@@ -28,7 +28,7 @@ export function Conversation({ children, className = "", onScroll, ...props }: C
   };
 
   useEffect(() => {
-    // 首次打开 Thread 时定位到最新内容，后续仅在用户主动回到底部时滚动。
+    // 首次打开 Task 时定位到最新内容，后续仅在用户主动回到底部时滚动。
     const container = containerRef.current;
     if (container !== null) {
       container.scrollTop = container.scrollHeight;

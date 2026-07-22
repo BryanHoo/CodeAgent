@@ -7,8 +7,9 @@
 ## Rules
 
 - 每个组件只承担一个可描述的界面职责，紧凑工作台界面避免装饰性嵌套卡片。
+- 工作台左栏先展示产品标识与名称，再按“新建任务”“搜索”、可选 `Pinned`、`Projects` 排列；没有固定 Task 时不渲染 `Pinned` 区域。
 - 通过显式 Props 或专用 Hook 获取数据，不从组件内部访问 Server 或 Provider。
-- 长列表使用稳定尺寸与虚拟化；流式 Item 独立订阅，避免整个 Thread 重渲染。
+- 长列表使用稳定尺寸与虚拟化；流式 Item 独立订阅，避免整个 Task 重渲染。
 - 交互控件使用语义化元素并提供可访问名称、键盘行为和明确状态。
 - `shared/styles/globals.css` 是颜色、字体、间距、圆角、阴影、动效和固定布局尺寸的唯一设计 Token 来源；组件使用语义化 Tailwind Token，不散落视觉字面值。
 - 浅色与深色主题在同一语义 Token 中使用 `light-dark()` 定义，`data-theme` 只切换 `color-scheme`，禁止复制整套主题变量。

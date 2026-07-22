@@ -38,7 +38,7 @@ function RootLayout() {
 
 export function BrandLink() {
   return (
-    <Link className="inline-flex items-center gap-2 font-semibold text-foreground" to="/workspaces">
+    <Link className="inline-flex items-center gap-2 font-semibold text-foreground" to="/">
       <span className="grid size-7 place-items-center rounded-control bg-foreground text-label font-bold text-raised shadow-sm">
         CA
       </span>

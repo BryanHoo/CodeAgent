@@ -17,10 +17,10 @@ export function NotFound() {
         </p>
         <Link
           className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-accent-strong"
-          to="/workspaces"
+          to="/"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
-          返回 Workspaces
+          返回工作台
         </Link>
       </section>
     </main>

@@ -10,7 +10,8 @@
 
 ## 规则
 
-- Fastify 路由只做 Schema 校验、身份与 Workspace 校验、用例调用和响应映射。
+- Fastify 路由只做 Schema 校验、身份与 Project 校验、用例调用和响应映射。
+- Core、Protocol 和 Server 公开使用 Project/Task；Codex 原生 Thread 命名只允许出现在 `provider-codex` 适配边界。
 - 基础设施通过 Core 端口接入，不让同步 SQLite 或子进程细节进入领域层。
 - 每个包只从 `src/index.ts` 暴露公共入口。
 - 不提供任意 JSON-RPC、文件系统或命令执行透传接口。

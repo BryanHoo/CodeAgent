@@ -19,18 +19,18 @@ import {
 } from "../../../shared/ai-elements/reasoning.js";
 import { Tool, ToolContent, ToolHeader } from "../../../shared/ai-elements/tool.js";
 
-type ThreadTimelineProps = Readonly<{
-  hasThread: boolean;
-  workspaceId: string;
+type TaskTimelineProps = Readonly<{
+  hasTask: boolean;
+  projectName: string;
 }>;
 
-export function ThreadTimeline({ hasThread, workspaceId }: ThreadTimelineProps) {
-  if (!hasThread) {
+export function TaskTimeline({ hasTask, projectName }: TaskTimelineProps) {
+  if (!hasTask) {
     return (
       <section className="grid min-h-0 flex-1 place-items-center px-6" aria-label="会话内容">
         <div className="max-w-sm text-center">
           <FolderGit2 className="mx-auto size-9 text-muted-foreground" strokeWidth={1.4} />
-          <h2 className="mt-4 text-base font-semibold text-foreground">{workspaceId}</h2>
+          <h2 className="mt-4 text-base font-semibold text-foreground">{projectName}</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             连接本地 Runtime 后即可创建任务。
           </p>

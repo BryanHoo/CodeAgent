@@ -18,10 +18,10 @@ function SettingsPage() {
       >
         <Link
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          to="/workspaces"
+          to="/"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
-          Workspaces
+          返回工作台
         </Link>
       </aside>
       <main

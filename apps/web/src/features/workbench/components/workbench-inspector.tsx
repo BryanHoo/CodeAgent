@@ -13,16 +13,16 @@ import { IconButton } from "../../../shared/ui/icon-button.js";
 
 const changedFiles = [
   { name: "workbench-shell.tsx", additions: 84, deletions: 18 },
-  { name: "thread-timeline.tsx", additions: 126, deletions: 0 },
+  { name: "task-timeline.tsx", additions: 126, deletions: 0 },
   { name: "globals.css", additions: 42, deletions: 9 },
 ];
 
 type WorkbenchInspectorProps = Readonly<{
   onClose: () => void;
-  workspaceId: string;
+  projectName: string;
 }>;
 
-export function WorkbenchInspector({ onClose, workspaceId }: WorkbenchInspectorProps) {
+export function WorkbenchInspector({ onClose, projectName }: WorkbenchInspectorProps) {
   const [tab, setTab] = useState<"changes" | "context">("changes");
 
   return (
@@ -31,7 +31,7 @@ export function WorkbenchInspector({ onClose, workspaceId }: WorkbenchInspectorP
       className="workbench-inspector z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse"
     >
       <div className="flex h-toolbar items-center justify-between px-3">
-        <span className="text-body-small font-semibold text-foreground">工作区</span>
+        <h2 className="text-body-small font-semibold text-foreground">环境信息</h2>
         <IconButton label="关闭上下文面板" onClick={onClose} size="small">
           <PanelRightClose className="size-3.5" aria-hidden="true" />
         </IconButton>
@@ -105,7 +105,7 @@ export function WorkbenchInspector({ onClose, workspaceId }: WorkbenchInspectorP
           <div className="space-y-5">
             <InspectorSection icon={<HardDrive className="size-3.5" />} title="环境">
               <InspectorRow label="运行位置" value="This Mac" />
-              <InspectorRow label="Workspace" value={workspaceId} />
+              <InspectorRow label="Project" value={projectName} />
               <InspectorRow icon={<GitBranch className="size-3" />} label="分支" value="main" />
             </InspectorSection>
             <InspectorSection icon={<Braces className="size-3.5" />} title="来源">

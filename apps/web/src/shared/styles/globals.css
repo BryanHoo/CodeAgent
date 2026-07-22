@@ -188,13 +188,6 @@ body {
 }
 
 button,
-input,
-textarea,
-select {
-  font: inherit;
-}
-
-button,
 a {
   -webkit-tap-highlight-color: transparent;
 }

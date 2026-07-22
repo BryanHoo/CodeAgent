@@ -3,9 +3,9 @@
 ## 边界与安全
 
 - Fastify 使用 JSON Schema 验证输入并序列化输出。
-- Workspace 路径每次操作都执行绝对路径、`realpath` 和允许根目录包含关系校验。
+- Project 路径每次操作都执行绝对路径、`realpath` 和允许根目录包含关系校验。
 - 默认只监听 `127.0.0.1`；WebSocket 校验 Origin，远程模式必须增加认证和 TLS 边界。
-- Approval 同时校验用户、Runtime、Thread、Turn、Request 身份与状态。
+- Approval 同时校验用户、Runtime、Task、Turn、Request 身份与状态。
 
 ## 日志与错误
 

@@ -1,46 +1,35 @@
 import { useEffect, useState } from "react";
 import { Ellipsis, ExternalLink, PanelLeft, PanelRight, WifiOff } from "lucide-react";
 
+import { useProjects } from "../../projects/project-context.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
-import { ThreadSidebar } from "./thread-sidebar.js";
-import { ThreadTimeline } from "./thread-timeline.js";
+import { ProjectSidebar } from "./project-sidebar.js";
+import { TaskTimeline } from "./task-timeline.js";
 import { WorkbenchComposer } from "./workbench-composer.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
-
-const threadTitles: Record<string, string> = {
-  "input-design": "优化输入框交互",
-  markdown: "完善 Markdown 渲染",
-  "model-api": "接入模型选择 API",
-  "thread-1": "构建 macOS 工作台",
-};
 
 const sidebarOverlayQuery = "(max-width: 760px)";
 const inspectorOverlayQuery = "(max-width: 1100px)";
 
 type WorkbenchShellProps = Readonly<{
-  threadId?: string;
-  workspaceId: string;
+  projectId: string;
+  taskId?: string;
 }>;
 
 function shouldOpenDesktopPanel(query: string) {
   return typeof window === "undefined" || !window.matchMedia(query).matches;
 }
 
-function getThreadTitle(threadId?: string) {
-  if (threadId === undefined) {
-    return "新任务";
-  }
-  return threadTitles[threadId] ?? threadId;
-}
-
-export function WorkbenchShell({ threadId, workspaceId }: WorkbenchShellProps) {
+export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
+  const { projects, tasks } = useProjects();
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
   const [sidebarOpen, setSidebarOpen] = useState(() => shouldOpenDesktopPanel(sidebarOverlayQuery));
   const [inspectorOpen, setInspectorOpen] = useState(() =>
     shouldOpenDesktopPanel(inspectorOverlayQuery),
   );
-  const hasThread = threadId !== undefined;
-  const title = getThreadTitle(threadId);
+  const projectName = projects.find((project) => project.id === projectId)?.name ?? projectId;
+  const hasTask = taskId !== undefined;
+  const title = tasks.find((task) => task.id === taskId)?.title ?? taskId ?? "New agent";
 
   const closeSidebar = () => {
     setSidebarOpen(false);
@@ -98,27 +87,27 @@ export function WorkbenchShell({ threadId, workspaceId }: WorkbenchShellProps) {
       data-inspector-open={inspectorOpen}
       data-sidebar-open={sidebarOpen}
     >
-      <ThreadSidebar
+      <ProjectSidebar
         onClose={closeSidebar}
-        workspaceId={workspaceId}
-        {...(threadId === undefined ? {} : { threadId })}
+        projectId={projectId}
+        {...(taskId === undefined ? {} : { taskId })}
       />
 
       {sidebarOpen ? (
         <button
-          aria-label="关闭任务侧栏"
+          aria-label="关闭项目侧栏"
           className="workbench-sidebar-scrim"
           onClick={closeSidebar}
           type="button"
         />
       ) : null}
 
-      <main aria-label="Thread Timeline" className="flex min-h-0 min-w-0 flex-col bg-content">
+      <main aria-label="Task Timeline" className="flex min-h-0 min-w-0 flex-col bg-content">
         <header className="flex h-toolbar shrink-0 items-center justify-between gap-3 bg-content px-2.5 shadow-toolbar sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
             <IconButton
               id="workbench-sidebar-toggle"
-              label={sidebarOpen ? "收起任务侧栏" : "展开任务侧栏"}
+              label={sidebarOpen ? "收起项目侧栏" : "展开项目侧栏"}
               onClick={() => {
                 setSidebarOpen((open) => !open);
               }}
@@ -128,7 +117,7 @@ export function WorkbenchShell({ threadId, workspaceId }: WorkbenchShellProps) {
             </IconButton>
             <div className="min-w-0">
               <h1 className="truncate text-body-small font-semibold text-foreground">{title}</h1>
-              <p className="truncate text-meta text-muted-foreground">{workspaceId}</p>
+              <p className="truncate text-meta text-muted-foreground">{projectName}</p>
             </div>
           </div>
 
@@ -161,8 +150,8 @@ export function WorkbenchShell({ threadId, workspaceId }: WorkbenchShellProps) {
           </div>
         </header>
 
-        <ThreadTimeline hasThread={hasThread} workspaceId={workspaceId} />
-        <WorkbenchComposer hasThread={hasThread} />
+        <TaskTimeline hasTask={hasTask} projectName={projectName} />
+        <WorkbenchComposer hasTask={hasTask} />
       </main>
 
       {inspectorOpen ? (
@@ -174,7 +163,7 @@ export function WorkbenchShell({ threadId, workspaceId }: WorkbenchShellProps) {
         />
       ) : null}
 
-      <WorkbenchInspector onClose={closeInspector} workspaceId={workspaceId} />
+      <WorkbenchInspector onClose={closeInspector} projectName={projectName} />
     </div>
   );
 }

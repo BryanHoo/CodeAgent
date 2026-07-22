@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
+import { ProjectProvider } from "../features/projects/project-context.js";
+
 export function createAppQueryClient() {
   return new QueryClient({
     defaultOptions: {
@@ -21,5 +23,9 @@ type AppProvidersProps = Readonly<{
 
 export function AppProviders({ children }: AppProvidersProps) {
   // SPA 生命周期内复用同一个 QueryClient，避免导航时丢失服务端状态缓存。
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ProjectProvider>{children}</ProjectProvider>
+    </QueryClientProvider>
+  );
 }

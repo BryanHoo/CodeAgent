@@ -7,5 +7,5 @@
 - 服务只监听 Loopback 地址。
 - 浏览器不直接连接 Codex App Server 或本地文件系统。
 - Secret 不进入命令行参数、日志、Web 响应和仓库。
-- Workspace 路径、审批和 Provider 请求必须在服务端逐次校验。
+- Project 路径、审批和 Provider 请求必须在服务端逐次校验。
 - 所有子进程、RPC、数据库和关闭流程必须设置超时。
