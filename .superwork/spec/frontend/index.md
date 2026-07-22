@@ -18,6 +18,7 @@
 ## Pre-Development Checklist
 
 - 读取 `.superwork/spec/guides/index.md` 和相关前端指南。
+- 读取 `docs/web-design.md`，确认页面、AI Elements、状态和性能策略。
 - 确认变更是否影响 `packages/client`、`packages/protocol` 或 Server API。
 - 保持 `src/main.tsx` 只负责根节点装配，业务视图进入明确的功能目录。
 - 完成后运行 `pnpm check`；涉及页面行为时再运行 `pnpm test:e2e`。
