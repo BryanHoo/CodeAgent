@@ -1,5 +1,5 @@
 {
-  "name": "@code-agent-window/protocol",
+  "name": "@code-agent/protocol",
   "version": "0.0.0",
   "private": true,
   "type": "module",

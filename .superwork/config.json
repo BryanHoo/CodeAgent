@@ -7,27 +7,27 @@
       "layers": ["distribution", "cli"]
     },
     {
-      "name": "@code-agent-window/web",
+      "name": "@code-agent/web",
       "layers": ["frontend"]
     },
     {
-      "name": "@code-agent-window/protocol",
+      "name": "@code-agent/protocol",
       "layers": ["shared", "protocol"]
     },
     {
-      "name": "@code-agent-window/core",
+      "name": "@code-agent/core",
       "layers": ["shared", "domain"]
     },
     {
-      "name": "@code-agent-window/provider-codex",
+      "name": "@code-agent/provider-codex",
       "layers": ["backend", "provider"]
     },
     {
-      "name": "@code-agent-window/server",
+      "name": "@code-agent/server",
       "layers": ["backend", "delivery", "persistence"]
     },
     {
-      "name": "@code-agent-window/client",
+      "name": "@code-agent/client",
       "layers": ["frontend", "transport"]
     }
   ],

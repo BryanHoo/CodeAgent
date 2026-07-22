@@ -1,5 +1,5 @@
 {
-  "name": "code-agent-window",
+  "name": "code-agent",
   "version": "0.0.0",
   "description": "通过 Web 操作本地 Coding Agent 的应用",
   "type": "module",
@@ -8,8 +8,7 @@
     "node": ">=24"
   },
   "bin": {
-    "code-agent-window": "./dist/cli.js",
-    "codeAgentWindow": "./dist/cli.js"
+    "code-agent": "./dist/cli.js"
   },
   "files": [
     "dist",
@@ -17,11 +16,11 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "pnpm run clean && pnpm run typecheck && pnpm --filter @code-agent-window/web build && pnpm run build:node",
+    "build": "pnpm run clean && pnpm run typecheck && pnpm --filter @code-agent/web build && pnpm run build:node",
     "build:node": "tsup",
     "check": "pnpm run format:check && pnpm run lint && pnpm run lint:architecture && pnpm run test && pnpm run build && pnpm run package:check",
     "clean": "node ./tools/clean.mjs",
-    "dev": "pnpm --filter @code-agent-window/web dev",
+    "dev": "pnpm --filter @code-agent/web dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
@@ -29,7 +28,7 @@
     "package:check": "node ./tools/verify-package.mjs",
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
-    "test:e2e": "pnpm --filter @code-agent-window/web build && playwright test",
+    "test:e2e": "pnpm --filter @code-agent/web build && playwright test",
     "typecheck": "tsc -b --pretty false",
     "prepublishOnly": "pnpm run check"
   },

@@ -1,4 +1,4 @@
-# `@code-agent-window/server`
+# `@code-agent/server`
 
 维护 Fastify 应用装配、HTTP/WebSocket 交付、持久化适配和 Worker 生命周期。
 

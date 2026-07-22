@@ -4,12 +4,12 @@ test("redirects the root route to the default project workbench", async ({ page 
   await page.goto("/");
 
   await expect(page.getByTestId("app-root")).toBeAttached();
-  await expect(page).toHaveURL(/\/p\/code-agent-window$/);
+  await expect(page).toHaveURL(/\/p\/code-agent$/);
   await expect(page.getByRole("main", { name: "Task Timeline" })).toBeVisible();
 });
 
 test("provides reusable design tokens for light and dark themes", async ({ page }) => {
-  await page.goto("/p/code-agent-window");
+  await page.goto("/p/code-agent");
   const readTheme = async (theme: "dark" | "light") =>
     page.locator("html").evaluate((root, activeTheme) => {
       root.setAttribute("data-theme", activeTheme);
@@ -63,8 +63,8 @@ test("provides reusable design tokens for light and dark themes", async ({ page 
 test("exposes the documented navigation routes", async ({ page }) => {
   const routes = [
     { path: "/login", heading: "登录" },
-    { path: "/p/code-agent-window", heading: "CodeAgentWindow" },
-    { path: "/p/code-agent-window/t/task-1", heading: "构建 macOS 工作台" },
+    { path: "/p/code-agent", heading: "CodeAgent" },
+    { path: "/p/code-agent/t/task-1", heading: "构建 macOS 工作台" },
     { path: "/settings", heading: "设置" },
   ];
 
@@ -92,7 +92,7 @@ test("uses subtle hairline separation across registered routes", async ({ page }
       offset: "0px 1px 0px 0px",
     },
     {
-      path: "/p/code-agent-window",
+      path: "/p/code-agent",
       selector: "main header",
       border: "borderBottomWidth",
       offset: "0px 1px 0px 0px",
@@ -125,7 +125,7 @@ test("uses subtle hairline separation across registered routes", async ({ page }
 });
 
 test("renders the AI workbench landmarks without enabling runtime actions", async ({ page }) => {
-  await page.goto("/p/code-agent-window/t/task-1");
+  await page.goto("/p/code-agent/t/task-1");
 
   await expect(page.getByRole("complementary", { name: "Project Sidebar" })).toBeVisible();
   await expect(page.getByRole("main", { name: "Task Timeline" })).toBeVisible();
@@ -140,14 +140,14 @@ test("renders the AI workbench landmarks without enabling runtime actions", asyn
 test("orders localized task actions, pinned tasks and projects in the sidebar", async ({
   page,
 }) => {
-  await page.goto("/p/code-agent-window/t/task-1");
+  await page.goto("/p/code-agent/t/task-1");
 
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
   const newAgent = sidebar.getByRole("link", { name: "新建任务" });
   const search = sidebar.getByRole("button", { name: "搜索" });
-  const productHome = sidebar.getByRole("link", { name: "CodeAgentWindow 首页" });
+  const productHome = sidebar.getByRole("link", { name: "CodeAgent 首页" });
   await expect(productHome).toBeVisible();
-  await expect(productHome.getByText("CodeAgentWindow", { exact: true })).toBeVisible();
+  await expect(productHome.getByText("CodeAgent", { exact: true })).toBeVisible();
 
   const readPrimaryActionStyle = async (selector: typeof newAgent) =>
     selector.evaluate((element) => {
@@ -181,7 +181,7 @@ test("orders localized task actions, pinned tasks and projects in the sidebar", 
 });
 
 test("searches tasks across projects", async ({ page }) => {
-  await page.goto("/p/code-agent-window/t/task-1");
+  await page.goto("/p/code-agent/t/task-1");
 
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
   await sidebar.getByRole("button", { name: "搜索" }).click();
@@ -198,7 +198,7 @@ test("adds a selected folder as a project and navigates to it", async ({ page })
       value: () => Promise.resolve({ kind: "directory", name: "New Demo" }),
     });
   });
-  await page.goto("/p/code-agent-window");
+  await page.goto("/p/code-agent");
 
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
   await sidebar.getByRole("button", { name: "添加项目文件夹" }).click();
@@ -208,7 +208,7 @@ test("adds a selected folder as a project and navigates to it", async ({ page })
 });
 
 test("uses material hierarchy instead of strong workbench borders", async ({ page }) => {
-  await page.goto("/p/code-agent-window/t/task-1");
+  await page.goto("/p/code-agent/t/task-1");
 
   const presentation = await page.evaluate(() => {
     const sidebar = document.querySelector<HTMLElement>('[aria-label="Project Sidebar"]');
@@ -281,7 +281,7 @@ test("uses material hierarchy instead of strong workbench borders", async ({ pag
 });
 
 test("supports structured activity and keyboard panel dismissal", async ({ page }) => {
-  await page.goto("/p/code-agent-window/t/task-1");
+  await page.goto("/p/code-agent/t/task-1");
 
   await page.getByText("读取 Web 设计规范").click();
   await expect(page.getByText("docs/web-design.md")).toBeVisible();
@@ -292,7 +292,7 @@ test("supports structured activity and keyboard panel dismissal", async ({ page 
 
 test("keeps the narrow workbench layout stable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/p/code-agent-window/t/task-1");
+  await page.goto("/p/code-agent/t/task-1");
 
   await expect(page.getByRole("complementary", { name: "Project Sidebar" })).not.toBeVisible();
   await page.getByRole("button", { name: "展开项目侧栏" }).click();
@@ -316,7 +316,7 @@ test("keeps the narrow workbench layout stable", async ({ page }) => {
 
 test("closes open workbench panels when the window becomes narrow", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/p/code-agent-window/t/task-1");
+  await page.goto("/p/code-agent/t/task-1");
 
   await expect(page.getByRole("complementary", { name: "Project Sidebar" })).toBeVisible();
   await expect(page.getByRole("complementary", { name: "Context Inspector" })).toBeVisible();

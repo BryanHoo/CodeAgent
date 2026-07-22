@@ -1,4 +1,4 @@
-import type { AgentTask, Project } from "@code-agent-window/protocol";
+import type { AgentTask, Project } from "@code-agent/protocol";
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 

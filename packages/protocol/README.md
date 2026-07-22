@@ -1,4 +1,4 @@
-# `@code-agent-window/protocol`
+# `@code-agent/protocol`
 
 维护 Provider 无关的公开协议、JSON Schema、事件信封和生成的 API 描述。
 

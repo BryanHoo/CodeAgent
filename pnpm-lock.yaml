@@ -144,10 +144,10 @@ importers:
 
   apps/web:
     dependencies:
-      '@code-agent-window/client':
+      '@code-agent/client':
         specifier: workspace:*
         version: link:../../packages/client
-      '@code-agent-window/protocol':
+      '@code-agent/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
       '@tanstack/react-query':
@@ -187,13 +187,13 @@ importers:
 
   packages/client:
     dependencies:
-      '@code-agent-window/protocol':
+      '@code-agent/protocol':
         specifier: workspace:*
         version: link:../protocol
 
   packages/core:
     dependencies:
-      '@code-agent-window/protocol':
+      '@code-agent/protocol':
         specifier: workspace:*
         version: link:../protocol
 
@@ -205,22 +205,22 @@ importers:
 
   packages/provider-codex:
     dependencies:
-      '@code-agent-window/core':
+      '@code-agent/core':
         specifier: workspace:*
         version: link:../core
-      '@code-agent-window/protocol':
+      '@code-agent/protocol':
         specifier: workspace:*
         version: link:../protocol
 
   packages/server:
     dependencies:
-      '@code-agent-window/core':
+      '@code-agent/core':
         specifier: workspace:*
         version: link:../core
-      '@code-agent-window/protocol':
+      '@code-agent/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@code-agent-window/provider-codex':
+      '@code-agent/provider-codex':
         specifier: workspace:*
         version: link:../provider-codex
       '@fastify/static':

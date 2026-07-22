@@ -1,5 +1,5 @@
 {
-  "name": "@code-agent-window/web",
+  "name": "@code-agent/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@code-agent-window/client": "workspace:*",
-    "@code-agent-window/protocol": "workspace:*",
+    "@code-agent/client": "workspace:*",
+    "@code-agent/protocol": "workspace:*",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "lucide-react": "catalog:",

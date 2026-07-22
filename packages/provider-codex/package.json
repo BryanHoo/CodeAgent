@@ -1,5 +1,5 @@
 {
-  "name": "@code-agent-window/provider-codex",
+  "name": "@code-agent/provider-codex",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     }
   },
   "dependencies": {
-    "@code-agent-window/core": "workspace:*",
-    "@code-agent-window/protocol": "workspace:*"
+    "@code-agent/core": "workspace:*",
+    "@code-agent/protocol": "workspace:*"
   }
 }

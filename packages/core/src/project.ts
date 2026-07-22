@@ -1,4 +1,4 @@
-import type { AgentTask, Project } from "@code-agent-window/protocol";
+import type { AgentTask, Project } from "@code-agent/protocol";
 
 export type RegisterProjectInput = Readonly<{
   name: string;

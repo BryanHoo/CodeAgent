@@ -1,4 +1,4 @@
-# `@code-agent-window/provider-codex`
+# `@code-agent/provider-codex`
 
 维护 Codex App Server 的进程生命周期、JSONL/RPC 客户端和协议适配。
 

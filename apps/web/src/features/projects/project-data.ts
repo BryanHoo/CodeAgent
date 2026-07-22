@@ -1,10 +1,10 @@
-import type { AgentTask, Project } from "@code-agent-window/protocol";
+import type { AgentTask, Project } from "@code-agent/protocol";
 
 export const initialProjects: readonly Project[] = [
   {
     createdAt: "2026-07-22T06:00:00.000Z",
-    id: "code-agent-window",
-    name: "CodeAgentWindow",
+    id: "code-agent",
+    name: "CodeAgent",
   },
   {
     createdAt: "2026-07-22T06:30:00.000Z",
@@ -17,28 +17,28 @@ export const initialTasks: readonly AgentTask[] = [
   {
     id: "task-1",
     pinned: true,
-    projectId: "code-agent-window",
+    projectId: "code-agent",
     title: "构建 macOS 工作台",
     updatedAt: "2026-07-22T07:58:00.000Z",
   },
   {
     id: "input-design",
     pinned: false,
-    projectId: "code-agent-window",
+    projectId: "code-agent",
     title: "优化输入框交互",
     updatedAt: "2026-07-22T06:00:00.000Z",
   },
   {
     id: "model-api",
     pinned: false,
-    projectId: "code-agent-window",
+    projectId: "code-agent",
     title: "接入模型选择 API",
     updatedAt: "2026-07-21T08:00:00.000Z",
   },
   {
     id: "markdown",
     pinned: false,
-    projectId: "code-agent-window",
+    projectId: "code-agent",
     title: "完善 Markdown 渲染",
     updatedAt: "2026-07-20T08:00:00.000Z",
   },

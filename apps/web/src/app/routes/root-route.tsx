@@ -42,7 +42,7 @@ export function BrandLink() {
       <span className="grid size-7 place-items-center rounded-control bg-foreground text-label font-bold text-raised shadow-sm">
         CA
       </span>
-      <span>CodeAgentWindow</span>
+      <span>CodeAgent</span>
     </Link>
   );
 }

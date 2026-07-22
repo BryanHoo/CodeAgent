@@ -1,6 +1,6 @@
-# CodeAgentWindow
+# CodeAgent
 
-CodeAgentWindow 是一个通过 Web 操作本地 Coding Agent 的应用。本仓库当前只包含基础项目架构，不包含业务功能。
+CodeAgent 是一个通过 Web 操作本地 Coding Agent 的应用。本仓库当前只包含基础项目架构，不包含业务功能。
 
 ## 环境要求
 
@@ -31,6 +31,6 @@ src/cli.ts                唯一公开 npm 包的 CLI 入口
 tools/                    构建与发布校验脚本
 ```
 
-内部 Workspace 包均为 `private: true`。发布产物只来自根包的 `dist/`，用户只安装 `code-agent-window`。
+内部 Workspace 包均为 `private: true`。发布产物只来自根包的 `dist/`，用户只安装 `code-agent`。
 
 架构决策见 [docs/architecture-design.md](docs/architecture-design.md)，工程约束见 [docs/project-structure.md](docs/project-structure.md)。

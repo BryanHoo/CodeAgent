@@ -1,4 +1,4 @@
-# `@code-agent-window/client`
+# `@code-agent/client`
 
 维护 Web 使用的轻量 HTTP/WebSocket 客户端和协议解码边界。
 

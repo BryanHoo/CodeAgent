@@ -1,4 +1,4 @@
-# CodeAgentWindow 架构设计
+# CodeAgent 架构设计
 
 > 状态：Draft  
 > 更新日期：2026-07-22  
@@ -7,21 +7,21 @@
 
 ## 1. 背景
 
-CodeAgentWindow 是一个通过 Web 操作本地 Coding Agent 的应用。第一阶段仅支持 Codex，底层调用 Codex CLI；后续允许接入 Claude Code 或其他 Agent Provider。
+CodeAgent 是一个通过 Web 操作本地 Coding Agent 的应用。第一阶段仅支持 Codex，底层调用 Codex CLI；后续允许接入 Claude Code 或其他 Agent Provider。
 
 Web 页面、组件、浏览器状态和渐进式性能策略由 [Web 设计](./web-design.md) 进一步约束；与本文件中的 Web 概览冲突时，以该细化设计为准。
 
 产品对用户只暴露一个 npm 包和一个 CLI 命令：
 
 ```bash
-npx code-agent-window start
+npx code-agent start
 ```
 
 或全局安装后运行：
 
 ```bash
-npm install -g code-agent-window
-code-agent-window start
+npm install -g code-agent
+code-agent start
 ```
 
 命令启动后，用户直接在浏览器中完成登录、Project 选择、Task 管理、任务执行、审批、Diff 查看和中断操作。
@@ -54,10 +54,10 @@ MVP 不包含以下能力：
 
 ### 3.1 只发布一个 npm 包
 
-CodeAgentWindow 只发布一个公开 npm 包：
+CodeAgent 只发布一个公开 npm 包：
 
 ```text
-code-agent-window
+code-agent
 ```
 
 内部使用 pnpm workspace 和多个私有模块，但它们只用于维护、测试和构建，不单独发布。
@@ -85,7 +85,7 @@ codex app-server --listen stdio://
 
 ### 3.3 浏览器不直接连接 Codex
 
-浏览器只连接 CodeAgentWindow Server。服务端负责：
+浏览器只连接 CodeAgent Server。服务端负责：
 
 - 启动和管理 Codex App Server 子进程。
 - 处理 Codex JSON-RPC Lite 协议。
@@ -119,7 +119,7 @@ codex app-server --listen stdio://
 项目内部统一使用 pnpm 管理依赖、Workspace、开发脚本和发布流程；用户侧仍推荐通过 `npx` 直接启动，不要求用户预先安装 pnpm：
 
 ```bash
-npx code-agent-window start
+npx code-agent start
 ```
 
 仓库内部使用：
@@ -138,7 +138,7 @@ pnpm publish
 
 ```mermaid
 flowchart LR
-    Browser["Browser"] <-->|"HTTP + WebSocket"| Server["CodeAgentWindow Server"]
+    Browser["Browser"] <-->|"HTTP + WebSocket"| Server["CodeAgent Server"]
     Server --> API["Agent API v1"]
     API --> Core["Agent Core"]
     Core --> Store["SQLite Read Model"]
@@ -155,7 +155,7 @@ flowchart LR
 
 ```text
 Browser
-  -> CodeAgentWindow Node.js Process
+  -> CodeAgent Node.js Process
        -> Fastify HTTP/WebSocket Server
        -> SQLite Writer Worker
        -> codex app-server Child Process
@@ -169,7 +169,7 @@ Browser
 sequenceDiagram
     participant U as User
     participant W as Web
-    participant S as CodeAgentWindow Server
+    participant S as CodeAgent Server
     participant C as Codex App Server
 
     U->>W: 提交任务
@@ -194,7 +194,7 @@ sequenceDiagram
 建议结构：
 
 ```text
-code-agent-window/
+code-agent/
   pnpm-workspace.yaml         # pnpm Workspace 范围
   pnpm-lock.yaml              # 唯一依赖锁文件
   apps/
@@ -230,12 +230,11 @@ LICENSE
 
 ```json
 {
-  "name": "code-agent-window",
+  "name": "code-agent",
   "type": "module",
   "packageManager": "pnpm@<pinned-version>",
   "bin": {
-    "code-agent-window": "./dist/cli.js",
-    "codeAgentWindow": "./dist/cli.js"
+    "code-agent": "./dist/cli.js"
   },
   "files": ["dist"],
   "engines": {
@@ -244,7 +243,7 @@ LICENSE
 }
 ```
 
-推荐文档统一使用 `code-agent-window`，`codeAgentWindow` 仅作为兼容别名。
+文档和发布配置统一使用 `code-agent`，不保留冗余 CLI 兼容别名。
 
 根 `pnpm-workspace.yaml` 至少包含：
 
@@ -271,15 +270,15 @@ pnpm publish
 MVP 提供：
 
 ```bash
-code-agent-window start
-code-agent-window doctor
-code-agent-window version
+code-agent start
+code-agent doctor
+code-agent version
 ```
 
 `start` 支持：
 
 ```bash
-code-agent-window start \
+code-agent start \
   --host 127.0.0.1 \
   --port 3210 \
   --project /path/to/project
@@ -344,8 +343,8 @@ Codex Binary 查找顺序：
 
 ```text
 1. --codex-bin
-2. CODE_AGENT_WINDOW_CODEX_BIN
-3. CodeAgentWindow 包内固定版本的 @openai/codex
+2. CODE_AGENT_CODEX_BIN
+3. CodeAgent 包内固定版本的 @openai/codex
 4. PATH 中的 codex
 ```
 
@@ -360,7 +359,7 @@ Codex Binary 查找顺序：
 ~/.codex/skills
 ```
 
-CodeAgentWindow 不直接解析或修改认证文件，而是通过 App Server 的 Account API 操作认证状态。
+CodeAgent 不直接解析或修改认证文件，而是通过 App Server 的 Account API 操作认证状态。
 
 ## 8. Provider 抽象
 
@@ -578,8 +577,8 @@ thread/list
 ```json
 {
   "clientInfo": {
-    "name": "code_agent_window",
-    "title": "CodeAgentWindow",
+    "name": "code_agent",
+    "title": "CodeAgent",
     "version": "<package-version>"
   }
 }
@@ -681,7 +680,7 @@ account/rateLimits/read
 
 ### 12.1 数据来源
 
-Codex 已经持久化原生 Thread 和 Session 历史。CodeAgentWindow 将 Thread 映射为 Task，不逐 Token 重复存储完整历史，只维护统一 Read Model 和断线恢复所需数据。
+Codex 已经持久化原生 Thread 和 Session 历史。CodeAgent 将 Thread 映射为 Task，不逐 Token 重复存储完整历史，只维护统一 Read Model 和断线恢复所需数据。
 
 ### 12.2 表结构
 
@@ -1077,7 +1076,7 @@ App Server Schema 与 Codex CLI 版本绑定，因此必须：
 - 保留最近一个稳定 Codex 版本的兼容测试。
 - 升级前执行事件录制回放和完整契约测试。
 
-CodeAgentWindow 自身 API 使用独立版本：
+CodeAgent 自身 API 使用独立版本：
 
 ```text
 /v1/*
@@ -1150,7 +1149,7 @@ Codex 升级不应直接导致 Web API 版本变化。
 
 ### 22.1 浏览器直连 App Server WebSocket
 
-不采用。该传输仍为实验状态，而且会绕过 CodeAgentWindow 的认证、路径校验、统一协议、断线恢复和 Provider 抽象。
+不采用。该传输仍为实验状态，而且会绕过 CodeAgent 的认证、路径校验、统一协议、断线恢复和 Provider 抽象。
 
 ### 22.2 每个 Turn 使用 `codex exec`
 
@@ -1158,7 +1157,7 @@ Codex 升级不应直接导致 Web API 版本变化。
 
 ### 22.3 发布多个公开 npm 包
 
-不采用。内部模块化仍然保留，但用户只安装 `code-agent-window`。
+不采用。内部模块化仍然保留，但用户只安装 `code-agent`。
 
 ### 22.4 MVP 引入分布式消息系统
 
