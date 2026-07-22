@@ -13,7 +13,7 @@ test("exposes the documented navigation routes", async ({ page }) => {
     { path: "/login", heading: "登录" },
     { path: "/workspaces", heading: "Workspaces" },
     { path: "/w/demo", heading: "demo" },
-    { path: "/w/demo/t/thread-1", heading: "暂无消息" },
+    { path: "/w/demo/t/thread-1", heading: "构建 macOS 工作台" },
     { path: "/settings", heading: "设置" },
   ];
 
@@ -25,28 +25,45 @@ test("exposes the documented navigation routes", async ({ page }) => {
   }
 });
 
-test("renders the workbench landmarks without enabling business actions", async ({ page }) => {
+test("renders the AI workbench landmarks without enabling runtime actions", async ({ page }) => {
   await page.goto("/w/demo/t/thread-1");
 
   await expect(page.getByRole("complementary", { name: "Thread Sidebar" })).toBeVisible();
   await expect(page.getByRole("main", { name: "Thread Timeline" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Context Inspector" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Composer" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "任务输入" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "提交" })).toBeDisabled();
+  await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();
+  await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+});
+
+test("supports structured activity and keyboard panel dismissal", async ({ page }) => {
+  await page.goto("/w/demo/t/thread-1");
+
+  await page.getByText("读取 Web 设计规范").click();
+  await expect(page.getByText("docs/web-design.md")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("complementary", { name: "Context Inspector" })).not.toBeVisible();
 });
 
 test("keeps the narrow workbench layout stable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/w/demo/t/thread-1");
 
-  const sidebarBox = await page
+  await expect(page.getByRole("complementary", { name: "Thread Sidebar" })).not.toBeVisible();
+  await page.getByRole("button", { name: "展开任务侧栏" }).click();
+  await expect(page.getByRole("complementary", { name: "Thread Sidebar" })).toBeVisible();
+  await page
     .getByRole("complementary", { name: "Thread Sidebar" })
-    .boundingBox();
+    .getByRole("button", { name: "关闭任务侧栏" })
+    .click();
+
   const timelineBox = await page.getByRole("main", { name: "Thread Timeline" }).boundingBox();
 
-  expect(sidebarBox).not.toBeNull();
   expect(timelineBox).not.toBeNull();
-  expect(timelineBox?.y).toBeGreaterThanOrEqual((sidebarBox?.y ?? 0) + (sidebarBox?.height ?? 0));
+  expect(timelineBox?.x).toBe(0);
+  expect(timelineBox?.width).toBe(390);
 
   const hasHorizontalOverflow = await page
     .locator("html")

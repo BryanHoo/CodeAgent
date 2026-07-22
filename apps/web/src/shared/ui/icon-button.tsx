@@ -21,22 +21,22 @@ export function IconButton({
   const sizeClass = size === "small" ? "size-7" : "size-9";
   const toneClass =
     tone === "accent"
-      ? "border-accent bg-accent text-white hover:bg-accent-strong"
-      : "border-border bg-surface text-foreground hover:bg-surface-muted";
+      ? "bg-accent text-white hover:bg-accent-strong"
+      : "bg-transparent text-muted-foreground hover:bg-surface-muted hover:text-foreground";
 
   return (
     <span className="group relative inline-flex shrink-0">
       <button
         {...buttonProps}
         aria-label={label}
-        className={`${sizeClass} ${toneClass} inline-grid place-items-center border transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
+        className={`${sizeClass} ${toneClass} inline-grid place-items-center rounded-[6px] border border-transparent transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
         title={label}
         type={type}
       >
         {children}
       </button>
       <span
-        className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap bg-foreground px-2 py-1 text-xs text-surface shadow-sm group-hover:block group-focus-within:block"
+        className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-[5px] bg-foreground px-2 py-1 text-[11px] text-surface shadow-sm group-hover:block group-focus-within:block"
         role="tooltip"
       >
         {label}
