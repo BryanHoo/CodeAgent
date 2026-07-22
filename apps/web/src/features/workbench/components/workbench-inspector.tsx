@@ -30,7 +30,7 @@ export function WorkbenchInspector({ onClose, workspaceId }: WorkbenchInspectorP
       aria-label="Context Inspector"
       className="workbench-inspector z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse"
     >
-      <div className="flex h-toolbar items-center justify-between px-3 shadow-toolbar">
+      <div className="flex h-toolbar items-center justify-between px-3">
         <span className="text-body-small font-semibold text-foreground">工作区</span>
         <IconButton label="关闭上下文面板" onClick={onClose} size="small">
           <PanelRightClose className="size-3.5" aria-hidden="true" />

@@ -44,7 +44,7 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
       aria-label="Thread Sidebar"
       className="workbench-sidebar z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] bg-sidebar shadow-divider"
     >
-      <div className="flex h-toolbar items-center gap-2 px-3 shadow-toolbar">
+      <div className="flex h-toolbar items-center gap-2 px-3">
         <Link
           aria-label="返回 Workspaces"
           className="grid size-7 shrink-0 place-items-center rounded-control bg-foreground text-caption font-bold text-raised shadow-sm"

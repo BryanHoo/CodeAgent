@@ -14,6 +14,6 @@
 - 浅色与深色主题在同一语义 Token 中使用 `light-dark()` 定义，`data-theme` 只切换 `color-scheme`，禁止复制整套主题变量。
 - 主题色固定为浅色 `surface #ffffff`、`ink #171717`、`accent #006aff`、`diffAdded #28a948`、`diffRemoved #eb001d`、`skill #a100f8`，深色 `surface #181818`、`ink #ffffff`、`accent #339cff`、`diffAdded #40c977`、`diffRemoved #fa423e`、`skill #ad7bf9`；浅色大面积区域保持纯白，不添加固定浅灰底。
 - 工作台区域优先使用材质背景、淡阴影和留白区分层级，不使用贯穿面板的高对比边框；视口进入覆盖模式时关闭已打开的桌面面板。
-- 永久 Sidebar、Toolbar 和 Inspector 使用连续同色背景，并通过低对比单像素分隔阴影区分内容区域；不使用模糊或多层重阴影，浮动阴影只用于 Composer、弹层和独立表面。
+- 永久 Sidebar 和 Inspector 使用连续同色背景，仅在其纵向边界添加低对比单像素分隔；侧栏顶栏不与下方内容分隔，主内容 Toolbar 保留单像素底部分隔。不使用模糊或多层重阴影，浮动阴影只用于 Composer、弹层和独立表面。
 - 视觉系统变更使用 Playwright 检查 computed style、桌面与移动溢出、窗口缩放和控制台错误。
 - 只有形成稳定复用模式后才写入本规范。

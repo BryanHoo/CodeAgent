@@ -192,8 +192,8 @@ test("uses material hierarchy instead of strong workbench borders", async ({ pag
   expect(presentation.composerBorder).toBe("0px");
   expect(presentation.sidebarShadow).toContain("1px 0px 0px 0px");
   expect(presentation.inspectorShadow).toContain("-1px 0px 0px 0px");
-  expect(presentation.sidebarToolbarShadow).toContain("0px 1px 0px 0px");
-  expect(presentation.inspectorToolbarShadow).toContain("0px 1px 0px 0px");
+  expect(presentation.sidebarToolbarShadow).toBe("none");
+  expect(presentation.inspectorToolbarShadow).toBe("none");
   expect(presentation.toolbarShadow).toContain("0px 1px 0px 0px");
   expect(presentation.composerShadow).not.toBe("none");
   expect(presentation.sidebarColor).toBe(presentation.timelineColor);
