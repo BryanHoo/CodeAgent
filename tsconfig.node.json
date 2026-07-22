@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": ".cache/types/root.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "tools/**/*.ts", "*.config.ts"]
+}

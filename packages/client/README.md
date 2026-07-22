@@ -1,0 +1,5 @@
+# `@code-agent-window/client`
+
+维护 Web 使用的轻量 HTTP/WebSocket 客户端和协议解码边界。
+
+该包只依赖 Protocol，不得导入 Server、Core 或具体 Provider 实现。

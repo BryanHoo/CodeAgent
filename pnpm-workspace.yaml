@@ -1,0 +1,47 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+allowBuilds:
+  # esbuild 是 Vite、Vitest 与 tsup 的构建器，只允许其安装本机二进制。
+  esbuild: true
+
+catalog:
+  "@eslint/js": 10.0.1
+  "@fastify/static": 8.3.0
+  "@fastify/websocket": 11.3.0
+  "@openai/codex": 0.145.0
+  "@playwright/test": 1.61.1
+  "@sinclair/typebox": 0.34.52
+  "@types/node": 24.13.3
+  "@types/react": 19.2.17
+  "@types/react-dom": 19.2.3
+  "@vitejs/plugin-react": 6.0.3
+  "@vitest/coverage-v8": 4.1.10
+  dependency-cruiser: 18.1.0
+  eslint: 10.7.0
+  eslint-config-prettier: 10.1.8
+  fastify: 5.10.0
+  globals: 17.7.0
+  prettier: 3.9.6
+  react: 19.2.8
+  react-dom: 19.2.8
+  tsup: 8.5.1
+  typescript: 6.0.2
+  typescript-eslint: 8.65.0
+  vite: 8.1.5
+  vitest: 4.1.10
+
+catalogMode: strict
+cleanupUnusedCatalogs: true
+autoInstallPeers: false
+linkWorkspacePackages: false
+minimumReleaseAgeExclude:
+  - "@openai/codex@0.145.0-darwin-arm64 || 0.145.0-darwin-x64 || 0.145.0-linux-arm64 || 0.145.0-linux-x64 || 0.145.0-win32-arm64 || 0.145.0-win32-x64 || 0.145.0"
+  - prettier@3.9.6
+  - react-dom@19.2.8
+  - react@19.2.8
+preferWorkspacePackages: true
+saveExact: true
+sharedWorkspaceLockfile: true
+strictPeerDependencies: true

@@ -1,0 +1,21 @@
+{
+  "name": "@code-agent-window/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@code-agent-window/core": "workspace:*",
+    "@code-agent-window/protocol": "workspace:*",
+    "@code-agent-window/provider-codex": "workspace:*",
+    "@fastify/static": "catalog:",
+    "@fastify/websocket": "catalog:",
+    "fastify": "catalog:"
+  }
+}

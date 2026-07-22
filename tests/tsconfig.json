@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "../.cache/types/tests.tsbuildinfo",
+    "types": ["node", "@playwright/test"]
+  },
+  "include": ["e2e/**/*.ts"]
+}

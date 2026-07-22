@@ -1,0 +1,55 @@
+{
+  "name": "code-agent-window",
+  "version": "0.0.0",
+  "description": "通过 Web 操作本地 Coding Agent 的应用",
+  "type": "module",
+  "packageManager": "pnpm@11.15.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "code-agent-window": "./dist/cli.js",
+    "codeAgentWindow": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "pnpm run clean && pnpm run typecheck && pnpm --filter @code-agent-window/web build && pnpm run build:node",
+    "build:node": "tsup",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run lint:architecture && pnpm run test && pnpm run build && pnpm run package:check",
+    "clean": "node ./tools/clean.mjs",
+    "dev": "pnpm --filter @code-agent-window/web dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0",
+    "lint:architecture": "depcruise --config dependency-cruiser.config.cjs src apps/web/src packages/*/src",
+    "package:check": "node ./tools/verify-package.mjs",
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage --passWithNoTests",
+    "test:e2e": "pnpm --filter @code-agent-window/web build && playwright test",
+    "typecheck": "tsc -b --pretty false",
+    "prepublishOnly": "pnpm run check"
+  },
+  "dependencies": {
+    "@openai/codex": "catalog:"
+  },
+  "devDependencies": {
+    "@eslint/js": "catalog:",
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "dependency-cruiser": "catalog:",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "globals": "catalog:",
+    "prettier": "catalog:",
+    "tsup": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
+    "vitest": "catalog:"
+  },
+  "license": "MIT"
+}

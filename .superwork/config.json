@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 2,
+  "packageManager": "pnpm",
+  "packages": [
+    {
+      "name": "root",
+      "layers": ["distribution", "cli"]
+    },
+    {
+      "name": "@code-agent-window/web",
+      "layers": ["frontend"]
+    },
+    {
+      "name": "@code-agent-window/protocol",
+      "layers": ["shared", "protocol"]
+    },
+    {
+      "name": "@code-agent-window/core",
+      "layers": ["shared", "domain"]
+    },
+    {
+      "name": "@code-agent-window/provider-codex",
+      "layers": ["backend", "provider"]
+    },
+    {
+      "name": "@code-agent-window/server",
+      "layers": ["backend", "delivery", "persistence"]
+    },
+    {
+      "name": "@code-agent-window/client",
+      "layers": ["frontend", "transport"]
+    }
+  ],
+  "artifactPaths": {
+    "designs": ".superwork/prd",
+    "plans": ".superwork/plans",
+    "specs": ".superwork/spec"
+  },
+  "verification": ["pnpm check", "pnpm test:e2e"]
+}
