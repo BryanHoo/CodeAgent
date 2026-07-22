@@ -236,7 +236,7 @@ apps/web/src/shared/ai-elements/
 
 Project 和 Task ID 必须来自 Server，URL 只表示导航意图，不能代替权限校验。
 
-Project 不使用独立页面。用户在工作台左栏通过目录选择器添加本地文件夹，文件夹名作为 Project 名称；真实路径只提交给本地 Runtime 校验，不进入浏览器持久化状态。
+Project 不使用独立页面。用户在工作台左栏通过目录选择器添加本地文件夹，文件夹名作为 Project 名称；本地 Runtime 校验真实路径后随 Project 上下文返回，Web 只负责在当前工作台展示，不单独持久化路径。
 
 ### 8.2 应用外壳
 

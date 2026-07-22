@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Ellipsis, ExternalLink, PanelLeft, PanelRight, WifiOff } from "lucide-react";
+import { Ellipsis, ExternalLink, PanelLeft, PanelRight } from "lucide-react";
 
 import { useProjects } from "../../projects/project-context.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
@@ -27,7 +27,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const [inspectorOpen, setInspectorOpen] = useState(() =>
     shouldOpenDesktopPanel(inspectorOverlayQuery),
   );
-  const projectName = projects.find((project) => project.id === projectId)?.name ?? projectId;
+  const project = projects.find((item) => item.id === projectId);
+  const projectName = project?.name ?? projectId;
+  const projectPath = project?.rootPath ?? projectId;
   const hasTask = taskId !== undefined;
   const title = tasks.find((task) => task.id === taskId)?.title ?? taskId ?? "New agent";
 
@@ -115,17 +117,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             >
               <PanelLeft className="size-3.5" aria-hidden="true" />
             </IconButton>
-            <div className="min-w-0">
-              <h1 className="truncate text-body-small font-semibold text-foreground">{title}</h1>
-              <p className="truncate text-meta text-muted-foreground">{projectName}</p>
-            </div>
+            <h1 className="truncate text-body-small font-semibold text-foreground">{title}</h1>
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
-            <span className="mr-1 hidden items-center gap-1.5 text-meta text-muted-foreground sm:inline-flex">
-              <WifiOff className="size-3" aria-hidden="true" />
-              本地离线
-            </span>
             <button
               className="hidden h-7 items-center gap-1.5 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover sm:inline-flex"
               disabled
@@ -151,7 +146,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         </header>
 
         <TaskTimeline hasTask={hasTask} projectName={projectName} />
-        <WorkbenchComposer hasTask={hasTask} />
+        <WorkbenchComposer hasTask={hasTask} projectPath={projectPath} />
       </main>
 
       {inspectorOpen ? (
@@ -163,7 +158,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         />
       ) : null}
 
-      <WorkbenchInspector onClose={closeInspector} projectName={projectName} />
+      <WorkbenchInspector projectName={projectName} />
     </div>
   );
 }

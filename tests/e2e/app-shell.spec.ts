@@ -127,75 +127,169 @@ test("uses subtle hairline separation across registered routes", async ({ page }
 test("renders the AI workbench landmarks without enabling runtime actions", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
+  const main = page.getByRole("main", { name: "Task Timeline" });
+  const inspector = page.getByRole("complementary", { name: "Context Inspector" });
   await expect(page.getByRole("complementary", { name: "Project Sidebar" })).toBeVisible();
-  await expect(page.getByRole("main", { name: "Task Timeline" })).toBeVisible();
-  await expect(page.getByRole("complementary", { name: "Context Inspector" })).toBeVisible();
+  await expect(main).toBeVisible();
+  await expect(inspector).toBeVisible();
   await expect(page.getByRole("heading", { name: "环境信息" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Composer" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "任务输入" })).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "批准模式" })).toHaveValue("on-request");
+  await expect(page.getByText("本地", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();
+  await expect(main.locator("header").getByText("CodeAgent", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("本地离线", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("项目路径")).toHaveText("~/Develop/person/CodeAgent");
+  await expect(inspector.getByRole("button", { name: "关闭上下文面板" })).toHaveCount(0);
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
 });
 
-test("orders localized task actions, pinned tasks and projects in the sidebar", async ({
+test("orders persistent search, task actions, pinned tasks and projects in the sidebar", async ({
   page,
 }) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
   const newAgent = sidebar.getByRole("link", { name: "新建任务" });
-  const search = sidebar.getByRole("button", { name: "搜索" });
+  const search = sidebar.getByRole("textbox", { name: "搜索任务" });
   const productHome = sidebar.getByRole("link", { name: "CodeAgent 首页" });
   await expect(productHome).toBeVisible();
   await expect(productHome.getByText("CodeAgent", { exact: true })).toBeVisible();
-
-  const readPrimaryActionStyle = async (selector: typeof newAgent) =>
-    selector.evaluate((element) => {
-      const icon = element.querySelector("svg")?.getBoundingClientRect();
-      const style = window.getComputedStyle(element);
-      return {
-        fontSize: style.fontSize,
-        fontWeight: style.fontWeight,
-        iconHeight: icon?.height,
-        iconWidth: icon?.width,
-        lineHeight: style.lineHeight,
-      };
-    });
-  expect(await readPrimaryActionStyle(search)).toEqual(await readPrimaryActionStyle(newAgent));
+  await expect(search).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: "搜索" })).toHaveCount(0);
 
   const newAgentBox = await newAgent.boundingBox();
   const searchBox = await search.boundingBox();
   const pinnedBox = await sidebar.getByRole("heading", { name: "Pinned" }).boundingBox();
   const projectsBox = await sidebar.getByRole("heading", { name: "Projects" }).boundingBox();
+  const addProjectIconBox = await sidebar
+    .getByRole("button", { name: "添加项目文件夹" })
+    .locator("svg")
+    .boundingBox();
+  const taskAgeRight = await sidebar
+    .getByRole("link", { name: /优化输入框交互/ })
+    .evaluate((link) => link.querySelector("span:last-child")?.getBoundingClientRect().right);
 
   expect(newAgentBox).not.toBeNull();
   expect(searchBox).not.toBeNull();
   expect(pinnedBox).not.toBeNull();
   expect(projectsBox).not.toBeNull();
-  if (newAgentBox === null || searchBox === null || pinnedBox === null || projectsBox === null) {
+  expect(addProjectIconBox).not.toBeNull();
+  expect(taskAgeRight).toBeDefined();
+  if (
+    newAgentBox === null ||
+    searchBox === null ||
+    pinnedBox === null ||
+    projectsBox === null ||
+    addProjectIconBox === null ||
+    taskAgeRight === undefined
+  ) {
     throw new Error("项目侧栏导航项缺失");
   }
-  expect(newAgentBox.y).toBeLessThan(searchBox.y);
-  expect(searchBox.y).toBeLessThan(pinnedBox.y);
+  expect(searchBox.y).toBeLessThan(newAgentBox.y);
+  expect(newAgentBox.y).toBeLessThan(pinnedBox.y);
   expect(pinnedBox.y).toBeLessThan(projectsBox.y);
+  expect(addProjectIconBox.x + addProjectIconBox.width).toBeCloseTo(taskAgeRight, 0);
+});
+
+test("keeps icon button tooltips visible within clipping and viewport boundaries", async ({
+  page,
+}) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const assertTooltipVisible = async (label: string) => {
+    await page.getByRole("button", { exact: true, name: label }).hover();
+    const tooltip = page.getByRole("tooltip", { exact: true, name: label });
+    await expect(tooltip).toBeVisible();
+
+    const placement = await tooltip.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      let clippedByAncestor = false;
+
+      // Tooltip 不能越过任何实际裁剪它的祖先边界。
+      for (
+        let ancestor = element.parentElement;
+        ancestor !== null;
+        ancestor = ancestor.parentElement
+      ) {
+        const style = getComputedStyle(ancestor);
+        const ancestorRect = ancestor.getBoundingClientRect();
+        const clipsX = ["auto", "clip", "hidden", "scroll"].includes(style.overflowX);
+        const clipsY = ["auto", "clip", "hidden", "scroll"].includes(style.overflowY);
+
+        if (
+          (clipsX && (rect.left < ancestorRect.left || rect.right > ancestorRect.right)) ||
+          (clipsY && (rect.top < ancestorRect.top || rect.bottom > ancestorRect.bottom))
+        ) {
+          clippedByAncestor = true;
+          break;
+        }
+      }
+
+      return {
+        bottom: rect.bottom,
+        clippedByAncestor,
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        viewportHeight: window.innerHeight,
+        viewportWidth: window.innerWidth,
+      };
+    });
+
+    expect(placement.clippedByAncestor).toBe(false);
+    expect(placement.left).toBeGreaterThanOrEqual(8);
+    expect(placement.right).toBeLessThanOrEqual(placement.viewportWidth - 8);
+    expect(placement.top).toBeGreaterThanOrEqual(8);
+    expect(placement.bottom).toBeLessThanOrEqual(placement.viewportHeight - 8);
+  };
+
+  await assertTooltipVisible("添加项目文件夹");
+  await assertTooltipVisible("收起项目侧栏");
+  await assertTooltipVisible("收起上下文面板");
+
+  await page.setViewportSize({ height: 844, width: 390 });
+  await assertTooltipVisible("展开项目侧栏");
+  await assertTooltipVisible("展开上下文面板");
 });
 
 test("searches tasks across projects", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
-  await sidebar.getByRole("button", { name: "搜索" }).click();
   await sidebar.getByRole("textbox", { name: "搜索任务" }).fill("Markdown");
 
   await expect(sidebar.getByRole("link", { name: /完善 Markdown 渲染/ })).toBeVisible();
   await expect(sidebar.getByRole("link", { name: /构建 macOS 工作台/ })).not.toBeVisible();
 });
 
+test("toggles project tasks from both project controls without navigation", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const task = sidebar.getByRole("link", { name: /优化输入框交互/ });
+  await expect(task).toBeVisible();
+
+  await sidebar.getByRole("button", { name: "切换项目 CodeAgent" }).click();
+  await expect(task).not.toBeVisible();
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
+
+  await sidebar.getByRole("button", { name: "展开项目 CodeAgent" }).click();
+  await expect(task).toBeVisible();
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
+});
+
 test("adds a selected folder as a project and navigates to it", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, "showDirectoryPicker", {
       configurable: true,
-      value: () => Promise.resolve({ kind: "directory", name: "New Demo" }),
+      value: () =>
+        Promise.resolve({
+          kind: "directory",
+          name: "New Demo",
+          rootPath: "/Users/demo/Projects/New Demo",
+        }),
     });
   });
   await page.goto("/p/code-agent");
@@ -205,6 +299,7 @@ test("adds a selected folder as a project and navigates to it", async ({ page })
 
   await expect(sidebar.getByText("New Demo", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/p\/new-demo$/);
+  await expect(page.getByLabel("项目路径")).toHaveText("/Users/demo/Projects/New Demo");
 });
 
 test("uses material hierarchy instead of strong workbench borders", async ({ page }) => {

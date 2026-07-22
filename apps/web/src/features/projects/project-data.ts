@@ -5,11 +5,13 @@ export const initialProjects: readonly Project[] = [
     createdAt: "2026-07-22T06:00:00.000Z",
     id: "code-agent",
     name: "CodeAgent",
+    rootPath: "~/Develop/person/CodeAgent",
   },
   {
     createdAt: "2026-07-22T06:30:00.000Z",
     id: "superwork",
     name: "superwork",
+    rootPath: "~/Develop/person/superwork",
   },
 ];
 

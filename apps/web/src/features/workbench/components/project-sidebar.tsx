@@ -3,9 +3,9 @@ import {
   ChevronDown,
   ChevronRight,
   Folder,
-  FolderPlus,
   PanelLeftClose,
   Pin,
+  Plus,
   Search,
   Send,
   Settings,
@@ -34,7 +34,6 @@ export function ProjectSidebar({ onClose, projectId, taskId }: ProjectSidebarPro
     () => new Set(projects.map((project) => project.id)),
   );
   const [query, setQuery] = useState("");
-  const [searchVisible, setSearchVisible] = useState(false);
   const [pickerError, setPickerError] = useState<string>();
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const visibleTasks = useMemo(
@@ -103,36 +102,25 @@ export function ProjectSidebar({ onClose, projectId, taskId }: ProjectSidebarPro
       </div>
 
       <nav className="space-y-0.5 px-2 pt-2" aria-label="Agent 导航">
+        <div className="relative px-1 pb-1">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground"
+          />
+          <input
+            aria-label="搜索任务"
+            className="h-9 w-full rounded-control bg-control pl-8 pr-2.5 text-body-small text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus:shadow-focus"
+            onChange={(event) => {
+              setQuery(event.currentTarget.value);
+            }}
+            placeholder="搜索任务"
+            value={query}
+          />
+        </div>
         <Link className={primaryActionClassName} params={{ projectId }} to="/p/$projectId">
           <Send className={primaryActionIconClassName} aria-hidden="true" />
           新建任务
         </Link>
-        <button
-          aria-expanded={searchVisible}
-          className={primaryActionClassName}
-          onClick={() => {
-            setSearchVisible((visible) => !visible);
-          }}
-          type="button"
-        >
-          <Search className={primaryActionIconClassName} aria-hidden="true" />
-          搜索
-          <span className="ml-auto text-caption text-subtle-foreground">⌘K</span>
-        </button>
-        {searchVisible ? (
-          <div className="px-1 pb-2 pt-1">
-            <input
-              aria-label="搜索任务"
-              autoFocus
-              className="h-8 w-full rounded-control bg-control px-2.5 text-label text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus:shadow-focus"
-              onChange={(event) => {
-                setQuery(event.currentTarget.value);
-              }}
-              placeholder="搜索任务"
-              value={query}
-            />
-          </div>
-        ) : null}
       </nav>
 
       <div className="min-h-0 overflow-y-auto px-2 pb-3 pt-5">
@@ -158,17 +146,12 @@ export function ProjectSidebar({ onClose, projectId, taskId }: ProjectSidebarPro
         ) : null}
 
         <section aria-labelledby="projects-title">
-          <div className="mb-2 flex h-7 items-center px-2">
+          <div className="mb-2 flex h-7 w-full items-center justify-between">
             <h2 className="text-meta font-semibold text-muted-foreground" id="projects-title">
               Projects
             </h2>
-            <IconButton
-              className="ml-auto"
-              label="添加项目文件夹"
-              onClick={() => void addProject()}
-              size="small"
-            >
-              <FolderPlus className="size-3.5" aria-hidden="true" />
+            <IconButton label="添加项目文件夹" onClick={() => void addProject()} size="small">
+              <Plus className="size-3" aria-hidden="true" />
             </IconButton>
           </div>
 
@@ -186,17 +169,18 @@ export function ProjectSidebar({ onClose, projectId, taskId }: ProjectSidebarPro
               return (
                 <div key={project.id}>
                   <div className="flex min-w-0 items-center gap-0.5">
-                    <Link
-                      aria-label={`打开项目 ${project.name}`}
-                      className={`flex h-8 min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-body-small font-medium transition-colors hover:bg-control-hover ${
-                        project.id === projectId ? "text-foreground" : "text-muted-foreground"
-                      }`}
-                      params={{ projectId: project.id }}
-                      to="/p/$projectId"
+                    <button
+                      aria-expanded={expanded}
+                      aria-label={`切换项目 ${project.name}`}
+                      className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-body-small font-medium text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+                      onClick={() => {
+                        toggleProject(project.id);
+                      }}
+                      type="button"
                     >
                       <Folder className="size-4 shrink-0" aria-hidden="true" />
                       <span className="truncate">{project.name}</span>
-                    </Link>
+                    </button>
                     <IconButton
                       label={expanded ? `收起项目 ${project.name}` : `展开项目 ${project.name}`}
                       onClick={() => {

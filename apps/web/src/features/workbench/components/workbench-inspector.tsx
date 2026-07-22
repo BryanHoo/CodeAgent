@@ -1,15 +1,5 @@
-import {
-  Braces,
-  CheckCircle2,
-  FileCode2,
-  GitBranch,
-  HardDrive,
-  PanelRightClose,
-  Plus,
-} from "lucide-react";
+import { Braces, CheckCircle2, FileCode2, GitBranch, HardDrive, Plus } from "lucide-react";
 import { useState } from "react";
-
-import { IconButton } from "../../../shared/ui/icon-button.js";
 
 const changedFiles = [
   { name: "workbench-shell.tsx", additions: 84, deletions: 18 },
@@ -18,11 +8,10 @@ const changedFiles = [
 ];
 
 type WorkbenchInspectorProps = Readonly<{
-  onClose: () => void;
   projectName: string;
 }>;
 
-export function WorkbenchInspector({ onClose, projectName }: WorkbenchInspectorProps) {
+export function WorkbenchInspector({ projectName }: WorkbenchInspectorProps) {
   const [tab, setTab] = useState<"changes" | "context">("changes");
 
   return (
@@ -30,11 +19,8 @@ export function WorkbenchInspector({ onClose, projectName }: WorkbenchInspectorP
       aria-label="Context Inspector"
       className="workbench-inspector z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse"
     >
-      <div className="flex h-toolbar items-center justify-between px-3">
+      <div className="flex h-toolbar items-center px-3">
         <h2 className="text-body-small font-semibold text-foreground">环境信息</h2>
-        <IconButton label="关闭上下文面板" onClick={onClose} size="small">
-          <PanelRightClose className="size-3.5" aria-hidden="true" />
-        </IconButton>
       </div>
 
       <div className="px-2.5 py-1.5">

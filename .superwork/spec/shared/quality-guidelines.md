@@ -7,6 +7,7 @@
 ## Rules
 
 - Project、Task 等 Protocol 类型必须有对应 JSON Schema 或明确生成来源，运行时边界不得只依赖 TypeScript 类型。
+- `Project.rootPath` 由本地 Runtime 校验后随 Project 契约返回，用于当前工作台展示，并由 `ProjectSchema` 校验为非空字符串。
 - Agent Event 保持版本字段、单调 `sequence` 和可判别事件类型。
 - Provider 专有数据只进入诊断字段或 `extensions`，未知事件记录告警但不破坏事件循环。
 - 变更按新协议逻辑实现并删除冗余旧路径；破坏性变更明确升级 API 或事件版本。

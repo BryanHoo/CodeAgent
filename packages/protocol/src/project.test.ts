@@ -3,18 +3,18 @@ import { describe, expect, it } from "vitest";
 import { AgentTaskSchema, ProjectSchema } from "./project.js";
 
 describe("project protocol", () => {
-  it("defines a public project without exposing its local path", () => {
+  it("defines a public project with its local root path", () => {
     expect(ProjectSchema).toMatchObject({
       additionalProperties: false,
       properties: {
         createdAt: { format: "date-time", type: "string" },
         id: { minLength: 1, type: "string" },
         name: { minLength: 1, type: "string" },
+        rootPath: { minLength: 1, type: "string" },
       },
-      required: ["id", "name", "createdAt"],
+      required: ["id", "name", "rootPath", "createdAt"],
       type: "object",
     });
-    expect(ProjectSchema.properties).not.toHaveProperty("path");
   });
 
   it("scopes every task to a project and records its pinned state", () => {

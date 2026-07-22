@@ -7,6 +7,7 @@ import { createProjectId, initialProjects, initialTasks } from "./project-data.j
 type DirectoryHandle = Readonly<{
   kind: "directory";
   name: string;
+  rootPath?: string;
 }>;
 
 type DirectoryPickerWindow = Window & {
@@ -46,9 +47,10 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
         projects.map((item) => item.id),
       ),
       name: directory.name,
+      rootPath: directory.rootPath ?? directory.name,
     };
 
-    // 目录句柄和绝对路径不进入页面状态，后续由本地 Runtime 完成注册与授权。
+    // Runtime 应返回已校验路径；浏览器原型无法读取绝对路径时退回目录名。
     setProjects((current) => [...current, project]);
     return project;
   }, [projects]);

@@ -1,4 +1,4 @@
-import { Folder, GitBranch, Paperclip, WifiOff } from "lucide-react";
+import { Folder, GitBranch, Paperclip } from "lucide-react";
 
 import {
   PromptInput,
@@ -13,9 +13,10 @@ import {
 
 type WorkbenchComposerProps = Readonly<{
   hasTask: boolean;
+  projectPath: string;
 }>;
 
-export function WorkbenchComposer({ hasTask }: WorkbenchComposerProps) {
+export function WorkbenchComposer({ hasTask, projectPath }: WorkbenchComposerProps) {
   return (
     <section className="shrink-0 bg-content px-3 pb-2 sm:px-5" aria-label="Composer">
       <PromptInput
@@ -36,10 +37,9 @@ export function WorkbenchComposer({ hasTask }: WorkbenchComposerProps) {
             <PromptInputButton aria-label="添加附件" disabled title="添加附件">
               <Paperclip className="size-3.5" aria-hidden="true" />
             </PromptInputButton>
-            <PromptInputButton disabled>
-              <Folder className="size-3.5" aria-hidden="true" />
-              本地
-            </PromptInputButton>
+            <PromptInputSelect aria-label="批准模式" defaultValue="on-request" disabled>
+              <option value="on-request">请求批准</option>
+            </PromptInputSelect>
           </PromptInputTools>
           <div className="flex min-w-0 items-center gap-1">
             <PromptInputSelect aria-label="选择模型" defaultValue="gpt-5.6-sol" disabled>
@@ -49,12 +49,17 @@ export function WorkbenchComposer({ hasTask }: WorkbenchComposerProps) {
           </div>
         </PromptInputFooter>
       </PromptInput>
-      <div className="mx-auto mt-1.5 flex w-full max-w-content items-center gap-3 px-1 text-caption text-muted-foreground">
-        <span className="inline-flex items-center gap-1">
+      <div className="mx-auto mt-1.5 flex w-full max-w-content min-w-0 items-center gap-3 px-1 text-caption text-muted-foreground">
+        <span className="inline-flex shrink-0 items-center gap-1">
           <GitBranch className="size-3" aria-hidden="true" /> main
         </span>
-        <span className="inline-flex items-center gap-1">
-          <WifiOff className="size-3" aria-hidden="true" /> This Mac
+        <span
+          aria-label="项目路径"
+          className="inline-flex min-w-0 items-center gap-1"
+          title={projectPath}
+        >
+          <Folder className="size-3 shrink-0" aria-hidden="true" />
+          <span className="truncate">{projectPath}</span>
         </span>
       </div>
     </section>
