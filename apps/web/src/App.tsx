@@ -1,4 +1,8 @@
+import { RouterProvider } from "@tanstack/react-router";
+
+import { router } from "./app/router.js";
+
 export function App() {
-  // 页面保持空壳，业务视图将在独立功能模块中注册。
-  return <main data-testid="app-root" />;
+  // App 只持有顶层导航，具体页面和功能状态由路由模块负责。
+  return <RouterProvider router={router} />;
 }

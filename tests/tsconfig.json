@@ -2,6 +2,7 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
+    "lib": ["ES2024", "DOM"],
     "noEmit": true,
     "tsBuildInfoFile": "../.cache/types/tests.tsbuildinfo",
     "types": ["node", "@playwright/test"]

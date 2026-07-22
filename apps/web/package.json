@@ -11,13 +11,18 @@
   "dependencies": {
     "@code-agent-window/client": "workspace:*",
     "@code-agent-window/protocol": "workspace:*",
+    "@tanstack/react-query": "catalog:",
+    "@tanstack/react-router": "catalog:",
+    "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "tailwindcss": "catalog:",
     "vite": "catalog:"
   }
 }

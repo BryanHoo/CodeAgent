@@ -1,7 +1,65 @@
 import { expect, test } from "@playwright/test";
 
-test("mounts the application shell", async ({ page }) => {
+test("redirects the root route to the workspace index", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByTestId("app-root")).toBeAttached();
+  await expect(page).toHaveURL(/\/workspaces$/);
+  await expect(page.getByRole("heading", { name: "Workspaces" })).toBeVisible();
+});
+
+test("exposes the documented navigation routes", async ({ page }) => {
+  const routes = [
+    { path: "/login", heading: "登录" },
+    { path: "/workspaces", heading: "Workspaces" },
+    { path: "/w/demo", heading: "demo" },
+    { path: "/w/demo/t/thread-1", heading: "暂无消息" },
+    { path: "/settings", heading: "设置" },
+  ];
+
+  for (const route of routes) {
+    await page.goto(route.path);
+    await expect(
+      page.getByRole("main").getByRole("heading", { name: route.heading }),
+    ).toBeVisible();
+  }
+});
+
+test("renders the workbench landmarks without enabling business actions", async ({ page }) => {
+  await page.goto("/w/demo/t/thread-1");
+
+  await expect(page.getByRole("complementary", { name: "Thread Sidebar" })).toBeVisible();
+  await expect(page.getByRole("main", { name: "Thread Timeline" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Composer" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "任务输入" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "提交" })).toBeDisabled();
+});
+
+test("keeps the narrow workbench layout stable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/w/demo/t/thread-1");
+
+  const sidebarBox = await page
+    .getByRole("complementary", { name: "Thread Sidebar" })
+    .boundingBox();
+  const timelineBox = await page.getByRole("main", { name: "Thread Timeline" }).boundingBox();
+
+  expect(sidebarBox).not.toBeNull();
+  expect(timelineBox).not.toBeNull();
+  expect(timelineBox?.y).toBeGreaterThanOrEqual((sidebarBox?.y ?? 0) + (sidebarBox?.height ?? 0));
+
+  const hasHorizontalOverflow = await page
+    .locator("html")
+    .evaluate((root) => root.scrollWidth > root.clientWidth);
+  expect(hasHorizontalOverflow).toBe(false);
+});
+
+test("renders a route-level not-found state", async ({ page }) => {
+  await page.goto("/missing-route");
+
+  await expect(page.getByRole("heading", { name: "页面不存在" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "返回 Workspaces" })).toHaveAttribute(
+    "href",
+    "/workspaces",
+  );
 });
