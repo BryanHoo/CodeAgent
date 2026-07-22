@@ -12,7 +12,7 @@ export const loginRoute = createRoute({
 function LoginPage() {
   return (
     <div className="grid h-full grid-rows-[var(--ui-layout-toolbar-height)_1fr] bg-window">
-      <header className="flex items-center bg-sidebar px-5 shadow-toolbar backdrop-blur-panel">
+      <header className="flex items-center bg-sidebar px-5 shadow-toolbar">
         <BrandLink />
       </header>
       <main className="grid min-h-0 place-items-center px-6" aria-labelledby="login-title">

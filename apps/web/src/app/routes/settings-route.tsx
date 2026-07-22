@@ -13,7 +13,7 @@ function SettingsPage() {
   return (
     <div className="grid h-full grid-cols-[var(--ui-layout-settings-sidebar-width)_minmax(0,1fr)] bg-window max-settings:grid-cols-1 max-settings:grid-rows-[var(--ui-layout-toolbar-height)_minmax(0,1fr)]">
       <aside
-        className="bg-sidebar p-4 shadow-divider backdrop-blur-panel max-settings:shadow-toolbar"
+        className="bg-sidebar p-4 shadow-divider max-settings:shadow-toolbar"
         aria-label="设置导航"
       >
         <Link

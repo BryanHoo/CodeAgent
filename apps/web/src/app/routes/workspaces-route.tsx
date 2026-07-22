@@ -13,7 +13,7 @@ export const workspacesRoute = createRoute({
 function WorkspacesPage() {
   return (
     <div className="grid h-full grid-rows-[var(--ui-layout-toolbar-height)_minmax(0,1fr)] bg-window">
-      <header className="flex items-center justify-between bg-sidebar px-5 shadow-toolbar backdrop-blur-panel">
+      <header className="flex items-center justify-between bg-sidebar px-5 shadow-toolbar">
         <BrandLink />
         <Link
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"

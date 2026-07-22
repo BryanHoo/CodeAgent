@@ -17,7 +17,7 @@ type WorkbenchComposerProps = Readonly<{
 
 export function WorkbenchComposer({ hasThread }: WorkbenchComposerProps) {
   return (
-    <section className="shrink-0 bg-content px-3 pb-2 sm:px-6 sm:pb-3" aria-label="Composer">
+    <section className="shrink-0 bg-content px-3 pb-2 sm:px-5" aria-label="Composer">
       <PromptInput
         className="mx-auto w-full max-w-content"
         onSubmit={(event) => {

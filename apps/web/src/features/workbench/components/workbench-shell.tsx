@@ -114,7 +114,7 @@ export function WorkbenchShell({ threadId, workspaceId }: WorkbenchShellProps) {
       ) : null}
 
       <main aria-label="Thread Timeline" className="flex min-h-0 min-w-0 flex-col bg-content">
-        <header className="flex h-toolbar shrink-0 items-center justify-between gap-3 bg-content/88 px-2.5 shadow-toolbar backdrop-blur-panel sm:px-3.5">
+        <header className="flex h-toolbar shrink-0 items-center justify-between gap-3 bg-content px-2.5 shadow-toolbar sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
             <IconButton
               id="workbench-sidebar-toggle"
@@ -138,7 +138,7 @@ export function WorkbenchShell({ threadId, workspaceId }: WorkbenchShellProps) {
               本地离线
             </span>
             <button
-              className="hidden h-7 items-center gap-1.5 rounded-control bg-control px-2.5 text-label font-medium text-foreground shadow-sm transition-colors hover:bg-control-hover sm:inline-flex"
+              className="hidden h-7 items-center gap-1.5 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover sm:inline-flex"
               disabled
               type="button"
             >

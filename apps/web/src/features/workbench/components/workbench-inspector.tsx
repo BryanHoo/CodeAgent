@@ -28,7 +28,7 @@ export function WorkbenchInspector({ onClose, workspaceId }: WorkbenchInspectorP
   return (
     <aside
       aria-label="Context Inspector"
-      className="workbench-inspector z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse backdrop-blur-panel"
+      className="workbench-inspector z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse"
     >
       <div className="flex h-toolbar items-center justify-between px-3 shadow-toolbar">
         <span className="text-body-small font-semibold text-foreground">工作区</span>
@@ -37,14 +37,14 @@ export function WorkbenchInspector({ onClose, workspaceId }: WorkbenchInspectorP
         </IconButton>
       </div>
 
-      <div className="px-3 py-2">
+      <div className="px-2.5 py-1.5">
         <div className="grid grid-cols-2 rounded-control bg-control p-0.5" role="tablist">
           {(["changes", "context"] as const).map((value) => (
             <button
               aria-selected={tab === value}
               className={`h-7 rounded-control text-label font-medium transition-colors ${
                 tab === value
-                  ? "bg-raised text-foreground shadow-sm"
+                  ? "bg-raised text-foreground"
                   : "text-muted-foreground hover:text-foreground"
               }`}
               key={value}
@@ -60,7 +60,7 @@ export function WorkbenchInspector({ onClose, workspaceId }: WorkbenchInspectorP
         </div>
       </div>
 
-      <div className="min-h-0 overflow-y-auto p-3" role="tabpanel">
+      <div className="min-h-0 overflow-y-auto p-2.5" role="tabpanel">
         {tab === "changes" ? (
           <>
             <div className="mb-3 flex items-center justify-between">

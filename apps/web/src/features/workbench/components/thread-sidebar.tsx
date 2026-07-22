@@ -42,7 +42,7 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
   return (
     <aside
       aria-label="Thread Sidebar"
-      className="workbench-sidebar z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] bg-sidebar shadow-divider backdrop-blur-panel"
+      className="workbench-sidebar z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] bg-sidebar shadow-divider"
     >
       <div className="flex h-toolbar items-center gap-2 px-3 shadow-toolbar">
         <Link
@@ -69,7 +69,7 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
         </IconButton>
       </div>
 
-      <nav className="space-y-0.5 px-2 py-2" aria-label="工作台导航">
+      <nav className="space-y-0.5 px-2 py-1.5" aria-label="工作台导航">
         <button
           className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-body-small text-foreground transition-colors hover:bg-control-hover disabled:opacity-50"
           disabled
@@ -100,7 +100,7 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
         </Link>
       </nav>
 
-      <div className="min-h-0 overflow-y-auto px-2 pb-3">
+      <div className="min-h-0 overflow-y-auto px-2 pb-2">
         {searchVisible ? (
           <div className="px-1 pb-2">
             <input
@@ -116,7 +116,7 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between px-2 py-2">
+        <div className="flex items-center justify-between px-2 py-1.5">
           <span className="text-meta font-medium text-muted-foreground">最近任务</span>
           <Clock3 className="size-3 text-muted-foreground" aria-hidden="true" />
         </div>
@@ -124,9 +124,9 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
         <div className="space-y-0.5">
           {filteredThreads.map((thread) => (
             <Link
-              className={`group flex min-w-0 items-center gap-2 rounded-control px-2 py-2 text-body-small transition-colors ${
+              className={`group flex min-w-0 items-center gap-2 rounded-control px-2 py-1.5 text-body-small transition-colors ${
                 thread.id === threadId
-                  ? "bg-control-active text-foreground shadow-sm"
+                  ? "bg-control-active text-foreground"
                   : "text-muted-foreground hover:bg-control-hover hover:text-foreground"
               }`}
               key={thread.id}
@@ -155,7 +155,7 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
         </div>
       </div>
 
-      <div className="p-2">
+      <div className="p-1.5">
         <Link
           aria-label="设置"
           className="flex h-9 items-center gap-2 rounded-control px-2 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"

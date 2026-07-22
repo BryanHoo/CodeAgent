@@ -51,12 +51,12 @@ export function ThreadTimeline({ hasThread, workspaceId }: ThreadTimelineProps) 
           </MessageContent>
         </Message>
 
-        <div className="my-6 flex items-center gap-3 text-meta text-muted-foreground">
+        <div className="my-5 flex items-center gap-3 text-meta text-muted-foreground">
           <span className="font-medium">已处理 1m 24s</span>
           <span className="h-px flex-1 bg-separator" />
         </div>
 
-        <div className="relative space-y-4 pl-5 before:absolute before:bottom-3 before:left-1.5 before:top-3 before:w-px before:bg-separator">
+        <div className="relative space-y-3 pl-5 before:absolute before:bottom-3 before:left-1.5 before:top-3 before:w-px before:bg-separator">
           <span className="absolute left-0.5 top-2 size-2 rounded-pill bg-accent shadow-timeline-node" />
           <Reasoning defaultOpen>
             <ReasoningTrigger>分析工作台信息架构</ReasoningTrigger>
@@ -80,7 +80,7 @@ export function ThreadTimeline({ hasThread, workspaceId }: ThreadTimelineProps) 
           </Tool>
         </div>
 
-        <Message className="mt-6" from="assistant">
+        <Message className="mt-5" from="assistant">
           <MessageContent className="w-full">
             <MessageResponse>
               <p>工作台界面已按统一的 AI Elements 结构重新组织。</p>

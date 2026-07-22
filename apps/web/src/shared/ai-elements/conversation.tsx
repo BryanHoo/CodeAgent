@@ -58,7 +58,7 @@ export function Conversation({ children, className = "", onScroll, ...props }: C
 export function ConversationContent({ className = "", ...props }: ConversationProps) {
   return (
     <div
-      className={`mx-auto flex w-full max-w-content flex-col px-5 py-8 sm:px-8 sm:py-10 ${className}`}
+      className={`mx-auto flex w-full max-w-content flex-col px-4 py-6 sm:px-6 sm:py-7 ${className}`}
       {...props}
     />
   );

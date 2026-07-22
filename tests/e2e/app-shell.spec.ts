@@ -10,39 +10,54 @@ test("redirects the root route to the workspace index", async ({ page }) => {
 
 test("provides reusable design tokens for light and dark themes", async ({ page }) => {
   await page.goto("/workspaces");
-  await page.locator("html").evaluate((root) => {
-    root.setAttribute("data-theme", "light");
-  });
+  const readTheme = async (theme: "dark" | "light") =>
+    page.locator("html").evaluate((root, activeTheme) => {
+      root.setAttribute("data-theme", activeTheme);
 
-  const lightTokens = await page.locator("html").evaluate((root) => {
-    const styles = getComputedStyle(root);
-    return {
-      bodyFontSize: styles.getPropertyValue("--ui-font-size-body").trim(),
-      canvasColor: styles.backgroundColor,
-      controlRadius: styles.getPropertyValue("--ui-radius-control").trim(),
-      panelShadow: styles.getPropertyValue("--ui-shadow-panel").trim(),
-      spaceUnit: styles.getPropertyValue("--ui-space-unit").trim(),
-      windowColor: styles.getPropertyValue("--ui-color-window").trim(),
-    };
-  });
+      // 通过真实 CSS 解析值校验主题，而不是绑定变量的文本写法。
+      const resolveColor = (token: string) => {
+        const probe = document.createElement("span");
+        probe.style.color = `var(${token})`;
+        root.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      };
+      const styles = getComputedStyle(root);
 
-  expect(lightTokens).toEqual({
+      return {
+        accent: resolveColor("--ui-color-accent"),
+        bodyFontSize: styles.getPropertyValue("--ui-font-size-body").trim(),
+        diffAdded: resolveColor("--ui-color-diff-added"),
+        diffRemoved: resolveColor("--ui-color-diff-removed"),
+        ink: resolveColor("--ui-color-text"),
+        skill: resolveColor("--ui-color-skill"),
+        spaceUnit: styles.getPropertyValue("--ui-space-unit").trim(),
+        surface: styles.backgroundColor,
+      };
+    }, theme);
+
+  expect(await readTheme("light")).toEqual({
+    accent: "rgb(0, 106, 255)",
     bodyFontSize: expect.stringMatching(/^0?\.875rem$/),
-    canvasColor: expect.stringContaining("oklch"),
-    controlRadius: "6px",
-    panelShadow: expect.stringContaining("oklch"),
+    diffAdded: "rgb(40, 169, 72)",
+    diffRemoved: "rgb(235, 0, 29)",
+    ink: "rgb(23, 23, 23)",
+    skill: "rgb(161, 0, 248)",
     spaceUnit: expect.stringMatching(/^0?\.25rem$/),
-    windowColor: expect.stringContaining("oklch"),
+    surface: "rgb(255, 255, 255)",
   });
 
-  await page.locator("html").evaluate((root) => {
-    root.setAttribute("data-theme", "dark");
+  expect(await readTheme("dark")).toEqual({
+    accent: "rgb(51, 156, 255)",
+    bodyFontSize: expect.stringMatching(/^0?\.875rem$/),
+    diffAdded: "rgb(64, 201, 119)",
+    diffRemoved: "rgb(250, 66, 62)",
+    ink: "rgb(255, 255, 255)",
+    skill: "rgb(173, 123, 249)",
+    spaceUnit: expect.stringMatching(/^0?\.25rem$/),
+    surface: "rgb(24, 24, 24)",
   });
-  const darkCanvasColor = await page
-    .locator("html")
-    .evaluate((root) => getComputedStyle(root).backgroundColor);
-
-  expect(darkCanvasColor).not.toBe(lightTokens.canvasColor);
 });
 
 test("exposes the documented navigation routes", async ({ page }) => {
@@ -62,16 +77,33 @@ test("exposes the documented navigation routes", async ({ page }) => {
   }
 });
 
-test("uses the shared material theme across registered routes", async ({ page }) => {
+test("uses subtle hairline separation across registered routes", async ({ page }) => {
   const surfaces = [
-    { path: "/login", selector: "header", border: "borderBottomWidth" },
-    { path: "/workspaces", selector: "header", border: "borderBottomWidth" },
-    { path: "/settings", selector: "aside", border: "borderRightWidth" },
-    { path: "/missing-route", selector: "main section", border: "borderLeftWidth" },
+    {
+      path: "/login",
+      selector: "header",
+      border: "borderBottomWidth",
+      offset: "0px 1px 0px 0px",
+    },
+    {
+      path: "/workspaces",
+      selector: "header",
+      border: "borderBottomWidth",
+      offset: "0px 1px 0px 0px",
+    },
+    {
+      path: "/settings",
+      selector: "aside",
+      border: "borderRightWidth",
+      offset: "1px 0px 0px 0px",
+    },
   ] as const;
 
   for (const surface of surfaces) {
     await page.goto(surface.path);
+    await page.locator("html").evaluate((root) => {
+      root.setAttribute("data-theme", "light");
+    });
     const styles = await page.locator(surface.selector).evaluate((element, border) => {
       const computed = getComputedStyle(element);
       return {
@@ -81,7 +113,8 @@ test("uses the shared material theme across registered routes", async ({ page })
     }, surface.border);
 
     expect(styles.borderWidth).toBe("0px");
-    expect(styles.boxShadow).not.toBe("none");
+    expect(styles.boxShadow).toContain("rgba(23, 23, 23, 0.06)");
+    expect(styles.boxShadow).toContain(surface.offset);
   }
 });
 
@@ -104,38 +137,70 @@ test("uses material hierarchy instead of strong workbench borders", async ({ pag
     const sidebar = document.querySelector<HTMLElement>('[aria-label="Thread Sidebar"]');
     const inspector = document.querySelector<HTMLElement>('[aria-label="Context Inspector"]');
     const timeline = document.querySelector<HTMLElement>('[aria-label="Thread Timeline"]');
+    const sidebarToolbar = sidebar?.querySelector<HTMLElement>(":scope > div") ?? null;
+    const inspectorToolbar = inspector?.querySelector<HTMLElement>(":scope > div") ?? null;
+    const toolbar = timeline?.querySelector<HTMLElement>("header") ?? null;
+    const timelineContent = document.querySelector<HTMLElement>('[role="log"] > div');
+    const composerRegion = document.querySelector<HTMLElement>('[aria-label="Composer"]');
     const composer = document.querySelector<HTMLElement>('[aria-label="Composer"] form');
 
-    if (sidebar === null || inspector === null || timeline === null || composer === null) {
+    if (
+      sidebar === null ||
+      inspector === null ||
+      timeline === null ||
+      sidebarToolbar === null ||
+      inspectorToolbar === null ||
+      toolbar === null ||
+      timelineContent === null ||
+      composerRegion === null ||
+      composer === null
+    ) {
       throw new Error("workbench surfaces are missing");
     }
 
+    const composerRegionStyles = getComputedStyle(composerRegion);
     const sidebarStyles = getComputedStyle(sidebar);
+    const sidebarToolbarStyles = getComputedStyle(sidebarToolbar);
     const inspectorStyles = getComputedStyle(inspector);
+    const inspectorToolbarStyles = getComputedStyle(inspectorToolbar);
     const timelineStyles = getComputedStyle(timeline);
+    const timelineContentStyles = getComputedStyle(timelineContent);
+    const toolbarStyles = getComputedStyle(toolbar);
     const composerStyles = getComputedStyle(composer);
 
     return {
       composerBorder: composerStyles.borderTopWidth,
+      composerBottomPadding: Number.parseFloat(composerRegionStyles.paddingBottom),
       composerShadow: composerStyles.boxShadow,
       inspectorBorder: inspectorStyles.borderLeftWidth,
       inspectorColor: inspectorStyles.backgroundColor,
       inspectorShadow: inspectorStyles.boxShadow,
+      inspectorToolbarShadow: inspectorToolbarStyles.boxShadow,
       sidebarBorder: sidebarStyles.borderRightWidth,
       sidebarColor: sidebarStyles.backgroundColor,
       sidebarShadow: sidebarStyles.boxShadow,
+      sidebarToolbarShadow: sidebarToolbarStyles.boxShadow,
       timelineColor: timelineStyles.backgroundColor,
+      timelineTopPadding: Number.parseFloat(timelineContentStyles.paddingTop),
+      toolbarHeight: toolbarStyles.height,
+      toolbarShadow: toolbarStyles.boxShadow,
     };
   });
 
   expect(presentation.sidebarBorder).toBe("0px");
   expect(presentation.inspectorBorder).toBe("0px");
   expect(presentation.composerBorder).toBe("0px");
-  expect(presentation.sidebarShadow).not.toBe("none");
-  expect(presentation.inspectorShadow).not.toBe("none");
+  expect(presentation.sidebarShadow).toContain("1px 0px 0px 0px");
+  expect(presentation.inspectorShadow).toContain("-1px 0px 0px 0px");
+  expect(presentation.sidebarToolbarShadow).toContain("0px 1px 0px 0px");
+  expect(presentation.inspectorToolbarShadow).toContain("0px 1px 0px 0px");
+  expect(presentation.toolbarShadow).toContain("0px 1px 0px 0px");
   expect(presentation.composerShadow).not.toBe("none");
-  expect(presentation.sidebarColor).not.toBe(presentation.timelineColor);
-  expect(presentation.inspectorColor).not.toBe(presentation.timelineColor);
+  expect(presentation.sidebarColor).toBe(presentation.timelineColor);
+  expect(presentation.inspectorColor).toBe(presentation.timelineColor);
+  expect(presentation.toolbarHeight).toBe("44px");
+  expect(presentation.timelineTopPadding).toBeLessThanOrEqual(28);
+  expect(presentation.composerBottomPadding).toBeLessThanOrEqual(8);
 });
 
 test("supports structured activity and keyboard panel dismissal", async ({ page }) => {
