@@ -8,7 +8,7 @@ type ReasoningProps = HTMLAttributes<HTMLDetailsElement> & {
 export function Reasoning({ className = "", defaultOpen, ...props }: ReasoningProps) {
   return (
     <details
-      className={`group/reasoning w-full border-l border-border pl-4 ${className}`}
+      className={`group/reasoning w-full rounded-surface bg-control px-3 py-1 ${className}`}
       open={defaultOpen}
       {...props}
     />
@@ -22,7 +22,7 @@ type ReasoningTriggerProps = HTMLAttributes<HTMLElement> & {
 export function ReasoningTrigger({ children, className = "", ...props }: ReasoningTriggerProps) {
   return (
     <summary
-      className={`flex cursor-pointer list-none items-center gap-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden ${className}`}
+      className={`flex cursor-pointer list-none items-center gap-2 py-1 text-label font-medium text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden ${className}`}
       {...props}
     >
       <Brain className="size-3.5" aria-hidden="true" />
@@ -39,6 +39,9 @@ type ReasoningContentProps = HTMLAttributes<HTMLDivElement>;
 
 export function ReasoningContent({ className = "", ...props }: ReasoningContentProps) {
   return (
-    <div className={`pb-2 pt-1 text-xs leading-5 text-muted-foreground ${className}`} {...props} />
+    <div
+      className={`pb-2 pt-1 text-label leading-5 text-muted-foreground ${className}`}
+      {...props}
+    />
   );
 }

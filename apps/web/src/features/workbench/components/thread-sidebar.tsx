@@ -42,25 +42,25 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
   return (
     <aside
       aria-label="Thread Sidebar"
-      className="workbench-sidebar z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] border-r border-border bg-surface"
+      className="workbench-sidebar z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] bg-sidebar shadow-divider backdrop-blur-panel"
     >
-      <div className="flex h-12 items-center gap-2 border-b border-border px-3">
+      <div className="flex h-toolbar items-center gap-2 px-3 shadow-toolbar">
         <Link
           aria-label="返回 Workspaces"
-          className="grid size-7 shrink-0 place-items-center rounded-[6px] bg-foreground text-[10px] font-bold text-surface"
+          className="grid size-7 shrink-0 place-items-center rounded-control bg-foreground text-caption font-bold text-raised shadow-sm"
           to="/workspaces"
         >
           CA
         </Link>
         <button
-          className="flex min-w-0 flex-1 items-center gap-1 text-left text-[13px] font-semibold text-foreground"
+          className="flex min-w-0 flex-1 items-center gap-1 text-left text-body-small font-semibold text-foreground"
           type="button"
         >
           <span className="truncate">CodeAgentWindow</span>
           <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
         <IconButton
-          className="min-[761px]:hidden"
+          className="min-workbench:hidden"
           label="关闭任务侧栏"
           onClick={onClose}
           size="small"
@@ -71,7 +71,7 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
 
       <nav className="space-y-0.5 px-2 py-2" aria-label="工作台导航">
         <button
-          className="flex h-8 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] text-foreground transition-colors hover:bg-surface-muted disabled:opacity-50"
+          className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-body-small text-foreground transition-colors hover:bg-control-hover disabled:opacity-50"
           disabled
           type="button"
         >
@@ -81,7 +81,7 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
         </button>
         <button
           aria-expanded={searchVisible}
-          className="flex h-8 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] text-foreground transition-colors hover:bg-surface-muted"
+          className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-body-small text-foreground transition-colors hover:bg-control-hover"
           onClick={() => {
             setSearchVisible((visible) => !visible);
           }}
@@ -89,10 +89,10 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
         >
           <Search className="size-3.5" aria-hidden="true" />
           搜索
-          <span className="ml-auto text-[10px] text-muted-foreground">⌘K</span>
+          <span className="ml-auto text-caption text-muted-foreground">⌘K</span>
         </button>
         <Link
-          className="flex h-8 items-center gap-2 rounded-[6px] px-2 text-[13px] text-foreground transition-colors hover:bg-surface-muted"
+          className="flex h-8 items-center gap-2 rounded-control px-2 text-body-small text-foreground transition-colors hover:bg-control-hover"
           to="/workspaces"
         >
           <Archive className="size-3.5" aria-hidden="true" />
@@ -106,7 +106,7 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
             <input
               aria-label="搜索任务"
               autoFocus
-              className="h-8 w-full rounded-[6px] border border-border bg-canvas px-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-focus"
+              className="h-8 w-full rounded-control border-0 bg-raised px-2.5 text-label text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus:shadow-focus"
               onChange={(event) => {
                 setQuery(event.currentTarget.value);
               }}
@@ -117,17 +117,17 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
         ) : null}
 
         <div className="flex items-center justify-between px-2 py-2">
-          <span className="text-[11px] font-medium text-muted-foreground">最近任务</span>
+          <span className="text-meta font-medium text-muted-foreground">最近任务</span>
           <Clock3 className="size-3 text-muted-foreground" aria-hidden="true" />
         </div>
 
         <div className="space-y-0.5">
           {filteredThreads.map((thread) => (
             <Link
-              className={`group flex min-w-0 items-center gap-2 rounded-[6px] px-2 py-2 text-[13px] transition-colors ${
+              className={`group flex min-w-0 items-center gap-2 rounded-control px-2 py-2 text-body-small transition-colors ${
                 thread.id === threadId
-                  ? "bg-surface-strong text-foreground"
-                  : "text-muted-foreground hover:bg-surface-muted hover:text-foreground"
+                  ? "bg-control-active text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-control-hover hover:text-foreground"
               }`}
               key={thread.id}
               params={{ threadId: thread.id, workspaceId }}
@@ -135,11 +135,11 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
             >
               <span
                 className={`size-1.5 shrink-0 rounded-full ${
-                  thread.id === threadId ? "bg-accent" : "bg-border"
+                  thread.id === threadId ? "bg-accent" : "bg-separator-strong"
                 }`}
               />
               <span className="min-w-0 flex-1 truncate">{thread.title}</span>
-              <span className="shrink-0 text-[10px] text-muted-foreground opacity-70">
+              <span className="shrink-0 text-caption text-muted-foreground opacity-70">
                 {thread.time}
               </span>
             </Link>
@@ -149,21 +149,21 @@ export function ThreadSidebar({ onClose, threadId, workspaceId }: ThreadSidebarP
           ) : null}
         </div>
 
-        <div className="mt-4 flex items-center gap-2 px-2 py-2 text-[11px] font-medium text-muted-foreground">
+        <div className="mt-4 flex items-center gap-2 px-2 py-2 text-meta font-medium text-muted-foreground">
           <FolderGit2 className="size-3.5" aria-hidden="true" />
           <span className="truncate">{workspaceId}</span>
         </div>
       </div>
 
-      <div className="border-t border-border p-2">
+      <div className="p-2">
         <Link
           aria-label="设置"
-          className="flex h-9 items-center gap-2 rounded-[6px] px-2 text-[13px] text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground"
+          className="flex h-9 items-center gap-2 rounded-control px-2 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
           to="/settings"
         >
           <Settings className="size-3.5" aria-hidden="true" />
           设置
-          <span className="ml-auto inline-flex items-center gap-1 text-[10px]">
+          <span className="ml-auto inline-flex items-center gap-1 text-caption">
             <span className="size-1.5 rounded-full bg-warning" /> 离线
           </span>
         </Link>

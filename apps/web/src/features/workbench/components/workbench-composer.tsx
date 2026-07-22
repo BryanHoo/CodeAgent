@@ -17,9 +17,9 @@ type WorkbenchComposerProps = Readonly<{
 
 export function WorkbenchComposer({ hasThread }: WorkbenchComposerProps) {
   return (
-    <section className="shrink-0 bg-canvas px-3 pb-2 sm:px-6 sm:pb-3" aria-label="Composer">
+    <section className="shrink-0 bg-content px-3 pb-2 sm:px-6 sm:pb-3" aria-label="Composer">
       <PromptInput
-        className="mx-auto w-full max-w-[780px]"
+        className="mx-auto w-full max-w-content"
         onSubmit={(event) => {
           event.preventDefault();
         }}
@@ -49,7 +49,7 @@ export function WorkbenchComposer({ hasThread }: WorkbenchComposerProps) {
           </div>
         </PromptInputFooter>
       </PromptInput>
-      <div className="mx-auto mt-1.5 flex w-full max-w-[780px] items-center gap-3 px-1 text-[10px] text-muted-foreground">
+      <div className="mx-auto mt-1.5 flex w-full max-w-content items-center gap-3 px-1 text-caption text-muted-foreground">
         <span className="inline-flex items-center gap-1">
           <GitBranch className="size-3" aria-hidden="true" /> main
         </span>

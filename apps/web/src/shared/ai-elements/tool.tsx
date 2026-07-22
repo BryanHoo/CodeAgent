@@ -10,7 +10,7 @@ type ToolProps = HTMLAttributes<HTMLDetailsElement> & {
 export function Tool({ className = "", defaultOpen, ...props }: ToolProps) {
   return (
     <details
-      className={`group/tool w-full border-y border-border/80 py-1 ${className}`}
+      className={`group/tool w-full rounded-surface bg-control px-3 py-1 ${className}`}
       open={defaultOpen}
       {...props}
     />
@@ -36,7 +36,7 @@ export function ToolHeader({ children, className = "", status, ...props }: ToolH
 
   return (
     <summary
-      className={`flex min-h-9 cursor-pointer list-none items-center gap-2 text-xs text-foreground [&::-webkit-details-marker]:hidden ${className}`}
+      className={`flex min-h-9 cursor-pointer list-none items-center gap-2 text-label text-foreground [&::-webkit-details-marker]:hidden ${className}`}
       {...props}
     >
       <Wrench className="size-3.5 text-muted-foreground" aria-hidden="true" />
@@ -62,7 +62,7 @@ type ToolContentProps = HTMLAttributes<HTMLDivElement>;
 export function ToolContent({ className = "", ...props }: ToolContentProps) {
   return (
     <div
-      className={`mb-2 overflow-x-auto rounded-[5px] bg-surface-muted px-3 py-2 font-mono text-[11px] leading-5 text-muted-foreground ${className}`}
+      className={`mb-2 overflow-x-auto rounded-control bg-raised px-3 py-2 font-mono text-meta leading-5 text-muted-foreground shadow-sm ${className}`}
       {...props}
     />
   );

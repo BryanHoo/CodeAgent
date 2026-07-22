@@ -21,7 +21,7 @@ type MessageContentProps = HTMLAttributes<HTMLDivElement>;
 export function MessageContent({ className = "", ...props }: MessageContentProps) {
   return (
     <div
-      className={`max-w-full text-[14px] leading-6 text-foreground group-data-[role=user]/message:max-w-[90%] group-data-[role=user]/message:rounded-[7px] group-data-[role=user]/message:bg-surface-muted group-data-[role=user]/message:px-3.5 group-data-[role=user]/message:py-2.5 ${className}`}
+      className={`max-w-full text-body leading-6 text-foreground group-data-[role=user]/message:max-w-[var(--ui-layout-message-width)] group-data-[role=user]/message:rounded-surface group-data-[role=user]/message:bg-control group-data-[role=user]/message:px-3.5 group-data-[role=user]/message:py-2.5 ${className}`}
       {...props}
     />
   );
@@ -30,7 +30,7 @@ export function MessageContent({ className = "", ...props }: MessageContentProps
 export function MessageResponse({ className = "", ...props }: MessageContentProps) {
   return (
     <div
-      className={`space-y-3 whitespace-pre-wrap break-words [&_code]:rounded-[4px] [&_code]:bg-surface-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.92em] [&_p]:m-0 ${className}`}
+      className={`space-y-3 whitespace-pre-wrap break-words [&_code]:rounded-control [&_code]:bg-control [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-body-small [&_p]:m-0 ${className}`}
       {...props}
     />
   );
@@ -53,7 +53,7 @@ export function MessageAction({
   return (
     <button
       aria-label={label}
-      className={`grid size-7 place-items-center rounded-[5px] text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground ${className}`}
+      className={`grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground ${className}`}
       title={label}
       type={type}
       {...props}

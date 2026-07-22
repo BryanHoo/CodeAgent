@@ -58,7 +58,7 @@ export function Conversation({ children, className = "", onScroll, ...props }: C
 export function ConversationContent({ className = "", ...props }: ConversationProps) {
   return (
     <div
-      className={`mx-auto flex w-full max-w-[780px] flex-col px-5 py-8 sm:px-8 sm:py-10 ${className}`}
+      className={`mx-auto flex w-full max-w-content flex-col px-5 py-8 sm:px-8 sm:py-10 ${className}`}
       {...props}
     />
   );
@@ -80,7 +80,7 @@ export function ConversationScrollButton({
 
   return (
     <button
-      className={`sticky bottom-3 left-1/2 z-10 grid size-8 -translate-x-1/2 place-items-center rounded-full border border-border bg-surface text-muted-foreground shadow-[var(--app-shadow-soft)] transition-colors hover:bg-surface-muted hover:text-foreground ${className}`}
+      className={`sticky bottom-3 left-1/2 z-10 grid size-8 -translate-x-1/2 place-items-center rounded-pill bg-raised text-muted-foreground shadow-floating transition-colors hover:bg-control-hover hover:text-foreground ${className}`}
       title="回到底部"
       type={type}
       {...props}

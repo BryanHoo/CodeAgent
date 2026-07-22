@@ -12,8 +12,8 @@ export const workspacesRoute = createRoute({
 
 function WorkspacesPage() {
   return (
-    <div className="grid h-full grid-rows-[56px_minmax(0,1fr)] bg-canvas">
-      <header className="flex items-center justify-between border-b border-border bg-surface px-5">
+    <div className="grid h-full grid-rows-[var(--ui-layout-toolbar-height)_minmax(0,1fr)] bg-window">
+      <header className="flex items-center justify-between bg-sidebar px-5 shadow-toolbar backdrop-blur-panel">
         <BrandLink />
         <Link
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
@@ -25,7 +25,7 @@ function WorkspacesPage() {
       </header>
       <main className="min-h-0 overflow-auto px-5 py-8 sm:px-8" aria-labelledby="workspaces-title">
         <div className="mx-auto w-full max-w-5xl">
-          <div className="flex items-center justify-between gap-4 border-b border-border pb-4">
+          <div className="flex items-center justify-between gap-4 pb-4">
             <div>
               <h1 id="workspaces-title" className="text-xl font-semibold">
                 Workspaces
@@ -36,10 +36,7 @@ function WorkspacesPage() {
               <Plus className="size-4" aria-hidden="true" />
             </IconButton>
           </div>
-          <section
-            className="grid min-h-72 place-items-center border-b border-border"
-            aria-label="Workspace 列表"
-          >
+          <section className="grid min-h-72 place-items-center" aria-label="Workspace 列表">
             <div className="max-w-sm text-center">
               <FolderGit2
                 className="mx-auto size-9 text-muted-foreground"

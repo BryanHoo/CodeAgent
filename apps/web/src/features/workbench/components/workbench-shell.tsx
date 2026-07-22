@@ -14,6 +14,9 @@ const threadTitles: Record<string, string> = {
   "thread-1": "构建 macOS 工作台",
 };
 
+const sidebarOverlayQuery = "(max-width: 760px)";
+const inspectorOverlayQuery = "(max-width: 1100px)";
+
 type WorkbenchShellProps = Readonly<{
   threadId?: string;
   workspaceId: string;
@@ -32,11 +35,9 @@ function getThreadTitle(threadId?: string) {
 
 export function WorkbenchShell({ threadId, workspaceId }: WorkbenchShellProps) {
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
-  const [sidebarOpen, setSidebarOpen] = useState(() =>
-    shouldOpenDesktopPanel("(max-width: 760px)"),
-  );
+  const [sidebarOpen, setSidebarOpen] = useState(() => shouldOpenDesktopPanel(sidebarOverlayQuery));
   const [inspectorOpen, setInspectorOpen] = useState(() =>
-    shouldOpenDesktopPanel("(max-width: 1100px)"),
+    shouldOpenDesktopPanel(inspectorOverlayQuery),
   );
   const hasThread = threadId !== undefined;
   const title = getThreadTitle(threadId);
@@ -70,9 +71,30 @@ export function WorkbenchShell({ threadId, workspaceId }: WorkbenchShellProps) {
     };
   }, []);
 
+  useEffect(() => {
+    // 窗口缩窄进入覆盖模式时关闭桌面面板，避免两个抽屉同时遮住主内容。
+    const sidebarMedia = window.matchMedia(sidebarOverlayQuery);
+    const inspectorMedia = window.matchMedia(inspectorOverlayQuery);
+    const syncOverlayPanels = () => {
+      if (sidebarMedia.matches) {
+        setSidebarOpen(false);
+      }
+      if (inspectorMedia.matches) {
+        setInspectorOpen(false);
+      }
+    };
+
+    sidebarMedia.addEventListener("change", syncOverlayPanels);
+    inspectorMedia.addEventListener("change", syncOverlayPanels);
+    return () => {
+      sidebarMedia.removeEventListener("change", syncOverlayPanels);
+      inspectorMedia.removeEventListener("change", syncOverlayPanels);
+    };
+  }, []);
+
   return (
     <div
-      className="workbench-shell h-full min-h-0 overflow-hidden bg-canvas"
+      className="workbench-shell h-full min-h-0 overflow-hidden bg-window"
       data-inspector-open={inspectorOpen}
       data-sidebar-open={sidebarOpen}
     >
@@ -91,8 +113,8 @@ export function WorkbenchShell({ threadId, workspaceId }: WorkbenchShellProps) {
         />
       ) : null}
 
-      <main aria-label="Thread Timeline" className="flex min-h-0 min-w-0 flex-col bg-canvas">
-        <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface/95 px-2.5 sm:px-3.5">
+      <main aria-label="Thread Timeline" className="flex min-h-0 min-w-0 flex-col bg-content">
+        <header className="flex h-toolbar shrink-0 items-center justify-between gap-3 bg-content/88 px-2.5 shadow-toolbar backdrop-blur-panel sm:px-3.5">
           <div className="flex min-w-0 items-center gap-2">
             <IconButton
               id="workbench-sidebar-toggle"
@@ -105,18 +127,18 @@ export function WorkbenchShell({ threadId, workspaceId }: WorkbenchShellProps) {
               <PanelLeft className="size-3.5" aria-hidden="true" />
             </IconButton>
             <div className="min-w-0">
-              <h1 className="truncate text-[13px] font-semibold text-foreground">{title}</h1>
-              <p className="truncate text-[11px] text-muted-foreground">{workspaceId}</p>
+              <h1 className="truncate text-body-small font-semibold text-foreground">{title}</h1>
+              <p className="truncate text-meta text-muted-foreground">{workspaceId}</p>
             </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
-            <span className="mr-1 hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:inline-flex">
+            <span className="mr-1 hidden items-center gap-1.5 text-meta text-muted-foreground sm:inline-flex">
               <WifiOff className="size-3" aria-hidden="true" />
               本地离线
             </span>
             <button
-              className="hidden h-7 items-center gap-1.5 rounded-[6px] border border-border bg-surface px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-muted sm:inline-flex"
+              className="hidden h-7 items-center gap-1.5 rounded-control bg-control px-2.5 text-label font-medium text-foreground shadow-sm transition-colors hover:bg-control-hover sm:inline-flex"
               disabled
               type="button"
             >

@@ -4,10 +4,10 @@ import { ArrowLeft } from "lucide-react";
 export function NotFound() {
   return (
     <main
-      className="grid h-full place-items-center bg-canvas px-6"
+      className="grid h-full place-items-center bg-window px-6"
       aria-labelledby="not-found-title"
     >
-      <section className="w-full max-w-md border-l-2 border-warning pl-5">
+      <section className="w-full max-w-md rounded-surface bg-raised p-6 shadow-panel">
         <p className="mb-2 font-mono text-xs text-warning">404</p>
         <h1 id="not-found-title" className="text-xl font-semibold">
           页面不存在

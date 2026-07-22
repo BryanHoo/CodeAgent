@@ -40,6 +40,8 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain("完成工作台结构分析。");
     expect(markup).toContain("分析界面约束");
     expect(markup).toContain("已完成");
+    expect(markup).toContain("bg-control");
+    expect(markup).toContain("rounded-surface");
   });
 
   it("renders an accessible prompt input composition", () => {
@@ -58,5 +60,6 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('aria-label="任务输入"');
     expect(markup).toContain('aria-label="提交"');
     expect(markup).toContain("disabled");
+    expect(markup).toContain("shadow-floating");
   });
 });

@@ -1,82 +1,170 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light dark;
+
+  /* 材质层级通过明度、透明度和阴影区分，避免依赖高对比边框。 */
+  --ui-color-window: light-dark(oklch(0.955 0.005 255), oklch(0.155 0.01 255));
+  --ui-color-content: light-dark(oklch(0.982 0.003 255), oklch(0.185 0.011 255));
+  --ui-color-sidebar: light-dark(oklch(0.94 0.007 255 / 0.92), oklch(0.205 0.013 255 / 0.94));
+  --ui-color-panel: light-dark(oklch(0.97 0.004 255 / 0.96), oklch(0.215 0.012 255 / 0.96));
+  --ui-color-raised: light-dark(oklch(0.995 0.002 255), oklch(0.245 0.013 255));
+  --ui-color-control: light-dark(oklch(0.93 0.006 255 / 0.8), oklch(0.27 0.014 255 / 0.82));
+  --ui-color-control-hover: light-dark(
+    oklch(0.895 0.009 255 / 0.74),
+    oklch(0.315 0.016 255 / 0.88)
+  );
+  --ui-color-control-active: light-dark(
+    oklch(0.865 0.012 255 / 0.82),
+    oklch(0.355 0.018 255 / 0.9)
+  );
+  --ui-color-separator: light-dark(oklch(0.36 0.014 255 / 0.12), oklch(0.88 0.008 255 / 0.1));
+  --ui-color-separator-strong: light-dark(
+    oklch(0.36 0.014 255 / 0.2),
+    oklch(0.88 0.008 255 / 0.17)
+  );
+  --ui-color-text: light-dark(oklch(0.235 0.016 255), oklch(0.94 0.007 255));
+  --ui-color-text-muted: light-dark(oklch(0.49 0.015 255), oklch(0.7 0.012 255));
+  --ui-color-text-subtle: light-dark(oklch(0.59 0.012 255), oklch(0.59 0.012 255));
+  --ui-color-accent: light-dark(oklch(0.56 0.115 158), oklch(0.72 0.125 158));
+  --ui-color-accent-strong: light-dark(oklch(0.44 0.105 158), oklch(0.8 0.11 158));
+  --ui-color-accent-soft: light-dark(oklch(0.91 0.036 158), oklch(0.28 0.04 158));
+  --ui-color-warning: light-dark(oklch(0.69 0.14 78), oklch(0.78 0.13 82));
+  --ui-color-danger: light-dark(oklch(0.58 0.17 28), oklch(0.72 0.15 28));
+  --ui-color-focus: light-dark(oklch(0.61 0.135 232), oklch(0.74 0.12 228));
+  --ui-color-scrim: light-dark(oklch(0.15 0.01 255 / 0.2), oklch(0.04 0.006 255 / 0.5));
+
+  --ui-shadow-divider: 1px 0 0 light-dark(oklch(0.2 0.015 255 / 0.07), oklch(0.02 0.006 255 / 0.34));
+  --ui-shadow-divider-reverse: -1px 0 0
+    light-dark(oklch(0.2 0.015 255 / 0.07), oklch(0.02 0.006 255 / 0.34));
+  --ui-shadow-toolbar: 0 1px 0
+    light-dark(oklch(0.2 0.015 255 / 0.075), oklch(0.02 0.006 255 / 0.34));
+  --ui-shadow-control: 0 1px 2px
+    light-dark(oklch(0.2 0.015 255 / 0.08), oklch(0.02 0.006 255 / 0.3));
+  --ui-shadow-panel:
+    0 14px 38px light-dark(oklch(0.2 0.02 255 / 0.12), oklch(0.02 0.006 255 / 0.48)),
+    0 2px 8px light-dark(oklch(0.2 0.02 255 / 0.07), oklch(0.02 0.006 255 / 0.34));
+  --ui-shadow-floating:
+    0 9px 28px light-dark(oklch(0.2 0.02 255 / 0.12), oklch(0.02 0.006 255 / 0.46)),
+    0 1px 4px light-dark(oklch(0.2 0.02 255 / 0.08), oklch(0.02 0.006 255 / 0.34));
+  --ui-shadow-focus: 0 0 0 3px light-dark(oklch(0.61 0.135 232 / 0.24), oklch(0.74 0.12 228 / 0.28));
+  --ui-shadow-timeline-node: 0 0 0 3px var(--ui-color-content);
+
+  --ui-font-family-text:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", ui-sans-serif,
+    system-ui, sans-serif;
+  --ui-font-family-mono: "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", monospace;
+  --ui-font-size-caption: 0.625rem;
+  --ui-font-size-meta: 0.6875rem;
+  --ui-font-size-label: 0.75rem;
+  --ui-font-size-body-small: 0.8125rem;
+  --ui-font-size-body: 0.875rem;
+  --ui-font-size-heading: 1rem;
+  --ui-font-size-title: 1.25rem;
+  --ui-font-size-display: 1.5rem;
+  --ui-line-height-tight: 1.25;
+  --ui-line-height-normal: 1.5;
+  --ui-line-height-relaxed: 1.65;
+
+  --ui-space-unit: 0.25rem;
+  --ui-radius-control: 6px;
+  --ui-radius-surface: 8px;
+  --ui-radius-pill: 9999px;
+  --ui-motion-fast: 120ms;
+  --ui-motion-normal: 180ms;
+  --ui-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ui-blur-panel: 18px;
+
+  --ui-layout-toolbar-height: 3rem;
+  --ui-layout-sidebar-width: 16.5rem;
+  --ui-layout-inspector-width: 18rem;
+  --ui-layout-content-width: 48.75rem;
+  --ui-layout-message-width: 90%;
+  --ui-layout-settings-sidebar-width: 13.75rem;
+}
+
+[data-theme="light"] {
   color-scheme: light;
-  --app-canvas: oklch(0.975 0.004 250);
-  --app-surface: oklch(0.995 0.002 250);
-  --app-surface-muted: oklch(0.952 0.006 250);
-  --app-surface-strong: oklch(0.91 0.01 250);
-  --app-border: oklch(0.855 0.012 250);
-  --app-text: oklch(0.225 0.018 250);
-  --app-text-muted: oklch(0.48 0.018 250);
-  --app-accent: oklch(0.55 0.125 158);
-  --app-accent-strong: oklch(0.43 0.115 158);
-  --app-accent-soft: oklch(0.93 0.035 158);
-  --app-warning: oklch(0.7 0.145 78);
-  --app-danger: oklch(0.58 0.18 28);
-  --app-focus: oklch(0.62 0.15 230);
-  --app-shadow: 0 18px 45px oklch(0.2 0.02 250 / 0.12);
-  --app-shadow-soft: 0 5px 18px oklch(0.2 0.02 250 / 0.09);
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --app-canvas: oklch(0.17 0.012 250);
-  --app-surface: oklch(0.205 0.013 250);
-  --app-surface-muted: oklch(0.245 0.015 250);
-  --app-surface-strong: oklch(0.3 0.016 250);
-  --app-border: oklch(0.36 0.018 250);
-  --app-text: oklch(0.94 0.008 250);
-  --app-text-muted: oklch(0.71 0.014 250);
-  --app-accent: oklch(0.72 0.14 158);
-  --app-accent-strong: oklch(0.8 0.125 158);
-  --app-accent-soft: oklch(0.28 0.04 158);
-  --app-warning: oklch(0.78 0.14 82);
-  --app-danger: oklch(0.72 0.16 28);
-  --app-focus: oklch(0.74 0.13 225);
-  --app-shadow: 0 22px 55px oklch(0.05 0.01 250 / 0.38);
-  --app-shadow-soft: 0 8px 24px oklch(0.05 0.01 250 / 0.28);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --app-canvas: oklch(0.17 0.012 250);
-    --app-surface: oklch(0.205 0.013 250);
-    --app-surface-muted: oklch(0.245 0.015 250);
-    --app-surface-strong: oklch(0.3 0.016 250);
-    --app-border: oklch(0.36 0.018 250);
-    --app-text: oklch(0.94 0.008 250);
-    --app-text-muted: oklch(0.71 0.014 250);
-    --app-accent: oklch(0.72 0.14 158);
-    --app-accent-strong: oklch(0.8 0.125 158);
-    --app-accent-soft: oklch(0.28 0.04 158);
-    --app-warning: oklch(0.78 0.14 82);
-    --app-danger: oklch(0.72 0.16 28);
-    --app-focus: oklch(0.74 0.13 225);
-    --app-shadow: 0 22px 55px oklch(0.05 0.01 250 / 0.38);
-    --app-shadow-soft: 0 8px 24px oklch(0.05 0.01 250 / 0.28);
-  }
 }
 
 @theme inline {
-  --color-canvas: var(--app-canvas);
-  --color-surface: var(--app-surface);
-  --color-surface-muted: var(--app-surface-muted);
-  --color-surface-strong: var(--app-surface-strong);
-  --color-border: var(--app-border);
-  --color-foreground: var(--app-text);
-  --color-muted-foreground: var(--app-text-muted);
-  --color-accent: var(--app-accent);
-  --color-accent-strong: var(--app-accent-strong);
-  --color-accent-soft: var(--app-accent-soft);
-  --color-warning: var(--app-warning);
-  --color-danger: var(--app-danger);
-  --color-focus: var(--app-focus);
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", ui-sans-serif, system-ui,
-    sans-serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --color-window: var(--ui-color-window);
+  --color-content: var(--ui-color-content);
+  --color-sidebar: var(--ui-color-sidebar);
+  --color-panel: var(--ui-color-panel);
+  --color-raised: var(--ui-color-raised);
+  --color-control: var(--ui-color-control);
+  --color-control-hover: var(--ui-color-control-hover);
+  --color-control-active: var(--ui-color-control-active);
+  --color-separator: var(--ui-color-separator);
+  --color-separator-strong: var(--ui-color-separator-strong);
+  --color-foreground: var(--ui-color-text);
+  --color-muted-foreground: var(--ui-color-text-muted);
+  --color-subtle-foreground: var(--ui-color-text-subtle);
+  --color-accent: var(--ui-color-accent);
+  --color-accent-strong: var(--ui-color-accent-strong);
+  --color-accent-soft: var(--ui-color-accent-soft);
+  --color-warning: var(--ui-color-warning);
+  --color-danger: var(--ui-color-danger);
+  --color-focus: var(--ui-color-focus);
+  --color-scrim: var(--ui-color-scrim);
+
+  --font-sans: var(--ui-font-family-text);
+  --font-mono: var(--ui-font-family-mono);
+  --text-xs: var(--ui-font-size-label);
+  --text-xs--line-height: var(--ui-line-height-normal);
+  --text-sm: var(--ui-font-size-body);
+  --text-sm--line-height: var(--ui-line-height-normal);
+  --text-base: var(--ui-font-size-heading);
+  --text-base--line-height: var(--ui-line-height-normal);
+  --text-xl: var(--ui-font-size-title);
+  --text-xl--line-height: var(--ui-line-height-tight);
+  --text-2xl: var(--ui-font-size-display);
+  --text-2xl--line-height: var(--ui-line-height-tight);
+  --text-caption: var(--ui-font-size-caption);
+  --text-caption--line-height: var(--ui-line-height-normal);
+  --text-meta: var(--ui-font-size-meta);
+  --text-meta--line-height: var(--ui-line-height-normal);
+  --text-label: var(--ui-font-size-label);
+  --text-label--line-height: var(--ui-line-height-normal);
+  --text-body-small: var(--ui-font-size-body-small);
+  --text-body-small--line-height: var(--ui-line-height-normal);
+  --text-body: var(--ui-font-size-body);
+  --text-body--line-height: var(--ui-line-height-normal);
+
+  --spacing: var(--ui-space-unit);
+  --spacing-toolbar: var(--ui-layout-toolbar-height);
+  --spacing-sidebar: var(--ui-layout-sidebar-width);
+  --spacing-inspector: var(--ui-layout-inspector-width);
+  --spacing-content: var(--ui-layout-content-width);
+  --spacing-settings-sidebar: var(--ui-layout-settings-sidebar-width);
+
+  --radius-sm: var(--ui-radius-control);
+  --radius-md: var(--ui-radius-surface);
+  --radius-lg: var(--ui-radius-surface);
+  --radius-control: var(--ui-radius-control);
+  --radius-surface: var(--ui-radius-surface);
+  --radius-pill: var(--ui-radius-pill);
+
+  --shadow-sm: var(--ui-shadow-control);
+  --shadow-md: var(--ui-shadow-panel);
+  --shadow-divider: var(--ui-shadow-divider);
+  --shadow-divider-reverse: var(--ui-shadow-divider-reverse);
+  --shadow-toolbar: var(--ui-shadow-toolbar);
+  --shadow-panel: var(--ui-shadow-panel);
+  --shadow-floating: var(--ui-shadow-floating);
+  --shadow-focus: var(--ui-shadow-focus);
+  --shadow-timeline-node: var(--ui-shadow-timeline-node);
+  --blur-panel: var(--ui-blur-panel);
+
+  --default-transition-duration: var(--ui-motion-fast);
+  --default-transition-timing-function: var(--ui-ease-standard);
+  --breakpoint-workbench: 47.5625rem;
+  --breakpoint-settings: 45.0625rem;
 }
 
 *,
@@ -93,15 +181,15 @@ body,
 }
 
 html {
-  background: var(--app-canvas);
+  background: var(--ui-color-window);
 }
 
 body {
   min-height: 100vh;
   margin: 0;
   overflow: hidden;
-  background: var(--app-canvas);
-  color: var(--app-text);
+  background: var(--ui-color-window);
+  color: var(--ui-color-text);
   font-family: var(--font-sans);
   letter-spacing: 0;
   text-rendering: optimizeLegibility;
@@ -120,12 +208,12 @@ a {
 }
 
 :focus-visible {
-  outline: 2px solid var(--app-focus);
+  outline: 2px solid var(--ui-color-focus);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--app-accent) 30%, transparent);
+  background: color-mix(in oklab, var(--ui-color-accent) 30%, transparent);
 }
 
 .workbench-shell {
@@ -134,15 +222,15 @@ a {
   position: relative;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--inspector-width);
-  transition: grid-template-columns 180ms ease;
+  transition: grid-template-columns var(--ui-motion-normal) var(--ui-ease-standard);
 }
 
 .workbench-shell[data-sidebar-open="true"] {
-  --sidebar-width: 260px;
+  --sidebar-width: var(--ui-layout-sidebar-width);
 }
 
 .workbench-shell[data-inspector-open="true"] {
-  --inspector-width: 286px;
+  --inspector-width: var(--ui-layout-inspector-width);
 }
 
 .workbench-sidebar,
@@ -176,10 +264,10 @@ a {
   .workbench-inspector {
     position: absolute;
     inset: 0 0 0 auto;
-    width: min(286px, calc(100vw - 32px));
+    width: min(var(--ui-layout-inspector-width), calc(100vw - calc(var(--ui-space-unit) * 8)));
     transform: translateX(100%);
-    box-shadow: var(--app-shadow);
-    transition: transform 180ms ease;
+    box-shadow: var(--ui-shadow-panel);
+    transition: transform var(--ui-motion-normal) var(--ui-ease-standard);
   }
 
   .workbench-shell[data-inspector-open="true"] .workbench-inspector {
@@ -192,7 +280,7 @@ a {
     inset: 0;
     display: block;
     border: 0;
-    background: oklch(0.15 0.01 250 / 0.18);
+    background: var(--ui-color-scrim);
   }
 }
 
@@ -205,10 +293,10 @@ a {
   .workbench-sidebar {
     position: absolute;
     inset: 0 auto 0 0;
-    width: min(260px, calc(100vw - 32px));
+    width: min(var(--ui-layout-sidebar-width), calc(100vw - calc(var(--ui-space-unit) * 8)));
     transform: translateX(-100%);
-    box-shadow: var(--app-shadow);
-    transition: transform 180ms ease;
+    box-shadow: var(--ui-shadow-panel);
+    transition: transform var(--ui-motion-normal) var(--ui-ease-standard);
   }
 
   .workbench-shell[data-sidebar-open="true"] .workbench-sidebar {
@@ -221,7 +309,7 @@ a {
     inset: 0;
     display: block;
     border: 0;
-    background: oklch(0.15 0.01 250 / 0.18);
+    background: var(--ui-color-scrim);
   }
 }
 

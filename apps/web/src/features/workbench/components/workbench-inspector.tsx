@@ -28,23 +28,23 @@ export function WorkbenchInspector({ onClose, workspaceId }: WorkbenchInspectorP
   return (
     <aside
       aria-label="Context Inspector"
-      className="workbench-inspector z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] border-l border-border bg-surface"
+      className="workbench-inspector z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse backdrop-blur-panel"
     >
-      <div className="flex h-12 items-center justify-between border-b border-border px-3">
-        <span className="text-[13px] font-semibold text-foreground">工作区</span>
+      <div className="flex h-toolbar items-center justify-between px-3 shadow-toolbar">
+        <span className="text-body-small font-semibold text-foreground">工作区</span>
         <IconButton label="关闭上下文面板" onClick={onClose} size="small">
           <PanelRightClose className="size-3.5" aria-hidden="true" />
         </IconButton>
       </div>
 
-      <div className="border-b border-border px-3 py-2">
-        <div className="grid grid-cols-2 rounded-[6px] bg-surface-muted p-0.5" role="tablist">
+      <div className="px-3 py-2">
+        <div className="grid grid-cols-2 rounded-control bg-control p-0.5" role="tablist">
           {(["changes", "context"] as const).map((value) => (
             <button
               aria-selected={tab === value}
-              className={`h-7 rounded-[5px] text-xs font-medium transition-colors ${
+              className={`h-7 rounded-control text-label font-medium transition-colors ${
                 tab === value
-                  ? "bg-surface text-foreground shadow-sm"
+                  ? "bg-raised text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
               key={value}
@@ -66,9 +66,9 @@ export function WorkbenchInspector({ onClose, workspaceId }: WorkbenchInspectorP
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-foreground">未提交变更</p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">3 个文件</p>
+                <p className="mt-0.5 text-caption text-muted-foreground">3 个文件</p>
               </div>
-              <span className="text-[11px] font-medium">
+              <span className="text-meta font-medium">
                 <span className="text-accent-strong">+252</span>{" "}
                 <span className="text-danger">-27</span>
               </span>
@@ -76,7 +76,7 @@ export function WorkbenchInspector({ onClose, workspaceId }: WorkbenchInspectorP
             <div className="space-y-0.5">
               {changedFiles.map((file) => (
                 <button
-                  className="flex w-full items-center gap-2 rounded-[6px] px-2 py-2 text-left transition-colors hover:bg-surface-muted"
+                  className="flex w-full items-center gap-2 rounded-control px-2 py-2 text-left transition-colors hover:bg-control-hover"
                   key={file.name}
                   type="button"
                 >
@@ -87,13 +87,13 @@ export function WorkbenchInspector({ onClose, workspaceId }: WorkbenchInspectorP
                   <span className="min-w-0 flex-1 truncate text-xs text-foreground">
                     {file.name}
                   </span>
-                  <span className="text-[10px] text-accent-strong">+{file.additions}</span>
-                  <span className="text-[10px] text-danger">-{file.deletions}</span>
+                  <span className="text-caption text-accent-strong">+{file.additions}</span>
+                  <span className="text-caption text-danger">-{file.deletions}</span>
                 </button>
               ))}
             </div>
             <button
-              className="mt-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-[6px] border border-border text-xs font-medium text-foreground transition-colors hover:bg-surface-muted disabled:opacity-50"
+              className="mt-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-control bg-control text-label font-medium text-foreground shadow-sm transition-colors hover:bg-control-hover disabled:opacity-50"
               disabled
               type="button"
             >
@@ -112,7 +112,7 @@ export function WorkbenchInspector({ onClose, workspaceId }: WorkbenchInspectorP
               <InspectorRow label="设计系统" value="AI Elements" />
               <InspectorRow label="规范" value="Web Design" />
               <button
-                className="mt-1 flex h-7 items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+                className="mt-1 flex h-7 items-center gap-1.5 text-meta text-muted-foreground hover:text-foreground"
                 type="button"
               >
                 <Plus className="size-3" aria-hidden="true" /> 添加来源
@@ -151,7 +151,7 @@ type InspectorRowProps = Readonly<{
 
 function InspectorRow({ icon, label, value }: InspectorRowProps) {
   return (
-    <div className="flex min-h-7 items-center gap-2 rounded-[5px] px-2 text-[11px]">
+    <div className="flex min-h-7 items-center gap-2 rounded-control px-2 text-meta">
       {icon}
       <span className="text-muted-foreground">{label}</span>
       <span className="ml-auto max-w-32 truncate font-medium text-foreground">{value}</span>

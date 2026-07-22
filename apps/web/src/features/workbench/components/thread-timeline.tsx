@@ -51,13 +51,13 @@ export function ThreadTimeline({ hasThread, workspaceId }: ThreadTimelineProps) 
           </MessageContent>
         </Message>
 
-        <div className="my-6 flex items-center gap-3 text-[11px] text-muted-foreground">
+        <div className="my-6 flex items-center gap-3 text-meta text-muted-foreground">
           <span className="font-medium">已处理 1m 24s</span>
-          <span className="h-px flex-1 bg-border" />
+          <span className="h-px flex-1 bg-separator" />
         </div>
 
-        <div className="relative space-y-4 pl-5 before:absolute before:bottom-3 before:left-[5px] before:top-3 before:w-px before:bg-border">
-          <span className="absolute left-[2px] top-2 size-[7px] rounded-full border border-accent bg-canvas" />
+        <div className="relative space-y-4 pl-5 before:absolute before:bottom-3 before:left-1.5 before:top-3 before:w-px before:bg-separator">
+          <span className="absolute left-0.5 top-2 size-2 rounded-pill bg-accent shadow-timeline-node" />
           <Reasoning defaultOpen>
             <ReasoningTrigger>分析工作台信息架构</ReasoningTrigger>
             <ReasoningContent>
@@ -92,7 +92,7 @@ export function ThreadTimeline({ hasThread, workspaceId }: ThreadTimelineProps) 
                   "窄屏切换为覆盖式面板，主时间线不被压缩或遮挡。",
                 ].map((item) => (
                   <div className="flex items-start gap-2.5" key={item}>
-                    <span className="mt-1 grid size-4 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
+                    <span className="mt-1 grid size-4 shrink-0 place-items-center rounded-pill bg-accent-soft text-accent-strong">
                       <Check className="size-2.5" aria-hidden="true" />
                     </span>
                     <span>{item}</span>
@@ -107,7 +107,7 @@ export function ThreadTimeline({ hasThread, workspaceId }: ThreadTimelineProps) 
               <MessageAction disabled label="重新生成">
                 <RefreshCcw className="size-3.5" aria-hidden="true" />
               </MessageAction>
-              <span className="ml-1 text-[10px] text-muted-foreground">刚刚</span>
+              <span className="ml-1 text-caption text-muted-foreground">刚刚</span>
             </MessageActions>
           </MessageContent>
         </Message>

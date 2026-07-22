@@ -12,7 +12,7 @@ type PromptInputProps = FormHTMLAttributes<HTMLFormElement>;
 export function PromptInput({ className = "", ...props }: PromptInputProps) {
   return (
     <form
-      className={`overflow-hidden rounded-[8px] border border-border bg-surface shadow-[var(--app-shadow-soft)] focus-within:border-focus ${className}`}
+      className={`overflow-hidden rounded-surface bg-raised shadow-floating transition-shadow focus-within:shadow-focus ${className}`}
       {...props}
     />
   );
@@ -63,7 +63,7 @@ export function PromptInputButton({
 }: PromptInputButtonProps) {
   return (
     <button
-      className={`inline-flex h-7 items-center gap-1.5 rounded-[5px] px-2 text-xs text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
+      className={`inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-label text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
       type={type}
       {...props}
     >
@@ -77,7 +77,7 @@ type PromptInputSelectProps = SelectHTMLAttributes<HTMLSelectElement>;
 export function PromptInputSelect({ className = "", ...props }: PromptInputSelectProps) {
   return (
     <select
-      className={`h-7 max-w-40 rounded-[5px] border-0 bg-transparent px-1.5 text-xs text-muted-foreground outline-none hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
+      className={`h-7 max-w-40 rounded-control border-0 bg-transparent px-1.5 text-label text-muted-foreground outline-none hover:bg-control-hover disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
       {...props}
     />
   );
@@ -98,7 +98,7 @@ export function PromptInputSubmit({
 
   return (
     <button
-      className={`grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-surface transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:bg-surface-strong disabled:text-muted-foreground ${className}`}
+      className={`grid size-8 shrink-0 place-items-center rounded-pill bg-foreground text-raised transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:bg-control-active disabled:text-muted-foreground ${className}`}
       type={type}
       {...props}
     >
