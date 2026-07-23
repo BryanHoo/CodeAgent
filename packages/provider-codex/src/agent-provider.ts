@@ -9,6 +9,7 @@ import type {
 } from "@code-agent/core";
 import type {
   AgentCapabilities,
+  AgentInput,
   AgentItem,
   AgentItemStatus,
   AgentTask,
@@ -505,7 +506,45 @@ export class CodexAgentProvider implements AgentProvider {
   }
 
   public getCapabilities(): Promise<AgentCapabilities> {
-    return Promise.resolve({ provider: "codex", tasks: { list: true, read: true } });
+    return Promise.resolve({
+      provider: "codex",
+      tasks: { list: true, read: true, start: true },
+      turns: { interrupt: true, start: true },
+    });
+  }
+
+  public async startTask(): Promise<AgentTask> {
+    const response = expectRecord(
+      await this.#client.request("thread/start", { cwd: this.#project.rootPath }),
+      "thread/start response",
+    );
+    const task = mapAgentTask(
+      expectRecord(response["thread"], "thread/start thread"),
+      this.#project,
+    );
+    // 新建 Task 必须立即接收后续 Turn 通知，不能等待下一次列表刷新。
+    this.#projectTaskIds.add(task.id);
+    return task;
+  }
+
+  public async startTurn(taskId: string, input: AgentInput): Promise<AgentTurn> {
+    this.#assertKnownProjectTask(taskId);
+    const response = expectRecord(
+      await this.#client.request("turn/start", {
+        input: [{ text: input.text, text_elements: [], type: "text" }],
+        threadId: taskId,
+      }),
+      "turn/start response",
+    );
+    return mapAgentTurn(response["turn"]);
+  }
+
+  public async interruptTurn(taskId: string, turnId: string): Promise<void> {
+    this.#assertKnownProjectTask(taskId);
+    expectRecord(
+      await this.#client.request("turn/interrupt", { threadId: taskId, turnId }),
+      "turn/interrupt response",
+    );
   }
 
   public async listTasks(input: ListAgentTasksInput = {}): Promise<AgentTaskPage> {
@@ -630,6 +669,12 @@ export class CodexAgentProvider implements AgentProvider {
       } catch {
         // 一个订阅者失败不能阻塞其他交付边界。
       }
+    }
+  }
+
+  #assertKnownProjectTask(taskId: string): void {
+    if (!this.#projectTaskIds.has(taskId)) {
+      throw new CodexProtocolMappingError("Codex thread does not belong to the active project");
     }
   }
 }

@@ -3,9 +3,17 @@ import { Value } from "@sinclair/typebox/value";
 
 import {
   AgentCapabilitiesSchema,
+  AgentInputSchema,
+  AgentMutationErrorSchema,
   AgentTaskPageSchema,
   AgentTaskSchema,
   AgentTaskSnapshotSchema,
+  InterruptAgentTurnRequestSchema,
+  InterruptAgentTurnResponseSchema,
+  StartAgentTaskRequestSchema,
+  StartAgentTaskResponseSchema,
+  StartAgentTurnRequestSchema,
+  StartAgentTurnResponseSchema,
   HealthResponseSchema,
   ProjectPageSchema,
   ProjectSchema,
@@ -157,7 +165,53 @@ describe("project protocol", () => {
     expect(
       Value.Check(AgentCapabilitiesSchema, {
         provider: "codex",
-        tasks: { list: true, read: true },
+        tasks: { list: true, read: true, start: true },
+        turns: { interrupt: true, start: true },
+      }),
+    ).toBe(true);
+  });
+
+  it("validates structured Agent inputs and mutation contracts", () => {
+    const task = {
+      id: "task-1",
+      pinned: false,
+      projectId: "code-agent",
+      title: "实现写入闭环",
+      updatedAt: "2026-07-23T00:00:00.000Z",
+    };
+    const turn = {
+      completedAt: null,
+      error: null,
+      id: "turn-1",
+      items: [],
+      startedAt: "2026-07-23T00:00:00.000Z",
+      status: "running",
+    };
+
+    expect(Value.Check(AgentInputSchema, { text: "实现功能", type: "text" })).toBe(true);
+    expect(Value.Check(AgentInputSchema, { text: "", type: "text" })).toBe(false);
+    expect(Value.Check(StartAgentTaskRequestSchema, {})).toBe(true);
+    expect(Value.Check(StartAgentTaskRequestSchema, { nativeOptions: {} })).toBe(false);
+    expect(Value.Check(StartAgentTaskResponseSchema, { task })).toBe(true);
+    expect(
+      Value.Check(StartAgentTurnRequestSchema, {
+        input: { text: "实现功能", type: "text" },
+      }),
+    ).toBe(true);
+    expect(Value.Check(StartAgentTurnResponseSchema, { taskId: task.id, turn })).toBe(true);
+    expect(Value.Check(InterruptAgentTurnRequestSchema, { taskId: task.id })).toBe(true);
+    expect(
+      Value.Check(InterruptAgentTurnResponseSchema, {
+        status: "interrupting",
+        taskId: task.id,
+        turnId: turn.id,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentMutationErrorSchema, {
+        code: "IDEMPOTENCY_CONFLICT",
+        message: "Idempotency key was already used with another request",
+        retryable: false,
       }),
     ).toBe(true);
   });

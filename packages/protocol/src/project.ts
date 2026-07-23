@@ -162,6 +162,79 @@ export const AgentTurnSchema = Type.Object(
 
 export type AgentTurn = Readonly<Static<typeof AgentTurnSchema>>;
 
+export const AgentInputSchema = Type.Union([
+  Type.Object(
+    {
+      text: Type.String({ minLength: 1 }),
+      type: Type.Literal("text"),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export type AgentInput = Readonly<Static<typeof AgentInputSchema>>;
+
+export const StartAgentTaskRequestSchema = Type.Object({}, { additionalProperties: false });
+export type StartAgentTaskRequest = Readonly<Static<typeof StartAgentTaskRequestSchema>>;
+
+export const StartAgentTaskResponseSchema = Type.Object(
+  { task: AgentTaskSchema },
+  { additionalProperties: false },
+);
+export type StartAgentTaskResponse = Readonly<Static<typeof StartAgentTaskResponseSchema>>;
+
+export const StartAgentTurnRequestSchema = Type.Object(
+  { input: AgentInputSchema },
+  { additionalProperties: false },
+);
+export type StartAgentTurnRequest = Readonly<Static<typeof StartAgentTurnRequestSchema>>;
+
+export const StartAgentTurnResponseSchema = Type.Object(
+  {
+    taskId: Type.String({ minLength: 1 }),
+    turn: AgentTurnSchema,
+  },
+  { additionalProperties: false },
+);
+export type StartAgentTurnResponse = Readonly<Static<typeof StartAgentTurnResponseSchema>>;
+
+export const InterruptAgentTurnRequestSchema = Type.Object(
+  { taskId: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+export type InterruptAgentTurnRequest = Readonly<Static<typeof InterruptAgentTurnRequestSchema>>;
+
+export const InterruptAgentTurnResponseSchema = Type.Object(
+  {
+    status: Type.Literal("interrupting"),
+    taskId: Type.String({ minLength: 1 }),
+    turnId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+export type InterruptAgentTurnResponse = Readonly<Static<typeof InterruptAgentTurnResponseSchema>>;
+
+export const AgentMutationErrorCodeSchema = Type.Union([
+  Type.Literal("IDEMPOTENCY_KEY_REQUIRED"),
+  Type.Literal("IDEMPOTENCY_CONFLICT"),
+  Type.Literal("INVALID_REQUEST"),
+  Type.Literal("PROJECT_NOT_FOUND"),
+  Type.Literal("TASK_NOT_FOUND"),
+  Type.Literal("TURN_NOT_FOUND"),
+  Type.Literal("TURN_NOT_RUNNING"),
+  Type.Literal("PROVIDER_ERROR"),
+]);
+
+export const AgentMutationErrorSchema = Type.Object(
+  {
+    code: AgentMutationErrorCodeSchema,
+    message: Type.String({ minLength: 1 }),
+    retryable: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+export type AgentMutationError = Readonly<Static<typeof AgentMutationErrorSchema>>;
+
 export const AgentTaskSnapshotSchema = Type.Object(
   {
     id: Type.String({ minLength: 1 }),
@@ -215,6 +288,14 @@ export const AgentCapabilitiesSchema = Type.Object(
       {
         list: Type.Boolean(),
         read: Type.Boolean(),
+        start: Type.Boolean(),
+      },
+      { additionalProperties: false },
+    ),
+    turns: Type.Object(
+      {
+        interrupt: Type.Boolean(),
+        start: Type.Boolean(),
       },
       { additionalProperties: false },
     ),

@@ -52,7 +52,7 @@ describe("AI Elements primitives", () => {
         </PromptInputBody>
         <PromptInputFooter>
           <PromptInputTools>本地</PromptInputTools>
-          <PromptInputSubmit aria-label="提交" disabled status="ready" />
+          <PromptInputSubmit aria-label="提交" disabled status="idle" />
         </PromptInputFooter>
       </PromptInput>,
     );

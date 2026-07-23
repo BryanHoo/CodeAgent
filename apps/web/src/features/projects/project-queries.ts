@@ -3,9 +3,25 @@ import { queryOptions } from "@tanstack/react-query";
 
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
 export type CodeAgentRuntimeClient = Pick<CodeAgentClient, "readTask" | "subscribeEvents">;
+export type CodeAgentCapabilitiesClient = Pick<CodeAgentClient, "getCapabilities">;
+export type CodeAgentMutationClient = Pick<
+  CodeAgentClient,
+  "interruptTurn" | "startTask" | "startTurn"
+>;
+export type CodeAgentWorkbenchClient = CodeAgentReadClient &
+  CodeAgentRuntimeClient &
+  CodeAgentMutationClient &
+  CodeAgentCapabilitiesClient;
 type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
 
 export const codeAgentClient = new CodeAgentClient();
+
+export function capabilitiesQueryOptions(client: CodeAgentCapabilitiesClient = codeAgentClient) {
+  return queryOptions({
+    queryFn: () => client.getCapabilities(),
+    queryKey: ["capabilities"] as const,
+  });
+}
 
 export function projectsQueryOptions(client: CodeAgentReadClient = codeAgentClient) {
   return queryOptions({

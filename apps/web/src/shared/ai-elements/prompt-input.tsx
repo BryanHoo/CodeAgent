@@ -1,4 +1,4 @@
-import { ArrowUp, LoaderCircle, Plus } from "lucide-react";
+import { ArrowUp, LoaderCircle, Plus, Square } from "lucide-react";
 import type {
   ButtonHTMLAttributes,
   FormHTMLAttributes,
@@ -84,7 +84,7 @@ export function PromptInputSelect({ className = "", ...props }: PromptInputSelec
 }
 
 type PromptInputSubmitProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  status: "error" | "ready" | "streaming" | "submitted";
+  status: "failed" | "idle" | "reconnecting" | "running" | "submitting";
 };
 
 export function PromptInputSubmit({
@@ -94,7 +94,7 @@ export function PromptInputSubmit({
   type = "submit",
   ...props
 }: PromptInputSubmitProps) {
-  const pending = status === "streaming" || status === "submitted";
+  const pending = status === "reconnecting" || status === "submitting";
 
   return (
     <button
@@ -103,7 +103,9 @@ export function PromptInputSubmit({
       {...props}
     >
       {children ??
-        (pending ? (
+        (status === "running" ? (
+          <Square className="size-3.5 fill-current" aria-hidden="true" />
+        ) : pending ? (
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
         ) : (
           <ArrowUp className="size-4" aria-hidden="true" />

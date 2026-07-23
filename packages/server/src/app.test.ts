@@ -1,4 +1,5 @@
 import type { AgentProvider, AgentProviderEvent } from "@code-agent/core";
+import type { AgentTaskSnapshot, AgentTurn } from "@code-agent/protocol";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -38,17 +39,33 @@ function createProvider() {
   const getCapabilities = vi.fn(() =>
     Promise.resolve({
       provider: "codex",
-      tasks: { list: true, read: true },
+      tasks: { list: true, read: true, start: true },
+      turns: { interrupt: true, start: true },
     }),
   );
   const listTasks = vi.fn(() => Promise.resolve({ data: [task], nextCursor: "next" }));
-  const readTask = vi.fn((taskId: string) =>
+  const readTask = vi.fn<(taskId: string) => Promise<AgentTaskSnapshot | undefined>>((taskId) =>
     Promise.resolve(taskId === task.id ? snapshot : undefined),
   );
+  const startTask = vi.fn(() => Promise.resolve(task));
+  const startTurn = vi.fn((taskId: string, input: { text: string; type: "text" }) =>
+    Promise.resolve({
+      completedAt: null,
+      error: null,
+      id: "turn-1",
+      items: [{ id: "input-1", role: "user" as const, text: input.text, type: "message" as const }],
+      startedAt: "2026-07-23T00:02:00.000Z",
+      status: "running" as const,
+    }),
+  );
+  const interruptTurn = vi.fn(() => Promise.resolve());
   const provider: AgentProvider = {
     getCapabilities,
+    interruptTurn,
     listTasks,
     readTask,
+    startTask,
+    startTurn,
     subscribeEvents(listener) {
       eventListeners.add(listener);
       return () => {
@@ -64,15 +81,37 @@ function createProvider() {
     },
     eventListeners,
     listTasks,
+    interruptTurn,
     provider,
+    readTask,
+    startTask,
+    startTurn,
   };
 }
 
-async function createHarness() {
-  const { emitEvent, eventListeners, listTasks, provider } = createProvider();
-  const app = await createCodeAgentServer({ project, provider });
+async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }> = {}) {
+  const {
+    emitEvent,
+    eventListeners,
+    interruptTurn,
+    listTasks,
+    provider,
+    readTask,
+    startTask,
+    startTurn,
+  } = createProvider();
+  const app = await createCodeAgentServer({ ...options, project, provider });
   closeCallbacks.push(() => app.close());
-  return { app, emitEvent, eventListeners, listTasks };
+  return {
+    app,
+    emitEvent,
+    eventListeners,
+    interruptTurn,
+    listTasks,
+    readTask,
+    startTask,
+    startTurn,
+  };
 }
 
 describe("CodeAgent Server", () => {
@@ -89,7 +128,8 @@ describe("CodeAgent Server", () => {
     });
     expect(capabilitiesResponse.json()).toEqual({
       provider: "codex",
-      tasks: { list: true, read: true },
+      tasks: { list: true, read: true, start: true },
+      turns: { interrupt: true, start: true },
     });
     expect(projectsResponse.json()).toEqual({ data: [project], nextCursor: null });
   });
@@ -118,6 +158,229 @@ describe("CodeAgent Server", () => {
     expect(body.checkpoint.sequence).toBe(0);
     expect(typeof body.checkpoint.sessionId).toBe("string");
     expect(body.snapshot).toEqual(snapshot);
+  });
+
+  it("serves idempotent task and turn mutations", async () => {
+    const { app, interruptTurn, readTask, startTask, startTurn } = await createHarness();
+    const headers = { "idempotency-key": "mutation-1" };
+
+    const created = await app.inject({
+      headers,
+      method: "POST",
+      payload: {},
+      url: "/v1/projects/code-agent/tasks",
+    });
+    const repeated = await app.inject({
+      headers,
+      method: "POST",
+      payload: {},
+      url: "/v1/projects/code-agent/tasks",
+    });
+    const turn = await app.inject({
+      headers: { "idempotency-key": "turn-1" },
+      method: "POST",
+      payload: { input: { text: "继续实现", type: "text" } },
+      url: "/v1/tasks/task-1/turns",
+    });
+    const turnBody = turn.json<{ taskId: string; turn: AgentTurn }>();
+    readTask.mockResolvedValueOnce({
+      ...snapshot,
+      status: "running",
+      turns: [turnBody.turn],
+    });
+    const interrupted = await app.inject({
+      headers: { "idempotency-key": "interrupt-1" },
+      method: "POST",
+      payload: { taskId: "task-1" },
+      url: "/v1/turns/turn-1/interrupt",
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(repeated.json()).toEqual(created.json());
+    expect(startTask).toHaveBeenCalledTimes(1);
+    expect(turn.statusCode).toBe(201);
+    expect(turn.json()).toMatchObject({ taskId: "task-1", turn: { id: "turn-1" } });
+    expect(startTurn).toHaveBeenCalledWith("task-1", { text: "继续实现", type: "text" });
+    expect(interrupted.statusCode).toBe(202);
+    expect(interrupted.json()).toEqual({
+      status: "interrupting",
+      taskId: "task-1",
+      turnId: "turn-1",
+    });
+    expect(interruptTurn).toHaveBeenCalledWith("task-1", "turn-1");
+
+    readTask.mockResolvedValueOnce({
+      ...snapshot,
+      turns: [{ ...turnBody.turn, completedAt: "2026-07-23T00:03:00.000Z", status: "interrupted" }],
+    });
+    const replayedInterrupt = await app.inject({
+      headers: { "idempotency-key": "interrupt-1" },
+      method: "POST",
+      payload: { taskId: "task-1" },
+      url: "/v1/turns/turn-1/interrupt",
+    });
+
+    expect(replayedInterrupt.statusCode).toBe(202);
+    expect(replayedInterrupt.json()).toEqual(interrupted.json());
+    expect(interruptTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses idempotent results for equivalent payload key orders", async () => {
+    const { app, startTurn } = await createHarness();
+    const headers = {
+      "content-type": "application/json",
+      "idempotency-key": "equivalent-payload",
+    };
+    const first = await app.inject({
+      headers,
+      method: "POST",
+      payload: '{"input":{"text":"继续实现","type":"text"}}',
+      url: "/v1/tasks/task-1/turns",
+    });
+    const repeated = await app.inject({
+      headers,
+      method: "POST",
+      payload: '{"input":{"type":"text","text":"继续实现"}}',
+      url: "/v1/tasks/task-1/turns",
+    });
+
+    expect(first.statusCode).toBe(201);
+    expect(repeated.statusCode).toBe(201);
+    expect(repeated.json()).toEqual(first.json());
+    expect(startTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps idempotency scopes distinct when resource IDs and keys contain separators", async () => {
+    const { app, readTask, startTurn } = await createHarness();
+    readTask.mockImplementation((taskId) =>
+      Promise.resolve({ ...snapshot, id: taskId, turns: [] }),
+    );
+    const payload = { input: { text: "继续实现", type: "text" } };
+
+    const first = await app.inject({
+      headers: { "idempotency-key": "b:c" },
+      method: "POST",
+      payload,
+      url: "/v1/tasks/task%3Aa/turns",
+    });
+    const second = await app.inject({
+      headers: { "idempotency-key": "c" },
+      method: "POST",
+      payload,
+      url: "/v1/tasks/task%3Aa%3Ab/turns",
+    });
+
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(201);
+    expect(startTurn).toHaveBeenNthCalledWith(1, "task:a", payload.input);
+    expect(startTurn).toHaveBeenNthCalledWith(2, "task:a:b", payload.input);
+  });
+
+  it("evicts completed idempotency entries when the cache reaches its limit", async () => {
+    const { app, startTask } = await createHarness({ idempotencyCacheSize: 1 });
+    const createTask = (key: string) =>
+      app.inject({
+        headers: { "idempotency-key": key },
+        method: "POST",
+        payload: {},
+        url: "/v1/projects/code-agent/tasks",
+      });
+
+    await createTask("task-key-1");
+    await createTask("task-key-2");
+    await createTask("task-key-1");
+
+    expect(startTask).toHaveBeenCalledTimes(3);
+  });
+
+  it("rejects interruption for a terminal or unrelated turn", async () => {
+    const { app, interruptTurn, readTask } = await createHarness();
+    readTask.mockResolvedValueOnce({
+      ...snapshot,
+      turns: [
+        {
+          completedAt: "2026-07-23T00:03:00.000Z",
+          error: null,
+          id: "turn-completed",
+          items: [],
+          startedAt: "2026-07-23T00:02:00.000Z",
+          status: "completed" as const,
+        },
+      ],
+    });
+    const terminal = await app.inject({
+      headers: { "idempotency-key": "terminal-turn" },
+      method: "POST",
+      payload: { taskId: "task-1" },
+      url: "/v1/turns/turn-completed/interrupt",
+    });
+    readTask.mockResolvedValueOnce(snapshot);
+    const missing = await app.inject({
+      headers: { "idempotency-key": "missing-turn" },
+      method: "POST",
+      payload: { taskId: "task-1" },
+      url: "/v1/turns/turn-missing/interrupt",
+    });
+
+    expect(terminal.statusCode).toBe(409);
+    expect(terminal.json()).toMatchObject({ code: "TURN_NOT_RUNNING" });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toMatchObject({ code: "TURN_NOT_FOUND" });
+    expect(interruptTurn).not.toHaveBeenCalled();
+  });
+
+  it("validates idempotency keys and rejects conflicting payloads", async () => {
+    const { app, startTurn } = await createHarness();
+    const missingKey = await app.inject({
+      method: "POST",
+      payload: {},
+      url: "/v1/projects/code-agent/tasks",
+    });
+    const first = await app.inject({
+      headers: { "idempotency-key": "turn-conflict" },
+      method: "POST",
+      payload: { input: { text: "第一次", type: "text" } },
+      url: "/v1/tasks/task-1/turns",
+    });
+    const conflict = await app.inject({
+      headers: { "idempotency-key": "turn-conflict" },
+      method: "POST",
+      payload: { input: { text: "第二次", type: "text" } },
+      url: "/v1/tasks/task-1/turns",
+    });
+
+    expect(missingKey.statusCode).toBe(400);
+    expect(missingKey.json()).toMatchObject({
+      code: "IDEMPOTENCY_KEY_REQUIRED",
+      retryable: false,
+    });
+    expect(first.statusCode).toBe(201);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({ code: "IDEMPOTENCY_CONFLICT", retryable: false });
+    expect(startTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes provider failures without caching them", async () => {
+    const { app, startTask } = await createHarness();
+    startTask.mockRejectedValueOnce(new Error("native RPC details"));
+    const request = {
+      headers: { "idempotency-key": "retry-task" },
+      method: "POST" as const,
+      payload: {},
+      url: "/v1/projects/code-agent/tasks",
+    };
+
+    const failed = await app.inject(request);
+    const retried = await app.inject(request);
+
+    expect(failed.statusCode).toBe(502);
+    expect(failed.json()).toEqual({
+      code: "PROVIDER_ERROR",
+      message: "Agent provider request failed",
+      retryable: true,
+    });
+    expect(retried.statusCode).toBe(201);
+    expect(startTask).toHaveBeenCalledTimes(2);
   });
 
   it("captures the checkpoint after reading a task snapshot", async () => {

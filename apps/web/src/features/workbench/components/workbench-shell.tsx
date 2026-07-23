@@ -1,7 +1,12 @@
+import type { AgentCapabilities } from "@code-agent/protocol";
+import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Ellipsis, ExternalLink, PanelLeft, PanelRight } from "lucide-react";
 
 import { useProjects } from "../../projects/project-context.js";
+import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
+import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { ProjectSidebar } from "./project-sidebar.js";
 import { TaskTimeline } from "./task-timeline.js";
@@ -21,7 +26,9 @@ function shouldOpenDesktopPanel(query: string) {
 }
 
 export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
-  const { client, projects, tasks } = useProjects();
+  const { capabilities, client, projects, tasks } = useProjects();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
   const [sidebarOpen, setSidebarOpen] = useState(() => shouldOpenDesktopPanel(sidebarOverlayQuery));
   const [inspectorOpen, setInspectorOpen] = useState(() =>
@@ -30,7 +37,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const project = projects.find((item) => item.id === projectId);
   const projectName = project?.name ?? projectId;
   const projectPath = project?.rootPath ?? projectId;
-  const hasTask = taskId !== undefined;
   const title = tasks.find((task) => task.id === taskId)?.title ?? taskId ?? "New agent";
 
   const closeSidebar = () => {
@@ -145,12 +151,36 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           </div>
         </header>
 
-        <TaskTimeline
-          client={client}
-          projectName={projectName}
-          {...(taskId === undefined ? {} : { taskId })}
-        />
-        <WorkbenchComposer hasTask={hasTask} projectPath={projectPath} />
+        {taskId === undefined ? (
+          <>
+            <TaskTimeline projectName={projectName} />
+            <WorkbenchComposer
+              capabilities={capabilities}
+              client={client}
+              onTaskStarted={(startedTaskId) => {
+                void queryClient.invalidateQueries({
+                  queryKey: ["projects", projectId, "tasks"],
+                });
+                void navigate({
+                  params: { projectId, taskId: startedTaskId },
+                  to: "/p/$projectId/t/$taskId",
+                });
+              }}
+              projectId={projectId}
+              projectPath={projectPath}
+            />
+          </>
+        ) : (
+          <ActiveTaskWorkbench
+            capabilities={capabilities}
+            client={client}
+            key={taskId}
+            projectId={projectId}
+            projectName={projectName}
+            projectPath={projectPath}
+            taskId={taskId}
+          />
+        )}
       </main>
 
       {inspectorOpen ? (
@@ -164,5 +194,38 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
 
       <WorkbenchInspector projectName={projectName} />
     </div>
+  );
+}
+
+function ActiveTaskWorkbench({
+  capabilities,
+  client,
+  projectId,
+  projectName,
+  projectPath,
+  taskId,
+}: Readonly<{
+  capabilities: AgentCapabilities | undefined;
+  client: CodeAgentWorkbenchClient;
+  projectId: string;
+  projectName: string;
+  projectPath: string;
+  taskId: string;
+}>) {
+  const runtime = useTaskRuntime(taskId, client);
+
+  return (
+    <>
+      <TaskTimeline projectName={projectName} runtime={runtime} taskId={taskId} />
+      <WorkbenchComposer
+        capabilities={capabilities}
+        client={client}
+        onTaskStarted={() => undefined}
+        projectId={projectId}
+        projectPath={projectPath}
+        runtime={runtime}
+        taskId={taskId}
+      />
+    </>
   );
 }

@@ -13,6 +13,13 @@ import {
   type TaskRuntimeState,
 } from "./task-runtime.js";
 
+export type TaskRuntimeView = Readonly<{
+  connectionState: "closed" | "connected" | "connecting" | "reconnecting";
+  error: Error | null;
+  isPending: boolean;
+  snapshot: TaskRuntimeState["snapshot"] | undefined;
+}>;
+
 function isDeltaEvent(event: AgentEvent): boolean {
   return (
     event.type === "message.delta" ||
@@ -21,7 +28,7 @@ function isDeltaEvent(event: AgentEvent): boolean {
   );
 }
 
-export function useTaskRuntime(taskId: string, client: CodeAgentRuntimeClient) {
+export function useTaskRuntime(taskId: string, client: CodeAgentRuntimeClient): TaskRuntimeView {
   const taskQuery = useQuery(taskSnapshotQueryOptions(taskId, client));
   const [runtime, setRuntime] = useState<TaskRuntimeState>();
   const [runtimeError, setRuntimeError] = useState<Error | null>(null);
@@ -131,5 +138,5 @@ export function useTaskRuntime(taskId: string, client: CodeAgentRuntimeClient) {
     error,
     isPending: error === null && (taskQuery.isPending || activeRuntime === undefined),
     snapshot: activeRuntime?.snapshot,
-  } as const;
+  };
 }

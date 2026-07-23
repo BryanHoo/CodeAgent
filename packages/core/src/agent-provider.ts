@@ -1,8 +1,11 @@
 import type {
   AgentCapabilities,
   AgentEvent,
+  AgentInput,
+  AgentTask,
   AgentTaskPage,
   AgentTaskSnapshot,
+  AgentTurn,
 } from "@code-agent/protocol";
 
 export type ListAgentTasksInput = Readonly<{
@@ -26,5 +29,8 @@ export interface AgentProvider {
   listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage>;
   // Promise 完成前须让 Snapshot 包含此前状态并同步交付对应通知，使 checkpoint 保持一致。
   readTask(taskId: string): Promise<AgentTaskSnapshot | undefined>;
+  startTask(): Promise<AgentTask>;
+  startTurn(taskId: string, input: AgentInput): Promise<AgentTurn>;
+  interruptTurn(taskId: string, turnId: string): Promise<void>;
   subscribeEvents(listener: AgentProviderEventListener): () => void;
 }

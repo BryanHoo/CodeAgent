@@ -9,7 +9,9 @@ export {
 export {
   CodeAgentClient,
   CodeAgentHttpError,
+  CodeAgentMutationError,
   CodeAgentResponseError,
   type CodeAgentClientOptions,
   type ListTasksOptions,
+  type MutationOptions,
 } from "./http-client.js";

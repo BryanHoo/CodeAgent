@@ -11,7 +11,7 @@ const staticRoot = fileURLToPath(new URL("../../dist/web", import.meta.url));
 
 const runtime = await startCodexAppServer({
   binaryPath: fakeAppServerPath,
-  env: { ...process.env, FAKE_APP_SERVER_SCENARIO: "realtime" },
+  env: { ...process.env, FAKE_APP_SERVER_SCENARIO: "realtime-actions" },
   rpcTimeoutMs: 1_000,
   shutdownTimeoutMs: 500,
 });

@@ -28,8 +28,11 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
   };
   const provider = {
     getCapabilities: vi.fn(),
+    interruptTurn: vi.fn(),
     listTasks: vi.fn(),
     readTask: vi.fn(),
+    startTask: vi.fn(),
+    startTurn: vi.fn(),
     subscribeEvents: vi.fn(() => () => undefined),
   };
   const project = {

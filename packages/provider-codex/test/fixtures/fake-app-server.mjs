@@ -16,10 +16,15 @@ if (JSON.stringify(args) !== JSON.stringify(expectedArgs)) {
 }
 
 const scenario = process.env["FAKE_APP_SERVER_SCENARIO"] ?? "normal";
+const actionScenario = scenario === "agent-actions" || scenario === "realtime-actions";
+const realtimeScenario = scenario === "realtime" || scenario === "realtime-actions";
 const input = createInterface({ input: process.stdin });
 let initializeParams;
 let initialized = false;
 let realtimeRunning = false;
+let nextActionTask = 1;
+let nextActionTurn = 1;
+const actionThreads = new Map();
 
 function send(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -36,6 +41,66 @@ function realtimeTurn(status, items, error = null) {
     startedAt: 1_753_228_800,
     status,
   };
+}
+
+function actionThread(id, turns = []) {
+  return {
+    createdAt: 1_753_228_800,
+    cwd: "/workspace/CodeAgent",
+    id,
+    name: "Agent Action",
+    preview: "Agent Action",
+    status: { type: turns.some((turn) => turn.status === "inProgress") ? "active" : "notLoaded" },
+    turns,
+    updatedAt: 1_753_228_800 + turns.length,
+  };
+}
+
+function actionTurn(id, status, items) {
+  return {
+    completedAt: status === "inProgress" ? null : 1_753_228_802,
+    durationMs: status === "inProgress" ? null : 2_000,
+    error: null,
+    id,
+    items,
+    itemsView: { type: "full" },
+    startedAt: 1_753_228_800,
+    status,
+  };
+}
+
+function completeActionTurn(threadId, turnId) {
+  const thread = actionThreads.get(threadId);
+  const runningTurn = thread?.turns.find((turn) => turn.id === turnId);
+  if (thread === undefined || runningTurn === undefined || runningTurn.status !== "inProgress") {
+    return;
+  }
+  const message = {
+    id: `${turnId}-assistant`,
+    memoryCitation: null,
+    phase: null,
+    text: "流式回复完成",
+    type: "agentMessage",
+  };
+  const completedTurn = actionTurn(turnId, "completed", [...runningTurn.items, message]);
+  actionThreads.set(
+    threadId,
+    actionThread(
+      threadId,
+      thread.turns.map((turn) => (turn.id === turnId ? completedTurn : turn)),
+    ),
+  );
+  for (const delta of ["流式回复", "完成"]) {
+    send({
+      method: "item/agentMessage/delta",
+      params: { delta, itemId: message.id, threadId, turnId },
+    });
+  }
+  send({
+    method: "item/completed",
+    params: { item: message, threadId, turnId },
+  });
+  send({ method: "turn/completed", params: { threadId, turn: completedTurn } });
 }
 
 function scheduleRealtimeEvents() {
@@ -167,7 +232,7 @@ input.on("line", (line) => {
     return;
   }
 
-  if (scenario === "realtime" && message.method === "thread/list") {
+  if (realtimeScenario && message.method === "thread/list") {
     send({
       id: message.id,
       result: {
@@ -181,6 +246,7 @@ input.on("line", (line) => {
             status: { type: "active" },
             updatedAt: 1_753_228_800,
           },
+          ...(actionScenario ? [...actionThreads.values()] : []),
         ],
         nextCursor: null,
       },
@@ -188,7 +254,11 @@ input.on("line", (line) => {
     return;
   }
 
-  if (scenario === "realtime" && message.method === "thread/read") {
+  if (
+    realtimeScenario &&
+    message.method === "thread/read" &&
+    message.params?.threadId === "task-realtime"
+  ) {
     send({
       id: message.id,
       result: {
@@ -205,6 +275,86 @@ input.on("line", (line) => {
       },
     });
     scheduleRealtimeEvents();
+    return;
+  }
+
+  if (actionScenario && message.method === "thread/list") {
+    send({
+      id: message.id,
+      result: { data: [...actionThreads.values()], nextCursor: null },
+    });
+    return;
+  }
+
+  if (actionScenario && message.method === "thread/start") {
+    const threadId = `task-action-${String(nextActionTask)}`;
+    nextActionTask += 1;
+    const thread = actionThread(threadId);
+    actionThreads.set(threadId, thread);
+    send({ id: message.id, result: { thread } });
+    return;
+  }
+
+  if (actionScenario && message.method === "thread/read") {
+    const thread = actionThreads.get(message.params?.threadId);
+    if (thread === undefined) {
+      send({
+        error: { code: -32600, message: `thread not loaded: ${String(message.params?.threadId)}` },
+        id: message.id,
+      });
+      return;
+    }
+    send({ id: message.id, result: { thread } });
+    return;
+  }
+
+  if (actionScenario && message.method === "turn/start") {
+    const threadId = message.params?.threadId;
+    const thread = actionThreads.get(threadId);
+    if (thread === undefined) {
+      send({
+        error: { code: -32600, message: `thread not loaded: ${String(threadId)}` },
+        id: message.id,
+      });
+      return;
+    }
+    const turnId = `turn-action-${String(nextActionTurn)}`;
+    nextActionTurn += 1;
+    const prompt = message.params?.input?.[0]?.text ?? "";
+    const userMessage = {
+      content: [{ text: prompt, type: "text" }],
+      id: `${turnId}-user`,
+      type: "userMessage",
+    };
+    const turn = actionTurn(turnId, "inProgress", [userMessage]);
+    actionThreads.set(threadId, actionThread(threadId, [...thread.turns, turn]));
+    send({ id: message.id, result: { turn } });
+    send({ method: "turn/started", params: { threadId, turn } });
+    if (!prompt.includes("中断")) {
+      setTimeout(() => completeActionTurn(threadId, turnId), 120);
+    }
+    return;
+  }
+
+  if (actionScenario && message.method === "turn/interrupt") {
+    const threadId = message.params?.threadId;
+    const turnId = message.params?.turnId;
+    const thread = actionThreads.get(threadId);
+    const runningTurn = thread?.turns.find((turn) => turn.id === turnId);
+    if (thread === undefined || runningTurn === undefined) {
+      send({ error: { code: -32600, message: "turn not found" }, id: message.id });
+      return;
+    }
+    const interruptedTurn = actionTurn(turnId, "interrupted", runningTurn.items);
+    actionThreads.set(
+      threadId,
+      actionThread(
+        threadId,
+        thread.turns.map((turn) => (turn.id === turnId ? interruptedTurn : turn)),
+      ),
+    );
+    send({ id: message.id, result: {} });
+    send({ method: "turn/completed", params: { threadId, turn: interruptedTurn } });
     return;
   }
 

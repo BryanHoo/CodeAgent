@@ -3,17 +3,45 @@ import { describe, expect, it } from "vitest";
 import type { AgentProvider, AgentProviderEvent } from "./agent-provider.js";
 
 describe("AgentProvider", () => {
-  it("defines a provider-independent read-only contract", async () => {
+  it("defines provider-independent read and mutation contracts", async () => {
     const listeners = new Set<(event: AgentProviderEvent) => void>();
     const provider: AgentProvider = {
       getCapabilities() {
-        return Promise.resolve({ provider: "fake", tasks: { list: true, read: true } });
+        return Promise.resolve({
+          provider: "fake",
+          tasks: { list: true, read: true, start: true },
+          turns: { interrupt: true, start: true },
+        });
       },
       listTasks() {
         return Promise.resolve({ data: [], nextCursor: null });
       },
       readTask() {
         return Promise.resolve(undefined);
+      },
+      startTask() {
+        return Promise.resolve({
+          id: "task-1",
+          pinned: false,
+          projectId: "project-1",
+          title: "新任务",
+          updatedAt: "2026-07-23T00:00:00.000Z",
+        });
+      },
+      startTurn(taskId, input) {
+        return Promise.resolve({
+          completedAt: null,
+          error: null,
+          id: `${taskId}-turn`,
+          items: [{ id: "input-1", role: "user", text: input.text, type: "message" }],
+          startedAt: "2026-07-23T00:00:00.000Z",
+          status: "running",
+        });
+      },
+      interruptTurn(taskId, turnId) {
+        expect(taskId).toBe("task-1");
+        expect(turnId).toBe("turn-1");
+        return Promise.resolve();
       },
       subscribeEvents(listener) {
         listeners.add(listener);
@@ -25,13 +53,19 @@ describe("AgentProvider", () => {
 
     await expect(provider.getCapabilities()).resolves.toEqual({
       provider: "fake",
-      tasks: { list: true, read: true },
+      tasks: { list: true, read: true, start: true },
+      turns: { interrupt: true, start: true },
     });
     await expect(provider.listTasks({ limit: 25 })).resolves.toEqual({
       data: [],
       nextCursor: null,
     });
     await expect(provider.readTask("missing-task")).resolves.toBeUndefined();
+    await expect(provider.startTask()).resolves.toMatchObject({ id: "task-1" });
+    await expect(
+      provider.startTurn("task-1", { text: "继续", type: "text" }),
+    ).resolves.toMatchObject({ id: "task-1-turn", status: "running" });
+    await expect(provider.interruptTurn("task-1", "turn-1")).resolves.toBeUndefined();
 
     const received: AgentProviderEvent[] = [];
     const unsubscribe = provider.subscribeEvents((event) => {

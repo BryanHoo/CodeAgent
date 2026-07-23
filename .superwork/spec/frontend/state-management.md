@@ -15,3 +15,8 @@
 - Snapshot 请求错误优先于加载状态展示；WebSocket 成功恢复为 `connected` 后清除上一次连接尝试产生的瞬时错误。
 - Approval、Error 和 Terminal State 不得因合并或反压丢失。
 - 在真正引入状态库前，不预先创建抽象 Store 或空 Slice。
+- Timeline 与 Composer 必须共享同一个 Task Runtime 订阅，不能为同一 Task 重复建立 Snapshot Query 和 WebSocket 链路。
+- Composer 只使用 `idle`、`submitting`、`running`、`reconnecting`、`failed` 五种状态；运行态来自活动 Turn，重连态暂停网络 Mutation，失败态保留草稿。
+- 同一次用户动作在结果尚未确定前重试时必须复用原 `Idempotency-Key`；输入或目标变化后生成新 Key。
+- 创建 Task 后启动首个 Turn；若 Turn 启动失败，保留已创建 Task ID 和原始草稿，重试不得重复创建 Task。只有 Turn 启动成功后才清空草稿。
+- 中断请求成功后继续保持运行语义，直到实时链路收到 `turn.completed` 的 `interrupted` 终态。

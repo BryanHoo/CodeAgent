@@ -1,8 +1,7 @@
 import type { AgentItemStatus, AgentTaskSnapshot } from "@code-agent/protocol";
 import { FolderGit2 } from "lucide-react";
 
-import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
-import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
+import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import {
   Conversation,
   ConversationContent,
@@ -22,8 +21,8 @@ import {
 } from "../../../shared/ai-elements/tool.js";
 
 type TaskTimelineProps = Readonly<{
-  client: CodeAgentRuntimeClient;
   projectName: string;
+  runtime?: TaskRuntimeView;
   taskId?: string;
 }>;
 
@@ -54,28 +53,26 @@ function TimelineState({
   );
 }
 
-export function TaskTimeline({ client, projectName, taskId }: TaskTimelineProps) {
+export function TaskTimeline({ projectName, runtime, taskId }: TaskTimelineProps) {
   if (taskId === undefined) {
     return <EmptyTimeline projectName={projectName} />;
   }
-  return <ActiveTaskTimeline client={client} taskId={taskId} />;
+  if (runtime === undefined) {
+    return <TimelineState message="正在加载任务历史" role="status" />;
+  }
+  return <ActiveTaskTimeline runtime={runtime} />;
 }
 
-function ActiveTaskTimeline({
-  client,
-  taskId,
-}: Readonly<{ client: CodeAgentRuntimeClient; taskId: string }>) {
-  const taskRuntime = useTaskRuntime(taskId, client);
-
-  if (taskRuntime.error !== null) {
+function ActiveTaskTimeline({ runtime }: Readonly<{ runtime: TaskRuntimeView }>) {
+  if (runtime.error !== null) {
     return <TimelineState message="无法加载任务历史" role="alert" />;
   }
-  if (taskRuntime.isPending || taskRuntime.snapshot === undefined) {
+  if (runtime.isPending || runtime.snapshot === undefined) {
     return <TimelineState message="正在加载任务历史" role="status" />;
   }
   return (
     <>
-      {taskRuntime.connectionState === "reconnecting" ? (
+      {runtime.connectionState === "reconnecting" ? (
         <div
           className="bg-control px-3 py-1.5 text-center text-label text-muted-foreground"
           role="status"
@@ -83,7 +80,7 @@ function ActiveTaskTimeline({
           实时连接恢复中
         </div>
       ) : null}
-      <TaskSnapshotTimeline snapshot={taskRuntime.snapshot} />
+      <TaskSnapshotTimeline snapshot={runtime.snapshot} />
     </>
   );
 }
@@ -114,7 +111,12 @@ export function TaskSnapshotTimeline({ snapshot }: Readonly<{ snapshot: AgentTas
     <Conversation aria-label="会话内容">
       <ConversationContent>
         {snapshot.turns.map((turn, turnIndex) => (
-          <section aria-label={`Turn ${String(turnIndex + 1)}`} className="space-y-3" key={turn.id}>
+          <section
+            aria-label={`Turn ${String(turnIndex + 1)}`}
+            className="space-y-3"
+            data-status={turn.status}
+            key={turn.id}
+          >
             {turn.error === null ? null : (
               <div
                 className="rounded-surface bg-control px-3 py-2 text-label leading-5 text-danger"

@@ -1,7 +1,7 @@
 # CodeAgent 架构设计
 
 > 状态：Draft  
-> 更新日期：2026-07-22  
+> 更新日期：2026-07-23
 > 目标版本：MVP  
 > 文档类型：架构说明（Explanation）
 
@@ -397,36 +397,33 @@ export interface AgentProvider {
 
 ```ts
 export interface ProviderCapabilities {
-  task: {
-    resume: boolean;
-    fork: boolean;
-    archive: boolean;
+  tasks: {
+    list: boolean;
+    read: boolean;
+    start: boolean;
   };
-  turn: {
-    steer: boolean;
+  turns: {
+    start: boolean;
     interrupt: boolean;
-  };
-  approval: {
-    command: boolean;
-    fileChange: boolean;
-    userInput: boolean;
-  };
-  stream: {
-    agentMessage: boolean;
-    commandOutput: boolean;
-    diff: boolean;
-    plan: boolean;
-  };
-  auth: {
-    managed: boolean;
-  };
-  usage: {
-    tokens: boolean;
   };
 }
 ```
 
 Web 根据能力决定是否展示 Fork、Steer、Approval、Plan 等控件，而不是根据 Provider 名称写条件分支。
+
+### 8.4 首条写入 API
+
+Agent Actions 的首条写入闭环使用三个 Provider 无关端点：
+
+```text
+POST /v1/projects/:projectId/tasks
+POST /v1/tasks/:taskId/turns
+POST /v1/turns/:turnId/interrupt
+```
+
+所有请求必须携带非空 `Idempotency-Key`。Server 以操作、资源和 Key 共同确定幂等范围：相同 Payload 复用进行中或成功结果，不同 Payload 返回 `IDEMPOTENCY_CONFLICT`，失败结果允许同 Key 重试。
+
+`turn/interrupt` 只返回 `{ status: "interrupting", taskId, turnId }`；Turn 是否真正中断由后续 `turn.completed` 事件决定。错误统一映射为 Protocol 定义的 `{ code, message, retryable }`，不得向 Web 暴露原生 RPC 细节。
 
 ## 9. 统一领域模型
 

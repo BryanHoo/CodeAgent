@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { TaskSnapshotTimeline } from "../workbench/components/task-timeline.js";
 import {
+  capabilitiesQueryOptions,
   projectTasksQueryOptions,
   projectsQueryOptions,
   taskSnapshotQueryOptions,
@@ -79,6 +80,13 @@ const snapshotResponse = {
 describe("project queries", () => {
   it("loads projects, project tasks, and task snapshots through the client", async () => {
     const client = {
+      getCapabilities: vi.fn(() =>
+        Promise.resolve({
+          provider: "codex",
+          tasks: { list: true, read: true, start: true },
+          turns: { interrupt: true, start: true },
+        }),
+      ),
       listProjects: vi.fn(() => Promise.resolve({ data: [project], nextCursor: null })),
       listTasks: vi.fn(() => Promise.resolve({ data: [task], nextCursor: null })),
       readTask: vi.fn(() => Promise.resolve(snapshotResponse)),
@@ -88,6 +96,10 @@ describe("project queries", () => {
     await expect(queryClient.fetchQuery(projectsQueryOptions(client))).resolves.toEqual({
       data: [project],
       nextCursor: null,
+    });
+    await expect(queryClient.fetchQuery(capabilitiesQueryOptions(client))).resolves.toMatchObject({
+      tasks: { start: true },
+      turns: { interrupt: true, start: true },
     });
     await expect(
       queryClient.fetchQuery(projectTasksQueryOptions("code-agent", client)),

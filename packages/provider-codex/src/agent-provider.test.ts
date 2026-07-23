@@ -69,6 +69,42 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("maps task and turn mutations to Codex App Server RPC", async () => {
+    const runningTurn = {
+      completedAt: null,
+      durationMs: null,
+      error: null,
+      id: "turn-1",
+      items: [],
+      itemsView: { type: "full" },
+      startedAt: 1_753_228_800,
+      status: "inProgress",
+    };
+    const rpc = new FakeRpcClient([{ thread: nativeThread() }, { turn: runningTurn }, {}]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.startTask()).resolves.toMatchObject({
+      id: "task-1",
+      projectId: "code-agent",
+    });
+    await expect(
+      provider.startTurn("task-1", { text: "实现写入闭环", type: "text" }),
+    ).resolves.toMatchObject({ id: "turn-1", status: "running" });
+    await expect(provider.interruptTurn("task-1", "turn-1")).resolves.toBeUndefined();
+
+    expect(rpc.calls).toEqual([
+      { method: "thread/start", params: { cwd: "/workspace/CodeAgent" } },
+      {
+        method: "turn/start",
+        params: {
+          input: [{ text: "实现写入闭环", text_elements: [], type: "text" }],
+          threadId: "task-1",
+        },
+      },
+      { method: "turn/interrupt", params: { threadId: "task-1", turnId: "turn-1" } },
+    ]);
+  });
+
   it("maps Codex notifications to provider-independent realtime events", async () => {
     const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
     const provider = createCodexAgentProvider({ client: rpc, project });
@@ -274,7 +310,8 @@ describe("CodexAgentProvider", () => {
 
     await expect(provider.getCapabilities()).resolves.toEqual({
       provider: "codex",
-      tasks: { list: true, read: true },
+      tasks: { list: true, read: true, start: true },
+      turns: { interrupt: true, start: true },
     });
     await expect(provider.listTasks({ cursor: "cursor", limit: 25 })).resolves.toEqual({
       data: [

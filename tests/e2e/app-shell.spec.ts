@@ -100,7 +100,11 @@ test.beforeEach(async ({ page }) => {
     if (url.pathname === "/v1/health") {
       body = { status: "ok", version: 1 };
     } else if (url.pathname === "/v1/capabilities") {
-      body = { provider: "codex", tasks: { list: true, read: true } };
+      body = {
+        provider: "codex",
+        tasks: { list: true, read: true, start: true },
+        turns: { interrupt: true, start: true },
+      };
     } else if (url.pathname === "/v1/projects") {
       body = { data: projects, nextCursor: null };
     } else if (url.pathname.startsWith("/v1/projects/") && url.pathname.endsWith("/tasks")) {
@@ -245,7 +249,7 @@ test("uses subtle hairline separation across registered routes", async ({ page }
   }
 });
 
-test("renders the AI workbench landmarks without enabling runtime actions", async ({ page }) => {
+test("renders the AI workbench landmarks with an enabled composer", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const main = page.getByRole("main", { name: "Task Timeline" });
@@ -255,15 +259,56 @@ test("renders the AI workbench landmarks without enabling runtime actions", asyn
   await expect(inspector).toBeVisible();
   await expect(page.getByRole("heading", { name: "环境信息" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Composer" })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "任务输入" })).toBeDisabled();
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await expect(prompt).toBeEnabled();
   await expect(page.getByRole("combobox", { name: "批准模式" })).toHaveValue("on-request");
   await expect(page.getByText("本地", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();
+  await prompt.fill("继续当前任务");
+  await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeEnabled();
   await expect(main.locator("header").getByText("CodeAgent", { exact: true })).toHaveCount(0);
   await expect(page.getByText("本地离线", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("项目路径")).toHaveText("~/Develop/person/CodeAgent");
   await expect(inspector.getByRole("button", { name: "关闭上下文面板" })).toHaveCount(0);
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+});
+
+test("disables composer mutations that the provider does not support", async ({ page }) => {
+  await page.route("**/v1/capabilities", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        provider: "readonly",
+        tasks: { list: true, read: true, start: false },
+        turns: { interrupt: false, start: false },
+      },
+    });
+  });
+  await page.goto("/p/code-agent");
+
+  await page.getByRole("textbox", { name: "任务输入" }).fill("不应允许提交");
+
+  await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();
+});
+
+test("isolates composer state between task routes", async ({ page }) => {
+  await page.route("**/v1/tasks/input-design", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        checkpoint: { sequence: 0, sessionId: "e2e-session" },
+        snapshot: { ...tasks[1], status: "idle", turns: [] },
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+  await page.getByRole("textbox", { name: "任务输入" }).fill("只属于 Task A 的草稿");
+
+  await page.getByRole("link", { name: /优化输入框交互/ }).click();
+
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/input-design$/);
+  await expect(page.getByRole("textbox", { name: "任务输入" })).toHaveValue("");
+  await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();
 });
 
 test("shows a task error when the initial snapshot request fails", async ({ page }) => {
@@ -561,6 +606,83 @@ test("streams Fake App Server notifications into the Timeline", async ({ page })
   await page.getByText("pnpm check", { exact: true }).click();
   await expect(page.getByText("Done", { exact: true })).toBeVisible();
   await expect(page.getByText("模型服务不可用", { exact: true })).toBeVisible();
+});
+
+test("submits a prompt and streams the completed reply", async ({ page }) => {
+  await page.unroute("**/v1/**");
+  await page.goto("/p/code-agent");
+
+  await page.getByRole("textbox", { name: "任务输入" }).fill("完成流式回复");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-action-\d+$/);
+  await expect(page.getByText("完成流式回复", { exact: true })).toBeVisible();
+  await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
+  await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeVisible();
+});
+
+test("interrupts a running turn from the composer", async ({ page }) => {
+  await page.unroute("**/v1/**");
+  await page.goto("/p/code-agent");
+
+  await page.getByRole("textbox", { name: "任务输入" }).fill("等待中断");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-action-\d+$/);
+  await page.getByRole("button", { exact: true, name: "停止" }).click();
+  await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "interrupted");
+  await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeVisible();
+});
+
+test("reuses the interrupt idempotency key until the terminal event arrives", async ({ page }) => {
+  await page.unroute("**/v1/**");
+  await page.goto("/p/code-agent");
+
+  await page.getByRole("textbox", { name: "任务输入" }).fill("等待中断");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-action-\d+$/);
+
+  const idempotencyKeys: string[] = [];
+  await page.route("**/v1/turns/*/interrupt", async (route) => {
+    const request = route.request();
+    const payload = request.postDataJSON() as { taskId: string };
+    const turnId = new URL(request.url()).pathname.split("/")[3] ?? "";
+    idempotencyKeys.push(request.headers()["idempotency-key"] ?? "");
+    await route.fulfill({
+      contentType: "application/json",
+      json: { status: "interrupting", taskId: payload.taskId, turnId },
+      status: 202,
+    });
+  });
+
+  await page.getByRole("button", { exact: true, name: "停止" }).click();
+  await page.getByRole("button", { exact: true, name: "停止" }).click();
+
+  await expect.poll(() => idempotencyKeys).toHaveLength(2);
+  expect(idempotencyKeys[0]).toBe(idempotencyKeys[1]);
+});
+
+test("preserves the prompt draft when submission fails", async ({ page }) => {
+  await page.route("**/v1/projects/code-agent/tasks", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: { code: "PROVIDER_ERROR", message: "Agent provider request failed", retryable: true },
+      status: 502,
+    });
+  });
+  await page.goto("/p/code-agent");
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+
+  await prompt.fill("失败后保留这段草稿");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+
+  await expect(page.getByRole("alert")).toHaveText("操作失败，请重试");
+  await expect(prompt).toHaveValue("失败后保留这段草稿");
 });
 
 test("orders persistent search, task actions, pinned tasks and projects in the sidebar", async ({

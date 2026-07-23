@@ -1,21 +1,22 @@
-import type { AgentTask, Project } from "@code-agent/protocol";
+import type { AgentCapabilities, AgentTask, Project } from "@code-agent/protocol";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { createContext, useContext } from "react";
 import type { ReactNode } from "react";
 
 import {
+  capabilitiesQueryOptions,
   codeAgentClient,
   projectTasksQueryOptions,
   projectsQueryOptions,
-  type CodeAgentRuntimeClient,
-  type CodeAgentReadClient,
+  type CodeAgentWorkbenchClient,
 } from "./project-queries.js";
 
 const emptyProjects: readonly Project[] = [];
 const emptyTasks: readonly AgentTask[] = [];
 
 type ProjectContextValue = Readonly<{
-  client: CodeAgentReadClient & CodeAgentRuntimeClient;
+  capabilities: AgentCapabilities | undefined;
+  client: CodeAgentWorkbenchClient;
   error: Error | null;
   isPending: boolean;
   projects: readonly Project[];
@@ -26,10 +27,11 @@ const ProjectContext = createContext<ProjectContextValue | undefined>(undefined)
 
 type ProjectProviderProps = Readonly<{
   children: ReactNode;
-  client?: CodeAgentReadClient & CodeAgentRuntimeClient;
+  client?: CodeAgentWorkbenchClient;
 }>;
 
 export function ProjectProvider({ children, client = codeAgentClient }: ProjectProviderProps) {
+  const capabilitiesQuery = useQuery(capabilitiesQueryOptions(client));
   const projectsQuery = useQuery(projectsQueryOptions(client));
   const projects = projectsQuery.data?.data ?? emptyProjects;
   const taskQueries = useQueries({
@@ -42,6 +44,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   return (
     <ProjectContext.Provider
       value={{
+        capabilities: capabilitiesQuery.data,
         client,
         error: projectsQuery.error ?? taskError,
         isPending,

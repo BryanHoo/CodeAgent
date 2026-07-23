@@ -15,5 +15,8 @@
 - WebSocket 控制帧使用 `connection.ready` 和 `resync.required`；恢复原因只使用 Protocol 定义的判别值。
 - Provider 专有数据只进入诊断字段或 `extensions`，未知事件记录告警但不破坏事件循环。
 - Task Snapshot 必须保留归一化的 Turn 与 Tool 错误；Command Output 最多保留最新 `10,000` 行或 `1 MiB`，并携带截断状态。
+- Agent 写入必须由 Protocol 提供结构化 `AgentInput`、Task/Turn Mutation 请求响应、能力和错误 Schema；Client 与 Server 都必须执行运行时校验。
+- 运行能力至少独立声明 Task 的 `list`、`read`、`start` 与 Turn 的 `start`、`interrupt`，消费者不得通过 Provider 名称推断能力。
+- `POST /v1/projects/:projectId/tasks`、`POST /v1/tasks/:taskId/turns` 和 `POST /v1/turns/:turnId/interrupt` 必须携带 `Idempotency-Key`，并使用统一错误码表达缺失 Key、冲突、资源不存在和 Provider 失败。
 - 变更按新协议逻辑实现并删除冗余旧路径；破坏性变更明确升级 API 或事件版本。
 - 更新所有消费者、契约测试和架构文档后运行 `pnpm check`。

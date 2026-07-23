@@ -1,14 +1,23 @@
 import {
   AgentCapabilitiesSchema,
+  AgentMutationErrorSchema,
+  InterruptAgentTurnResponseSchema,
   AgentTaskPageSchema,
   AgentTaskSnapshotResponseSchema,
   HealthResponseSchema,
   ProjectPageSchema,
+  StartAgentTaskResponseSchema,
+  StartAgentTurnResponseSchema,
   type AgentCapabilities,
+  type AgentInput,
+  type AgentMutationError,
   type AgentTaskPage,
   type AgentTaskSnapshotResponse,
   type HealthResponse,
+  type InterruptAgentTurnResponse,
   type ProjectPage,
+  type StartAgentTaskResponse,
+  type StartAgentTurnResponse,
 } from "@code-agent/protocol";
 import type { Static, TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
@@ -30,13 +39,29 @@ export type ListTasksOptions = Readonly<{
   limit?: number;
 }>;
 
+export type MutationOptions = Readonly<{
+  idempotencyKey?: string;
+}>;
+
 export class CodeAgentHttpError extends Error {
   public readonly status: number;
 
-  public constructor(status: number, statusText: string) {
-    super(`CodeAgent request failed with ${String(status)} ${statusText}`.trim());
+  public constructor(status: number, statusText: string, message?: string) {
+    super(message ?? `CodeAgent request failed with ${String(status)} ${statusText}`.trim());
     this.name = "CodeAgentHttpError";
     this.status = status;
+  }
+}
+
+export class CodeAgentMutationError extends CodeAgentHttpError {
+  public readonly code: AgentMutationError["code"];
+  public readonly retryable: boolean;
+
+  public constructor(status: number, statusText: string, error: AgentMutationError) {
+    super(status, statusText, error.message);
+    this.name = "CodeAgentMutationError";
+    this.code = error.code;
+    this.retryable = error.retryable;
   }
 }
 
@@ -96,6 +121,44 @@ export class CodeAgentClient {
     );
   }
 
+  public async startTask(
+    projectId: string,
+    options: MutationOptions = {},
+  ): Promise<StartAgentTaskResponse> {
+    return this.#mutation(
+      `/v1/projects/${encodeURIComponent(projectId)}/tasks`,
+      {},
+      StartAgentTaskResponseSchema,
+      options,
+    );
+  }
+
+  public async startTurn(
+    taskId: string,
+    input: AgentInput,
+    options: MutationOptions = {},
+  ): Promise<StartAgentTurnResponse> {
+    return this.#mutation(
+      `/v1/tasks/${encodeURIComponent(taskId)}/turns`,
+      { input },
+      StartAgentTurnResponseSchema,
+      options,
+    );
+  }
+
+  public async interruptTurn(
+    taskId: string,
+    turnId: string,
+    options: MutationOptions = {},
+  ): Promise<InterruptAgentTurnResponse> {
+    return this.#mutation(
+      `/v1/turns/${encodeURIComponent(turnId)}/interrupt`,
+      { taskId },
+      InterruptAgentTurnResponseSchema,
+      options,
+    );
+  }
+
   public subscribeEvents(options: SubscribeAgentEventsOptions): () => void {
     return startAgentEventSubscription({
       ...options,
@@ -104,11 +167,59 @@ export class CodeAgentClient {
     });
   }
 
-  async #request<T extends TSchema>(path: string, schema: T): Promise<Static<T>> {
+  #mutation<T extends TSchema>(
+    path: string,
+    body: unknown,
+    schema: T,
+    options: MutationOptions,
+  ): Promise<Static<T>> {
+    return this.#request(
+      path,
+      schema,
+      {
+        body: JSON.stringify(body),
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": options.idempotencyKey ?? globalThis.crypto.randomUUID(),
+        },
+        method: "POST",
+      },
+      AgentMutationErrorSchema,
+    );
+  }
+
+  async #request<T extends TSchema>(
+    path: string,
+    schema: T,
+    init: RequestInit = {},
+    errorSchema?: TSchema,
+  ): Promise<Static<T>> {
     const response = await this.#fetch(`${this.#baseUrl}${path}`, {
-      headers: { accept: "application/json" },
+      ...init,
+      headers: { accept: "application/json", ...(init.headers as Record<string, string>) },
     });
     if (!response.ok) {
+      if (errorSchema !== undefined) {
+        let errorBody: unknown;
+        try {
+          errorBody = await response.json();
+        } catch (error) {
+          throw new CodeAgentResponseError("CodeAgent error response is not valid JSON", {
+            cause: error,
+          });
+        }
+        // Mutation 错误也必须通过 Protocol Schema 后才能进入页面状态。
+        if (!Value.Check(errorSchema, errorBody)) {
+          throw new CodeAgentResponseError(
+            "CodeAgent error response does not match the protocol schema",
+          );
+        }
+        throw new CodeAgentMutationError(
+          response.status,
+          response.statusText,
+          errorBody as AgentMutationError,
+        );
+      }
       throw new CodeAgentHttpError(response.status, response.statusText);
     }
 

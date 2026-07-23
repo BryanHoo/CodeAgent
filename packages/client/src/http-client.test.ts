@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { CodeAgentClient, CodeAgentHttpError, CodeAgentResponseError } from "./http-client.js";
+import {
+  CodeAgentClient,
+  CodeAgentHttpError,
+  CodeAgentMutationError,
+  CodeAgentResponseError,
+} from "./http-client.js";
 
 const task = {
   id: "task-1",
@@ -35,7 +40,13 @@ describe("CodeAgentClient", () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ status: "ok", version: 1 }))
-      .mockResolvedValueOnce(jsonResponse({ provider: "codex", tasks: { list: true, read: true } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          provider: "codex",
+          tasks: { list: true, read: true, start: true },
+          turns: { interrupt: true, start: true },
+        }),
+      )
       .mockResolvedValueOnce(jsonResponse({ data: [], nextCursor: null }))
       .mockResolvedValueOnce(
         jsonResponse({
@@ -64,6 +75,81 @@ describe("CodeAgentClient", () => {
     const client = new CodeAgentClient({ fetch: fetchMock });
 
     await expect(client.getHealth()).rejects.toBeInstanceOf(CodeAgentHttpError);
+  });
+
+  it("sends typed task and turn mutations with idempotency keys", async () => {
+    const runningTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-1",
+      items: [],
+      startedAt: "2026-07-23T00:02:00.000Z",
+      status: "running",
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ task }))
+      .mockResolvedValueOnce(jsonResponse({ taskId: task.id, turn: runningTurn }))
+      .mockResolvedValueOnce(
+        jsonResponse({ status: "interrupting", taskId: task.id, turnId: runningTurn.id }),
+      );
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await client.startTask("code-agent", { idempotencyKey: "task-key" });
+    await client.startTurn(
+      task.id,
+      { text: "继续实现", type: "text" },
+      { idempotencyKey: "turn-key" },
+    );
+    await client.interruptTurn(task.id, runningTurn.id, { idempotencyKey: "interrupt-key" });
+
+    const [taskCall, turnCall, interruptCall] = fetchMock.mock.calls;
+    expect(taskCall?.[0]).toBe("/v1/projects/code-agent/tasks");
+    expect(taskCall?.[1]).toMatchObject({ body: "{}", method: "POST" });
+    expect(new Headers(taskCall?.[1]?.headers).get("idempotency-key")).toBe("task-key");
+    expect(turnCall?.[0]).toBe("/v1/tasks/task-1/turns");
+    expect(turnCall?.[1]).toMatchObject({
+      body: JSON.stringify({ input: { text: "继续实现", type: "text" } }),
+      method: "POST",
+    });
+    expect(new Headers(turnCall?.[1]?.headers).get("idempotency-key")).toBe("turn-key");
+    expect(interruptCall?.[0]).toBe("/v1/turns/turn-1/interrupt");
+    expect(interruptCall?.[1]).toMatchObject({
+      body: JSON.stringify({ taskId: "task-1" }),
+      method: "POST",
+    });
+    expect(new Headers(interruptCall?.[1]?.headers).get("idempotency-key")).toBe("interrupt-key");
+  });
+
+  it("validates and exposes structured mutation errors", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        { code: "PROVIDER_ERROR", message: "Agent provider request failed", retryable: true },
+        { status: 502, statusText: "Bad Gateway" },
+      ),
+    );
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    const error = await client.startTask("code-agent").catch((cause: unknown) => cause);
+
+    expect(error).toBeInstanceOf(CodeAgentMutationError);
+    expect(error).toMatchObject({
+      code: "PROVIDER_ERROR",
+      message: "Agent provider request failed",
+      retryable: true,
+      status: 502,
+    });
+  });
+
+  it("rejects malformed mutation error responses at the protocol boundary", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ code: "PROVIDER_ERROR", message: "missing retryable" }, { status: 502 }),
+    );
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.startTask("code-agent")).rejects.toBeInstanceOf(CodeAgentResponseError);
   });
 
   it("rejects invalid JSON and schema mismatches at the boundary", async () => {

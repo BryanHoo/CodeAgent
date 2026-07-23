@@ -3,10 +3,19 @@ import { randomUUID } from "node:crypto";
 import type { AgentProvider } from "@code-agent/core";
 import {
   AgentCapabilitiesSchema,
+  AgentMutationErrorSchema,
   AgentTaskPageSchema,
   AgentTaskSnapshotResponseSchema,
   HealthResponseSchema,
+  InterruptAgentTurnRequestSchema,
+  InterruptAgentTurnResponseSchema,
   ProjectPageSchema,
+  StartAgentTaskRequestSchema,
+  StartAgentTaskResponseSchema,
+  StartAgentTurnRequestSchema,
+  StartAgentTurnResponseSchema,
+  type AgentInput,
+  type AgentMutationError,
   type EventStreamMessage,
   type Project,
 } from "@code-agent/protocol";
@@ -19,6 +28,8 @@ import { AgentEventStream } from "./agent-event-stream.js";
 export interface CreateCodeAgentServerOptions {
   eventBufferSize?: number;
   eventSessionId?: string;
+  idempotencyCacheSize?: number;
+  idempotencyTtlMs?: number;
   project: Project;
   provider: AgentProvider;
   staticRoot?: string;
@@ -35,6 +46,19 @@ const TaskParamsSchema = {
   additionalProperties: false,
   properties: { taskId: { minLength: 1, type: "string" } },
   required: ["taskId"],
+  type: "object",
+} as const;
+
+const TurnParamsSchema = {
+  additionalProperties: false,
+  properties: { turnId: { minLength: 1, type: "string" } },
+  required: ["turnId"],
+  type: "object",
+} as const;
+
+const IdempotencyHeadersSchema = {
+  properties: { "idempotency-key": { minLength: 1, type: "string" } },
+  required: ["idempotency-key"],
   type: "object",
 } as const;
 
@@ -64,6 +88,46 @@ const ErrorResponseSchema = {
   type: "object",
 } as const;
 
+class MutationHttpError extends Error {
+  public constructor(
+    public readonly code: AgentMutationError["code"],
+    message: string,
+    public readonly statusCode: number,
+    public readonly retryable = false,
+  ) {
+    super(message);
+    this.name = "MutationHttpError";
+  }
+}
+
+interface IdempotencyEntry {
+  expiresAt?: number;
+  fingerprint: string;
+  promise: Promise<unknown>;
+}
+
+const DEFAULT_IDEMPOTENCY_CACHE_SIZE = 1_000;
+const DEFAULT_IDEMPOTENCY_TTL_MS = 10 * 60 * 1_000;
+
+function normalizeJsonForFingerprint(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeJsonForFingerprint);
+  }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  // Mutation Body 已通过 JSON Schema；递归排序对象键以消除字段顺序差异。
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([key, item]) => [key, normalizeJsonForFingerprint(item)]),
+  );
+}
+
+function fingerprintPayload(payload: unknown): string {
+  return JSON.stringify(normalizeJsonForFingerprint(payload));
+}
+
 export async function createCodeAgentServer(
   options: CreateCodeAgentServerOptions,
 ): Promise<FastifyInstance> {
@@ -77,10 +141,103 @@ export async function createCodeAgentServer(
   const unsubscribeProvider = options.provider.subscribeEvents((event) => {
     eventStream.publish(event);
   });
+  const idempotencyEntries = new Map<string, IdempotencyEntry>();
+  const idempotencyCacheSize = options.idempotencyCacheSize ?? DEFAULT_IDEMPOTENCY_CACHE_SIZE;
+  const idempotencyTtlMs = options.idempotencyTtlMs ?? DEFAULT_IDEMPOTENCY_TTL_MS;
+  if (!Number.isInteger(idempotencyCacheSize) || idempotencyCacheSize <= 0) {
+    throw new RangeError("Idempotency cache size must be a positive integer");
+  }
+  if (!Number.isFinite(idempotencyTtlMs) || idempotencyTtlMs <= 0) {
+    throw new RangeError("Idempotency TTL must be a positive number");
+  }
+
+  const pruneIdempotencyEntries = () => {
+    const now = Date.now();
+    for (const [entryKey, entry] of idempotencyEntries) {
+      if (entry.expiresAt !== undefined && entry.expiresAt <= now) {
+        idempotencyEntries.delete(entryKey);
+      }
+    }
+    // 进行中的请求不能淘汰；成功条目按插入顺序移除最旧记录。
+    for (const [entryKey, entry] of idempotencyEntries) {
+      if (idempotencyEntries.size <= idempotencyCacheSize) {
+        break;
+      }
+      if (entry.expiresAt !== undefined) {
+        idempotencyEntries.delete(entryKey);
+      }
+    }
+  };
+
+  const runIdempotent = async <T>(
+    operation: string,
+    key: string,
+    payload: unknown,
+    action: () => Promise<T>,
+  ): Promise<T> => {
+    pruneIdempotencyEntries();
+    // 结构化编码作用域，避免资源 ID 或 Key 中的分隔符产生碰撞。
+    const entryKey = JSON.stringify([operation, key]);
+    const fingerprint = fingerprintPayload(payload);
+    const existing = idempotencyEntries.get(entryKey);
+    if (existing !== undefined) {
+      if (existing.fingerprint !== fingerprint) {
+        throw new MutationHttpError(
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency key was already used with another request",
+          409,
+        );
+      }
+      return existing.promise as Promise<T>;
+    }
+
+    const promise = Promise.resolve()
+      .then(action)
+      .catch((error: unknown) => {
+        if (error instanceof MutationHttpError) {
+          throw error;
+        }
+        throw new MutationHttpError("PROVIDER_ERROR", "Agent provider request failed", 502, true);
+      });
+    const entry: IdempotencyEntry = { fingerprint, promise };
+    idempotencyEntries.set(entryKey, entry);
+    try {
+      const result = await promise;
+      entry.expiresAt = Date.now() + idempotencyTtlMs;
+      pruneIdempotencyEntries();
+      return result;
+    } catch (error) {
+      // 失败结果不进入幂等缓存，允许调用方使用同一 Key 安全重试。
+      if (idempotencyEntries.get(entryKey) === entry) {
+        idempotencyEntries.delete(entryKey);
+      }
+      throw error;
+    }
+  };
 
   await app.register(fastifyWebsocket, { options: { maxPayload: 64 * 1024 } });
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof MutationHttpError) {
+      return reply.code(error.statusCode).send({
+        code: error.code,
+        message: error.message,
+        retryable: error.retryable,
+      });
+    }
+    if (typeof error === "object" && error !== null && "validation" in error) {
+      const key = request.headers["idempotency-key"];
+      const missingKey = request.method === "POST" && (key === undefined || key === "");
+      return reply.code(400).send({
+        code: missingKey ? "IDEMPOTENCY_KEY_REQUIRED" : "INVALID_REQUEST",
+        message: missingKey ? "Idempotency-Key header is required" : "Request is invalid",
+        retryable: false,
+      });
+    }
+    return reply.send(error);
+  });
   app.addHook("onClose", () => {
     unsubscribeProvider();
+    idempotencyEntries.clear();
   });
 
   if (options.staticRoot !== undefined) {
@@ -153,6 +310,126 @@ export async function createCodeAgentServer(
       // Provider Promise 完成时已交付此前通知，此处 checkpoint 与返回 Snapshot 对齐。
       const checkpoint = eventStream.checkpoint;
       return { checkpoint, snapshot: task };
+    },
+  );
+
+  app.post<{
+    Body: Record<string, never>;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string };
+  }>(
+    "/v1/projects/:projectId/tasks",
+    {
+      schema: {
+        body: StartAgentTaskRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectParamsSchema,
+        response: {
+          201: StartAgentTaskResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (request.params.projectId !== options.project.id) {
+        throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+      }
+      const task = await runIdempotent(
+        `start-task:${request.params.projectId}`,
+        request.headers["idempotency-key"],
+        request.body,
+        () => options.provider.startTask(),
+      );
+      return reply.code(201).send({ task });
+    },
+  );
+
+  app.post<{
+    Body: { input: AgentInput };
+    Headers: { "idempotency-key": string };
+    Params: { taskId: string };
+  }>(
+    "/v1/tasks/:taskId/turns",
+    {
+      schema: {
+        body: StartAgentTurnRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: TaskParamsSchema,
+        response: {
+          201: StartAgentTurnResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const turn = await runIdempotent(
+        `start-turn:${request.params.taskId}`,
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const task = await options.provider.readTask(request.params.taskId);
+          if (task?.projectId !== options.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          return options.provider.startTurn(request.params.taskId, request.body.input);
+        },
+      );
+      return reply.code(201).send({ taskId: request.params.taskId, turn });
+    },
+  );
+
+  app.post<{
+    Body: { taskId: string };
+    Headers: { "idempotency-key": string };
+    Params: { turnId: string };
+  }>(
+    "/v1/turns/:turnId/interrupt",
+    {
+      schema: {
+        body: InterruptAgentTurnRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: TurnParamsSchema,
+        response: {
+          202: InterruptAgentTurnResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const response = await runIdempotent(
+        `interrupt-turn:${request.params.turnId}`,
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const task = await options.provider.readTask(request.body.taskId);
+          if (task?.projectId !== options.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          const turn = task.turns.find((item) => item.id === request.params.turnId);
+          if (turn === undefined) {
+            throw new MutationHttpError("TURN_NOT_FOUND", "Turn not found", 404);
+          }
+          if (turn.status !== "running") {
+            throw new MutationHttpError("TURN_NOT_RUNNING", "Turn is not running", 409);
+          }
+          await options.provider.interruptTurn(request.body.taskId, request.params.turnId);
+          return {
+            status: "interrupting" as const,
+            taskId: request.body.taskId,
+            turnId: request.params.turnId,
+          };
+        },
+      );
+      return reply.code(202).send(response);
     },
   );
 
