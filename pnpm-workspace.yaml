@@ -8,7 +8,7 @@ allowBuilds:
 
 catalog:
   "@eslint/js": 10.0.1
-  "@fastify/static": 8.3.0
+  "@fastify/static": 10.1.2
   "@fastify/websocket": 11.3.0
   "@openai/codex": 0.145.0
   "@playwright/test": 1.61.1
