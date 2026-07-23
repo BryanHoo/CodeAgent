@@ -5,7 +5,8 @@
     "emitDeclarationOnly": true,
     "outDir": "../../.cache/types/provider-codex",
     "rootDir": "src",
-    "tsBuildInfoFile": "../../.cache/types/provider-codex.tsbuildinfo"
+    "tsBuildInfoFile": "../../.cache/types/provider-codex.tsbuildinfo",
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"],
   "references": [{ "path": "../protocol" }, { "path": "../core" }]

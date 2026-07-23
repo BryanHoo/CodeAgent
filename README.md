@@ -1,6 +1,7 @@
 # CodeAgent
 
-CodeAgent 是一个通过 Web 操作本地 Coding Agent 的应用。本仓库当前只包含基础项目架构，不包含业务功能。
+CodeAgent 是一个通过 Web 操作本地 Coding Agent 的应用。当前已实现 Codex App Server
+进程管理、JSONL/RPC Client 和基础 CLI 命令。
 
 ## 环境要求
 
@@ -17,6 +18,17 @@ pnpm test:e2e
 ```
 
 `pnpm check` 依次执行格式、静态检查、架构依赖检查、单元测试、类型检查、构建和 npm 包内容校验。
+
+## CLI 命令
+
+```bash
+code-agent start --project /path/to/project
+code-agent doctor
+code-agent version
+```
+
+`start` 支持 `--codex-bin`、`--codex-home` 和 `--project`；收到 `SIGINT` 或
+`SIGTERM` 后会关闭长驻 Codex App Server。
 
 ## 仓库结构
 

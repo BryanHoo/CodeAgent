@@ -211,6 +211,9 @@ importers:
       '@code-agent/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@openai/codex':
+        specifier: 'catalog:'
+        version: 0.145.0
 
   packages/server:
     dependencies:

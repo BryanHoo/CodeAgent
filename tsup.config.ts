@@ -12,6 +12,12 @@ export default defineConfig({
   bundle: true,
   clean: false,
   dts: false,
+  esbuildOptions(options) {
+    options.alias = {
+      ...options.alias,
+      "@code-agent/provider-codex": "./packages/provider-codex/src/index.ts",
+    };
+  },
   format: ["esm"],
   minify: false,
   outDir: "dist",
