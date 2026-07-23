@@ -1,21 +1,28 @@
 import {
   AgentCapabilitiesSchema,
   AgentTaskPageSchema,
-  AgentTaskSnapshotSchema,
+  AgentTaskSnapshotResponseSchema,
   HealthResponseSchema,
   ProjectPageSchema,
   type AgentCapabilities,
   type AgentTaskPage,
-  type AgentTaskSnapshot,
+  type AgentTaskSnapshotResponse,
   type HealthResponse,
   type ProjectPage,
 } from "@code-agent/protocol";
 import type { Static, TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
+import {
+  startAgentEventSubscription,
+  type SubscribeAgentEventsOptions,
+  type WebSocketFactory,
+} from "./event-client.js";
+
 export interface CodeAgentClientOptions {
   baseUrl?: string;
   fetch?: typeof globalThis.fetch;
+  webSocketFactory?: WebSocketFactory;
 }
 
 export type ListTasksOptions = Readonly<{
@@ -54,10 +61,12 @@ function appendQuery(path: string, values: Readonly<Record<string, string | numb
 export class CodeAgentClient {
   readonly #baseUrl: string;
   readonly #fetch: typeof globalThis.fetch;
+  readonly #webSocketFactory: WebSocketFactory;
 
   public constructor(options: CodeAgentClientOptions = {}) {
     this.#baseUrl = options.baseUrl?.replace(/\/$/u, "") ?? "";
     this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
+    this.#webSocketFactory = options.webSocketFactory ?? ((url) => new WebSocket(url));
   }
 
   public async getHealth(): Promise<HealthResponse> {
@@ -80,8 +89,19 @@ export class CodeAgentClient {
     return this.#request(path, AgentTaskPageSchema);
   }
 
-  public async readTask(taskId: string): Promise<AgentTaskSnapshot> {
-    return this.#request(`/v1/tasks/${encodeURIComponent(taskId)}`, AgentTaskSnapshotSchema);
+  public async readTask(taskId: string): Promise<AgentTaskSnapshotResponse> {
+    return this.#request(
+      `/v1/tasks/${encodeURIComponent(taskId)}`,
+      AgentTaskSnapshotResponseSchema,
+    );
+  }
+
+  public subscribeEvents(options: SubscribeAgentEventsOptions): () => void {
+    return startAgentEventSubscription({
+      ...options,
+      baseUrl: this.#baseUrl,
+      webSocketFactory: this.#webSocketFactory,
+    });
   }
 
   async #request<T extends TSchema>(path: string, schema: T): Promise<Static<T>> {

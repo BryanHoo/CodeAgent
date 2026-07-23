@@ -7,6 +7,7 @@ import {
   codeAgentClient,
   projectTasksQueryOptions,
   projectsQueryOptions,
+  type CodeAgentRuntimeClient,
   type CodeAgentReadClient,
 } from "./project-queries.js";
 
@@ -14,7 +15,7 @@ const emptyProjects: readonly Project[] = [];
 const emptyTasks: readonly AgentTask[] = [];
 
 type ProjectContextValue = Readonly<{
-  client: CodeAgentReadClient;
+  client: CodeAgentReadClient & CodeAgentRuntimeClient;
   error: Error | null;
   isPending: boolean;
   projects: readonly Project[];
@@ -25,7 +26,7 @@ const ProjectContext = createContext<ProjectContextValue | undefined>(undefined)
 
 type ProjectProviderProps = Readonly<{
   children: ReactNode;
-  client?: CodeAgentReadClient;
+  client?: CodeAgentReadClient & CodeAgentRuntimeClient;
 }>;
 
 export function ProjectProvider({ children, client = codeAgentClient }: ProjectProviderProps) {

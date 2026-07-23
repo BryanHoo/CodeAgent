@@ -37,7 +37,12 @@ describe("CodeAgentClient", () => {
       .mockResolvedValueOnce(jsonResponse({ status: "ok", version: 1 }))
       .mockResolvedValueOnce(jsonResponse({ provider: "codex", tasks: { list: true, read: true } }))
       .mockResolvedValueOnce(jsonResponse({ data: [], nextCursor: null }))
-      .mockResolvedValueOnce(jsonResponse({ ...task, status: "idle", turns: [] }));
+      .mockResolvedValueOnce(
+        jsonResponse({
+          checkpoint: { sequence: 0, sessionId: "runtime-1" },
+          snapshot: { ...task, status: "idle", turns: [] },
+        }),
+      );
     const client = new CodeAgentClient({ baseUrl: "http://127.0.0.1:3210/", fetch: fetchMock });
 
     await client.getHealth();

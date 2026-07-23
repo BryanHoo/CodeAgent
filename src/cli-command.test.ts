@@ -21,11 +21,16 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     lifecycle.push("server.listen");
     return Promise.resolve("http://127.0.0.1:3210");
   });
-  const client = { notify: vi.fn(), request: vi.fn() };
+  const client = {
+    notify: vi.fn(),
+    onNotification: vi.fn(() => () => undefined),
+    request: vi.fn(),
+  };
   const provider = {
     getCapabilities: vi.fn(),
     listTasks: vi.fn(),
     readTask: vi.fn(),
+    subscribeEvents: vi.fn(() => () => undefined),
   };
   const project = {
     createdAt: "2026-07-23T00:00:00.000Z",
@@ -177,7 +182,11 @@ describe("runCli", () => {
       startCodexAppServer: vi.fn(() =>
         Promise.resolve({
           close: () => Promise.resolve(),
-          client: { notify: vi.fn(), request: vi.fn() },
+          client: {
+            notify: vi.fn(),
+            onNotification: vi.fn(() => () => undefined),
+            request: vi.fn(),
+          },
           pid: 4321,
           waitForExit: () => Promise.resolve({ code: 23, signal: null }),
         }),

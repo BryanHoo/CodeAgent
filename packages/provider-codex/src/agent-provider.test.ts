@@ -6,6 +6,9 @@ import { RpcResponseError } from "./jsonl-rpc-client.js";
 class FakeRpcClient {
   readonly calls: Readonly<{ method: string; params: unknown }>[] = [];
   readonly notifications: Readonly<{ method: string; params: unknown }>[] = [];
+  readonly #notificationListeners = new Set<
+    (notification: { method: string; params: unknown }) => void
+  >();
   readonly #responses: unknown[];
 
   public constructor(responses: unknown[]) {
@@ -15,11 +18,27 @@ class FakeRpcClient {
   public request(method: string, params?: unknown): Promise<unknown> {
     this.calls.push({ method, params });
     const response = this.#responses.shift();
-    return response instanceof Error ? Promise.reject(response) : Promise.resolve(response);
+    const resolved = typeof response === "function" ? (response as () => unknown)() : response;
+    return resolved instanceof Error ? Promise.reject(resolved) : Promise.resolve(resolved);
   }
 
   public notify(method: string, params?: unknown): void {
     this.notifications.push({ method, params });
+  }
+
+  public onNotification(
+    listener: (notification: { method: string; params: unknown }) => void,
+  ): () => void {
+    this.#notificationListeners.add(listener);
+    return () => {
+      this.#notificationListeners.delete(listener);
+    };
+  }
+
+  public emitNotification(method: string, params?: unknown): void {
+    for (const listener of this.#notificationListeners) {
+      listener({ method, params });
+    }
   }
 }
 
@@ -50,6 +69,205 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("maps Codex notifications to provider-independent realtime events", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: unknown[] = [];
+    const unsubscribe = provider.subscribeEvents((event) => {
+      events.push(event);
+    });
+    await provider.listTasks();
+    const runningTurn = {
+      completedAt: null,
+      durationMs: null,
+      error: null,
+      id: "turn-1",
+      items: [],
+      itemsView: { type: "full" },
+      startedAt: 1_753_228_800,
+      status: "inProgress",
+    };
+    const completedItem = { id: "item-1", text: "实时完成", type: "agentMessage" };
+    const completedTurn = {
+      ...runningTurn,
+      completedAt: 1_753_228_801,
+      items: [completedItem],
+      status: "completed",
+    };
+
+    rpc.emitNotification("future/notification", { private: true });
+    rpc.emitNotification("turn/started", { threadId: "task-1", turn: runningTurn });
+    rpc.emitNotification("item/agentMessage/delta", {
+      delta: "实时",
+      itemId: "item-1",
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("item/reasoning/summaryTextDelta", {
+      delta: "分析",
+      itemId: "item-2",
+      summaryIndex: 0,
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("item/reasoning/textDelta", {
+      contentIndex: 0,
+      delta: "细节",
+      itemId: "item-2",
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("item/commandExecution/outputDelta", {
+      delta: "Done\n",
+      itemId: "item-3",
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("item/completed", {
+      completedAtMs: 1_753_228_801_000,
+      item: completedItem,
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("turn/completed", { threadId: "task-1", turn: completedTurn });
+    rpc.emitNotification("error", {
+      error: { message: "模型服务不可用" },
+      threadId: "task-1",
+      turnId: "turn-1",
+      willRetry: false,
+    });
+
+    expect(events).toEqual([
+      {
+        payload: {
+          turn: {
+            completedAt: null,
+            error: null,
+            id: "turn-1",
+            items: [],
+            startedAt: "2025-07-23T00:00:00.000Z",
+            status: "running",
+          },
+        },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "turn.started",
+      },
+      {
+        itemId: "item-1",
+        payload: { delta: "实时" },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "message.delta",
+      },
+      {
+        itemId: "item-2",
+        payload: { delta: "分析", field: "summary" },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "reasoning.delta",
+      },
+      {
+        itemId: "item-2",
+        payload: { delta: "细节", field: "content" },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "reasoning.delta",
+      },
+      {
+        itemId: "item-3",
+        payload: { delta: "Done\n" },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "command.output_delta",
+      },
+      {
+        itemId: "item-1",
+        payload: {
+          item: { id: "item-1", role: "assistant", text: "实时完成", type: "message" },
+        },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "item.completed",
+      },
+      {
+        payload: {
+          turn: {
+            completedAt: "2025-07-23T00:00:01.000Z",
+            error: null,
+            id: "turn-1",
+            items: [{ id: "item-1", role: "assistant", text: "实时完成", type: "message" }],
+            startedAt: "2025-07-23T00:00:00.000Z",
+            status: "completed",
+          },
+        },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "turn.completed",
+      },
+      {
+        payload: { message: "模型服务不可用", willRetry: false },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "provider.error",
+      },
+    ]);
+
+    unsubscribe();
+    rpc.emitNotification("item/agentMessage/delta", {
+      delta: "不应交付",
+      itemId: "item-1",
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    expect(events).toHaveLength(8);
+  });
+
+  it("does not publish notifications for tasks outside the active project", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread({ cwd: "/workspace/other", id: "task-foreign" }) },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: unknown[] = [];
+    provider.subscribeEvents((event) => {
+      events.push(event);
+    });
+
+    await expect(provider.readTask("task-foreign")).resolves.toBeUndefined();
+    rpc.emitNotification("item/agentMessage/delta", {
+      delta: "不应泄漏",
+      itemId: "item-foreign",
+      threadId: "task-foreign",
+      turnId: "turn-foreign",
+    });
+
+    expect(events).toEqual([]);
+  });
+
+  it("delivers notifications received while readTask is validating project ownership", async () => {
+    const deliveryOrder: string[] = [];
+    const rpc = new FakeRpcClient([
+      () => {
+        rpc.emitNotification("item/agentMessage/delta", {
+          delta: "读取期间到达",
+          itemId: "item-1",
+          threadId: "task-1",
+          turnId: "turn-1",
+        });
+        return { thread: nativeThread() };
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    provider.subscribeEvents(() => {
+      deliveryOrder.push("event");
+    });
+
+    await provider.readTask("task-1");
+    deliveryOrder.push("snapshot");
+
+    expect(deliveryOrder).toEqual(["event", "snapshot"]);
+  });
+
   it("maps thread/list without repeating the runtime handshake", async () => {
     const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: "next-cursor" }]);
     const provider = createCodexAgentProvider({ client: rpc, project });

@@ -2,6 +2,8 @@ import { CodeAgentClient } from "@code-agent/client";
 import { queryOptions } from "@tanstack/react-query";
 
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
+export type CodeAgentRuntimeClient = Pick<CodeAgentClient, "readTask" | "subscribeEvents">;
+type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
 
 export const codeAgentClient = new CodeAgentClient();
 
@@ -44,7 +46,7 @@ export function projectTasksQueryOptions(
 
 export function taskSnapshotQueryOptions(
   taskId: string,
-  client: CodeAgentReadClient = codeAgentClient,
+  client: CodeAgentSnapshotClient = codeAgentClient,
 ) {
   return queryOptions({
     queryFn: () => client.readTask(taskId),

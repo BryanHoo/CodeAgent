@@ -28,7 +28,7 @@
     "package:check": "node ./tools/verify-package.mjs",
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
-    "test:e2e": "pnpm --filter @code-agent/web build && playwright test",
+    "test:e2e": "pnpm build && playwright test",
     "typecheck": "tsc -b --pretty false",
     "prepublishOnly": "pnpm run check"
   },

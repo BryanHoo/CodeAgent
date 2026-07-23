@@ -471,6 +471,20 @@ export type AgentEvent = {
 };
 ```
 
+Realtime Path 当前实现的 v1 判别类型与 payload：
+
+| `type`                 | 必需定位字段                 | `payload`                                    |
+| ---------------------- | ---------------------------- | -------------------------------------------- |
+| `turn.started`         | `taskId`, `turnId`           | `{ turn: AgentTurn }`                        |
+| `message.delta`        | `taskId`, `turnId`, `itemId` | `{ delta: string }`                          |
+| `reasoning.delta`      | `taskId`, `turnId`, `itemId` | `{ delta, field: "summary" \| "content" }` |
+| `command.output_delta` | `taskId`, `turnId`, `itemId` | `{ delta: string }`                          |
+| `item.completed`       | `taskId`, `turnId`, `itemId` | `{ item: AgentItem }`                        |
+| `turn.completed`       | `taskId`, `turnId`           | `{ turn: AgentTurn }`                        |
+| `provider.error`       | `taskId`, `turnId`           | `{ message, willRetry }`                     |
+
+Provider 只产生不含传输字段的统一事件，并仅发布已通过当前 Project 归属验证的 Task。Server 在 Runtime Session 内统一补齐 `version`、`provider`、`sessionId`、`sequence` 和 `timestamp`。
+
 事件约束：
 
 - `sequence` 在一个 Runtime Session 内单调递增。
@@ -512,6 +526,17 @@ DELETE /v1/auth/session
 Idempotency-Key: <uuid>
 ```
 
+`GET /v1/tasks/:taskId` 返回 Snapshot 与同一 Event Stream 的恢复检查点：
+
+```json
+{
+  "snapshot": { "id": "task-id", "turns": [] },
+  "checkpoint": { "sessionId": "runtime-session-id", "sequence": 1024 }
+}
+```
+
+Provider 在 `readTask` Promise 完成前让返回 Snapshot 包含此前状态并同步交付对应 Notification；Server 在 Snapshot 读取完成后捕获 checkpoint，保证事件既不会丢失，也不会对已有内容再次补发。
+
 ### 10.2 WebSocket API
 
 ```text
@@ -528,6 +553,21 @@ WS /v1/events?afterSequence=<sequence>
   "latestSequence": 1024
 }
 ```
+
+如果 `afterSequence` 已被有界缓存淘汰，或大于当前 Session 的最新序号，服务端发送控制帧并要求刷新 Snapshot：
+
+```json
+{
+  "type": "resync.required",
+  "version": 1,
+  "sessionId": "runtime-session-id",
+  "latestSequence": 1024,
+  "reason": "event_retention_exceeded"
+}
+```
+
+`reason` 当前为 `event_retention_exceeded`、`session_changed` 或客户端检测生成的 `sequence_gap`。
+服务端发送 `resync.required` 后关闭当前连接，客户端刷新 Snapshot 并使用新 checkpoint 建立连接。
 
 客户端恢复流程：
 
@@ -624,6 +664,8 @@ turn id -> runtime state
 | `turn/plan/updated`                 | `turn.plan_updated`         |
 | `item/started`                      | `item.started`              |
 | `item/agentMessage/delta`           | `message.delta`             |
+| `item/reasoning/summaryTextDelta`   | `reasoning.delta`           |
+| `item/reasoning/textDelta`          | `reasoning.delta`           |
 | `item/commandExecution/outputDelta` | `command.output_delta`      |
 | `item/fileChange/patchUpdated`      | `file_change.patch_updated` |
 | `item/completed`                    | `item.completed`            |

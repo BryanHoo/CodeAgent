@@ -1,5 +1,26 @@
 // 统一协议、JSON Schema 与事件信封只能从此公开入口导出。
 export {
+  AgentEventSchema,
+  AgentTaskSnapshotResponseSchema,
+  CommandOutputDeltaEventSchema,
+  ConnectionReadySchema,
+  EventCheckpointSchema,
+  EventStreamMessageSchema,
+  ItemCompletedEventSchema,
+  MessageDeltaEventSchema,
+  ProviderErrorEventSchema,
+  ReasoningDeltaEventSchema,
+  ResyncRequiredSchema,
+  TurnCompletedEventSchema,
+  TurnStartedEventSchema,
+  type AgentEvent,
+  type AgentTaskSnapshotResponse,
+  type ConnectionReady,
+  type EventCheckpoint,
+  type EventStreamMessage,
+  type ResyncRequired,
+} from "./agent-event.js";
+export {
   AgentActivityItemSchema,
   AgentCapabilitiesSchema,
   AgentCommandItemSchema,

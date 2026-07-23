@@ -314,6 +314,8 @@ apps/web/src/
 - 处理连接级取消、超时和错误翻译。
 - 识别重复 `sequence`、会话变化和恢复要求。
 
+`CodeAgentClient.subscribeEvents` 以 Snapshot 的 `sessionId` 和 `sequence` 建立连接。Client 负责 Schema 校验、重复事件过滤、Sequence Gap 检测、退避重连和取消时清理 Socket、Timer 与全部监听器；它通过回调报告连接状态与 `resync.required`，不持有 React 状态。
+
 不负责：
 
 - React 状态。
@@ -472,6 +474,8 @@ Terminal Event 到达时必须：
 3. 清理对应 Buffer。
 4. 通知相关低频 Query 更新或失效。
 
+当前实现使用 `AgentEventBuffer` 按 `turnId + itemId + type + field` 合并同一动画帧内的 Delta。关键事件到达时先按 `sequence` 冲刷所有更早的缓冲事件，再应用完整 Item/Turn 终态，避免跨 Item 缓冲造成全局顺序倒置。
+
 ### 13.4 有界队列
 
 浏览器 WebSocket API 不提供接收侧反压。Web 必须限制尚未处理的事件数量和字节数。达到软限制时优先合并 Delta；达到硬限制时主动关闭连接并通过 Snapshot 恢复，不能无限占用内存。
@@ -491,6 +495,8 @@ Approval、Error 和 Terminal Event 不能因队列压力丢失。
 6. 应用服务端补发事件。
 7. 标记 connectionState = connected。
 ```
+
+当前 `useTaskRuntime` 保留已渲染 Snapshot；Client 报告 `reconnecting`、`resync.required` 或 Session 变化时触发 `tasks.snapshot(taskId)` refetch。新响应完成 Hydration 后，旧订阅随 Effect 清理，并从新 checkpoint 建立订阅。
 
 ### 14.2 事件过期
 

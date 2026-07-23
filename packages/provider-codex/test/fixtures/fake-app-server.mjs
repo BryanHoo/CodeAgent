@@ -19,9 +19,112 @@ const scenario = process.env["FAKE_APP_SERVER_SCENARIO"] ?? "normal";
 const input = createInterface({ input: process.stdin });
 let initializeParams;
 let initialized = false;
+let realtimeRunning = false;
 
 function send(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
+}
+
+function realtimeTurn(status, items, error = null) {
+  return {
+    completedAt: status === "inProgress" ? null : 1_753_228_802,
+    durationMs: status === "inProgress" ? null : 2_000,
+    error,
+    id: "turn-realtime",
+    items,
+    itemsView: { type: "full" },
+    startedAt: 1_753_228_800,
+    status,
+  };
+}
+
+function scheduleRealtimeEvents() {
+  if (realtimeRunning) {
+    return;
+  }
+  realtimeRunning = true;
+  setTimeout(() => {
+    const messageItem = {
+      id: "message-realtime",
+      memoryCitation: null,
+      phase: null,
+      text: "Realtime connected",
+      type: "agentMessage",
+    };
+    const commandItem = {
+      aggregatedOutput: "Done\n",
+      command: "pnpm check",
+      commandActions: [],
+      cwd: "/workspace/CodeAgent",
+      durationMs: 20,
+      exitCode: 0,
+      id: "command-realtime",
+      processId: null,
+      source: "agent",
+      status: "completed",
+      type: "commandExecution",
+    };
+    send({
+      method: "turn/started",
+      params: { threadId: "task-realtime", turn: realtimeTurn("inProgress", []) },
+    });
+    for (const delta of ["Realtime ", "connected"]) {
+      send({
+        method: "item/agentMessage/delta",
+        params: {
+          delta,
+          itemId: "message-realtime",
+          threadId: "task-realtime",
+          turnId: "turn-realtime",
+        },
+      });
+    }
+    send({
+      method: "item/completed",
+      params: {
+        completedAtMs: 1_753_228_801_000,
+        item: messageItem,
+        threadId: "task-realtime",
+        turnId: "turn-realtime",
+      },
+    });
+    send({
+      method: "item/commandExecution/outputDelta",
+      params: {
+        delta: "Done\n",
+        itemId: "command-realtime",
+        threadId: "task-realtime",
+        turnId: "turn-realtime",
+      },
+    });
+    send({
+      method: "item/completed",
+      params: {
+        completedAtMs: 1_753_228_801_500,
+        item: commandItem,
+        threadId: "task-realtime",
+        turnId: "turn-realtime",
+      },
+    });
+    send({
+      method: "turn/completed",
+      params: {
+        threadId: "task-realtime",
+        turn: realtimeTurn("completed", [messageItem, commandItem]),
+      },
+    });
+    send({
+      method: "error",
+      params: {
+        error: { message: "模型服务不可用" },
+        threadId: "task-realtime",
+        turnId: "turn-realtime",
+        willRetry: false,
+      },
+    });
+    // 同一轮读取期间只调度一次，完成后允许 Playwright 重试重新触发场景。
+    realtimeRunning = false;
+  }, 250);
 }
 
 input.on("line", (line) => {
@@ -61,6 +164,47 @@ input.on("line", (line) => {
 
   if (message.method === "echo") {
     send({ id: message.id, result: message.params });
+    return;
+  }
+
+  if (scenario === "realtime" && message.method === "thread/list") {
+    send({
+      id: message.id,
+      result: {
+        data: [
+          {
+            createdAt: 1_753_228_800,
+            cwd: "/workspace/CodeAgent",
+            id: "task-realtime",
+            name: "Realtime Path",
+            preview: "Realtime Path",
+            status: { type: "active" },
+            updatedAt: 1_753_228_800,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    return;
+  }
+
+  if (scenario === "realtime" && message.method === "thread/read") {
+    send({
+      id: message.id,
+      result: {
+        thread: {
+          createdAt: 1_753_228_800,
+          cwd: "/workspace/CodeAgent",
+          id: "task-realtime",
+          name: "Realtime Path",
+          preview: "Realtime Path",
+          status: { type: "active" },
+          turns: [],
+          updatedAt: 1_753_228_800,
+        },
+      },
+    });
+    scheduleRealtimeEvents();
     return;
   }
 

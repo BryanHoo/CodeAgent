@@ -15,6 +15,11 @@
 - Fastify 资源通过插件封装，并在 `onClose` 中释放。
 - 同步 SQLite 写入放入专用 Worker，主事件循环不执行持久化批处理。
 - WebSocket 客户端使用独立有界队列，慢客户端不能阻塞 Provider。
+- 每次 Runtime 创建唯一 Event Stream Session，由 Server 分配单调 `sequence` 并维护固定容量缓存；Provider 不分配传输序号。
+- `/v1/events` 首帧发送 `connection.ready`，只补发 `afterSequence` 之后仍在缓存窗口内的事件；过期或超前序号发送 `resync.required`。
+- Provider `readTask` Promise 完成前必须让返回 Snapshot 包含此前状态并同步交付对应通知；Task Snapshot 读取完成后再从当前 Event Stream 固定 checkpoint，避免丢失事件或重复补发已有内容。
+- `resync.required` 发送后由 Server 主动关闭当前 WebSocket；客户端必须使用新 Snapshot checkpoint 建立新连接。
+- Fastify 关闭时取消 Provider Event 订阅并关闭 WebSocket 资源。
 
 ## 关闭
 

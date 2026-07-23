@@ -16,6 +16,10 @@
     "@code-agent/provider-codex": "workspace:*",
     "@fastify/static": "catalog:",
     "@fastify/websocket": "catalog:",
-    "fastify": "catalog:"
+    "fastify": "catalog:",
+    "ws": "catalog:"
+  },
+  "devDependencies": {
+    "@types/ws": "catalog:"
   }
 }

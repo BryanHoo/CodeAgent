@@ -1,11 +1,8 @@
 import type { AgentItemStatus, AgentTaskSnapshot } from "@code-agent/protocol";
-import { useQuery } from "@tanstack/react-query";
 import { FolderGit2 } from "lucide-react";
 
-import {
-  taskSnapshotQueryOptions,
-  type CodeAgentReadClient,
-} from "../../projects/project-queries.js";
+import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
+import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
 import {
   Conversation,
   ConversationContent,
@@ -25,7 +22,7 @@ import {
 } from "../../../shared/ai-elements/tool.js";
 
 type TaskTimelineProps = Readonly<{
-  client: CodeAgentReadClient;
+  client: CodeAgentRuntimeClient;
   projectName: string;
   taskId?: string;
 }>;
@@ -58,21 +55,37 @@ function TimelineState({
 }
 
 export function TaskTimeline({ client, projectName, taskId }: TaskTimelineProps) {
-  const taskQuery = useQuery({
-    ...taskSnapshotQueryOptions(taskId ?? "", client),
-    enabled: taskId !== undefined,
-  });
-
   if (taskId === undefined) {
     return <EmptyTimeline projectName={projectName} />;
   }
-  if (taskQuery.isPending) {
-    return <TimelineState message="正在加载任务历史" role="status" />;
-  }
-  if (taskQuery.error !== null) {
+  return <ActiveTaskTimeline client={client} taskId={taskId} />;
+}
+
+function ActiveTaskTimeline({
+  client,
+  taskId,
+}: Readonly<{ client: CodeAgentRuntimeClient; taskId: string }>) {
+  const taskRuntime = useTaskRuntime(taskId, client);
+
+  if (taskRuntime.error !== null) {
     return <TimelineState message="无法加载任务历史" role="alert" />;
   }
-  return <TaskSnapshotTimeline snapshot={taskQuery.data} />;
+  if (taskRuntime.isPending || taskRuntime.snapshot === undefined) {
+    return <TimelineState message="正在加载任务历史" role="status" />;
+  }
+  return (
+    <>
+      {taskRuntime.connectionState === "reconnecting" ? (
+        <div
+          className="bg-control px-3 py-1.5 text-center text-label text-muted-foreground"
+          role="status"
+        >
+          实时连接恢复中
+        </div>
+      ) : null}
+      <TaskSnapshotTimeline snapshot={taskRuntime.snapshot} />
+    </>
+  );
 }
 
 function toToolStatus(status: AgentItemStatus): ToolStatus {

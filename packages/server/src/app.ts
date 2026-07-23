@@ -1,16 +1,24 @@
+import { randomUUID } from "node:crypto";
+
 import type { AgentProvider } from "@code-agent/core";
 import {
   AgentCapabilitiesSchema,
   AgentTaskPageSchema,
-  AgentTaskSnapshotSchema,
+  AgentTaskSnapshotResponseSchema,
   HealthResponseSchema,
   ProjectPageSchema,
+  type EventStreamMessage,
   type Project,
 } from "@code-agent/protocol";
 import fastifyStatic from "@fastify/static";
+import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 
+import { AgentEventStream } from "./agent-event-stream.js";
+
 export interface CreateCodeAgentServerOptions {
+  eventBufferSize?: number;
+  eventSessionId?: string;
   project: Project;
   provider: AgentProvider;
   staticRoot?: string;
@@ -39,6 +47,13 @@ const TaskPageQuerySchema = {
   type: "object",
 } as const;
 
+const EventQuerySchema = {
+  additionalProperties: false,
+  properties: { afterSequence: { minimum: 0, type: "integer" } },
+  required: ["afterSequence"],
+  type: "object",
+} as const;
+
 const ErrorResponseSchema = {
   additionalProperties: false,
   properties: {
@@ -53,6 +68,20 @@ export async function createCodeAgentServer(
   options: CreateCodeAgentServerOptions,
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  const capabilities = await options.provider.getCapabilities();
+  const eventStream = new AgentEventStream({
+    ...(options.eventBufferSize === undefined ? {} : { capacity: options.eventBufferSize }),
+    provider: capabilities.provider,
+    sessionId: options.eventSessionId ?? randomUUID(),
+  });
+  const unsubscribeProvider = options.provider.subscribeEvents((event) => {
+    eventStream.publish(event);
+  });
+
+  await app.register(fastifyWebsocket, { options: { maxPayload: 64 * 1024 } });
+  app.addHook("onClose", () => {
+    unsubscribeProvider();
+  });
 
   if (options.staticRoot !== undefined) {
     await app.register(fastifyStatic, {
@@ -76,7 +105,7 @@ export async function createCodeAgentServer(
   app.get(
     "/v1/capabilities",
     { schema: { response: { 200: AgentCapabilitiesSchema } } },
-    async () => options.provider.getCapabilities(),
+    () => capabilities,
   );
 
   app.get("/v1/projects", { schema: { response: { 200: ProjectPageSchema } } }, () => ({
@@ -113,7 +142,7 @@ export async function createCodeAgentServer(
     {
       schema: {
         params: TaskParamsSchema,
-        response: { 200: AgentTaskSnapshotSchema, 404: ErrorResponseSchema },
+        response: { 200: AgentTaskSnapshotResponseSchema, 404: ErrorResponseSchema },
       },
     },
     async (request, reply) => {
@@ -121,7 +150,88 @@ export async function createCodeAgentServer(
       if (task?.projectId !== options.project.id) {
         return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
       }
-      return task;
+      // Provider Promise 完成时已交付此前通知，此处 checkpoint 与返回 Snapshot 对齐。
+      const checkpoint = eventStream.checkpoint;
+      return { checkpoint, snapshot: task };
+    },
+  );
+
+  app.get<{ Querystring: { afterSequence: number } }>(
+    "/v1/events",
+    {
+      async preValidation(request, reply) {
+        const origin = request.headers.origin;
+        const host = request.headers.host;
+        if (origin === undefined) {
+          return;
+        }
+        try {
+          const parsedOrigin = new URL(origin);
+          if (
+            host === undefined ||
+            (parsedOrigin.protocol !== "http:" && parsedOrigin.protocol !== "https:") ||
+            parsedOrigin.host !== host
+          ) {
+            return await reply
+              .code(403)
+              .send({ code: "ORIGIN_REJECTED", message: "Origin rejected" });
+          }
+        } catch {
+          return await reply
+            .code(403)
+            .send({ code: "ORIGIN_REJECTED", message: "Origin rejected" });
+        }
+      },
+      schema: { querystring: EventQuerySchema },
+      websocket: true,
+    },
+    (socket, request) => {
+      const send = (message: EventStreamMessage): boolean => {
+        if (socket.readyState !== 1) {
+          return false;
+        }
+        if (socket.bufferedAmount > 1_048_576) {
+          socket.close(1013, "Client is too slow; refresh the snapshot");
+          return false;
+        }
+        socket.send(JSON.stringify(message));
+        return true;
+      };
+      const replay = eventStream.replayAfter(request.query.afterSequence);
+      if (replay.type === "resync") {
+        const sent = send({
+          latestSequence: replay.latestSequence,
+          reason: replay.reason,
+          sessionId: eventStream.checkpoint.sessionId,
+          type: "resync.required",
+          version: 1,
+        });
+        if (sent) {
+          socket.close(1000, "Snapshot resync required");
+        }
+        return;
+      }
+
+      // 同步建立实时订阅并挂载清理回调，避免补发与实时事件之间出现空窗。
+      const unsubscribe = eventStream.subscribe((event) => {
+        send(event);
+      });
+      const cleanup = () => {
+        unsubscribe();
+      };
+      socket.once("close", cleanup);
+      socket.once("error", cleanup);
+      send({
+        latestSequence: eventStream.checkpoint.sequence,
+        sessionId: eventStream.checkpoint.sessionId,
+        type: "connection.ready",
+        version: 1,
+      });
+      for (const event of replay.events) {
+        if (!send(event)) {
+          return;
+        }
+      }
     },
   );
 

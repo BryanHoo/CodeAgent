@@ -87,6 +87,11 @@ const taskSnapshot = {
   ],
 };
 
+const taskSnapshotResponse = {
+  checkpoint: { sequence: 0, sessionId: "e2e-session" },
+  snapshot: taskSnapshot,
+};
+
 test.beforeEach(async ({ page }) => {
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
@@ -102,7 +107,7 @@ test.beforeEach(async ({ page }) => {
       const projectId = url.pathname.split("/")[3];
       body = { data: tasks.filter((task) => task.projectId === projectId), nextCursor: null };
     } else if (url.pathname === "/v1/tasks/task-1") {
-      body = taskSnapshot;
+      body = taskSnapshotResponse;
     } else {
       await route.fulfill({
         contentType: "application/json",
@@ -259,6 +264,303 @@ test("renders the AI workbench landmarks without enabling runtime actions", asyn
   await expect(page.getByLabel("项目路径")).toHaveText("~/Develop/person/CodeAgent");
   await expect(inspector.getByRole("button", { name: "关闭上下文面板" })).toHaveCount(0);
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+});
+
+test("shows a task error when the initial snapshot request fails", async ({ page }) => {
+  await page.route("**/v1/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { code: "SNAPSHOT_FAILED", message: "Snapshot failed" },
+      status: 500,
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+
+  await expect(page.getByRole("alert", { name: "会话内容" })).toHaveText("无法加载任务历史");
+});
+
+test("shows an error when the resync snapshot refresh fails", async ({ page }) => {
+  let snapshotRequestCount = 0;
+  await page.route("**/v1/tasks/task-1", async (route) => {
+    snapshotRequestCount += 1;
+    if (snapshotRequestCount === 1) {
+      await route.fulfill({ contentType: "application/json", json: taskSnapshotResponse });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: { code: "SNAPSHOT_FAILED", message: "Snapshot failed" },
+      status: 503,
+    });
+  });
+  await page.addInitScript(() => {
+    class ResyncWebSocket extends EventTarget {
+      public readonly bufferedAmount = 0;
+      public readyState = 0;
+
+      public constructor() {
+        super();
+        queueMicrotask(() => {
+          if (this.readyState === 3) {
+            return;
+          }
+          this.readyState = 1;
+          this.dispatchEvent(new Event("open"));
+          for (const message of [
+            {
+              latestSequence: 0,
+              sessionId: "e2e-session",
+              type: "connection.ready",
+              version: 1,
+            },
+            {
+              latestSequence: 8,
+              reason: "event_retention_exceeded",
+              sessionId: "e2e-session",
+              type: "resync.required",
+              version: 1,
+            },
+          ]) {
+            this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(message) }));
+          }
+        });
+      }
+
+      public close(code = 1000, reason = ""): void {
+        if (this.readyState === 3) {
+          return;
+        }
+        this.readyState = 3;
+        this.dispatchEvent(new CloseEvent("close", { code, reason }));
+      }
+
+      public send(): void {
+        return undefined;
+      }
+    }
+
+    Object.defineProperty(window, "WebSocket", {
+      configurable: true,
+      value: ResyncWebSocket,
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+
+  await expect.poll(() => snapshotRequestCount).toBeGreaterThanOrEqual(2);
+  await expect(page.getByRole("alert", { name: "会话内容" })).toHaveText("无法加载任务历史");
+});
+
+test("refreshes the snapshot when the realtime delta buffer overflows", async ({ page }) => {
+  let snapshotRequestCount = 0;
+  await page.route("**/v1/tasks/task-1", async (route) => {
+    snapshotRequestCount += 1;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        checkpoint: {
+          ...taskSnapshotResponse.checkpoint,
+          sequence: snapshotRequestCount === 1 ? 0 : 1_001,
+        },
+      },
+    });
+  });
+  await page.addInitScript(() => {
+    let burstSent = false;
+
+    class BurstingWebSocket extends EventTarget {
+      public readonly bufferedAmount = 0;
+      public readyState = 0;
+
+      public constructor() {
+        super();
+        queueMicrotask(() => {
+          if (this.readyState === 3) {
+            return;
+          }
+          this.readyState = 1;
+          this.dispatchEvent(new Event("open"));
+          this.dispatchEvent(
+            new MessageEvent("message", {
+              data: JSON.stringify({
+                latestSequence: 1_001,
+                sessionId: "e2e-session",
+                type: "connection.ready",
+                version: 1,
+              }),
+            }),
+          );
+          if (burstSent) {
+            return;
+          }
+          burstSent = true;
+          for (let sequence = 1; sequence <= 1_001; sequence += 1) {
+            this.dispatchEvent(
+              new MessageEvent("message", {
+                data: JSON.stringify({
+                  itemId: `item-${String(sequence % 2)}`,
+                  payload: { delta: "x" },
+                  provider: "codex",
+                  sequence,
+                  sessionId: "e2e-session",
+                  taskId: "task-1",
+                  timestamp: "2026-07-23T00:00:00.000Z",
+                  turnId: "turn-1",
+                  type: "message.delta",
+                  version: 1,
+                }),
+              }),
+            );
+          }
+        });
+      }
+
+      public close(code = 1000, reason = ""): void {
+        if (this.readyState === 3) {
+          return;
+        }
+        this.readyState = 3;
+        this.dispatchEvent(new CloseEvent("close", { code, reason }));
+      }
+
+      public send(): void {
+        return undefined;
+      }
+    }
+
+    Object.defineProperty(window, "WebSocket", {
+      configurable: true,
+      value: BurstingWebSocket,
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+
+  await expect.poll(() => snapshotRequestCount).toBeGreaterThanOrEqual(2);
+});
+
+test("clears transient realtime errors after the WebSocket reconnects", async ({ page }) => {
+  let snapshotRequestCount = 0;
+  await page.route("**/v1/tasks/task-1", async (route) => {
+    snapshotRequestCount += 1;
+    if (snapshotRequestCount === 1) {
+      await route.fulfill({ contentType: "application/json", json: taskSnapshotResponse });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: { code: "SNAPSHOT_FAILED", message: "Snapshot failed" },
+      status: 503,
+    });
+  });
+  await page.addInitScript(() => {
+    let failureSent = false;
+    let connectionCount = 0;
+    sessionStorage.setItem("__testWebSocketConnections", String(connectionCount));
+    sessionStorage.setItem("__testWebSocketFailed", "false");
+    sessionStorage.setItem("__testWebSocketRecovered", "false");
+
+    class ReconnectingWebSocket extends EventTarget {
+      public readonly bufferedAmount = 0;
+      public readyState = 0;
+
+      public constructor() {
+        super();
+        connectionCount += 1;
+        sessionStorage.setItem("__testWebSocketConnections", String(connectionCount));
+        queueMicrotask(() => {
+          if (this.readyState === 3) {
+            return;
+          }
+          this.readyState = 1;
+          this.dispatchEvent(new Event("open"));
+          const sendReady = () => {
+            this.dispatchEvent(
+              new MessageEvent("message", {
+                data: JSON.stringify({
+                  latestSequence: 0,
+                  sessionId: "e2e-session",
+                  type: "connection.ready",
+                  version: 1,
+                }),
+              }),
+            );
+          };
+          if (failureSent) {
+            setTimeout(() => {
+              if (this.readyState === 3) {
+                return;
+              }
+              sendReady();
+              sessionStorage.setItem("__testWebSocketRecovered", "true");
+            }, 1_000);
+            return;
+          }
+          sendReady();
+          failureSent = true;
+          setTimeout(() => {
+            sessionStorage.setItem("__testWebSocketFailed", "true");
+            this.dispatchEvent(new Event("error"));
+            this.readyState = 3;
+            this.dispatchEvent(new CloseEvent("close", { code: 1006 }));
+          }, 200);
+        });
+      }
+
+      public close(code = 1000, reason = ""): void {
+        if (this.readyState === 3) {
+          return;
+        }
+        this.readyState = 3;
+        this.dispatchEvent(new CloseEvent("close", { code, reason }));
+      }
+
+      public send(): void {
+        return undefined;
+      }
+    }
+
+    // 在应用创建连接前替换浏览器实现，稳定复现失败后成功重连。
+    Object.defineProperty(window, "WebSocket", {
+      configurable: true,
+      value: ReconnectingWebSocket,
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+  await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => WebSocket.name)).toBe("ReconnectingWebSocket");
+  await expect
+    .poll(() => page.evaluate(() => sessionStorage.getItem("__testWebSocketFailed")))
+    .toBe("true");
+  await expect.poll(() => snapshotRequestCount).toBeGreaterThanOrEqual(2);
+  await page.waitForTimeout(50);
+
+  // Snapshot 刷新失败属于非阻塞恢复错误，已渲染 Timeline 不能被替换。
+  await expect(page.getByRole("alert", { name: "会话内容" })).toHaveCount(0);
+  await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => Number(sessionStorage.getItem("__testWebSocketConnections") ?? "0")),
+    )
+    .toBeGreaterThanOrEqual(2);
+  await expect
+    .poll(() => page.evaluate(() => sessionStorage.getItem("__testWebSocketRecovered")))
+    .toBe("true");
+
+  await expect(page.getByRole("alert", { name: "会话内容" })).toHaveCount(0);
+});
+
+test("streams Fake App Server notifications into the Timeline", async ({ page }) => {
+  await page.unroute("**/v1/**");
+  await page.goto("/p/code-agent/t/task-realtime");
+
+  await expect(page.getByText("Realtime connected", { exact: true })).toBeVisible();
+  await page.getByText("pnpm check", { exact: true }).click();
+  await expect(page.getByText("Done", { exact: true })).toBeVisible();
+  await expect(page.getByText("模型服务不可用", { exact: true })).toBeVisible();
 });
 
 test("orders persistent search, task actions, pinned tasks and projects in the sidebar", async ({

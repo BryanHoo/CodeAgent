@@ -71,12 +71,17 @@ const snapshot = {
   ],
 };
 
+const snapshotResponse = {
+  checkpoint: { sequence: 0, sessionId: "runtime-1" },
+  snapshot,
+};
+
 describe("project queries", () => {
   it("loads projects, project tasks, and task snapshots through the client", async () => {
     const client = {
       listProjects: vi.fn(() => Promise.resolve({ data: [project], nextCursor: null })),
       listTasks: vi.fn(() => Promise.resolve({ data: [task], nextCursor: null })),
-      readTask: vi.fn(() => Promise.resolve(snapshot)),
+      readTask: vi.fn(() => Promise.resolve(snapshotResponse)),
     };
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -89,7 +94,7 @@ describe("project queries", () => {
     ).resolves.toEqual({ data: [task], nextCursor: null });
     await expect(
       queryClient.fetchQuery(taskSnapshotQueryOptions("task-1", client)),
-    ).resolves.toEqual(snapshot);
+    ).resolves.toEqual(snapshotResponse);
   });
 
   it("loads and merges every task page returned by the client", async () => {
@@ -100,7 +105,7 @@ describe("project queries", () => {
         .fn()
         .mockResolvedValueOnce({ data: [task], nextCursor: "next-page" })
         .mockResolvedValueOnce({ data: [nextTask], nextCursor: null }),
-      readTask: vi.fn(() => Promise.resolve(snapshot)),
+      readTask: vi.fn(() => Promise.resolve(snapshotResponse)),
     };
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 

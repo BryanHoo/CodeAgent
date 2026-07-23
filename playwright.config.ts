@@ -17,9 +17,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm --filter @code-agent/web preview --host 127.0.0.1 --port 4173",
+    command: "node tests/fixtures/fake-realtime-server.mjs",
     url: "http://127.0.0.1:4173",
-    reuseExistingServer: !process.env["CI"],
+    // Fake Server 持有事件序号和场景状态，每次测试运行必须使用全新进程。
+    reuseExistingServer: false,
     timeout: 30_000,
   },
 });

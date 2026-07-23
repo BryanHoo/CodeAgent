@@ -1,7 +1,12 @@
 import { Buffer } from "node:buffer";
 import { resolve } from "node:path";
 
-import type { AgentProvider, ListAgentTasksInput } from "@code-agent/core";
+import type {
+  AgentProvider,
+  AgentProviderEvent,
+  AgentProviderEventListener,
+  ListAgentTasksInput,
+} from "@code-agent/core";
 import type {
   AgentCapabilities,
   AgentItem,
@@ -17,6 +22,7 @@ import { RpcResponseError } from "./jsonl-rpc-client.js";
 
 export interface CodexRpcClient {
   notify(method: string, params?: unknown): void;
+  onNotification(listener: (notification: { method: string; params: unknown }) => void): () => void;
   request(method: string, params?: unknown): Promise<unknown>;
 }
 
@@ -377,6 +383,81 @@ function mapAgentTurn(value: unknown): AgentTurn {
   };
 }
 
+function mapCodexNotification(method: string, value: unknown): AgentProviderEvent | undefined {
+  if (
+    method !== "turn/started" &&
+    method !== "turn/completed" &&
+    method !== "item/agentMessage/delta" &&
+    method !== "item/reasoning/summaryTextDelta" &&
+    method !== "item/reasoning/textDelta" &&
+    method !== "item/commandExecution/outputDelta" &&
+    method !== "item/completed" &&
+    method !== "error"
+  ) {
+    return undefined;
+  }
+
+  const params = expectRecord(value, `Codex ${method} params`);
+  const taskId = expectString(params["threadId"], `Codex ${method} threadId`);
+
+  if (method === "turn/started" || method === "turn/completed") {
+    const turn = mapAgentTurn(params["turn"]);
+    return {
+      payload: { turn },
+      taskId,
+      turnId: turn.id,
+      type: method === "turn/started" ? "turn.started" : "turn.completed",
+    };
+  }
+
+  const turnId = expectString(params["turnId"], `Codex ${method} turnId`);
+  if (method === "error") {
+    const error = expectRecord(params["error"], "Codex error notification error");
+    if (typeof params["willRetry"] !== "boolean") {
+      throw new CodexProtocolMappingError("Codex error notification willRetry must be a boolean");
+    }
+    return {
+      payload: {
+        message: expectString(error["message"], "Codex error notification message"),
+        willRetry: params["willRetry"],
+      },
+      taskId,
+      turnId,
+      type: "provider.error",
+    };
+  }
+
+  if (method === "item/completed") {
+    const item = mapAgentItem(params["item"]);
+    return {
+      itemId: item.id,
+      payload: { item },
+      taskId,
+      turnId,
+      type: "item.completed",
+    };
+  }
+
+  const itemId = expectString(params["itemId"], `Codex ${method} itemId`);
+  const delta = expectString(params["delta"], `Codex ${method} delta`);
+  if (method === "item/agentMessage/delta") {
+    return { itemId, payload: { delta }, taskId, turnId, type: "message.delta" };
+  }
+  if (method === "item/commandExecution/outputDelta") {
+    return { itemId, payload: { delta }, taskId, turnId, type: "command.output_delta" };
+  }
+  return {
+    itemId,
+    payload: {
+      delta,
+      field: method === "item/reasoning/summaryTextDelta" ? "summary" : "content",
+    },
+    taskId,
+    turnId,
+    type: "reasoning.delta",
+  };
+}
+
 function isProjectThread(thread: Record<string, unknown>, project: Project): boolean {
   const cwd = expectString(thread["cwd"], "Codex thread cwd");
   return resolve(cwd) === resolve(project.rootPath);
@@ -409,11 +490,18 @@ function mapAgentTask(thread: Record<string, unknown>, project: Project): AgentT
 
 export class CodexAgentProvider implements AgentProvider {
   readonly #client: CodexRpcClient;
+  readonly #eventListeners = new Set<AgentProviderEventListener>();
+  readonly #pendingTaskEvents = new Map<string, AgentProviderEvent[]>();
+  readonly #pendingTaskReads = new Map<string, number>();
   readonly #project: Project;
+  readonly #projectTaskIds = new Set<string>();
 
   public constructor(client: CodexRpcClient, project: Project) {
     this.#client = client;
     this.#project = project;
+    this.#client.onNotification((notification) => {
+      this.#handleNotification(notification.method, notification.params);
+    });
   }
 
   public getCapabilities(): Promise<AgentCapabilities> {
@@ -438,42 +526,111 @@ export class CodexAgentProvider implements AgentProvider {
     if (nextCursor !== null && nextCursor !== undefined && typeof nextCursor !== "string") {
       throw new CodexProtocolMappingError("thread/list nextCursor must be a string or null");
     }
-    return {
-      data: response["data"].map((thread) =>
-        mapAgentTask(expectRecord(thread, "Codex thread"), this.#project),
-      ),
-      nextCursor: nextCursor ?? null,
-    };
+    const data = response["data"].map((thread) =>
+      mapAgentTask(expectRecord(thread, "Codex thread"), this.#project),
+    );
+    for (const task of data) {
+      this.#projectTaskIds.add(task.id);
+    }
+    return { data, nextCursor: nextCursor ?? null };
   }
 
   public async readTask(taskId: string): Promise<AgentTaskSnapshot | undefined> {
-    let nativeResponse: unknown;
+    this.#pendingTaskReads.set(taskId, (this.#pendingTaskReads.get(taskId) ?? 0) + 1);
+    let projectVerified = false;
     try {
-      nativeResponse = await this.#client.request("thread/read", {
-        includeTurns: true,
-        threadId: taskId,
-      });
-    } catch (error) {
-      // Codex 用明确的 RPC 错误表示 Task 不存在，其他连接与协议错误继续向上传播。
-      if (isThreadNotLoadedError(error)) {
+      let nativeResponse: unknown;
+      try {
+        nativeResponse = await this.#client.request("thread/read", {
+          includeTurns: true,
+          threadId: taskId,
+        });
+      } catch (error) {
+        // Codex 用明确的 RPC 错误表示 Task 不存在，其他连接与协议错误继续向上传播。
+        if (isThreadNotLoadedError(error)) {
+          return undefined;
+        }
+        throw error;
+      }
+      const response = expectRecord(nativeResponse, "thread/read response");
+      const thread = expectRecord(response["thread"], "thread/read thread");
+      if (!isProjectThread(thread, this.#project)) {
         return undefined;
       }
-      throw error;
+      const task = mapAgentTask(thread, this.#project);
+      if (!Array.isArray(thread["turns"])) {
+        throw new CodexProtocolMappingError("thread/read turns must be an array");
+      }
+      const snapshot = {
+        ...task,
+        status: mapThreadStatus(thread["status"]),
+        turns: thread["turns"].map(mapAgentTurn),
+      };
+      projectVerified = true;
+      return snapshot;
+    } finally {
+      this.#finishTaskRead(taskId, projectVerified);
     }
-    const response = expectRecord(nativeResponse, "thread/read response");
-    const thread = expectRecord(response["thread"], "thread/read thread");
-    if (!isProjectThread(thread, this.#project)) {
-      return undefined;
-    }
-    const task = mapAgentTask(thread, this.#project);
-    if (!Array.isArray(thread["turns"])) {
-      throw new CodexProtocolMappingError("thread/read turns must be an array");
-    }
-    return {
-      ...task,
-      status: mapThreadStatus(thread["status"]),
-      turns: thread["turns"].map(mapAgentTurn),
+  }
+
+  public subscribeEvents(listener: AgentProviderEventListener): () => void {
+    this.#eventListeners.add(listener);
+    return () => {
+      this.#eventListeners.delete(listener);
     };
+  }
+
+  #handleNotification(method: string, params: unknown): void {
+    let event: AgentProviderEvent | undefined;
+    try {
+      event = mapCodexNotification(method, params);
+    } catch {
+      // 单个原生通知字段漂移不能中断 JSONL Client 或后续关键事件。
+      return;
+    }
+    if (event === undefined) {
+      return;
+    }
+    if (this.#projectTaskIds.has(event.taskId)) {
+      this.#publishEvent(event);
+      return;
+    }
+    if (this.#pendingTaskReads.has(event.taskId)) {
+      const pendingEvents = this.#pendingTaskEvents.get(event.taskId) ?? [];
+      pendingEvents.push(event);
+      this.#pendingTaskEvents.set(event.taskId, pendingEvents);
+    }
+  }
+
+  #finishTaskRead(taskId: string, projectVerified: boolean): void {
+    const remainingReads = (this.#pendingTaskReads.get(taskId) ?? 1) - 1;
+    if (projectVerified) {
+      // 归属确认后先同步交付读取期间的通知，再让 readTask Promise 完成。
+      this.#projectTaskIds.add(taskId);
+      const pendingEvents = this.#pendingTaskEvents.get(taskId) ?? [];
+      this.#pendingTaskEvents.delete(taskId);
+      for (const event of pendingEvents) {
+        this.#publishEvent(event);
+      }
+    }
+    if (remainingReads > 0) {
+      this.#pendingTaskReads.set(taskId, remainingReads);
+      return;
+    }
+    this.#pendingTaskReads.delete(taskId);
+    if (!this.#projectTaskIds.has(taskId)) {
+      this.#pendingTaskEvents.delete(taskId);
+    }
+  }
+
+  #publishEvent(event: AgentProviderEvent): void {
+    for (const listener of this.#eventListeners) {
+      try {
+        listener(event);
+      } catch {
+        // 一个订阅者失败不能阻塞其他交付边界。
+      }
+    }
   }
 }
 

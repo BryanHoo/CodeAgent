@@ -1,4 +1,4 @@
-import type { AgentProvider } from "@code-agent/core";
+import type { AgentProvider, AgentProviderEvent } from "@code-agent/core";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,6 +34,7 @@ afterEach(async () => {
 });
 
 function createProvider() {
+  const eventListeners = new Set<(event: AgentProviderEvent) => void>();
   const getCapabilities = vi.fn(() =>
     Promise.resolve({
       provider: "codex",
@@ -48,15 +49,30 @@ function createProvider() {
     getCapabilities,
     listTasks,
     readTask,
+    subscribeEvents(listener) {
+      eventListeners.add(listener);
+      return () => {
+        eventListeners.delete(listener);
+      };
+    },
   };
-  return { listTasks, provider };
+  return {
+    emitEvent: (event: AgentProviderEvent) => {
+      for (const listener of eventListeners) {
+        listener(event);
+      }
+    },
+    eventListeners,
+    listTasks,
+    provider,
+  };
 }
 
 async function createHarness() {
-  const { listTasks, provider } = createProvider();
+  const { emitEvent, eventListeners, listTasks, provider } = createProvider();
   const app = await createCodeAgentServer({ project, provider });
   closeCallbacks.push(() => app.close());
-  return { app, listTasks };
+  return { app, emitEvent, eventListeners, listTasks };
 }
 
 describe("CodeAgent Server", () => {
@@ -93,9 +109,190 @@ describe("CodeAgent Server", () => {
   it("reads a structured task snapshot", async () => {
     const { app } = await createHarness();
     const response = await app.inject({ method: "GET", url: "/v1/tasks/task-1" });
+    const body = response.json<{
+      checkpoint: { sequence: number; sessionId: unknown };
+      snapshot: typeof snapshot;
+    }>();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual(snapshot);
+    expect(body.checkpoint.sequence).toBe(0);
+    expect(typeof body.checkpoint.sessionId).toBe("string");
+    expect(body.snapshot).toEqual(snapshot);
+  });
+
+  it("captures the checkpoint after reading a task snapshot", async () => {
+    const harness = createProvider();
+    const snapshotDuringRead = {
+      ...snapshot,
+      status: "running" as const,
+      turns: [
+        {
+          completedAt: null,
+          error: null,
+          id: "turn-1",
+          items: [
+            {
+              id: "item-1",
+              role: "assistant" as const,
+              text: "读取期间到达",
+              type: "message" as const,
+            },
+          ],
+          startedAt: "2026-07-23T00:01:00.000Z",
+          status: "running" as const,
+        },
+      ],
+    };
+    const provider: AgentProvider = {
+      ...harness.provider,
+      readTask: vi.fn((taskId: string) => {
+        harness.emitEvent({
+          itemId: "item-1",
+          payload: { delta: "读取期间到达" },
+          taskId,
+          turnId: "turn-1",
+          type: "message.delta",
+        });
+        return Promise.resolve(snapshotDuringRead);
+      }),
+    };
+    const app = await createCodeAgentServer({ project, provider });
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({ method: "GET", url: "/v1/tasks/task-1" });
+
+    expect(response.json()).toMatchObject({
+      checkpoint: { sequence: 1 },
+      snapshot: snapshotDuringRead,
+    });
+  });
+
+  it("streams ready and realtime Agent Events over WebSocket", async () => {
+    const { app, emitEvent } = await createHarness();
+    const messages: unknown[] = [];
+    const socket = await app.injectWS(
+      "/v1/events?afterSequence=0",
+      { headers: { host: "127.0.0.1:3210", origin: "http://127.0.0.1:3210" } },
+      {
+        onInit(webSocket) {
+          webSocket.on("message", (data: { toString(): string }) => {
+            messages.push(JSON.parse(data.toString()) as unknown);
+          });
+        },
+      },
+    );
+
+    await vi.waitFor(() => {
+      expect(messages).toHaveLength(1);
+    });
+    emitEvent({
+      itemId: "item-1",
+      payload: { delta: "实时更新" },
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "message.delta",
+    });
+    await vi.waitFor(() => {
+      expect(messages).toHaveLength(2);
+    });
+
+    expect(messages[0]).toMatchObject({
+      latestSequence: 0,
+      type: "connection.ready",
+      version: 1,
+    });
+    expect(typeof (messages[0] as { sessionId: unknown }).sessionId).toBe("string");
+    expect(messages[1]).toMatchObject({
+      payload: { delta: "实时更新" },
+      sequence: 1,
+      type: "message.delta",
+      version: 1,
+    });
+    expect(typeof (messages[1] as { sessionId: unknown }).sessionId).toBe("string");
+    socket.terminate();
+  });
+
+  it("replays retained events and requests resync after retention expires", async () => {
+    const harness = createProvider();
+    const app = await createCodeAgentServer({
+      eventBufferSize: 1,
+      project,
+      provider: harness.provider,
+    });
+    closeCallbacks.push(() => app.close());
+    const event = {
+      itemId: "item-1",
+      payload: { delta: "1" },
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "message.delta",
+    } as const;
+    harness.emitEvent(event);
+    harness.emitEvent({ ...event, payload: { delta: "2" } });
+
+    const replayed: unknown[] = [];
+    const replaySocket = await app.injectWS(
+      "/v1/events?afterSequence=1",
+      { headers: { host: "localhost", origin: "http://localhost" } },
+      {
+        onInit(webSocket) {
+          webSocket.on("message", (data: { toString(): string }) => {
+            replayed.push(JSON.parse(data.toString()) as unknown);
+          });
+        },
+      },
+    );
+    await vi.waitFor(() => {
+      expect(replayed).toHaveLength(2);
+    });
+    expect(replayed[1]).toMatchObject({ payload: { delta: "2" }, sequence: 2 });
+    replaySocket.terminate();
+
+    const expired: unknown[] = [];
+    const expiredSocket = await app.injectWS(
+      "/v1/events?afterSequence=0",
+      { headers: { host: "localhost", origin: "http://localhost" } },
+      {
+        onInit(webSocket) {
+          webSocket.on("message", (data: { toString(): string }) => {
+            expired.push(JSON.parse(data.toString()) as unknown);
+          });
+        },
+      },
+    );
+    await vi.waitFor(() => {
+      expect(expired).toHaveLength(1);
+    });
+    expect(expired[0]).toMatchObject({
+      latestSequence: 2,
+      reason: "event_retention_exceeded",
+      type: "resync.required",
+    });
+    await vi.waitFor(() => {
+      expect(expiredSocket.readyState).toBe(expiredSocket.CLOSED);
+    });
+  });
+
+  it("rejects invalid event queries and cross-origin WebSockets", async () => {
+    const { app } = await createHarness();
+
+    await expect(app.injectWS("/v1/events?afterSequence=-1")).rejects.toThrow(
+      /Unexpected server response: 400/u,
+    );
+    await expect(
+      app.injectWS("/v1/events?afterSequence=0", {
+        headers: { host: "localhost", origin: "http://attacker.example" },
+      }),
+    ).rejects.toThrow(/Unexpected server response: 403/u);
+  });
+
+  it("unsubscribes from Provider events when Fastify closes", async () => {
+    const { app, eventListeners } = await createHarness();
+    expect(eventListeners.size).toBe(1);
+
+    await app.close();
+
+    expect(eventListeners.size).toBe(0);
   });
 
   it("returns 404 for unknown projects and tasks", async () => {
