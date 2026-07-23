@@ -52,6 +52,7 @@ const taskSnapshot = {
   turns: [
     {
       completedAt: "2026-07-22T08:00:00.000Z",
+      error: null,
       id: "turn-1",
       items: [
         {

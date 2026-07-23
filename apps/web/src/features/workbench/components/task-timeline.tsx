@@ -102,6 +102,15 @@ export function TaskSnapshotTimeline({ snapshot }: Readonly<{ snapshot: AgentTas
       <ConversationContent>
         {snapshot.turns.map((turn, turnIndex) => (
           <section aria-label={`Turn ${String(turnIndex + 1)}`} className="space-y-3" key={turn.id}>
+            {turn.error === null ? null : (
+              <div
+                className="rounded-surface bg-control px-3 py-2 text-label leading-5 text-danger"
+                role="alert"
+              >
+                <p className="font-medium">Turn 执行失败</p>
+                <p className="mt-1">{turn.error}</p>
+              </div>
+            )}
             {turn.items.map((item) => {
               switch (item.type) {
                 case "message":
@@ -125,6 +134,9 @@ export function TaskSnapshotTimeline({ snapshot }: Readonly<{ snapshot: AgentTas
                       <ToolHeader status={toToolStatus(item.status)}>{item.command}</ToolHeader>
                       <ToolContent>
                         <pre className="whitespace-pre-wrap">{item.output ?? item.cwd}</pre>
+                        {item.outputTruncated ? (
+                          <p className="mt-2 text-warning">输出已截断，仅显示最新内容。</p>
+                        ) : null}
                       </ToolContent>
                     </Tool>
                   );

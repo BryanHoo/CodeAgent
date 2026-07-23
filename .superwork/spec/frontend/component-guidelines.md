@@ -11,6 +11,7 @@
 - Project 名称和右侧箭头都只切换任务树的展开状态，不导航或选中 Project；Task 链接继续负责工作台导航。
 - 通过显式 Props 或专用 Hook 获取数据，不从组件内部访问 Server 或 Provider。
 - 长列表使用稳定尺寸与虚拟化；流式 Item 独立订阅，避免整个 Task 重渲染。
+- Task Timeline 必须显示失败 Turn 的归一化错误，并明确标识已截断的 Command Output，不能把错误或截断状态静默隐藏。
 - 交互控件使用语义化元素并提供可访问名称、键盘行为和明确状态。
 - 可能位于裁剪容器或视口边缘的 Tooltip 必须脱离局部层叠上下文渲染，并在桌面与窄屏中自动翻转、限制到视口安全边距；同时验证 Hover 和键盘焦点行为。
 - `shared/styles/globals.css` 是颜色、字体、间距、圆角、阴影、动效和固定布局尺寸的唯一设计 Token 来源；组件使用语义化 Tailwind Token，不散落视觉字面值。

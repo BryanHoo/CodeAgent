@@ -71,6 +71,7 @@ export const AgentCommandItemSchema = Type.Object(
     exitCode: Type.Optional(Type.Integer()),
     id: Type.String({ minLength: 1 }),
     output: Type.Optional(Type.String()),
+    outputTruncated: Type.Boolean(),
     status: AgentItemStatusSchema,
     type: Type.Literal("command"),
   },
@@ -150,6 +151,7 @@ export const AgentTurnStatusSchema = Type.Union([
 export const AgentTurnSchema = Type.Object(
   {
     completedAt: NullableDateTimeSchema,
+    error: Type.Union([Type.String(), Type.Null()]),
     id: Type.String({ minLength: 1 }),
     items: Type.Array(AgentItemSchema),
     startedAt: NullableDateTimeSchema,

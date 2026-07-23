@@ -81,6 +81,7 @@ describe("project protocol", () => {
       turns: [
         {
           completedAt: "2026-07-23T00:01:00.000Z",
+          error: null,
           id: "turn-1",
           items: [
             { id: "item-1", role: "user", text: "读取真实历史", type: "message" },
@@ -95,6 +96,7 @@ describe("project protocol", () => {
               cwd: "/workspace/CodeAgent",
               id: "item-3",
               output: "Done",
+              outputTruncated: false,
               status: "completed",
               type: "command",
             },
@@ -122,6 +124,25 @@ describe("project protocol", () => {
     };
 
     expect(Value.Check(AgentTaskSnapshotSchema, snapshot)).toBe(true);
+    expect(
+      Value.Check(AgentTaskSnapshotSchema, {
+        ...snapshot,
+        turns: [{ ...snapshot.turns[0], error: undefined }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentTaskSnapshotSchema, {
+        ...snapshot,
+        turns: [
+          {
+            ...snapshot.turns[0],
+            items: snapshot.turns[0]?.items.map((item) =>
+              item.type === "command" ? { ...item, outputTruncated: undefined } : item,
+            ),
+          },
+        ],
+      }),
+    ).toBe(false);
     expect(
       Value.Check(AgentTaskSnapshotSchema, {
         ...snapshot,

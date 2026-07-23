@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { resolve } from "node:path";
 
 import type { AgentProvider, ListAgentTasksInput } from "@code-agent/core";
@@ -30,6 +31,9 @@ export class CodexProtocolMappingError extends Error {
     this.name = "CodexProtocolMappingError";
   }
 }
+
+const MAX_COMMAND_OUTPUT_BYTES = 1_048_576;
+const MAX_COMMAND_OUTPUT_LINES = 10_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -151,14 +155,64 @@ function mapFileChangeKind(value: unknown): "create" | "delete" | "update" {
   throw new CodexProtocolMappingError("Codex file change kind is invalid");
 }
 
+function sliceUtf8Tail(value: string, maxBytes: number): string {
+  const encoded = Buffer.from(value, "utf8");
+  let start = Math.max(0, encoded.length - maxBytes);
+
+  // 跳过 UTF-8 续字节，确保截断后的首字符保持完整。
+  while (start < encoded.length) {
+    const byte = encoded[start];
+    if (byte === undefined || (byte & 0xc0) !== 0x80) {
+      break;
+    }
+    start += 1;
+  }
+
+  return encoded.subarray(start).toString("utf8");
+}
+
+function boundCommandOutput(value: string): { output: string; outputTruncated: boolean } {
+  let output = value;
+  let outputTruncated = false;
+  let newlineCount = 0;
+
+  // 从尾部保留最新日志；超过行数时无需创建完整行数组。
+  for (let index = output.length - 1; index >= 0; index -= 1) {
+    if (output.charCodeAt(index) !== 10) {
+      continue;
+    }
+    newlineCount += 1;
+    if (newlineCount === MAX_COMMAND_OUTPUT_LINES) {
+      output = output.slice(index + 1);
+      outputTruncated = true;
+      break;
+    }
+  }
+
+  if (Buffer.byteLength(output, "utf8") > MAX_COMMAND_OUTPUT_BYTES) {
+    output = sliceUtf8Tail(output, MAX_COMMAND_OUTPUT_BYTES);
+    outputTruncated = true;
+  }
+
+  return { output, outputTruncated };
+}
+
+function mapToolError(value: unknown): { error: string } | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  const error = expectRecord(value, "Codex tool error");
+  return { error: expectString(error["message"], "Codex tool error message") };
+}
+
 function mapToolItem(item: Record<string, unknown>, id: string, name: string): AgentItem {
   const input = item["arguments"];
-  const output = item["result"] ?? item["contentItems"];
+  const output = item["result"] ?? item["contentItems"] ?? mapToolError(item["error"]);
   return {
     id,
     ...(input === undefined ? {} : { input }),
     name,
-    ...(output === undefined || output === null ? {} : { output }),
+    ...(output === undefined ? {} : { output }),
     status: mapItemStatus(item["status"]),
     type: "tool",
   };
@@ -198,13 +252,15 @@ function mapAgentItem(value: unknown): AgentItem {
       };
     case "commandExecution": {
       const exitCode = optionalInteger(item["exitCode"]);
-      const output = optionalString(item["aggregatedOutput"]);
+      const nativeOutput = optionalString(item["aggregatedOutput"]);
+      const output = nativeOutput === undefined ? undefined : boundCommandOutput(nativeOutput);
       return {
         command: expectString(item["command"], "Codex command"),
         cwd: expectString(item["cwd"], "Codex command cwd"),
         ...(exitCode === undefined ? {} : { exitCode }),
         id,
-        ...(output === undefined ? {} : { output }),
+        ...(output === undefined ? {} : { output: output.output }),
+        outputTruncated: output?.outputTruncated ?? false,
         status: mapItemStatus(item["status"]),
         type: "command",
       };
@@ -307,6 +363,13 @@ function mapAgentTurn(value: unknown): AgentTurn {
   }
   return {
     completedAt: toNullableDateTime(turn["completedAt"], "Codex turn completedAt"),
+    error:
+      turn["error"] === null || turn["error"] === undefined
+        ? null
+        : expectString(
+            expectRecord(turn["error"], "Codex turn error")["message"],
+            "Codex turn error message",
+          ),
     id: expectString(turn["id"], "Codex turn id"),
     items: turn["items"].map(mapAgentItem),
     startedAt: toNullableDateTime(turn["startedAt"], "Codex turn startedAt"),

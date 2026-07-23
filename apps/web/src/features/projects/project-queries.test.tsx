@@ -30,6 +30,7 @@ const snapshot = {
   turns: [
     {
       completedAt: "2026-07-23T00:01:00.000Z",
+      error: "模型服务不可用",
       id: "turn-1",
       items: [
         { id: "i1", role: "user" as const, text: "读取真实历史", type: "message" as const },
@@ -44,6 +45,7 @@ const snapshot = {
           cwd: "/workspace/CodeAgent",
           id: "i3",
           output: "Done",
+          outputTruncated: true,
           status: "completed" as const,
           type: "command" as const,
         },
@@ -64,7 +66,7 @@ const snapshot = {
         { detail: "完成压缩", id: "i7", label: "上下文压缩", type: "activity" as const },
       ],
       startedAt: "2026-07-23T00:00:00.000Z",
-      status: "completed" as const,
+      status: "failed" as const,
     },
   ],
 };
@@ -114,8 +116,11 @@ describe("project queries", () => {
 
     for (const text of [
       "读取真实历史",
+      "Turn 执行失败",
+      "模型服务不可用",
       "分析协议",
       "pnpm check",
+      "输出已截断",
       "src/index.ts",
       "filesystem/read_file",
       "1. 定义协议",

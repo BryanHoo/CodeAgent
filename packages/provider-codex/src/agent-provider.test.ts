@@ -161,6 +161,7 @@ describe("CodexAgentProvider", () => {
       title: "结构化历史",
       turns: [
         {
+          error: null,
           id: "turn-1",
           status: "completed",
           items: [
@@ -173,6 +174,7 @@ describe("CodexAgentProvider", () => {
               exitCode: 0,
               id: "i4",
               output: "Done",
+              outputTruncated: false,
               status: "completed",
               type: "command",
             },
@@ -205,6 +207,80 @@ describe("CodexAgentProvider", () => {
     expect(JSON.stringify(snapshot)).not.toMatch(
       /modelProvider|sessionId|nativeThread|futureItem.*private/,
     );
+  });
+
+  it("preserves failures and bounds command output in task snapshots", async () => {
+    const lineLimitedOutput = Array.from(
+      { length: 10_001 },
+      (_, index) => `line-${String(index)}`,
+    ).join("\n");
+    const byteLimitedOutput = "界".repeat(400_000);
+    const rpc = new FakeRpcClient([
+      {
+        thread: nativeThread({
+          turns: [
+            {
+              completedAt: 1_753_232_400,
+              error: {
+                additionalDetails: null,
+                codexErrorInfo: null,
+                message: "模型服务不可用",
+              },
+              id: "failed-turn",
+              items: [
+                {
+                  aggregatedOutput: lineLimitedOutput,
+                  command: "print-lines",
+                  cwd: "/workspace/CodeAgent",
+                  id: "line-command",
+                  status: "failed",
+                  type: "commandExecution",
+                },
+                {
+                  aggregatedOutput: byteLimitedOutput,
+                  command: "print-bytes",
+                  cwd: "/workspace/CodeAgent",
+                  id: "byte-command",
+                  status: "completed",
+                  type: "commandExecution",
+                },
+                {
+                  arguments: { path: "missing.ts" },
+                  error: { message: "MCP 服务不可用" },
+                  id: "failed-tool",
+                  result: null,
+                  server: "filesystem",
+                  status: "failed",
+                  tool: "read_file",
+                  type: "mcpToolCall",
+                },
+              ],
+              startedAt: 1_753_228_800,
+              status: "failed",
+            },
+          ],
+        }),
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    const snapshot = await provider.readTask("task-1");
+    const turn = snapshot?.turns[0];
+    const lineCommand = turn?.items.find((item) => item.id === "line-command");
+    const byteCommand = turn?.items.find((item) => item.id === "byte-command");
+    const failedTool = turn?.items.find((item) => item.id === "failed-tool");
+
+    expect(turn?.error).toBe("模型服务不可用");
+    expect(lineCommand).toMatchObject({
+      output: lineLimitedOutput.split("\n").slice(-10_000).join("\n"),
+      outputTruncated: true,
+    });
+    expect(byteCommand).toMatchObject({ outputTruncated: true });
+    if (byteCommand?.type !== "command") {
+      throw new Error("Expected a command item");
+    }
+    expect(Buffer.byteLength(byteCommand.output ?? "", "utf8")).toBeLessThanOrEqual(1_048_576);
+    expect(failedTool).toMatchObject({ output: { error: "MCP 服务不可用" } });
   });
 
   it("returns undefined for a thread that belongs to another project", async () => {
