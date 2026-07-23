@@ -282,10 +282,16 @@ async function runStart(
     }
     return 0;
   } finally {
-    // 先停止接收 HTTP 请求，再关闭 Provider 进程，避免关闭期间产生新 RPC。
-    await server?.close();
-    await runtime?.close();
-    ownedShutdown?.cleanup();
+    // 每层 finally 都保证后续资源被回收，避免单个关闭错误遗留长驻进程。
+    try {
+      await server?.close();
+    } finally {
+      try {
+        await runtime?.close();
+      } finally {
+        ownedShutdown?.cleanup();
+      }
+    }
   }
 }
 

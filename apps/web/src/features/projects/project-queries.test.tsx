@@ -90,6 +90,25 @@ describe("project queries", () => {
     ).resolves.toEqual(snapshot);
   });
 
+  it("loads and merges every task page returned by the client", async () => {
+    const nextTask = { ...task, id: "task-2", title: "后续分页任务" };
+    const client = {
+      listProjects: vi.fn(() => Promise.resolve({ data: [project], nextCursor: null })),
+      listTasks: vi
+        .fn()
+        .mockResolvedValueOnce({ data: [task], nextCursor: "next-page" })
+        .mockResolvedValueOnce({ data: [nextTask], nextCursor: null }),
+      readTask: vi.fn(() => Promise.resolve(snapshot)),
+    };
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    await expect(
+      queryClient.fetchQuery(projectTasksQueryOptions("code-agent", client)),
+    ).resolves.toEqual({ data: [task, nextTask], nextCursor: null });
+    expect(client.listTasks).toHaveBeenNthCalledWith(1, "code-agent");
+    expect(client.listTasks).toHaveBeenNthCalledWith(2, "code-agent", { cursor: "next-page" });
+  });
+
   it("renders every structured item category from a task snapshot", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={snapshot} />);
 

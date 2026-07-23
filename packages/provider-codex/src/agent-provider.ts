@@ -12,6 +12,8 @@ import type {
   Project,
 } from "@code-agent/protocol";
 
+import { RpcResponseError } from "./jsonl-rpc-client.js";
+
 export interface CodexRpcClient {
   notify(method: string, params?: unknown): void;
   request(method: string, params?: unknown): Promise<unknown>;
@@ -312,11 +314,23 @@ function mapAgentTurn(value: unknown): AgentTurn {
   };
 }
 
-function assertProjectThread(thread: Record<string, unknown>, project: Project): void {
+function isProjectThread(thread: Record<string, unknown>, project: Project): boolean {
   const cwd = expectString(thread["cwd"], "Codex thread cwd");
-  if (resolve(cwd) !== resolve(project.rootPath)) {
+  return resolve(cwd) === resolve(project.rootPath);
+}
+
+function assertProjectThread(thread: Record<string, unknown>, project: Project): void {
+  if (!isProjectThread(thread, project)) {
     throw new CodexProtocolMappingError("Codex thread does not belong to the active project");
   }
+}
+
+function isThreadNotLoadedError(error: unknown): boolean {
+  return (
+    error instanceof RpcResponseError &&
+    error.code === -32600 &&
+    error.message.startsWith("thread not loaded:")
+  );
 }
 
 function mapAgentTask(thread: Record<string, unknown>, project: Project): AgentTask {
@@ -370,11 +384,24 @@ export class CodexAgentProvider implements AgentProvider {
   }
 
   public async readTask(taskId: string): Promise<AgentTaskSnapshot | undefined> {
-    const response = expectRecord(
-      await this.#client.request("thread/read", { includeTurns: true, threadId: taskId }),
-      "thread/read response",
-    );
+    let nativeResponse: unknown;
+    try {
+      nativeResponse = await this.#client.request("thread/read", {
+        includeTurns: true,
+        threadId: taskId,
+      });
+    } catch (error) {
+      // Codex 用明确的 RPC 错误表示 Task 不存在，其他连接与协议错误继续向上传播。
+      if (isThreadNotLoadedError(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+    const response = expectRecord(nativeResponse, "thread/read response");
     const thread = expectRecord(response["thread"], "thread/read thread");
+    if (!isProjectThread(thread, this.#project)) {
+      return undefined;
+    }
     const task = mapAgentTask(thread, this.#project);
     if (!Array.isArray(thread["turns"])) {
       throw new CodexProtocolMappingError("thread/read turns must be an array");

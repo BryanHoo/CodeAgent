@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createCodexAgentProvider, CodexProtocolMappingError } from "./agent-provider.js";
+import { RpcResponseError } from "./jsonl-rpc-client.js";
 
 class FakeRpcClient {
   readonly calls: Readonly<{ method: string; params: unknown }>[] = [];
@@ -13,7 +14,8 @@ class FakeRpcClient {
 
   public request(method: string, params?: unknown): Promise<unknown> {
     this.calls.push({ method, params });
-    return Promise.resolve(this.#responses.shift());
+    const response = this.#responses.shift();
+    return response instanceof Error ? Promise.reject(response) : Promise.resolve(response);
   }
 
   public notify(method: string, params?: unknown): void {
@@ -205,11 +207,36 @@ describe("CodexAgentProvider", () => {
     );
   });
 
-  it("rejects a thread that belongs to another project", async () => {
+  it("returns undefined for a thread that belongs to another project", async () => {
     const rpc = new FakeRpcClient([{ thread: nativeThread({ cwd: "/workspace/Other" }) }]);
     const provider = createCodexAgentProvider({ client: rpc, project });
 
-    await expect(provider.readTask("task-1")).rejects.toThrow(CodexProtocolMappingError);
+    await expect(provider.readTask("task-1")).resolves.toBeUndefined();
+  });
+
+  it("returns undefined when Codex reports that a thread is not loaded", async () => {
+    const rpc = new FakeRpcClient([
+      new RpcResponseError({
+        code: -32600,
+        data: null,
+        message: "thread not loaded: missing-task",
+      }),
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.readTask("missing-task")).resolves.toBeUndefined();
+  });
+
+  it("preserves unrelated RPC failures when reading a thread", async () => {
+    const error = new RpcResponseError({
+      code: -32600,
+      data: null,
+      message: "invalid request",
+    });
+    const rpc = new FakeRpcClient([error]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.readTask("task-1")).rejects.toBe(error);
   });
 
   it("rejects malformed native responses at the adapter boundary", async () => {

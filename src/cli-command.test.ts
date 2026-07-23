@@ -215,6 +215,26 @@ describe("runCli", () => {
     expect(harness.stderr.join("")).toContain("browser unavailable");
   });
 
+  it("closes the runtime when closing the HTTP server fails", async () => {
+    const serverClose = vi.fn(() => Promise.reject(new Error("server close failed")));
+    const serverListen = vi.fn(() => Promise.resolve("http://127.0.0.1:3210"));
+    const harness = createHarness({
+      createServer: vi.fn(() => Promise.resolve({ close: serverClose, listen: serverListen })),
+    });
+    const controller = new AbortController();
+    const run = runCli(["start"], { ...harness.options, signal: controller.signal });
+
+    await vi.waitFor(() => {
+      expect(harness.dependencies.openBrowser).toHaveBeenCalledOnce();
+    });
+    controller.abort();
+
+    await expect(run).resolves.toBe(1);
+    expect(serverClose).toHaveBeenCalledOnce();
+    expect(harness.close).toHaveBeenCalledOnce();
+    expect(harness.stderr.join("")).toContain("server close failed");
+  });
+
   it("prints help and rejects unknown commands or missing option values", async () => {
     const helpHarness = createHarness();
     const unknownHarness = createHarness();

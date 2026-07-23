@@ -12,12 +12,32 @@ export function projectsQueryOptions(client: CodeAgentReadClient = codeAgentClie
   });
 }
 
+async function listAllProjectTasks(projectId: string, client: CodeAgentReadClient) {
+  const firstPage = await client.listTasks(projectId);
+  const data = [...firstPage.data];
+  let nextCursor = firstPage.nextCursor;
+  const visitedCursors = new Set<string>();
+
+  // Task 树没有“加载更多”入口，因此在 Query 边界顺序读取完整游标链。
+  while (nextCursor !== null) {
+    if (visitedCursors.has(nextCursor)) {
+      throw new Error("CodeAgent task pagination returned a repeated cursor");
+    }
+    visitedCursors.add(nextCursor);
+    const page = await client.listTasks(projectId, { cursor: nextCursor });
+    data.push(...page.data);
+    nextCursor = page.nextCursor;
+  }
+
+  return { data, nextCursor: null };
+}
+
 export function projectTasksQueryOptions(
   projectId: string,
   client: CodeAgentReadClient = codeAgentClient,
 ) {
   return queryOptions({
-    queryFn: () => client.listTasks(projectId),
+    queryFn: () => listAllProjectTasks(projectId, client),
     queryKey: ["projects", projectId, "tasks"] as const,
   });
 }
