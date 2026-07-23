@@ -1,66 +1,56 @@
 import type { AgentTask, Project } from "@code-agent/protocol";
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { createContext, useContext } from "react";
 import type { ReactNode } from "react";
 
-import { createProjectId, initialProjects, initialTasks } from "./project-data.js";
+import {
+  codeAgentClient,
+  projectTasksQueryOptions,
+  projectsQueryOptions,
+  type CodeAgentReadClient,
+} from "./project-queries.js";
 
-type DirectoryHandle = Readonly<{
-  kind: "directory";
-  name: string;
-  rootPath?: string;
-}>;
-
-type DirectoryPickerWindow = Window & {
-  showDirectoryPicker?: () => Promise<DirectoryHandle>;
-};
+const emptyProjects: readonly Project[] = [];
+const emptyTasks: readonly AgentTask[] = [];
 
 type ProjectContextValue = Readonly<{
-  addProjectFromDirectory: () => Promise<Project>;
+  client: CodeAgentReadClient;
+  error: Error | null;
+  isPending: boolean;
   projects: readonly Project[];
   tasks: readonly AgentTask[];
 }>;
 
 const ProjectContext = createContext<ProjectContextValue | undefined>(undefined);
 
-async function pickProjectDirectory() {
-  const picker = (window as DirectoryPickerWindow).showDirectoryPicker;
-  if (picker === undefined) {
-    throw new Error("当前浏览器不支持选择项目文件夹");
-  }
-  return picker.call(window);
-}
-
 type ProjectProviderProps = Readonly<{
   children: ReactNode;
+  client?: CodeAgentReadClient;
 }>;
 
-export function ProjectProvider({ children }: ProjectProviderProps) {
-  const [projects, setProjects] = useState<readonly Project[]>(initialProjects);
-  const [tasks] = useState<readonly AgentTask[]>(initialTasks);
+export function ProjectProvider({ children, client = codeAgentClient }: ProjectProviderProps) {
+  const projectsQuery = useQuery(projectsQueryOptions(client));
+  const projects = projectsQuery.data?.data ?? emptyProjects;
+  const taskQueries = useQueries({
+    queries: projects.map((project) => projectTasksQueryOptions(project.id, client)),
+  });
+  const tasks = taskQueries.flatMap((query) => query.data?.data ?? emptyTasks);
+  const taskError = taskQueries.find((query) => query.error !== null)?.error ?? null;
+  const isPending = projectsQuery.isPending || taskQueries.some((query) => query.isPending);
 
-  const addProjectFromDirectory = useCallback(async () => {
-    const directory = await pickProjectDirectory();
-    const project: Project = {
-      createdAt: new Date().toISOString(),
-      id: createProjectId(
-        directory.name,
-        projects.map((item) => item.id),
-      ),
-      name: directory.name,
-      rootPath: directory.rootPath ?? directory.name,
-    };
-
-    // Runtime 应返回已校验路径；浏览器原型无法读取绝对路径时退回目录名。
-    setProjects((current) => [...current, project]);
-    return project;
-  }, [projects]);
-
-  const value = useMemo(
-    () => ({ addProjectFromDirectory, projects, tasks }),
-    [addProjectFromDirectory, projects, tasks],
+  return (
+    <ProjectContext.Provider
+      value={{
+        client,
+        error: projectsQuery.error ?? taskError,
+        isPending,
+        projects,
+        tasks,
+      }}
+    >
+      {children}
+    </ProjectContext.Provider>
   );
-
-  return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 
 export function useProjects() {

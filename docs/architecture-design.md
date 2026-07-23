@@ -546,13 +546,13 @@ WS /v1/events?afterSequence=<sequence>
 推荐启动参数：
 
 ```text
-codex app-server --listen stdio:// --strict-config
+codex app-server --listen stdio://
 ```
 
 Node.js 必须使用参数数组和 `shell: false`：
 
 ```ts
-const child = spawn(codexBin, ["app-server", "--listen", "stdio://", "--strict-config"], {
+const child = spawn(codexBin, ["app-server", "--listen", "stdio://"], {
   cwd: runtimeCwd,
   shell: false,
   stdio: ["pipe", "pipe", "pipe"],

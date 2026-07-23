@@ -5,8 +5,15 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: {
+      "@code-agent/core": fileURLToPath(new URL("./packages/core/src/index.ts", import.meta.url)),
+      "@code-agent/protocol": fileURLToPath(
+        new URL("./packages/protocol/src/index.ts", import.meta.url),
+      ),
       "@code-agent/provider-codex": fileURLToPath(
         new URL("./packages/provider-codex/src/index.ts", import.meta.url),
+      ),
+      "@code-agent/server": fileURLToPath(
+        new URL("./packages/server/src/index.ts", import.meta.url),
       ),
     },
   },

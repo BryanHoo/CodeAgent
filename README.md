@@ -1,7 +1,7 @@
 # CodeAgent
 
-CodeAgent 是一个通过 Web 操作本地 Coding Agent 的应用。当前已实现 Codex App Server
-进程管理、JSONL/RPC Client 和基础 CLI 命令。
+CodeAgent 是一个通过 Web 操作本地 Coding Agent 的应用。`code-agent start` 会启动
+Codex App Server、本地 HTTP API 和静态 Web 工作台。
 
 ## 环境要求
 
@@ -27,8 +27,9 @@ code-agent doctor
 code-agent version
 ```
 
-`start` 支持 `--codex-bin`、`--codex-home` 和 `--project`；收到 `SIGINT` 或
-`SIGTERM` 后会关闭长驻 Codex App Server。
+`start` 支持 `--codex-bin`、`--codex-home` 和 `--project`。启动后浏览器会打开
+`http://127.0.0.1:3210`，展示指定 Project 的真实 Codex Task 列表与结构化历史；收到
+`SIGINT` 或 `SIGTERM` 后会依次关闭 HTTP Server 和长驻 Codex App Server。
 
 ## 仓库结构
 

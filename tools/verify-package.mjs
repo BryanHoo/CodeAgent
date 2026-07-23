@@ -1,5 +1,15 @@
 import { spawnSync } from "node:child_process";
 
+const cliResult = spawnSync(process.execPath, ["dist/cli.js", "--help"], {
+  encoding: "utf8",
+  shell: false,
+});
+
+if (cliResult.status !== 0 || !cliResult.stdout.includes("Usage: code-agent")) {
+  process.stderr.write(cliResult.stderr);
+  throw new Error("Built CLI is not executable");
+}
+
 const result = spawnSync("pnpm", ["pack", "--dry-run", "--json"], {
   encoding: "utf8",
   shell: false,

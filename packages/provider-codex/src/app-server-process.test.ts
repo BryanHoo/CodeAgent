@@ -65,7 +65,7 @@ describe("CodexAppServerProcess", () => {
 
     await expect(runtime.client.request("echo", { ok: true })).resolves.toEqual({ ok: true });
     await expect(runtime.client.request("inspect")).resolves.toEqual({
-      args: ["app-server", "--listen", "stdio://", "--strict-config"],
+      args: ["app-server", "--listen", "stdio://"],
       initializeParams: {
         clientInfo: { name: "code_agent", title: "CodeAgent", version: "1.2.3" },
       },

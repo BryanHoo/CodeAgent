@@ -1,116 +1,182 @@
-import { Check, Copy, FolderGit2, RefreshCcw } from "lucide-react";
+import type { AgentItemStatus, AgentTaskSnapshot } from "@code-agent/protocol";
+import { useQuery } from "@tanstack/react-query";
+import { FolderGit2 } from "lucide-react";
 
+import {
+  taskSnapshotQueryOptions,
+  type CodeAgentReadClient,
+} from "../../projects/project-queries.js";
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
 } from "../../../shared/ai-elements/conversation.js";
-import {
-  Message,
-  MessageAction,
-  MessageActions,
-  MessageContent,
-  MessageResponse,
-} from "../../../shared/ai-elements/message.js";
+import { Message, MessageContent, MessageResponse } from "../../../shared/ai-elements/message.js";
 import {
   Reasoning,
   ReasoningContent,
   ReasoningTrigger,
 } from "../../../shared/ai-elements/reasoning.js";
-import { Tool, ToolContent, ToolHeader } from "../../../shared/ai-elements/tool.js";
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  type ToolStatus,
+} from "../../../shared/ai-elements/tool.js";
 
 type TaskTimelineProps = Readonly<{
-  hasTask: boolean;
+  client: CodeAgentReadClient;
   projectName: string;
+  taskId?: string;
 }>;
 
-export function TaskTimeline({ hasTask, projectName }: TaskTimelineProps) {
-  if (!hasTask) {
-    return (
-      <section className="grid min-h-0 flex-1 place-items-center px-6" aria-label="会话内容">
-        <div className="max-w-sm text-center">
-          <FolderGit2 className="mx-auto size-9 text-muted-foreground" strokeWidth={1.4} />
-          <h2 className="mt-4 text-base font-semibold text-foreground">{projectName}</h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            连接本地 Runtime 后即可创建任务。
-          </p>
-        </div>
-      </section>
-    );
+function EmptyTimeline({ projectName }: Readonly<{ projectName: string }>) {
+  return (
+    <section className="grid min-h-0 flex-1 place-items-center px-6" aria-label="会话内容">
+      <div className="max-w-sm text-center">
+        <FolderGit2 className="mx-auto size-9 text-muted-foreground" strokeWidth={1.4} />
+        <h2 className="mt-4 text-base font-semibold text-foreground">{projectName}</h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">选择一个任务查看历史。</p>
+      </div>
+    </section>
+  );
+}
+
+function TimelineState({
+  message,
+  role,
+}: Readonly<{ message: string; role?: "alert" | "status" }>) {
+  return (
+    <section
+      aria-label="会话内容"
+      className="grid min-h-0 flex-1 place-items-center px-6 text-sm text-muted-foreground"
+      role={role}
+    >
+      {message}
+    </section>
+  );
+}
+
+export function TaskTimeline({ client, projectName, taskId }: TaskTimelineProps) {
+  const taskQuery = useQuery({
+    ...taskSnapshotQueryOptions(taskId ?? "", client),
+    enabled: taskId !== undefined,
+  });
+
+  if (taskId === undefined) {
+    return <EmptyTimeline projectName={projectName} />;
+  }
+  if (taskQuery.isPending) {
+    return <TimelineState message="正在加载任务历史" role="status" />;
+  }
+  if (taskQuery.error !== null) {
+    return <TimelineState message="无法加载任务历史" role="alert" />;
+  }
+  return <TaskSnapshotTimeline snapshot={taskQuery.data} />;
+}
+
+function toToolStatus(status: AgentItemStatus): ToolStatus {
+  if (status === "pending" || status === "running") {
+    return "running";
+  }
+  if (status === "failed" || status === "declined" || status === "interrupted") {
+    return "failed";
+  }
+  return "completed";
+}
+
+function formatStructuredValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  return JSON.stringify(value, null, 2);
+}
+
+export function TaskSnapshotTimeline({ snapshot }: Readonly<{ snapshot: AgentTaskSnapshot }>) {
+  if (snapshot.turns.length === 0) {
+    return <TimelineState message="此任务暂无历史" role="status" />;
   }
 
   return (
     <Conversation aria-label="会话内容">
       <ConversationContent>
-        <Message from="user">
-          <MessageContent>
-            <MessageResponse>
-              参考 Codex App 和 Cursor 工作台，使用 AI Elements 统一设计语言，完成 macOS
-              原生风格的三栏工作台页面。
-            </MessageResponse>
-          </MessageContent>
-        </Message>
-
-        <div className="my-5 flex items-center gap-3 text-meta text-muted-foreground">
-          <span className="font-medium">已处理 1m 24s</span>
-          <span className="h-px flex-1 bg-separator" />
-        </div>
-
-        <div className="relative space-y-3 pl-5 before:absolute before:bottom-3 before:left-1.5 before:top-3 before:w-px before:bg-separator">
-          <span className="absolute left-0.5 top-2 size-2 rounded-pill bg-accent shadow-timeline-node" />
-          <Reasoning defaultOpen>
-            <ReasoningTrigger>分析工作台信息架构</ReasoningTrigger>
-            <ReasoningContent>
-              保留任务导航、结构化 Agent 时间线与上下文检查器，并让 Composer 始终稳定在主区底部。
-            </ReasoningContent>
-          </Reasoning>
-
-          <Tool>
-            <ToolHeader status="completed">读取 Web 设计规范</ToolHeader>
-            <ToolContent>
-              docs/web-design.md{"\n"}.superwork/spec/frontend/component-guidelines.md
-            </ToolContent>
-          </Tool>
-
-          <Tool>
-            <ToolHeader status="completed">检查工作台组件</ToolHeader>
-            <ToolContent>
-              apps/web/src/features/workbench/components/workbench-shell.tsx
-            </ToolContent>
-          </Tool>
-        </div>
-
-        <Message className="mt-5" from="assistant">
-          <MessageContent className="w-full">
-            <MessageResponse>
-              <p>工作台界面已按统一的 AI Elements 结构重新组织。</p>
-              <div className="mt-4 space-y-2.5">
-                {[
-                  "使用高密度三栏布局，侧栏与上下文面板均可独立收起。",
-                  "将推理、工具调用和回复串联为连续工作轨迹。",
-                  "Composer 保留附件、模型和提交控制，并明确离线状态。",
-                  "窄屏切换为覆盖式面板，主时间线不被压缩或遮挡。",
-                ].map((item) => (
-                  <div className="flex items-start gap-2.5" key={item}>
-                    <span className="mt-1 grid size-4 shrink-0 place-items-center rounded-pill bg-accent-soft text-accent-strong">
-                      <Check className="size-2.5" aria-hidden="true" />
-                    </span>
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </MessageResponse>
-            <MessageActions>
-              <MessageAction label="复制回复">
-                <Copy className="size-3.5" aria-hidden="true" />
-              </MessageAction>
-              <MessageAction disabled label="重新生成">
-                <RefreshCcw className="size-3.5" aria-hidden="true" />
-              </MessageAction>
-              <span className="ml-1 text-caption text-muted-foreground">刚刚</span>
-            </MessageActions>
-          </MessageContent>
-        </Message>
+        {snapshot.turns.map((turn, turnIndex) => (
+          <section aria-label={`Turn ${String(turnIndex + 1)}`} className="space-y-3" key={turn.id}>
+            {turn.items.map((item) => {
+              switch (item.type) {
+                case "message":
+                  return (
+                    <Message from={item.role} key={item.id}>
+                      <MessageContent className={item.role === "assistant" ? "w-full" : ""}>
+                        <MessageResponse>{item.text}</MessageResponse>
+                      </MessageContent>
+                    </Message>
+                  );
+                case "reasoning":
+                  return (
+                    <Reasoning defaultOpen key={item.id}>
+                      <ReasoningTrigger>{item.summary || "推理"}</ReasoningTrigger>
+                      <ReasoningContent>{item.content}</ReasoningContent>
+                    </Reasoning>
+                  );
+                case "command":
+                  return (
+                    <Tool key={item.id}>
+                      <ToolHeader status={toToolStatus(item.status)}>{item.command}</ToolHeader>
+                      <ToolContent>
+                        <pre className="whitespace-pre-wrap">{item.output ?? item.cwd}</pre>
+                      </ToolContent>
+                    </Tool>
+                  );
+                case "file_change":
+                  return (
+                    <Tool key={item.id}>
+                      <ToolHeader status={toToolStatus(item.status)}>文件变更</ToolHeader>
+                      <ToolContent>
+                        <pre className="whitespace-pre-wrap">
+                          {item.changes
+                            .map((change) => `${change.path}\n${change.diff}`)
+                            .join("\n\n")}
+                        </pre>
+                      </ToolContent>
+                    </Tool>
+                  );
+                case "tool":
+                  return (
+                    <Tool key={item.id}>
+                      <ToolHeader status={toToolStatus(item.status)}>{item.name}</ToolHeader>
+                      <ToolContent>
+                        <pre className="whitespace-pre-wrap">
+                          {[item.input, item.output]
+                            .filter((value) => value !== undefined)
+                            .map(formatStructuredValue)
+                            .join("\n")}
+                        </pre>
+                      </ToolContent>
+                    </Tool>
+                  );
+                case "plan":
+                  return (
+                    <Tool defaultOpen key={item.id}>
+                      <ToolHeader status="completed">计划</ToolHeader>
+                      <ToolContent>
+                        <pre className="whitespace-pre-wrap">{item.text}</pre>
+                      </ToolContent>
+                    </Tool>
+                  );
+                case "activity":
+                  return (
+                    <Tool key={item.id}>
+                      <ToolHeader status={toToolStatus(item.status ?? "completed")}>
+                        {item.label}
+                      </ToolHeader>
+                      {item.detail === undefined ? null : <ToolContent>{item.detail}</ToolContent>}
+                    </Tool>
+                  );
+              }
+            })}
+          </section>
+        ))}
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>

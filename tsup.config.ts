@@ -13,9 +13,16 @@ export default defineConfig({
   clean: false,
   dts: false,
   esbuildOptions(options) {
+    // Fastify 插件仍包含 CommonJS 动态 require，ESM bundle 通过 Node 标准桥接加载内置模块。
+    options.banner = {
+      js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
+    };
     options.alias = {
       ...options.alias,
+      "@code-agent/core": "./packages/core/src/index.ts",
+      "@code-agent/protocol": "./packages/protocol/src/index.ts",
       "@code-agent/provider-codex": "./packages/provider-codex/src/index.ts",
+      "@code-agent/server": "./packages/server/src/index.ts",
     };
   },
   format: ["esm"],

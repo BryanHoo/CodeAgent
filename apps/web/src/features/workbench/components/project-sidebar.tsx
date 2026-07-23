@@ -1,17 +1,16 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import {
   ChevronDown,
   ChevronRight,
   Folder,
   PanelLeftClose,
   Pin,
-  Plus,
   Search,
   Send,
   Settings,
   WifiOff,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { formatTaskAge, getPinnedTasks } from "../../projects/project-data.js";
 import { useProjects } from "../../projects/project-context.js";
@@ -28,13 +27,11 @@ type ProjectSidebarProps = Readonly<{
 }>;
 
 export function ProjectSidebar({ onClose, projectId, taskId }: ProjectSidebarProps) {
-  const { addProjectFromDirectory, projects, tasks } = useProjects();
-  const navigate = useNavigate();
+  const { error, isPending, projects, tasks } = useProjects();
   const [expandedProjects, setExpandedProjects] = useState<ReadonlySet<string>>(
     () => new Set(projects.map((project) => project.id)),
   );
   const [query, setQuery] = useState("");
-  const [pickerError, setPickerError] = useState<string>();
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const visibleTasks = useMemo(
     () =>
@@ -44,6 +41,21 @@ export function ProjectSidebar({ onClose, projectId, taskId }: ProjectSidebarPro
     [normalizedQuery, tasks],
   );
   const pinnedTasks = getPinnedTasks(visibleTasks);
+
+  useEffect(() => {
+    // Projects 异步到达后默认展开新项目，保留用户已手动设置的现有项目状态。
+    setExpandedProjects((current) => {
+      const next = new Set(current);
+      let changed = false;
+      for (const project of projects) {
+        if (!next.has(project.id)) {
+          next.add(project.id);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [projects]);
 
   const toggleProject = (id: string) => {
     setExpandedProjects((current) => {
@@ -55,20 +67,6 @@ export function ProjectSidebar({ onClose, projectId, taskId }: ProjectSidebarPro
       }
       return next;
     });
-  };
-
-  const addProject = async () => {
-    try {
-      setPickerError(undefined);
-      const project = await addProjectFromDirectory();
-      setExpandedProjects((current) => new Set(current).add(project.id));
-      await navigate({ params: { projectId: project.id }, to: "/p/$projectId" });
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return;
-      }
-      setPickerError(error instanceof Error ? error.message : "无法添加项目文件夹");
-    }
   };
 
   return (
@@ -146,18 +144,18 @@ export function ProjectSidebar({ onClose, projectId, taskId }: ProjectSidebarPro
         ) : null}
 
         <section aria-labelledby="projects-title">
-          <div className="mb-2 flex h-7 w-full items-center justify-between">
+          <div className="mb-2 flex h-7 w-full items-center">
             <h2 className="text-meta font-semibold text-muted-foreground" id="projects-title">
               Projects
             </h2>
-            <IconButton label="添加项目文件夹" onClick={() => void addProject()} size="small">
-              <Plus className="size-3" aria-hidden="true" />
-            </IconButton>
           </div>
 
-          {pickerError === undefined ? null : (
-            <p className="mx-2 mb-2 text-meta leading-5 text-danger" role="alert">
-              {pickerError}
+          {isPending ? (
+            <p className="px-2 py-1.5 text-meta text-subtle-foreground">正在加载任务</p>
+          ) : null}
+          {error === null ? null : (
+            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
+              无法加载任务
             </p>
           )}
 

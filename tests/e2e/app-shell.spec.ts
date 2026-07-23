@@ -1,5 +1,120 @@
 import { expect, test } from "@playwright/test";
 
+const projects = [
+  {
+    createdAt: "2026-07-22T06:00:00.000Z",
+    id: "code-agent",
+    name: "CodeAgent",
+    rootPath: "~/Develop/person/CodeAgent",
+  },
+  {
+    createdAt: "2026-07-22T06:30:00.000Z",
+    id: "superwork",
+    name: "superwork",
+    rootPath: "~/Develop/person/superwork",
+  },
+];
+
+const tasks = [
+  {
+    id: "task-1",
+    pinned: true,
+    projectId: "code-agent",
+    title: "构建 macOS 工作台",
+    updatedAt: "2026-07-22T07:58:00.000Z",
+  },
+  {
+    id: "input-design",
+    pinned: false,
+    projectId: "code-agent",
+    title: "优化输入框交互",
+    updatedAt: "2026-07-22T06:00:00.000Z",
+  },
+  {
+    id: "markdown",
+    pinned: false,
+    projectId: "code-agent",
+    title: "完善 Markdown 渲染",
+    updatedAt: "2026-07-20T08:00:00.000Z",
+  },
+  {
+    id: "plan-check",
+    pinned: false,
+    projectId: "superwork",
+    title: "优化计划预检反馈",
+    updatedAt: "2026-07-21T09:00:00.000Z",
+  },
+];
+
+const taskSnapshot = {
+  ...tasks[0],
+  status: "idle",
+  turns: [
+    {
+      completedAt: "2026-07-22T08:00:00.000Z",
+      id: "turn-1",
+      items: [
+        {
+          id: "message-1",
+          role: "user",
+          text: "完成 macOS 原生风格的三栏工作台页面。",
+          type: "message",
+        },
+        {
+          content: "保留任务导航、结构化 Agent 时间线与上下文检查器。",
+          id: "reasoning-1",
+          summary: "分析工作台信息架构",
+          type: "reasoning",
+        },
+        {
+          id: "tool-1",
+          input: { files: ["docs/web-design.md"] },
+          name: "读取 Web 设计规范",
+          status: "completed",
+          type: "tool",
+        },
+        {
+          id: "message-2",
+          role: "assistant",
+          text: "工作台界面已按统一的 AI Elements 结构重新组织。",
+          type: "message",
+        },
+      ],
+      startedAt: "2026-07-22T07:58:00.000Z",
+      status: "completed",
+    },
+  ],
+};
+
+test.beforeEach(async ({ page }) => {
+  await page.route("**/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    let body: unknown;
+
+    if (url.pathname === "/v1/health") {
+      body = { status: "ok", version: 1 };
+    } else if (url.pathname === "/v1/capabilities") {
+      body = { provider: "codex", tasks: { list: true, read: true } };
+    } else if (url.pathname === "/v1/projects") {
+      body = { data: projects, nextCursor: null };
+    } else if (url.pathname.startsWith("/v1/projects/") && url.pathname.endsWith("/tasks")) {
+      const projectId = url.pathname.split("/")[3];
+      body = { data: tasks.filter((task) => task.projectId === projectId), nextCursor: null };
+    } else if (url.pathname === "/v1/tasks/task-1") {
+      body = taskSnapshot;
+    } else {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { message: "Not found" },
+        status: 404,
+      });
+      return;
+    }
+
+    await route.fulfill({ contentType: "application/json", json: body });
+  });
+});
+
 test("redirects the root route to the default project workbench", async ({ page }) => {
   await page.goto("/");
 
@@ -163,34 +278,16 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
   const searchBox = await search.boundingBox();
   const pinnedBox = await sidebar.getByRole("heading", { name: "Pinned" }).boundingBox();
   const projectsBox = await sidebar.getByRole("heading", { name: "Projects" }).boundingBox();
-  const addProjectIconBox = await sidebar
-    .getByRole("button", { name: "添加项目文件夹" })
-    .locator("svg")
-    .boundingBox();
-  const taskAgeRight = await sidebar
-    .getByRole("link", { name: /优化输入框交互/ })
-    .evaluate((link) => link.querySelector("span:last-child")?.getBoundingClientRect().right);
-
   expect(newAgentBox).not.toBeNull();
   expect(searchBox).not.toBeNull();
   expect(pinnedBox).not.toBeNull();
   expect(projectsBox).not.toBeNull();
-  expect(addProjectIconBox).not.toBeNull();
-  expect(taskAgeRight).toBeDefined();
-  if (
-    newAgentBox === null ||
-    searchBox === null ||
-    pinnedBox === null ||
-    projectsBox === null ||
-    addProjectIconBox === null ||
-    taskAgeRight === undefined
-  ) {
+  if (newAgentBox === null || searchBox === null || pinnedBox === null || projectsBox === null) {
     throw new Error("项目侧栏导航项缺失");
   }
   expect(searchBox.y).toBeLessThan(newAgentBox.y);
   expect(newAgentBox.y).toBeLessThan(pinnedBox.y);
   expect(pinnedBox.y).toBeLessThan(projectsBox.y);
-  expect(addProjectIconBox.x + addProjectIconBox.width).toBeCloseTo(taskAgeRight, 0);
 });
 
 test("keeps icon button tooltips visible within clipping and viewport boundaries", async ({
@@ -245,7 +342,6 @@ test("keeps icon button tooltips visible within clipping and viewport boundaries
     expect(placement.bottom).toBeLessThanOrEqual(placement.viewportHeight - 8);
   };
 
-  await assertTooltipVisible("添加项目文件夹");
   await assertTooltipVisible("收起项目侧栏");
   await assertTooltipVisible("收起上下文面板");
 
@@ -280,30 +376,9 @@ test("toggles project tasks from both project controls without navigation", asyn
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
 });
 
-test("adds a selected folder as a project and navigates to it", async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(window, "showDirectoryPicker", {
-      configurable: true,
-      value: () =>
-        Promise.resolve({
-          kind: "directory",
-          name: "New Demo",
-          rootPath: "/Users/demo/Projects/New Demo",
-        }),
-    });
-  });
-  await page.goto("/p/code-agent");
-
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
-  await sidebar.getByRole("button", { name: "添加项目文件夹" }).click();
-
-  await expect(sidebar.getByText("New Demo", { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/\/p\/new-demo$/);
-  await expect(page.getByLabel("项目路径")).toHaveText("/Users/demo/Projects/New Demo");
-});
-
 test("uses material hierarchy instead of strong workbench borders", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
+  await expect(page.locator('[role="log"] > div')).toBeVisible();
 
   const presentation = await page.evaluate(() => {
     const sidebar = document.querySelector<HTMLElement>('[aria-label="Project Sidebar"]');

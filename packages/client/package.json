@@ -11,6 +11,7 @@
     }
   },
   "dependencies": {
-    "@code-agent/protocol": "workspace:*"
+    "@code-agent/protocol": "workspace:*",
+    "@sinclair/typebox": "catalog:"
   }
 }

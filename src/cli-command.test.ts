@@ -3,26 +3,62 @@ import { describe, expect, it, vi } from "vitest";
 import { runCli, type CliDependencies } from "./cli-command.js";
 
 function createHarness(overrides: Partial<CliDependencies> = {}) {
+  const lifecycle: string[] = [];
   let resolveExit!: (exit: { code: number | null; signal: NodeJS.Signals | null }) => void;
   const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
     resolveExit = resolve;
   });
   const close = vi.fn(() => {
+    lifecycle.push("runtime.close");
     resolveExit({ code: 0, signal: null });
     return Promise.resolve();
   });
+  const serverClose = vi.fn(() => {
+    lifecycle.push("server.close");
+    return Promise.resolve();
+  });
+  const serverListen = vi.fn(() => {
+    lifecycle.push("server.listen");
+    return Promise.resolve("http://127.0.0.1:3210");
+  });
+  const client = { notify: vi.fn(), request: vi.fn() };
+  const provider = {
+    getCapabilities: vi.fn(),
+    listTasks: vi.fn(),
+    readTask: vi.fn(),
+  };
+  const project = {
+    createdAt: "2026-07-23T00:00:00.000Z",
+    id: "project",
+    name: "project",
+    rootPath: "/workspace/project",
+  };
   const dependencies: CliDependencies = {
     appVersion: "1.2.3",
     checkCodexVersion: vi.fn(() =>
       Promise.resolve({ raw: "codex-cli 0.145.0", version: "0.145.0" }),
     ),
+    createAgentProvider: vi.fn(() => {
+      lifecycle.push("provider.create");
+      return provider;
+    }),
+    createServer: vi.fn(() => Promise.resolve({ close: serverClose, listen: serverListen })),
     locateCodexBinary: vi.fn(() =>
       Promise.resolve({ path: "/fake/codex", source: "explicit" as const }),
     ),
     nodeVersion: "24.1.0",
+    openBrowser: vi.fn(() => {
+      lifecycle.push("browser.open");
+      return Promise.resolve();
+    }),
+    resolveProject: vi.fn(() => {
+      lifecycle.push("project.resolve");
+      return Promise.resolve(project);
+    }),
     startCodexAppServer: vi.fn(() =>
-      Promise.resolve({ close, pid: 4321, waitForExit: () => exit }),
+      Promise.resolve({ client, close, pid: 4321, waitForExit: () => exit }),
     ),
+    webRoot: "/package/dist/web",
     ...overrides,
   };
   const stderr: string[] = [];
@@ -30,7 +66,9 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
 
   return {
     close,
+    client,
     dependencies,
+    lifecycle,
     options: {
       dependencies,
       stderr: (message: string) => {
@@ -40,7 +78,11 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
         stdout.push(message);
       },
     },
+    project,
+    provider,
     stderr,
+    serverClose,
+    serverListen,
     stdout,
   };
 }
@@ -76,7 +118,7 @@ describe("runCli", () => {
     expect(harness.dependencies.locateCodexBinary).not.toHaveBeenCalled();
   });
 
-  it("starts App Server with project and CODEX_HOME then closes on abort", async () => {
+  it("starts Codex, HTTP, and static Web then closes on abort", async () => {
     const harness = createHarness();
     const controller = new AbortController();
     const run = runCli(
@@ -102,12 +144,32 @@ describe("runCli", () => {
       cwd: "/workspace/project",
     });
     expect(startOptions?.env?.["CODEX_HOME"]).toBe("/custom/home");
-    expect(harness.stdout.join("")).toContain("CodeAgent App Server started (pid 4321)");
+    expect(harness.dependencies.createAgentProvider).toHaveBeenCalledWith({
+      client: harness.client,
+      project: harness.project,
+    });
+    expect(harness.dependencies.createServer).toHaveBeenCalledWith({
+      project: harness.project,
+      provider: harness.provider,
+      staticRoot: "/package/dist/web",
+    });
+    expect(harness.serverListen).toHaveBeenCalledWith({ host: "127.0.0.1", port: 3210 });
+    expect(harness.dependencies.openBrowser).toHaveBeenCalledWith("http://127.0.0.1:3210");
+    expect(harness.stdout.join("")).toContain("CodeAgent started at http://127.0.0.1:3210");
 
     controller.abort();
 
     await expect(run).resolves.toBe(0);
     expect(harness.close).toHaveBeenCalledOnce();
+    expect(harness.serverClose).toHaveBeenCalledOnce();
+    expect(harness.lifecycle).toEqual([
+      "project.resolve",
+      "provider.create",
+      "server.listen",
+      "browser.open",
+      "server.close",
+      "runtime.close",
+    ]);
   });
 
   it("returns a non-zero code when App Server exits before shutdown", async () => {
@@ -115,6 +177,7 @@ describe("runCli", () => {
       startCodexAppServer: vi.fn(() =>
         Promise.resolve({
           close: () => Promise.resolve(),
+          client: { notify: vi.fn(), request: vi.fn() },
           pid: 4321,
           waitForExit: () => Promise.resolve({ code: 23, signal: null }),
         }),
@@ -131,6 +194,25 @@ describe("runCli", () => {
     expect(harness.stderr.join("")).toContain(
       "Codex App Server exited before shutdown with code 23",
     );
+  });
+
+  it("keeps the server running when opening the browser fails", async () => {
+    const harness = createHarness({
+      openBrowser: vi.fn(() => Promise.reject(new Error("browser unavailable"))),
+    });
+    const controller = new AbortController();
+    const run = runCli(["start", "--project", "/workspace/project"], {
+      ...harness.options,
+      signal: controller.signal,
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.serverListen).toHaveBeenCalledOnce();
+    });
+    controller.abort();
+
+    await expect(run).resolves.toBe(0);
+    expect(harness.stderr.join("")).toContain("browser unavailable");
   });
 
   it("prints help and rejects unknown commands or missing option values", async () => {

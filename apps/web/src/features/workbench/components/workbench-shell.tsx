@@ -21,7 +21,7 @@ function shouldOpenDesktopPanel(query: string) {
 }
 
 export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
-  const { projects, tasks } = useProjects();
+  const { client, projects, tasks } = useProjects();
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
   const [sidebarOpen, setSidebarOpen] = useState(() => shouldOpenDesktopPanel(sidebarOverlayQuery));
   const [inspectorOpen, setInspectorOpen] = useState(() =>
@@ -145,7 +145,11 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           </div>
         </header>
 
-        <TaskTimeline hasTask={hasTask} projectName={projectName} />
+        <TaskTimeline
+          client={client}
+          projectName={projectName}
+          {...(taskId === undefined ? {} : { taskId })}
+        />
         <WorkbenchComposer hasTask={hasTask} projectPath={projectPath} />
       </main>
 

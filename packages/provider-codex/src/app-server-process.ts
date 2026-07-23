@@ -8,7 +8,8 @@ import {
 } from "./binary.js";
 import { JsonlRpcClient, RpcConnectionClosedError } from "./jsonl-rpc-client.js";
 
-const APP_SERVER_ARGUMENTS = ["app-server", "--listen", "stdio://", "--strict-config"] as const;
+// 保留 Codex 对前向配置字段的默认兼容行为，避免 Desktop 与打包 CLI 的配置版本差异阻断启动。
+const APP_SERVER_ARGUMENTS = ["app-server", "--listen", "stdio://"] as const;
 const MAX_STDERR_LENGTH = 8_192;
 
 export interface StartCodexAppServerOptions {

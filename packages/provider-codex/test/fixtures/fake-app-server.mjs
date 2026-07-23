@@ -9,7 +9,7 @@ if (args.includes("--version")) {
   process.exit(0);
 }
 
-const expectedArgs = ["app-server", "--listen", "stdio://", "--strict-config"];
+const expectedArgs = ["app-server", "--listen", "stdio://"];
 if (JSON.stringify(args) !== JSON.stringify(expectedArgs)) {
   process.stderr.write(`unexpected argv: ${JSON.stringify(args)}\n`);
   process.exit(64);

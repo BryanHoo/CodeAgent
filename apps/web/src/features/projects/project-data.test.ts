@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createProjectId, getPinnedTasks } from "./project-data.js";
+import { getPinnedTasks } from "./project-data.js";
 
 describe("project navigation data", () => {
   it("returns no pinned section data when every task is unpinned", () => {
@@ -15,10 +15,5 @@ describe("project navigation data", () => {
         },
       ]),
     ).toEqual([]);
-  });
-
-  it("uses the folder name to create a stable unique project id", () => {
-    expect(createProjectId("New Demo", ["new-demo"])).toBe("new-demo-2");
-    expect(createProjectId("中文项目", [])).toBe("project");
   });
 });

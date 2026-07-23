@@ -190,6 +190,9 @@ importers:
       '@code-agent/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@sinclair/typebox':
+        specifier: 'catalog:'
+        version: 0.34.52
 
   packages/core:
     dependencies:
