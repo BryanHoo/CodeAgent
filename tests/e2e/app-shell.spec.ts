@@ -76,6 +76,26 @@ const taskSnapshot = {
           type: "tool",
         },
         {
+          changes: [
+            {
+              diff: [
+                "--- a/package.json",
+                "+++ b/package.json",
+                "@@ -1,3 +1,3 @@",
+                " {",
+                '-  "start": "pnpm run dev",',
+                '+  "start": "node ./dist/cli.js start --project .",',
+                " }",
+              ].join("\n"),
+              kind: "update",
+              path: "/workspace/CodeAgent/package.json",
+            },
+          ],
+          id: "file-change-1",
+          status: "completed",
+          type: "file_change",
+        },
+        {
           id: "message-2",
           role: "assistant",
           text: "工作台界面已按统一的 AI Elements 结构重新组织。",
@@ -272,6 +292,30 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(page.getByLabel("项目路径")).toHaveText("~/Develop/person/CodeAgent");
   await expect(inspector.getByRole("button", { name: "关闭上下文面板" })).toHaveCount(0);
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+});
+
+test("opens file diffs from the timeline and inspector", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      consoleErrors.push(message.text());
+    }
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  await page.getByRole("button", { name: /已编辑 package\.json.*打开 Diff/ }).click();
+  const dialog = page.getByRole("dialog", { name: "package.json" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".file-diff-renderer")).toContainText("pnpm run dev");
+  await expect(dialog.locator(".file-diff-renderer")).toContainText("node ./dist/cli.js");
+  await page.getByRole("button", { name: "关闭文件 Diff" }).click();
+  await expect(dialog).not.toBeAttached();
+
+  await page.getByRole("button", { name: "打开 package.json 的 Diff" }).click();
+  await expect(page.getByRole("dialog", { name: "package.json" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "package.json" })).not.toBeAttached();
+  expect(consoleErrors).toEqual([]);
 });
 
 test("disables composer mutations that the provider does not support", async ({ page }) => {

@@ -28,8 +28,14 @@ function isDeltaEvent(event: AgentEvent): boolean {
   );
 }
 
-export function useTaskRuntime(taskId: string, client: CodeAgentRuntimeClient): TaskRuntimeView {
-  const taskQuery = useQuery(taskSnapshotQueryOptions(taskId, client));
+export function useTaskRuntime(
+  taskId: string | undefined,
+  client: CodeAgentRuntimeClient,
+): TaskRuntimeView {
+  const taskQuery = useQuery({
+    ...taskSnapshotQueryOptions(taskId ?? "no-active-task", client),
+    enabled: taskId !== undefined,
+  });
   const [runtime, setRuntime] = useState<TaskRuntimeState>();
   const [runtimeError, setRuntimeError] = useState<Error | null>(null);
 
@@ -125,7 +131,8 @@ export function useTaskRuntime(taskId: string, client: CodeAgentRuntimeClient): 
     };
   }, [client, taskQuery.data, taskQuery.refetch]);
 
-  const activeRuntime = runtime?.snapshot.id === taskId ? runtime : undefined;
+  const activeRuntime =
+    taskId !== undefined && runtime?.snapshot.id === taskId ? runtime : undefined;
   const error =
     activeRuntime === undefined
       ? taskQuery.error

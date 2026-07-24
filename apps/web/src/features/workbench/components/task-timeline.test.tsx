@@ -99,6 +99,8 @@ describe("TaskSnapshotTimeline", () => {
 
     expect(markup).toContain("已编辑");
     expect(markup).toContain("package.json");
+    expect(markup).toContain('aria-haspopup="dialog"');
+    expect(markup).toContain("打开 Diff");
     expect(markup).toContain('text-diff-added">+2</span>');
     expect(markup).toContain('text-diff-removed">-1</span>');
     expect(markup).toContain("已创建");
@@ -107,5 +109,6 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain('text-diff-added">+2</span>');
     expect(markup).toContain('text-diff-removed">-0</span>');
     expect(markup).not.toContain(">文件变更<");
+    expect(markup).not.toContain("@@ -1,2 +1,10 @@");
   });
 });

@@ -1,8 +1,9 @@
-import type { AgentItem, AgentItemStatus, PendingRequest } from "@code-agent/protocol";
-import { ChevronRight, FilePenLine, FolderGit2 } from "lucide-react";
+import type { AgentItemStatus, PendingRequest } from "@code-agent/protocol";
+import { FilePenLine, FolderGit2 } from "lucide-react";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
+import { countFileChangeLines, getFileName, type AgentFileChange } from "../../diff/file-change.js";
 import {
   Conversation,
   ConversationContent,
@@ -23,6 +24,7 @@ import {
 import { PendingRequestCard, type PendingRequestResolution } from "./pending-request.js";
 
 type TaskTimelineProps = Readonly<{
+  onOpenFileDiff?: (change: AgentFileChange) => void;
   projectName: string;
   onResolvePendingRequest?: (
     request: PendingRequest,
@@ -61,6 +63,7 @@ function TimelineState({
 }
 
 export function TaskTimeline({
+  onOpenFileDiff,
   onResolvePendingRequest,
   projectName,
   runtime,
@@ -74,6 +77,7 @@ export function TaskTimeline({
   }
   return (
     <ActiveTaskTimeline
+      onOpenFileDiff={onOpenFileDiff ?? (() => undefined)}
       onResolvePendingRequest={onResolvePendingRequest ?? (() => Promise.resolve())}
       runtime={runtime}
     />
@@ -81,6 +85,7 @@ export function TaskTimeline({
 }
 
 function ActiveTaskTimeline({
+  onOpenFileDiff,
   onResolvePendingRequest,
   runtime,
 }: Readonly<{
@@ -89,6 +94,7 @@ function ActiveTaskTimeline({
     resolution: PendingRequestResolution,
     idempotencyKey: string,
   ) => Promise<void>;
+  onOpenFileDiff: (change: AgentFileChange) => void;
   runtime: TaskRuntimeView;
 }>) {
   if (runtime.error !== null) {
@@ -109,6 +115,7 @@ function ActiveTaskTimeline({
       ) : null}
       <TaskSnapshotTimeline
         connected={runtime.connectionState === "connected"}
+        onOpenFileDiff={onOpenFileDiff}
         onResolvePendingRequest={onResolvePendingRequest}
         snapshot={runtime.snapshot}
       />
@@ -153,80 +160,50 @@ function extractReasoningSteps(summary: string): string[] {
     .filter((step) => step.length > 0);
 }
 
-type AgentFileChange = Extract<AgentItem, { type: "file_change" }>["changes"][number];
-
 const fileChangeOperationLabels: Readonly<Record<AgentFileChange["kind"], string>> = {
   create: "已创建",
   delete: "已删除",
   update: "已编辑",
 };
 
-function countChangedLines(
-  diff: string,
-  kind: AgentFileChange["kind"],
-): Readonly<{ additions: number; removals: number }> {
-  let additions = 0;
-  let removals = 0;
-
-  // 只统计补丁正文，忽略统一 Diff 的文件头标记。
-  for (const line of diff.split("\n")) {
-    if (line.startsWith("+") && !line.startsWith("+++")) {
-      additions += 1;
-    } else if (line.startsWith("-") && !line.startsWith("---")) {
-      removals += 1;
-    }
-  }
-
-  // Codex 的 add/delete 补丁可能以应用方向的反向形式返回；文件类型才是最终语义来源。
-  if (kind === "create") {
-    return { additions: Math.max(additions, removals), removals: 0 };
-  }
-  if (kind === "delete") {
-    return { additions: 0, removals: Math.max(additions, removals) };
-  }
-
-  return { additions, removals };
-}
-
-function FileChangeDisclosure({ change }: Readonly<{ change: AgentFileChange }>) {
-  const fileName = change.path.split(/[\\/]/).at(-1) ?? change.path;
+function FileChangeButton({
+  change,
+  onOpen,
+}: Readonly<{ change: AgentFileChange; onOpen: (change: AgentFileChange) => void }>) {
+  const fileName = getFileName(change.path);
   const operationLabel = fileChangeOperationLabels[change.kind];
-  const { additions, removals } = countChangedLines(change.diff, change.kind);
+  const { additions, removals } = countFileChangeLines(change);
 
   return (
-    <details className="group/file-change w-full" data-file-change={change.kind}>
-      <summary
-        aria-label={`${operationLabel} ${fileName}，新增 ${String(additions)} 行，删除 ${String(removals)} 行`}
-        className="flex min-h-8 cursor-pointer list-none items-center gap-2 text-label text-foreground [&::-webkit-details-marker]:hidden"
-      >
-        <FilePenLine className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="shrink-0 text-muted-foreground">{operationLabel}</span>
-        <span
-          className="min-w-0 truncate font-medium underline underline-offset-2"
-          title={change.path}
-        >
-          {fileName}
-        </span>
-        <span className="ml-auto shrink-0 text-diff-added">+{additions}</span>
-        <span className="shrink-0 text-diff-removed">-{removals}</span>
-        <ChevronRight
-          className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open/file-change:rotate-90"
-          aria-hidden="true"
-        />
-      </summary>
-      <ToolContent className="ml-5">
-        <pre className="whitespace-pre-wrap">{change.diff}</pre>
-      </ToolContent>
-    </details>
+    <button
+      aria-haspopup="dialog"
+      aria-label={`${operationLabel} ${fileName}，新增 ${String(additions)} 行，删除 ${String(removals)} 行，打开 Diff`}
+      className="flex min-h-9 w-full items-center gap-2 rounded-control bg-control px-2.5 text-left text-label text-foreground transition-colors hover:bg-control-hover"
+      data-file-change={change.kind}
+      onClick={() => {
+        onOpen(change);
+      }}
+      type="button"
+    >
+      <FilePenLine className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <span className="shrink-0 text-muted-foreground">{operationLabel}</span>
+      <span className="min-w-0 truncate font-medium" title={change.path}>
+        {fileName}
+      </span>
+      <span className="ml-auto shrink-0 text-diff-added">+{additions}</span>
+      <span className="shrink-0 text-diff-removed">-{removals}</span>
+    </button>
   );
 }
 
 export function TaskSnapshotTimeline({
   connected = true,
+  onOpenFileDiff = () => undefined,
   onResolvePendingRequest = () => Promise.resolve(),
   snapshot,
 }: Readonly<{
   connected?: boolean;
+  onOpenFileDiff?: (change: AgentFileChange) => void;
   onResolvePendingRequest?: (
     request: PendingRequest,
     resolution: PendingRequestResolution,
@@ -317,9 +294,10 @@ export function TaskSnapshotTimeline({
                   return (
                     <div className="space-y-1" data-status={item.status} key={item.id}>
                       {item.changes.map((change, changeIndex) => (
-                        <FileChangeDisclosure
+                        <FileChangeButton
                           change={change}
                           key={`${change.path}:${String(changeIndex)}`}
+                          onOpen={onOpenFileDiff}
                         />
                       ))}
                     </div>

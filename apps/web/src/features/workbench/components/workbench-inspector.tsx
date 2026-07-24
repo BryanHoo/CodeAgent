@@ -1,18 +1,37 @@
 import { Braces, CheckCircle2, FileCode2, GitBranch, HardDrive, Plus } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-const changedFiles = [
-  { name: "workbench-shell.tsx", additions: 84, deletions: 18 },
-  { name: "task-timeline.tsx", additions: 126, deletions: 0 },
-  { name: "globals.css", additions: 42, deletions: 9 },
-];
+import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
+import {
+  collectSnapshotFileChanges,
+  countFileChangeLines,
+  getFileName,
+  type AgentFileChange,
+} from "../../diff/file-change.js";
 
 type WorkbenchInspectorProps = Readonly<{
+  onOpenFileDiff: (change: AgentFileChange) => void;
   projectName: string;
+  snapshot?: RuntimeTaskSnapshot;
 }>;
 
-export function WorkbenchInspector({ projectName }: WorkbenchInspectorProps) {
+export function WorkbenchInspector({
+  onOpenFileDiff,
+  projectName,
+  snapshot,
+}: WorkbenchInspectorProps) {
   const [tab, setTab] = useState<"changes" | "context">("changes");
+  const changeSummary = useMemo(() => {
+    const files = collectSnapshotFileChanges(snapshot);
+    let additions = 0;
+    let removals = 0;
+    for (const file of files) {
+      const fileStats = countFileChangeLines(file);
+      additions += fileStats.additions;
+      removals += fileStats.removals;
+    }
+    return { additions, files, removals };
+  }, [snapshot]);
 
   return (
     <aside
@@ -52,31 +71,51 @@ export function WorkbenchInspector({ projectName }: WorkbenchInspectorProps) {
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-foreground">未提交变更</p>
-                <p className="mt-0.5 text-caption text-muted-foreground">3 个文件</p>
+                <p className="mt-0.5 text-caption text-muted-foreground">
+                  {changeSummary.files.length} 个文件
+                </p>
               </div>
               <span className="text-meta font-medium">
-                <span className="text-accent-strong">+252</span>{" "}
-                <span className="text-danger">-27</span>
+                <span className="text-diff-added">+{changeSummary.additions}</span>{" "}
+                <span className="text-diff-removed">-{changeSummary.removals}</span>
               </span>
             </div>
             <div className="space-y-0.5">
-              {changedFiles.map((file) => (
-                <button
-                  className="flex w-full items-center gap-2 rounded-control px-2 py-2 text-left transition-colors hover:bg-control-hover"
-                  key={file.name}
-                  type="button"
-                >
-                  <FileCode2
-                    className="size-3.5 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <span className="min-w-0 flex-1 truncate text-xs text-foreground">
-                    {file.name}
-                  </span>
-                  <span className="text-caption text-accent-strong">+{file.additions}</span>
-                  <span className="text-caption text-danger">-{file.deletions}</span>
-                </button>
-              ))}
+              {changeSummary.files.length === 0 ? (
+                <p className="px-2 py-5 text-center text-label text-muted-foreground">
+                  当前任务暂无文件变更
+                </p>
+              ) : (
+                changeSummary.files.map((file) => {
+                  const fileName = getFileName(file.path);
+                  const { additions, removals } = countFileChangeLines(file);
+                  return (
+                    <button
+                      aria-haspopup="dialog"
+                      aria-label={`打开 ${fileName} 的 Diff`}
+                      className="flex w-full items-center gap-2 rounded-control px-2 py-2 text-left transition-colors hover:bg-control-hover"
+                      key={file.path}
+                      onClick={() => {
+                        onOpenFileDiff(file);
+                      }}
+                      type="button"
+                    >
+                      <FileCode2
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <span
+                        className="min-w-0 flex-1 truncate text-xs text-foreground"
+                        title={file.path}
+                      >
+                        {fileName}
+                      </span>
+                      <span className="text-caption text-diff-added">+{additions}</span>
+                      <span className="text-caption text-diff-removed">-{removals}</span>
+                    </button>
+                  );
+                })
+              )}
             </div>
             <button
               className="mt-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-control bg-control text-label font-medium text-foreground shadow-sm transition-colors hover:bg-control-hover disabled:opacity-50"

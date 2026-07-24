@@ -5,7 +5,12 @@ import { useEffect, useState } from "react";
 import { Ellipsis, ExternalLink, PanelLeft, PanelRight } from "lucide-react";
 
 import { useProjects } from "../../projects/project-context.js";
-import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
+import {
+  useTaskRuntime,
+  type TaskRuntimeView,
+} from "../../conversation/runtime/use-task-runtime.js";
+import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
+import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { ProjectSidebar } from "./project-sidebar.js";
@@ -30,15 +35,29 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const { capabilities, client, projects, tasks } = useProjects();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const runtime = useTaskRuntime(taskId, client);
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
   const [sidebarOpen, setSidebarOpen] = useState(() => shouldOpenDesktopPanel(sidebarOverlayQuery));
   const [inspectorOpen, setInspectorOpen] = useState(() =>
     shouldOpenDesktopPanel(inspectorOverlayQuery),
   );
+  const [fileDiffSelection, setFileDiffSelection] = useState<{
+    change: AgentFileChange;
+    taskId: string;
+  } | null>(null);
   const project = projects.find((item) => item.id === projectId);
   const projectName = project?.name ?? projectId;
   const projectPath = project?.rootPath ?? projectId;
   const title = tasks.find((task) => task.id === taskId)?.title ?? taskId ?? "New agent";
+  const selectedFileChange =
+    fileDiffSelection !== null && fileDiffSelection.taskId === taskId
+      ? fileDiffSelection.change
+      : null;
+  const openFileDiff = (change: AgentFileChange) => {
+    if (taskId !== undefined) {
+      setFileDiffSelection({ change, taskId });
+    }
+  };
 
   const closeSidebar = () => {
     setSidebarOpen(false);
@@ -179,7 +198,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             projectId={projectId}
             projectName={projectName}
             projectPath={projectPath}
+            runtime={runtime}
             taskId={taskId}
+            onOpenFileDiff={openFileDiff}
           />
         )}
       </main>
@@ -193,7 +214,19 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         />
       ) : null}
 
-      <WorkbenchInspector projectName={projectName} />
+      <WorkbenchInspector
+        onOpenFileDiff={openFileDiff}
+        projectName={projectName}
+        {...(taskId === undefined || runtime.snapshot === undefined
+          ? {}
+          : { snapshot: runtime.snapshot })}
+      />
+      <FileDiffDialog
+        change={selectedFileChange}
+        onClose={() => {
+          setFileDiffSelection(null);
+        }}
+      />
     </div>
   );
 }
@@ -204,16 +237,19 @@ function ActiveTaskWorkbench({
   projectId,
   projectName,
   projectPath,
+  runtime,
   taskId,
+  onOpenFileDiff,
 }: Readonly<{
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentWorkbenchClient;
   projectId: string;
   projectName: string;
   projectPath: string;
+  runtime: TaskRuntimeView;
   taskId: string;
+  onOpenFileDiff: (change: AgentFileChange) => void;
 }>) {
-  const runtime = useTaskRuntime(taskId, client);
   const resolvePendingRequest = (
     request: PendingRequest,
     resolution: PendingRequestResolution,
@@ -223,6 +259,7 @@ function ActiveTaskWorkbench({
   return (
     <>
       <TaskTimeline
+        onOpenFileDiff={onOpenFileDiff}
         onResolvePendingRequest={resolvePendingRequest}
         projectName={projectName}
         runtime={runtime}

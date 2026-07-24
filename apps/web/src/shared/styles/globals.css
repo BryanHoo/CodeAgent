@@ -316,6 +316,38 @@ a {
   line-height: var(--ui-line-height-relaxed) !important;
 }
 
+/* Diff 作为唯一高信息密度弹层，使用原生 dialog 保持焦点与视口行为一致。 */
+.file-diff-dialog {
+  border: 0;
+  animation: file-diff-dialog-enter var(--ui-motion-normal) var(--ui-ease-standard);
+}
+
+.file-diff-dialog::backdrop {
+  background: var(--ui-color-scrim);
+}
+
+.file-diff-renderer {
+  min-width: 100%;
+}
+
+@keyframes file-diff-dialog-enter {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--ui-space-unit) * 2)) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-diff-dialog {
+    animation: none;
+  }
+}
+
 .workbench-shell {
   --sidebar-width: 0px;
   --inspector-width: 0px;

@@ -11,6 +11,7 @@
   "dependencies": {
     "@code-agent/client": "workspace:*",
     "@code-agent/protocol": "workspace:*",
+    "@pierre/diffs": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "lucide-react": "catalog:",
