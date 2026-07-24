@@ -2,7 +2,6 @@ import type {
   AgentApprovalPolicy,
   AgentAttachment,
   AgentCapabilities,
-  AgentContextUsage,
   AgentModel,
   AgentPromptInput,
   Project,
@@ -24,6 +23,7 @@ import {
   AttachmentRemove,
   Attachments,
 } from "../../../shared/ai-elements/attachments.js";
+import { Context, ContextTrigger } from "../../../shared/ai-elements/context.js";
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -44,7 +44,6 @@ import {
   type PromptInputAttachment,
   type PromptInputMessage,
 } from "../../../shared/ai-elements/prompt-input.js";
-import { IconButton } from "../../../shared/ui/icon-button.js";
 import {
   filterPromptCommandItems,
   movePromptCommandSelection,
@@ -103,86 +102,6 @@ const promptCommands = [
 ] as const satisfies readonly PromptCommandItem[];
 
 type PromptCommandMenuMode = "commands" | "projects";
-
-export function formatContextUsage(usage: AgentContextUsage | null): Readonly<{
-  accessibleLabel: string;
-  percentage: number | null;
-  summary: string;
-  tokenCount: string | null;
-}> {
-  const contextWindow = usage?.contextWindow;
-  const usedTokens = usage?.usedTokens;
-  if (contextWindow === null || contextWindow === undefined || usedTokens === undefined) {
-    return {
-      accessibleLabel: "上下文用量未知",
-      percentage: null,
-      summary: "等待模型返回上下文用量",
-      tokenCount: usedTokens === undefined ? null : `${formatCompactTokenCount(usedTokens)} tokens`,
-    };
-  }
-  const percentage = Math.min(100, Math.max(0, Math.round((usedTokens / contextWindow) * 100)));
-  return {
-    accessibleLabel: `上下文已使用 ${String(percentage)}%`,
-    percentage,
-    summary: `${String(percentage)}% 上下文已使用`,
-    tokenCount: `${formatCompactTokenCount(usedTokens)} / ${formatCompactTokenCount(contextWindow)} tokens`,
-  };
-}
-
-function formatCompactTokenCount(tokenCount: number): string {
-  return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 1,
-    notation: "compact",
-  }).format(tokenCount);
-}
-
-const contextRingRadius = 7;
-const contextRingCircumference = 2 * Math.PI * contextRingRadius;
-
-function ContextUsageButton({ usage }: Readonly<{ usage: ReturnType<typeof formatContextUsage> }>) {
-  const completedPercentage = usage.percentage ?? 0;
-  const ringOffset = contextRingCircumference * (1 - completedPercentage / 100);
-
-  return (
-    <IconButton
-      className="ml-auto"
-      label={usage.accessibleLabel}
-      size="small"
-      tooltip={
-        <span className="flex flex-col gap-0.5 px-0.5 py-0.5 tabular-nums">
-          <span className="text-body-small font-medium">{usage.summary}</span>
-          {usage.tokenCount === null ? null : (
-            <span className="text-label text-muted-foreground">{usage.tokenCount}</span>
-          )}
-        </span>
-      }
-      tooltipTone="surface"
-    >
-      <svg className="size-4.5 -rotate-90" viewBox="0 0 20 20" aria-hidden="true">
-        <circle
-          cx="10"
-          cy="10"
-          fill="none"
-          r={contextRingRadius}
-          stroke="var(--ui-color-text-muted)"
-          strokeOpacity="0.24"
-          strokeWidth="3"
-        />
-        <circle
-          cx="10"
-          cy="10"
-          fill="none"
-          r={contextRingRadius}
-          stroke="var(--ui-color-text-muted)"
-          strokeDasharray={contextRingCircumference}
-          strokeDashoffset={ringOffset}
-          strokeLinecap="round"
-          strokeWidth="3"
-        />
-      </svg>
-    </IconButton>
-  );
-}
 
 export function deriveComposerActions(
   capabilities: AgentCapabilities | undefined,
@@ -401,7 +320,7 @@ export function WorkbenchComposer({
     models.find((model) => model.isDefault) ??
     models[0];
   const selectedReasoningEffort = resolveReasoningEffort(selectedModel, selectedReasoningEffortId);
-  const contextUsage = formatContextUsage(runtime?.snapshot?.contextUsage ?? null);
+  const contextUsage = runtime?.snapshot?.contextUsage;
   const { attachmentsDisabled, turnControlsDisabled } = deriveComposerInputAvailability(state);
   const filteredCommands = filterPromptCommandItems(promptCommands, commandQuery);
   const commandMenuItems: readonly (PromptCommandItem | Project)[] =
@@ -821,7 +740,13 @@ export function WorkbenchComposer({
           <Folder className="size-3 shrink-0" aria-hidden="true" />
           <span className="truncate">{projectPath}</span>
         </span>
-        <ContextUsageButton usage={contextUsage} />
+        <Context
+          className="ml-auto"
+          maxTokens={contextUsage?.contextWindow}
+          usedTokens={contextUsage?.usedTokens}
+        >
+          <ContextTrigger />
+        </Context>
       </div>
     </section>
   );

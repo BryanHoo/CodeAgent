@@ -16,6 +16,7 @@ import {
   ConfirmationRequest,
   ConfirmationTitle,
 } from "./confirmation.js";
+import { Context, ContextTrigger, formatContextUsage } from "./context.js";
 import { Message, MessageContent, MessageResponse } from "./message.js";
 import {
   PromptInput,
@@ -35,6 +36,29 @@ import { Reasoning, ReasoningContent, ReasoningTrigger } from "./reasoning.js";
 import { Tool, ToolContent, ToolHeader } from "./tool.js";
 
 describe("AI Elements primitives", () => {
+  it("renders an accessible context usage trigger", () => {
+    const markup = renderToStaticMarkup(
+      <Context maxTokens={200_000} usedTokens={25_000}>
+        <ContextTrigger />
+      </Context>,
+    );
+
+    expect(markup).toContain('aria-label="上下文已使用 13%"');
+    expect(markup.match(/<circle/g)).toHaveLength(2);
+    expect(formatContextUsage({ maxTokens: 200_000, usedTokens: 25_000 })).toEqual({
+      accessibleLabel: "上下文已使用 13%",
+      percentage: 13,
+      summary: "13% 上下文已使用",
+      tokenCount: "25K / 200K tokens",
+    });
+    expect(formatContextUsage({ maxTokens: undefined, usedTokens: undefined })).toEqual({
+      accessibleLabel: "上下文用量未知",
+      percentage: null,
+      summary: "等待模型返回上下文用量",
+      tokenCount: null,
+    });
+  });
+
   it("renders a structured agent activity timeline", () => {
     const markup = renderToStaticMarkup(
       <Conversation aria-label="会话">

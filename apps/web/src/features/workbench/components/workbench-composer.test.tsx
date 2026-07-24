@@ -5,7 +5,6 @@ import {
   deriveComposerInputAvailability,
   deriveComposerState,
   interruptPromptTurn,
-  formatContextUsage,
   resolveIdempotencyAttempt,
   resolveActiveTurnId,
   resolveReasoningEffort,
@@ -129,28 +128,10 @@ describe("WorkbenchComposer", () => {
     expect(createKey).toHaveBeenCalledTimes(2);
   });
 
-  it("resolves model reasoning effort and formats current context usage", () => {
+  it("resolves model reasoning effort", () => {
     expect(resolveReasoningEffort(model, "low")).toBe("low");
     expect(resolveReasoningEffort(model, "unsupported")).toBe("high");
     expect(resolveReasoningEffort(undefined, "high")).toBeUndefined();
-    expect(formatContextUsage(null)).toEqual({
-      accessibleLabel: "上下文用量未知",
-      percentage: null,
-      summary: "等待模型返回上下文用量",
-      tokenCount: null,
-    });
-    expect(formatContextUsage({ contextWindow: 200_000, usedTokens: 25_000 })).toEqual({
-      accessibleLabel: "上下文已使用 13%",
-      percentage: 13,
-      summary: "13% 上下文已使用",
-      tokenCount: "25K / 200K tokens",
-    });
-    expect(formatContextUsage({ contextWindow: 272_000, usedTokens: 87_100 })).toEqual({
-      accessibleLabel: "上下文已使用 32%",
-      percentage: 32,
-      summary: "32% 上下文已使用",
-      tokenCount: "87.1K / 272K tokens",
-    });
   });
 
   it("creates a task before its first turn and continues existing tasks directly", async () => {
