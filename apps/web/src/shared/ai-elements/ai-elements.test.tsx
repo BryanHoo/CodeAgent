@@ -21,6 +21,11 @@ import {
   PromptInput,
   PromptInputActionAddAttachments,
   PromptInputBody,
+  PromptInputCommand,
+  PromptInputCommandEmpty,
+  PromptInputCommandGroup,
+  PromptInputCommandItem,
+  PromptInputCommandList,
   PromptInputFooter,
   PromptInputSubmit,
   PromptInputTextarea,
@@ -199,6 +204,28 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain("screen.png");
     expect(markup).toContain('src="data:image/png;base64,aW1hZ2U="');
     expect(markup).toContain('aria-label="移除 screen.png"');
+  });
+
+  it("renders an accessible prompt command composition", () => {
+    const markup = renderToStaticMarkup(
+      <PromptInputCommand aria-label="输入命令">
+        <PromptInputCommandList>
+          <PromptInputCommandGroup label="命令">
+            <PromptInputCommandItem active selected>
+              选择项目
+            </PromptInputCommandItem>
+          </PromptInputCommandGroup>
+          <PromptInputCommandEmpty hidden>没有匹配的命令</PromptInputCommandEmpty>
+        </PromptInputCommandList>
+      </PromptInputCommand>,
+    );
+
+    expect(markup).toContain('role="listbox"');
+    expect(markup).toContain('aria-label="输入命令"');
+    expect(markup).toContain('role="option"');
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain("选择项目");
+    expect(markup).toContain('data-prompt-input-command=""');
   });
 
   it("renders an accessible confirmation composition", () => {

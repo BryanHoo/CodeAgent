@@ -1,6 +1,7 @@
 import { ArrowUp, LoaderCircle, Paperclip, Plus, Square } from "lucide-react";
 import {
   createContext,
+  forwardRef,
   useCallback,
   useContext,
   useEffect,
@@ -256,6 +257,77 @@ export function PromptInput({
 
 type PromptInputSectionProps = HTMLAttributes<HTMLDivElement>;
 
+export function PromptInputCommand({ className = "", ...props }: PromptInputSectionProps) {
+  return (
+    <div
+      className={`overflow-hidden rounded-surface border border-separator-strong bg-raised shadow-floating ${className}`}
+      data-prompt-input-command=""
+      role="listbox"
+      {...props}
+    />
+  );
+}
+
+export function PromptInputCommandList({ className = "", ...props }: PromptInputSectionProps) {
+  return <div className={`max-h-64 overflow-y-auto p-1 ${className}`} {...props} />;
+}
+
+type PromptInputCommandGroupProps = PromptInputSectionProps & { label: string };
+
+export function PromptInputCommandGroup({
+  children,
+  className = "",
+  label,
+  ...props
+}: PromptInputCommandGroupProps) {
+  return (
+    <div aria-label={label} className={className} role="group" {...props}>
+      <div className="px-2 py-1.5 text-caption font-medium text-muted-foreground">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+type PromptInputCommandItemProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  active?: boolean;
+  selected?: boolean;
+};
+
+export function PromptInputCommandItem({
+  active = false,
+  className = "",
+  onMouseDown,
+  selected = false,
+  type = "button",
+  ...props
+}: PromptInputCommandItemProps) {
+  return (
+    <button
+      aria-selected={selected}
+      className={`flex w-full items-center gap-2 rounded-control px-2 py-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover ${active ? "bg-control-active" : ""} ${className}`}
+      data-active={active || undefined}
+      onMouseDown={(event) => {
+        // 保留输入框焦点，避免鼠标选择命令时丢失光标上下文。
+        event.preventDefault();
+        onMouseDown?.(event);
+      }}
+      role="option"
+      type={type}
+      {...props}
+    />
+  );
+}
+
+export function PromptInputCommandEmpty({ className = "", ...props }: PromptInputSectionProps) {
+  return (
+    <div
+      className={`px-3 py-5 text-center text-body-small text-muted-foreground ${className}`}
+      role="status"
+      {...props}
+    />
+  );
+}
+
 export function PromptInputBody({ className = "", ...props }: PromptInputSectionProps) {
   return <div className={`px-3 pt-2 ${className}`} {...props} />;
 }
@@ -279,34 +351,34 @@ export function PromptInputTools({ className = "", ...props }: PromptInputSectio
 
 type PromptInputTextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement>;
 
-export function PromptInputTextarea({
-  className = "",
-  name = "message",
-  onKeyDown,
-  rows = 2,
-  ...props
-}: PromptInputTextareaProps) {
-  return (
-    <textarea
-      className={`max-h-40 min-h-12 w-full resize-none bg-transparent px-1 py-1 text-sm leading-5 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed ${className}`}
-      name={name}
-      onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-        onKeyDown?.(event);
-        if (
-          !event.defaultPrevented &&
-          event.key === "Enter" &&
-          !event.shiftKey &&
-          !event.nativeEvent.isComposing
-        ) {
-          event.preventDefault();
-          event.currentTarget.form?.requestSubmit();
-        }
-      }}
-      rows={rows}
-      {...props}
-    />
-  );
-}
+export const PromptInputTextarea = forwardRef<HTMLTextAreaElement, PromptInputTextareaProps>(
+  function PromptInputTextarea(
+    { className = "", name = "message", onKeyDown, rows = 2, ...props },
+    forwardedRef,
+  ) {
+    return (
+      <textarea
+        className={`max-h-40 min-h-12 w-full resize-none bg-transparent px-1 py-1 text-sm leading-5 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed ${className}`}
+        name={name}
+        onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+          onKeyDown?.(event);
+          if (
+            !event.defaultPrevented &&
+            event.key === "Enter" &&
+            !event.shiftKey &&
+            !event.nativeEvent.isComposing
+          ) {
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+          }
+        }}
+        ref={forwardedRef}
+        rows={rows}
+        {...props}
+      />
+    );
+  },
+);
 
 type PromptInputActionAddAttachmentsProps = PromptInputButtonProps & { label?: string };
 

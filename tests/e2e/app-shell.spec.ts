@@ -411,6 +411,59 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
 });
 
+test("opens the slash command project picker without changing backend context", async ({
+  page,
+}) => {
+  const turnRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().includes("/turns")) {
+      turnRequests.push(request.url());
+    }
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.fill("/");
+  const commandMenu = page.getByRole("listbox", { name: "输入命令" });
+  await expect(commandMenu).toBeVisible();
+  expect(await commandMenu.evaluate((menu) => menu.closest("form") === null)).toBe(true);
+  await expect(commandMenu.getByRole("option", { name: /选择项目/u })).toHaveAttribute(
+    "data-active",
+    "true",
+  );
+
+  await prompt.press("Enter");
+  const projectMenu = page.getByRole("listbox", { name: "选择项目" });
+  await expect(projectMenu).toBeVisible();
+  await expect(prompt).toHaveValue("");
+  await prompt.press("ArrowDown");
+  await expect(projectMenu.getByRole("option", { name: /superwork/u })).toHaveAttribute(
+    "data-active",
+    "true",
+  );
+  await prompt.press("Enter");
+  await expect(page.getByRole("button", { name: /当前为 superwork/u })).toBeVisible();
+  await expect(projectMenu).toHaveCount(0);
+  expect(turnRequests).toEqual([]);
+
+  // 点击预览标签可重新选择，Escape 只关闭前端菜单。
+  await prompt.fill("保留这段任务描述");
+  await page.getByRole("button", { name: /当前为 superwork/u }).click();
+  await expect(page.getByRole("listbox", { name: "选择项目" })).toBeVisible();
+  await expect(prompt).toHaveValue("保留这段任务描述");
+  await prompt.press("Escape");
+  await expect(page.getByRole("listbox", { name: "选择项目" })).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await prompt.fill("/");
+  await expect(page.getByRole("listbox", { name: "输入命令" })).toBeVisible();
+  const viewportMetrics = await page.evaluate(() => ({
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  }));
+  expect(viewportMetrics.documentWidth).toBeLessThanOrEqual(viewportMetrics.viewportWidth);
+});
+
 test("opens bounded source previews from assistant file references", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 

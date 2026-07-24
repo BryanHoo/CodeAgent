@@ -5,15 +5,17 @@ import type {
   AgentContextUsage,
   AgentModel,
   AgentPromptInput,
+  Project,
   AgentTask,
   AgentTaskSnapshot,
   AgentTurn,
   AgentTurnOptions,
 } from "@code-agent/protocol";
-import { Folder, GitBranch } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { Check, Folder, FolderOpen, GitBranch } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
+import { useProjects } from "../../projects/project-context.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
 import {
   Attachment,
@@ -26,6 +28,12 @@ import {
   PromptInput,
   PromptInputActionAddAttachments,
   PromptInputBody,
+  PromptInputButton,
+  PromptInputCommand,
+  PromptInputCommandEmpty,
+  PromptInputCommandGroup,
+  PromptInputCommandItem,
+  PromptInputCommandList,
   PromptInputFooter,
   PromptInputHeader,
   PromptInputSelect,
@@ -37,6 +45,12 @@ import {
   type PromptInputMessage,
 } from "../../../shared/ai-elements/prompt-input.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
+import {
+  filterPromptCommandItems,
+  movePromptCommandSelection,
+  resolvePromptSlashCommand,
+  type PromptCommandItem,
+} from "./prompt-command.js";
 
 export type ComposerState = "failed" | "idle" | "reconnecting" | "running" | "submitting";
 
@@ -79,6 +93,16 @@ const reasoningEffortLabels: Readonly<Record<string, string>> = {
   ultra: "超高",
   xhigh: "极高",
 };
+
+const promptCommands = [
+  {
+    id: "select-project",
+    keywords: ["project", "workspace", "项目", "工作区"],
+    label: "选择项目",
+  },
+] as const satisfies readonly PromptCommandItem[];
+
+type PromptCommandMenuMode = "commands" | "projects";
 
 export function formatContextUsage(usage: AgentContextUsage | null): Readonly<{
   accessibleLabel: string;
@@ -336,8 +360,12 @@ export function WorkbenchComposer({
   runtime,
   taskId,
 }: WorkbenchComposerProps) {
+  const { projects } = useProjects();
   const [approvalPolicy, setApprovalPolicy] = useState<AgentApprovalPolicy>("on-request");
+  const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const [attachmentCount, setAttachmentCount] = useState(0);
+  const [commandMenuMode, setCommandMenuMode] = useState<PromptCommandMenuMode | null>(null);
+  const [commandQuery, setCommandQuery] = useState("");
   const [composerRevision, setComposerRevision] = useState(0);
   const [draft, setDraft] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -345,7 +373,10 @@ export function WorkbenchComposer({
   const [pendingTaskId, setPendingTaskId] = useState<string>();
   const [selectedModelId, setSelectedModelId] = useState("");
   const [selectedReasoningEffortId, setSelectedReasoningEffortId] = useState("");
+  const [selectedPreviewProjectId, setSelectedPreviewProjectId] = useState<string>();
   const [submittedTurnId, setSubmittedTurnId] = useState<string>();
+  const commandMenuId = useId();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const startTaskAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const startTurnAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const interruptAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
@@ -372,9 +403,64 @@ export function WorkbenchComposer({
   const selectedReasoningEffort = resolveReasoningEffort(selectedModel, selectedReasoningEffortId);
   const contextUsage = formatContextUsage(runtime?.snapshot?.contextUsage ?? null);
   const { attachmentsDisabled, turnControlsDisabled } = deriveComposerInputAvailability(state);
+  const filteredCommands = filterPromptCommandItems(promptCommands, commandQuery);
+  const commandMenuItems: readonly (PromptCommandItem | Project)[] =
+    commandMenuMode === "projects" ? projects : filteredCommands;
+  const selectedPreviewProject = projects.find(
+    (project) => project.id === selectedPreviewProjectId,
+  );
+  const activeCommandItemId =
+    commandMenuMode === null || commandMenuItems.length === 0
+      ? undefined
+      : `${commandMenuId}-item-${String(activeCommandIndex)}`;
   const handleAttachmentsChange = useCallback((files: readonly PromptInputAttachment[]) => {
     setAttachmentCount(files.length);
   }, []);
+
+  useEffect(() => {
+    if (turnControlsDisabled) {
+      setCommandMenuMode(null);
+    }
+  }, [turnControlsDisabled]);
+
+  const focusTextarea = () => {
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  };
+
+  const openProjectMenu = () => {
+    setActiveCommandIndex(0);
+    setCommandMenuMode("projects");
+    setCommandQuery("");
+    focusTextarea();
+  };
+
+  const executeSelectProjectCommand = () => {
+    // 执行命令时只移除 `/` 命令片段，直接重开项目菜单则保留已有草稿。
+    setDraft("");
+    openProjectMenu();
+  };
+
+  const selectProject = (project: Project) => {
+    // 当前阶段只记录前端预览，不改变路由和真实 Turn 的 projectId。
+    setSelectedPreviewProjectId(project.id);
+    setCommandMenuMode(null);
+    focusTextarea();
+  };
+
+  const selectActiveCommandItem = () => {
+    if (commandMenuMode === "commands") {
+      if (filteredCommands[activeCommandIndex] !== undefined) {
+        executeSelectProjectCommand();
+      }
+      return;
+    }
+    const selectedProject = projects[activeCommandIndex];
+    if (selectedProject !== undefined) {
+      selectProject(selectedProject);
+    }
+  };
 
   const submitPrompt = async (message: PromptInputMessage) => {
     const text = message.text.trim();
@@ -490,116 +576,234 @@ export function WorkbenchComposer({
     }
   };
 
+  const commandMenu =
+    commandMenuMode === null || turnControlsDisabled ? null : (
+      <PromptInputCommand
+        aria-label={commandMenuMode === "commands" ? "输入命令" : "选择项目"}
+        className="absolute inset-x-0 bottom-full z-20 mb-2"
+        id={commandMenuId}
+      >
+        <PromptInputCommandList>
+          <PromptInputCommandGroup label={commandMenuMode === "commands" ? "命令" : "项目"}>
+            {commandMenuMode === "commands"
+              ? filteredCommands.map((command, index) => (
+                  <PromptInputCommandItem
+                    active={index === activeCommandIndex}
+                    id={`${commandMenuId}-item-${String(index)}`}
+                    key={command.id}
+                    onClick={executeSelectProjectCommand}
+                  >
+                    <FolderOpen className="size-4 text-accent" aria-hidden="true" />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="font-medium">{command.label}</span>
+                      <span className="text-caption text-muted-foreground">
+                        从已有工作区中选择一个项目
+                      </span>
+                    </span>
+                  </PromptInputCommandItem>
+                ))
+              : projects.map((project, index) => (
+                  <PromptInputCommandItem
+                    active={index === activeCommandIndex}
+                    id={`${commandMenuId}-item-${String(index)}`}
+                    key={project.id}
+                    onClick={() => {
+                      selectProject(project);
+                    }}
+                    selected={selectedPreviewProjectId === project.id}
+                  >
+                    <Folder className="size-4 shrink-0 text-accent" aria-hidden="true" />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate font-medium">{project.name}</span>
+                      <span className="truncate text-caption text-muted-foreground">
+                        {project.rootPath}
+                      </span>
+                    </span>
+                    {selectedPreviewProjectId === project.id ? (
+                      <Check className="size-4 shrink-0 text-accent" aria-hidden="true" />
+                    ) : null}
+                  </PromptInputCommandItem>
+                ))}
+          </PromptInputCommandGroup>
+          {commandMenuItems.length === 0 ? (
+            <PromptInputCommandEmpty>
+              {commandMenuMode === "commands" ? "没有匹配的命令" : "暂无可选项目"}
+            </PromptInputCommandEmpty>
+          ) : null}
+        </PromptInputCommandList>
+      </PromptInputCommand>
+    );
+
   return (
     <section className="shrink-0 bg-content px-3 pb-2 sm:px-5" aria-label="Composer">
-      <PromptInput
-        accept="image/gif,image/jpeg,image/png,image/webp"
-        aria-busy={state === "submitting" || state === "reconnecting"}
-        className="mx-auto w-full max-w-content"
-        data-state={state}
-        disabled={attachmentsDisabled}
-        globalDrop
-        key={composerRevision}
-        maxFiles={4}
-        maxFileSize={2 * 1024 * 1024}
-        multiple
-        onAttachmentsChange={handleAttachmentsChange}
-        onError={(error) => {
-          setMutationError(new Error(error.message));
-        }}
-        onSubmit={(message) => {
-          void submitPrompt(message);
-        }}
-      >
-        <ComposerAttachments />
-        <PromptInputBody>
-          <PromptInputTextarea
-            aria-label="任务输入"
-            disabled={turnControlsDisabled}
-            onChange={(event) => {
-              setDraft(event.currentTarget.value);
-            }}
-            placeholder={taskId === undefined ? "描述一个新任务" : "继续这个任务"}
-            value={draft}
-          />
-          {mutationError === null ? null : (
-            <p className="px-1 pb-1 text-label text-danger" role="alert">
-              操作失败，请重试
-            </p>
+      <div className="relative mx-auto w-full max-w-content">
+        {commandMenu}
+        <PromptInput
+          accept="image/gif,image/jpeg,image/png,image/webp"
+          aria-busy={state === "submitting" || state === "reconnecting"}
+          className="w-full"
+          data-state={state}
+          disabled={attachmentsDisabled}
+          globalDrop
+          key={composerRevision}
+          maxFiles={4}
+          maxFileSize={2 * 1024 * 1024}
+          multiple
+          onAttachmentsChange={handleAttachmentsChange}
+          onError={(error) => {
+            setMutationError(new Error(error.message));
+          }}
+          onSubmit={(message) => {
+            void submitPrompt(message);
+          }}
+        >
+          {selectedPreviewProject === undefined ? null : (
+            <PromptInputHeader className="flex items-center">
+              <PromptInputButton
+                aria-label={`重新选择预览项目，当前为 ${selectedPreviewProject.name}`}
+                className="max-w-full border border-separator-strong bg-control text-foreground"
+                onClick={openProjectMenu}
+                title="仅用于前端交互预览"
+              >
+                <FolderOpen className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
+                <span className="truncate">项目预览 · {selectedPreviewProject.name}</span>
+              </PromptInputButton>
+            </PromptInputHeader>
           )}
-        </PromptInputBody>
-        <PromptInputFooter>
-          <PromptInputTools>
-            <PromptInputActionAddAttachments disabled={attachmentsDisabled} label="添加图片" />
-            <PromptInputSelect
-              aria-label="批准模式"
+          <ComposerAttachments />
+          <PromptInputBody>
+            <PromptInputTextarea
+              aria-activedescendant={activeCommandItemId}
+              aria-controls={commandMenuMode === null ? undefined : commandMenuId}
+              aria-expanded={commandMenuMode !== null}
+              aria-haspopup="listbox"
+              aria-label="任务输入"
               disabled={turnControlsDisabled}
               onChange={(event) => {
-                setApprovalPolicy(event.currentTarget.value as AgentApprovalPolicy);
+                const nextDraft = event.currentTarget.value;
+                setDraft(nextDraft);
+                const slashCommand = resolvePromptSlashCommand(
+                  nextDraft,
+                  event.currentTarget.selectionStart,
+                );
+                if (slashCommand === null) {
+                  setCommandMenuMode(null);
+                  setCommandQuery("");
+                  return;
+                }
+                // 输入框起始 `/` 片段驱动命令过滤，普通正文不会打开菜单。
+                setActiveCommandIndex(0);
+                setCommandMenuMode("commands");
+                setCommandQuery(slashCommand.query);
               }}
-              value={approvalPolicy}
-            >
-              <option value="untrusted">仅不受信任操作</option>
-              <option value="on-request">按需审批</option>
-              <option value="never">永不询问</option>
-            </PromptInputSelect>
-          </PromptInputTools>
-          <div className="flex min-w-0 items-center gap-1">
-            <PromptInputSelect
-              aria-label="选择模型"
-              disabled={turnControlsDisabled || modelsPending || selectedModel === undefined}
-              onChange={(event) => {
-                setSelectedModelId(event.currentTarget.value);
+              onKeyDown={(event) => {
+                if (commandMenuMode === null || event.nativeEvent.isComposing) {
+                  return;
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setCommandMenuMode(null);
+                  return;
+                }
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveCommandIndex((currentIndex) =>
+                    movePromptCommandSelection(
+                      currentIndex,
+                      event.key === "ArrowDown" ? 1 : -1,
+                      commandMenuItems.length,
+                    ),
+                  );
+                  return;
+                }
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  selectActiveCommandItem();
+                }
               }}
-              value={selectedModel?.id ?? ""}
-            >
-              {models.length === 0 ? (
-                <option value="">{modelsPending ? "模型加载中" : "暂无可用模型"}</option>
-              ) : (
-                models.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.displayName}
-                  </option>
-                ))
-              )}
-            </PromptInputSelect>
-            <PromptInputSelect
-              aria-label="选择思考量"
-              disabled={turnControlsDisabled || modelsPending || selectedModel === undefined}
-              onChange={(event) => {
-                setSelectedReasoningEffortId(event.currentTarget.value);
-              }}
-              title={
-                selectedModel?.supportedReasoningEfforts.find(
-                  (option) => option.id === selectedReasoningEffort,
-                )?.description
-              }
-              value={selectedReasoningEffort ?? ""}
-            >
-              {selectedModel?.supportedReasoningEfforts.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {reasoningEffortLabels[option.id] ?? option.id}
-                </option>
-              ))}
-            </PromptInputSelect>
-            <PromptInputSubmit
-              aria-label={state === "running" ? "停止" : "提交"}
-              disabled={
-                turnControlsDisabled ||
-                (state !== "running" &&
-                  (!canSubmit ||
-                    selectedModel === undefined ||
-                    selectedReasoningEffort === undefined ||
-                    (trimmedDraft === "" && attachmentCount === 0))) ||
-                (state === "running" && (!canInterrupt || activeTurnId === undefined))
-              }
-              onClick={state === "running" ? () => void interruptTurn() : undefined}
-              status={state}
-              type={state === "running" ? "button" : "submit"}
+              placeholder={taskId === undefined ? "描述一个新任务" : "继续这个任务"}
+              ref={textareaRef}
+              value={draft}
             />
-          </div>
-        </PromptInputFooter>
-      </PromptInput>
+            {mutationError === null ? null : (
+              <p className="px-1 pb-1 text-label text-danger" role="alert">
+                操作失败，请重试
+              </p>
+            )}
+          </PromptInputBody>
+          <PromptInputFooter>
+            <PromptInputTools>
+              <PromptInputActionAddAttachments disabled={attachmentsDisabled} label="添加图片" />
+              <PromptInputSelect
+                aria-label="批准模式"
+                disabled={turnControlsDisabled}
+                onChange={(event) => {
+                  setApprovalPolicy(event.currentTarget.value as AgentApprovalPolicy);
+                }}
+                value={approvalPolicy}
+              >
+                <option value="untrusted">仅不受信任操作</option>
+                <option value="on-request">按需审批</option>
+                <option value="never">永不询问</option>
+              </PromptInputSelect>
+            </PromptInputTools>
+            <div className="flex min-w-0 items-center gap-1">
+              <PromptInputSelect
+                aria-label="选择模型"
+                disabled={turnControlsDisabled || modelsPending || selectedModel === undefined}
+                onChange={(event) => {
+                  setSelectedModelId(event.currentTarget.value);
+                }}
+                value={selectedModel?.id ?? ""}
+              >
+                {models.length === 0 ? (
+                  <option value="">{modelsPending ? "模型加载中" : "暂无可用模型"}</option>
+                ) : (
+                  models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.displayName}
+                    </option>
+                  ))
+                )}
+              </PromptInputSelect>
+              <PromptInputSelect
+                aria-label="选择思考量"
+                disabled={turnControlsDisabled || modelsPending || selectedModel === undefined}
+                onChange={(event) => {
+                  setSelectedReasoningEffortId(event.currentTarget.value);
+                }}
+                title={
+                  selectedModel?.supportedReasoningEfforts.find(
+                    (option) => option.id === selectedReasoningEffort,
+                  )?.description
+                }
+                value={selectedReasoningEffort ?? ""}
+              >
+                {selectedModel?.supportedReasoningEfforts.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {reasoningEffortLabels[option.id] ?? option.id}
+                  </option>
+                ))}
+              </PromptInputSelect>
+              <PromptInputSubmit
+                aria-label={state === "running" ? "停止" : "提交"}
+                disabled={
+                  turnControlsDisabled ||
+                  (state !== "running" &&
+                    (!canSubmit ||
+                      selectedModel === undefined ||
+                      selectedReasoningEffort === undefined ||
+                      (trimmedDraft === "" && attachmentCount === 0))) ||
+                  (state === "running" && (!canInterrupt || activeTurnId === undefined))
+                }
+                onClick={state === "running" ? () => void interruptTurn() : undefined}
+                status={state}
+                type={state === "running" ? "button" : "submit"}
+              />
+            </div>
+          </PromptInputFooter>
+        </PromptInput>
+      </div>
       {modelsError === null ? null : (
         <p className="mx-auto mt-1 w-full max-w-content px-1 text-caption text-danger" role="alert">
           模型列表加载失败
