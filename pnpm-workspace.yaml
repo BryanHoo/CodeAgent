@@ -38,6 +38,7 @@ catalog:
   vite: 8.1.5
   vitest: 4.1.10
   ws: 8.21.1
+  streamdown: 2.5.0
 
 catalogMode: strict
 cleanupUnusedCatalogs: true

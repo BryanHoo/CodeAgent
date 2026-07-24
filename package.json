@@ -26,6 +26,7 @@
     "lint": "eslint . --max-warnings 0",
     "lint:architecture": "depcruise --config dependency-cruiser.config.cjs src apps/web/src packages/*/src",
     "package:check": "node ./tools/verify-package.mjs",
+    "start": "pnpm run build && node ./dist/cli.js start --project .",
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
     "test:e2e": "pnpm build && playwright test",

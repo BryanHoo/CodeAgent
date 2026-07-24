@@ -15,7 +15,8 @@
     "@tanstack/react-router": "catalog:",
     "lucide-react": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "streamdown": "catalog:"
   },
   "devDependencies": {
     "@tailwindcss/vite": "catalog:",
