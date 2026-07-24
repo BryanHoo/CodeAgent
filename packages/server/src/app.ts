@@ -14,6 +14,7 @@ import {
   InterruptAgentTurnResponseSchema,
   ProjectPageSchema,
   ProjectGitStatusSchema,
+  ProjectSourceFileSchema,
   ResolvePendingRequestRequestSchema,
   ResolvePendingRequestResponseSchema,
   StartAgentTaskRequestSchema,
@@ -26,6 +27,7 @@ import {
   type EventStreamMessage,
   type Project,
   type ProjectGitStatus,
+  type ProjectSourceFile,
   type ResolvePendingRequestRequest,
   type StartAgentTurnRequest,
 } from "@code-agent/protocol";
@@ -36,6 +38,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { AgentEventStream } from "./agent-event-stream.js";
 import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js";
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
+import { readProjectSourceFile } from "./project-source-file.js";
 
 export interface CreateCodeAgentServerOptions {
   eventBufferSize?: number;
@@ -45,6 +48,7 @@ export interface CreateCodeAgentServerOptions {
   project: Project;
   provider: AgentProvider;
   readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
+  readProjectSourceFile?: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
   staticRoot?: string;
 }
 
@@ -88,6 +92,13 @@ const TaskPageQuerySchema = {
     cursor: { minLength: 1, type: "string" },
     limit: { maximum: 100, minimum: 1, type: "integer" },
   },
+  type: "object",
+} as const;
+
+const SourceFileQuerySchema = {
+  additionalProperties: false,
+  properties: { path: { minLength: 1, type: "string" } },
+  required: ["path"],
   type: "object",
 } as const;
 
@@ -174,6 +185,7 @@ export async function createCodeAgentServer(
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   const readProjectGitStatus = options.readProjectGitStatus ?? readGitWorkingTreeStatus;
+  const readSourceFile = options.readProjectSourceFile ?? readProjectSourceFile;
   const attachmentStore = new AttachmentStore();
   const capabilities = await options.provider.getCapabilities();
   const eventStream = new AgentEventStream({
@@ -341,6 +353,34 @@ export async function createCodeAgentServer(
         return reply.code(500).send({
           code: "GIT_STATUS_UNAVAILABLE",
           message: "Git working tree status is unavailable",
+        });
+      }
+    },
+  );
+
+  app.get<{ Params: { projectId: string }; Querystring: { path: string } }>(
+    "/v1/projects/:projectId/files/source",
+    {
+      schema: {
+        params: ProjectParamsSchema,
+        querystring: SourceFileQuerySchema,
+        response: {
+          200: ProjectSourceFileSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (request.params.projectId !== options.project.id) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      try {
+        return await readSourceFile(options.project.rootPath, request.query.path);
+      } catch {
+        // 路径越界、文件不存在和二进制文件统一隐藏为不可预览，避免泄露本机文件信息。
+        return reply.code(404).send({
+          code: "SOURCE_FILE_NOT_FOUND",
+          message: "Source file is unavailable",
         });
       }
     },

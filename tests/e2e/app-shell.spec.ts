@@ -124,7 +124,7 @@ const taskSnapshot = {
         {
           id: "message-2",
           role: "assistant",
-          text: "工作台界面已按统一的 AI Elements 结构重新组织。",
+          text: "工作台界面已按统一的 AI Elements 结构重新组织。\n\n[architecture-design.md](/workspace/CodeAgent/docs/architecture-design.md:716)",
           type: "message",
         },
       ],
@@ -138,6 +138,10 @@ const taskSnapshotResponse = {
   checkpoint: { sequence: 0, sessionId: "e2e-session" },
   snapshot: taskSnapshot,
 };
+
+const architectureSourcePreview = Array.from({ length: 720 }, (_, lineIndex) =>
+  lineIndex === 715 ? "### 11.7 认证" : `line ${String(lineIndex + 1)}`,
+).join("\n");
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/v1/**", async (route) => {
@@ -156,6 +160,12 @@ test.beforeEach(async ({ page }) => {
       body = { data: models, nextCursor: null };
     } else if (url.pathname === "/v1/projects") {
       body = { data: projects, nextCursor: null };
+    } else if (url.pathname === "/v1/projects/code-agent/files/source") {
+      body = {
+        content: architectureSourcePreview,
+        path: "docs/architecture-design.md",
+        truncated: true,
+      };
     } else if (url.pathname.startsWith("/v1/projects/") && url.pathname.endsWith("/tasks")) {
       const projectId = url.pathname.split("/")[3];
       body = { data: tasks.filter((task) => task.projectId === projectId), nextCursor: null };
@@ -399,6 +409,19 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(contextUsageTooltip).toContainText("25K / 200K tokens");
   await expect(inspector.getByRole("button", { name: "关闭上下文面板" })).toHaveCount(0);
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+});
+
+test("opens bounded source previews from assistant file references", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  await page.getByRole("button", { name: "architecture-design.md(line 716)" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "architecture-design.md (line 716)" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("内容已截断")).toBeVisible();
+  await expect(dialog.locator('[data-source-line="716"]')).toContainText("### 11.7 认证");
+  await expect(dialog.locator('[data-source-line="716"]')).toHaveClass(/bg-accent-soft/u);
+  await expect(dialog.locator('[data-source-line="716"]')).toHaveClass(/text-accent-strong/u);
 });
 
 test("submits attachments, approval policy, model, and reasoning effort through the real client contract", async ({

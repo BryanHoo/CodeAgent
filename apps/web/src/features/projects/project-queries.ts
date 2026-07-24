@@ -3,6 +3,7 @@ import { queryOptions } from "@tanstack/react-query";
 
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
 export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
+export type CodeAgentSourceFileClient = Pick<CodeAgentClient, "readProjectSourceFile">;
 export type CodeAgentRuntimeClient = Pick<CodeAgentClient, "readTask" | "subscribeEvents">;
 export type CodeAgentCapabilitiesClient = Pick<CodeAgentClient, "getCapabilities">;
 export type CodeAgentModelsClient = Pick<CodeAgentClient, "listModels">;
@@ -17,7 +18,8 @@ export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentMutationClient &
   CodeAgentPendingRequestClient &
   CodeAgentCapabilitiesClient &
-  CodeAgentModelsClient;
+  CodeAgentModelsClient &
+  CodeAgentSourceFileClient;
 type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
 
 export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 1_500;

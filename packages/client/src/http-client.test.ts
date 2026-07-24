@@ -104,6 +104,27 @@ describe("CodeAgentClient", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects/project%20one/git/status");
   });
 
+  it("reads and validates a bounded project source preview", async () => {
+    const sourceFile = {
+      content: "### 11.7 认证\n",
+      path: "docs/architecture-design.md",
+      truncated: true,
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse(sourceFile));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(
+      client.readProjectSourceFile(
+        "project one",
+        "/workspace/CodeAgent/docs/architecture-design.md",
+      ),
+    ).resolves.toEqual(sourceFile);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/projects/project%20one/files/source?path=%2Fworkspace%2FCodeAgent%2Fdocs%2Farchitecture-design.md",
+    );
+  });
+
   it("uses the configured base URL for all read methods", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock

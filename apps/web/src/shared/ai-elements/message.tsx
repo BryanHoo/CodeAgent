@@ -25,6 +25,15 @@ type FileReferenceMetadata = Readonly<{
   path: string;
 }>;
 
+export type MessageFileReference = Readonly<{
+  lineNumber: number | null;
+  path: string;
+}>;
+
+const MessageFileReferenceContext = createContext<
+  ((reference: MessageFileReference) => void) | null
+>(null);
+
 // Agent 输出使用“绝对路径:行号”表达文件定位；渲染时拆出行号，避免把路径暴露给用户。
 const LOCAL_FILE_REFERENCE_PATTERN = /^(?<path>\/.+?\.[a-z0-9]+?)(?::(?<line>\d+)(?::\d+)?)?$/i;
 
@@ -54,20 +63,47 @@ function MarkdownLink({ children, className = "", href, node, ...props }: Markdo
   // Streamdown 注入的语法树节点不能透传给原生元素。
   void node;
   const fileReference = getFileReferenceMetadata(href);
+  const onOpenFileReference = useContext(MessageFileReferenceContext);
 
   if (fileReference !== null) {
-    return (
-      <span
-        className={`markdown-file-reference text-accent ${className}`}
-        data-file-reference="true"
-        title={fileReference.path}
-      >
+    const content = (
+      <>
         <span>{children}</span>
         {fileReference.lineNumber === null ? null : (
           <span className="markdown-file-reference__line">
             {`(line ${fileReference.lineNumber})`}
           </span>
         )}
+      </>
+    );
+
+    if (onOpenFileReference !== null) {
+      return (
+        <button
+          className={`markdown-file-reference cursor-pointer text-accent underline decoration-transparent underline-offset-2 transition-colors hover:text-accent-strong hover:decoration-current ${className}`}
+          data-file-reference="true"
+          onClick={() => {
+            onOpenFileReference({
+              lineNumber:
+                fileReference.lineNumber === null ? null : Number(fileReference.lineNumber),
+              path: fileReference.path,
+            });
+          }}
+          title={fileReference.path}
+          type="button"
+        >
+          {content}
+        </button>
+      );
+    }
+
+    return (
+      <span
+        className={`markdown-file-reference text-accent ${className}`}
+        data-file-reference="true"
+        title={fileReference.path}
+      >
+        {content}
       </span>
     );
   }
@@ -310,12 +346,15 @@ export function MessageBranchPage({ className = "", ...props }: MessageBranchPag
   );
 }
 
-export type MessageResponseProps = ComponentProps<typeof Streamdown>;
+export type MessageResponseProps = ComponentProps<typeof Streamdown> & {
+  onOpenFileReference?: (reference: MessageFileReference) => void;
+};
 
 function MessageResponseContent({
   children,
   className = "",
   components,
+  onOpenFileReference,
   ...props
 }: MessageResponseProps) {
   const parsedResponse = parseCodeComments(children ?? "");
@@ -325,7 +364,7 @@ function MessageResponseContent({
   };
 
   return (
-    <>
+    <MessageFileReferenceContext.Provider value={onOpenFileReference ?? null}>
       <Streamdown
         className={`size-full break-words [&_blockquote]:border-l-2 [&_blockquote]:border-separator [&_blockquote]:pl-3 [&_code]:font-mono [&_code]:text-body-small [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_pre]:overflow-x-auto [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 ${className}`}
         controls={{ code: { copy: true, download: false }, mermaid: false, table: false }}
@@ -335,7 +374,7 @@ function MessageResponseContent({
         {parsedResponse.markdown}
       </Streamdown>
       <CodeComments comments={parsedResponse.comments} />
-    </>
+    </MessageFileReferenceContext.Provider>
   );
 }
 
@@ -343,7 +382,8 @@ export const MessageResponse = memo(
   MessageResponseContent,
   (previousProps, nextProps) =>
     previousProps.children === nextProps.children &&
-    previousProps.isAnimating === nextProps.isAnimating,
+    previousProps.isAnimating === nextProps.isAnimating &&
+    previousProps.onOpenFileReference === nextProps.onOpenFileReference,
 );
 
 MessageResponse.displayName = "MessageResponse";

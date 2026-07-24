@@ -15,6 +15,7 @@
 - WebSocket 控制帧使用 `connection.ready` 和 `resync.required`；恢复原因只使用 Protocol 定义的判别值。
 - Provider 专有数据只进入诊断字段或 `extensions`，未知事件记录告警但不破坏事件循环。
 - Task Snapshot 必须保留归一化的 Turn 与 Tool 错误；Command Output 最多保留最新 `10,000` 行或 `1 MiB`，并携带截断状态。
+- Project 源文件预览必须返回 Project 相对路径、文本内容和截断状态；Server 必须解析真实路径并拒绝越界路径、越界符号链接、目录和二进制文件，单次预览最多读取 `256 KiB`、最多返回 `4,000` 行。
 - Agent 写入必须由 Protocol 提供结构化 `AgentPromptInput`、Task/Turn Mutation 请求响应、能力和错误 Schema；Client 与 Server 都必须执行运行时校验。
 - 模型目录使用统一 `AgentModelPage` 并保留每个模型的默认与可用思考量；图片上传返回不含 Data URL 和本地路径的 `AgentAttachment`，Turn 只接收附件 ID、`AgentApprovalPolicy`、非空模型 ID 和该模型支持的思考量。
 - Task Snapshot 使用 `contextUsage` 保存最近一轮上下文用量，实时链路使用 `usage.updated` 同步更新；占用值必须来自 Provider 的最近一轮 Token Usage 与模型上下文窗口。

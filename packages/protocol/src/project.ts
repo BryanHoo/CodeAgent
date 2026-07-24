@@ -97,6 +97,17 @@ export const ProjectGitStatusSchema = Type.Object(
 
 export type ProjectGitStatus = Readonly<Static<typeof ProjectGitStatusSchema>>;
 
+export const ProjectSourceFileSchema = Type.Object(
+  {
+    content: Type.String(),
+    path: Type.String({ minLength: 1, pattern: "^(?![A-Za-z]:[\\\\/])(?!/).+" }),
+    truncated: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectSourceFile = Readonly<Static<typeof ProjectSourceFileSchema>>;
+
 export const AgentFileChangeItemSchema = Type.Object(
   {
     changes: Type.Array(AgentFileChangeSchema),

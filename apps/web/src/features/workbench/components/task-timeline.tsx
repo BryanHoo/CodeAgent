@@ -16,6 +16,7 @@ import {
   MessageActions,
   MessageContent,
   MessageResponse,
+  type MessageFileReference,
 } from "../../../shared/ai-elements/message.js";
 import {
   Reasoning,
@@ -32,6 +33,7 @@ import { PendingRequestCard, type PendingRequestResolution } from "./pending-req
 
 type TaskTimelineProps = Readonly<{
   onOpenFileDiff?: (change: AgentFileChange) => void;
+  onOpenSourceFile?: (reference: MessageFileReference) => void;
   projectName: string;
   onResolvePendingRequest?: (
     request: PendingRequest,
@@ -71,6 +73,7 @@ function TimelineState({
 
 export function TaskTimeline({
   onOpenFileDiff,
+  onOpenSourceFile,
   onResolvePendingRequest,
   projectName,
   runtime,
@@ -85,6 +88,7 @@ export function TaskTimeline({
   return (
     <ActiveTaskTimeline
       onOpenFileDiff={onOpenFileDiff ?? (() => undefined)}
+      onOpenSourceFile={onOpenSourceFile ?? (() => undefined)}
       onResolvePendingRequest={onResolvePendingRequest ?? (() => Promise.resolve())}
       runtime={runtime}
     />
@@ -93,6 +97,7 @@ export function TaskTimeline({
 
 function ActiveTaskTimeline({
   onOpenFileDiff,
+  onOpenSourceFile,
   onResolvePendingRequest,
   runtime,
 }: Readonly<{
@@ -102,6 +107,7 @@ function ActiveTaskTimeline({
     idempotencyKey: string,
   ) => Promise<void>;
   onOpenFileDiff: (change: AgentFileChange) => void;
+  onOpenSourceFile: (reference: MessageFileReference) => void;
   runtime: TaskRuntimeView;
 }>) {
   if (runtime.error !== null) {
@@ -123,6 +129,7 @@ function ActiveTaskTimeline({
       <TaskSnapshotTimeline
         connected={runtime.connectionState === "connected"}
         onOpenFileDiff={onOpenFileDiff}
+        onOpenSourceFile={onOpenSourceFile}
         onResolvePendingRequest={onResolvePendingRequest}
         snapshot={runtime.snapshot}
       />
@@ -272,11 +279,13 @@ function FileChangeButton({
 export function TaskSnapshotTimeline({
   connected = true,
   onOpenFileDiff = () => undefined,
+  onOpenSourceFile = () => undefined,
   onResolvePendingRequest = () => Promise.resolve(),
   snapshot,
 }: Readonly<{
   connected?: boolean;
   onOpenFileDiff?: (change: AgentFileChange) => void;
+  onOpenSourceFile?: (reference: MessageFileReference) => void;
   onResolvePendingRequest?: (
     request: PendingRequest,
     resolution: PendingRequestResolution,
@@ -316,7 +325,9 @@ export function TaskSnapshotTimeline({
                   return (
                     <Message from={item.role} key={item.id}>
                       <MessageContent className={item.role === "assistant" ? "w-full" : ""}>
-                        <MessageResponse>{item.text}</MessageResponse>
+                        <MessageResponse onOpenFileReference={onOpenSourceFile}>
+                          {item.text}
+                        </MessageResponse>
                       </MessageContent>
                       <MessageMetadata
                         text={item.text}

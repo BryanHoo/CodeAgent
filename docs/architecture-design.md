@@ -429,6 +429,16 @@ POST /v1/turns/:turnId/interrupt
 
 `turn/interrupt` 只返回 `{ status: "interrupting", taskId, turnId }`；Turn 是否真正中断由后续 `turn.completed` 事件决定。错误统一映射为 Protocol 定义的 `{ code, message, retryable }`，不得向 Web 暴露原生 RPC 细节。
 
+### 8.5 Project 源文件预览 API
+
+AI 回复中的本地文件引用通过以下只读端点打开：
+
+```text
+GET /v1/projects/:projectId/files/source?path=:path
+```
+
+Server 必须先验证 Project，再对 Project 根目录和目标文件执行 `realpath` 边界检查，拒绝越界路径、越界符号链接、目录和二进制文件。响应只返回 Project 相对路径、文本预览与 `truncated`，单次最多读取 `256 KiB`、最多返回 `4,000` 行；Web 在弹窗中显示行号、定位引用行，并明确提示内容已截断。
+
 ## 9. 统一领域模型
 
 ### 9.1 核心实体
@@ -510,6 +520,7 @@ GET    /v1/models
 POST   /v1/attachments
 GET    /v1/projects
 POST   /v1/projects
+GET    /v1/projects/:projectId/files/source
 GET    /v1/projects/:projectId/tasks
 POST   /v1/projects/:projectId/tasks
 GET    /v1/tasks/:taskId

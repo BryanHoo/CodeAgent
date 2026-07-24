@@ -9,6 +9,7 @@ import {
   HealthResponseSchema,
   ProjectPageSchema,
   ProjectGitStatusSchema,
+  ProjectSourceFileSchema,
   ResolvePendingRequestResponseSchema,
   StartAgentTaskResponseSchema,
   StartAgentTurnResponseSchema,
@@ -25,6 +26,7 @@ import {
   type InterruptAgentTurnResponse,
   type ProjectPage,
   type ProjectGitStatus,
+  type ProjectSourceFile,
   type PendingRequest,
   type ResolvePendingRequestRequest,
   type ResolvePendingRequestResponse,
@@ -132,6 +134,13 @@ export class CodeAgentClient {
       `/v1/projects/${encodeURIComponent(projectId)}/git/status`,
       ProjectGitStatusSchema,
     );
+  }
+
+  public async readProjectSourceFile(projectId: string, path: string): Promise<ProjectSourceFile> {
+    const requestPath = appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/files/source`, {
+      path,
+    });
+    return this.#request(requestPath, ProjectSourceFileSchema);
   }
 
   public async listTasks(

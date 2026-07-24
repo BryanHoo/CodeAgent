@@ -22,6 +22,7 @@ import {
   HealthResponseSchema,
   ProjectPageSchema,
   ProjectGitStatusSchema,
+  ProjectSourceFileSchema,
   ProjectSchema,
   ResolvePendingRequestRequestSchema,
   ResolvePendingRequestResponseSchema,
@@ -105,6 +106,23 @@ describe("project protocol", () => {
         staged: [],
         unstaged: [],
         legacyChanges: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("describes a bounded project source file preview", () => {
+    expect(
+      Value.Check(ProjectSourceFileSchema, {
+        content: "# Architecture\n",
+        path: "docs/architecture-design.md",
+        truncated: true,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ProjectSourceFileSchema, {
+        content: "# Architecture\n",
+        path: "/workspace/CodeAgent/docs/architecture-design.md",
+        truncated: false,
       }),
     ).toBe(false);
   });

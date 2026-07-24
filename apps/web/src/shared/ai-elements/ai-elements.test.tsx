@@ -95,6 +95,26 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain("(line 948)");
   });
 
+  it("renders local Markdown file references as source preview buttons when enabled", () => {
+    const markup = renderToStaticMarkup(
+      <Message from="assistant">
+        <MessageContent>
+          <MessageResponse onOpenFileReference={() => undefined}>
+            {"[architecture-design.md](/workspace/docs/architecture-design.md:716)"}
+          </MessageResponse>
+        </MessageContent>
+      </Message>,
+    );
+
+    expect(markup).toContain('<button class="markdown-file-reference');
+    expect(markup).toContain("cursor-pointer");
+    expect(markup).toContain("hover:decoration-current");
+    expect(markup).toContain('data-file-reference="true"');
+    expect(markup).toContain("architecture-design.md");
+    expect(markup).toContain("(line 716)");
+    expect(markup).not.toContain('href="/workspace/docs/architecture-design.md:716"');
+  });
+
   it("extracts code review directives into a dedicated comments summary", () => {
     const reviewMarkdown = `发现 3 个需要修复的问题：
 

@@ -232,6 +232,41 @@ describe("CodeAgent Server", () => {
     expect(readProjectGitStatus).toHaveBeenCalledTimes(1);
   });
 
+  it("serves bounded source previews only for the configured project", async () => {
+    const { provider } = createProvider();
+    const readProjectSourceFile = vi.fn(() =>
+      Promise.resolve({
+        content: "### 11.7 认证\n",
+        path: "docs/architecture-design.md",
+        truncated: true,
+      }),
+    );
+    const app = await createCodeAgentServer({ project, provider, readProjectSourceFile });
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/files/source?path=%2Fworkspace%2FCodeAgent%2Fdocs%2Farchitecture-design.md",
+    });
+    const missingProjectResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/other/files/source?path=docs%2Farchitecture-design.md",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      content: "### 11.7 认证\n",
+      path: "docs/architecture-design.md",
+      truncated: true,
+    });
+    expect(readProjectSourceFile).toHaveBeenCalledWith(
+      project.rootPath,
+      "/workspace/CodeAgent/docs/architecture-design.md",
+    );
+    expect(missingProjectResponse.statusCode).toBe(404);
+    expect(readProjectSourceFile).toHaveBeenCalledTimes(1);
+  });
+
   it("serves models and resolves uploaded attachments before starting a turn", async () => {
     const { app, listModels, startTurn } = await createHarness();
     const models = await app.inject({ method: "GET", url: "/v1/models" });

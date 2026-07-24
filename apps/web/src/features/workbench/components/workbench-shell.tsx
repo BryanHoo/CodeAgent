@@ -1,7 +1,7 @@
 import type { AgentCapabilities, AgentModel, PendingRequest } from "@code-agent/protocol";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Ellipsis, ExternalLink, PanelLeft, PanelRight } from "lucide-react";
 
 import { useProjects } from "../../projects/project-context.js";
@@ -17,7 +17,9 @@ import {
   projectGitStatusQueryOptions,
 } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
+import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
 import { ProjectSidebar } from "./project-sidebar.js";
+import { ProjectSourceDialog } from "./project-source-dialog.js";
 import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
 import { WorkbenchComposer } from "./workbench-composer.js";
@@ -53,6 +55,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     change: AgentFileChange;
     projectId: string;
   } | null>(null);
+  const [sourceFileSelection, setSourceFileSelection] = useState<{
+    projectId: string;
+    reference: MessageFileReference;
+  } | null>(null);
   const project = projects.find((item) => item.id === projectId);
   const projectName = project?.name ?? projectId;
   const projectPath = project?.rootPath ?? projectId;
@@ -61,9 +67,19 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     fileDiffSelection !== null && fileDiffSelection.projectId === projectId
       ? fileDiffSelection.change
       : null;
+  const selectedSourceFile =
+    sourceFileSelection !== null && sourceFileSelection.projectId === projectId
+      ? sourceFileSelection.reference
+      : null;
   const openFileDiff = (change: AgentFileChange) => {
     setFileDiffSelection({ change, projectId });
   };
+  const openSourceFile = useCallback(
+    (reference: MessageFileReference) => {
+      setSourceFileSelection({ projectId, reference });
+    },
+    [projectId],
+  );
 
   const closeSidebar = () => {
     setSidebarOpen(false);
@@ -221,6 +237,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             runtime={runtime}
             taskId={taskId}
             onOpenFileDiff={openFileDiff}
+            onOpenSourceFile={openSourceFile}
           />
         )}
       </main>
@@ -247,6 +264,14 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           setFileDiffSelection(null);
         }}
       />
+      <ProjectSourceDialog
+        client={client}
+        onClose={() => {
+          setSourceFileSelection(null);
+        }}
+        projectId={projectId}
+        reference={selectedSourceFile}
+      />
     </div>
   );
 }
@@ -263,6 +288,7 @@ function ActiveTaskWorkbench({
   runtime,
   taskId,
   onOpenFileDiff,
+  onOpenSourceFile,
 }: Readonly<{
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentWorkbenchClient;
@@ -275,6 +301,7 @@ function ActiveTaskWorkbench({
   runtime: TaskRuntimeView;
   taskId: string;
   onOpenFileDiff: (change: AgentFileChange) => void;
+  onOpenSourceFile: (reference: MessageFileReference) => void;
 }>) {
   const resolvePendingRequest = (
     request: PendingRequest,
@@ -286,6 +313,7 @@ function ActiveTaskWorkbench({
     <>
       <TaskTimeline
         onOpenFileDiff={onOpenFileDiff}
+        onOpenSourceFile={onOpenSourceFile}
         onResolvePendingRequest={resolvePendingRequest}
         projectName={projectName}
         runtime={runtime}
