@@ -8,6 +8,7 @@ import {
   AgentTaskSnapshotResponseSchema,
   HealthResponseSchema,
   ProjectPageSchema,
+  ProjectGitStatusSchema,
   ResolvePendingRequestResponseSchema,
   StartAgentTaskResponseSchema,
   StartAgentTurnResponseSchema,
@@ -23,6 +24,7 @@ import {
   type HealthResponse,
   type InterruptAgentTurnResponse,
   type ProjectPage,
+  type ProjectGitStatus,
   type PendingRequest,
   type ResolvePendingRequestRequest,
   type ResolvePendingRequestResponse,
@@ -123,6 +125,13 @@ export class CodeAgentClient {
 
   public async listProjects(): Promise<ProjectPage> {
     return this.#request("/v1/projects", ProjectPageSchema);
+  }
+
+  public async getProjectGitStatus(projectId: string): Promise<ProjectGitStatus> {
+    return this.#request(
+      `/v1/projects/${encodeURIComponent(projectId)}/git/status`,
+      ProjectGitStatusSchema,
+    );
   }
 
   public async listTasks(

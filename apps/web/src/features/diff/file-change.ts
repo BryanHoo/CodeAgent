@@ -1,7 +1,5 @@
 import type { AgentItem } from "@code-agent/protocol";
 
-import type { RuntimeTaskSnapshot } from "../conversation/runtime/task-runtime.js";
-
 export type AgentFileChange = Extract<AgentItem, { type: "file_change" }>["changes"][number];
 
 export type FileChangeStats = Readonly<{
@@ -58,28 +56,6 @@ export function countFileChangeLines(change: AgentFileChange): FileChangeStats {
   }
 
   return { additions, removals };
-}
-
-export function collectSnapshotFileChanges(
-  snapshot: RuntimeTaskSnapshot | undefined,
-): readonly AgentFileChange[] {
-  if (snapshot === undefined) {
-    return [];
-  }
-
-  const latestChangeByPath = new Map<string, AgentFileChange>();
-  for (const turn of snapshot.turns) {
-    for (const item of turn.items) {
-      // Inspector 只汇总已落盘变更，审批中、拒绝或失败的补丁仍仅保留在时间线中。
-      if (item.type !== "file_change" || item.status !== "completed") {
-        continue;
-      }
-      for (const change of item.changes) {
-        latestChangeByPath.set(change.path, change);
-      }
-    }
-  }
-  return [...latestChangeByPath.values()];
 }
 
 function getPatchFileHeaders(change: AgentFileChange): Readonly<{

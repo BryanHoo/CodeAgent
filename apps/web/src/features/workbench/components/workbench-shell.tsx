@@ -1,7 +1,7 @@
 import type { AgentCapabilities, AgentModel, PendingRequest } from "@code-agent/protocol";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Ellipsis, ExternalLink, PanelLeft, PanelRight } from "lucide-react";
 
 import { useProjects } from "../../projects/project-context.js";
@@ -12,7 +12,10 @@ import {
 import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
-import { modelsQueryOptions } from "../../projects/project-queries.js";
+import {
+  modelsQueryOptions,
+  projectGitStatusQueryOptions,
+} from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { ProjectSidebar } from "./project-sidebar.js";
 import { TaskTimeline } from "./task-timeline.js";
@@ -38,6 +41,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const queryClient = useQueryClient();
   const modelsQuery = useQuery(modelsQueryOptions(client));
   const runtime = useTaskRuntime(taskId, client);
+  const isTaskRunning = runtime.snapshot?.status === "running";
+  const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, isTaskRunning, client));
+  const previousTaskRunningRef = useRef(isTaskRunning);
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
   const [sidebarOpen, setSidebarOpen] = useState(() => shouldOpenDesktopPanel(sidebarOverlayQuery));
   const [inspectorOpen, setInspectorOpen] = useState(() =>
@@ -45,20 +51,18 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   );
   const [fileDiffSelection, setFileDiffSelection] = useState<{
     change: AgentFileChange;
-    taskId: string;
+    projectId: string;
   } | null>(null);
   const project = projects.find((item) => item.id === projectId);
   const projectName = project?.name ?? projectId;
   const projectPath = project?.rootPath ?? projectId;
   const title = tasks.find((task) => task.id === taskId)?.title ?? taskId ?? "New agent";
   const selectedFileChange =
-    fileDiffSelection !== null && fileDiffSelection.taskId === taskId
+    fileDiffSelection !== null && fileDiffSelection.projectId === projectId
       ? fileDiffSelection.change
       : null;
   const openFileDiff = (change: AgentFileChange) => {
-    if (taskId !== undefined) {
-      setFileDiffSelection({ change, taskId });
-    }
+    setFileDiffSelection({ change, projectId });
   };
 
   const closeSidebar = () => {
@@ -74,6 +78,14 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       document.querySelector<HTMLButtonElement>("#workbench-inspector-toggle")?.focus();
     });
   };
+
+  useEffect(() => {
+    if (previousTaskRunningRef.current && !isTaskRunning) {
+      // 停止轮询前补读一次，确保最后一批落盘变更不会停留在上个采样周期。
+      void gitStatusQuery.refetch();
+    }
+    previousTaskRunningRef.current = isTaskRunning;
+  }, [gitStatusQuery.refetch, isTaskRunning]);
 
   useEffect(() => {
     // Escape 统一关闭覆盖面板，避免键盘用户被窄屏抽屉困住。
@@ -223,11 +235,11 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       ) : null}
 
       <WorkbenchInspector
+        gitStatusError={gitStatusQuery.error}
+        gitStatusPending={gitStatusQuery.isPending}
         onOpenFileDiff={openFileDiff}
         projectName={projectName}
-        {...(taskId === undefined || runtime.snapshot === undefined
-          ? {}
-          : { snapshot: runtime.snapshot })}
+        {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
       />
       <FileDiffDialog
         change={selectedFileChange}

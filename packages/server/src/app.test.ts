@@ -199,6 +199,39 @@ describe("CodeAgent Server", () => {
     expect(projectsResponse.json()).toEqual({ data: [project], nextCursor: null });
   });
 
+  it("serves the configured project's Git working tree status", async () => {
+    const { provider } = createProvider();
+    const readProjectGitStatus = vi.fn(() =>
+      Promise.resolve({
+        staged: [
+          {
+            diff: "--- a/staged.ts\n+++ b/staged.ts\n@@ -1 +1 @@\n-old\n+new",
+            kind: "update" as const,
+            path: "staged.ts",
+          },
+        ],
+        unstaged: [],
+      }),
+    );
+    const app = await createCodeAgentServer({ project, provider, readProjectGitStatus });
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/git/status",
+    });
+    const missingProjectResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/other/git/status",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ staged: [{ path: "staged.ts" }], unstaged: [] });
+    expect(readProjectGitStatus).toHaveBeenCalledWith(project.rootPath);
+    expect(missingProjectResponse.statusCode).toBe(404);
+    expect(readProjectGitStatus).toHaveBeenCalledTimes(1);
+  });
+
   it("serves models and resolves uploaded attachments before starting a turn", async () => {
     const { app, listModels, startTurn } = await createHarness();
     const models = await app.inject({ method: "GET", url: "/v1/models" });

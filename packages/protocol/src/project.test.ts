@@ -21,6 +21,7 @@ import {
   StartAgentTurnResponseSchema,
   HealthResponseSchema,
   ProjectPageSchema,
+  ProjectGitStatusSchema,
   ProjectSchema,
   ResolvePendingRequestRequestSchema,
   ResolvePendingRequestResponseSchema,
@@ -84,6 +85,28 @@ describe("project protocol", () => {
         nextCursor: "next-page",
       }),
     ).toBe(true);
+  });
+
+  it("separates staged and unstaged Git file changes", () => {
+    const fileChange = {
+      diff: "--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-old\n+new",
+      kind: "update",
+      path: "src/index.ts",
+    };
+
+    expect(
+      Value.Check(ProjectGitStatusSchema, {
+        staged: [fileChange],
+        unstaged: [{ ...fileChange, path: "README.md" }],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ProjectGitStatusSchema, {
+        staged: [],
+        unstaged: [],
+        legacyChanges: [],
+      }),
+    ).toBe(false);
   });
 
   it("validates a structured task snapshot", () => {

@@ -13,6 +13,7 @@ import {
   InterruptAgentTurnRequestSchema,
   InterruptAgentTurnResponseSchema,
   ProjectPageSchema,
+  ProjectGitStatusSchema,
   ResolvePendingRequestRequestSchema,
   ResolvePendingRequestResponseSchema,
   StartAgentTaskRequestSchema,
@@ -24,6 +25,7 @@ import {
   type AgentMutationError,
   type EventStreamMessage,
   type Project,
+  type ProjectGitStatus,
   type ResolvePendingRequestRequest,
   type StartAgentTurnRequest,
 } from "@code-agent/protocol";
@@ -33,6 +35,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 
 import { AgentEventStream } from "./agent-event-stream.js";
 import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js";
+import { readGitWorkingTreeStatus } from "./git-working-tree.js";
 
 export interface CreateCodeAgentServerOptions {
   eventBufferSize?: number;
@@ -41,6 +44,7 @@ export interface CreateCodeAgentServerOptions {
   idempotencyTtlMs?: number;
   project: Project;
   provider: AgentProvider;
+  readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
   staticRoot?: string;
 }
 
@@ -169,6 +173,7 @@ export async function createCodeAgentServer(
   options: CreateCodeAgentServerOptions,
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  const readProjectGitStatus = options.readProjectGitStatus ?? readGitWorkingTreeStatus;
   const attachmentStore = new AttachmentStore();
   const capabilities = await options.provider.getCapabilities();
   const eventStream = new AgentEventStream({
@@ -312,6 +317,34 @@ export async function createCodeAgentServer(
     data: [options.project],
     nextCursor: null,
   }));
+
+  app.get<{ Params: { projectId: string } }>(
+    "/v1/projects/:projectId/git/status",
+    {
+      schema: {
+        params: ProjectParamsSchema,
+        response: {
+          200: ProjectGitStatusSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (request.params.projectId !== options.project.id) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      try {
+        return await readProjectGitStatus(options.project.rootPath);
+      } catch {
+        // Git 和文件系统错误在 HTTP 边界统一收敛，避免向页面泄露本机路径细节。
+        return reply.code(500).send({
+          code: "GIT_STATUS_UNAVAILABLE",
+          message: "Git working tree status is unavailable",
+        });
+      }
+    },
+  );
 
   app.post<{
     Body: AgentAttachmentUploadRequest;

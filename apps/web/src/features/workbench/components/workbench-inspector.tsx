@@ -1,37 +1,35 @@
-import { Braces, CheckCircle2, FileCode2, GitBranch, HardDrive, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import type { ProjectGitStatus } from "@code-agent/protocol";
+import { Braces, FileCode2, GitBranch, HardDrive, Plus } from "lucide-react";
+import { useState } from "react";
 
-import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
-import {
-  collectSnapshotFileChanges,
-  countFileChangeLines,
-  getFileName,
-  type AgentFileChange,
-} from "../../diff/file-change.js";
+import { countFileChangeLines, getFileName, type AgentFileChange } from "../../diff/file-change.js";
 
 type WorkbenchInspectorProps = Readonly<{
   onOpenFileDiff: (change: AgentFileChange) => void;
+  gitStatus?: ProjectGitStatus;
+  gitStatusError?: Error | null;
+  gitStatusPending?: boolean;
   projectName: string;
-  snapshot?: RuntimeTaskSnapshot;
 }>;
 
 export function WorkbenchInspector({
+  gitStatus,
+  gitStatusError = null,
+  gitStatusPending = false,
   onOpenFileDiff,
   projectName,
-  snapshot,
 }: WorkbenchInspectorProps) {
   const [tab, setTab] = useState<"changes" | "context">("changes");
-  const changeSummary = useMemo(() => {
-    const files = collectSnapshotFileChanges(snapshot);
-    let additions = 0;
-    let removals = 0;
-    for (const file of files) {
-      const fileStats = countFileChangeLines(file);
-      additions += fileStats.additions;
-      removals += fileStats.removals;
-    }
-    return { additions, files, removals };
-  }, [snapshot]);
+  const stagedChanges = gitStatus?.staged ?? [];
+  const unstagedChanges = gitStatus?.unstaged ?? [];
+  const allChanges = [...unstagedChanges, ...stagedChanges];
+  let additions = 0;
+  let removals = 0;
+  for (const change of allChanges) {
+    const fileStats = countFileChangeLines(change);
+    additions += fileStats.additions;
+    removals += fileStats.removals;
+  }
 
   return (
     <aside
@@ -65,69 +63,56 @@ export function WorkbenchInspector({
         </div>
       </div>
 
-      <div className="min-h-0 overflow-y-auto p-2.5" role="tabpanel">
+      <div className="min-h-0 overflow-hidden" role="tabpanel">
         {tab === "changes" ? (
-          <>
-            <div className="mb-3 flex items-center justify-between">
+          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+            <div className="flex items-center justify-between px-2.5 pb-3 pt-2.5">
               <div>
                 <p className="text-xs font-medium text-foreground">未提交变更</p>
                 <p className="mt-0.5 text-caption text-muted-foreground">
-                  {changeSummary.files.length} 个文件
+                  {allChanges.length} 个变更
                 </p>
               </div>
               <span className="text-meta font-medium">
-                <span className="text-diff-added">+{changeSummary.additions}</span>{" "}
-                <span className="text-diff-removed">-{changeSummary.removals}</span>
+                <span className="text-diff-added">+{additions}</span>{" "}
+                <span className="text-diff-removed">-{removals}</span>
               </span>
             </div>
-            <div className="space-y-0.5">
-              {changeSummary.files.length === 0 ? (
+            <div aria-label="Git 变更文件" className="min-h-0 overflow-y-auto px-2.5 pb-2.5">
+              {gitStatusError !== null ? (
+                <p className="px-2 py-5 text-center text-label text-diff-removed">
+                  无法读取当前项目的 Git 变更
+                </p>
+              ) : gitStatusPending && gitStatus === undefined ? (
                 <p className="px-2 py-5 text-center text-label text-muted-foreground">
-                  当前任务暂无文件变更
+                  正在读取 Git 变更...
+                </p>
+              ) : allChanges.length === 0 ? (
+                <p className="px-2 py-5 text-center text-label text-muted-foreground">
+                  当前项目暂无未提交变更
                 </p>
               ) : (
-                changeSummary.files.map((file) => {
-                  const fileName = getFileName(file.path);
-                  const { additions, removals } = countFileChangeLines(file);
-                  return (
-                    <button
-                      aria-haspopup="dialog"
-                      aria-label={`打开 ${fileName} 的 Diff`}
-                      className="flex w-full items-center gap-2 rounded-control px-2 py-2 text-left transition-colors hover:bg-control-hover"
-                      key={file.path}
-                      onClick={() => {
-                        onOpenFileDiff(file);
-                      }}
-                      type="button"
-                    >
-                      <FileCode2
-                        className="size-3.5 shrink-0 text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                      <span
-                        className="min-w-0 flex-1 truncate text-xs text-foreground"
-                        title={file.path}
-                      >
-                        {fileName}
-                      </span>
-                      <span className="text-caption text-diff-added">+{additions}</span>
-                      <span className="text-caption text-diff-removed">-{removals}</span>
-                    </button>
-                  );
-                })
+                <div className="space-y-4">
+                  {unstagedChanges.length > 0 ? (
+                    <GitChangeSection
+                      changes={unstagedChanges}
+                      label="未暂存"
+                      onOpenFileDiff={onOpenFileDiff}
+                    />
+                  ) : null}
+                  {stagedChanges.length > 0 ? (
+                    <GitChangeSection
+                      changes={stagedChanges}
+                      label="已暂存"
+                      onOpenFileDiff={onOpenFileDiff}
+                    />
+                  ) : null}
+                </div>
               )}
             </div>
-            <button
-              className="mt-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-control bg-control text-label font-medium text-foreground shadow-sm transition-colors hover:bg-control-hover disabled:opacity-50"
-              disabled
-              type="button"
-            >
-              <CheckCircle2 className="size-3.5" aria-hidden="true" />
-              提交变更
-            </button>
-          </>
+          </div>
         ) : (
-          <div className="space-y-5">
+          <div className="h-full space-y-5 overflow-y-auto p-2.5">
             <InspectorSection icon={<HardDrive className="size-3.5" />} title="环境">
               <InspectorRow label="运行位置" value="This Mac" />
               <InspectorRow label="Project" value={projectName} />
@@ -147,6 +132,50 @@ export function WorkbenchInspector({
         )}
       </div>
     </aside>
+  );
+}
+
+function GitChangeSection({
+  changes,
+  label,
+  onOpenFileDiff,
+}: Readonly<{
+  changes: readonly AgentFileChange[];
+  label: string;
+  onOpenFileDiff: (change: AgentFileChange) => void;
+}>) {
+  return (
+    <section aria-label={label}>
+      <div className="mb-1 flex items-center justify-between px-2 text-meta font-medium text-muted-foreground">
+        <span>{label}</span>
+        <span>{changes.length}</span>
+      </div>
+      <div className="space-y-0.5">
+        {changes.map((change) => {
+          const fileName = getFileName(change.path);
+          const { additions, removals } = countFileChangeLines(change);
+          return (
+            <button
+              aria-haspopup="dialog"
+              aria-label={`打开 ${label}文件 ${fileName} 的 Diff`}
+              className="flex w-full items-center gap-2 rounded-control px-2 py-2 text-left transition-colors hover:bg-control-hover"
+              key={change.path}
+              onClick={() => {
+                onOpenFileDiff(change);
+              }}
+              type="button"
+            >
+              <FileCode2 aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-xs text-foreground" title={change.path}>
+                {fileName}
+              </span>
+              <span className="text-caption text-diff-added">+{additions}</span>
+              <span className="text-caption text-diff-removed">-{removals}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

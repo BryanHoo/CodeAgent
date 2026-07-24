@@ -2,6 +2,7 @@ import { CodeAgentClient } from "@code-agent/client";
 import { queryOptions } from "@tanstack/react-query";
 
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
+export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
 export type CodeAgentRuntimeClient = Pick<CodeAgentClient, "readTask" | "subscribeEvents">;
 export type CodeAgentCapabilitiesClient = Pick<CodeAgentClient, "getCapabilities">;
 export type CodeAgentModelsClient = Pick<CodeAgentClient, "listModels">;
@@ -11,12 +12,15 @@ export type CodeAgentMutationClient = Pick<
 >;
 export type CodeAgentPendingRequestClient = Pick<CodeAgentClient, "resolvePendingRequest">;
 export type CodeAgentWorkbenchClient = CodeAgentReadClient &
+  CodeAgentGitStatusClient &
   CodeAgentRuntimeClient &
   CodeAgentMutationClient &
   CodeAgentPendingRequestClient &
   CodeAgentCapabilitiesClient &
   CodeAgentModelsClient;
 type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
+
+export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 1_500;
 
 export const codeAgentClient = new CodeAgentClient();
 
@@ -39,6 +43,19 @@ export function projectsQueryOptions(client: CodeAgentReadClient = codeAgentClie
   return queryOptions({
     queryFn: () => client.listProjects(),
     queryKey: ["projects"] as const,
+  });
+}
+
+export function projectGitStatusQueryOptions(
+  projectId: string,
+  isTaskRunning: boolean,
+  client: CodeAgentGitStatusClient = codeAgentClient,
+) {
+  return queryOptions({
+    queryFn: () => client.getProjectGitStatus(projectId),
+    queryKey: ["projects", projectId, "git-status"] as const,
+    // Agent 运行时持续采样工作区；空闲时仍保留首次读取和窗口聚焦重验证。
+    refetchInterval: isTaskRunning ? PROJECT_GIT_STATUS_POLL_INTERVAL_MS : false,
   });
 }
 

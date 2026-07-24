@@ -6,6 +6,8 @@ import { TaskSnapshotTimeline } from "../workbench/components/task-timeline.js";
 import {
   capabilitiesQueryOptions,
   modelsQueryOptions,
+  PROJECT_GIT_STATUS_POLL_INTERVAL_MS,
+  projectGitStatusQueryOptions,
   projectTasksQueryOptions,
   projectsQueryOptions,
   taskSnapshotQueryOptions,
@@ -81,6 +83,25 @@ const snapshotResponse = {
 };
 
 describe("project queries", () => {
+  it("polls Git status only while the current task is running", async () => {
+    const getProjectGitStatus = vi.fn(() => Promise.resolve({ staged: [], unstaged: [] }));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const runningOptions = projectGitStatusQueryOptions("code-agent", true, {
+      getProjectGitStatus,
+    });
+    const idleOptions = projectGitStatusQueryOptions("code-agent", false, {
+      getProjectGitStatus,
+    });
+
+    await expect(queryClient.fetchQuery(runningOptions)).resolves.toEqual({
+      staged: [],
+      unstaged: [],
+    });
+    expect(runningOptions.refetchInterval).toBe(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
+    expect(idleOptions.refetchInterval).toBe(false);
+    expect(getProjectGitStatus).toHaveBeenCalledWith("code-agent");
+  });
+
   it("loads projects, project tasks, and task snapshots through the client", async () => {
     const client = {
       getCapabilities: vi.fn(() =>

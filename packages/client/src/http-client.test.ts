@@ -85,6 +85,25 @@ describe("CodeAgentClient", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/models");
   });
 
+  it("reads and validates a project's staged and unstaged Git changes", async () => {
+    const gitStatus = {
+      staged: [],
+      unstaged: [
+        {
+          diff: "--- /dev/null\n+++ b/new.ts\n@@ -0,0 +1,1 @@\n+export {};",
+          kind: "create",
+          path: "new.ts",
+        },
+      ],
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse(gitStatus));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.getProjectGitStatus("project one")).resolves.toEqual(gitStatus);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects/project%20one/git/status");
+  });
+
   it("uses the configured base URL for all read methods", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock

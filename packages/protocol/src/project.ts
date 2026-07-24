@@ -87,6 +87,16 @@ export const AgentFileChangeSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ProjectGitStatusSchema = Type.Object(
+  {
+    staged: Type.Array(AgentFileChangeSchema),
+    unstaged: Type.Array(AgentFileChangeSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectGitStatus = Readonly<Static<typeof ProjectGitStatusSchema>>;
+
 export const AgentFileChangeItemSchema = Type.Object(
   {
     changes: Type.Array(AgentFileChangeSchema),
