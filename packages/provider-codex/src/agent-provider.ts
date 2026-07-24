@@ -6,18 +6,21 @@ import {
   type AgentProvider,
   type AgentProviderEvent,
   type AgentProviderEventListener,
+  type AgentProviderTurnInput,
   type ListAgentTasksInput,
   type ResolvePendingRequestInput,
 } from "@code-agent/core";
 import type {
   AgentCapabilities,
-  AgentInput,
+  AgentContextUsage,
   AgentItem,
   AgentItemStatus,
   AgentTask,
   AgentTaskPage,
   AgentTaskSnapshot,
   AgentTurn,
+  AgentModelPage,
+  AgentTurnOptions,
   PendingApprovalDecision,
   PendingRequest,
   Project,
@@ -358,6 +361,62 @@ function normalizedTitle(thread: Record<string, unknown>): string {
   return preview?.length ? preview : "未命名任务";
 }
 
+function mapAgentModel(value: unknown): AgentModelPage["data"][number] | undefined {
+  const model = expectRecord(value, "Codex model");
+  if (model["hidden"] === true) {
+    return undefined;
+  }
+  if (model["hidden"] !== false || typeof model["isDefault"] !== "boolean") {
+    throw new CodexProtocolMappingError("Codex model visibility or default flag is invalid");
+  }
+  if (!Array.isArray(model["supportedReasoningEfforts"])) {
+    throw new CodexProtocolMappingError("Codex model reasoning efforts must be an array");
+  }
+  const supportedReasoningEfforts = model["supportedReasoningEfforts"].map((value) => {
+    const option = expectRecord(value, "Codex model reasoning effort");
+    return {
+      description: expectString(option["description"], "Codex reasoning effort description"),
+      id: expectString(option["reasoningEffort"], "Codex reasoning effort id"),
+    };
+  });
+  const defaultReasoningEffort = expectString(
+    model["defaultReasoningEffort"],
+    "Codex model default reasoning effort",
+  );
+  if (
+    supportedReasoningEfforts.length === 0 ||
+    !supportedReasoningEfforts.some((option) => option.id === defaultReasoningEffort)
+  ) {
+    throw new CodexProtocolMappingError("Codex model default reasoning effort is unsupported");
+  }
+  return {
+    defaultReasoningEffort,
+    description: expectString(model["description"], "Codex model description"),
+    displayName: expectString(model["displayName"], "Codex model displayName"),
+    id: expectString(model["model"], "Codex model model"),
+    isDefault: model["isDefault"],
+    supportedReasoningEfforts,
+  };
+}
+
+function mapContextUsage(value: unknown): AgentContextUsage {
+  const tokenUsage = expectRecord(value, "Codex token usage");
+  const last = expectRecord(tokenUsage["last"], "Codex last token usage");
+  const usedTokens = optionalInteger(last["totalTokens"]);
+  const rawContextWindow = tokenUsage["modelContextWindow"];
+  const parsedContextWindow = rawContextWindow === null ? null : optionalInteger(rawContextWindow);
+  if (usedTokens === undefined || usedTokens < 0) {
+    throw new CodexProtocolMappingError("Codex context usage is invalid");
+  }
+  if (
+    parsedContextWindow !== null &&
+    (parsedContextWindow === undefined || parsedContextWindow <= 0)
+  ) {
+    throw new CodexProtocolMappingError("Codex context usage is invalid");
+  }
+  return { contextWindow: parsedContextWindow, usedTokens };
+}
+
 function mapThreadStatus(value: unknown): AgentTaskSnapshot["status"] {
   const type = optionalString(isRecord(value) ? value["type"] : undefined);
   if (type === "active") {
@@ -663,6 +722,7 @@ function mapCodexNotification(method: string, value: unknown): AgentProviderEven
     method !== "item/reasoning/textDelta" &&
     method !== "item/commandExecution/outputDelta" &&
     method !== "item/completed" &&
+    method !== "thread/tokenUsage/updated" &&
     method !== "error"
   ) {
     return undefined;
@@ -670,6 +730,15 @@ function mapCodexNotification(method: string, value: unknown): AgentProviderEven
 
   const params = expectRecord(value, `Codex ${method} params`);
   const taskId = expectString(params["threadId"], `Codex ${method} threadId`);
+
+  if (method === "thread/tokenUsage/updated") {
+    return {
+      payload: { usage: mapContextUsage(params["tokenUsage"]) },
+      taskId,
+      turnId: expectString(params["turnId"], "Codex token usage turnId"),
+      type: "usage.updated",
+    };
+  }
 
   if (method === "turn/started" || method === "turn/completed") {
     const turn = mapAgentTurn(params["turn"]);
@@ -770,6 +839,7 @@ export class CodexAgentProvider implements AgentProvider {
   readonly #projectTaskIds = new Set<string>();
   readonly #requestExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #resolvingRequests = new Map<string, ResolvingPendingRequest>();
+  readonly #taskContextUsage = new Map<string, AgentContextUsage>();
   readonly #terminalRequests = new Map<string, PendingRequest>();
 
   public constructor(client: CodexRpcClient, project: Project) {
@@ -791,6 +861,47 @@ export class CodexAgentProvider implements AgentProvider {
     });
   }
 
+  public async listModels(): Promise<AgentModelPage> {
+    const data: AgentModelPage["data"][number][] = [];
+    const visitedCursors = new Set<string>();
+    let cursor: string | undefined;
+
+    do {
+      const response = expectRecord(
+        await this.#client.request("model/list", {
+          ...(cursor === undefined ? {} : { cursor }),
+          includeHidden: false,
+          limit: 100,
+        }),
+        "model/list response",
+      );
+      if (!Array.isArray(response["data"])) {
+        throw new CodexProtocolMappingError("model/list data must be an array");
+      }
+      for (const value of response["data"]) {
+        const model = mapAgentModel(value);
+        if (model !== undefined) {
+          data.push(model);
+        }
+      }
+      const nextCursor = response["nextCursor"];
+      if (nextCursor !== null && typeof nextCursor !== "string") {
+        throw new CodexProtocolMappingError("model/list nextCursor must be a string or null");
+      }
+      if (typeof nextCursor === "string") {
+        if (visitedCursors.has(nextCursor)) {
+          throw new CodexProtocolMappingError("model/list returned a repeated cursor");
+        }
+        visitedCursors.add(nextCursor);
+        cursor = nextCursor;
+      } else {
+        cursor = undefined;
+      }
+    } while (cursor !== undefined);
+
+    return { data, nextCursor: null };
+  }
+
   public async startTask(): Promise<AgentTask> {
     const response = expectRecord(
       await this.#client.request("thread/start", { cwd: this.#project.rootPath }),
@@ -805,11 +916,33 @@ export class CodexAgentProvider implements AgentProvider {
     return task;
   }
 
-  public async startTurn(taskId: string, input: AgentInput): Promise<AgentTurn> {
+  public async startTurn(
+    taskId: string,
+    input: AgentProviderTurnInput,
+    options: AgentTurnOptions,
+  ): Promise<AgentTurn> {
     this.#assertKnownProjectTask(taskId);
+    const images = input.images.map((image) => {
+      if (!image.url.startsWith(`data:${image.mediaType};base64,`)) {
+        throw new CodexProtocolMappingError("Provider image URL does not match its media type");
+      }
+      return { type: "image" as const, url: image.url };
+    });
+    const codexInput = [
+      ...(input.text.length === 0
+        ? []
+        : [{ text: input.text, text_elements: [], type: "text" as const }]),
+      ...images,
+    ];
+    if (codexInput.length === 0) {
+      throw new CodexProtocolMappingError("Provider turn input must not be empty");
+    }
     const response = expectRecord(
       await this.#client.request("turn/start", {
-        input: [{ text: input.text, text_elements: [], type: "text" }],
+        approvalPolicy: options.approvalPolicy,
+        effort: options.reasoningEffort,
+        input: codexInput,
+        model: options.model,
         threadId: taskId,
       }),
       "turn/start response",
@@ -883,6 +1016,7 @@ export class CodexAgentProvider implements AgentProvider {
       }
       const snapshot: AgentTaskSnapshot = {
         ...task,
+        contextUsage: this.#taskContextUsage.get(taskId) ?? null,
         pendingRequests: [...this.#pendingRequests.values()]
           .map((entry) => entry.request)
           .filter((request) => request.taskId === taskId),
@@ -1001,6 +1135,13 @@ export class CodexAgentProvider implements AgentProvider {
     }
     if (event === undefined) {
       return;
+    }
+    if (
+      event.type === "usage.updated" &&
+      (this.#projectTaskIds.has(event.taskId) || this.#pendingTaskReads.has(event.taskId))
+    ) {
+      // 快照和实时事件共享同一份最近一轮上下文用量。
+      this.#taskContextUsage.set(event.taskId, event.payload.usage);
     }
     if (event.type === "turn.completed") {
       this.#removeQueuedRequestsForTurn(event.taskId, event.turnId);
@@ -1291,6 +1432,7 @@ export class CodexAgentProvider implements AgentProvider {
     if (!this.#projectTaskIds.has(taskId)) {
       this.#pendingTaskEvents.delete(taskId);
       this.#pendingTaskServerRequests.delete(taskId);
+      this.#taskContextUsage.delete(taskId);
       for (const entry of [...this.#pendingRequests.values()]) {
         if (entry.request.taskId === taskId) {
           this.#pendingRequests.delete(entry.request.requestId);

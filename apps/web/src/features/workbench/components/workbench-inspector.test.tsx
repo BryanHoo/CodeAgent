@@ -5,6 +5,7 @@ import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtim
 import { WorkbenchInspector } from "./workbench-inspector.js";
 
 const snapshot = {
+  contextUsage: null,
   id: "task-1",
   pendingRequests: [],
   pinned: false,

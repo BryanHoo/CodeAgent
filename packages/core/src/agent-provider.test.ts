@@ -16,6 +16,21 @@ describe("AgentProvider", () => {
       listTasks() {
         return Promise.resolve({ data: [], nextCursor: null });
       },
+      listModels() {
+        return Promise.resolve({
+          data: [
+            {
+              defaultReasoningEffort: "high",
+              description: "适合复杂编码任务",
+              displayName: "GPT-5.6 Sol",
+              id: "gpt-5.6-sol",
+              isDefault: true,
+              supportedReasoningEfforts: [{ description: "深入分析", id: "high" }],
+            },
+          ],
+          nextCursor: null,
+        });
+      },
       readTask() {
         return Promise.resolve(undefined);
       },
@@ -46,7 +61,12 @@ describe("AgentProvider", () => {
           updatedAt: "2026-07-23T00:00:00.000Z",
         });
       },
-      startTurn(taskId, input) {
+      startTurn(taskId, input, options) {
+        expect(options).toEqual({
+          approvalPolicy: "on-request",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+        });
         return Promise.resolve({
           completedAt: null,
           error: null,
@@ -78,6 +98,9 @@ describe("AgentProvider", () => {
       data: [],
       nextCursor: null,
     });
+    await expect(provider.listModels()).resolves.toMatchObject({
+      data: [{ id: "gpt-5.6-sol", isDefault: true }],
+    });
     await expect(provider.readTask("missing-task")).resolves.toBeUndefined();
     await expect(
       provider.resolvePendingRequest({
@@ -92,7 +115,14 @@ describe("AgentProvider", () => {
     ).resolves.toMatchObject({ requestId: "number:7", status: "resolved" });
     await expect(provider.startTask()).resolves.toMatchObject({ id: "task-1" });
     await expect(
-      provider.startTurn("task-1", { text: "继续", type: "text" }),
+      provider.startTurn(
+        "task-1",
+        {
+          images: [{ mediaType: "image/png", url: "data:image/png;base64,aW1hZ2U=" }],
+          text: "继续",
+        },
+        { approvalPolicy: "on-request", model: "gpt-5.6-sol", reasoningEffort: "high" },
+      ),
     ).resolves.toMatchObject({ id: "task-1-turn", status: "running" });
     await expect(provider.interruptTurn("task-1", "turn-1")).resolves.toBeUndefined();
 

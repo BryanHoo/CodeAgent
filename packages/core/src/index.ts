@@ -3,6 +3,7 @@ export {
   type AgentProvider,
   type AgentProviderEvent,
   type AgentProviderEventListener,
+  type AgentProviderTurnInput,
   type ListAgentTasksInput,
   PendingRequestResolutionError,
   type PendingRequestResolutionErrorCode,

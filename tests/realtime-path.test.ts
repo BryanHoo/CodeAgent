@@ -21,6 +21,14 @@ const project = {
   rootPath: "/workspace/CodeAgent",
 } as const;
 
+const pixelDataUrl =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const turnOptions = {
+  approvalPolicy: "on-request",
+  model: "gpt-5.6-sol",
+  reasoningEffort: "high",
+} as const;
+
 const runtimes: CodexAppServerProcess[] = [];
 const servers: Awaited<ReturnType<typeof createCodeAgentServer>>[] = [];
 
@@ -82,6 +90,7 @@ describe("Realtime Path", () => {
       "item.completed",
       "command.output_delta",
       "item.completed",
+      "usage.updated",
       "turn.completed",
       "provider.error",
     ]);
@@ -111,7 +120,12 @@ describe("Realtime Path", () => {
     servers.push(server);
     const baseUrl = await server.listen({ host: "127.0.0.1", port: 0 });
     const client = new CodeAgentClient({ baseUrl });
+    const models = await client.listModels();
     const created = await client.startTask(project.id, { idempotencyKey: "create-complete" });
+    const uploaded = await client.uploadAttachment(
+      { dataUrl: pixelDataUrl, name: "screen.png" },
+      { idempotencyKey: "upload-complete" },
+    );
     const snapshot = await client.readTask(created.task.id);
     const events: AgentEvent[] = [];
 
@@ -142,7 +156,12 @@ describe("Realtime Path", () => {
 
     await client.startTurn(
       created.task.id,
-      { text: "完成流式回复", type: "text" },
+      {
+        attachments: [{ id: uploaded.attachment.id }],
+        text: "完成流式回复",
+        type: "prompt",
+      },
+      turnOptions,
       { idempotencyKey: "turn-complete" },
     );
     await completed;
@@ -152,8 +171,12 @@ describe("Realtime Path", () => {
       "message.delta",
       "message.delta",
       "item.completed",
+      "usage.updated",
       "turn.completed",
     ]);
+    expect(models.data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "gpt-5.6-sol", isDefault: true })]),
+    );
     expect(events.at(-1)).toMatchObject({
       payload: { turn: { status: "completed" } },
       type: "turn.completed",
@@ -208,7 +231,8 @@ describe("Realtime Path", () => {
 
     const started = await client.startTurn(
       created.task.id,
-      { text: "等待中断", type: "text" },
+      { attachments: [], text: "等待中断", type: "prompt" },
+      turnOptions,
       { idempotencyKey: "turn-interrupt" },
     );
     await client.interruptTurn(created.task.id, started.turn.id, {

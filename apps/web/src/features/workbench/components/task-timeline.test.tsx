@@ -21,6 +21,7 @@ const completedTurn: RuntimeTaskSnapshot["turns"][number] = {
 };
 
 const snapshot: RuntimeTaskSnapshot = {
+  contextUsage: null,
   id: "task-1",
   pendingRequests: [],
   pinned: false,

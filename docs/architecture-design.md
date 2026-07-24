@@ -411,17 +411,21 @@ export interface ProviderCapabilities {
 
 Web 根据能力决定是否展示 Fork、Steer、Approval、Plan 等控件，而不是根据 Provider 名称写条件分支。
 
-### 8.4 首条写入 API
+### 8.4 Agent 输入 API
 
-Agent Actions 的首条写入闭环使用三个 Provider 无关端点：
+Agent Actions 使用 Provider 无关的模型、附件和写入端点：
 
 ```text
+GET  /v1/models
+POST /v1/attachments
 POST /v1/projects/:projectId/tasks
 POST /v1/tasks/:taskId/turns
 POST /v1/turns/:turnId/interrupt
 ```
 
-所有请求必须携带非空 `Idempotency-Key`。Server 以操作、资源和 Key 共同确定幂等范围：相同 Payload 复用进行中或成功结果，不同 Payload 返回 `IDEMPOTENCY_CONFLICT`，失败结果允许同 Key 重试。
+所有写请求必须携带非空 `Idempotency-Key`。Server 以操作、资源和 Key 共同确定幂等范围：相同 Payload 复用进行中或成功结果，不同 Payload 返回 `IDEMPOTENCY_CONFLICT`，失败结果允许同 Key 重试。
+
+图片先上传到有容量和过期时间限制的 Server Store，浏览器只获得随机附件 ID。Turn 启动前由 Server 将 ID 解析为 Provider 输入；成功后消费引用，失败时保留引用供重试。`GET /v1/models` 直接映射 Provider 模型目录及其默认、可用思考量，页面不得把硬编码模型或思考量作为成功态数据。
 
 `turn/interrupt` 只返回 `{ status: "interrupting", taskId, turnId }`；Turn 是否真正中断由后续 `turn.completed` 事件决定。错误统一映射为 Protocol 定义的 `{ code, message, retryable }`，不得向 Web 暴露原生 RPC 细节。
 
@@ -503,6 +507,7 @@ GET    /v1/health
 GET    /v1/capabilities
 GET    /v1/providers
 GET    /v1/models
+POST   /v1/attachments
 GET    /v1/projects
 POST   /v1/projects
 GET    /v1/projects/:projectId/tasks
@@ -612,6 +617,8 @@ model/list
 thread/list
 ```
 
+`model/list` 必须处理游标直到完成，过滤隐藏模型并保留 `isDefault`、`defaultReasoningEffort` 和 `supportedReasoningEfforts`；重复游标、空能力或不受支持的默认思考量按 Provider 协议错误处理。
+
 `clientInfo` 使用稳定标识：
 
 ```json
@@ -652,6 +659,8 @@ turn id -> runtime state
 | `steerTurn`     | `turn/steer`      |
 | `interruptTurn` | `turn/interrupt`  |
 
+`startTurn` 将统一 Prompt 映射为 Codex `UserInput[]`：非空文本使用 `text`，Server 已验证的图片 Data URL 使用 `image`。统一 `model`、`reasoningEffort` 和 `approvalPolicy` 分别映射为 Codex `model`、`effort` 和 `approvalPolicy`，不向 Web 暴露其他原生字段。
+
 ### 11.5 事件映射
 
 | Codex Event                         | Agent Event                 |
@@ -671,6 +680,8 @@ turn id -> runtime state
 | `item/completed`                    | `item.completed`            |
 | `thread/tokenUsage/updated`         | `usage.updated`             |
 | `error`                             | `provider.error`            |
+
+`usage.updated` 使用 `last.totalTokens` 与 `modelContextWindow` 生成统一 `AgentContextUsage`，Runtime Reducer 实时更新，Provider 在后续 `AgentTaskSnapshot.contextUsage` 中恢复最近值；累计 `total.totalTokens` 仅表示账单累计量，不用于上下文占用。
 
 ### 11.6 审批映射
 

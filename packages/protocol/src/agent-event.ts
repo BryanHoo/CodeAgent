@@ -2,6 +2,7 @@ import { Type, type Static, type TProperties, type TSchema } from "@sinclair/typ
 
 import {
   ActivePendingRequestSchema,
+  AgentContextUsageSchema,
   AgentItemSchema,
   AgentTaskSnapshotSchema,
   AgentTurnSchema,
@@ -84,6 +85,12 @@ export const ProviderErrorEventSchema = createEventSchema({
   type: Type.Literal("provider.error"),
 });
 
+export const UsageUpdatedEventSchema = createEventSchema({
+  payload: Type.Object({ usage: AgentContextUsageSchema }, { additionalProperties: false }),
+  turnId: Type.String({ minLength: 1 }),
+  type: Type.Literal("usage.updated"),
+});
+
 function createPendingRequestEventSchema<TType extends string, TRequestSchema extends TSchema>(
   type: TType,
   requestSchema: TRequestSchema,
@@ -116,6 +123,7 @@ export const AgentEventSchema = Type.Union([
   CommandOutputDeltaEventSchema,
   ItemCompletedEventSchema,
   TurnCompletedEventSchema,
+  UsageUpdatedEventSchema,
   ProviderErrorEventSchema,
   PendingRequestCreatedEventSchema,
   PendingRequestResolvedEventSchema,

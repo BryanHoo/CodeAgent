@@ -15,6 +15,31 @@ const projects = [
   },
 ];
 
+const models = [
+  {
+    defaultReasoningEffort: "high",
+    description: "适合复杂编码任务",
+    displayName: "GPT-5.6 Sol",
+    id: "gpt-5.6-sol",
+    isDefault: true,
+    supportedReasoningEfforts: [
+      { description: "快速回答", id: "low" },
+      { description: "深入分析", id: "high" },
+    ],
+  },
+  {
+    defaultReasoningEffort: "medium",
+    description: "适合日常编码任务",
+    displayName: "GPT-5.6 Terra",
+    id: "gpt-5.6-terra",
+    isDefault: false,
+    supportedReasoningEfforts: [
+      { description: "快速回答", id: "low" },
+      { description: "平衡速度与深度", id: "medium" },
+    ],
+  },
+];
+
 const tasks = [
   {
     id: "task-1",
@@ -48,6 +73,7 @@ const tasks = [
 
 const taskSnapshot = {
   ...tasks[0],
+  contextUsage: { contextWindow: 200_000, usedTokens: 25_000 },
   pendingRequests: [],
   status: "idle",
   turns: [
@@ -126,6 +152,8 @@ test.beforeEach(async ({ page }) => {
         tasks: { list: true, read: true, start: true },
         turns: { interrupt: true, start: true },
       };
+    } else if (url.pathname === "/v1/models") {
+      body = { data: models, nextCursor: null };
     } else if (url.pathname === "/v1/projects") {
       body = { data: projects, nextCursor: null };
     } else if (url.pathname.startsWith("/v1/projects/") && url.pathname.endsWith("/tasks")) {
@@ -281,8 +309,25 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(page.getByRole("heading", { name: "环境信息" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Composer" })).toBeVisible();
   const prompt = page.getByRole("textbox", { name: "任务输入" });
+  const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
+  const compactSelects = [
+    approvalSelect,
+    page.getByRole("combobox", { name: "选择模型" }),
+    page.getByRole("combobox", { name: "选择思考量" }),
+  ];
   await expect(prompt).toBeEnabled();
-  await expect(page.getByRole("combobox", { name: "批准模式" })).toHaveValue("on-request");
+  await expect(approvalSelect).toHaveValue("on-request");
+  for (const select of compactSelects) {
+    await expect(select).toHaveCSS("appearance", "none");
+    await expect
+      .poll(() => select.evaluate((element) => getComputedStyle(element).fieldSizing))
+      .toBe("content");
+  }
+  await prompt.focus();
+  await expect(page.getByRole("region", { name: "Composer" }).locator("form")).toHaveCSS(
+    "border-color",
+    "rgb(0, 106, 255)",
+  );
   await expect(page.getByText("本地", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();
   await prompt.fill("继续当前任务");
@@ -290,8 +335,88 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(main.locator("header").getByText("CodeAgent", { exact: true })).toHaveCount(0);
   await expect(page.getByText("本地离线", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("项目路径")).toHaveText("~/Develop/person/CodeAgent");
+  await expect(page.getByLabel("上下文用量")).toHaveText("上下文 13%");
   await expect(inspector.getByRole("button", { name: "关闭上下文面板" })).toHaveCount(0);
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+});
+
+test("submits attachments, approval policy, model, and reasoning effort through the real client contract", async ({
+  page,
+}) => {
+  let uploadBody: unknown;
+  let turnBody: unknown;
+  await page.route("**/v1/attachments", async (route) => {
+    uploadBody = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        attachment: {
+          id: "attachment-1",
+          mediaType: "image/png",
+          name: "screen.png",
+          size: 68,
+        },
+      },
+      status: 201,
+    });
+  });
+  await page.route("**/v1/tasks/task-1/turns", async (route) => {
+    turnBody = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        taskId: "task-1",
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "turn-attachment",
+          items: [],
+          startedAt: "2026-07-24T00:00:00.000Z",
+          status: "running",
+        },
+      },
+      status: 201,
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const modelSelect = page.getByRole("combobox", { name: "选择模型" });
+  await expect(modelSelect).toHaveValue("gpt-5.6-sol");
+  await expect(modelSelect.locator("option")).toHaveText(["GPT-5.6 Sol", "GPT-5.6 Terra"]);
+  await modelSelect.selectOption("gpt-5.6-terra");
+  const reasoningSelect = page.getByRole("combobox", { name: "选择思考量" });
+  await expect(reasoningSelect).toHaveValue("medium");
+  await reasoningSelect.selectOption("low");
+  await page.getByRole("combobox", { name: "批准模式" }).selectOption("never");
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "添加图片" }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    ),
+    mimeType: "image/png",
+    name: "screen.png",
+  });
+  await expect(page.getByText("screen.png", { exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: "任务输入" }).fill("按截图完成改造");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+
+  await expect(page.getByRole("textbox", { name: "任务输入" })).toHaveValue("");
+  await expect(page.getByText("screen.png", { exact: true })).toHaveCount(0);
+  expect(uploadBody).toMatchObject({
+    dataUrl: expect.stringMatching(/^data:image\/png;base64,/),
+    name: "screen.png",
+  });
+  expect(turnBody).toEqual({
+    input: {
+      attachments: [{ id: "attachment-1" }],
+      text: "按截图完成改造",
+      type: "prompt",
+    },
+    options: { approvalPolicy: "never", model: "gpt-5.6-terra", reasoningEffort: "low" },
+  });
 });
 
 test("opens file diffs from the timeline and inspector", async ({ page }) => {
@@ -342,7 +467,13 @@ test("isolates composer state between task routes", async ({ page }) => {
       contentType: "application/json",
       json: {
         checkpoint: { sequence: 0, sessionId: "e2e-session" },
-        snapshot: { ...tasks[1], pendingRequests: [], status: "idle", turns: [] },
+        snapshot: {
+          ...tasks[1],
+          contextUsage: null,
+          pendingRequests: [],
+          status: "idle",
+          turns: [],
+        },
       },
     });
   });
@@ -853,6 +984,20 @@ test("reuses the interrupt idempotency key until the terminal event arrives", as
 });
 
 test("preserves the prompt draft when submission fails", async ({ page }) => {
+  await page.route("**/v1/attachments", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        attachment: {
+          id: "attachment-preserved",
+          mediaType: "image/png",
+          name: "preserved.png",
+          size: 68,
+        },
+      },
+      status: 201,
+    });
+  });
   await page.route("**/v1/projects/code-agent/tasks", async (route) => {
     if (route.request().method() !== "POST") {
       await route.fallback();
@@ -866,12 +1011,24 @@ test("preserves the prompt draft when submission fails", async ({ page }) => {
   });
   await page.goto("/p/code-agent");
   const prompt = page.getByRole("textbox", { name: "任务输入" });
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "添加图片" }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    ),
+    mimeType: "image/png",
+    name: "preserved.png",
+  });
 
   await prompt.fill("失败后保留这段草稿");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
 
   await expect(page.getByRole("alert")).toHaveText("操作失败，请重试");
   await expect(prompt).toHaveValue("失败后保留这段草稿");
+  await expect(page.getByText("preserved.png", { exact: true })).toBeVisible();
 });
 
 test("orders persistent search, task actions, pinned tasks and projects in the sidebar", async ({
@@ -1031,6 +1188,7 @@ test("uses material hierarchy instead of strong workbench borders", async ({ pag
 
     return {
       composerBorder: composerStyles.borderTopWidth,
+      composerBorderColor: composerStyles.borderTopColor,
       composerBottomPadding: Number.parseFloat(composerRegionStyles.paddingBottom),
       composerShadow: composerStyles.boxShadow,
       inspectorBorder: inspectorStyles.borderLeftWidth,
@@ -1050,7 +1208,8 @@ test("uses material hierarchy instead of strong workbench borders", async ({ pag
 
   expect(presentation.sidebarBorder).toBe("0px");
   expect(presentation.inspectorBorder).toBe("0px");
-  expect(presentation.composerBorder).toBe("0px");
+  expect(presentation.composerBorder).toBe("1px");
+  expect(presentation.composerBorderColor).toBe("rgba(0, 0, 0, 0)");
   expect(presentation.sidebarShadow).toContain("1px 0px 0px 0px");
   expect(presentation.inspectorShadow).toContain("-1px 0px 0px 0px");
   expect(presentation.sidebarToolbarShadow).toBe("none");

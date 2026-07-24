@@ -3,6 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import { Conversation, ConversationContent } from "./conversation.js";
 import {
+  Attachment,
+  AttachmentInfo,
+  AttachmentPreview,
+  AttachmentRemove,
+  Attachments,
+} from "./attachments.js";
+import {
   Confirmation,
   ConfirmationAction,
   ConfirmationActions,
@@ -12,6 +19,7 @@ import {
 import { Message, MessageContent, MessageResponse } from "./message.js";
 import {
   PromptInput,
+  PromptInputActionAddAttachments,
   PromptInputBody,
   PromptInputFooter,
   PromptInputSubmit,
@@ -125,12 +133,14 @@ describe("AI Elements primitives", () => {
 
   it("renders an accessible prompt input composition", () => {
     const markup = renderToStaticMarkup(
-      <PromptInput>
+      <PromptInput accept="image/png,image/jpeg" disabled maxFiles={4} multiple>
         <PromptInputBody>
           <PromptInputTextarea aria-label="任务输入" disabled />
         </PromptInputBody>
         <PromptInputFooter>
-          <PromptInputTools>本地</PromptInputTools>
+          <PromptInputTools>
+            <PromptInputActionAddAttachments label="添加图片" />
+          </PromptInputTools>
           <PromptInputSubmit aria-label="提交" disabled status="idle" />
         </PromptInputFooter>
       </PromptInput>,
@@ -140,6 +150,34 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('aria-label="提交"');
     expect(markup).toContain("disabled");
     expect(markup).toContain("shadow-floating");
+    expect(markup).toContain('type="file"');
+    expect(markup).toContain('accept="image/png,image/jpeg"');
+    expect(markup).toContain('aria-label="添加图片"');
+    expect(markup).toContain('aria-disabled="true"');
+  });
+
+  it("renders attachment previews and removal controls", () => {
+    const markup = renderToStaticMarkup(
+      <Attachments>
+        <Attachment
+          data={{
+            id: "attachment-1",
+            mediaType: "image/png",
+            name: "screen.png",
+            previewUrl: "data:image/png;base64,aW1hZ2U=",
+            size: 5,
+          }}
+        >
+          <AttachmentPreview />
+          <AttachmentInfo />
+          <AttachmentRemove aria-label="移除 screen.png" />
+        </Attachment>
+      </Attachments>,
+    );
+
+    expect(markup).toContain("screen.png");
+    expect(markup).toContain('src="data:image/png;base64,aW1hZ2U="');
+    expect(markup).toContain('aria-label="移除 screen.png"');
   });
 
   it("renders an accessible confirmation composition", () => {

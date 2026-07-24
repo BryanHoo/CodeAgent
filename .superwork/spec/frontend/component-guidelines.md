@@ -8,6 +8,8 @@
 
 - 每个组件只承担一个可描述的界面职责，紧凑工作台界面避免装饰性嵌套卡片。
 - `shared/ai-elements` 以官方 AI Elements 组件源码和公开 API 为实现基线，只改造样式、基础控件适配与本地化文案以使用本项目设计 Token；不得用功能不完整的自研组件替代官方能力。
+- Composer 使用 AI Elements `PromptInput`、`Attachments` 和组合式工具栏，支持点击、拖放、粘贴、预览与移除图片；模型来自 Server Query，审批策略、模型和思考量随同一个 Turn 请求提交，不保留禁用占位控件。
+- Composer 的审批、模型和思考量选择隐藏原生箭头并按当前文字收缩；思考量紧邻模型，输入聚焦时使用主色边框，分支/路径行最右展示真实上下文占用。
 - 工作台左栏先展示产品标识与名称，再按常显搜索框、“新建任务”、可选 `Pinned`、`Projects` 排列；没有固定 Task 时不渲染 `Pinned` 区域。
 - Project 名称和右侧箭头都只切换任务树的展开状态，不导航或选中 Project；Task 链接继续负责工作台导航。
 - 通过显式 Props 或专用 Hook 获取数据，不从组件内部访问 Server 或 Provider。

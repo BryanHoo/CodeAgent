@@ -29,6 +29,7 @@ describe("file change view model", () => {
 
   it("keeps only the latest change for each path in a task snapshot", () => {
     const snapshot = {
+      contextUsage: null,
       id: "task-1",
       pendingRequests: [],
       pinned: false,

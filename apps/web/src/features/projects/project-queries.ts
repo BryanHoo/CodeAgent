@@ -4,16 +4,18 @@ import { queryOptions } from "@tanstack/react-query";
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
 export type CodeAgentRuntimeClient = Pick<CodeAgentClient, "readTask" | "subscribeEvents">;
 export type CodeAgentCapabilitiesClient = Pick<CodeAgentClient, "getCapabilities">;
+export type CodeAgentModelsClient = Pick<CodeAgentClient, "listModels">;
 export type CodeAgentMutationClient = Pick<
   CodeAgentClient,
-  "interruptTurn" | "startTask" | "startTurn"
+  "interruptTurn" | "startTask" | "startTurn" | "uploadAttachment"
 >;
 export type CodeAgentPendingRequestClient = Pick<CodeAgentClient, "resolvePendingRequest">;
 export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentRuntimeClient &
   CodeAgentMutationClient &
   CodeAgentPendingRequestClient &
-  CodeAgentCapabilitiesClient;
+  CodeAgentCapabilitiesClient &
+  CodeAgentModelsClient;
 type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
 
 export const codeAgentClient = new CodeAgentClient();
@@ -22,6 +24,14 @@ export function capabilitiesQueryOptions(client: CodeAgentCapabilitiesClient = c
   return queryOptions({
     queryFn: () => client.getCapabilities(),
     queryKey: ["capabilities"] as const,
+  });
+}
+
+export function modelsQueryOptions(client: CodeAgentModelsClient = codeAgentClient) {
+  return queryOptions({
+    queryFn: () => client.listModels(),
+    queryKey: ["models"] as const,
+    staleTime: 5 * 60_000,
   });
 }
 

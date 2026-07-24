@@ -240,6 +240,13 @@ export function reduceAgentEvent(state: TaskRuntimeState, event: AgentEvent): Ta
         updatedAt: event.timestamp,
       };
       break;
+    case "usage.updated":
+      snapshot = {
+        ...snapshot,
+        contextUsage: event.payload.usage,
+        updatedAt: event.timestamp,
+      };
+      break;
     case "provider.error":
       snapshot = updateTurn(snapshot, event.turnId, (turn) => ({
         ...turn,

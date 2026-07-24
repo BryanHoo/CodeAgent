@@ -32,6 +32,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
   const provider = {
     getCapabilities: vi.fn(),
     interruptTurn: vi.fn(),
+    listModels: vi.fn(),
     listTasks: vi.fn(),
     readTask: vi.fn(),
     resolvePendingRequest: vi.fn(),

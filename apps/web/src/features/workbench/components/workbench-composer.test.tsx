@@ -4,12 +4,15 @@ import {
   deriveComposerActions,
   deriveComposerState,
   interruptPromptTurn,
+  formatContextUsage,
   resolveIdempotencyAttempt,
   resolveActiveTurnId,
+  resolveReasoningEffort,
   startPromptTurn,
 } from "./workbench-composer.js";
 
 const task = {
+  contextUsage: null,
   id: "task-1",
   pendingRequests: [],
   pinned: false,
@@ -17,6 +20,18 @@ const task = {
   title: "新任务",
   updatedAt: "2026-07-23T00:00:00.000Z",
 };
+
+const model = {
+  defaultReasoningEffort: "high",
+  description: "适合复杂编码任务",
+  displayName: "GPT-5.6 Sol",
+  id: "gpt-5.6-sol",
+  isDefault: true,
+  supportedReasoningEfforts: [
+    { description: "快速回答", id: "low" },
+    { description: "深入分析", id: "high" },
+  ],
+} as const;
 
 const turn = {
   completedAt: null,
@@ -102,26 +117,51 @@ describe("WorkbenchComposer", () => {
     expect(createKey).toHaveBeenCalledTimes(2);
   });
 
+  it("resolves model reasoning effort and formats current context usage", () => {
+    expect(resolveReasoningEffort(model, "low")).toBe("low");
+    expect(resolveReasoningEffort(model, "unsupported")).toBe("high");
+    expect(resolveReasoningEffort(undefined, "high")).toBeUndefined();
+    expect(formatContextUsage(null)).toEqual({
+      label: "上下文 --",
+      title: "等待模型返回上下文用量",
+    });
+    expect(formatContextUsage({ contextWindow: 200_000, usedTokens: 25_000 })).toEqual({
+      label: "上下文 13%",
+      title: "已使用 25,000 / 200,000 tokens",
+    });
+  });
+
   it("creates a task before its first turn and continues existing tasks directly", async () => {
     const client = {
       interruptTurn: vi.fn(),
       startTask: vi.fn(() => Promise.resolve({ task })),
       startTurn: vi.fn(() => Promise.resolve({ taskId: task.id, turn })),
+      uploadAttachment: vi.fn(),
     };
 
     await expect(
       startPromptTurn(client, {
         idempotencyKeys: { startTask: "task-key", startTurn: "turn-key" },
-        input: { text: "首次提交", type: "text" },
+        input: { attachments: [], text: "首次提交", type: "prompt" },
         projectId: "code-agent",
+        turnOptions: {
+          approvalPolicy: "on-request",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+        },
       }),
     ).resolves.toEqual({ createdTask: task, taskId: task.id, turn });
     await expect(
       startPromptTurn(client, {
         idempotencyKeys: { startTurn: "existing-turn-key" },
-        input: { text: "继续任务", type: "text" },
+        input: { attachments: [], text: "继续任务", type: "prompt" },
         projectId: "code-agent",
         taskId: task.id,
+        turnOptions: {
+          approvalPolicy: "never",
+          model: "gpt-5.6-terra",
+          reasoningEffort: "low",
+        },
       }),
     ).resolves.toEqual({ taskId: task.id, turn });
 
@@ -131,18 +171,22 @@ describe("WorkbenchComposer", () => {
       1,
       task.id,
       {
+        attachments: [],
         text: "首次提交",
-        type: "text",
+        type: "prompt",
       },
+      { approvalPolicy: "on-request", model: "gpt-5.6-sol", reasoningEffort: "high" },
       { idempotencyKey: "turn-key" },
     );
     expect(client.startTurn).toHaveBeenNthCalledWith(
       2,
       task.id,
       {
+        attachments: [],
         text: "继续任务",
-        type: "text",
+        type: "prompt",
       },
+      { approvalPolicy: "never", model: "gpt-5.6-terra", reasoningEffort: "low" },
       { idempotencyKey: "existing-turn-key" },
     );
   });
@@ -154,6 +198,7 @@ describe("WorkbenchComposer", () => {
       ),
       startTask: vi.fn(),
       startTurn: vi.fn(),
+      uploadAttachment: vi.fn(),
     };
 
     await expect(

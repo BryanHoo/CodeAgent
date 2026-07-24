@@ -6,6 +6,7 @@ import { AgentEventBuffer, hydrateTaskRuntime, reduceAgentEvent } from "./task-r
 const response: AgentTaskSnapshotResponse = {
   checkpoint: { sequence: 10, sessionId: "runtime-1" },
   snapshot: {
+    contextUsage: null,
     id: "task-1",
     pendingRequests: [],
     pinned: false,
@@ -183,6 +184,18 @@ describe("task runtime", () => {
       error: "模型服务不可用",
       status: "failed",
     });
+  });
+
+  it("updates current context usage from realtime events", () => {
+    const state = reduceAgentEvent(hydrateTaskRuntime(response), {
+      ...envelope(11),
+      payload: { usage: { contextWindow: 200_000, usedTokens: 25_000 } },
+      turnId: "turn-1",
+      type: "usage.updated",
+    });
+
+    expect(state.snapshot.contextUsage).toEqual({ contextWindow: 200_000, usedTokens: 25_000 });
+    expect(state.checkpoint.sequence).toBe(11);
   });
 
   it("reconciles pending request lifecycle events by request id", () => {

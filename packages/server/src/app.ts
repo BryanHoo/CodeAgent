@@ -3,6 +3,9 @@ import { randomUUID } from "node:crypto";
 import { PendingRequestResolutionError, type AgentProvider } from "@code-agent/core";
 import {
   AgentCapabilitiesSchema,
+  AgentAttachmentUploadRequestSchema,
+  AgentAttachmentUploadResponseSchema,
+  AgentModelPageSchema,
   AgentMutationErrorSchema,
   AgentTaskPageSchema,
   AgentTaskSnapshotResponseSchema,
@@ -16,17 +19,20 @@ import {
   StartAgentTaskResponseSchema,
   StartAgentTurnRequestSchema,
   StartAgentTurnResponseSchema,
-  type AgentInput,
+  MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
+  type AgentAttachmentUploadRequest,
   type AgentMutationError,
   type EventStreamMessage,
   type Project,
   type ResolvePendingRequestRequest,
+  type StartAgentTurnRequest,
 } from "@code-agent/protocol";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { AgentEventStream } from "./agent-event-stream.js";
+import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js";
 
 export interface CreateCodeAgentServerOptions {
   eventBufferSize?: number;
@@ -163,6 +169,7 @@ export async function createCodeAgentServer(
   options: CreateCodeAgentServerOptions,
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  const attachmentStore = new AttachmentStore();
   const capabilities = await options.provider.getCapabilities();
   const eventStream = new AgentEventStream({
     ...(options.eventBufferSize === undefined ? {} : { capacity: options.eventBufferSize }),
@@ -204,7 +211,7 @@ export async function createCodeAgentServer(
     operation: string,
     key: string,
     payload: unknown,
-    action: () => Promise<T>,
+    action: () => Promise<T> | T,
   ): Promise<T> => {
     pruneIdempotencyEntries();
     // 结构化编码作用域，避免资源 ID 或 Key 中的分隔符产生碰撞。
@@ -268,6 +275,7 @@ export async function createCodeAgentServer(
   });
   app.addHook("onClose", () => {
     unsubscribeProvider();
+    attachmentStore.clear();
     idempotencyEntries.clear();
   });
 
@@ -296,10 +304,52 @@ export async function createCodeAgentServer(
     () => capabilities,
   );
 
+  app.get("/v1/models", { schema: { response: { 200: AgentModelPageSchema } } }, () =>
+    options.provider.listModels(),
+  );
+
   app.get("/v1/projects", { schema: { response: { 200: ProjectPageSchema } } }, () => ({
     data: [options.project],
     nextCursor: null,
   }));
+
+  app.post<{
+    Body: AgentAttachmentUploadRequest;
+    Headers: { "idempotency-key": string };
+  }>(
+    "/v1/attachments",
+    {
+      bodyLimit: MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH + 1_024,
+      schema: {
+        body: AgentAttachmentUploadRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        response: {
+          201: AgentAttachmentUploadResponseSchema,
+          400: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const attachment = await runIdempotent(
+        "upload-attachment",
+        request.headers["idempotency-key"],
+        request.body,
+        () => {
+          try {
+            return attachmentStore.add(request.body);
+          } catch (error) {
+            if (error instanceof TypeError || error instanceof RangeError) {
+              throw new MutationHttpError("INVALID_REQUEST", "Attachment is invalid", 400);
+            }
+            throw error;
+          }
+        },
+      );
+      return reply.code(201).send({ attachment });
+    },
+  );
 
   app.get<{
     Params: { projectId: string };
@@ -379,7 +429,7 @@ export async function createCodeAgentServer(
   );
 
   app.post<{
-    Body: { input: AgentInput };
+    Body: StartAgentTurnRequest;
     Headers: { "idempotency-key": string };
     Params: { taskId: string };
   }>(
@@ -408,7 +458,35 @@ export async function createCodeAgentServer(
           if (task?.projectId !== options.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
-          return options.provider.startTurn(request.params.taskId, request.body.input);
+          const attachmentIds = request.body.input.attachments.map((attachment) => attachment.id);
+          if (new Set(attachmentIds).size !== attachmentIds.length) {
+            throw new MutationHttpError(
+              "INVALID_REQUEST",
+              "Duplicate attachments are not allowed",
+              400,
+            );
+          }
+          let images;
+          try {
+            images = attachmentStore.resolve(attachmentIds);
+          } catch (error) {
+            if (error instanceof AttachmentNotFoundError) {
+              throw new MutationHttpError(
+                "ATTACHMENT_NOT_FOUND",
+                "Attachment was not found or has expired",
+                404,
+              );
+            }
+            throw error;
+          }
+          const turn = await options.provider.startTurn(
+            request.params.taskId,
+            { images, text: request.body.input.text },
+            request.body.options,
+          );
+          // 只有 Provider 确认启动成功后才消费附件，网络失败仍允许原请求重试。
+          attachmentStore.consume(attachmentIds);
+          return turn;
         },
       );
       return reply.code(201).send({ taskId: request.params.taskId, turn });

@@ -11,6 +11,8 @@
 - JSONL 响应只有在底层写入回调确认后才算成功，所有写入都使用有界超时；异步写入失败必须关闭连接且不能提前发布请求终态。
 - 过载错误使用带 jitter 的有上限指数退避，不做同步密集重试。
 - Task/Turn 写入只通过 `thread/start`、`turn/start` 和 `turn/interrupt` 映射；文本输入必须转换为当前 Codex Schema 要求的 `UserInput[]`，Provider 不向上泄漏原生字段。
+- 模型列表只通过分页 `model/list` 获取，过滤隐藏模型并保留默认模型、默认思考量和可用思考量；`turn/start` 明确映射文本、受控图片 Data URL、`model`、`effort` 和 `approvalPolicy`。
+- `thread/tokenUsage/updated` 只使用最近一轮 `last.totalTokens` 计算当前上下文占用，并连同 `modelContextWindow` 写入实时事件和后续 Snapshot；不得使用累计 `total.totalTokens` 冒充当前上下文。
 - `turn/interrupt` 响应只确认中断请求已接收；`turn/completed` 的 `interrupted` 状态才是 Turn 终态，Server 和 Web 不得提前伪造完成状态。
 - Codex Server Request 只有在 Task 已通过当前 Project 归属验证后才能进入可解决集合；读取期间到达的请求先暂存，原生终态到达时立即清理，归属验证成功后再提升，其他 Project 的请求直接丢弃；归属已确认后即使 Snapshot 映射失败，也不得删除仍在等待响应的请求。
 - Pending Request 在本地解决、原生 `serverRequest/resolved` 或 Turn 终止时只产生一次终态；Snapshot 不保留 `resolved` 或 `expired` 请求。
@@ -28,6 +30,7 @@
 - Fastify 关闭时取消 Provider Event 订阅并关闭 WebSocket 资源。
 - 所有 Agent Mutation 必须校验非空 `Idempotency-Key`；同操作、同 Key、同 Payload 复用进行中或成功结果，不同 Payload 返回冲突，失败结果不缓存。
 - 成功的幂等结果缓存必须同时设置容量上限和过期时间；进行中的请求不得淘汰，Runtime 关闭时清空全部条目。
+- 浏览器附件先经幂等上传进入 Server 的有界 TTL Store，并只返回随机 ID；Turn 成功后消费引用，Provider 失败时保留引用供同一请求重试，Runtime 关闭时清空 Store。
 
 ## 关闭
 

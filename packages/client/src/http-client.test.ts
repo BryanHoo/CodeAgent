@@ -16,6 +16,28 @@ const task = {
   updatedAt: "2026-07-23T00:01:00.000Z",
 };
 
+const modelPage = {
+  data: [
+    {
+      defaultReasoningEffort: "high",
+      description: "适合复杂编码任务",
+      displayName: "GPT-5.6 Sol",
+      id: "gpt-5.6-sol",
+      isDefault: true,
+      supportedReasoningEfforts: [{ description: "深入分析", id: "high" }],
+    },
+  ],
+  nextCursor: null,
+};
+const pixelDataUrl =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const attachment = {
+  id: "attachment-1",
+  mediaType: "image/png",
+  name: "screen.png",
+  size: 68,
+};
+
 const pendingRequest: PendingRequest = {
   availableDecisions: ["allow", "deny"],
   command: "pnpm check",
@@ -54,6 +76,15 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("reads the provider model catalog", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse(modelPage));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.listModels()).resolves.toEqual(modelPage);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/models");
+  });
+
   it("uses the configured base URL for all read methods", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock
@@ -69,7 +100,7 @@ describe("CodeAgentClient", () => {
       .mockResolvedValueOnce(
         jsonResponse({
           checkpoint: { sequence: 0, sessionId: "runtime-1" },
-          snapshot: { ...task, pendingRequests: [], status: "idle", turns: [] },
+          snapshot: { ...task, contextUsage: null, pendingRequests: [], status: "idle", turns: [] },
         }),
       );
     const client = new CodeAgentClient({ baseUrl: "http://127.0.0.1:3210/", fetch: fetchMock });
@@ -107,6 +138,7 @@ describe("CodeAgentClient", () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ task }))
+      .mockResolvedValueOnce(jsonResponse({ attachment }))
       .mockResolvedValueOnce(jsonResponse({ taskId: task.id, turn: runningTurn }))
       .mockResolvedValueOnce(
         jsonResponse({ status: "interrupting", taskId: task.id, turnId: runningTurn.id }),
@@ -114,20 +146,42 @@ describe("CodeAgentClient", () => {
     const client = new CodeAgentClient({ fetch: fetchMock });
 
     await client.startTask("code-agent", { idempotencyKey: "task-key" });
+    await client.uploadAttachment(
+      { dataUrl: pixelDataUrl, name: attachment.name },
+      { idempotencyKey: "attachment-key" },
+    );
     await client.startTurn(
       task.id,
-      { text: "继续实现", type: "text" },
+      { attachments: [{ id: attachment.id }], text: "继续实现", type: "prompt" },
+      { approvalPolicy: "on-request", model: "gpt-5.6-sol", reasoningEffort: "high" },
       { idempotencyKey: "turn-key" },
     );
     await client.interruptTurn(task.id, runningTurn.id, { idempotencyKey: "interrupt-key" });
 
-    const [taskCall, turnCall, interruptCall] = fetchMock.mock.calls;
+    const [taskCall, attachmentCall, turnCall, interruptCall] = fetchMock.mock.calls;
     expect(taskCall?.[0]).toBe("/v1/projects/code-agent/tasks");
     expect(taskCall?.[1]).toMatchObject({ body: "{}", method: "POST" });
     expect(new Headers(taskCall?.[1]?.headers).get("idempotency-key")).toBe("task-key");
+    expect(attachmentCall?.[0]).toBe("/v1/attachments");
+    expect(attachmentCall?.[1]).toMatchObject({
+      body: JSON.stringify({ dataUrl: pixelDataUrl, name: "screen.png" }),
+      method: "POST",
+    });
+    expect(new Headers(attachmentCall?.[1]?.headers).get("idempotency-key")).toBe("attachment-key");
     expect(turnCall?.[0]).toBe("/v1/tasks/task-1/turns");
     expect(turnCall?.[1]).toMatchObject({
-      body: JSON.stringify({ input: { text: "继续实现", type: "text" } }),
+      body: JSON.stringify({
+        input: {
+          attachments: [{ id: "attachment-1" }],
+          text: "继续实现",
+          type: "prompt",
+        },
+        options: {
+          approvalPolicy: "on-request",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+        },
+      }),
       method: "POST",
     });
     expect(new Headers(turnCall?.[1]?.headers).get("idempotency-key")).toBe("turn-key");

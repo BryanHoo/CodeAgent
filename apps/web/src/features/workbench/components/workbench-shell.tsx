@@ -1,5 +1,5 @@
-import type { AgentCapabilities, PendingRequest } from "@code-agent/protocol";
-import { useQueryClient } from "@tanstack/react-query";
+import type { AgentCapabilities, AgentModel, PendingRequest } from "@code-agent/protocol";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Ellipsis, ExternalLink, PanelLeft, PanelRight } from "lucide-react";
@@ -12,6 +12,7 @@ import {
 import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
+import { modelsQueryOptions } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { ProjectSidebar } from "./project-sidebar.js";
 import { TaskTimeline } from "./task-timeline.js";
@@ -35,6 +36,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const { capabilities, client, projects, tasks } = useProjects();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const modelsQuery = useQuery(modelsQueryOptions(client));
   const runtime = useTaskRuntime(taskId, client);
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
   const [sidebarOpen, setSidebarOpen] = useState(() => shouldOpenDesktopPanel(sidebarOverlayQuery));
@@ -177,6 +179,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             <WorkbenchComposer
               capabilities={capabilities}
               client={client}
+              models={modelsQuery.data?.data ?? []}
+              modelsError={modelsQuery.error}
+              modelsPending={modelsQuery.isPending}
               onTaskStarted={(startedTaskId) => {
                 void queryClient.invalidateQueries({
                   queryKey: ["projects", projectId, "tasks"],
@@ -194,6 +199,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           <ActiveTaskWorkbench
             capabilities={capabilities}
             client={client}
+            models={modelsQuery.data?.data ?? []}
+            modelsError={modelsQuery.error}
+            modelsPending={modelsQuery.isPending}
             key={taskId}
             projectId={projectId}
             projectName={projectName}
@@ -234,6 +242,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
 function ActiveTaskWorkbench({
   capabilities,
   client,
+  models,
+  modelsError,
+  modelsPending,
   projectId,
   projectName,
   projectPath,
@@ -243,6 +254,9 @@ function ActiveTaskWorkbench({
 }: Readonly<{
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentWorkbenchClient;
+  models: readonly AgentModel[];
+  modelsError: Error | null;
+  modelsPending: boolean;
   projectId: string;
   projectName: string;
   projectPath: string;
@@ -268,6 +282,9 @@ function ActiveTaskWorkbench({
       <WorkbenchComposer
         capabilities={capabilities}
         client={client}
+        models={models}
+        modelsError={modelsError}
+        modelsPending={modelsPending}
         onTaskStarted={() => undefined}
         projectId={projectId}
         projectPath={projectPath}

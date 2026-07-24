@@ -1,5 +1,7 @@
 import {
   AgentCapabilitiesSchema,
+  AgentAttachmentUploadResponseSchema,
+  AgentModelPageSchema,
   AgentMutationErrorSchema,
   InterruptAgentTurnResponseSchema,
   AgentTaskPageSchema,
@@ -10,9 +12,13 @@ import {
   StartAgentTaskResponseSchema,
   StartAgentTurnResponseSchema,
   type AgentCapabilities,
-  type AgentInput,
+  type AgentAttachmentUploadRequest,
+  type AgentAttachmentUploadResponse,
   type AgentMutationError,
   type AgentTaskPage,
+  type AgentModelPage,
+  type AgentPromptInput,
+  type AgentTurnOptions,
   type AgentTaskSnapshotResponse,
   type HealthResponse,
   type InterruptAgentTurnResponse,
@@ -111,6 +117,10 @@ export class CodeAgentClient {
     return this.#request("/v1/capabilities", AgentCapabilitiesSchema);
   }
 
+  public async listModels(): Promise<AgentModelPage> {
+    return this.#request("/v1/models", AgentModelPageSchema);
+  }
+
   public async listProjects(): Promise<ProjectPage> {
     return this.#request("/v1/projects", ProjectPageSchema);
   }
@@ -142,14 +152,22 @@ export class CodeAgentClient {
     );
   }
 
+  public async uploadAttachment(
+    input: AgentAttachmentUploadRequest,
+    options: MutationOptions = {},
+  ): Promise<AgentAttachmentUploadResponse> {
+    return this.#mutation("/v1/attachments", input, AgentAttachmentUploadResponseSchema, options);
+  }
+
   public async startTurn(
     taskId: string,
-    input: AgentInput,
+    input: AgentPromptInput,
+    turnOptions: AgentTurnOptions,
     options: MutationOptions = {},
   ): Promise<StartAgentTurnResponse> {
     return this.#mutation(
       `/v1/tasks/${encodeURIComponent(taskId)}/turns`,
-      { input },
+      { input, options: turnOptions },
       StartAgentTurnResponseSchema,
       options,
     );

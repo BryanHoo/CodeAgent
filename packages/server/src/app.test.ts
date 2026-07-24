@@ -2,6 +2,7 @@ import {
   PendingRequestResolutionError,
   type AgentProvider,
   type AgentProviderEvent,
+  type AgentProviderTurnInput,
 } from "@code-agent/core";
 import type { AgentTaskSnapshot, AgentTurn, PendingRequest } from "@code-agent/protocol";
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -18,6 +19,21 @@ const project = {
   rootPath: "/workspace/CodeAgent",
 } as const;
 
+const pixelDataUrl =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const turnOptions = {
+  approvalPolicy: "on-request",
+  model: "gpt-5.6-sol",
+  reasoningEffort: "high",
+} as const;
+
+function turnRequest(text: string) {
+  return {
+    input: { attachments: [], text, type: "prompt" as const },
+    options: turnOptions,
+  };
+}
+
 const task = {
   id: "task-1",
   pinned: false,
@@ -28,6 +44,7 @@ const task = {
 
 const snapshot = {
   ...task,
+  contextUsage: null,
   pendingRequests: [],
   status: "idle" as const,
   turns: [],
@@ -66,6 +83,21 @@ function createProvider() {
     }),
   );
   const listTasks = vi.fn(() => Promise.resolve({ data: [task], nextCursor: "next" }));
+  const listModels = vi.fn(() =>
+    Promise.resolve({
+      data: [
+        {
+          defaultReasoningEffort: "high",
+          description: "适合复杂编码任务",
+          displayName: "GPT-5.6 Sol",
+          id: "gpt-5.6-sol",
+          isDefault: true,
+          supportedReasoningEfforts: [{ description: "深入分析", id: "high" }],
+        },
+      ],
+      nextCursor: null,
+    }),
+  );
   const readTask = vi.fn<(taskId: string) => Promise<AgentTaskSnapshot | undefined>>((taskId) =>
     Promise.resolve(taskId === task.id ? snapshot : undefined),
   );
@@ -73,7 +105,7 @@ function createProvider() {
     Promise.resolve({ ...pendingRequest, status: "resolved" as const }),
   );
   const startTask = vi.fn(() => Promise.resolve(task));
-  const startTurn = vi.fn((taskId: string, input: { text: string; type: "text" }) =>
+  const startTurn = vi.fn((taskId: string, input: AgentProviderTurnInput) =>
     Promise.resolve({
       completedAt: null,
       error: null,
@@ -87,6 +119,7 @@ function createProvider() {
   const provider: AgentProvider = {
     getCapabilities,
     interruptTurn,
+    listModels,
     listTasks,
     readTask,
     resolvePendingRequest,
@@ -107,6 +140,7 @@ function createProvider() {
     },
     eventListeners,
     listTasks,
+    listModels,
     interruptTurn,
     provider,
     readTask,
@@ -122,6 +156,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     eventListeners,
     interruptTurn,
     listTasks,
+    listModels,
     provider,
     readTask,
     resolvePendingRequest,
@@ -136,6 +171,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     eventListeners,
     interruptTurn,
     listTasks,
+    listModels,
     readTask,
     resolvePendingRequest,
     startTask,
@@ -161,6 +197,55 @@ describe("CodeAgent Server", () => {
       turns: { interrupt: true, start: true },
     });
     expect(projectsResponse.json()).toEqual({ data: [project], nextCursor: null });
+  });
+
+  it("serves models and resolves uploaded attachments before starting a turn", async () => {
+    const { app, listModels, startTurn } = await createHarness();
+    const models = await app.inject({ method: "GET", url: "/v1/models" });
+    const uploadRequest = {
+      headers: { "idempotency-key": "upload-1" },
+      method: "POST" as const,
+      payload: { dataUrl: pixelDataUrl, name: "screen.png" },
+      url: "/v1/attachments",
+    };
+    const uploaded = await app.inject(uploadRequest);
+    const repeatedUpload = await app.inject(uploadRequest);
+    const attachment = uploaded.json<{ attachment: { id: string } }>().attachment;
+    const turn = await app.inject({
+      headers: { "idempotency-key": "attachment-turn" },
+      method: "POST",
+      payload: {
+        input: { attachments: [{ id: attachment.id }], text: "", type: "prompt" },
+        options: turnOptions,
+      },
+      url: "/v1/tasks/task-1/turns",
+    });
+    const consumed = await app.inject({
+      headers: { "idempotency-key": "attachment-consumed" },
+      method: "POST",
+      payload: {
+        input: { attachments: [{ id: attachment.id }], text: "", type: "prompt" },
+        options: turnOptions,
+      },
+      url: "/v1/tasks/task-1/turns",
+    });
+
+    expect(models.statusCode).toBe(200);
+    expect(models.json()).toMatchObject({ data: [{ id: "gpt-5.6-sol", isDefault: true }] });
+    expect(listModels).toHaveBeenCalledTimes(1);
+    expect(uploaded.statusCode).toBe(201);
+    expect(repeatedUpload.json()).toEqual(uploaded.json());
+    expect(uploaded.json()).toMatchObject({
+      attachment: { mediaType: "image/png", name: "screen.png", size: 68 },
+    });
+    expect(turn.statusCode).toBe(201);
+    expect(startTurn).toHaveBeenCalledWith(
+      "task-1",
+      { images: [{ mediaType: "image/png", url: pixelDataUrl }], text: "" },
+      turnOptions,
+    );
+    expect(consumed.statusCode).toBe(404);
+    expect(consumed.json()).toMatchObject({ code: "ATTACHMENT_NOT_FOUND" });
   });
 
   it("lists project tasks with validated pagination", async () => {
@@ -208,7 +293,7 @@ describe("CodeAgent Server", () => {
     const turn = await app.inject({
       headers: { "idempotency-key": "turn-1" },
       method: "POST",
-      payload: { input: { text: "继续实现", type: "text" } },
+      payload: turnRequest("继续实现"),
       url: "/v1/tasks/task-1/turns",
     });
     const turnBody = turn.json<{ taskId: string; turn: AgentTurn }>();
@@ -229,7 +314,7 @@ describe("CodeAgent Server", () => {
     expect(startTask).toHaveBeenCalledTimes(1);
     expect(turn.statusCode).toBe(201);
     expect(turn.json()).toMatchObject({ taskId: "task-1", turn: { id: "turn-1" } });
-    expect(startTurn).toHaveBeenCalledWith("task-1", { text: "继续实现", type: "text" });
+    expect(startTurn).toHaveBeenCalledWith("task-1", { images: [], text: "继续实现" }, turnOptions);
     expect(interrupted.statusCode).toBe(202);
     expect(interrupted.json()).toEqual({
       status: "interrupting",
@@ -335,13 +420,15 @@ describe("CodeAgent Server", () => {
     const first = await app.inject({
       headers,
       method: "POST",
-      payload: '{"input":{"text":"继续实现","type":"text"}}',
+      payload:
+        '{"input":{"attachments":[],"text":"继续实现","type":"prompt"},"options":{"approvalPolicy":"on-request","model":"gpt-5.6-sol","reasoningEffort":"high"}}',
       url: "/v1/tasks/task-1/turns",
     });
     const repeated = await app.inject({
       headers,
       method: "POST",
-      payload: '{"input":{"type":"text","text":"继续实现"}}',
+      payload:
+        '{"options":{"reasoningEffort":"high","model":"gpt-5.6-sol","approvalPolicy":"on-request"},"input":{"type":"prompt","text":"继续实现","attachments":[]}}',
       url: "/v1/tasks/task-1/turns",
     });
 
@@ -356,7 +443,7 @@ describe("CodeAgent Server", () => {
     readTask.mockImplementation((taskId) =>
       Promise.resolve({ ...snapshot, id: taskId, turns: [] }),
     );
-    const payload = { input: { text: "继续实现", type: "text" } };
+    const payload = turnRequest("继续实现");
 
     const first = await app.inject({
       headers: { "idempotency-key": "b:c" },
@@ -373,8 +460,18 @@ describe("CodeAgent Server", () => {
 
     expect(first.statusCode).toBe(201);
     expect(second.statusCode).toBe(201);
-    expect(startTurn).toHaveBeenNthCalledWith(1, "task:a", payload.input);
-    expect(startTurn).toHaveBeenNthCalledWith(2, "task:a:b", payload.input);
+    expect(startTurn).toHaveBeenNthCalledWith(
+      1,
+      "task:a",
+      { images: [], text: payload.input.text },
+      payload.options,
+    );
+    expect(startTurn).toHaveBeenNthCalledWith(
+      2,
+      "task:a:b",
+      { images: [], text: payload.input.text },
+      payload.options,
+    );
   });
 
   it("evicts completed idempotency entries when the cache reaches its limit", async () => {
@@ -440,13 +537,13 @@ describe("CodeAgent Server", () => {
     const first = await app.inject({
       headers: { "idempotency-key": "turn-conflict" },
       method: "POST",
-      payload: { input: { text: "第一次", type: "text" } },
+      payload: turnRequest("第一次"),
       url: "/v1/tasks/task-1/turns",
     });
     const conflict = await app.inject({
       headers: { "idempotency-key": "turn-conflict" },
       method: "POST",
-      payload: { input: { text: "第二次", type: "text" } },
+      payload: turnRequest("第二次"),
       url: "/v1/tasks/task-1/turns",
     });
 

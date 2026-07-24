@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TaskSnapshotTimeline } from "../workbench/components/task-timeline.js";
 import {
   capabilitiesQueryOptions,
+  modelsQueryOptions,
   projectTasksQueryOptions,
   projectsQueryOptions,
   taskSnapshotQueryOptions,
@@ -27,6 +28,7 @@ const task = {
 
 const snapshot = {
   ...task,
+  contextUsage: null,
   pendingRequests: [],
   status: "idle" as const,
   turns: [
@@ -89,6 +91,21 @@ describe("project queries", () => {
         }),
       ),
       listProjects: vi.fn(() => Promise.resolve({ data: [project], nextCursor: null })),
+      listModels: vi.fn(() =>
+        Promise.resolve({
+          data: [
+            {
+              defaultReasoningEffort: "high",
+              description: "适合复杂编码任务",
+              displayName: "GPT-5.6 Sol",
+              id: "gpt-5.6-sol",
+              isDefault: true,
+              supportedReasoningEfforts: [{ description: "深入分析", id: "high" }],
+            },
+          ],
+          nextCursor: null,
+        }),
+      ),
       listTasks: vi.fn(() => Promise.resolve({ data: [task], nextCursor: null })),
       readTask: vi.fn(() => Promise.resolve(snapshotResponse)),
     };
@@ -101,6 +118,9 @@ describe("project queries", () => {
     await expect(queryClient.fetchQuery(capabilitiesQueryOptions(client))).resolves.toMatchObject({
       tasks: { start: true },
       turns: { interrupt: true, start: true },
+    });
+    await expect(queryClient.fetchQuery(modelsQueryOptions(client))).resolves.toMatchObject({
+      data: [{ id: "gpt-5.6-sol", isDefault: true }],
     });
     await expect(
       queryClient.fetchQuery(projectTasksQueryOptions("code-agent", client)),

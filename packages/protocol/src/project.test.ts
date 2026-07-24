@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 
 import {
+  AgentAttachmentSchema,
+  AgentAttachmentUploadRequestSchema,
+  AgentAttachmentUploadResponseSchema,
   AgentCapabilitiesSchema,
-  AgentInputSchema,
+  AgentModelPageSchema,
+  AgentPromptInputSchema,
   AgentMutationErrorSchema,
   AgentTaskPageSchema,
   AgentTaskSchema,
@@ -84,6 +88,7 @@ describe("project protocol", () => {
 
   it("validates a structured task snapshot", () => {
     const snapshot = {
+      contextUsage: null,
       id: "task-1",
       pinned: false,
       pendingRequests: [],
@@ -329,16 +334,85 @@ describe("project protocol", () => {
       status: "running",
     };
 
-    expect(Value.Check(AgentInputSchema, { text: "实现功能", type: "text" })).toBe(true);
-    expect(Value.Check(AgentInputSchema, { text: "", type: "text" })).toBe(false);
+    const attachment = {
+      id: "attachment-1",
+      mediaType: "image/png",
+      name: "screen.png",
+      size: 68,
+    };
+    const prompt = {
+      attachments: [{ id: attachment.id }],
+      text: "参考截图实现功能",
+      type: "prompt",
+    };
+
+    expect(
+      Value.Check(AgentModelPageSchema, {
+        data: [
+          {
+            defaultReasoningEffort: "high",
+            description: "适合复杂编码任务",
+            displayName: "GPT-5.6 Sol",
+            id: "gpt-5.6-sol",
+            isDefault: true,
+            supportedReasoningEfforts: [
+              { description: "快速回答", id: "low" },
+              { description: "深入分析", id: "high" },
+            ],
+          },
+        ],
+        nextCursor: null,
+      }),
+    ).toBe(true);
+    expect(Value.Check(AgentAttachmentSchema, attachment)).toBe(true);
+    expect(
+      Value.Check(AgentAttachmentUploadRequestSchema, {
+        dataUrl:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        name: attachment.name,
+      }),
+    ).toBe(true);
+    expect(Value.Check(AgentAttachmentUploadResponseSchema, { attachment })).toBe(true);
+    expect(Value.Check(AgentPromptInputSchema, prompt)).toBe(true);
+    expect(
+      Value.Check(AgentPromptInputSchema, {
+        attachments: [{ id: attachment.id }],
+        text: "",
+        type: "prompt",
+      }),
+    ).toBe(true);
+    expect(Value.Check(AgentPromptInputSchema, { attachments: [], text: "", type: "prompt" })).toBe(
+      false,
+    );
+    expect(
+      Value.Check(AgentAttachmentUploadRequestSchema, {
+        dataUrl: "data:text/plain;base64,SGVsbG8=",
+        name: "notes.txt",
+      }),
+    ).toBe(false);
     expect(Value.Check(StartAgentTaskRequestSchema, {})).toBe(true);
     expect(Value.Check(StartAgentTaskRequestSchema, { nativeOptions: {} })).toBe(false);
     expect(Value.Check(StartAgentTaskResponseSchema, { task })).toBe(true);
     expect(
       Value.Check(StartAgentTurnRequestSchema, {
-        input: { text: "实现功能", type: "text" },
+        input: prompt,
+        options: {
+          approvalPolicy: "on-request",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+        },
       }),
     ).toBe(true);
+    expect(
+      Value.Check(StartAgentTurnRequestSchema, {
+        input: prompt,
+        options: {
+          approvalPolicy: "always",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+        },
+      }),
+    ).toBe(false);
     expect(Value.Check(StartAgentTurnResponseSchema, { taskId: task.id, turn })).toBe(true);
     expect(Value.Check(InterruptAgentTurnRequestSchema, { taskId: task.id })).toBe(true);
     expect(

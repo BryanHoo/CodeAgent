@@ -166,6 +166,18 @@ function completeActionTurn(threadId, turnId) {
     method: "item/completed",
     params: { item: message, threadId, turnId },
   });
+  send({
+    method: "thread/tokenUsage/updated",
+    params: {
+      threadId,
+      tokenUsage: {
+        last: { totalTokens: 25_000 },
+        modelContextWindow: 200_000,
+        total: { totalTokens: 25_000 },
+      },
+      turnId,
+    },
+  });
   send({ method: "turn/completed", params: { threadId, turn: completedTurn } });
 }
 
@@ -234,6 +246,18 @@ function scheduleRealtimeEvents() {
         completedAtMs: 1_753_228_801_500,
         item: commandItem,
         threadId: "task-realtime",
+        turnId: "turn-realtime",
+      },
+    });
+    send({
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "task-realtime",
+        tokenUsage: {
+          last: { totalTokens: 25_000 },
+          modelContextWindow: 200_000,
+          total: { totalTokens: 100_000 },
+        },
         turnId: "turn-realtime",
       },
     });
@@ -309,6 +333,42 @@ input.on("line", (line) => {
 
   if (message.method === "echo") {
     send({ id: message.id, result: message.params });
+    return;
+  }
+
+  if (message.method === "model/list") {
+    send({
+      id: message.id,
+      result: {
+        data: [
+          {
+            defaultReasoningEffort: "high",
+            description: "适合复杂编码任务",
+            displayName: "GPT-5.6 Sol",
+            hidden: false,
+            isDefault: true,
+            model: "gpt-5.6-sol",
+            supportedReasoningEfforts: [
+              { description: "快速回答", reasoningEffort: "low" },
+              { description: "深入分析", reasoningEffort: "high" },
+            ],
+          },
+          {
+            defaultReasoningEffort: "medium",
+            description: "适合日常编码任务",
+            displayName: "GPT-5.6 Terra",
+            hidden: false,
+            isDefault: false,
+            model: "gpt-5.6-terra",
+            supportedReasoningEfforts: [
+              { description: "快速回答", reasoningEffort: "low" },
+              { description: "平衡速度与深度", reasoningEffort: "medium" },
+            ],
+          },
+        ],
+        nextCursor: null,
+      },
+    });
     return;
   }
 

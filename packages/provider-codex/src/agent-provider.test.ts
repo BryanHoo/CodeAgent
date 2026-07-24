@@ -742,6 +742,112 @@ describe("CodexAgentProvider", () => {
     expect(rpc.serverResponses).toEqual([]);
   });
 
+  it("lists all visible Codex models through the provider contract", async () => {
+    const rpc = new FakeRpcClient([
+      {
+        data: [
+          {
+            defaultReasoningEffort: "high",
+            description: "适合复杂编码任务",
+            displayName: "GPT-5.6 Sol",
+            hidden: false,
+            isDefault: true,
+            model: "gpt-5.6-sol",
+            supportedReasoningEfforts: [
+              { description: "快速回答", reasoningEffort: "low" },
+              { description: "深入分析", reasoningEffort: "high" },
+            ],
+          },
+        ],
+        nextCursor: "models-page-2",
+      },
+      {
+        data: [
+          {
+            defaultReasoningEffort: "low",
+            description: "隐藏模型",
+            displayName: "Hidden",
+            hidden: true,
+            isDefault: false,
+            model: "hidden-model",
+            supportedReasoningEfforts: [{ description: "快速回答", reasoningEffort: "low" }],
+          },
+          {
+            defaultReasoningEffort: "medium",
+            description: "快速编码模型",
+            displayName: "GPT-5.6 Terra",
+            hidden: false,
+            isDefault: false,
+            model: "gpt-5.6-terra",
+            supportedReasoningEfforts: [
+              { description: "平衡速度与深度", reasoningEffort: "medium" },
+            ],
+          },
+        ],
+        nextCursor: null,
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.listModels()).resolves.toEqual({
+      data: [
+        {
+          defaultReasoningEffort: "high",
+          description: "适合复杂编码任务",
+          displayName: "GPT-5.6 Sol",
+          id: "gpt-5.6-sol",
+          isDefault: true,
+          supportedReasoningEfforts: [
+            { description: "快速回答", id: "low" },
+            { description: "深入分析", id: "high" },
+          ],
+        },
+        {
+          defaultReasoningEffort: "medium",
+          description: "快速编码模型",
+          displayName: "GPT-5.6 Terra",
+          id: "gpt-5.6-terra",
+          isDefault: false,
+          supportedReasoningEfforts: [{ description: "平衡速度与深度", id: "medium" }],
+        },
+      ],
+      nextCursor: null,
+    });
+    expect(rpc.calls).toEqual([
+      { method: "model/list", params: { includeHidden: false, limit: 100 } },
+      {
+        method: "model/list",
+        params: { cursor: "models-page-2", includeHidden: false, limit: 100 },
+      },
+    ]);
+  });
+
+  it("rejects repeated model cursors and mismatched image data URLs", async () => {
+    const cursorRpc = new FakeRpcClient([
+      { data: [], nextCursor: "same-page" },
+      { data: [], nextCursor: "same-page" },
+    ]);
+    const cursorProvider = createCodexAgentProvider({ client: cursorRpc, project });
+    await expect(cursorProvider.listModels()).rejects.toThrow(
+      "model/list returned a repeated cursor",
+    );
+
+    const inputRpc = new FakeRpcClient([{ thread: nativeThread() }]);
+    const inputProvider = createCodexAgentProvider({ client: inputRpc, project });
+    await inputProvider.startTask();
+    await expect(
+      inputProvider.startTurn(
+        "task-1",
+        {
+          images: [{ mediaType: "image/png", url: "data:image/jpeg;base64,aW1hZ2U=" }],
+          text: "",
+        },
+        { approvalPolicy: "on-request", model: "gpt-5.6-sol", reasoningEffort: "high" },
+      ),
+    ).rejects.toThrow("Provider image URL does not match its media type");
+    expect(inputRpc.calls).toHaveLength(1);
+  });
+
   it("maps task and turn mutations to Codex App Server RPC", async () => {
     const runningTurn = {
       completedAt: null,
@@ -761,7 +867,19 @@ describe("CodexAgentProvider", () => {
       projectId: "code-agent",
     });
     await expect(
-      provider.startTurn("task-1", { text: "实现写入闭环", type: "text" }),
+      provider.startTurn(
+        "task-1",
+        {
+          images: [
+            {
+              mediaType: "image/png",
+              url: "data:image/png;base64,aW1hZ2U=",
+            },
+          ],
+          text: "实现写入闭环",
+        },
+        { approvalPolicy: "untrusted", model: "gpt-5.6-sol", reasoningEffort: "high" },
+      ),
     ).resolves.toMatchObject({ id: "turn-1", status: "running" });
     await expect(provider.interruptTurn("task-1", "turn-1")).resolves.toBeUndefined();
 
@@ -770,7 +888,13 @@ describe("CodexAgentProvider", () => {
       {
         method: "turn/start",
         params: {
-          input: [{ text: "实现写入闭环", text_elements: [], type: "text" }],
+          approvalPolicy: "untrusted",
+          input: [
+            { text: "实现写入闭环", text_elements: [], type: "text" },
+            { type: "image", url: "data:image/png;base64,aW1hZ2U=" },
+          ],
+          model: "gpt-5.6-sol",
+          effort: "high",
           threadId: "task-1",
         },
       },
@@ -838,6 +962,29 @@ describe("CodexAgentProvider", () => {
       threadId: "task-1",
       turnId: "turn-1",
     });
+    rpc.emitNotification("thread/tokenUsage/updated", {
+      threadId: "task-1",
+      tokenUsage: {
+        last: {
+          cacheWriteInputTokens: 0,
+          cachedInputTokens: 10_000,
+          inputTokens: 20_000,
+          outputTokens: 4_000,
+          reasoningOutputTokens: 1_000,
+          totalTokens: 25_000,
+        },
+        modelContextWindow: 200_000,
+        total: {
+          cacheWriteInputTokens: 0,
+          cachedInputTokens: 10_000,
+          inputTokens: 80_000,
+          outputTokens: 15_000,
+          reasoningOutputTokens: 5_000,
+          totalTokens: 100_000,
+        },
+      },
+      turnId: "turn-1",
+    });
     rpc.emitNotification("turn/completed", { threadId: "task-1", turn: completedTurn });
     rpc.emitNotification("error", {
       error: { message: "模型服务不可用" },
@@ -900,6 +1047,12 @@ describe("CodexAgentProvider", () => {
         type: "item.completed",
       },
       {
+        payload: { usage: { contextWindow: 200_000, usedTokens: 25_000 } },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "usage.updated",
+      },
+      {
         payload: {
           turn: {
             completedAt: "2025-07-23T00:00:01.000Z",
@@ -929,7 +1082,7 @@ describe("CodexAgentProvider", () => {
       threadId: "task-1",
       turnId: "turn-1",
     });
-    expect(events).toHaveLength(8);
+    expect(events).toHaveLength(9);
   });
 
   it("does not publish notifications for tasks outside the active project", async () => {
@@ -1131,6 +1284,28 @@ describe("CodexAgentProvider", () => {
     deliveryOrder.push("snapshot");
 
     expect(deliveryOrder).toEqual(["event", "snapshot"]);
+  });
+
+  it("restores the latest context usage after validating project ownership", async () => {
+    const rpc = new FakeRpcClient([
+      () => {
+        rpc.emitNotification("thread/tokenUsage/updated", {
+          threadId: "task-1",
+          tokenUsage: {
+            last: { totalTokens: 25_000 },
+            modelContextWindow: 200_000,
+            total: { totalTokens: 100_000 },
+          },
+          turnId: "turn-1",
+        });
+        return { thread: nativeThread() };
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.readTask("task-1")).resolves.toMatchObject({
+      contextUsage: { contextWindow: 200_000, usedTokens: 25_000 },
+    });
   });
 
   it("maps thread/list without repeating the runtime handshake", async () => {

@@ -36,5 +36,6 @@ const close = async () => {
 process.once("SIGINT", () => void close().finally(() => process.exit(0)));
 process.once("SIGTERM", () => void close().finally(() => process.exit(0)));
 
-await server.listen({ host: "127.0.0.1", port: 4173 });
-process.stdout.write("Fake realtime server listening on http://127.0.0.1:4173\n");
+const e2ePort = Number.parseInt(process.env["CODE_AGENT_E2E_PORT"] ?? "4173", 10);
+await server.listen({ host: "127.0.0.1", port: e2ePort });
+process.stdout.write(`Fake realtime server listening on http://127.0.0.1:${String(e2ePort)}\n`);

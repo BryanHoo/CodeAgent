@@ -98,6 +98,12 @@ describe("Agent Event v1 protocol", () => {
       },
       {
         ...baseEvent,
+        payload: { usage: { contextWindow: 200_000, usedTokens: 25_000 } },
+        turnId: "turn-1",
+        type: "usage.updated",
+      },
+      {
+        ...baseEvent,
         payload: { message: "模型服务不可用", willRetry: false },
         turnId: "turn-1",
         type: "provider.error",
@@ -145,6 +151,7 @@ describe("Agent Event v1 protocol", () => {
     const response = {
       checkpoint: { sequence: 7, sessionId: "runtime-1" },
       snapshot: {
+        contextUsage: { contextWindow: 200_000, usedTokens: 25_000 },
         id: "task-1",
         pinned: false,
         pendingRequests: [pendingRequest],

@@ -162,17 +162,141 @@ export const AgentTurnSchema = Type.Object(
 
 export type AgentTurn = Readonly<Static<typeof AgentTurnSchema>>;
 
-export const AgentInputSchema = Type.Union([
+export const MAX_AGENT_ATTACHMENTS = 4;
+export const MAX_AGENT_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+export const MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH =
+  Math.ceil((MAX_AGENT_ATTACHMENT_BYTES * 4) / 3) + 64;
+
+export const AgentAttachmentMediaTypeSchema = Type.Union([
+  Type.Literal("image/gif"),
+  Type.Literal("image/jpeg"),
+  Type.Literal("image/png"),
+  Type.Literal("image/webp"),
+]);
+
+export type AgentAttachmentMediaType = Readonly<Static<typeof AgentAttachmentMediaTypeSchema>>;
+
+export const AgentAttachmentSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    mediaType: AgentAttachmentMediaTypeSchema,
+    name: Type.String({ maxLength: 255, minLength: 1 }),
+    size: Type.Integer({ maximum: MAX_AGENT_ATTACHMENT_BYTES, minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentAttachment = Readonly<Static<typeof AgentAttachmentSchema>>;
+
+export const AgentAttachmentUploadRequestSchema = Type.Object(
+  {
+    dataUrl: Type.String({
+      maxLength: MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
+      pattern: "^data:image/(gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$",
+    }),
+    name: Type.String({ maxLength: 255, minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentAttachmentUploadRequest = Readonly<
+  Static<typeof AgentAttachmentUploadRequestSchema>
+>;
+
+export const AgentAttachmentUploadResponseSchema = Type.Object(
+  { attachment: AgentAttachmentSchema },
+  { additionalProperties: false },
+);
+
+export type AgentAttachmentUploadResponse = Readonly<
+  Static<typeof AgentAttachmentUploadResponseSchema>
+>;
+
+const AgentAttachmentReferenceSchema = Type.Object(
+  { id: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+
+const AgentPromptInputProperties = {
+  attachments: Type.Array(AgentAttachmentReferenceSchema, { maxItems: MAX_AGENT_ATTACHMENTS }),
+  text: Type.String({ maxLength: 100_000 }),
+  type: Type.Literal("prompt"),
+};
+
+export const AgentPromptInputSchema = Type.Union([
   Type.Object(
     {
-      text: Type.String({ minLength: 1 }),
-      type: Type.Literal("text"),
+      ...AgentPromptInputProperties,
+      text: Type.String({ maxLength: 100_000, minLength: 1 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...AgentPromptInputProperties,
+      attachments: Type.Array(AgentAttachmentReferenceSchema, {
+        maxItems: MAX_AGENT_ATTACHMENTS,
+        minItems: 1,
+      }),
     },
     { additionalProperties: false },
   ),
 ]);
 
-export type AgentInput = Readonly<Static<typeof AgentInputSchema>>;
+export type AgentPromptInput = Readonly<Static<typeof AgentPromptInputSchema>>;
+
+export const AgentApprovalPolicySchema = Type.Union([
+  Type.Literal("untrusted"),
+  Type.Literal("on-request"),
+  Type.Literal("never"),
+]);
+
+export type AgentApprovalPolicy = Readonly<Static<typeof AgentApprovalPolicySchema>>;
+
+export const AgentTurnOptionsSchema = Type.Object(
+  {
+    approvalPolicy: AgentApprovalPolicySchema,
+    model: Type.String({ minLength: 1 }),
+    reasoningEffort: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentTurnOptions = Readonly<Static<typeof AgentTurnOptionsSchema>>;
+
+export const AgentReasoningEffortOptionSchema = Type.Object(
+  {
+    description: Type.String(),
+    id: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentReasoningEffortOption = Readonly<Static<typeof AgentReasoningEffortOptionSchema>>;
+
+export const AgentModelSchema = Type.Object(
+  {
+    defaultReasoningEffort: Type.String({ minLength: 1 }),
+    description: Type.String(),
+    displayName: Type.String({ minLength: 1 }),
+    id: Type.String({ minLength: 1 }),
+    isDefault: Type.Boolean(),
+    supportedReasoningEfforts: Type.Array(AgentReasoningEffortOptionSchema, { minItems: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentModel = Readonly<Static<typeof AgentModelSchema>>;
+
+export const AgentContextUsageSchema = Type.Object(
+  {
+    contextWindow: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+    usedTokens: Type.Integer({ minimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentContextUsage = Readonly<Static<typeof AgentContextUsageSchema>>;
 
 export const PendingRequestStatusSchema = Type.Union([
   Type.Literal("pending"),
@@ -400,7 +524,7 @@ export const StartAgentTaskResponseSchema = Type.Object(
 export type StartAgentTaskResponse = Readonly<Static<typeof StartAgentTaskResponseSchema>>;
 
 export const StartAgentTurnRequestSchema = Type.Object(
-  { input: AgentInputSchema },
+  { input: AgentPromptInputSchema, options: AgentTurnOptionsSchema },
   { additionalProperties: false },
 );
 export type StartAgentTurnRequest = Readonly<Static<typeof StartAgentTurnRequestSchema>>;
@@ -438,6 +562,7 @@ export const AgentMutationErrorCodeSchema = Type.Union([
   Type.Literal("TASK_NOT_FOUND"),
   Type.Literal("TURN_NOT_FOUND"),
   Type.Literal("TURN_NOT_RUNNING"),
+  Type.Literal("ATTACHMENT_NOT_FOUND"),
   Type.Literal("PENDING_REQUEST_NOT_FOUND"),
   Type.Literal("PENDING_REQUEST_EXPIRED"),
   Type.Literal("PENDING_REQUEST_ALREADY_RESOLVED"),
@@ -457,6 +582,7 @@ export type AgentMutationError = Readonly<Static<typeof AgentMutationErrorSchema
 
 export const AgentTaskSnapshotSchema = Type.Object(
   {
+    contextUsage: Type.Union([AgentContextUsageSchema, Type.Null()]),
     id: Type.String({ minLength: 1 }),
     pendingRequests: Type.Array(ActivePendingRequestSchema),
     pinned: Type.Boolean(),
@@ -491,6 +617,9 @@ export type ProjectPage = Page<Project>;
 
 export const AgentTaskPageSchema = createPageSchema(AgentTaskSchema);
 export type AgentTaskPage = Page<AgentTask>;
+
+export const AgentModelPageSchema = createPageSchema(AgentModelSchema);
+export type AgentModelPage = Page<AgentModel>;
 
 export const HealthResponseSchema = Type.Object(
   {
