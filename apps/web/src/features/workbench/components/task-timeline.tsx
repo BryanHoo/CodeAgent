@@ -1,5 +1,6 @@
 import type { AgentItemStatus, PendingRequest } from "@code-agent/protocol";
-import { FilePenLine, FolderGit2 } from "lucide-react";
+import { Check, Copy, FilePenLine, FolderGit2 } from "lucide-react";
+import { useState } from "react";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
@@ -9,7 +10,13 @@ import {
   ConversationContent,
   ConversationScrollButton,
 } from "../../../shared/ai-elements/conversation.js";
-import { Message, MessageContent, MessageResponse } from "../../../shared/ai-elements/message.js";
+import {
+  Message,
+  MessageAction,
+  MessageActions,
+  MessageContent,
+  MessageResponse,
+} from "../../../shared/ai-elements/message.js";
 import {
   Reasoning,
   ReasoningContent,
@@ -140,6 +147,72 @@ function formatStructuredValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+const messageTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
+  hour: "2-digit",
+  hour12: false,
+  minute: "2-digit",
+});
+
+const messageDateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
+  dateStyle: "medium",
+  timeStyle: "medium",
+});
+
+function getMessageTimestamp(
+  role: "assistant" | "user",
+  turn: RuntimeTaskSnapshot["turns"][number],
+  latestSnapshotTimestamp: string,
+): string {
+  // 协议尚未记录 Item 时间；用户消息使用 Turn 开始时间，AI 消息使用完成或最新事件时间。
+  if (role === "user") {
+    return turn.startedAt ?? latestSnapshotTimestamp;
+  }
+  return turn.completedAt ?? latestSnapshotTimestamp;
+}
+
+function MessageMetadata({
+  text,
+  timestamp,
+}: Readonly<{
+  text: string;
+  timestamp: string;
+}>) {
+  const [copiedText, setCopiedText] = useState<string | null>(null);
+  const copied = copiedText === text;
+  const messageDate = new Date(timestamp);
+
+  const copyMessage = async () => {
+    try {
+      // 只在明确点击时访问 Clipboard，避免渲染阶段触发浏览器权限请求。
+      await navigator.clipboard.writeText(text);
+      setCopiedText(text);
+    } catch {
+      setCopiedText(null);
+    }
+  };
+
+  return (
+    <MessageActions className="mt-2 text-label text-muted-foreground">
+      <MessageAction
+        label={copied ? "已复制" : "复制消息"}
+        onClick={() => {
+          void copyMessage();
+        }}
+        tooltip={copied ? "已复制" : "复制消息"}
+      >
+        {copied ? (
+          <Check className="size-3.5" aria-hidden="true" />
+        ) : (
+          <Copy className="size-3.5" aria-hidden="true" />
+        )}
+      </MessageAction>
+      <time dateTime={timestamp} title={messageDateTimeFormatter.format(messageDate)}>
+        {messageTimeFormatter.format(messageDate)}
+      </time>
+    </MessageActions>
+  );
+}
+
 function extractReasoningSteps(summary: string): string[] {
   const emphasizedSteps = [...summary.matchAll(/\*\*([^*\n]+)\*\*/g)]
     .map((match) => match[1]?.trim() ?? "")
@@ -220,11 +293,11 @@ export function TaskSnapshotTimeline({
 
   return (
     <Conversation aria-label="会话内容">
-      <ConversationContent>
+      <ConversationContent className="gap-6">
         {snapshot.turns.map((turn, turnIndex) => (
           <section
             aria-label={`Turn ${String(turnIndex + 1)}`}
-            className="space-y-3"
+            className="space-y-4"
             data-status={turn.status}
             key={turn.id}
           >
@@ -245,6 +318,10 @@ export function TaskSnapshotTimeline({
                       <MessageContent className={item.role === "assistant" ? "w-full" : ""}>
                         <MessageResponse>{item.text}</MessageResponse>
                       </MessageContent>
+                      <MessageMetadata
+                        text={item.text}
+                        timestamp={getMessageTimestamp(item.role, turn, snapshot.updatedAt)}
+                      />
                     </Message>
                   );
                 case "reasoning": {

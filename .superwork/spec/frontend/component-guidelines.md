@@ -15,6 +15,7 @@
 - 通过显式 Props 或专用 Hook 获取数据，不从组件内部访问 Server 或 Provider。
 - 长列表使用稳定尺寸与虚拟化；流式 Item 独立订阅，避免整个 Task 重渲染。
 - Task Timeline 必须显示失败 Turn 的归一化错误，并明确标识已截断的 Command Output，不能把错误或截断状态静默隐藏。
+- Task Timeline 的用户消息和 AI 回复末尾都必须常显可访问的复制操作与本地时间；消息 Item 和相邻 Turn 之间保留明确纵向间距，不能让下一条用户消息贴住上一条回复。
 - Timeline 展示 Task Snapshot 中的 Agent 文件操作，Inspector 则始终展示当前 Project 的真实 Git 未提交文件，并明确区分非空的未暂存与已暂存分组；变更总览固定在 Inspector 顶部，只有文件列表滚动，不展示未接通的提交入口。当前 Task 运行时 Inspector 定时刷新 Git 状态，停止运行后补做最终刷新。两处文件行都复用 Diff 弹窗；新增或删除文件的行数统计同时支持 Unified Diff 和 Provider 返回的完整文件内容，完整 Viewer 使用 `@pierre/diffs/react` 并仅在打开弹窗后动态加载，不能在消息内展开原始补丁或保留演示变更数据。
 - 交互控件使用语义化元素并提供可访问名称、键盘行为和明确状态。
 - Approval 使用 `Confirmation` 提供 Allow、Deny 和可用的 Session 级决策；网络审批必须明确显示目标 Host 与协议，不能依赖命令文本表达授权对象；User Input 的选择、确认和短文本分别使用 Radio、可切换 Button 和 Input，提交开始后立即禁用重复操作。

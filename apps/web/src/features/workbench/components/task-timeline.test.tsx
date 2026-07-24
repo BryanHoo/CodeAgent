@@ -33,6 +33,39 @@ const snapshot: RuntimeTaskSnapshot = {
 };
 
 describe("TaskSnapshotTimeline", () => {
+  it("renders copy controls, timestamps, and spacing for user and assistant messages", () => {
+    const messageSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              id: "message-user-1",
+              role: "user",
+              text: "请检查消息工具栏。",
+              type: "message",
+            },
+            {
+              id: "message-assistant-1",
+              role: "assistant",
+              text: "消息工具栏已检查。",
+              type: "message",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={messageSnapshot} />);
+
+    expect(markup.match(/aria-label="复制消息"/g)).toHaveLength(2);
+    expect(markup).toContain('dateTime="2026-07-24T00:00:00.000Z"');
+    expect(markup).toContain('dateTime="2026-07-24T00:01:00.000Z"');
+    expect(markup).toContain("gap-6");
+    expect(markup).toContain("space-y-4");
+  });
+
   it("renders a completed reasoning item as a collapsed readable summary", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={snapshot} />);
 
