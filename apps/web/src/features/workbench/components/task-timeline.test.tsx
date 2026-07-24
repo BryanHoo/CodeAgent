@@ -66,6 +66,80 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain("space-y-4");
   });
 
+  it("keeps reasoning and assistant text in one response with one completed footer", () => {
+    const multiItemResponseSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              id: "message-assistant-progress",
+              role: "assistant",
+              text: "我先检查消息判定。",
+              type: "message",
+            },
+            {
+              content: "正在核对时间线的分组逻辑。",
+              id: "reasoning-between-messages",
+              summary: "**核对消息分组**",
+              type: "reasoning",
+            },
+            {
+              id: "message-assistant-final",
+              role: "assistant",
+              text: "已修正消息判定。",
+              type: "message",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      <TaskSnapshotTimeline snapshot={multiItemResponseSnapshot} />,
+    );
+
+    // 同一 Turn 内的思考与文本属于一次 AI 回复，不应按 Agent Item 拆成多条消息。
+    expect(markup.match(/data-role="assistant"/g)).toHaveLength(1);
+    expect(markup.match(/aria-label="复制消息"/g)).toHaveLength(1);
+    expect(markup.match(/dateTime="2026-07-24T00:01:00.000Z"/g)).toHaveLength(1);
+  });
+
+  it("does not render an assistant footer while its turn is still running", () => {
+    const runningSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          ...completedTurn,
+          completedAt: null,
+          items: [
+            {
+              id: "message-assistant-progress",
+              role: "assistant",
+              text: "正在处理。",
+              type: "message",
+            },
+            {
+              content: "",
+              id: "reasoning-active",
+              summary: "**继续思考**",
+              type: "reasoning",
+            },
+          ],
+          status: "running",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningSnapshot} />);
+
+    expect(markup).toContain("正在处理。");
+    expect(markup).not.toContain('aria-label="复制消息"');
+    expect(markup).not.toContain("<time");
+  });
+
   it("renders a completed reasoning item as a collapsed readable summary", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={snapshot} />);
 

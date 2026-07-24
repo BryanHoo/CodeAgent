@@ -1,4 +1,4 @@
-import type { AgentItemStatus, PendingRequest } from "@code-agent/protocol";
+import type { AgentItem, AgentItemStatus, AgentTurn, PendingRequest } from "@code-agent/protocol";
 import { Check, Copy, FilePenLine, FolderGit2 } from "lucide-react";
 import { useState } from "react";
 
@@ -276,6 +276,206 @@ function FileChangeButton({
   );
 }
 
+type IndexedAgentItem = Readonly<{
+  item: AgentItem;
+  itemIndex: number;
+}>;
+
+type TurnTimelineGroup =
+  | Readonly<{ item: Extract<AgentItem, { type: "message" }>; type: "user" }>
+  | Readonly<{ items: readonly IndexedAgentItem[]; key: string; type: "assistant" }>;
+
+function groupTurnTimelineItems(items: readonly AgentItem[]): TurnTimelineGroup[] {
+  const groups: TurnTimelineGroup[] = [];
+  let assistantItems: IndexedAgentItem[] = [];
+
+  const flushAssistantItems = () => {
+    const firstAssistantItem = assistantItems[0];
+    if (firstAssistantItem === undefined) {
+      return;
+    }
+    groups.push({ items: assistantItems, key: firstAssistantItem.item.id, type: "assistant" });
+    assistantItems = [];
+  };
+
+  items.forEach((item, itemIndex) => {
+    if (item.type === "message" && item.role === "user") {
+      // 用户消息切断回复分组，其余 Item 都属于当前 Turn 的一次 AI 回复。
+      flushAssistantItems();
+      groups.push({ item, type: "user" });
+      return;
+    }
+    assistantItems.push({ item, itemIndex });
+  });
+  flushAssistantItems();
+
+  return groups;
+}
+
+function TimelineItemContent({
+  isLastTurnItem,
+  item,
+  onOpenFileDiff,
+  onOpenSourceFile,
+  turnStatus,
+}: Readonly<{
+  isLastTurnItem: boolean;
+  item: AgentItem;
+  onOpenFileDiff: (change: AgentFileChange) => void;
+  onOpenSourceFile: (reference: MessageFileReference) => void;
+  turnStatus: AgentTurn["status"];
+}>) {
+  switch (item.type) {
+    case "message":
+      return (
+        <MessageContent className={item.role === "assistant" ? "w-full" : ""}>
+          <MessageResponse onOpenFileReference={onOpenSourceFile}>{item.text}</MessageResponse>
+        </MessageContent>
+      );
+    case "reasoning": {
+      const reasoningSteps = extractReasoningSteps(item.summary);
+      const reasoningTitle = reasoningSteps.at(-1) ?? "推理";
+      const trimmedReasoningContent = item.content.trim();
+      const contentRepeatsSummary =
+        trimmedReasoningContent.length > 0 &&
+        extractReasoningSteps(trimmedReasoningContent).join("\n") === reasoningSteps.join("\n");
+      const reasoningContent =
+        trimmedReasoningContent.length > 0 && !contentRepeatsSummary
+          ? trimmedReasoningContent
+          : reasoningSteps.length > 1
+            ? item.summary
+            : "";
+      const isStreamingReasoning = turnStatus === "running" && isLastTurnItem;
+      const hasReasoningContent = reasoningContent.length > 0;
+
+      return (
+        <Reasoning collapsible={hasReasoningContent} isStreaming={isStreamingReasoning}>
+          <ReasoningTrigger expandable={hasReasoningContent}>{reasoningTitle}</ReasoningTrigger>
+          <ReasoningContent>{reasoningContent}</ReasoningContent>
+        </Reasoning>
+      );
+    }
+    case "command":
+      return (
+        <Tool>
+          <ToolHeader status={toToolStatus(item.status)}>{item.command}</ToolHeader>
+          <ToolContent>
+            <pre className="whitespace-pre-wrap">{item.output ?? item.cwd}</pre>
+            {item.outputTruncated ? (
+              <p className="mt-2 text-warning">输出已截断，仅显示最新内容。</p>
+            ) : null}
+          </ToolContent>
+        </Tool>
+      );
+    case "file_change":
+      return (
+        <div className="space-y-1" data-status={item.status}>
+          {item.changes.map((change, changeIndex) => (
+            <FileChangeButton
+              change={change}
+              key={`${change.path}:${String(changeIndex)}`}
+              onOpen={onOpenFileDiff}
+            />
+          ))}
+        </div>
+      );
+    case "tool":
+      return (
+        <Tool>
+          <ToolHeader status={toToolStatus(item.status)}>{item.name}</ToolHeader>
+          <ToolContent>
+            <pre className="whitespace-pre-wrap">
+              {[item.input, item.output]
+                .filter((value) => value !== undefined)
+                .map(formatStructuredValue)
+                .join("\n")}
+            </pre>
+          </ToolContent>
+        </Tool>
+      );
+    case "plan":
+      return (
+        <Tool defaultOpen>
+          <ToolHeader status="completed">计划</ToolHeader>
+          <ToolContent>
+            <pre className="whitespace-pre-wrap">{item.text}</pre>
+          </ToolContent>
+        </Tool>
+      );
+    case "activity":
+      return (
+        <Tool>
+          <ToolHeader status={toToolStatus(item.status ?? "completed")}>{item.label}</ToolHeader>
+          {item.detail === undefined ? null : <ToolContent>{item.detail}</ToolContent>}
+        </Tool>
+      );
+  }
+}
+
+function TurnTimelineItems({
+  latestSnapshotTimestamp,
+  onOpenFileDiff,
+  onOpenSourceFile,
+  turn,
+}: Readonly<{
+  latestSnapshotTimestamp: string;
+  onOpenFileDiff: (change: AgentFileChange) => void;
+  onOpenSourceFile: (reference: MessageFileReference) => void;
+  turn: AgentTurn;
+}>) {
+  const timelineGroups = groupTurnTimelineItems(turn.items);
+
+  return timelineGroups.map((group) => {
+    if (group.type === "user") {
+      return (
+        <Message from="user" key={group.item.id}>
+          <TimelineItemContent
+            isLastTurnItem={false}
+            item={group.item}
+            onOpenFileDiff={onOpenFileDiff}
+            onOpenSourceFile={onOpenSourceFile}
+            turnStatus={turn.status}
+          />
+          <MessageMetadata
+            text={group.item.text}
+            timestamp={getMessageTimestamp("user", turn, latestSnapshotTimestamp)}
+          />
+        </Message>
+      );
+    }
+
+    const assistantText = group.items
+      .flatMap(({ item }) =>
+        item.type === "message" && item.role === "assistant" ? [item.text] : [],
+      )
+      .join("\n\n");
+    const showCompletedFooter = turn.status !== "running" && assistantText.trim().length > 0;
+
+    return (
+      <Message from="assistant" key={group.key}>
+        <div className="w-full space-y-4">
+          {group.items.map(({ item, itemIndex }) => (
+            <TimelineItemContent
+              isLastTurnItem={itemIndex === turn.items.length - 1}
+              item={item}
+              key={item.id}
+              onOpenFileDiff={onOpenFileDiff}
+              onOpenSourceFile={onOpenSourceFile}
+              turnStatus={turn.status}
+            />
+          ))}
+        </div>
+        {showCompletedFooter ? (
+          <MessageMetadata
+            text={assistantText}
+            timestamp={getMessageTimestamp("assistant", turn, latestSnapshotTimestamp)}
+          />
+        ) : null}
+      </Message>
+    );
+  });
+}
+
 export function TaskSnapshotTimeline({
   connected = true,
   onOpenFileDiff = () => undefined,
@@ -319,111 +519,12 @@ export function TaskSnapshotTimeline({
                 <p className="mt-1">{turn.error}</p>
               </div>
             )}
-            {turn.items.map((item, itemIndex) => {
-              switch (item.type) {
-                case "message":
-                  return (
-                    <Message from={item.role} key={item.id}>
-                      <MessageContent className={item.role === "assistant" ? "w-full" : ""}>
-                        <MessageResponse onOpenFileReference={onOpenSourceFile}>
-                          {item.text}
-                        </MessageResponse>
-                      </MessageContent>
-                      <MessageMetadata
-                        text={item.text}
-                        timestamp={getMessageTimestamp(item.role, turn, snapshot.updatedAt)}
-                      />
-                    </Message>
-                  );
-                case "reasoning": {
-                  const reasoningSteps = extractReasoningSteps(item.summary);
-                  const reasoningTitle = reasoningSteps.at(-1) ?? "推理";
-                  const trimmedReasoningContent = item.content.trim();
-                  const contentRepeatsSummary =
-                    trimmedReasoningContent.length > 0 &&
-                    extractReasoningSteps(trimmedReasoningContent).join("\n") ===
-                      reasoningSteps.join("\n");
-                  const reasoningContent =
-                    trimmedReasoningContent.length > 0 && !contentRepeatsSummary
-                      ? trimmedReasoningContent
-                      : reasoningSteps.length > 1
-                        ? item.summary
-                        : "";
-                  const isStreamingReasoning =
-                    turn.status === "running" && itemIndex === turn.items.length - 1;
-                  const hasReasoningContent = reasoningContent.length > 0;
-
-                  return (
-                    <Reasoning
-                      collapsible={hasReasoningContent}
-                      isStreaming={isStreamingReasoning}
-                      key={item.id}
-                    >
-                      <ReasoningTrigger expandable={hasReasoningContent}>
-                        {reasoningTitle}
-                      </ReasoningTrigger>
-                      <ReasoningContent>{reasoningContent}</ReasoningContent>
-                    </Reasoning>
-                  );
-                }
-                case "command":
-                  return (
-                    <Tool key={item.id}>
-                      <ToolHeader status={toToolStatus(item.status)}>{item.command}</ToolHeader>
-                      <ToolContent>
-                        <pre className="whitespace-pre-wrap">{item.output ?? item.cwd}</pre>
-                        {item.outputTruncated ? (
-                          <p className="mt-2 text-warning">输出已截断，仅显示最新内容。</p>
-                        ) : null}
-                      </ToolContent>
-                    </Tool>
-                  );
-                case "file_change":
-                  return (
-                    <div className="space-y-1" data-status={item.status} key={item.id}>
-                      {item.changes.map((change, changeIndex) => (
-                        <FileChangeButton
-                          change={change}
-                          key={`${change.path}:${String(changeIndex)}`}
-                          onOpen={onOpenFileDiff}
-                        />
-                      ))}
-                    </div>
-                  );
-                case "tool":
-                  return (
-                    <Tool key={item.id}>
-                      <ToolHeader status={toToolStatus(item.status)}>{item.name}</ToolHeader>
-                      <ToolContent>
-                        <pre className="whitespace-pre-wrap">
-                          {[item.input, item.output]
-                            .filter((value) => value !== undefined)
-                            .map(formatStructuredValue)
-                            .join("\n")}
-                        </pre>
-                      </ToolContent>
-                    </Tool>
-                  );
-                case "plan":
-                  return (
-                    <Tool defaultOpen key={item.id}>
-                      <ToolHeader status="completed">计划</ToolHeader>
-                      <ToolContent>
-                        <pre className="whitespace-pre-wrap">{item.text}</pre>
-                      </ToolContent>
-                    </Tool>
-                  );
-                case "activity":
-                  return (
-                    <Tool key={item.id}>
-                      <ToolHeader status={toToolStatus(item.status ?? "completed")}>
-                        {item.label}
-                      </ToolHeader>
-                      {item.detail === undefined ? null : <ToolContent>{item.detail}</ToolContent>}
-                    </Tool>
-                  );
-              }
-            })}
+            <TurnTimelineItems
+              latestSnapshotTimestamp={snapshot.updatedAt}
+              onOpenFileDiff={onOpenFileDiff}
+              onOpenSourceFile={onOpenSourceFile}
+              turn={turn}
+            />
           </section>
         ))}
         {snapshot.pendingRequests.map((request, index) => {
