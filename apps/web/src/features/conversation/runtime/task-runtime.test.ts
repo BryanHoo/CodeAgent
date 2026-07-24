@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentTaskSnapshotResponse } from "@code-agent/protocol";
+import type { AgentEvent, AgentTaskSnapshotResponse, PendingRequest } from "@code-agent/protocol";
 import { describe, expect, it } from "vitest";
 
 import { AgentEventBuffer, hydrateTaskRuntime, reduceAgentEvent } from "./task-runtime.js";
@@ -7,6 +7,7 @@ const response: AgentTaskSnapshotResponse = {
   checkpoint: { sequence: 10, sessionId: "runtime-1" },
   snapshot: {
     id: "task-1",
+    pendingRequests: [],
     pinned: false,
     projectId: "code-agent",
     status: "idle",
@@ -182,6 +183,49 @@ describe("task runtime", () => {
       error: "模型服务不可用",
       status: "failed",
     });
+  });
+
+  it("reconciles pending request lifecycle events by request id", () => {
+    const request = {
+      availableDecisions: ["allow", "deny"],
+      command: "pnpm check",
+      createdAt: "2026-07-23T00:00:01.000Z",
+      cwd: "/workspace/CodeAgent",
+      expiresAt: null,
+      itemId: "command-1",
+      networkAccess: null,
+      projectId: "code-agent",
+      reason: null,
+      requestId: "number:7",
+      status: "pending",
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "command_approval",
+    } satisfies PendingRequest & { status: "pending" };
+    let state = reduceAgentEvent(hydrateTaskRuntime(response), {
+      ...envelope(11),
+      itemId: request.itemId,
+      payload: { request },
+      turnId: request.turnId,
+      type: "pending_request.created",
+    });
+    state = reduceAgentEvent(state, {
+      ...envelope(12),
+      itemId: request.itemId,
+      payload: { request: { ...request, status: "resolved" } },
+      turnId: request.turnId,
+      type: "pending_request.resolved",
+    });
+    state = reduceAgentEvent(state, {
+      ...envelope(12),
+      itemId: request.itemId,
+      payload: { request: { ...request, status: "expired" } },
+      turnId: request.turnId,
+      type: "pending_request.expired",
+    });
+
+    expect(state.snapshot.pendingRequests).toEqual([{ ...request, status: "resolved" }]);
+    expect(state.checkpoint.sequence).toBe(12);
   });
 
   it("merges delta buffers and flushes earlier sequences before terminals", () => {

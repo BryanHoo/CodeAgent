@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { AgentProvider } from "@code-agent/core";
+import { PendingRequestResolutionError, type AgentProvider } from "@code-agent/core";
 import {
   AgentCapabilitiesSchema,
   AgentMutationErrorSchema,
@@ -10,6 +10,8 @@ import {
   InterruptAgentTurnRequestSchema,
   InterruptAgentTurnResponseSchema,
   ProjectPageSchema,
+  ResolvePendingRequestRequestSchema,
+  ResolvePendingRequestResponseSchema,
   StartAgentTaskRequestSchema,
   StartAgentTaskResponseSchema,
   StartAgentTurnRequestSchema,
@@ -18,6 +20,7 @@ import {
   type AgentMutationError,
   type EventStreamMessage,
   type Project,
+  type ResolvePendingRequestRequest,
 } from "@code-agent/protocol";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
@@ -53,6 +56,13 @@ const TurnParamsSchema = {
   additionalProperties: false,
   properties: { turnId: { minLength: 1, type: "string" } },
   required: ["turnId"],
+  type: "object",
+} as const;
+
+const PendingRequestParamsSchema = {
+  additionalProperties: false,
+  properties: { requestId: { minLength: 1, type: "string" } },
+  required: ["requestId"],
   type: "object",
 } as const;
 
@@ -126,6 +136,27 @@ function normalizeJsonForFingerprint(value: unknown): unknown {
 
 function fingerprintPayload(payload: unknown): string {
   return JSON.stringify(normalizeJsonForFingerprint(payload));
+}
+
+function toPendingRequestHttpError(error: PendingRequestResolutionError): MutationHttpError {
+  switch (error.code) {
+    case "not_found":
+      return new MutationHttpError("PENDING_REQUEST_NOT_FOUND", "Pending request not found", 404);
+    case "expired":
+      return new MutationHttpError("PENDING_REQUEST_EXPIRED", "Pending request expired", 409);
+    case "resolved":
+      return new MutationHttpError(
+        "PENDING_REQUEST_ALREADY_RESOLVED",
+        "Pending request already resolved",
+        409,
+      );
+    case "mismatch":
+      return new MutationHttpError(
+        "PENDING_REQUEST_MISMATCH",
+        "Pending request identity does not match",
+        409,
+      );
+  }
 }
 
 export async function createCodeAgentServer(
@@ -430,6 +461,52 @@ export async function createCodeAgentServer(
         },
       );
       return reply.code(202).send(response);
+    },
+  );
+
+  app.post<{
+    Body: ResolvePendingRequestRequest;
+    Headers: { "idempotency-key": string };
+    Params: { requestId: string };
+  }>(
+    "/v1/pending-requests/:requestId/resolve",
+    {
+      schema: {
+        body: ResolvePendingRequestRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: PendingRequestParamsSchema,
+        response: {
+          200: ResolvePendingRequestResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) => {
+      if (request.body.projectId !== options.project.id) {
+        throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+      }
+      const resolvedRequest = await runIdempotent(
+        `resolve-pending-request:${request.params.requestId}`,
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          try {
+            return await options.provider.resolvePendingRequest({
+              ...request.body,
+              requestId: request.params.requestId,
+            });
+          } catch (error) {
+            if (error instanceof PendingRequestResolutionError) {
+              throw toPendingRequestHttpError(error);
+            }
+            throw error;
+          }
+        },
+      );
+      return { request: resolvedRequest };
     },
   );
 

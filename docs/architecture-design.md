@@ -479,6 +479,9 @@ Realtime Path 当前实现的 v1 判别类型与 payload：
 | `item.completed`       | `taskId`, `turnId`, `itemId` | `{ item: AgentItem }`                        |
 | `turn.completed`       | `taskId`, `turnId`           | `{ turn: AgentTurn }`                        |
 | `provider.error`       | `taskId`, `turnId`           | `{ message, willRetry }`                     |
+| `pending_request.created` | `taskId`, `turnId`, `itemId` | `{ request: PendingRequest }`             |
+| `pending_request.resolved` | `taskId`, `turnId`, `itemId` | `{ request: PendingRequest }`            |
+| `pending_request.expired` | `taskId`, `turnId`, `itemId` | `{ request: PendingRequest }`              |
 
 Provider 只产生不含传输字段的统一事件，并仅发布已通过当前 Project 归属验证的 Task。Server 在 Runtime Session 内统一补齐 `version`、`provider`、`sessionId`、`sequence` 和 `timestamp`。
 
@@ -511,7 +514,7 @@ POST   /v1/tasks/:taskId/archive
 POST   /v1/tasks/:taskId/turns
 POST   /v1/turns/:turnId/steer
 POST   /v1/turns/:turnId/interrupt
-POST   /v1/requests/:requestId/resolve
+POST   /v1/pending-requests/:requestId/resolve
 GET    /v1/auth/session
 POST   /v1/auth/login
 DELETE /v1/auth/session
@@ -527,7 +530,7 @@ Idempotency-Key: <uuid>
 
 ```json
 {
-  "snapshot": { "id": "task-id", "turns": [] },
+  "snapshot": { "id": "task-id", "pendingRequests": [], "turns": [] },
   "checkpoint": { "sessionId": "runtime-session-id", "sequence": 1024 }
 }
 ```
@@ -683,22 +686,21 @@ item/tool/requestUserInput
 
 ```ts
 export type PendingRequest = {
-  id: string;
-  providerRequestId: string | number;
-  provider: string;
-  userId: string;
+  requestId: string;
+  projectId: string;
   taskId: string;
   turnId: string;
-  itemId?: string;
-  type: "command" | "file_change" | "user_input";
+  itemId: string;
+  type: "command_approval" | "file_change_approval" | "user_input";
   status: "pending" | "resolved" | "expired";
-  payload: unknown;
   createdAt: string;
-  expiresAt?: string;
+  expiresAt: string | null;
 };
 ```
 
-收到 `serverRequest/resolved`、Turn 完成或 Turn 中断后，必须清理相应 Pending Request。
+各判别分支分别携带命令、文件授权根或结构化问题，不向 Web 暴露原生 JSON-RPC Payload。命令审批遇到 `networkApprovalContext` 时，将目标 Host 与协议归一化为 `networkAccess`，Web 必须按网络授权展示，不能依赖可能为空的命令文本。只有已通过当前 Project 归属验证的 Task 请求可进入解决集合；读取期间到达的请求先暂存，验证失败后直接丢弃。
+
+解决请求统一调用 `POST /v1/pending-requests/:requestId/resolve`，携带 `Idempotency-Key` 并完整校验 `projectId + taskId + turnId + itemId + requestId`、请求类型和状态。收到 `serverRequest/resolved`、Turn 完成或 Turn 中断后，必须发布一次 `pending_request.expired` 并清理相应请求；本地解决发布 `pending_request.resolved`。
 
 ### 11.7 认证
 

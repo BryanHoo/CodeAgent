@@ -1,4 +1,4 @@
-import type { AgentCapabilities } from "@code-agent/protocol";
+import type { AgentCapabilities, PendingRequest } from "@code-agent/protocol";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -10,6 +10,7 @@ import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { ProjectSidebar } from "./project-sidebar.js";
 import { TaskTimeline } from "./task-timeline.js";
+import type { PendingRequestResolution } from "./pending-request.js";
 import { WorkbenchComposer } from "./workbench-composer.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
 
@@ -213,10 +214,20 @@ function ActiveTaskWorkbench({
   taskId: string;
 }>) {
   const runtime = useTaskRuntime(taskId, client);
+  const resolvePendingRequest = (
+    request: PendingRequest,
+    resolution: PendingRequestResolution,
+    idempotencyKey: string,
+  ) => client.resolvePendingRequest(request, resolution, { idempotencyKey }).then(() => undefined);
 
   return (
     <>
-      <TaskTimeline projectName={projectName} runtime={runtime} taskId={taskId} />
+      <TaskTimeline
+        onResolvePendingRequest={resolvePendingRequest}
+        projectName={projectName}
+        runtime={runtime}
+        taskId={taskId}
+      />
       <WorkbenchComposer
         capabilities={capabilities}
         client={client}

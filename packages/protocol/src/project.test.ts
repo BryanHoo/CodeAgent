@@ -10,6 +10,7 @@ import {
   AgentTaskSnapshotSchema,
   InterruptAgentTurnRequestSchema,
   InterruptAgentTurnResponseSchema,
+  PendingRequestSchema,
   StartAgentTaskRequestSchema,
   StartAgentTaskResponseSchema,
   StartAgentTurnRequestSchema,
@@ -17,6 +18,8 @@ import {
   HealthResponseSchema,
   ProjectPageSchema,
   ProjectSchema,
+  ResolvePendingRequestRequestSchema,
+  ResolvePendingRequestResponseSchema,
 } from "./project.js";
 
 describe("project protocol", () => {
@@ -83,6 +86,7 @@ describe("project protocol", () => {
     const snapshot = {
       id: "task-1",
       pinned: false,
+      pendingRequests: [],
       projectId: "code-agent",
       status: "idle",
       title: "实现真实任务历史",
@@ -158,6 +162,143 @@ describe("project protocol", () => {
       }),
     ).toBe(false);
     expect(Value.Check(AgentTaskSnapshotSchema, { ...snapshot, nativeThread: {} })).toBe(false);
+  });
+
+  it("validates discriminated pending requests and typed resolutions", () => {
+    const identity = {
+      createdAt: "2026-07-23T00:00:00.000Z",
+      expiresAt: null,
+      itemId: "item-1",
+      projectId: "code-agent",
+      requestId: "number:7",
+      status: "pending",
+      taskId: "task-1",
+      turnId: "turn-1",
+    } as const;
+    const commandRequest = {
+      ...identity,
+      availableDecisions: ["allow", "allow_for_session", "deny"],
+      command: "pnpm check",
+      cwd: "/workspace/CodeAgent",
+      networkAccess: { host: "api.example.com", protocol: "https" },
+      reason: "需要执行检查",
+      type: "command_approval",
+    } as const;
+    const fileRequest = {
+      ...identity,
+      availableDecisions: ["allow", "deny"],
+      grantRoot: "/workspace/CodeAgent",
+      reason: null,
+      requestId: "number:8",
+      type: "file_change_approval",
+    } as const;
+    const inputRequest = {
+      ...identity,
+      questions: [
+        {
+          header: "执行模式",
+          id: "mode",
+          isOther: false,
+          isSecret: false,
+          options: [
+            { description: "继续实现", label: "继续" },
+            { description: "停止当前工作", label: "停止" },
+          ],
+          prompt: "下一步怎么处理？",
+          type: "choice",
+        },
+      ],
+      requestId: "string:input-1",
+      type: "user_input",
+    } as const;
+
+    expect(
+      [commandRequest, fileRequest, inputRequest].every((request) =>
+        Value.Check(PendingRequestSchema, request),
+      ),
+    ).toBe(true);
+    expect(
+      Value.Check(PendingRequestSchema, {
+        ...inputRequest,
+        questions: [{ ...inputRequest.questions[0], options: [] }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(PendingRequestSchema, {
+        ...inputRequest,
+        questions: [
+          {
+            ...inputRequest.questions[0],
+            isOther: true,
+            type: "confirmation",
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(Value.Check(PendingRequestSchema, { ...commandRequest, nativeRequestId: 7 })).toBe(
+      false,
+    );
+    expect(
+      Value.Check(PendingRequestSchema, {
+        ...commandRequest,
+        networkAccess: { host: "api.example.com", protocol: "ftp" },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: commandRequest.itemId,
+        projectId: commandRequest.projectId,
+        resolution: { decision: "allow_for_session" },
+        taskId: commandRequest.taskId,
+        turnId: commandRequest.turnId,
+        type: commandRequest.type,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: inputRequest.itemId,
+        projectId: inputRequest.projectId,
+        resolution: { answers: { mode: ["继续"] } },
+        taskId: inputRequest.taskId,
+        turnId: inputRequest.turnId,
+        type: inputRequest.type,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: inputRequest.itemId,
+        projectId: inputRequest.projectId,
+        resolution: { answers: { mode: [""] } },
+        taskId: inputRequest.taskId,
+        turnId: inputRequest.turnId,
+        type: inputRequest.type,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: inputRequest.itemId,
+        projectId: inputRequest.projectId,
+        resolution: { answers: { mode: ["继续", "停止"] } },
+        taskId: inputRequest.taskId,
+        turnId: inputRequest.turnId,
+        type: inputRequest.type,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: inputRequest.itemId,
+        projectId: inputRequest.projectId,
+        resolution: { decision: "allow" },
+        taskId: inputRequest.taskId,
+        turnId: inputRequest.turnId,
+        type: inputRequest.type,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ResolvePendingRequestResponseSchema, {
+        request: { ...commandRequest, status: "resolved" },
+      }),
+    ).toBe(true);
   });
 
   it("validates health and capability responses", () => {

@@ -34,6 +34,23 @@ const baseEvent = {
   version: 1,
 } as const;
 
+const pendingRequest = {
+  availableDecisions: ["allow", "deny"],
+  command: "pnpm check",
+  createdAt: "2026-07-23T00:00:00.000Z",
+  cwd: "/workspace/CodeAgent",
+  expiresAt: null,
+  itemId: "item-approval",
+  networkAccess: null,
+  projectId: "code-agent",
+  reason: null,
+  requestId: "number:7",
+  status: "pending",
+  taskId: "task-1",
+  turnId: "turn-1",
+  type: "command_approval",
+} as const;
+
 describe("Agent Event v1 protocol", () => {
   it("validates every supported event variant", () => {
     const events = [
@@ -85,6 +102,27 @@ describe("Agent Event v1 protocol", () => {
         turnId: "turn-1",
         type: "provider.error",
       },
+      {
+        ...baseEvent,
+        itemId: pendingRequest.itemId,
+        payload: { request: pendingRequest },
+        turnId: pendingRequest.turnId,
+        type: "pending_request.created",
+      },
+      {
+        ...baseEvent,
+        itemId: pendingRequest.itemId,
+        payload: { request: { ...pendingRequest, status: "resolved" } },
+        turnId: pendingRequest.turnId,
+        type: "pending_request.resolved",
+      },
+      {
+        ...baseEvent,
+        itemId: pendingRequest.itemId,
+        payload: { request: { ...pendingRequest, status: "expired" } },
+        turnId: pendingRequest.turnId,
+        type: "pending_request.expired",
+      },
     ];
 
     expect(events.every((event) => Value.Check(AgentEventSchema, event))).toBe(true);
@@ -109,6 +147,7 @@ describe("Agent Event v1 protocol", () => {
       snapshot: {
         id: "task-1",
         pinned: false,
+        pendingRequests: [pendingRequest],
         projectId: "code-agent",
         status: "idle",
         title: "实时链路",
@@ -122,6 +161,43 @@ describe("Agent Event v1 protocol", () => {
     expect(Value.Check(EventStreamMessageSchema, ready)).toBe(true);
     expect(Value.Check(EventStreamMessageSchema, resync)).toBe(true);
     expect(Value.Check(AgentTaskSnapshotResponseSchema, response)).toBe(true);
+    expect(
+      Value.Check(AgentTaskSnapshotResponseSchema, {
+        ...response,
+        snapshot: {
+          ...response.snapshot,
+          pendingRequests: [{ ...pendingRequest, status: "resolved" }],
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects pending request lifecycle events with contradictory statuses", () => {
+    const event = {
+      ...baseEvent,
+      itemId: pendingRequest.itemId,
+      payload: { request: pendingRequest },
+      turnId: pendingRequest.turnId,
+    };
+
+    expect(Value.Check(AgentEventSchema, { ...event, type: "pending_request.created" })).toBe(true);
+    expect(Value.Check(AgentEventSchema, { ...event, type: "pending_request.resolved" })).toBe(
+      false,
+    );
+    expect(
+      Value.Check(AgentEventSchema, {
+        ...event,
+        payload: { request: { ...pendingRequest, status: "expired" } },
+        type: "pending_request.expired",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentEventSchema, {
+        ...event,
+        payload: { request: { ...pendingRequest, status: "resolved" } },
+        type: "pending_request.expired",
+      }),
+    ).toBe(false);
   });
 
   it("rejects invalid versions, sequences, discriminants, and extra fields", () => {

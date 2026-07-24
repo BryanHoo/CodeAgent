@@ -1,6 +1,13 @@
-import { Type, type Static, type TProperties } from "@sinclair/typebox";
+import { Type, type Static, type TProperties, type TSchema } from "@sinclair/typebox";
 
-import { AgentItemSchema, AgentTaskSnapshotSchema, AgentTurnSchema } from "./project.js";
+import {
+  ActivePendingRequestSchema,
+  AgentItemSchema,
+  AgentTaskSnapshotSchema,
+  AgentTurnSchema,
+  ExpiredPendingRequestSchema,
+  ResolvedPendingRequestSchema,
+} from "./project.js";
 
 const SessionIdSchema = Type.String({ minLength: 1 });
 const SequenceSchema = Type.Integer({ minimum: 0 });
@@ -77,6 +84,31 @@ export const ProviderErrorEventSchema = createEventSchema({
   type: Type.Literal("provider.error"),
 });
 
+function createPendingRequestEventSchema<TType extends string, TRequestSchema extends TSchema>(
+  type: TType,
+  requestSchema: TRequestSchema,
+) {
+  return createEventSchema({
+    itemId: Type.String({ minLength: 1 }),
+    payload: Type.Object({ request: requestSchema }, { additionalProperties: false }),
+    turnId: Type.String({ minLength: 1 }),
+    type: Type.Literal(type),
+  });
+}
+
+export const PendingRequestCreatedEventSchema = createPendingRequestEventSchema(
+  "pending_request.created",
+  ActivePendingRequestSchema,
+);
+export const PendingRequestResolvedEventSchema = createPendingRequestEventSchema(
+  "pending_request.resolved",
+  ResolvedPendingRequestSchema,
+);
+export const PendingRequestExpiredEventSchema = createPendingRequestEventSchema(
+  "pending_request.expired",
+  ExpiredPendingRequestSchema,
+);
+
 export const AgentEventSchema = Type.Union([
   TurnStartedEventSchema,
   MessageDeltaEventSchema,
@@ -85,6 +117,9 @@ export const AgentEventSchema = Type.Union([
   ItemCompletedEventSchema,
   TurnCompletedEventSchema,
   ProviderErrorEventSchema,
+  PendingRequestCreatedEventSchema,
+  PendingRequestResolvedEventSchema,
+  PendingRequestExpiredEventSchema,
 ]);
 
 export type AgentEvent = Readonly<Static<typeof AgentEventSchema>>;

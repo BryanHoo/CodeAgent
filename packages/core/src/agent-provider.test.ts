@@ -19,6 +19,24 @@ describe("AgentProvider", () => {
       readTask() {
         return Promise.resolve(undefined);
       },
+      resolvePendingRequest(input) {
+        return Promise.resolve({
+          availableDecisions: ["allow", "deny"],
+          command: "pnpm check",
+          createdAt: "2026-07-23T00:00:00.000Z",
+          cwd: "/workspace/CodeAgent",
+          expiresAt: null,
+          itemId: input.itemId,
+          networkAccess: null,
+          projectId: input.projectId,
+          reason: null,
+          requestId: input.requestId,
+          status: "resolved",
+          taskId: input.taskId,
+          turnId: input.turnId,
+          type: "command_approval",
+        });
+      },
       startTask() {
         return Promise.resolve({
           id: "task-1",
@@ -61,6 +79,17 @@ describe("AgentProvider", () => {
       nextCursor: null,
     });
     await expect(provider.readTask("missing-task")).resolves.toBeUndefined();
+    await expect(
+      provider.resolvePendingRequest({
+        itemId: "item-1",
+        projectId: "project-1",
+        requestId: "number:7",
+        resolution: { decision: "allow" },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "command_approval",
+      }),
+    ).resolves.toMatchObject({ requestId: "number:7", status: "resolved" });
     await expect(provider.startTask()).resolves.toMatchObject({ id: "task-1" });
     await expect(
       provider.startTurn("task-1", { text: "继续", type: "text" }),

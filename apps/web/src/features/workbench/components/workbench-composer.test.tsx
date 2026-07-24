@@ -11,6 +11,7 @@ import {
 
 const task = {
   id: "task-1",
+  pendingRequests: [],
   pinned: false,
   projectId: "code-agent",
   title: "新任务",

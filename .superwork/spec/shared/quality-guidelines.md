@@ -18,5 +18,8 @@
 - Agent 写入必须由 Protocol 提供结构化 `AgentInput`、Task/Turn Mutation 请求响应、能力和错误 Schema；Client 与 Server 都必须执行运行时校验。
 - 运行能力至少独立声明 Task 的 `list`、`read`、`start` 与 Turn 的 `start`、`interrupt`，消费者不得通过 Provider 名称推断能力。
 - `POST /v1/projects/:projectId/tasks`、`POST /v1/tasks/:taskId/turns` 和 `POST /v1/turns/:turnId/interrupt` 必须携带 `Idempotency-Key`，并使用统一错误码表达缺失 Key、冲突、资源不存在和 Provider 失败。
+- Pending Request 使用 `command_approval`、`file_change_approval`、`user_input` 判别联合；命令审批将受管网络目标归一化为可空的 `networkAccess`，保留 Host 与协议；Snapshot 只返回未解决请求，实时链路使用 `pending_request.created`、`pending_request.resolved`、`pending_request.expired` 同步生命周期。
+- Pending Request 生命周期事件必须分别携带 `pending`、`resolved`、`expired` 状态；固定选项问题至少提供一个选项，无选项 Choice 只有在允许自定义回答时才合法。
+- `POST /v1/pending-requests/:requestId/resolve` 必须携带 `Idempotency-Key`，并校验 `projectId + taskId + turnId + itemId + requestId`、请求类型、可用决策、User Input 单值与固定选项和当前状态。
 - 变更按新协议逻辑实现并删除冗余旧路径；破坏性变更明确升级 API 或事件版本。
 - 更新所有消费者、契约测试和架构文档后运行 `pnpm check`。

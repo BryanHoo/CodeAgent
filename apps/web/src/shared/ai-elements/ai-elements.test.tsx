@@ -2,6 +2,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { Conversation, ConversationContent } from "./conversation.js";
+import {
+  Confirmation,
+  ConfirmationAction,
+  ConfirmationActions,
+  ConfirmationRequest,
+  ConfirmationTitle,
+} from "./confirmation.js";
 import { Message, MessageContent, MessageResponse } from "./message.js";
 import {
   PromptInput,
@@ -61,5 +68,24 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('aria-label="提交"');
     expect(markup).toContain("disabled");
     expect(markup).toContain("shadow-floating");
+  });
+
+  it("renders an accessible confirmation composition", () => {
+    const markup = renderToStaticMarkup(
+      <Confirmation approval={{ id: "request-1" }} state="approval-requested">
+        <ConfirmationTitle>命令审批</ConfirmationTitle>
+        <ConfirmationRequest>pnpm check</ConfirmationRequest>
+        <ConfirmationActions>
+          <ConfirmationAction>拒绝</ConfirmationAction>
+          <ConfirmationAction>允许</ConfirmationAction>
+        </ConfirmationActions>
+      </Confirmation>,
+    );
+
+    expect(markup).toContain('aria-label="命令审批请求"');
+    expect(markup).toContain('data-state="approval-requested"');
+    expect(markup).toContain("pnpm check");
+    expect(markup).toContain("拒绝");
+    expect(markup).toContain("允许");
   });
 });

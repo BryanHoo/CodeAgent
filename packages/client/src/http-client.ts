@@ -6,6 +6,7 @@ import {
   AgentTaskSnapshotResponseSchema,
   HealthResponseSchema,
   ProjectPageSchema,
+  ResolvePendingRequestResponseSchema,
   StartAgentTaskResponseSchema,
   StartAgentTurnResponseSchema,
   type AgentCapabilities,
@@ -16,6 +17,9 @@ import {
   type HealthResponse,
   type InterruptAgentTurnResponse,
   type ProjectPage,
+  type PendingRequest,
+  type ResolvePendingRequestRequest,
+  type ResolvePendingRequestResponse,
   type StartAgentTaskResponse,
   type StartAgentTurnResponse,
 } from "@code-agent/protocol";
@@ -42,6 +46,11 @@ export type ListTasksOptions = Readonly<{
 export type MutationOptions = Readonly<{
   idempotencyKey?: string;
 }>;
+
+export type PendingRequestResolution<T extends PendingRequest> = Extract<
+  ResolvePendingRequestRequest,
+  { type: T["type"] }
+>["resolution"];
 
 export class CodeAgentHttpError extends Error {
   public readonly status: number;
@@ -155,6 +164,27 @@ export class CodeAgentClient {
       `/v1/turns/${encodeURIComponent(turnId)}/interrupt`,
       { taskId },
       InterruptAgentTurnResponseSchema,
+      options,
+    );
+  }
+
+  public async resolvePendingRequest<T extends PendingRequest>(
+    request: T,
+    resolution: PendingRequestResolution<T>,
+    options: MutationOptions = {},
+  ): Promise<ResolvePendingRequestResponse> {
+    const body = {
+      itemId: request.itemId,
+      projectId: request.projectId,
+      resolution,
+      taskId: request.taskId,
+      turnId: request.turnId,
+      type: request.type,
+    } as ResolvePendingRequestRequest;
+    return this.#mutation(
+      `/v1/pending-requests/${encodeURIComponent(request.requestId)}/resolve`,
+      body,
+      ResolvePendingRequestResponseSchema,
       options,
     );
   }

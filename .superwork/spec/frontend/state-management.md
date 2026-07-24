@@ -14,6 +14,7 @@
 - `reconnecting`、`resync.required` 和 Session 变化触发 Snapshot refetch；旧订阅、Socket、Timer 和动画帧回调必须在替换或卸载时清理。
 - Snapshot 请求错误优先于加载状态展示；WebSocket 成功恢复为 `connected` 后清除上一次连接尝试产生的瞬时错误。
 - Approval、Error 和 Terminal State 不得因合并或反压丢失。
+- Pending Request 按 `requestId` 合并 Snapshot 与实时生命周期事件；多个未解决请求按到达顺序展示，仅队首允许提交，重连期间全部暂停提交。
 - 在真正引入状态库前，不预先创建抽象 Store 或空 Slice。
 - Timeline 与 Composer 必须共享同一个 Task Runtime 订阅，不能为同一 Task 重复建立 Snapshot Query 和 WebSocket 链路。
 - Composer 只使用 `idle`、`submitting`、`running`、`reconnecting`、`failed` 五种状态；运行态来自活动 Turn，重连态暂停网络 Mutation，失败态保留草稿。

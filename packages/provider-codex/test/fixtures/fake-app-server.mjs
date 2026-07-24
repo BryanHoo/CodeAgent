@@ -18,6 +18,7 @@ if (JSON.stringify(args) !== JSON.stringify(expectedArgs)) {
 const scenario = process.env["FAKE_APP_SERVER_SCENARIO"] ?? "normal";
 const actionScenario = scenario === "agent-actions" || scenario === "realtime-actions";
 const realtimeScenario = scenario === "realtime" || scenario === "realtime-actions";
+const pendingRequestScenario = scenario === "pending-requests" || actionScenario;
 const input = createInterface({ input: process.stdin });
 let initializeParams;
 let initialized = false;
@@ -25,9 +26,74 @@ let realtimeRunning = false;
 let nextActionTask = 1;
 let nextActionTurn = 1;
 const actionThreads = new Map();
+const pendingServerRequests = new Map();
+const pendingServerResponses = [];
+let nextPendingRequest = 1;
 
 function send(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
+}
+
+function pendingRequestParams(
+  kind,
+  identity = { itemId: `${kind}-item`, threadId: "task-1", turnId: "turn-1" },
+) {
+  if (kind === "command") {
+    return {
+      ...identity,
+      availableDecisions: ["accept", "acceptForSession", "decline"],
+      command: "pnpm check",
+      cwd: "/workspace/CodeAgent",
+      reason: "需要执行检查",
+      startedAtMs: 1_753_228_800_000,
+    };
+  }
+  if (kind === "file") {
+    return {
+      ...identity,
+      grantRoot: "/workspace/CodeAgent",
+      reason: "需要修改文件",
+      startedAtMs: 1_753_228_801_000,
+    };
+  }
+  return {
+    ...identity,
+    autoResolutionMs: 30_000,
+    questions: [
+      {
+        header: "执行模式",
+        id: "mode",
+        isOther: true,
+        isSecret: false,
+        options: [
+          { description: "继续实现", label: "继续" },
+          { description: "停止当前工作", label: "停止" },
+        ],
+        question: "下一步怎么处理？",
+      },
+    ],
+  };
+}
+
+function sendPendingRequest(
+  kind,
+  requestId,
+  identity = { itemId: `${kind}-item`, threadId: "task-1", turnId: "turn-1" },
+  completeOnResolve = false,
+) {
+  const method =
+    kind === "command"
+      ? "item/commandExecution/requestApproval"
+      : kind === "file"
+        ? "item/fileChange/requestApproval"
+        : "item/tool/requestUserInput";
+  pendingServerRequests.set(requestId, {
+    completeOnResolve,
+    kind,
+    threadId: identity.threadId,
+    turnId: identity.turnId,
+  });
+  send({ id: requestId, method, params: pendingRequestParams(kind, identity) });
 }
 
 function realtimeTurn(status, items, error = null) {
@@ -195,6 +261,20 @@ function scheduleRealtimeEvents() {
 input.on("line", (line) => {
   const message = JSON.parse(line);
 
+  if (message.method === undefined && pendingServerRequests.has(message.id)) {
+    const pending = pendingServerRequests.get(message.id);
+    pendingServerRequests.delete(message.id);
+    pendingServerResponses.push({ id: message.id, result: message.result });
+    send({
+      method: "serverRequest/resolved",
+      params: { requestId: message.id, threadId: pending.threadId },
+    });
+    if (pending.completeOnResolve) {
+      completeActionTurn(pending.threadId, pending.turnId);
+    }
+    return;
+  }
+
   if (message.method === "initialize") {
     initializeParams = message.params;
     if (scenario === "invalid-jsonl") {
@@ -229,6 +309,24 @@ input.on("line", (line) => {
 
   if (message.method === "echo") {
     send({ id: message.id, result: message.params });
+    return;
+  }
+
+  if (pendingRequestScenario && message.method === "trigger/pending") {
+    const kind = message.params?.kind;
+    if (kind !== "command" && kind !== "file" && kind !== "user_input") {
+      send({ error: { code: -32602, message: "invalid pending request kind" }, id: message.id });
+      return;
+    }
+    const requestId = `fake-${kind}-${String(nextPendingRequest)}`;
+    nextPendingRequest += 1;
+    send({ id: message.id, result: { requestId } });
+    sendPendingRequest(kind, requestId);
+    return;
+  }
+
+  if (pendingRequestScenario && message.method === "inspect/pending") {
+    send({ id: message.id, result: { responses: pendingServerResponses } });
     return;
   }
 
@@ -330,7 +428,23 @@ input.on("line", (line) => {
     actionThreads.set(threadId, actionThread(threadId, [...thread.turns, turn]));
     send({ id: message.id, result: { turn } });
     send({ method: "turn/started", params: { threadId, turn } });
-    if (!prompt.includes("中断")) {
+    const pendingKind = prompt.includes("审批命令")
+      ? "command"
+      : prompt.includes("审批文件")
+        ? "file"
+        : prompt.includes("用户输入")
+          ? "user_input"
+          : undefined;
+    if (pendingKind !== undefined) {
+      const requestId = `fake-${pendingKind}-${String(nextPendingRequest)}`;
+      nextPendingRequest += 1;
+      sendPendingRequest(
+        pendingKind,
+        requestId,
+        { itemId: `${turnId}-${pendingKind}`, threadId, turnId },
+        true,
+      );
+    } else if (!prompt.includes("中断")) {
       setTimeout(() => completeActionTurn(threadId, turnId), 120);
     }
     return;

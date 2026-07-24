@@ -74,7 +74,8 @@ export function deriveComposerState(
 }
 
 export function resolveActiveTurnId(
-  snapshot: AgentTaskSnapshot | undefined,
+  snapshot:
+    (Pick<AgentTaskSnapshot, "turns"> & Partial<Pick<AgentTaskSnapshot, "status">>) | undefined,
   submittedTurnId: string | undefined,
 ): string | undefined {
   const runningTurn = snapshot?.turns.findLast((turn) => turn.status === "running");

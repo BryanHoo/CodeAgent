@@ -24,13 +24,17 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
   const client = {
     notify: vi.fn(),
     onNotification: vi.fn(() => () => undefined),
+    onServerRequest: vi.fn(() => () => undefined),
+    rejectServerRequest: vi.fn(() => Promise.resolve()),
     request: vi.fn(),
+    respondToServerRequest: vi.fn(),
   };
   const provider = {
     getCapabilities: vi.fn(),
     interruptTurn: vi.fn(),
     listTasks: vi.fn(),
     readTask: vi.fn(),
+    resolvePendingRequest: vi.fn(),
     startTask: vi.fn(),
     startTurn: vi.fn(),
     subscribeEvents: vi.fn(() => () => undefined),
@@ -188,7 +192,10 @@ describe("runCli", () => {
           client: {
             notify: vi.fn(),
             onNotification: vi.fn(() => () => undefined),
+            onServerRequest: vi.fn(() => () => undefined),
+            rejectServerRequest: vi.fn(() => Promise.resolve()),
             request: vi.fn(),
+            respondToServerRequest: vi.fn(),
           },
           pid: 4321,
           waitForExit: () => Promise.resolve({ code: 23, signal: null }),

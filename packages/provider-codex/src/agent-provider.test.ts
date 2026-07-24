@@ -1,18 +1,33 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+import type { AgentProviderEvent, PendingRequestResolutionError } from "@code-agent/core";
 
 import { createCodexAgentProvider, CodexProtocolMappingError } from "./agent-provider.js";
-import { RpcResponseError } from "./jsonl-rpc-client.js";
+import { RpcResponseError, type RpcRequestId } from "./jsonl-rpc-client.js";
 
 class FakeRpcClient {
   readonly calls: Readonly<{ method: string; params: unknown }>[] = [];
   readonly notifications: Readonly<{ method: string; params: unknown }>[] = [];
+  readonly serverErrors: Readonly<{
+    error: { code: number; data: unknown; message: string };
+    id: RpcRequestId;
+  }>[] = [];
+  readonly serverResponses: Readonly<{ id: RpcRequestId; result: unknown }>[] = [];
   readonly #notificationListeners = new Set<
     (notification: { method: string; params: unknown }) => void
   >();
+  readonly #serverRequestListeners = new Set<
+    (request: { id: RpcRequestId; method: string; params: unknown }) => void
+  >();
   readonly #responses: unknown[];
+  readonly #serverResponseBehavior: Promise<void> | (() => Promise<void>) | undefined;
 
-  public constructor(responses: unknown[]) {
+  public constructor(
+    responses: unknown[],
+    serverResponseBehavior?: Promise<void> | (() => Promise<void>),
+  ) {
     this.#responses = [...responses];
+    this.#serverResponseBehavior = serverResponseBehavior;
   }
 
   public request(method: string, params?: unknown): Promise<unknown> {
@@ -38,6 +53,36 @@ class FakeRpcClient {
   public emitNotification(method: string, params?: unknown): void {
     for (const listener of this.#notificationListeners) {
       listener({ method, params });
+    }
+  }
+
+  public onServerRequest(
+    listener: (request: { id: RpcRequestId; method: string; params: unknown }) => void,
+  ): () => void {
+    this.#serverRequestListeners.add(listener);
+    return () => {
+      this.#serverRequestListeners.delete(listener);
+    };
+  }
+
+  public async respondToServerRequest(id: RpcRequestId, result: unknown): Promise<void> {
+    this.serverResponses.push({ id, result });
+    await (typeof this.#serverResponseBehavior === "function"
+      ? this.#serverResponseBehavior()
+      : this.#serverResponseBehavior);
+  }
+
+  public rejectServerRequest(
+    id: RpcRequestId,
+    error: { code: number; data: unknown; message: string },
+  ): Promise<void> {
+    this.serverErrors.push({ error, id });
+    return Promise.resolve();
+  }
+
+  public emitServerRequest(id: RpcRequestId, method: string, params: unknown): void {
+    for (const listener of this.#serverRequestListeners) {
+      listener({ id, method, params });
     }
   }
 }
@@ -69,6 +114,634 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("rejects unsupported server request methods instead of leaving Codex blocked", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.listTasks();
+
+    rpc.emitServerRequest("unsupported-request", "item/tool/futureApproval", {
+      threadId: "task-1",
+    });
+    await Promise.resolve();
+
+    expect(rpc.serverErrors).toEqual([
+      {
+        error: {
+          code: -32601,
+          data: { method: "item/tool/futureApproval" },
+          message: "Method not found",
+        },
+        id: "unsupported-request",
+      },
+    ]);
+  });
+
+  it("rejects user input questions that have no available answer", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+    await provider.listTasks();
+
+    rpc.emitServerRequest("empty-choice", "item/tool/requestUserInput", {
+      autoResolutionMs: null,
+      itemId: "empty-choice-item",
+      questions: [
+        {
+          header: "模式",
+          id: "mode",
+          isOther: false,
+          isSecret: false,
+          options: [],
+          question: "下一步怎么处理？",
+        },
+      ],
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    await Promise.resolve();
+
+    expect(events).toEqual([]);
+    expect(rpc.serverErrors).toEqual([
+      {
+        error: {
+          code: -32602,
+          data: { method: "item/tool/requestUserInput" },
+          message: "Invalid params",
+        },
+        id: "empty-choice",
+      },
+    ]);
+  });
+
+  it("maps, restores, and resolves approval server requests", async () => {
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      { thread: nativeThread({ status: { type: "active" } }) },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: unknown[] = [];
+    provider.subscribeEvents((event) => {
+      events.push(event);
+    });
+    await provider.listTasks();
+
+    rpc.emitServerRequest(7, "item/commandExecution/requestApproval", {
+      availableDecisions: ["accept", "acceptForSession", "decline"],
+      command: "pnpm check",
+      cwd: "/workspace/CodeAgent",
+      itemId: "command-1",
+      networkApprovalContext: { host: "api.example.com", protocol: "https" },
+      reason: "需要执行检查",
+      startedAtMs: 1_753_228_800_000,
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    const snapshot = await provider.readTask("task-1");
+    const request = snapshot?.pendingRequests[0];
+    expect(request).toMatchObject({
+      availableDecisions: ["allow", "allow_for_session", "deny"],
+      command: "pnpm check",
+      itemId: "command-1",
+      networkAccess: { host: "api.example.com", protocol: "https" },
+      projectId: "code-agent",
+      requestId: "number:7",
+      status: "pending",
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "command_approval",
+    });
+    if (request?.type !== "command_approval") {
+      throw new Error("Expected a pending command approval");
+    }
+
+    await expect(
+      provider.resolvePendingRequest({
+        itemId: request.itemId,
+        projectId: request.projectId,
+        requestId: request.requestId,
+        resolution: { decision: "allow_for_session" },
+        taskId: request.taskId,
+        turnId: request.turnId,
+        type: request.type,
+      }),
+    ).resolves.toMatchObject({ requestId: "number:7", status: "resolved" });
+    expect(rpc.serverResponses).toEqual([{ id: 7, result: { decision: "acceptForSession" } }]);
+    await expect(
+      provider.resolvePendingRequest({
+        itemId: request.itemId,
+        projectId: request.projectId,
+        requestId: request.requestId,
+        resolution: { decision: "deny" },
+        taskId: request.taskId,
+        turnId: request.turnId,
+        type: request.type,
+      }),
+    ).rejects.toMatchObject({ code: "resolved" } satisfies Partial<PendingRequestResolutionError>);
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ type: "pending_request.created" });
+    expect(events[1]).toMatchObject({
+      payload: { request: { status: "resolved" } },
+      type: "pending_request.resolved",
+    });
+  });
+
+  it("reuses matching concurrent resolutions and rejects conflicting decisions", async () => {
+    let releaseResponse: () => void = () => undefined;
+    const responseGate = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    const rpc = new FakeRpcClient(
+      [
+        { data: [nativeThread()], nextCursor: null },
+        { thread: nativeThread({ status: { type: "active" } }) },
+      ],
+      responseGate,
+    );
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.listTasks();
+    rpc.emitServerRequest(7, "item/commandExecution/requestApproval", {
+      availableDecisions: ["accept", "decline"],
+      command: "pnpm check",
+      cwd: "/workspace/CodeAgent",
+      itemId: "command-1",
+      reason: null,
+      startedAtMs: 1_753_228_800_000,
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    const request = (await provider.readTask("task-1"))?.pendingRequests[0];
+    if (request?.type !== "command_approval") {
+      throw new Error("Expected a pending command approval");
+    }
+    const input = {
+      itemId: request.itemId,
+      projectId: request.projectId,
+      requestId: request.requestId,
+      taskId: request.taskId,
+      turnId: request.turnId,
+      type: request.type,
+    } as const;
+
+    const first = provider.resolvePendingRequest({
+      ...input,
+      resolution: { decision: "allow" },
+    });
+    const repeated = provider.resolvePendingRequest({
+      ...input,
+      resolution: { decision: "allow" },
+    });
+    const conflicting = provider.resolvePendingRequest({
+      ...input,
+      resolution: { decision: "deny" },
+    });
+    await Promise.resolve();
+    releaseResponse();
+    await expect(Promise.all([first, repeated])).resolves.toEqual([
+      expect.objectContaining({ status: "resolved" }),
+      expect.objectContaining({ status: "resolved" }),
+    ]);
+    await expect(conflicting).rejects.toMatchObject({
+      code: "resolved",
+    } satisfies Partial<PendingRequestResolutionError>);
+
+    expect(rpc.serverResponses).toEqual([{ id: 7, result: { decision: "accept" } }]);
+  });
+
+  it("keeps a local resolution resolved when Codex confirms it before the write callback", async () => {
+    let releaseResponse: () => void = () => undefined;
+    const responseGate = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }], responseGate);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+    await provider.listTasks();
+    rpc.emitServerRequest("approval-race", "item/fileChange/requestApproval", {
+      grantRoot: "/workspace/CodeAgent",
+      itemId: "approval-race-item",
+      reason: null,
+      startedAtMs: 1_753_228_801_000,
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    const resolution = provider.resolvePendingRequest({
+      itemId: "approval-race-item",
+      projectId: project.id,
+      requestId: "string:approval-race",
+      resolution: { decision: "allow" },
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "file_change_approval",
+    });
+    await Promise.resolve();
+    rpc.emitNotification("serverRequest/resolved", {
+      requestId: "approval-race",
+      threadId: "task-1",
+    });
+    releaseResponse();
+
+    await expect(resolution).resolves.toMatchObject({ status: "resolved" });
+    expect(events.map((event) => event.type)).toEqual([
+      "pending_request.created",
+      "pending_request.resolved",
+    ]);
+  });
+
+  it("auto-resolves timed user input and rejects answers after expiry", async () => {
+    vi.useFakeTimers();
+    try {
+      const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+      const provider = createCodexAgentProvider({ client: rpc, project });
+      const events: AgentProviderEvent[] = [];
+      provider.subscribeEvents((event) => events.push(event));
+      await provider.listTasks();
+      rpc.emitServerRequest("timed-input", "item/tool/requestUserInput", {
+        autoResolutionMs: 1_000,
+        itemId: "timed-input-item",
+        questions: [
+          {
+            header: "确认",
+            id: "confirm",
+            isOther: false,
+            isSecret: false,
+            options: [
+              { description: "继续", label: "Yes" },
+              { description: "停止", label: "No" },
+            ],
+            question: "继续执行吗？",
+          },
+        ],
+        threadId: "task-1",
+        turnId: "turn-timed",
+      });
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(rpc.serverResponses).toEqual([{ id: "timed-input", result: { answers: {} } }]);
+      expect(events.some((event) => event.type === "pending_request.expired")).toBe(true);
+      await expect(
+        provider.resolvePendingRequest({
+          itemId: "timed-input-item",
+          projectId: project.id,
+          requestId: "string:timed-input",
+          resolution: { answers: { confirm: ["Yes"] } },
+          taskId: "task-1",
+          turnId: "turn-timed",
+          type: "user_input",
+        }),
+      ).rejects.toMatchObject({ code: "expired" } satisfies Partial<PendingRequestResolutionError>);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps auto-expiration expired when Codex confirms it before the write callback", async () => {
+    vi.useFakeTimers();
+    try {
+      let releaseResponse: () => void = () => undefined;
+      const responseGate = new Promise<void>((resolve) => {
+        releaseResponse = resolve;
+      });
+      const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }], responseGate);
+      const provider = createCodexAgentProvider({ client: rpc, project });
+      const events: AgentProviderEvent[] = [];
+      provider.subscribeEvents((event) => events.push(event));
+      await provider.listTasks();
+      rpc.emitServerRequest("expiry-race", "item/tool/requestUserInput", {
+        autoResolutionMs: 1_000,
+        itemId: "expiry-race-item",
+        questions: [
+          {
+            header: "说明",
+            id: "note",
+            isOther: false,
+            isSecret: false,
+            options: null,
+            question: "补充说明",
+          },
+        ],
+        threadId: "task-1",
+        turnId: "turn-1",
+      });
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      rpc.emitNotification("serverRequest/resolved", {
+        requestId: "expiry-race",
+        threadId: "task-1",
+      });
+      releaseResponse();
+      await Promise.resolve();
+
+      expect(events.map((event) => event.type)).toEqual([
+        "pending_request.created",
+        "pending_request.expired",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps timed user input expiry active after a failed manual response", async () => {
+    vi.useFakeTimers();
+    try {
+      let responseAttempt = 0;
+      const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }], () => {
+        responseAttempt += 1;
+        return responseAttempt === 1
+          ? Promise.reject(new Error("RPC write failed"))
+          : Promise.resolve();
+      });
+      const provider = createCodexAgentProvider({ client: rpc, project });
+      const events: AgentProviderEvent[] = [];
+      provider.subscribeEvents((event) => events.push(event));
+      await provider.listTasks();
+      rpc.emitServerRequest("timed-input", "item/tool/requestUserInput", {
+        autoResolutionMs: 1_000,
+        itemId: "timed-input-item",
+        questions: [
+          {
+            header: "确认",
+            id: "confirm",
+            isOther: false,
+            isSecret: false,
+            options: [
+              { description: "继续", label: "Yes" },
+              { description: "停止", label: "No" },
+            ],
+            question: "继续执行吗？",
+          },
+        ],
+        threadId: "task-1",
+        turnId: "turn-timed",
+      });
+
+      await expect(
+        provider.resolvePendingRequest({
+          itemId: "timed-input-item",
+          projectId: project.id,
+          requestId: "string:timed-input",
+          resolution: { answers: { confirm: ["Yes"] } },
+          taskId: "task-1",
+          turnId: "turn-timed",
+          type: "user_input",
+        }),
+      ).rejects.toThrow("RPC write failed");
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(rpc.serverResponses).toEqual([
+        { id: "timed-input", result: { answers: { confirm: { answers: ["Yes"] } } } },
+        { id: "timed-input", result: { answers: {} } },
+      ]);
+      expect(events.at(-1)).toMatchObject({
+        payload: { request: { status: "expired" } },
+        type: "pending_request.expired",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("maps file denial and semantic user input answers", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const requests: unknown[] = [];
+    provider.subscribeEvents((event) => {
+      if (event.type === "pending_request.created") {
+        requests.push(event.payload.request);
+      }
+    });
+    await provider.listTasks();
+
+    rpc.emitServerRequest("file-1", "item/fileChange/requestApproval", {
+      grantRoot: "/workspace/CodeAgent",
+      itemId: "file-item",
+      reason: null,
+      startedAtMs: 1_753_228_801_000,
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitServerRequest("input-1", "item/tool/requestUserInput", {
+      autoResolutionMs: 30_000,
+      itemId: "input-item",
+      questions: [
+        {
+          header: "确认",
+          id: "confirm",
+          isOther: false,
+          isSecret: false,
+          options: [
+            { description: "继续", label: "Yes" },
+            { description: "停止", label: "No" },
+          ],
+          question: "继续执行吗？",
+        },
+        {
+          header: "说明",
+          id: "note",
+          isOther: false,
+          isSecret: false,
+          options: null,
+          question: "补充说明",
+        },
+        {
+          header: "替代方案",
+          id: "alternative",
+          isOther: true,
+          isSecret: false,
+          options: [
+            { description: "继续", label: "Yes" },
+            { description: "停止", label: "No" },
+          ],
+          question: "是否采用预设方案？",
+        },
+      ],
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    expect(requests).toEqual([
+      expect.objectContaining({ requestId: "string:file-1", type: "file_change_approval" }),
+      expect.objectContaining({
+        questions: [
+          expect.objectContaining({ id: "confirm", type: "confirmation" }),
+          expect.objectContaining({ id: "note", type: "short_text" }),
+          expect.objectContaining({ id: "alternative", isOther: true, type: "choice" }),
+        ],
+        requestId: "string:input-1",
+        type: "user_input",
+      }),
+    ]);
+    const fileRequest = requests[0] as {
+      itemId: string;
+      projectId: string;
+      requestId: string;
+      taskId: string;
+      turnId: string;
+      type: "file_change_approval";
+    };
+    await provider.resolvePendingRequest({
+      itemId: fileRequest.itemId,
+      projectId: fileRequest.projectId,
+      requestId: fileRequest.requestId,
+      resolution: { decision: "deny" },
+      taskId: fileRequest.taskId,
+      turnId: fileRequest.turnId,
+      type: fileRequest.type,
+    });
+    const inputRequest = requests[1] as {
+      itemId: string;
+      projectId: string;
+      requestId: string;
+      taskId: string;
+      turnId: string;
+      type: "user_input";
+    };
+    await provider.resolvePendingRequest({
+      itemId: inputRequest.itemId,
+      projectId: inputRequest.projectId,
+      requestId: inputRequest.requestId,
+      resolution: {
+        answers: { alternative: ["自定义方案"], confirm: ["Yes"], note: ["继续"] },
+      },
+      taskId: inputRequest.taskId,
+      turnId: inputRequest.turnId,
+      type: inputRequest.type,
+    });
+
+    expect(rpc.serverResponses).toEqual([
+      { id: "file-1", result: { decision: "decline" } },
+      {
+        id: "input-1",
+        result: {
+          answers: {
+            alternative: { answers: ["自定义方案"] },
+            confirm: { answers: ["Yes"] },
+            note: { answers: ["继续"] },
+          },
+        },
+      },
+    ]);
+  });
+
+  it("applies Codex defaults to optional user input fields", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const requests: unknown[] = [];
+    provider.subscribeEvents((event) => {
+      if (event.type === "pending_request.created") {
+        requests.push(event.payload.request);
+      }
+    });
+    await provider.listTasks();
+
+    rpc.emitServerRequest("input-defaults", "item/tool/requestUserInput", {
+      itemId: "input-defaults-item",
+      questions: [{ header: "说明", id: "note", question: "补充说明" }],
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    expect(requests).toEqual([
+      expect.objectContaining({
+        expiresAt: null,
+        questions: [
+          {
+            header: "说明",
+            id: "note",
+            isOther: false,
+            isSecret: false,
+            options: [],
+            prompt: "补充说明",
+            type: "short_text",
+          },
+        ],
+        requestId: "string:input-defaults",
+        type: "user_input",
+      }),
+    ]);
+  });
+
+  it("rejects answers outside fixed user input options", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.listTasks();
+    rpc.emitServerRequest("input-fixed", "item/tool/requestUserInput", {
+      autoResolutionMs: null,
+      itemId: "input-fixed-item",
+      questions: [
+        {
+          header: "确认",
+          id: "confirm",
+          isOther: false,
+          isSecret: false,
+          options: [
+            { description: "继续", label: "Yes" },
+            { description: "停止", label: "No" },
+          ],
+          question: "继续执行吗？",
+        },
+      ],
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    await expect(
+      provider.resolvePendingRequest({
+        itemId: "input-fixed-item",
+        projectId: project.id,
+        requestId: "string:input-fixed",
+        resolution: { answers: { confirm: ["INVALID"] } },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "user_input",
+      }),
+    ).rejects.toMatchObject({ code: "mismatch" } satisfies Partial<PendingRequestResolutionError>);
+    expect(rpc.serverResponses).toEqual([]);
+  });
+
+  it("expires requests once when Codex clears them or their turn ends", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: unknown[] = [];
+    provider.subscribeEvents((event) => {
+      events.push(event);
+    });
+    await provider.listTasks();
+    const emitApproval = (id: number, itemId: string, turnId: string) => {
+      rpc.emitServerRequest(id, "item/fileChange/requestApproval", {
+        itemId,
+        startedAtMs: 1_753_228_801_000,
+        threadId: "task-1",
+        turnId,
+      });
+    };
+    emitApproval(1, "file-1", "turn-1");
+    rpc.emitNotification("serverRequest/resolved", { requestId: 1, threadId: "task-1" });
+    rpc.emitNotification("serverRequest/resolved", { requestId: 1, threadId: "task-1" });
+    emitApproval(2, "file-2", "turn-2");
+    rpc.emitNotification("turn/completed", {
+      threadId: "task-1",
+      turn: {
+        completedAt: 1_753_228_802,
+        error: null,
+        id: "turn-2",
+        items: [],
+        startedAt: 1_753_228_800,
+        status: "interrupted",
+      },
+    });
+
+    expect(
+      events.filter((event) => (event as { type: string }).type === "pending_request.expired"),
+    ).toHaveLength(2);
+    expect(rpc.serverResponses).toEqual([]);
+  });
+
   it("maps task and turn mutations to Codex App Server RPC", async () => {
     const runningTurn = {
       completedAt: null,
@@ -260,8 +933,33 @@ describe("CodexAgentProvider", () => {
   });
 
   it("does not publish notifications for tasks outside the active project", async () => {
+    let pendingResolution: Promise<unknown> | undefined;
     const rpc = new FakeRpcClient([
-      { thread: nativeThread({ cwd: "/workspace/other", id: "task-foreign" }) },
+      () => {
+        rpc.emitServerRequest("foreign-request", "item/fileChange/requestApproval", {
+          grantRoot: "/workspace/other",
+          itemId: "foreign-file",
+          reason: null,
+          startedAtMs: 1_753_228_801_000,
+          threadId: "task-foreign",
+          turnId: "turn-foreign",
+        });
+        pendingResolution = provider
+          .resolvePendingRequest({
+            itemId: "foreign-file",
+            projectId: project.id,
+            requestId: "string:foreign-request",
+            resolution: { decision: "deny" },
+            taskId: "task-foreign",
+            turnId: "turn-foreign",
+            type: "file_change_approval",
+          })
+          .then(
+            () => "resolved",
+            (error: unknown) => error,
+          );
+        return { thread: nativeThread({ cwd: "/workspace/other", id: "task-foreign" }) };
+      },
     ]);
     const provider = createCodexAgentProvider({ client: rpc, project });
     const events: unknown[] = [];
@@ -278,6 +976,137 @@ describe("CodexAgentProvider", () => {
     });
 
     expect(events).toEqual([]);
+    await expect(pendingResolution).resolves.toMatchObject({ code: "not_found" });
+    expect(rpc.serverResponses).toEqual([]);
+  });
+
+  it("restores server requests received while readTask validates project ownership", async () => {
+    const rpc = new FakeRpcClient([
+      () => {
+        rpc.emitServerRequest("during-read", "item/fileChange/requestApproval", {
+          grantRoot: "/workspace/CodeAgent",
+          itemId: "file-during-read",
+          reason: null,
+          startedAtMs: 1_753_228_801_000,
+          threadId: "task-1",
+          turnId: "turn-1",
+        });
+        return { thread: nativeThread() };
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: unknown[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+
+    const snapshot = await provider.readTask("task-1");
+
+    expect(snapshot?.pendingRequests).toEqual([
+      expect.objectContaining({ requestId: "string:during-read", status: "pending" }),
+    ]);
+    expect(events).toEqual([expect.objectContaining({ type: "pending_request.created" })]);
+  });
+
+  it("preserves owned server requests when task snapshot mapping fails", async () => {
+    const rpc = new FakeRpcClient([
+      () => {
+        rpc.emitServerRequest("during-invalid-read", "item/fileChange/requestApproval", {
+          grantRoot: "/workspace/CodeAgent",
+          itemId: "file-during-invalid-read",
+          reason: null,
+          startedAtMs: 1_753_228_801_000,
+          threadId: "task-1",
+          turnId: "turn-1",
+        });
+        return { thread: nativeThread({ turns: null }) };
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+
+    await expect(provider.readTask("task-1")).rejects.toThrow("thread/read turns must be an array");
+    await expect(
+      provider.resolvePendingRequest({
+        itemId: "file-during-invalid-read",
+        projectId: project.id,
+        requestId: "string:during-invalid-read",
+        resolution: { decision: "deny" },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "file_change_approval",
+      }),
+    ).resolves.toMatchObject({ status: "resolved" });
+
+    expect(rpc.serverResponses).toEqual([
+      { id: "during-invalid-read", result: { decision: "decline" } },
+    ]);
+    expect(events.map((event) => event.type)).toEqual([
+      "pending_request.created",
+      "pending_request.resolved",
+    ]);
+  });
+
+  it("does not restore server requests resolved while readTask validates ownership", async () => {
+    const rpc = new FakeRpcClient([
+      () => {
+        rpc.emitServerRequest("resolved-during-read", "item/fileChange/requestApproval", {
+          grantRoot: "/workspace/CodeAgent",
+          itemId: "resolved-file-during-read",
+          reason: null,
+          startedAtMs: 1_753_228_801_000,
+          threadId: "task-1",
+          turnId: "turn-1",
+        });
+        rpc.emitNotification("serverRequest/resolved", {
+          requestId: "resolved-during-read",
+          threadId: "task-1",
+        });
+        return { thread: nativeThread() };
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: unknown[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+
+    const snapshot = await provider.readTask("task-1");
+
+    expect(snapshot?.pendingRequests).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
+  it("does not restore server requests whose turn completes during ownership validation", async () => {
+    const rpc = new FakeRpcClient([
+      () => {
+        rpc.emitServerRequest("completed-during-read", "item/fileChange/requestApproval", {
+          grantRoot: "/workspace/CodeAgent",
+          itemId: "completed-file-during-read",
+          reason: null,
+          startedAtMs: 1_753_228_801_000,
+          threadId: "task-1",
+          turnId: "turn-completed-during-read",
+        });
+        rpc.emitNotification("turn/completed", {
+          threadId: "task-1",
+          turn: {
+            completedAt: 1_753_228_802,
+            error: null,
+            id: "turn-completed-during-read",
+            items: [],
+            startedAt: 1_753_228_800,
+            status: "completed",
+          },
+        });
+        return { thread: nativeThread() };
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: unknown[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+
+    const snapshot = await provider.readTask("task-1");
+
+    expect(snapshot?.pendingRequests).toEqual([]);
+    expect(events).toEqual([expect.objectContaining({ type: "turn.completed" })]);
   });
 
   it("delivers notifications received while readTask is validating project ownership", async () => {

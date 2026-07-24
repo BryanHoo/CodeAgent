@@ -1,5 +1,9 @@
-import type { AgentProvider, AgentProviderEvent } from "@code-agent/core";
-import type { AgentTaskSnapshot, AgentTurn } from "@code-agent/protocol";
+import {
+  PendingRequestResolutionError,
+  type AgentProvider,
+  type AgentProviderEvent,
+} from "@code-agent/core";
+import type { AgentTaskSnapshot, AgentTurn, PendingRequest } from "@code-agent/protocol";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,9 +28,27 @@ const task = {
 
 const snapshot = {
   ...task,
+  pendingRequests: [],
   status: "idle" as const,
   turns: [],
 };
+
+const pendingRequest = {
+  availableDecisions: ["allow", "allow_for_session", "deny"],
+  command: "pnpm check",
+  createdAt: "2026-07-23T00:02:00.000Z",
+  cwd: "/workspace/CodeAgent",
+  expiresAt: null,
+  itemId: "command-1",
+  networkAccess: null,
+  projectId: "code-agent",
+  reason: "需要执行检查",
+  requestId: "number:7",
+  status: "pending",
+  taskId: "task-1",
+  turnId: "turn-1",
+  type: "command_approval",
+} as const satisfies PendingRequest;
 
 const closeCallbacks: (() => Promise<void>)[] = [];
 
@@ -47,6 +69,9 @@ function createProvider() {
   const readTask = vi.fn<(taskId: string) => Promise<AgentTaskSnapshot | undefined>>((taskId) =>
     Promise.resolve(taskId === task.id ? snapshot : undefined),
   );
+  const resolvePendingRequest = vi.fn(() =>
+    Promise.resolve({ ...pendingRequest, status: "resolved" as const }),
+  );
   const startTask = vi.fn(() => Promise.resolve(task));
   const startTurn = vi.fn((taskId: string, input: { text: string; type: "text" }) =>
     Promise.resolve({
@@ -64,6 +89,7 @@ function createProvider() {
     interruptTurn,
     listTasks,
     readTask,
+    resolvePendingRequest,
     startTask,
     startTurn,
     subscribeEvents(listener) {
@@ -84,6 +110,7 @@ function createProvider() {
     interruptTurn,
     provider,
     readTask,
+    resolvePendingRequest,
     startTask,
     startTurn,
   };
@@ -97,6 +124,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     listTasks,
     provider,
     readTask,
+    resolvePendingRequest,
     startTask,
     startTurn,
   } = createProvider();
@@ -109,6 +137,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     interruptTurn,
     listTasks,
     readTask,
+    resolvePendingRequest,
     startTask,
     startTurn,
   };
@@ -223,6 +252,78 @@ describe("CodeAgent Server", () => {
     expect(replayedInterrupt.statusCode).toBe(202);
     expect(replayedInterrupt.json()).toEqual(interrupted.json());
     expect(interruptTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves pending requests idempotently with complete identity validation", async () => {
+    const { app, resolvePendingRequest } = await createHarness();
+    const request = {
+      headers: { "idempotency-key": "resolve-1" },
+      method: "POST" as const,
+      payload: {
+        itemId: pendingRequest.itemId,
+        projectId: pendingRequest.projectId,
+        resolution: { decision: "allow_for_session" },
+        taskId: pendingRequest.taskId,
+        turnId: pendingRequest.turnId,
+        type: pendingRequest.type,
+      },
+      url: `/v1/pending-requests/${encodeURIComponent(pendingRequest.requestId)}/resolve`,
+    };
+
+    const first = await app.inject(request);
+    const repeated = await app.inject(request);
+
+    expect(first.statusCode).toBe(200);
+    expect(repeated.json()).toEqual(first.json());
+    expect(first.json()).toEqual({ request: { ...pendingRequest, status: "resolved" } });
+    expect(resolvePendingRequest).toHaveBeenCalledTimes(1);
+    expect(resolvePendingRequest).toHaveBeenCalledWith({
+      ...request.payload,
+      requestId: pendingRequest.requestId,
+    });
+  });
+
+  it("rejects cross-project and stale pending request resolutions", async () => {
+    const { app, resolvePendingRequest } = await createHarness();
+    const request = {
+      headers: { "idempotency-key": "resolve-invalid" },
+      method: "POST" as const,
+      payload: {
+        itemId: pendingRequest.itemId,
+        projectId: "other-project",
+        resolution: { decision: "deny" },
+        taskId: pendingRequest.taskId,
+        turnId: pendingRequest.turnId,
+        type: pendingRequest.type,
+      },
+      url: `/v1/pending-requests/${encodeURIComponent(pendingRequest.requestId)}/resolve`,
+    };
+    const crossProject = await app.inject(request);
+    expect(crossProject.statusCode).toBe(404);
+    expect(crossProject.json()).toMatchObject({ code: "PROJECT_NOT_FOUND" });
+    expect(resolvePendingRequest).not.toHaveBeenCalled();
+
+    resolvePendingRequest.mockRejectedValueOnce(
+      new PendingRequestResolutionError("mismatch", "identity mismatch"),
+    );
+    const mismatch = await app.inject({
+      ...request,
+      headers: { "idempotency-key": "resolve-mismatch" },
+      payload: { ...request.payload, projectId: pendingRequest.projectId, taskId: "other-task" },
+    });
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json()).toMatchObject({ code: "PENDING_REQUEST_MISMATCH" });
+
+    resolvePendingRequest.mockRejectedValueOnce(
+      new PendingRequestResolutionError("expired", "request expired"),
+    );
+    const expired = await app.inject({
+      ...request,
+      headers: { "idempotency-key": "resolve-expired" },
+      payload: { ...request.payload, projectId: pendingRequest.projectId },
+    });
+    expect(expired.statusCode).toBe(409);
+    expect(expired.json()).toMatchObject({ code: "PENDING_REQUEST_EXPIRED" });
   });
 
   it("reuses idempotent results for equivalent payload key orders", async () => {

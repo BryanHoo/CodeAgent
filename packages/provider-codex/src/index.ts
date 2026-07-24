@@ -31,6 +31,7 @@ export {
   RpcResponseError,
   RpcTimeoutError,
   type JsonlRpcClientOptions,
+  type RpcErrorPayload,
   type RpcNotification,
   type RpcRequestId,
   type RpcServerRequest,

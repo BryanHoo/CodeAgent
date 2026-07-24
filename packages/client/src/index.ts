@@ -14,4 +14,5 @@ export {
   type CodeAgentClientOptions,
   type ListTasksOptions,
   type MutationOptions,
+  type PendingRequestResolution,
 } from "./http-client.js";

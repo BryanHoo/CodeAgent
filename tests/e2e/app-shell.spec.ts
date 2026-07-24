@@ -48,6 +48,7 @@ const tasks = [
 
 const taskSnapshot = {
   ...tasks[0],
+  pendingRequests: [],
   status: "idle",
   turns: [
     {
@@ -297,7 +298,7 @@ test("isolates composer state between task routes", async ({ page }) => {
       contentType: "application/json",
       json: {
         checkpoint: { sequence: 0, sessionId: "e2e-session" },
-        snapshot: { ...tasks[1], status: "idle", turns: [] },
+        snapshot: { ...tasks[1], pendingRequests: [], status: "idle", turns: [] },
       },
     });
   });
@@ -598,6 +599,110 @@ test("clears transient realtime errors after the WebSocket reconnects", async ({
   await expect(page.getByRole("alert", { name: "会话内容" })).toHaveCount(0);
 });
 
+test("restores network approvals from the task snapshot after refresh", async ({ page }) => {
+  let resolutionCount = 0;
+  const pendingRequest = {
+    availableDecisions: ["allow", "deny"],
+    command: "pnpm check",
+    createdAt: "2026-07-23T00:00:00.000Z",
+    cwd: "/workspace/CodeAgent",
+    expiresAt: null,
+    itemId: "command-approval-1",
+    networkAccess: { host: "api.example.com", protocol: "https" },
+    projectId: "code-agent",
+    reason: "需要执行检查",
+    requestId: "string:snapshot-request",
+    status: "pending",
+    taskId: "task-1",
+    turnId: "turn-1",
+    type: "command_approval",
+  };
+  await page.route("**/v1/pending-requests/*/resolve", async (route) => {
+    resolutionCount += 1;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await route.fulfill({
+      contentType: "application/json",
+      json: { request: { ...pendingRequest, status: "resolved" } },
+    });
+  });
+  await page.route("**/v1/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: { ...taskSnapshot, pendingRequests: [pendingRequest], status: "running" },
+      },
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+  const approval = page.getByRole("region", { name: "网络访问审批请求" });
+  await expect(approval).toBeVisible();
+  await expect(approval).toContainText("api.example.com");
+  await expect(approval).toContainText("HTTPS");
+
+  await page.reload();
+  await expect(page.getByRole("region", { name: "网络访问审批请求" })).toBeVisible();
+  const allow = page.getByRole("button", { exact: true, name: "允许" });
+  await expect(allow).toBeEnabled();
+  await allow.dblclick();
+  await expect.poll(() => resolutionCount).toBe(1);
+  await expect(allow).toBeDisabled();
+});
+
+test("disables user input controls while an answer is being submitted", async ({ page }) => {
+  const pendingRequest = {
+    createdAt: "2026-07-23T00:00:00.000Z",
+    expiresAt: null,
+    itemId: "user-input-1",
+    projectId: "code-agent",
+    questions: [
+      {
+        header: "执行模式",
+        id: "mode",
+        isOther: false,
+        isSecret: false,
+        options: [
+          { description: "继续实现", label: "继续" },
+          { description: "停止当前工作", label: "停止" },
+        ],
+        prompt: "下一步怎么处理？",
+        type: "choice",
+      },
+    ],
+    requestId: "string:user-input-1",
+    status: "pending",
+    taskId: "task-1",
+    turnId: "turn-1",
+    type: "user_input",
+  };
+  await page.route("**/v1/pending-requests/*/resolve", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await route.fulfill({
+      contentType: "application/json",
+      json: { request: { ...pendingRequest, status: "resolved" } },
+    });
+  });
+  await page.route("**/v1/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: { ...taskSnapshot, pendingRequests: [pendingRequest], status: "running" },
+      },
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+  const continueAnswer = page.getByRole("radio", { name: /继续/ });
+  const stopAnswer = page.getByRole("radio", { name: /停止/ });
+  await continueAnswer.check();
+  await page.getByRole("button", { name: "提交回答" }).click();
+
+  await expect(continueAnswer).toBeDisabled();
+  await expect(stopAnswer).toBeDisabled();
+});
+
 test("streams Fake App Server notifications into the Timeline", async ({ page }) => {
   await page.unroute("**/v1/**");
   await page.goto("/p/code-agent/t/task-realtime");
@@ -620,6 +725,46 @@ test("submits a prompt and streams the completed reply", async ({ page }) => {
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeVisible();
+});
+
+test("allows a command approval and completes the turn", async ({ page }) => {
+  await page.unroute("**/v1/**");
+  await page.goto("/p/code-agent");
+
+  await page.getByRole("textbox", { name: "任务输入" }).fill("审批命令");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await expect(page.getByRole("region", { name: "命令审批请求" })).toBeVisible();
+  await page.getByRole("button", { exact: true, name: "允许" }).click();
+
+  await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
+});
+
+test("denies a file change approval and completes the turn", async ({ page }) => {
+  await page.unroute("**/v1/**");
+  await page.goto("/p/code-agent");
+
+  await page.getByRole("textbox", { name: "任务输入" }).fill("审批文件");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await expect(page.getByRole("region", { name: "文件变更审批请求" })).toBeVisible();
+  await page.getByRole("button", { exact: true, name: "拒绝" }).click();
+
+  await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
+});
+
+test("answers a user input request and completes the turn", async ({ page }) => {
+  await page.unroute("**/v1/**");
+  await page.goto("/p/code-agent");
+
+  await page.getByRole("textbox", { name: "任务输入" }).fill("用户输入");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await expect(page.getByRole("heading", { name: "需要你的输入" })).toBeVisible();
+  await page.getByRole("radio", { name: /继续/ }).check();
+  await page.getByRole("button", { exact: true, name: "提交回答" }).click();
+
+  await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
 });
 
 test("interrupts a running turn from the composer", async ({ page }) => {

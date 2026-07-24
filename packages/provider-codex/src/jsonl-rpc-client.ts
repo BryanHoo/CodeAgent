@@ -27,7 +27,7 @@ export interface RpcServerRequest {
   params: unknown;
 }
 
-interface RpcErrorPayload {
+export interface RpcErrorPayload {
   code: number;
   data: unknown;
   message: string;
@@ -149,16 +149,16 @@ export class JsonlRpcClient {
       this.#pending.set(id, { reject, resolve, timer });
 
       try {
-        this.#writeMessage(request);
-      } catch (error) {
-        this.#fail(this.#toConnectionError(error));
+        void this.#sendMessage(request).catch(() => undefined);
+      } catch {
+        // #sendMessage 已关闭连接并拒绝当前 Pending RPC。
       }
     });
   }
 
   public notify(method: string, params?: unknown): void {
     const notification = params === undefined ? { method } : { method, params };
-    this.#sendMessage(notification);
+    void this.#sendMessage(notification).catch(() => undefined);
   }
 
   public onNotification(listener: NotificationListener): () => void {
@@ -182,22 +182,35 @@ export class JsonlRpcClient {
     };
   }
 
-  public respondToServerRequest(id: RpcRequestId, result: unknown): void {
+  public respondToServerRequest(id: RpcRequestId, result: unknown): Promise<void> {
     if (!isRequestId(id)) {
       throw new TypeError("RPC request id must be a string or finite number");
     }
-    this.#sendMessage({ id, result });
+    return this.#sendMessage({ id, result });
   }
 
-  #sendMessage(message: unknown): void {
+  public rejectServerRequest(id: RpcRequestId, error: RpcErrorPayload): Promise<void> {
+    if (!isRequestId(id)) {
+      throw new TypeError("RPC request id must be a string or finite number");
+    }
+    return this.#sendMessage({ error, id });
+  }
+
+  #sendMessage(message: unknown): Promise<void> {
     this.#assertOpen();
+    let pendingWrite: Promise<void>;
     try {
-      this.#writeMessage(message);
+      pendingWrite = this.#writeMessage(message);
     } catch (error) {
       const connectionError = this.#toConnectionError(error);
       this.#fail(connectionError);
       throw connectionError;
     }
+    return pendingWrite.catch((error: unknown) => {
+      const connectionError = this.#toConnectionError(error);
+      this.#fail(connectionError);
+      throw connectionError;
+    });
   }
 
   public close(reason: Error = new RpcConnectionClosedError()): void {
@@ -327,12 +340,25 @@ export class JsonlRpcClient {
     pending.resolve(message["result"]);
   }
 
-  #writeMessage(message: unknown): void {
+  #writeMessage(message: unknown): Promise<void> {
     const frame = `${JSON.stringify(message)}\n`;
-    this.#output.write(frame, "utf8", (error) => {
-      if (error) {
-        this.#fail(new RpcConnectionClosedError(`RPC write failed: ${error.message}`));
-      }
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(
+          new RpcConnectionClosedError(
+            `RPC write timed out after ${String(this.#defaultTimeoutMs)}ms`,
+          ),
+        );
+      }, this.#defaultTimeoutMs);
+      timer.unref();
+      this.#output.write(frame, "utf8", (error) => {
+        clearTimeout(timer);
+        if (error) {
+          reject(new RpcConnectionClosedError(`RPC write failed: ${error.message}`));
+          return;
+        }
+        resolve();
+      });
     });
   }
 
@@ -353,6 +379,9 @@ export class JsonlRpcClient {
   }
 
   #toConnectionError(error: unknown): RpcConnectionClosedError {
+    if (error instanceof RpcConnectionClosedError) {
+      return error;
+    }
     const reason = error instanceof Error ? error.message : String(error);
     return new RpcConnectionClosedError(`RPC write failed: ${reason}`);
   }

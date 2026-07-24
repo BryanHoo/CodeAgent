@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { PendingRequest } from "@code-agent/protocol";
 
 import {
   CodeAgentClient,
@@ -13,6 +14,23 @@ const task = {
   projectId: "code-agent",
   title: "结构化历史",
   updatedAt: "2026-07-23T00:01:00.000Z",
+};
+
+const pendingRequest: PendingRequest = {
+  availableDecisions: ["allow", "deny"],
+  command: "pnpm check",
+  createdAt: "2026-07-23T00:02:00.000Z",
+  cwd: "/workspace/CodeAgent",
+  expiresAt: null,
+  itemId: "command-1",
+  networkAccess: null,
+  projectId: "code-agent",
+  reason: null,
+  requestId: "number:7",
+  status: "pending",
+  taskId: "task-1",
+  turnId: "turn-1",
+  type: "command_approval",
 };
 
 function jsonResponse(body: unknown, init?: ResponseInit) {
@@ -51,7 +69,7 @@ describe("CodeAgentClient", () => {
       .mockResolvedValueOnce(
         jsonResponse({
           checkpoint: { sequence: 0, sessionId: "runtime-1" },
-          snapshot: { ...task, status: "idle", turns: [] },
+          snapshot: { ...task, pendingRequests: [], status: "idle", turns: [] },
         }),
       );
     const client = new CodeAgentClient({ baseUrl: "http://127.0.0.1:3210/", fetch: fetchMock });
@@ -119,6 +137,37 @@ describe("CodeAgentClient", () => {
       method: "POST",
     });
     expect(new Headers(interruptCall?.[1]?.headers).get("idempotency-key")).toBe("interrupt-key");
+  });
+
+  it("sends typed pending request resolutions with full identity", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ request: { ...pendingRequest, status: "resolved" } }),
+    );
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(
+      client.resolvePendingRequest(
+        pendingRequest,
+        { decision: "allow" },
+        { idempotencyKey: "resolve-key" },
+      ),
+    ).resolves.toMatchObject({ request: { status: "resolved" } });
+
+    const call = fetchMock.mock.calls[0];
+    expect(call?.[0]).toBe("/v1/pending-requests/number%3A7/resolve");
+    expect(call?.[1]).toMatchObject({
+      body: JSON.stringify({
+        itemId: "command-1",
+        projectId: "code-agent",
+        resolution: { decision: "allow" },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "command_approval",
+      }),
+      method: "POST",
+    });
+    expect(new Headers(call?.[1]?.headers).get("idempotency-key")).toBe("resolve-key");
   });
 
   it("validates and exposes structured mutation errors", async () => {

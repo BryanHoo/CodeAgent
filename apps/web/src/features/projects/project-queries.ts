@@ -8,9 +8,11 @@ export type CodeAgentMutationClient = Pick<
   CodeAgentClient,
   "interruptTurn" | "startTask" | "startTurn"
 >;
+export type CodeAgentPendingRequestClient = Pick<CodeAgentClient, "resolvePendingRequest">;
 export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentRuntimeClient &
   CodeAgentMutationClient &
+  CodeAgentPendingRequestClient &
   CodeAgentCapabilitiesClient;
 type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
 

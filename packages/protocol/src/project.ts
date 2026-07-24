@@ -174,6 +174,222 @@ export const AgentInputSchema = Type.Union([
 
 export type AgentInput = Readonly<Static<typeof AgentInputSchema>>;
 
+export const PendingRequestStatusSchema = Type.Union([
+  Type.Literal("pending"),
+  Type.Literal("resolved"),
+  Type.Literal("expired"),
+]);
+
+export const PendingApprovalDecisionSchema = Type.Union([
+  Type.Literal("allow"),
+  Type.Literal("allow_for_session"),
+  Type.Literal("deny"),
+]);
+
+const PendingNetworkAccessSchema = Type.Object(
+  {
+    host: Type.String({ minLength: 1 }),
+    protocol: Type.Union([
+      Type.Literal("http"),
+      Type.Literal("https"),
+      Type.Literal("socks5Tcp"),
+      Type.Literal("socks5Udp"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+const PendingRequestIdentityProperties = {
+  createdAt: DateTimeSchema,
+  expiresAt: NullableDateTimeSchema,
+  itemId: Type.String({ minLength: 1 }),
+  projectId: Type.String({ minLength: 1 }),
+  requestId: Type.String({ minLength: 1 }),
+  status: PendingRequestStatusSchema,
+  taskId: Type.String({ minLength: 1 }),
+  turnId: Type.String({ minLength: 1 }),
+};
+
+const PendingRequestResolutionIdentityProperties = {
+  itemId: Type.String({ minLength: 1 }),
+  projectId: Type.String({ minLength: 1 }),
+  taskId: Type.String({ minLength: 1 }),
+  turnId: Type.String({ minLength: 1 }),
+};
+
+export const PendingUserInputOptionSchema = Type.Object(
+  {
+    description: Type.String(),
+    label: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+const PendingUserInputQuestionProperties = {
+  header: Type.String({ minLength: 1 }),
+  id: Type.String({ minLength: 1 }),
+  isSecret: Type.Boolean(),
+  prompt: Type.String({ minLength: 1 }),
+};
+
+export const PendingUserInputQuestionSchema = Type.Union([
+  Type.Object(
+    {
+      ...PendingUserInputQuestionProperties,
+      isOther: Type.Boolean(),
+      options: Type.Array(PendingUserInputOptionSchema, { minItems: 1 }),
+      type: Type.Literal("choice"),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...PendingUserInputQuestionProperties,
+      isOther: Type.Literal(true),
+      options: Type.Array(PendingUserInputOptionSchema, { maxItems: 0 }),
+      type: Type.Literal("choice"),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...PendingUserInputQuestionProperties,
+      isOther: Type.Literal(false),
+      options: Type.Array(PendingUserInputOptionSchema, { maxItems: 2, minItems: 2 }),
+      type: Type.Literal("confirmation"),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...PendingUserInputQuestionProperties,
+      isOther: Type.Boolean(),
+      options: Type.Array(PendingUserInputOptionSchema, { maxItems: 0 }),
+      type: Type.Literal("short_text"),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export const CommandApprovalPendingRequestSchema = Type.Object(
+  {
+    ...PendingRequestIdentityProperties,
+    availableDecisions: Type.Array(PendingApprovalDecisionSchema, { minItems: 1 }),
+    command: Type.Union([Type.String(), Type.Null()]),
+    cwd: Type.Union([Type.String(), Type.Null()]),
+    networkAccess: Type.Union([PendingNetworkAccessSchema, Type.Null()]),
+    reason: Type.Union([Type.String(), Type.Null()]),
+    type: Type.Literal("command_approval"),
+  },
+  { additionalProperties: false },
+);
+
+export const FileChangeApprovalPendingRequestSchema = Type.Object(
+  {
+    ...PendingRequestIdentityProperties,
+    availableDecisions: Type.Array(PendingApprovalDecisionSchema, { minItems: 1 }),
+    grantRoot: Type.Union([Type.String(), Type.Null()]),
+    reason: Type.Union([Type.String(), Type.Null()]),
+    type: Type.Literal("file_change_approval"),
+  },
+  { additionalProperties: false },
+);
+
+export const UserInputPendingRequestSchema = Type.Object(
+  {
+    ...PendingRequestIdentityProperties,
+    questions: Type.Array(PendingUserInputQuestionSchema, { minItems: 1, maxItems: 3 }),
+    type: Type.Literal("user_input"),
+  },
+  { additionalProperties: false },
+);
+
+export const PendingRequestSchema = Type.Union([
+  CommandApprovalPendingRequestSchema,
+  FileChangeApprovalPendingRequestSchema,
+  UserInputPendingRequestSchema,
+]);
+
+function createPendingRequestStatusSchema<TStatus extends "expired" | "pending" | "resolved">(
+  status: TStatus,
+) {
+  return Type.Union([
+    Type.Object(
+      { ...CommandApprovalPendingRequestSchema.properties, status: Type.Literal(status) },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      { ...FileChangeApprovalPendingRequestSchema.properties, status: Type.Literal(status) },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      { ...UserInputPendingRequestSchema.properties, status: Type.Literal(status) },
+      { additionalProperties: false },
+    ),
+  ]);
+}
+
+export const ActivePendingRequestSchema = createPendingRequestStatusSchema("pending");
+export const ResolvedPendingRequestSchema = createPendingRequestStatusSchema("resolved");
+export const ExpiredPendingRequestSchema = createPendingRequestStatusSchema("expired");
+
+export type PendingRequest = Readonly<Static<typeof PendingRequestSchema>>;
+export type PendingApprovalDecision = Static<typeof PendingApprovalDecisionSchema>;
+
+const ApprovalResolutionSchema = Type.Object(
+  { decision: PendingApprovalDecisionSchema },
+  { additionalProperties: false },
+);
+const UserInputResolutionSchema = Type.Object(
+  {
+    answers: Type.Record(
+      Type.String(),
+      Type.Array(Type.String({ minLength: 1 }), { maxItems: 1, minItems: 1 }),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const ResolvePendingRequestRequestSchema = Type.Union([
+  Type.Object(
+    {
+      ...PendingRequestResolutionIdentityProperties,
+      resolution: ApprovalResolutionSchema,
+      type: Type.Literal("command_approval"),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...PendingRequestResolutionIdentityProperties,
+      resolution: ApprovalResolutionSchema,
+      type: Type.Literal("file_change_approval"),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...PendingRequestResolutionIdentityProperties,
+      resolution: UserInputResolutionSchema,
+      type: Type.Literal("user_input"),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export type ResolvePendingRequestRequest = Readonly<
+  Static<typeof ResolvePendingRequestRequestSchema>
+>;
+
+export const ResolvePendingRequestResponseSchema = Type.Object(
+  { request: PendingRequestSchema },
+  { additionalProperties: false },
+);
+
+export type ResolvePendingRequestResponse = Readonly<
+  Static<typeof ResolvePendingRequestResponseSchema>
+>;
+
 export const StartAgentTaskRequestSchema = Type.Object({}, { additionalProperties: false });
 export type StartAgentTaskRequest = Readonly<Static<typeof StartAgentTaskRequestSchema>>;
 
@@ -222,6 +438,10 @@ export const AgentMutationErrorCodeSchema = Type.Union([
   Type.Literal("TASK_NOT_FOUND"),
   Type.Literal("TURN_NOT_FOUND"),
   Type.Literal("TURN_NOT_RUNNING"),
+  Type.Literal("PENDING_REQUEST_NOT_FOUND"),
+  Type.Literal("PENDING_REQUEST_EXPIRED"),
+  Type.Literal("PENDING_REQUEST_ALREADY_RESOLVED"),
+  Type.Literal("PENDING_REQUEST_MISMATCH"),
   Type.Literal("PROVIDER_ERROR"),
 ]);
 
@@ -238,6 +458,7 @@ export type AgentMutationError = Readonly<Static<typeof AgentMutationErrorSchema
 export const AgentTaskSnapshotSchema = Type.Object(
   {
     id: Type.String({ minLength: 1 }),
+    pendingRequests: Type.Array(ActivePendingRequestSchema),
     pinned: Type.Boolean(),
     projectId: Type.String({ minLength: 1 }),
     status: Type.Union([Type.Literal("idle"), Type.Literal("running"), Type.Literal("failed")]),

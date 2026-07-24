@@ -5,6 +5,7 @@ import type {
   AgentTaskSnapshotResponse,
   AgentTurn,
   EventCheckpoint,
+  PendingRequest,
 } from "@code-agent/protocol";
 import type { AgentEventConnectionState } from "@code-agent/client";
 
@@ -17,8 +18,12 @@ const textEncoder = new TextEncoder();
 export interface TaskRuntimeState {
   checkpoint: EventCheckpoint;
   connectionState: AgentEventConnectionState;
-  snapshot: AgentTaskSnapshot;
+  snapshot: RuntimeTaskSnapshot;
 }
+
+// HTTP Snapshot 只含 pending；实时会话额外保留本次连接内的终态展示。
+export type RuntimeTaskSnapshot = Omit<AgentTaskSnapshot, "pendingRequests"> &
+  Readonly<{ pendingRequests: readonly PendingRequest[] }>;
 
 export function hydrateTaskRuntime(response: AgentTaskSnapshotResponse): TaskRuntimeState {
   return {
@@ -29,10 +34,10 @@ export function hydrateTaskRuntime(response: AgentTaskSnapshotResponse): TaskRun
 }
 
 function updateTurn(
-  snapshot: AgentTaskSnapshot,
+  snapshot: RuntimeTaskSnapshot,
   turnId: string,
   update: (turn: AgentTurn) => AgentTurn,
-): AgentTaskSnapshot {
+): RuntimeTaskSnapshot {
   const index = snapshot.turns.findIndex((turn) => turn.id === turnId);
   const turn = snapshot.turns[index];
   if (index < 0 || turn === undefined) {
@@ -109,7 +114,7 @@ function boundCommandOutput(value: string): { output: string; outputTruncated: b
   return { output, outputTruncated };
 }
 
-function applyDelta(snapshot: AgentTaskSnapshot, event: AgentEvent): AgentTaskSnapshot {
+function applyDelta(snapshot: RuntimeTaskSnapshot, event: AgentEvent): RuntimeTaskSnapshot {
   if (
     event.type !== "message.delta" &&
     event.type !== "reasoning.delta" &&
@@ -183,6 +188,21 @@ function applyDelta(snapshot: AgentTaskSnapshot, event: AgentEvent): AgentTaskSn
   });
 }
 
+function upsertPendingRequest(
+  snapshot: RuntimeTaskSnapshot,
+  request: PendingRequest,
+): RuntimeTaskSnapshot {
+  const index = snapshot.pendingRequests.findIndex(
+    (pendingRequest) => pendingRequest.requestId === request.requestId,
+  );
+  if (index < 0) {
+    return { ...snapshot, pendingRequests: [...snapshot.pendingRequests, request] };
+  }
+  const pendingRequests = [...snapshot.pendingRequests];
+  pendingRequests[index] = request;
+  return { ...snapshot, pendingRequests };
+}
+
 export function reduceAgentEvent(state: TaskRuntimeState, event: AgentEvent): TaskRuntimeState {
   if (event.taskId !== state.snapshot.id || event.sessionId !== state.checkpoint.sessionId) {
     return state;
@@ -229,6 +249,15 @@ export function reduceAgentEvent(state: TaskRuntimeState, event: AgentEvent): Ta
       if (!event.payload.willRetry) {
         snapshot = { ...snapshot, status: "failed", updatedAt: event.timestamp };
       }
+      break;
+    case "pending_request.created":
+    case "pending_request.resolved":
+    case "pending_request.expired":
+      // 生命周期事件共享完整请求载荷，按 requestId 保持原有展示顺序。
+      snapshot = {
+        ...upsertPendingRequest(snapshot, event.payload.request),
+        updatedAt: event.timestamp,
+      };
       break;
   }
 

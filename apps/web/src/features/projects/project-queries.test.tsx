@@ -27,6 +27,7 @@ const task = {
 
 const snapshot = {
   ...task,
+  pendingRequests: [],
   status: "idle" as const,
   turns: [
     {

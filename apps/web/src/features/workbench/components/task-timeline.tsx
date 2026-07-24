@@ -1,6 +1,7 @@
-import type { AgentItemStatus, AgentTaskSnapshot } from "@code-agent/protocol";
+import type { AgentItemStatus, PendingRequest } from "@code-agent/protocol";
 import { FolderGit2 } from "lucide-react";
 
+import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import {
   Conversation,
@@ -19,9 +20,15 @@ import {
   ToolHeader,
   type ToolStatus,
 } from "../../../shared/ai-elements/tool.js";
+import { PendingRequestCard, type PendingRequestResolution } from "./pending-request.js";
 
 type TaskTimelineProps = Readonly<{
   projectName: string;
+  onResolvePendingRequest?: (
+    request: PendingRequest,
+    resolution: PendingRequestResolution,
+    idempotencyKey: string,
+  ) => Promise<void>;
   runtime?: TaskRuntimeView;
   taskId?: string;
 }>;
@@ -53,17 +60,37 @@ function TimelineState({
   );
 }
 
-export function TaskTimeline({ projectName, runtime, taskId }: TaskTimelineProps) {
+export function TaskTimeline({
+  onResolvePendingRequest,
+  projectName,
+  runtime,
+  taskId,
+}: TaskTimelineProps) {
   if (taskId === undefined) {
     return <EmptyTimeline projectName={projectName} />;
   }
   if (runtime === undefined) {
     return <TimelineState message="正在加载任务历史" role="status" />;
   }
-  return <ActiveTaskTimeline runtime={runtime} />;
+  return (
+    <ActiveTaskTimeline
+      onResolvePendingRequest={onResolvePendingRequest ?? (() => Promise.resolve())}
+      runtime={runtime}
+    />
+  );
 }
 
-function ActiveTaskTimeline({ runtime }: Readonly<{ runtime: TaskRuntimeView }>) {
+function ActiveTaskTimeline({
+  onResolvePendingRequest,
+  runtime,
+}: Readonly<{
+  onResolvePendingRequest: (
+    request: PendingRequest,
+    resolution: PendingRequestResolution,
+    idempotencyKey: string,
+  ) => Promise<void>;
+  runtime: TaskRuntimeView;
+}>) {
   if (runtime.error !== null) {
     return <TimelineState message="无法加载任务历史" role="alert" />;
   }
@@ -80,7 +107,11 @@ function ActiveTaskTimeline({ runtime }: Readonly<{ runtime: TaskRuntimeView }>)
           实时连接恢复中
         </div>
       ) : null}
-      <TaskSnapshotTimeline snapshot={runtime.snapshot} />
+      <TaskSnapshotTimeline
+        connected={runtime.connectionState === "connected"}
+        onResolvePendingRequest={onResolvePendingRequest}
+        snapshot={runtime.snapshot}
+      />
     </>
   );
 }
@@ -102,10 +133,25 @@ function formatStructuredValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-export function TaskSnapshotTimeline({ snapshot }: Readonly<{ snapshot: AgentTaskSnapshot }>) {
-  if (snapshot.turns.length === 0) {
+export function TaskSnapshotTimeline({
+  connected = true,
+  onResolvePendingRequest = () => Promise.resolve(),
+  snapshot,
+}: Readonly<{
+  connected?: boolean;
+  onResolvePendingRequest?: (
+    request: PendingRequest,
+    resolution: PendingRequestResolution,
+    idempotencyKey: string,
+  ) => Promise<void>;
+  snapshot: RuntimeTaskSnapshot;
+}>) {
+  if (snapshot.turns.length === 0 && snapshot.pendingRequests.length === 0) {
     return <TimelineState message="此任务暂无历史" role="status" />;
   }
+  const firstPendingIndex = snapshot.pendingRequests.findIndex(
+    (candidate) => candidate.status === "pending",
+  );
 
   return (
     <Conversation aria-label="会话内容">
@@ -204,6 +250,17 @@ export function TaskSnapshotTimeline({ snapshot }: Readonly<{ snapshot: AgentTas
             })}
           </section>
         ))}
+        {snapshot.pendingRequests.map((request, index) => {
+          // 只开放队首未解决请求，避免并发响应改变 Provider 的请求顺序。
+          return (
+            <PendingRequestCard
+              interactive={connected && request.status === "pending" && index === firstPendingIndex}
+              key={request.requestId}
+              onResolve={onResolvePendingRequest}
+              request={request}
+            />
+          );
+        })}
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>

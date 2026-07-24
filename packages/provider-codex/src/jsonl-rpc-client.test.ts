@@ -1,4 +1,4 @@
-import { PassThrough } from "node:stream";
+import { PassThrough, Writable } from "node:stream";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -149,7 +149,7 @@ describe("JsonlRpcClient", () => {
     client.close();
   });
 
-  it("delivers server requests and writes responses with the original request id", () => {
+  it("delivers server requests and writes responses with the original request id", async () => {
     const { client, sentMessages, serverOutput } = createHarness();
     const onServerRequest = vi.fn();
     const unsubscribe = client.onServerRequest(onServerRequest);
@@ -161,7 +161,12 @@ describe("JsonlRpcClient", () => {
         params: { itemId: "item_1" },
       })}\n`,
     );
-    client.respondToServerRequest("approval_1", { decision: "accept" });
+    await client.respondToServerRequest("approval_1", { decision: "accept" });
+    await client.rejectServerRequest("unsupported_1", {
+      code: -32601,
+      data: { method: "future/request" },
+      message: "Method not found",
+    });
 
     expect(onServerRequest).toHaveBeenCalledWith({
       id: "approval_1",
@@ -172,10 +177,35 @@ describe("JsonlRpcClient", () => {
       id: "approval_1",
       result: { decision: "accept" },
     });
+    expect(sentMessages).toContainEqual({
+      error: {
+        code: -32601,
+        data: { method: "future/request" },
+        message: "Method not found",
+      },
+      id: "unsupported_1",
+    });
     expect(client.closed).toBe(false);
 
     unsubscribe();
     client.close();
+  });
+
+  it("rejects a server response when the asynchronous stream write fails", async () => {
+    const serverOutput = new PassThrough();
+    const failingOutput = new Writable({
+      write(_chunk, _encoding, callback) {
+        setImmediate(() => {
+          callback(new Error("pipe closed"));
+        });
+      },
+    });
+    const client = new JsonlRpcClient({ input: serverOutput, output: failingOutput });
+
+    await expect(
+      client.respondToServerRequest("approval_1", { decision: "accept" }),
+    ).rejects.toThrow("RPC write failed: pipe closed");
+    expect(client.closed).toBe(true);
   });
 
   it("rejects all pending requests and closes idempotently", async () => {

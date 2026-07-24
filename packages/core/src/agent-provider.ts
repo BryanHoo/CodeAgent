@@ -6,6 +6,8 @@ import type {
   AgentTaskPage,
   AgentTaskSnapshot,
   AgentTurn,
+  PendingRequest,
+  ResolvePendingRequestRequest,
 } from "@code-agent/protocol";
 
 export type ListAgentTasksInput = Readonly<{
@@ -23,12 +25,29 @@ export type AgentProviderEvent = AgentEvent extends infer Event
 
 export type AgentProviderEventListener = (event: AgentProviderEvent) => void;
 
+export type ResolvePendingRequestInput = Readonly<
+  ResolvePendingRequestRequest & { requestId: string }
+>;
+
+export type PendingRequestResolutionErrorCode = "expired" | "mismatch" | "not_found" | "resolved";
+
+export class PendingRequestResolutionError extends Error {
+  public constructor(
+    public readonly code: PendingRequestResolutionErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "PendingRequestResolutionError";
+  }
+}
+
 // Core 只声明 Provider 无关能力，具体 RPC、传输顺序与进程生命周期留在外层。
 export interface AgentProvider {
   getCapabilities(): Promise<AgentCapabilities>;
   listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage>;
   // Promise 完成前须让 Snapshot 包含此前状态并同步交付对应通知，使 checkpoint 保持一致。
   readTask(taskId: string): Promise<AgentTaskSnapshot | undefined>;
+  resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest>;
   startTask(): Promise<AgentTask>;
   startTurn(taskId: string, input: AgentInput): Promise<AgentTurn>;
   interruptTurn(taskId: string, turnId: string): Promise<void>;
