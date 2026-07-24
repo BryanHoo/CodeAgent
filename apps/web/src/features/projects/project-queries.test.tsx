@@ -108,7 +108,7 @@ describe("project queries", () => {
         Promise.resolve({
           provider: "codex",
           tasks: { list: true, read: true, start: true },
-          turns: { interrupt: true, start: true },
+          turns: { interrupt: true, rollback: true, start: true },
         }),
       ),
       listProjects: vi.fn(() => Promise.resolve({ data: [project], nextCursor: null })),
@@ -138,7 +138,7 @@ describe("project queries", () => {
     });
     await expect(queryClient.fetchQuery(capabilitiesQueryOptions(client))).resolves.toMatchObject({
       tasks: { start: true },
-      turns: { interrupt: true, start: true },
+      turns: { interrupt: true, rollback: true, start: true },
     });
     await expect(queryClient.fetchQuery(modelsQueryOptions(client))).resolves.toMatchObject({
       data: [{ id: "gpt-5.6-sol", isDefault: true }],

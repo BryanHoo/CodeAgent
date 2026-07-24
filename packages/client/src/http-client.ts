@@ -10,6 +10,7 @@ import {
   ProjectPageSchema,
   ProjectGitStatusSchema,
   ProjectSourceFileSchema,
+  RollbackAgentTurnResponseSchema,
   ResolvePendingRequestResponseSchema,
   StartAgentTaskResponseSchema,
   StartAgentTurnResponseSchema,
@@ -27,6 +28,7 @@ import {
   type ProjectPage,
   type ProjectGitStatus,
   type ProjectSourceFile,
+  type RollbackAgentTurnResponse,
   type PendingRequest,
   type ResolvePendingRequestRequest,
   type ResolvePendingRequestResponse,
@@ -200,6 +202,19 @@ export class CodeAgentClient {
       `/v1/turns/${encodeURIComponent(turnId)}/interrupt`,
       { taskId },
       InterruptAgentTurnResponseSchema,
+      options,
+    );
+  }
+
+  public async rollbackTurn(
+    taskId: string,
+    turnId: string,
+    options: MutationOptions = {},
+  ): Promise<RollbackAgentTurnResponse> {
+    return this.#mutation(
+      `/v1/turns/${encodeURIComponent(turnId)}/rollback`,
+      { taskId },
+      RollbackAgentTurnResponseSchema,
       options,
     );
   }

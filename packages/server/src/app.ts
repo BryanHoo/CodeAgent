@@ -15,6 +15,8 @@ import {
   ProjectPageSchema,
   ProjectGitStatusSchema,
   ProjectSourceFileSchema,
+  RollbackAgentTurnRequestSchema,
+  RollbackAgentTurnResponseSchema,
   ResolvePendingRequestRequestSchema,
   ResolvePendingRequestResponseSchema,
   StartAgentTaskRequestSchema,
@@ -28,6 +30,7 @@ import {
   type Project,
   type ProjectGitStatus,
   type ProjectSourceFile,
+  type RollbackAgentTurnRequest,
   type ResolvePendingRequestRequest,
   type StartAgentTurnRequest,
 } from "@code-agent/protocol";
@@ -39,6 +42,11 @@ import { AgentEventStream } from "./agent-event-stream.js";
 import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js";
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
 import { readProjectSourceFile } from "./project-source-file.js";
+import {
+  prepareTurnFileRollback,
+  TurnFileRollbackError,
+  type PreparedTurnFileRollback,
+} from "./turn-file-rollback.js";
 
 export interface CreateCodeAgentServerOptions {
   eventBufferSize?: number;
@@ -49,6 +57,10 @@ export interface CreateCodeAgentServerOptions {
   provider: AgentProvider;
   readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
   readProjectSourceFile?: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
+  prepareTurnFileRollback?: (
+    projectRoot: string,
+    changes: Parameters<typeof prepareTurnFileRollback>[1],
+  ) => Promise<PreparedTurnFileRollback>;
   staticRoot?: string;
 }
 
@@ -186,6 +198,7 @@ export async function createCodeAgentServer(
   const app = Fastify({ logger: false });
   const readProjectGitStatus = options.readProjectGitStatus ?? readGitWorkingTreeStatus;
   const readSourceFile = options.readProjectSourceFile ?? readProjectSourceFile;
+  const prepareFileRollback = options.prepareTurnFileRollback ?? prepareTurnFileRollback;
   const attachmentStore = new AttachmentStore();
   const capabilities = await options.provider.getCapabilities();
   const eventStream = new AgentEventStream({
@@ -465,6 +478,93 @@ export async function createCodeAgentServer(
       const checkpoint = eventStream.checkpoint;
       return { checkpoint, snapshot: task };
     },
+  );
+
+  app.post<{
+    Body: RollbackAgentTurnRequest;
+    Headers: { "idempotency-key": string };
+    Params: { turnId: string };
+  }>(
+    "/v1/turns/:turnId/rollback",
+    {
+      schema: {
+        body: RollbackAgentTurnRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: TurnParamsSchema,
+        response: {
+          200: RollbackAgentTurnResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        `rollback-turn:${request.params.turnId}`,
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const task = await options.provider.readTask(request.body.taskId);
+          if (task?.projectId !== options.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          const latestTurn = task.turns.at(-1);
+          const requestedTurn = task.turns.find((turn) => turn.id === request.params.turnId);
+          if (requestedTurn === undefined) {
+            throw new MutationHttpError("TURN_NOT_FOUND", "Turn not found", 404);
+          }
+          if (latestTurn?.id !== requestedTurn.id || requestedTurn.status !== "completed") {
+            throw new MutationHttpError(
+              "TURN_NOT_ROLLBACKABLE",
+              "Only the latest completed turn can be rolled back",
+              409,
+            );
+          }
+          const changes = requestedTurn.items.flatMap((item) =>
+            item.type === "file_change" && item.status === "completed" ? item.changes : [],
+          );
+          let preparedRollback: PreparedTurnFileRollback;
+          try {
+            preparedRollback = await prepareFileRollback(options.project.rootPath, changes);
+            await preparedRollback.applyReverse();
+          } catch (error) {
+            if (error instanceof TurnFileRollbackError) {
+              throw new MutationHttpError(
+                "FILE_ROLLBACK_CONFLICT",
+                "Files changed after this turn and cannot be safely restored",
+                409,
+              );
+            }
+            throw error;
+          }
+
+          try {
+            // Codex 只撤销会话历史；文件已通过预检并在此前恢复。
+            await options.provider.rollbackLatestTurn(request.body.taskId);
+          } catch (providerError) {
+            try {
+              // Provider 失败时恢复正向补丁，避免会话与工作区状态分裂。
+              await preparedRollback.applyForward();
+            } catch {
+              throw new MutationHttpError(
+                "FILE_ROLLBACK_CONFLICT",
+                "Codex rollback failed and file changes could not be restored",
+                409,
+              );
+            }
+            throw providerError;
+          }
+
+          return {
+            restoredFiles: preparedRollback.restoredFiles,
+            status: "rolled_back" as const,
+            taskId: request.body.taskId,
+            turnId: request.params.turnId,
+          };
+        },
+      ),
   );
 
   app.post<{

@@ -10,6 +10,7 @@ import {
   type TaskRuntimeView,
 } from "../../conversation/runtime/use-task-runtime.js";
 import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
+import { FileReviewDialog } from "../../diff/file-review-dialog.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 import {
@@ -55,6 +56,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     change: AgentFileChange;
     projectId: string;
   } | null>(null);
+  const [fileReviewSelection, setFileReviewSelection] = useState<{
+    changes: readonly AgentFileChange[];
+    projectId: string;
+  } | null>(null);
   const [sourceFileSelection, setSourceFileSelection] = useState<{
     projectId: string;
     reference: MessageFileReference;
@@ -71,6 +76,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     sourceFileSelection !== null && sourceFileSelection.projectId === projectId
       ? sourceFileSelection.reference
       : null;
+  const selectedFileReview =
+    fileReviewSelection !== null && fileReviewSelection.projectId === projectId
+      ? fileReviewSelection.changes
+      : null;
   const openFileDiff = (change: AgentFileChange) => {
     setFileDiffSelection({ change, projectId });
   };
@@ -80,6 +89,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     },
     [projectId],
   );
+  const openFileReview = (changes: readonly AgentFileChange[]) => {
+    setFileReviewSelection({ changes, projectId });
+  };
 
   const closeSidebar = () => {
     setSidebarOpen(false);
@@ -238,6 +250,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             taskId={taskId}
             onOpenFileDiff={openFileDiff}
             onOpenSourceFile={openSourceFile}
+            onReviewFileChanges={openFileReview}
           />
         )}
       </main>
@@ -262,6 +275,12 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         change={selectedFileChange}
         onClose={() => {
           setFileDiffSelection(null);
+        }}
+      />
+      <FileReviewDialog
+        changes={selectedFileReview}
+        onClose={() => {
+          setFileReviewSelection(null);
         }}
       />
       <ProjectSourceDialog
@@ -289,6 +308,7 @@ function ActiveTaskWorkbench({
   taskId,
   onOpenFileDiff,
   onOpenSourceFile,
+  onReviewFileChanges,
 }: Readonly<{
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentWorkbenchClient;
@@ -302,19 +322,32 @@ function ActiveTaskWorkbench({
   taskId: string;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
+  onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
 }>) {
+  const queryClient = useQueryClient();
   const resolvePendingRequest = (
     request: PendingRequest,
     resolution: PendingRequestResolution,
     idempotencyKey: string,
   ) => client.resolvePendingRequest(request, resolution, { idempotencyKey }).then(() => undefined);
+  const rollbackTurn = async (turnId: string, idempotencyKey: string) => {
+    await client.rollbackTurn(taskId, turnId, { idempotencyKey });
+    // Codex 回滚不会发送统一事件；成功后主动刷新会话与工作区状态。
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: ["tasks", taskId] }),
+      queryClient.invalidateQueries({ queryKey: ["projects", projectId, "git-status"] }),
+    ]);
+  };
 
   return (
     <>
       <TaskTimeline
+        canRollbackTurns={capabilities?.turns.rollback ?? false}
         onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
+        onReviewFileChanges={onReviewFileChanges}
         onResolvePendingRequest={resolvePendingRequest}
+        onRollbackTurn={rollbackTurn}
         projectName={projectName}
         runtime={runtime}
         taskId={taskId}

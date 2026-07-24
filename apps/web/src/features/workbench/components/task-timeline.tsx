@@ -1,10 +1,15 @@
 import type { AgentItem, AgentItemStatus, AgentTurn, PendingRequest } from "@code-agent/protocol";
-import { Check, Copy, FilePenLine, FolderGit2 } from "lucide-react";
+import { Check, Copy, FilePenLine, Files, FolderGit2, RotateCcw } from "lucide-react";
 import { useState } from "react";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
-import { countFileChangeLines, getFileName, type AgentFileChange } from "../../diff/file-change.js";
+import {
+  countFileChangeLines,
+  getFileName,
+  summarizeFileChanges,
+  type AgentFileChange,
+} from "../../diff/file-change.js";
 import {
   Conversation,
   ConversationContent,
@@ -32,7 +37,10 @@ import {
 import { PendingRequestCard, type PendingRequestResolution } from "./pending-request.js";
 
 type TaskTimelineProps = Readonly<{
+  canRollbackTurns?: boolean;
   onOpenFileDiff?: (change: AgentFileChange) => void;
+  onReviewFileChanges?: (changes: readonly AgentFileChange[]) => void;
+  onRollbackTurn?: (turnId: string, idempotencyKey: string) => Promise<void>;
   onOpenSourceFile?: (reference: MessageFileReference) => void;
   projectName: string;
   onResolvePendingRequest?: (
@@ -72,9 +80,12 @@ function TimelineState({
 }
 
 export function TaskTimeline({
+  canRollbackTurns = false,
   onOpenFileDiff,
   onOpenSourceFile,
+  onReviewFileChanges,
   onResolvePendingRequest,
+  onRollbackTurn,
   projectName,
   runtime,
   taskId,
@@ -89,16 +100,22 @@ export function TaskTimeline({
     <ActiveTaskTimeline
       onOpenFileDiff={onOpenFileDiff ?? (() => undefined)}
       onOpenSourceFile={onOpenSourceFile ?? (() => undefined)}
+      onReviewFileChanges={onReviewFileChanges ?? (() => undefined)}
       onResolvePendingRequest={onResolvePendingRequest ?? (() => Promise.resolve())}
+      onRollbackTurn={onRollbackTurn ?? (() => Promise.resolve())}
+      canRollbackTurns={canRollbackTurns}
       runtime={runtime}
     />
   );
 }
 
 function ActiveTaskTimeline({
+  canRollbackTurns,
   onOpenFileDiff,
   onOpenSourceFile,
+  onReviewFileChanges,
   onResolvePendingRequest,
+  onRollbackTurn,
   runtime,
 }: Readonly<{
   onResolvePendingRequest: (
@@ -108,6 +125,9 @@ function ActiveTaskTimeline({
   ) => Promise<void>;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
+  onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
+  onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
+  canRollbackTurns: boolean;
   runtime: TaskRuntimeView;
 }>) {
   if (runtime.error !== null) {
@@ -127,10 +147,13 @@ function ActiveTaskTimeline({
         </div>
       ) : null}
       <TaskSnapshotTimeline
+        canRollbackTurns={canRollbackTurns}
         connected={runtime.connectionState === "connected"}
         onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
+        onReviewFileChanges={onReviewFileChanges}
         onResolvePendingRequest={onResolvePendingRequest}
+        onRollbackTurn={onRollbackTurn}
         snapshot={runtime.snapshot}
       />
     </>
@@ -276,6 +299,115 @@ function FileChangeButton({
   );
 }
 
+function ChangedFilesCard({
+  canRollback,
+  changes,
+  onOpenFileDiff,
+  onReviewFileChanges,
+  onRollback,
+}: Readonly<{
+  canRollback: boolean;
+  changes: readonly AgentFileChange[];
+  onOpenFileDiff: (change: AgentFileChange) => void;
+  onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
+  onRollback: (idempotencyKey: string) => Promise<void>;
+}>) {
+  const [expanded, setExpanded] = useState(false);
+  const [rollbackError, setRollbackError] = useState<string | null>(null);
+  const [rollbackPending, setRollbackPending] = useState(false);
+  const [rollbackIdempotencyKey] = useState(() => globalThis.crypto.randomUUID());
+  const summary = summarizeFileChanges(changes);
+  const visibleChanges = expanded ? summary.changes : summary.changes.slice(0, 3);
+  const hiddenChangeCount = summary.changes.length - visibleChanges.length;
+
+  const rollback = async () => {
+    setRollbackPending(true);
+    setRollbackError(null);
+    try {
+      await onRollback(rollbackIdempotencyKey);
+    } catch (error) {
+      setRollbackError(error instanceof Error ? error.message : "无法撤销本次更改");
+    } finally {
+      setRollbackPending(false);
+    }
+  };
+
+  return (
+    <section
+      aria-label={`本次修改了 ${String(summary.changes.length)} 个文件`}
+      className="w-full overflow-hidden rounded-surface border border-separator-strong bg-raised shadow-control"
+    >
+      <header className="flex min-h-16 items-center gap-3 px-3 py-2.5 shadow-toolbar">
+        <span className="grid size-9 shrink-0 place-items-center rounded-control bg-control text-muted-foreground">
+          <Files className="size-4" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-body-small font-semibold">已编辑 {summary.changes.length} 个文件</h3>
+          <p className="mt-0.5 text-label text-muted-foreground">
+            <span className="text-diff-added">+{summary.additions}</span>{" "}
+            <span className="text-diff-removed">-{summary.removals}</span>
+          </p>
+        </div>
+        {canRollback ? (
+          <button
+            className="inline-flex h-8 items-center gap-1.5 rounded-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover disabled:cursor-wait disabled:opacity-55"
+            disabled={rollbackPending}
+            onClick={() => {
+              void rollback();
+            }}
+            type="button"
+          >
+            <RotateCcw className="size-3.5" aria-hidden="true" />
+            {rollbackPending ? "撤销中" : "撤销"}
+          </button>
+        ) : null}
+        <button
+          aria-haspopup="dialog"
+          className="h-8 rounded-control bg-control px-3 text-label font-semibold text-foreground transition-colors hover:bg-control-hover"
+          onClick={() => {
+            onReviewFileChanges(summary.changes);
+          }}
+          type="button"
+        >
+          审核
+        </button>
+      </header>
+      <div className="space-y-1 p-2">
+        {visibleChanges.map((change) => (
+          <FileChangeButton change={change} key={change.path} onOpen={onOpenFileDiff} />
+        ))}
+        {hiddenChangeCount > 0 ? (
+          <button
+            className="h-8 w-full rounded-control px-2.5 text-left text-label font-medium text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+            onClick={() => {
+              setExpanded(true);
+            }}
+            type="button"
+          >
+            再显示 {hiddenChangeCount} 个文件
+          </button>
+        ) : null}
+        {expanded && summary.changes.length > 3 ? (
+          <button
+            className="h-8 w-full rounded-control px-2.5 text-left text-label font-medium text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+            onClick={() => {
+              setExpanded(false);
+            }}
+            type="button"
+          >
+            收起文件列表
+          </button>
+        ) : null}
+      </div>
+      {rollbackError === null ? null : (
+        <p className="px-3 pb-3 text-label text-danger" role="alert">
+          {rollbackError}
+        </p>
+      )}
+    </section>
+  );
+}
+
 type IndexedAgentItem = Readonly<{
   item: AgentItem;
   itemIndex: number;
@@ -315,13 +447,11 @@ function groupTurnTimelineItems(items: readonly AgentItem[]): TurnTimelineGroup[
 function TimelineItemContent({
   isLastTurnItem,
   item,
-  onOpenFileDiff,
   onOpenSourceFile,
   turnStatus,
 }: Readonly<{
   isLastTurnItem: boolean;
   item: AgentItem;
-  onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   turnStatus: AgentTurn["status"];
 }>) {
@@ -368,17 +498,8 @@ function TimelineItemContent({
         </Tool>
       );
     case "file_change":
-      return (
-        <div className="space-y-1" data-status={item.status}>
-          {item.changes.map((change, changeIndex) => (
-            <FileChangeButton
-              change={change}
-              key={`${change.path}:${String(changeIndex)}`}
-              onOpen={onOpenFileDiff}
-            />
-          ))}
-        </div>
-      );
+      // 文件变更统一在回复末尾聚合，避免工具流中重复展示同一组文件。
+      return null;
     case "tool":
       return (
         <Tool>
@@ -413,14 +534,20 @@ function TimelineItemContent({
 }
 
 function TurnTimelineItems({
+  canRollback,
   latestSnapshotTimestamp,
   onOpenFileDiff,
   onOpenSourceFile,
+  onReviewFileChanges,
+  onRollbackTurn,
   turn,
 }: Readonly<{
+  canRollback: boolean;
   latestSnapshotTimestamp: string;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
+  onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
+  onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
   turn: AgentTurn;
 }>) {
   const timelineGroups = groupTurnTimelineItems(turn.items);
@@ -432,7 +559,6 @@ function TurnTimelineItems({
           <TimelineItemContent
             isLastTurnItem={false}
             item={group.item}
-            onOpenFileDiff={onOpenFileDiff}
             onOpenSourceFile={onOpenSourceFile}
             turnStatus={turn.status}
           />
@@ -449,7 +575,11 @@ function TurnTimelineItems({
         item.type === "message" && item.role === "assistant" ? [item.text] : [],
       )
       .join("\n\n");
+    const responseFileChanges = group.items.flatMap(({ item }) =>
+      item.type === "file_change" && item.status === "completed" ? item.changes : [],
+    );
     const showCompletedFooter = turn.status !== "running" && assistantText.trim().length > 0;
+    const showChangedFilesCard = turn.status !== "running" && responseFileChanges.length > 0;
 
     return (
       <Message from="assistant" key={group.key}>
@@ -459,12 +589,20 @@ function TurnTimelineItems({
               isLastTurnItem={itemIndex === turn.items.length - 1}
               item={item}
               key={item.id}
-              onOpenFileDiff={onOpenFileDiff}
               onOpenSourceFile={onOpenSourceFile}
               turnStatus={turn.status}
             />
           ))}
         </div>
+        {showChangedFilesCard ? (
+          <ChangedFilesCard
+            canRollback={canRollback}
+            changes={responseFileChanges}
+            onOpenFileDiff={onOpenFileDiff}
+            onReviewFileChanges={onReviewFileChanges}
+            onRollback={(idempotencyKey) => onRollbackTurn(turn.id, idempotencyKey)}
+          />
+        ) : null}
         {showCompletedFooter ? (
           <MessageMetadata
             text={assistantText}
@@ -477,20 +615,26 @@ function TurnTimelineItems({
 }
 
 export function TaskSnapshotTimeline({
+  canRollbackTurns = false,
   connected = true,
   onOpenFileDiff = () => undefined,
   onOpenSourceFile = () => undefined,
+  onReviewFileChanges = () => undefined,
   onResolvePendingRequest = () => Promise.resolve(),
+  onRollbackTurn = () => Promise.resolve(),
   snapshot,
 }: Readonly<{
+  canRollbackTurns?: boolean;
   connected?: boolean;
   onOpenFileDiff?: (change: AgentFileChange) => void;
   onOpenSourceFile?: (reference: MessageFileReference) => void;
+  onReviewFileChanges?: (changes: readonly AgentFileChange[]) => void;
   onResolvePendingRequest?: (
     request: PendingRequest,
     resolution: PendingRequestResolution,
     idempotencyKey: string,
   ) => Promise<void>;
+  onRollbackTurn?: (turnId: string, idempotencyKey: string) => Promise<void>;
   snapshot: RuntimeTaskSnapshot;
 }>) {
   if (snapshot.turns.length === 0 && snapshot.pendingRequests.length === 0) {
@@ -499,6 +643,7 @@ export function TaskSnapshotTimeline({
   const firstPendingIndex = snapshot.pendingRequests.findIndex(
     (candidate) => candidate.status === "pending",
   );
+  const latestTurnId = snapshot.turns.at(-1)?.id;
 
   return (
     <Conversation aria-label="会话内容">
@@ -520,9 +665,17 @@ export function TaskSnapshotTimeline({
               </div>
             )}
             <TurnTimelineItems
+              canRollback={
+                connected &&
+                canRollbackTurns &&
+                turn.status === "completed" &&
+                turn.id === latestTurnId
+              }
               latestSnapshotTimestamp={snapshot.updatedAt}
               onOpenFileDiff={onOpenFileDiff}
               onOpenSourceFile={onOpenSourceFile}
+              onReviewFileChanges={onReviewFileChanges}
+              onRollbackTurn={onRollbackTurn}
               turn={turn}
             />
           </section>

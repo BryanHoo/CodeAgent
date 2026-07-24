@@ -79,7 +79,7 @@ function createProvider() {
     Promise.resolve({
       provider: "codex",
       tasks: { list: true, read: true, start: true },
-      turns: { interrupt: true, start: true },
+      turns: { interrupt: true, rollback: true, start: true },
     }),
   );
   const listTasks = vi.fn(() => Promise.resolve({ data: [task], nextCursor: "next" }));
@@ -104,6 +104,7 @@ function createProvider() {
   const resolvePendingRequest = vi.fn(() =>
     Promise.resolve({ ...pendingRequest, status: "resolved" as const }),
   );
+  const rollbackLatestTurn = vi.fn(() => Promise.resolve());
   const startTask = vi.fn(() => Promise.resolve(task));
   const startTurn = vi.fn((taskId: string, input: AgentProviderTurnInput) =>
     Promise.resolve({
@@ -123,6 +124,7 @@ function createProvider() {
     listTasks,
     readTask,
     resolvePendingRequest,
+    rollbackLatestTurn,
     startTask,
     startTurn,
     subscribeEvents(listener) {
@@ -145,6 +147,7 @@ function createProvider() {
     provider,
     readTask,
     resolvePendingRequest,
+    rollbackLatestTurn,
     startTask,
     startTurn,
   };
@@ -160,6 +163,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     provider,
     readTask,
     resolvePendingRequest,
+    rollbackLatestTurn,
     startTask,
     startTurn,
   } = createProvider();
@@ -174,6 +178,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     listModels,
     readTask,
     resolvePendingRequest,
+    rollbackLatestTurn,
     startTask,
     startTurn,
   };
@@ -194,7 +199,7 @@ describe("CodeAgent Server", () => {
     expect(capabilitiesResponse.json()).toEqual({
       provider: "codex",
       tasks: { list: true, read: true, start: true },
-      turns: { interrupt: true, start: true },
+      turns: { interrupt: true, rollback: true, start: true },
     });
     expect(projectsResponse.json()).toEqual({ data: [project], nextCursor: null });
   });
@@ -405,6 +410,115 @@ describe("CodeAgent Server", () => {
     expect(replayedInterrupt.statusCode).toBe(202);
     expect(replayedInterrupt.json()).toEqual(interrupted.json());
     expect(interruptTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores files and rolls back the latest completed turn idempotently", async () => {
+    const { provider, readTask, rollbackLatestTurn } = createProvider();
+    const fileChange = {
+      diff: "--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-old\n+new",
+      kind: "update" as const,
+      path: "src/index.ts",
+    };
+    readTask.mockResolvedValue({
+      ...snapshot,
+      turns: [
+        {
+          completedAt: "2026-07-23T00:03:00.000Z",
+          error: null,
+          id: "turn-1",
+          items: [
+            {
+              changes: [fileChange],
+              id: "change-1",
+              status: "completed",
+              type: "file_change",
+            },
+          ],
+          startedAt: "2026-07-23T00:02:00.000Z",
+          status: "completed",
+        },
+      ],
+    });
+    const applyReverse = vi.fn(() => Promise.resolve());
+    const applyForward = vi.fn(() => Promise.resolve());
+    const prepareTurnFileRollback = vi.fn(() =>
+      Promise.resolve({ applyForward, applyReverse, restoredFiles: ["src/index.ts"] }),
+    );
+    const app = await createCodeAgentServer({
+      prepareTurnFileRollback,
+      project,
+      provider,
+    });
+    closeCallbacks.push(() => app.close());
+    const request = {
+      headers: { "idempotency-key": "rollback-1" },
+      method: "POST" as const,
+      payload: { taskId: "task-1" },
+      url: "/v1/turns/turn-1/rollback",
+    };
+
+    const first = await app.inject(request);
+    const repeated = await app.inject(request);
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toEqual({
+      restoredFiles: ["src/index.ts"],
+      status: "rolled_back",
+      taskId: "task-1",
+      turnId: "turn-1",
+    });
+    expect(repeated.json()).toEqual(first.json());
+    expect(prepareTurnFileRollback).toHaveBeenCalledWith(project.rootPath, [fileChange]);
+    expect(applyReverse).toHaveBeenCalledTimes(1);
+    expect(applyForward).not.toHaveBeenCalled();
+    expect(rollbackLatestTurn).toHaveBeenCalledTimes(1);
+    expect(rollbackLatestTurn).toHaveBeenCalledWith("task-1");
+  });
+
+  it("compensates restored files when Codex rollback fails", async () => {
+    const { provider, readTask, rollbackLatestTurn } = createProvider();
+    readTask.mockResolvedValue({
+      ...snapshot,
+      turns: [
+        {
+          completedAt: "2026-07-23T00:03:00.000Z",
+          error: null,
+          id: "turn-1",
+          items: [
+            {
+              changes: [{ diff: "content", kind: "create", path: "new.ts" }],
+              id: "change-1",
+              status: "completed",
+              type: "file_change",
+            },
+          ],
+          startedAt: "2026-07-23T00:02:00.000Z",
+          status: "completed",
+        },
+      ],
+    });
+    rollbackLatestTurn.mockRejectedValue(new Error("Codex unavailable"));
+    const applyReverse = vi.fn(() => Promise.resolve());
+    const applyForward = vi.fn(() => Promise.resolve());
+    const app = await createCodeAgentServer({
+      prepareTurnFileRollback: () =>
+        Promise.resolve({ applyForward, applyReverse, restoredFiles: ["new.ts"] }),
+      project,
+      provider,
+    });
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({
+      headers: { "idempotency-key": "rollback-failed" },
+      method: "POST",
+      payload: { taskId: "task-1" },
+      url: "/v1/turns/turn-1/rollback",
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toMatchObject({ code: "PROVIDER_ERROR", retryable: true });
+    expect(applyReverse).toHaveBeenCalledOnce();
+    expect(applyForward).toHaveBeenCalledOnce();
   });
 
   it("resolves pending requests idempotently with complete identity validation", async () => {

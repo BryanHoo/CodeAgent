@@ -114,6 +114,34 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("rolls back exactly the latest Codex turn", async () => {
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      { thread: nativeThread({ turns: [] }) },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.listTasks();
+
+    await expect(provider.rollbackLatestTurn("task-1")).resolves.toBeUndefined();
+    expect(rpc.calls.at(-1)).toEqual({
+      method: "thread/rollback",
+      params: { numTurns: 1, threadId: "task-1" },
+    });
+  });
+
+  it("rejects malformed Codex rollback responses", async () => {
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      { thread: nativeThread({ id: "another-task", turns: [] }) },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.listTasks();
+
+    await expect(provider.rollbackLatestTurn("task-1")).rejects.toThrow(
+      "thread/rollback returned a different thread",
+    );
+  });
+
   it("rejects unsupported server request methods instead of leaving Codex blocked", async () => {
     const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
     const provider = createCodexAgentProvider({ client: rpc, project });
@@ -1315,7 +1343,7 @@ describe("CodexAgentProvider", () => {
     await expect(provider.getCapabilities()).resolves.toEqual({
       provider: "codex",
       tasks: { list: true, read: true, start: true },
-      turns: { interrupt: true, start: true },
+      turns: { interrupt: true, rollback: true, start: true },
     });
     await expect(provider.listTasks({ cursor: "cursor", limit: 25 })).resolves.toEqual({
       data: [

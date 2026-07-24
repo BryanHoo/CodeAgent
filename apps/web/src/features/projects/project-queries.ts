@@ -11,11 +11,13 @@ export type CodeAgentMutationClient = Pick<
   CodeAgentClient,
   "interruptTurn" | "startTask" | "startTurn" | "uploadAttachment"
 >;
+export type CodeAgentRollbackClient = Pick<CodeAgentClient, "rollbackTurn">;
 export type CodeAgentPendingRequestClient = Pick<CodeAgentClient, "resolvePendingRequest">;
 export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentGitStatusClient &
   CodeAgentRuntimeClient &
   CodeAgentMutationClient &
+  CodeAgentRollbackClient &
   CodeAgentPendingRequestClient &
   CodeAgentCapabilitiesClient &
   CodeAgentModelsClient &

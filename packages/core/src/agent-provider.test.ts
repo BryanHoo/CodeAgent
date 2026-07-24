@@ -10,7 +10,7 @@ describe("AgentProvider", () => {
         return Promise.resolve({
           provider: "fake",
           tasks: { list: true, read: true, start: true },
-          turns: { interrupt: true, start: true },
+          turns: { interrupt: true, rollback: true, start: true },
         });
       },
       listTasks() {
@@ -33,6 +33,10 @@ describe("AgentProvider", () => {
       },
       readTask() {
         return Promise.resolve(undefined);
+      },
+      rollbackLatestTurn(taskId) {
+        expect(taskId).toBe("task-1");
+        return Promise.resolve();
       },
       resolvePendingRequest(input) {
         return Promise.resolve({
@@ -92,7 +96,7 @@ describe("AgentProvider", () => {
     await expect(provider.getCapabilities()).resolves.toEqual({
       provider: "fake",
       tasks: { list: true, read: true, start: true },
-      turns: { interrupt: true, start: true },
+      turns: { interrupt: true, rollback: true, start: true },
     });
     await expect(provider.listTasks({ limit: 25 })).resolves.toEqual({
       data: [],
@@ -125,6 +129,7 @@ describe("AgentProvider", () => {
       ),
     ).resolves.toMatchObject({ id: "task-1-turn", status: "running" });
     await expect(provider.interruptTurn("task-1", "turn-1")).resolves.toBeUndefined();
+    await expect(provider.rollbackLatestTurn("task-1")).resolves.toBeUndefined();
 
     const received: AgentProviderEvent[] = [];
     const unsubscribe = provider.subscribeEvents((event) => {

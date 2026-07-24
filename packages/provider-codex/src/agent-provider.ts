@@ -857,7 +857,7 @@ export class CodexAgentProvider implements AgentProvider {
     return Promise.resolve({
       provider: "codex",
       tasks: { list: true, read: true, start: true },
-      turns: { interrupt: true, start: true },
+      turns: { interrupt: true, rollback: true, start: true },
     });
   }
 
@@ -956,6 +956,21 @@ export class CodexAgentProvider implements AgentProvider {
       await this.#client.request("turn/interrupt", { threadId: taskId, turnId }),
       "turn/interrupt response",
     );
+  }
+
+  public async rollbackLatestTurn(taskId: string): Promise<void> {
+    this.#assertKnownProjectTask(taskId);
+    const response = expectRecord(
+      await this.#client.request("thread/rollback", { numTurns: 1, threadId: taskId }),
+      "thread/rollback response",
+    );
+    const thread = expectRecord(response["thread"], "thread/rollback thread");
+    if (expectString(thread["id"], "thread/rollback thread id") !== taskId) {
+      throw new CodexProtocolMappingError("thread/rollback returned a different thread");
+    }
+    if (!Array.isArray(thread["turns"])) {
+      throw new CodexProtocolMappingError("thread/rollback turns must be an array");
+    }
   }
 
   public async listTasks(input: ListAgentTasksInput = {}): Promise<AgentTaskPage> {

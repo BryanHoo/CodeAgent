@@ -48,7 +48,7 @@ describe("WorkbenchComposer", () => {
     const capabilities = {
       provider: "fake",
       tasks: { list: true, read: true, start: false },
-      turns: { interrupt: false, start: true },
+      turns: { interrupt: false, rollback: false, start: true },
     };
 
     expect(deriveComposerActions(undefined, false)).toEqual({

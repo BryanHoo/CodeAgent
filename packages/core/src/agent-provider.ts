@@ -59,6 +59,7 @@ export interface AgentProvider {
   // Promise 完成前须让 Snapshot 包含此前状态并同步交付对应通知，使 checkpoint 保持一致。
   readTask(taskId: string): Promise<AgentTaskSnapshot | undefined>;
   resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest>;
+  rollbackLatestTurn(taskId: string): Promise<void>;
   startTask(): Promise<AgentTask>;
   startTurn(
     taskId: string,

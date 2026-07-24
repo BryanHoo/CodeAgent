@@ -19,5 +19,6 @@
 - Timeline 与 Composer 必须共享同一个 Task Runtime 订阅，不能为同一 Task 重复建立 Snapshot Query 和 WebSocket 链路。
 - Composer 只使用 `idle`、`submitting`、`running`、`reconnecting`、`failed` 五种状态；运行态来自活动 Turn，重连态暂停网络 Mutation，失败态保留草稿。
 - 同一次用户动作在结果尚未确定前重试时必须复用原 `Idempotency-Key`；输入或目标变化后生成新 Key。
+- Turn 撤销的提交、失败和 Idempotency Key 属于对应回复卡片的瞬时状态；同一次撤销重试复用原 Key。撤销成功后主动刷新 Task Snapshot 与 Project Git 状态，因为 Codex 会话回滚不保证产生统一实时事件。
 - 创建 Task 后启动首个 Turn；若 Turn 启动失败，保留已创建 Task ID 和原始草稿，重试不得重复创建 Task。只有 Turn 启动成功后才清空草稿。
 - 中断请求成功后继续保持运行语义，直到实时链路收到 `turn.completed` 的 `interrupted` 终态。

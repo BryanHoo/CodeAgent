@@ -154,7 +154,7 @@ test.beforeEach(async ({ page }) => {
       body = {
         provider: "codex",
         tasks: { list: true, read: true, start: true },
-        turns: { interrupt: true, start: true },
+        turns: { interrupt: true, rollback: true, start: true },
       };
     } else if (url.pathname === "/v1/models") {
       body = { data: models, nextCursor: null };
@@ -535,7 +535,7 @@ test("disables composer mutations that the provider does not support", async ({ 
       json: {
         provider: "readonly",
         tasks: { list: true, read: true, start: false },
-        turns: { interrupt: false, start: false },
+        turns: { interrupt: false, rollback: false, start: false },
       },
     });
   });

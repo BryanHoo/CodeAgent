@@ -133,7 +133,7 @@ describe("CodeAgentClient", () => {
         jsonResponse({
           provider: "codex",
           tasks: { list: true, read: true, start: true },
-          turns: { interrupt: true, start: true },
+          turns: { interrupt: true, rollback: true, start: true },
         }),
       )
       .mockResolvedValueOnce(jsonResponse({ data: [], nextCursor: null }))
@@ -182,6 +182,14 @@ describe("CodeAgentClient", () => {
       .mockResolvedValueOnce(jsonResponse({ taskId: task.id, turn: runningTurn }))
       .mockResolvedValueOnce(
         jsonResponse({ status: "interrupting", taskId: task.id, turnId: runningTurn.id }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          restoredFiles: ["src/index.ts"],
+          status: "rolled_back",
+          taskId: task.id,
+          turnId: runningTurn.id,
+        }),
       );
     const client = new CodeAgentClient({ fetch: fetchMock });
 
@@ -197,8 +205,9 @@ describe("CodeAgentClient", () => {
       { idempotencyKey: "turn-key" },
     );
     await client.interruptTurn(task.id, runningTurn.id, { idempotencyKey: "interrupt-key" });
+    await client.rollbackTurn(task.id, runningTurn.id, { idempotencyKey: "rollback-key" });
 
-    const [taskCall, attachmentCall, turnCall, interruptCall] = fetchMock.mock.calls;
+    const [taskCall, attachmentCall, turnCall, interruptCall, rollbackCall] = fetchMock.mock.calls;
     expect(taskCall?.[0]).toBe("/v1/projects/code-agent/tasks");
     expect(taskCall?.[1]).toMatchObject({ body: "{}", method: "POST" });
     expect(new Headers(taskCall?.[1]?.headers).get("idempotency-key")).toBe("task-key");
@@ -231,6 +240,12 @@ describe("CodeAgentClient", () => {
       method: "POST",
     });
     expect(new Headers(interruptCall?.[1]?.headers).get("idempotency-key")).toBe("interrupt-key");
+    expect(rollbackCall?.[0]).toBe("/v1/turns/turn-1/rollback");
+    expect(rollbackCall?.[1]).toMatchObject({
+      body: JSON.stringify({ taskId: "task-1" }),
+      method: "POST",
+    });
+    expect(new Headers(rollbackCall?.[1]?.headers).get("idempotency-key")).toBe("rollback-key");
   });
 
   it("sends typed pending request resolutions with full identity", async () => {

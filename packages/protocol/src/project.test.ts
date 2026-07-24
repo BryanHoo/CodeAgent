@@ -24,6 +24,8 @@ import {
   ProjectGitStatusSchema,
   ProjectSourceFileSchema,
   ProjectSchema,
+  RollbackAgentTurnRequestSchema,
+  RollbackAgentTurnResponseSchema,
   ResolvePendingRequestRequestSchema,
   ResolvePendingRequestResponseSchema,
 } from "./project.js";
@@ -353,9 +355,29 @@ describe("project protocol", () => {
       Value.Check(AgentCapabilitiesSchema, {
         provider: "codex",
         tasks: { list: true, read: true, start: true },
-        turns: { interrupt: true, start: true },
+        turns: { interrupt: true, rollback: true, start: true },
       }),
     ).toBe(true);
+  });
+
+  it("validates the latest turn rollback contract", () => {
+    expect(Value.Check(RollbackAgentTurnRequestSchema, { taskId: "task-1" })).toBe(true);
+    expect(
+      Value.Check(RollbackAgentTurnResponseSchema, {
+        restoredFiles: ["src/index.ts"],
+        status: "rolled_back",
+        taskId: "task-1",
+        turnId: "turn-1",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(RollbackAgentTurnResponseSchema, {
+        restoredFiles: [],
+        status: "rolled_back",
+        taskId: "task-1",
+        turnId: "turn-1",
+      }),
+    ).toBe(false);
   });
 
   it("validates structured Agent inputs and mutation contracts", () => {

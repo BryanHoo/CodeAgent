@@ -203,8 +203,14 @@ describe("TaskSnapshotTimeline", () => {
       ],
     };
 
-    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={fileChangeSnapshot} />);
+    const markup = renderToStaticMarkup(
+      <TaskSnapshotTimeline canRollbackTurns snapshot={fileChangeSnapshot} />,
+    );
 
+    expect(markup).toContain("已编辑 2 个文件");
+    expect(markup).toContain('aria-label="本次修改了 2 个文件"');
+    expect(markup).toContain(">撤销<");
+    expect(markup).toContain(">审核<");
     expect(markup).toContain("已编辑");
     expect(markup).toContain("package.json");
     expect(markup).toContain('aria-haspopup="dialog"');
