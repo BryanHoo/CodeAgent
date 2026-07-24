@@ -74,7 +74,7 @@ export function ProjectSidebar({ onClose, projectId, taskId }: ProjectSidebarPro
       aria-label="Project Sidebar"
       className="workbench-sidebar z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] bg-sidebar shadow-divider"
     >
-      <div className="flex h-toolbar items-center gap-2 px-3">
+      <div className="flex h-workbench-header items-center gap-2 px-3">
         <Link
           aria-label="CodeAgent 首页"
           className="flex min-w-0 flex-1 items-center gap-2 text-body-small font-semibold text-foreground"
@@ -99,7 +99,7 @@ export function ProjectSidebar({ onClose, projectId, taskId }: ProjectSidebarPro
         </IconButton>
       </div>
 
-      <nav className="space-y-0.5 px-2 pt-2" aria-label="Agent 导航">
+      <nav className="space-y-0.5 px-2" aria-label="Agent 导航">
         <div className="relative px-1 pb-1">
           <Search
             aria-hidden="true"

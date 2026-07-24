@@ -67,6 +67,9 @@
   --ui-motion-normal: 180ms;
   --ui-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ui-layout-toolbar-height: 2.75rem;
+  --ui-layout-workbench-header-height: calc(
+    var(--ui-layout-toolbar-height) + var(--ui-space-unit) * 2
+  );
   --ui-layout-sidebar-width: 16.5rem;
   --ui-layout-inspector-width: 18rem;
   --ui-layout-content-width: 48.75rem;
@@ -132,6 +135,7 @@
 
   --spacing: var(--ui-space-unit);
   --spacing-toolbar: var(--ui-layout-toolbar-height);
+  --spacing-workbench-header: var(--ui-layout-workbench-header-height);
   --spacing-sidebar: var(--ui-layout-sidebar-width);
   --spacing-inspector: var(--ui-layout-inspector-width);
   --spacing-content: var(--ui-layout-content-width);
@@ -195,6 +199,11 @@ a {
 :focus-visible {
   outline: 2px solid var(--ui-color-focus);
   outline-offset: 2px;
+}
+
+/* Composer 以整体外框表达焦点，内部输入与工具控件不再重复绘制主色轮廓。 */
+[data-prompt-input] :focus-visible {
+  outline: none;
 }
 
 ::selection {

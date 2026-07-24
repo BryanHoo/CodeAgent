@@ -13,7 +13,30 @@ export function getFileName(filePath: string): string {
   return filePath.split(/[\\/]/).at(-1) ?? filePath;
 }
 
+function isUnifiedFilePatch(diff: string): boolean {
+  const hasFileHeaders = /^---\s/m.test(diff) && /^\+\+\+\s/m.test(diff);
+  return hasFileHeaders || /^@@\s/m.test(diff);
+}
+
+function countCompleteFileLines(content: string): number {
+  if (content.length === 0) {
+    return 0;
+  }
+  const lines = content.split("\n");
+  return content.endsWith("\n") ? lines.length - 1 : lines.length;
+}
+
 export function countFileChangeLines(change: AgentFileChange): FileChangeStats {
+  if (!isUnifiedFilePatch(change.diff)) {
+    // Codex 有时直接返回新旧文件的完整内容，此时每一行都属于对应文件操作。
+    if (change.kind === "create") {
+      return { additions: countCompleteFileLines(change.diff), removals: 0 };
+    }
+    if (change.kind === "delete") {
+      return { additions: 0, removals: countCompleteFileLines(change.diff) };
+    }
+  }
+
   let additions = 0;
   let removals = 0;
 

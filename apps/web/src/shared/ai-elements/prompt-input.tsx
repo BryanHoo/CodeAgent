@@ -217,6 +217,7 @@ export function PromptInput({
         {...props}
         aria-disabled={disabled || undefined}
         className={`overflow-hidden rounded-surface border border-transparent bg-raised shadow-floating transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-focus ${className}`}
+        data-prompt-input=""
         onPaste={(event) => {
           onPaste?.(event);
           if (disabled || event.defaultPrevented) {

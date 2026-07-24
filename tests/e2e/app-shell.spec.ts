@@ -298,6 +298,53 @@ test("uses subtle hairline separation across registered routes", async ({ page }
   }
 });
 
+test("aligns the center toolbar divider with sidebar controls", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const mainHeader = page.getByRole("main", { name: "Task Timeline" }).locator(":scope > header");
+  const leftTitle = page.getByRole("link", { name: "CodeAgent 首页" });
+  const centerTitle = page.getByRole("heading", { name: "构建 macOS 工作台", level: 1 });
+  const rightTitle = page.getByRole("heading", { name: "环境信息", level: 2 });
+  const search = page.getByRole("textbox", { name: "搜索任务" });
+  const tabs = page.getByRole("tablist");
+  const [mainHeaderBox, leftTitleBox, centerTitleBox, rightTitleBox, searchBox, tabsBox] =
+    await Promise.all([
+      mainHeader.boundingBox(),
+      leftTitle.boundingBox(),
+      centerTitle.boundingBox(),
+      rightTitle.boundingBox(),
+      search.boundingBox(),
+      tabs.boundingBox(),
+    ]);
+
+  expect(mainHeaderBox).not.toBeNull();
+  expect(leftTitleBox).not.toBeNull();
+  expect(centerTitleBox).not.toBeNull();
+  expect(rightTitleBox).not.toBeNull();
+  expect(searchBox).not.toBeNull();
+  expect(tabsBox).not.toBeNull();
+  if (
+    mainHeaderBox === null ||
+    leftTitleBox === null ||
+    centerTitleBox === null ||
+    rightTitleBox === null ||
+    searchBox === null ||
+    tabsBox === null
+  ) {
+    return;
+  }
+
+  // 三栏标题行共用同一个垂直中心，避免文字和图标上下错位。
+  const centerTitlePosition = centerTitleBox.y + centerTitleBox.height / 2;
+  expect(leftTitleBox.y + leftTitleBox.height / 2).toBe(centerTitlePosition);
+  expect(rightTitleBox.y + rightTitleBox.height / 2).toBe(centerTitlePosition);
+
+  // 中栏分隔线与左右栏第二层控件顶部共用同一水平基线。
+  const dividerPosition = mainHeaderBox.y + mainHeaderBox.height;
+  expect(dividerPosition).toBe(searchBox.y);
+  expect(dividerPosition).toBe(tabsBox.y);
+});
+
 test("renders the AI workbench landmarks with an enabled composer", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
@@ -323,11 +370,18 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
       .poll(() => select.evaluate((element) => getComputedStyle(element).fieldSizing))
       .toBe("content");
   }
-  await prompt.focus();
-  await expect(page.getByRole("region", { name: "Composer" }).locator("form")).toHaveCSS(
-    "border-color",
-    "rgb(0, 106, 255)",
-  );
+  const composerForm = page.getByRole("region", { name: "Composer" }).locator("form");
+  const composerControls = [
+    prompt,
+    page.getByRole("button", { name: "添加图片" }),
+    ...compactSelects,
+  ];
+  for (const control of composerControls) {
+    await control.focus();
+    // 内部控件不重复绘制主色焦点框，焦点状态统一由 Composer 外框表达。
+    await expect(control).toHaveCSS("outline-style", "none");
+    await expect(composerForm).toHaveCSS("border-color", "rgb(0, 106, 255)");
+  }
   await expect(page.getByText("本地", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();
   await prompt.fill("继续当前任务");
@@ -335,7 +389,14 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(main.locator("header").getByText("CodeAgent", { exact: true })).toHaveCount(0);
   await expect(page.getByText("本地离线", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("项目路径")).toHaveText("~/Develop/person/CodeAgent");
-  await expect(page.getByLabel("上下文用量")).toHaveText("上下文 13%");
+  const contextUsageButton = page.getByRole("button", { name: "上下文已使用 13%" });
+  await expect(contextUsageButton).toBeVisible();
+  await expect(contextUsageButton.locator("circle")).toHaveCount(2);
+  await expect(contextUsageButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await contextUsageButton.hover();
+  const contextUsageTooltip = page.getByRole("tooltip");
+  await expect(contextUsageTooltip).toContainText("13% 上下文已使用");
+  await expect(contextUsageTooltip).toContainText("25K / 200K tokens");
   await expect(inspector.getByRole("button", { name: "关闭上下文面板" })).toHaveCount(0);
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
 });
@@ -386,6 +447,7 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   await modelSelect.selectOption("gpt-5.6-terra");
   const reasoningSelect = page.getByRole("combobox", { name: "选择思考量" });
   await expect(reasoningSelect).toHaveValue("medium");
+  await expect(reasoningSelect.locator("option")).toHaveText(["低", "中"]);
   await reasoningSelect.selectOption("low");
   await page.getByRole("combobox", { name: "批准模式" }).selectOption("never");
   const chooserPromise = page.waitForEvent("filechooser");

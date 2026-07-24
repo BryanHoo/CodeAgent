@@ -27,6 +27,16 @@ describe("file change view model", () => {
     ).toEqual({ additions: 0, removals: 2 });
   });
 
+  it("counts complete file content returned for a created file", () => {
+    expect(
+      countFileChangeLines({
+        diff: "export const enabled = true;\n\nexport function run() {}\n",
+        kind: "create",
+        path: "src/new-module.ts",
+      }),
+    ).toEqual({ additions: 3, removals: 0 });
+  });
+
   it("keeps only the latest change for each path in a task snapshot", () => {
     const snapshot = {
       contextUsage: null,

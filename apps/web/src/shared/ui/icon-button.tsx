@@ -16,6 +16,8 @@ type IconButtonProps = Readonly<
     label: string;
     size?: "small" | "medium";
     tone?: "accent" | "neutral";
+    tooltip?: ReactNode;
+    tooltipTone?: "default" | "surface";
   }
 >;
 
@@ -25,6 +27,8 @@ export function IconButton({
   label,
   size = "medium",
   tone = "neutral",
+  tooltip,
+  tooltipTone = "default",
   type = "button",
   ...buttonProps
 }: IconButtonProps) {
@@ -38,6 +42,10 @@ export function IconButton({
     tone === "accent"
       ? "bg-accent text-white hover:bg-accent-strong"
       : "bg-transparent text-muted-foreground hover:bg-control-hover hover:text-foreground";
+  const tooltipClass =
+    tooltipTone === "surface"
+      ? "bg-raised text-foreground shadow-floating"
+      : "bg-foreground text-raised shadow-floating";
 
   const updateTooltipPosition = useCallback(() => {
     const button = buttonRef.current;
@@ -114,7 +122,7 @@ export function IconButton({
       {tooltipVisible && typeof document !== "undefined"
         ? createPortal(
             <span
-              className="pointer-events-none fixed z-50 max-w-[calc(100vw-1rem)] whitespace-normal rounded-control bg-foreground px-2 py-1 text-meta text-raised shadow-floating"
+              className={`pointer-events-none fixed z-50 max-w-[calc(100vw-1rem)] whitespace-normal rounded-control px-2 py-1 text-meta ${tooltipClass}`}
               id={tooltipId}
               ref={tooltipRef}
               role="tooltip"
@@ -124,7 +132,7 @@ export function IconButton({
                   : { left: tooltipPosition.left, top: tooltipPosition.top }
               }
             >
-              {label}
+              {tooltip ?? label}
             </span>,
             document.body,
           )

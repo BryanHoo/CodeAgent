@@ -38,11 +38,11 @@ export function WorkbenchInspector({
       aria-label="Context Inspector"
       className="workbench-inspector z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse"
     >
-      <div className="flex h-toolbar items-center px-3">
+      <div className="flex h-workbench-header items-center px-3">
         <h2 className="text-body-small font-semibold text-foreground">环境信息</h2>
       </div>
 
-      <div className="px-2.5 py-1.5">
+      <div className="px-2.5 pb-1.5">
         <div className="grid grid-cols-2 rounded-control bg-control p-0.5" role="tablist">
           {(["changes", "context"] as const).map((value) => (
             <button

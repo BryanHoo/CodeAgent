@@ -10,7 +10,7 @@ import type {
   AgentTurn,
   AgentTurnOptions,
 } from "@code-agent/protocol";
-import { Folder, Gauge, GitBranch } from "lucide-react";
+import { Folder, GitBranch } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
@@ -36,6 +36,7 @@ import {
   type PromptInputAttachment,
   type PromptInputMessage,
 } from "../../../shared/ai-elements/prompt-input.js";
+import { IconButton } from "../../../shared/ui/icon-button.js";
 
 export type ComposerState = "failed" | "idle" | "reconnecting" | "running" | "submitting";
 
@@ -79,26 +80,84 @@ const reasoningEffortLabels: Readonly<Record<string, string>> = {
   xhigh: "极高",
 };
 
-export function formatContextUsage(
-  usage: AgentContextUsage | null,
-): Readonly<{ label: string; title: string }> {
+export function formatContextUsage(usage: AgentContextUsage | null): Readonly<{
+  accessibleLabel: string;
+  percentage: number | null;
+  summary: string;
+  tokenCount: string | null;
+}> {
   const contextWindow = usage?.contextWindow;
   const usedTokens = usage?.usedTokens;
   if (contextWindow === null || contextWindow === undefined || usedTokens === undefined) {
     return {
-      label: "上下文 --",
-      title:
-        usedTokens === undefined
-          ? "等待模型返回上下文用量"
-          : `已使用 ${new Intl.NumberFormat("en-US").format(usedTokens)} tokens`,
+      accessibleLabel: "上下文用量未知",
+      percentage: null,
+      summary: "等待模型返回上下文用量",
+      tokenCount: usedTokens === undefined ? null : `${formatCompactTokenCount(usedTokens)} tokens`,
     };
   }
-  const percentage = Math.min(100, Math.round((usedTokens / contextWindow) * 100));
-  const numberFormat = new Intl.NumberFormat("en-US");
+  const percentage = Math.min(100, Math.max(0, Math.round((usedTokens / contextWindow) * 100)));
   return {
-    label: `上下文 ${String(percentage)}%`,
-    title: `已使用 ${numberFormat.format(usedTokens)} / ${numberFormat.format(contextWindow)} tokens`,
+    accessibleLabel: `上下文已使用 ${String(percentage)}%`,
+    percentage,
+    summary: `${String(percentage)}% 上下文已使用`,
+    tokenCount: `${formatCompactTokenCount(usedTokens)} / ${formatCompactTokenCount(contextWindow)} tokens`,
   };
+}
+
+function formatCompactTokenCount(tokenCount: number): string {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 1,
+    notation: "compact",
+  }).format(tokenCount);
+}
+
+const contextRingRadius = 7;
+const contextRingCircumference = 2 * Math.PI * contextRingRadius;
+
+function ContextUsageButton({ usage }: Readonly<{ usage: ReturnType<typeof formatContextUsage> }>) {
+  const completedPercentage = usage.percentage ?? 0;
+  const ringOffset = contextRingCircumference * (1 - completedPercentage / 100);
+
+  return (
+    <IconButton
+      className="ml-auto"
+      label={usage.accessibleLabel}
+      size="small"
+      tooltip={
+        <span className="flex flex-col gap-0.5 px-0.5 py-0.5 tabular-nums">
+          <span className="text-body-small font-medium">{usage.summary}</span>
+          {usage.tokenCount === null ? null : (
+            <span className="text-label text-muted-foreground">{usage.tokenCount}</span>
+          )}
+        </span>
+      }
+      tooltipTone="surface"
+    >
+      <svg className="size-4.5 -rotate-90" viewBox="0 0 20 20" aria-hidden="true">
+        <circle
+          cx="10"
+          cy="10"
+          fill="none"
+          r={contextRingRadius}
+          stroke="var(--ui-color-text-muted)"
+          strokeOpacity="0.24"
+          strokeWidth="3"
+        />
+        <circle
+          cx="10"
+          cy="10"
+          fill="none"
+          r={contextRingRadius}
+          stroke="var(--ui-color-text-muted)"
+          strokeDasharray={contextRingCircumference}
+          strokeDashoffset={ringOffset}
+          strokeLinecap="round"
+          strokeWidth="3"
+        />
+      </svg>
+    </IconButton>
+  );
 }
 
 export function deriveComposerActions(
@@ -136,6 +195,16 @@ export function deriveComposerState(
     return "running";
   }
   return input.mutationFailed === true ? "failed" : "idle";
+}
+
+export function deriveComposerInputAvailability(
+  state: ComposerState,
+): Readonly<{ attachmentsDisabled: boolean; turnControlsDisabled: boolean }> {
+  return {
+    // 附件选择是本地操作，实时连接恢复期间仍允许选择、粘贴和拖放文件。
+    attachmentsDisabled: state === "submitting",
+    turnControlsDisabled: state === "reconnecting" || state === "submitting",
+  };
 }
 
 export function resolveActiveTurnId(
@@ -302,7 +371,7 @@ export function WorkbenchComposer({
     models[0];
   const selectedReasoningEffort = resolveReasoningEffort(selectedModel, selectedReasoningEffortId);
   const contextUsage = formatContextUsage(runtime?.snapshot?.contextUsage ?? null);
-  const unavailable = state === "reconnecting" || state === "submitting";
+  const { attachmentsDisabled, turnControlsDisabled } = deriveComposerInputAvailability(state);
   const handleAttachmentsChange = useCallback((files: readonly PromptInputAttachment[]) => {
     setAttachmentCount(files.length);
   }, []);
@@ -314,7 +383,7 @@ export function WorkbenchComposer({
       (text === "" && message.files.length === 0) ||
       selectedModel === undefined ||
       selectedReasoningEffort === undefined ||
-      unavailable ||
+      turnControlsDisabled ||
       state === "running"
     ) {
       return;
@@ -396,7 +465,12 @@ export function WorkbenchComposer({
   };
 
   const interruptTurn = async () => {
-    if (!canInterrupt || activeTaskId === undefined || activeTurnId === undefined || unavailable) {
+    if (
+      !canInterrupt ||
+      activeTaskId === undefined ||
+      activeTurnId === undefined ||
+      turnControlsDisabled
+    ) {
       return;
     }
     setIsSubmitting(true);
@@ -423,7 +497,7 @@ export function WorkbenchComposer({
         aria-busy={state === "submitting" || state === "reconnecting"}
         className="mx-auto w-full max-w-content"
         data-state={state}
-        disabled={unavailable}
+        disabled={attachmentsDisabled}
         globalDrop
         key={composerRevision}
         maxFiles={4}
@@ -441,7 +515,7 @@ export function WorkbenchComposer({
         <PromptInputBody>
           <PromptInputTextarea
             aria-label="任务输入"
-            disabled={unavailable}
+            disabled={turnControlsDisabled}
             onChange={(event) => {
               setDraft(event.currentTarget.value);
             }}
@@ -456,10 +530,10 @@ export function WorkbenchComposer({
         </PromptInputBody>
         <PromptInputFooter>
           <PromptInputTools>
-            <PromptInputActionAddAttachments disabled={unavailable} label="添加图片" />
+            <PromptInputActionAddAttachments disabled={attachmentsDisabled} label="添加图片" />
             <PromptInputSelect
               aria-label="批准模式"
-              disabled={unavailable}
+              disabled={turnControlsDisabled}
               onChange={(event) => {
                 setApprovalPolicy(event.currentTarget.value as AgentApprovalPolicy);
               }}
@@ -473,7 +547,7 @@ export function WorkbenchComposer({
           <div className="flex min-w-0 items-center gap-1">
             <PromptInputSelect
               aria-label="选择模型"
-              disabled={unavailable || modelsPending || selectedModel === undefined}
+              disabled={turnControlsDisabled || modelsPending || selectedModel === undefined}
               onChange={(event) => {
                 setSelectedModelId(event.currentTarget.value);
               }}
@@ -491,7 +565,7 @@ export function WorkbenchComposer({
             </PromptInputSelect>
             <PromptInputSelect
               aria-label="选择思考量"
-              disabled={unavailable || modelsPending || selectedModel === undefined}
+              disabled={turnControlsDisabled || modelsPending || selectedModel === undefined}
               onChange={(event) => {
                 setSelectedReasoningEffortId(event.currentTarget.value);
               }}
@@ -504,14 +578,14 @@ export function WorkbenchComposer({
             >
               {selectedModel?.supportedReasoningEfforts.map((option) => (
                 <option key={option.id} value={option.id}>
-                  思考量 {reasoningEffortLabels[option.id] ?? option.id}
+                  {reasoningEffortLabels[option.id] ?? option.id}
                 </option>
               ))}
             </PromptInputSelect>
             <PromptInputSubmit
               aria-label={state === "running" ? "停止" : "提交"}
               disabled={
-                unavailable ||
+                turnControlsDisabled ||
                 (state !== "running" &&
                   (!canSubmit ||
                     selectedModel === undefined ||
@@ -543,14 +617,7 @@ export function WorkbenchComposer({
           <Folder className="size-3 shrink-0" aria-hidden="true" />
           <span className="truncate">{projectPath}</span>
         </span>
-        <span
-          aria-label="上下文用量"
-          className="ml-auto inline-flex shrink-0 items-center gap-1 tabular-nums"
-          title={contextUsage.title}
-        >
-          <Gauge className="size-3" aria-hidden="true" />
-          {contextUsage.label}
-        </span>
+        <ContextUsageButton usage={contextUsage} />
       </div>
     </section>
   );

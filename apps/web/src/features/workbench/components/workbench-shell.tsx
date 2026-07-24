@@ -133,7 +133,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       ) : null}
 
       <main aria-label="Task Timeline" className="flex min-h-0 min-w-0 flex-col bg-content">
-        <header className="flex h-toolbar shrink-0 items-center justify-between gap-3 bg-content px-2.5 shadow-toolbar sm:px-3">
+        <header className="flex h-workbench-header shrink-0 items-center justify-between gap-3 bg-content px-2.5 shadow-toolbar sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
             <IconButton
               id="workbench-sidebar-toggle"

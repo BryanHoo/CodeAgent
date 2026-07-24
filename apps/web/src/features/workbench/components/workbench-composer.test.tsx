@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   deriveComposerActions,
+  deriveComposerInputAvailability,
   deriveComposerState,
   interruptPromptTurn,
   formatContextUsage,
@@ -106,6 +107,17 @@ describe("WorkbenchComposer", () => {
     ).toBeUndefined();
   });
 
+  it("keeps local attachment input available while the runtime reconnects", () => {
+    expect(deriveComposerInputAvailability("reconnecting")).toEqual({
+      attachmentsDisabled: false,
+      turnControlsDisabled: true,
+    });
+    expect(deriveComposerInputAvailability("submitting")).toEqual({
+      attachmentsDisabled: true,
+      turnControlsDisabled: true,
+    });
+  });
+
   it("reuses an idempotency key until the mutation fingerprint changes", () => {
     const createKey = vi.fn().mockReturnValueOnce("key-1").mockReturnValueOnce("key-2");
     const first = resolveIdempotencyAttempt(undefined, "start-turn:task-1:首次提交", createKey);
@@ -122,12 +134,22 @@ describe("WorkbenchComposer", () => {
     expect(resolveReasoningEffort(model, "unsupported")).toBe("high");
     expect(resolveReasoningEffort(undefined, "high")).toBeUndefined();
     expect(formatContextUsage(null)).toEqual({
-      label: "上下文 --",
-      title: "等待模型返回上下文用量",
+      accessibleLabel: "上下文用量未知",
+      percentage: null,
+      summary: "等待模型返回上下文用量",
+      tokenCount: null,
     });
     expect(formatContextUsage({ contextWindow: 200_000, usedTokens: 25_000 })).toEqual({
-      label: "上下文 13%",
-      title: "已使用 25,000 / 200,000 tokens",
+      accessibleLabel: "上下文已使用 13%",
+      percentage: 13,
+      summary: "13% 上下文已使用",
+      tokenCount: "25K / 200K tokens",
+    });
+    expect(formatContextUsage({ contextWindow: 272_000, usedTokens: 87_100 })).toEqual({
+      accessibleLabel: "上下文已使用 32%",
+      percentage: 32,
+      summary: "32% 上下文已使用",
+      tokenCount: "87.1K / 272K tokens",
     });
   });
 

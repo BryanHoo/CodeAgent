@@ -154,6 +154,7 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('accept="image/png,image/jpeg"');
     expect(markup).toContain('aria-label="添加图片"');
     expect(markup).toContain('aria-disabled="true"');
+    expect(markup).toContain('data-prompt-input=""');
   });
 
   it("renders attachment previews and removal controls", () => {
