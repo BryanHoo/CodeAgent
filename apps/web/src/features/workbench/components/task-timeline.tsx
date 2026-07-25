@@ -45,6 +45,13 @@ import {
   TerminalTitle,
 } from "../../../shared/ai-elements/terminal.js";
 import {
+  Task,
+  TaskContent,
+  TaskItem,
+  TaskTrigger,
+  type TaskStatus,
+} from "../../../shared/ai-elements/task.js";
+import {
   Tool,
   ToolContent,
   ToolHeader,
@@ -182,6 +189,20 @@ function toToolStatus(status: AgentItemStatus): ToolStatus {
   }
   if (status === "failed" || status === "declined" || status === "interrupted") {
     return "failed";
+  }
+  return "completed";
+}
+
+function toTaskStatus(status: AgentItemStatus): TaskStatus {
+  // Activity 使用 AI Elements 的四态模型，协议中的拒绝与中断都属于失败终态。
+  if (status === "pending") {
+    return "pending";
+  }
+  if (status === "running") {
+    return "in_progress";
+  }
+  if (status === "failed" || status === "declined" || status === "interrupted") {
+    return "error";
   }
   return "completed";
 }
@@ -560,10 +581,17 @@ function TimelineItemContent({
     }
     case "activity":
       return (
-        <Tool>
-          <ToolHeader status={toToolStatus(item.status ?? "completed")}>{item.label}</ToolHeader>
-          {item.detail === undefined ? null : <ToolContent>{item.detail}</ToolContent>}
-        </Tool>
+        <Task
+          collapsible={item.detail !== undefined}
+          status={toTaskStatus(item.status ?? "completed")}
+        >
+          <TaskTrigger title={item.label} />
+          {item.detail === undefined ? null : (
+            <TaskContent>
+              <TaskItem>{item.detail}</TaskItem>
+            </TaskContent>
+          )}
+        </Task>
       );
   }
 }

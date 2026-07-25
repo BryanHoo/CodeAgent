@@ -287,6 +287,73 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("lucide-wrench");
   });
 
+  it("renders activity items with compact and expandable AI Elements Tasks", () => {
+    const activitySnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              id: "activity-compact",
+              label: "上下文压缩",
+              status: "completed",
+              type: "activity",
+            },
+            {
+              detail: "/workspace/apps/web/src/App.tsx",
+              id: "activity-detailed",
+              label: "查看图片",
+              status: "running",
+              type: "activity",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={activitySnapshot} />);
+
+    expect(markup.match(/data-ai-task=""/g)).toHaveLength(2);
+    expect(markup).toContain('data-status="completed"');
+    expect(markup).toContain('data-status="in_progress"');
+    expect(markup).toContain("上下文压缩");
+    expect(markup).toContain("查看图片");
+    expect(markup).toContain("/workspace/apps/web/src/App.tsx");
+    expect(markup.match(/<details/g)).toHaveLength(1);
+    expect(markup).not.toContain("lucide-wrench");
+  });
+
+  it("maps failed and pending activity statuses to AI Elements Task statuses", () => {
+    const activitySnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              id: "activity-failed",
+              label: "进入审查",
+              status: "failed",
+              type: "activity",
+            },
+            {
+              id: "activity-pending",
+              label: "子任务活动",
+              status: "pending",
+              type: "activity",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={activitySnapshot} />);
+
+    expect(markup).toContain('data-status="error"');
+    expect(markup).toContain('data-status="pending"');
+  });
+
   it("renders each changed file with its operation and diff statistics", () => {
     const fileChangeSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
