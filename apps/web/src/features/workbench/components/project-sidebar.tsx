@@ -1,13 +1,16 @@
 import { Link } from "@tanstack/react-router";
+import type { AgentEventConnectionState } from "@code-agent/client";
 import {
   ChevronDown,
   ChevronRight,
   Folder,
+  LoaderCircle,
   PanelLeftClose,
   Pin,
   Search,
   Send,
   Settings,
+  Wifi,
   WifiOff,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -21,13 +24,59 @@ const primaryActionClassName =
 const primaryActionIconClassName = "size-4 shrink-0 text-muted-foreground";
 
 type ProjectSidebarProps = Readonly<{
+  connectionState: AgentEventConnectionState;
   onClose: () => void;
   projectId: string;
   taskId?: string;
 }>;
 
-export function ProjectSidebar({ onClose, projectId, taskId }: ProjectSidebarProps) {
+type ProjectSidebarConnectionInput = Readonly<{
+  hasActiveTask: boolean;
+  projectDataFailed: boolean;
+  projectDataPending: boolean;
+  taskConnectionState: AgentEventConnectionState;
+}>;
+
+export function deriveProjectSidebarConnectionState({
+  hasActiveTask,
+  projectDataFailed,
+  projectDataPending,
+  taskConnectionState,
+}: ProjectSidebarConnectionInput): AgentEventConnectionState {
+  // 活动任务以实时终端链路为准；新任务页则使用 HTTP Runtime 的可用性作为连接依据。
+  if (hasActiveTask) {
+    return taskConnectionState;
+  }
+  if (projectDataFailed) {
+    return "closed";
+  }
+  if (projectDataPending) {
+    return "connecting";
+  }
+  return "connected";
+}
+
+export function getProjectSidebarConnectionStatus(connectionState: AgentEventConnectionState) {
+  switch (connectionState) {
+    case "connected":
+      return { label: "Online", toneClassName: "text-diff-added" } as const;
+    case "connecting":
+      return { label: "Connecting", toneClassName: "text-warning" } as const;
+    case "reconnecting":
+      return { label: "Reconnecting", toneClassName: "text-warning" } as const;
+    case "closed":
+      return { label: "Offline", toneClassName: "text-danger" } as const;
+  }
+}
+
+export function ProjectSidebar({
+  connectionState,
+  onClose,
+  projectId,
+  taskId,
+}: ProjectSidebarProps) {
   const { error, isPending, projects, tasks } = useProjects();
+  const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
   const [expandedProjects, setExpandedProjects] = useState<ReadonlySet<string>>(
     () => new Set(projects.map((project) => project.id)),
   );
@@ -213,18 +262,38 @@ export function ProjectSidebar({ onClose, projectId, taskId }: ProjectSidebarPro
 
       <div className="p-2">
         <Link
-          aria-label="设置"
+          aria-label={`设置，终端连接状态：${connectionStatus.label}`}
           className="flex h-9 items-center gap-2.5 rounded-control px-2.5 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
           to="/settings"
         >
           <Settings className="size-4" aria-hidden="true" />
           Settings
-          <span className="ml-auto inline-flex items-center gap-1 text-caption">
-            <WifiOff className="size-3" aria-hidden="true" /> Offline
+          <span
+            aria-live="polite"
+            className={`ml-auto inline-flex items-center gap-1 text-caption ${connectionStatus.toneClassName}`}
+          >
+            <ProjectSidebarConnectionIcon connectionState={connectionState} />
+            {connectionStatus.label}
           </span>
         </Link>
       </div>
     </aside>
+  );
+}
+
+function ProjectSidebarConnectionIcon({
+  connectionState,
+}: Readonly<{ connectionState: AgentEventConnectionState }>) {
+  if (connectionState === "connected") {
+    return <Wifi className="size-3" aria-hidden="true" />;
+  }
+  if (connectionState === "closed") {
+    return <WifiOff className="size-3" aria-hidden="true" />;
+  }
+  return (
+    <span className="inline-flex animate-spin" aria-hidden="true">
+      <LoaderCircle className="size-3" />
+    </span>
   );
 }
 

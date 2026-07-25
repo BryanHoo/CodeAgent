@@ -20,7 +20,7 @@ import {
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
 import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
-import { ProjectSidebar } from "./project-sidebar.js";
+import { deriveProjectSidebarConnectionState, ProjectSidebar } from "./project-sidebar.js";
 import { ProjectSourceDialog } from "./project-source-dialog.js";
 import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
@@ -40,11 +40,17 @@ function shouldOpenDesktopPanel(query: string) {
 }
 
 export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
-  const { capabilities, client, error, projects, retry, tasks } = useProjects();
+  const { capabilities, client, error, isPending, projects, retry, tasks } = useProjects();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const modelsQuery = useQuery(modelsQueryOptions(client));
   const runtime = useTaskRuntime(taskId, client);
+  const sidebarConnectionState = deriveProjectSidebarConnectionState({
+    hasActiveTask: taskId !== undefined,
+    projectDataFailed: error !== null,
+    projectDataPending: isPending,
+    taskConnectionState: runtime.connectionState,
+  });
   const isTaskRunning = runtime.snapshot?.status === "running";
   const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, isTaskRunning, client));
   const previousTaskRunningRef = useRef(isTaskRunning);
@@ -159,6 +165,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       data-sidebar-open={sidebarOpen}
     >
       <ProjectSidebar
+        connectionState={sidebarConnectionState}
         onClose={closeSidebar}
         projectId={projectId}
         {...(taskId === undefined ? {} : { taskId })}
