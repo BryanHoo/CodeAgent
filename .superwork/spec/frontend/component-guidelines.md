@@ -16,6 +16,7 @@
 - 通过显式 Props 或专用 Hook 获取数据，不从组件内部访问 Server 或 Provider。
 - 长列表使用稳定尺寸与虚拟化；流式 Item 独立订阅，避免整个 Task 重渲染。
 - Task Timeline 必须显示失败 Turn 的归一化错误；Command 继续使用 `Tool` 表达调用和状态，输出使用 AI Elements `Terminal` 解析 ANSI、复制、流式跟随和自动滚动，并明确标识截断状态。历史输出保持只读，不提供清空操作；缺少输出时只能展示真实 `cwd`，不得伪造内容。
+- 通用 Tool 必须使用 AI Elements `ToolInput` 与 `ToolOutput` 分区展示参数、JSON 结果和错误文本；`AgentItemStatus` 只在 Timeline 视图边界映射为 AI Elements Tool 执行状态，不向 Web 引入 `ToolUIPart` 或 AI SDK Runtime。
 - Task Timeline 的 Plan Item 必须使用 AI Elements `Plan` 组合组件并原样展示计划文本；仅当它是运行中 Turn 的当前最后一个 Item 时启用 `isStreaming`，不得为展示状态扩展 Protocol 或使用 `Tool` 模拟 Plan。
 - Task Timeline 仅将 `AgentItem` 中的 `activity` 映射为 AI Elements `Task`，按 Activity 状态映射进度；有 `detail` 时允许展开，没有 `detail` 时保持紧凑。不得继续用 `Tool` 模拟 Activity，也不得把 CodeAgent 的整个 Task 或 Turn 映射为 AI Elements `Task`。
 - Task Timeline 的用户消息和 AI 回复末尾都必须常显可访问的复制操作与本地时间；消息 Item 和相邻 Turn 之间保留明确纵向间距，不能让下一条用户消息贴住上一条回复。

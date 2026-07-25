@@ -41,7 +41,7 @@ import {
   PromptInputTools,
 } from "./prompt-input.js";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "./reasoning.js";
-import { Tool, ToolContent, ToolHeader } from "./tool.js";
+import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "./tool.js";
 
 describe("AI Elements primitives", () => {
   it("renders a code block with line numbers and a highlighted line", () => {
@@ -108,7 +108,7 @@ describe("AI Elements primitives", () => {
             <ReasoningContent>保持三区域稳定。</ReasoningContent>
           </Reasoning>
           <Tool defaultOpen>
-            <ToolHeader status="completed">读取设计文档</ToolHeader>
+            <ToolHeader state="output-available" title="读取设计文档" />
             <ToolContent>docs/web-design.md</ToolContent>
           </Tool>
         </ConversationContent>
@@ -121,6 +121,47 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain("已完成");
     expect(markup).toContain("bg-control");
     expect(markup).toContain("rounded-surface");
+  });
+
+  it("renders localized tool states with structured JSON input and output", () => {
+    const markup = renderToStaticMarkup(
+      <Tool defaultOpen>
+        <ToolHeader state="output-available" title="读取文件" />
+        <ToolContent>
+          <ToolInput input={{ path: "src/index.ts", range: [1, 20] }} />
+          <ToolOutput errorText={undefined} output={{ lines: 20, truncated: false }} />
+        </ToolContent>
+      </Tool>,
+    );
+
+    expect(markup).toContain("读取文件");
+    expect(markup).toContain("已完成");
+    expect(markup).toContain(">参数<");
+    expect(markup).toContain(">结果<");
+    expect(markup).toContain("&quot;path&quot;: &quot;src/index.ts&quot;");
+    expect(markup).toContain("&quot;lines&quot;: 20");
+    expect(markup).toContain('data-language="json"');
+  });
+
+  it("renders denied and failed tools as distinct error states", () => {
+    const deniedMarkup = renderToStaticMarkup(
+      <Tool>
+        <ToolHeader state="output-denied" title="执行命令" />
+      </Tool>,
+    );
+    const failedMarkup = renderToStaticMarkup(
+      <Tool defaultOpen>
+        <ToolHeader state="output-error" title="读取文件" />
+        <ToolContent>
+          <ToolOutput errorText="文件不存在" output={undefined} />
+        </ToolContent>
+      </Tool>,
+    );
+
+    expect(deniedMarkup).toContain("已拒绝");
+    expect(failedMarkup).toContain("失败");
+    expect(failedMarkup).toContain(">错误<");
+    expect(failedMarkup).toContain("文件不存在");
   });
 
   it("renders assistant Markdown as semantic HTML", () => {

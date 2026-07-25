@@ -241,6 +241,69 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("输出已截断");
   });
 
+  it("renders generic tool input and output in separate structured sections", () => {
+    const toolSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              id: "tool-read-file",
+              input: { path: "src/index.ts" },
+              name: "read_file",
+              output: { content: "export {};", lines: 1 },
+              status: "completed",
+              type: "tool",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={toolSnapshot} />);
+
+    expect(markup).toContain("read_file");
+    expect(markup).toContain("已完成");
+    expect(markup).toContain(">参数<");
+    expect(markup).toContain(">结果<");
+    expect(markup).toContain("&quot;path&quot;: &quot;src/index.ts&quot;");
+    expect(markup).toContain("&quot;lines&quot;: 1");
+  });
+
+  it("maps declined and interrupted agent items to official tool terminal states", () => {
+    const toolSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              id: "tool-declined",
+              name: "request_permission",
+              status: "declined",
+              type: "tool",
+            },
+            {
+              id: "tool-interrupted",
+              name: "background_task",
+              output: "连接已中断",
+              status: "interrupted",
+              type: "tool",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={toolSnapshot} />);
+
+    expect(markup).toContain("已拒绝");
+    expect(markup).toContain("失败");
+    expect(markup).toContain(">错误<");
+    expect(markup).toContain("连接已中断");
+  });
+
   it("renders the active plan as a streaming, expanded Plan", () => {
     const planText = "1. 保留原始文本\n2. 接入 Plan 组件";
     const runningPlanSnapshot: RuntimeTaskSnapshot = {

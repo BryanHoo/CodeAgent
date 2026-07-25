@@ -55,7 +55,9 @@ import {
   Tool,
   ToolContent,
   ToolHeader,
-  type ToolStatus,
+  ToolInput,
+  ToolOutput,
+  type ToolState,
 } from "../../../shared/ai-elements/tool.js";
 import { PendingRequestCard, type PendingRequestResolution } from "./pending-request.js";
 
@@ -183,14 +185,21 @@ function ActiveTaskTimeline({
   );
 }
 
-function toToolStatus(status: AgentItemStatus): ToolStatus {
-  if (status === "pending" || status === "running") {
-    return "running";
+function toToolState(status: AgentItemStatus): ToolState {
+  // Protocol 状态在视图边界映射到官方 Tool 的完整执行状态，不引入 AI SDK Runtime 类型。
+  if (status === "pending") {
+    return "input-streaming";
   }
-  if (status === "failed" || status === "declined" || status === "interrupted") {
-    return "failed";
+  if (status === "running") {
+    return "input-available";
   }
-  return "completed";
+  if (status === "declined") {
+    return "output-denied";
+  }
+  if (status === "failed" || status === "interrupted") {
+    return "output-error";
+  }
+  return "output-available";
 }
 
 function toTaskStatus(status: AgentItemStatus): TaskStatus {
@@ -527,7 +536,7 @@ function TimelineItemContent({
       const isStreamingCommand = turnStatus === "running" && item.status === "running";
       return (
         <Tool>
-          <ToolHeader status={toToolStatus(item.status)}>{item.command}</ToolHeader>
+          <ToolHeader state={toToolState(item.status)} title={item.command} />
           <Terminal isStreaming={isStreamingCommand} output={commandOutput}>
             <TerminalHeader>
               <TerminalTitle>输出</TerminalTitle>
@@ -547,20 +556,24 @@ function TimelineItemContent({
     case "file_change":
       // 文件变更统一在回复末尾聚合，避免工具流中重复展示同一组文件。
       return null;
-    case "tool":
+    case "tool": {
+      const hasErrorOutput =
+        item.status === "failed" || item.status === "declined" || item.status === "interrupted";
+      const errorText =
+        hasErrorOutput && item.output !== undefined
+          ? formatStructuredValue(item.output)
+          : undefined;
+
       return (
         <Tool>
-          <ToolHeader status={toToolStatus(item.status)}>{item.name}</ToolHeader>
+          <ToolHeader state={toToolState(item.status)} title={item.name} />
           <ToolContent>
-            <pre className="whitespace-pre-wrap">
-              {[item.input, item.output]
-                .filter((value) => value !== undefined)
-                .map(formatStructuredValue)
-                .join("\n")}
-            </pre>
+            {item.input === undefined ? null : <ToolInput input={item.input} />}
+            <ToolOutput errorText={errorText} output={hasErrorOutput ? undefined : item.output} />
           </ToolContent>
         </Tool>
       );
+    }
     case "plan": {
       // Plan Item 没有独立状态；运行中 Turn 的最后一个 Item 即当前流式计划。
       const isStreamingPlan = turnStatus === "running" && isLastTurnItem;
