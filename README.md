@@ -7,6 +7,10 @@ Codex App Server、本地 HTTP API 和静态 Web 工作台。
 
 - Node.js 24 或更高版本
 - pnpm 11.15.1
+- 已使用官方 Codex CLI 在相同 `CODEX_HOME` 中完成 `codex login`
+
+CodeAgent 不提供登录、退出或凭证管理，也不会读取或修改 `auth.json`。Runtime 不可用时，
+请先在官方 Codex CLI 完成登录，再回到 Web 工作台重试。
 
 ## 开发命令
 

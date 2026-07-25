@@ -18,6 +18,7 @@ import {
   projectGitStatusQueryOptions,
 } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
+import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
 import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
 import { ProjectSidebar } from "./project-sidebar.js";
 import { ProjectSourceDialog } from "./project-source-dialog.js";
@@ -39,7 +40,7 @@ function shouldOpenDesktopPanel(query: string) {
 }
 
 export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
-  const { capabilities, client, projects, tasks } = useProjects();
+  const { capabilities, client, error, projects, retry, tasks } = useProjects();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const modelsQuery = useQuery(modelsQueryOptions(client));
@@ -213,7 +214,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           </div>
         </header>
 
-        {taskId === undefined ? (
+        {error !== null || modelsQuery.error !== null ? (
+          <RuntimeUnavailable onRetry={() => void retry()} />
+        ) : taskId === undefined ? (
           <>
             <TaskTimeline projectName={projectName} />
             <WorkbenchComposer

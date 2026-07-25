@@ -218,7 +218,6 @@ apps/web/src/shared/ai-elements/
 
 ```text
 /
-/login
 /p/:projectId
 /p/:projectId/t/:taskId
 /settings
@@ -226,13 +225,12 @@ apps/web/src/shared/ai-elements/
 
 路由职责：
 
-| 路由                      | 页面职责                                       |
-| ------------------------- | ---------------------------------------------- |
-| `/`                       | 检查 Runtime、认证和最近 Project，并进入工作台 |
-| `/login`                  | 展示 ChatGPT 登录、Device Code 或错误恢复      |
-| `/p/:projectId`           | 唯一工作台的 Project 空任务状态                |
-| `/p/:projectId/t/:taskId` | 唯一工作台，显示选中 Task 和 Composer          |
-| `/settings`               | 模型、Reasoning、Sandbox、Approval 和外观设置  |
+| 路由                      | 页面职责                                      |
+| ------------------------- | --------------------------------------------- |
+| `/`                       | 检查 Runtime 和最近 Project，并进入工作台     |
+| `/p/:projectId`           | 唯一工作台的 Project 空任务状态               |
+| `/p/:projectId/t/:taskId` | 唯一工作台，显示选中 Task 和 Composer         |
+| `/settings`               | 模型、Reasoning、Sandbox、Approval 和外观设置 |
 
 Project 和 Task ID 必须来自 Server，URL 只表示导航意图，不能代替权限校验。
 
@@ -736,7 +734,7 @@ User Input Request 可能包含选择题、确认或短文本。使用语义化 
 | Error                  | 展示可操作错误、Retry 和诊断 ID                |
 | Reconnecting           | 保留当前 Task，显示连接状态并暂停危险 Mutation |
 | Offline                | 保留草稿和已加载内容，明确不可提交             |
-| Unauthorized           | 进入登录或重新授权流程                         |
+| Runtime Unavailable    | 展示 `codex login` 指引和 Retry，不发起登录    |
 | Unsupported Capability | 隐藏或禁用对应功能，不按 Provider 名称分支     |
 
 Error Boundary 至少分为：
@@ -790,7 +788,7 @@ Server 必须执行最终权限判断。Web 只负责减少误操作和展示已
 ### 22.3 网络与操作
 
 - WebSocket 由 Server 校验 Origin 和 Session。
-- 所有 Mutation 使用统一 Client，并处理 CSRF、认证和 Idempotency。
+- 所有 Mutation 使用统一 Client，并处理 CSRF、部署访问认证和 Idempotency。
 - Project 文件操作每次由 Server 校验绝对路径、`realpath` 和允许根目录。
 - Approval 必须由 Server 校验当前 Pending Request，Web 禁止构造任意 Provider 响应。
 - 不向页面暴露任意 JSON-RPC、`command/exec`、`process/spawn` 或文件系统透传接口。
@@ -873,7 +871,7 @@ Server 必须执行最终权限判断。Web 只负责减少误操作和展示已
 Playwright 覆盖：
 
 ```text
-登录状态与恢复
+Runtime 不可用提示与重试
 Project 选择
 创建和切换 Task
 流式 Agent Message
@@ -905,7 +903,7 @@ Turn Steer / Interrupt
 - 配置 Tailwind CSS、shadcn/ui 和设计 Token。
 - 建立 TanStack Router 和应用级 Provider。
 - 实现 Client HTTP 基础调用。
-- 完成登录、App Shell 和 Project Navigator。
+- 完成 Runtime 错误恢复、App Shell 和 Project Navigator。
 
 完成标准：根路径直接进入唯一工作台，左栏可以选择 Project 并显示其 Task 列表和明确状态。
 

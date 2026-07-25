@@ -1,7 +1,7 @@
 # CodeAgent 架构设计
 
 > 状态：Draft  
-> 更新日期：2026-07-23
+> 更新日期：2026-07-25
 > 目标版本：MVP  
 > 文档类型：架构说明（Explanation）
 
@@ -24,7 +24,7 @@ npm install -g code-agent
 code-agent start
 ```
 
-命令启动后，用户直接在浏览器中完成登录、Project 选择、Task 管理、任务执行、审批、Diff 查看和中断操作。
+用户先在官方 Codex CLI 中完成登录。命令启动后，用户直接在浏览器中完成 Project 选择、Task 管理、任务执行、审批、Diff 查看和中断操作。
 
 ## 2. 目标与非目标
 
@@ -47,6 +47,7 @@ MVP 不包含以下能力：
 - 浏览器内完整终端。
 - 完整文件编辑器和 Git 客户端。
 - MCP Server 管理、插件市场和 Skills 管理。
+- Codex 账号登录、退出和凭证管理。
 - 对所有 Provider 强制提供完全一致的能力。
 - 兼容旧的自定义 CLI 文本解析实现。
 
@@ -66,7 +67,7 @@ code-agent
 
 ### 3.2 使用 Codex App Server 作为主接入层
 
-富交互 Web 客户端需要认证、历史、审批、流式事件、模型发现和配置读取，因此主接入层选择：
+富交互 Web 客户端需要历史、审批、流式事件、模型发现和配置读取，因此主接入层选择：
 
 ```text
 codex app-server --listen stdio://
@@ -317,7 +318,7 @@ code-agent start \
 4. 执行 Codex 版本检查。
 5. 启动 codex app-server 子进程。
 6. 完成 initialize / initialized 握手。
-7. 读取认证状态、模型和 Task 元数据。
+7. 读取模型和 Task 元数据。
 8. 启动 Fastify HTTP/WebSocket Server。
 9. 提供构建后的 React 静态资源。
 10. 打开浏览器。
@@ -329,7 +330,6 @@ code-agent start \
 - Node.js 版本。
 - Codex CLI 是否可执行及版本是否兼容。
 - `CODEX_HOME` 是否可访问。
-- Codex 登录状态。
 - Project 是否存在、是否为目录、是否在允许范围内。
 - 配置文件是否有效。
 - 端口是否可用。
@@ -359,7 +359,7 @@ Codex Binary 查找顺序：
 ~/.codex/skills
 ```
 
-CodeAgent 不直接解析或修改认证文件，而是通过 App Server 的 Account API 操作认证状态。
+用户必须使用相同 `CODEX_HOME` 在官方 Codex CLI 中完成登录。认证文件只由 Codex CLI 和 App Server 消费；CodeAgent 不读取、修改或复制认证文件，也不调用 App Server Account API。
 
 ## 8. Provider 抽象
 
@@ -531,9 +531,6 @@ POST   /v1/tasks/:taskId/turns
 POST   /v1/turns/:turnId/steer
 POST   /v1/turns/:turnId/interrupt
 POST   /v1/pending-requests/:requestId/resolve
-GET    /v1/auth/session
-POST   /v1/auth/login
-DELETE /v1/auth/session
 ```
 
 所有可能重试的写操作支持：
@@ -623,7 +620,6 @@ const child = spawn(codexBin, ["app-server", "--listen", "stdio://"], {
 ```text
 initialize
 initialized
-account/read
 model/list
 thread/list
 ```
@@ -724,20 +720,11 @@ export type PendingRequest = {
 
 解决请求统一调用 `POST /v1/pending-requests/:requestId/resolve`，携带 `Idempotency-Key` 并完整校验 `projectId + taskId + turnId + itemId + requestId`、请求类型和状态。收到 `serverRequest/resolved`、Turn 完成或 Turn 中断后，必须发布一次 `pending_request.expired` 并清理相应请求；本地解决发布 `pending_request.resolved`。
 
-### 11.7 认证
+### 11.7 外部登录边界
 
-统一调用：
+CodeAgent 不实现账号登录、退出、Device Code、OAuth 回调或凭证管理。用户在官方 Codex CLI 中通过 `codex login` 完成登录，CodeAgent 启动的 App Server 只复用相同 `CODEX_HOME` 中的状态。
 
-```text
-account/read
-account/login/start
-account/login/cancel
-account/logout
-account/updated
-account/rateLimits/read
-```
-
-优先支持 ChatGPT 浏览器登录和 `chatgptDeviceCode`。不得直接解析或复制 `auth.json`。
+Runtime 因凭证或其他 Provider 原因不可用时，Server 返回统一 Provider 错误；Web 展示 `codex login` 恢复指引和重试操作，不发起 Account API 请求，也不读取、修改或复制 `auth.json`。
 
 ## 12. 持久化设计
 
@@ -860,7 +847,7 @@ App Server 返回错误码 `-32001` 时，Adapter 使用带 jitter 的指数退�
 - 不允许未经初始化直接监听 `0.0.0.0`。
 - 非 Loopback 模式必须启用认证、TLS 或可信反向代理。
 - WebSocket 必须校验 `Origin`。
-- Session Cookie 使用 `HttpOnly`、`SameSite` 和合适的 `Secure` 设置。
+- 非 Loopback 访问认证的 Session Cookie 使用 `HttpOnly`、`SameSite` 和合适的 `Secure` 设置。
 
 ### 14.2 Project 边界
 
@@ -899,7 +886,7 @@ command/exec
 - 不把 Secret 写入普通日志。
 - 不把 Token 返回给 Web。
 - 不通过项目可控环境变量传递平台密钥。
-- 使用 App Server Account API 管理 Codex 登录。
+- 不调用 App Server Account API，不读取、修改或复制 Codex 认证文件。
 - 日志和诊断包必须执行字段级脱敏。
 
 ### 14.5 审批权限
@@ -907,7 +894,7 @@ command/exec
 审批操作必须同时校验：
 
 ```text
-authenticated user
+runtime access principal
 provider runtime
 task ownership
 turn identity
@@ -915,7 +902,7 @@ pending request identity
 request status
 ```
 
-审批结果写入 Audit Log，记录用户、决定、时间、请求摘要和最终状态。
+审批结果写入 Audit Log，记录访问主体、决定、时间、请求摘要和最终状态。
 
 ### 14.6 远程部署
 
@@ -1069,7 +1056,6 @@ Trace 不应包含 Token 或完整用户内容。
 
 ```text
 initialize
-account/read
 model/list
 thread/start
 turn/start
@@ -1107,7 +1093,7 @@ Schema 变化必须经过人工评审和 Adapter 测试更新。
 ### 18.4 E2E 测试
 
 - CLI 启动并打开 Web。
-- 登录状态展示。
+- Runtime 不可用提示和重试。
 - 创建和恢复 Task。
 - 流式 Agent Message。
 - 实时命令输出。
@@ -1212,7 +1198,7 @@ Codex 升级不应直接导致 Web API 版本变化。
 
 ### 22.1 浏览器直连 App Server WebSocket
 
-不采用。该传输仍为实验状态，而且会绕过 CodeAgent 的认证、路径校验、统一协议、断线恢复和 Provider 抽象。
+不采用。该传输仍为实验状态，而且会绕过 CodeAgent 的访问控制、路径校验、统一协议、断线恢复和 Provider 抽象。
 
 ### 22.2 每个 Turn 使用 `codex exec`
 

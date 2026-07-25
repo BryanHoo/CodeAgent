@@ -71,6 +71,21 @@ const tasks = [
   },
 ];
 
+const packageJsonDiff = [
+  "--- a/package.json",
+  "+++ b/package.json",
+  "@@ -1,3 +1,3 @@",
+  " {",
+  '-  "start": "pnpm run dev",',
+  '+  "start": "node ./dist/cli.js start --project .",',
+  " }",
+].join("\n");
+
+const projectGitStatus = {
+  staged: [],
+  unstaged: [{ diff: packageJsonDiff, kind: "update", path: "package.json" }],
+};
+
 const taskSnapshot = {
   ...tasks[0],
   contextUsage: { contextWindow: 200_000, usedTokens: 25_000 },
@@ -104,15 +119,7 @@ const taskSnapshot = {
         {
           changes: [
             {
-              diff: [
-                "--- a/package.json",
-                "+++ b/package.json",
-                "@@ -1,3 +1,3 @@",
-                " {",
-                '-  "start": "pnpm run dev",',
-                '+  "start": "node ./dist/cli.js start --project .",',
-                " }",
-              ].join("\n"),
+              diff: packageJsonDiff,
               kind: "update",
               path: "/workspace/CodeAgent/package.json",
             },
@@ -140,7 +147,7 @@ const taskSnapshotResponse = {
 };
 
 const architectureSourcePreview = Array.from({ length: 720 }, (_, lineIndex) =>
-  lineIndex === 715 ? "### 11.7 认证" : `line ${String(lineIndex + 1)}`,
+  lineIndex === 715 ? "### 11.7 外部登录边界" : `line ${String(lineIndex + 1)}`,
 ).join("\n");
 
 test.beforeEach(async ({ page }) => {
@@ -166,6 +173,8 @@ test.beforeEach(async ({ page }) => {
         path: "docs/architecture-design.md",
         truncated: true,
       };
+    } else if (url.pathname === "/v1/projects/code-agent/git/status") {
+      body = projectGitStatus;
     } else if (url.pathname.startsWith("/v1/projects/") && url.pathname.endsWith("/tasks")) {
       const projectId = url.pathname.split("/")[3];
       body = { data: tasks.filter((task) => task.projectId === projectId), nextCursor: null };
@@ -246,7 +255,6 @@ test("provides reusable design tokens for light and dark themes", async ({ page 
 
 test("exposes the documented navigation routes", async ({ page }) => {
   const routes = [
-    { path: "/login", heading: "登录" },
     { path: "/p/code-agent", heading: "CodeAgent" },
     { path: "/p/code-agent/t/task-1", heading: "构建 macOS 工作台" },
     { path: "/settings", heading: "设置" },
@@ -261,20 +269,35 @@ test("exposes the documented navigation routes", async ({ page }) => {
 });
 
 test("removes the legacy workspace routes", async ({ page }) => {
-  for (const path of ["/workspaces", "/w/demo", "/w/demo/t/thread-1"]) {
+  for (const path of ["/login", "/workspaces", "/w/demo", "/w/demo/t/thread-1"]) {
     await page.goto(path);
     await expect(page.getByRole("heading", { name: "页面不存在" })).toBeVisible();
   }
 });
 
+test("directs unavailable Runtime users to the official Codex CLI", async ({ page }) => {
+  let modelRequestCount = 0;
+  await page.route("**/v1/models", async (route) => {
+    modelRequestCount += 1;
+    await route.fulfill({
+      contentType: "application/json",
+      json: { message: "Provider unavailable" },
+      status: 503,
+    });
+  });
+
+  await page.goto("/p/code-agent");
+
+  await expect(page.getByRole("heading", { name: "Codex Runtime 不可用" })).toBeVisible();
+  await expect(page.getByText("codex login", { exact: true })).toBeVisible();
+
+  const requestCountBeforeRetry = modelRequestCount;
+  await page.getByRole("button", { name: "重试" }).click();
+  await expect.poll(() => modelRequestCount).toBeGreaterThan(requestCountBeforeRetry);
+});
+
 test("uses subtle hairline separation across registered routes", async ({ page }) => {
   const surfaces = [
-    {
-      path: "/login",
-      selector: "header",
-      border: "borderBottomWidth",
-      offset: "0px 1px 0px 0px",
-    },
     {
       path: "/p/code-agent",
       selector: "main header",
@@ -478,7 +501,7 @@ test("opens bounded source previews from assistant file references", async ({ co
   await expect(dialog.getByText("内容已截断")).toBeVisible();
   await expect(dialog.locator('[data-language="markdown"]')).toBeVisible();
   const highlightedLine = dialog.locator('[data-code-line="716"]');
-  await expect(highlightedLine).toContainText("### 11.7 认证");
+  await expect(highlightedLine).toContainText("### 11.7 外部登录边界");
   await expect(highlightedLine).toHaveAttribute("data-highlighted", "true");
   await expect(highlightedLine).toBeInViewport();
 
@@ -594,7 +617,7 @@ test("opens file diffs from the timeline and inspector", async ({ page }) => {
   await page.getByRole("button", { name: "关闭文件 Diff" }).click();
   await expect(dialog).not.toBeAttached();
 
-  await page.getByRole("button", { name: "打开 package.json 的 Diff" }).click();
+  await page.getByRole("button", { name: "打开 未暂存文件 package.json 的 Diff" }).click();
   await expect(page.getByRole("dialog", { name: "package.json" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "package.json" })).not.toBeAttached();
@@ -1343,6 +1366,12 @@ test("uses material hierarchy instead of strong workbench borders", async ({ pag
     const timelineContentStyles = getComputedStyle(timelineContent);
     const toolbarStyles = getComputedStyle(toolbar);
     const composerStyles = getComputedStyle(composer);
+    // 将布局断言绑定到语义 Token，避免 Toolbar 尺寸调整后测试保留旧字面值。
+    const workbenchHeaderProbe = document.createElement("div");
+    workbenchHeaderProbe.style.height = "var(--ui-layout-workbench-header-height)";
+    document.body.append(workbenchHeaderProbe);
+    const workbenchHeaderHeight = getComputedStyle(workbenchHeaderProbe).height;
+    workbenchHeaderProbe.remove();
 
     return {
       composerBorder: composerStyles.borderTopWidth,
@@ -1361,6 +1390,7 @@ test("uses material hierarchy instead of strong workbench borders", async ({ pag
       timelineTopPadding: Number.parseFloat(timelineContentStyles.paddingTop),
       toolbarHeight: toolbarStyles.height,
       toolbarShadow: toolbarStyles.boxShadow,
+      workbenchHeaderHeight,
     };
   });
 
@@ -1376,7 +1406,7 @@ test("uses material hierarchy instead of strong workbench borders", async ({ pag
   expect(presentation.composerShadow).not.toBe("none");
   expect(presentation.sidebarColor).toBe(presentation.timelineColor);
   expect(presentation.inspectorColor).toBe(presentation.timelineColor);
-  expect(presentation.toolbarHeight).toBe("44px");
+  expect(presentation.toolbarHeight).toBe(presentation.workbenchHeaderHeight);
   expect(presentation.timelineTopPadding).toBeLessThanOrEqual(28);
   expect(presentation.composerBottomPadding).toBeLessThanOrEqual(8);
 });

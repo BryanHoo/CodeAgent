@@ -7,6 +7,7 @@
 ## Rules
 
 - 每个组件只承担一个可描述的界面职责，紧凑工作台界面避免装饰性嵌套卡片。
+- Web 不提供登录路由或账号控件；Provider 资源不可用时展示 `codex login` 指引和 Query 重试操作，不调用账号接口。
 - `shared/ai-elements` 以官方 AI Elements 组件源码和公开 API 为实现基线，只改造样式、基础控件适配与本地化文案以使用本项目设计 Token；不得用功能不完整的自研组件替代官方能力。
 - Composer 使用 AI Elements `PromptInput`、`Attachments` 和组合式工具栏，支持点击、拖放、粘贴、预览与移除图片；附件选择是本地操作，在实时连接恢复期间仍保持可用，仅在正在提交时锁定；模型来自 Server Query，审批策略、模型和思考量随同一个 Turn 请求提交，不保留禁用占位控件。
 - Composer 的起始 `/` 输入使用 AI Elements `PromptInputCommand*` 在输入框外部向上浮出命令列表，不得把列表嵌入 PromptInput 表面；命令项支持鼠标、上下方向键、Enter、Escape 和明确的 listbox/option 语义。纯前端项目预览不得切换路由、修改真实 Turn 的 Project 或伪造后端连接状态。

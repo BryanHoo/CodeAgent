@@ -1,6 +1,6 @@
 import type { AgentCapabilities, AgentTask, Project } from "@code-agent/protocol";
-import { useQueries, useQuery } from "@tanstack/react-query";
-import { createContext, useContext } from "react";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createContext, useCallback, useContext } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -20,6 +20,7 @@ type ProjectContextValue = Readonly<{
   error: Error | null;
   isPending: boolean;
   projects: readonly Project[];
+  retry: () => Promise<void>;
   tasks: readonly AgentTask[];
 }>;
 
@@ -31,6 +32,7 @@ type ProjectProviderProps = Readonly<{
 }>;
 
 export function ProjectProvider({ children, client = codeAgentClient }: ProjectProviderProps) {
+  const queryClient = useQueryClient();
   const capabilitiesQuery = useQuery(capabilitiesQueryOptions(client));
   const projectsQuery = useQuery(projectsQueryOptions(client));
   const projects = projectsQuery.data?.data ?? emptyProjects;
@@ -40,15 +42,20 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   const tasks = taskQueries.flatMap((query) => query.data?.data ?? emptyTasks);
   const taskError = taskQueries.find((query) => query.error !== null)?.error ?? null;
   const isPending = projectsQuery.isPending || taskQueries.some((query) => query.isPending);
+  const retry = useCallback(async () => {
+    // Runtime 恢复后统一刷新全部服务端状态，避免部分 Query 继续保留失败结果。
+    await queryClient.invalidateQueries();
+  }, [queryClient]);
 
   return (
     <ProjectContext.Provider
       value={{
         capabilities: capabilitiesQuery.data,
         client,
-        error: projectsQuery.error ?? taskError,
+        error: capabilitiesQuery.error ?? projectsQuery.error ?? taskError,
         isPending,
         projects,
+        retry,
         tasks,
       }}
     >
