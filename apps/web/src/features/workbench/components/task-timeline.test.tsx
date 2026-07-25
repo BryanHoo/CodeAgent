@@ -174,6 +174,119 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("lucide-chevron-right");
   });
 
+  it("renders completed ANSI command output in a copyable Terminal", () => {
+    const ansiOutput = "\u001B[31m失败\u001B[0m\n请检查日志";
+    const commandSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              command: "pnpm check",
+              cwd: "/workspace/CodeAgent",
+              id: "command-completed",
+              output: ansiOutput,
+              outputTruncated: true,
+              status: "completed",
+              type: "command",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={commandSnapshot} />);
+
+    expect(markup).toContain("pnpm check");
+    expect(markup).toContain("已完成");
+    expect(markup).toContain('data-terminal=""');
+    expect(markup).toContain('data-streaming="false"');
+    expect(markup).toContain('aria-label="复制命令输出"');
+    expect(markup).toContain("失败");
+    expect(markup).not.toContain("\u001B[31m");
+    expect(markup).toContain("输出已截断，仅显示最新内容。");
+    expect(markup).not.toContain("清空");
+  });
+
+  it("renders a running command as a streaming Terminal with its real cwd fallback", () => {
+    const runningCommandSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          ...completedTurn,
+          completedAt: null,
+          items: [
+            {
+              command: "pnpm test",
+              cwd: "/workspace/CodeAgent",
+              id: "command-running",
+              outputTruncated: false,
+              status: "running",
+              type: "command",
+            },
+          ],
+          status: "running",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningCommandSnapshot} />);
+
+    expect(markup).toContain('data-terminal=""');
+    expect(markup).toContain('data-streaming="true"');
+    expect(markup).toContain('aria-label="正在接收命令输出"');
+    expect(markup).toContain("/workspace/CodeAgent");
+    expect(markup).not.toContain("输出已截断");
+  });
+
+  it("renders the active plan as a streaming, expanded Plan", () => {
+    const planText = "1. 保留原始文本\n2. 接入 Plan 组件";
+    const runningPlanSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          ...completedTurn,
+          completedAt: null,
+          items: [{ id: "plan-active", text: planText, type: "plan" }],
+          status: "running",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningPlanSnapshot} />);
+
+    expect(markup).toContain('data-ai-plan=""');
+    expect(markup).toContain('data-streaming="true"');
+    expect(markup).toMatch(/<details[^>]* open/);
+    expect(markup).toContain("正在生成计划");
+    expect(markup).toContain(planText);
+    expect(markup).not.toContain("lucide-wrench");
+  });
+
+  it("renders a completed plan as non-streaming collapsible content", () => {
+    const planText = "# 实施计划\n\n- 保留 `Protocol`";
+    const completedPlanSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [{ id: "plan-completed", text: planText, type: "plan" }],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={completedPlanSnapshot} />);
+
+    expect(markup).toContain('data-ai-plan=""');
+    expect(markup).toContain('data-streaming="false"');
+    expect(markup).toContain("执行计划");
+    expect(markup).toContain(planText);
+    expect(markup).not.toContain("lucide-wrench");
+  });
+
   it("renders each changed file with its operation and diff statistics", () => {
     const fileChangeSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,

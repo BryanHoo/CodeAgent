@@ -24,10 +24,26 @@ import {
   type MessageFileReference,
 } from "../../../shared/ai-elements/message.js";
 import {
+  Plan,
+  PlanContent,
+  PlanDescription,
+  PlanHeader,
+  PlanTitle,
+  PlanTrigger,
+} from "../../../shared/ai-elements/plan.js";
+import {
   Reasoning,
   ReasoningContent,
   ReasoningTrigger,
 } from "../../../shared/ai-elements/reasoning.js";
+import {
+  Terminal,
+  TerminalActions,
+  TerminalContent,
+  TerminalCopyButton,
+  TerminalHeader,
+  TerminalTitle,
+} from "../../../shared/ai-elements/terminal.js";
 import {
   Tool,
   ToolContent,
@@ -485,18 +501,28 @@ function TimelineItemContent({
         </Reasoning>
       );
     }
-    case "command":
+    case "command": {
+      const commandOutput = item.output ?? item.cwd;
+      const isStreamingCommand = turnStatus === "running" && item.status === "running";
       return (
         <Tool>
           <ToolHeader status={toToolStatus(item.status)}>{item.command}</ToolHeader>
-          <ToolContent>
-            <pre className="whitespace-pre-wrap">{item.output ?? item.cwd}</pre>
-            {item.outputTruncated ? (
-              <p className="mt-2 text-warning">输出已截断，仅显示最新内容。</p>
-            ) : null}
-          </ToolContent>
+          <Terminal isStreaming={isStreamingCommand} output={commandOutput}>
+            <TerminalHeader>
+              <TerminalTitle>输出</TerminalTitle>
+              <TerminalActions>
+                <TerminalCopyButton />
+              </TerminalActions>
+            </TerminalHeader>
+            <TerminalContent>
+              {item.outputTruncated ? (
+                <p className="mt-2 text-warning">输出已截断，仅显示最新内容。</p>
+              ) : null}
+            </TerminalContent>
+          </Terminal>
         </Tool>
       );
+    }
     case "file_change":
       // 文件变更统一在回复末尾聚合，避免工具流中重复展示同一组文件。
       return null;
@@ -514,15 +540,24 @@ function TimelineItemContent({
           </ToolContent>
         </Tool>
       );
-    case "plan":
+    case "plan": {
+      // Plan Item 没有独立状态；运行中 Turn 的最后一个 Item 即当前流式计划。
+      const isStreamingPlan = turnStatus === "running" && isLastTurnItem;
       return (
-        <Tool defaultOpen>
-          <ToolHeader status="completed">计划</ToolHeader>
-          <ToolContent>
+        <Plan defaultOpen isStreaming={isStreamingPlan}>
+          <PlanHeader>
+            <div className="min-w-0 flex-1">
+              <PlanTitle>计划</PlanTitle>
+              <PlanDescription>{isStreamingPlan ? "正在生成计划" : "执行计划"}</PlanDescription>
+            </div>
+            <PlanTrigger />
+          </PlanHeader>
+          <PlanContent>
             <pre className="whitespace-pre-wrap">{item.text}</pre>
-          </ToolContent>
-        </Tool>
+          </PlanContent>
+        </Plan>
       );
+    }
     case "activity":
       return (
         <Tool>
