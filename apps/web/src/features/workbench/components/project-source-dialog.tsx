@@ -1,9 +1,17 @@
-import type { ProjectSourceFile } from "@code-agent/protocol";
 import { useQuery } from "@tanstack/react-query";
 import { FileCode2, X } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
+import {
+  CodeBlock,
+  CodeBlockActions,
+  CodeBlockCopyButton,
+  CodeBlockFilename,
+  CodeBlockHeader,
+  CodeBlockTitle,
+  type CodeBlockLanguage,
+} from "../../../shared/ai-elements/code-block.js";
 import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 
@@ -18,43 +26,112 @@ function getFileName(path: string): string {
   return path.split(/[\\/]/u).at(-1) ?? path;
 }
 
-function SourceCode({
-  file,
+const languageByExtension: Readonly<Record<string, CodeBlockLanguage>> = {
+  bash: "bash",
+  c: "c",
+  cc: "cpp",
+  cpp: "cpp",
+  cs: "csharp",
+  css: "css",
+  diff: "diff",
+  env: "dotenv",
+  go: "go",
+  graphql: "graphql",
+  h: "c",
+  hpp: "cpp",
+  htm: "html",
+  html: "html",
+  ini: "ini",
+  java: "java",
+  js: "javascript",
+  json: "json",
+  json5: "json5",
+  jsonc: "jsonc",
+  jsx: "jsx",
+  kt: "kotlin",
+  kts: "kotlin",
+  lua: "lua",
+  md: "markdown",
+  mdx: "mdx",
+  mjs: "javascript",
+  php: "php",
+  pl: "perl",
+  py: "python",
+  rb: "ruby",
+  rs: "rust",
+  scss: "scss",
+  sh: "shellscript",
+  sql: "sql",
+  svelte: "svelte",
+  swift: "swift",
+  toml: "toml",
+  ts: "typescript",
+  tsx: "tsx",
+  vue: "vue",
+  xml: "xml",
+  yaml: "yaml",
+  yml: "yaml",
+  zsh: "shellscript",
+};
+
+const languageByFileName: Readonly<Record<string, CodeBlockLanguage>> = {
+  ".env": "dotenv",
+  dockerfile: "dockerfile",
+  makefile: "makefile",
+};
+
+export function getCodeLanguage(path: string): CodeBlockLanguage {
+  const fileName = getFileName(path).toLowerCase();
+  const fileLanguage = languageByFileName[fileName];
+  if (fileLanguage !== undefined) {
+    return fileLanguage;
+  }
+
+  const extension = fileName.includes(".") ? fileName.split(".").at(-1) : undefined;
+  return extension === undefined ? "text" : (languageByExtension[extension] ?? "text");
+}
+
+type SourceHeaderProps = Readonly<{
+  actions?: ReactNode;
+  lineNumber: number | null;
+  onClose: () => void;
+  sourcePath: string;
+  titleId: string;
+  truncated: boolean;
+}>;
+
+function SourceHeader({
+  actions,
   lineNumber,
-}: Readonly<{ file: ProjectSourceFile; lineNumber: number | null }>) {
-  const lines = useMemo(() => file.content.split("\n"), [file.content]);
-  const highlightedLineRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    highlightedLineRef.current?.scrollIntoView({ block: "center" });
-  }, [file.content, lineNumber]);
-
+  onClose,
+  sourcePath,
+  titleId,
+  truncated,
+}: SourceHeaderProps) {
   return (
-    <div className="min-w-max py-3 font-mono text-body-small leading-6">
-      {lines.map((line, lineIndex) => {
-        const currentLineNumber = lineIndex + 1;
-        const highlighted = currentLineNumber === lineNumber;
-        return (
-          <div
-            className={`grid grid-cols-[4rem_minmax(0,1fr)] px-3 ${
-              highlighted ? "bg-accent-soft text-accent-strong" : ""
-            }`}
-            data-source-line={currentLineNumber}
-            key={currentLineNumber}
-            ref={highlighted ? highlightedLineRef : undefined}
-          >
-            <span
-              className={`select-none pr-4 text-right ${
-                highlighted ? "text-accent" : "text-muted-foreground"
-              }`}
-            >
-              {currentLineNumber}
-            </span>
-            <code className="whitespace-pre">{line.length === 0 ? " " : line}</code>
-          </div>
-        );
-      })}
-    </div>
+    <CodeBlockHeader className="min-h-toolbar gap-3 bg-raised px-3 shadow-toolbar sm:px-4">
+      <CodeBlockTitle className="min-w-0 flex-1">
+        <FileCode2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-body-small font-semibold" id={titleId} title={sourcePath}>
+            <CodeBlockFilename>
+              {getFileName(sourcePath)}
+              {lineNumber === null ? null : ` (line ${String(lineNumber)})`}
+            </CodeBlockFilename>
+          </h2>
+          <p className="truncate text-caption text-muted-foreground" title={sourcePath}>
+            {sourcePath}
+          </p>
+        </div>
+      </CodeBlockTitle>
+      {truncated ? <span className="shrink-0 text-label text-warning">内容已截断</span> : null}
+      <CodeBlockActions>
+        {actions}
+        <IconButton label="关闭源文件" onClick={onClose} size="small">
+          <X className="size-3.5" aria-hidden="true" />
+        </IconButton>
+      </CodeBlockActions>
+    </CodeBlockHeader>
   );
 }
 
@@ -85,12 +162,31 @@ export function ProjectSourceDialog({
     dialog.showModal();
   }, [reference]);
 
+  useEffect(() => {
+    const lineNumber = reference?.lineNumber;
+    if (sourceQuery.data === undefined || lineNumber === null || lineNumber === undefined) {
+      return;
+    }
+
+    // 行节点由共享 CodeBlock 提供，查询完成后让所有可滚动祖先共同定位目标行。
+    dialogRef.current
+      ?.querySelector(`[data-code-line="${String(lineNumber)}"]`)
+      ?.scrollIntoView({ block: "center" });
+  }, [reference?.lineNumber, sourceQuery.data]);
+
   if (reference === null) {
     return null;
   }
 
   const sourcePath = sourceQuery.data?.path ?? reference.path;
   const titleId = "project-source-dialog-title";
+  const headerProps = {
+    lineNumber: reference.lineNumber,
+    onClose,
+    sourcePath,
+    titleId,
+    truncated: sourceQuery.data?.truncated === true,
+  };
 
   return (
     <dialog
@@ -107,44 +203,38 @@ export function ProjectSourceDialog({
       }}
       ref={dialogRef}
     >
-      <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-raised">
-        <header className="flex min-h-toolbar items-center gap-3 px-3 shadow-toolbar sm:px-4">
-          <FileCode2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-body-small font-semibold" id={titleId} title={sourcePath}>
-              {getFileName(sourcePath)}
-              {reference.lineNumber === null ? null : ` (line ${String(reference.lineNumber)})`}
-            </h2>
-            <p className="truncate text-caption text-muted-foreground" title={sourcePath}>
-              {sourcePath}
-            </p>
-          </div>
-          {sourceQuery.data?.truncated === true ? (
-            <span className="shrink-0 text-label text-warning">内容已截断</span>
-          ) : null}
-          <IconButton label="关闭源文件" onClick={onClose} size="small">
-            <X className="size-3.5" aria-hidden="true" />
-          </IconButton>
-        </header>
-        <div className="min-h-0 overflow-auto bg-content">
-          {sourceQuery.isPending ? (
+      <section className="h-full min-h-0 bg-raised">
+        {sourceQuery.isPending ? (
+          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+            <SourceHeader {...headerProps} />
             <div
               className="grid min-h-48 place-items-center text-body-small text-muted-foreground"
               role="status"
             >
               正在加载源文件
             </div>
-          ) : sourceQuery.error !== null ? (
+          </div>
+        ) : sourceQuery.error !== null ? (
+          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+            <SourceHeader {...headerProps} />
             <div
               className="grid min-h-48 place-items-center text-body-small text-danger"
               role="alert"
             >
               无法加载源文件
             </div>
-          ) : (
-            <SourceCode file={sourceQuery.data} lineNumber={reference.lineNumber} />
-          )}
-        </div>
+          </div>
+        ) : (
+          <CodeBlock
+            className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] rounded-none bg-content shadow-none"
+            code={sourceQuery.data.content}
+            highlightedLine={reference.lineNumber}
+            language={getCodeLanguage(sourcePath)}
+            showLineNumbers
+          >
+            <SourceHeader {...headerProps} actions={<CodeBlockCopyButton />} />
+          </CodeBlock>
+        )}
       </section>
     </dialog>
   );

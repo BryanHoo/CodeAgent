@@ -464,17 +464,37 @@ test("opens the slash command project picker without changing backend context", 
   expect(viewportMetrics.documentWidth).toBeLessThanOrEqual(viewportMetrics.viewportWidth);
 });
 
-test("opens bounded source previews from assistant file references", async ({ page }) => {
+test("opens bounded source previews from assistant file references", async ({ context, page }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/p/code-agent/t/task-1");
 
-  await page.getByRole("button", { name: "architecture-design.md(line 716)" }).click();
+  const sourceReference = page.getByRole("button", {
+    name: /architecture-design\.md\s+\(line 716\)/u,
+  });
+  await sourceReference.click();
 
   const dialog = page.getByRole("dialog", { name: "architecture-design.md (line 716)" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText("内容已截断")).toBeVisible();
-  await expect(dialog.locator('[data-source-line="716"]')).toContainText("### 11.7 认证");
-  await expect(dialog.locator('[data-source-line="716"]')).toHaveClass(/bg-accent-soft/u);
-  await expect(dialog.locator('[data-source-line="716"]')).toHaveClass(/text-accent-strong/u);
+  await expect(dialog.locator('[data-language="markdown"]')).toBeVisible();
+  const highlightedLine = dialog.locator('[data-code-line="716"]');
+  await expect(highlightedLine).toContainText("### 11.7 认证");
+  await expect(highlightedLine).toHaveAttribute("data-highlighted", "true");
+  await expect(highlightedLine).toBeInViewport();
+
+  await dialog.getByRole("button", { name: "复制代码" }).click();
+  await expect(dialog.getByRole("button", { name: "代码已复制" })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe(architectureSourcePreview);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+
+  await sourceReference.click();
+  await expect(dialog).toBeVisible();
+  await page.mouse.click(1, 1);
+  await expect(dialog).toBeHidden();
 });
 
 test("submits attachments, approval policy, model, and reasoning effort through the real client contract", async ({

@@ -16,6 +16,14 @@ import {
   ConfirmationRequest,
   ConfirmationTitle,
 } from "./confirmation.js";
+import {
+  CodeBlock,
+  CodeBlockActions,
+  CodeBlockCopyButton,
+  CodeBlockFilename,
+  CodeBlockHeader,
+  CodeBlockTitle,
+} from "./code-block.js";
 import { Context, ContextTrigger, formatContextUsage } from "./context.js";
 import { Message, MessageContent, MessageResponse } from "./message.js";
 import {
@@ -36,6 +44,33 @@ import { Reasoning, ReasoningContent, ReasoningTrigger } from "./reasoning.js";
 import { Tool, ToolContent, ToolHeader } from "./tool.js";
 
 describe("AI Elements primitives", () => {
+  it("renders a code block with line numbers and a highlighted line", () => {
+    const markup = renderToStaticMarkup(
+      <CodeBlock
+        code={"const first = 1;\nconst second = 2;"}
+        highlightedLine={2}
+        language="typescript"
+        showLineNumbers
+      >
+        <CodeBlockHeader>
+          <CodeBlockTitle>
+            <CodeBlockFilename>example.ts</CodeBlockFilename>
+          </CodeBlockTitle>
+          <CodeBlockActions>
+            <CodeBlockCopyButton />
+          </CodeBlockActions>
+        </CodeBlockHeader>
+      </CodeBlock>,
+    );
+
+    expect(markup).toContain("example.ts");
+    expect(markup).toContain('data-code-line="1"');
+    expect(markup).toContain('data-code-line="2"');
+    expect(markup).toContain('data-highlighted="true"');
+    expect(markup).toContain("const second = 2;");
+    expect(markup).toContain('aria-label="复制代码"');
+  });
+
   it("renders an accessible context usage trigger", () => {
     const markup = renderToStaticMarkup(
       <Context maxTokens={200_000} usedTokens={25_000}>
