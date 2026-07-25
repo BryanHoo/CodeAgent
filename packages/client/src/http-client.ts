@@ -1,5 +1,7 @@
 import {
   AgentCapabilitiesSchema,
+  CompactAgentTaskResponseSchema,
+  ForkAgentTaskResponseSchema,
   AgentAttachmentUploadResponseSchema,
   AgentModelPageSchema,
   AgentMutationErrorSchema,
@@ -10,11 +12,15 @@ import {
   ProjectPageSchema,
   ProjectGitStatusSchema,
   ProjectSourceFileSchema,
+  ReviewAgentTaskResponseSchema,
   RollbackAgentTurnResponseSchema,
   ResolvePendingRequestResponseSchema,
   StartAgentTaskResponseSchema,
   StartAgentTurnResponseSchema,
+  UploadAgentFeedbackResponseSchema,
   type AgentCapabilities,
+  type CompactAgentTaskResponse,
+  type ForkAgentTaskResponse,
   type AgentAttachmentUploadRequest,
   type AgentAttachmentUploadResponse,
   type AgentMutationError,
@@ -28,12 +34,16 @@ import {
   type ProjectPage,
   type ProjectGitStatus,
   type ProjectSourceFile,
+  type ReviewAgentTaskRequest,
+  type ReviewAgentTaskResponse,
   type RollbackAgentTurnResponse,
   type PendingRequest,
   type ResolvePendingRequestRequest,
   type ResolvePendingRequestResponse,
   type StartAgentTaskResponse,
   type StartAgentTurnResponse,
+  type UploadAgentFeedbackRequest,
+  type UploadAgentFeedbackResponse,
 } from "@code-agent/protocol";
 import type { Static, TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
@@ -168,6 +178,56 @@ export class CodeAgentClient {
       `/v1/projects/${encodeURIComponent(projectId)}/tasks`,
       {},
       StartAgentTaskResponseSchema,
+      options,
+    );
+  }
+
+  public async startReview(
+    taskId: string,
+    input: ReviewAgentTaskRequest,
+    options: MutationOptions = {},
+  ): Promise<ReviewAgentTaskResponse> {
+    return this.#mutation(
+      `/v1/tasks/${encodeURIComponent(taskId)}/review`,
+      input,
+      ReviewAgentTaskResponseSchema,
+      options,
+    );
+  }
+
+  public async compactTask(
+    taskId: string,
+    options: MutationOptions = {},
+  ): Promise<CompactAgentTaskResponse> {
+    return this.#mutation(
+      `/v1/tasks/${encodeURIComponent(taskId)}/compact`,
+      {},
+      CompactAgentTaskResponseSchema,
+      options,
+    );
+  }
+
+  public async forkTask(
+    taskId: string,
+    options: MutationOptions = {},
+  ): Promise<ForkAgentTaskResponse> {
+    return this.#mutation(
+      `/v1/tasks/${encodeURIComponent(taskId)}/fork`,
+      {},
+      ForkAgentTaskResponseSchema,
+      options,
+    );
+  }
+
+  public async uploadFeedback(
+    taskId: string,
+    input: UploadAgentFeedbackRequest,
+    options: MutationOptions = {},
+  ): Promise<UploadAgentFeedbackResponse> {
+    return this.#mutation(
+      `/v1/tasks/${encodeURIComponent(taskId)}/feedback`,
+      input,
+      UploadAgentFeedbackResponseSchema,
       options,
     );
   }

@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import { PendingRequestResolutionError, type AgentProvider } from "@code-agent/core";
 import {
   AgentCapabilitiesSchema,
+  CompactAgentTaskRequestSchema,
+  CompactAgentTaskResponseSchema,
+  ForkAgentTaskRequestSchema,
+  ForkAgentTaskResponseSchema,
   AgentAttachmentUploadRequestSchema,
   AgentAttachmentUploadResponseSchema,
   AgentModelPageSchema,
@@ -15,6 +19,8 @@ import {
   ProjectPageSchema,
   ProjectGitStatusSchema,
   ProjectSourceFileSchema,
+  ReviewAgentTaskRequestSchema,
+  ReviewAgentTaskResponseSchema,
   RollbackAgentTurnRequestSchema,
   RollbackAgentTurnResponseSchema,
   ResolvePendingRequestRequestSchema,
@@ -23,16 +29,22 @@ import {
   StartAgentTaskResponseSchema,
   StartAgentTurnRequestSchema,
   StartAgentTurnResponseSchema,
+  UploadAgentFeedbackRequestSchema,
+  UploadAgentFeedbackResponseSchema,
   MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
   type AgentAttachmentUploadRequest,
   type AgentMutationError,
   type EventStreamMessage,
+  type CompactAgentTaskRequest,
+  type ForkAgentTaskRequest,
   type Project,
   type ProjectGitStatus,
   type ProjectSourceFile,
   type RollbackAgentTurnRequest,
+  type ReviewAgentTaskRequest,
   type ResolvePendingRequestRequest,
   type StartAgentTurnRequest,
+  type UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
@@ -478,6 +490,154 @@ export async function createCodeAgentServer(
       const checkpoint = eventStream.checkpoint;
       return { checkpoint, snapshot: task };
     },
+  );
+
+  app.post<{
+    Body: ReviewAgentTaskRequest;
+    Headers: { "idempotency-key": string };
+    Params: { taskId: string };
+  }>(
+    "/v1/tasks/:taskId/review",
+    {
+      schema: {
+        body: ReviewAgentTaskRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: TaskParamsSchema,
+        response: {
+          201: ReviewAgentTaskResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const turn = await runIdempotent(
+        `review-task:${request.params.taskId}`,
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const task = await options.provider.readTask(request.params.taskId);
+          if (task?.projectId !== options.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          return options.provider.startReview(request.params.taskId, request.body.target);
+        },
+      );
+      return reply.code(201).send({ taskId: request.params.taskId, turn });
+    },
+  );
+
+  app.post<{
+    Body: CompactAgentTaskRequest;
+    Headers: { "idempotency-key": string };
+    Params: { taskId: string };
+  }>(
+    "/v1/tasks/:taskId/compact",
+    {
+      schema: {
+        body: CompactAgentTaskRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: TaskParamsSchema,
+        response: {
+          202: CompactAgentTaskResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const response = await runIdempotent(
+        `compact-task:${request.params.taskId}`,
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const task = await options.provider.readTask(request.params.taskId);
+          if (task?.projectId !== options.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          await options.provider.compactTask(request.params.taskId);
+          return { status: "compacting" as const, taskId: request.params.taskId };
+        },
+      );
+      return reply.code(202).send(response);
+    },
+  );
+
+  app.post<{
+    Body: ForkAgentTaskRequest;
+    Headers: { "idempotency-key": string };
+    Params: { taskId: string };
+  }>(
+    "/v1/tasks/:taskId/fork",
+    {
+      schema: {
+        body: ForkAgentTaskRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: TaskParamsSchema,
+        response: {
+          201: ForkAgentTaskResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const forkedTask = await runIdempotent(
+        `fork-task:${request.params.taskId}`,
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const task = await options.provider.readTask(request.params.taskId);
+          if (task?.projectId !== options.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          return options.provider.forkTask(request.params.taskId);
+        },
+      );
+      return reply.code(201).send({ task: forkedTask });
+    },
+  );
+
+  app.post<{
+    Body: UploadAgentFeedbackRequest;
+    Headers: { "idempotency-key": string };
+    Params: { taskId: string };
+  }>(
+    "/v1/tasks/:taskId/feedback",
+    {
+      schema: {
+        body: UploadAgentFeedbackRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: TaskParamsSchema,
+        response: {
+          200: UploadAgentFeedbackResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        `feedback-task:${request.params.taskId}`,
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const task = await options.provider.readTask(request.params.taskId);
+          if (task?.projectId !== options.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          await options.provider.uploadFeedback(request.params.taskId, request.body);
+          return { status: "sent" as const, taskId: request.params.taskId };
+        },
+      ),
   );
 
   app.post<{

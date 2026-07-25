@@ -930,6 +930,63 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
+  it("maps task commands to Codex App Server RPC", async () => {
+    const runningTurn = {
+      completedAt: null,
+      durationMs: null,
+      error: null,
+      id: "review-turn",
+      items: [],
+      itemsView: { type: "full" },
+      startedAt: 1_753_228_800,
+      status: "inProgress",
+    };
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      { reviewThreadId: "task-1", turn: runningTurn },
+      {},
+      { thread: nativeThread({ id: "task-2", preview: "续接任务" }) },
+      { threadId: "task-1" },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.listTasks();
+
+    await expect(
+      provider.startReview("task-1", { type: "base_branch", branch: "main" }),
+    ).resolves.toMatchObject({ id: "review-turn", status: "running" });
+    await expect(provider.compactTask("task-1")).resolves.toBeUndefined();
+    await expect(provider.forkTask("task-1")).resolves.toMatchObject({ id: "task-2" });
+    await expect(
+      provider.uploadFeedback("task-1", {
+        classification: "other",
+        includeLogs: true,
+        reason: "体验反馈",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(rpc.calls.slice(1)).toEqual([
+      {
+        method: "review/start",
+        params: {
+          delivery: "inline",
+          target: { type: "baseBranch", branch: "main" },
+          threadId: "task-1",
+        },
+      },
+      { method: "thread/compact/start", params: { threadId: "task-1" } },
+      { method: "thread/fork", params: { threadId: "task-1" } },
+      {
+        method: "feedback/upload",
+        params: {
+          classification: "other",
+          includeLogs: true,
+          reason: "体验反馈",
+          threadId: "task-1",
+        },
+      },
+    ]);
+  });
+
   it("maps Codex notifications to provider-independent realtime events", async () => {
     const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
     const provider = createCodexAgentProvider({ client: rpc, project });
@@ -1341,9 +1398,10 @@ describe("CodexAgentProvider", () => {
     const provider = createCodexAgentProvider({ client: rpc, project });
 
     await expect(provider.getCapabilities()).resolves.toEqual({
+      feedback: { upload: true },
       provider: "codex",
-      tasks: { list: true, read: true, start: true },
-      turns: { interrupt: true, rollback: true, start: true },
+      tasks: { fork: true, list: true, read: true, start: true },
+      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     });
     await expect(provider.listTasks({ cursor: "cursor", limit: 25 })).resolves.toEqual({
       data: [

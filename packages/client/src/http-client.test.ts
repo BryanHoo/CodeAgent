@@ -131,9 +131,10 @@ describe("CodeAgentClient", () => {
       .mockResolvedValueOnce(jsonResponse({ status: "ok", version: 1 }))
       .mockResolvedValueOnce(
         jsonResponse({
+          feedback: { upload: true },
           provider: "codex",
-          tasks: { list: true, read: true, start: true },
-          turns: { interrupt: true, rollback: true, start: true },
+          tasks: { fork: true, list: true, read: true, start: true },
+          turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
         }),
       )
       .mockResolvedValueOnce(jsonResponse({ data: [], nextCursor: null }))
@@ -246,6 +247,48 @@ describe("CodeAgentClient", () => {
       method: "POST",
     });
     expect(new Headers(rollbackCall?.[1]?.headers).get("idempotency-key")).toBe("rollback-key");
+  });
+
+  it("sends typed task command mutations with idempotency keys", async () => {
+    const reviewTurn = {
+      completedAt: null,
+      error: null,
+      id: "review-turn",
+      items: [],
+      startedAt: "2026-07-25T00:00:00.000Z",
+      status: "running",
+    };
+    const forkedTask = { ...task, id: "task-2", title: "续接任务" };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ taskId: task.id, turn: reviewTurn }))
+      .mockResolvedValueOnce(jsonResponse({ status: "compacting", taskId: task.id }))
+      .mockResolvedValueOnce(jsonResponse({ task: forkedTask }))
+      .mockResolvedValueOnce(jsonResponse({ status: "sent", taskId: task.id }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await client.startReview(
+      task.id,
+      { target: { type: "uncommitted_changes" } },
+      { idempotencyKey: "review-key" },
+    );
+    await client.compactTask(task.id, { idempotencyKey: "compact-key" });
+    await client.forkTask(task.id, { idempotencyKey: "fork-key" });
+    await client.uploadFeedback(
+      task.id,
+      { classification: "other", includeLogs: true, reason: "体验反馈" },
+      { idempotencyKey: "feedback-key" },
+    );
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/v1/tasks/task-1/review",
+      "/v1/tasks/task-1/compact",
+      "/v1/tasks/task-1/fork",
+      "/v1/tasks/task-1/feedback",
+    ]);
+    expect(
+      fetchMock.mock.calls.map((call) => new Headers(call[1]?.headers).get("idempotency-key")),
+    ).toEqual(["review-key", "compact-key", "fork-key", "feedback-key"]);
   });
 
   it("sends typed pending request resolutions with full identity", async () => {

@@ -12,6 +12,7 @@
 - JSONL 响应只有在底层写入回调确认后才算成功，所有写入都使用有界超时；异步写入失败必须关闭连接且不能提前发布请求终态。
 - 过载错误使用带 jitter 的有上限指数退避，不做同步密集重试。
 - Task/Turn 写入只通过 `thread/start`、`turn/start` 和 `turn/interrupt` 映射；文本输入必须转换为当前 Codex Schema 要求的 `UserInput[]`，Provider 不向上泄漏原生字段。
+- Task 命令通过受控 Provider 方法映射：代码审查使用 `review/start`，上下文压缩使用 `thread/compact/start`，新任务续接使用 `thread/fork`，任务反馈使用 `feedback/upload`；每个动作都必须先验证 Task 属于当前 Project，并校验响应中的 Thread ID。
 - 模型列表只通过分页 `model/list` 获取，过滤隐藏模型并保留默认模型、默认思考量和可用思考量；`turn/start` 明确映射文本、受控图片 Data URL、`model`、`effort` 和 `approvalPolicy`。
 - `thread/tokenUsage/updated` 只使用最近一轮 `last.totalTokens` 计算当前上下文占用，并连同 `modelContextWindow` 写入实时事件和后续 Snapshot；不得使用累计 `total.totalTokens` 冒充当前上下文。
 - `turn/interrupt` 响应只确认中断请求已接收；`turn/completed` 的 `interrupted` 状态才是 Turn 终态，Server 和 Web 不得提前伪造完成状态。

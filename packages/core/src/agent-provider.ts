@@ -8,8 +8,10 @@ import type {
   AgentTaskSnapshot,
   AgentTurn,
   AgentTurnOptions,
+  AgentReviewTarget,
   PendingRequest,
   ResolvePendingRequestRequest,
+  UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
 
 export type ListAgentTasksInput = Readonly<{
@@ -53,6 +55,8 @@ export class PendingRequestResolutionError extends Error {
 
 // Core 只声明 Provider 无关能力，具体 RPC、传输顺序与进程生命周期留在外层。
 export interface AgentProvider {
+  compactTask(taskId: string): Promise<void>;
+  forkTask(taskId: string): Promise<AgentTask>;
   getCapabilities(): Promise<AgentCapabilities>;
   listModels(): Promise<AgentModelPage>;
   listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage>;
@@ -60,6 +64,7 @@ export interface AgentProvider {
   readTask(taskId: string): Promise<AgentTaskSnapshot | undefined>;
   resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest>;
   rollbackLatestTurn(taskId: string): Promise<void>;
+  startReview(taskId: string, target: AgentReviewTarget): Promise<AgentTurn>;
   startTask(): Promise<AgentTask>;
   startTurn(
     taskId: string,
@@ -68,4 +73,5 @@ export interface AgentProvider {
   ): Promise<AgentTurn>;
   interruptTurn(taskId: string, turnId: string): Promise<void>;
   subscribeEvents(listener: AgentProviderEventListener): () => void;
+  uploadFeedback(taskId: string, input: UploadAgentFeedbackRequest): Promise<void>;
 }

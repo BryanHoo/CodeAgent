@@ -21,9 +21,11 @@ import type {
   AgentTurn,
   AgentModelPage,
   AgentTurnOptions,
+  AgentReviewTarget,
   PendingApprovalDecision,
   PendingRequest,
   Project,
+  UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
 
 import {
@@ -855,10 +857,34 @@ export class CodexAgentProvider implements AgentProvider {
 
   public getCapabilities(): Promise<AgentCapabilities> {
     return Promise.resolve({
+      feedback: { upload: true },
       provider: "codex",
-      tasks: { list: true, read: true, start: true },
-      turns: { interrupt: true, rollback: true, start: true },
+      tasks: { fork: true, list: true, read: true, start: true },
+      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     });
+  }
+
+  public async compactTask(taskId: string): Promise<void> {
+    this.#assertKnownProjectTask(taskId);
+    expectRecord(
+      await this.#client.request("thread/compact/start", { threadId: taskId }),
+      "thread/compact/start response",
+    );
+  }
+
+  public async forkTask(taskId: string): Promise<AgentTask> {
+    this.#assertKnownProjectTask(taskId);
+    const response = expectRecord(
+      await this.#client.request("thread/fork", { threadId: taskId }),
+      "thread/fork response",
+    );
+    const task = mapAgentTask(
+      expectRecord(response["thread"], "thread/fork thread"),
+      this.#project,
+    );
+    // Fork 成功后立即接受新 Task 的实时通知与后续 Mutation。
+    this.#projectTaskIds.add(task.id);
+    return task;
   }
 
   public async listModels(): Promise<AgentModelPage> {
@@ -950,6 +976,30 @@ export class CodexAgentProvider implements AgentProvider {
     return mapAgentTurn(response["turn"]);
   }
 
+  public async startReview(taskId: string, target: AgentReviewTarget): Promise<AgentTurn> {
+    this.#assertKnownProjectTask(taskId);
+    const nativeTarget =
+      target.type === "uncommitted_changes"
+        ? { type: "uncommittedChanges" as const }
+        : target.type === "base_branch"
+          ? { branch: target.branch, type: "baseBranch" as const }
+          : target.type === "commit"
+            ? { sha: target.sha, title: target.title ?? null, type: "commit" as const }
+            : { instructions: target.instructions, type: "custom" as const };
+    const response = expectRecord(
+      await this.#client.request("review/start", {
+        delivery: "inline",
+        target: nativeTarget,
+        threadId: taskId,
+      }),
+      "review/start response",
+    );
+    if (expectString(response["reviewThreadId"], "review/start thread id") !== taskId) {
+      throw new CodexProtocolMappingError("review/start returned a different thread");
+    }
+    return mapAgentTurn(response["turn"]);
+  }
+
   public async interruptTurn(taskId: string, turnId: string): Promise<void> {
     this.#assertKnownProjectTask(taskId);
     expectRecord(
@@ -970,6 +1020,17 @@ export class CodexAgentProvider implements AgentProvider {
     }
     if (!Array.isArray(thread["turns"])) {
       throw new CodexProtocolMappingError("thread/rollback turns must be an array");
+    }
+  }
+
+  public async uploadFeedback(taskId: string, input: UploadAgentFeedbackRequest): Promise<void> {
+    this.#assertKnownProjectTask(taskId);
+    const response = expectRecord(
+      await this.#client.request("feedback/upload", { ...input, threadId: taskId }),
+      "feedback/upload response",
+    );
+    if (expectString(response["threadId"], "feedback/upload thread id") !== taskId) {
+      throw new CodexProtocolMappingError("feedback/upload returned a different thread");
     }
   }
 

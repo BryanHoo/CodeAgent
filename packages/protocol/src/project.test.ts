@@ -24,6 +24,14 @@ import {
   ProjectGitStatusSchema,
   ProjectSourceFileSchema,
   ProjectSchema,
+  CompactAgentTaskRequestSchema,
+  CompactAgentTaskResponseSchema,
+  ForkAgentTaskRequestSchema,
+  ForkAgentTaskResponseSchema,
+  ReviewAgentTaskRequestSchema,
+  ReviewAgentTaskResponseSchema,
+  UploadAgentFeedbackRequestSchema,
+  UploadAgentFeedbackResponseSchema,
   RollbackAgentTurnRequestSchema,
   RollbackAgentTurnResponseSchema,
   ResolvePendingRequestRequestSchema,
@@ -353,10 +361,55 @@ describe("project protocol", () => {
     expect(Value.Check(HealthResponseSchema, { status: "ok", version: 1 })).toBe(true);
     expect(
       Value.Check(AgentCapabilitiesSchema, {
+        feedback: { upload: true },
         provider: "codex",
-        tasks: { list: true, read: true, start: true },
-        turns: { interrupt: true, rollback: true, start: true },
+        tasks: { fork: true, list: true, read: true, start: true },
+        turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
       }),
+    ).toBe(true);
+  });
+
+  it("validates task command mutation contracts", () => {
+    const task = {
+      id: "task-2",
+      pinned: false,
+      projectId: "code-agent",
+      title: "续接任务",
+      updatedAt: "2026-07-25T00:00:00.000Z",
+    };
+    const turn = {
+      completedAt: null,
+      error: null,
+      id: "review-turn",
+      items: [],
+      startedAt: "2026-07-25T00:00:00.000Z",
+      status: "running",
+    };
+
+    expect(
+      Value.Check(ReviewAgentTaskRequestSchema, {
+        target: { type: "base_branch", branch: "main" },
+      }),
+    ).toBe(true);
+    expect(Value.Check(ReviewAgentTaskRequestSchema, { target: { type: "base_branch" } })).toBe(
+      false,
+    );
+    expect(Value.Check(ReviewAgentTaskResponseSchema, { taskId: "task-1", turn })).toBe(true);
+    expect(Value.Check(CompactAgentTaskRequestSchema, {})).toBe(true);
+    expect(
+      Value.Check(CompactAgentTaskResponseSchema, { status: "compacting", taskId: "task-1" }),
+    ).toBe(true);
+    expect(Value.Check(ForkAgentTaskRequestSchema, {})).toBe(true);
+    expect(Value.Check(ForkAgentTaskResponseSchema, { task })).toBe(true);
+    expect(
+      Value.Check(UploadAgentFeedbackRequestSchema, {
+        classification: "other",
+        includeLogs: true,
+        reason: "菜单操作不符合预期",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(UploadAgentFeedbackResponseSchema, { status: "sent", taskId: "task-1" }),
     ).toBe(true);
   });
 

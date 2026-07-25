@@ -401,10 +401,17 @@ export interface ProviderCapabilities {
     list: boolean;
     read: boolean;
     start: boolean;
+    fork: boolean;
   };
   turns: {
     start: boolean;
     interrupt: boolean;
+    rollback: boolean;
+    review: boolean;
+    compact: boolean;
+  };
+  feedback: {
+    upload: boolean;
   };
 }
 ```
@@ -421,6 +428,10 @@ POST /v1/attachments
 POST /v1/projects/:projectId/tasks
 POST /v1/tasks/:taskId/turns
 POST /v1/turns/:turnId/interrupt
+POST /v1/tasks/:taskId/review
+POST /v1/tasks/:taskId/compact
+POST /v1/tasks/:taskId/fork
+POST /v1/tasks/:taskId/feedback
 ```
 
 所有写请求必须携带非空 `Idempotency-Key`。Server 以操作、资源和 Key 共同确定幂等范围：相同 Payload 复用进行中或成功结果，不同 Payload 返回 `IDEMPOTENCY_CONFLICT`，失败结果允许同 Key 重试。

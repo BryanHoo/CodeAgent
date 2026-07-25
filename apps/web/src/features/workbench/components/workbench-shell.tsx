@@ -99,6 +99,17 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const openFileReview = (changes: readonly AgentFileChange[]) => {
     setFileReviewSelection({ changes, projectId });
   };
+  const handleTaskStarted = useCallback(
+    (startedTaskId: string) => {
+      // 新建与 Fork 共用同一路由收口，确保侧栏列表和当前 Task 同步更新。
+      void queryClient.invalidateQueries({ queryKey: ["projects", projectId, "tasks"] });
+      void navigate({
+        params: { projectId, taskId: startedTaskId },
+        to: "/p/$projectId/t/$taskId",
+      });
+    },
+    [navigate, projectId, queryClient],
+  );
 
   const closeSidebar = () => {
     setSidebarOpen(false);
@@ -232,15 +243,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               models={modelsQuery.data?.data ?? []}
               modelsError={modelsQuery.error}
               modelsPending={modelsQuery.isPending}
-              onTaskStarted={(startedTaskId) => {
-                void queryClient.invalidateQueries({
-                  queryKey: ["projects", projectId, "tasks"],
-                });
-                void navigate({
-                  params: { projectId, taskId: startedTaskId },
-                  to: "/p/$projectId/t/$taskId",
-                });
-              }}
+              onTaskStarted={handleTaskStarted}
               projectId={projectId}
               projectPath={projectPath}
             />
@@ -252,6 +255,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             models={modelsQuery.data?.data ?? []}
             modelsError={modelsQuery.error}
             modelsPending={modelsQuery.isPending}
+            onTaskStarted={handleTaskStarted}
             key={taskId}
             projectId={projectId}
             projectName={projectName}
@@ -311,6 +315,7 @@ function ActiveTaskWorkbench({
   models,
   modelsError,
   modelsPending,
+  onTaskStarted,
   projectId,
   projectName,
   projectPath,
@@ -325,6 +330,7 @@ function ActiveTaskWorkbench({
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;
+  onTaskStarted: (taskId: string) => void;
   projectId: string;
   projectName: string;
   projectPath: string;
@@ -368,7 +374,7 @@ function ActiveTaskWorkbench({
         models={models}
         modelsError={modelsError}
         modelsPending={modelsPending}
-        onTaskStarted={() => undefined}
+        onTaskStarted={onTaskStarted}
         projectId={projectId}
         projectPath={projectPath}
         runtime={runtime}

@@ -544,6 +544,85 @@ export const StartAgentTaskResponseSchema = Type.Object(
 );
 export type StartAgentTaskResponse = Readonly<Static<typeof StartAgentTaskResponseSchema>>;
 
+const AgentReviewTargetFieldsSchema = Type.Object(
+  {
+    branch: Type.Optional(Type.String({ minLength: 1 })),
+    instructions: Type.Optional(Type.String({ minLength: 1 })),
+    sha: Type.Optional(Type.String({ minLength: 1 })),
+    title: Type.Optional(Type.String({ minLength: 1 })),
+    type: Type.Union([
+      Type.Literal("uncommitted_changes"),
+      Type.Literal("base_branch"),
+      Type.Literal("commit"),
+      Type.Literal("custom"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+// 分支只声明条件必填字段；字段白名单由前一个 Schema 统一控制，避免 Ajv 删除其他分支字段。
+export const AgentReviewTargetSchema = Type.Intersect([
+  AgentReviewTargetFieldsSchema,
+  Type.Union([
+    Type.Object({ type: Type.Literal("uncommitted_changes") }),
+    Type.Object({ branch: Type.String({ minLength: 1 }), type: Type.Literal("base_branch") }),
+    Type.Object({ sha: Type.String({ minLength: 1 }), type: Type.Literal("commit") }),
+    Type.Object({
+      instructions: Type.String({ minLength: 1 }),
+      type: Type.Literal("custom"),
+    }),
+  ]),
+]);
+export type AgentReviewTarget = Readonly<Static<typeof AgentReviewTargetSchema>>;
+
+export const ReviewAgentTaskRequestSchema = Type.Object(
+  { target: AgentReviewTargetSchema },
+  { additionalProperties: false },
+);
+export type ReviewAgentTaskRequest = Readonly<Static<typeof ReviewAgentTaskRequestSchema>>;
+
+export const ReviewAgentTaskResponseSchema = Type.Object(
+  { taskId: Type.String({ minLength: 1 }), turn: AgentTurnSchema },
+  { additionalProperties: false },
+);
+export type ReviewAgentTaskResponse = Readonly<Static<typeof ReviewAgentTaskResponseSchema>>;
+
+export const CompactAgentTaskRequestSchema = Type.Object({}, { additionalProperties: false });
+export type CompactAgentTaskRequest = Readonly<Static<typeof CompactAgentTaskRequestSchema>>;
+
+export const CompactAgentTaskResponseSchema = Type.Object(
+  { status: Type.Literal("compacting"), taskId: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+export type CompactAgentTaskResponse = Readonly<Static<typeof CompactAgentTaskResponseSchema>>;
+
+export const ForkAgentTaskRequestSchema = Type.Object({}, { additionalProperties: false });
+export type ForkAgentTaskRequest = Readonly<Static<typeof ForkAgentTaskRequestSchema>>;
+
+export const ForkAgentTaskResponseSchema = Type.Object(
+  { task: AgentTaskSchema },
+  { additionalProperties: false },
+);
+export type ForkAgentTaskResponse = Readonly<Static<typeof ForkAgentTaskResponseSchema>>;
+
+export const UploadAgentFeedbackRequestSchema = Type.Object(
+  {
+    classification: Type.String({ maxLength: 100, minLength: 1 }),
+    includeLogs: Type.Boolean(),
+    reason: Type.String({ maxLength: 4_000, minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+export type UploadAgentFeedbackRequest = Readonly<Static<typeof UploadAgentFeedbackRequestSchema>>;
+
+export const UploadAgentFeedbackResponseSchema = Type.Object(
+  { status: Type.Literal("sent"), taskId: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+export type UploadAgentFeedbackResponse = Readonly<
+  Static<typeof UploadAgentFeedbackResponseSchema>
+>;
+
 export const StartAgentTurnRequestSchema = Type.Object(
   { input: AgentPromptInputSchema, options: AgentTurnOptionsSchema },
   { additionalProperties: false },
@@ -673,9 +752,11 @@ export type HealthResponse = Readonly<Static<typeof HealthResponseSchema>>;
 
 export const AgentCapabilitiesSchema = Type.Object(
   {
+    feedback: Type.Object({ upload: Type.Boolean() }, { additionalProperties: false }),
     provider: Type.String({ minLength: 1 }),
     tasks: Type.Object(
       {
+        fork: Type.Boolean(),
         list: Type.Boolean(),
         read: Type.Boolean(),
         start: Type.Boolean(),
@@ -684,7 +765,9 @@ export const AgentCapabilitiesSchema = Type.Object(
     ),
     turns: Type.Object(
       {
+        compact: Type.Boolean(),
         interrupt: Type.Boolean(),
+        review: Type.Boolean(),
         rollback: Type.Boolean(),
         start: Type.Boolean(),
       },

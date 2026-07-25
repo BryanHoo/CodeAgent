@@ -269,7 +269,7 @@ export function PromptInputCommand({ className = "", ...props }: PromptInputSect
 }
 
 export function PromptInputCommandList({ className = "", ...props }: PromptInputSectionProps) {
-  return <div className={`max-h-64 overflow-y-auto p-1 ${className}`} {...props} />;
+  return <div className={`max-h-96 overflow-y-auto p-1 ${className}`} {...props} />;
 }
 
 type PromptInputCommandGroupProps = PromptInputSectionProps & { label: string };
@@ -304,7 +304,7 @@ export function PromptInputCommandItem({
   return (
     <button
       aria-selected={selected}
-      className={`flex w-full items-center gap-2 rounded-control px-2 py-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover ${active ? "bg-control-active" : ""} ${className}`}
+      className={`flex w-full items-center gap-2 rounded-control px-2 py-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent ${active ? "bg-control-active" : ""} ${className}`}
       data-active={active || undefined}
       onMouseDown={(event) => {
         // 保留输入框焦点，避免鼠标选择命令时丢失光标上下文。

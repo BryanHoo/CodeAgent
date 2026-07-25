@@ -30,6 +30,8 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     respondToServerRequest: vi.fn(),
   };
   const provider = {
+    compactTask: vi.fn(),
+    forkTask: vi.fn(),
     getCapabilities: vi.fn(),
     interruptTurn: vi.fn(),
     listModels: vi.fn(),
@@ -38,8 +40,10 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     resolvePendingRequest: vi.fn(),
     rollbackLatestTurn: vi.fn(),
     startTask: vi.fn(),
+    startReview: vi.fn(),
     startTurn: vi.fn(),
     subscribeEvents: vi.fn(() => () => undefined),
+    uploadFeedback: vi.fn(),
   };
   const project = {
     createdAt: "2026-07-23T00:00:00.000Z",

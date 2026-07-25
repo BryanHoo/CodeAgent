@@ -9,7 +9,14 @@ export type CodeAgentCapabilitiesClient = Pick<CodeAgentClient, "getCapabilities
 export type CodeAgentModelsClient = Pick<CodeAgentClient, "listModels">;
 export type CodeAgentMutationClient = Pick<
   CodeAgentClient,
-  "interruptTurn" | "startTask" | "startTurn" | "uploadAttachment"
+  | "compactTask"
+  | "forkTask"
+  | "interruptTurn"
+  | "startReview"
+  | "startTask"
+  | "startTurn"
+  | "uploadAttachment"
+  | "uploadFeedback"
 >;
 export type CodeAgentRollbackClient = Pick<CodeAgentClient, "rollbackTurn">;
 export type CodeAgentPendingRequestClient = Pick<CodeAgentClient, "resolvePendingRequest">;

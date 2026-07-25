@@ -4,17 +4,25 @@ import type {
   AgentCapabilities,
   AgentModel,
   AgentPromptInput,
-  Project,
   AgentTask,
   AgentTaskSnapshot,
   AgentTurn,
   AgentTurnOptions,
 } from "@code-agent/protocol";
-import { Check, Folder, FolderOpen, GitBranch } from "lucide-react";
+import {
+  Bug,
+  CircleGauge,
+  FilePlus2,
+  Folder,
+  GitBranch,
+  GitFork,
+  MessageCirclePlus,
+  MessageSquareText,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
-import { useProjects } from "../../projects/project-context.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
 import {
   Attachment,
@@ -46,8 +54,11 @@ import {
 } from "../../../shared/ai-elements/prompt-input.js";
 import {
   filterPromptCommandItems,
+  getPromptCommandAvailability,
   movePromptCommandSelection,
+  promptCommandItems,
   resolvePromptSlashCommand,
+  type PromptCommandAction,
   type PromptCommandItem,
 } from "./prompt-command.js";
 
@@ -93,15 +104,7 @@ const reasoningEffortLabels: Readonly<Record<string, string>> = {
   xhigh: "极高",
 };
 
-const promptCommands = [
-  {
-    id: "select-project",
-    keywords: ["project", "workspace", "项目", "工作区"],
-    label: "选择项目",
-  },
-] as const satisfies readonly PromptCommandItem[];
-
-type PromptCommandMenuMode = "commands" | "projects";
+type CommandDraftMode = "feedback" | "subtask";
 
 export function deriveComposerActions(
   capabilities: AgentCapabilities | undefined,
@@ -175,7 +178,7 @@ type StartPromptTurnOptions = Readonly<{
 }>;
 
 export async function startPromptTurn(
-  client: CodeAgentMutationClient,
+  client: Pick<CodeAgentMutationClient, "startTask" | "startTurn">,
   options: StartPromptTurnOptions,
 ): Promise<Readonly<{ createdTask?: AgentTask; taskId: string; turn: AgentTurn }>> {
   let taskId = options.taskId;
@@ -203,7 +206,7 @@ export async function startPromptTurn(
 }
 
 export function interruptPromptTurn(
-  client: CodeAgentMutationClient,
+  client: Pick<CodeAgentMutationClient, "interruptTurn">,
   taskId: string,
   turnId: string,
   idempotencyKey: string,
@@ -223,6 +226,24 @@ type WorkbenchComposerProps = Readonly<{
   runtime?: TaskRuntimeView;
   taskId?: string;
 }>;
+
+function PromptCommandIcon({ action }: Readonly<{ action: PromptCommandAction }>) {
+  const className = "size-4 shrink-0 text-accent";
+  switch (action) {
+    case "review":
+      return <Bug aria-hidden="true" className={className} />;
+    case "initialize":
+      return <FilePlus2 aria-hidden="true" className={className} />;
+    case "subtask":
+      return <MessageCirclePlus aria-hidden="true" className={className} />;
+    case "compact":
+      return <CircleGauge aria-hidden="true" className={className} />;
+    case "feedback":
+      return <MessageSquareText aria-hidden="true" className={className} />;
+    case "fork":
+      return <GitFork aria-hidden="true" className={className} />;
+  }
+}
 
 function ComposerAttachments() {
   const attachments = usePromptInputAttachments();
@@ -279,11 +300,12 @@ export function WorkbenchComposer({
   runtime,
   taskId,
 }: WorkbenchComposerProps) {
-  const { projects } = useProjects();
   const [approvalPolicy, setApprovalPolicy] = useState<AgentApprovalPolicy>("on-request");
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const [attachmentCount, setAttachmentCount] = useState(0);
-  const [commandMenuMode, setCommandMenuMode] = useState<PromptCommandMenuMode | null>(null);
+  const [commandDraftMode, setCommandDraftMode] = useState<CommandDraftMode | null>(null);
+  const [commandMenuOpen, setCommandMenuOpen] = useState(false);
+  const [commandNotice, setCommandNotice] = useState<string>();
   const [commandQuery, setCommandQuery] = useState("");
   const [composerRevision, setComposerRevision] = useState(0);
   const [draft, setDraft] = useState("");
@@ -292,7 +314,6 @@ export function WorkbenchComposer({
   const [pendingTaskId, setPendingTaskId] = useState<string>();
   const [selectedModelId, setSelectedModelId] = useState("");
   const [selectedReasoningEffortId, setSelectedReasoningEffortId] = useState("");
-  const [selectedPreviewProjectId, setSelectedPreviewProjectId] = useState<string>();
   const [submittedTurnId, setSubmittedTurnId] = useState<string>();
   const commandMenuId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -301,6 +322,7 @@ export function WorkbenchComposer({
   const interruptAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const uploadedAttachments = useRef(new Map<string, AgentAttachment>());
   const uploadAttempts = useRef(new Map<string, string>());
+  const commandAttempts = useRef(new Map<PromptCommandAction, IdempotencyAttempt>());
   const activeTurnId = resolveActiveTurnId(runtime?.snapshot, submittedTurnId);
   const activeTaskId = taskId ?? pendingTaskId;
   const { canInterrupt, canSubmit } = deriveComposerActions(
@@ -322,14 +344,9 @@ export function WorkbenchComposer({
   const selectedReasoningEffort = resolveReasoningEffort(selectedModel, selectedReasoningEffortId);
   const contextUsage = runtime?.snapshot?.contextUsage;
   const { attachmentsDisabled, turnControlsDisabled } = deriveComposerInputAvailability(state);
-  const filteredCommands = filterPromptCommandItems(promptCommands, commandQuery);
-  const commandMenuItems: readonly (PromptCommandItem | Project)[] =
-    commandMenuMode === "projects" ? projects : filteredCommands;
-  const selectedPreviewProject = projects.find(
-    (project) => project.id === selectedPreviewProjectId,
-  );
+  const filteredCommands = filterPromptCommandItems(promptCommandItems, commandQuery);
   const activeCommandItemId =
-    commandMenuMode === null || commandMenuItems.length === 0
+    !commandMenuOpen || filteredCommands.length === 0
       ? undefined
       : `${commandMenuId}-item-${String(activeCommandIndex)}`;
   const handleAttachmentsChange = useCallback((files: readonly PromptInputAttachment[]) => {
@@ -338,7 +355,7 @@ export function WorkbenchComposer({
 
   useEffect(() => {
     if (turnControlsDisabled) {
-      setCommandMenuMode(null);
+      setCommandMenuOpen(false);
     }
   }, [turnControlsDisabled]);
 
@@ -346,39 +363,6 @@ export function WorkbenchComposer({
     requestAnimationFrame(() => {
       textareaRef.current?.focus();
     });
-  };
-
-  const openProjectMenu = () => {
-    setActiveCommandIndex(0);
-    setCommandMenuMode("projects");
-    setCommandQuery("");
-    focusTextarea();
-  };
-
-  const executeSelectProjectCommand = () => {
-    // 执行命令时只移除 `/` 命令片段，直接重开项目菜单则保留已有草稿。
-    setDraft("");
-    openProjectMenu();
-  };
-
-  const selectProject = (project: Project) => {
-    // 当前阶段只记录前端预览，不改变路由和真实 Turn 的 projectId。
-    setSelectedPreviewProjectId(project.id);
-    setCommandMenuMode(null);
-    focusTextarea();
-  };
-
-  const selectActiveCommandItem = () => {
-    if (commandMenuMode === "commands") {
-      if (filteredCommands[activeCommandIndex] !== undefined) {
-        executeSelectProjectCommand();
-      }
-      return;
-    }
-    const selectedProject = projects[activeCommandIndex];
-    if (selectedProject !== undefined) {
-      selectProject(selectedProject);
-    }
   };
 
   const submitPrompt = async (message: PromptInputMessage) => {
@@ -453,6 +437,7 @@ export function WorkbenchComposer({
         turnOptions,
       });
       setDraft("");
+      setCommandDraftMode(null);
       setAttachmentCount(0);
       setComposerRevision((revision) => revision + 1);
       setSubmittedTurnId(result.turn.id);
@@ -466,6 +451,122 @@ export function WorkbenchComposer({
       setMutationError(error instanceof Error ? error : new Error("Prompt submission failed"));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const getCommandAvailability = (command: PromptCommandItem) => {
+    const availability = getPromptCommandAvailability(
+      command,
+      capabilities,
+      activeTaskId !== undefined,
+    );
+    if (availability.available && state === "running") {
+      return { available: false, reason: "任务运行中" } as const;
+    }
+    return availability;
+  };
+
+  const beginCommandDraft = (mode: CommandDraftMode) => {
+    setCommandDraftMode(mode);
+    setCommandMenuOpen(false);
+    setCommandQuery("");
+    setCommandNotice(undefined);
+    setDraft("");
+    setAttachmentCount(0);
+    setComposerRevision((revision) => revision + 1);
+    focusTextarea();
+  };
+
+  const submitFeedback = async (reason: string) => {
+    const normalizedReason = reason.trim();
+    if (
+      activeTaskId === undefined ||
+      normalizedReason === "" ||
+      !capabilities?.feedback.upload ||
+      turnControlsDisabled
+    ) {
+      return;
+    }
+    setIsSubmitting(true);
+    setMutationError(null);
+    const input = { classification: "other", includeLogs: true, reason: normalizedReason };
+    const attempt = resolveIdempotencyAttempt(
+      commandAttempts.current.get("feedback"),
+      JSON.stringify({ input, taskId: activeTaskId }),
+    );
+    commandAttempts.current.set("feedback", attempt);
+    try {
+      await client.uploadFeedback(activeTaskId, input, { idempotencyKey: attempt.key });
+      commandAttempts.current.delete("feedback");
+      setCommandDraftMode(null);
+      setCommandNotice("反馈已发送");
+      setDraft("");
+    } catch (error) {
+      setMutationError(error instanceof Error ? error : new Error("Feedback submission failed"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const executePromptCommand = async (command: PromptCommandItem) => {
+    if (!getCommandAvailability(command).available) {
+      return;
+    }
+    setCommandMenuOpen(false);
+    setCommandQuery("");
+    setCommandNotice(undefined);
+    setDraft("");
+
+    if (command.action === "feedback" || command.action === "subtask") {
+      beginCommandDraft(command.action);
+      return;
+    }
+    if (command.action === "initialize") {
+      await submitPrompt({
+        files: [],
+        text: "请检查当前项目，并在项目根目录创建或完善 AGENTS.md，写入适用于 Codex 的项目说明、常用命令和验证要求。",
+      });
+      return;
+    }
+    if (activeTaskId === undefined) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setMutationError(null);
+    const attempt = resolveIdempotencyAttempt(
+      commandAttempts.current.get(command.action),
+      `${command.action}:${activeTaskId}`,
+    );
+    commandAttempts.current.set(command.action, attempt);
+    try {
+      if (command.action === "review") {
+        const response = await client.startReview(
+          activeTaskId,
+          { target: { type: "uncommitted_changes" } },
+          { idempotencyKey: attempt.key },
+        );
+        setSubmittedTurnId(response.turn.id);
+        setCommandNotice("代码审查已开始");
+      } else if (command.action === "compact") {
+        await client.compactTask(activeTaskId, { idempotencyKey: attempt.key });
+        setCommandNotice("正在压缩上下文");
+      } else {
+        const response = await client.forkTask(activeTaskId, { idempotencyKey: attempt.key });
+        onTaskStarted(response.task.id);
+      }
+      commandAttempts.current.delete(command.action);
+    } catch (error) {
+      setMutationError(error instanceof Error ? error : new Error("Task command failed"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const selectActiveCommandItem = () => {
+    const command = filteredCommands[activeCommandIndex];
+    if (command !== undefined) {
+      void executePromptCommand(command);
     }
   };
 
@@ -496,58 +597,40 @@ export function WorkbenchComposer({
   };
 
   const commandMenu =
-    commandMenuMode === null || turnControlsDisabled ? null : (
+    !commandMenuOpen || turnControlsDisabled ? null : (
       <PromptInputCommand
-        aria-label={commandMenuMode === "commands" ? "输入命令" : "选择项目"}
+        aria-label="输入命令"
         className="absolute inset-x-0 bottom-full z-20 mb-2"
         id={commandMenuId}
       >
         <PromptInputCommandList>
-          <PromptInputCommandGroup label={commandMenuMode === "commands" ? "命令" : "项目"}>
-            {commandMenuMode === "commands"
-              ? filteredCommands.map((command, index) => (
-                  <PromptInputCommandItem
-                    active={index === activeCommandIndex}
-                    id={`${commandMenuId}-item-${String(index)}`}
-                    key={command.id}
-                    onClick={executeSelectProjectCommand}
-                  >
-                    <FolderOpen className="size-4 text-accent" aria-hidden="true" />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="font-medium">{command.label}</span>
-                      <span className="text-caption text-muted-foreground">
-                        从已有工作区中选择一个项目
-                      </span>
+          <PromptInputCommandGroup label="命令">
+            {filteredCommands.map((command, index) => {
+              const availability = getCommandAvailability(command);
+              return (
+                <PromptInputCommandItem
+                  active={index === activeCommandIndex}
+                  aria-description={availability.reason}
+                  disabled={!availability.available}
+                  id={`${commandMenuId}-item-${String(index)}`}
+                  key={command.id}
+                  onClick={() => {
+                    void executePromptCommand(command);
+                  }}
+                >
+                  <PromptCommandIcon action={command.action} />
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="font-medium">{command.label}</span>
+                    <span className="text-caption text-muted-foreground">
+                      {availability.reason ?? command.description}
                     </span>
-                  </PromptInputCommandItem>
-                ))
-              : projects.map((project, index) => (
-                  <PromptInputCommandItem
-                    active={index === activeCommandIndex}
-                    id={`${commandMenuId}-item-${String(index)}`}
-                    key={project.id}
-                    onClick={() => {
-                      selectProject(project);
-                    }}
-                    selected={selectedPreviewProjectId === project.id}
-                  >
-                    <Folder className="size-4 shrink-0 text-accent" aria-hidden="true" />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate font-medium">{project.name}</span>
-                      <span className="truncate text-caption text-muted-foreground">
-                        {project.rootPath}
-                      </span>
-                    </span>
-                    {selectedPreviewProjectId === project.id ? (
-                      <Check className="size-4 shrink-0 text-accent" aria-hidden="true" />
-                    ) : null}
-                  </PromptInputCommandItem>
-                ))}
+                  </span>
+                </PromptInputCommandItem>
+              );
+            })}
           </PromptInputCommandGroup>
-          {commandMenuItems.length === 0 ? (
-            <PromptInputCommandEmpty>
-              {commandMenuMode === "commands" ? "没有匹配的命令" : "暂无可选项目"}
-            </PromptInputCommandEmpty>
+          {filteredCommands.length === 0 ? (
+            <PromptInputCommandEmpty>没有匹配的命令</PromptInputCommandEmpty>
           ) : null}
         </PromptInputCommandList>
       </PromptInputCommand>
@@ -573,19 +656,38 @@ export function WorkbenchComposer({
             setMutationError(new Error(error.message));
           }}
           onSubmit={(message) => {
+            if (commandDraftMode === "feedback") {
+              void submitFeedback(message.text);
+              return;
+            }
+            if (commandDraftMode === "subtask") {
+              void submitPrompt({
+                ...message,
+                text: `请使用子代理独立处理以下副任务，并在完成后汇总结果：\n\n${message.text}`,
+              });
+              return;
+            }
             void submitPrompt(message);
           }}
         >
-          {selectedPreviewProject === undefined ? null : (
+          {commandDraftMode === null ? null : (
             <PromptInputHeader className="flex items-center">
               <PromptInputButton
-                aria-label={`重新选择预览项目，当前为 ${selectedPreviewProject.name}`}
+                aria-label={`取消${commandDraftMode === "feedback" ? "反馈" : "副任务"}`}
                 className="max-w-full border border-separator-strong bg-control text-foreground"
-                onClick={openProjectMenu}
-                title="仅用于前端交互预览"
+                onClick={() => {
+                  setCommandDraftMode(null);
+                  setDraft("");
+                  focusTextarea();
+                }}
               >
-                <FolderOpen className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
-                <span className="truncate">项目预览 · {selectedPreviewProject.name}</span>
+                {commandDraftMode === "feedback" ? (
+                  <MessageSquareText className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
+                ) : (
+                  <MessageCirclePlus className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
+                )}
+                <span>{commandDraftMode === "feedback" ? "任务反馈" : "副任务"}</span>
+                <X className="size-3.5 shrink-0" aria-hidden="true" />
               </PromptInputButton>
             </PromptInputHeader>
           )}
@@ -593,35 +695,39 @@ export function WorkbenchComposer({
           <PromptInputBody>
             <PromptInputTextarea
               aria-activedescendant={activeCommandItemId}
-              aria-controls={commandMenuMode === null ? undefined : commandMenuId}
-              aria-expanded={commandMenuMode !== null}
+              aria-controls={commandMenuOpen ? commandMenuId : undefined}
+              aria-expanded={commandMenuOpen}
               aria-haspopup="listbox"
               aria-label="任务输入"
               disabled={turnControlsDisabled}
               onChange={(event) => {
                 const nextDraft = event.currentTarget.value;
                 setDraft(nextDraft);
+                setCommandNotice(undefined);
+                if (commandDraftMode !== null) {
+                  return;
+                }
                 const slashCommand = resolvePromptSlashCommand(
                   nextDraft,
                   event.currentTarget.selectionStart,
                 );
                 if (slashCommand === null) {
-                  setCommandMenuMode(null);
+                  setCommandMenuOpen(false);
                   setCommandQuery("");
                   return;
                 }
                 // 输入框起始 `/` 片段驱动命令过滤，普通正文不会打开菜单。
                 setActiveCommandIndex(0);
-                setCommandMenuMode("commands");
+                setCommandMenuOpen(true);
                 setCommandQuery(slashCommand.query);
               }}
               onKeyDown={(event) => {
-                if (commandMenuMode === null || event.nativeEvent.isComposing) {
+                if (!commandMenuOpen || event.nativeEvent.isComposing) {
                   return;
                 }
                 if (event.key === "Escape") {
                   event.preventDefault();
-                  setCommandMenuMode(null);
+                  setCommandMenuOpen(false);
                   return;
                 }
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -630,7 +736,7 @@ export function WorkbenchComposer({
                     movePromptCommandSelection(
                       currentIndex,
                       event.key === "ArrowDown" ? 1 : -1,
-                      commandMenuItems.length,
+                      filteredCommands.length,
                     ),
                   );
                   return;
@@ -640,7 +746,15 @@ export function WorkbenchComposer({
                   selectActiveCommandItem();
                 }
               }}
-              placeholder={taskId === undefined ? "描述一个新任务" : "继续这个任务"}
+              placeholder={
+                commandDraftMode === "feedback"
+                  ? "输入关于此任务的反馈"
+                  : commandDraftMode === "subtask"
+                    ? "描述需要交给子代理的任务"
+                    : taskId === undefined
+                      ? "描述一个新任务"
+                      : "继续这个任务"
+              }
               ref={textareaRef}
               value={draft}
             />
@@ -649,10 +763,18 @@ export function WorkbenchComposer({
                 操作失败，请重试
               </p>
             )}
+            {commandNotice === undefined ? null : (
+              <p className="px-1 pb-1 text-label text-muted-foreground" role="status">
+                {commandNotice}
+              </p>
+            )}
           </PromptInputBody>
           <PromptInputFooter>
             <PromptInputTools>
-              <PromptInputActionAddAttachments disabled={attachmentsDisabled} label="添加图片" />
+              <PromptInputActionAddAttachments
+                disabled={attachmentsDisabled || commandDraftMode === "feedback"}
+                label="添加图片"
+              />
               <PromptInputSelect
                 aria-label="批准模式"
                 disabled={turnControlsDisabled}

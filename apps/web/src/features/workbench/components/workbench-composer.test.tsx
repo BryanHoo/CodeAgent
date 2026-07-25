@@ -45,9 +45,10 @@ const turn = {
 describe("WorkbenchComposer", () => {
   it("derives available actions from provider capabilities and task context", () => {
     const capabilities = {
+      feedback: { upload: false },
       provider: "fake",
-      tasks: { list: true, read: true, start: false },
-      turns: { interrupt: false, rollback: false, start: true },
+      tasks: { fork: false, list: true, read: true, start: false },
+      turns: { compact: false, interrupt: false, review: false, rollback: false, start: true },
     };
 
     expect(deriveComposerActions(undefined, false)).toEqual({

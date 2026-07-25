@@ -77,11 +77,14 @@ function createProvider() {
   const eventListeners = new Set<(event: AgentProviderEvent) => void>();
   const getCapabilities = vi.fn(() =>
     Promise.resolve({
+      feedback: { upload: true },
       provider: "codex",
-      tasks: { list: true, read: true, start: true },
-      turns: { interrupt: true, rollback: true, start: true },
+      tasks: { fork: true, list: true, read: true, start: true },
+      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     }),
   );
+  const compactTask = vi.fn(() => Promise.resolve());
+  const forkTask = vi.fn(() => Promise.resolve({ ...task, id: "task-2", title: "续接任务" }));
   const listTasks = vi.fn(() => Promise.resolve({ data: [task], nextCursor: "next" }));
   const listModels = vi.fn(() =>
     Promise.resolve({
@@ -117,7 +120,20 @@ function createProvider() {
     }),
   );
   const interruptTurn = vi.fn(() => Promise.resolve());
+  const startReview = vi.fn(() =>
+    Promise.resolve({
+      completedAt: null,
+      error: null,
+      id: "review-turn",
+      items: [],
+      startedAt: "2026-07-25T00:00:00.000Z",
+      status: "running" as const,
+    }),
+  );
+  const uploadFeedback = vi.fn(() => Promise.resolve());
   const provider: AgentProvider = {
+    compactTask,
+    forkTask,
     getCapabilities,
     interruptTurn,
     listModels,
@@ -126,6 +142,7 @@ function createProvider() {
     resolvePendingRequest,
     rollbackLatestTurn,
     startTask,
+    startReview,
     startTurn,
     subscribeEvents(listener) {
       eventListeners.add(listener);
@@ -133,14 +150,17 @@ function createProvider() {
         eventListeners.delete(listener);
       };
     },
+    uploadFeedback,
   };
   return {
+    compactTask,
     emitEvent: (event: AgentProviderEvent) => {
       for (const listener of eventListeners) {
         listener(event);
       }
     },
     eventListeners,
+    forkTask,
     listTasks,
     listModels,
     interruptTurn,
@@ -149,14 +169,18 @@ function createProvider() {
     resolvePendingRequest,
     rollbackLatestTurn,
     startTask,
+    startReview,
     startTurn,
+    uploadFeedback,
   };
 }
 
 async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }> = {}) {
   const {
+    compactTask,
     emitEvent,
     eventListeners,
+    forkTask,
     interruptTurn,
     listTasks,
     listModels,
@@ -165,14 +189,18 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     resolvePendingRequest,
     rollbackLatestTurn,
     startTask,
+    startReview,
     startTurn,
+    uploadFeedback,
   } = createProvider();
   const app = await createCodeAgentServer({ ...options, project, provider });
   closeCallbacks.push(() => app.close());
   return {
     app,
+    compactTask,
     emitEvent,
     eventListeners,
+    forkTask,
     interruptTurn,
     listTasks,
     listModels,
@@ -180,7 +208,9 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     resolvePendingRequest,
     rollbackLatestTurn,
     startTask,
+    startReview,
     startTurn,
+    uploadFeedback,
   };
 }
 
@@ -197,9 +227,10 @@ describe("CodeAgent Server", () => {
       version: 1,
     });
     expect(capabilitiesResponse.json()).toEqual({
+      feedback: { upload: true },
       provider: "codex",
-      tasks: { list: true, read: true, start: true },
-      turns: { interrupt: true, rollback: true, start: true },
+      tasks: { fork: true, list: true, read: true, start: true },
+      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     });
     expect(projectsResponse.json()).toEqual({ data: [project], nextCursor: null });
   });
@@ -410,6 +441,59 @@ describe("CodeAgent Server", () => {
     expect(replayedInterrupt.statusCode).toBe(202);
     expect(replayedInterrupt.json()).toEqual(interrupted.json());
     expect(interruptTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves idempotent task command mutations", async () => {
+    const { app, compactTask, forkTask, startReview, uploadFeedback } = await createHarness();
+    const reviewRequest = {
+      headers: { "idempotency-key": "review-key" },
+      method: "POST" as const,
+      payload: { target: { type: "base_branch", branch: "main" } },
+      url: "/v1/tasks/task-1/review",
+    };
+
+    const review = await app.inject(reviewRequest);
+    const repeatedReview = await app.inject(reviewRequest);
+    const compact = await app.inject({
+      headers: { "idempotency-key": "compact-key" },
+      method: "POST",
+      payload: {},
+      url: "/v1/tasks/task-1/compact",
+    });
+    const fork = await app.inject({
+      headers: { "idempotency-key": "fork-key" },
+      method: "POST",
+      payload: {},
+      url: "/v1/tasks/task-1/fork",
+    });
+    const feedback = await app.inject({
+      headers: { "idempotency-key": "feedback-key" },
+      method: "POST",
+      payload: { classification: "other", includeLogs: true, reason: "体验反馈" },
+      url: "/v1/tasks/task-1/feedback",
+    });
+
+    expect(review.statusCode, review.body).toBe(201);
+    expect(repeatedReview.json()).toEqual(review.json());
+    expect(review.json()).toMatchObject({ taskId: "task-1", turn: { id: "review-turn" } });
+    expect(startReview).toHaveBeenCalledTimes(1);
+    expect(startReview).toHaveBeenCalledWith("task-1", {
+      branch: "main",
+      type: "base_branch",
+    });
+    expect(compact.statusCode).toBe(202);
+    expect(compact.json()).toEqual({ status: "compacting", taskId: "task-1" });
+    expect(compactTask).toHaveBeenCalledWith("task-1");
+    expect(fork.statusCode).toBe(201);
+    expect(fork.json()).toMatchObject({ task: { id: "task-2" } });
+    expect(forkTask).toHaveBeenCalledWith("task-1");
+    expect(feedback.statusCode).toBe(200);
+    expect(feedback.json()).toEqual({ status: "sent", taskId: "task-1" });
+    expect(uploadFeedback).toHaveBeenCalledWith("task-1", {
+      classification: "other",
+      includeLogs: true,
+      reason: "体验反馈",
+    });
   });
 
   it("restores files and rolls back the latest completed turn idempotently", async () => {

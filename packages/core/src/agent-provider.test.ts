@@ -8,9 +8,23 @@ describe("AgentProvider", () => {
     const provider: AgentProvider = {
       getCapabilities() {
         return Promise.resolve({
+          feedback: { upload: true },
           provider: "fake",
-          tasks: { list: true, read: true, start: true },
-          turns: { interrupt: true, rollback: true, start: true },
+          tasks: { fork: true, list: true, read: true, start: true },
+          turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+        });
+      },
+      compactTask(taskId) {
+        expect(taskId).toBe("task-1");
+        return Promise.resolve();
+      },
+      forkTask(taskId) {
+        return Promise.resolve({
+          id: `${taskId}-fork`,
+          pinned: false,
+          projectId: "project-1",
+          title: "续接任务",
+          updatedAt: "2026-07-25T00:00:00.000Z",
         });
       },
       listTasks() {
@@ -37,6 +51,17 @@ describe("AgentProvider", () => {
       rollbackLatestTurn(taskId) {
         expect(taskId).toBe("task-1");
         return Promise.resolve();
+      },
+      startReview(taskId, target) {
+        expect(target).toEqual({ type: "uncommitted_changes" });
+        return Promise.resolve({
+          completedAt: null,
+          error: null,
+          id: `${taskId}-review`,
+          items: [],
+          startedAt: "2026-07-25T00:00:00.000Z",
+          status: "running",
+        });
       },
       resolvePendingRequest(input) {
         return Promise.resolve({
@@ -85,6 +110,13 @@ describe("AgentProvider", () => {
         expect(turnId).toBe("turn-1");
         return Promise.resolve();
       },
+      uploadFeedback(taskId, input) {
+        expect({ input, taskId }).toEqual({
+          input: { classification: "other", includeLogs: true, reason: "体验反馈" },
+          taskId: "task-1",
+        });
+        return Promise.resolve();
+      },
       subscribeEvents(listener) {
         listeners.add(listener);
         return () => {
@@ -94,9 +126,10 @@ describe("AgentProvider", () => {
     };
 
     await expect(provider.getCapabilities()).resolves.toEqual({
+      feedback: { upload: true },
       provider: "fake",
-      tasks: { list: true, read: true, start: true },
-      turns: { interrupt: true, rollback: true, start: true },
+      tasks: { fork: true, list: true, read: true, start: true },
+      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     });
     await expect(provider.listTasks({ limit: 25 })).resolves.toEqual({
       data: [],
@@ -130,6 +163,18 @@ describe("AgentProvider", () => {
     ).resolves.toMatchObject({ id: "task-1-turn", status: "running" });
     await expect(provider.interruptTurn("task-1", "turn-1")).resolves.toBeUndefined();
     await expect(provider.rollbackLatestTurn("task-1")).resolves.toBeUndefined();
+    await expect(provider.compactTask("task-1")).resolves.toBeUndefined();
+    await expect(provider.forkTask("task-1")).resolves.toMatchObject({ id: "task-1-fork" });
+    await expect(
+      provider.startReview("task-1", { type: "uncommitted_changes" }),
+    ).resolves.toMatchObject({ id: "task-1-review" });
+    await expect(
+      provider.uploadFeedback("task-1", {
+        classification: "other",
+        includeLogs: true,
+        reason: "体验反馈",
+      }),
+    ).resolves.toBeUndefined();
 
     const received: AgentProviderEvent[] = [];
     const unsubscribe = provider.subscribeEvents((event) => {

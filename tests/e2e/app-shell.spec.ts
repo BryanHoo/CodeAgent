@@ -159,9 +159,10 @@ test.beforeEach(async ({ page }) => {
       body = { status: "ok", version: 1 };
     } else if (url.pathname === "/v1/capabilities") {
       body = {
+        feedback: { upload: true },
         provider: "codex",
-        tasks: { list: true, read: true, start: true },
-        turns: { interrupt: true, rollback: true, start: true },
+        tasks: { fork: true, list: true, read: true, start: true },
+        turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
       };
     } else if (url.pathname === "/v1/models") {
       body = { data: models, nextCursor: null };
@@ -180,6 +181,25 @@ test.beforeEach(async ({ page }) => {
       body = { data: tasks.filter((task) => task.projectId === projectId), nextCursor: null };
     } else if (url.pathname === "/v1/tasks/task-1") {
       body = taskSnapshotResponse;
+    } else if (url.pathname === "/v1/tasks/task-2") {
+      body = {
+        ...taskSnapshotResponse,
+        snapshot: { ...taskSnapshotResponse.snapshot, id: "task-2", title: "续接任务" },
+      };
+    } else if (url.pathname === "/v1/tasks/task-1/compact") {
+      body = { status: "compacting", taskId: "task-1" };
+    } else if (url.pathname === "/v1/tasks/task-1/feedback") {
+      body = { status: "sent", taskId: "task-1" };
+    } else if (url.pathname === "/v1/tasks/task-1/fork") {
+      body = {
+        task: {
+          id: "task-2",
+          pinned: false,
+          projectId: "code-agent",
+          title: "续接任务",
+          updatedAt: "2026-07-25T00:00:00.000Z",
+        },
+      };
     } else {
       await route.fulfill({
         contentType: "application/json",
@@ -434,13 +454,12 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
 });
 
-test("opens the slash command project picker without changing backend context", async ({
-  page,
-}) => {
-  const turnRequests: string[] = [];
+test("runs official task actions from the slash command menu", async ({ page }) => {
+  const commandRequests: { body: string | null; path: string }[] = [];
   page.on("request", (request) => {
-    if (request.method() === "POST" && request.url().includes("/turns")) {
-      turnRequests.push(request.url());
+    const url = new URL(request.url());
+    if (request.method() === "POST" && url.pathname.startsWith("/v1/tasks/task-1/")) {
+      commandRequests.push({ body: request.postData(), path: url.pathname });
     }
   });
   await page.goto("/p/code-agent/t/task-1");
@@ -450,32 +469,31 @@ test("opens the slash command project picker without changing backend context", 
   const commandMenu = page.getByRole("listbox", { name: "输入命令" });
   await expect(commandMenu).toBeVisible();
   expect(await commandMenu.evaluate((menu) => menu.closest("form") === null)).toBe(true);
-  await expect(commandMenu.getByRole("option", { name: /选择项目/u })).toHaveAttribute(
+  await expect(commandMenu.getByRole("option")).toHaveCount(6);
+  await expect(commandMenu.getByRole("option", { name: /代码审查/u })).toHaveAttribute(
     "data-active",
     "true",
   );
+  for (const label of ["初始化", "副任务", "压缩", "反馈", "在新任务中继续"]) {
+    await expect(commandMenu.getByRole("option", { name: new RegExp(label, "u") })).toBeVisible();
+  }
 
+  await prompt.fill("/压缩");
   await prompt.press("Enter");
-  const projectMenu = page.getByRole("listbox", { name: "选择项目" });
-  await expect(projectMenu).toBeVisible();
-  await expect(prompt).toHaveValue("");
-  await prompt.press("ArrowDown");
-  await expect(projectMenu.getByRole("option", { name: /superwork/u })).toHaveAttribute(
-    "data-active",
-    "true",
-  );
-  await prompt.press("Enter");
-  await expect(page.getByRole("button", { name: /当前为 superwork/u })).toBeVisible();
-  await expect(projectMenu).toHaveCount(0);
-  expect(turnRequests).toEqual([]);
+  await expect(page.getByRole("status")).toContainText("正在压缩上下文");
+  await expect
+    .poll(() => commandRequests.map((request) => request.path))
+    .toContain("/v1/tasks/task-1/compact");
 
-  // 点击预览标签可重新选择，Escape 只关闭前端菜单。
-  await prompt.fill("保留这段任务描述");
-  await page.getByRole("button", { name: /当前为 superwork/u }).click();
-  await expect(page.getByRole("listbox", { name: "选择项目" })).toBeVisible();
-  await expect(prompt).toHaveValue("保留这段任务描述");
-  await prompt.press("Escape");
-  await expect(page.getByRole("listbox", { name: "选择项目" })).toHaveCount(0);
+  await prompt.fill("/反馈");
+  await prompt.press("Enter");
+  await expect(page.getByRole("button", { name: "取消反馈" })).toBeVisible();
+  await prompt.fill("Slash 命令操作顺畅");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await expect(page.getByRole("status")).toContainText("反馈已发送");
+  await expect
+    .poll(() => commandRequests.find((request) => request.path.endsWith("/feedback"))?.body)
+    .toContain("Slash 命令操作顺畅");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await prompt.fill("/");
@@ -485,6 +503,13 @@ test("opens the slash command project picker without changing backend context", 
     viewportWidth: window.innerWidth,
   }));
   expect(viewportMetrics.documentWidth).toBeLessThanOrEqual(viewportMetrics.viewportWidth);
+
+  await prompt.fill("/在新任务中继续");
+  await prompt.press("Enter");
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-2$/u);
+  await expect
+    .poll(() => commandRequests.map((request) => request.path))
+    .toContain("/v1/tasks/task-1/fork");
 });
 
 test("opens bounded source previews from assistant file references", async ({ context, page }) => {
@@ -629,9 +654,16 @@ test("disables composer mutations that the provider does not support", async ({ 
     await route.fulfill({
       contentType: "application/json",
       json: {
+        feedback: { upload: false },
         provider: "readonly",
-        tasks: { list: true, read: true, start: false },
-        turns: { interrupt: false, rollback: false, start: false },
+        tasks: { fork: false, list: true, read: true, start: false },
+        turns: {
+          compact: false,
+          interrupt: false,
+          review: false,
+          rollback: false,
+          start: false,
+        },
       },
     });
   });
