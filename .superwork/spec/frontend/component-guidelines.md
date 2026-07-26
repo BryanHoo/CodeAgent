@@ -24,6 +24,7 @@
 - Task Timeline 的 Plan Item 必须使用 AI Elements `Plan` 组合组件并原样展示计划文本；仅当它是运行中 Turn 的当前最后一个 Item 时启用 `isStreaming`，不得为展示状态扩展 Protocol 或使用 `Tool` 模拟 Plan。
 - Task Timeline 仅将 `AgentItem` 中的 `activity` 映射为 AI Elements `Task`，按 Activity 状态映射进度；有 `detail` 时允许展开，没有 `detail` 时保持紧凑。不得继续用 `Tool` 模拟 Activity，也不得把 CodeAgent 的整个 Task 或 Turn 映射为 AI Elements `Task`。
 - Task Timeline 的用户消息和 AI 回复末尾都必须常显可访问的复制操作与本地时间；消息 Item 和相邻 Turn 之间保留明确纵向间距，不能让下一条用户消息贴住上一条回复。
+- Task Timeline 默认随 AI 流式内容自动滚动到最新位置；用户主动离开底部后暂停跟随，用户再次滚动到底部或使用“回到底部”操作后恢复自动跟随。
 - AI 回复中的 Project 内绝对文件引用必须可点击打开只读源文件弹窗；带行号时定位并高亮对应行。源文件只通过 Server 受控接口读取，超长内容显示明确截断状态，页面不得直接访问本地文件系统。
 - Timeline 展示 Task Snapshot 中的 Agent 文件操作，Inspector 则始终展示当前 Project 的真实 Git 未提交文件，并明确区分非空的未暂存与已暂存分组；变更总览固定在 Inspector 顶部，只有文件列表滚动，不展示未接通的提交入口。当前 Task 运行时 Inspector 定时刷新 Git 状态，停止运行后补做最终刷新。两处文件行都复用 Diff 弹窗；新增或删除文件的行数统计同时支持 Unified Diff 和 Provider 返回的完整文件内容，完整 Viewer 使用 `@pierre/diffs/react` 并仅在打开弹窗后动态加载，不能在消息内展开原始补丁或保留演示变更数据。
 - 每次已结束的 AI 回复在末尾聚合该 Turn 已完成的文件变更，以卡片展示去重文件数和总增删行；单击文件继续打开单文件 Diff，“审核”则打开同一组文件的连续审核弹窗。连续审核必须提供明确的当前位置、上一个/下一个按钮、左右方向键和首尾禁用状态，并支持 Escape 与 backdrop 关闭。

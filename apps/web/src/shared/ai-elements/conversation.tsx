@@ -9,6 +9,8 @@ import {
   type HTMLAttributes,
 } from "react";
 
+import { createConversationAutoScrollController } from "./conversation-scroll.js";
+
 type ConversationProps = HTMLAttributes<HTMLDivElement>;
 
 type ConversationContextValue = Readonly<{
@@ -21,19 +23,39 @@ const ConversationContext = createContext<ConversationContextValue | null>(null)
 export function Conversation({ children, className = "", onScroll, ...props }: ConversationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
+  const autoScrollControllerRef = useRef<
+    ReturnType<typeof createConversationAutoScrollController> | undefined
+  >(undefined);
+  const autoScrollController =
+    autoScrollControllerRef.current ??
+    (autoScrollControllerRef.current = createConversationAutoScrollController(setAtBottom));
 
   const scrollToBottom = () => {
-    containerRef.current?.scrollTo({ behavior: "smooth", top: containerRef.current.scrollHeight });
-    setAtBottom(true);
+    const container = containerRef.current;
+    if (container !== null) {
+      autoScrollController.scrollToBottom(container);
+    }
   };
 
   useEffect(() => {
-    // 首次打开 Task 时定位到最新内容，后续仅在用户主动回到底部时滚动。
     const container = containerRef.current;
-    if (container !== null) {
-      container.scrollTop = container.scrollHeight;
+    if (container === null) {
+      return;
     }
-  }, []);
+
+    const content = container.firstElementChild;
+
+    // 初次打开及流式内容增长时跟随最新消息；用户离开底部后控制器会暂停跟随。
+    autoScrollController.handleContentResize(container);
+    const contentResizeObserver = new ResizeObserver(() => {
+      autoScrollController.handleContentResize(container);
+    });
+    contentResizeObserver.observe(content ?? container);
+
+    return () => {
+      contentResizeObserver.disconnect();
+    };
+  }, [autoScrollController]);
 
   return (
     <ConversationContext.Provider value={{ atBottom, scrollToBottom }}>
@@ -41,7 +63,7 @@ export function Conversation({ children, className = "", onScroll, ...props }: C
         className={`relative min-h-0 flex-1 overflow-y-auto overscroll-contain ${className}`}
         onScroll={(event) => {
           const container = event.currentTarget;
-          setAtBottom(container.scrollHeight - container.scrollTop - container.clientHeight < 24);
+          autoScrollController.handleScroll(container);
           onScroll?.(event);
         }}
         ref={containerRef}
