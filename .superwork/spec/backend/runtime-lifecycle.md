@@ -3,6 +3,7 @@
 ## Codex App Server
 
 - 默认使用长驻 `codex app-server --listen stdio://`，不为每个 Turn 创建进程；允许 Codex 忽略其版本尚未识别的前向配置字段，避免 Desktop 与打包 CLI 的配置版本差异阻断启动。
+- CLI 启动 App Server 时不绑定 Project `cwd`；全局 `CodexRuntimeProvider` 只注册一次 RPC Notification 与 Server Request Listener，并维护 `taskId -> projectId/cwd` 归属映射。
 - 用户必须先通过官方 Codex CLI 在相同 `CODEX_HOME` 中完成登录；CodeAgent 不调用 Account API，也不读取、修改或复制认证文件。
 - 包内 Codex 必须解析平台可选依赖中的原生 `codex`/`codex.exe`，不得把会再次派生子进程的 JS launcher 作为受管 App Server 进程。
 - 使用参数数组、`shell: false` 和经过控制的环境变量；Secret 不进入参数或日志。
@@ -24,10 +25,11 @@
 ## Server 与持久化
 
 - Fastify 资源通过插件封装，并在 `onClose` 中释放。
+- Project 列表默认空，通过宿主系统目录选择器注册，并在 `CODEX_HOME/code-agent/projects.json` 使用同目录临时文件和原子 `rename` 持久化；启动时读取，重复真实路径幂等返回已有 Project。
 - 同步 SQLite 写入放入专用 Worker，主事件循环不执行持久化批处理。
 - WebSocket 客户端使用独立有界队列，慢客户端不能阻塞 Provider。
-- 每次 Runtime 创建唯一 Event Stream Session，由 Server 分配单调 `sequence` 并维护固定容量缓存；Provider 不分配传输序号。
-- `/v1/events` 首帧发送 `connection.ready`，只补发 `afterSequence` 之后仍在缓存窗口内的事件；过期或超前序号发送 `resync.required`。
+- 每个 Project 创建独立 Event Stream Session，由 Server 分配单调 `sequence` 并维护固定容量缓存；Provider 不分配传输序号。
+- `/v1/projects/:projectId/events` 首帧发送 `connection.ready`，只补发 `afterSequence` 之后仍在缓存窗口内的事件；过期或超前序号发送 `resync.required`。
 - Provider `readTask` Promise 完成前必须让返回 Snapshot 包含此前状态并同步交付对应通知；Task Snapshot 读取完成后再从当前 Event Stream 固定 checkpoint，避免丢失事件或重复补发已有内容。
 - `resync.required` 发送后由 Server 主动关闭当前 WebSocket；客户端必须使用新 Snapshot checkpoint 建立新连接。
 - Fastify 关闭时取消 Provider Event 订阅并关闭 WebSocket 资源。

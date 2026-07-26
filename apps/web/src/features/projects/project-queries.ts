@@ -9,6 +9,7 @@ export type CodeAgentCapabilitiesClient = Pick<CodeAgentClient, "getCapabilities
 export type CodeAgentModelsClient = Pick<CodeAgentClient, "listModels">;
 export type CodeAgentMutationClient = Pick<
   CodeAgentClient,
+  | "addProject"
   | "compactTask"
   | "forkTask"
   | "interruptTurn"
@@ -101,11 +102,12 @@ export function projectTasksQueryOptions(
 }
 
 export function taskSnapshotQueryOptions(
+  projectId: string,
   taskId: string,
   client: CodeAgentSnapshotClient = codeAgentClient,
 ) {
   return queryOptions({
-    queryFn: () => client.readTask(taskId),
-    queryKey: ["tasks", taskId] as const,
+    queryFn: () => client.readTask(projectId, taskId),
+    queryKey: ["projects", projectId, "tasks", taskId] as const,
   });
 }

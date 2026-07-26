@@ -20,6 +20,13 @@ export const ProjectSchema = Type.Object(
 
 export type Project = Readonly<Static<typeof ProjectSchema>>;
 
+export const AddProjectResponseSchema = Type.Object(
+  { project: Type.Union([ProjectSchema, Type.Null()]) },
+  { additionalProperties: false },
+);
+
+export type AddProjectResponse = Readonly<Static<typeof AddProjectResponseSchema>>;
+
 export const AgentTaskSchema = Type.Object(
   {
     id: Type.String({ minLength: 1 }),

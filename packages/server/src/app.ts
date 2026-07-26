@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
+import { basename } from "node:path";
 
-import { PendingRequestResolutionError, type AgentProvider } from "@code-agent/core";
 import {
+  PendingRequestResolutionError,
+  type AgentProvider,
+  type AgentRuntimeProvider,
+  type ProjectRepository,
+} from "@code-agent/core";
+import {
+  AddProjectResponseSchema,
   AgentCapabilitiesSchema,
   CompactAgentTaskRequestSchema,
   CompactAgentTaskResponseSchema,
@@ -65,14 +72,15 @@ export interface CreateCodeAgentServerOptions {
   eventSessionId?: string;
   idempotencyCacheSize?: number;
   idempotencyTtlMs?: number;
-  project: Project;
-  provider: AgentProvider;
+  projectRepository: ProjectRepository;
+  provider: AgentRuntimeProvider;
   readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
   readProjectSourceFile?: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
   prepareTurnFileRollback?: (
     projectRoot: string,
     changes: Parameters<typeof prepareTurnFileRollback>[1],
   ) => Promise<PreparedTurnFileRollback>;
+  selectProjectDirectory: () => Promise<string | undefined>;
   staticRoot?: string;
 }
 
@@ -83,24 +91,35 @@ const ProjectParamsSchema = {
   type: "object",
 } as const;
 
-const TaskParamsSchema = {
+const ProjectTaskParamsSchema = {
   additionalProperties: false,
-  properties: { taskId: { minLength: 1, type: "string" } },
-  required: ["taskId"],
+  properties: {
+    projectId: { minLength: 1, type: "string" },
+    taskId: { minLength: 1, type: "string" },
+  },
+  required: ["projectId", "taskId"],
   type: "object",
 } as const;
 
-const TurnParamsSchema = {
+const ProjectTaskTurnParamsSchema = {
   additionalProperties: false,
-  properties: { turnId: { minLength: 1, type: "string" } },
-  required: ["turnId"],
+  properties: {
+    projectId: { minLength: 1, type: "string" },
+    taskId: { minLength: 1, type: "string" },
+    turnId: { minLength: 1, type: "string" },
+  },
+  required: ["projectId", "taskId", "turnId"],
   type: "object",
 } as const;
 
-const PendingRequestParamsSchema = {
+const ProjectTaskPendingRequestParamsSchema = {
   additionalProperties: false,
-  properties: { requestId: { minLength: 1, type: "string" } },
-  required: ["requestId"],
+  properties: {
+    projectId: { minLength: 1, type: "string" },
+    requestId: { minLength: 1, type: "string" },
+    taskId: { minLength: 1, type: "string" },
+  },
+  required: ["projectId", "taskId", "requestId"],
   type: "object",
 } as const;
 
@@ -213,14 +232,48 @@ export async function createCodeAgentServer(
   const prepareFileRollback = options.prepareTurnFileRollback ?? prepareTurnFileRollback;
   const attachmentStore = new AttachmentStore();
   const capabilities = await options.provider.getCapabilities();
-  const eventStream = new AgentEventStream({
-    ...(options.eventBufferSize === undefined ? {} : { capacity: options.eventBufferSize }),
-    provider: capabilities.provider,
-    sessionId: options.eventSessionId ?? randomUUID(),
-  });
-  const unsubscribeProvider = options.provider.subscribeEvents((event) => {
-    eventStream.publish(event);
-  });
+  const projectContexts = new Map<
+    string,
+    Readonly<{
+      eventStream: AgentEventStream;
+      project: Project;
+      provider: AgentProvider;
+      unsubscribe: () => void;
+    }>
+  >();
+  const getProjectContext = async (projectId: string) => {
+    const project = await options.projectRepository.read(projectId);
+    if (project === undefined) {
+      return undefined;
+    }
+    const existing = projectContexts.get(projectId);
+    if (existing !== undefined) {
+      if (existing.project.rootPath !== project.rootPath) {
+        throw new Error("Project identity changed while the runtime was active");
+      }
+      return existing;
+    }
+    const provider = options.provider.forProject(project);
+    const eventStream = new AgentEventStream({
+      ...(options.eventBufferSize === undefined ? {} : { capacity: options.eventBufferSize }),
+      provider: capabilities.provider,
+      sessionId: options.eventSessionId ?? randomUUID(),
+    });
+    const context = {
+      eventStream,
+      project,
+      provider,
+      unsubscribe: provider.subscribeEvents((event) => {
+        eventStream.publish(event);
+      }),
+    };
+    projectContexts.set(projectId, context);
+    return context;
+  };
+  // 启动时只为已持久化 Project 建立事件流；后续新增项目在首次注册时懒创建。
+  for (const project of await options.projectRepository.list()) {
+    await getProjectContext(project.id);
+  }
   const idempotencyEntries = new Map<string, IdempotencyEntry>();
   const idempotencyCacheSize = options.idempotencyCacheSize ?? DEFAULT_IDEMPOTENCY_CACHE_SIZE;
   const idempotencyTtlMs = options.idempotencyTtlMs ?? DEFAULT_IDEMPOTENCY_TTL_MS;
@@ -250,14 +303,14 @@ export async function createCodeAgentServer(
   };
 
   const runIdempotent = async <T>(
-    operation: string,
+    scope: readonly string[],
     key: string,
     payload: unknown,
     action: () => Promise<T> | T,
   ): Promise<T> => {
     pruneIdempotencyEntries();
-    // 结构化编码作用域，避免资源 ID 或 Key 中的分隔符产生碰撞。
-    const entryKey = JSON.stringify([operation, key]);
+    // 结构化编码完整资源作用域，避免跨 Project 命中或分隔符碰撞。
+    const entryKey = JSON.stringify([...scope, key]);
     const fingerprint = fingerprintPayload(payload);
     const existing = idempotencyEntries.get(entryKey);
     if (existing !== undefined) {
@@ -316,7 +369,10 @@ export async function createCodeAgentServer(
     return reply.send(error);
   });
   app.addHook("onClose", () => {
-    unsubscribeProvider();
+    for (const context of projectContexts.values()) {
+      context.unsubscribe();
+    }
+    projectContexts.clear();
     attachmentStore.clear();
     idempotencyEntries.clear();
   });
@@ -350,10 +406,41 @@ export async function createCodeAgentServer(
     options.provider.listModels(),
   );
 
-  app.get("/v1/projects", { schema: { response: { 200: ProjectPageSchema } } }, () => ({
-    data: [options.project],
+  app.get("/v1/projects", { schema: { response: { 200: ProjectPageSchema } } }, async () => ({
+    data: await options.projectRepository.list(),
     nextCursor: null,
   }));
+
+  app.post<{
+    Body: Record<string, never>;
+    Headers: { "idempotency-key": string };
+  }>(
+    "/v1/projects",
+    {
+      schema: {
+        body: StartAgentTaskRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        response: {
+          200: AddProjectResponseSchema,
+          400: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(["add-project"], request.headers["idempotency-key"], request.body, async () => {
+        const selectedPath = await options.selectProjectDirectory();
+        if (selectedPath === undefined) {
+          return { project: null };
+        }
+        const project = await options.projectRepository.register({
+          name: basename(selectedPath),
+          rootPath: selectedPath,
+        });
+        return { project };
+      }),
+  );
 
   app.get<{ Params: { projectId: string } }>(
     "/v1/projects/:projectId/git/status",
@@ -368,11 +455,12 @@ export async function createCodeAgentServer(
       },
     },
     async (request, reply) => {
-      if (request.params.projectId !== options.project.id) {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       try {
-        return await readProjectGitStatus(options.project.rootPath);
+        return await readProjectGitStatus(context.project.rootPath);
       } catch {
         // Git 和文件系统错误在 HTTP 边界统一收敛，避免向页面泄露本机路径细节。
         return reply.code(500).send({
@@ -396,11 +484,12 @@ export async function createCodeAgentServer(
       },
     },
     async (request, reply) => {
-      if (request.params.projectId !== options.project.id) {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       try {
-        return await readSourceFile(options.project.rootPath, request.query.path);
+        return await readSourceFile(context.project.rootPath, request.query.path);
       } catch {
         // 路径越界、文件不存在和二进制文件统一隐藏为不可预览，避免泄露本机文件信息。
         return reply.code(404).send({
@@ -414,13 +503,15 @@ export async function createCodeAgentServer(
   app.post<{
     Body: AgentAttachmentUploadRequest;
     Headers: { "idempotency-key": string };
+    Params: { projectId: string };
   }>(
-    "/v1/attachments",
+    "/v1/projects/:projectId/attachments",
     {
       bodyLimit: MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH + 1_024,
       schema: {
         body: AgentAttachmentUploadRequestSchema,
         headers: IdempotencyHeadersSchema,
+        params: ProjectParamsSchema,
         response: {
           201: AgentAttachmentUploadResponseSchema,
           400: AgentMutationErrorSchema,
@@ -430,13 +521,16 @@ export async function createCodeAgentServer(
       },
     },
     async (request, reply) => {
+      if ((await getProjectContext(request.params.projectId)) === undefined) {
+        throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+      }
       const attachment = await runIdempotent(
-        "upload-attachment",
+        ["upload-attachment", request.params.projectId],
         request.headers["idempotency-key"],
         request.body,
         () => {
           try {
-            return attachmentStore.add(request.body);
+            return attachmentStore.add(request.params.projectId, request.body);
           } catch (error) {
             if (error instanceof TypeError || error instanceof RangeError) {
               throw new MutationHttpError("INVALID_REQUEST", "Attachment is invalid", 400);
@@ -462,32 +556,37 @@ export async function createCodeAgentServer(
       },
     },
     async (request, reply) => {
-      if (request.params.projectId !== options.project.id) {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       const input = {
         ...(request.query.cursor === undefined ? {} : { cursor: request.query.cursor }),
         ...(request.query.limit === undefined ? {} : { limit: request.query.limit }),
       };
-      return options.provider.listTasks(input);
+      return context.provider.listTasks(input);
     },
   );
 
-  app.get<{ Params: { taskId: string } }>(
-    "/v1/tasks/:taskId",
+  app.get<{ Params: { projectId: string; taskId: string } }>(
+    "/v1/projects/:projectId/tasks/:taskId",
     {
       schema: {
-        params: TaskParamsSchema,
+        params: ProjectTaskParamsSchema,
         response: { 200: AgentTaskSnapshotResponseSchema, 404: ErrorResponseSchema },
       },
     },
     async (request, reply) => {
-      const task = await options.provider.readTask(request.params.taskId);
-      if (task?.projectId !== options.project.id) {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      const task = await context.provider.readTask(request.params.taskId);
+      if (task?.projectId !== context.project.id) {
         return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
       }
       // Provider Promise 完成时已交付此前通知，此处 checkpoint 与返回 Snapshot 对齐。
-      const checkpoint = eventStream.checkpoint;
+      const checkpoint = context.eventStream.checkpoint;
       return { checkpoint, snapshot: task };
     },
   );
@@ -495,14 +594,14 @@ export async function createCodeAgentServer(
   app.post<{
     Body: ReviewAgentTaskRequest;
     Headers: { "idempotency-key": string };
-    Params: { taskId: string };
+    Params: { projectId: string; taskId: string };
   }>(
-    "/v1/tasks/:taskId/review",
+    "/v1/projects/:projectId/tasks/:taskId/review",
     {
       schema: {
         body: ReviewAgentTaskRequestSchema,
         headers: IdempotencyHeadersSchema,
-        params: TaskParamsSchema,
+        params: ProjectTaskParamsSchema,
         response: {
           201: ReviewAgentTaskResponseSchema,
           400: AgentMutationErrorSchema,
@@ -514,15 +613,19 @@ export async function createCodeAgentServer(
     },
     async (request, reply) => {
       const turn = await runIdempotent(
-        `review-task:${request.params.taskId}`,
+        ["review-task", request.params.projectId, request.params.taskId],
         request.headers["idempotency-key"],
         request.body,
         async () => {
-          const task = await options.provider.readTask(request.params.taskId);
-          if (task?.projectId !== options.project.id) {
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
-          return options.provider.startReview(request.params.taskId, request.body.target);
+          return context.provider.startReview(request.params.taskId, request.body.target);
         },
       );
       return reply.code(201).send({ taskId: request.params.taskId, turn });
@@ -532,14 +635,14 @@ export async function createCodeAgentServer(
   app.post<{
     Body: CompactAgentTaskRequest;
     Headers: { "idempotency-key": string };
-    Params: { taskId: string };
+    Params: { projectId: string; taskId: string };
   }>(
-    "/v1/tasks/:taskId/compact",
+    "/v1/projects/:projectId/tasks/:taskId/compact",
     {
       schema: {
         body: CompactAgentTaskRequestSchema,
         headers: IdempotencyHeadersSchema,
-        params: TaskParamsSchema,
+        params: ProjectTaskParamsSchema,
         response: {
           202: CompactAgentTaskResponseSchema,
           400: AgentMutationErrorSchema,
@@ -551,15 +654,19 @@ export async function createCodeAgentServer(
     },
     async (request, reply) => {
       const response = await runIdempotent(
-        `compact-task:${request.params.taskId}`,
+        ["compact-task", request.params.projectId, request.params.taskId],
         request.headers["idempotency-key"],
         request.body,
         async () => {
-          const task = await options.provider.readTask(request.params.taskId);
-          if (task?.projectId !== options.project.id) {
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
-          await options.provider.compactTask(request.params.taskId);
+          await context.provider.compactTask(request.params.taskId);
           return { status: "compacting" as const, taskId: request.params.taskId };
         },
       );
@@ -570,14 +677,14 @@ export async function createCodeAgentServer(
   app.post<{
     Body: ForkAgentTaskRequest;
     Headers: { "idempotency-key": string };
-    Params: { taskId: string };
+    Params: { projectId: string; taskId: string };
   }>(
-    "/v1/tasks/:taskId/fork",
+    "/v1/projects/:projectId/tasks/:taskId/fork",
     {
       schema: {
         body: ForkAgentTaskRequestSchema,
         headers: IdempotencyHeadersSchema,
-        params: TaskParamsSchema,
+        params: ProjectTaskParamsSchema,
         response: {
           201: ForkAgentTaskResponseSchema,
           400: AgentMutationErrorSchema,
@@ -589,15 +696,19 @@ export async function createCodeAgentServer(
     },
     async (request, reply) => {
       const forkedTask = await runIdempotent(
-        `fork-task:${request.params.taskId}`,
+        ["fork-task", request.params.projectId, request.params.taskId],
         request.headers["idempotency-key"],
         request.body,
         async () => {
-          const task = await options.provider.readTask(request.params.taskId);
-          if (task?.projectId !== options.project.id) {
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
-          return options.provider.forkTask(request.params.taskId);
+          return context.provider.forkTask(request.params.taskId);
         },
       );
       return reply.code(201).send({ task: forkedTask });
@@ -607,14 +718,14 @@ export async function createCodeAgentServer(
   app.post<{
     Body: UploadAgentFeedbackRequest;
     Headers: { "idempotency-key": string };
-    Params: { taskId: string };
+    Params: { projectId: string; taskId: string };
   }>(
-    "/v1/tasks/:taskId/feedback",
+    "/v1/projects/:projectId/tasks/:taskId/feedback",
     {
       schema: {
         body: UploadAgentFeedbackRequestSchema,
         headers: IdempotencyHeadersSchema,
-        params: TaskParamsSchema,
+        params: ProjectTaskParamsSchema,
         response: {
           200: UploadAgentFeedbackResponseSchema,
           400: AgentMutationErrorSchema,
@@ -626,15 +737,19 @@ export async function createCodeAgentServer(
     },
     async (request) =>
       runIdempotent(
-        `feedback-task:${request.params.taskId}`,
+        ["feedback-task", request.params.projectId, request.params.taskId],
         request.headers["idempotency-key"],
         request.body,
         async () => {
-          const task = await options.provider.readTask(request.params.taskId);
-          if (task?.projectId !== options.project.id) {
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
-          await options.provider.uploadFeedback(request.params.taskId, request.body);
+          await context.provider.uploadFeedback(request.params.taskId, request.body);
           return { status: "sent" as const, taskId: request.params.taskId };
         },
       ),
@@ -643,14 +758,14 @@ export async function createCodeAgentServer(
   app.post<{
     Body: RollbackAgentTurnRequest;
     Headers: { "idempotency-key": string };
-    Params: { turnId: string };
+    Params: { projectId: string; taskId: string; turnId: string };
   }>(
-    "/v1/turns/:turnId/rollback",
+    "/v1/projects/:projectId/tasks/:taskId/turns/:turnId/rollback",
     {
       schema: {
         body: RollbackAgentTurnRequestSchema,
         headers: IdempotencyHeadersSchema,
-        params: TurnParamsSchema,
+        params: ProjectTaskTurnParamsSchema,
         response: {
           200: RollbackAgentTurnResponseSchema,
           400: AgentMutationErrorSchema,
@@ -662,12 +777,19 @@ export async function createCodeAgentServer(
     },
     async (request) =>
       runIdempotent(
-        `rollback-turn:${request.params.turnId}`,
+        ["rollback-turn", request.params.projectId, request.params.taskId, request.params.turnId],
         request.headers["idempotency-key"],
         request.body,
         async () => {
-          const task = await options.provider.readTask(request.body.taskId);
-          if (task?.projectId !== options.project.id) {
+          if (request.body.taskId !== request.params.taskId) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
           const latestTurn = task.turns.at(-1);
@@ -687,7 +809,7 @@ export async function createCodeAgentServer(
           );
           let preparedRollback: PreparedTurnFileRollback;
           try {
-            preparedRollback = await prepareFileRollback(options.project.rootPath, changes);
+            preparedRollback = await prepareFileRollback(context.project.rootPath, changes);
             await preparedRollback.applyReverse();
           } catch (error) {
             if (error instanceof TurnFileRollbackError) {
@@ -702,7 +824,7 @@ export async function createCodeAgentServer(
 
           try {
             // Codex 只撤销会话历史；文件已通过预检并在此前恢复。
-            await options.provider.rollbackLatestTurn(request.body.taskId);
+            await context.provider.rollbackLatestTurn(request.params.taskId);
           } catch (providerError) {
             try {
               // Provider 失败时恢复正向补丁，避免会话与工作区状态分裂。
@@ -748,14 +870,15 @@ export async function createCodeAgentServer(
       },
     },
     async (request, reply) => {
-      if (request.params.projectId !== options.project.id) {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
         throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
       }
       const task = await runIdempotent(
-        `start-task:${request.params.projectId}`,
+        ["start-task", request.params.projectId],
         request.headers["idempotency-key"],
         request.body,
-        () => options.provider.startTask(),
+        () => context.provider.startTask(),
       );
       return reply.code(201).send({ task });
     },
@@ -764,14 +887,14 @@ export async function createCodeAgentServer(
   app.post<{
     Body: StartAgentTurnRequest;
     Headers: { "idempotency-key": string };
-    Params: { taskId: string };
+    Params: { projectId: string; taskId: string };
   }>(
-    "/v1/tasks/:taskId/turns",
+    "/v1/projects/:projectId/tasks/:taskId/turns",
     {
       schema: {
         body: StartAgentTurnRequestSchema,
         headers: IdempotencyHeadersSchema,
-        params: TaskParamsSchema,
+        params: ProjectTaskParamsSchema,
         response: {
           201: StartAgentTurnResponseSchema,
           400: AgentMutationErrorSchema,
@@ -783,12 +906,16 @@ export async function createCodeAgentServer(
     },
     async (request, reply) => {
       const turn = await runIdempotent(
-        `start-turn:${request.params.taskId}`,
+        ["start-turn", request.params.projectId, request.params.taskId],
         request.headers["idempotency-key"],
         request.body,
         async () => {
-          const task = await options.provider.readTask(request.params.taskId);
-          if (task?.projectId !== options.project.id) {
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
           const attachmentIds = request.body.input.attachments.map((attachment) => attachment.id);
@@ -801,7 +928,7 @@ export async function createCodeAgentServer(
           }
           let images;
           try {
-            images = attachmentStore.resolve(attachmentIds);
+            images = attachmentStore.resolve(request.params.projectId, attachmentIds);
           } catch (error) {
             if (error instanceof AttachmentNotFoundError) {
               throw new MutationHttpError(
@@ -812,13 +939,13 @@ export async function createCodeAgentServer(
             }
             throw error;
           }
-          const turn = await options.provider.startTurn(
+          const turn = await context.provider.startTurn(
             request.params.taskId,
             { images, text: request.body.input.text },
             request.body.options,
           );
           // 只有 Provider 确认启动成功后才消费附件，网络失败仍允许原请求重试。
-          attachmentStore.consume(attachmentIds);
+          attachmentStore.consume(request.params.projectId, attachmentIds);
           return turn;
         },
       );
@@ -829,14 +956,14 @@ export async function createCodeAgentServer(
   app.post<{
     Body: { taskId: string };
     Headers: { "idempotency-key": string };
-    Params: { turnId: string };
+    Params: { projectId: string; taskId: string; turnId: string };
   }>(
-    "/v1/turns/:turnId/interrupt",
+    "/v1/projects/:projectId/tasks/:taskId/turns/:turnId/interrupt",
     {
       schema: {
         body: InterruptAgentTurnRequestSchema,
         headers: IdempotencyHeadersSchema,
-        params: TurnParamsSchema,
+        params: ProjectTaskTurnParamsSchema,
         response: {
           202: InterruptAgentTurnResponseSchema,
           400: AgentMutationErrorSchema,
@@ -848,12 +975,19 @@ export async function createCodeAgentServer(
     },
     async (request, reply) => {
       const response = await runIdempotent(
-        `interrupt-turn:${request.params.turnId}`,
+        ["interrupt-turn", request.params.projectId, request.params.taskId, request.params.turnId],
         request.headers["idempotency-key"],
         request.body,
         async () => {
-          const task = await options.provider.readTask(request.body.taskId);
-          if (task?.projectId !== options.project.id) {
+          if (request.body.taskId !== request.params.taskId) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
           const turn = task.turns.find((item) => item.id === request.params.turnId);
@@ -863,7 +997,7 @@ export async function createCodeAgentServer(
           if (turn.status !== "running") {
             throw new MutationHttpError("TURN_NOT_RUNNING", "Turn is not running", 409);
           }
-          await options.provider.interruptTurn(request.body.taskId, request.params.turnId);
+          await context.provider.interruptTurn(request.params.taskId, request.params.turnId);
           return {
             status: "interrupting" as const,
             taskId: request.body.taskId,
@@ -878,14 +1012,14 @@ export async function createCodeAgentServer(
   app.post<{
     Body: ResolvePendingRequestRequest;
     Headers: { "idempotency-key": string };
-    Params: { requestId: string };
+    Params: { projectId: string; requestId: string; taskId: string };
   }>(
-    "/v1/pending-requests/:requestId/resolve",
+    "/v1/projects/:projectId/tasks/:taskId/pending-requests/:requestId/resolve",
     {
       schema: {
         body: ResolvePendingRequestRequestSchema,
         headers: IdempotencyHeadersSchema,
-        params: PendingRequestParamsSchema,
+        params: ProjectTaskPendingRequestParamsSchema,
         response: {
           200: ResolvePendingRequestResponseSchema,
           400: AgentMutationErrorSchema,
@@ -896,16 +1030,36 @@ export async function createCodeAgentServer(
       },
     },
     async (request) => {
-      if (request.body.projectId !== options.project.id) {
+      if (
+        request.body.projectId !== request.params.projectId ||
+        request.body.taskId !== request.params.taskId
+      ) {
+        throw new MutationHttpError(
+          "PENDING_REQUEST_MISMATCH",
+          "Pending request identity does not match",
+          409,
+        );
+      }
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
         throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
       }
+      const task = await context.provider.readTask(request.params.taskId);
+      if (task?.projectId !== context.project.id) {
+        throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+      }
       const resolvedRequest = await runIdempotent(
-        `resolve-pending-request:${request.params.requestId}`,
+        [
+          "resolve-pending-request",
+          request.params.projectId,
+          request.params.taskId,
+          request.params.requestId,
+        ],
         request.headers["idempotency-key"],
         request.body,
         async () => {
           try {
-            return await options.provider.resolvePendingRequest({
+            return await context.provider.resolvePendingRequest({
               ...request.body,
               requestId: request.params.requestId,
             });
@@ -921,10 +1075,15 @@ export async function createCodeAgentServer(
     },
   );
 
-  app.get<{ Querystring: { afterSequence: number } }>(
-    "/v1/events",
+  app.get<{ Params: { projectId: string }; Querystring: { afterSequence: number } }>(
+    "/v1/projects/:projectId/events",
     {
       async preValidation(request, reply) {
+        if ((await getProjectContext(request.params.projectId)) === undefined) {
+          return await reply
+            .code(404)
+            .send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+        }
         const origin = request.headers.origin;
         const host = request.headers.host;
         if (origin === undefined) {
@@ -947,10 +1106,16 @@ export async function createCodeAgentServer(
             .send({ code: "ORIGIN_REJECTED", message: "Origin rejected" });
         }
       },
-      schema: { querystring: EventQuerySchema },
+      schema: { params: ProjectParamsSchema, querystring: EventQuerySchema },
       websocket: true,
     },
     (socket, request) => {
+      const context = projectContexts.get(request.params.projectId);
+      if (context === undefined) {
+        socket.close(1008, "Project not found");
+        return;
+      }
+      const eventStream = context.eventStream;
       const send = (message: EventStreamMessage): boolean => {
         if (socket.readyState !== 1) {
           return false;

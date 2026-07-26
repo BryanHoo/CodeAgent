@@ -7,6 +7,7 @@ export type RegisterProjectInput = Readonly<{
 
 export interface ProjectRepository {
   list(): Promise<readonly Project[]>;
+  read(projectId: string): Promise<Project | undefined>;
   register(input: RegisterProjectInput): Promise<Project>;
 }
 

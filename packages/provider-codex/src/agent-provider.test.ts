@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { AgentProviderEvent, PendingRequestResolutionError } from "@code-agent/core";
+import type { Project } from "@code-agent/protocol";
 
-import { createCodexAgentProvider, CodexProtocolMappingError } from "./agent-provider.js";
+import {
+  CodexAgentProvider,
+  createCodexRuntimeProvider,
+  CodexProtocolMappingError,
+  type CodexRpcClient,
+} from "./agent-provider.js";
 import { RpcResponseError, type RpcRequestId } from "./jsonl-rpc-client.js";
 
 class FakeRpcClient {
@@ -50,6 +56,10 @@ class FakeRpcClient {
     };
   }
 
+  public get notificationListenerCount(): number {
+    return this.#notificationListeners.size;
+  }
+
   public emitNotification(method: string, params?: unknown): void {
     for (const listener of this.#notificationListeners) {
       listener({ method, params });
@@ -63,6 +73,10 @@ class FakeRpcClient {
     return () => {
       this.#serverRequestListeners.delete(listener);
     };
+  }
+
+  public get serverRequestListenerCount(): number {
+    return this.#serverRequestListeners.size;
   }
 
   public async respondToServerRequest(id: RpcRequestId, result: unknown): Promise<void> {
@@ -94,6 +108,13 @@ const project = {
   rootPath: "/workspace/CodeAgent",
 } as const;
 
+function createCodexAgentProvider(options: {
+  client: CodexRpcClient;
+  project: Project;
+}): CodexAgentProvider {
+  return new CodexAgentProvider(options.client, options.project);
+}
+
 function nativeThread(overrides: Record<string, unknown> = {}) {
   return {
     cliVersion: "0.145.0",
@@ -114,6 +135,64 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("shares one RPC subscription across multiple project providers", async () => {
+    const otherProject = {
+      ...project,
+      id: "other",
+      name: "Other",
+      rootPath: "/workspace/Other",
+    };
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      {
+        data: [nativeThread({ cwd: otherProject.rootPath, id: "task-2" })],
+        nextCursor: null,
+      },
+      { thread: nativeThread({ cwd: otherProject.rootPath, id: "task-3" }) },
+    ]);
+    const runtime = createCodexRuntimeProvider({ client: rpc });
+    const projectProvider = runtime.forProject(project);
+    const otherProvider = runtime.forProject(otherProject);
+
+    await expect(projectProvider.listTasks()).resolves.toMatchObject({
+      data: [{ id: "task-1", projectId: project.id }],
+    });
+    await expect(otherProvider.listTasks()).resolves.toMatchObject({
+      data: [{ id: "task-2", projectId: otherProject.id }],
+    });
+    await expect(otherProvider.startTask()).resolves.toMatchObject({
+      id: "task-3",
+      projectId: otherProject.id,
+    });
+
+    expect(rpc.notificationListenerCount).toBe(1);
+    expect(rpc.serverRequestListenerCount).toBe(1);
+    expect(rpc.calls).toEqual([
+      {
+        method: "thread/list",
+        params: {
+          cwd: project.rootPath,
+          sortDirection: "desc",
+          sortKey: "updated_at",
+        },
+      },
+      {
+        method: "thread/list",
+        params: {
+          cwd: otherProject.rootPath,
+          sortDirection: "desc",
+          sortKey: "updated_at",
+        },
+      },
+      { method: "thread/start", params: { cwd: otherProject.rootPath } },
+    ]);
+    await expect(projectProvider.readTask("task-2")).resolves.toBeUndefined();
+    expect(rpc.calls).toHaveLength(3);
+    expect(() => runtime.forProject({ ...project, rootPath: "/workspace/Conflicting" })).toThrow(
+      "project identity belongs to another cwd",
+    );
+  });
+
   it("rolls back exactly the latest Codex turn", async () => {
     const rpc = new FakeRpcClient([
       { data: [nativeThread()], nextCursor: null },

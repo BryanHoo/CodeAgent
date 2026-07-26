@@ -9,7 +9,7 @@ describe("AttachmentStore", () => {
   it("stores validated image data behind an opaque reference", () => {
     const store = new AttachmentStore({ createId: () => "attachment-1" });
 
-    const attachment = store.add({ dataUrl: pixelDataUrl, name: "screen.png" });
+    const attachment = store.add("code-agent", { dataUrl: pixelDataUrl, name: "screen.png" });
 
     expect(attachment).toEqual({
       id: "attachment-1",
@@ -17,7 +17,10 @@ describe("AttachmentStore", () => {
       name: "screen.png",
       size: 68,
     });
-    expect(store.resolve([attachment.id])).toEqual([{ mediaType: "image/png", url: pixelDataUrl }]);
+    expect(store.resolve("code-agent", [attachment.id])).toEqual([
+      { mediaType: "image/png", url: pixelDataUrl },
+    ]);
+    expect(() => store.resolve("other", [attachment.id])).toThrow(AttachmentNotFoundError);
   });
 
   it("expires, consumes, and clears stored attachments", () => {
@@ -28,19 +31,19 @@ describe("AttachmentStore", () => {
       createId: () => `attachment-${String(nextId++)}`,
       ttlMs: 100,
     });
-    const expired = store.add({ dataUrl: pixelDataUrl, name: "expired.png" });
+    const expired = store.add("code-agent", { dataUrl: pixelDataUrl, name: "expired.png" });
     now = 1_101;
 
-    expect(() => store.resolve([expired.id])).toThrow(AttachmentNotFoundError);
+    expect(() => store.resolve("code-agent", [expired.id])).toThrow(AttachmentNotFoundError);
 
-    const consumed = store.add({ dataUrl: pixelDataUrl, name: "consumed.png" });
-    expect(store.resolve([consumed.id])).toHaveLength(1);
-    store.consume([consumed.id]);
-    expect(() => store.resolve([consumed.id])).toThrow(AttachmentNotFoundError);
+    const consumed = store.add("code-agent", { dataUrl: pixelDataUrl, name: "consumed.png" });
+    expect(store.resolve("code-agent", [consumed.id])).toHaveLength(1);
+    store.consume("code-agent", [consumed.id]);
+    expect(() => store.resolve("code-agent", [consumed.id])).toThrow(AttachmentNotFoundError);
 
-    const cleared = store.add({ dataUrl: pixelDataUrl, name: "cleared.png" });
+    const cleared = store.add("code-agent", { dataUrl: pixelDataUrl, name: "cleared.png" });
     store.clear();
-    expect(() => store.resolve([cleared.id])).toThrow(AttachmentNotFoundError);
+    expect(() => store.resolve("code-agent", [cleared.id])).toThrow(AttachmentNotFoundError);
   });
 
   it("enforces decoded byte and total capacity limits", () => {
@@ -50,13 +53,16 @@ describe("AttachmentStore", () => {
       maxEntries: 1,
       maxTotalBytes: 68,
     });
-    store.add({ dataUrl: pixelDataUrl, name: "first.png" });
+    store.add("code-agent", { dataUrl: pixelDataUrl, name: "first.png" });
 
-    expect(() => store.add({ dataUrl: pixelDataUrl, name: "second.png" })).toThrow(
+    expect(() => store.add("code-agent", { dataUrl: pixelDataUrl, name: "second.png" })).toThrow(
       "Attachment store capacity exceeded",
     );
     expect(() =>
-      new AttachmentStore({ maxBytes: 67 }).add({ dataUrl: pixelDataUrl, name: "large.png" }),
+      new AttachmentStore({ maxBytes: 67 }).add("code-agent", {
+        dataUrl: pixelDataUrl,
+        name: "large.png",
+      }),
     ).toThrow("Attachment exceeds the maximum size");
   });
 });

@@ -3,6 +3,7 @@ import { useEffect } from "react";
 
 import { useProjects } from "../../features/projects/project-context.js";
 import { RuntimeUnavailable } from "../../shared/ui/runtime-unavailable.js";
+import { ProjectSidebar } from "../../features/workbench/components/project-sidebar.js";
 import { rootRoute } from "./root-route.js";
 
 export const indexRoute = createRoute({
@@ -37,8 +38,15 @@ function IndexPage() {
     );
   }
   return (
-    <main className="grid h-full place-items-center text-sm text-muted-foreground">
-      没有可用项目
-    </main>
+    <div
+      className="workbench-shell h-full min-h-0 overflow-hidden bg-window"
+      data-inspector-open="false"
+      data-sidebar-open="true"
+    >
+      <ProjectSidebar connectionState="connected" onClose={() => undefined} />
+      <main className="grid min-h-0 min-w-0 place-items-center bg-content text-sm text-muted-foreground">
+        尚未添加项目
+      </main>
+    </div>
   );
 }

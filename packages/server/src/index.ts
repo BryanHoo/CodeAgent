@@ -5,3 +5,4 @@ export {
   type AgentEventStreamOptions,
 } from "./agent-event-stream.js";
 export { createCodeAgentServer, type CreateCodeAgentServerOptions } from "./app.js";
+export { JsonProjectRepository } from "./json-project-repository.js";

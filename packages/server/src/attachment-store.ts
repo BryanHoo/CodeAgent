@@ -32,6 +32,7 @@ export interface AttachmentStoreOptions {
 interface StoredAttachment {
   attachment: AgentAttachment;
   expiresAt: number;
+  projectId: string;
   url: string;
 }
 
@@ -78,7 +79,7 @@ export class AttachmentStore {
     this.#ttlMs = options.ttlMs ?? DEFAULT_ATTACHMENT_TTL_MS;
   }
 
-  public add(input: AgentAttachmentUploadRequest): AgentAttachment {
+  public add(projectId: string, input: AgentAttachmentUploadRequest): AgentAttachment {
     this.#pruneExpired();
     const parsed = parseDataUrl(input.dataUrl);
     if (parsed.bytes > this.#maxBytes) {
@@ -100,29 +101,35 @@ export class AttachmentStore {
     this.#entries.set(id, {
       attachment,
       expiresAt: this.#clock() + this.#ttlMs,
+      projectId,
       url: input.dataUrl,
     });
     this.#totalBytes += parsed.bytes;
     return attachment;
   }
 
-  public resolve(ids: readonly string[]): readonly Readonly<{
+  public resolve(
+    projectId: string,
+    ids: readonly string[],
+  ): readonly Readonly<{
     mediaType: AgentAttachmentMediaType;
     url: string;
   }>[] {
     this.#pruneExpired();
     return ids.map((id) => {
       const entry = this.#entries.get(id);
-      if (entry === undefined) {
+      if (entry?.projectId !== projectId) {
         throw new AttachmentNotFoundError();
       }
       return { mediaType: entry.attachment.mediaType, url: entry.url };
     });
   }
 
-  public consume(ids: readonly string[]): void {
+  public consume(projectId: string, ids: readonly string[]): void {
     for (const id of new Set(ids)) {
-      this.#delete(id);
+      if (this.#entries.get(id)?.projectId === projectId) {
+        this.#delete(id);
+      }
     }
   }
 

@@ -174,7 +174,7 @@ sequenceDiagram
     participant C as Codex App Server
 
     U->>W: 提交任务
-    W->>S: POST /v1/tasks/:id/turns
+    W->>S: POST /v1/projects/:projectId/tasks/:taskId/turns
     S->>S: 校验用户和 Project
     S->>C: turn/start
     C-->>S: turn/started
@@ -279,23 +279,17 @@ code-agent version
 `start` 支持：
 
 ```bash
-code-agent start \
-  --host 127.0.0.1 \
-  --port 3210 \
-  --project /path/to/project
+code-agent start --codex-home /path/to/codex-home
 ```
 
 可选参数：
 
 ```text
---no-open
 --codex-bin <path>
 --codex-home <path>
---data-dir <path>
---log-level <level>
---sandbox <mode>
---approval-policy <policy>
 ```
+
+CLI 启动一个不绑定 Project 的全局 `codex app-server --listen stdio://`。Project 默认列表为空，由 Web 通过宿主系统目录选择器添加，并原子持久化到 `CODEX_HOME/code-agent/projects.json`。
 
 ### 6.2 默认配置
 
@@ -424,14 +418,14 @@ Agent Actions 使用 Provider 无关的模型、附件和写入端点：
 
 ```text
 GET  /v1/models
-POST /v1/attachments
+POST /v1/projects/:projectId/attachments
 POST /v1/projects/:projectId/tasks
-POST /v1/tasks/:taskId/turns
-POST /v1/turns/:turnId/interrupt
-POST /v1/tasks/:taskId/review
-POST /v1/tasks/:taskId/compact
-POST /v1/tasks/:taskId/fork
-POST /v1/tasks/:taskId/feedback
+POST /v1/projects/:projectId/tasks/:taskId/turns
+POST /v1/projects/:projectId/tasks/:taskId/turns/:turnId/interrupt
+POST /v1/projects/:projectId/tasks/:taskId/review
+POST /v1/projects/:projectId/tasks/:taskId/compact
+POST /v1/projects/:projectId/tasks/:taskId/fork
+POST /v1/projects/:projectId/tasks/:taskId/feedback
 ```
 
 所有写请求必须携带非空 `Idempotency-Key`。Server 以操作、资源和 Key 共同确定幂等范围：相同 Payload 复用进行中或成功结果，不同 Payload 返回 `IDEMPOTENCY_CONFLICT`，失败结果允许同 Key 重试。
@@ -528,20 +522,17 @@ GET    /v1/health
 GET    /v1/capabilities
 GET    /v1/providers
 GET    /v1/models
-POST   /v1/attachments
 GET    /v1/projects
 POST   /v1/projects
+POST   /v1/projects/:projectId/attachments
 GET    /v1/projects/:projectId/files/source
 GET    /v1/projects/:projectId/tasks
 POST   /v1/projects/:projectId/tasks
-GET    /v1/tasks/:taskId
-POST   /v1/tasks/:taskId/resume
-POST   /v1/tasks/:taskId/fork
-POST   /v1/tasks/:taskId/archive
-POST   /v1/tasks/:taskId/turns
-POST   /v1/turns/:turnId/steer
-POST   /v1/turns/:turnId/interrupt
-POST   /v1/pending-requests/:requestId/resolve
+GET    /v1/projects/:projectId/tasks/:taskId
+POST   /v1/projects/:projectId/tasks/:taskId/fork
+POST   /v1/projects/:projectId/tasks/:taskId/turns
+POST   /v1/projects/:projectId/tasks/:taskId/turns/:turnId/interrupt
+POST   /v1/projects/:projectId/tasks/:taskId/pending-requests/:requestId/resolve
 ```
 
 所有可能重试的写操作支持：
@@ -550,7 +541,7 @@ POST   /v1/pending-requests/:requestId/resolve
 Idempotency-Key: <uuid>
 ```
 
-`GET /v1/tasks/:taskId` 返回 Snapshot 与同一 Event Stream 的恢复检查点：
+`GET /v1/projects/:projectId/tasks/:taskId` 返回 Snapshot 与同一 Project Event Stream 的恢复检查点：
 
 ```json
 {
@@ -564,7 +555,7 @@ Provider 在 `readTask` Promise 完成前让返回 Snapshot 包含此前状态�
 ### 10.2 WebSocket API
 
 ```text
-WS /v1/events?afterSequence=<sequence>
+WS /v1/projects/:projectId/events?afterSequence=<sequence>
 ```
 
 连接建立后的第一条服务端消息包含：
@@ -729,7 +720,7 @@ export type PendingRequest = {
 
 各判别分支分别携带命令、文件授权根或结构化问题，不向 Web 暴露原生 JSON-RPC Payload。命令审批遇到 `networkApprovalContext` 时，将目标 Host 与协议归一化为 `networkAccess`，Web 必须按网络授权展示，不能依赖可能为空的命令文本。只有已通过当前 Project 归属验证的 Task 请求可进入解决集合；读取期间到达的请求先暂存，验证失败后直接丢弃。
 
-解决请求统一调用 `POST /v1/pending-requests/:requestId/resolve`，携带 `Idempotency-Key` 并完整校验 `projectId + taskId + turnId + itemId + requestId`、请求类型和状态。收到 `serverRequest/resolved`、Turn 完成或 Turn 中断后，必须发布一次 `pending_request.expired` 并清理相应请求；本地解决发布 `pending_request.resolved`。
+解决请求统一调用 `POST /v1/projects/:projectId/tasks/:taskId/pending-requests/:requestId/resolve`，携带 `Idempotency-Key` 并完整校验 `projectId + taskId + turnId + itemId + requestId`、请求类型和状态。收到 `serverRequest/resolved`、Turn 完成或 Turn 中断后，必须发布一次 `pending_request.expired` 并清理相应请求；本地解决发布 `pending_request.resolved`。
 
 ### 11.7 外部登录边界
 

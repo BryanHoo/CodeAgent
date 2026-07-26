@@ -7,6 +7,7 @@ import {
   type AgentProviderEvent,
   type AgentProviderEventListener,
   type AgentProviderTurnInput,
+  type AgentRuntimeProvider,
   type ListAgentTasksInput,
   type ResolvePendingRequestInput,
 } from "@code-agent/core";
@@ -44,9 +45,8 @@ export interface CodexRpcClient {
   respondToServerRequest(id: RpcRequestId, result: unknown): Promise<void> | void;
 }
 
-export interface CreateCodexAgentProviderOptions {
+export interface CreateCodexRuntimeProviderOptions {
   client: CodexRpcClient;
-  project: Project;
 }
 
 export class CodexProtocolMappingError extends Error {
@@ -844,15 +844,21 @@ export class CodexAgentProvider implements AgentProvider {
   readonly #taskContextUsage = new Map<string, AgentContextUsage>();
   readonly #terminalRequests = new Map<string, PendingRequest>();
 
-  public constructor(client: CodexRpcClient, project: Project) {
+  public constructor(
+    client: CodexRpcClient,
+    project: Project,
+    options: { subscribeRpc?: boolean } = {},
+  ) {
     this.#client = client;
     this.#project = project;
-    this.#client.onNotification((notification) => {
-      this.#handleNotification(notification.method, notification.params);
-    });
-    this.#client.onServerRequest((request) => {
-      this.#handleServerRequest(request);
-    });
+    if (options.subscribeRpc ?? true) {
+      this.#client.onNotification((notification) => {
+        this.receiveNotification(notification.method, notification.params);
+      });
+      this.#client.onServerRequest((request) => {
+        this.receiveServerRequest(request);
+      });
+    }
   }
 
   public getCapabilities(): Promise<AgentCapabilities> {
@@ -1197,6 +1203,14 @@ export class CodexAgentProvider implements AgentProvider {
     };
   }
 
+  public receiveNotification(method: string, params: unknown): void {
+    this.#handleNotification(method, params);
+  }
+
+  public receiveServerRequest(request: RpcServerRequest): void {
+    this.#handleServerRequest(request);
+  }
+
   #handleNotification(method: string, params: unknown): void {
     if (method === "serverRequest/resolved") {
       this.#handleServerRequestResolved(params);
@@ -1534,9 +1548,259 @@ export class CodexAgentProvider implements AgentProvider {
   }
 }
 
-export function createCodexAgentProvider(
-  options: CreateCodexAgentProviderOptions,
-): CodexAgentProvider {
-  // App Server Runtime 已完成握手；Provider 只负责统一只读能力与字段映射。
-  return new CodexAgentProvider(options.client, options.project);
+function readTaskId(value: unknown): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  if (typeof value["threadId"] === "string") {
+    return value["threadId"];
+  }
+  const thread = value["thread"];
+  return isRecord(thread) && typeof thread["id"] === "string" ? thread["id"] : undefined;
+}
+
+class CodexRuntimeProjectProvider implements AgentProvider {
+  readonly #delegate: CodexAgentProvider;
+  readonly #project: Project;
+  readonly #runtime: CodexRuntimeProvider;
+
+  public constructor(
+    runtime: CodexRuntimeProvider,
+    delegate: CodexAgentProvider,
+    project: Project,
+  ) {
+    this.#delegate = delegate;
+    this.#project = project;
+    this.#runtime = runtime;
+  }
+
+  public compactTask(taskId: string): Promise<void> {
+    this.#runtime.assertTaskOwner(this.#project, taskId);
+    return this.#delegate.compactTask(taskId);
+  }
+
+  public async forkTask(taskId: string): Promise<AgentTask> {
+    this.#runtime.assertTaskOwner(this.#project, taskId);
+    const task = await this.#delegate.forkTask(taskId);
+    this.#runtime.claimTask(this.#project, task.id);
+    return task;
+  }
+
+  public getCapabilities(): Promise<AgentCapabilities> {
+    return this.#delegate.getCapabilities();
+  }
+
+  public interruptTurn(taskId: string, turnId: string): Promise<void> {
+    this.#runtime.assertTaskOwner(this.#project, taskId);
+    return this.#delegate.interruptTurn(taskId, turnId);
+  }
+
+  public listModels(): Promise<AgentModelPage> {
+    return this.#delegate.listModels();
+  }
+
+  public async listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage> {
+    const page = await this.#delegate.listTasks(input);
+    for (const task of page.data) {
+      this.#runtime.claimTask(this.#project, task.id);
+    }
+    return page;
+  }
+
+  public async readTask(taskId: string): Promise<AgentTaskSnapshot | undefined> {
+    if (!this.#runtime.beginTaskRead(this.#project, taskId)) {
+      return undefined;
+    }
+    try {
+      const snapshot = await this.#delegate.readTask(taskId);
+      if (snapshot === undefined) {
+        this.#runtime.releaseProvisionalTask(this.#project, taskId);
+      } else {
+        this.#runtime.claimTask(this.#project, taskId);
+      }
+      return snapshot;
+    } catch (error) {
+      this.#runtime.releaseProvisionalTask(this.#project, taskId);
+      throw error;
+    }
+  }
+
+  public resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest> {
+    this.#runtime.assertTaskOwner(this.#project, input.taskId);
+    return this.#delegate.resolvePendingRequest(input);
+  }
+
+  public rollbackLatestTurn(taskId: string): Promise<void> {
+    this.#runtime.assertTaskOwner(this.#project, taskId);
+    return this.#delegate.rollbackLatestTurn(taskId);
+  }
+
+  public startReview(taskId: string, target: AgentReviewTarget): Promise<AgentTurn> {
+    this.#runtime.assertTaskOwner(this.#project, taskId);
+    return this.#delegate.startReview(taskId, target);
+  }
+
+  public async startTask(): Promise<AgentTask> {
+    const task = await this.#delegate.startTask();
+    this.#runtime.claimTask(this.#project, task.id);
+    return task;
+  }
+
+  public startTurn(
+    taskId: string,
+    input: AgentProviderTurnInput,
+    options: AgentTurnOptions,
+  ): Promise<AgentTurn> {
+    this.#runtime.assertTaskOwner(this.#project, taskId);
+    return this.#delegate.startTurn(taskId, input, options);
+  }
+
+  public subscribeEvents(listener: AgentProviderEventListener): () => void {
+    return this.#delegate.subscribeEvents(listener);
+  }
+
+  public uploadFeedback(taskId: string, input: UploadAgentFeedbackRequest): Promise<void> {
+    this.#runtime.assertTaskOwner(this.#project, taskId);
+    return this.#delegate.uploadFeedback(taskId, input);
+  }
+}
+
+type TaskOwner = Readonly<{ projectId: string; provisional: boolean; rootPath: string }>;
+
+export class CodexRuntimeProvider implements AgentRuntimeProvider {
+  readonly #client: CodexRpcClient;
+  readonly #projects = new Map<string, Project>();
+  readonly #projectProviders = new Map<string, CodexRuntimeProjectProvider>();
+  readonly #rawProviders = new Map<string, CodexAgentProvider>();
+  readonly #taskOwners = new Map<string, TaskOwner>();
+
+  public constructor(client: CodexRpcClient) {
+    this.#client = client;
+    client.onNotification((notification) => {
+      const taskId = readTaskId(notification.params);
+      if (taskId !== undefined) {
+        this.#rawProviders
+          .get(this.#taskOwners.get(taskId)?.projectId ?? "")
+          ?.receiveNotification(notification.method, notification.params);
+      }
+    });
+    client.onServerRequest((request) => {
+      const taskId = readTaskId(request.params);
+      const provider =
+        taskId === undefined
+          ? undefined
+          : this.#rawProviders.get(this.#taskOwners.get(taskId)?.projectId ?? "");
+      if (provider !== undefined) {
+        provider.receiveServerRequest(request);
+        return;
+      }
+      void client
+        .rejectServerRequest(request.id, {
+          code: -32602,
+          data: { method: request.method },
+          message: "Task project is unknown",
+        })
+        .catch(() => undefined);
+    });
+  }
+
+  public forProject(project: Project): AgentProvider {
+    const current = this.#projectProviders.get(project.id);
+    if (current !== undefined) {
+      const registeredProject = this.#projects.get(project.id);
+      if (
+        registeredProject === undefined ||
+        resolve(registeredProject.rootPath) !== resolve(project.rootPath)
+      ) {
+        throw new CodexProtocolMappingError("Codex project identity belongs to another cwd");
+      }
+      return current;
+    }
+    const rawProvider = new CodexAgentProvider(this.#client, project, { subscribeRpc: false });
+    const provider = new CodexRuntimeProjectProvider(this, rawProvider, project);
+    this.#rawProviders.set(project.id, rawProvider);
+    this.#projectProviders.set(project.id, provider);
+    this.#projects.set(project.id, project);
+    return provider;
+  }
+
+  public getCapabilities(): Promise<AgentCapabilities> {
+    return Promise.resolve({
+      feedback: { upload: true },
+      provider: "codex",
+      tasks: { fork: true, list: true, read: true, start: true },
+      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+    });
+  }
+
+  public listModels(): Promise<AgentModelPage> {
+    const firstProvider = this.#projectProviders.values().next().value;
+    if (firstProvider !== undefined) {
+      return firstProvider.listModels();
+    }
+    const runtimeProject: Project = {
+      createdAt: new Date(0).toISOString(),
+      id: "runtime",
+      name: "Runtime",
+      rootPath: resolve("/"),
+    };
+    return new CodexAgentProvider(this.#client, runtimeProject, {
+      subscribeRpc: false,
+    }).listModels();
+  }
+
+  public beginTaskRead(project: Project, taskId: string): boolean {
+    const owner = this.#taskOwners.get(taskId);
+    if (owner !== undefined) {
+      return (
+        owner.projectId === project.id && resolve(owner.rootPath) === resolve(project.rootPath)
+      );
+    }
+    this.#taskOwners.set(taskId, {
+      projectId: project.id,
+      provisional: true,
+      rootPath: project.rootPath,
+    });
+    return true;
+  }
+
+  public claimTask(project: Project, taskId: string): void {
+    const owner = this.#taskOwners.get(taskId);
+    if (
+      owner !== undefined &&
+      (owner.projectId !== project.id || resolve(owner.rootPath) !== resolve(project.rootPath))
+    ) {
+      throw new CodexProtocolMappingError("Codex thread belongs to another project");
+    }
+    this.#taskOwners.set(taskId, {
+      projectId: project.id,
+      provisional: false,
+      rootPath: project.rootPath,
+    });
+  }
+
+  public assertTaskOwner(project: Project, taskId: string): void {
+    const owner = this.#taskOwners.get(taskId);
+    if (
+      owner === undefined ||
+      owner.provisional ||
+      owner.projectId !== project.id ||
+      resolve(owner.rootPath) !== resolve(project.rootPath)
+    ) {
+      throw new CodexProtocolMappingError("Codex thread does not belong to the active project");
+    }
+  }
+
+  public releaseProvisionalTask(project: Project, taskId: string): void {
+    const owner = this.#taskOwners.get(taskId);
+    if (owner?.provisional === true && owner.projectId === project.id) {
+      this.#taskOwners.delete(taskId);
+    }
+  }
+}
+
+export function createCodexRuntimeProvider(
+  options: CreateCodexRuntimeProviderOptions,
+): CodexRuntimeProvider {
+  return new CodexRuntimeProvider(options.client);
 }

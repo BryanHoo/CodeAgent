@@ -1,5 +1,6 @@
 import {
   AgentCapabilitiesSchema,
+  AddProjectResponseSchema,
   CompactAgentTaskResponseSchema,
   ForkAgentTaskResponseSchema,
   AgentAttachmentUploadResponseSchema,
@@ -19,6 +20,7 @@ import {
   StartAgentTurnResponseSchema,
   UploadAgentFeedbackResponseSchema,
   type AgentCapabilities,
+  type AddProjectResponse,
   type CompactAgentTaskResponse,
   type ForkAgentTaskResponse,
   type AgentAttachmentUploadRequest,
@@ -114,6 +116,14 @@ function appendQuery(path: string, values: Readonly<Record<string, string | numb
   return encoded ? `${path}?${encoded}` : path;
 }
 
+function projectPath(projectId: string): string {
+  return `/v1/projects/${encodeURIComponent(projectId)}`;
+}
+
+function taskPath(projectId: string, taskId: string): string {
+  return `${projectPath(projectId)}/tasks/${encodeURIComponent(taskId)}`;
+}
+
 export class CodeAgentClient {
   readonly #baseUrl: string;
   readonly #fetch: typeof globalThis.fetch;
@@ -141,6 +151,10 @@ export class CodeAgentClient {
     return this.#request("/v1/projects", ProjectPageSchema);
   }
 
+  public async addProject(options: MutationOptions = {}): Promise<AddProjectResponse> {
+    return this.#mutation("/v1/projects", {}, AddProjectResponseSchema, options);
+  }
+
   public async getProjectGitStatus(projectId: string): Promise<ProjectGitStatus> {
     return this.#request(
       `/v1/projects/${encodeURIComponent(projectId)}/git/status`,
@@ -163,11 +177,8 @@ export class CodeAgentClient {
     return this.#request(path, AgentTaskPageSchema);
   }
 
-  public async readTask(taskId: string): Promise<AgentTaskSnapshotResponse> {
-    return this.#request(
-      `/v1/tasks/${encodeURIComponent(taskId)}`,
-      AgentTaskSnapshotResponseSchema,
-    );
+  public async readTask(projectId: string, taskId: string): Promise<AgentTaskSnapshotResponse> {
+    return this.#request(taskPath(projectId, taskId), AgentTaskSnapshotResponseSchema);
   }
 
   public async startTask(
@@ -183,12 +194,13 @@ export class CodeAgentClient {
   }
 
   public async startReview(
+    projectId: string,
     taskId: string,
     input: ReviewAgentTaskRequest,
     options: MutationOptions = {},
   ): Promise<ReviewAgentTaskResponse> {
     return this.#mutation(
-      `/v1/tasks/${encodeURIComponent(taskId)}/review`,
+      `${taskPath(projectId, taskId)}/review`,
       input,
       ReviewAgentTaskResponseSchema,
       options,
@@ -196,11 +208,12 @@ export class CodeAgentClient {
   }
 
   public async compactTask(
+    projectId: string,
     taskId: string,
     options: MutationOptions = {},
   ): Promise<CompactAgentTaskResponse> {
     return this.#mutation(
-      `/v1/tasks/${encodeURIComponent(taskId)}/compact`,
+      `${taskPath(projectId, taskId)}/compact`,
       {},
       CompactAgentTaskResponseSchema,
       options,
@@ -208,11 +221,12 @@ export class CodeAgentClient {
   }
 
   public async forkTask(
+    projectId: string,
     taskId: string,
     options: MutationOptions = {},
   ): Promise<ForkAgentTaskResponse> {
     return this.#mutation(
-      `/v1/tasks/${encodeURIComponent(taskId)}/fork`,
+      `${taskPath(projectId, taskId)}/fork`,
       {},
       ForkAgentTaskResponseSchema,
       options,
@@ -220,12 +234,13 @@ export class CodeAgentClient {
   }
 
   public async uploadFeedback(
+    projectId: string,
     taskId: string,
     input: UploadAgentFeedbackRequest,
     options: MutationOptions = {},
   ): Promise<UploadAgentFeedbackResponse> {
     return this.#mutation(
-      `/v1/tasks/${encodeURIComponent(taskId)}/feedback`,
+      `${taskPath(projectId, taskId)}/feedback`,
       input,
       UploadAgentFeedbackResponseSchema,
       options,
@@ -233,20 +248,27 @@ export class CodeAgentClient {
   }
 
   public async uploadAttachment(
+    projectId: string,
     input: AgentAttachmentUploadRequest,
     options: MutationOptions = {},
   ): Promise<AgentAttachmentUploadResponse> {
-    return this.#mutation("/v1/attachments", input, AgentAttachmentUploadResponseSchema, options);
+    return this.#mutation(
+      `${projectPath(projectId)}/attachments`,
+      input,
+      AgentAttachmentUploadResponseSchema,
+      options,
+    );
   }
 
   public async startTurn(
+    projectId: string,
     taskId: string,
     input: AgentPromptInput,
     turnOptions: AgentTurnOptions,
     options: MutationOptions = {},
   ): Promise<StartAgentTurnResponse> {
     return this.#mutation(
-      `/v1/tasks/${encodeURIComponent(taskId)}/turns`,
+      `${taskPath(projectId, taskId)}/turns`,
       { input, options: turnOptions },
       StartAgentTurnResponseSchema,
       options,
@@ -254,12 +276,13 @@ export class CodeAgentClient {
   }
 
   public async interruptTurn(
+    projectId: string,
     taskId: string,
     turnId: string,
     options: MutationOptions = {},
   ): Promise<InterruptAgentTurnResponse> {
     return this.#mutation(
-      `/v1/turns/${encodeURIComponent(turnId)}/interrupt`,
+      `${taskPath(projectId, taskId)}/turns/${encodeURIComponent(turnId)}/interrupt`,
       { taskId },
       InterruptAgentTurnResponseSchema,
       options,
@@ -267,12 +290,13 @@ export class CodeAgentClient {
   }
 
   public async rollbackTurn(
+    projectId: string,
     taskId: string,
     turnId: string,
     options: MutationOptions = {},
   ): Promise<RollbackAgentTurnResponse> {
     return this.#mutation(
-      `/v1/turns/${encodeURIComponent(turnId)}/rollback`,
+      `${taskPath(projectId, taskId)}/turns/${encodeURIComponent(turnId)}/rollback`,
       { taskId },
       RollbackAgentTurnResponseSchema,
       options,
@@ -293,7 +317,7 @@ export class CodeAgentClient {
       type: request.type,
     } as ResolvePendingRequestRequest;
     return this.#mutation(
-      `/v1/pending-requests/${encodeURIComponent(request.requestId)}/resolve`,
+      `${taskPath(request.projectId, request.taskId)}/pending-requests/${encodeURIComponent(request.requestId)}/resolve`,
       body,
       ResolvePendingRequestResponseSchema,
       options,

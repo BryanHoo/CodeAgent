@@ -12,6 +12,7 @@ import type {
   PendingRequest,
   ResolvePendingRequestRequest,
   UploadAgentFeedbackRequest,
+  Project,
 } from "@code-agent/protocol";
 
 export type ListAgentTasksInput = Readonly<{
@@ -74,4 +75,11 @@ export interface AgentProvider {
   interruptTurn(taskId: string, turnId: string): Promise<void>;
   subscribeEvents(listener: AgentProviderEventListener): () => void;
   uploadFeedback(taskId: string, input: UploadAgentFeedbackRequest): Promise<void>;
+}
+
+// Runtime 负责全局资源和订阅，Project Adapter 只暴露已校验的项目作用域能力。
+export interface AgentRuntimeProvider {
+  forProject(project: Project): AgentProvider;
+  getCapabilities(): Promise<AgentCapabilities>;
+  listModels(): Promise<AgentModelPage>;
 }

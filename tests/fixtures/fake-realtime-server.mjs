@@ -1,6 +1,9 @@
 import { fileURLToPath } from "node:url";
 
-import { createCodexAgentProvider, startCodexAppServer } from "../../dist/providers/codex/index.js";
+import {
+  createCodexRuntimeProvider,
+  startCodexAppServer,
+} from "../../dist/providers/codex/index.js";
 import { createCodeAgentServer } from "../../dist/server/index.js";
 
 const projectRoot = "/workspace/CodeAgent";
@@ -21,11 +24,16 @@ const project = {
   name: "CodeAgent",
   rootPath: projectRoot,
 };
-const provider = createCodexAgentProvider({ client: runtime.client, project });
+const provider = createCodexRuntimeProvider({ client: runtime.client });
 const server = await createCodeAgentServer({
   eventSessionId: "e2e-session",
-  project,
+  projectRepository: {
+    list: () => Promise.resolve([project]),
+    read: (projectId) => Promise.resolve(projectId === project.id ? project : undefined),
+    register: () => Promise.resolve(project),
+  },
   provider,
+  selectProjectDirectory: () => Promise.resolve(undefined),
   staticRoot,
 });
 

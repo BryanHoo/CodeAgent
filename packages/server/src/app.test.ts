@@ -3,6 +3,7 @@ import {
   type AgentProvider,
   type AgentProviderEvent,
   type AgentProviderTurnInput,
+  type AgentRuntimeProvider,
 } from "@code-agent/core";
 import type { AgentTaskSnapshot, AgentTurn, PendingRequest } from "@code-agent/protocol";
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -175,6 +176,26 @@ function createProvider() {
   };
 }
 
+function createServerOptions(provider: AgentProvider, overrides: Record<string, unknown> = {}) {
+  const runtimeProvider: AgentRuntimeProvider = {
+    forProject: () => provider,
+    getCapabilities: () => provider.getCapabilities(),
+    listModels: () => provider.listModels(),
+  };
+  return {
+    projectRepository: {
+      list: vi.fn(() => Promise.resolve([project])),
+      read: vi.fn((projectId: string) =>
+        Promise.resolve(projectId === project.id ? project : undefined),
+      ),
+      register: vi.fn(() => Promise.resolve(project)),
+    },
+    provider: runtimeProvider,
+    selectProjectDirectory: vi.fn(() => Promise.resolve(undefined)),
+    ...overrides,
+  };
+}
+
 async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }> = {}) {
   const {
     compactTask,
@@ -193,7 +214,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     startTurn,
     uploadFeedback,
   } = createProvider();
-  const app = await createCodeAgentServer({ ...options, project, provider });
+  const app = await createCodeAgentServer(createServerOptions(provider, { ...options }));
   closeCallbacks.push(() => app.close());
   return {
     app,
@@ -235,6 +256,33 @@ describe("CodeAgent Server", () => {
     expect(projectsResponse.json()).toEqual({ data: [project], nextCursor: null });
   });
 
+  it("adds a project through the host directory selector", async () => {
+    const { provider } = createProvider();
+    const register = vi.fn(() => Promise.resolve(project));
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, {
+        projectRepository: {
+          list: () => Promise.resolve([]),
+          read: () => Promise.resolve(undefined),
+          register,
+        },
+        selectProjectDirectory: () => Promise.resolve(project.rootPath),
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({
+      headers: { "idempotency-key": "add-project" },
+      method: "POST",
+      payload: {},
+      url: "/v1/projects",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ project });
+    expect(register).toHaveBeenCalledWith({ name: "CodeAgent", rootPath: project.rootPath });
+  });
+
   it("serves the configured project's Git working tree status", async () => {
     const { provider } = createProvider();
     const readProjectGitStatus = vi.fn(() =>
@@ -249,7 +297,9 @@ describe("CodeAgent Server", () => {
         unstaged: [],
       }),
     );
-    const app = await createCodeAgentServer({ project, provider, readProjectGitStatus });
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, { readProjectGitStatus }),
+    );
     closeCallbacks.push(() => app.close());
 
     const response = await app.inject({
@@ -277,7 +327,9 @@ describe("CodeAgent Server", () => {
         truncated: true,
       }),
     );
-    const app = await createCodeAgentServer({ project, provider, readProjectSourceFile });
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, { readProjectSourceFile }),
+    );
     closeCallbacks.push(() => app.close());
 
     const response = await app.inject({
@@ -310,7 +362,7 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "upload-1" },
       method: "POST" as const,
       payload: { dataUrl: pixelDataUrl, name: "screen.png" },
-      url: "/v1/attachments",
+      url: "/v1/projects/code-agent/attachments",
     };
     const uploaded = await app.inject(uploadRequest);
     const repeatedUpload = await app.inject(uploadRequest);
@@ -322,7 +374,7 @@ describe("CodeAgent Server", () => {
         input: { attachments: [{ id: attachment.id }], text: "", type: "prompt" },
         options: turnOptions,
       },
-      url: "/v1/tasks/task-1/turns",
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
     const consumed = await app.inject({
       headers: { "idempotency-key": "attachment-consumed" },
@@ -331,7 +383,7 @@ describe("CodeAgent Server", () => {
         input: { attachments: [{ id: attachment.id }], text: "", type: "prompt" },
         options: turnOptions,
       },
-      url: "/v1/tasks/task-1/turns",
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
 
     expect(models.statusCode).toBe(200);
@@ -366,7 +418,10 @@ describe("CodeAgent Server", () => {
 
   it("reads a structured task snapshot", async () => {
     const { app } = await createHarness();
-    const response = await app.inject({ method: "GET", url: "/v1/tasks/task-1" });
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/task-1",
+    });
     const body = response.json<{
       checkpoint: { sequence: number; sessionId: unknown };
       snapshot: typeof snapshot;
@@ -398,7 +453,7 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "turn-1" },
       method: "POST",
       payload: turnRequest("继续实现"),
-      url: "/v1/tasks/task-1/turns",
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
     const turnBody = turn.json<{ taskId: string; turn: AgentTurn }>();
     readTask.mockResolvedValueOnce({
@@ -410,7 +465,7 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "interrupt-1" },
       method: "POST",
       payload: { taskId: "task-1" },
-      url: "/v1/turns/turn-1/interrupt",
+      url: "/v1/projects/code-agent/tasks/task-1/turns/turn-1/interrupt",
     });
 
     expect(created.statusCode).toBe(201);
@@ -435,7 +490,7 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "interrupt-1" },
       method: "POST",
       payload: { taskId: "task-1" },
-      url: "/v1/turns/turn-1/interrupt",
+      url: "/v1/projects/code-agent/tasks/task-1/turns/turn-1/interrupt",
     });
 
     expect(replayedInterrupt.statusCode).toBe(202);
@@ -449,7 +504,7 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "review-key" },
       method: "POST" as const,
       payload: { target: { type: "base_branch", branch: "main" } },
-      url: "/v1/tasks/task-1/review",
+      url: "/v1/projects/code-agent/tasks/task-1/review",
     };
 
     const review = await app.inject(reviewRequest);
@@ -458,19 +513,19 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "compact-key" },
       method: "POST",
       payload: {},
-      url: "/v1/tasks/task-1/compact",
+      url: "/v1/projects/code-agent/tasks/task-1/compact",
     });
     const fork = await app.inject({
       headers: { "idempotency-key": "fork-key" },
       method: "POST",
       payload: {},
-      url: "/v1/tasks/task-1/fork",
+      url: "/v1/projects/code-agent/tasks/task-1/fork",
     });
     const feedback = await app.inject({
       headers: { "idempotency-key": "feedback-key" },
       method: "POST",
       payload: { classification: "other", includeLogs: true, reason: "体验反馈" },
-      url: "/v1/tasks/task-1/feedback",
+      url: "/v1/projects/code-agent/tasks/task-1/feedback",
     });
 
     expect(review.statusCode, review.body).toBe(201);
@@ -494,6 +549,63 @@ describe("CodeAgent Server", () => {
       includeLogs: true,
       reason: "体验反馈",
     });
+  });
+
+  it("isolates idempotent task command results by project", async () => {
+    const primary = createProvider();
+    const secondary = createProvider();
+    const otherProject = {
+      ...project,
+      id: "other-project",
+      name: "Other Project",
+      rootPath: "/workspace/OtherProject",
+    };
+    secondary.readTask.mockResolvedValue({ ...snapshot, projectId: otherProject.id });
+    secondary.startReview.mockResolvedValue({
+      completedAt: null,
+      error: null,
+      id: "other-review-turn",
+      items: [],
+      startedAt: "2026-07-26T00:00:00.000Z",
+      status: "running",
+    });
+    const runtimeProvider: AgentRuntimeProvider = {
+      forProject: (activeProject) =>
+        activeProject.id === otherProject.id ? secondary.provider : primary.provider,
+      getCapabilities: () => primary.provider.getCapabilities(),
+      listModels: () => primary.provider.listModels(),
+    };
+    const app = await createCodeAgentServer({
+      projectRepository: {
+        list: () => Promise.resolve([project, otherProject]),
+        read: (projectId) =>
+          Promise.resolve([project, otherProject].find((item) => item.id === projectId)),
+        register: () => Promise.resolve(project),
+      },
+      provider: runtimeProvider,
+      selectProjectDirectory: () => Promise.resolve(undefined),
+    });
+    closeCallbacks.push(() => app.close());
+    const request = {
+      headers: { "idempotency-key": "shared-review-key" },
+      method: "POST" as const,
+      payload: { target: { type: "uncommitted_changes" } },
+    };
+
+    const first = await app.inject({
+      ...request,
+      url: "/v1/projects/code-agent/tasks/task-1/review",
+    });
+    const second = await app.inject({
+      ...request,
+      url: "/v1/projects/other-project/tasks/task-1/review",
+    });
+
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(201);
+    expect(second.json()).toMatchObject({ turn: { id: "other-review-turn" } });
+    expect(primary.startReview).toHaveBeenCalledTimes(1);
+    expect(secondary.startReview).toHaveBeenCalledTimes(1);
   });
 
   it("restores files and rolls back the latest completed turn idempotently", async () => {
@@ -528,17 +640,15 @@ describe("CodeAgent Server", () => {
     const prepareTurnFileRollback = vi.fn(() =>
       Promise.resolve({ applyForward, applyReverse, restoredFiles: ["src/index.ts"] }),
     );
-    const app = await createCodeAgentServer({
-      prepareTurnFileRollback,
-      project,
-      provider,
-    });
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, { prepareTurnFileRollback }),
+    );
     closeCallbacks.push(() => app.close());
     const request = {
       headers: { "idempotency-key": "rollback-1" },
       method: "POST" as const,
       payload: { taskId: "task-1" },
-      url: "/v1/turns/turn-1/rollback",
+      url: "/v1/projects/code-agent/tasks/task-1/turns/turn-1/rollback",
     };
 
     const first = await app.inject(request);
@@ -584,19 +694,19 @@ describe("CodeAgent Server", () => {
     rollbackLatestTurn.mockRejectedValue(new Error("Codex unavailable"));
     const applyReverse = vi.fn(() => Promise.resolve());
     const applyForward = vi.fn(() => Promise.resolve());
-    const app = await createCodeAgentServer({
-      prepareTurnFileRollback: () =>
-        Promise.resolve({ applyForward, applyReverse, restoredFiles: ["new.ts"] }),
-      project,
-      provider,
-    });
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, {
+        prepareTurnFileRollback: () =>
+          Promise.resolve({ applyForward, applyReverse, restoredFiles: ["new.ts"] }),
+      }),
+    );
     closeCallbacks.push(() => app.close());
 
     const response = await app.inject({
       headers: { "idempotency-key": "rollback-failed" },
       method: "POST",
       payload: { taskId: "task-1" },
-      url: "/v1/turns/turn-1/rollback",
+      url: "/v1/projects/code-agent/tasks/task-1/turns/turn-1/rollback",
     });
 
     expect(response.statusCode).toBe(502);
@@ -618,7 +728,7 @@ describe("CodeAgent Server", () => {
         turnId: pendingRequest.turnId,
         type: pendingRequest.type,
       },
-      url: `/v1/pending-requests/${encodeURIComponent(pendingRequest.requestId)}/resolve`,
+      url: `/v1/projects/code-agent/tasks/task-1/pending-requests/${encodeURIComponent(pendingRequest.requestId)}/resolve`,
     };
 
     const first = await app.inject(request);
@@ -647,11 +757,11 @@ describe("CodeAgent Server", () => {
         turnId: pendingRequest.turnId,
         type: pendingRequest.type,
       },
-      url: `/v1/pending-requests/${encodeURIComponent(pendingRequest.requestId)}/resolve`,
+      url: `/v1/projects/code-agent/tasks/task-1/pending-requests/${encodeURIComponent(pendingRequest.requestId)}/resolve`,
     };
     const crossProject = await app.inject(request);
-    expect(crossProject.statusCode).toBe(404);
-    expect(crossProject.json()).toMatchObject({ code: "PROJECT_NOT_FOUND" });
+    expect(crossProject.statusCode).toBe(409);
+    expect(crossProject.json()).toMatchObject({ code: "PENDING_REQUEST_MISMATCH" });
     expect(resolvePendingRequest).not.toHaveBeenCalled();
 
     resolvePendingRequest.mockRejectedValueOnce(
@@ -660,7 +770,7 @@ describe("CodeAgent Server", () => {
     const mismatch = await app.inject({
       ...request,
       headers: { "idempotency-key": "resolve-mismatch" },
-      payload: { ...request.payload, projectId: pendingRequest.projectId, taskId: "other-task" },
+      payload: { ...request.payload, itemId: "other-item", projectId: pendingRequest.projectId },
     });
     expect(mismatch.statusCode).toBe(409);
     expect(mismatch.json()).toMatchObject({ code: "PENDING_REQUEST_MISMATCH" });
@@ -688,14 +798,14 @@ describe("CodeAgent Server", () => {
       method: "POST",
       payload:
         '{"input":{"attachments":[],"text":"继续实现","type":"prompt"},"options":{"approvalPolicy":"on-request","model":"gpt-5.6-sol","reasoningEffort":"high"}}',
-      url: "/v1/tasks/task-1/turns",
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
     const repeated = await app.inject({
       headers,
       method: "POST",
       payload:
         '{"options":{"reasoningEffort":"high","model":"gpt-5.6-sol","approvalPolicy":"on-request"},"input":{"type":"prompt","text":"继续实现","attachments":[]}}',
-      url: "/v1/tasks/task-1/turns",
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
 
     expect(first.statusCode).toBe(201);
@@ -715,13 +825,13 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "b:c" },
       method: "POST",
       payload,
-      url: "/v1/tasks/task%3Aa/turns",
+      url: "/v1/projects/code-agent/tasks/task%3Aa/turns",
     });
     const second = await app.inject({
       headers: { "idempotency-key": "c" },
       method: "POST",
       payload,
-      url: "/v1/tasks/task%3Aa%3Ab/turns",
+      url: "/v1/projects/code-agent/tasks/task%3Aa%3Ab/turns",
     });
 
     expect(first.statusCode).toBe(201);
@@ -776,14 +886,14 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "terminal-turn" },
       method: "POST",
       payload: { taskId: "task-1" },
-      url: "/v1/turns/turn-completed/interrupt",
+      url: "/v1/projects/code-agent/tasks/task-1/turns/turn-completed/interrupt",
     });
     readTask.mockResolvedValueOnce(snapshot);
     const missing = await app.inject({
       headers: { "idempotency-key": "missing-turn" },
       method: "POST",
       payload: { taskId: "task-1" },
-      url: "/v1/turns/turn-missing/interrupt",
+      url: "/v1/projects/code-agent/tasks/task-1/turns/turn-missing/interrupt",
     });
 
     expect(terminal.statusCode).toBe(409);
@@ -804,13 +914,13 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "turn-conflict" },
       method: "POST",
       payload: turnRequest("第一次"),
-      url: "/v1/tasks/task-1/turns",
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
     const conflict = await app.inject({
       headers: { "idempotency-key": "turn-conflict" },
       method: "POST",
       payload: turnRequest("第二次"),
-      url: "/v1/tasks/task-1/turns",
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
 
     expect(missingKey.statusCode).toBe(400);
@@ -883,10 +993,13 @@ describe("CodeAgent Server", () => {
         return Promise.resolve(snapshotDuringRead);
       }),
     };
-    const app = await createCodeAgentServer({ project, provider });
+    const app = await createCodeAgentServer(createServerOptions(provider));
     closeCallbacks.push(() => app.close());
 
-    const response = await app.inject({ method: "GET", url: "/v1/tasks/task-1" });
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/task-1",
+    });
 
     expect(response.json()).toMatchObject({
       checkpoint: { sequence: 1 },
@@ -898,7 +1011,7 @@ describe("CodeAgent Server", () => {
     const { app, emitEvent } = await createHarness();
     const messages: unknown[] = [];
     const socket = await app.injectWS(
-      "/v1/events?afterSequence=0",
+      "/v1/projects/code-agent/events?afterSequence=0",
       { headers: { host: "127.0.0.1:3210", origin: "http://127.0.0.1:3210" } },
       {
         onInit(webSocket) {
@@ -941,11 +1054,9 @@ describe("CodeAgent Server", () => {
 
   it("replays retained events and requests resync after retention expires", async () => {
     const harness = createProvider();
-    const app = await createCodeAgentServer({
-      eventBufferSize: 1,
-      project,
-      provider: harness.provider,
-    });
+    const app = await createCodeAgentServer(
+      createServerOptions(harness.provider, { eventBufferSize: 1 }),
+    );
     closeCallbacks.push(() => app.close());
     const event = {
       itemId: "item-1",
@@ -959,7 +1070,7 @@ describe("CodeAgent Server", () => {
 
     const replayed: unknown[] = [];
     const replaySocket = await app.injectWS(
-      "/v1/events?afterSequence=1",
+      "/v1/projects/code-agent/events?afterSequence=1",
       { headers: { host: "localhost", origin: "http://localhost" } },
       {
         onInit(webSocket) {
@@ -977,7 +1088,7 @@ describe("CodeAgent Server", () => {
 
     const expired: unknown[] = [];
     const expiredSocket = await app.injectWS(
-      "/v1/events?afterSequence=0",
+      "/v1/projects/code-agent/events?afterSequence=0",
       { headers: { host: "localhost", origin: "http://localhost" } },
       {
         onInit(webSocket) {
@@ -1003,11 +1114,11 @@ describe("CodeAgent Server", () => {
   it("rejects invalid event queries and cross-origin WebSockets", async () => {
     const { app } = await createHarness();
 
-    await expect(app.injectWS("/v1/events?afterSequence=-1")).rejects.toThrow(
+    await expect(app.injectWS("/v1/projects/code-agent/events?afterSequence=-1")).rejects.toThrow(
       /Unexpected server response: 400/u,
     );
     await expect(
-      app.injectWS("/v1/events?afterSequence=0", {
+      app.injectWS("/v1/projects/code-agent/events?afterSequence=0", {
         headers: { host: "localhost", origin: "http://attacker.example" },
       }),
     ).rejects.toThrow(/Unexpected server response: 403/u);
@@ -1015,6 +1126,7 @@ describe("CodeAgent Server", () => {
 
   it("unsubscribes from Provider events when Fastify closes", async () => {
     const { app, eventListeners } = await createHarness();
+    await app.inject({ method: "GET", url: "/v1/projects/code-agent/tasks" });
     expect(eventListeners.size).toBe(1);
 
     await app.close();
@@ -1028,7 +1140,10 @@ describe("CodeAgent Server", () => {
       method: "GET",
       url: "/v1/projects/other/tasks",
     });
-    const taskResponse = await app.inject({ method: "GET", url: "/v1/tasks/missing" });
+    const taskResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/missing",
+    });
 
     expect(projectResponse.statusCode).toBe(404);
     expect(taskResponse.statusCode).toBe(404);
@@ -1051,11 +1166,9 @@ describe("CodeAgent Server", () => {
     const staticRoot = await mkdtemp(join(tmpdir(), "code-agent-web-"));
     await writeFile(join(staticRoot, "index.html"), "<main>CodeAgent Web</main>", "utf8");
     await writeFile(join(staticRoot, "app.js"), "export {};", "utf8");
-    const app = await createCodeAgentServer({
-      project,
-      provider: createProvider().provider,
-      staticRoot,
-    });
+    const app = await createCodeAgentServer(
+      createServerOptions(createProvider().provider, { staticRoot }),
+    );
     closeCallbacks.push(() => app.close());
 
     const routeResponse = await app.inject({ method: "GET", url: "/p/code-agent/t/task-1" });

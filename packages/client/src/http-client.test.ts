@@ -63,6 +63,18 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
 }
 
 describe("CodeAgentClient", () => {
+  it("opens the host directory picker through the projects endpoint", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse({ project: null }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.addProject({ idempotencyKey: "project-key" })).resolves.toEqual({
+      project: null,
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ body: "{}", method: "POST" });
+  });
+
   it("builds task pagination requests and validates successful responses", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock.mockResolvedValue(jsonResponse({ data: [task], nextCursor: null }));
@@ -149,13 +161,13 @@ describe("CodeAgentClient", () => {
     await client.getHealth();
     await client.getCapabilities();
     await client.listProjects();
-    await client.readTask("task-1");
+    await client.readTask("code-agent", "task-1");
 
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       "http://127.0.0.1:3210/v1/health",
       "http://127.0.0.1:3210/v1/capabilities",
       "http://127.0.0.1:3210/v1/projects",
-      "http://127.0.0.1:3210/v1/tasks/task-1",
+      "http://127.0.0.1:3210/v1/projects/code-agent/tasks/task-1",
     ]);
   });
 
@@ -196,29 +208,35 @@ describe("CodeAgentClient", () => {
 
     await client.startTask("code-agent", { idempotencyKey: "task-key" });
     await client.uploadAttachment(
+      "code-agent",
       { dataUrl: pixelDataUrl, name: attachment.name },
       { idempotencyKey: "attachment-key" },
     );
     await client.startTurn(
+      "code-agent",
       task.id,
       { attachments: [{ id: attachment.id }], text: "继续实现", type: "prompt" },
       { approvalPolicy: "on-request", model: "gpt-5.6-sol", reasoningEffort: "high" },
       { idempotencyKey: "turn-key" },
     );
-    await client.interruptTurn(task.id, runningTurn.id, { idempotencyKey: "interrupt-key" });
-    await client.rollbackTurn(task.id, runningTurn.id, { idempotencyKey: "rollback-key" });
+    await client.interruptTurn("code-agent", task.id, runningTurn.id, {
+      idempotencyKey: "interrupt-key",
+    });
+    await client.rollbackTurn("code-agent", task.id, runningTurn.id, {
+      idempotencyKey: "rollback-key",
+    });
 
     const [taskCall, attachmentCall, turnCall, interruptCall, rollbackCall] = fetchMock.mock.calls;
     expect(taskCall?.[0]).toBe("/v1/projects/code-agent/tasks");
     expect(taskCall?.[1]).toMatchObject({ body: "{}", method: "POST" });
     expect(new Headers(taskCall?.[1]?.headers).get("idempotency-key")).toBe("task-key");
-    expect(attachmentCall?.[0]).toBe("/v1/attachments");
+    expect(attachmentCall?.[0]).toBe("/v1/projects/code-agent/attachments");
     expect(attachmentCall?.[1]).toMatchObject({
       body: JSON.stringify({ dataUrl: pixelDataUrl, name: "screen.png" }),
       method: "POST",
     });
     expect(new Headers(attachmentCall?.[1]?.headers).get("idempotency-key")).toBe("attachment-key");
-    expect(turnCall?.[0]).toBe("/v1/tasks/task-1/turns");
+    expect(turnCall?.[0]).toBe("/v1/projects/code-agent/tasks/task-1/turns");
     expect(turnCall?.[1]).toMatchObject({
       body: JSON.stringify({
         input: {
@@ -235,13 +253,13 @@ describe("CodeAgentClient", () => {
       method: "POST",
     });
     expect(new Headers(turnCall?.[1]?.headers).get("idempotency-key")).toBe("turn-key");
-    expect(interruptCall?.[0]).toBe("/v1/turns/turn-1/interrupt");
+    expect(interruptCall?.[0]).toBe("/v1/projects/code-agent/tasks/task-1/turns/turn-1/interrupt");
     expect(interruptCall?.[1]).toMatchObject({
       body: JSON.stringify({ taskId: "task-1" }),
       method: "POST",
     });
     expect(new Headers(interruptCall?.[1]?.headers).get("idempotency-key")).toBe("interrupt-key");
-    expect(rollbackCall?.[0]).toBe("/v1/turns/turn-1/rollback");
+    expect(rollbackCall?.[0]).toBe("/v1/projects/code-agent/tasks/task-1/turns/turn-1/rollback");
     expect(rollbackCall?.[1]).toMatchObject({
       body: JSON.stringify({ taskId: "task-1" }),
       method: "POST",
@@ -268,23 +286,25 @@ describe("CodeAgentClient", () => {
     const client = new CodeAgentClient({ fetch: fetchMock });
 
     await client.startReview(
+      "code-agent",
       task.id,
       { target: { type: "uncommitted_changes" } },
       { idempotencyKey: "review-key" },
     );
-    await client.compactTask(task.id, { idempotencyKey: "compact-key" });
-    await client.forkTask(task.id, { idempotencyKey: "fork-key" });
+    await client.compactTask("code-agent", task.id, { idempotencyKey: "compact-key" });
+    await client.forkTask("code-agent", task.id, { idempotencyKey: "fork-key" });
     await client.uploadFeedback(
+      "code-agent",
       task.id,
       { classification: "other", includeLogs: true, reason: "体验反馈" },
       { idempotencyKey: "feedback-key" },
     );
 
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
-      "/v1/tasks/task-1/review",
-      "/v1/tasks/task-1/compact",
-      "/v1/tasks/task-1/fork",
-      "/v1/tasks/task-1/feedback",
+      "/v1/projects/code-agent/tasks/task-1/review",
+      "/v1/projects/code-agent/tasks/task-1/compact",
+      "/v1/projects/code-agent/tasks/task-1/fork",
+      "/v1/projects/code-agent/tasks/task-1/feedback",
     ]);
     expect(
       fetchMock.mock.calls.map((call) => new Headers(call[1]?.headers).get("idempotency-key")),
@@ -307,7 +327,9 @@ describe("CodeAgentClient", () => {
     ).resolves.toMatchObject({ request: { status: "resolved" } });
 
     const call = fetchMock.mock.calls[0];
-    expect(call?.[0]).toBe("/v1/pending-requests/number%3A7/resolve");
+    expect(call?.[0]).toBe(
+      "/v1/projects/code-agent/tasks/task-1/pending-requests/number%3A7/resolve",
+    );
     expect(call?.[1]).toMatchObject({
       body: JSON.stringify({
         itemId: "command-1",

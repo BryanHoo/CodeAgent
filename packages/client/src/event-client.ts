@@ -15,6 +15,7 @@ export interface SubscribeAgentEventsOptions {
   onError?: (error: Error) => void;
   onEvent: (event: AgentEvent) => void;
   onResyncRequired: (message: ResyncRequired) => void;
+  projectId: string;
   reconnectDelayMs?: number;
   sessionId: string;
 }
@@ -31,10 +32,9 @@ export class CodeAgentEventError extends Error {
   }
 }
 
-function createEventUrl(baseUrl: string, afterSequence: number): string {
-  const httpUrl = baseUrl
-    ? new URL(`${baseUrl}/v1/events`)
-    : new URL("/v1/events", globalThis.location.href);
+function createEventUrl(baseUrl: string, projectId: string, afterSequence: number): string {
+  const path = `/v1/projects/${encodeURIComponent(projectId)}/events`;
+  const httpUrl = baseUrl ? new URL(`${baseUrl}${path}`) : new URL(path, globalThis.location.href);
   httpUrl.protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
   httpUrl.searchParams.set("afterSequence", String(afterSequence));
   return httpUrl.toString();
@@ -103,7 +103,9 @@ export function startAgentEventSubscription(
     }
     retryTimer = undefined;
     let connectionReady = false;
-    const currentSocket = options.webSocketFactory(createEventUrl(options.baseUrl, lastSequence));
+    const currentSocket = options.webSocketFactory(
+      createEventUrl(options.baseUrl, options.projectId, lastSequence),
+    );
     socket = currentSocket;
 
     const onMessage = (event: MessageEvent) => {

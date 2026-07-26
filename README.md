@@ -26,14 +26,13 @@ pnpm test:e2e
 ## CLI 命令
 
 ```bash
-code-agent start --project /path/to/project
+code-agent start
 code-agent doctor
 code-agent version
 ```
 
-`start` 支持 `--codex-bin`、`--codex-home` 和 `--project`。启动后浏览器会打开
-`http://127.0.0.1:3210`，展示指定 Project 的真实 Codex Task 列表与结构化历史；收到
-`SIGINT` 或 `SIGTERM` 后会依次关闭 HTTP Server 和长驻 Codex App Server。
+`start` 支持 `--codex-bin` 和 `--codex-home`。启动后浏览器会打开
+`http://127.0.0.1:3210`。首次启动项目列表为空，通过 Projects 标题右侧的 `+` 使用系统目录选择器添加文件夹；列表原子写入 `CODEX_HOME/code-agent/projects.json`。收到 `SIGINT` 或 `SIGTERM` 后会依次关闭 HTTP Server 和全局长驻 Codex App Server。
 
 在 Composer 起始位置输入 `/`，可执行代码审查、初始化、副任务、上下文压缩、反馈和在新任务中继续。代码审查、压缩、反馈与续接直接调用 Codex App Server 对应能力；初始化和副任务通过正常 Turn 提交。
 

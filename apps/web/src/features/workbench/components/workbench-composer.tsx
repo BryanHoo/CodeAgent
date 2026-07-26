@@ -195,9 +195,15 @@ export async function startPromptTurn(
     taskId = response.task.id;
     options.onTaskCreated?.(response.task);
   }
-  const response = await client.startTurn(taskId, options.input, options.turnOptions, {
-    idempotencyKey: options.idempotencyKeys.startTurn,
-  });
+  const response = await client.startTurn(
+    options.projectId,
+    taskId,
+    options.input,
+    options.turnOptions,
+    {
+      idempotencyKey: options.idempotencyKeys.startTurn,
+    },
+  );
   return {
     ...(createdTask === undefined ? {} : { createdTask }),
     taskId,
@@ -207,11 +213,12 @@ export async function startPromptTurn(
 
 export function interruptPromptTurn(
   client: Pick<CodeAgentMutationClient, "interruptTurn">,
+  projectId: string,
   taskId: string,
   turnId: string,
   idempotencyKey: string,
 ) {
-  return client.interruptTurn(taskId, turnId, { idempotencyKey });
+  return client.interruptTurn(projectId, taskId, turnId, { idempotencyKey });
 }
 
 type WorkbenchComposerProps = Readonly<{
@@ -391,6 +398,7 @@ export function WorkbenchComposer({
             uploadAttempts.current.get(attachment.id) ?? globalThis.crypto.randomUUID();
           uploadAttempts.current.set(attachment.id, idempotencyKey);
           const response = await client.uploadAttachment(
+            projectId,
             { dataUrl: await readFileAsDataUrl(attachment.file), name: attachment.name },
             { idempotencyKey },
           );
@@ -496,7 +504,9 @@ export function WorkbenchComposer({
     );
     commandAttempts.current.set("feedback", attempt);
     try {
-      await client.uploadFeedback(activeTaskId, input, { idempotencyKey: attempt.key });
+      await client.uploadFeedback(projectId, activeTaskId, input, {
+        idempotencyKey: attempt.key,
+      });
       commandAttempts.current.delete("feedback");
       setCommandDraftMode(null);
       setCommandNotice("反馈已发送");
@@ -542,6 +552,7 @@ export function WorkbenchComposer({
     try {
       if (command.action === "review") {
         const response = await client.startReview(
+          projectId,
           activeTaskId,
           { target: { type: "uncommitted_changes" } },
           { idempotencyKey: attempt.key },
@@ -549,10 +560,12 @@ export function WorkbenchComposer({
         setSubmittedTurnId(response.turn.id);
         setCommandNotice("代码审查已开始");
       } else if (command.action === "compact") {
-        await client.compactTask(activeTaskId, { idempotencyKey: attempt.key });
+        await client.compactTask(projectId, activeTaskId, { idempotencyKey: attempt.key });
         setCommandNotice("正在压缩上下文");
       } else {
-        const response = await client.forkTask(activeTaskId, { idempotencyKey: attempt.key });
+        const response = await client.forkTask(projectId, activeTaskId, {
+          idempotencyKey: attempt.key,
+        });
         onTaskStarted(response.task.id);
       }
       commandAttempts.current.delete(command.action);
@@ -588,7 +601,7 @@ export function WorkbenchComposer({
     interruptAttempt.current = attempt;
     try {
       // `202` 仅确认请求已接收；同一 Turn 到达终态前继续复用当前 Key。
-      await interruptPromptTurn(client, activeTaskId, activeTurnId, attempt.key);
+      await interruptPromptTurn(client, projectId, activeTaskId, activeTurnId, attempt.key);
     } catch (error) {
       setMutationError(error instanceof Error ? error : new Error("Turn interruption failed"));
     } finally {

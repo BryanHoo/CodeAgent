@@ -45,20 +45,31 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     subscribeEvents: vi.fn(() => () => undefined),
     uploadFeedback: vi.fn(),
   };
+  const runtimeProvider = {
+    forProject: vi.fn(() => provider),
+    getCapabilities: provider.getCapabilities,
+    listModels: provider.listModels,
+  };
   const project = {
     createdAt: "2026-07-23T00:00:00.000Z",
     id: "project",
     name: "project",
     rootPath: "/workspace/project",
   };
+  const projectRepository = {
+    list: vi.fn(() => Promise.resolve([])),
+    read: vi.fn(() => Promise.resolve(undefined)),
+    register: vi.fn(),
+  };
   const dependencies: CliDependencies = {
     appVersion: "1.2.3",
     checkCodexVersion: vi.fn(() =>
       Promise.resolve({ raw: "codex-cli 0.145.0", version: "0.145.0" }),
     ),
-    createAgentProvider: vi.fn(() => {
+    createProjectRepository: vi.fn(() => projectRepository),
+    createRuntimeProvider: vi.fn(() => {
       lifecycle.push("provider.create");
-      return provider;
+      return runtimeProvider;
     }),
     createServer: vi.fn(() => Promise.resolve({ close: serverClose, listen: serverListen })),
     locateCodexBinary: vi.fn(() =>
@@ -69,10 +80,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
       lifecycle.push("browser.open");
       return Promise.resolve();
     }),
-    resolveProject: vi.fn(() => {
-      lifecycle.push("project.resolve");
-      return Promise.resolve(project);
-    }),
+    selectProjectDirectory: vi.fn(() => Promise.resolve(undefined)),
     startCodexAppServer: vi.fn(() =>
       Promise.resolve({ client, close, pid: 4321, waitForExit: () => exit }),
     ),
@@ -97,7 +105,9 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
       },
     },
     project,
+    projectRepository,
     provider,
+    runtimeProvider,
     stderr,
     serverClose,
     serverListen,
@@ -139,38 +149,33 @@ describe("runCli", () => {
   it("starts Codex, HTTP, and static Web then closes on abort", async () => {
     const harness = createHarness();
     const controller = new AbortController();
-    const run = runCli(
-      [
-        "start",
-        "--codex-bin",
-        "/custom/codex",
-        "--codex-home",
-        "/custom/home",
-        "--project",
-        "/workspace/project",
-      ],
-      { ...harness.options, signal: controller.signal },
-    );
+    const run = runCli(["start", "--codex-bin", "/custom/codex", "--codex-home", "/custom/home"], {
+      ...harness.options,
+      signal: controller.signal,
+    });
 
     await vi.waitFor(() => {
-      expect(harness.dependencies.startCodexAppServer).toHaveBeenCalledOnce();
+      expect(harness.dependencies.createServer).toHaveBeenCalledOnce();
     });
     const [startOptions] = vi.mocked(harness.dependencies.startCodexAppServer).mock.calls[0] ?? [];
     expect(startOptions).toMatchObject({
       appVersion: "1.2.3",
       binaryPath: "/custom/codex",
-      cwd: "/workspace/project",
     });
+    expect(startOptions).not.toHaveProperty("cwd");
     expect(startOptions?.env?.["CODEX_HOME"]).toBe("/custom/home");
-    expect(harness.dependencies.createAgentProvider).toHaveBeenCalledWith({
+    expect(harness.dependencies.createRuntimeProvider).toHaveBeenCalledWith({
       client: harness.client,
-      project: harness.project,
     });
     expect(harness.dependencies.createServer).toHaveBeenCalledWith({
-      project: harness.project,
-      provider: harness.provider,
+      projectRepository: harness.projectRepository,
+      provider: harness.runtimeProvider,
+      selectProjectDirectory: harness.dependencies.selectProjectDirectory,
       staticRoot: "/package/dist/web",
     });
+    expect(harness.dependencies.createProjectRepository).toHaveBeenCalledWith(
+      "/custom/home/code-agent/projects.json",
+    );
     expect(harness.serverListen).toHaveBeenCalledWith({ host: "127.0.0.1", port: 3210 });
     expect(harness.dependencies.openBrowser).toHaveBeenCalledWith("http://127.0.0.1:3210");
     expect(harness.stdout.join("")).toContain("CodeAgent started at http://127.0.0.1:3210");
@@ -181,7 +186,6 @@ describe("runCli", () => {
     expect(harness.close).toHaveBeenCalledOnce();
     expect(harness.serverClose).toHaveBeenCalledOnce();
     expect(harness.lifecycle).toEqual([
-      "project.resolve",
       "provider.create",
       "server.listen",
       "browser.open",
@@ -226,7 +230,7 @@ describe("runCli", () => {
       openBrowser: vi.fn(() => Promise.reject(new Error("browser unavailable"))),
     });
     const controller = new AbortController();
-    const run = runCli(["start", "--project", "/workspace/project"], {
+    const run = runCli(["start"], {
       ...harness.options,
       signal: controller.signal,
     });
@@ -272,5 +276,15 @@ describe("runCli", () => {
     expect(helpHarness.stdout.join("")).toContain("code-agent start");
     expect(unknownHarness.stderr.join("")).toContain("Unknown command: unknown");
     expect(invalidHarness.stderr.join("")).toContain("Missing value for --codex-bin");
+  });
+
+  it("rejects the removed --project option", async () => {
+    const harness = createHarness();
+
+    await expect(
+      runCli(["start", "--project", "/workspace/project"], harness.options),
+    ).resolves.toBe(1);
+    expect(harness.stderr.join("")).toContain("Unknown option: --project");
+    expect(harness.dependencies.startCodexAppServer).not.toHaveBeenCalled();
   });
 });

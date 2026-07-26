@@ -28,12 +28,26 @@ function isDeltaEvent(event: AgentEvent): boolean {
   );
 }
 
+export function selectActiveTaskRuntime(
+  runtime: TaskRuntimeState | undefined,
+  projectId: string,
+  taskId: string | undefined,
+): TaskRuntimeState | undefined {
+  // 统一收口路由身份判断，避免旧 Runtime 状态直接进入渲染层。
+  return taskId !== undefined &&
+    runtime?.snapshot.projectId === projectId &&
+    runtime.snapshot.id === taskId
+    ? runtime
+    : undefined;
+}
+
 export function useTaskRuntime(
+  projectId: string,
   taskId: string | undefined,
   client: CodeAgentRuntimeClient,
 ): TaskRuntimeView {
   const taskQuery = useQuery({
-    ...taskSnapshotQueryOptions(taskId ?? "no-active-task", client),
+    ...taskSnapshotQueryOptions(projectId, taskId ?? "no-active-task", client),
     enabled: taskId !== undefined,
   });
   const [runtime, setRuntime] = useState<TaskRuntimeState>();
@@ -77,6 +91,7 @@ export function useTaskRuntime(
     let unsubscribe: () => void = () => undefined;
     unsubscribe = client.subscribeEvents({
       afterSequence: response.checkpoint.sequence,
+      projectId,
       onConnectionState(connectionState) {
         setRuntime((current) =>
           current === undefined ? current : { ...current, connectionState },
@@ -129,10 +144,9 @@ export function useTaskRuntime(
         cancelAnimationFrame(frameId);
       }
     };
-  }, [client, taskQuery.data, taskQuery.refetch]);
+  }, [client, projectId, taskQuery.data, taskQuery.refetch]);
 
-  const activeRuntime =
-    taskId !== undefined && runtime?.snapshot.id === taskId ? runtime : undefined;
+  const activeRuntime = selectActiveTaskRuntime(runtime, projectId, taskId);
   const error =
     activeRuntime === undefined
       ? taskQuery.error

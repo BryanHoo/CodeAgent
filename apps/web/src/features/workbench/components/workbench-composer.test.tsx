@@ -173,6 +173,7 @@ describe("WorkbenchComposer", () => {
     expect(client.startTask).toHaveBeenCalledWith("code-agent", { idempotencyKey: "task-key" });
     expect(client.startTurn).toHaveBeenNthCalledWith(
       1,
+      "code-agent",
       task.id,
       {
         attachments: [],
@@ -184,6 +185,7 @@ describe("WorkbenchComposer", () => {
     );
     expect(client.startTurn).toHaveBeenNthCalledWith(
       2,
+      "code-agent",
       task.id,
       {
         attachments: [],
@@ -206,11 +208,11 @@ describe("WorkbenchComposer", () => {
     };
 
     await expect(
-      interruptPromptTurn(client, task.id, turn.id, "interrupt-key"),
+      interruptPromptTurn(client, "code-agent", task.id, turn.id, "interrupt-key"),
     ).resolves.toMatchObject({
       status: "interrupting",
     });
-    expect(client.interruptTurn).toHaveBeenCalledWith(task.id, turn.id, {
+    expect(client.interruptTurn).toHaveBeenCalledWith("code-agent", task.id, turn.id, {
       idempotencyKey: "interrupt-key",
     });
   });

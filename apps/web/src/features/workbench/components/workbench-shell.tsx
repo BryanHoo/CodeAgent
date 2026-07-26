@@ -40,15 +40,17 @@ function shouldOpenDesktopPanel(query: string) {
 }
 
 export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
-  const { capabilities, client, error, isPending, projects, retry, tasks } = useProjects();
+  const { capabilities, client, error, isPending, projects, projectTaskStates, retry, tasks } =
+    useProjects();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const modelsQuery = useQuery(modelsQueryOptions(client));
-  const runtime = useTaskRuntime(taskId, client);
+  const runtime = useTaskRuntime(projectId, taskId, client);
+  const projectTaskState = projectTaskStates.get(projectId);
   const sidebarConnectionState = deriveProjectSidebarConnectionState({
     hasActiveTask: taskId !== undefined,
-    projectDataFailed: error !== null,
-    projectDataPending: isPending,
+    projectDataFailed: error !== null || (projectTaskState?.error ?? null) !== null,
+    projectDataPending: isPending || projectTaskState?.isPending === true,
     taskConnectionState: runtime.connectionState,
   });
   const isTaskRunning = runtime.snapshot?.status === "running";
@@ -74,7 +76,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const project = projects.find((item) => item.id === projectId);
   const projectName = project?.name ?? projectId;
   const projectPath = project?.rootPath ?? projectId;
-  const title = tasks.find((task) => task.id === taskId)?.title ?? taskId ?? "New agent";
+  const title =
+    tasks.find((task) => task.projectId === projectId && task.id === taskId)?.title ??
+    taskId ??
+    "New agent";
   const selectedFileChange =
     fileDiffSelection !== null && fileDiffSelection.projectId === projectId
       ? fileDiffSelection.change
@@ -232,7 +237,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           </div>
         </header>
 
-        {error !== null || modelsQuery.error !== null ? (
+        {error !== null ||
+        (projectTaskState?.error ?? null) !== null ||
+        modelsQuery.error !== null ? (
           <RuntimeUnavailable onRetry={() => void retry()} />
         ) : taskId === undefined ? (
           <>
@@ -256,7 +263,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             modelsError={modelsQuery.error}
             modelsPending={modelsQuery.isPending}
             onTaskStarted={handleTaskStarted}
-            key={taskId}
+            key={`${projectId}:${taskId}`}
             projectId={projectId}
             projectName={projectName}
             projectPath={projectPath}
@@ -347,10 +354,10 @@ function ActiveTaskWorkbench({
     idempotencyKey: string,
   ) => client.resolvePendingRequest(request, resolution, { idempotencyKey }).then(() => undefined);
   const rollbackTurn = async (turnId: string, idempotencyKey: string) => {
-    await client.rollbackTurn(taskId, turnId, { idempotencyKey });
+    await client.rollbackTurn(projectId, taskId, turnId, { idempotencyKey });
     // Codex 回滚不会发送统一事件；成功后主动刷新会话与工作区状态。
     await Promise.all([
-      queryClient.refetchQueries({ queryKey: ["tasks", taskId] }),
+      queryClient.refetchQueries({ queryKey: ["projects", projectId, "tasks", taskId] }),
       queryClient.invalidateQueries({ queryKey: ["projects", projectId, "git-status"] }),
     ]);
   };

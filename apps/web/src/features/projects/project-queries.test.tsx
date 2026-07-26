@@ -149,8 +149,9 @@ describe("project queries", () => {
       queryClient.fetchQuery(projectTasksQueryOptions("code-agent", client)),
     ).resolves.toEqual({ data: [task], nextCursor: null });
     await expect(
-      queryClient.fetchQuery(taskSnapshotQueryOptions("task-1", client)),
+      queryClient.fetchQuery(taskSnapshotQueryOptions("code-agent", "task-1", client)),
     ).resolves.toEqual(snapshotResponse);
+    expect(client.readTask).toHaveBeenCalledWith("code-agent", "task-1");
   });
 
   it("loads and merges every task page returned by the client", async () => {

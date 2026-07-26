@@ -26,6 +26,7 @@ export {
 } from "./agent-event.js";
 export {
   AgentActivityItemSchema,
+  AddProjectResponseSchema,
   AgentApprovalPolicySchema,
   AgentAttachmentMediaTypeSchema,
   AgentAttachmentSchema,
@@ -90,6 +91,7 @@ export {
   MAX_AGENT_ATTACHMENT_BYTES,
   MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
   type AgentApprovalPolicy,
+  type AddProjectResponse,
   type AgentAttachment,
   type AgentAttachmentMediaType,
   type AgentAttachmentUploadRequest,

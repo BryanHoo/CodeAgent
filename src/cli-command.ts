@@ -1,13 +1,12 @@
 import { spawn } from "node:child_process";
-import { realpath, stat } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { AgentProvider } from "@code-agent/core";
-import type { Project } from "@code-agent/protocol";
+import type { AgentRuntimeProvider, ProjectRepository } from "@code-agent/core";
 import {
   checkCodexVersion,
-  createCodexAgentProvider,
+  createCodexRuntimeProvider,
   locateCodexBinary,
   startCodexAppServer,
   type CodexBinary,
@@ -17,9 +16,10 @@ import {
   type LocateCodexBinaryOptions,
   type StartCodexAppServerOptions,
 } from "@code-agent/provider-codex";
-import { createCodeAgentServer } from "@code-agent/server";
+import { createCodeAgentServer, JsonProjectRepository } from "@code-agent/server";
 
 import packageManifest from "../package.json" with { type: "json" };
+import { selectSystemDirectory } from "./system-directory-picker.js";
 
 interface CliManagedRuntime {
   client: CodexRpcClient;
@@ -33,52 +33,31 @@ interface CliManagedServer {
   listen: (options: { host: string; port: number }) => Promise<string>;
 }
 
-interface CreateAgentProviderInput {
+interface CreateRuntimeProviderInput {
   client: CodexRpcClient;
-  project: Project;
 }
 
 interface CreateServerInput {
-  project: Project;
-  provider: AgentProvider;
+  projectRepository: ProjectRepository;
+  provider: AgentRuntimeProvider;
+  selectProjectDirectory: () => Promise<string | undefined>;
   staticRoot: string;
 }
 
 export interface CliDependencies {
   appVersion: string;
   checkCodexVersion: (binaryPath: string) => Promise<CodexVersionInfo>;
-  createAgentProvider: (input: CreateAgentProviderInput) => AgentProvider | Promise<AgentProvider>;
+  createProjectRepository: (filePath: string) => ProjectRepository;
+  createRuntimeProvider: (
+    input: CreateRuntimeProviderInput,
+  ) => AgentRuntimeProvider | Promise<AgentRuntimeProvider>;
   createServer: (input: CreateServerInput) => Promise<CliManagedServer>;
   locateCodexBinary: (options?: LocateCodexBinaryOptions) => Promise<CodexBinary>;
   nodeVersion: string;
   openBrowser: (url: string) => Promise<void>;
-  resolveProject: (path: string) => Promise<Project>;
+  selectProjectDirectory: () => Promise<string | undefined>;
   startCodexAppServer: (options?: StartCodexAppServerOptions) => Promise<CliManagedRuntime>;
   webRoot: string;
-}
-
-function createProjectId(name: string): string {
-  const normalized = name
-    .normalize("NFKD")
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-+|-+$/gu, "");
-  return normalized || "project";
-}
-
-async function resolveProject(path: string): Promise<Project> {
-  const rootPath = await realpath(resolve(path));
-  const projectStat = await stat(rootPath);
-  if (!projectStat.isDirectory()) {
-    throw new Error(`Project path is not a directory: ${rootPath}`);
-  }
-  const name = basename(rootPath);
-  return {
-    createdAt: new Date().toISOString(),
-    id: createProjectId(name),
-    name,
-    rootPath,
-  };
 }
 
 async function openBrowser(url: string): Promise<void> {
@@ -113,18 +92,18 @@ export interface RunCliOptions {
 interface ParsedCommandOptions {
   codexBin?: string;
   codexHome?: string;
-  project?: string;
 }
 
 const defaultDependencies: CliDependencies = {
   appVersion: packageManifest.version,
   checkCodexVersion,
-  createAgentProvider: createCodexAgentProvider,
+  createProjectRepository: (filePath) => new JsonProjectRepository(filePath),
+  createRuntimeProvider: createCodexRuntimeProvider,
   createServer: createCodeAgentServer,
   locateCodexBinary,
   nodeVersion: process.versions.node,
   openBrowser,
-  resolveProject,
+  selectProjectDirectory: selectSystemDirectory,
   startCodexAppServer,
   webRoot: fileURLToPath(new URL("../dist/web", import.meta.url)),
 };
@@ -132,7 +111,7 @@ const defaultDependencies: CliDependencies = {
 const HELP = `Usage: code-agent <command> [options]
 
 Commands:
-  code-agent start [--codex-bin <path>] [--codex-home <path>] [--project <path>]
+  code-agent start [--codex-bin <path>] [--codex-home <path>]
   code-agent doctor [--codex-bin <path>]
   code-agent version
 `;
@@ -157,8 +136,6 @@ function parseCommandOptions(
       parsed.codexBin = value;
     } else if (option === "--codex-home") {
       parsed.codexHome = value;
-    } else if (option === "--project") {
-      parsed.project = value;
     }
   }
 
@@ -228,7 +205,7 @@ async function runStart(
   stderr: (message: string) => void,
   stdout: (message: string) => void,
 ): Promise<number> {
-  const options = parseCommandOptions(args, new Set(["--codex-bin", "--codex-home", "--project"]));
+  const options = parseCommandOptions(args, new Set(["--codex-bin", "--codex-home"]));
   const ownedShutdown = signal ? null : createProcessShutdownSignal();
   const shutdownSignal = signal ?? ownedShutdown?.signal;
   if (!shutdownSignal) {
@@ -239,7 +216,7 @@ async function runStart(
   let server: CliManagedServer | undefined;
 
   try {
-    const project = await dependencies.resolveProject(options.project ?? process.cwd());
+    const codexHome = options.codexHome ?? process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
     const env = {
       ...process.env,
       ...(options.codexHome ? { CODEX_HOME: options.codexHome } : {}),
@@ -248,15 +225,17 @@ async function runStart(
       appVersion: dependencies.appVersion,
       env,
       ...(options.codexBin ? { binaryPath: options.codexBin } : {}),
-      cwd: project.rootPath,
     });
-    const provider = await dependencies.createAgentProvider({
+    const provider = await dependencies.createRuntimeProvider({
       client: runtime.client,
-      project,
     });
+    const projectRepository = dependencies.createProjectRepository(
+      join(codexHome, "code-agent", "projects.json"),
+    );
     server = await dependencies.createServer({
-      project,
+      projectRepository,
       provider,
+      selectProjectDirectory: dependencies.selectProjectDirectory,
       staticRoot: dependencies.webRoot,
     });
     const url = await server.listen({ host: "127.0.0.1", port: 3210 });

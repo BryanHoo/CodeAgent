@@ -657,10 +657,10 @@ PromptInputMessage
   -> Composer Adapter
   -> AgentPromptInput + AgentTurnOptions
   -> @code-agent/client
-  -> POST /v1/tasks/:taskId/turns
+  -> POST /v1/projects/:projectId/tasks/:taskId/turns
 ```
 
-附件必须先通过幂等 `POST /v1/attachments` 转换为 Server 受控引用。浏览器只把附件 ID 放入 `AgentPromptInput`，不得提交任意本地绝对路径作为已授权文件。
+附件必须先通过幂等 `POST /v1/projects/:projectId/attachments` 转换为 Server 受控引用。浏览器只把附件 ID 放入 `AgentPromptInput`，不得提交任意本地绝对路径作为已授权文件。
 
 MVP 附件仅接受 `image/gif`、`image/jpeg`、`image/png` 和 `image/webp`，单文件最大 `2 MiB`，一次最多 `4` 个。预览使用短生命周期 Blob URL；删除、提交成功和组件卸载时立即释放。Server Store 同时限制条目数、总字节数和 TTL，Turn 成功后消费引用。
 

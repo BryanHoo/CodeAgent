@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { CodeAgentClient } from "@code-agent/client";
 import type { AgentEvent } from "@code-agent/protocol";
 import {
-  createCodexAgentProvider,
+  createCodexRuntimeProvider,
   startCodexAppServer,
   type CodexAppServerProcess,
 } from "@code-agent/provider-codex";
@@ -32,6 +32,18 @@ const turnOptions = {
 const runtimes: CodexAppServerProcess[] = [];
 const servers: Awaited<ReturnType<typeof createCodeAgentServer>>[] = [];
 
+function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvider>) {
+  return {
+    projectRepository: {
+      list: () => Promise.resolve([project]),
+      read: (projectId: string) => Promise.resolve(projectId === project.id ? project : undefined),
+      register: () => Promise.resolve(project),
+    },
+    provider,
+    selectProjectDirectory: () => Promise.resolve(undefined),
+  };
+}
+
 afterEach(async () => {
   await Promise.all(servers.splice(0).map(async (server) => server.close()));
   await Promise.all(runtimes.splice(0).map(async (runtime) => runtime.close()));
@@ -46,16 +58,15 @@ describe("Realtime Path", () => {
       shutdownTimeoutMs: 200,
     });
     runtimes.push(runtime);
-    const provider = createCodexAgentProvider({ client: runtime.client, project });
+    const provider = createCodexRuntimeProvider({ client: runtime.client });
     const server = await createCodeAgentServer({
+      ...createServerOptions(provider),
       eventSessionId: "integration-session",
-      project,
-      provider,
     });
     servers.push(server);
     const baseUrl = await server.listen({ host: "127.0.0.1", port: 0 });
     const client = new CodeAgentClient({ baseUrl });
-    const snapshot = await client.readTask("task-realtime");
+    const snapshot = await client.readTask(project.id, "task-realtime");
     const events: AgentEvent[] = [];
 
     await new Promise<void>((resolve, reject) => {
@@ -65,6 +76,7 @@ describe("Realtime Path", () => {
       }, 2_000);
       const unsubscribe = client.subscribeEvents({
         afterSequence: snapshot.checkpoint.sequence,
+        projectId: project.id,
         onError: reject,
         onEvent(event) {
           events.push(event);
@@ -111,11 +123,10 @@ describe("Realtime Path", () => {
       shutdownTimeoutMs: 200,
     });
     runtimes.push(runtime);
-    const provider = createCodexAgentProvider({ client: runtime.client, project });
+    const provider = createCodexRuntimeProvider({ client: runtime.client });
     const server = await createCodeAgentServer({
+      ...createServerOptions(provider),
       eventSessionId: "action-complete-session",
-      project,
-      provider,
     });
     servers.push(server);
     const baseUrl = await server.listen({ host: "127.0.0.1", port: 0 });
@@ -123,10 +134,11 @@ describe("Realtime Path", () => {
     const models = await client.listModels();
     const created = await client.startTask(project.id, { idempotencyKey: "create-complete" });
     const uploaded = await client.uploadAttachment(
+      project.id,
       { dataUrl: pixelDataUrl, name: "screen.png" },
       { idempotencyKey: "upload-complete" },
     );
-    const snapshot = await client.readTask(created.task.id);
+    const snapshot = await client.readTask(project.id, created.task.id);
     const events: AgentEvent[] = [];
 
     const completed = new Promise<void>((resolve, reject) => {
@@ -135,6 +147,7 @@ describe("Realtime Path", () => {
       }, 2_000);
       const unsubscribe = client.subscribeEvents({
         afterSequence: snapshot.checkpoint.sequence,
+        projectId: project.id,
         onError: reject,
         onEvent(event) {
           if (event.taskId !== created.task.id) {
@@ -155,6 +168,7 @@ describe("Realtime Path", () => {
     });
 
     await client.startTurn(
+      project.id,
       created.task.id,
       {
         attachments: [{ id: uploaded.attachment.id }],
@@ -191,17 +205,16 @@ describe("Realtime Path", () => {
       shutdownTimeoutMs: 200,
     });
     runtimes.push(runtime);
-    const provider = createCodexAgentProvider({ client: runtime.client, project });
+    const provider = createCodexRuntimeProvider({ client: runtime.client });
     const server = await createCodeAgentServer({
+      ...createServerOptions(provider),
       eventSessionId: "action-interrupt-session",
-      project,
-      provider,
     });
     servers.push(server);
     const baseUrl = await server.listen({ host: "127.0.0.1", port: 0 });
     const client = new CodeAgentClient({ baseUrl });
     const created = await client.startTask(project.id, { idempotencyKey: "create-interrupt" });
-    const snapshot = await client.readTask(created.task.id);
+    const snapshot = await client.readTask(project.id, created.task.id);
     const events: AgentEvent[] = [];
 
     const interrupted = new Promise<void>((resolve, reject) => {
@@ -210,6 +223,7 @@ describe("Realtime Path", () => {
       }, 2_000);
       const unsubscribe = client.subscribeEvents({
         afterSequence: snapshot.checkpoint.sequence,
+        projectId: project.id,
         onError: reject,
         onEvent(event) {
           if (event.taskId !== created.task.id) {
@@ -230,12 +244,13 @@ describe("Realtime Path", () => {
     });
 
     const started = await client.startTurn(
+      project.id,
       created.task.id,
       { attachments: [], text: "等待中断", type: "prompt" },
       turnOptions,
       { idempotencyKey: "turn-interrupt" },
     );
-    await client.interruptTurn(created.task.id, started.turn.id, {
+    await client.interruptTurn(project.id, created.task.id, started.turn.id, {
       idempotencyKey: "interrupt-turn",
     });
     await interrupted;

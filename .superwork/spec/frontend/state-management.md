@@ -8,6 +8,7 @@
 
 - 瞬时 UI 状态默认保留在最近组件或功能内。
 - HTTP Snapshot 由服务端状态层持有；实时事件按 Task、Turn 和 Item ID 归一化合并。
+- Project Task 列表、Task Snapshot、Mutation 和实时订阅必须显式携带 `projectId`；Query Key 与连接状态按 Project 隔离，不能只用 `taskId` 作为跨项目身份。
 - `sequence` 是 Runtime Session 内的事件顺序依据；断线恢复先刷新 Snapshot，再从检查点补发。
 - Client 必须忽略 `sequence <= lastAppliedSequence` 的重复事件，并在更大缺口或 `sessionId` 变化时停止增量应用、请求 resync。
 - Delta 可在同一动画帧按 Item 与字段合并，但只能合并相邻同 Key 事件，不得跨其他 Item 重排首次出现顺序；关键事件到达时先按 `sequence` 冲刷所有更早 Delta，再应用完整 Item/Turn 终态。

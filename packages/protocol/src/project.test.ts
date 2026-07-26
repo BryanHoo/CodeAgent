@@ -11,6 +11,7 @@ import {
   AgentMutationErrorSchema,
   AgentTaskPageSchema,
   AgentTaskSchema,
+  AddProjectResponseSchema,
   AgentTaskSnapshotSchema,
   InterruptAgentTurnRequestSchema,
   InterruptAgentTurnResponseSchema,
@@ -39,6 +40,20 @@ import {
 } from "./project.js";
 
 describe("project protocol", () => {
+  it("accepts a selected project or a cancelled host directory selection", () => {
+    expect(Value.Check(AddProjectResponseSchema, { project: null })).toBe(true);
+    expect(
+      Value.Check(AddProjectResponseSchema, {
+        project: {
+          createdAt: "2026-07-25T00:00:00.000Z",
+          id: "code-agent",
+          name: "CodeAgent",
+          rootPath: "/workspace/CodeAgent",
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("defines a public project with its local root path", () => {
     expect(ProjectSchema).toMatchObject({
       additionalProperties: false,

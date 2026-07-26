@@ -77,7 +77,7 @@ const packageJsonDiff = [
   "@@ -1,3 +1,3 @@",
   " {",
   '-  "start": "pnpm run dev",',
-  '+  "start": "node ./dist/cli.js start --project .",',
+  '+  "start": "node ./dist/cli.js start",',
   " }",
 ].join("\n");
 
@@ -151,6 +151,7 @@ const architectureSourcePreview = Array.from({ length: 720 }, (_, lineIndex) =>
 ).join("\n");
 
 test.beforeEach(async ({ page }) => {
+  let routedProjects = [...projects];
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
     let body: unknown;
@@ -166,8 +167,17 @@ test.beforeEach(async ({ page }) => {
       };
     } else if (url.pathname === "/v1/models") {
       body = { data: models, nextCursor: null };
+    } else if (url.pathname === "/v1/projects" && route.request().method() === "POST") {
+      const addedProject = {
+        createdAt: "2026-07-25T00:00:00.000Z",
+        id: "added-project",
+        name: "AddedProject",
+        rootPath: "/workspace/AddedProject",
+      };
+      routedProjects = [...routedProjects, addedProject];
+      body = { project: addedProject };
     } else if (url.pathname === "/v1/projects") {
-      body = { data: projects, nextCursor: null };
+      body = { data: routedProjects, nextCursor: null };
     } else if (url.pathname === "/v1/projects/code-agent/files/source") {
       body = {
         content: architectureSourcePreview,
@@ -179,18 +189,18 @@ test.beforeEach(async ({ page }) => {
     } else if (url.pathname.startsWith("/v1/projects/") && url.pathname.endsWith("/tasks")) {
       const projectId = url.pathname.split("/")[3];
       body = { data: tasks.filter((task) => task.projectId === projectId), nextCursor: null };
-    } else if (url.pathname === "/v1/tasks/task-1") {
+    } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1") {
       body = taskSnapshotResponse;
-    } else if (url.pathname === "/v1/tasks/task-2") {
+    } else if (url.pathname === "/v1/projects/code-agent/tasks/task-2") {
       body = {
         ...taskSnapshotResponse,
         snapshot: { ...taskSnapshotResponse.snapshot, id: "task-2", title: "续接任务" },
       };
-    } else if (url.pathname === "/v1/tasks/task-1/compact") {
+    } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1/compact") {
       body = { status: "compacting", taskId: "task-1" };
-    } else if (url.pathname === "/v1/tasks/task-1/feedback") {
+    } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1/feedback") {
       body = { status: "sent", taskId: "task-1" };
-    } else if (url.pathname === "/v1/tasks/task-1/fork") {
+    } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1/fork") {
       body = {
         task: {
           id: "task-2",
@@ -314,6 +324,24 @@ test("directs unavailable Runtime users to the official Codex CLI", async ({ pag
   const requestCountBeforeRetry = modelRequestCount;
   await page.getByRole("button", { name: "重试" }).click();
   await expect.poll(() => modelRequestCount).toBeGreaterThan(requestCountBeforeRetry);
+});
+
+test("keeps a healthy project usable when another project task query fails", async ({ page }) => {
+  let failedProjectRequestCount = 0;
+  await page.route("**/v1/projects/superwork/tasks", async (route) => {
+    failedProjectRequestCount += 1;
+    await route.fulfill({
+      contentType: "application/json",
+      json: { message: "Project unavailable" },
+      status: 503,
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+
+  await expect.poll(() => failedProjectRequestCount).toBe(2);
+  await expect(page.getByRole("heading", { name: "构建 macOS 工作台" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Codex Runtime 不可用" })).toHaveCount(0);
 });
 
 test("uses subtle hairline separation across registered routes", async ({ page }) => {
@@ -458,7 +486,10 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   const commandRequests: { body: string | null; path: string }[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
-    if (request.method() === "POST" && url.pathname.startsWith("/v1/tasks/task-1/")) {
+    if (
+      request.method() === "POST" &&
+      url.pathname.startsWith("/v1/projects/code-agent/tasks/task-1/")
+    ) {
       commandRequests.push({ body: request.postData(), path: url.pathname });
     }
   });
@@ -483,7 +514,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   await expect(page.getByRole("status")).toContainText("正在压缩上下文");
   await expect
     .poll(() => commandRequests.map((request) => request.path))
-    .toContain("/v1/tasks/task-1/compact");
+    .toContain("/v1/projects/code-agent/tasks/task-1/compact");
 
   await prompt.fill("/反馈");
   await prompt.press("Enter");
@@ -509,7 +540,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-2$/u);
   await expect
     .poll(() => commandRequests.map((request) => request.path))
-    .toContain("/v1/tasks/task-1/fork");
+    .toContain("/v1/projects/code-agent/tasks/task-1/fork");
 });
 
 test("opens bounded source previews from assistant file references", async ({ context, page }) => {
@@ -550,7 +581,7 @@ test("submits attachments, approval policy, model, and reasoning effort through 
 }) => {
   let uploadBody: unknown;
   let turnBody: unknown;
-  await page.route("**/v1/attachments", async (route) => {
+  await page.route("**/v1/projects/code-agent/attachments", async (route) => {
     uploadBody = route.request().postDataJSON();
     await route.fulfill({
       contentType: "application/json",
@@ -565,7 +596,7 @@ test("submits attachments, approval policy, model, and reasoning effort through 
       status: 201,
     });
   });
-  await page.route("**/v1/tasks/task-1/turns", async (route) => {
+  await page.route("**/v1/projects/code-agent/tasks/task-1/turns", async (route) => {
     turnBody = route.request().postDataJSON();
     await route.fulfill({
       contentType: "application/json",
@@ -675,7 +706,7 @@ test("disables composer mutations that the provider does not support", async ({ 
 });
 
 test("isolates composer state between task routes", async ({ page }) => {
-  await page.route("**/v1/tasks/input-design", async (route) => {
+  await page.route("**/v1/projects/code-agent/tasks/input-design", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -701,7 +732,7 @@ test("isolates composer state between task routes", async ({ page }) => {
 });
 
 test("shows a task error when the initial snapshot request fails", async ({ page }) => {
-  await page.route("**/v1/tasks/task-1", async (route) => {
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       json: { code: "SNAPSHOT_FAILED", message: "Snapshot failed" },
@@ -716,7 +747,7 @@ test("shows a task error when the initial snapshot request fails", async ({ page
 
 test("shows an error when the resync snapshot refresh fails", async ({ page }) => {
   let snapshotRequestCount = 0;
-  await page.route("**/v1/tasks/task-1", async (route) => {
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     snapshotRequestCount += 1;
     if (snapshotRequestCount === 1) {
       await route.fulfill({ contentType: "application/json", json: taskSnapshotResponse });
@@ -788,7 +819,7 @@ test("shows an error when the resync snapshot refresh fails", async ({ page }) =
 
 test("refreshes the snapshot when the realtime delta buffer overflows", async ({ page }) => {
   let snapshotRequestCount = 0;
-  await page.route("**/v1/tasks/task-1", async (route) => {
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     snapshotRequestCount += 1;
     await route.fulfill({
       contentType: "application/json",
@@ -877,7 +908,7 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
 
 test("clears transient realtime errors after the WebSocket reconnects", async ({ page }) => {
   let snapshotRequestCount = 0;
-  await page.route("**/v1/tasks/task-1", async (route) => {
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     snapshotRequestCount += 1;
     if (snapshotRequestCount === 1) {
       await route.fulfill({ contentType: "application/json", json: taskSnapshotResponse });
@@ -1005,15 +1036,18 @@ test("restores network approvals from the task snapshot after refresh", async ({
     turnId: "turn-1",
     type: "command_approval",
   };
-  await page.route("**/v1/pending-requests/*/resolve", async (route) => {
-    resolutionCount += 1;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    await route.fulfill({
-      contentType: "application/json",
-      json: { request: { ...pendingRequest, status: "resolved" } },
-    });
-  });
-  await page.route("**/v1/tasks/task-1", async (route) => {
+  await page.route(
+    "**/v1/projects/code-agent/tasks/task-1/pending-requests/*/resolve",
+    async (route) => {
+      resolutionCount += 1;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await route.fulfill({
+        contentType: "application/json",
+        json: { request: { ...pendingRequest, status: "resolved" } },
+      });
+    },
+  );
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -1064,14 +1098,17 @@ test("disables user input controls while an answer is being submitted", async ({
     turnId: "turn-1",
     type: "user_input",
   };
-  await page.route("**/v1/pending-requests/*/resolve", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
-    await route.fulfill({
-      contentType: "application/json",
-      json: { request: { ...pendingRequest, status: "resolved" } },
-    });
-  });
-  await page.route("**/v1/tasks/task-1", async (route) => {
+  await page.route(
+    "**/v1/projects/code-agent/tasks/task-1/pending-requests/*/resolve",
+    async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      await route.fulfill({
+        contentType: "application/json",
+        json: { request: { ...pendingRequest, status: "resolved" } },
+      });
+    },
+  );
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -1177,10 +1214,10 @@ test("reuses the interrupt idempotency key until the terminal event arrives", as
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-action-\d+$/);
 
   const idempotencyKeys: string[] = [];
-  await page.route("**/v1/turns/*/interrupt", async (route) => {
+  await page.route("**/v1/projects/code-agent/tasks/*/turns/*/interrupt", async (route) => {
     const request = route.request();
     const payload = request.postDataJSON() as { taskId: string };
-    const turnId = new URL(request.url()).pathname.split("/")[3] ?? "";
+    const turnId = new URL(request.url()).pathname.split("/")[7] ?? "";
     idempotencyKeys.push(request.headers()["idempotency-key"] ?? "");
     await route.fulfill({
       contentType: "application/json",
@@ -1197,7 +1234,7 @@ test("reuses the interrupt idempotency key until the terminal event arrives", as
 });
 
 test("preserves the prompt draft when submission fails", async ({ page }) => {
-  await page.route("**/v1/attachments", async (route) => {
+  await page.route("**/v1/projects/code-agent/attachments", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -1257,6 +1294,7 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
   await expect(productHome.getByText("CodeAgent", { exact: true })).toBeVisible();
   await expect(search).toBeVisible();
   await expect(sidebar.getByRole("button", { name: "搜索" })).toHaveCount(0);
+  await expect(sidebar.getByRole("button", { name: "添加项目" })).toBeVisible();
 
   const newAgentBox = await newAgent.boundingBox();
   const searchBox = await search.boundingBox();
@@ -1272,6 +1310,39 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
   expect(searchBox.y).toBeLessThan(newAgentBox.y);
   expect(newAgentBox.y).toBeLessThan(pinnedBox.y);
   expect(pinnedBox.y).toBeLessThan(projectsBox.y);
+});
+
+test("adds a folder through the host project picker", async ({ page }) => {
+  await page.goto("/p/code-agent");
+
+  await page.getByRole("button", { name: "添加项目" }).click();
+
+  await expect(page).toHaveURL(/\/p\/added-project$/);
+  await expect(page.getByRole("heading", { name: "AddedProject" })).toBeVisible();
+});
+
+test("handles a host project picker failure without an unhandled rejection", async ({ page }) => {
+  const pageErrors: Error[] = [];
+  page.on("pageerror", (error) => {
+    pageErrors.push(error);
+  });
+  await page.route("**/v1/projects", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: { code: "PROVIDER_ERROR", message: "Project picker failed", retryable: true },
+      status: 502,
+    });
+  });
+  await page.goto("/p/code-agent");
+
+  await page.getByRole("button", { name: "添加项目" }).click();
+
+  await expect(page.getByRole("alert")).toContainText("无法添加项目");
+  expect(pageErrors).toEqual([]);
 });
 
 test("keeps icon button tooltips visible within clipping and viewport boundaries", async ({

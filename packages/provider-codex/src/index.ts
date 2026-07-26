@@ -1,10 +1,10 @@
 // Codex 进程、JSONL/RPC 与统一协议映射只能从此公开入口导出。
 export {
-  CodexAgentProvider,
+  CodexRuntimeProvider,
   CodexProtocolMappingError,
-  createCodexAgentProvider,
+  createCodexRuntimeProvider,
   type CodexRpcClient,
-  type CreateCodexAgentProviderOptions,
+  type CreateCodexRuntimeProviderOptions,
 } from "./agent-provider.js";
 export {
   CodexAppServerExitedError,

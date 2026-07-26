@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import type { AgentEventConnectionState } from "@code-agent/client";
 import {
   ChevronDown,
@@ -7,6 +7,7 @@ import {
   LoaderCircle,
   PanelLeftClose,
   Pin,
+  Plus,
   Search,
   Send,
   Settings,
@@ -26,7 +27,7 @@ const primaryActionIconClassName = "size-4 shrink-0 text-muted-foreground";
 type ProjectSidebarProps = Readonly<{
   connectionState: AgentEventConnectionState;
   onClose: () => void;
-  projectId: string;
+  projectId?: string;
   taskId?: string;
 }>;
 
@@ -75,7 +76,17 @@ export function ProjectSidebar({
   projectId,
   taskId,
 }: ProjectSidebarProps) {
-  const { error, isPending, projects, tasks } = useProjects();
+  const {
+    addProject,
+    addProjectError,
+    error,
+    isPending,
+    isProjectPickerOpen,
+    projects,
+    projectTaskStates,
+    tasks,
+  } = useProjects();
+  const navigate = useNavigate();
   const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
   const [expandedProjects, setExpandedProjects] = useState<ReadonlySet<string>>(
     () => new Set(projects.map((project) => project.id)),
@@ -90,6 +101,8 @@ export function ProjectSidebar({
     [normalizedQuery, tasks],
   );
   const pinnedTasks = getPinnedTasks(visibleTasks);
+  const hasPendingTasks = [...projectTaskStates.values()].some((state) => state.isPending);
+  const hasTaskError = [...projectTaskStates.values()].some((state) => state.error !== null);
 
   useEffect(() => {
     // Projects 异步到达后默认展开新项目，保留用户已手动设置的现有项目状态。
@@ -118,6 +131,13 @@ export function ProjectSidebar({
     });
   };
 
+  const openProjectPicker = async () => {
+    const project = await addProject();
+    if (project !== undefined) {
+      await navigate({ params: { projectId: project.id }, to: "/p/$projectId" });
+    }
+  };
+
   return (
     <aside
       aria-label="Project Sidebar"
@@ -127,8 +147,9 @@ export function ProjectSidebar({
         <Link
           aria-label="CodeAgent 首页"
           className="flex min-w-0 flex-1 items-center gap-2 text-body-small font-semibold text-foreground"
-          params={{ projectId }}
-          to="/p/$projectId"
+          {...(projectId === undefined
+            ? { to: "/" as const }
+            : { params: { projectId }, to: "/p/$projectId" as const })}
         >
           <span
             aria-hidden="true"
@@ -164,10 +185,12 @@ export function ProjectSidebar({
             value={query}
           />
         </div>
-        <Link className={primaryActionClassName} params={{ projectId }} to="/p/$projectId">
-          <Send className={primaryActionIconClassName} aria-hidden="true" />
-          新建任务
-        </Link>
+        {projectId === undefined ? null : (
+          <Link className={primaryActionClassName} params={{ projectId }} to="/p/$projectId">
+            <Send className={primaryActionIconClassName} aria-hidden="true" />
+            新建任务
+          </Link>
+        )}
       </nav>
 
       <div className="min-h-0 overflow-y-auto px-2 pb-3 pt-5">
@@ -182,9 +205,9 @@ export function ProjectSidebar({
             <div className="space-y-0.5">
               {pinnedTasks.map((task) => (
                 <TaskLink
-                  active={task.id === taskId}
+                  active={task.projectId === projectId && task.id === taskId}
                   icon={<Pin className="size-3.5" aria-hidden="true" />}
-                  key={task.id}
+                  key={`${task.projectId}:${task.id}`}
                   task={task}
                 />
               ))}
@@ -193,18 +216,35 @@ export function ProjectSidebar({
         ) : null}
 
         <section aria-labelledby="projects-title">
-          <div className="mb-2 flex h-7 w-full items-center">
+          <div className="mb-2 flex h-7 w-full items-center justify-between pl-2">
             <h2 className="text-meta font-semibold text-muted-foreground" id="projects-title">
               Projects
             </h2>
+            <IconButton
+              disabled={isProjectPickerOpen}
+              label="添加项目"
+              onClick={() => void openProjectPicker()}
+              size="small"
+            >
+              {isProjectPickerOpen ? (
+                <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Plus className="size-3.5" aria-hidden="true" />
+              )}
+            </IconButton>
           </div>
 
-          {isPending ? (
+          {isPending || hasPendingTasks ? (
             <p className="px-2 py-1.5 text-meta text-subtle-foreground">正在加载任务</p>
           ) : null}
-          {error === null ? null : (
+          {error === null && !hasTaskError ? null : (
             <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
               无法加载任务
+            </p>
+          )}
+          {addProjectError === null ? null : (
+            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
+              无法添加项目
             </p>
           )}
 
@@ -246,7 +286,11 @@ export function ProjectSidebar({
                   {expanded ? (
                     <div className="mt-0.5 space-y-0.5 pl-5">
                       {projectTasks.map((task) => (
-                        <TaskLink active={task.id === taskId} key={task.id} task={task} />
+                        <TaskLink
+                          active={project.id === projectId && task.id === taskId}
+                          key={`${task.projectId}:${task.id}`}
+                          task={task}
+                        />
                       ))}
                       {projectTasks.length === 0 && normalizedQuery.length === 0 ? (
                         <p className="px-2 py-1.5 text-meta text-subtle-foreground">暂无任务</p>
