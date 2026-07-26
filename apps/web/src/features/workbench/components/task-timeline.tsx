@@ -79,6 +79,7 @@ type TaskTimelineCommonProps = Readonly<{
     idempotencyKey: string,
   ) => Promise<void>;
   runtime?: TaskRuntimeView;
+  startingSnapshot?: RuntimeTaskSnapshot;
 }>;
 
 type TaskTimelineProps = TaskTimelineCommonProps &
@@ -172,6 +173,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
     onResolvePendingRequest,
     onRollbackTurn,
     runtime,
+    startingSnapshot,
   } = props;
   if (runtime === undefined) {
     return <TimelineState message="正在加载任务历史" role="status" />;
@@ -185,6 +187,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
       onRollbackTurn={onRollbackTurn ?? (() => Promise.resolve())}
       canRollbackTurns={canRollbackTurns}
       runtime={runtime}
+      startingSnapshot={startingSnapshot}
     />
   );
 }
@@ -197,6 +200,7 @@ function ActiveTaskTimeline({
   onResolvePendingRequest,
   onRollbackTurn,
   runtime,
+  startingSnapshot,
 }: Readonly<{
   onResolvePendingRequest: (
     request: PendingRequest,
@@ -209,11 +213,15 @@ function ActiveTaskTimeline({
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
   canRollbackTurns: boolean;
   runtime: TaskRuntimeView;
+  startingSnapshot: RuntimeTaskSnapshot | undefined;
 }>) {
   if (runtime.error !== null) {
     return <TimelineState message="无法加载任务历史" role="alert" />;
   }
   if (runtime.isPending || runtime.snapshot === undefined) {
+    if (startingSnapshot !== undefined) {
+      return <TaskSnapshotTimeline connected={false} snapshot={startingSnapshot} />;
+    }
     return <TimelineState message="正在加载任务历史" role="status" />;
   }
   return (
@@ -682,8 +690,9 @@ function TurnTimelineItems({
   turn: AgentTurn;
 }>) {
   const timelineGroups = groupTurnTimelineItems(turn.items);
+  const hasAssistantItems = timelineGroups.some((group) => group.type === "assistant");
 
-  return timelineGroups.map((group) => {
+  const renderedGroups = timelineGroups.map((group) => {
     if (group.type === "user") {
       return (
         <Message from="user" key={group.item.id}>
@@ -743,6 +752,20 @@ function TurnTimelineItems({
       </Message>
     );
   });
+
+  return (
+    <>
+      {renderedGroups}
+      {turn.status === "running" && !hasAssistantItems ? (
+        <Message from="assistant">
+          {/* 首个 Delta 到达前也要让用户明确看到 AI 已进入思考状态。 */}
+          <Task collapsible={false} status="in_progress">
+            <TaskTrigger title="正在思考" />
+          </Task>
+        </Message>
+      ) : null}
+    </>
+  );
 }
 
 export function TaskSnapshotTimeline({

@@ -1003,7 +1003,6 @@ export class CodexAgentProvider implements AgentProvider {
       "turn/start response",
     );
     const turn = mapAgentTurn(response["turn"]);
-    this.#unmaterializedTasks.delete(taskId);
     return turn;
   }
 
@@ -1083,12 +1082,21 @@ export class CodexAgentProvider implements AgentProvider {
     if (nextCursor !== null && nextCursor !== undefined && typeof nextCursor !== "string") {
       throw new CodexProtocolMappingError("thread/list nextCursor must be a string or null");
     }
-    const data = response["data"].map((thread) =>
+    const nativeTasks = response["data"].map((thread) =>
       mapAgentTask(expectRecord(thread, "Codex thread"), this.#project),
     );
-    for (const task of data) {
+    for (const task of nativeTasks) {
       this.#projectTaskIds.add(task.id);
+      this.#unmaterializedTasks.delete(task.id);
     }
+    // thread/list 可能晚于 thread/start materialize；首屏先合并本地已确认的新 Task。
+    const pendingTasks =
+      input.cursor === undefined
+        ? [...this.#unmaterializedTasks.values()].toSorted((leftTask, rightTask) =>
+            rightTask.updatedAt.localeCompare(leftTask.updatedAt),
+          )
+        : [];
+    const data = [...pendingTasks, ...nativeTasks];
     return { data, nextCursor: nextCursor ?? null };
   }
 
@@ -1122,7 +1130,6 @@ export class CodexAgentProvider implements AgentProvider {
         return undefined;
       }
       projectOwnershipVerified = true;
-      this.#unmaterializedTasks.delete(taskId);
       // Project 归属确认后才提升读取期间暂存的 Server Request。
       this.#promotePendingServerRequests(taskId);
       const task = mapAgentTask(thread, this.#project);

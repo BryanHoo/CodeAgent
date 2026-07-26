@@ -1,4 +1,5 @@
 import { CodeAgentClient } from "@code-agent/client";
+import type { AgentTask, AgentTaskPage } from "@code-agent/protocol";
 import { queryOptions } from "@tanstack/react-query";
 
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
@@ -35,6 +36,17 @@ type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
 export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 1_500;
 
 export const codeAgentClient = new CodeAgentClient();
+
+export function upsertProjectTaskPage(
+  currentPage: AgentTaskPage | undefined,
+  task: AgentTask,
+): AgentTaskPage {
+  // Mutation 返回的 Task 先进入列表，避免等待 Provider 最终一致的 thread/list。
+  const remainingTasks = (currentPage?.data ?? []).filter(
+    (currentTask) => currentTask.id !== task.id,
+  );
+  return { data: [task, ...remainingTasks], nextCursor: null };
+}
 
 export function capabilitiesQueryOptions(client: CodeAgentCapabilitiesClient = codeAgentClient) {
   return queryOptions({

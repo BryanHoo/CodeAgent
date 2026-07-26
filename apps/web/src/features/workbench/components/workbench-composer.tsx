@@ -227,7 +227,7 @@ type WorkbenchComposerProps = Readonly<{
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;
-  onTaskStarted: (taskId: string) => void;
+  onTaskStarted: (task: AgentTask, turn?: AgentTurn, input?: AgentPromptInput) => void;
   projectId: string;
   projectPath: string;
   runtime?: TaskRuntimeView;
@@ -318,7 +318,7 @@ export function WorkbenchComposer({
   const [draft, setDraft] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mutationError, setMutationError] = useState<Error | null>(null);
-  const [pendingTaskId, setPendingTaskId] = useState<string>();
+  const [pendingTask, setPendingTask] = useState<AgentTask>();
   const [selectedModelId, setSelectedModelId] = useState("");
   const [selectedReasoningEffortId, setSelectedReasoningEffortId] = useState("");
   const [submittedTurnId, setSubmittedTurnId] = useState<string>();
@@ -331,7 +331,7 @@ export function WorkbenchComposer({
   const uploadAttempts = useRef(new Map<string, string>());
   const commandAttempts = useRef(new Map<PromptCommandAction, IdempotencyAttempt>());
   const activeTurnId = resolveActiveTurnId(runtime?.snapshot, submittedTurnId);
-  const activeTaskId = taskId ?? pendingTaskId;
+  const activeTaskId = taskId ?? pendingTask?.id;
   const { canInterrupt, canSubmit } = deriveComposerActions(
     capabilities,
     activeTaskId !== undefined,
@@ -437,7 +437,7 @@ export function WorkbenchComposer({
         input,
         onTaskCreated(task) {
           // Turn 启动失败时保留已创建 Task，重试不能重复创建。
-          setPendingTaskId(task.id);
+          setPendingTask(task);
           startTaskAttempt.current = undefined;
         },
         projectId,
@@ -453,7 +453,10 @@ export function WorkbenchComposer({
       uploadedAttachments.current.clear();
       uploadAttempts.current.clear();
       if (taskId === undefined) {
-        onTaskStarted(result.taskId);
+        const startedTask = result.createdTask ?? pendingTask;
+        if (startedTask !== undefined) {
+          onTaskStarted(startedTask, result.turn, input);
+        }
       }
     } catch (error) {
       setMutationError(error instanceof Error ? error : new Error("Prompt submission failed"));
@@ -566,7 +569,7 @@ export function WorkbenchComposer({
         const response = await client.forkTask(projectId, activeTaskId, {
           idempotencyKey: attempt.key,
         });
-        onTaskStarted(response.task.id);
+        onTaskStarted(response.task);
       }
       commandAttempts.current.delete(command.action);
     } catch (error) {

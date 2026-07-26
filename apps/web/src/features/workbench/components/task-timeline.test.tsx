@@ -169,6 +169,38 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("<time");
   });
 
+  it("shows the user message before the AI Elements thinking status", () => {
+    const waitingForAssistantSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          ...completedTurn,
+          completedAt: null,
+          items: [
+            {
+              id: "message-user-waiting",
+              role: "user",
+              text: "你好",
+              type: "message",
+            },
+          ],
+          status: "running",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      <TaskSnapshotTimeline snapshot={waitingForAssistantSnapshot} />,
+    );
+
+    expect(markup).toContain('data-ai-task=""');
+    expect(markup).toContain('data-status="in_progress"');
+    expect(markup).toContain("正在思考");
+    expect(markup).toContain("进行中");
+    expect(markup.indexOf("你好")).toBeLessThan(markup.indexOf("正在思考"));
+  });
+
   it("renders a completed reasoning item as a collapsed readable summary", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={snapshot} />);
 

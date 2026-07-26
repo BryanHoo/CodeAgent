@@ -1,4 +1,12 @@
-import type { AgentCapabilities, AgentModel, PendingRequest } from "@code-agent/protocol";
+import type {
+  AgentCapabilities,
+  AgentModel,
+  AgentPromptInput,
+  AgentTask,
+  AgentTaskPage,
+  AgentTurn,
+  PendingRequest,
+} from "@code-agent/protocol";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -9,6 +17,7 @@ import {
   useTaskRuntime,
   type TaskRuntimeView,
 } from "../../conversation/runtime/use-task-runtime.js";
+import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
 import { FileReviewDialog } from "../../diff/file-review-dialog.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
@@ -16,6 +25,7 @@ import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js
 import {
   modelsQueryOptions,
   projectGitStatusQueryOptions,
+  upsertProjectTaskPage,
 } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
@@ -29,6 +39,39 @@ import { WorkbenchInspector } from "./workbench-inspector.js";
 
 const sidebarOverlayQuery = "(max-width: 760px)";
 const inspectorOverlayQuery = "(max-width: 1100px)";
+
+function taskLaunchQueryKey(projectId: string, taskId: string) {
+  return ["projects", projectId, "tasks", taskId, "launch"] as const;
+}
+
+type TaskLaunchState = Readonly<{
+  input: AgentPromptInput;
+  task: AgentTask;
+  turn: AgentTurn;
+}>;
+
+function createStartingTurn(launchState: TaskLaunchState): AgentTurn {
+  const alreadyContainsUserMessage = launchState.turn.items.some(
+    (item) => item.type === "message" && item.role === "user",
+  );
+  if (alreadyContainsUserMessage || launchState.input.text.length === 0) {
+    return launchState.turn;
+  }
+
+  // turn/start 可能只返回空运行态；先补入本次提交，保证用户消息始终排在思考状态之前。
+  return {
+    ...launchState.turn,
+    items: [
+      {
+        id: `submitted-user-${launchState.turn.id}`,
+        role: "user",
+        text: launchState.input.text,
+        type: "message",
+      },
+      ...launchState.turn.items,
+    ],
+  };
+}
 
 type WorkbenchShellProps = Readonly<{
   projectId: string;
@@ -46,6 +89,20 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const queryClient = useQueryClient();
   const modelsQuery = useQuery(modelsQueryOptions(client));
   const runtime = useTaskRuntime(projectId, taskId, client);
+  const taskLaunchState =
+    taskId === undefined
+      ? undefined
+      : queryClient.getQueryData<TaskLaunchState>(taskLaunchQueryKey(projectId, taskId));
+  const startingSnapshot: RuntimeTaskSnapshot | undefined =
+    runtime.snapshot === undefined && taskLaunchState !== undefined
+      ? {
+          ...taskLaunchState.task,
+          contextUsage: null,
+          pendingRequests: [],
+          status: "running",
+          turns: [createStartingTurn(taskLaunchState)],
+        }
+      : undefined;
   const projectTaskState = projectTaskStates.get(projectId);
   const sidebarConnectionState = deriveProjectSidebarConnectionState({
     hasActiveTask: taskId !== undefined,
@@ -53,7 +110,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     projectDataPending: isPending || projectTaskState?.isPending === true,
     taskConnectionState: runtime.connectionState,
   });
-  const isTaskRunning = runtime.snapshot?.status === "running";
+  const isTaskRunning =
+    runtime.snapshot?.status === "running" || startingSnapshot?.status === "running";
   const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, isTaskRunning, client));
   const previousTaskRunningRef = useRef(isTaskRunning);
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
@@ -78,8 +136,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const projectPath = project?.rootPath ?? projectId;
   const title =
     tasks.find((task) => task.projectId === projectId && task.id === taskId)?.title ??
-    taskId ??
-    "New agent";
+    runtime.snapshot?.title ??
+    "新聊天";
   const selectedFileChange =
     fileDiffSelection !== null && fileDiffSelection.projectId === projectId
       ? fileDiffSelection.change
@@ -105,11 +163,21 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     setFileReviewSelection({ changes, projectId });
   };
   const handleTaskStarted = useCallback(
-    (startedTaskId: string) => {
-      // 新建与 Fork 共用同一路由收口，确保侧栏列表和当前 Task 同步更新。
-      void queryClient.invalidateQueries({ queryKey: ["projects", projectId, "tasks"] });
+    (startedTask: AgentTask, startedTurn?: AgentTurn, startedInput?: AgentPromptInput) => {
+      // Mutation 返回即代表 Task 已创建，先写列表缓存再导航，不能等待最终一致的列表刷新。
+      queryClient.setQueryData<AgentTaskPage>(["projects", projectId, "tasks"], (currentPage) =>
+        upsertProjectTaskPage(currentPage, startedTask),
+      );
+      if (startedTurn !== undefined && startedInput !== undefined) {
+        // 跨路由保存首轮启动结果，让 Snapshot 返回前即可渲染用户消息和 AI 运行态。
+        queryClient.setQueryData<TaskLaunchState>(taskLaunchQueryKey(projectId, startedTask.id), {
+          input: startedInput,
+          task: startedTask,
+          turn: startedTurn,
+        });
+      }
       void navigate({
-        params: { projectId, taskId: startedTaskId },
+        params: { projectId, taskId: startedTask.id },
         to: "/p/$projectId/t/$taskId",
       });
     },
@@ -138,12 +206,23 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   };
 
   useEffect(() => {
+    if (taskId !== undefined && runtime.snapshot !== undefined) {
+      queryClient.removeQueries({
+        exact: true,
+        queryKey: taskLaunchQueryKey(projectId, taskId),
+      });
+    }
+  }, [projectId, queryClient, runtime.snapshot, taskId]);
+
+  useEffect(() => {
     if (previousTaskRunningRef.current && !isTaskRunning) {
       // 停止轮询前补读一次，确保最后一批落盘变更不会停留在上个采样周期。
       void gitStatusQuery.refetch();
+      // Codex 会在首轮执行期间生成标题，Turn 结束后同步刷新项目 Task 元数据。
+      void queryClient.invalidateQueries({ queryKey: ["projects", projectId, "tasks"] });
     }
     previousTaskRunningRef.current = isTaskRunning;
-  }, [gitStatusQuery.refetch, isTaskRunning]);
+  }, [gitStatusQuery.refetch, isTaskRunning, projectId, queryClient]);
 
   useEffect(() => {
     // Escape 统一关闭覆盖面板，避免键盘用户被窄屏抽屉困住。
@@ -278,6 +357,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             projectId={projectId}
             projectPath={projectPath}
             runtime={runtime}
+            startingSnapshot={startingSnapshot}
             taskId={taskId}
             onOpenFileDiff={openFileDiff}
             onOpenSourceFile={openSourceFile}
@@ -336,6 +416,7 @@ function ActiveTaskWorkbench({
   projectId,
   projectPath,
   runtime,
+  startingSnapshot,
   taskId,
   onOpenFileDiff,
   onOpenSourceFile,
@@ -346,10 +427,11 @@ function ActiveTaskWorkbench({
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;
-  onTaskStarted: (taskId: string) => void;
+  onTaskStarted: (task: AgentTask, turn?: AgentTurn, input?: AgentPromptInput) => void;
   projectId: string;
   projectPath: string;
   runtime: TaskRuntimeView;
+  startingSnapshot: RuntimeTaskSnapshot | undefined;
   taskId: string;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
@@ -381,6 +463,7 @@ function ActiveTaskWorkbench({
         onRollbackTurn={rollbackTurn}
         runtime={runtime}
         taskId={taskId}
+        {...(startingSnapshot === undefined ? {} : { startingSnapshot })}
       />
       <WorkbenchComposer
         capabilities={capabilities}

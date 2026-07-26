@@ -1444,6 +1444,90 @@ test("opens and reuses project new chats without creating empty Codex tasks", as
   expect(taskCreationRequests).toEqual([]);
 });
 
+test("shows a newly submitted task and AI reply state before the task snapshot loads", async ({
+  page,
+}) => {
+  const createdTask = {
+    id: "019f9d81-13ab-7863-9676-beae70726117",
+    pinned: false,
+    projectId: "code-agent",
+    title: "新聊天",
+    updatedAt: "2026-07-26T08:00:00.000Z",
+  };
+  const startedTurn = {
+    completedAt: null,
+    error: null,
+    id: "turn-new-task",
+    // 模拟 turn/start 只返回运行态、用户 Item 尚未进入 Snapshot 的真实窗口。
+    items: [],
+    startedAt: "2026-07-26T08:00:00.000Z",
+    status: "running",
+  };
+  let releaseSnapshotRequest: () => void = () => undefined;
+  const snapshotGate = new Promise<void>((resolve) => {
+    releaseSnapshotRequest = resolve;
+  });
+
+  await page.route("**/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/v1/projects/code-agent/tasks" && route.request().method() === "POST") {
+      await route.fulfill({ contentType: "application/json", json: { task: createdTask } });
+      return;
+    }
+    if (
+      url.pathname === `/v1/projects/code-agent/tasks/${createdTask.id}/turns` &&
+      route.request().method() === "POST"
+    ) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { taskId: createdTask.id, turn: startedTurn },
+      });
+      return;
+    }
+    if (
+      url.pathname === `/v1/projects/code-agent/tasks/${createdTask.id}` &&
+      route.request().method() === "GET"
+    ) {
+      await snapshotGate;
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          checkpoint: { sequence: 0, sessionId: "new-task-session" },
+          snapshot: {
+            ...createdTask,
+            contextUsage: null,
+            pendingRequests: [],
+            status: "running",
+            turns: [startedTurn],
+          },
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/p/code-agent");
+  await page.getByRole("textbox", { name: "任务输入" }).fill("你好");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/p/code-agent/t/${createdTask.id}$`, "u"));
+  const main = page.getByRole("main", { name: "Task Timeline" });
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  await expect(main.getByRole("heading", { name: "新聊天" })).toBeVisible();
+  const timelineMessages = main.locator('[role="log"] article');
+  await expect(timelineMessages.nth(0)).toContainText("你好");
+  await expect(timelineMessages.nth(1)).toContainText("正在思考");
+  await expect(main.locator('[data-ai-task][data-status="in_progress"]')).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(main.getByText(createdTask.id, { exact: true })).toHaveCount(0);
+
+  releaseSnapshotRequest();
+});
+
 test("switches the new chat project from the empty timeline", async ({ page }) => {
   await page.goto("/p/code-agent");
   const prompt = page.getByRole("textbox", { name: "任务输入" });

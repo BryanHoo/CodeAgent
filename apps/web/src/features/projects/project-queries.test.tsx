@@ -11,6 +11,7 @@ import {
   projectTasksQueryOptions,
   projectsQueryOptions,
   taskSnapshotQueryOptions,
+  upsertProjectTaskPage,
 } from "./project-queries.js";
 
 const project = {
@@ -83,6 +84,23 @@ const snapshotResponse = {
 };
 
 describe("project queries", () => {
+  it("inserts a created task immediately and replaces it when fresh metadata arrives", () => {
+    const initialPage = { data: [task], nextCursor: null };
+    const createdTask = {
+      ...task,
+      id: "task-created",
+      title: "新聊天",
+      updatedAt: "2026-07-26T08:00:00.000Z",
+    };
+    const materializedTask = { ...createdTask, title: "发送你好" };
+
+    const insertedPage = upsertProjectTaskPage(initialPage, createdTask);
+    const refreshedPage = upsertProjectTaskPage(insertedPage, materializedTask);
+
+    expect(insertedPage.data).toEqual([createdTask, task]);
+    expect(refreshedPage.data).toEqual([materializedTask, task]);
+  });
+
   it("polls Git status only while the current task is running", async () => {
     const getProjectGitStatus = vi.fn(() => Promise.resolve({ staged: [], unstaged: [] }));
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

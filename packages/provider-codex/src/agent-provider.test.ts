@@ -146,6 +146,26 @@ describe("CodexAgentProvider", () => {
     await expect(provider.startTask()).resolves.toMatchObject({ title: "Codex 返回的标题" });
   });
 
+  it("keeps a newly created task visible until Codex materializes it in the native list", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread({ name: null, preview: "" }) },
+      { data: [], nextCursor: null },
+      {
+        data: [nativeThread({ name: "Codex 生成的标题", preview: "用户发送了你好" })],
+        nextCursor: null,
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.startTask()).resolves.toMatchObject({ id: "task-1", title: "新聊天" });
+    await expect(provider.listTasks()).resolves.toMatchObject({
+      data: [{ id: "task-1", title: "新聊天" }],
+    });
+    await expect(provider.listTasks()).resolves.toMatchObject({
+      data: [{ id: "task-1", title: "Codex 生成的标题" }],
+    });
+  });
+
   it("shares one RPC subscription across multiple project providers", async () => {
     const otherProject = {
       ...project,
