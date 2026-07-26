@@ -819,6 +819,26 @@ function isThreadNotLoadedError(error: unknown): boolean {
   );
 }
 
+function isThreadNotMaterializedError(error: unknown): boolean {
+  return (
+    error instanceof RpcResponseError &&
+    error.code === -32600 &&
+    error.message.includes(
+      "is not materialized yet; includeTurns is unavailable before first user message",
+    )
+  );
+}
+
+function createUnmaterializedTaskSnapshot(task: AgentTask): AgentTaskSnapshot {
+  return {
+    ...task,
+    contextUsage: null,
+    pendingRequests: [],
+    status: "idle",
+    turns: [],
+  };
+}
+
 function mapAgentTask(thread: Record<string, unknown>, project: Project): AgentTask {
   assertProjectThread(thread, project);
   return {
@@ -843,6 +863,7 @@ export class CodexAgentProvider implements AgentProvider {
   readonly #resolvingRequests = new Map<string, ResolvingPendingRequest>();
   readonly #taskContextUsage = new Map<string, AgentContextUsage>();
   readonly #terminalRequests = new Map<string, PendingRequest>();
+  readonly #unmaterializedTasks = new Map<string, AgentTask>();
 
   public constructor(
     client: CodexRpcClient,
@@ -945,6 +966,7 @@ export class CodexAgentProvider implements AgentProvider {
     );
     // 新建 Task 必须立即接收后续 Turn 通知，不能等待下一次列表刷新。
     this.#projectTaskIds.add(task.id);
+    this.#unmaterializedTasks.set(task.id, task);
     return task;
   }
 
@@ -979,7 +1001,9 @@ export class CodexAgentProvider implements AgentProvider {
       }),
       "turn/start response",
     );
-    return mapAgentTurn(response["turn"]);
+    const turn = mapAgentTurn(response["turn"]);
+    this.#unmaterializedTasks.delete(taskId);
+    return turn;
   }
 
   public async startReview(taskId: string, target: AgentReviewTarget): Promise<AgentTurn> {
@@ -1078,6 +1102,13 @@ export class CodexAgentProvider implements AgentProvider {
           threadId: taskId,
         });
       } catch (error) {
+        const unmaterializedTask = this.#unmaterializedTasks.get(taskId);
+        if (unmaterializedTask !== undefined && isThreadNotMaterializedError(error)) {
+          // Codex 在首条用户消息前不允许 includeTurns，返回已知新 Task 的空快照供首轮校验。
+          projectOwnershipVerified = true;
+          this.#promotePendingServerRequests(taskId);
+          return createUnmaterializedTaskSnapshot(unmaterializedTask);
+        }
         // Codex 用明确的 RPC 错误表示 Task 不存在，其他连接与协议错误继续向上传播。
         if (isThreadNotLoadedError(error)) {
           return undefined;
@@ -1090,6 +1121,7 @@ export class CodexAgentProvider implements AgentProvider {
         return undefined;
       }
       projectOwnershipVerified = true;
+      this.#unmaterializedTasks.delete(taskId);
       // Project 归属确认后才提升读取期间暂存的 Server Request。
       this.#promotePendingServerRequests(taskId);
       const task = mapAgentTask(thread, this.#project);

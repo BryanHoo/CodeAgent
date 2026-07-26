@@ -1727,6 +1727,30 @@ describe("CodexAgentProvider", () => {
     await expect(provider.readTask("missing-task")).resolves.toBeUndefined();
   });
 
+  it("reads a newly started task before its first turn is materialized", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      new RpcResponseError({
+        code: -32600,
+        data: null,
+        message:
+          "thread task-1 is not materialized yet; includeTurns is unavailable before first user message",
+      }),
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await provider.startTask();
+
+    await expect(provider.readTask("task-1")).resolves.toMatchObject({
+      contextUsage: null,
+      id: "task-1",
+      pendingRequests: [],
+      projectId: project.id,
+      status: "idle",
+      turns: [],
+    });
+  });
+
   it("preserves unrelated RPC failures when reading a thread", async () => {
     const error = new RpcResponseError({
       code: -32600,
