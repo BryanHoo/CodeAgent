@@ -10,6 +10,12 @@ import {
   Attachments,
 } from "./attachments.js";
 import {
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
+  ChainOfThoughtStep,
+} from "./chain-of-thought.js";
+import {
   Confirmation,
   ConfirmationAction,
   ConfirmationActions,
@@ -40,7 +46,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "./prompt-input.js";
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "./reasoning.js";
+import { Shimmer } from "./shimmer.js";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "./tool.js";
 
 describe("AI Elements primitives", () => {
@@ -103,10 +109,12 @@ describe("AI Elements primitives", () => {
               <MessageResponse>完成工作台结构分析。</MessageResponse>
             </MessageContent>
           </Message>
-          <Reasoning defaultOpen>
-            <ReasoningTrigger>分析界面约束</ReasoningTrigger>
-            <ReasoningContent>保持三区域稳定。</ReasoningContent>
-          </Reasoning>
+          <ChainOfThought defaultOpen>
+            <ChainOfThoughtHeader>分析界面约束</ChainOfThoughtHeader>
+            <ChainOfThoughtContent>
+              <ChainOfThoughtStep description="保持三区域稳定。" label="确认布局" />
+            </ChainOfThoughtContent>
+          </ChainOfThought>
           <Tool defaultOpen>
             <ToolHeader state="output-available" title="读取设计文档" />
             <ToolContent>docs/web-design.md</ToolContent>
@@ -118,9 +126,23 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('role="log"');
     expect(markup).toContain("完成工作台结构分析。");
     expect(markup).toContain("分析界面约束");
+    expect(markup).toContain('data-ai-chain-of-thought=""');
     expect(markup).toContain("已完成");
     expect(markup).toContain("bg-control");
     expect(markup).toContain("rounded-surface");
+  });
+
+  it("renders a polymorphic running Shimmer with an accessible status", () => {
+    const markup = renderToStaticMarkup(
+      <Shimmer aria-label="AI 回复正在运行" as="span" role="status">
+        正在运行
+      </Shimmer>,
+    );
+
+    expect(markup).toContain('<span class="ai-shimmer inline-block ');
+    expect(markup).toContain('data-ai-shimmer=""');
+    expect(markup).toContain('role="status"');
+    expect(markup).toContain("正在运行");
   });
 
   it("renders localized tool states with structured JSON input and output", () => {

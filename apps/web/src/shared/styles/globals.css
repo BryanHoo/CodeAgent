@@ -85,6 +85,42 @@
   color-scheme: dark;
 }
 
+/* Shimmer 只用于持续生成状态，并尊重系统的减弱动态效果设置。 */
+.ai-shimmer {
+  color: transparent;
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent calc(50% - var(--ui-shimmer-spread)),
+      var(--ui-color-text),
+      transparent calc(50% + var(--ui-shimmer-spread))
+    ),
+    linear-gradient(var(--ui-color-text-muted), var(--ui-color-text-muted));
+  background-position:
+    100% center,
+    center;
+  background-repeat: no-repeat;
+  background-size:
+    250% 100%,
+    auto;
+  background-clip: text;
+  animation: ai-shimmer var(--ui-shimmer-duration) linear infinite;
+}
+
+@keyframes ai-shimmer {
+  to {
+    background-position:
+      0% center,
+      center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-shimmer {
+    animation: none;
+  }
+}
+
 @theme inline {
   --color-window: var(--ui-color-window);
   --color-content: var(--ui-color-content);

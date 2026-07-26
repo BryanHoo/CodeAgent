@@ -167,9 +167,12 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain("正在处理。");
     expect(markup).not.toContain('aria-label="复制消息"');
     expect(markup).not.toContain("<time");
+    expect(markup).toContain('data-ai-shimmer=""');
+    expect(markup).toContain("正在运行");
+    expect(markup.indexOf("正在处理。")).toBeLessThan(markup.indexOf("正在运行"));
   });
 
-  it("shows the user message before the AI Elements thinking status", () => {
+  it("shows the user message before the AI Elements running shimmer", () => {
     const waitingForAssistantSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       status: "running",
@@ -194,19 +197,18 @@ describe("TaskSnapshotTimeline", () => {
       <TaskSnapshotTimeline snapshot={waitingForAssistantSnapshot} />,
     );
 
-    expect(markup).toContain('data-ai-task=""');
-    expect(markup).toContain('data-status="in_progress"');
-    expect(markup).toContain("正在思考");
-    expect(markup).toContain("进行中");
-    expect(markup.indexOf("你好")).toBeLessThan(markup.indexOf("正在思考"));
+    expect(markup).toContain('data-ai-shimmer=""');
+    expect(markup).toContain("正在运行");
+    expect(markup.indexOf("你好")).toBeLessThan(markup.indexOf("正在运行"));
   });
 
-  it("renders a completed reasoning item as a collapsed readable summary", () => {
+  it("keeps a completed Chain of Thought available as collapsed readable steps", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={snapshot} />);
 
+    expect(markup).toContain('data-ai-chain-of-thought=""');
     expect(markup).toContain(">Preparing final build and test verification<");
     expect(markup).not.toContain("**Preparing final build and test verification**");
-    expect(markup).not.toMatch(/<details[^>]* open/);
+    expect(markup).toContain('data-state="closed"');
     expect(markup).toContain("Preparing implementation");
   });
 

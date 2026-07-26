@@ -17,6 +17,12 @@ import {
   type AgentFileChange,
 } from "../../diff/file-change.js";
 import {
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
+  ChainOfThoughtStep,
+} from "../../../shared/ai-elements/chain-of-thought.js";
+import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
@@ -37,11 +43,7 @@ import {
   PlanTitle,
   PlanTrigger,
 } from "../../../shared/ai-elements/plan.js";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-} from "../../../shared/ai-elements/reasoning.js";
+import { Shimmer } from "../../../shared/ai-elements/shimmer.js";
 import {
   Terminal,
   TerminalActions,
@@ -586,12 +588,29 @@ function TimelineItemContent({
             : "";
       const isStreamingReasoning = turnStatus === "running" && isLastTurnItem;
       const hasReasoningContent = reasoningContent.length > 0;
+      const completedReasoningSteps = reasoningSteps.slice(0, -1);
 
       return (
-        <Reasoning collapsible={hasReasoningContent} isStreaming={isStreamingReasoning}>
-          <ReasoningTrigger expandable={hasReasoningContent}>{reasoningTitle}</ReasoningTrigger>
-          <ReasoningContent>{reasoningContent}</ReasoningContent>
-        </Reasoning>
+        <ChainOfThought
+          collapsible={hasReasoningContent || completedReasoningSteps.length > 0}
+          defaultOpen={isStreamingReasoning}
+        >
+          <ChainOfThoughtHeader>{reasoningTitle}</ChainOfThoughtHeader>
+          {hasReasoningContent || completedReasoningSteps.length > 0 ? (
+            <ChainOfThoughtContent>
+              {completedReasoningSteps.map((step) => (
+                <ChainOfThoughtStep key={step} label={step} status="complete" />
+              ))}
+              {hasReasoningContent ? (
+                <ChainOfThoughtStep
+                  description={reasoningContent}
+                  label={reasoningTitle}
+                  status={isStreamingReasoning ? "active" : "complete"}
+                />
+              ) : null}
+            </ChainOfThoughtContent>
+          ) : null}
+        </ChainOfThought>
       );
     }
     case "command": {
@@ -692,7 +711,7 @@ function TurnTimelineItems({
   const timelineGroups = groupTurnTimelineItems(turn.items);
   const hasAssistantItems = timelineGroups.some((group) => group.type === "assistant");
 
-  const renderedGroups = timelineGroups.map((group) => {
+  const renderedGroups = timelineGroups.map((group, groupIndex) => {
     if (group.type === "user") {
       return (
         <Message from="user" key={group.item.id}>
@@ -720,6 +739,8 @@ function TurnTimelineItems({
     );
     const showCompletedFooter = turn.status !== "running" && assistantText.trim().length > 0;
     const showChangedFilesCard = turn.status !== "running" && responseFileChanges.length > 0;
+    const showRunningShimmer =
+      turn.status === "running" && groupIndex === timelineGroups.length - 1;
 
     return (
       <Message from="assistant" key={group.key}>
@@ -733,6 +754,11 @@ function TurnTimelineItems({
               turnStatus={turn.status}
             />
           ))}
+          {showRunningShimmer ? (
+            <Shimmer aria-label="AI 回复正在运行" as="p" className="text-body-small" role="status">
+              正在运行
+            </Shimmer>
+          ) : null}
         </div>
         {showChangedFilesCard ? (
           <ChangedFilesCard
@@ -758,10 +784,10 @@ function TurnTimelineItems({
       {renderedGroups}
       {turn.status === "running" && !hasAssistantItems ? (
         <Message from="assistant">
-          {/* 首个 Delta 到达前也要让用户明确看到 AI 已进入思考状态。 */}
-          <Task collapsible={false} status="in_progress">
-            <TaskTrigger title="正在思考" />
-          </Task>
+          {/* 首个 Delta 到达前同样用回复尾行的 Shimmer 表达实时运行状态。 */}
+          <Shimmer aria-label="AI 回复正在运行" as="p" className="text-body-small" role="status">
+            正在运行
+          </Shimmer>
         </Message>
       ) : null}
     </>
