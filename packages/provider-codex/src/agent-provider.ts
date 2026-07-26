@@ -360,7 +360,8 @@ function normalizedTitle(thread: Record<string, unknown>): string {
     return name;
   }
   const preview = optionalString(thread["preview"])?.trim().split(/\r?\n/u)[0]?.trim();
-  return preview?.length ? preview : "未命名任务";
+  // Codex 生成正式标题前统一显示新聊天，后续列表刷新会自然替换为 name 或 preview。
+  return preview?.length ? preview : "新聊天";
 }
 
 function mapAgentModel(value: unknown): AgentModelPage["data"][number] | undefined {

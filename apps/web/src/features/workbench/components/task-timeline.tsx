@@ -1,5 +1,11 @@
-import type { AgentItem, AgentItemStatus, AgentTurn, PendingRequest } from "@code-agent/protocol";
-import { Check, Copy, FilePenLine, Files, FolderGit2, RotateCcw } from "lucide-react";
+import type {
+  AgentItem,
+  AgentItemStatus,
+  AgentTurn,
+  PendingRequest,
+  Project,
+} from "@code-agent/protocol";
+import { Check, ChevronDown, Copy, FilePenLine, Files, FolderGit2, RotateCcw } from "lucide-react";
 import { useState } from "react";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
@@ -61,28 +67,72 @@ import {
 } from "../../../shared/ai-elements/tool.js";
 import { PendingRequestCard, type PendingRequestResolution } from "./pending-request.js";
 
-type TaskTimelineProps = Readonly<{
+type TaskTimelineCommonProps = Readonly<{
   canRollbackTurns?: boolean;
   onOpenFileDiff?: (change: AgentFileChange) => void;
   onReviewFileChanges?: (changes: readonly AgentFileChange[]) => void;
   onRollbackTurn?: (turnId: string, idempotencyKey: string) => Promise<void>;
   onOpenSourceFile?: (reference: MessageFileReference) => void;
-  projectName: string;
   onResolvePendingRequest?: (
     request: PendingRequest,
     resolution: PendingRequestResolution,
     idempotencyKey: string,
   ) => Promise<void>;
   runtime?: TaskRuntimeView;
-  taskId?: string;
 }>;
 
-function EmptyTimeline({ projectName }: Readonly<{ projectName: string }>) {
+type TaskTimelineProps = TaskTimelineCommonProps &
+  Readonly<
+    | {
+        onProjectChange: (projectId: string) => void;
+        projectId: string;
+        projects: readonly Project[];
+        taskId?: undefined;
+      }
+    | {
+        taskId: string;
+      }
+  >;
+
+function EmptyTimeline({
+  onProjectChange,
+  projectId,
+  projects,
+}: Readonly<{
+  onProjectChange: (projectId: string) => void;
+  projectId: string;
+  projects: readonly Project[];
+}>) {
   return (
     <section className="grid min-h-0 flex-1 place-items-center px-6" aria-label="会话内容">
       <div className="max-w-sm text-center">
         <FolderGit2 className="mx-auto size-9 text-muted-foreground" strokeWidth={1.4} />
-        <h2 className="mt-4 text-base font-semibold text-foreground">{projectName}</h2>
+        <h2 className="mt-3 flex h-9 items-center justify-center">
+          {/* 直接挂载原生选择器，确保首次点击就能打开项目列表。 */}
+          <span className="relative inline-flex max-w-full items-center">
+            <select
+              aria-label="选择新聊天项目"
+              className="h-8 max-w-full cursor-pointer appearance-none rounded-control bg-transparent py-0 pl-2 pr-7 text-base font-semibold text-foreground outline-none transition-colors hover:bg-control-hover focus:bg-control focus:shadow-focus"
+              onChange={(event) => {
+                const nextProjectId = event.currentTarget.value;
+                if (nextProjectId !== projectId) {
+                  onProjectChange(nextProjectId);
+                }
+              }}
+              value={projectId}
+            >
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              className="pointer-events-none absolute right-2 size-3.5 text-muted-foreground"
+              aria-hidden="true"
+            />
+          </span>
+        </h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">选择一个任务查看历史。</p>
       </div>
     </section>
@@ -104,20 +154,25 @@ function TimelineState({
   );
 }
 
-export function TaskTimeline({
-  canRollbackTurns = false,
-  onOpenFileDiff,
-  onOpenSourceFile,
-  onReviewFileChanges,
-  onResolvePendingRequest,
-  onRollbackTurn,
-  projectName,
-  runtime,
-  taskId,
-}: TaskTimelineProps) {
-  if (taskId === undefined) {
-    return <EmptyTimeline projectName={projectName} />;
+export function TaskTimeline(props: TaskTimelineProps) {
+  if (props.taskId === undefined) {
+    return (
+      <EmptyTimeline
+        onProjectChange={props.onProjectChange}
+        projectId={props.projectId}
+        projects={props.projects}
+      />
+    );
   }
+  const {
+    canRollbackTurns = false,
+    onOpenFileDiff,
+    onOpenSourceFile,
+    onReviewFileChanges,
+    onResolvePendingRequest,
+    onRollbackTurn,
+    runtime,
+  } = props;
   if (runtime === undefined) {
     return <TimelineState message="正在加载任务历史" role="status" />;
   }

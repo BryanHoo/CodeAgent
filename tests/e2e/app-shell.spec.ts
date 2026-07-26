@@ -1415,7 +1415,55 @@ test("searches tasks across projects", async ({ page }) => {
   await expect(sidebar.getByRole("link", { name: /构建 macOS 工作台/ })).not.toBeVisible();
 });
 
-test("toggles project tasks from both project controls without navigation", async ({ page }) => {
+test("opens and reuses project new chats without creating empty Codex tasks", async ({ page }) => {
+  const taskCreationRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && /\/v1\/projects\/[^/]+\/tasks$/u.test(request.url())) {
+      taskCreationRequests.push(request.url());
+    }
+  });
+  await page.goto("/p/superwork/t/plan-check");
+
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  await sidebar.getByRole("link", { name: "新建任务" }).click();
+  await expect(page).toHaveURL(/\/p\/code-agent$/);
+  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+
+  // 已经位于首个项目的新聊天时继续复用当前草稿，不创建空 Codex Task。
+  await sidebar.getByRole("link", { name: "新建任务" }).click();
+  await expect(page).toHaveURL(/\/p\/code-agent$/);
+  await sidebar.getByRole("button", { name: "在 superwork 中新建任务" }).click();
+  await expect(page).toHaveURL(/\/p\/superwork$/);
+  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  expect(taskCreationRequests).toEqual([]);
+});
+
+test("switches the new chat project from the empty timeline", async ({ page }) => {
+  await page.goto("/p/code-agent");
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.fill("保留这段新聊天草稿");
+
+  const projectSelect = page.getByRole("combobox", { name: "选择新聊天项目" });
+  await expect(projectSelect).toBeVisible();
+  await projectSelect.selectOption("superwork");
+
+  await expect(page).toHaveURL(/\/p\/superwork$/);
+  await expect(projectSelect).toHaveValue("superwork");
+  await expect(prompt).toHaveValue("保留这段新聊天草稿");
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+});
+
+test("toggles project tasks from the project name without navigation", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
@@ -1426,7 +1474,8 @@ test("toggles project tasks from both project controls without navigation", asyn
   await expect(task).not.toBeVisible();
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
 
-  await sidebar.getByRole("button", { name: "展开项目 CodeAgent" }).click();
+  await expect(sidebar.getByRole("button", { name: "在 CodeAgent 中新建任务" })).toBeVisible();
+  await sidebar.getByRole("button", { name: "切换项目 CodeAgent" }).click();
   await expect(task).toBeVisible();
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
 });

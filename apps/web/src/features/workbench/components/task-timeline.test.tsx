@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
-import { TaskSnapshotTimeline } from "./task-timeline.js";
+import { TaskSnapshotTimeline, TaskTimeline } from "./task-timeline.js";
 
 const completedTurn: RuntimeTaskSnapshot["turns"][number] = {
   completedAt: "2026-07-24T00:01:00.000Z",
@@ -31,6 +31,35 @@ const snapshot: RuntimeTaskSnapshot = {
   turns: [completedTurn],
   updatedAt: "2026-07-24T00:01:00.000Z",
 };
+
+describe("TaskTimeline", () => {
+  it("renders the empty chat project selector without an intermediate button", () => {
+    const markup = renderToStaticMarkup(
+      <TaskTimeline
+        onProjectChange={() => undefined}
+        projectId="code-agent"
+        projects={[
+          {
+            createdAt: "2026-07-22T06:00:00.000Z",
+            id: "code-agent",
+            name: "CodeAgent",
+            rootPath: "/workspace/CodeAgent",
+          },
+          {
+            createdAt: "2026-07-22T06:30:00.000Z",
+            id: "superwork",
+            name: "superwork",
+            rootPath: "/workspace/superwork",
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain('<select aria-label="选择新聊天项目"');
+    expect(markup).toContain(">CodeAgent<");
+    expect(markup).not.toContain('aria-label="切换新聊天项目，当前 CodeAgent"');
+  });
+});
 
 describe("TaskSnapshotTimeline", () => {
   it("renders copy controls, timestamps, and spacing for user and assistant messages", () => {

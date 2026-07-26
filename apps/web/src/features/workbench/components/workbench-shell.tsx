@@ -115,6 +115,13 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     },
     [navigate, projectId, queryClient],
   );
+  const handleNewTaskProjectChange = useCallback(
+    (nextProjectId: string) => {
+      // 空聊天切换只移动草稿路由，首次提交时再在目标 Project 中创建真实 Task。
+      void navigate({ params: { projectId: nextProjectId }, to: "/p/$projectId" });
+    },
+    [navigate],
+  );
 
   const closeSidebar = () => {
     setSidebarOpen(false);
@@ -243,7 +250,11 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           <RuntimeUnavailable onRetry={() => void retry()} />
         ) : taskId === undefined ? (
           <>
-            <TaskTimeline projectName={projectName} />
+            <TaskTimeline
+              onProjectChange={handleNewTaskProjectChange}
+              projectId={projectId}
+              projects={projects}
+            />
             <WorkbenchComposer
               capabilities={capabilities}
               client={client}
@@ -265,7 +276,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             onTaskStarted={handleTaskStarted}
             key={`${projectId}:${taskId}`}
             projectId={projectId}
-            projectName={projectName}
             projectPath={projectPath}
             runtime={runtime}
             taskId={taskId}
@@ -324,7 +334,6 @@ function ActiveTaskWorkbench({
   modelsPending,
   onTaskStarted,
   projectId,
-  projectName,
   projectPath,
   runtime,
   taskId,
@@ -339,7 +348,6 @@ function ActiveTaskWorkbench({
   modelsPending: boolean;
   onTaskStarted: (taskId: string) => void;
   projectId: string;
-  projectName: string;
   projectPath: string;
   runtime: TaskRuntimeView;
   taskId: string;
@@ -371,7 +379,6 @@ function ActiveTaskWorkbench({
         onReviewFileChanges={onReviewFileChanges}
         onResolvePendingRequest={resolvePendingRequest}
         onRollbackTurn={rollbackTurn}
-        projectName={projectName}
         runtime={runtime}
         taskId={taskId}
       />

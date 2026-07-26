@@ -135,6 +135,17 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("uses 新聊天 until Codex provides a task title", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread({ name: null, preview: "" }) },
+      { thread: nativeThread({ name: "Codex 返回的标题", preview: "忽略的预览" }) },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.startTask()).resolves.toMatchObject({ title: "新聊天" });
+    await expect(provider.startTask()).resolves.toMatchObject({ title: "Codex 返回的标题" });
+  });
+
   it("shares one RPC subscription across multiple project providers", async () => {
     const otherProject = {
       ...project,

@@ -1,8 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { AgentEventConnectionState } from "@code-agent/client";
 import {
-  ChevronDown,
-  ChevronRight,
   Folder,
   LoaderCircle,
   PanelLeftClose,
@@ -103,6 +101,7 @@ export function ProjectSidebar({
   const pinnedTasks = getPinnedTasks(visibleTasks);
   const hasPendingTasks = [...projectTaskStates.values()].some((state) => state.isPending);
   const hasTaskError = [...projectTaskStates.values()].some((state) => state.error !== null);
+  const firstProject = projects[0];
 
   useEffect(() => {
     // Projects 异步到达后默认展开新项目，保留用户已手动设置的现有项目状态。
@@ -136,6 +135,19 @@ export function ProjectSidebar({
     if (project !== undefined) {
       await navigate({ params: { projectId: project.id }, to: "/p/$projectId" });
     }
+  };
+
+  const openNewTask = async (targetProjectId: string) => {
+    // 新聊天先复用 Project 空任务路由，首次提交时再由 Composer 创建真实 Codex Task。
+    setExpandedProjects((current) => {
+      if (current.has(targetProjectId)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.add(targetProjectId);
+      return next;
+    });
+    await navigate({ params: { projectId: targetProjectId }, to: "/p/$projectId" });
   };
 
   return (
@@ -185,8 +197,15 @@ export function ProjectSidebar({
             value={query}
           />
         </div>
-        {projectId === undefined ? null : (
-          <Link className={primaryActionClassName} params={{ projectId }} to="/p/$projectId">
+        {firstProject === undefined ? null : (
+          <Link
+            className={primaryActionClassName}
+            onClick={() => {
+              setExpandedProjects((current) => new Set(current).add(firstProject.id));
+            }}
+            params={{ projectId: firstProject.id }}
+            to="/p/$projectId"
+          >
             <Send className={primaryActionIconClassName} aria-hidden="true" />
             新建任务
           </Link>
@@ -269,22 +288,21 @@ export function ProjectSidebar({
                       <span className="truncate">{project.name}</span>
                     </button>
                     <IconButton
-                      label={expanded ? `收起项目 ${project.name}` : `展开项目 ${project.name}`}
+                      label={`在 ${project.name} 中新建任务`}
                       onClick={() => {
-                        toggleProject(project.id);
+                        void openNewTask(project.id);
                       }}
                       size="small"
                     >
-                      {expanded ? (
-                        <ChevronDown className="size-3.5" aria-hidden="true" />
-                      ) : (
-                        <ChevronRight className="size-3.5" aria-hidden="true" />
-                      )}
+                      <Plus className="size-3.5" aria-hidden="true" />
                     </IconButton>
                   </div>
 
                   {expanded ? (
                     <div className="mt-0.5 space-y-0.5 pl-5">
+                      {project.id === projectId && taskId === undefined ? (
+                        <NewTaskLink projectId={project.id} />
+                      ) : null}
                       {projectTasks.map((task) => (
                         <TaskLink
                           active={project.id === projectId && task.id === taskId}
@@ -322,6 +340,19 @@ export function ProjectSidebar({
         </Link>
       </div>
     </aside>
+  );
+}
+
+function NewTaskLink({ projectId }: Readonly<{ projectId: string }>) {
+  return (
+    <Link
+      aria-current="page"
+      className="flex h-8 min-w-0 items-center rounded-control bg-control-active px-2 text-body-small font-medium text-foreground"
+      params={{ projectId }}
+      to="/p/$projectId"
+    >
+      <span className="min-w-0 flex-1 truncate">新聊天</span>
+    </Link>
   );
 }
 
