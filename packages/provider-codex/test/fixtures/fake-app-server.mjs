@@ -373,6 +373,19 @@ input.on("line", (line) => {
     return;
   }
 
+  if (message.method === "skills/list") {
+    const requestedCwds = Array.isArray(message.params?.cwds)
+      ? message.params.cwds
+      : ["/workspace/CodeAgent"];
+    send({
+      id: message.id,
+      result: {
+        data: requestedCwds.map((cwd) => ({ cwd, errors: [], skills: [] })),
+      },
+    });
+    return;
+  }
+
   if (message.method === "config/read") {
     send({
       id: message.id,

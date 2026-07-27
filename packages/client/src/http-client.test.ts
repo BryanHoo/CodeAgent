@@ -40,6 +40,17 @@ const modelPage = {
   ],
   nextCursor: null,
 };
+const skill = {
+  description: "审查认证、授权和敏感数据边界",
+  displayName: "Security review",
+  id: "skill_01J00000000000000000000000",
+  name: "review-security",
+  scope: "system" as const,
+};
+const skillPage = {
+  data: [skill],
+  nextCursor: null,
+};
 const pixelDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const attachment = {
@@ -108,6 +119,15 @@ describe("CodeAgentClient", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/models");
   });
 
+  it("reads and validates the current project skill catalog", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse(skillPage));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.listSkills("project one")).resolves.toEqual(skillPage);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects/project%20one/skills");
+  });
+
   it("reads and validates a project's staged and unstaged Git changes", async () => {
     const gitStatus = {
       staged: [],
@@ -156,6 +176,7 @@ describe("CodeAgentClient", () => {
         jsonResponse({
           feedback: { upload: true },
           provider: "codex",
+          skills: { list: true, use: true },
           tasks: { fork: true, list: true, read: true, start: true },
           turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
         }),
@@ -290,7 +311,12 @@ describe("CodeAgentClient", () => {
     await client.startTurn(
       "code-agent",
       task.id,
-      { attachments: [{ id: attachment.id }], text: "继续实现", type: "prompt" },
+      {
+        attachments: [{ id: attachment.id }],
+        skills: [{ id: skill.id, name: skill.name }],
+        text: "继续实现",
+        type: "prompt",
+      },
       {
         approvalPolicy: "on-request",
         model: "gpt-5.6-sol",
@@ -321,6 +347,7 @@ describe("CodeAgentClient", () => {
       body: JSON.stringify({
         input: {
           attachments: [{ id: "attachment-1" }],
+          skills: [{ id: "skill_01J00000000000000000000000", name: "review-security" }],
           text: "继续实现",
           type: "prompt",
         },

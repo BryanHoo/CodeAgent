@@ -12,7 +12,7 @@
 - Task Timeline 不展示原生 Reasoning Item 或 Chain of Thought；Codex Commentary 与 Final Answer 都作为普通 Assistant Message，通过 `MessageResponse` 实时流式展示。Command、Tool 等结构化 Item 保持独立可见，不包裹进思考容器。运行中的 AI 回复必须在回复最后一行使用 AI Elements `Shimmer` 表达持续生成状态；存在运行中的 Command、Tool、Activity 或流式 Plan 时显示当前操作名称，其中 Command 同时显示终端图标；没有结构化操作时回退为通用运行状态，并在 Turn 结束后移除。
 - Composer 使用 AI Elements `PromptInput`、`Attachments` 和组合式工具栏，支持点击、拖放、粘贴、预览与移除图片；附件选择是本地操作，在实时连接恢复期间仍保持可用，仅在正在提交时锁定；模型来自 Server Query，审批策略、沙盒模式、模型和思考量随同一个 Turn 请求提交，不保留禁用占位控件。
 - Composer 在已有 Task 中使用 Snapshot 携带的完整设置，在新聊天中使用 Project 默认模型、思考量与沙盒模式并固定以 `on-request` 初始化审批；沙盒选择紧邻审批并提供只读、工作区可写和完全访问；设置只由用户事件触发完整对象 Mutation，不得通过 effect 写回或从其他 Task 继承审批。
-- Composer 的起始 `/` 输入使用 AI Elements `PromptInputCommand*` 在输入框外部向上浮出命令列表，不得把列表嵌入 PromptInput 表面；固定提供代码审查、初始化、副任务、压缩、反馈和在新任务中继续，并支持鼠标、上下方向键、Enter、Escape 和明确的 listbox/option 语义。代码审查、压缩、反馈和续接必须调用对应 Provider 能力；初始化与副任务复用正常 Turn 提交链路，不得在前端伪造执行结果。
+- Composer 在文本开头或空白字符后的 `/` 输入使用 AI Elements `PromptInputCommand*` 在输入框外部向上浮出分组列表，连续正文字符后的 `/` 仅作为普通字符；不得把列表嵌入 PromptInput 表面。列表先固定提供代码审查、初始化、副任务、压缩、反馈和在新任务中继续，再在命令组下方展示当前 Project 由 Server 返回的可用 Skills，并支持鼠标、上下方向键、Enter、Escape 和明确的 listbox/option 语义。Skill 描述固定为单行省略；键盘高亮移动到滚动区域外时必须自动滚动到可见位置。Skill 选择后仅移除当前 Slash 片段并保留已有正文，在输入框内使用 `skill` 主题色展示可移除 Token；提交结构化不透明引用，不得拼接文本或接触原生路径。代码审查、压缩、反馈和续接必须调用对应 Provider 能力，初始化与副任务复用正常 Turn 提交链路。
 - Composer 的审批、模型和思考量选择隐藏原生箭头并按当前文字收缩，思考量选项直接显示“低”“中”“高”等等级，不重复显示“思考量”前缀；思考量紧邻模型；任一内部控件聚焦时只由 Composer 整体显示主色边框，内部控件不重复显示主色焦点轮廓；分支/路径行最右使用圆环按钮表达真实上下文占比，悬停或键盘聚焦后通过 Tooltip 展示百分比和已用/总 Token 数。
 - 工作台左栏先展示产品标识与名称，再按常显搜索框、“新建任务”、可选 `Pinned`、`Projects` 排列；没有固定 Task 时不渲染 `Pinned` 区域。
 - `Projects` 标题使用高于分组元数据的字号并固定在项目树滚动区域之外；Project 行之间不增加分组间隔。每个展开 Project 默认展示最近 5 个 Task，超过后使用占满 Task 列表整行的“显示更多”展开，并允许通过同样的整行控件收起。
@@ -28,6 +28,7 @@
 - Task Timeline 的 Plan Item 必须使用 AI Elements `Plan` 组合组件并原样展示计划文本；仅当它是运行中 Turn 的当前最后一个 Item 时启用 `isStreaming`，不得为展示状态扩展 Protocol 或使用 `Tool` 模拟 Plan。
 - Task Timeline 仅将 `AgentItem` 中的 `activity` 映射为 AI Elements `Task`，按 Activity 状态映射进度；有 `detail` 时允许展开，没有 `detail` 时保持紧凑。不得继续用 `Tool` 模拟 Activity，也不得把 CodeAgent 的整个 Task 或 Turn 映射为 AI Elements `Task`。
 - Task Timeline 的用户消息和 AI 回复末尾都必须常显可访问的复制操作与本地时间；消息 Item 和相邻 Turn 之间保留明确纵向间距，不能让下一条用户消息贴住上一条回复。
+- Task Timeline 的用户消息必须渲染统一消息协议携带的 Skill Token；实时 Turn、首轮乐观消息和重新打开 Task 后的历史消息使用同一 `skill` 主题色样式。Web 不从普通文本猜测 Skill，Provider 必须解析 Codex `userMessage.content` 中的 `skill` 字段并在丢弃原生路径后提供 Skill 名称。
 - Task Timeline 默认随 AI 流式内容自动滚动到最新位置；用户主动离开底部后暂停跟随，用户再次滚动到底部或使用“回到底部”操作后恢复自动跟随。
 - AI 回复中的 Project 内绝对文件引用必须可点击打开只读源文件弹窗；带行号时定位并高亮对应行。源文件只通过 Server 受控接口读取，超长内容显示明确截断状态，页面不得直接访问本地文件系统。
 - Timeline 展示 Task Snapshot 中的 Agent 文件操作，Inspector 则始终展示当前 Project 的真实 Git 未提交文件，并明确区分非空的未暂存与已暂存分组；变更总览固定在 Inspector 顶部，只有文件列表滚动，不展示未接通的提交入口。当前 Task 运行时 Inspector 定时刷新 Git 状态，停止运行后补做最终刷新。两处文件行都复用 Diff 弹窗；新增或删除文件的行数统计同时支持 Unified Diff 和 Provider 返回的完整文件内容，完整 Viewer 使用 `@pierre/diffs/react` 并仅在打开弹窗后动态加载，不能在消息内展开原始补丁或保留演示变更数据。

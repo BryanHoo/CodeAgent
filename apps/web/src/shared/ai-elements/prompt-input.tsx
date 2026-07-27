@@ -269,7 +269,13 @@ export function PromptInputCommand({ className = "", ...props }: PromptInputSect
 }
 
 export function PromptInputCommandList({ className = "", ...props }: PromptInputSectionProps) {
-  return <div className={`max-h-96 overflow-y-auto p-1 ${className}`} {...props} />;
+  return (
+    <div
+      className={`max-h-96 overflow-y-auto p-1 ${className}`}
+      data-prompt-input-command-list=""
+      {...props}
+    />
+  );
 }
 
 type PromptInputCommandGroupProps = PromptInputSectionProps & { label: string };
@@ -301,6 +307,15 @@ export function PromptInputCommandItem({
   type = "button",
   ...props
 }: PromptInputCommandItemProps) {
+  const itemRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (active) {
+      // 键盘切换高亮项时，让滚动容器始终露出当前选项。
+      itemRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [active]);
+
   return (
     <button
       aria-selected={selected}
@@ -311,6 +326,7 @@ export function PromptInputCommandItem({
         event.preventDefault();
         onMouseDown?.(event);
       }}
+      ref={itemRef}
       role="option"
       type={type}
       {...props}

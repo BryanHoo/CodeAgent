@@ -151,6 +151,7 @@ describe("project queries", () => {
         Promise.resolve({
           feedback: { upload: true },
           provider: "codex",
+          skills: { list: true, use: true },
           tasks: { fork: true, list: true, read: true, start: true },
           turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
         }),

@@ -3,6 +3,8 @@ import type {
   AgentEvent,
   AgentAttachmentMediaType,
   AgentModelPage,
+  AgentSkillPage,
+  AgentSkillReference,
   AgentTask,
   AgentTaskPage,
   AgentTaskSnapshot,
@@ -26,6 +28,7 @@ export type AgentProviderTurnInput = Readonly<{
     mediaType: AgentAttachmentMediaType;
     url: string;
   }>[];
+  skills: readonly AgentSkillReference[];
   text: string;
 }>;
 
@@ -65,6 +68,7 @@ export interface AgentProvider {
   forkTask(taskId: string): Promise<AgentTask>;
   getCapabilities(): Promise<AgentCapabilities>;
   listModels(): Promise<AgentModelPage>;
+  listSkills(): Promise<AgentSkillPage>;
   listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage>;
   readSandboxMode(): Promise<AgentSandboxMode>;
   // Promise 完成前须让 Snapshot 包含此前状态并同步交付对应通知，使 checkpoint 保持一致。

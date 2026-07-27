@@ -8,6 +8,7 @@ import {
   AgentModelPageSchema,
   AgentMutationErrorSchema,
   AgentProjectDefaultsResponseSchema,
+  AgentSkillPageSchema,
   InterruptAgentTurnResponseSchema,
   AgentTaskPageSchema,
   AgentTaskSnapshotResponseSchema,
@@ -37,6 +38,7 @@ import {
   type AgentPromptInput,
   type AgentProjectDefaults,
   type AgentProjectDefaultsResponse,
+  type AgentSkillPage,
   type AgentTurnOptions,
   type AgentTaskSnapshotResponse,
   type AgentTaskSettings,
@@ -157,6 +159,10 @@ export class CodeAgentClient {
 
   public async listModels(): Promise<AgentModelPage> {
     return this.#request("/v1/models", AgentModelPageSchema);
+  }
+
+  public async listSkills(projectId: string): Promise<AgentSkillPage> {
+    return this.#request(`${projectPath(projectId)}/skills`, AgentSkillPageSchema);
   }
 
   public async listProjects(): Promise<ProjectPage> {

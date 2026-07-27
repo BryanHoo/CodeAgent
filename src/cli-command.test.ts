@@ -40,6 +40,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     getCapabilities: vi.fn(),
     interruptTurn: vi.fn(),
     listModels: vi.fn(),
+    listSkills: vi.fn(),
     listTasks: vi.fn(),
     readSandboxMode: vi.fn(() => Promise.resolve("workspace-write" as const)),
     readTask: vi.fn(),

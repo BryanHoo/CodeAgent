@@ -13,6 +13,7 @@ import {
   Files,
   FolderGit2,
   RotateCcw,
+  Sparkles,
   SquareTerminal,
 } from "lucide-react";
 import { useState } from "react";
@@ -600,12 +601,32 @@ function TimelineItemContent({
   turnStatus: AgentTurn["status"];
 }>) {
   switch (item.type) {
-    case "message":
+    case "message": {
+      const skills = item.role === "user" ? (item.skills ?? []) : [];
       return (
-        <MessageContent className={item.role === "assistant" ? "w-full" : ""}>
-          <MessageResponse onOpenFileReference={onOpenSourceFile}>{item.text}</MessageResponse>
+        <MessageContent
+          className={`${item.role === "assistant" ? "w-full" : ""} ${skills.length > 0 ? "space-y-2" : ""}`}
+        >
+          {skills.length === 0 ? null : (
+            <div className="flex flex-wrap gap-1.5" aria-label="使用的 Skills">
+              {skills.map((skill) => (
+                <span
+                  className="inline-flex max-w-full items-center gap-1 rounded-control bg-raised px-2 py-1 text-label font-medium text-skill"
+                  data-message-skill={skill.name}
+                  key={skill.name}
+                >
+                  <Sparkles aria-hidden="true" className="size-3.5 shrink-0" />
+                  <span className="truncate">${skill.name}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          {item.text.length === 0 ? null : (
+            <MessageResponse onOpenFileReference={onOpenSourceFile}>{item.text}</MessageResponse>
+          )}
         </MessageContent>
       );
+    }
     case "reasoning":
       // 原生 Reasoning 仅用于运行时状态同步，避免在界面暴露模型思维链。
       return null;
@@ -709,6 +730,12 @@ function TurnTimelineItems({
 
   const renderedGroups = timelineGroups.map((group, groupIndex) => {
     if (group.type === "user") {
+      const copiedText = [
+        ...(group.item.skills ?? []).map((skill) => `$${skill.name}`),
+        group.item.text,
+      ]
+        .filter((part) => part.length > 0)
+        .join("\n");
       return (
         <Message from="user" key={group.item.id}>
           <TimelineItemContent
@@ -718,7 +745,7 @@ function TurnTimelineItems({
             turnStatus={turn.status}
           />
           <MessageMetadata
-            text={group.item.text}
+            text={copiedText}
             timestamp={getMessageTimestamp("user", turn, latestSnapshotTimestamp)}
           />
         </Message>

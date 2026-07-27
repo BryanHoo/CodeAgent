@@ -23,6 +23,7 @@ import {
   AgentModelPageSchema,
   AgentProjectDefaultsResponseSchema,
   AgentProjectDefaultsSchema,
+  AgentSkillPageSchema,
   AgentMutationErrorSchema,
   AgentTaskPageSchema,
   AgentTaskSettingsResponseSchema,
@@ -576,6 +577,23 @@ export async function createCodeAgentServer(
     data: await options.projectRepository.list(),
     nextCursor: null,
   }));
+
+  app.get<{ Params: { projectId: string } }>(
+    "/v1/projects/:projectId/skills",
+    {
+      schema: {
+        params: ProjectParamsSchema,
+        response: { 200: AgentSkillPageSchema, 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      return context.provider.listSkills();
+    },
+  );
 
   app.get<{ Params: { projectId: string } }>(
     "/v1/projects/:projectId/defaults",
@@ -1413,7 +1431,11 @@ export async function createCodeAgentServer(
           );
           const turn = await context.provider.startTurn(
             request.params.taskId,
-            { images, text: request.body.input.text },
+            {
+              images,
+              skills: request.body.input.skills,
+              text: request.body.input.text,
+            },
             request.body.options,
           );
           // 只有 Provider 确认启动成功后才消费附件，网络失败仍允许原请求重试。

@@ -53,6 +53,7 @@ describe("WorkbenchComposer", () => {
     const capabilities = {
       feedback: { upload: false },
       provider: "fake",
+      skills: { list: false, use: false },
       tasks: { fork: false, list: true, read: true, start: false },
       turns: { compact: false, interrupt: false, review: false, rollback: false, start: true },
     };
@@ -152,7 +153,7 @@ describe("WorkbenchComposer", () => {
     await expect(
       startPromptTurn(client, {
         idempotencyKeys: { startTask: "task-key", startTurn: "turn-key" },
-        input: { attachments: [], text: "首次提交", type: "prompt" },
+        input: { attachments: [], skills: [], text: "首次提交", type: "prompt" },
         projectId: "code-agent",
         turnOptions: {
           approvalPolicy: "on-request",
@@ -165,7 +166,7 @@ describe("WorkbenchComposer", () => {
     await expect(
       startPromptTurn(client, {
         idempotencyKeys: { startTurn: "existing-turn-key" },
-        input: { attachments: [], text: "继续任务", type: "prompt" },
+        input: { attachments: [], skills: [], text: "继续任务", type: "prompt" },
         projectId: "code-agent",
         taskId: task.id,
         turnOptions: {
@@ -185,6 +186,7 @@ describe("WorkbenchComposer", () => {
       task.id,
       {
         attachments: [],
+        skills: [],
         text: "首次提交",
         type: "prompt",
       },
@@ -202,6 +204,7 @@ describe("WorkbenchComposer", () => {
       task.id,
       {
         attachments: [],
+        skills: [],
         text: "继续任务",
         type: "prompt",
       },

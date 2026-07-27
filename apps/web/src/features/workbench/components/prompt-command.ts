@@ -1,4 +1,4 @@
-import type { AgentCapabilities } from "@code-agent/protocol";
+import type { AgentCapabilities, AgentSkill } from "@code-agent/protocol";
 
 export type PromptCommandAction =
   "compact" | "feedback" | "fork" | "initialize" | "review" | "subtask";
@@ -93,14 +93,26 @@ export function resolvePromptSlashCommand(
   draft: string,
   cursorPosition: number,
 ): PromptSlashCommand | null {
-  if (!draft.startsWith("/") || cursorPosition !== draft.length || /\s/u.test(draft)) {
+  if (cursorPosition < 0 || cursorPosition > draft.length) {
+    return null;
+  }
+
+  const draftBeforeCursor = draft.slice(0, cursorPosition);
+  const commandStart = draftBeforeCursor.lastIndexOf("/");
+  if (commandStart < 0) {
+    return null;
+  }
+
+  const precedingCharacter = draftBeforeCursor[commandStart - 1];
+  const query = draftBeforeCursor.slice(commandStart + 1);
+  if ((precedingCharacter !== undefined && !/\s/u.test(precedingCharacter)) || /\s/u.test(query)) {
     return null;
   }
 
   return {
-    end: draft.length,
-    query: draft.slice(1),
-    start: 0,
+    end: cursorPosition,
+    query,
+    start: commandStart,
   };
 }
 
@@ -115,6 +127,22 @@ export function filterPromptCommandItems<TItem extends PromptCommandItem>(
 
   return items.filter((item) =>
     [item.label, ...item.keywords].some((candidate) =>
+      candidate.toLocaleLowerCase().includes(normalizedQuery),
+    ),
+  );
+}
+
+export function filterPromptSkills<TSkill extends AgentSkill>(
+  skills: readonly TSkill[],
+  query: string,
+): readonly TSkill[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (normalizedQuery === "") {
+    return skills;
+  }
+
+  return skills.filter((skill) =>
+    [skill.displayName, skill.name, skill.description].some((candidate) =>
       candidate.toLocaleLowerCase().includes(normalizedQuery),
     ),
   );

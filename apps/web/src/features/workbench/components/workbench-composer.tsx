@@ -5,6 +5,7 @@ import type {
   AgentModel,
   AgentPromptInput,
   AgentSandboxMode,
+  AgentSkill,
   AgentTask,
   AgentTaskSettings,
   AgentTaskSnapshot,
@@ -20,6 +21,7 @@ import {
   GitFork,
   MessageCirclePlus,
   MessageSquareText,
+  Sparkles,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -56,12 +58,14 @@ import {
 } from "../../../shared/ai-elements/prompt-input.js";
 import {
   filterPromptCommandItems,
+  filterPromptSkills,
   getPromptCommandAvailability,
   movePromptCommandSelection,
   promptCommandItems,
   resolvePromptSlashCommand,
   type PromptCommandAction,
   type PromptCommandItem,
+  type PromptSlashCommand,
 } from "./prompt-command.js";
 
 export type ComposerState = "failed" | "idle" | "reconnecting" | "running" | "submitting";
@@ -243,6 +247,7 @@ type WorkbenchComposerProps = Readonly<{
   projectPath: string;
   runtime?: TaskRuntimeView;
   settings: AgentTaskSettings;
+  skills: readonly AgentSkill[];
   taskId?: string;
 }>;
 
@@ -319,6 +324,7 @@ export function WorkbenchComposer({
   projectPath,
   runtime,
   settings,
+  skills,
   taskId,
 }: WorkbenchComposerProps) {
   const [settingsOverride, setSettingsOverride] = useState<{
@@ -331,11 +337,16 @@ export function WorkbenchComposer({
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [commandNotice, setCommandNotice] = useState<string>();
   const [commandQuery, setCommandQuery] = useState("");
+  const [commandSlashCommand, setCommandSlashCommand] = useState<PromptSlashCommand>();
   const [composerRevision, setComposerRevision] = useState(0);
   const [draft, setDraft] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mutationError, setMutationError] = useState<Error | null>(null);
   const [pendingTask, setPendingTask] = useState<AgentTask>();
+  const [selectedSkillState, setSelectedSkillState] = useState<{
+    projectId: string;
+    skill: AgentSkill;
+  }>();
   const [submittedTurnId, setSubmittedTurnId] = useState<string>();
   const commandMenuId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -370,10 +381,17 @@ export function WorkbenchComposer({
     activeSettings.reasoningEffort,
   );
   const contextUsage = runtime?.snapshot?.contextUsage;
+  const selectedSkill =
+    selectedSkillState?.projectId === projectId ? selectedSkillState.skill : undefined;
   const { attachmentsDisabled, turnControlsDisabled } = deriveComposerInputAvailability(state);
+  const filteredSkills = filterPromptSkills(
+    capabilities?.skills.use === true ? skills : [],
+    commandQuery,
+  );
   const filteredCommands = filterPromptCommandItems(promptCommandItems, commandQuery);
+  const menuItemCount = filteredSkills.length + filteredCommands.length;
   const activeCommandItemId =
-    !commandMenuOpen || filteredCommands.length === 0
+    !commandMenuOpen || menuItemCount === 0
       ? undefined
       : `${commandMenuId}-item-${String(activeCommandIndex)}`;
   const handleAttachmentsChange = useCallback((files: readonly PromptInputAttachment[]) => {
@@ -392,20 +410,28 @@ export function WorkbenchComposer({
   useEffect(() => {
     if (turnControlsDisabled) {
       setCommandMenuOpen(false);
+      setCommandSlashCommand(undefined);
     }
   }, [turnControlsDisabled]);
 
-  const focusTextarea = () => {
+  const focusTextarea = (cursorPosition?: number) => {
     requestAnimationFrame(() => {
-      textareaRef.current?.focus();
+      const textarea = textareaRef.current;
+      textarea?.focus();
+      if (textarea !== null && cursorPosition !== undefined) {
+        textarea.setSelectionRange(cursorPosition, cursorPosition);
+      }
     });
   };
 
-  const submitPrompt = async (message: PromptInputMessage) => {
+  const submitPrompt = async (
+    message: PromptInputMessage,
+    promptSkill: AgentSkill | null = selectedSkill ?? null,
+  ) => {
     const text = message.text.trim();
     if (
       !canSubmit ||
-      (text === "" && message.files.length === 0) ||
+      (text === "" && message.files.length === 0 && promptSkill === null) ||
       selectedModel === undefined ||
       selectedReasoningEffort === undefined ||
       turnControlsDisabled ||
@@ -435,7 +461,12 @@ export function WorkbenchComposer({
           return { id: response.attachment.id };
         }),
       );
-      input = { attachments, text, type: "prompt" };
+      input = {
+        attachments,
+        skills: promptSkill === null ? [] : [{ id: promptSkill.id, name: promptSkill.name }],
+        text,
+        type: "prompt",
+      };
     } catch (error) {
       setMutationError(error instanceof Error ? error : new Error("附件上传失败"));
       setIsSubmitting(false);
@@ -475,6 +506,7 @@ export function WorkbenchComposer({
         turnOptions,
       });
       setDraft("");
+      setSelectedSkillState(undefined);
       setCommandDraftMode(null);
       setAttachmentCount(0);
       setComposerRevision((revision) => revision + 1);
@@ -511,7 +543,9 @@ export function WorkbenchComposer({
     setCommandDraftMode(mode);
     setCommandMenuOpen(false);
     setCommandQuery("");
+    setCommandSlashCommand(undefined);
     setCommandNotice(undefined);
+    setSelectedSkillState(undefined);
     setDraft("");
     setAttachmentCount(0);
     setComposerRevision((revision) => revision + 1);
@@ -557,18 +591,23 @@ export function WorkbenchComposer({
     }
     setCommandMenuOpen(false);
     setCommandQuery("");
+    setCommandSlashCommand(undefined);
     setCommandNotice(undefined);
     setDraft("");
+    setSelectedSkillState(undefined);
 
     if (command.action === "feedback" || command.action === "subtask") {
       beginCommandDraft(command.action);
       return;
     }
     if (command.action === "initialize") {
-      await submitPrompt({
-        files: [],
-        text: "请检查当前项目，并在项目根目录创建或完善 AGENTS.md，写入适用于 Codex 的项目说明、常用命令和验证要求。",
-      });
+      await submitPrompt(
+        {
+          files: [],
+          text: "请检查当前项目，并在项目根目录创建或完善 AGENTS.md，写入适用于 Codex 的项目说明、常用命令和验证要求。",
+        },
+        null,
+      );
       return;
     }
     if (activeTaskId === undefined) {
@@ -609,10 +648,31 @@ export function WorkbenchComposer({
     }
   };
 
+  const selectSkill = (skill: AgentSkill) => {
+    // Skill 选择只保存不透明引用；原生路径由 Provider 在提交边界解析。
+    const slashCommand = commandSlashCommand;
+    const nextDraft =
+      slashCommand === undefined
+        ? draft
+        : `${draft.slice(0, slashCommand.start)}${draft.slice(slashCommand.end)}`;
+    setSelectedSkillState({ projectId, skill });
+    setCommandMenuOpen(false);
+    setCommandQuery("");
+    setCommandSlashCommand(undefined);
+    setCommandNotice(undefined);
+    setDraft(nextDraft);
+    focusTextarea(slashCommand?.start);
+  };
+
   const selectActiveCommandItem = () => {
     const command = filteredCommands[activeCommandIndex];
     if (command !== undefined) {
       void executePromptCommand(command);
+      return;
+    }
+    const skill = filteredSkills[activeCommandIndex - filteredCommands.length];
+    if (skill !== undefined) {
+      selectSkill(skill);
     }
   };
 
@@ -675,8 +735,33 @@ export function WorkbenchComposer({
               );
             })}
           </PromptInputCommandGroup>
-          {filteredCommands.length === 0 ? (
-            <PromptInputCommandEmpty>没有匹配的命令</PromptInputCommandEmpty>
+          {filteredSkills.length === 0 ? null : (
+            <PromptInputCommandGroup label="Skills">
+              {filteredSkills.map((skill, index) => {
+                const menuIndex = filteredCommands.length + index;
+                return (
+                  <PromptInputCommandItem
+                    active={menuIndex === activeCommandIndex}
+                    id={`${commandMenuId}-item-${String(menuIndex)}`}
+                    key={skill.id}
+                    onClick={() => {
+                      selectSkill(skill);
+                    }}
+                  >
+                    <Sparkles aria-hidden="true" className="size-4 shrink-0 text-skill" />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="font-medium text-skill">{skill.displayName}</span>
+                      <span className="block max-w-full truncate text-caption text-muted-foreground">
+                        /{skill.name} · {skill.description}
+                      </span>
+                    </span>
+                  </PromptInputCommandItem>
+                );
+              })}
+            </PromptInputCommandGroup>
+          )}
+          {menuItemCount === 0 ? (
+            <PromptInputCommandEmpty>没有匹配的 Skill 或命令</PromptInputCommandEmpty>
           ) : null}
         </PromptInputCommandList>
       </PromptInputCommand>
@@ -737,6 +822,23 @@ export function WorkbenchComposer({
               </PromptInputButton>
             </PromptInputHeader>
           )}
+          {selectedSkill === undefined || commandDraftMode !== null ? null : (
+            <PromptInputHeader className="flex items-center">
+              <button
+                aria-label={`移除 Skill ${selectedSkill.displayName}`}
+                className="inline-flex max-w-full items-center gap-1 rounded-control bg-control px-2 py-1 text-label font-medium text-skill transition-colors hover:bg-control-hover"
+                onClick={() => {
+                  setSelectedSkillState(undefined);
+                  focusTextarea();
+                }}
+                type="button"
+              >
+                <Sparkles aria-hidden="true" className="size-3.5 shrink-0" />
+                <span className="truncate">${selectedSkill.name}</span>
+                <X aria-hidden="true" className="size-3 shrink-0" />
+              </button>
+            </PromptInputHeader>
+          )}
           <ComposerAttachments />
           <PromptInputBody>
             <PromptInputTextarea
@@ -760,20 +862,33 @@ export function WorkbenchComposer({
                 if (slashCommand === null) {
                   setCommandMenuOpen(false);
                   setCommandQuery("");
+                  setCommandSlashCommand(undefined);
                   return;
                 }
-                // 输入框起始 `/` 片段驱动命令过滤，普通正文不会打开菜单。
+                // 文本开头或空白后的 `/` 片段驱动过滤，连续正文中的斜杠保持普通字符。
                 setActiveCommandIndex(0);
                 setCommandMenuOpen(true);
                 setCommandQuery(slashCommand.query);
+                setCommandSlashCommand(slashCommand);
               }}
               onKeyDown={(event) => {
+                if (
+                  event.key === "Backspace" &&
+                  draft === "" &&
+                  selectedSkill !== undefined &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  setSelectedSkillState(undefined);
+                  return;
+                }
                 if (!commandMenuOpen || event.nativeEvent.isComposing) {
                   return;
                 }
                 if (event.key === "Escape") {
                   event.preventDefault();
                   setCommandMenuOpen(false);
+                  setCommandSlashCommand(undefined);
                   return;
                 }
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -782,7 +897,7 @@ export function WorkbenchComposer({
                     movePromptCommandSelection(
                       currentIndex,
                       event.key === "ArrowDown" ? 1 : -1,
-                      filteredCommands.length,
+                      menuItemCount,
                     ),
                   );
                   return;
@@ -921,7 +1036,9 @@ export function WorkbenchComposer({
                     (!canSubmit ||
                       selectedModel === undefined ||
                       selectedReasoningEffort === undefined ||
-                      (trimmedDraft === "" && attachmentCount === 0))) ||
+                      (trimmedDraft === "" &&
+                        attachmentCount === 0 &&
+                        selectedSkill === undefined))) ||
                   (state === "running" && (!canInterrupt || activeTurnId === undefined))
                 }
                 onClick={state === "running" ? () => void interruptTurn() : undefined}

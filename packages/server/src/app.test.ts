@@ -37,7 +37,7 @@ const turnOptions = {
 
 function turnRequest(text: string) {
   return {
-    input: { attachments: [], text, type: "prompt" as const },
+    input: { attachments: [], skills: [], text, type: "prompt" as const },
     options: turnOptions,
   };
 }
@@ -87,6 +87,7 @@ function createProvider() {
     Promise.resolve({
       feedback: { upload: true },
       provider: "codex",
+      skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
       turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     }),
@@ -105,6 +106,20 @@ function createProvider() {
           id: "gpt-5.6-sol",
           isDefault: true,
           supportedReasoningEfforts: [{ description: "深入分析", id: "high" }],
+        },
+      ],
+      nextCursor: null,
+    }),
+  );
+  const listSkills = vi.fn(() =>
+    Promise.resolve({
+      data: [
+        {
+          description: "审查认证、授权和敏感数据边界",
+          displayName: "Security review",
+          id: "skill_01J00000000000000000000000",
+          name: "review-security",
+          scope: "system" as const,
         },
       ],
       nextCursor: null,
@@ -149,6 +164,7 @@ function createProvider() {
     getCapabilities,
     interruptTurn,
     listModels,
+    listSkills,
     listTasks,
     readSandboxMode,
     readTask,
@@ -178,6 +194,7 @@ function createProvider() {
     forkTask,
     listTasks,
     listModels,
+    listSkills,
     interruptTurn,
     provider,
     readSandboxMode,
@@ -267,6 +284,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     interruptTurn,
     listTasks,
     listModels,
+    listSkills,
     provider,
     readTask,
     renameTask,
@@ -297,6 +315,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     interruptTurn,
     listTasks,
     listModels,
+    listSkills,
     readTask,
     renameTask,
     resolvePendingRequest,
@@ -325,6 +344,7 @@ describe("CodeAgent Server", () => {
     expect(capabilitiesResponse.json()).toEqual({
       feedback: { upload: true },
       provider: "codex",
+      skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
       turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     });
@@ -431,8 +451,9 @@ describe("CodeAgent Server", () => {
   });
 
   it("serves models and resolves uploaded attachments before starting a turn", async () => {
-    const { app, listModels, startTurn, writeTaskSettings } = await createHarness();
+    const { app, listModels, listSkills, startTurn, writeTaskSettings } = await createHarness();
     const models = await app.inject({ method: "GET", url: "/v1/models" });
+    const skills = await app.inject({ method: "GET", url: "/v1/projects/code-agent/skills" });
     const uploadRequest = {
       headers: { "idempotency-key": "upload-1" },
       method: "POST" as const,
@@ -446,7 +467,7 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "attachment-turn" },
       method: "POST",
       payload: {
-        input: { attachments: [{ id: attachment.id }], text: "", type: "prompt" },
+        input: { attachments: [{ id: attachment.id }], skills: [], text: "", type: "prompt" },
         options: turnOptions,
       },
       url: "/v1/projects/code-agent/tasks/task-1/turns",
@@ -464,7 +485,7 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "attachment-consumed" },
       method: "POST",
       payload: {
-        input: { attachments: [{ id: attachment.id }], text: "", type: "prompt" },
+        input: { attachments: [{ id: attachment.id }], skills: [], text: "", type: "prompt" },
         options: turnOptions,
       },
       url: "/v1/projects/code-agent/tasks/task-1/turns",
@@ -472,6 +493,9 @@ describe("CodeAgent Server", () => {
 
     expect(models.statusCode).toBe(200);
     expect(models.json()).toMatchObject({ data: [{ id: "gpt-5.6-sol", isDefault: true }] });
+    expect(skills.statusCode).toBe(200);
+    expect(skills.json()).toMatchObject({ data: [{ name: "review-security" }] });
+    expect(listSkills).toHaveBeenCalledOnce();
     expect(listModels).toHaveBeenCalledTimes(3);
     expect(uploaded.statusCode).toBe(201);
     expect(repeatedUpload.json()).toEqual(uploaded.json());
@@ -484,7 +508,7 @@ describe("CodeAgent Server", () => {
     expect(writeTaskSettings).toHaveBeenCalledOnce();
     expect(startTurn).toHaveBeenCalledWith(
       "task-1",
-      { images: [{ mediaType: "image/png", url: pixelDataUrl }], text: "" },
+      { images: [{ mediaType: "image/png", url: pixelDataUrl }], skills: [], text: "" },
       turnOptions,
     );
     expect(consumed.statusCode).toBe(404);
@@ -712,7 +736,11 @@ describe("CodeAgent Server", () => {
     expect(startTask).toHaveBeenCalledTimes(1);
     expect(turn.statusCode).toBe(201);
     expect(turn.json()).toMatchObject({ taskId: "task-1", turn: { id: "turn-1" } });
-    expect(startTurn).toHaveBeenCalledWith("task-1", { images: [], text: "继续实现" }, turnOptions);
+    expect(startTurn).toHaveBeenCalledWith(
+      "task-1",
+      { images: [], skills: [], text: "继续实现" },
+      turnOptions,
+    );
     expect(interrupted.statusCode).toBe(202);
     expect(interrupted.json()).toEqual({
       status: "interrupting",
@@ -1094,14 +1122,14 @@ describe("CodeAgent Server", () => {
       headers,
       method: "POST",
       payload:
-        '{"input":{"attachments":[],"text":"继续实现","type":"prompt"},"options":{"approvalPolicy":"on-request","model":"gpt-5.6-sol","reasoningEffort":"high","sandboxMode":"workspace-write"}}',
+        '{"input":{"attachments":[],"skills":[],"text":"继续实现","type":"prompt"},"options":{"approvalPolicy":"on-request","model":"gpt-5.6-sol","reasoningEffort":"high","sandboxMode":"workspace-write"}}',
       url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
     const repeated = await app.inject({
       headers,
       method: "POST",
       payload:
-        '{"options":{"sandboxMode":"workspace-write","reasoningEffort":"high","model":"gpt-5.6-sol","approvalPolicy":"on-request"},"input":{"type":"prompt","text":"继续实现","attachments":[]}}',
+        '{"options":{"sandboxMode":"workspace-write","reasoningEffort":"high","model":"gpt-5.6-sol","approvalPolicy":"on-request"},"input":{"type":"prompt","text":"继续实现","skills":[],"attachments":[]}}',
       url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
 
@@ -1136,13 +1164,13 @@ describe("CodeAgent Server", () => {
     expect(startTurn).toHaveBeenNthCalledWith(
       1,
       "task:a",
-      { images: [], text: payload.input.text },
+      { images: [], skills: [], text: payload.input.text },
       payload.options,
     );
     expect(startTurn).toHaveBeenNthCalledWith(
       2,
       "task:a:b",
-      { images: [], text: payload.input.text },
+      { images: [], skills: [], text: payload.input.text },
       payload.options,
     );
   });

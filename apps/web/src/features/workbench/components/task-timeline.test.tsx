@@ -143,6 +143,33 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain("space-y-4");
   });
 
+  it("renders skills carried by historical user messages", () => {
+    const skillMessageSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              id: "message-user-skill",
+              role: "user",
+              skills: [{ name: "review-security" }],
+              text: "检查认证边界。",
+              type: "message",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={skillMessageSnapshot} />);
+
+    expect(markup).toContain('data-message-skill="review-security"');
+    expect(markup).toContain("$review-security");
+    expect(markup).toContain("检查认证边界。");
+    expect(markup).not.toContain("SKILL.md");
+  });
+
   it("hides reasoning while keeping normal assistant text in one completed response", () => {
     const multiItemResponseSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,

@@ -375,6 +375,7 @@ export interface AgentProvider {
 
   getCapabilities(): Promise<ProviderCapabilities>;
   listModels(): Promise<AgentModel[]>;
+  listSkills(): Promise<AgentSkill[]>;
   listTasks(input: ListTasksInput): Promise<Page<AgentTask>>;
   readTask(input: ReadTaskInput): Promise<AgentTask>;
   startTask(input: StartTaskInput): Promise<AgentTask>;
@@ -411,6 +412,10 @@ export interface ProviderCapabilities {
   feedback: {
     upload: boolean;
   };
+  skills: {
+    list: boolean;
+    use: boolean;
+  };
 }
 ```
 
@@ -422,6 +427,7 @@ Agent Actions 使用 Provider 无关的模型、附件和写入端点：
 
 ```text
 GET  /v1/models
+GET  /v1/projects/:projectId/skills
 POST /v1/projects/:projectId/attachments
 POST /v1/projects/:projectId/tasks
 POST /v1/projects/:projectId/tasks/:taskId/turns
@@ -434,7 +440,7 @@ POST /v1/projects/:projectId/tasks/:taskId/feedback
 
 所有写请求必须携带非空 `Idempotency-Key`。Server 以操作、资源和 Key 共同确定幂等范围：相同 Payload 复用进行中或成功结果，不同 Payload 返回 `IDEMPOTENCY_CONFLICT`，失败结果允许同 Key 重试。
 
-图片先上传到有容量和过期时间限制的 Server Store，浏览器只获得随机附件 ID。Turn 启动前由 Server 将 ID 解析为 Provider 输入；成功后消费引用，失败时保留引用供重试。`GET /v1/models` 直接映射 Provider 模型目录及其默认、可用思考量，页面不得把硬编码模型或思考量作为成功态数据。
+图片先上传到有容量和过期时间限制的 Server Store，浏览器只获得随机附件 ID。Turn 启动前由 Server 将 ID 解析为 Provider 输入；成功后消费引用，失败时保留引用供重试。`GET /v1/models` 直接映射 Provider 模型目录及其默认、可用思考量，页面不得把硬编码模型或思考量作为成功态数据。`GET /v1/projects/:projectId/skills` 返回当前 Project 的统一 Skill 目录，只包含不透明 ID 和展示元数据；原生路径不得进入 HTTP 契约。
 
 `turn/interrupt` 只返回 `{ status: "interrupting", taskId, turnId }`；Turn 是否真正中断由后续 `turn.completed` 事件决定。错误统一映射为 Protocol 定义的 `{ code, message, retryable }`，不得向 Web 暴露原生 RPC 细节。
 
@@ -672,7 +678,7 @@ turn id -> runtime state
 | `steerTurn`     | `turn/steer`      |
 | `interruptTurn` | `turn/interrupt`  |
 
-`startTurn` 将统一 Prompt 映射为 Codex `UserInput[]`：非空文本使用 `text`，Server 已验证的图片 Data URL 使用 `image`。统一 `model`、`reasoningEffort` 和 `approvalPolicy` 分别映射为 Codex `model`、`effort` 和 `approvalPolicy`，不向 Web 暴露其他原生字段。
+`startTurn` 将统一 Prompt 映射为 Codex `UserInput[]`：已选择 Skill 使用 `{ type: "skill", name, path }`，非空文本使用 `text`，Server 已验证的图片 Data URL 使用 `image`。Skill 目录由 Project Provider 调用 `skills/list { cwds: [project.rootPath] }` 获取；Web 只接收稳定不透明 ID，Provider 在提交时重新验证 ID 与名称并解析原生绝对路径。统一 `model`、`reasoningEffort` 和 `approvalPolicy` 分别映射为 Codex `model`、`effort` 和 `approvalPolicy`，不向 Web 暴露其他原生字段。
 
 ### 11.5 事件映射
 

@@ -13,6 +13,7 @@ export type CodeAgentSourceFileClient = Pick<CodeAgentClient, "readProjectSource
 export type CodeAgentRuntimeClient = Pick<CodeAgentClient, "readTask" | "subscribeEvents">;
 export type CodeAgentCapabilitiesClient = Pick<CodeAgentClient, "getCapabilities">;
 export type CodeAgentModelsClient = Pick<CodeAgentClient, "listModels">;
+export type CodeAgentSkillsClient = Pick<CodeAgentClient, "listSkills">;
 export type CodeAgentSettingsClient = Pick<
   CodeAgentClient,
   "getProjectDefaults" | "updateProjectDefaults" | "updateTaskSettings"
@@ -42,6 +43,7 @@ export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentPendingRequestClient &
   CodeAgentCapabilitiesClient &
   CodeAgentModelsClient &
+  CodeAgentSkillsClient &
   CodeAgentSettingsClient &
   CodeAgentSourceFileClient;
 type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
@@ -138,6 +140,16 @@ export function modelsQueryOptions(client: CodeAgentModelsClient = codeAgentClie
     queryFn: () => client.listModels(),
     queryKey: ["models"] as const,
     staleTime: 5 * 60_000,
+  });
+}
+
+export function skillsQueryOptions(
+  projectId: string,
+  client: CodeAgentSkillsClient = codeAgentClient,
+) {
+  return queryOptions({
+    queryFn: () => client.listSkills(projectId),
+    queryKey: ["projects", projectId, "skills"] as const,
   });
 }
 

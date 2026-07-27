@@ -13,6 +13,7 @@ describe("AgentProvider", () => {
         return Promise.resolve({
           feedback: { upload: true },
           provider: "fake",
+          skills: { list: true, use: true },
           tasks: { fork: true, list: true, read: true, start: true },
           turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
         });
@@ -43,6 +44,20 @@ describe("AgentProvider", () => {
               id: "gpt-5.6-sol",
               isDefault: true,
               supportedReasoningEfforts: [{ description: "深入分析", id: "high" }],
+            },
+          ],
+          nextCursor: null,
+        });
+      },
+      listSkills() {
+        return Promise.resolve({
+          data: [
+            {
+              description: "安全审查",
+              displayName: "Security review",
+              id: "skill-security",
+              name: "review-security",
+              scope: "system",
             },
           ],
           nextCursor: null,
@@ -138,6 +153,7 @@ describe("AgentProvider", () => {
     await expect(provider.getCapabilities()).resolves.toEqual({
       feedback: { upload: true },
       provider: "fake",
+      skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
       turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     });
@@ -147,6 +163,9 @@ describe("AgentProvider", () => {
     });
     await expect(provider.listModels()).resolves.toMatchObject({
       data: [{ id: "gpt-5.6-sol", isDefault: true }],
+    });
+    await expect(provider.listSkills()).resolves.toMatchObject({
+      data: [{ id: "skill-security", name: "review-security" }],
     });
     await expect(provider.readSandboxMode()).resolves.toBe("workspace-write");
     await expect(provider.readTask("missing-task")).resolves.toBeUndefined();
@@ -167,6 +186,7 @@ describe("AgentProvider", () => {
         "task-1",
         {
           images: [{ mediaType: "image/png", url: "data:image/png;base64,aW1hZ2U=" }],
+          skills: [{ id: "skill-security", name: "review-security" }],
           text: "继续",
         },
         {

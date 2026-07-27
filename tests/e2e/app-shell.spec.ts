@@ -84,6 +84,23 @@ const models = [
   },
 ];
 
+const skills = [
+  {
+    description: "审查认证、授权和敏感数据边界",
+    displayName: "Security review",
+    id: "skill-security",
+    name: "review-security",
+    scope: "system",
+  },
+  {
+    description: "撰写结构化项目文档",
+    displayName: "Documentation writer",
+    id: "skill-docs",
+    name: "documentation-writer",
+    scope: "user",
+  },
+];
+
 const tasks = [
   {
     id: "task-1",
@@ -178,6 +195,7 @@ const taskSnapshot = {
         {
           id: "message-1",
           role: "user",
+          skills: [{ name: "review-security" }],
           text: "完成 macOS 原生风格的三栏工作台页面。",
           type: "message",
         },
@@ -256,11 +274,14 @@ test.beforeEach(async ({ page }) => {
       body = {
         feedback: { upload: true },
         provider: "codex",
+        skills: { list: true, use: true },
         tasks: { fork: true, list: true, read: true, start: true },
         turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
       };
     } else if (url.pathname === "/v1/models") {
       body = { data: models, nextCursor: null };
+    } else if (/^\/v1\/projects\/[^/]+\/skills$/u.test(url.pathname)) {
+      body = { data: skills, nextCursor: null };
     } else if (url.pathname === "/v1/projects" && route.request().method() === "POST") {
       const addedProject = {
         createdAt: "2026-07-25T00:00:00.000Z",
@@ -485,6 +506,15 @@ test("keeps a healthy project usable when another project task query fails", asy
   await expect.poll(() => failedProjectRequestCount).toBe(2);
   await expect(page.getByRole("heading", { name: "构建 macOS 工作台" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Codex Runtime 不可用" })).toHaveCount(0);
+});
+
+test("renders skills from a reopened task history", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const historicalSkill = page.locator('[data-message-skill="review-security"]');
+  await expect(historicalSkill).toContainText("$review-security");
+  await expect(historicalSkill).toHaveCSS("color", "rgb(161, 0, 248)");
+  await expect(page.getByText("完成 macOS 原生风格的三栏工作台页面。")).toBeVisible();
 });
 
 test("uses subtle hairline separation across registered routes", async ({ page }) => {
@@ -785,14 +815,57 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   const commandMenu = page.getByRole("listbox", { name: "输入命令" });
   await expect(commandMenu).toBeVisible();
   expect(await commandMenu.evaluate((menu) => menu.closest("form") === null)).toBe(true);
-  await expect(commandMenu.getByRole("option")).toHaveCount(6);
+  await expect(commandMenu.getByRole("option")).toHaveCount(8);
   await expect(commandMenu.getByRole("option", { name: /代码审查/u })).toHaveAttribute(
     "data-active",
     "true",
   );
+  await expect(commandMenu.getByRole("option", { name: /Documentation writer/u })).toBeVisible();
+  const skillDescription = commandMenu.getByText(/review-security/u);
+  await expect
+    .poll(() =>
+      skillDescription.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return [style.overflow, style.textOverflow, style.whiteSpace];
+      }),
+    )
+    .toEqual(["hidden", "ellipsis", "nowrap"]);
   for (const label of ["初始化", "副任务", "压缩", "反馈", "在新任务中继续"]) {
     await expect(commandMenu.getByRole("option", { name: new RegExp(label, "u") })).toBeVisible();
   }
+
+  const commandList = commandMenu.locator("[data-prompt-input-command-list]");
+  for (let movementIndex = 0; movementIndex < 7; movementIndex += 1) {
+    await prompt.press("ArrowDown");
+  }
+  await expect(commandMenu.getByRole("option", { name: /Documentation writer/u })).toHaveAttribute(
+    "data-active",
+    "true",
+  );
+  await expect.poll(() => commandList.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  await prompt.fill("说明/security");
+  await expect(commandMenu).toBeHidden();
+  await prompt.fill("说明 /security");
+  await expect(commandMenu).toBeVisible();
+  await prompt.press("Enter");
+  const selectedSkill = page.getByRole("button", { name: "移除 Skill Security review" });
+  await expect(selectedSkill).toContainText("$review-security");
+  await expect(prompt).toHaveValue("说明 ");
+  const skillColors = await selectedSkill.evaluate((element) => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--ui-color-skill)";
+    document.body.append(probe);
+    const colors = {
+      expected: getComputedStyle(probe).color,
+      selected: getComputedStyle(element).color,
+    };
+    probe.remove();
+    return colors;
+  });
+  expect(skillColors.selected).toBe(skillColors.expected);
+  await selectedSkill.click();
+  await expect(selectedSkill).toBeHidden();
 
   await prompt.fill("/压缩");
   await prompt.press("Enter");
@@ -929,10 +1002,15 @@ test("submits attachments, approval policy, model, and reasoning effort through 
     name: "screen.png",
   });
   await expect(page.getByText("screen.png", { exact: true })).toBeVisible();
-  await page.getByRole("textbox", { name: "任务输入" }).fill("按截图完成改造");
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.fill("/security");
+  await prompt.press("Enter");
+  await expect(page.getByRole("button", { name: "移除 Skill Security review" })).toBeVisible();
+  await prompt.fill("按截图完成改造");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
 
-  await expect(page.getByRole("textbox", { name: "任务输入" })).toHaveValue("");
+  await expect(prompt).toHaveValue("");
+  await expect(page.getByRole("button", { name: "移除 Skill Security review" })).toBeHidden();
   await expect(page.getByText("screen.png", { exact: true })).toHaveCount(0);
   expect(uploadBody).toMatchObject({
     dataUrl: expect.stringMatching(/^data:image\/png;base64,/),
@@ -941,6 +1019,7 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   expect(turnBody).toEqual({
     input: {
       attachments: [{ id: "attachment-1" }],
+      skills: [{ id: "skill-security", name: "review-security" }],
       text: "按截图完成改造",
       type: "prompt",
     },
@@ -984,6 +1063,7 @@ test("disables composer mutations that the provider does not support", async ({ 
       json: {
         feedback: { upload: false },
         provider: "readonly",
+        skills: { list: false, use: false },
         tasks: { fork: false, list: true, read: true, start: false },
         turns: {
           compact: false,

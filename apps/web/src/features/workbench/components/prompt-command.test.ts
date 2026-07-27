@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   filterPromptCommandItems,
+  filterPromptSkills,
   getPromptCommandAvailability,
   movePromptCommandSelection,
   promptCommandItems,
@@ -25,6 +26,23 @@ const commandItems = [
   },
 ] as const;
 
+const skills = [
+  {
+    description: "审查认证、授权和敏感数据边界",
+    displayName: "Security review",
+    id: "skill-security",
+    name: "review-security",
+    scope: "system" as const,
+  },
+  {
+    description: "撰写 Diataxis 项目文档",
+    displayName: "Documentation writer",
+    id: "skill-docs",
+    name: "documentation-writer",
+    scope: "user" as const,
+  },
+];
+
 function findCommand(action: (typeof promptCommandItems)[number]["action"]) {
   const command = promptCommandItems.find((item) => item.action === action);
   if (command === undefined) {
@@ -34,19 +52,34 @@ function findCommand(action: (typeof promptCommandItems)[number]["action"]) {
 }
 
 describe("prompt slash command", () => {
-  it("only resolves an unfinished command token at the start of the draft", () => {
+  it("resolves slash tokens at the start or after whitespace", () => {
     expect(resolvePromptSlashCommand("/", 1)).toEqual({ end: 1, query: "", start: 0 });
     expect(resolvePromptSlashCommand("/项目", 3)).toEqual({ end: 3, query: "项目", start: 0 });
-    expect(resolvePromptSlashCommand(" /项目", 4)).toBeNull();
-    expect(resolvePromptSlashCommand("说明 /项目", 6)).toBeNull();
+    expect(resolvePromptSlashCommand(" /项目", 4)).toEqual({ end: 4, query: "项目", start: 1 });
+    expect(resolvePromptSlashCommand("说明 /项目", 6)).toEqual({ end: 6, query: "项目", start: 3 });
+    expect(resolvePromptSlashCommand("说明\n/项目", 6)).toEqual({
+      end: 6,
+      query: "项目",
+      start: 3,
+    });
+  });
+
+  it("rejects slash tokens attached to preceding text or containing whitespace", () => {
+    expect(resolvePromptSlashCommand("说明/项目", 5)).toBeNull();
     expect(resolvePromptSlashCommand("/项目 后续说明", 7)).toBeNull();
-    expect(resolvePromptSlashCommand("/项目", 1)).toBeNull();
+    expect(resolvePromptSlashCommand("说明 /项目", 2)).toBeNull();
   });
 
   it("filters commands by labels and localized keywords", () => {
     expect(filterPromptCommandItems(commandItems, "初始化")).toEqual([commandItems[0]]);
     expect(filterPromptCommandItems(commandItems, "review")).toEqual([commandItems[1]]);
     expect(filterPromptCommandItems(commandItems, "missing")).toEqual([]);
+  });
+
+  it("filters Codex skills by display name, native name, and description", () => {
+    expect(filterPromptSkills(skills, "Security")).toEqual([skills[0]]);
+    expect(filterPromptSkills(skills, "documentation-writer")).toEqual([skills[1]]);
+    expect(filterPromptSkills(skills, "认证")).toEqual([skills[0]]);
   });
 
   it("wraps keyboard selection while keeping empty lists stable", () => {
@@ -72,6 +105,7 @@ describe("prompt slash command", () => {
     const capabilities = {
       feedback: { upload: true },
       provider: "codex",
+      skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
       turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     };

@@ -3,6 +3,7 @@ import type {
   AgentModel,
   AgentPromptInput,
   AgentProjectDefaults,
+  AgentSkill,
   AgentTask,
   AgentTaskPage,
   AgentTaskSettings,
@@ -30,6 +31,7 @@ import {
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
   projectGitStatusQueryOptions,
+  skillsQueryOptions,
   taskSettingsMutationOptions,
   upsertProjectTaskPage,
 } from "../../projects/project-queries.js";
@@ -65,7 +67,10 @@ function createStartingTurn(launchState: TaskLaunchState): AgentTurn {
   const alreadyContainsUserMessage = launchState.turn.items.some(
     (item) => item.type === "message" && item.role === "user",
   );
-  if (alreadyContainsUserMessage || launchState.input.text.length === 0) {
+  if (
+    alreadyContainsUserMessage ||
+    (launchState.input.text.length === 0 && launchState.input.skills.length === 0)
+  ) {
     return launchState.turn;
   }
 
@@ -76,6 +81,9 @@ function createStartingTurn(launchState: TaskLaunchState): AgentTurn {
       {
         id: `submitted-user-${launchState.turn.id}`,
         role: "user",
+        ...(launchState.input.skills.length === 0
+          ? {}
+          : { skills: launchState.input.skills.map((skill) => ({ name: skill.name })) }),
         text: launchState.input.text,
         type: "message",
       },
@@ -99,6 +107,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const modelsQuery = useQuery(modelsQueryOptions(client));
+  const skillsQuery = useQuery({
+    ...skillsQueryOptions(projectId, client),
+    enabled: capabilities?.skills.list === true,
+  });
   const projectDefaultsQuery = useQuery(projectDefaultsQueryOptions(projectId, client));
   const projectDefaultsMutation = useMutation({
     ...projectDefaultsMutationOptions(projectId, client),
@@ -384,6 +396,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         {error !== null ||
         (projectTaskState?.error ?? null) !== null ||
         modelsQuery.error !== null ||
+        skillsQuery.error !== null ||
         projectDefaultsQuery.error !== null ? (
           <RuntimeUnavailable onRetry={() => void retry()} />
         ) : taskId === undefined ? (
@@ -404,6 +417,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               projectId={projectId}
               projectPath={projectPath}
               settings={draftSettings}
+              skills={skillsQuery.data?.data ?? []}
             />
           </>
         ) : (
@@ -419,6 +433,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             projectId={projectId}
             projectPath={projectPath}
             runtime={runtime}
+            skills={skillsQuery.data?.data ?? []}
             startingSnapshot={startingSnapshot}
             taskId={taskId}
             onOpenFileDiff={openFileDiff}
@@ -479,6 +494,7 @@ function ActiveTaskWorkbench({
   projectId,
   projectPath,
   runtime,
+  skills,
   startingSnapshot,
   taskId,
   onOpenFileDiff,
@@ -500,6 +516,7 @@ function ActiveTaskWorkbench({
   projectId: string;
   projectPath: string;
   runtime: TaskRuntimeView;
+  skills: readonly AgentSkill[];
   startingSnapshot: RuntimeTaskSnapshot | undefined;
   taskId: string;
   onOpenFileDiff: (change: AgentFileChange) => void;
@@ -563,6 +580,7 @@ function ActiveTaskWorkbench({
         projectPath={projectPath}
         runtime={runtime}
         settings={runtime.snapshot?.settings ?? startingSnapshot?.settings ?? fallbackSettings}
+        skills={skills}
         taskId={taskId}
       />
     </>

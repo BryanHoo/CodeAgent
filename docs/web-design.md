@@ -254,6 +254,8 @@ Project 不使用独立页面。用户在工作台左栏通过目录选择器添
 - Inspector 在宽屏工作台默认显示，窄窗口关闭并按需作为抽屉打开。
 - Composer 固定在 Timeline 底部，但不能覆盖滚动内容。
 - Composer 左侧依次展示附件、审批和沙盒模式；沙盒模式使用 Codex 有效 Project 配置初始化，并允许选择只读、工作区可写或完全访问。右侧继续展示模型、思考量和提交操作。
+- Composer 在文本开头或空白字符后输入 `/` 时显示外部浮层，连续正文字符后的 `/` 不触发；浮层先展示本地 Task 命令，再在命令组下方展示当前 Project 的 Codex Skills。Skill 选择后仅移除当前 Slash 片段并保留已有正文，以 `skill` 主题色 Token 留在输入框内，可点击或在空草稿时按 Backspace 移除。提交只携带统一 Skill ID 与名称，不拼接文本、不接收原生路径。
+- 用户消息通过统一消息字段携带已使用的 Skill 名称，并在 Timeline 中继续以 `skill` 主题色 Token 展示；该行为同时覆盖提交后的实时 Turn、首轮乐观消息和重新打开 Task 后由 Codex `userMessage.content` 恢复的历史消息。Codex 返回的 Skill 路径在 Provider 映射后丢弃，不进入 Web。
 - 窗口较窄时 Inspector 变为抽屉，Sidebar 变为可关闭侧栏。
 - Sidebar 的 `Projects` 标题固定在项目树滚动区外，Project 行连续排列；每个 Project 默认显示 5 个 Task，超出部分经“显示更多”展开。Task 行 hover/focus 时以省略号替换时间，并通过菜单执行固定、重命名和归档。
 
@@ -391,6 +393,7 @@ export type AgentItemBaseViewModel = {
 capabilities
 auth.session
 models
+skills(projectId)
 projects
 tasks.list(projectId, filters, cursor)
 tasks.detail(taskId)

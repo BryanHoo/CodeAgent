@@ -7,9 +7,11 @@ import {
   AgentAttachmentUploadResponseSchema,
   AgentCapabilitiesSchema,
   AgentModelPageSchema,
+  AgentMessageItemSchema,
   AgentProjectDefaultsResponseSchema,
   AgentProjectDefaultsSchema,
   AgentPromptInputSchema,
+  AgentSkillPageSchema,
   AgentMutationErrorSchema,
   AgentTaskPageSchema,
   AgentTaskSchema,
@@ -251,6 +253,24 @@ describe("project protocol", () => {
     expect(Value.Check(AgentTaskSnapshotSchema, { ...snapshot, nativeThread: {} })).toBe(false);
   });
 
+  it("accepts user message skills without exposing native paths", () => {
+    const message = {
+      id: "message-1",
+      role: "user",
+      skills: [{ name: "review-security" }],
+      text: "检查认证边界",
+      type: "message",
+    };
+
+    expect(Value.Check(AgentMessageItemSchema, message)).toBe(true);
+    expect(
+      Value.Check(AgentMessageItemSchema, {
+        ...message,
+        skills: [{ name: "review-security", path: "/private/SKILL.md" }],
+      }),
+    ).toBe(false);
+  });
+
   it("validates strict project defaults and task settings", () => {
     const projectDefaults = {
       model: "gpt-5.6-sol",
@@ -425,6 +445,7 @@ describe("project protocol", () => {
       Value.Check(AgentCapabilitiesSchema, {
         feedback: { upload: true },
         provider: "codex",
+        skills: { list: true, use: true },
         tasks: { fork: true, list: true, read: true, start: true },
         turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
       }),
@@ -534,9 +555,25 @@ describe("project protocol", () => {
     };
     const prompt = {
       attachments: [{ id: attachment.id }],
+      skills: [],
       text: "参考截图实现功能",
       type: "prompt",
     };
+
+    expect(
+      Value.Check(AgentSkillPageSchema, {
+        data: [
+          {
+            description: "执行严格的安全审查",
+            displayName: "Security review",
+            id: "skill_01J00000000000000000000000",
+            name: "review-security",
+            scope: "system",
+          },
+        ],
+        nextCursor: null,
+      }),
+    ).toBe(true);
 
     expect(
       Value.Check(AgentModelPageSchema, {
@@ -569,13 +606,46 @@ describe("project protocol", () => {
     expect(
       Value.Check(AgentPromptInputSchema, {
         attachments: [{ id: attachment.id }],
+        skills: [],
         text: "",
         type: "prompt",
       }),
     ).toBe(true);
-    expect(Value.Check(AgentPromptInputSchema, { attachments: [], text: "", type: "prompt" })).toBe(
-      false,
-    );
+    expect(
+      Value.Check(AgentPromptInputSchema, {
+        attachments: [],
+        skills: [{ id: "skill_01J00000000000000000000000", name: "review-security" }],
+        text: "",
+        type: "prompt",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentPromptInputSchema, {
+        attachments: [],
+        skills: [],
+        text: "",
+        type: "prompt",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentPromptInputSchema, {
+        attachments: [],
+        skills: [
+          { id: "skill-1", name: "first" },
+          { id: "skill-2", name: "second" },
+        ],
+        text: "run",
+        type: "prompt",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentPromptInputSchema, {
+        attachments: [],
+        skills: [{ id: "skill-1", name: "first", path: "/private/skill" }],
+        text: "run",
+        type: "prompt",
+      }),
+    ).toBe(false);
     expect(
       Value.Check(AgentAttachmentUploadRequestSchema, {
         dataUrl: "data:text/plain;base64,SGVsbG8=",

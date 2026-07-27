@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 
 import {
@@ -24,6 +25,7 @@ import type {
   AgentTurnOptions,
   AgentReviewTarget,
   AgentSandboxMode,
+  AgentSkillPage,
   PendingApprovalDecision,
   PendingRequest,
   Project,
@@ -36,6 +38,7 @@ import {
   type RpcRequestId,
   type RpcServerRequest,
 } from "./jsonl-rpc-client.js";
+import { extractCodexTextSkills, readCodexTranscriptTurnSkills } from "./codex-transcript.js";
 
 export interface CodexRpcClient {
   notify(method: string, params?: unknown): void;
@@ -92,6 +95,16 @@ type CodexSandboxPolicy =
       type: "workspaceWrite";
       writableRoots: readonly string[];
     }>;
+
+type CodexSkill = Readonly<{
+  description: string;
+  displayName: string;
+  enabled: boolean;
+  id: string;
+  name: string;
+  path: string;
+  scope: AgentSkillPage["data"][number]["scope"];
+}>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -155,6 +168,41 @@ function expectBoolean(value: unknown, context: string): boolean {
     throw new CodexProtocolMappingError(`${context} must be a boolean`);
   }
   return value;
+}
+
+function createSkillId(name: string, path: string): string {
+  // 浏览器只持有稳定摘要，Codex 绝对路径始终留在 Provider 边界内。
+  const digest = createHash("sha256").update(`${name}\0${path}`).digest("hex");
+  return `skill_${digest.slice(0, 32)}`;
+}
+
+function mapCodexSkill(value: unknown): CodexSkill {
+  const skill = expectRecord(value, "skills/list skill");
+  const name = expectString(skill["name"], "skills/list skill name");
+  const path = expectString(skill["path"], "skills/list skill path");
+  const scope = skill["scope"];
+  if (scope !== "user" && scope !== "repo" && scope !== "system" && scope !== "admin") {
+    throw new CodexProtocolMappingError("skills/list skill scope is invalid");
+  }
+  const skillInterface = skill["interface"];
+  const interfaceRecord =
+    skillInterface === null || skillInterface === undefined
+      ? undefined
+      : expectRecord(skillInterface, "skills/list skill interface");
+  const displayName = optionalString(interfaceRecord?.["displayName"]) ?? name;
+  const description =
+    optionalString(interfaceRecord?.["shortDescription"]) ??
+    optionalString(skill["shortDescription"]) ??
+    expectString(skill["description"], "skills/list skill description");
+  return {
+    description,
+    displayName,
+    enabled: expectBoolean(skill["enabled"], "skills/list skill enabled"),
+    id: createSkillId(name, path),
+    name,
+    path,
+    scope,
+  };
 }
 
 function requestIdKey(id: RpcRequestId): string {
@@ -493,33 +541,81 @@ function mapItemStatus(value: unknown): AgentItemStatus {
   return "completed";
 }
 
-function mapUserMessageText(value: unknown): string {
+function mapUserMessageContent(value: unknown): Readonly<{
+  skills: { name: string }[];
+  text: string;
+}> {
   if (!Array.isArray(value)) {
     throw new CodexProtocolMappingError("Codex user message content must be an array");
   }
-  return value
-    .flatMap((part) => {
-      if (!isRecord(part)) {
-        return [];
+  const skills: { name: string }[] = [];
+  const textParts: string[] = [];
+
+  for (const part of value) {
+    if (!isRecord(part)) {
+      continue;
+    }
+    if (part["type"] === "text" && typeof part["text"] === "string") {
+      const textContent = extractCodexTextSkills(part["text"]);
+      skills.push(...textContent.skills);
+      if (textContent.text.length > 0) {
+        textParts.push(textContent.text);
       }
-      if (part["type"] === "text" && typeof part["text"] === "string") {
-        return [part["text"]];
+      continue;
+    }
+    if (part["type"] === "skill") {
+      // Codex 历史保留 Skill 的 name/path；公开消息只暴露展示所需的 name。
+      const name = expectString(part["name"], "Codex user message skill name");
+      expectString(part["path"], "Codex user message skill path");
+      skills.push({ name });
+      continue;
+    }
+    if (part["type"] === "mention" && typeof part["name"] === "string") {
+      textParts.push(`@${part["name"]}`);
+      continue;
+    }
+    if (part["type"] === "image" || part["type"] === "localImage") {
+      textParts.push("[图片]");
+      continue;
+    }
+    if (part["type"] === "audio" || part["type"] === "localAudio") {
+      textParts.push("[音频]");
+    }
+  }
+
+  return { skills, text: textParts.join("\n") };
+}
+
+function mergeExpandedSkillMessages(items: readonly AgentItem[]): AgentItem[] {
+  const mergedItems: AgentItem[] = [];
+
+  for (const item of items) {
+    const isSkillOnlyMessage =
+      item.type === "message" &&
+      item.role === "user" &&
+      item.text.length === 0 &&
+      (item.skills?.length ?? 0) > 0;
+    const previousItem = mergedItems.at(-1);
+    if (isSkillOnlyMessage && previousItem?.type === "message" && previousItem.role === "user") {
+      // 持久化历史把 Skill 指令放在原消息之后，恢复时合并为一个用户气泡。
+      const skillNames = new Set((previousItem.skills ?? []).map((skill) => skill.name));
+      const mergedSkills = [...(previousItem.skills ?? [])];
+      for (const skill of item.skills ?? []) {
+        if (!skillNames.has(skill.name)) {
+          skillNames.add(skill.name);
+          mergedSkills.push(skill);
+        }
       }
-      if (
-        (part["type"] === "skill" || part["type"] === "mention") &&
-        typeof part["name"] === "string"
-      ) {
-        return [`@${part["name"]}`];
-      }
-      if (part["type"] === "image" || part["type"] === "localImage") {
-        return ["[图片]"];
-      }
-      if (part["type"] === "audio" || part["type"] === "localAudio") {
-        return ["[音频]"];
-      }
-      return [];
-    })
-    .join("\n");
+      mergedItems[mergedItems.length - 1] = {
+        ...previousItem,
+        skills: mergedSkills,
+      };
+      continue;
+    }
+    mergedItems.push(item);
+  }
+
+  return mergedItems;
 }
 
 function mapFileChangeKind(value: unknown): "create" | "delete" | "update" {
@@ -620,8 +716,16 @@ function mapAgentItem(value: unknown): AgentItem {
   const type = expectString(item["type"], "Codex item type");
 
   switch (type) {
-    case "userMessage":
-      return { id, role: "user", text: mapUserMessageText(item["content"]), type: "message" };
+    case "userMessage": {
+      const content = mapUserMessageContent(item["content"]);
+      return {
+        id,
+        role: "user",
+        ...(content.skills.length === 0 ? {} : { skills: content.skills }),
+        text: content.text,
+        type: "message",
+      };
+    }
     case "agentMessage": {
       const text = expectString(item["text"], "Codex agent message text");
       // Commentary 与最终回复都是面向用户的输出，统一走普通消息的流式渲染路径。
@@ -760,10 +864,37 @@ function mapAgentTurn(value: unknown): AgentTurn {
             "Codex turn error message",
           ),
     id: expectString(turn["id"], "Codex turn id"),
-    items: turn["items"].map(mapAgentItem),
+    items: mergeExpandedSkillMessages(turn["items"].map(mapAgentItem)),
     startedAt: toNullableDateTime(turn["startedAt"], "Codex turn startedAt"),
     status: mapTurnStatus(turn["status"]),
   };
+}
+
+function attachTranscriptSkills(turn: AgentTurn, skillNames: readonly string[]): AgentTurn {
+  if (skillNames.length === 0) {
+    return turn;
+  }
+
+  const userMessageIndex = turn.items.findIndex(
+    (item) => item.type === "message" && item.role === "user",
+  );
+  const userMessage = turn.items[userMessageIndex];
+  if (userMessageIndex < 0 || userMessage?.type !== "message" || userMessage.role !== "user") {
+    return turn;
+  }
+
+  const existingSkillNames = new Set((userMessage.skills ?? []).map((skill) => skill.name));
+  const skills = [...(userMessage.skills ?? [])];
+  for (const name of skillNames) {
+    if (!existingSkillNames.has(name)) {
+      existingSkillNames.add(name);
+      skills.push({ name });
+    }
+  }
+  const items = turn.items.map((item, itemIndex) =>
+    itemIndex === userMessageIndex ? { ...userMessage, skills } : item,
+  );
+  return { ...turn, items };
 }
 
 function mapCodexNotification(method: string, value: unknown): AgentProviderEvent | undefined {
@@ -920,6 +1051,7 @@ export class CodexAgentProvider implements AgentProvider {
   readonly #taskContextUsage = new Map<string, AgentContextUsage>();
   readonly #terminalRequests = new Map<string, PendingRequest>();
   readonly #unmaterializedTasks = new Map<string, AgentTask>();
+  readonly #skillsById = new Map<string, CodexSkill>();
 
   public constructor(
     client: CodexRpcClient,
@@ -942,6 +1074,7 @@ export class CodexAgentProvider implements AgentProvider {
     return Promise.resolve({
       feedback: { upload: true },
       provider: "codex",
+      skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
       turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     });
@@ -1036,6 +1169,45 @@ export class CodexAgentProvider implements AgentProvider {
     return { data, nextCursor: null };
   }
 
+  public async listSkills(): Promise<AgentSkillPage> {
+    const response = expectRecord(
+      await this.#client.request("skills/list", {
+        cwds: [this.#project.rootPath],
+        forceReload: false,
+      }),
+      "skills/list response",
+    );
+    if (!Array.isArray(response["data"])) {
+      throw new CodexProtocolMappingError("skills/list data must be an array");
+    }
+    const projectEntry = response["data"]
+      .map((value) => expectRecord(value, "skills/list entry"))
+      .find(
+        (entry) =>
+          resolve(expectString(entry["cwd"], "skills/list cwd")) ===
+          resolve(this.#project.rootPath),
+      );
+    if (projectEntry === undefined || !Array.isArray(projectEntry["skills"])) {
+      throw new CodexProtocolMappingError("skills/list did not return the active project");
+    }
+
+    const skills = projectEntry["skills"].map(mapCodexSkill).filter((skill) => skill.enabled);
+    this.#skillsById.clear();
+    for (const skill of skills) {
+      this.#skillsById.set(skill.id, skill);
+    }
+    return {
+      data: skills.map(({ description, displayName, id, name, scope }) => ({
+        description,
+        displayName,
+        id,
+        name,
+        scope,
+      })),
+      nextCursor: null,
+    };
+  }
+
   public async startTask(): Promise<AgentTask> {
     const response = expectRecord(
       await this.#client.request("thread/start", { cwd: this.#project.rootPath }),
@@ -1057,6 +1229,19 @@ export class CodexAgentProvider implements AgentProvider {
     options: AgentTurnOptions,
   ): Promise<AgentTurn> {
     this.#assertKnownProjectTask(taskId);
+    if (input.skills.length > 1) {
+      throw new CodexProtocolMappingError("Provider turn input supports one skill");
+    }
+    if (input.skills.some((skill) => !this.#skillsById.has(skill.id))) {
+      await this.listSkills();
+    }
+    const skills = input.skills.map((reference) => {
+      const skill = this.#skillsById.get(reference.id);
+      if (skill?.name !== reference.name) {
+        throw new CodexProtocolMappingError("Provider turn skill is unavailable");
+      }
+      return { name: skill.name, path: skill.path, type: "skill" as const };
+    });
     const images = input.images.map((image) => {
       if (!image.url.startsWith(`data:${image.mediaType};base64,`)) {
         throw new CodexProtocolMappingError("Provider image URL does not match its media type");
@@ -1064,6 +1249,7 @@ export class CodexAgentProvider implements AgentProvider {
       return { type: "image" as const, url: image.url };
     });
     const codexInput = [
+      ...skills,
       ...(input.text.length === 0
         ? []
         : [{ text: input.text, text_elements: [], type: "text" as const }]),
@@ -1217,6 +1403,10 @@ export class CodexAgentProvider implements AgentProvider {
       if (!Array.isArray(thread["turns"])) {
         throw new CodexProtocolMappingError("thread/read turns must be an array");
       }
+      const transcriptSkillsByTurnId = await readCodexTranscriptTurnSkills(taskId);
+      const turns = thread["turns"]
+        .map(mapAgentTurn)
+        .map((turn) => attachTranscriptSkills(turn, transcriptSkillsByTurnId.get(turn.id) ?? []));
       const snapshot: AgentProviderTaskSnapshot = {
         ...task,
         contextUsage: this.#taskContextUsage.get(taskId) ?? null,
@@ -1224,7 +1414,7 @@ export class CodexAgentProvider implements AgentProvider {
           .map((entry) => entry.request)
           .filter((request) => request.taskId === taskId),
         status: mapThreadStatus(thread["status"]),
-        turns: thread["turns"].map(mapAgentTurn),
+        turns,
       };
       return snapshot;
     } finally {
@@ -1725,6 +1915,10 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     return this.#delegate.listModels();
   }
 
+  public listSkills(): Promise<AgentSkillPage> {
+    return this.#delegate.listSkills();
+  }
+
   public readSandboxMode(): Promise<AgentSandboxMode> {
     return this.#delegate.readSandboxMode();
   }
@@ -1863,6 +2057,7 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
     return Promise.resolve({
       feedback: { upload: true },
       provider: "codex",
+      skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
       turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     });

@@ -19,10 +19,11 @@
 - Agent 写入必须由 Protocol 提供结构化 `AgentPromptInput`、Task/Turn Mutation 请求响应、能力和错误 Schema；Client 与 Server 都必须执行运行时校验。
 - Task 固定、重命名和归档必须使用独立的严格 Mutation Schema 并携带 `Idempotency-Key`；Server 校验 `projectId + taskId` 归属后，固定写本地元数据，重命名和归档调用 Provider 端口。
 - 模型目录使用统一 `AgentModelPage` 并保留每个模型的默认与可用思考量；图片上传返回不含 Data URL 和本地路径的 `AgentAttachment`，Turn 只接收附件 ID、`AgentApprovalPolicy`、`AgentSandboxMode`、非空模型 ID 和该模型支持的思考量。
+- Skill 目录使用 Project 作用域的统一 `AgentSkillPage`，只向 Web 暴露不透明 ID、名称、描述和作用域；`AgentPromptInput.skills` 只接收不透明 ID 与名称，禁止暴露或接收 Codex Skill 绝对路径。
 - `AgentTaskSettings` 必须是审批、模型、思考量和沙盒模式的严格完整对象，Task Snapshot 直接返回 Server 校验后的有效设置；Project defaults 包含模型、思考量和沙盒模式。完整设置更新使用原子 `PUT`，Client 必须对所有设置响应执行 Protocol Schema 校验。
 - Provider 模型目录和 Codex Project 有效沙盒配置分别是初始模型能力与沙盒默认值的真相源，持久层只保存统一设置值；新 Task 继承 Project 模型、思考量和沙盒默认值，审批固定初始化为 `on-request`，会话级授权和 Pending Request 不得进入长期设置。
 - Task Snapshot 使用 `contextUsage` 保存最近一轮上下文用量，实时链路使用 `usage.updated` 同步更新；占用值必须来自 Provider 的最近一轮 Token Usage 与模型上下文窗口。
-- 运行能力独立声明 Task 的 `list`、`read`、`start`、`fork`，Turn 的 `start`、`interrupt`、`rollback`、`review`、`compact`，以及 Feedback 的 `upload`；消费者不得通过 Provider 名称推断能力。
+- 运行能力独立声明 Task 的 `list`、`read`、`start`、`fork`，Turn 的 `start`、`interrupt`、`rollback`、`review`、`compact`，Skill 的 `list`、`use`，以及 Feedback 的 `upload`；消费者不得通过 Provider 名称推断能力。
 - `POST /v1/projects/:projectId/tasks`、`POST /v1/projects/:projectId/tasks/:taskId/turns` 和 Project 作用域内的 Turn Mutation 必须携带 `Idempotency-Key`，并使用统一错误码表达缺失 Key、冲突、资源不存在和 Provider 失败。
 - Pending Request 使用 `command_approval`、`file_change_approval`、`user_input` 判别联合；命令审批将受管网络目标归一化为可空的 `networkAccess`，保留 Host 与协议；Snapshot 只返回未解决请求，实时链路使用 `pending_request.created`、`pending_request.resolved`、`pending_request.expired` 同步生命周期。
 - Pending Request 生命周期事件必须分别携带 `pending`、`resolved`、`expired` 状态；固定选项问题至少提供一个选项，无选项 Choice 只有在允许自定义回答时才合法。

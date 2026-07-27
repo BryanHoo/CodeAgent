@@ -209,6 +209,7 @@ describe("Realtime Path", () => {
       created.task.id,
       {
         attachments: [{ id: uploaded.attachment.id }],
+        skills: [],
         text: "完成流式回复",
         type: "prompt",
       },
@@ -283,7 +284,7 @@ describe("Realtime Path", () => {
     const started = await client.startTurn(
       project.id,
       created.task.id,
-      { attachments: [], text: "等待中断", type: "prompt" },
+      { attachments: [], skills: [], text: "等待中断", type: "prompt" },
       turnOptions,
       { idempotencyKey: "turn-interrupt" },
     );

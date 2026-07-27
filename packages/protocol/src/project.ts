@@ -51,10 +51,18 @@ export const AgentItemStatusSchema = Type.Union([
 
 export type AgentItemStatus = Static<typeof AgentItemStatusSchema>;
 
+export const AgentMessageSkillSchema = Type.Object(
+  { name: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+
+export type AgentMessageSkill = Readonly<Static<typeof AgentMessageSkillSchema>>;
+
 export const AgentMessageItemSchema = Type.Object(
   {
     id: Type.String({ minLength: 1 }),
     role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
+    skills: Type.Optional(Type.Array(AgentMessageSkillSchema)),
     text: Type.String(),
     type: Type.Literal("message"),
   },
@@ -240,6 +248,36 @@ export type AgentAttachmentUploadResponse = Readonly<
   Static<typeof AgentAttachmentUploadResponseSchema>
 >;
 
+export const AgentSkillScopeSchema = Type.Union([
+  Type.Literal("user"),
+  Type.Literal("repo"),
+  Type.Literal("system"),
+  Type.Literal("admin"),
+]);
+
+export const AgentSkillSchema = Type.Object(
+  {
+    description: Type.String(),
+    displayName: Type.String({ minLength: 1 }),
+    id: Type.String({ minLength: 1 }),
+    name: Type.String({ minLength: 1 }),
+    scope: AgentSkillScopeSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type AgentSkill = Readonly<Static<typeof AgentSkillSchema>>;
+
+export const AgentSkillReferenceSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    name: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentSkillReference = Readonly<Static<typeof AgentSkillReferenceSchema>>;
+
 const AgentAttachmentReferenceSchema = Type.Object(
   { id: Type.String({ minLength: 1 }) },
   { additionalProperties: false },
@@ -247,6 +285,7 @@ const AgentAttachmentReferenceSchema = Type.Object(
 
 const AgentPromptInputProperties = {
   attachments: Type.Array(AgentAttachmentReferenceSchema, { maxItems: MAX_AGENT_ATTACHMENTS }),
+  skills: Type.Array(AgentSkillReferenceSchema, { maxItems: 1 }),
   text: Type.String({ maxLength: 100_000 }),
   type: Type.Literal("prompt"),
 };
@@ -266,6 +305,13 @@ export const AgentPromptInputSchema = Type.Union([
         maxItems: MAX_AGENT_ATTACHMENTS,
         minItems: 1,
       }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...AgentPromptInputProperties,
+      skills: Type.Array(AgentSkillReferenceSchema, { maxItems: 1, minItems: 1 }),
     },
     { additionalProperties: false },
   ),
@@ -820,6 +866,9 @@ export type AgentTaskPage = Page<AgentTask>;
 export const AgentModelPageSchema = createPageSchema(AgentModelSchema);
 export type AgentModelPage = Page<AgentModel>;
 
+export const AgentSkillPageSchema = createPageSchema(AgentSkillSchema);
+export type AgentSkillPage = Page<AgentSkill>;
+
 export const HealthResponseSchema = Type.Object(
   {
     status: Type.Literal("ok"),
@@ -834,6 +883,10 @@ export const AgentCapabilitiesSchema = Type.Object(
   {
     feedback: Type.Object({ upload: Type.Boolean() }, { additionalProperties: false }),
     provider: Type.String({ minLength: 1 }),
+    skills: Type.Object(
+      { list: Type.Boolean(), use: Type.Boolean() },
+      { additionalProperties: false },
+    ),
     tasks: Type.Object(
       {
         fork: Type.Boolean(),

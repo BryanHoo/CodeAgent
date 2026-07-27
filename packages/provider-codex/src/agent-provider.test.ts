@@ -960,6 +960,122 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
+  it("lists enabled project skills and submits the native Codex skill input", async () => {
+    const runningTurn = {
+      completedAt: null,
+      durationMs: null,
+      error: null,
+      id: "turn-skill",
+      items: [],
+      itemsView: { type: "full" },
+      startedAt: 1_753_228_800,
+      status: "inProgress",
+    };
+    const rpc = new FakeRpcClient([
+      {
+        data: [
+          {
+            cwd: project.rootPath,
+            errors: [],
+            skills: [
+              {
+                description: "Security audit specialist",
+                enabled: true,
+                interface: {
+                  displayName: "Security review",
+                  shortDescription: "审查认证、授权和敏感数据边界",
+                },
+                name: "review-security",
+                path: "/Users/test/.codex/skills/review-security/SKILL.md",
+                scope: "system",
+                shortDescription: null,
+              },
+              {
+                description: "Disabled skill",
+                enabled: false,
+                interface: null,
+                name: "disabled-skill",
+                path: "/Users/test/.codex/skills/disabled-skill/SKILL.md",
+                scope: "user",
+                shortDescription: null,
+              },
+            ],
+          },
+        ],
+      },
+      { thread: nativeThread() },
+      { turn: runningTurn },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    const skillPage = await provider.listSkills();
+    const selectedSkill = skillPage.data[0];
+    if (selectedSkill === undefined) {
+      throw new Error("Expected an enabled Codex skill");
+    }
+    expect(selectedSkill.id).toMatch(/^skill_[a-f0-9]{32}$/u);
+    expect(skillPage).toEqual({
+      data: [
+        {
+          description: "审查认证、授权和敏感数据边界",
+          displayName: "Security review",
+          id: selectedSkill.id,
+          name: "review-security",
+          scope: "system",
+        },
+      ],
+      nextCursor: null,
+    });
+    await provider.startTask();
+    await expect(
+      provider.startTurn(
+        "task-1",
+        {
+          images: [],
+          skills: [{ id: selectedSkill.id, name: "review-security" }],
+          text: "",
+        },
+        {
+          approvalPolicy: "on-request",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+          sandboxMode: "workspace-write",
+        },
+      ),
+    ).resolves.toMatchObject({ id: "turn-skill", status: "running" });
+
+    expect(rpc.calls).toEqual([
+      {
+        method: "skills/list",
+        params: { cwds: [project.rootPath], forceReload: false },
+      },
+      { method: "thread/start", params: { cwd: project.rootPath } },
+      {
+        method: "turn/start",
+        params: {
+          approvalPolicy: "on-request",
+          effort: "high",
+          input: [
+            {
+              name: "review-security",
+              path: "/Users/test/.codex/skills/review-security/SKILL.md",
+              type: "skill",
+            },
+          ],
+          model: "gpt-5.6-sol",
+          sandboxPolicy: {
+            excludeSlashTmp: false,
+            excludeTmpdirEnvVar: false,
+            networkAccess: false,
+            type: "workspaceWrite",
+            writableRoots: [],
+          },
+          threadId: "task-1",
+        },
+      },
+    ]);
+  });
+
   it("rejects repeated model cursors and mismatched image data URLs", async () => {
     const cursorRpc = new FakeRpcClient([
       { data: [], nextCursor: "same-page" },
@@ -978,6 +1094,7 @@ describe("CodexAgentProvider", () => {
         "task-1",
         {
           images: [{ mediaType: "image/png", url: "data:image/jpeg;base64,aW1hZ2U=" }],
+          skills: [],
           text: "",
         },
         {
@@ -1037,6 +1154,7 @@ describe("CodexAgentProvider", () => {
               url: "data:image/png;base64,aW1hZ2U=",
             },
           ],
+          skills: [],
           text: "实现写入闭环",
         },
         {
@@ -1096,7 +1214,7 @@ describe("CodexAgentProvider", () => {
 
     await provider.startTurn(
       "task-1",
-      { images: [], text: "只读检查" },
+      { images: [], skills: [], text: "只读检查" },
       {
         approvalPolicy: "on-request",
         model: "gpt-5.6-sol",
@@ -1106,7 +1224,7 @@ describe("CodexAgentProvider", () => {
     );
     await provider.startTurn(
       "task-1",
-      { images: [], text: "完全访问" },
+      { images: [], skills: [], text: "完全访问" },
       {
         approvalPolicy: "never",
         model: "gpt-5.6-sol",
@@ -1752,6 +1870,7 @@ describe("CodexAgentProvider", () => {
     await expect(provider.getCapabilities()).resolves.toEqual({
       feedback: { upload: true },
       provider: "codex",
+      skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
       turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     });
@@ -1793,7 +1912,39 @@ describe("CodexAgentProvider", () => {
               completedAt: 1_753_232_400,
               id: "turn-1",
               items: [
-                { content: [{ text: "读取历史", type: "text" }], id: "i1", type: "userMessage" },
+                {
+                  content: [
+                    {
+                      text: [
+                        "[$review-security](/Users/test/.codex/skills/review-security/SKILL.md)",
+                        "读取历史",
+                      ].join(" "),
+                      type: "text",
+                    },
+                  ],
+                  id: "i1",
+                  type: "userMessage",
+                },
+                {
+                  content: [
+                    {
+                      text: [
+                        "<skill>",
+                        "<name>review-security</name>",
+                        "<path>/Users/test/.codex/skills/review-security/SKILL.md</path>",
+                        "---",
+                        "name: review-security",
+                        "description: Security audit specialist",
+                        "---",
+                        "Review authentication boundaries.",
+                        "</skill>",
+                      ].join("\n"),
+                      type: "text",
+                    },
+                  ],
+                  id: "i1-skill",
+                  type: "userMessage",
+                },
                 { id: "i2", text: "已读取", type: "agentMessage" },
                 {
                   content: ["核对边界"],
@@ -1862,7 +2013,13 @@ describe("CodexAgentProvider", () => {
           id: "turn-1",
           status: "completed",
           items: [
-            { id: "i1", role: "user", text: "读取历史", type: "message" },
+            {
+              id: "i1",
+              role: "user",
+              skills: [{ name: "review-security" }],
+              text: "读取历史",
+              type: "message",
+            },
             { id: "i2", role: "assistant", text: "已读取", type: "message" },
             { content: "核对边界", id: "i3", summary: "分析协议", type: "reasoning" },
             {

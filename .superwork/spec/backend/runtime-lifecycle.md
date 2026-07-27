@@ -19,6 +19,7 @@
 - Task 命令通过受控 Provider 方法映射：代码审查使用 `review/start`，上下文压缩使用 `thread/compact/start`，新任务续接使用 `thread/fork`，任务反馈使用 `feedback/upload`；每个动作都必须先验证 Task 属于当前 Project，并校验响应中的 Thread ID。
 - Task 重命名固定映射 `thread/name/set`，归档固定映射 `thread/archive`，两者都必须先验证 Task 属于当前 Project；固定状态不是 Codex 原生能力，由 CodeAgent 本地 Task 元数据持久化。
 - 模型列表只通过分页 `model/list` 获取，过滤隐藏模型并保留默认模型、默认思考量和可用思考量；Project 沙盒默认值通过携带 `cwd` 的 `config/read` 读取；`turn/start` 明确映射文本、受控图片 Data URL、`model`、`effort`、`approvalPolicy` 和结构化 `sandboxPolicy`。
+- Project Skill 目录只通过 `skills/list { cwds: [project.rootPath] }` 获取并过滤禁用项；对外 ID 必须是稳定不透明摘要。`turn/start` 只有在 ID 与名称仍匹配当前目录时，才能加入 Codex 原生 `{ type: "skill", name, path }`，原生绝对路径不得越过 Provider 边界。
 - `thread/tokenUsage/updated` 只使用最近一轮 `last.totalTokens` 计算当前上下文占用，并连同 `modelContextWindow` 写入实时事件和后续 Snapshot；不得使用累计 `total.totalTokens` 冒充当前上下文。
 - `turn/interrupt` 响应只确认中断请求已接收；`turn/completed` 的 `interrupted` 状态才是 Turn 终态，Server 和 Web 不得提前伪造完成状态。
 - `thread/rollback` 只用于撤销当前 Task 的最新已完成 Turn，并固定 `numTurns: 1`；它只修改 Codex 会话历史，不能视为本地文件恢复。Server 必须先对当前 Project 内受控文本补丁执行反向预检并恢复文件，再调用 Provider；Provider 失败时正向补偿文件，补偿失败返回明确冲突，禁止路径越界、`.git`、二进制和同文件多段依赖补丁。
