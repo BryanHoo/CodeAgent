@@ -384,6 +384,42 @@ describe("CodeAgentClient", () => {
     ).toEqual(["review-key", "compact-key", "fork-key", "feedback-key"]);
   });
 
+  it("sends typed task metadata mutations with idempotency keys", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ task: { ...task, pinned: true } }))
+      .mockResolvedValueOnce(jsonResponse({ task: { ...task, title: "新的任务名称" } }))
+      .mockResolvedValueOnce(jsonResponse({ status: "archived", taskId: task.id }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(
+      client.pinTask("code-agent", task.id, true, { idempotencyKey: "pin-key" }),
+    ).resolves.toMatchObject({ task: { pinned: true } });
+    await expect(
+      client.renameTask("code-agent", task.id, "新的任务名称", {
+        idempotencyKey: "rename-key",
+      }),
+    ).resolves.toMatchObject({ task: { title: "新的任务名称" } });
+    await expect(
+      client.archiveTask("code-agent", task.id, { idempotencyKey: "archive-key" }),
+    ).resolves.toEqual({ status: "archived", taskId: task.id });
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/v1/projects/code-agent/tasks/task-1/pin",
+      "/v1/projects/code-agent/tasks/task-1/rename",
+      "/v1/projects/code-agent/tasks/task-1/archive",
+    ]);
+    expect(fetchMock.mock.calls.map((call) => call[1]?.method)).toEqual(["PUT", "POST", "POST"]);
+    expect(fetchMock.mock.calls.map((call) => call[1]?.body)).toEqual([
+      JSON.stringify({ pinned: true }),
+      JSON.stringify({ title: "新的任务名称" }),
+      "{}",
+    ]);
+    expect(
+      fetchMock.mock.calls.map((call) => new Headers(call[1]?.headers).get("idempotency-key")),
+    ).toEqual(["pin-key", "rename-key", "archive-key"]);
+  });
+
   it("sends typed pending request resolutions with full identity", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock.mockResolvedValueOnce(

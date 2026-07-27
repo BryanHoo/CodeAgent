@@ -6,10 +6,13 @@ import {
   type AgentProvider,
   type AgentRuntimeProvider,
   type AgentSettingsRepository,
+  type AgentTaskMetadataRepository,
   type ProjectRepository,
 } from "@code-agent/core";
 import {
   AddProjectResponseSchema,
+  ArchiveAgentTaskRequestSchema,
+  ArchiveAgentTaskResponseSchema,
   AgentCapabilitiesSchema,
   CompactAgentTaskRequestSchema,
   CompactAgentTaskResponseSchema,
@@ -31,8 +34,12 @@ import {
   ProjectPageSchema,
   ProjectGitStatusSchema,
   ProjectSourceFileSchema,
+  PinAgentTaskRequestSchema,
+  PinAgentTaskResponseSchema,
   ReviewAgentTaskRequestSchema,
   ReviewAgentTaskResponseSchema,
+  RenameAgentTaskRequestSchema,
+  RenameAgentTaskResponseSchema,
   RollbackAgentTurnRequestSchema,
   RollbackAgentTurnResponseSchema,
   ResolvePendingRequestRequestSchema,
@@ -45,6 +52,7 @@ import {
   UploadAgentFeedbackResponseSchema,
   MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
   type AgentAttachmentUploadRequest,
+  type ArchiveAgentTaskRequest,
   type AgentMutationError,
   type AgentModel,
   type AgentProjectDefaults,
@@ -56,8 +64,10 @@ import {
   type Project,
   type ProjectGitStatus,
   type ProjectSourceFile,
+  type PinAgentTaskRequest,
   type RollbackAgentTurnRequest,
   type ReviewAgentTaskRequest,
+  type RenameAgentTaskRequest,
   type ResolvePendingRequestRequest,
   type StartAgentTurnRequest,
   type UploadAgentFeedbackRequest,
@@ -84,6 +94,7 @@ export interface CreateCodeAgentServerOptions {
   projectRepository: ProjectRepository;
   provider: AgentRuntimeProvider;
   settingsRepository: AgentSettingsRepository;
+  taskMetadataRepository: AgentTaskMetadataRepository;
   readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
   readProjectSourceFile?: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
   prepareTurnFileRollback?: (
@@ -246,6 +257,23 @@ function taskSettingsEqual(left: AgentTaskSettings | undefined, right: AgentTask
     left.model === right.model &&
     left.reasoningEffort === right.reasoningEffort
   );
+}
+
+function mergeTaskPinned(task: AgentTask, pinnedTaskIds: ReadonlySet<string>): AgentTask {
+  return { ...task, pinned: pinnedTaskIds.has(task.id) };
+}
+
+function taskFromSnapshot(
+  snapshot: Awaited<ReturnType<AgentProvider["readTask"]>> & object,
+  overrides: Partial<Pick<AgentTask, "pinned" | "title">> = {},
+): AgentTask {
+  return {
+    id: snapshot.id,
+    pinned: overrides.pinned ?? snapshot.pinned,
+    projectId: snapshot.projectId,
+    title: overrides.title ?? snapshot.title,
+    updatedAt: snapshot.updatedAt,
+  };
 }
 
 interface IdempotencyEntry {
@@ -736,7 +764,12 @@ export async function createCodeAgentServer(
         ...(request.query.cursor === undefined ? {} : { cursor: request.query.cursor }),
         ...(request.query.limit === undefined ? {} : { limit: request.query.limit }),
       };
-      return context.provider.listTasks(input);
+      const [page, pinnedTaskIds] = await Promise.all([
+        context.provider.listTasks(input),
+        options.taskMetadataRepository.listPinnedTaskIds(request.params.projectId),
+      ]);
+      const pinned = new Set(pinnedTaskIds);
+      return { ...page, data: page.data.map((task) => mergeTaskPinned(task, pinned)) };
     },
   );
 
@@ -763,8 +796,137 @@ export async function createCodeAgentServer(
         request.params.projectId,
         request.params.taskId,
       );
-      return { checkpoint, snapshot: { ...task, settings } };
+      const pinnedTaskIds = new Set(
+        await options.taskMetadataRepository.listPinnedTaskIds(request.params.projectId),
+      );
+      return { checkpoint, snapshot: { ...task, pinned: pinnedTaskIds.has(task.id), settings } };
     },
+  );
+
+  app.put<{
+    Body: PinAgentTaskRequest;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string; taskId: string };
+  }>(
+    "/v1/projects/:projectId/tasks/:taskId/pin",
+    {
+      schema: {
+        body: PinAgentTaskRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectTaskParamsSchema,
+        response: {
+          200: PinAgentTaskResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        ["pin-task", request.params.projectId, request.params.taskId],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          const pinned = await options.taskMetadataRepository.writeTaskPinned(
+            request.params.projectId,
+            request.params.taskId,
+            request.body.pinned,
+          );
+          return { task: taskFromSnapshot(task, { pinned }) };
+        },
+      ),
+  );
+
+  app.post<{
+    Body: RenameAgentTaskRequest;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string; taskId: string };
+  }>(
+    "/v1/projects/:projectId/tasks/:taskId/rename",
+    {
+      schema: {
+        body: RenameAgentTaskRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectTaskParamsSchema,
+        response: {
+          200: RenameAgentTaskResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        ["rename-task", request.params.projectId, request.params.taskId],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          const title = request.body.title.trim();
+          // Web 只提交统一标题，Codex 原生命名字段由 Provider 边界负责映射。
+          await context.provider.renameTask(request.params.taskId, title);
+          return { task: taskFromSnapshot(task, { title }) };
+        },
+      ),
+  );
+
+  app.post<{
+    Body: ArchiveAgentTaskRequest;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string; taskId: string };
+  }>(
+    "/v1/projects/:projectId/tasks/:taskId/archive",
+    {
+      schema: {
+        body: ArchiveAgentTaskRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectTaskParamsSchema,
+        response: {
+          200: ArchiveAgentTaskResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        ["archive-task", request.params.projectId, request.params.taskId],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          await context.provider.archiveTask(request.params.taskId);
+          return { status: "archived" as const, taskId: request.params.taskId };
+        },
+      ),
   );
 
   app.get<{ Params: { projectId: string; taskId: string } }>(

@@ -100,6 +100,34 @@ const tasks = [
     updatedAt: "2026-07-20T08:00:00.000Z",
   },
   {
+    id: "runtime",
+    pinned: false,
+    projectId: "code-agent",
+    title: "完善 Runtime 状态",
+    updatedAt: "2026-07-19T08:00:00.000Z",
+  },
+  {
+    id: "provider",
+    pinned: false,
+    projectId: "code-agent",
+    title: "整理 Provider 边界",
+    updatedAt: "2026-07-18T08:00:00.000Z",
+  },
+  {
+    id: "protocol",
+    pinned: false,
+    projectId: "code-agent",
+    title: "补充 Protocol 契约",
+    updatedAt: "2026-07-17T08:00:00.000Z",
+  },
+  {
+    id: "client",
+    pinned: false,
+    projectId: "code-agent",
+    title: "优化 Client 请求",
+    updatedAt: "2026-07-16T08:00:00.000Z",
+  },
+  {
     id: "plan-check",
     pinned: false,
     projectId: "superwork",
@@ -194,6 +222,7 @@ const architectureSourcePreview = Array.from({ length: 720 }, (_, lineIndex) =>
 
 test.beforeEach(async ({ page }) => {
   let routedProjects = [...projects];
+  let routedTasks = tasks.map((task) => ({ ...task }));
   const projectDefaults = new Map(
     projects.map((project) => [project.id, { model: "gpt-5.6-sol", reasoningEffort: "high" }]),
   );
@@ -205,6 +234,9 @@ test.beforeEach(async ({ page }) => {
     const url = new URL(route.request().url());
     const defaultsMatch = /^\/v1\/projects\/([^/]+)\/defaults$/u.exec(url.pathname);
     const settingsMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/settings$/u.exec(url.pathname);
+    const pinMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/pin$/u.exec(url.pathname);
+    const renameMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/rename$/u.exec(url.pathname);
+    const archiveMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/archive$/u.exec(url.pathname);
     let body: unknown;
 
     if (url.pathname === "/v1/health") {
@@ -251,9 +283,33 @@ test.beforeEach(async ({ page }) => {
         taskSettings.set(key, parseTaskSettingsRequest(route.request().postData()));
       }
       body = { settings: taskSettings.get(key) ?? taskSnapshot.settings };
+    } else if (pinMatch !== null) {
+      const taskId = pinMatch[2] ?? "";
+      const request = parseRequestRecord(route.request().postData());
+      const pinned = request["pinned"];
+      const task = routedTasks.find((item) => item.id === taskId);
+      if (task === undefined || typeof pinned !== "boolean") {
+        throw new Error("Invalid pin task request");
+      }
+      task.pinned = pinned;
+      body = { task };
+    } else if (renameMatch !== null) {
+      const taskId = renameMatch[2] ?? "";
+      const request = parseRequestRecord(route.request().postData());
+      const title = request["title"];
+      const task = routedTasks.find((item) => item.id === taskId);
+      if (task === undefined || typeof title !== "string") {
+        throw new Error("Invalid rename task request");
+      }
+      task.title = title;
+      body = { task };
+    } else if (archiveMatch !== null) {
+      const taskId = archiveMatch[2] ?? "";
+      routedTasks = routedTasks.filter((item) => item.id !== taskId);
+      body = { status: "archived", taskId };
     } else if (url.pathname.startsWith("/v1/projects/") && url.pathname.endsWith("/tasks")) {
       const projectId = url.pathname.split("/")[3];
-      body = { data: tasks.filter((task) => task.projectId === projectId), nextCursor: null };
+      body = { data: routedTasks.filter((task) => task.projectId === projectId), nextCursor: null };
     } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1") {
       body = {
         ...taskSnapshotResponse,
@@ -556,6 +612,93 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(contextUsageTooltip).toContainText("25K / 200K tokens");
   await expect(inspector.getByRole("button", { name: "关闭上下文面板" })).toHaveCount(0);
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+});
+
+test("keeps Projects fixed and manages task actions from the compact tree", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const projectsHeading = sidebar.getByRole("heading", { name: "Projects" });
+  const pinnedHeading = sidebar.getByRole("heading", { name: "Pinned" });
+  const projectTree = page.getByTestId("project-tree-scroll");
+  const projectGroup = sidebar
+    .getByRole("button", { name: "切换项目 CodeAgent" })
+    .locator("xpath=../..");
+
+  await expect(projectsHeading).toBeVisible();
+  await expect
+    .poll(async () =>
+      Number.parseFloat(await projectsHeading.evaluate((node) => getComputedStyle(node).fontSize)),
+    )
+    .toBeGreaterThan(
+      Number.parseFloat(await pinnedHeading.evaluate((node) => getComputedStyle(node).fontSize)),
+    );
+  const headingY = (await projectsHeading.boundingBox())?.y;
+  await projectTree.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  expect((await projectsHeading.boundingBox())?.y).toBe(headingY);
+
+  await expect(projectGroup.getByRole("link")).toHaveCount(5);
+  const showMoreButton = projectGroup.getByRole("button", { name: "显示更多" });
+  const showMoreBox = await showMoreButton.boundingBox();
+  const taskListBox = await showMoreButton.locator("xpath=..").boundingBox();
+  expect(showMoreBox).not.toBeNull();
+  expect(taskListBox).not.toBeNull();
+  if (showMoreBox === null || taskListBox === null) {
+    throw new Error("项目任务展开按钮缺失");
+  }
+  expect
+    .soft(Math.abs(showMoreBox.x + showMoreBox.width - (taskListBox.x + taskListBox.width)))
+    .toBeLessThanOrEqual(1);
+  await showMoreButton.click();
+  await expect(projectGroup.getByRole("link")).toHaveCount(7);
+
+  const inputTask = projectGroup.getByRole("link", { name: /优化输入框交互/u });
+  const inputTaskBox = await inputTask.boundingBox();
+  const inputTaskAgeBox = await inputTask.locator(".task-age").boundingBox();
+  expect(inputTaskBox).not.toBeNull();
+  expect(inputTaskAgeBox).not.toBeNull();
+  if (inputTaskBox === null || inputTaskAgeBox === null) {
+    throw new Error("Task 时间布局缺失");
+  }
+  expect
+    .soft(
+      Math.abs(inputTaskBox.x + inputTaskBox.width - (inputTaskAgeBox.x + inputTaskAgeBox.width)),
+    )
+    .toBeLessThanOrEqual(10);
+  await inputTask.hover();
+  await projectGroup.getByRole("button", { name: "打开 优化输入框交互 的操作菜单" }).click();
+  await page.getByRole("menuitem", { name: "固定" }).click();
+  const pinnedSection = pinnedHeading.locator("xpath=..");
+  const pinnedInputTask = pinnedSection.getByRole("link", { name: /优化输入框交互/u });
+  await expect(pinnedInputTask).toBeVisible();
+  await pinnedInputTask.hover();
+  const pinnedMenuTrigger = pinnedSection.getByRole("button", {
+    name: "打开 优化输入框交互 的操作菜单",
+  });
+  await pinnedMenuTrigger.click();
+  const pinnedMenu = page.getByRole("menu", { name: "优化输入框交互 的任务操作" });
+  await expect(pinnedMenu).toBeVisible();
+  const pinnedMenuTriggerBox = await pinnedMenuTrigger.boundingBox();
+  const pinnedMenuBox = await pinnedMenu.boundingBox();
+  expect(pinnedMenuTriggerBox).not.toBeNull();
+  expect(pinnedMenuBox).not.toBeNull();
+  if (pinnedMenuTriggerBox === null || pinnedMenuBox === null) {
+    throw new Error("Pinned Task 菜单布局缺失");
+  }
+  expect.soft(Math.abs(pinnedMenuBox.x - pinnedMenuTriggerBox.x)).toBeLessThanOrEqual(1);
+  await pinnedMenu.getByRole("menuitem", { name: "重命名" }).click();
+  await page.getByRole("textbox", { name: "任务名称" }).fill("优化侧栏任务操作");
+  await page.getByRole("button", { name: "保存" }).click();
+  await expect(projectGroup.getByText("优化侧栏任务操作", { exact: true })).toBeVisible();
+
+  const activeTask = projectGroup.getByRole("link", { name: /构建 macOS 工作台/u });
+  await activeTask.hover();
+  await projectGroup.getByRole("button", { name: "打开 构建 macOS 工作台 的操作菜单" }).click();
+  await page.getByRole("menuitem", { name: "归档" }).click();
+  await expect(page).toHaveURL(/\/p\/code-agent$/u);
+  await expect(projectGroup.getByText("构建 macOS 工作台", { exact: true })).toHaveCount(0);
 });
 
 test("restores task settings after a page refresh", async ({ page }) => {
@@ -1696,6 +1839,46 @@ test("toggles project tasks from the project name without navigation", async ({ 
   await sidebar.getByRole("button", { name: "切换项目 CodeAgent" }).click();
   await expect(task).toBeVisible();
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
+});
+
+test("keeps project add buttons visible after opening a task", async ({ page }) => {
+  const longTask = {
+    ...tasks[1],
+    title: "这是一个用于验证项目树横向布局不会挤走右侧操作按钮的超长任务名称",
+  };
+  await page.route("**/v1/projects/code-agent/tasks", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { data: [longTask, ...tasks.slice(2, 7)], nextCursor: null },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  await sidebar.getByRole("link", { name: longTask.title }).click();
+
+  const layout = await sidebar.evaluate((element) => {
+    const sidebarRect = element.getBoundingClientRect();
+    const projectTree = element.querySelector<HTMLElement>('[data-testid="project-tree-scroll"]');
+    const addButtons = [
+      ...element.querySelectorAll<HTMLElement>(
+        'button[aria-label*="添加项目"], button[aria-label^="在 "]',
+      ),
+    ];
+    return {
+      addButtonsInsideSidebar: addButtons.every((button) => {
+        const rect = button.getBoundingClientRect();
+        return rect.left >= sidebarRect.left && rect.right <= sidebarRect.right;
+      }),
+      hasHorizontalOverflow:
+        projectTree === null ? true : projectTree.scrollWidth > projectTree.clientWidth,
+    };
+  });
+
+  expect(layout).toEqual({ addButtonsInsideSidebar: true, hasHorizontalOverflow: false });
+  await expect(sidebar.getByRole("button", { name: "添加项目" })).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: "在 CodeAgent 中新建任务" })).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: "在 superwork 中新建任务" })).toBeVisible();
 });
 
 test("uses material hierarchy instead of strong workbench borders", async ({ page }) => {

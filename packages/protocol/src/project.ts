@@ -580,6 +580,39 @@ export const StartAgentTaskResponseSchema = Type.Object(
 );
 export type StartAgentTaskResponse = Readonly<Static<typeof StartAgentTaskResponseSchema>>;
 
+export const PinAgentTaskRequestSchema = Type.Object(
+  { pinned: Type.Boolean() },
+  { additionalProperties: false },
+);
+export type PinAgentTaskRequest = Readonly<Static<typeof PinAgentTaskRequestSchema>>;
+
+export const PinAgentTaskResponseSchema = Type.Object(
+  { task: AgentTaskSchema },
+  { additionalProperties: false },
+);
+export type PinAgentTaskResponse = Readonly<Static<typeof PinAgentTaskResponseSchema>>;
+
+export const RenameAgentTaskRequestSchema = Type.Object(
+  { title: Type.String({ maxLength: 200, minLength: 1, pattern: "\\S" }) },
+  { additionalProperties: false },
+);
+export type RenameAgentTaskRequest = Readonly<Static<typeof RenameAgentTaskRequestSchema>>;
+
+export const RenameAgentTaskResponseSchema = Type.Object(
+  { task: AgentTaskSchema },
+  { additionalProperties: false },
+);
+export type RenameAgentTaskResponse = Readonly<Static<typeof RenameAgentTaskResponseSchema>>;
+
+export const ArchiveAgentTaskRequestSchema = Type.Object({}, { additionalProperties: false });
+export type ArchiveAgentTaskRequest = Readonly<Static<typeof ArchiveAgentTaskRequestSchema>>;
+
+export const ArchiveAgentTaskResponseSchema = Type.Object(
+  { status: Type.Literal("archived"), taskId: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+export type ArchiveAgentTaskResponse = Readonly<Static<typeof ArchiveAgentTaskResponseSchema>>;
+
 const AgentReviewTargetFieldsSchema = Type.Object(
   {
     branch: Type.Optional(Type.String({ minLength: 1 })),

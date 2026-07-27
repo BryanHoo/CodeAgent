@@ -20,9 +20,12 @@ export type CodeAgentSettingsClient = Pick<
 export type CodeAgentMutationClient = Pick<
   CodeAgentClient,
   | "addProject"
+  | "archiveTask"
   | "compactTask"
   | "forkTask"
   | "interruptTurn"
+  | "pinTask"
+  | "renameTask"
   | "startReview"
   | "startTask"
   | "startTurn"
@@ -56,6 +59,71 @@ export function upsertProjectTaskPage(
     (currentTask) => currentTask.id !== task.id,
   );
   return { data: [task, ...remainingTasks], nextCursor: null };
+}
+
+export function replaceProjectTaskInPage(
+  currentPage: AgentTaskPage | undefined,
+  task: AgentTask,
+): AgentTaskPage {
+  if (currentPage === undefined) {
+    return { data: [task], nextCursor: null };
+  }
+  return {
+    ...currentPage,
+    data: currentPage.data.map((currentTask) => (currentTask.id === task.id ? task : currentTask)),
+  };
+}
+
+export function removeProjectTaskFromPage(
+  currentPage: AgentTaskPage | undefined,
+  taskId: string,
+): AgentTaskPage {
+  return {
+    data: (currentPage?.data ?? []).filter((task) => task.id !== taskId),
+    nextCursor: currentPage?.nextCursor ?? null,
+  };
+}
+
+type TaskPinMutationInput = Readonly<{
+  pinned: boolean;
+  projectId: string;
+  taskId: string;
+}>;
+
+type TaskRenameMutationInput = Readonly<{
+  projectId: string;
+  taskId: string;
+  title: string;
+}>;
+
+type TaskArchiveMutationInput = Readonly<{ projectId: string; taskId: string }>;
+
+export function taskPinMutationOptions(client: Pick<CodeAgentClient, "pinTask"> = codeAgentClient) {
+  return mutationOptions({
+    mutationFn: ({ pinned, projectId, taskId }: TaskPinMutationInput) =>
+      client.pinTask(projectId, taskId, pinned),
+    mutationKey: ["tasks", "pin"] as const,
+  });
+}
+
+export function taskRenameMutationOptions(
+  client: Pick<CodeAgentClient, "renameTask"> = codeAgentClient,
+) {
+  return mutationOptions({
+    mutationFn: ({ projectId, taskId, title }: TaskRenameMutationInput) =>
+      client.renameTask(projectId, taskId, title),
+    mutationKey: ["tasks", "rename"] as const,
+  });
+}
+
+export function taskArchiveMutationOptions(
+  client: Pick<CodeAgentClient, "archiveTask"> = codeAgentClient,
+) {
+  return mutationOptions({
+    mutationFn: ({ projectId, taskId }: TaskArchiveMutationInput) =>
+      client.archiveTask(projectId, taskId),
+    mutationKey: ["tasks", "archive"] as const,
+  });
 }
 
 export function capabilitiesQueryOptions(client: CodeAgentCapabilitiesClient = codeAgentClient) {

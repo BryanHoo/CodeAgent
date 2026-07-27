@@ -41,7 +41,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 1,
+      migrationVersion: 2,
       synchronous: "normal",
       writable: true,
     });
@@ -154,6 +154,25 @@ describe("SqliteStateRepository", () => {
       reasoningEffort: "high",
     });
     await expect(reopened.read(project.id)).resolves.toEqual(project);
+  });
+
+  it("persists pinned task metadata across repository restarts", async () => {
+    const root = await createWorkspace();
+    const projectRoot = join(root, "workspace");
+    await mkdir(projectRoot);
+    const repository = await openRepository(root);
+    const project = await repository.register({ name: "Workspace", rootPath: projectRoot });
+
+    await expect(repository.listPinnedTaskIds(project.id)).resolves.toEqual([]);
+    await expect(repository.writeTaskPinned(project.id, "task-1", true)).resolves.toBe(true);
+    await expect(repository.writeTaskPinned(project.id, "task-2", false)).resolves.toBe(false);
+    await repository.close();
+    repositories.splice(repositories.indexOf(repository), 1);
+
+    const reopened = await openRepository(root);
+    await expect(reopened.listPinnedTaskIds(project.id)).resolves.toEqual(["task-1"]);
+    await expect(reopened.writeTaskPinned(project.id, "task-1", false)).resolves.toBe(false);
+    await expect(reopened.listPinnedTaskIds(project.id)).resolves.toEqual([]);
   });
 
   it("terminates an unresponsive worker after the request deadline", async () => {

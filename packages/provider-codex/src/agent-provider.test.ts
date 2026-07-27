@@ -1053,6 +1053,8 @@ describe("CodexAgentProvider", () => {
     };
     const rpc = new FakeRpcClient([
       { data: [nativeThread()], nextCursor: null },
+      {},
+      {},
       { reviewThreadId: "task-1", turn: runningTurn },
       {},
       { thread: nativeThread({ id: "task-2", preview: "续接任务" }) },
@@ -1061,6 +1063,8 @@ describe("CodexAgentProvider", () => {
     const provider = createCodexAgentProvider({ client: rpc, project });
     await provider.listTasks();
 
+    await expect(provider.renameTask("task-1", "新的任务名称")).resolves.toBeUndefined();
+    await expect(provider.archiveTask("task-1")).resolves.toBeUndefined();
     await expect(
       provider.startReview("task-1", { type: "base_branch", branch: "main" }),
     ).resolves.toMatchObject({ id: "review-turn", status: "running" });
@@ -1075,6 +1079,11 @@ describe("CodexAgentProvider", () => {
     ).resolves.toBeUndefined();
 
     expect(rpc.calls.slice(1)).toEqual([
+      {
+        method: "thread/name/set",
+        params: { name: "新的任务名称", threadId: "task-1" },
+      },
+      { method: "thread/archive", params: { threadId: "task-1" } },
       {
         method: "review/start",
         params: {
@@ -1095,6 +1104,19 @@ describe("CodexAgentProvider", () => {
         },
       },
     ]);
+  });
+
+  it("rejects task metadata mutations outside the current project", async () => {
+    const rpc = new FakeRpcClient([]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.renameTask("unknown-task", "新的任务名称")).rejects.toThrow(
+      "does not belong to the active project",
+    );
+    await expect(provider.archiveTask("unknown-task")).rejects.toThrow(
+      "does not belong to the active project",
+    );
+    expect(rpc.calls).toEqual([]);
   });
 
   it("maps Codex notifications to provider-independent realtime events", async () => {

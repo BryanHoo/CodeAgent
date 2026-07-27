@@ -34,6 +34,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     respondToServerRequest: vi.fn(),
   };
   const provider = {
+    archiveTask: vi.fn(),
     compactTask: vi.fn(),
     forkTask: vi.fn(),
     getCapabilities: vi.fn(),
@@ -41,6 +42,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     listModels: vi.fn(),
     listTasks: vi.fn(),
     readTask: vi.fn(),
+    renameTask: vi.fn(),
     resolvePendingRequest: vi.fn(),
     rollbackLatestTurn: vi.fn(),
     startTask: vi.fn(),
@@ -68,17 +70,19 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
         foreignKeys: true,
         integrityCheck: "ok",
         journalMode: "wal",
-        migrationVersion: 1,
+        migrationVersion: 2,
         synchronous: "normal",
         writable: true,
       }),
     ),
     list: vi.fn(() => Promise.resolve([])),
+    listPinnedTaskIds: vi.fn(() => Promise.resolve([])),
     readProjectDefaults: vi.fn(() => Promise.resolve(undefined)),
     readTaskSettings: vi.fn(() => Promise.resolve(undefined)),
     read: vi.fn(() => Promise.resolve(undefined)),
     register: vi.fn(),
     writeProjectDefaults: vi.fn((_projectId, settings) => Promise.resolve(settings)),
+    writeTaskPinned: vi.fn((_projectId, _taskId, pinned) => Promise.resolve(pinned)),
     writeTaskSettings: vi.fn((_projectId, _taskId, settings) => Promise.resolve(settings)),
   };
   const dependencies: CliDependencies = {
@@ -164,7 +168,7 @@ describe("runCli", () => {
       "/custom/home/code-agent/state.sqlite3",
     );
     expect(harness.stdout.join("")).toContain("[ok] SQLite writable");
-    expect(harness.stdout.join("")).toContain("[ok] SQLite migration 1");
+    expect(harness.stdout.join("")).toContain("[ok] SQLite migration 2");
     expect(harness.stdout.join("")).toContain("[ok] SQLite integrity_check ok");
     expect(harness.stdout.join("")).toContain("[ok] SQLite journal_mode wal");
     expect(harness.databaseClose).toHaveBeenCalledOnce();
@@ -215,6 +219,7 @@ describe("runCli", () => {
       selectProjectDirectory: harness.dependencies.selectProjectDirectory,
       settingsRepository: harness.stateRepository,
       staticRoot: "/package/dist/web",
+      taskMetadataRepository: harness.stateRepository,
     });
     expect(harness.dependencies.createStateRepository).toHaveBeenCalledWith(
       "/custom/home/code-agent/state.sqlite3",

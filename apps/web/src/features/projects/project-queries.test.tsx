@@ -14,6 +14,8 @@ import {
   projectsQueryOptions,
   taskSnapshotQueryOptions,
   taskSettingsMutationOptions,
+  removeProjectTaskFromPage,
+  replaceProjectTaskInPage,
   upsertProjectTaskPage,
 } from "./project-queries.js";
 
@@ -107,6 +109,20 @@ describe("project queries", () => {
 
     expect(insertedPage.data).toEqual([createdTask, task]);
     expect(refreshedPage.data).toEqual([materializedTask, task]);
+  });
+
+  it("replaces and removes task metadata without changing sibling order", () => {
+    const sibling = { ...task, id: "task-2", title: "Sibling" };
+    const page = { data: [task, sibling], nextCursor: null };
+
+    expect(replaceProjectTaskInPage(page, { ...task, pinned: true })).toEqual({
+      data: [{ ...task, pinned: true }, sibling],
+      nextCursor: null,
+    });
+    expect(removeProjectTaskFromPage(page, task.id)).toEqual({
+      data: [sibling],
+      nextCursor: null,
+    });
   });
 
   it("polls Git status only while the current task is running", async () => {

@@ -16,6 +16,7 @@
 - `thread/start` 返回的新 Task 在首条用户消息前可能尚未 materialize；此时 `thread/read(includeTurns: true)` 的明确未 materialize 错误必须映射为该已知 Task 的空闲空快照，未知 Task 和其他 RPC 错误不得被吞掉。
 - Provider 对已成功 `thread/start` 的 Task 必须提供进程内 read-your-writes：在 Codex 原生 `thread/list` 首次返回该 Task 前，将本地未 materialize Task 合并到首个列表页；只有原生列表接管后才能移除该列表回退，`turn/start` 或 `thread/read` 成功不能提前造成列表不可见窗口。
 - Task 命令通过受控 Provider 方法映射：代码审查使用 `review/start`，上下文压缩使用 `thread/compact/start`，新任务续接使用 `thread/fork`，任务反馈使用 `feedback/upload`；每个动作都必须先验证 Task 属于当前 Project，并校验响应中的 Thread ID。
+- Task 重命名固定映射 `thread/name/set`，归档固定映射 `thread/archive`，两者都必须先验证 Task 属于当前 Project；固定状态不是 Codex 原生能力，由 CodeAgent 本地 Task 元数据持久化。
 - 模型列表只通过分页 `model/list` 获取，过滤隐藏模型并保留默认模型、默认思考量和可用思考量；`turn/start` 明确映射文本、受控图片 Data URL、`model`、`effort` 和 `approvalPolicy`。
 - `thread/tokenUsage/updated` 只使用最近一轮 `last.totalTokens` 计算当前上下文占用，并连同 `modelContextWindow` 写入实时事件和后续 Snapshot；不得使用累计 `total.totalTokens` 冒充当前上下文。
 - `turn/interrupt` 响应只确认中断请求已接收；`turn/completed` 的 `interrupted` 状态才是 Turn 终态，Server 和 Web 不得提前伪造完成状态。
@@ -31,6 +32,7 @@
 - 数据库使用版本化 Migration、`STRICT` 表、显式 SQL、Prepared Statement 和事务，并固定启用 WAL、外键、NORMAL synchronous 与 5000ms busy timeout。
 - 所有同步 SQLite 操作都放入专用 `worker_threads` Worker，Fastify 主事件循环只通过 Core Repository 端口异步调用。
 - Project defaults 只保存模型与思考量；新 Task 审批固定从 `on-request` 开始。Task settings 保存完整审批、模型和思考量，并在调用 Provider 前按实时模型目录校验和 upsert。
+- `task_metadata` 只保存 Project 作用域的 Task 固定状态；Task 列表与 Snapshot 在 Server 交付边界合并该状态，不修改 Codex Thread 内容。
 - Provider 模型目录、`allow_for_session` 和可操作 Pending Approval 不得持久化；进程重启后不得恢复可操作 `pending`。
 - WebSocket 客户端使用独立有界队列，慢客户端不能阻塞 Provider。
 - 每个 Project 创建独立 Event Stream Session，由 Server 分配单调 `sequence` 并维护固定容量缓存；Provider 不分配传输序号。

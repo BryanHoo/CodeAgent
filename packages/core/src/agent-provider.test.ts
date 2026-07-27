@@ -6,6 +6,9 @@ describe("AgentProvider", () => {
   it("defines provider-independent read and mutation contracts", async () => {
     const listeners = new Set<(event: AgentProviderEvent) => void>();
     const provider: AgentProvider = {
+      archiveTask() {
+        return Promise.resolve();
+      },
       getCapabilities() {
         return Promise.resolve({
           feedback: { upload: true },
@@ -47,6 +50,9 @@ describe("AgentProvider", () => {
       },
       readTask() {
         return Promise.resolve(undefined);
+      },
+      renameTask() {
+        return Promise.resolve();
       },
       rollbackLatestTurn(taskId) {
         expect(taskId).toBe("task-1");

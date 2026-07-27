@@ -17,6 +17,7 @@
 - Task Snapshot 必须保留归一化的 Turn 与 Tool 错误；Command Output 最多保留最新 `10,000` 行或 `1 MiB`，并携带截断状态。
 - Project 源文件预览必须返回 Project 相对路径、文本内容和截断状态；Server 必须解析真实路径并拒绝越界路径、越界符号链接、目录和二进制文件，单次预览最多读取 `256 KiB`、最多返回 `4,000` 行。
 - Agent 写入必须由 Protocol 提供结构化 `AgentPromptInput`、Task/Turn Mutation 请求响应、能力和错误 Schema；Client 与 Server 都必须执行运行时校验。
+- Task 固定、重命名和归档必须使用独立的严格 Mutation Schema 并携带 `Idempotency-Key`；Server 校验 `projectId + taskId` 归属后，固定写本地元数据，重命名和归档调用 Provider 端口。
 - 模型目录使用统一 `AgentModelPage` 并保留每个模型的默认与可用思考量；图片上传返回不含 Data URL 和本地路径的 `AgentAttachment`，Turn 只接收附件 ID、`AgentApprovalPolicy`、非空模型 ID 和该模型支持的思考量。
 - `AgentTaskSettings` 必须是审批、模型和思考量的严格完整对象，Task Snapshot 直接返回 Server 校验后的有效设置；Project defaults 只包含模型和思考量。完整设置更新使用原子 `PUT`，Client 必须对所有设置响应执行 Protocol Schema 校验。
 - Provider 模型目录是设置有效性的唯一真相源，持久层只保存 ID；新 Task 只继承 Project 模型默认值，审批固定初始化为 `on-request`，会话级授权和 Pending Request 不得进入长期设置。

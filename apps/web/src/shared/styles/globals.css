@@ -416,6 +416,34 @@ a {
   overflow: hidden;
 }
 
+/* Task 行始终保留操作位，hover/focus 只切换内容，避免标题和列表宽度抖动。 */
+.task-actions {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.group:hover > .task-actions,
+.group:focus-within > .task-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.group:hover .task-age,
+.group:focus-within .task-age {
+  visibility: hidden;
+}
+
+@media (hover: none) {
+  .task-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .task-age {
+    visibility: hidden;
+  }
+}
+
 .workbench-shell[data-sidebar-open="false"] .workbench-sidebar,
 .workbench-shell[data-inspector-open="false"] .workbench-inspector {
   visibility: hidden;

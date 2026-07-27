@@ -1,6 +1,7 @@
 import {
   AgentCapabilitiesSchema,
   AddProjectResponseSchema,
+  ArchiveAgentTaskResponseSchema,
   CompactAgentTaskResponseSchema,
   ForkAgentTaskResponseSchema,
   AgentAttachmentUploadResponseSchema,
@@ -15,7 +16,9 @@ import {
   ProjectPageSchema,
   ProjectGitStatusSchema,
   ProjectSourceFileSchema,
+  PinAgentTaskResponseSchema,
   ReviewAgentTaskResponseSchema,
+  RenameAgentTaskResponseSchema,
   RollbackAgentTurnResponseSchema,
   ResolvePendingRequestResponseSchema,
   StartAgentTaskResponseSchema,
@@ -23,6 +26,7 @@ import {
   UploadAgentFeedbackResponseSchema,
   type AgentCapabilities,
   type AddProjectResponse,
+  type ArchiveAgentTaskResponse,
   type CompactAgentTaskResponse,
   type ForkAgentTaskResponse,
   type AgentAttachmentUploadRequest,
@@ -42,8 +46,10 @@ import {
   type ProjectPage,
   type ProjectGitStatus,
   type ProjectSourceFile,
+  type PinAgentTaskResponse,
   type ReviewAgentTaskRequest,
   type ReviewAgentTaskResponse,
+  type RenameAgentTaskResponse,
   type RollbackAgentTurnResponse,
   type PendingRequest,
   type ResolvePendingRequestRequest,
@@ -238,6 +244,48 @@ export class CodeAgentClient {
       `/v1/projects/${encodeURIComponent(projectId)}/tasks`,
       {},
       StartAgentTaskResponseSchema,
+      options,
+    );
+  }
+
+  public async pinTask(
+    projectId: string,
+    taskId: string,
+    pinned: boolean,
+    options: MutationOptions = {},
+  ): Promise<PinAgentTaskResponse> {
+    return this.#mutation(
+      `${taskPath(projectId, taskId)}/pin`,
+      { pinned },
+      PinAgentTaskResponseSchema,
+      options,
+      "PUT",
+    );
+  }
+
+  public async renameTask(
+    projectId: string,
+    taskId: string,
+    title: string,
+    options: MutationOptions = {},
+  ): Promise<RenameAgentTaskResponse> {
+    return this.#mutation(
+      `${taskPath(projectId, taskId)}/rename`,
+      { title },
+      RenameAgentTaskResponseSchema,
+      options,
+    );
+  }
+
+  public async archiveTask(
+    projectId: string,
+    taskId: string,
+    options: MutationOptions = {},
+  ): Promise<ArchiveAgentTaskResponse> {
+    return this.#mutation(
+      `${taskPath(projectId, taskId)}/archive`,
+      {},
+      ArchiveAgentTaskResponseSchema,
       options,
     );
   }

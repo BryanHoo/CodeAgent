@@ -1,9 +1,14 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { AgentEventConnectionState } from "@code-agent/client";
+import type { AgentTask, AgentTaskPage } from "@code-agent/protocol";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  Archive,
+  Ellipsis,
   Folder,
   LoaderCircle,
   PanelLeftClose,
+  Pencil,
   Pin,
   Plus,
   Search,
@@ -12,15 +17,32 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
-import { formatTaskAge, getPinnedTasks } from "../../projects/project-data.js";
+import {
+  formatTaskAge,
+  getPinnedTasks,
+  getProjectTaskPreview,
+  PROJECT_TASK_PREVIEW_LIMIT,
+} from "../../projects/project-data.js";
 import { useProjects } from "../../projects/project-context.js";
+import {
+  removeProjectTaskFromPage,
+  replaceProjectTaskInPage,
+  taskArchiveMutationOptions,
+  taskPinMutationOptions,
+  taskRenameMutationOptions,
+} from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 
 const primaryActionClassName =
   "flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small font-medium text-foreground transition-colors hover:bg-control-hover";
 const primaryActionIconClassName = "size-4 shrink-0 text-muted-foreground";
+const taskActionMenuGap = 2;
+const taskActionMenuHeight = 104;
+const taskActionMenuWidth = 128;
+const taskActionMenuViewportPadding = 8;
 
 type ProjectSidebarProps = Readonly<{
   connectionState: AgentEventConnectionState;
@@ -77,6 +99,7 @@ export function ProjectSidebar({
   const {
     addProject,
     addProjectError,
+    client,
     error,
     isPending,
     isProjectPickerOpen,
@@ -85,11 +108,20 @@ export function ProjectSidebar({
     tasks,
   } = useProjects();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
   const [expandedProjects, setExpandedProjects] = useState<ReadonlySet<string>>(
     () => new Set(projects.map((project) => project.id)),
   );
   const [query, setQuery] = useState("");
+  const [expandedTaskProjects, setExpandedTaskProjects] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [renamingTask, setRenamingTask] = useState<AgentTask | null>(null);
+  const [taskActionError, setTaskActionError] = useState<string | null>(null);
+  const pinMutation = useMutation(taskPinMutationOptions(client));
+  const renameMutation = useMutation(taskRenameMutationOptions(client));
+  const archiveMutation = useMutation(taskArchiveMutationOptions(client));
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const visibleTasks = useMemo(
     () =>
@@ -102,6 +134,8 @@ export function ProjectSidebar({
   const hasPendingTasks = [...projectTaskStates.values()].some((state) => state.isPending);
   const hasTaskError = [...projectTaskStates.values()].some((state) => state.error !== null);
   const firstProject = projects[0];
+  const taskActionPending =
+    pinMutation.isPending || renameMutation.isPending || archiveMutation.isPending;
 
   useEffect(() => {
     // Projects 异步到达后默认展开新项目，保留用户已手动设置的现有项目状态。
@@ -148,6 +182,58 @@ export function ProjectSidebar({
       return next;
     });
     await navigate({ params: { projectId: targetProjectId }, to: "/p/$projectId" });
+  };
+
+  const replaceTaskCache = (task: AgentTask) => {
+    // Mutation 成功后原位更新对应 Project，避免任务跳到列表顶部或等待 Provider 最终一致。
+    queryClient.setQueryData<AgentTaskPage>(["projects", task.projectId, "tasks"], (currentPage) =>
+      replaceProjectTaskInPage(currentPage, task),
+    );
+  };
+
+  const pinTask = async (task: AgentTask) => {
+    setTaskActionError(null);
+    try {
+      const response = await pinMutation.mutateAsync({
+        pinned: !task.pinned,
+        projectId: task.projectId,
+        taskId: task.id,
+      });
+      replaceTaskCache(response.task);
+    } catch {
+      setTaskActionError("无法更新固定状态");
+    }
+  };
+
+  const renameTask = async (task: AgentTask, title: string) => {
+    setTaskActionError(null);
+    try {
+      const response = await renameMutation.mutateAsync({
+        projectId: task.projectId,
+        taskId: task.id,
+        title,
+      });
+      replaceTaskCache(response.task);
+      setRenamingTask(null);
+    } catch {
+      setTaskActionError("无法重命名任务");
+    }
+  };
+
+  const archiveTask = async (task: AgentTask) => {
+    setTaskActionError(null);
+    try {
+      await archiveMutation.mutateAsync({ projectId: task.projectId, taskId: task.id });
+      queryClient.setQueryData<AgentTaskPage>(
+        ["projects", task.projectId, "tasks"],
+        (currentPage) => removeProjectTaskFromPage(currentPage, task.id),
+      );
+      if (task.projectId === projectId && task.id === taskId) {
+        await navigate({ params: { projectId: task.projectId }, to: "/p/$projectId" });
+      }
+    } catch {
+      setTaskActionError("无法归档任务");
+    }
   };
 
   return (
@@ -212,9 +298,13 @@ export function ProjectSidebar({
         )}
       </nav>
 
-      <div className="min-h-0 overflow-y-auto px-2 pb-3 pt-5">
+      {/* 限制项目区的固有宽度，长 Task 标题不能把右侧操作按钮推出 Sidebar。 */}
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden px-2 pt-5">
         {pinnedTasks.length > 0 ? (
-          <section className="mb-6" aria-labelledby="pinned-title">
+          <section
+            className="mb-4 max-h-40 shrink-0 overflow-y-auto"
+            aria-labelledby="pinned-title"
+          >
             <h2
               className="px-2 pb-2 text-meta font-semibold text-muted-foreground"
               id="pinned-title"
@@ -227,6 +317,10 @@ export function ProjectSidebar({
                   active={task.projectId === projectId && task.id === taskId}
                   icon={<Pin className="size-3.5" aria-hidden="true" />}
                   key={`${task.projectId}:${task.id}`}
+                  isActionPending={taskActionPending}
+                  onArchive={(task) => void archiveTask(task)}
+                  onPin={(task) => void pinTask(task)}
+                  onRename={setRenamingTask}
                   task={task}
                 />
               ))}
@@ -234,9 +328,9 @@ export function ProjectSidebar({
           </section>
         ) : null}
 
-        <section aria-labelledby="projects-title">
-          <div className="mb-2 flex h-7 w-full items-center justify-between pl-2">
-            <h2 className="text-meta font-semibold text-muted-foreground" id="projects-title">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-labelledby="projects-title">
+          <div className="flex h-8 min-w-0 w-full shrink-0 items-center justify-between pl-2">
+            <h2 className="text-body-small font-semibold text-foreground" id="projects-title">
               Projects
             </h2>
             <IconButton
@@ -266,14 +360,27 @@ export function ProjectSidebar({
               无法添加项目
             </p>
           )}
+          {taskActionError === null ? null : (
+            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
+              {taskActionError}
+            </p>
+          )}
 
-          <div className="space-y-4">
+          <div
+            className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-3"
+            data-testid="project-tree-scroll"
+          >
             {projects.map((project) => {
               const projectTasks = visibleTasks.filter((task) => task.projectId === project.id);
               const expanded = expandedProjects.has(project.id);
+              const showAllTasks = expandedTaskProjects.has(project.id);
+              const taskPreview = getProjectTaskPreview(projectTasks, showAllTasks);
+              const showTaskToggle =
+                taskPreview.hasMore ||
+                (showAllTasks && projectTasks.length > PROJECT_TASK_PREVIEW_LIMIT);
 
               return (
-                <div key={project.id}>
+                <div className="min-w-0" key={project.id}>
                   <div className="flex min-w-0 items-center gap-0.5">
                     <button
                       aria-expanded={expanded}
@@ -299,17 +406,41 @@ export function ProjectSidebar({
                   </div>
 
                   {expanded ? (
-                    <div className="mt-0.5 space-y-0.5 pl-5">
+                    <div className="mt-0.5 min-w-0 space-y-0.5 pl-5">
                       {project.id === projectId && taskId === undefined ? (
                         <NewTaskLink projectId={project.id} />
                       ) : null}
-                      {projectTasks.map((task) => (
+                      {taskPreview.tasks.map((task) => (
                         <TaskLink
                           active={project.id === projectId && task.id === taskId}
+                          isActionPending={taskActionPending}
                           key={`${task.projectId}:${task.id}`}
+                          onArchive={(task) => void archiveTask(task)}
+                          onPin={(task) => void pinTask(task)}
+                          onRename={setRenamingTask}
                           task={task}
                         />
                       ))}
+                      {showTaskToggle ? (
+                        <button
+                          aria-expanded={showAllTasks}
+                          className="flex h-7 w-full items-center rounded-control px-2 text-left text-meta font-medium text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+                          onClick={() => {
+                            setExpandedTaskProjects((current) => {
+                              const next = new Set(current);
+                              if (showAllTasks) {
+                                next.delete(project.id);
+                              } else {
+                                next.add(project.id);
+                              }
+                              return next;
+                            });
+                          }}
+                          type="button"
+                        >
+                          {showAllTasks ? "收起" : "显示更多"}
+                        </button>
+                      ) : null}
                       {projectTasks.length === 0 && normalizedQuery.length === 0 ? (
                         <p className="px-2 py-1.5 text-meta text-subtle-foreground">暂无任务</p>
                       ) : null}
@@ -321,6 +452,18 @@ export function ProjectSidebar({
           </div>
         </section>
       </div>
+
+      {renamingTask === null ? null : (
+        <TaskRenameDialog
+          isPending={renameMutation.isPending}
+          key={renamingTask.id}
+          onClose={() => {
+            setRenamingTask(null);
+          }}
+          onRename={(title) => void renameTask(renamingTask, title)}
+          task={renamingTask}
+        />
+      )}
 
       <div className="p-2">
         <Link
@@ -375,26 +518,298 @@ function ProjectSidebarConnectionIcon({
 type TaskLinkProps = Readonly<{
   active: boolean;
   icon?: React.ReactNode;
-  task: ReturnType<typeof getPinnedTasks>[number];
+  isActionPending: boolean;
+  onArchive: (task: AgentTask) => void;
+  onPin: (task: AgentTask) => void;
+  onRename: (task: AgentTask) => void;
+  task: AgentTask;
 }>;
 
-function TaskLink({ active, icon, task }: TaskLinkProps) {
+function TaskLink({
+  active,
+  icon,
+  isActionPending,
+  onArchive,
+  onPin,
+  onRename,
+  task,
+}: TaskLinkProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<Readonly<{ left: number; top: number }>>();
+  const menuContainerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const updateMenuPosition = useCallback(() => {
+    const container = menuContainerRef.current;
+    const trigger = triggerRef.current;
+    if (container === null || trigger === null) {
+      return;
+    }
+    const triggerRect = trigger.getBoundingClientRect();
+    const maximumLeft = Math.max(
+      taskActionMenuViewportPadding,
+      window.innerWidth - taskActionMenuWidth - taskActionMenuViewportPadding,
+    );
+    const belowTop = triggerRect.bottom + taskActionMenuGap;
+    const maximumTop = window.innerHeight - taskActionMenuHeight - taskActionMenuViewportPadding;
+
+    // 菜单左边缘与省略号按钮对齐，并在靠近视口底部时翻转到行上方。
+    setMenuPosition({
+      left: Math.min(Math.max(triggerRect.left, taskActionMenuViewportPadding), maximumLeft),
+      top:
+        belowTop <= maximumTop
+          ? belowTop
+          : Math.max(
+              taskActionMenuViewportPadding,
+              triggerRect.top - taskActionMenuHeight - taskActionMenuGap,
+            ),
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) {
+      setMenuPosition(undefined);
+      return;
+    }
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [menuOpen, updateMenuPosition]);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (
+        !menuContainerRef.current?.contains(event.target as Node) &&
+        !menuRef.current?.contains(event.target as Node)
+      ) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [menuOpen]);
+
   return (
-    <Link
-      aria-current={active ? "page" : undefined}
-      className={`flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-body-small transition-colors ${
-        active
-          ? "bg-control-active font-medium text-foreground"
-          : "text-muted-foreground hover:bg-control-hover hover:text-foreground"
-      }`}
-      params={{ projectId: task.projectId, taskId: task.id }}
-      to="/p/$projectId/t/$taskId"
+    <div
+      className="group relative min-w-0"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && menuOpen) {
+          event.preventDefault();
+          setMenuOpen(false);
+          triggerRef.current?.focus();
+        }
+      }}
+      ref={menuContainerRef}
     >
-      {icon === undefined ? null : <span className="shrink-0 text-subtle-foreground">{icon}</span>}
-      <span className="min-w-0 flex-1 truncate">{task.title}</span>
-      <span className="shrink-0 text-caption text-subtle-foreground">
-        {formatTaskAge(task.updatedAt)}
-      </span>
-    </Link>
+      <Link
+        aria-current={active ? "page" : undefined}
+        className={`flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-body-small transition-colors ${
+          active
+            ? "bg-control-active font-medium text-foreground"
+            : "text-muted-foreground hover:bg-control-hover hover:text-foreground"
+        }`}
+        params={{ projectId: task.projectId, taskId: task.id }}
+        to="/p/$projectId/t/$taskId"
+      >
+        {icon === undefined ? null : (
+          <span className="shrink-0 text-subtle-foreground">{icon}</span>
+        )}
+        <span className="min-w-0 flex-1 truncate">{task.title}</span>
+        <span className="task-age ml-auto shrink-0 text-caption text-subtle-foreground">
+          {formatTaskAge(task.updatedAt)}
+        </span>
+      </Link>
+      <button
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
+        aria-label={`打开 ${task.title} 的操作菜单`}
+        className="task-actions absolute right-1 top-1 grid size-6 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:opacity-100 focus-visible:shadow-focus"
+        disabled={isActionPending}
+        onClick={() => {
+          setMenuOpen((open) => !open);
+        }}
+        ref={triggerRef}
+        type="button"
+      >
+        <Ellipsis className="size-4" aria-hidden="true" />
+      </button>
+      {menuOpen && menuPosition !== undefined && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed z-50"
+              ref={menuRef}
+              style={{ left: menuPosition.left, top: menuPosition.top }}
+            >
+              <TaskActionMenu
+                isPending={isActionPending}
+                onArchive={() => {
+                  setMenuOpen(false);
+                  onArchive(task);
+                }}
+                onPin={() => {
+                  setMenuOpen(false);
+                  onPin(task);
+                }}
+                onRename={() => {
+                  setMenuOpen(false);
+                  onRename(task);
+                }}
+                task={task}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
+type TaskActionMenuProps = Readonly<{
+  isPending: boolean;
+  onArchive: () => void;
+  onPin: () => void;
+  onRename: () => void;
+  task: AgentTask;
+}>;
+
+const taskActionClassName =
+  "flex h-8 w-full items-center gap-2 rounded-control px-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover disabled:opacity-50";
+
+export function TaskActionMenu({
+  isPending,
+  onArchive,
+  onPin,
+  onRename,
+  task,
+}: TaskActionMenuProps) {
+  return (
+    <div
+      aria-label={`${task.title} 的任务操作`}
+      className="w-32 rounded-surface bg-raised p-1 shadow-floating"
+      role="menu"
+    >
+      <button
+        className={taskActionClassName}
+        disabled={isPending}
+        onClick={onPin}
+        role="menuitem"
+        type="button"
+      >
+        <Pin className="size-3.5" aria-hidden="true" />
+        {task.pinned ? "取消固定" : "固定"}
+      </button>
+      <button
+        className={taskActionClassName}
+        disabled={isPending}
+        onClick={onRename}
+        role="menuitem"
+        type="button"
+      >
+        <Pencil className="size-3.5" aria-hidden="true" />
+        重命名
+      </button>
+      <button
+        className={`${taskActionClassName} text-danger`}
+        disabled={isPending}
+        onClick={onArchive}
+        role="menuitem"
+        type="button"
+      >
+        <Archive className="size-3.5" aria-hidden="true" />
+        归档
+      </button>
+    </div>
+  );
+}
+
+type TaskRenameDialogProps = Readonly<{
+  isPending: boolean;
+  onClose: () => void;
+  onRename: (title: string) => void;
+  task: AgentTask;
+}>;
+
+function TaskRenameDialog({ isPending, onClose, onRename, task }: TaskRenameDialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [title, setTitle] = useState(task.title);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog !== null && !dialog.open) {
+      // 原生 dialog 负责焦点圈定和 Escape，避免侧栏弹层泄漏键盘焦点。
+      dialog.showModal();
+    }
+  }, []);
+
+  return (
+    <dialog
+      aria-labelledby="task-rename-title"
+      className="m-auto w-[min(90vw,24rem)] max-w-none rounded-surface bg-raised p-0 text-foreground shadow-panel backdrop:bg-scrim"
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!isPending) {
+          onClose();
+        }
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !isPending) {
+          onClose();
+        }
+      }}
+      ref={dialogRef}
+    >
+      <form
+        className="p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const normalizedTitle = title.trim();
+          if (normalizedTitle.length > 0) {
+            onRename(normalizedTitle);
+          }
+        }}
+      >
+        <h2 className="text-heading font-semibold" id="task-rename-title">
+          重命名任务
+        </h2>
+        <input
+          aria-label="任务名称"
+          autoFocus
+          className="mt-3 h-9 w-full rounded-control bg-control px-3 text-body text-foreground outline-none focus:shadow-focus"
+          disabled={isPending}
+          maxLength={200}
+          onChange={(event) => {
+            setTitle(event.currentTarget.value);
+          }}
+          value={title}
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            className="h-8 rounded-control px-3 text-body-small text-muted-foreground hover:bg-control-hover hover:text-foreground"
+            disabled={isPending}
+            onClick={onClose}
+            type="button"
+          >
+            取消
+          </button>
+          <button
+            className="h-8 rounded-control bg-accent px-3 text-body-small font-medium text-white hover:bg-accent-strong disabled:opacity-50"
+            disabled={isPending || title.trim().length === 0}
+            type="submit"
+          >
+            保存
+          </button>
+        </div>
+      </form>
+    </dialog>
   );
 }

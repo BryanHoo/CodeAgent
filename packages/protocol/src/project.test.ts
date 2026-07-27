@@ -16,6 +16,8 @@ import {
   AgentTaskSettingsResponseSchema,
   AgentTaskSettingsSchema,
   AddProjectResponseSchema,
+  ArchiveAgentTaskRequestSchema,
+  ArchiveAgentTaskResponseSchema,
   AgentTaskSnapshotSchema,
   InterruptAgentTurnRequestSchema,
   InterruptAgentTurnResponseSchema,
@@ -29,12 +31,16 @@ import {
   ProjectGitStatusSchema,
   ProjectSourceFileSchema,
   ProjectSchema,
+  PinAgentTaskRequestSchema,
+  PinAgentTaskResponseSchema,
   CompactAgentTaskRequestSchema,
   CompactAgentTaskResponseSchema,
   ForkAgentTaskRequestSchema,
   ForkAgentTaskResponseSchema,
   ReviewAgentTaskRequestSchema,
   ReviewAgentTaskResponseSchema,
+  RenameAgentTaskRequestSchema,
+  RenameAgentTaskResponseSchema,
   UploadAgentFeedbackRequestSchema,
   UploadAgentFeedbackResponseSchema,
   RollbackAgentTurnRequestSchema,
@@ -449,6 +455,20 @@ describe("project protocol", () => {
     ).toBe(true);
     expect(Value.Check(ForkAgentTaskRequestSchema, {})).toBe(true);
     expect(Value.Check(ForkAgentTaskResponseSchema, { task })).toBe(true);
+    expect(Value.Check(PinAgentTaskRequestSchema, { pinned: true })).toBe(true);
+    expect(Value.Check(PinAgentTaskRequestSchema, { pinned: true, taskId: "task-2" })).toBe(false);
+    expect(Value.Check(PinAgentTaskResponseSchema, { task: { ...task, pinned: true } })).toBe(true);
+    expect(Value.Check(RenameAgentTaskRequestSchema, { title: "重命名任务" })).toBe(true);
+    expect(Value.Check(RenameAgentTaskRequestSchema, { title: "   " })).toBe(false);
+    expect(Value.Check(RenameAgentTaskRequestSchema, { title: "" })).toBe(false);
+    expect(
+      Value.Check(RenameAgentTaskResponseSchema, { task: { ...task, title: "重命名任务" } }),
+    ).toBe(true);
+    expect(Value.Check(ArchiveAgentTaskRequestSchema, {})).toBe(true);
+    expect(Value.Check(ArchiveAgentTaskRequestSchema, { permanent: true })).toBe(false);
+    expect(
+      Value.Check(ArchiveAgentTaskResponseSchema, { status: "archived", taskId: "task-2" }),
+    ).toBe(true);
     expect(
       Value.Check(UploadAgentFeedbackRequestSchema, {
         classification: "other",

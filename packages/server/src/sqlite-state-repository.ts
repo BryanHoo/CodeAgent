@@ -65,6 +65,19 @@ const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     `,
     version: 1,
   },
+  {
+    name: "create_task_metadata",
+    sql: `
+      CREATE TABLE task_metadata (
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        task_id TEXT NOT NULL,
+        pinned INTEGER NOT NULL CHECK (pinned IN (0, 1)),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (project_id, task_id)
+      ) STRICT;
+    `,
+    version: 2,
+  },
 ];
 
 type WorkerResponse =
@@ -256,6 +269,10 @@ export class SqliteStateRepository implements ProjectRepository, AgentSettingsRe
     return this.#call("readTaskSettings", { projectId, taskId });
   }
 
+  public listPinnedTaskIds(projectId: string): Promise<readonly string[]> {
+    return this.#call("listPinnedTaskIds", { projectId });
+  }
+
   public writeProjectDefaults(
     projectId: string,
     settings: AgentProjectDefaults,
@@ -275,6 +292,15 @@ export class SqliteStateRepository implements ProjectRepository, AgentSettingsRe
     return this.#call("writeTaskSettings", {
       projectId,
       settings,
+      taskId,
+      updatedAt: this.#now().toISOString(),
+    });
+  }
+
+  public writeTaskPinned(projectId: string, taskId: string, pinned: boolean): Promise<boolean> {
+    return this.#call("writeTaskPinned", {
+      pinned,
+      projectId,
       taskId,
       updatedAt: this.#now().toISOString(),
     });

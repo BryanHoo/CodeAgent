@@ -59,6 +59,7 @@ export class PendingRequestResolutionError extends Error {
 
 // Core 只声明 Provider 无关能力，具体 RPC、传输顺序与进程生命周期留在外层。
 export interface AgentProvider {
+  archiveTask(taskId: string): Promise<void>;
   compactTask(taskId: string): Promise<void>;
   forkTask(taskId: string): Promise<AgentTask>;
   getCapabilities(): Promise<AgentCapabilities>;
@@ -66,6 +67,7 @@ export interface AgentProvider {
   listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage>;
   // Promise 完成前须让 Snapshot 包含此前状态并同步交付对应通知，使 checkpoint 保持一致。
   readTask(taskId: string): Promise<AgentProviderTaskSnapshot | undefined>;
+  renameTask(taskId: string, title: string): Promise<void>;
   resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest>;
   rollbackLatestTurn(taskId: string): Promise<void>;
   startReview(taskId: string, target: AgentReviewTarget): Promise<AgentTurn>;

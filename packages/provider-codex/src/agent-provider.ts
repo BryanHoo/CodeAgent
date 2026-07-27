@@ -892,6 +892,14 @@ export class CodexAgentProvider implements AgentProvider {
     });
   }
 
+  public async archiveTask(taskId: string): Promise<void> {
+    this.#assertKnownProjectTask(taskId);
+    expectRecord(
+      await this.#client.request("thread/archive", { threadId: taskId }),
+      "thread/archive response",
+    );
+  }
+
   public async compactTask(taskId: string): Promise<void> {
     this.#assertKnownProjectTask(taskId);
     expectRecord(
@@ -913,6 +921,14 @@ export class CodexAgentProvider implements AgentProvider {
     // Fork 成功后立即接受新 Task 的实时通知与后续 Mutation。
     this.#projectTaskIds.add(task.id);
     return task;
+  }
+
+  public async renameTask(taskId: string, title: string): Promise<void> {
+    this.#assertKnownProjectTask(taskId);
+    expectRecord(
+      await this.#client.request("thread/name/set", { name: title, threadId: taskId }),
+      "thread/name/set response",
+    );
   }
 
   public async listModels(): Promise<AgentModelPage> {
@@ -1614,6 +1630,11 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     this.#runtime = runtime;
   }
 
+  public archiveTask(taskId: string): Promise<void> {
+    this.#runtime.assertTaskOwner(this.#project, taskId);
+    return this.#delegate.archiveTask(taskId);
+  }
+
   public compactTask(taskId: string): Promise<void> {
     this.#runtime.assertTaskOwner(this.#project, taskId);
     return this.#delegate.compactTask(taskId);
@@ -1663,6 +1684,11 @@ class CodexRuntimeProjectProvider implements AgentProvider {
       this.#runtime.releaseProvisionalTask(this.#project, taskId);
       throw error;
     }
+  }
+
+  public renameTask(taskId: string, title: string): Promise<void> {
+    this.#runtime.assertTaskOwner(this.#project, taskId);
+    return this.#delegate.renameTask(taskId, title);
   }
 
   public resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest> {

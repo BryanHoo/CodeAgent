@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   deriveProjectSidebarConnectionState,
   getProjectSidebarConnectionStatus,
+  TaskActionMenu,
 } from "./project-sidebar.js";
 
 describe("ProjectSidebar connection status", () => {
@@ -63,5 +65,30 @@ describe("ProjectSidebar connection status", () => {
       label: "Offline",
       toneClassName: "text-danger",
     });
+  });
+});
+
+describe("TaskActionMenu", () => {
+  it("offers pin, rename, and archive commands", () => {
+    const markup = renderToStaticMarkup(
+      <TaskActionMenu
+        isPending={false}
+        onArchive={() => undefined}
+        onPin={() => undefined}
+        onRename={() => undefined}
+        task={{
+          id: "task-1",
+          pinned: false,
+          projectId: "code-agent",
+          title: "结构化历史",
+          updatedAt: "2026-07-23T00:01:00.000Z",
+        }}
+      />,
+    );
+
+    expect(markup).toContain('role="menu"');
+    expect(markup).toContain("固定");
+    expect(markup).toContain("重命名");
+    expect(markup).toContain("归档");
   });
 });

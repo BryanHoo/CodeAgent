@@ -86,6 +86,7 @@ function createProvider() {
     }),
   );
   const compactTask = vi.fn(() => Promise.resolve());
+  const archiveTask = vi.fn(() => Promise.resolve());
   const forkTask = vi.fn(() => Promise.resolve({ ...task, id: "task-2", title: "续接任务" }));
   const listTasks = vi.fn(() => Promise.resolve({ data: [task], nextCursor: "next" }));
   const listModels = vi.fn(() =>
@@ -110,6 +111,7 @@ function createProvider() {
     Promise.resolve({ ...pendingRequest, status: "resolved" as const }),
   );
   const rollbackLatestTurn = vi.fn(() => Promise.resolve());
+  const renameTask = vi.fn(() => Promise.resolve());
   const startTask = vi.fn(() => Promise.resolve(task));
   const startTurn = vi.fn((taskId: string, input: AgentProviderTurnInput) =>
     Promise.resolve({
@@ -134,6 +136,7 @@ function createProvider() {
   );
   const uploadFeedback = vi.fn(() => Promise.resolve());
   const provider: AgentProvider = {
+    archiveTask,
     compactTask,
     forkTask,
     getCapabilities,
@@ -141,6 +144,7 @@ function createProvider() {
     listModels,
     listTasks,
     readTask,
+    renameTask,
     resolvePendingRequest,
     rollbackLatestTurn,
     startTask,
@@ -155,6 +159,7 @@ function createProvider() {
     uploadFeedback,
   };
   return {
+    archiveTask,
     compactTask,
     emitEvent: (event: AgentProviderEvent) => {
       for (const listener of eventListeners) {
@@ -168,6 +173,7 @@ function createProvider() {
     interruptTurn,
     provider,
     readTask,
+    renameTask,
     resolvePendingRequest,
     rollbackLatestTurn,
     startTask,
@@ -175,6 +181,24 @@ function createProvider() {
     startTurn,
     uploadFeedback,
   };
+}
+
+function createTaskMetadataRepository() {
+  const pinnedTaskIds = new Map<string, Set<string>>();
+  const listPinnedTaskIds = vi.fn((projectId: string) =>
+    Promise.resolve([...(pinnedTaskIds.get(projectId) ?? [])]),
+  );
+  const writeTaskPinned = vi.fn((projectId: string, taskId: string, pinned: boolean) => {
+    const current = pinnedTaskIds.get(projectId) ?? new Set<string>();
+    if (pinned) {
+      current.add(taskId);
+    } else {
+      current.delete(taskId);
+    }
+    pinnedTaskIds.set(projectId, current);
+    return Promise.resolve(pinned);
+  });
+  return { listPinnedTaskIds, repository: { listPinnedTaskIds, writeTaskPinned }, writeTaskPinned };
 }
 
 function createSettingsRepository() {
@@ -237,12 +261,14 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
     provider: runtimeProvider,
     selectProjectDirectory: vi.fn(() => Promise.resolve(undefined)),
     settingsRepository: createSettingsRepository().repository,
+    taskMetadataRepository: createTaskMetadataRepository().repository,
     ...overrides,
   };
 }
 
 async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }> = {}) {
   const {
+    archiveTask,
     compactTask,
     emitEvent,
     eventListeners,
@@ -252,6 +278,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     listModels,
     provider,
     readTask,
+    renameTask,
     resolvePendingRequest,
     rollbackLatestTurn,
     startTask,
@@ -260,12 +287,18 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     uploadFeedback,
   } = createProvider();
   const settings = createSettingsRepository();
+  const taskMetadata = createTaskMetadataRepository();
   const app = await createCodeAgentServer(
-    createServerOptions(provider, { ...options, settingsRepository: settings.repository }),
+    createServerOptions(provider, {
+      ...options,
+      settingsRepository: settings.repository,
+      taskMetadataRepository: taskMetadata.repository,
+    }),
   );
   closeCallbacks.push(() => app.close());
   return {
     app,
+    archiveTask,
     compactTask,
     emitEvent,
     eventListeners,
@@ -274,12 +307,14 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     listTasks,
     listModels,
     readTask,
+    renameTask,
     resolvePendingRequest,
     rollbackLatestTurn,
     startTask,
     startReview,
     startTurn,
     ...settings,
+    ...taskMetadata,
     uploadFeedback,
   };
 }
@@ -762,6 +797,41 @@ describe("CodeAgent Server", () => {
     });
   });
 
+  it("pins locally and delegates rename and archive to the Provider", async () => {
+    const { app, archiveTask, renameTask, writeTaskPinned } = await createHarness();
+
+    const pinned = await app.inject({
+      headers: { "idempotency-key": "pin-key" },
+      method: "PUT",
+      payload: { pinned: true },
+      url: "/v1/projects/code-agent/tasks/task-1/pin",
+    });
+    const renamed = await app.inject({
+      headers: { "idempotency-key": "rename-key" },
+      method: "POST",
+      payload: { title: "新的任务名称" },
+      url: "/v1/projects/code-agent/tasks/task-1/rename",
+    });
+    const listed = await app.inject({ method: "GET", url: "/v1/projects/code-agent/tasks" });
+    const archived = await app.inject({
+      headers: { "idempotency-key": "archive-key" },
+      method: "POST",
+      payload: {},
+      url: "/v1/projects/code-agent/tasks/task-1/archive",
+    });
+
+    expect(pinned.statusCode, pinned.body).toBe(200);
+    expect(pinned.json()).toMatchObject({ task: { id: "task-1", pinned: true } });
+    expect(writeTaskPinned).toHaveBeenCalledWith("code-agent", "task-1", true);
+    expect(renamed.statusCode, renamed.body).toBe(200);
+    expect(renamed.json()).toMatchObject({ task: { id: "task-1", title: "新的任务名称" } });
+    expect(renameTask).toHaveBeenCalledWith("task-1", "新的任务名称");
+    expect(listed.json()).toMatchObject({ data: [{ id: "task-1", pinned: true }] });
+    expect(archived.statusCode, archived.body).toBe(200);
+    expect(archived.json()).toEqual({ status: "archived", taskId: "task-1" });
+    expect(archiveTask).toHaveBeenCalledWith("task-1");
+  });
+
   it("isolates idempotent task command results by project", async () => {
     const primary = createProvider();
     const secondary = createProvider();
@@ -796,6 +866,7 @@ describe("CodeAgent Server", () => {
       provider: runtimeProvider,
       selectProjectDirectory: () => Promise.resolve(undefined),
       settingsRepository: createSettingsRepository().repository,
+      taskMetadataRepository: createTaskMetadataRepository().repository,
     });
     closeCallbacks.push(() => app.close());
     const request = {

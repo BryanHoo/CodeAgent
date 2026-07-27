@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import type {
   AgentRuntimeProvider,
   AgentSettingsRepository,
+  AgentTaskMetadataRepository,
   ProjectRepository,
 } from "@code-agent/core";
 import {
@@ -41,7 +42,8 @@ interface CliManagedServer {
   listen: (options: { host: string; port: number }) => Promise<string>;
 }
 
-interface CliManagedStateRepository extends ProjectRepository, AgentSettingsRepository {
+interface CliManagedStateRepository
+  extends ProjectRepository, AgentSettingsRepository, AgentTaskMetadataRepository {
   close: () => Promise<void>;
   diagnose: () => Promise<SqliteDatabaseDiagnostics>;
 }
@@ -56,6 +58,7 @@ interface CreateServerInput {
   selectProjectDirectory: () => Promise<string | undefined>;
   settingsRepository: AgentSettingsRepository;
   staticRoot: string;
+  taskMetadataRepository: AgentTaskMetadataRepository;
 }
 
 export interface CliDependencies {
@@ -296,6 +299,7 @@ async function runStart(
       selectProjectDirectory: dependencies.selectProjectDirectory,
       settingsRepository: stateRepository,
       staticRoot: dependencies.webRoot,
+      taskMetadataRepository: stateRepository,
     });
     const url = await server.listen({ host: "127.0.0.1", port: 3210 });
     stdout(`CodeAgent started at ${url} (Codex pid ${String(runtime.pid ?? "unknown")})\n`);

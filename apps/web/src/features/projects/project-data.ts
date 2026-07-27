@@ -1,7 +1,16 @@
 import type { AgentTask } from "@code-agent/protocol";
 
+export const PROJECT_TASK_PREVIEW_LIMIT = 5;
+
 export function getPinnedTasks(tasks: readonly AgentTask[]) {
   return tasks.filter((task) => task.pinned);
+}
+
+export function getProjectTaskPreview(tasks: readonly AgentTask[], expanded: boolean) {
+  if (expanded || tasks.length <= PROJECT_TASK_PREVIEW_LIMIT) {
+    return { hasMore: false, tasks } as const;
+  }
+  return { hasMore: true, tasks: tasks.slice(0, PROJECT_TASK_PREVIEW_LIMIT) } as const;
 }
 
 export function formatTaskAge(updatedAt: string) {

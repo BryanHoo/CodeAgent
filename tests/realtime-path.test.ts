@@ -34,6 +34,7 @@ const servers: Awaited<ReturnType<typeof createCodeAgentServer>>[] = [];
 
 function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvider>) {
   const projectDefaults = new Map();
+  const pinnedTaskIds = new Map<string, Set<string>>();
   const taskSettings = new Map();
 
   return {
@@ -59,6 +60,20 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
       writeTaskSettings: (projectId: string, taskId: string, settings: typeof turnOptions) => {
         taskSettings.set(`${projectId}:${taskId}`, settings);
         return Promise.resolve(settings);
+      },
+    },
+    taskMetadataRepository: {
+      listPinnedTaskIds: (projectId: string) =>
+        Promise.resolve([...(pinnedTaskIds.get(projectId) ?? [])]),
+      writeTaskPinned: (projectId: string, taskId: string, pinned: boolean) => {
+        const current = pinnedTaskIds.get(projectId) ?? new Set<string>();
+        if (pinned) {
+          current.add(taskId);
+        } else {
+          current.delete(taskId);
+        }
+        pinnedTaskIds.set(projectId, current);
+        return Promise.resolve(pinned);
       },
     },
   };
