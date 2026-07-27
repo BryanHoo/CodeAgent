@@ -176,7 +176,7 @@ sequenceDiagram
     U->>W: 提交任务
     W->>S: POST /v1/projects/:projectId/tasks/:taskId/turns
     S->>S: 校验用户和 Project
-    S->>C: turn/start
+    S->>C: turn/start(model, effort, approvalPolicy, sandboxPolicy)
     C-->>S: turn/started
     S-->>W: AgentEvent(turn.started)
     C-->>S: item/agentMessage/delta

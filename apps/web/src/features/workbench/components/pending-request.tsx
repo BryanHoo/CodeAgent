@@ -118,8 +118,6 @@ function ApprovalRequestCard({
       </ConfirmationRequest>
       {request.status === "expired" ? (
         <ConfirmationRejected>请求已过期</ConfirmationRejected>
-      ) : request.status === "resolved" ? (
-        <p className="mt-2 text-label text-muted-foreground">请求已处理</p>
       ) : (
         <>
           {!interactive ? (
@@ -132,7 +130,11 @@ function ApprovalRequestCard({
           )}
           <ConfirmationActions>
             {request.availableDecisions.includes("deny") ? (
-              <ConfirmationAction disabled={!canSubmit} onClick={() => void resolve("deny")}>
+              <ConfirmationAction
+                disabled={!canSubmit}
+                onClick={() => void resolve("deny")}
+                tone="danger"
+              >
                 拒绝
               </ConfirmationAction>
             ) : null}
@@ -146,9 +148,9 @@ function ApprovalRequestCard({
             ) : null}
             {request.availableDecisions.includes("allow") ? (
               <ConfirmationAction
-                className="bg-foreground text-raised hover:opacity-90"
                 disabled={!canSubmit}
                 onClick={() => void resolve("allow")}
+                tone="primary"
               >
                 允许
               </ConfirmationAction>
@@ -311,6 +313,10 @@ function UserInputRequestCard({ interactive, onResolve, request }: PendingReques
 }
 
 export function PendingRequestCard(props: PendingRequestCardProps) {
+  // 已处理请求只保留在运行时快照中用于状态对账，不继续占用会话界面。
+  if (props.request.status === "resolved") {
+    return null;
+  }
   if (props.request.type === "user_input") {
     return <UserInputRequestCard {...props} />;
   }

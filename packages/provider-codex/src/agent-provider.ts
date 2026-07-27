@@ -23,6 +23,7 @@ import type {
   AgentModelPage,
   AgentTurnOptions,
   AgentReviewTarget,
+  AgentSandboxMode,
   PendingApprovalDecision,
   PendingRequest,
   Project,
@@ -81,6 +82,17 @@ type PendingUserInputQuestion = Extract<
   { type: "user_input" }
 >["questions"][number];
 
+type CodexSandboxPolicy =
+  | Readonly<{ type: "dangerFullAccess" }>
+  | Readonly<{ networkAccess: boolean; type: "readOnly" }>
+  | Readonly<{
+      excludeSlashTmp: boolean;
+      excludeTmpdirEnvVar: boolean;
+      networkAccess: boolean;
+      type: "workspaceWrite";
+      writableRoots: readonly string[];
+    }>;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -90,6 +102,33 @@ function expectRecord(value: unknown, context: string): Record<string, unknown> 
     throw new CodexProtocolMappingError(`${context} must be an object`);
   }
   return value;
+}
+
+function mapSandboxMode(value: unknown): AgentSandboxMode {
+  if (value === null) {
+    // Codex 未配置时采用其交互式编码安全默认值。
+    return "workspace-write";
+  }
+  if (value === "read-only" || value === "workspace-write" || value === "danger-full-access") {
+    return value;
+  }
+  throw new CodexProtocolMappingError("config/read sandbox_mode is invalid");
+}
+
+function mapSandboxPolicy(mode: AgentSandboxMode): CodexSandboxPolicy {
+  if (mode === "danger-full-access") {
+    return { type: "dangerFullAccess" };
+  }
+  if (mode === "read-only") {
+    return { networkAccess: false, type: "readOnly" };
+  }
+  return {
+    excludeSlashTmp: false,
+    excludeTmpdirEnvVar: false,
+    networkAccess: false,
+    type: "workspaceWrite",
+    writableRoots: [],
+  };
 }
 
 function expectString(value: unknown, context: string): string {
@@ -947,6 +986,15 @@ export class CodexAgentProvider implements AgentProvider {
     });
   }
 
+  public async readSandboxMode(): Promise<AgentSandboxMode> {
+    const response = expectRecord(
+      await this.#client.request("config/read", { cwd: this.#project.rootPath }),
+      "config/read response",
+    );
+    const config = expectRecord(response["config"], "config/read config");
+    return mapSandboxMode(config["sandbox_mode"]);
+  }
+
   public async archiveTask(taskId: string): Promise<void> {
     this.#assertKnownProjectTask(taskId);
     expectRecord(
@@ -1069,6 +1117,7 @@ export class CodexAgentProvider implements AgentProvider {
         effort: options.reasoningEffort,
         input: codexInput,
         model: options.model,
+        sandboxPolicy: mapSandboxPolicy(options.sandboxMode),
         threadId: taskId,
       }),
       "turn/start response",
@@ -1713,6 +1762,10 @@ class CodexRuntimeProjectProvider implements AgentProvider {
 
   public listModels(): Promise<AgentModelPage> {
     return this.#delegate.listModels();
+  }
+
+  public readSandboxMode(): Promise<AgentSandboxMode> {
+    return this.#delegate.readSandboxMode();
   }
 
   public async listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage> {

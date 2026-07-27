@@ -4,6 +4,7 @@ import type {
   AgentCapabilities,
   AgentModel,
   AgentPromptInput,
+  AgentSandboxMode,
   AgentTask,
   AgentTaskSettings,
   AgentTaskSnapshot,
@@ -445,6 +446,7 @@ export function WorkbenchComposer({
       approvalPolicy: activeSettings.approvalPolicy,
       model: selectedModel.id,
       reasoningEffort: selectedReasoningEffort,
+      sandboxMode: activeSettings.sandboxMode,
     } as const;
     const turnAttempt = resolveIdempotencyAttempt(
       startTurnAttempt.current,
@@ -836,6 +838,24 @@ export function WorkbenchComposer({
                 <option value="untrusted">仅不受信任操作</option>
                 <option value="on-request">按需审批</option>
                 <option value="never">永不询问</option>
+              </PromptInputSelect>
+              <PromptInputSelect
+                aria-label="沙盒模式"
+                disabled={turnControlsDisabled}
+                onChange={(event) => {
+                  updateSettings(
+                    {
+                      ...activeSettings,
+                      sandboxMode: event.currentTarget.value as AgentSandboxMode,
+                    },
+                    "sandboxMode",
+                  );
+                }}
+                value={activeSettings.sandboxMode}
+              >
+                <option value="read-only">只读</option>
+                <option value="workspace-write">工作区可写</option>
+                <option value="danger-full-access">完全访问</option>
               </PromptInputSelect>
             </PromptInputTools>
             <div className="flex min-w-0 items-center gap-1">

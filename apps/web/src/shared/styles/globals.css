@@ -428,8 +428,8 @@ a {
   pointer-events: auto;
 }
 
-.group:hover .task-age,
-.group:focus-within .task-age {
+.group:hover .task-status,
+.group:focus-within .task-status {
   visibility: hidden;
 }
 
@@ -439,7 +439,7 @@ a {
     pointer-events: auto;
   }
 
-  .task-age {
+  .task-status {
     visibility: hidden;
   }
 }

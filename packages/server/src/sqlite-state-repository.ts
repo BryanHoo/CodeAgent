@@ -78,6 +78,18 @@ const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     `,
     version: 2,
   },
+  {
+    name: "add_sandbox_mode_settings",
+    sql: `
+      ALTER TABLE project_defaults
+        ADD COLUMN sandbox_mode TEXT NOT NULL DEFAULT 'workspace-write'
+        CHECK (sandbox_mode IN ('read-only', 'workspace-write', 'danger-full-access'));
+      ALTER TABLE task_settings
+        ADD COLUMN sandbox_mode TEXT NOT NULL DEFAULT 'workspace-write'
+        CHECK (sandbox_mode IN ('read-only', 'workspace-write', 'danger-full-access'));
+    `,
+    version: 3,
+  },
 ];
 
 type WorkerResponse =

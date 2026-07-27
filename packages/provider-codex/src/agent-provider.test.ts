@@ -980,10 +980,33 @@ describe("CodexAgentProvider", () => {
           images: [{ mediaType: "image/png", url: "data:image/jpeg;base64,aW1hZ2U=" }],
           text: "",
         },
-        { approvalPolicy: "on-request", model: "gpt-5.6-sol", reasoningEffort: "high" },
+        {
+          approvalPolicy: "on-request",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+          sandboxMode: "workspace-write",
+        },
       ),
     ).rejects.toThrow("Provider image URL does not match its media type");
     expect(inputRpc.calls).toHaveLength(1);
+  });
+
+  it("reads the project sandbox mode from Codex config", async () => {
+    const rpc = new FakeRpcClient([
+      { config: { sandbox_mode: "read-only" }, layers: null, origins: {} },
+      { config: { sandbox_mode: null }, layers: null, origins: {} },
+      { config: { sandbox_mode: "host-write" }, layers: null, origins: {} },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.readSandboxMode()).resolves.toBe("read-only");
+    await expect(provider.readSandboxMode()).resolves.toBe("workspace-write");
+    await expect(provider.readSandboxMode()).rejects.toThrow("config/read sandbox_mode is invalid");
+    expect(rpc.calls).toEqual([
+      { method: "config/read", params: { cwd: project.rootPath } },
+      { method: "config/read", params: { cwd: project.rootPath } },
+      { method: "config/read", params: { cwd: project.rootPath } },
+    ]);
   });
 
   it("maps task and turn mutations to Codex App Server RPC", async () => {
@@ -1016,7 +1039,12 @@ describe("CodexAgentProvider", () => {
           ],
           text: "实现写入闭环",
         },
-        { approvalPolicy: "untrusted", model: "gpt-5.6-sol", reasoningEffort: "high" },
+        {
+          approvalPolicy: "untrusted",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+          sandboxMode: "workspace-write",
+        },
       ),
     ).resolves.toMatchObject({ id: "turn-1", status: "running" });
     await expect(provider.interruptTurn("task-1", "turn-1")).resolves.toBeUndefined();
@@ -1033,11 +1061,66 @@ describe("CodexAgentProvider", () => {
           ],
           model: "gpt-5.6-sol",
           effort: "high",
+          sandboxPolicy: {
+            excludeSlashTmp: false,
+            excludeTmpdirEnvVar: false,
+            networkAccess: false,
+            type: "workspaceWrite",
+            writableRoots: [],
+          },
           threadId: "task-1",
         },
       },
       { method: "turn/interrupt", params: { threadId: "task-1", turnId: "turn-1" } },
     ]);
+  });
+
+  it("maps restricted and full-access sandbox policies", async () => {
+    const runningTurn = {
+      completedAt: null,
+      durationMs: null,
+      error: null,
+      id: "turn-1",
+      items: [],
+      itemsView: { type: "full" },
+      startedAt: 1_753_228_800,
+      status: "inProgress",
+    };
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      { turn: runningTurn },
+      { turn: { ...runningTurn, id: "turn-2" } },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.startTask();
+
+    await provider.startTurn(
+      "task-1",
+      { images: [], text: "只读检查" },
+      {
+        approvalPolicy: "on-request",
+        model: "gpt-5.6-sol",
+        reasoningEffort: "high",
+        sandboxMode: "read-only",
+      },
+    );
+    await provider.startTurn(
+      "task-1",
+      { images: [], text: "完全访问" },
+      {
+        approvalPolicy: "never",
+        model: "gpt-5.6-sol",
+        reasoningEffort: "high",
+        sandboxMode: "danger-full-access",
+      },
+    );
+
+    expect(rpc.calls[1]).toMatchObject({
+      params: { sandboxPolicy: { networkAccess: false, type: "readOnly" } },
+    });
+    expect(rpc.calls[2]).toMatchObject({
+      params: { sandboxPolicy: { type: "dangerFullAccess" } },
+    });
   });
 
   it("maps task commands to Codex App Server RPC", async () => {

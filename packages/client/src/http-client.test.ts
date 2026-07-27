@@ -19,10 +19,12 @@ const taskSettings = {
   approvalPolicy: "never" as const,
   model: "gpt-5.6-sol",
   reasoningEffort: "high",
+  sandboxMode: "workspace-write" as const,
 };
 const projectDefaults = {
   model: taskSettings.model,
   reasoningEffort: taskSettings.reasoningEffort,
+  sandboxMode: taskSettings.sandboxMode,
 };
 
 const modelPage = {
@@ -289,7 +291,12 @@ describe("CodeAgentClient", () => {
       "code-agent",
       task.id,
       { attachments: [{ id: attachment.id }], text: "继续实现", type: "prompt" },
-      { approvalPolicy: "on-request", model: "gpt-5.6-sol", reasoningEffort: "high" },
+      {
+        approvalPolicy: "on-request",
+        model: "gpt-5.6-sol",
+        reasoningEffort: "high",
+        sandboxMode: "read-only",
+      },
       { idempotencyKey: "turn-key" },
     );
     await client.interruptTurn("code-agent", task.id, runningTurn.id, {
@@ -321,6 +328,7 @@ describe("CodeAgentClient", () => {
           approvalPolicy: "on-request",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
+          sandboxMode: "read-only",
         },
       }),
       method: "POST",

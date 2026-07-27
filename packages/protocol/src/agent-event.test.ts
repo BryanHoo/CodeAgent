@@ -160,6 +160,7 @@ describe("Agent Event v1 protocol", () => {
           approvalPolicy: "on-request",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
+          sandboxMode: "workspace-write",
         },
         status: "idle",
         title: "实时链路",

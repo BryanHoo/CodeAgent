@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 import { CodeAgentClient } from "@code-agent/client";
-import type { AgentEvent } from "@code-agent/protocol";
+import type { AgentEvent, AgentProjectDefaults, AgentTaskSettings } from "@code-agent/protocol";
 import {
   createCodexRuntimeProvider,
   startCodexAppServer,
@@ -27,15 +27,16 @@ const turnOptions = {
   approvalPolicy: "on-request",
   model: "gpt-5.6-sol",
   reasoningEffort: "high",
+  sandboxMode: "workspace-write",
 } as const;
 
 const runtimes: CodexAppServerProcess[] = [];
 const servers: Awaited<ReturnType<typeof createCodeAgentServer>>[] = [];
 
 function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvider>) {
-  const projectDefaults = new Map();
+  const projectDefaults = new Map<string, AgentProjectDefaults>();
   const pinnedTaskIds = new Map<string, Set<string>>();
-  const taskSettings = new Map();
+  const taskSettings = new Map<string, AgentTaskSettings>();
 
   return {
     projectRepository: {
@@ -49,15 +50,16 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
       readProjectDefaults: (projectId: string) => Promise.resolve(projectDefaults.get(projectId)),
       readTaskSettings: (projectId: string, taskId: string) =>
         Promise.resolve(taskSettings.get(`${projectId}:${taskId}`)),
-      writeProjectDefaults: (projectId: string, settings: typeof turnOptions) => {
+      writeProjectDefaults: (projectId: string, settings: AgentProjectDefaults) => {
         const defaults = {
           model: settings.model,
           reasoningEffort: settings.reasoningEffort,
+          sandboxMode: settings.sandboxMode,
         };
         projectDefaults.set(projectId, defaults);
         return Promise.resolve(defaults);
       },
-      writeTaskSettings: (projectId: string, taskId: string, settings: typeof turnOptions) => {
+      writeTaskSettings: (projectId: string, taskId: string, settings: AgentTaskSettings) => {
         taskSettings.set(`${projectId}:${taskId}`, settings);
         return Promise.resolve(settings);
       },

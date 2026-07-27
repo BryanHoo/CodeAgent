@@ -51,6 +51,8 @@ describe("PendingRequestCard", () => {
     expect(active).toContain("本次会话允许");
     expect(active).toContain("允许");
     expect(active).toContain("拒绝");
+    expect(active).toMatch(/class="[^"]*bg-danger[^"]*"[^>]*>拒绝<\/button>/);
+    expect(active).toMatch(/class="[^"]*bg-accent[^"]*"[^>]*>允许<\/button>/);
     expect(queued).toContain("等待处理前一项");
     expect(queued.match(/disabled/g)?.length).toBeGreaterThanOrEqual(2);
   });

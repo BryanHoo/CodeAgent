@@ -56,6 +56,7 @@ import {
   type AgentMutationError,
   type AgentModel,
   type AgentProjectDefaults,
+  type AgentSandboxMode,
   type AgentTask,
   type AgentTaskSettings,
   type EventStreamMessage,
@@ -202,6 +203,7 @@ function orderById<T extends Readonly<{ id: string }>>(values: readonly T[]): re
 function resolveProjectDefaults(
   models: readonly AgentModel[],
   requested?: AgentProjectDefaults,
+  fallbackSandboxMode: AgentSandboxMode = "workspace-write",
 ): AgentProjectDefaults {
   const orderedModels = orderById(models);
   const model =
@@ -224,7 +226,11 @@ function resolveProjectDefaults(
       true,
     );
   }
-  return { model: model.id, reasoningEffort };
+  return {
+    model: model.id,
+    reasoningEffort,
+    sandboxMode: requested?.sandboxMode ?? fallbackSandboxMode,
+  };
 }
 
 function assertValidProjectDefaults(
@@ -248,14 +254,19 @@ function projectDefaultsEqual(
   left: AgentProjectDefaults | undefined,
   right: AgentProjectDefaults,
 ): boolean {
-  return left?.model === right.model && left.reasoningEffort === right.reasoningEffort;
+  return (
+    left?.model === right.model &&
+    left.reasoningEffort === right.reasoningEffort &&
+    left.sandboxMode === right.sandboxMode
+  );
 }
 
 function taskSettingsEqual(left: AgentTaskSettings | undefined, right: AgentTaskSettings): boolean {
   return (
     left?.approvalPolicy === right.approvalPolicy &&
     left.model === right.model &&
-    left.reasoningEffort === right.reasoningEffort
+    left.reasoningEffort === right.reasoningEffort &&
+    left.sandboxMode === right.sandboxMode
   );
 }
 
@@ -386,7 +397,14 @@ export async function createCodeAgentServer(
   ): Promise<AgentProjectDefaults> => {
     const catalog = models ?? (await listModels());
     const stored = await options.settingsRepository.readProjectDefaults(projectId);
-    const effective = resolveProjectDefaults(catalog, stored);
+    const context = stored === undefined ? await getProjectContext(projectId) : undefined;
+    const providerSandboxMode =
+      stored?.sandboxMode ??
+      (context === undefined ? undefined : await context.provider.readSandboxMode());
+    if (providerSandboxMode === undefined) {
+      throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+    }
+    const effective = resolveProjectDefaults(catalog, stored, providerSandboxMode);
     if (!projectDefaultsEqual(stored, effective)) {
       await options.settingsRepository.writeProjectDefaults(projectId, effective);
     }
@@ -400,7 +418,11 @@ export async function createCodeAgentServer(
     const catalog = models ?? (await listModels());
     const stored = await options.settingsRepository.readTaskSettings(projectId, taskId);
     const defaults = await readEffectiveProjectDefaults(projectId, catalog);
-    const effectiveModel = resolveProjectDefaults(catalog, stored ?? defaults);
+    const effectiveModel = resolveProjectDefaults(
+      catalog,
+      stored ?? defaults,
+      defaults.sandboxMode,
+    );
     const effective = {
       approvalPolicy: stored?.approvalPolicy ?? "on-request",
       ...effectiveModel,

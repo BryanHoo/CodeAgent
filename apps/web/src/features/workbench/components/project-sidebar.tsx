@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { AgentEventConnectionState } from "@code-agent/client";
-import type { AgentTask, AgentTaskPage } from "@code-agent/protocol";
+import type { AgentTask, AgentTaskPage, PendingRequest } from "@code-agent/protocol";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -14,6 +14,7 @@ import {
   Search,
   Send,
   Settings,
+  ShieldQuestion,
   Wifi,
   WifiOff,
 } from "lucide-react";
@@ -46,6 +47,8 @@ const taskActionMenuViewportPadding = 8;
 
 type ProjectSidebarProps = Readonly<{
   connectionState: AgentEventConnectionState;
+  isTaskAwaitingApproval: boolean;
+  isTaskRunning: boolean;
   onClose: () => void;
   projectId?: string;
   taskId?: string;
@@ -90,8 +93,19 @@ export function getProjectSidebarConnectionStatus(connectionState: AgentEventCon
   }
 }
 
+export function hasPendingApproval(pendingRequests: readonly PendingRequest[]): boolean {
+  // 只有命令和文件变更属于审批等待，普通用户输入继续沿用运行态提示。
+  return pendingRequests.some(
+    (request) =>
+      request.status === "pending" &&
+      (request.type === "command_approval" || request.type === "file_change_approval"),
+  );
+}
+
 export function ProjectSidebar({
   connectionState,
+  isTaskAwaitingApproval,
+  isTaskRunning,
   onClose,
   projectId,
   taskId,
@@ -316,8 +330,12 @@ export function ProjectSidebar({
                 <TaskLink
                   active={task.projectId === projectId && task.id === taskId}
                   icon={<Pin className="size-3.5" aria-hidden="true" />}
+                  isAwaitingApproval={
+                    isTaskAwaitingApproval && task.projectId === projectId && task.id === taskId
+                  }
                   key={`${task.projectId}:${task.id}`}
                   isActionPending={taskActionPending}
+                  isRunning={isTaskRunning && task.projectId === projectId && task.id === taskId}
                   onArchive={(task) => void archiveTask(task)}
                   onPin={(task) => void pinTask(task)}
                   onRename={setRenamingTask}
@@ -413,7 +431,13 @@ export function ProjectSidebar({
                       {taskPreview.tasks.map((task) => (
                         <TaskLink
                           active={project.id === projectId && task.id === taskId}
+                          isAwaitingApproval={
+                            isTaskAwaitingApproval && project.id === projectId && task.id === taskId
+                          }
                           isActionPending={taskActionPending}
+                          isRunning={
+                            isTaskRunning && project.id === projectId && task.id === taskId
+                          }
                           key={`${task.projectId}:${task.id}`}
                           onArchive={(task) => void archiveTask(task)}
                           onPin={(task) => void pinTask(task)}
@@ -519,6 +543,8 @@ type TaskLinkProps = Readonly<{
   active: boolean;
   icon?: React.ReactNode;
   isActionPending: boolean;
+  isAwaitingApproval: boolean;
+  isRunning: boolean;
   onArchive: (task: AgentTask) => void;
   onPin: (task: AgentTask) => void;
   onRename: (task: AgentTask) => void;
@@ -529,6 +555,8 @@ function TaskLink({
   active,
   icon,
   isActionPending,
+  isAwaitingApproval,
+  isRunning,
   onArchive,
   onPin,
   onRename,
@@ -625,9 +653,11 @@ function TaskLink({
           <span className="shrink-0 text-subtle-foreground">{icon}</span>
         )}
         <span className="min-w-0 flex-1 truncate">{task.title}</span>
-        <span className="task-age ml-auto shrink-0 text-caption text-subtle-foreground">
-          {formatTaskAge(task.updatedAt)}
-        </span>
+        <TaskStatusIndicator
+          isAwaitingApproval={isAwaitingApproval}
+          isRunning={isRunning}
+          updatedAt={task.updatedAt}
+        />
       </Link>
       <button
         aria-expanded={menuOpen}
@@ -671,6 +701,51 @@ function TaskLink({
           )
         : null}
     </div>
+  );
+}
+
+type TaskStatusIndicatorProps = Readonly<{
+  isAwaitingApproval: boolean;
+  isRunning: boolean;
+  updatedAt: string;
+}>;
+
+export function TaskStatusIndicator({
+  isAwaitingApproval,
+  isRunning,
+  updatedAt,
+}: TaskStatusIndicatorProps) {
+  if (isAwaitingApproval) {
+    return (
+      <span
+        aria-label="任务等待审批"
+        className="task-status ml-auto inline-flex shrink-0 text-accent"
+        role="status"
+      >
+        <ShieldQuestion className="size-3.5" aria-hidden="true" />
+      </span>
+    );
+  }
+
+  if (isRunning) {
+    return (
+      <span
+        aria-label="任务运行中"
+        className="task-status ml-auto inline-flex shrink-0 text-subtle-foreground"
+        role="status"
+      >
+        {/* 动画放在 HTML 容器上，确保 SVG 图标在各浏览器中平滑旋转。 */}
+        <span className="inline-flex animate-spin" aria-hidden="true">
+          <LoaderCircle className="size-3.5" />
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="task-age task-status ml-auto shrink-0 text-caption text-subtle-foreground">
+      {formatTaskAge(updatedAt)}
+    </span>
   );
 }
 

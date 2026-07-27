@@ -36,7 +36,11 @@ import {
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
 import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
-import { deriveProjectSidebarConnectionState, ProjectSidebar } from "./project-sidebar.js";
+import {
+  deriveProjectSidebarConnectionState,
+  hasPendingApproval,
+  ProjectSidebar,
+} from "./project-sidebar.js";
 import { ProjectSourceDialog } from "./project-source-dialog.js";
 import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
@@ -127,6 +131,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   });
   const isTaskRunning =
     runtime.snapshot?.status === "running" || startingSnapshot?.status === "running";
+  const isTaskAwaitingApproval = hasPendingApproval(runtime.snapshot?.pendingRequests ?? []);
   const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, isTaskRunning, client));
   const previousTaskRunningRef = useRef(isTaskRunning);
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
@@ -215,6 +220,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       projectDefaultsQuery.data?.settings.reasoningEffort ??
       defaultModel?.defaultReasoningEffort ??
       "",
+    sandboxMode: projectDefaultsQuery.data?.settings.sandboxMode ?? "workspace-write",
   };
   const draftSettings: AgentTaskSettings = {
     approvalPolicy: "on-request",
@@ -230,6 +236,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     await projectDefaultsMutation.mutateAsync({
       model: settings.model,
       reasoningEffort: settings.reasoningEffort,
+      sandboxMode: settings.sandboxMode,
     });
   };
   const handleNewTaskProjectChange = useCallback(
@@ -317,6 +324,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     >
       <ProjectSidebar
         connectionState={sidebarConnectionState}
+        isTaskAwaitingApproval={isTaskAwaitingApproval}
+        isTaskRunning={isTaskRunning}
         onClose={closeSidebar}
         projectId={projectId}
         {...(taskId === undefined ? {} : { taskId })}

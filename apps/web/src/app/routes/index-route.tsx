@@ -43,7 +43,12 @@ function IndexPage() {
       data-inspector-open="false"
       data-sidebar-open="true"
     >
-      <ProjectSidebar connectionState="connected" onClose={() => undefined} />
+      <ProjectSidebar
+        connectionState="connected"
+        isTaskAwaitingApproval={false}
+        isTaskRunning={false}
+        onClose={() => undefined}
+      />
       <main className="grid min-h-0 min-w-0 place-items-center bg-content text-sm text-muted-foreground">
         尚未添加项目
       </main>

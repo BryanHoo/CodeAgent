@@ -15,6 +15,7 @@ const response: AgentTaskSnapshotResponse = {
       approvalPolicy: "on-request",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
+      sandboxMode: "workspace-write",
     },
     status: "idle",
     title: "实时链路",

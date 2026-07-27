@@ -21,6 +21,7 @@ const task = {
     approvalPolicy: "on-request" as const,
     model: "gpt-5.6-sol",
     reasoningEffort: "high",
+    sandboxMode: "workspace-write" as const,
   },
   title: "新任务",
   updatedAt: "2026-07-23T00:00:00.000Z",
@@ -157,6 +158,7 @@ describe("WorkbenchComposer", () => {
           approvalPolicy: "on-request",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
+          sandboxMode: "workspace-write",
         },
       }),
     ).resolves.toEqual({ createdTask: task, taskId: task.id, turn });
@@ -170,6 +172,7 @@ describe("WorkbenchComposer", () => {
           approvalPolicy: "never",
           model: "gpt-5.6-terra",
           reasoningEffort: "low",
+          sandboxMode: "danger-full-access",
         },
       }),
     ).resolves.toEqual({ taskId: task.id, turn });
@@ -185,7 +188,12 @@ describe("WorkbenchComposer", () => {
         text: "首次提交",
         type: "prompt",
       },
-      { approvalPolicy: "on-request", model: "gpt-5.6-sol", reasoningEffort: "high" },
+      {
+        approvalPolicy: "on-request",
+        model: "gpt-5.6-sol",
+        reasoningEffort: "high",
+        sandboxMode: "workspace-write",
+      },
       { idempotencyKey: "turn-key" },
     );
     expect(client.startTurn).toHaveBeenNthCalledWith(
@@ -197,7 +205,12 @@ describe("WorkbenchComposer", () => {
         text: "继续任务",
         type: "prompt",
       },
-      { approvalPolicy: "never", model: "gpt-5.6-terra", reasoningEffort: "low" },
+      {
+        approvalPolicy: "never",
+        model: "gpt-5.6-terra",
+        reasoningEffort: "low",
+        sandboxMode: "danger-full-access",
+      },
       { idempotencyKey: "existing-turn-key" },
     );
   });

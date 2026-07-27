@@ -48,6 +48,9 @@ describe("AgentProvider", () => {
           nextCursor: null,
         });
       },
+      readSandboxMode() {
+        return Promise.resolve("workspace-write");
+      },
       readTask() {
         return Promise.resolve(undefined);
       },
@@ -101,6 +104,7 @@ describe("AgentProvider", () => {
           approvalPolicy: "on-request",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
+          sandboxMode: "workspace-write",
         });
         return Promise.resolve({
           completedAt: null,
@@ -144,6 +148,7 @@ describe("AgentProvider", () => {
     await expect(provider.listModels()).resolves.toMatchObject({
       data: [{ id: "gpt-5.6-sol", isDefault: true }],
     });
+    await expect(provider.readSandboxMode()).resolves.toBe("workspace-write");
     await expect(provider.readTask("missing-task")).resolves.toBeUndefined();
     await expect(
       provider.resolvePendingRequest({
@@ -164,7 +169,12 @@ describe("AgentProvider", () => {
           images: [{ mediaType: "image/png", url: "data:image/png;base64,aW1hZ2U=" }],
           text: "继续",
         },
-        { approvalPolicy: "on-request", model: "gpt-5.6-sol", reasoningEffort: "high" },
+        {
+          approvalPolicy: "on-request",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+          sandboxMode: "workspace-write",
+        },
       ),
     ).resolves.toMatchObject({ id: "task-1-turn", status: "running" });
     await expect(provider.interruptTurn("task-1", "turn-1")).resolves.toBeUndefined();

@@ -173,6 +173,7 @@ describe("project protocol", () => {
         approvalPolicy: "on-request",
         model: "gpt-5.6-sol",
         reasoningEffort: "high",
+        sandboxMode: "workspace-write",
       },
       status: "idle",
       title: "实现真实任务历史",
@@ -251,7 +252,11 @@ describe("project protocol", () => {
   });
 
   it("validates strict project defaults and task settings", () => {
-    const projectDefaults = { model: "gpt-5.6-sol", reasoningEffort: "high" };
+    const projectDefaults = {
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write",
+    };
     const taskSettings = { approvalPolicy: "never", ...projectDefaults };
 
     expect(Value.Check(AgentProjectDefaultsSchema, projectDefaults)).toBe(true);
@@ -265,6 +270,9 @@ describe("project protocol", () => {
     ).toBe(false);
     expect(
       Value.Check(AgentTaskSettingsSchema, { ...taskSettings, approvalPolicy: "always" }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentTaskSettingsSchema, { ...taskSettings, sandboxMode: "host-write" }),
     ).toBe(false);
     expect(
       Value.Check(AgentTaskSettingsSchema, { ...taskSettings, reasoningEffort: undefined }),
@@ -584,6 +592,7 @@ describe("project protocol", () => {
           approvalPolicy: "on-request",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
+          sandboxMode: "workspace-write",
         },
       }),
     ).toBe(true);
@@ -594,6 +603,7 @@ describe("project protocol", () => {
           approvalPolicy: "always",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
+          sandboxMode: "workspace-write",
         },
       }),
     ).toBe(false);

@@ -27,7 +27,11 @@ function projectDefaultsFromRow(row) {
   if (row === undefined) {
     return undefined;
   }
-  return { model: row.model, reasoningEffort: row.reasoning_effort };
+  return {
+    model: row.model,
+    reasoningEffort: row.reasoning_effort,
+    sandboxMode: row.sandbox_mode,
+  };
 }
 
 function taskSettingsFromRow(row) {
@@ -38,6 +42,7 @@ function taskSettingsFromRow(row) {
     approvalPolicy: row.approval_policy,
     model: row.model,
     reasoningEffort: row.reasoning_effort,
+    sandboxMode: row.sandbox_mode,
   };
 }
 
@@ -110,30 +115,32 @@ function createOperations(database) {
           "SELECT id, name, root_path, created_at FROM projects WHERE root_path = ?",
         ),
         readProjectDefaults: database.prepare(
-          "SELECT model, reasoning_effort FROM project_defaults WHERE project_id = ?",
+          "SELECT model, reasoning_effort, sandbox_mode FROM project_defaults WHERE project_id = ?",
         ),
         readTaskSettings: database.prepare(
-          "SELECT approval_policy, model, reasoning_effort FROM task_settings WHERE project_id = ? AND task_id = ?",
+          "SELECT approval_policy, model, reasoning_effort, sandbox_mode FROM task_settings WHERE project_id = ? AND task_id = ?",
         ),
         listPinnedTaskIds: database.prepare(
           "SELECT task_id FROM task_metadata WHERE project_id = ? AND pinned = 1 ORDER BY task_id",
         ),
         writeProjectDefaults: database.prepare(`
-      INSERT INTO project_defaults (project_id, model, reasoning_effort, updated_at)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO project_defaults (project_id, model, reasoning_effort, sandbox_mode, updated_at)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(project_id) DO UPDATE SET
         model = excluded.model,
         reasoning_effort = excluded.reasoning_effort,
+        sandbox_mode = excluded.sandbox_mode,
         updated_at = excluded.updated_at
     `),
         writeTaskSettings: database.prepare(`
       INSERT INTO task_settings (
-        project_id, task_id, approval_policy, model, reasoning_effort, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        project_id, task_id, approval_policy, model, reasoning_effort, sandbox_mode, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(project_id, task_id) DO UPDATE SET
         approval_policy = excluded.approval_policy,
         model = excluded.model,
         reasoning_effort = excluded.reasoning_effort,
+        sandbox_mode = excluded.sandbox_mode,
         updated_at = excluded.updated_at
         `),
         writeTaskPinned: database.prepare(`
@@ -218,6 +225,7 @@ function createOperations(database) {
         payload.projectId,
         settings.model,
         settings.reasoningEffort,
+        settings.sandboxMode,
         payload.updatedAt,
       );
       return settings;
@@ -239,6 +247,7 @@ function createOperations(database) {
         settings.approvalPolicy,
         settings.model,
         settings.reasoningEffort,
+        settings.sandboxMode,
         payload.updatedAt,
       );
       return settings;

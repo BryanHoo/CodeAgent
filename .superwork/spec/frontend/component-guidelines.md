@@ -10,13 +10,13 @@
 - Web 不提供登录路由或账号控件；Provider 资源不可用时展示 `codex login` 指引和 Query 重试操作，不调用账号接口。
 - `shared/ai-elements` 以官方 AI Elements 组件源码和公开 API 为实现基线，只改造样式、基础控件适配与本地化文案以使用本项目设计 Token；不得用功能不完整的自研组件替代官方能力。
 - Task Timeline 的非空思考 Item 使用 AI Elements `ChainOfThought`、`ChainOfThoughtHeader`、`ChainOfThoughtContent` 和 `ChainOfThoughtStep` 展示；连续的 Reasoning、Command 和 Tool Item 必须合并为一个思考块，只有普通消息等可见非思考内容才能切断分组。单段 Commentary Summary 也必须成为可读 Step，空 Reasoning 占位不渲染。运行时默认展开，结束后即使收起也必须保留可查看内容。运行中的 AI 回复必须在回复最后一行使用 AI Elements `Shimmer` 表达持续生成状态，并在 Turn 结束后移除。
-- Composer 使用 AI Elements `PromptInput`、`Attachments` 和组合式工具栏，支持点击、拖放、粘贴、预览与移除图片；附件选择是本地操作，在实时连接恢复期间仍保持可用，仅在正在提交时锁定；模型来自 Server Query，审批策略、模型和思考量随同一个 Turn 请求提交，不保留禁用占位控件。
-- Composer 在已有 Task 中使用 Snapshot 携带的完整设置，在新聊天中使用 Project 默认模型与思考量并固定以 `on-request` 初始化审批；设置只由用户事件触发完整对象 Mutation，不得通过 effect 写回或从其他 Task 继承审批。
+- Composer 使用 AI Elements `PromptInput`、`Attachments` 和组合式工具栏，支持点击、拖放、粘贴、预览与移除图片；附件选择是本地操作，在实时连接恢复期间仍保持可用，仅在正在提交时锁定；模型来自 Server Query，审批策略、沙盒模式、模型和思考量随同一个 Turn 请求提交，不保留禁用占位控件。
+- Composer 在已有 Task 中使用 Snapshot 携带的完整设置，在新聊天中使用 Project 默认模型、思考量与沙盒模式并固定以 `on-request` 初始化审批；沙盒选择紧邻审批并提供只读、工作区可写和完全访问；设置只由用户事件触发完整对象 Mutation，不得通过 effect 写回或从其他 Task 继承审批。
 - Composer 的起始 `/` 输入使用 AI Elements `PromptInputCommand*` 在输入框外部向上浮出命令列表，不得把列表嵌入 PromptInput 表面；固定提供代码审查、初始化、副任务、压缩、反馈和在新任务中继续，并支持鼠标、上下方向键、Enter、Escape 和明确的 listbox/option 语义。代码审查、压缩、反馈和续接必须调用对应 Provider 能力；初始化与副任务复用正常 Turn 提交链路，不得在前端伪造执行结果。
 - Composer 的审批、模型和思考量选择隐藏原生箭头并按当前文字收缩，思考量选项直接显示“低”“中”“高”等等级，不重复显示“思考量”前缀；思考量紧邻模型；任一内部控件聚焦时只由 Composer 整体显示主色边框，内部控件不重复显示主色焦点轮廓；分支/路径行最右使用圆环按钮表达真实上下文占比，悬停或键盘聚焦后通过 Tooltip 展示百分比和已用/总 Token 数。
 - 工作台左栏先展示产品标识与名称，再按常显搜索框、“新建任务”、可选 `Pinned`、`Projects` 排列；没有固定 Task 时不渲染 `Pinned` 区域。
 - `Projects` 标题使用高于分组元数据的字号并固定在项目树滚动区域之外；Project 行之间不增加分组间隔。每个展开 Project 默认展示最近 5 个 Task，超过后使用占满 Task 列表整行的“显示更多”展开，并允许通过同样的整行控件收起。
-- Task 行常态在最右侧显示更新时间，鼠标悬停或键盘焦点进入后在同一稳定位置显示省略号操作；菜单必须脱离 Pinned 与 Projects 滚动容器的裁剪，左边缘与当前省略号按钮对齐。菜单提供固定/取消固定、重命名和归档，支持 Escape 与点击外部关闭。重命名使用带焦点圈定的 Dialog，归档当前 Task 后进入所属 Project 的新聊天草稿。
+- Task 行常态在最右侧显示更新时间；当前 Task 运行时在同一位置改为显示带可访问状态的旋转加载图标，结束后恢复更新时间。鼠标悬停或键盘焦点进入后在同一稳定位置显示省略号操作；菜单必须脱离 Pinned 与 Projects 滚动容器的裁剪，左边缘与当前省略号按钮对齐。菜单提供固定/取消固定、重命名和归档，支持 Escape 与点击外部关闭。重命名使用带焦点圈定的 Dialog，归档当前 Task 后进入所属 Project 的新聊天草稿。
 - `Projects` 标题右侧使用可访问的 `+` 图标触发宿主系统目录选择器；添加成功后刷新项目树并进入新 Project，取消选择保持当前界面，项目列表为空时不得伪造默认 Project。
 - 左栏 Settings 旁的连接状态必须反映真实 Runtime：活动 Task 使用其实时事件连接状态，新建 Task 页面使用 HTTP Runtime 的加载、可用和失败状态；不得硬编码在线或离线文案。
 - Project 名称只切换任务树的展开状态；名称右侧使用可访问的 `+` 图标进入该 Project 的“新聊天”草稿，顶部“新建任务”始终进入第一个 Project 的草稿，目标草稿已打开时直接复用。

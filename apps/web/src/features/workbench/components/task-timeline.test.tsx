@@ -30,6 +30,7 @@ const snapshot: RuntimeTaskSnapshot = {
     approvalPolicy: "on-request",
     model: "gpt-5.6-sol",
     reasoningEffort: "high",
+    sandboxMode: "workspace-write",
   },
   status: "idle",
   title: "Markdown 渲染",
@@ -67,6 +68,48 @@ describe("TaskTimeline", () => {
 });
 
 describe("TaskSnapshotTimeline", () => {
+  it("removes resolved approvals while keeping pending approvals visible", () => {
+    const approvalSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      pendingRequests: [
+        {
+          availableDecisions: ["allow", "deny"],
+          createdAt: "2026-07-24T00:01:01.000Z",
+          expiresAt: null,
+          grantRoot: "/workspace/resolved-change",
+          itemId: "file-change-resolved",
+          projectId: "code-agent",
+          reason: null,
+          requestId: "number:resolved",
+          status: "resolved",
+          taskId: "task-1",
+          turnId: "turn-1",
+          type: "file_change_approval",
+        },
+        {
+          availableDecisions: ["allow", "deny"],
+          createdAt: "2026-07-24T00:01:02.000Z",
+          expiresAt: null,
+          grantRoot: "/workspace/pending-change",
+          itemId: "file-change-pending",
+          projectId: "code-agent",
+          reason: null,
+          requestId: "number:pending",
+          status: "pending",
+          taskId: "task-1",
+          turnId: "turn-1",
+          type: "file_change_approval",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={approvalSnapshot} />);
+
+    expect(markup).not.toContain("/workspace/resolved-change");
+    expect(markup).not.toContain("请求已处理");
+    expect(markup).toContain("/workspace/pending-change");
+  });
+
   it("renders copy controls, timestamps, and spacing for user and assistant messages", () => {
     const messageSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,

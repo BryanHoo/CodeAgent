@@ -42,6 +42,7 @@ const snapshot = {
     approvalPolicy: "never" as const,
     model: "gpt-5.6-sol",
     reasoningEffort: "high",
+    sandboxMode: "workspace-write" as const,
   },
   status: "idle" as const,
   turns: [
@@ -156,7 +157,11 @@ describe("project queries", () => {
       ),
       getProjectDefaults: vi.fn(() =>
         Promise.resolve({
-          settings: { model: "gpt-5.6-sol", reasoningEffort: "high" },
+          settings: {
+            model: "gpt-5.6-sol",
+            reasoningEffort: "high",
+            sandboxMode: "workspace-write" as const,
+          },
         }),
       ),
       listProjects: vi.fn(() => Promise.resolve({ data: [project], nextCursor: null })),
@@ -195,7 +200,11 @@ describe("project queries", () => {
     await expect(
       queryClient.fetchQuery(projectDefaultsQueryOptions("code-agent", client)),
     ).resolves.toEqual({
-      settings: { model: "gpt-5.6-sol", reasoningEffort: "high" },
+      settings: {
+        model: "gpt-5.6-sol",
+        reasoningEffort: "high",
+        sandboxMode: "workspace-write",
+      },
     });
     await expect(
       queryClient.fetchQuery(projectTasksQueryOptions("code-agent", client)),
@@ -207,7 +216,11 @@ describe("project queries", () => {
   });
 
   it("updates complete project defaults and task settings through mutations", async () => {
-    const defaults = { model: "gpt-5.6-sol", reasoningEffort: "high" };
+    const defaults = {
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write" as const,
+    };
     const settings = { approvalPolicy: "never" as const, ...defaults };
     const client = {
       updateProjectDefaults: vi.fn(() => Promise.resolve({ settings: defaults })),

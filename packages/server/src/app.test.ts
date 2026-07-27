@@ -6,7 +6,12 @@ import {
   type AgentProviderTurnInput,
   type AgentRuntimeProvider,
 } from "@code-agent/core";
-import type { AgentTurn, PendingRequest } from "@code-agent/protocol";
+import type {
+  AgentProjectDefaults,
+  AgentTaskSettings,
+  AgentTurn,
+  PendingRequest,
+} from "@code-agent/protocol";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,6 +32,7 @@ const turnOptions = {
   approvalPolicy: "on-request",
   model: "gpt-5.6-sol",
   reasoningEffort: "high",
+  sandboxMode: "workspace-write",
 } as const;
 
 function turnRequest(text: string) {
@@ -124,6 +130,7 @@ function createProvider() {
     }),
   );
   const interruptTurn = vi.fn(() => Promise.resolve());
+  const readSandboxMode = vi.fn(() => Promise.resolve("read-only" as const));
   const startReview = vi.fn(() =>
     Promise.resolve({
       completedAt: null,
@@ -143,6 +150,7 @@ function createProvider() {
     interruptTurn,
     listModels,
     listTasks,
+    readSandboxMode,
     readTask,
     renameTask,
     resolvePendingRequest,
@@ -172,6 +180,7 @@ function createProvider() {
     listModels,
     interruptTurn,
     provider,
+    readSandboxMode,
     readTask,
     renameTask,
     resolvePendingRequest,
@@ -203,32 +212,14 @@ function createTaskMetadataRepository() {
 
 function createSettingsRepository() {
   const readProjectDefaults = vi.fn(() =>
-    Promise.resolve<{ model: string; reasoningEffort: string } | undefined>(undefined),
+    Promise.resolve<AgentProjectDefaults | undefined>(undefined),
   );
-  const readTaskSettings = vi.fn(() =>
-    Promise.resolve<
-      | {
-          approvalPolicy: "never" | "on-request" | "untrusted";
-          model: string;
-          reasoningEffort: string;
-        }
-      | undefined
-    >(undefined),
-  );
-  const writeProjectDefaults = vi.fn(
-    (_projectId: string, settings: { model: string; reasoningEffort: string }) =>
-      Promise.resolve(settings),
+  const readTaskSettings = vi.fn(() => Promise.resolve<AgentTaskSettings | undefined>(undefined));
+  const writeProjectDefaults = vi.fn((_projectId: string, settings: AgentProjectDefaults) =>
+    Promise.resolve(settings),
   );
   const writeTaskSettings = vi.fn(
-    (
-      _projectId: string,
-      _taskId: string,
-      settings: {
-        approvalPolicy: "never" | "on-request" | "untrusted";
-        model: string;
-        reasoningEffort: string;
-      },
-    ) => Promise.resolve(settings),
+    (_projectId: string, _taskId: string, settings: AgentTaskSettings) => Promise.resolve(settings),
   );
   return {
     readProjectDefaults,
@@ -526,7 +517,10 @@ describe("CodeAgent Server", () => {
     expect(response.statusCode).toBe(200);
     expect(body.checkpoint.sequence).toBe(0);
     expect(typeof body.checkpoint.sessionId).toBe("string");
-    expect(body.snapshot).toEqual({ ...snapshot, settings: turnOptions });
+    expect(body.snapshot).toEqual({
+      ...snapshot,
+      settings: { ...turnOptions, sandboxMode: "read-only" },
+    });
   });
 
   it("returns effective settings and atomically validates complete updates", async () => {
@@ -557,11 +551,13 @@ describe("CodeAgent Server", () => {
     readProjectDefaults.mockResolvedValue({
       model: "removed-model",
       reasoningEffort: "ultra",
+      sandboxMode: "read-only",
     });
     readTaskSettings.mockResolvedValue({
       approvalPolicy: "never",
       model: "removed-model",
       reasoningEffort: "ultra",
+      sandboxMode: "danger-full-access",
     });
 
     const defaults = await app.inject({
@@ -575,7 +571,11 @@ describe("CodeAgent Server", () => {
     const invalid = await app.inject({
       headers: { "idempotency-key": "invalid-defaults" },
       method: "PUT",
-      payload: { model: "gpt-5.6-sol", reasoningEffort: "ultra" },
+      payload: {
+        model: "gpt-5.6-sol",
+        reasoningEffort: "ultra",
+        sandboxMode: "workspace-write",
+      },
       url: "/v1/projects/code-agent/defaults",
     });
     const updated = await app.inject({
@@ -585,12 +585,17 @@ describe("CodeAgent Server", () => {
         approvalPolicy: "untrusted",
         model: "gpt-5.6-sol",
         reasoningEffort: "low",
+        sandboxMode: "workspace-write",
       },
       url: "/v1/projects/code-agent/tasks/task-1/settings",
     });
 
     expect(defaults.json()).toEqual({
-      settings: { model: "gpt-5.6-sol", reasoningEffort: "high" },
+      settings: {
+        model: "gpt-5.6-sol",
+        reasoningEffort: "high",
+        sandboxMode: "read-only",
+      },
     });
     expect(taskSnapshot.json()).toMatchObject({
       snapshot: {
@@ -598,6 +603,7 @@ describe("CodeAgent Server", () => {
           approvalPolicy: "never",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
+          sandboxMode: "danger-full-access",
         },
       },
     });
@@ -608,16 +614,19 @@ describe("CodeAgent Server", () => {
         approvalPolicy: "untrusted",
         model: "gpt-5.6-sol",
         reasoningEffort: "low",
+        sandboxMode: "workspace-write",
       },
     });
     expect(writeProjectDefaults).toHaveBeenCalledWith("code-agent", {
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
+      sandboxMode: "read-only",
     });
     expect(writeTaskSettings).toHaveBeenCalledWith("code-agent", "task-1", {
       approvalPolicy: "never",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
+      sandboxMode: "danger-full-access",
     });
   });
 
@@ -627,11 +636,13 @@ describe("CodeAgent Server", () => {
     readProjectDefaults.mockResolvedValue({
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
+      sandboxMode: "read-only",
     });
     readTaskSettings.mockResolvedValue({
       approvalPolicy: "never",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
+      sandboxMode: "danger-full-access",
     });
 
     const created = await app.inject({
@@ -653,6 +664,7 @@ describe("CodeAgent Server", () => {
       approvalPolicy: "on-request",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
+      sandboxMode: "read-only",
     });
     expect(turn.statusCode).toBe(201);
     expect(writeTaskSettings.mock.invocationCallOrder.at(-1)).toBeLessThan(
@@ -1082,14 +1094,14 @@ describe("CodeAgent Server", () => {
       headers,
       method: "POST",
       payload:
-        '{"input":{"attachments":[],"text":"继续实现","type":"prompt"},"options":{"approvalPolicy":"on-request","model":"gpt-5.6-sol","reasoningEffort":"high"}}',
+        '{"input":{"attachments":[],"text":"继续实现","type":"prompt"},"options":{"approvalPolicy":"on-request","model":"gpt-5.6-sol","reasoningEffort":"high","sandboxMode":"workspace-write"}}',
       url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
     const repeated = await app.inject({
       headers,
       method: "POST",
       payload:
-        '{"options":{"reasoningEffort":"high","model":"gpt-5.6-sol","approvalPolicy":"on-request"},"input":{"type":"prompt","text":"继续实现","attachments":[]}}',
+        '{"options":{"sandboxMode":"workspace-write","reasoningEffort":"high","model":"gpt-5.6-sol","approvalPolicy":"on-request"},"input":{"type":"prompt","text":"继续实现","attachments":[]}}',
       url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
 

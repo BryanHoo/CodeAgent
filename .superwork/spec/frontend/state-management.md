@@ -10,7 +10,7 @@
 - HTTP Snapshot 由服务端状态层持有；实时事件按 Task、Turn 和 Item ID 归一化合并。
 - Project 新 Task 默认模型设置使用 TanStack Query 独立缓存；Task Snapshot 必须直接携带 Server 校验后的完整 Task 设置。
 - Project defaults 与 Task settings 只在用户事件中通过原子 `PUT` 更新完整对象；Mutation 按 Project 或 Task 串行，成功后更新对应 Query/Snapshot 缓存。
-- 新 Task 草稿只继承 Project 的模型与思考量，审批始终初始化为 `on-request`，不得从其他 Task 继承 `never`。
+- 新 Task 草稿只继承 Project 的模型、思考量与沙盒模式，审批始终初始化为 `on-request`，不得从其他 Task 继承 `never`。
 - Project Task 列表、Task Snapshot、Mutation 和实时订阅必须显式携带 `projectId`；Query Key 与连接状态按 Project 隔离，不能只用 `taskId` 作为跨项目身份。
 - `sequence` 是 Runtime Session 内的事件顺序依据；断线恢复先刷新 Snapshot，再从检查点补发。
 - Client 必须忽略 `sequence <= lastAppliedSequence` 的重复事件，并在更大缺口或 `sessionId` 变化时停止增量应用、请求 resync。

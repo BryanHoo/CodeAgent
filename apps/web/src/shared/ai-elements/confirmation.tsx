@@ -121,14 +121,27 @@ export function ConfirmationActions({ className = "", ...props }: HTMLAttributes
   return <div className={`mt-3 flex flex-wrap justify-end gap-2 ${className}`} {...props} />;
 }
 
+type ConfirmationActionProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  tone?: "danger" | "neutral" | "primary";
+};
+
 export function ConfirmationAction({
   className = "",
+  tone = "neutral",
   type = "button",
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ConfirmationActionProps) {
+  // 语义色在基础样式中只选择一组背景和文字色，避免 Tailwind 冲突工具类导致文字不可见。
+  const toneClass =
+    tone === "danger"
+      ? "bg-danger text-white hover:opacity-90"
+      : tone === "primary"
+        ? "bg-accent text-white hover:bg-accent-strong"
+        : "bg-raised text-foreground hover:bg-control-hover";
+
   return (
     <button
-      className={`inline-flex h-8 items-center justify-center rounded-control bg-raised px-3 text-label font-medium text-foreground shadow-sm transition-colors hover:bg-control-hover disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
+      className={`inline-flex h-8 items-center justify-center rounded-control px-3 text-label font-medium shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${toneClass} ${className}`}
       type={type}
       {...props}
     />

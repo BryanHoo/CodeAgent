@@ -373,6 +373,18 @@ input.on("line", (line) => {
     return;
   }
 
+  if (message.method === "config/read") {
+    send({
+      id: message.id,
+      result: {
+        config: { sandbox_mode: "workspace-write" },
+        layers: null,
+        origins: {},
+      },
+    });
+    return;
+  }
+
   if (pendingRequestScenario && message.method === "trigger/pending") {
     const kind = message.params?.kind;
     if (kind !== "command" && kind !== "file" && kind !== "user_input") {

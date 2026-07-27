@@ -9,6 +9,7 @@ import type {
   AgentTurn,
   AgentTurnOptions,
   AgentReviewTarget,
+  AgentSandboxMode,
   PendingRequest,
   ResolvePendingRequestRequest,
   UploadAgentFeedbackRequest,
@@ -65,6 +66,7 @@ export interface AgentProvider {
   getCapabilities(): Promise<AgentCapabilities>;
   listModels(): Promise<AgentModelPage>;
   listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage>;
+  readSandboxMode(): Promise<AgentSandboxMode>;
   // Promise 完成前须让 Snapshot 包含此前状态并同步交付对应通知，使 checkpoint 保持一致。
   readTask(taskId: string): Promise<AgentProviderTaskSnapshot | undefined>;
   renameTask(taskId: string, title: string): Promise<void>;

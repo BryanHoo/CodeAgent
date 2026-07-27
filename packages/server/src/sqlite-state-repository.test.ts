@@ -41,7 +41,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 2,
+      migrationVersion: 3,
       synchronous: "normal",
       writable: true,
     });
@@ -95,29 +95,35 @@ describe("SqliteStateRepository", () => {
     await repository.writeProjectDefaults(first.id, {
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
+      sandboxMode: "workspace-write",
     });
     await repository.writeProjectDefaults(second.id, {
       model: "gpt-5.6-terra",
       reasoningEffort: "low",
+      sandboxMode: "read-only",
     });
     await repository.writeTaskSettings(first.id, "task-1", {
       approvalPolicy: "never",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
+      sandboxMode: "danger-full-access",
     });
     await repository.writeTaskSettings(second.id, "task-1", {
       approvalPolicy: "on-request",
       model: "gpt-5.6-terra",
       reasoningEffort: "low",
+      sandboxMode: "read-only",
     });
 
     await expect(repository.readProjectDefaults(first.id)).resolves.toEqual({
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
+      sandboxMode: "workspace-write",
     });
     await expect(repository.readProjectDefaults(second.id)).resolves.toEqual({
       model: "gpt-5.6-terra",
       reasoningEffort: "low",
+      sandboxMode: "read-only",
     });
     await expect(repository.readTaskSettings(first.id, "task-1")).resolves.toMatchObject({
       approvalPolicy: "never",
@@ -137,11 +143,13 @@ describe("SqliteStateRepository", () => {
       approvalPolicy: "never",
       model: "old-model",
       reasoningEffort: "low",
+      sandboxMode: "read-only",
     });
     await repository.writeTaskSettings(project.id, "task-1", {
       approvalPolicy: "on-request",
       model: "new-model",
       reasoningEffort: "high",
+      sandboxMode: "danger-full-access",
     });
     await repository.close();
     repositories.splice(repositories.indexOf(repository), 1);
@@ -152,6 +160,7 @@ describe("SqliteStateRepository", () => {
       approvalPolicy: "on-request",
       model: "new-model",
       reasoningEffort: "high",
+      sandboxMode: "danger-full-access",
     });
     await expect(reopened.read(project.id)).resolves.toEqual(project);
   });
@@ -178,7 +187,8 @@ describe("SqliteStateRepository", () => {
   it("terminates an unresponsive worker after the request deadline", async () => {
     const root = await createWorkspace();
     const repository = await openRepository(root, {
-      requestTimeoutMs: 20,
+      // 为 Worker 初始化预留稳定余量，同时保持关闭请求的测试等待有界。
+      requestTimeoutMs: 200,
       workerUrl: new URL("../test/fixtures/unresponsive-sqlite-worker.mjs", import.meta.url),
     });
 

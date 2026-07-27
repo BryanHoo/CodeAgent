@@ -16,10 +16,15 @@ function parseProjectDefaultsRequest(requestBody: string | null) {
   const value = parseRequestRecord(requestBody);
   const model = value["model"];
   const reasoningEffort = value["reasoningEffort"];
-  if (typeof model !== "string" || typeof reasoningEffort !== "string") {
+  const sandboxMode = value["sandboxMode"];
+  if (
+    typeof model !== "string" ||
+    typeof reasoningEffort !== "string" ||
+    typeof sandboxMode !== "string"
+  ) {
     throw new Error("Invalid project defaults request");
   }
-  return { model, reasoningEffort };
+  return { model, reasoningEffort, sandboxMode };
 }
 
 function parseTaskSettingsRequest(requestBody: string | null) {
@@ -27,14 +32,16 @@ function parseTaskSettingsRequest(requestBody: string | null) {
   const approvalPolicy = value["approvalPolicy"];
   const model = value["model"];
   const reasoningEffort = value["reasoningEffort"];
+  const sandboxMode = value["sandboxMode"];
   if (
     typeof approvalPolicy !== "string" ||
     typeof model !== "string" ||
-    typeof reasoningEffort !== "string"
+    typeof reasoningEffort !== "string" ||
+    typeof sandboxMode !== "string"
   ) {
     throw new Error("Invalid task settings request");
   }
-  return { approvalPolicy, model, reasoningEffort };
+  return { approvalPolicy, model, reasoningEffort, sandboxMode };
 }
 
 const projects = [
@@ -159,6 +166,7 @@ const taskSnapshot = {
     approvalPolicy: "on-request",
     model: "gpt-5.6-sol",
     reasoningEffort: "high",
+    sandboxMode: "workspace-write",
   },
   status: "idle",
   turns: [
@@ -224,7 +232,10 @@ test.beforeEach(async ({ page }) => {
   let routedProjects = [...projects];
   let routedTasks = tasks.map((task) => ({ ...task }));
   const projectDefaults = new Map(
-    projects.map((project) => [project.id, { model: "gpt-5.6-sol", reasoningEffort: "high" }]),
+    projects.map((project) => [
+      project.id,
+      { model: "gpt-5.6-sol", reasoningEffort: "high", sandboxMode: "workspace-write" },
+    ]),
   );
   const taskSettings = new Map([
     ["code-agent:task-1", taskSnapshot.settings],
@@ -898,7 +909,14 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   await expect(reasoningSelect).toHaveValue("medium");
   await expect(reasoningSelect.locator("option")).toHaveText(["低", "中"]);
   await reasoningSelect.selectOption("low");
-  await page.getByRole("combobox", { name: "批准模式" }).selectOption("never");
+  const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
+  const sandboxSelect = page.getByRole("combobox", { name: "沙盒模式" });
+  await expect(approvalSelect.locator("xpath=following-sibling::select[1]")).toHaveAttribute(
+    "aria-label",
+    "沙盒模式",
+  );
+  await approvalSelect.selectOption("never");
+  await sandboxSelect.selectOption("danger-full-access");
   const chooserPromise = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "添加图片" }).click();
   const chooser = await chooserPromise;
@@ -926,7 +944,12 @@ test("submits attachments, approval policy, model, and reasoning effort through 
       text: "按截图完成改造",
       type: "prompt",
     },
-    options: { approvalPolicy: "never", model: "gpt-5.6-terra", reasoningEffort: "low" },
+    options: {
+      approvalPolicy: "never",
+      model: "gpt-5.6-terra",
+      reasoningEffort: "low",
+      sandboxMode: "danger-full-access",
+    },
   });
 });
 
@@ -1436,8 +1459,12 @@ test("allows a command approval and completes the turn", async ({ page }) => {
   await page.getByRole("textbox", { name: "任务输入" }).fill("审批命令");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
   await expect(page.getByRole("region", { name: "命令审批请求" })).toBeVisible();
+  const approvalStatus = page.getByRole("status", { name: "任务等待审批" });
+  await expect(approvalStatus).toBeVisible();
+  await expect(approvalStatus).toHaveClass(/text-accent/);
   await page.getByRole("button", { exact: true, name: "允许" }).click();
 
+  await expect(approvalStatus).toBeHidden();
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
 });
@@ -1796,10 +1823,10 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
   const timelineMessages = main.locator('[role="log"] article');
   await expect(timelineMessages.nth(0)).toContainText("你好");
   await expect(timelineMessages.nth(1)).toContainText("正在运行");
-  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  const runningTaskLink = sidebar.getByRole("link", { name: "新聊天" });
+  await expect(runningTaskLink).toHaveAttribute("aria-current", "page");
+  await expect(runningTaskLink.getByRole("status", { name: "任务运行中" })).toBeVisible();
+  await expect(runningTaskLink.locator(".task-age")).toHaveCount(0);
   await expect(main.getByText(createdTask.id, { exact: true })).toHaveCount(0);
 
   releaseSnapshotRequest();

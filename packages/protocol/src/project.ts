@@ -281,11 +281,20 @@ export const AgentApprovalPolicySchema = Type.Union([
 
 export type AgentApprovalPolicy = Readonly<Static<typeof AgentApprovalPolicySchema>>;
 
+export const AgentSandboxModeSchema = Type.Union([
+  Type.Literal("read-only"),
+  Type.Literal("workspace-write"),
+  Type.Literal("danger-full-access"),
+]);
+
+export type AgentSandboxMode = Readonly<Static<typeof AgentSandboxModeSchema>>;
+
 export const AgentTaskSettingsSchema = Type.Object(
   {
     approvalPolicy: AgentApprovalPolicySchema,
     model: Type.String({ minLength: 1 }),
     reasoningEffort: Type.String({ minLength: 1 }),
+    sandboxMode: AgentSandboxModeSchema,
   },
   { additionalProperties: false },
 );
@@ -296,6 +305,7 @@ export const AgentProjectDefaultsSchema = Type.Object(
   {
     model: Type.String({ minLength: 1 }),
     reasoningEffort: Type.String({ minLength: 1 }),
+    sandboxMode: AgentSandboxModeSchema,
   },
   { additionalProperties: false },
 );

@@ -962,10 +962,14 @@ export function TaskSnapshotTimeline({
   onRollbackTurn?: (turnId: string, idempotencyKey: string) => Promise<void>;
   snapshot: RuntimeTaskSnapshot;
 }>) {
-  if (snapshot.turns.length === 0 && snapshot.pendingRequests.length === 0) {
+  // 审批完成后仍保留实时快照记录，但已解决请求不再占用消息时间线。
+  const visiblePendingRequests = snapshot.pendingRequests.filter(
+    (request) => request.status !== "resolved",
+  );
+  if (snapshot.turns.length === 0 && visiblePendingRequests.length === 0) {
     return <TimelineState message="此任务暂无历史" role="status" />;
   }
-  const firstPendingIndex = snapshot.pendingRequests.findIndex(
+  const firstPendingIndex = visiblePendingRequests.findIndex(
     (candidate) => candidate.status === "pending",
   );
   const latestTurnId = snapshot.turns.at(-1)?.id;
@@ -1005,7 +1009,7 @@ export function TaskSnapshotTimeline({
             />
           </section>
         ))}
-        {snapshot.pendingRequests.map((request, index) => {
+        {visiblePendingRequests.map((request, index) => {
           // 只开放队首未解决请求，避免并发响应改变 Provider 的请求顺序。
           return (
             <PendingRequestCard

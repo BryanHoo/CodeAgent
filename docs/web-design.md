@@ -254,6 +254,7 @@ Project 不使用独立页面。用户在工作台左栏通过目录选择器添
 - Timeline 占据剩余空间，宽度使用合理上限保证 Markdown 可读性。
 - Inspector 在宽屏工作台默认显示，窄窗口关闭并按需作为抽屉打开。
 - Composer 固定在 Timeline 底部，但不能覆盖滚动内容。
+- Composer 左侧依次展示附件、审批和沙盒模式；沙盒模式使用 Codex 有效 Project 配置初始化，并允许选择只读、工作区可写或完全访问。右侧继续展示模型、思考量和提交操作。
 - 窗口较窄时 Inspector 变为抽屉，Sidebar 变为可关闭侧栏。
 - Sidebar 的 `Projects` 标题固定在项目树滚动区外，Project 行连续排列；每个 Project 默认显示 5 个 Task，超出部分经“显示更多”展开。Task 行 hover/focus 时以省略号替换时间，并通过菜单执行固定、重命名和归档。
 
