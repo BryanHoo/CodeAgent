@@ -300,6 +300,103 @@ describe("CodexAgentProvider", () => {
     );
   });
 
+  it("resumes a persisted Codex task before continuing it after runtime restart", async () => {
+    const runningTurn = {
+      completedAt: null,
+      durationMs: null,
+      error: null,
+      id: "turn-after-restart",
+      items: [],
+      itemsView: { type: "full" },
+      startedAt: 1_753_228_800,
+      status: "inProgress",
+    };
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      { thread: nativeThread() },
+      { turn: runningTurn },
+    ]);
+    const runtime = createCodexRuntimeProvider({ client: rpc });
+    const provider = runtime.forProject(project);
+
+    // 新 Runtime 只能先读取持久化历史，再显式恢复 Codex Thread 后继续发送。
+    await expect(provider.readTask("task-1")).resolves.toMatchObject({ id: "task-1" });
+    await expect(
+      provider.startTurn(
+        "task-1",
+        { images: [], skills: [], text: "继续之前的任务" },
+        {
+          approvalPolicy: "on-request",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+          sandboxMode: "workspace-write",
+        },
+      ),
+    ).resolves.toMatchObject({ id: "turn-after-restart", status: "running" });
+
+    expect(rpc.calls.map(({ method }) => method)).toEqual([
+      "thread/read",
+      "thread/resume",
+      "turn/start",
+    ]);
+    expect(rpc.calls[1]).toEqual({
+      method: "thread/resume",
+      params: { threadId: "task-1" },
+    });
+  });
+
+  it("shares one resume request across concurrent turns for a restored task", async () => {
+    let resolveResume!: (response: unknown) => void;
+    const resumeResponse = new Promise<unknown>((resolveResponse) => {
+      resolveResume = resolveResponse;
+    });
+    const createRunningTurn = (turnId: string) => ({
+      completedAt: null,
+      durationMs: null,
+      error: null,
+      id: turnId,
+      items: [],
+      itemsView: { type: "full" },
+      startedAt: 1_753_228_800,
+      status: "inProgress",
+    });
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      () => resumeResponse,
+      { turn: createRunningTurn("turn-concurrent-1") },
+      { turn: createRunningTurn("turn-concurrent-2") },
+    ]);
+    const provider = createCodexRuntimeProvider({ client: rpc }).forProject(project);
+    const turnOptions = {
+      approvalPolicy: "on-request",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write",
+    } as const;
+
+    await provider.readTask("task-1");
+    const firstTurn = provider.startTurn(
+      "task-1",
+      { images: [], skills: [], text: "并发消息一" },
+      turnOptions,
+    );
+    const secondTurn = provider.startTurn(
+      "task-1",
+      { images: [], skills: [], text: "并发消息二" },
+      turnOptions,
+    );
+    await Promise.resolve();
+
+    // 两个续写请求必须等待同一个恢复操作，避免重复加载同一 Thread。
+    expect(rpc.calls.map(({ method }) => method)).toEqual(["thread/read", "thread/resume"]);
+    resolveResume({ thread: nativeThread() });
+    await expect(Promise.all([firstTurn, secondTurn])).resolves.toMatchObject([
+      { id: "turn-concurrent-1" },
+      { id: "turn-concurrent-2" },
+    ]);
+    expect(rpc.calls.filter(({ method }) => method === "thread/resume")).toHaveLength(1);
+  });
+
   it("rolls back exactly the latest Codex turn", async () => {
     const rpc = new FakeRpcClient([
       { data: [nativeThread()], nextCursor: null },

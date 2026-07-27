@@ -13,6 +13,7 @@
 - JSONL 响应只有在底层写入回调确认后才算成功，所有写入都使用有界超时；异步写入失败必须关闭连接且不能提前发布请求终态。
 - 过载错误使用带 jitter 的有上限指数退避，不做同步密集重试。
 - Task/Turn 写入只通过 `thread/start`、`turn/start` 和 `turn/interrupt` 映射；文本输入必须转换为当前 Codex Schema 要求的 `UserInput[]`，Provider 不向上泄漏原生字段。
+- App Server 重启后，从 `thread/list` 或 `thread/read` 重新发现的持久化 Task 在首次 `turn/start` 前必须调用一次 `thread/resume`；同一进程内由 `thread/start` 或 `thread/fork` 创建的已加载 Task 不得重复恢复，并发续写必须复用同一个恢复 Promise。
 - `agentMessage.phase` 中的 `commentary` 与 `final_answer` 都必须映射为 Assistant Message，并通过 `message.delta` 实时交付；原生 `reasoning` Item 仍映射为统一 Reasoning Item，但 Web 不展示其内容。
 - Codex 协作 Item 的 `item/started` 必须映射为统一 `item.started` 实时事件，不能丢弃长时间运行的子代理操作；协作 Item 必须保留子代理任务、模型、思考量和代理状态，并使用 Provider 无关的 `agent/*` Tool 名称。普通消息和命令继续使用专用 Delta，不重复交付空的 Started Item。
 - 子代理使用独立 Codex Thread。Web 按需读取父协作 Item 的 receiver Task ID 时，Runtime 必须先以 Project 归属暂存该 Thread，`thread/read` 验证 `cwd` 后同时确认 Runtime Owner 与 Project Provider Task 集合，再交付读取期间暂存的通知；这样弹窗关闭后可以停止浏览器订阅，再次打开时从最新 Snapshot checkpoint 继续，未知 Project 的子线程事件仍必须丢弃。

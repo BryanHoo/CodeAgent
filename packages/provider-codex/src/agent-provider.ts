@@ -1140,6 +1140,8 @@ export class CodexAgentProvider implements AgentProvider {
   readonly #pendingTaskReads = new Map<string, number>();
   readonly #project: Project;
   readonly #projectTaskIds = new Set<string>();
+  readonly #resumedTaskIds = new Set<string>();
+  readonly #taskResumePromises = new Map<string, Promise<void>>();
   readonly #requestExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #resolvingRequests = new Map<string, ResolvingPendingRequest>();
   readonly #taskContextUsage = new Map<string, AgentContextUsage>();
@@ -1211,6 +1213,7 @@ export class CodexAgentProvider implements AgentProvider {
     );
     // Fork 成功后立即接受新 Task 的实时通知与后续 Mutation。
     this.#projectTaskIds.add(task.id);
+    this.#resumedTaskIds.add(task.id);
     return task;
   }
 
@@ -1313,6 +1316,7 @@ export class CodexAgentProvider implements AgentProvider {
     );
     // 新建 Task 必须立即接收后续 Turn 通知，不能等待下一次列表刷新。
     this.#projectTaskIds.add(task.id);
+    this.#resumedTaskIds.add(task.id);
     this.#unmaterializedTasks.set(task.id, task);
     return task;
   }
@@ -1352,6 +1356,7 @@ export class CodexAgentProvider implements AgentProvider {
     if (codexInput.length === 0) {
       throw new CodexProtocolMappingError("Provider turn input must not be empty");
     }
+    await this.#resumeTask(taskId);
     const response = expectRecord(
       await this.#client.request("turn/start", {
         approvalPolicy: options.approvalPolicy,
@@ -1949,6 +1954,38 @@ export class CodexAgentProvider implements AgentProvider {
   #assertKnownProjectTask(taskId: string): void {
     if (!this.#projectTaskIds.has(taskId)) {
       throw new CodexProtocolMappingError("Codex thread does not belong to the active project");
+    }
+  }
+
+  async #resumeTask(taskId: string): Promise<void> {
+    if (this.#resumedTaskIds.has(taskId)) {
+      return;
+    }
+    const currentResume = this.#taskResumePromises.get(taskId);
+    if (currentResume !== undefined) {
+      return currentResume;
+    }
+
+    const resumePromise = (async () => {
+      const response = expectRecord(
+        await this.#client.request("thread/resume", { threadId: taskId }),
+        "thread/resume response",
+      );
+      const thread = expectRecord(response["thread"], "thread/resume thread");
+      if (expectString(thread["id"], "thread/resume thread id") !== taskId) {
+        throw new CodexProtocolMappingError("thread/resume returned a different thread");
+      }
+      assertProjectThread(thread, this.#project);
+      // 恢复成功后，本次 App Server 生命周期内可直接继续后续 Turn。
+      this.#resumedTaskIds.add(taskId);
+    })();
+    this.#taskResumePromises.set(taskId, resumePromise);
+    try {
+      await resumePromise;
+    } finally {
+      if (this.#taskResumePromises.get(taskId) === resumePromise) {
+        this.#taskResumePromises.delete(taskId);
+      }
     }
   }
 }
