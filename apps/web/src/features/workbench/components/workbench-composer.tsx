@@ -349,6 +349,7 @@ export function WorkbenchComposer({
   }>();
   const [submittedTurnId, setSubmittedTurnId] = useState<string>();
   const commandMenuId = useId();
+  const commandSurfaceRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const startTaskAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const startTurnAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
@@ -397,6 +398,11 @@ export function WorkbenchComposer({
   const handleAttachmentsChange = useCallback((files: readonly PromptInputAttachment[]) => {
     setAttachmentCount(files.length);
   }, []);
+  const closeCommandMenu = useCallback(() => {
+    setCommandMenuOpen(false);
+    setCommandQuery("");
+    setCommandSlashCommand(undefined);
+  }, []);
 
   const updateSettings = (nextSettings: AgentTaskSettings, field: keyof AgentTaskSettings) => {
     setSettingsOverride({ projectId, settings: nextSettings });
@@ -409,10 +415,34 @@ export function WorkbenchComposer({
 
   useEffect(() => {
     if (turnControlsDisabled) {
-      setCommandMenuOpen(false);
-      setCommandSlashCommand(undefined);
+      closeCommandMenu();
     }
-  }, [turnControlsDisabled]);
+  }, [closeCommandMenu, turnControlsDisabled]);
+
+  useEffect(() => {
+    if (!commandMenuOpen) {
+      return undefined;
+    }
+    const handleDocumentKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeCommandMenu();
+      }
+    };
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      const eventTarget = event.target;
+      if (eventTarget instanceof Node && !commandSurfaceRef.current?.contains(eventTarget)) {
+        // 输入框和命令弹层共享一个交互区域，只有点击区域外部才关闭弹层。
+        closeCommandMenu();
+      }
+    };
+    document.addEventListener("keydown", handleDocumentKeyDown, true);
+    document.addEventListener("pointerdown", handleDocumentPointerDown, true);
+    return () => {
+      document.removeEventListener("keydown", handleDocumentKeyDown, true);
+      document.removeEventListener("pointerdown", handleDocumentPointerDown, true);
+    };
+  }, [closeCommandMenu, commandMenuOpen]);
 
   const focusTextarea = (cursorPosition?: number) => {
     requestAnimationFrame(() => {
@@ -769,7 +799,7 @@ export function WorkbenchComposer({
 
   return (
     <section className="shrink-0 bg-content px-3 pb-2 sm:px-5" aria-label="Composer">
-      <div className="relative mx-auto w-full max-w-content">
+      <div className="relative mx-auto w-full max-w-content" ref={commandSurfaceRef}>
         {commandMenu}
         <PromptInput
           accept="image/gif,image/jpeg,image/png,image/webp"
@@ -883,12 +913,6 @@ export function WorkbenchComposer({
                   return;
                 }
                 if (!commandMenuOpen || event.nativeEvent.isComposing) {
-                  return;
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setCommandMenuOpen(false);
-                  setCommandSlashCommand(undefined);
                   return;
                 }
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {

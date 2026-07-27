@@ -12,7 +12,7 @@
 - Task Timeline 不展示原生 Reasoning Item 或 Chain of Thought；Codex Commentary 与 Final Answer 都作为普通 Assistant Message，通过 `MessageResponse` 实时流式展示。Command、Tool 等结构化 Item 保持独立可见，不包裹进思考容器。运行中的 AI 回复必须在回复最后一行使用 AI Elements `Shimmer` 表达持续生成状态；存在运行中的 Command、Tool、Activity 或流式 Plan 时显示当前操作名称，其中 Command 同时显示终端图标；没有结构化操作时回退为通用运行状态，并在 Turn 结束后移除。
 - Composer 使用 AI Elements `PromptInput`、`Attachments` 和组合式工具栏，支持点击、拖放、粘贴、预览与移除图片；附件选择是本地操作，在实时连接恢复期间仍保持可用，仅在正在提交时锁定；模型来自 Server Query，审批策略、沙盒模式、模型和思考量随同一个 Turn 请求提交，不保留禁用占位控件。
 - Composer 在已有 Task 中使用 Snapshot 携带的完整设置，在新聊天中使用 Project 默认模型、思考量与沙盒模式并固定以 `on-request` 初始化审批；沙盒选择紧邻审批并提供只读、工作区可写和完全访问；设置只由用户事件触发完整对象 Mutation，不得通过 effect 写回或从其他 Task 继承审批。
-- Composer 在文本开头或空白字符后的 `/` 输入使用 AI Elements `PromptInputCommand*` 在输入框外部向上浮出分组列表，连续正文字符后的 `/` 仅作为普通字符；不得把列表嵌入 PromptInput 表面。列表先固定提供代码审查、初始化、副任务、压缩、反馈和在新任务中继续，再在命令组下方展示当前 Project 由 Server 返回的可用 Skills，并支持鼠标、上下方向键、Enter、Escape 和明确的 listbox/option 语义。Skill 描述固定为单行省略；键盘高亮移动到滚动区域外时必须自动滚动到可见位置。Skill 选择后仅移除当前 Slash 片段并保留已有正文，在输入框内使用 `skill` 主题色展示可移除 Token；提交结构化不透明引用，不得拼接文本或接触原生路径。代码审查、压缩、反馈和续接必须调用对应 Provider 能力，初始化与副任务复用正常 Turn 提交链路。
+- Composer 在文本开头或空白字符后的 `/` 输入使用 AI Elements `PromptInputCommand*` 在输入框外部向上浮出分组列表，连续正文字符后的 `/` 仅作为普通字符；不得把列表嵌入 PromptInput 表面。列表先固定提供代码审查、初始化、副任务、压缩、反馈和在新任务中继续，再在命令组下方展示当前 Project 由 Server 返回的可用 Skills，并支持鼠标、上下方向键、Enter、Escape、点击输入框与列表之外区域关闭，以及明确的 listbox/option 语义。Skill 描述固定为单行省略；键盘高亮移动到滚动区域外时必须自动滚动到可见位置。Skill 选择后仅移除当前 Slash 片段并保留已有正文，在输入框内使用 `skill` 主题色展示可移除 Token；提交结构化不透明引用，不得拼接文本或接触原生路径。代码审查、压缩、反馈和续接必须调用对应 Provider 能力，初始化与副任务复用正常 Turn 提交链路。
 - Composer 的审批、模型和思考量选择隐藏原生箭头并按当前文字收缩，思考量选项直接显示“低”“中”“高”等等级，不重复显示“思考量”前缀；思考量紧邻模型；任一内部控件聚焦时只由 Composer 整体显示主色边框，内部控件不重复显示主色焦点轮廓；分支/路径行最右使用圆环按钮表达真实上下文占比，悬停或键盘聚焦后通过 Tooltip 展示百分比和已用/总 Token 数。
 - 工作台左栏先展示产品标识与名称，再按常显搜索框、“新建任务”、可选 `Pinned`、`Projects` 排列；没有固定 Task 时不渲染 `Pinned` 区域。
 - `Projects` 标题使用高于分组元数据的字号并固定在项目树滚动区域之外；Project 行之间不增加分组间隔。每个展开 Project 默认展示最近 5 个 Task，超过后使用占满 Task 列表整行的“显示更多”展开，并允许通过同样的整行控件收起。
@@ -40,7 +40,7 @@
 - `shared/styles/globals.css` 是颜色、字体、间距、圆角、阴影、动效和固定布局尺寸的唯一设计 Token 来源；组件使用语义化 Tailwind Token，不散落视觉字面值。
 - 浅色与深色主题在同一语义 Token 中使用 `light-dark()` 定义，`data-theme` 只切换 `color-scheme`，禁止复制整套主题变量。
 - 主题色固定为浅色 `surface #ffffff`、`ink #171717`、`accent #006aff`、`diffAdded #28a948`、`diffRemoved #eb001d`、`skill #a100f8`，深色 `surface #181818`、`ink #ffffff`、`accent #339cff`、`diffAdded #40c977`、`diffRemoved #fa423e`、`skill #ad7bf9`；浅色大面积区域保持纯白，不添加固定浅灰底。
-- 工作台区域优先使用材质背景、淡阴影和留白区分层级，不使用贯穿面板的高对比边框；视口进入覆盖模式时关闭已打开的桌面面板。
+- 工作台区域优先使用材质背景、淡阴影和留白区分层级，不使用贯穿面板的高对比边框；视口进入覆盖模式时关闭已打开的桌面面板。左右栏仅由各自工具栏按钮、窄屏遮罩或响应式视口变化控制，任何情况下都不得由 Escape 键关闭。
 - 永久 Sidebar 和 Inspector 使用连续同色背景，仅在其纵向边界添加低对比单像素分隔；三栏标题行使用相同高度并保持文字、图标垂直居中，侧栏顶栏不与下方内容分隔，主内容 Toolbar 的单像素底部分隔与左栏搜索框、右栏 Tab 的顶部对齐。不使用模糊或多层重阴影，浮动阴影只用于 Composer、弹层和独立表面。
 - 视觉系统变更使用 Playwright 检查 computed style、桌面与移动溢出、窗口缩放和控制台错误。
 - 只有形成稳定复用模式后才写入本规范。

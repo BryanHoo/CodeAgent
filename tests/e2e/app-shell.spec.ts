@@ -811,6 +811,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   await page.goto("/p/code-agent/t/task-1");
 
   const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.fill("");
   await prompt.fill("/");
   const commandMenu = page.getByRole("listbox", { name: "输入命令" });
   await expect(commandMenu).toBeVisible();
@@ -821,6 +822,20 @@ test("runs official task actions from the slash command menu", async ({ page }) 
     "true",
   );
   await expect(commandMenu.getByRole("option", { name: /Documentation writer/u })).toBeVisible();
+  await prompt.press("Escape");
+  await expect(commandMenu).toBeHidden();
+  await expect(page.getByRole("button", { name: "收起项目侧栏" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "收起上下文面板" })).toBeVisible();
+
+  await prompt.fill("");
+  await prompt.fill("/");
+  await expect(commandMenu).toBeVisible();
+  await page.getByRole("main", { name: "Task Timeline" }).click({ position: { x: 10, y: 10 } });
+  await expect(commandMenu).toBeHidden();
+
+  await prompt.fill("");
+  await prompt.fill("/");
+  await expect(commandMenu).toBeVisible();
   const skillDescription = commandMenu.getByText(/review-security/u);
   await expect
     .poll(() =>
@@ -2088,7 +2103,7 @@ test("uses material hierarchy instead of strong workbench borders", async ({ pag
   expect(presentation.composerBottomPadding).toBeLessThanOrEqual(8);
 });
 
-test("supports structured activity and keyboard panel dismissal", async ({ page }) => {
+test("supports structured activity without Escape changing panel state", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
   await expect(page.getByText("思考过程", { exact: true })).toHaveCount(0);
@@ -2097,7 +2112,8 @@ test("supports structured activity and keyboard panel dismissal", async ({ page 
   await expect(page.getByText("docs/web-design.md")).toBeVisible();
 
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("complementary", { name: "Context Inspector" })).not.toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Project Sidebar" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Context Inspector" })).toBeVisible();
 });
 
 test("keeps the narrow workbench layout stable", async ({ page }) => {

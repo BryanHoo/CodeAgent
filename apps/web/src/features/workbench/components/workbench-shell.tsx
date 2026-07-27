@@ -293,21 +293,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   }, [gitStatusQuery.refetch, isTaskRunning, projectId, queryClient]);
 
   useEffect(() => {
-    // Escape 统一关闭覆盖面板，避免键盘用户被窄屏抽屉困住。
-    const closePanels = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSidebarOpen(false);
-        setInspectorOpen(false);
-      }
-    };
-
-    window.addEventListener("keydown", closePanels);
-    return () => {
-      window.removeEventListener("keydown", closePanels);
-    };
-  }, []);
-
-  useEffect(() => {
     // 窗口缩窄进入覆盖模式时关闭桌面面板，避免两个抽屉同时遮住主内容。
     const sidebarMedia = window.matchMedia(sidebarOverlayQuery);
     const inspectorMedia = window.matchMedia(inspectorOverlayQuery);
