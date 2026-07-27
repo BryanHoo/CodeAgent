@@ -13,6 +13,7 @@
 - JSONL 响应只有在底层写入回调确认后才算成功，所有写入都使用有界超时；异步写入失败必须关闭连接且不能提前发布请求终态。
 - 过载错误使用带 jitter 的有上限指数退避，不做同步密集重试。
 - Task/Turn 写入只通过 `thread/start`、`turn/start` 和 `turn/interrupt` 映射；文本输入必须转换为当前 Codex Schema 要求的 `UserInput[]`，Provider 不向上泄漏原生字段。
+- `agentMessage.phase` 中的 `commentary` 必须映射为统一 Reasoning Item，`final_answer` 映射为 Assistant Message；实时 Delta 通过此前 `item/started` 的 phase 元数据分流，Turn 终态保持同一映射。
 - `thread/start` 返回的新 Task 在首条用户消息前可能尚未 materialize；此时 `thread/read(includeTurns: true)` 的明确未 materialize 错误必须映射为该已知 Task 的空闲空快照，未知 Task 和其他 RPC 错误不得被吞掉。
 - Provider 对已成功 `thread/start` 的 Task 必须提供进程内 read-your-writes：在 Codex 原生 `thread/list` 首次返回该 Task 前，将本地未 materialize Task 合并到首个列表页；只有原生列表接管后才能移除该列表回退，`turn/start` 或 `thread/read` 成功不能提前造成列表不可见窗口。
 - Task 命令通过受控 Provider 方法映射：代码审查使用 `review/start`，上下文压缩使用 `thread/compact/start`，新任务续接使用 `thread/fork`，任务反馈使用 `feedback/upload`；每个动作都必须先验证 Task 属于当前 Project，并校验响应中的 Thread ID。

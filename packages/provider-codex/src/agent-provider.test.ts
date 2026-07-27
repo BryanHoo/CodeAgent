@@ -1302,6 +1302,143 @@ describe("CodexAgentProvider", () => {
     expect(events).toHaveLength(9);
   });
 
+  it("maps commentary messages to reasoning while preserving final answers", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: unknown[] = [];
+    provider.subscribeEvents((event) => {
+      events.push(event);
+    });
+    await provider.listTasks();
+
+    const commentaryItem = {
+      id: "commentary-1",
+      memoryCitation: null,
+      phase: "commentary",
+      text: "正在扫描项目结构。",
+      type: "agentMessage",
+    };
+    rpc.emitNotification("item/started", {
+      item: { ...commentaryItem, text: "" },
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("item/agentMessage/delta", {
+      delta: "正在扫描项目结构。",
+      itemId: "commentary-1",
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("item/completed", {
+      item: commentaryItem,
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    const finalAnswerItem = {
+      id: "answer-1",
+      memoryCitation: null,
+      phase: "final_answer",
+      text: "项目已理解。",
+      type: "agentMessage",
+    };
+    rpc.emitNotification("item/started", {
+      item: { ...finalAnswerItem, text: "" },
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("item/agentMessage/delta", {
+      delta: "项目已理解。",
+      itemId: "answer-1",
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("item/completed", {
+      item: finalAnswerItem,
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("turn/completed", {
+      threadId: "task-1",
+      turn: {
+        completedAt: 1_753_228_801,
+        error: null,
+        id: "turn-1",
+        items: [commentaryItem, finalAnswerItem],
+        startedAt: 1_753_228_800,
+        status: "completed",
+      },
+    });
+
+    expect(events).toEqual([
+      {
+        itemId: "commentary-1",
+        payload: { delta: "正在扫描项目结构。", field: "summary" },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "reasoning.delta",
+      },
+      {
+        itemId: "commentary-1",
+        payload: {
+          item: {
+            content: "",
+            id: "commentary-1",
+            summary: "正在扫描项目结构。",
+            type: "reasoning",
+          },
+        },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "item.completed",
+      },
+      {
+        itemId: "answer-1",
+        payload: { delta: "项目已理解。" },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "message.delta",
+      },
+      {
+        itemId: "answer-1",
+        payload: {
+          item: { id: "answer-1", role: "assistant", text: "项目已理解。", type: "message" },
+        },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "item.completed",
+      },
+      {
+        payload: {
+          turn: {
+            completedAt: "2025-07-23T00:00:01.000Z",
+            error: null,
+            id: "turn-1",
+            items: [
+              {
+                content: "",
+                id: "commentary-1",
+                summary: "正在扫描项目结构。",
+                type: "reasoning",
+              },
+              {
+                id: "answer-1",
+                role: "assistant",
+                text: "项目已理解。",
+                type: "message",
+              },
+            ],
+            startedAt: "2025-07-23T00:00:00.000Z",
+            status: "completed",
+          },
+        },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "turn.completed",
+      },
+    ]);
+  });
+
   it("does not publish notifications for tasks outside the active project", async () => {
     let pendingResolution: Promise<unknown> | undefined;
     const rpc = new FakeRpcClient([

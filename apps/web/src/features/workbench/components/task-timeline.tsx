@@ -6,7 +6,7 @@ import type {
   Project,
 } from "@code-agent/protocol";
 import { Check, ChevronDown, Copy, FilePenLine, Files, FolderGit2, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
@@ -374,6 +374,50 @@ function extractReasoningSteps(summary: string): string[] {
     .filter((step) => step.length > 0);
 }
 
+type ReasoningPresentation = Readonly<{
+  content: string;
+  steps: readonly string[];
+}>;
+
+function getReasoningPresentation(
+  item: Extract<AgentItem, { type: "reasoning" }>,
+): ReasoningPresentation | null {
+  const trimmedSummary = item.summary.trim();
+  const trimmedContent = item.content.trim();
+  if (trimmedSummary.length === 0 && trimmedContent.length === 0) {
+    return null;
+  }
+  const steps = extractReasoningSteps(trimmedSummary.length > 0 ? trimmedSummary : trimmedContent);
+  const contentRepeatsSummary =
+    trimmedContent.length > 0 &&
+    extractReasoningSteps(trimmedContent).join("\n") === steps.join("\n");
+  const content =
+    trimmedSummary.length > 0 && trimmedContent.length > 0 && !contentRepeatsSummary
+      ? trimmedContent
+      : "";
+  return { content, steps };
+}
+
+function renderReasoningSteps(
+  itemId: string,
+  presentation: ReasoningPresentation,
+  isActive: boolean,
+) {
+  return presentation.steps.map((step, stepIndex) => {
+    const isLastStep = stepIndex === presentation.steps.length - 1;
+    return (
+      <ChainOfThoughtStep
+        {...(isLastStep && presentation.content.length > 0
+          ? { description: presentation.content }
+          : {})}
+        key={`${itemId}:${String(stepIndex)}`}
+        label={step}
+        status={isActive && isLastStep ? "active" : "complete"}
+      />
+    );
+  });
+}
+
 const fileChangeOperationLabels: Readonly<Record<AgentFileChange["kind"], string>> = {
   create: "已创建",
   delete: "已删除",
@@ -524,6 +568,12 @@ type IndexedAgentItem = Readonly<{
   itemIndex: number;
 }>;
 
+type ThoughtAgentItem = Extract<AgentItem, { type: "command" | "reasoning" | "tool" }>;
+
+type AssistantTimelineSegment =
+  | Readonly<{ item: IndexedAgentItem; type: "item" }>
+  | Readonly<{ items: readonly IndexedAgentItem[]; key: string; type: "thought" }>;
+
 type TurnTimelineGroup =
   | Readonly<{ item: Extract<AgentItem, { type: "message" }>; type: "user" }>
   | Readonly<{ items: readonly IndexedAgentItem[]; key: string; type: "assistant" }>;
@@ -555,6 +605,46 @@ function groupTurnTimelineItems(items: readonly AgentItem[]): TurnTimelineGroup[
   return groups;
 }
 
+function isThoughtAgentItem(item: AgentItem): item is ThoughtAgentItem {
+  return item.type === "reasoning" || item.type === "command" || item.type === "tool";
+}
+
+function groupAssistantTimelineItems(
+  items: readonly IndexedAgentItem[],
+): AssistantTimelineSegment[] {
+  const segments: AssistantTimelineSegment[] = [];
+  let thoughtItems: IndexedAgentItem[] = [];
+
+  const flushThoughtItems = () => {
+    const firstItem = thoughtItems[0];
+    if (firstItem === undefined) {
+      return;
+    }
+    const hasVisibleReasoning = thoughtItems.some(
+      ({ item }) => item.type === "reasoning" && getReasoningPresentation(item) !== null,
+    );
+    if (hasVisibleReasoning) {
+      segments.push({ items: thoughtItems, key: firstItem.item.id, type: "thought" });
+    } else {
+      segments.push(...thoughtItems.map((item) => ({ item, type: "item" }) as const));
+    }
+    thoughtItems = [];
+  };
+
+  items.forEach((indexedItem) => {
+    if (isThoughtAgentItem(indexedItem.item)) {
+      thoughtItems.push(indexedItem);
+      return;
+    }
+    // 普通消息等可见内容会切断思考；后续 reasoning 从新的思考块开始。
+    flushThoughtItems();
+    segments.push({ item: indexedItem, type: "item" });
+  });
+  flushThoughtItems();
+
+  return segments;
+}
+
 function TimelineItemContent({
   isLastTurnItem,
   item,
@@ -574,42 +664,21 @@ function TimelineItemContent({
         </MessageContent>
       );
     case "reasoning": {
-      const reasoningSteps = extractReasoningSteps(item.summary);
-      const reasoningTitle = reasoningSteps.at(-1) ?? "推理";
-      const trimmedReasoningContent = item.content.trim();
-      const contentRepeatsSummary =
-        trimmedReasoningContent.length > 0 &&
-        extractReasoningSteps(trimmedReasoningContent).join("\n") === reasoningSteps.join("\n");
-      const reasoningContent =
-        trimmedReasoningContent.length > 0 && !contentRepeatsSummary
-          ? trimmedReasoningContent
-          : reasoningSteps.length > 1
-            ? item.summary
-            : "";
+      const presentation = getReasoningPresentation(item);
+      if (presentation === null) {
+        // 部分模型会发出空 reasoning 占位，不向用户展示无内容的思考组件。
+        return null;
+      }
       const isStreamingReasoning = turnStatus === "running" && isLastTurnItem;
-      const hasReasoningContent = reasoningContent.length > 0;
-      const completedReasoningSteps = reasoningSteps.slice(0, -1);
 
       return (
-        <ChainOfThought
-          collapsible={hasReasoningContent || completedReasoningSteps.length > 0}
-          defaultOpen={isStreamingReasoning}
-        >
-          <ChainOfThoughtHeader>{reasoningTitle}</ChainOfThoughtHeader>
-          {hasReasoningContent || completedReasoningSteps.length > 0 ? (
-            <ChainOfThoughtContent>
-              {completedReasoningSteps.map((step) => (
-                <ChainOfThoughtStep key={step} label={step} status="complete" />
-              ))}
-              {hasReasoningContent ? (
-                <ChainOfThoughtStep
-                  description={reasoningContent}
-                  label={reasoningTitle}
-                  status={isStreamingReasoning ? "active" : "complete"}
-                />
-              ) : null}
-            </ChainOfThoughtContent>
-          ) : null}
+        <ChainOfThought defaultOpen={isStreamingReasoning}>
+          <ChainOfThoughtHeader>
+            {isStreamingReasoning ? "正在思考" : "思考过程"}
+          </ChainOfThoughtHeader>
+          <ChainOfThoughtContent>
+            {renderReasoningSteps(item.id, presentation, isStreamingReasoning)}
+          </ChainOfThoughtContent>
         </ChainOfThought>
       );
     }
@@ -691,6 +760,59 @@ function TimelineItemContent({
   }
 }
 
+function ThoughtTimelineSegment({
+  isActive,
+  items,
+  onOpenSourceFile,
+  turn,
+}: Readonly<{
+  isActive: boolean;
+  items: readonly IndexedAgentItem[];
+  onOpenSourceFile: (reference: MessageFileReference) => void;
+  turn: AgentTurn;
+}>) {
+  let lastReasoningItemId: string | null = null;
+  for (const { item } of items) {
+    if (item.type === "reasoning" && getReasoningPresentation(item) !== null) {
+      lastReasoningItemId = item.id;
+    }
+  }
+
+  return (
+    <ChainOfThought defaultOpen={isActive}>
+      <ChainOfThoughtHeader>{isActive ? "正在思考" : "思考过程"}</ChainOfThoughtHeader>
+      <ChainOfThoughtContent>
+        {items.map(({ item, itemIndex }) => {
+          if (item.type !== "reasoning") {
+            return (
+              <TimelineItemContent
+                isLastTurnItem={itemIndex === turn.items.length - 1}
+                item={item}
+                key={item.id}
+                onOpenSourceFile={onOpenSourceFile}
+                turnStatus={turn.status}
+              />
+            );
+          }
+          const presentation = getReasoningPresentation(item);
+          if (presentation === null) {
+            return null;
+          }
+          return (
+            <Fragment key={item.id}>
+              {renderReasoningSteps(
+                item.id,
+                presentation,
+                isActive && item.id === lastReasoningItemId,
+              )}
+            </Fragment>
+          );
+        })}
+      </ChainOfThoughtContent>
+    </ChainOfThought>
+  );
+}
+
 function TurnTimelineItems({
   canRollback,
   latestSnapshotTimestamp,
@@ -741,19 +863,42 @@ function TurnTimelineItems({
     const showChangedFilesCard = turn.status !== "running" && responseFileChanges.length > 0;
     const showRunningShimmer =
       turn.status === "running" && groupIndex === timelineGroups.length - 1;
+    const assistantSegments = groupAssistantTimelineItems(group.items);
+    const lastVisibleItem = group.items.findLast(
+      ({ item }) =>
+        item.type !== "file_change" &&
+        (item.type !== "reasoning" || getReasoningPresentation(item) !== null),
+    );
 
     return (
       <Message from="assistant" key={group.key}>
         <div className="w-full space-y-4">
-          {group.items.map(({ item, itemIndex }) => (
-            <TimelineItemContent
-              isLastTurnItem={itemIndex === turn.items.length - 1}
-              item={item}
-              key={item.id}
-              onOpenSourceFile={onOpenSourceFile}
-              turnStatus={turn.status}
-            />
-          ))}
+          {assistantSegments.map((segment) => {
+            if (segment.type === "thought") {
+              return (
+                <ThoughtTimelineSegment
+                  isActive={
+                    turn.status === "running" &&
+                    segment.items.some(({ item }) => item.id === lastVisibleItem?.item.id)
+                  }
+                  items={segment.items}
+                  key={segment.key}
+                  onOpenSourceFile={onOpenSourceFile}
+                  turn={turn}
+                />
+              );
+            }
+            const { item, itemIndex } = segment.item;
+            return (
+              <TimelineItemContent
+                isLastTurnItem={itemIndex === turn.items.length - 1}
+                item={item}
+                key={item.id}
+                onOpenSourceFile={onOpenSourceFile}
+                turnStatus={turn.status}
+              />
+            );
+          })}
           {showRunningShimmer ? (
             <Shimmer aria-label="AI 回复正在运行" as="p" className="text-body-small" role="status">
               正在运行

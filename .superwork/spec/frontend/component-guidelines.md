@@ -9,7 +9,7 @@
 - 每个组件只承担一个可描述的界面职责，紧凑工作台界面避免装饰性嵌套卡片。
 - Web 不提供登录路由或账号控件；Provider 资源不可用时展示 `codex login` 指引和 Query 重试操作，不调用账号接口。
 - `shared/ai-elements` 以官方 AI Elements 组件源码和公开 API 为实现基线，只改造样式、基础控件适配与本地化文案以使用本项目设计 Token；不得用功能不完整的自研组件替代官方能力。
-- Task Timeline 的思考 Item 使用 AI Elements `ChainOfThought`、`ChainOfThoughtHeader`、`ChainOfThoughtContent` 和 `ChainOfThoughtStep` 展示；运行时默认展开，结束后即使收起也必须保留可查看内容。运行中的 AI 回复必须在回复最后一行使用 AI Elements `Shimmer` 表达持续生成状态，并在 Turn 结束后移除。
+- Task Timeline 的非空思考 Item 使用 AI Elements `ChainOfThought`、`ChainOfThoughtHeader`、`ChainOfThoughtContent` 和 `ChainOfThoughtStep` 展示；连续的 Reasoning、Command 和 Tool Item 必须合并为一个思考块，只有普通消息等可见非思考内容才能切断分组。单段 Commentary Summary 也必须成为可读 Step，空 Reasoning 占位不渲染。运行时默认展开，结束后即使收起也必须保留可查看内容。运行中的 AI 回复必须在回复最后一行使用 AI Elements `Shimmer` 表达持续生成状态，并在 Turn 结束后移除。
 - Composer 使用 AI Elements `PromptInput`、`Attachments` 和组合式工具栏，支持点击、拖放、粘贴、预览与移除图片；附件选择是本地操作，在实时连接恢复期间仍保持可用，仅在正在提交时锁定；模型来自 Server Query，审批策略、模型和思考量随同一个 Turn 请求提交，不保留禁用占位控件。
 - Composer 在已有 Task 中使用 Snapshot 携带的完整设置，在新聊天中使用 Project 默认模型与思考量并固定以 `on-request` 初始化审批；设置只由用户事件触发完整对象 Mutation，不得通过 effect 写回或从其他 Task 继承审批。
 - Composer 的起始 `/` 输入使用 AI Elements `PromptInputCommand*` 在输入框外部向上浮出命令列表，不得把列表嵌入 PromptInput 表面；固定提供代码审查、初始化、副任务、压缩、反馈和在新任务中继续，并支持鼠标、上下方向键、Enter、Escape 和明确的 listbox/option 语义。代码审查、压缩、反馈和续接必须调用对应 Provider 能力；初始化与副任务复用正常 Turn 提交链路，不得在前端伪造执行结果。

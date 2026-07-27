@@ -563,6 +563,18 @@ function createActivityItem(id: string, label: string, detail?: string): AgentIt
     : { detail, id, label, type: "activity" };
 }
 
+type CodexMessagePhase = "commentary" | "final_answer";
+
+function mapCodexMessagePhase(value: unknown): CodexMessagePhase | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (value === "commentary" || value === "final_answer") {
+    return value;
+  }
+  throw new CodexProtocolMappingError("Codex agent message phase is invalid");
+}
+
 function mapAgentItem(value: unknown): AgentItem {
   const item = expectRecord(value, "Codex item");
   const id = expectString(item["id"], "Codex item id");
@@ -571,13 +583,14 @@ function mapAgentItem(value: unknown): AgentItem {
   switch (type) {
     case "userMessage":
       return { id, role: "user", text: mapUserMessageText(item["content"]), type: "message" };
-    case "agentMessage":
-      return {
-        id,
-        role: "assistant",
-        text: expectString(item["text"], "Codex agent message text"),
-        type: "message",
-      };
+    case "agentMessage": {
+      const text = expectString(item["text"], "Codex agent message text");
+      if (mapCodexMessagePhase(item["phase"]) === "commentary") {
+        // Codex commentary 是面向用户的思考摘要，统一映射为 reasoning 供时间线展示。
+        return { content: "", id, summary: text, type: "reasoning" };
+      }
+      return { id, role: "assistant", text, type: "message" };
+    }
     case "reasoning":
       return {
         content: Array.isArray(item["content"])
@@ -716,10 +729,19 @@ function mapAgentTurn(value: unknown): AgentTurn {
   };
 }
 
-function mapCodexNotification(method: string, value: unknown): AgentProviderEvent | undefined {
+function messageItemKey(taskId: string, turnId: string, itemId: string): string {
+  return `${taskId}:${turnId}:${itemId}`;
+}
+
+function mapCodexNotification(
+  method: string,
+  value: unknown,
+  messageItemPhases: Map<string, CodexMessagePhase>,
+): AgentProviderEvent | undefined {
   if (
     method !== "turn/started" &&
     method !== "turn/completed" &&
+    method !== "item/started" &&
     method !== "item/agentMessage/delta" &&
     method !== "item/reasoning/summaryTextDelta" &&
     method !== "item/reasoning/textDelta" &&
@@ -734,6 +756,20 @@ function mapCodexNotification(method: string, value: unknown): AgentProviderEven
   const params = expectRecord(value, `Codex ${method} params`);
   const taskId = expectString(params["threadId"], `Codex ${method} threadId`);
 
+  if (method === "item/started") {
+    const turnId = expectString(params["turnId"], "Codex item/started turnId");
+    const item = expectRecord(params["item"], "Codex item/started item");
+    if (item["type"] === "agentMessage") {
+      const itemId = expectString(item["id"], "Codex item/started item id");
+      const phase = mapCodexMessagePhase(item["phase"]);
+      if (phase !== undefined) {
+        // Delta 本身不携带 phase，先缓存 item/started 元数据以保持实时分流准确。
+        messageItemPhases.set(messageItemKey(taskId, turnId, itemId), phase);
+      }
+    }
+    return undefined;
+  }
+
   if (method === "thread/tokenUsage/updated") {
     return {
       payload: { usage: mapContextUsage(params["tokenUsage"]) },
@@ -745,6 +781,14 @@ function mapCodexNotification(method: string, value: unknown): AgentProviderEven
 
   if (method === "turn/started" || method === "turn/completed") {
     const turn = mapAgentTurn(params["turn"]);
+    if (method === "turn/completed") {
+      const keyPrefix = `${taskId}:${turn.id}:`;
+      for (const key of messageItemPhases.keys()) {
+        if (key.startsWith(keyPrefix)) {
+          messageItemPhases.delete(key);
+        }
+      }
+    }
     return {
       payload: { turn },
       taskId,
@@ -772,6 +816,7 @@ function mapCodexNotification(method: string, value: unknown): AgentProviderEven
 
   if (method === "item/completed") {
     const item = mapAgentItem(params["item"]);
+    messageItemPhases.delete(messageItemKey(taskId, turnId, item.id));
     return {
       itemId: item.id,
       payload: { item },
@@ -784,6 +829,15 @@ function mapCodexNotification(method: string, value: unknown): AgentProviderEven
   const itemId = expectString(params["itemId"], `Codex ${method} itemId`);
   const delta = expectString(params["delta"], `Codex ${method} delta`);
   if (method === "item/agentMessage/delta") {
+    if (messageItemPhases.get(messageItemKey(taskId, turnId, itemId)) === "commentary") {
+      return {
+        itemId,
+        payload: { delta, field: "summary" },
+        taskId,
+        turnId,
+        type: "reasoning.delta",
+      };
+    }
     return { itemId, payload: { delta }, taskId, turnId, type: "message.delta" };
   }
   if (method === "item/commandExecution/outputDelta") {
@@ -854,6 +908,7 @@ function mapAgentTask(thread: Record<string, unknown>, project: Project): AgentT
 export class CodexAgentProvider implements AgentProvider {
   readonly #client: CodexRpcClient;
   readonly #eventListeners = new Set<AgentProviderEventListener>();
+  readonly #messageItemPhases = new Map<string, CodexMessagePhase>();
   readonly #pendingRequests = new Map<string, PendingCodexRequest>();
   readonly #pendingTaskServerRequests = new Map<string, PendingCodexRequest[]>();
   readonly #pendingTaskEvents = new Map<string, AgentProviderEvent[]>();
@@ -1274,7 +1329,7 @@ export class CodexAgentProvider implements AgentProvider {
     }
     let event: AgentProviderEvent | undefined;
     try {
-      event = mapCodexNotification(method, params);
+      event = mapCodexNotification(method, params, this.#messageItemPhases);
     } catch {
       // 单个原生通知字段漂移不能中断 JSONL Client 或后续关键事件。
       return;

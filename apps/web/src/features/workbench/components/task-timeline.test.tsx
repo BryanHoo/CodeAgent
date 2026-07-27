@@ -217,7 +217,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain("Preparing implementation");
   });
 
-  it("renders a reasoning status without an empty disclosure", () => {
+  it("renders a single reasoning summary as a readable Chain of Thought step", () => {
     const singleStepSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: [
@@ -238,8 +238,121 @@ describe("TaskSnapshotTimeline", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={singleStepSnapshot} />);
 
     expect(markup).toContain(">Preparing final build and test verification<");
-    expect(markup).not.toContain("<details");
-    expect(markup).not.toContain("lucide-chevron-right");
+    expect(markup).toContain("<details");
+    expect(markup).toContain('data-status="complete"');
+    expect(markup).toContain(">思考过程<");
+  });
+
+  it("groups adjacent reasoning and tool calls into one Chain of Thought", () => {
+    const continuousReasoningSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              content: "",
+              id: "reasoning-prepare",
+              summary: "**准备检查项目**",
+              type: "reasoning",
+            },
+            {
+              id: "tool-read-project",
+              input: { path: "package.json" },
+              name: "read_file",
+              output: "CodeAgent",
+              status: "completed",
+              type: "tool",
+            },
+            {
+              command: "pnpm check",
+              cwd: "/workspace/CodeAgent",
+              id: "command-check-project",
+              output: "268 passed",
+              outputTruncated: false,
+              status: "completed",
+              type: "command",
+            },
+            {
+              content: "",
+              id: "reasoning-finish",
+              summary: "**整理项目结论**",
+              type: "reasoning",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      <TaskSnapshotTimeline snapshot={continuousReasoningSnapshot} />,
+    );
+
+    expect(markup.match(/data-ai-chain-of-thought=""/g)).toHaveLength(1);
+    expect(markup.indexOf("准备检查项目")).toBeLessThan(markup.indexOf("read_file"));
+    expect(markup.indexOf("read_file")).toBeLessThan(markup.indexOf("pnpm check"));
+    expect(markup.indexOf("pnpm check")).toBeLessThan(markup.indexOf("整理项目结论"));
+    expect(markup.indexOf("整理项目结论")).toBeLessThan(markup.lastIndexOf("</details>"));
+  });
+
+  it("splits Chain of Thought groups when assistant content appears between reasoning", () => {
+    const separatedReasoningSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              content: "",
+              id: "reasoning-before-message",
+              summary: "**先检查现状**",
+              type: "reasoning",
+            },
+            {
+              id: "message-between-reasoning",
+              role: "assistant",
+              text: "已找到需要进一步确认的内容。",
+              type: "message",
+            },
+            {
+              content: "",
+              id: "reasoning-after-message",
+              summary: "**继续核对细节**",
+              type: "reasoning",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      <TaskSnapshotTimeline snapshot={separatedReasoningSnapshot} />,
+    );
+
+    expect(markup.match(/data-ai-chain-of-thought=""/g)).toHaveLength(2);
+    expect(markup.indexOf("先检查现状")).toBeLessThan(
+      markup.indexOf("已找到需要进一步确认的内容。"),
+    );
+    expect(markup.indexOf("已找到需要进一步确认的内容。")).toBeLessThan(
+      markup.indexOf("继续核对细节"),
+    );
+  });
+
+  it("does not render an empty reasoning placeholder", () => {
+    const emptyReasoningSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [{ content: "", id: "reasoning-empty", summary: "", type: "reasoning" }],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={emptyReasoningSnapshot} />);
+
+    expect(markup).not.toContain('data-ai-chain-of-thought=""');
+    expect(markup).not.toContain(">推理<");
   });
 
   it("renders completed ANSI command output in a copyable Terminal", () => {
