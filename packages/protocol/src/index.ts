@@ -7,6 +7,7 @@ export {
   EventCheckpointSchema,
   EventStreamMessageSchema,
   ItemCompletedEventSchema,
+  ItemStartedEventSchema,
   MessageDeltaEventSchema,
   PendingRequestCreatedEventSchema,
   PendingRequestExpiredEventSchema,

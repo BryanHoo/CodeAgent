@@ -698,6 +698,92 @@ function createActivityItem(id: string, label: string, detail?: string): AgentIt
     : { detail, id, label, type: "activity" };
 }
 
+const collaborationToolNames = {
+  closeAgent: "agent/close",
+  resumeAgent: "agent/resume",
+  sendInput: "agent/send_input",
+  spawnAgent: "agent/spawn",
+  wait: "agent/wait",
+} as const;
+
+function mapCollaborationAgentStatus(value: unknown): AgentItemStatus {
+  if (value === "pendingInit") {
+    return "pending";
+  }
+  if (value === "errored" || value === "notFound") {
+    return "failed";
+  }
+  if (value === "shutdown") {
+    return "completed";
+  }
+  return mapItemStatus(value);
+}
+
+function mapCollaborationToolItem(item: Record<string, unknown>, id: string): AgentItem {
+  const nativeToolName = expectString(item["tool"], "Codex collaboration tool");
+  if (!(nativeToolName in collaborationToolNames)) {
+    throw new CodexProtocolMappingError("Codex collaboration tool is invalid");
+  }
+  const toolName = collaborationToolNames[nativeToolName as keyof typeof collaborationToolNames];
+  if (!Array.isArray(item["receiverThreadIds"])) {
+    throw new CodexProtocolMappingError("Codex collaboration receivers must be an array");
+  }
+  const receiverTaskIds = item["receiverThreadIds"].map((value) =>
+    expectString(value, "Codex collaboration receiver thread id"),
+  );
+  const prompt = optionalString(item["prompt"]);
+  const model = optionalString(item["model"]);
+  const reasoningEffort = optionalString(item["reasoningEffort"]);
+  const agentsStates = expectRecord(item["agentsStates"], "Codex collaboration agent states");
+  const agents = Object.entries(agentsStates).map(([taskId, value]) => {
+    const agentState = expectRecord(value, "Codex collaboration agent state");
+    const message = optionalString(agentState["message"]);
+    return {
+      ...(message === undefined ? {} : { message }),
+      status: mapCollaborationAgentStatus(agentState["status"]),
+      taskId,
+    };
+  });
+
+  return {
+    id,
+    input: {
+      ...(model === undefined ? {} : { model }),
+      ...(prompt === undefined ? {} : { prompt }),
+      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+      receiverTaskIds,
+      senderTaskId: expectString(item["senderThreadId"], "Codex collaboration sender thread id"),
+    },
+    name: toolName,
+    output: { agents },
+    status: mapItemStatus(item["status"]),
+    type: "tool",
+  };
+}
+
+function mapSubagentActivityItem(item: Record<string, unknown>, id: string): AgentItem {
+  expectString(item["agentThreadId"], "Codex subagent thread id");
+  const agentPath = expectString(item["agentPath"], "Codex subagent path");
+  const agentName = agentPath.split("/").filter(Boolean).at(-1) ?? agentPath;
+  const kind = expectString(item["kind"], "Codex subagent activity kind");
+  const activityLabels: Readonly<Record<string, string>> = {
+    interacted: "已交互",
+    interrupted: "已中断",
+    started: "已启动",
+  };
+  const detail = activityLabels[kind];
+  if (detail === undefined) {
+    throw new CodexProtocolMappingError("Codex subagent activity kind is invalid");
+  }
+  return {
+    detail,
+    id,
+    label: `子代理 ${agentName}`,
+    status: kind === "interrupted" ? "interrupted" : "completed",
+    type: "activity",
+  };
+}
+
 type CodexMessagePhase = "commentary" | "final_answer";
 
 function mapCodexMessagePhase(value: unknown): CodexMessagePhase | undefined {
@@ -788,11 +874,7 @@ function mapAgentItem(value: unknown): AgentItem {
       return mapToolItem(item, id, namespace ? `${namespace}/${tool}` : tool);
     }
     case "collabAgentToolCall":
-      return mapToolItem(
-        { ...item, arguments: { receiverTaskIds: item["receiverThreadIds"] } },
-        id,
-        `collaboration/${expectString(item["tool"], "Codex collaboration tool")}`,
-      );
+      return mapCollaborationToolItem(item, id);
     case "webSearch":
       return {
         id,
@@ -822,7 +904,7 @@ function mapAgentItem(value: unknown): AgentItem {
     case "hookPrompt":
       return createActivityItem(id, "Hook 提示");
     case "subAgentActivity":
-      return createActivityItem(id, "子任务活动", optionalString(item["kind"]));
+      return mapSubagentActivityItem(item, id);
     case "imageView":
       return createActivityItem(id, "查看图片", optionalString(item["path"]));
     case "sleep":
@@ -916,10 +998,6 @@ function mapCodexNotification(method: string, value: unknown): AgentProviderEven
   const params = expectRecord(value, `Codex ${method} params`);
   const taskId = expectString(params["threadId"], `Codex ${method} threadId`);
 
-  if (method === "item/started") {
-    return undefined;
-  }
-
   if (method === "thread/tokenUsage/updated") {
     return {
       payload: { usage: mapContextUsage(params["tokenUsage"]) },
@@ -953,6 +1031,22 @@ function mapCodexNotification(method: string, value: unknown): AgentProviderEven
       taskId,
       turnId,
       type: "provider.error",
+    };
+  }
+
+  if (method === "item/started") {
+    const nativeItem = expectRecord(params["item"], "Codex started item");
+    // 子代理启动可能持续较久，需立即交付；普通消息与命令已有专用 Delta，避免重复空 Item。
+    if (nativeItem["type"] !== "collabAgentToolCall") {
+      return undefined;
+    }
+    const item = mapAgentItem(nativeItem);
+    return {
+      itemId: item.id,
+      payload: { item },
+      taskId,
+      turnId,
+      type: "item.started",
     };
   }
 

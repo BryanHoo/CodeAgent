@@ -505,6 +505,7 @@ Realtime Path 当前实现的 v1 判别类型与 payload：
 | `message.delta`        | `taskId`, `turnId`, `itemId` | `{ delta: string }`                          |
 | `reasoning.delta`      | `taskId`, `turnId`, `itemId` | `{ delta, field: "summary" \| "content" }` |
 | `command.output_delta` | `taskId`, `turnId`, `itemId` | `{ delta: string }`                          |
+| `item.started`         | `taskId`, `turnId`, `itemId` | `{ item: AgentItem }`                        |
 | `item.completed`       | `taskId`, `turnId`, `itemId` | `{ item: AgentItem }`                        |
 | `turn.completed`       | `taskId`, `turnId`           | `{ turn: AgentTurn }`                        |
 | `provider.error`       | `taskId`, `turnId`           | `{ message, willRetry }`                     |
@@ -833,6 +834,7 @@ App Server 返回错误码 `-32001` 时，Adapter 使用带 jitter 的指数退�
 - 使用 Normalized Store，以 ID 关联实体。
 - 每个 Item 独立订阅，避免整个 Task 重渲染。
 - Markdown 只重新解析当前流式消息。
+- 子代理详情只在用户打开弹窗时按 receiver Task ID 读取独立 Snapshot 并建立实时订阅；关闭弹窗立即卸载该 Runtime，再次打开时从最新 checkpoint 恢复，不能中断后台子代理或把完整子线程复制进父 Tool Item。
 - 代码高亮延迟到代码块稳定后执行。
 - Diff 使用 `turn/diff/updated` 的完整快照，不自行拼接历史 Patch。
 - `@pierre/diffs` 仅在用户打开 Diff 时动态加载。

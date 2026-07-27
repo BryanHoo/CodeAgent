@@ -606,6 +606,57 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain('data-status="pending"');
   });
 
+  it("renders structured subagent calls as dialog triggers instead of inline summaries", () => {
+    const subagentSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              id: "collaboration-spawn",
+              input: {
+                model: "gpt-5.6-sol",
+                prompt: "理解前端项目",
+                reasoningEffort: "high",
+                receiverTaskIds: ["child-frontend"],
+                senderTaskId: "task-1",
+              },
+              name: "agent/spawn",
+              output: {
+                agents: [
+                  {
+                    message: "前端由 React 工作台与类型安全 Client 组成。",
+                    status: "completed",
+                    taskId: "child-frontend",
+                  },
+                ],
+              },
+              status: "completed",
+              type: "tool",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      <TaskSnapshotTimeline onOpenSubagent={() => undefined} snapshot={subagentSnapshot} />,
+    );
+
+    expect(markup.match(/data-ai-task=""/g)).toHaveLength(2);
+    expect(markup).toContain("启动子代理");
+    expect(markup).toContain("子代理 child-frontend");
+    expect(markup).toContain("理解前端项目");
+    expect(markup).toContain("GPT-5.6-Sol");
+    expect(markup).toContain('aria-haspopup="dialog"');
+    expect(markup).toContain('aria-label="打开子代理 child-frontend 的实时输出"');
+    expect(markup).not.toContain("前端由 React 工作台与类型安全 Client 组成。");
+    expect(markup).not.toContain("agent/spawn");
+    expect(markup).not.toContain("receiverTaskIds");
+    expect(markup).not.toContain('data-ai-tool=""');
+  });
+
   it("renders each changed file with its operation and diff statistics", () => {
     const fileChangeSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,

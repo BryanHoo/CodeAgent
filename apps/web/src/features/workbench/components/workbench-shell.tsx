@@ -557,11 +557,13 @@ function ActiveTaskWorkbench({
     <>
       <TaskTimeline
         canRollbackTurns={capabilities?.turns.rollback ?? false}
+        client={client}
         onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
         onReviewFileChanges={onReviewFileChanges}
         onResolvePendingRequest={resolvePendingRequest}
         onRollbackTurn={rollbackTurn}
+        projectId={projectId}
         runtime={runtime}
         taskId={taskId}
         {...(startingSnapshot === undefined ? {} : { startingSnapshot })}

@@ -23,6 +23,7 @@ const input = createInterface({ input: process.stdin });
 let initializeParams;
 let initialized = false;
 let realtimeRunning = false;
+let subagentRealtimeRunning = false;
 let nextActionTask = 1;
 let nextActionTurn = 1;
 const actionThreads = new Map();
@@ -109,6 +110,21 @@ function realtimeTurn(status, items, error = null) {
   };
 }
 
+function realtimeThread(turns = []) {
+  return {
+    createdAt: 1_753_228_800,
+    cwd: "/workspace/CodeAgent",
+    id: "task-realtime",
+    name: "Realtime Path",
+    preview: "Realtime Path",
+    status: { type: turns.some((turn) => turn.status === "inProgress") ? "active" : "notLoaded" },
+    turns,
+    updatedAt: 1_753_228_800 + turns.length,
+  };
+}
+
+let parentRealtimeThread = realtimeThread();
+
 function actionThread(id, turns = []) {
   return {
     createdAt: 1_753_228_800,
@@ -133,6 +149,63 @@ function actionTurn(id, status, items) {
     startedAt: 1_753_228_800,
     status,
   };
+}
+
+let subagentThread = actionThread("frontend-analysis", [
+  actionTurn("turn-frontend-analysis", "inProgress", [
+    {
+      content: [{ text: "理解前端项目", type: "text" }],
+      id: "frontend-analysis-user",
+      type: "userMessage",
+    },
+  ]),
+]);
+
+function scheduleSubagentRealtimeEvents() {
+  if (subagentRealtimeRunning) {
+    return;
+  }
+  subagentRealtimeRunning = true;
+  const threadId = "frontend-analysis";
+  const turnId = "turn-frontend-analysis";
+  const messageId = "frontend-analysis-message";
+  const firstMessage = {
+    id: messageId,
+    memoryCitation: null,
+    phase: null,
+    text: "正在分析前端",
+    type: "agentMessage",
+  };
+
+  setTimeout(() => {
+    const runningTurn = subagentThread.turns[0];
+    subagentThread = actionThread(threadId, [
+      actionTurn(turnId, "inProgress", [...runningTurn.items, firstMessage]),
+    ]);
+    send({
+      method: "item/agentMessage/delta",
+      params: { delta: firstMessage.text, itemId: messageId, threadId, turnId },
+    });
+  }, 120);
+
+  setTimeout(() => {
+    const completedMessage = {
+      ...firstMessage,
+      text: "正在分析前端\n前端流式分析完成",
+    };
+    const userMessage = subagentThread.turns[0].items[0];
+    const completedTurn = actionTurn(turnId, "completed", [userMessage, completedMessage]);
+    subagentThread = actionThread(threadId, [completedTurn]);
+    send({
+      method: "item/agentMessage/delta",
+      params: { delta: "\n前端流式分析完成", itemId: messageId, threadId, turnId },
+    });
+    send({
+      method: "item/completed",
+      params: { item: completedMessage, threadId, turnId },
+    });
+    send({ method: "turn/completed", params: { threadId, turn: completedTurn } });
+  }, 700);
 }
 
 function completeActionTurn(threadId, turnId) {
@@ -207,9 +280,42 @@ function scheduleRealtimeEvents() {
       status: "completed",
       type: "commandExecution",
     };
+    const startedSubagentItem = {
+      agentsStates: {},
+      id: "subagent-realtime",
+      model: "gpt-5.6-sol",
+      prompt: "理解前端项目",
+      reasoningEffort: "high",
+      receiverThreadIds: [],
+      senderThreadId: "task-realtime",
+      status: "inProgress",
+      tool: "spawnAgent",
+      type: "collabAgentToolCall",
+    };
+    const completedSubagentItem = {
+      ...startedSubagentItem,
+      agentsStates: {
+        "frontend-analysis": {
+          message: "前端由 React 工作台与类型安全 Client 组成。",
+          status: "completed",
+        },
+      },
+      receiverThreadIds: ["frontend-analysis"],
+      status: "completed",
+    };
+    parentRealtimeThread = realtimeThread([realtimeTurn("inProgress", [])]);
     send({
       method: "turn/started",
       params: { threadId: "task-realtime", turn: realtimeTurn("inProgress", []) },
+    });
+    // 先交付运行态，再用同一 Item ID 的完成事件替换为子代理结果。
+    send({
+      method: "item/started",
+      params: {
+        item: startedSubagentItem,
+        threadId: "task-realtime",
+        turnId: "turn-realtime",
+      },
     });
     for (const delta of ["Realtime ", "connected"]) {
       send({
@@ -250,6 +356,15 @@ function scheduleRealtimeEvents() {
       },
     });
     send({
+      method: "item/completed",
+      params: {
+        completedAtMs: 1_753_228_801_750,
+        item: completedSubagentItem,
+        threadId: "task-realtime",
+        turnId: "turn-realtime",
+      },
+    });
+    send({
       method: "thread/tokenUsage/updated",
       params: {
         threadId: "task-realtime",
@@ -265,9 +380,12 @@ function scheduleRealtimeEvents() {
       method: "turn/completed",
       params: {
         threadId: "task-realtime",
-        turn: realtimeTurn("completed", [messageItem, commandItem]),
+        turn: realtimeTurn("completed", [messageItem, commandItem, completedSubagentItem]),
       },
     });
+    parentRealtimeThread = realtimeThread([
+      realtimeTurn("completed", [messageItem, commandItem, completedSubagentItem]),
+    ]);
     send({
       method: "error",
       params: {
@@ -277,9 +395,7 @@ function scheduleRealtimeEvents() {
         willRetry: false,
       },
     });
-    // 同一轮读取期间只调度一次，完成后允许 Playwright 重试重新触发场景。
-    realtimeRunning = false;
-    // 为 Snapshot 设置校验和 WebSocket 建连留出稳定窗口，避免并发 E2E 夹具抢跑。
+    // 同一 App Server 进程只调度一次，避免后续 Snapshot 刷新反复替换已完成的父线程。
   }, 750);
 }
 
@@ -445,20 +561,19 @@ input.on("line", (line) => {
   ) {
     send({
       id: message.id,
-      result: {
-        thread: {
-          createdAt: 1_753_228_800,
-          cwd: "/workspace/CodeAgent",
-          id: "task-realtime",
-          name: "Realtime Path",
-          preview: "Realtime Path",
-          status: { type: "active" },
-          turns: [],
-          updatedAt: 1_753_228_800,
-        },
-      },
+      result: { thread: parentRealtimeThread },
     });
     scheduleRealtimeEvents();
+    return;
+  }
+
+  if (
+    realtimeScenario &&
+    message.method === "thread/read" &&
+    message.params?.threadId === "frontend-analysis"
+  ) {
+    send({ id: message.id, result: { thread: subagentThread } });
+    scheduleSubagentRealtimeEvents();
     return;
   }
 

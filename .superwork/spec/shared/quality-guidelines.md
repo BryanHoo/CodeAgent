@@ -9,7 +9,7 @@
 - Project、Task 等 Protocol 类型必须有对应 JSON Schema 或明确生成来源，运行时边界不得只依赖 TypeScript 类型。
 - `Project.rootPath` 由本地 Runtime 校验后随 Project 契约返回，用于当前工作台展示，并由 `ProjectSchema` 校验为非空字符串。
 - Agent Event 保持版本字段、单调 `sequence` 和可判别事件类型。
-- Provider 只发布不含 `sessionId`、`sequence`、`timestamp` 和 `version` 的统一事件；Server Event Stream 统一分配这些传输字段。
+- Provider 只发布不含 `sessionId`、`sequence`、`timestamp` 和 `version` 的统一事件；Server Event Stream 统一分配这些传输字段。结构化 Item 的开始与完成分别使用 `item.started` 和 `item.completed`，并携带同一统一 Item 载荷供客户端按 ID 替换。
 - Project 级 Provider 只发布已通过 Project 归属验证的 Task 事件，未知或其他目录的 `threadId` 不得进入 Event Stream。
 - Task Snapshot HTTP 响应必须同时返回同一 Event Stream 的 `{ sessionId, sequence }` checkpoint，Client 不得猜测恢复序号。
 - WebSocket 控制帧使用 `connection.ready` 和 `resync.required`；恢复原因只使用 Protocol 定义的判别值。

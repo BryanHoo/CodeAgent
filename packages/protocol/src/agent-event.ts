@@ -70,6 +70,13 @@ export const ItemCompletedEventSchema = createEventSchema({
   type: Type.Literal("item.completed"),
 });
 
+export const ItemStartedEventSchema = createEventSchema({
+  itemId: Type.String({ minLength: 1 }),
+  payload: Type.Object({ item: AgentItemSchema }, { additionalProperties: false }),
+  turnId: Type.String({ minLength: 1 }),
+  type: Type.Literal("item.started"),
+});
+
 export const TurnCompletedEventSchema = createEventSchema({
   payload: Type.Object({ turn: AgentTurnSchema }, { additionalProperties: false }),
   turnId: Type.String({ minLength: 1 }),
@@ -121,6 +128,7 @@ export const AgentEventSchema = Type.Union([
   MessageDeltaEventSchema,
   ReasoningDeltaEventSchema,
   CommandOutputDeltaEventSchema,
+  ItemStartedEventSchema,
   ItemCompletedEventSchema,
   TurnCompletedEventSchema,
   UsageUpdatedEventSchema,

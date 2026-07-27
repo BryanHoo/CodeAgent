@@ -88,6 +88,13 @@ describe("Agent Event v1 protocol", () => {
         itemId: "item-1",
         payload: { item: messageItem },
         turnId: "turn-1",
+        type: "item.started",
+      },
+      {
+        ...baseEvent,
+        itemId: "item-1",
+        payload: { item: messageItem },
+        turnId: "turn-1",
         type: "item.completed",
       },
       {

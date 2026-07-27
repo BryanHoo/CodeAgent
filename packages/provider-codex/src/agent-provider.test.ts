@@ -135,6 +135,82 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("preserves structured subagent details from Codex collaboration items", async () => {
+    const rpc = new FakeRpcClient([
+      {
+        thread: nativeThread({
+          turns: [
+            {
+              completedAt: 1_753_228_860,
+              error: null,
+              id: "turn-collaboration",
+              items: [
+                {
+                  agentsStates: {
+                    "child-frontend": { message: "前端分析完成", status: "completed" },
+                  },
+                  id: "collaboration-spawn",
+                  model: "gpt-5.6-sol",
+                  prompt: "理解前端项目",
+                  reasoningEffort: "high",
+                  receiverThreadIds: ["child-frontend"],
+                  senderThreadId: "task-1",
+                  status: "completed",
+                  tool: "spawnAgent",
+                  type: "collabAgentToolCall",
+                },
+                {
+                  agentPath: "/root/frontend_analysis",
+                  agentThreadId: "child-frontend",
+                  id: "subagent-started",
+                  kind: "started",
+                  type: "subAgentActivity",
+                },
+              ],
+              startedAt: 1_753_228_800,
+              status: "completed",
+            },
+          ],
+        }),
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    const snapshot = await provider.readTask("task-1");
+
+    expect(snapshot?.turns[0]?.items).toEqual([
+      {
+        id: "collaboration-spawn",
+        input: {
+          model: "gpt-5.6-sol",
+          prompt: "理解前端项目",
+          reasoningEffort: "high",
+          receiverTaskIds: ["child-frontend"],
+          senderTaskId: "task-1",
+        },
+        name: "agent/spawn",
+        output: {
+          agents: [
+            {
+              message: "前端分析完成",
+              status: "completed",
+              taskId: "child-frontend",
+            },
+          ],
+        },
+        status: "completed",
+        type: "tool",
+      },
+      {
+        detail: "已启动",
+        id: "subagent-started",
+        label: "子代理 frontend_analysis",
+        status: "completed",
+        type: "activity",
+      },
+    ]);
+  });
+
   it("uses 新聊天 until Codex provides a task title", async () => {
     const rpc = new FakeRpcClient([
       { thread: nativeThread({ name: null, preview: "" }) },
@@ -1339,6 +1415,18 @@ describe("CodexAgentProvider", () => {
       status: "inProgress",
     };
     const completedItem = { id: "item-1", text: "实时完成", type: "agentMessage" };
+    const startedSubagentItem = {
+      agentsStates: {},
+      id: "subagent-spawn",
+      model: "gpt-5.6-sol",
+      prompt: "理解前端项目",
+      reasoningEffort: "high",
+      receiverThreadIds: [],
+      senderThreadId: "task-1",
+      status: "inProgress",
+      tool: "spawnAgent",
+      type: "collabAgentToolCall",
+    };
     const completedTurn = {
       ...runningTurn,
       completedAt: 1_753_228_801,
@@ -1348,6 +1436,11 @@ describe("CodexAgentProvider", () => {
 
     rpc.emitNotification("future/notification", { private: true });
     rpc.emitNotification("turn/started", { threadId: "task-1", turn: runningTurn });
+    rpc.emitNotification("item/started", {
+      item: startedSubagentItem,
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
     rpc.emitNotification("item/agentMessage/delta", {
       delta: "实时",
       itemId: "item-1",
@@ -1428,6 +1521,28 @@ describe("CodexAgentProvider", () => {
         type: "turn.started",
       },
       {
+        itemId: "subagent-spawn",
+        payload: {
+          item: {
+            id: "subagent-spawn",
+            input: {
+              model: "gpt-5.6-sol",
+              prompt: "理解前端项目",
+              reasoningEffort: "high",
+              receiverTaskIds: [],
+              senderTaskId: "task-1",
+            },
+            name: "agent/spawn",
+            output: { agents: [] },
+            status: "running",
+            type: "tool",
+          },
+        },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "item.started",
+      },
+      {
         itemId: "item-1",
         payload: { delta: "实时" },
         taskId: "task-1",
@@ -1500,7 +1615,7 @@ describe("CodexAgentProvider", () => {
       threadId: "task-1",
       turnId: "turn-1",
     });
-    expect(events).toHaveLength(9);
+    expect(events).toHaveLength(10);
   });
 
   it("streams commentary and final answers as normal assistant messages", async () => {

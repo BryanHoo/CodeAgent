@@ -14,6 +14,8 @@
 - 过载错误使用带 jitter 的有上限指数退避，不做同步密集重试。
 - Task/Turn 写入只通过 `thread/start`、`turn/start` 和 `turn/interrupt` 映射；文本输入必须转换为当前 Codex Schema 要求的 `UserInput[]`，Provider 不向上泄漏原生字段。
 - `agentMessage.phase` 中的 `commentary` 与 `final_answer` 都必须映射为 Assistant Message，并通过 `message.delta` 实时交付；原生 `reasoning` Item 仍映射为统一 Reasoning Item，但 Web 不展示其内容。
+- Codex 协作 Item 的 `item/started` 必须映射为统一 `item.started` 实时事件，不能丢弃长时间运行的子代理操作；协作 Item 必须保留子代理任务、模型、思考量和代理状态，并使用 Provider 无关的 `agent/*` Tool 名称。普通消息和命令继续使用专用 Delta，不重复交付空的 Started Item。
+- 子代理使用独立 Codex Thread。Web 按需读取父协作 Item 的 receiver Task ID 时，Runtime 必须先以 Project 归属暂存该 Thread，`thread/read` 验证 `cwd` 后同时确认 Runtime Owner 与 Project Provider Task 集合，再交付读取期间暂存的通知；这样弹窗关闭后可以停止浏览器订阅，再次打开时从最新 Snapshot checkpoint 继续，未知 Project 的子线程事件仍必须丢弃。
 - `thread/start` 返回的新 Task 在首条用户消息前可能尚未 materialize；此时 `thread/read(includeTurns: true)` 的明确未 materialize 错误必须映射为该已知 Task 的空闲空快照，未知 Task 和其他 RPC 错误不得被吞掉。
 - Provider 对已成功 `thread/start` 的 Task 必须提供进程内 read-your-writes：在 Codex 原生 `thread/list` 首次返回该 Task 前，将本地未 materialize Task 合并到首个列表页；只有原生列表接管后才能移除该列表回退，`turn/start` 或 `thread/read` 成功不能提前造成列表不可见窗口。
 - Task 命令通过受控 Provider 方法映射：代码审查使用 `review/start`，上下文压缩使用 `thread/compact/start`，新任务续接使用 `thread/fork`，任务反馈使用 `feedback/upload`；每个动作都必须先验证 Task 属于当前 Project，并校验响应中的 Thread ID。

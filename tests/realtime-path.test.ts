@@ -134,10 +134,12 @@ describe("Realtime Path", () => {
 
     expect(events.map((event) => event.type)).toEqual([
       "turn.started",
+      "item.started",
       "message.delta",
       "message.delta",
       "item.completed",
       "command.output_delta",
+      "item.completed",
       "item.completed",
       "usage.updated",
       "turn.completed",
@@ -145,6 +147,16 @@ describe("Realtime Path", () => {
     ]);
     expect(events.find((event) => event.type === "message.delta")).toMatchObject({
       payload: { delta: "Realtime " },
+    });
+    expect(events.find((event) => event.type === "item.started")).toMatchObject({
+      payload: {
+        item: {
+          input: { prompt: "理解前端项目" },
+          name: "agent/spawn",
+          status: "running",
+          type: "tool",
+        },
+      },
     });
     expect(events.at(-1)).toMatchObject({
       payload: { message: "模型服务不可用", willRetry: false },

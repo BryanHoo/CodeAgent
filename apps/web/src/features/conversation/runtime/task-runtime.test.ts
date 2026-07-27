@@ -160,6 +160,45 @@ describe("task runtime", () => {
     expect(state.checkpoint.sequence).toBe(14);
   });
 
+  it("inserts a structured subagent as soon as its item starts", () => {
+    let state = reduceAgentEvent(hydrateTaskRuntime(response), {
+      ...envelope(11),
+      payload: {
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "turn-1",
+          items: [],
+          startedAt: "2026-07-23T00:00:01.000Z",
+          status: "running",
+        },
+      },
+      turnId: "turn-1",
+      type: "turn.started",
+    });
+    const startedItem: AgentEvent = {
+      ...envelope(12),
+      itemId: "subagent-spawn",
+      payload: {
+        item: {
+          id: "subagent-spawn",
+          input: { prompt: "理解前端项目" },
+          name: "agent/spawn",
+          output: { agents: [] },
+          status: "running",
+          type: "tool",
+        },
+      },
+      turnId: "turn-1",
+      type: "item.started",
+    };
+
+    state = reduceAgentEvent(state, startedItem);
+
+    expect(state.snapshot.turns[0]?.items).toEqual([startedItem.payload.item]);
+    expect(state.checkpoint.sequence).toBe(12);
+  });
+
   it("records non-retrying provider errors on the affected turn", () => {
     let state = hydrateTaskRuntime({
       ...response,

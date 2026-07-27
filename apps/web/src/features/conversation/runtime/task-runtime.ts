@@ -226,6 +226,7 @@ export function reduceAgentEvent(state: TaskRuntimeState, event: AgentEvent): Ta
     case "command.output_delta":
       snapshot = { ...applyDelta(snapshot, event), updatedAt: event.timestamp };
       break;
+    case "item.started":
     case "item.completed":
       snapshot = {
         ...updateTurn(snapshot, event.turnId, (turn) => replaceItem(turn, event.payload.item)),
