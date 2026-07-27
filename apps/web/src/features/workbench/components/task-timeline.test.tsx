@@ -143,7 +143,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain("space-y-4");
   });
 
-  it("keeps reasoning and assistant text in one response with one completed footer", () => {
+  it("hides reasoning while keeping normal assistant text in one completed response", () => {
     const multiItemResponseSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: [
@@ -177,10 +177,15 @@ describe("TaskSnapshotTimeline", () => {
       <TaskSnapshotTimeline snapshot={multiItemResponseSnapshot} />,
     );
 
-    // 同一 Turn 内的思考与文本属于一次 AI 回复，不应按 Agent Item 拆成多条消息。
+    // 原生 Reasoning 不向用户暴露，普通回复仍按同一 Turn 合并展示。
     expect(markup.match(/data-role="assistant"/g)).toHaveLength(1);
     expect(markup.match(/aria-label="复制消息"/g)).toHaveLength(1);
     expect(markup.match(/dateTime="2026-07-24T00:01:00.000Z"/g)).toHaveLength(1);
+    expect(markup).toContain("我先检查消息判定。");
+    expect(markup).toContain("已修正消息判定。");
+    expect(markup).not.toContain("核对消息分组");
+    expect(markup).not.toContain("正在核对时间线的分组逻辑。");
+    expect(markup).not.toContain("data-ai-chain-of-thought");
   });
 
   it("does not render an assistant footer while its turn is still running", () => {
@@ -250,43 +255,16 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup.indexOf("你好")).toBeLessThan(markup.indexOf("正在运行"));
   });
 
-  it("keeps a completed Chain of Thought available as collapsed readable steps", () => {
+  it("does not expose completed reasoning content", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={snapshot} />);
 
-    expect(markup).toContain('data-ai-chain-of-thought=""');
-    expect(markup).toContain(">Preparing final build and test verification<");
-    expect(markup).not.toContain("**Preparing final build and test verification**");
-    expect(markup).toContain('data-state="closed"');
-    expect(markup).toContain("Preparing implementation");
+    expect(markup).not.toContain("data-ai-chain-of-thought");
+    expect(markup).not.toContain("Preparing final build and test verification");
+    expect(markup).not.toContain("Preparing implementation");
+    expect(markup).not.toContain("思考过程");
   });
 
-  it("renders a single reasoning summary as a readable Chain of Thought step", () => {
-    const singleStepSnapshot: RuntimeTaskSnapshot = {
-      ...snapshot,
-      turns: [
-        {
-          ...completedTurn,
-          items: [
-            {
-              content: "**Preparing final build and test verification**",
-              id: "reasoning-2",
-              summary: "**Preparing final build and test verification**",
-              type: "reasoning",
-            },
-          ],
-        },
-      ],
-    };
-
-    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={singleStepSnapshot} />);
-
-    expect(markup).toContain(">Preparing final build and test verification<");
-    expect(markup).toContain("<details");
-    expect(markup).toContain('data-status="complete"');
-    expect(markup).toContain(">思考过程<");
-  });
-
-  it("groups adjacent reasoning and tool calls into one Chain of Thought", () => {
+  it("keeps tools and commands visible without wrapping them in Chain of Thought", () => {
     const continuousReasoningSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: [
@@ -331,54 +309,12 @@ describe("TaskSnapshotTimeline", () => {
       <TaskSnapshotTimeline snapshot={continuousReasoningSnapshot} />,
     );
 
-    expect(markup.match(/data-ai-chain-of-thought=""/g)).toHaveLength(1);
-    expect(markup.indexOf("准备检查项目")).toBeLessThan(markup.indexOf("read_file"));
+    expect(markup).not.toContain("data-ai-chain-of-thought");
+    expect(markup).not.toContain("准备检查项目");
+    expect(markup).not.toContain("整理项目结论");
+    expect(markup).toContain("read_file");
+    expect(markup).toContain("pnpm check");
     expect(markup.indexOf("read_file")).toBeLessThan(markup.indexOf("pnpm check"));
-    expect(markup.indexOf("pnpm check")).toBeLessThan(markup.indexOf("整理项目结论"));
-    expect(markup.indexOf("整理项目结论")).toBeLessThan(markup.lastIndexOf("</details>"));
-  });
-
-  it("splits Chain of Thought groups when assistant content appears between reasoning", () => {
-    const separatedReasoningSnapshot: RuntimeTaskSnapshot = {
-      ...snapshot,
-      turns: [
-        {
-          ...completedTurn,
-          items: [
-            {
-              content: "",
-              id: "reasoning-before-message",
-              summary: "**先检查现状**",
-              type: "reasoning",
-            },
-            {
-              id: "message-between-reasoning",
-              role: "assistant",
-              text: "已找到需要进一步确认的内容。",
-              type: "message",
-            },
-            {
-              content: "",
-              id: "reasoning-after-message",
-              summary: "**继续核对细节**",
-              type: "reasoning",
-            },
-          ],
-        },
-      ],
-    };
-
-    const markup = renderToStaticMarkup(
-      <TaskSnapshotTimeline snapshot={separatedReasoningSnapshot} />,
-    );
-
-    expect(markup.match(/data-ai-chain-of-thought=""/g)).toHaveLength(2);
-    expect(markup.indexOf("先检查现状")).toBeLessThan(
-      markup.indexOf("已找到需要进一步确认的内容。"),
-    );
-    expect(markup.indexOf("已找到需要进一步确认的内容。")).toBeLessThan(
-      markup.indexOf("继续核对细节"),
-    );
   });
 
   it("does not render an empty reasoning placeholder", () => {

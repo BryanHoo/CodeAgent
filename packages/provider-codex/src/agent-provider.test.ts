@@ -1385,7 +1385,7 @@ describe("CodexAgentProvider", () => {
     expect(events).toHaveLength(9);
   });
 
-  it("maps commentary messages to reasoning while preserving final answers", async () => {
+  it("streams commentary and final answers as normal assistant messages", async () => {
     const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
     const provider = createCodexAgentProvider({ client: rpc, project });
     const events: unknown[] = [];
@@ -1456,19 +1456,19 @@ describe("CodexAgentProvider", () => {
     expect(events).toEqual([
       {
         itemId: "commentary-1",
-        payload: { delta: "正在扫描项目结构。", field: "summary" },
+        payload: { delta: "正在扫描项目结构。" },
         taskId: "task-1",
         turnId: "turn-1",
-        type: "reasoning.delta",
+        type: "message.delta",
       },
       {
         itemId: "commentary-1",
         payload: {
           item: {
-            content: "",
             id: "commentary-1",
-            summary: "正在扫描项目结构。",
-            type: "reasoning",
+            role: "assistant",
+            text: "正在扫描项目结构。",
+            type: "message",
           },
         },
         taskId: "task-1",
@@ -1499,10 +1499,10 @@ describe("CodexAgentProvider", () => {
             id: "turn-1",
             items: [
               {
-                content: "",
                 id: "commentary-1",
-                summary: "正在扫描项目结构。",
-                type: "reasoning",
+                role: "assistant",
+                text: "正在扫描项目结构。",
+                type: "message",
               },
               {
                 id: "answer-1",

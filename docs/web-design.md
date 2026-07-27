@@ -23,7 +23,7 @@ CodeAgent 是通过浏览器操作本地 Coding Agent 的应用。Web 不是普�
 
 - Project 与 Task 导航。
 - 长时间运行的 Turn。
-- 流式 Agent Message 和 Reasoning Summary。
+- 流式 Commentary 与 Final Answer 消息。
 - Command、Tool、File Change、Plan、Usage 等结构化 Item。
 - Approval 和 User Input 等阻塞请求。
 - Diff、错误、重连和 Runtime 状态。
@@ -169,20 +169,19 @@ KaTeX
 
 首批选择性引入：
 
-| AI Elements 组件 | 用途                                | 项目适配                      |
-| ---------------- | ----------------------------------- | ----------------------------- |
-| `conversation`   | 会话滚动、底部跟随、回到底部按钮    | 包装进 `TaskTimeline`         |
-| `message`        | 用户与 Agent 消息、操作栏、Markdown | 替换 `UIMessage` 类型         |
-| `reasoning`      | Reasoning Summary 折叠展示          | 映射 Reasoning Item 状态      |
-| `tool`           | Tool 调用输入、状态和输出           | 映射统一 Tool ViewModel       |
-| `confirmation`   | Command 和 File Change 审批         | 接入 Pending Request Mutation |
-| `plan`           | Plan 步骤和状态                     | 映射 Plan Item                |
-| `task`           | 紧凑任务活动展示                    | 用于适合的结构化 Item         |
-| `prompt-input`   | 文本、附件、工具栏和提交            | 接入 Turn Start / Steer       |
-| `attachments`    | 附件 Chip、预览和删除               | 使用 Server 返回的受控引用    |
-| `terminal`       | ANSI Command Output                 | 增加输出上限和截断状态        |
-| `code-block`     | 稳定代码块                          | 按需高亮                      |
-| `model-selector` | Model 选择                          | 数据来自 `/v1/models`         |
+| AI Elements 组件 | 用途                                 | 项目适配                        |
+| ---------------- | ------------------------------------ | ------------------------------- |
+| `conversation`   | 会话滚动、底部跟随、回到底部按钮     | 包装进 `TaskTimeline`           |
+| `message`        | 用户消息、Commentary 与 Final Answer | 映射消息状态并流式渲染 Markdown |
+| `tool`           | Tool 调用输入、状态和输出            | 映射统一 Tool ViewModel         |
+| `confirmation`   | Command 和 File Change 审批          | 接入 Pending Request Mutation   |
+| `plan`           | Plan 步骤和状态                      | 映射 Plan Item                  |
+| `task`           | 紧凑任务活动展示                     | 用于适合的结构化 Item           |
+| `prompt-input`   | 文本、附件、工具栏和提交             | 接入 Turn Start / Steer         |
+| `attachments`    | 附件 Chip、预览和删除                | 使用 Server 返回的受控引用      |
+| `terminal`       | ANSI Command Output                  | 增加输出上限和截断状态          |
+| `code-block`     | 稳定代码块                           | 按需高亮                        |
+| `model-selector` | Model 选择                           | 数据来自 `/v1/models`           |
 
 ### 7.2 不直接采用的组件
 
@@ -544,7 +543,7 @@ TaskTimeline
 | ------------- | ------------------------------------------ |
 | User Message  | AI Elements `Message`                      |
 | Agent Message | `Message` + `MessageResponse`              |
-| Reasoning     | AI Elements `Reasoning`                    |
+| Reasoning     | 不展示                                     |
 | Command       | AI Elements `Terminal` 或紧凑 Command Item |
 | Tool          | AI Elements `Tool`                         |
 | File Change   | 项目 File Change Item + Diff Action        |

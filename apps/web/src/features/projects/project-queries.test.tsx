@@ -260,14 +260,13 @@ describe("project queries", () => {
     expect(client.listTasks).toHaveBeenNthCalledWith(2, "code-agent", { cursor: "next-page" });
   });
 
-  it("renders every structured item category from a task snapshot", () => {
+  it("renders user-visible structured items without exposing reasoning", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={snapshot} />);
 
     for (const text of [
       "读取真实历史",
       "Turn 执行失败",
       "模型服务不可用",
-      "分析协议",
       "pnpm check",
       "输出已截断",
       "src/index.ts",
@@ -277,5 +276,7 @@ describe("project queries", () => {
     ]) {
       expect(markup).toContain(text);
     }
+    expect(markup).not.toContain("分析协议");
+    expect(markup).not.toContain("按统一边界实现");
   });
 });

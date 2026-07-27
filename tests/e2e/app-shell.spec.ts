@@ -1994,7 +1994,8 @@ test("uses material hierarchy instead of strong workbench borders", async ({ pag
 test("supports structured activity and keyboard panel dismissal", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  await page.getByText("思考过程", { exact: true }).click();
+  await expect(page.getByText("思考过程", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("分析工作台信息架构", { exact: true })).toHaveCount(0);
   await page.getByText("读取 Web 设计规范").click();
   await expect(page.getByText("docs/web-design.md")).toBeVisible();
 

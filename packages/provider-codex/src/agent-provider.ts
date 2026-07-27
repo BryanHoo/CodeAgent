@@ -624,10 +624,8 @@ function mapAgentItem(value: unknown): AgentItem {
       return { id, role: "user", text: mapUserMessageText(item["content"]), type: "message" };
     case "agentMessage": {
       const text = expectString(item["text"], "Codex agent message text");
-      if (mapCodexMessagePhase(item["phase"]) === "commentary") {
-        // Codex commentary 是面向用户的思考摘要，统一映射为 reasoning 供时间线展示。
-        return { content: "", id, summary: text, type: "reasoning" };
-      }
+      // Commentary 与最终回复都是面向用户的输出，统一走普通消息的流式渲染路径。
+      mapCodexMessagePhase(item["phase"]);
       return { id, role: "assistant", text, type: "message" };
     }
     case "reasoning":
@@ -768,15 +766,7 @@ function mapAgentTurn(value: unknown): AgentTurn {
   };
 }
 
-function messageItemKey(taskId: string, turnId: string, itemId: string): string {
-  return `${taskId}:${turnId}:${itemId}`;
-}
-
-function mapCodexNotification(
-  method: string,
-  value: unknown,
-  messageItemPhases: Map<string, CodexMessagePhase>,
-): AgentProviderEvent | undefined {
+function mapCodexNotification(method: string, value: unknown): AgentProviderEvent | undefined {
   if (
     method !== "turn/started" &&
     method !== "turn/completed" &&
@@ -796,16 +786,6 @@ function mapCodexNotification(
   const taskId = expectString(params["threadId"], `Codex ${method} threadId`);
 
   if (method === "item/started") {
-    const turnId = expectString(params["turnId"], "Codex item/started turnId");
-    const item = expectRecord(params["item"], "Codex item/started item");
-    if (item["type"] === "agentMessage") {
-      const itemId = expectString(item["id"], "Codex item/started item id");
-      const phase = mapCodexMessagePhase(item["phase"]);
-      if (phase !== undefined) {
-        // Delta 本身不携带 phase，先缓存 item/started 元数据以保持实时分流准确。
-        messageItemPhases.set(messageItemKey(taskId, turnId, itemId), phase);
-      }
-    }
     return undefined;
   }
 
@@ -820,14 +800,6 @@ function mapCodexNotification(
 
   if (method === "turn/started" || method === "turn/completed") {
     const turn = mapAgentTurn(params["turn"]);
-    if (method === "turn/completed") {
-      const keyPrefix = `${taskId}:${turn.id}:`;
-      for (const key of messageItemPhases.keys()) {
-        if (key.startsWith(keyPrefix)) {
-          messageItemPhases.delete(key);
-        }
-      }
-    }
     return {
       payload: { turn },
       taskId,
@@ -855,7 +827,6 @@ function mapCodexNotification(
 
   if (method === "item/completed") {
     const item = mapAgentItem(params["item"]);
-    messageItemPhases.delete(messageItemKey(taskId, turnId, item.id));
     return {
       itemId: item.id,
       payload: { item },
@@ -868,15 +839,6 @@ function mapCodexNotification(
   const itemId = expectString(params["itemId"], `Codex ${method} itemId`);
   const delta = expectString(params["delta"], `Codex ${method} delta`);
   if (method === "item/agentMessage/delta") {
-    if (messageItemPhases.get(messageItemKey(taskId, turnId, itemId)) === "commentary") {
-      return {
-        itemId,
-        payload: { delta, field: "summary" },
-        taskId,
-        turnId,
-        type: "reasoning.delta",
-      };
-    }
     return { itemId, payload: { delta }, taskId, turnId, type: "message.delta" };
   }
   if (method === "item/commandExecution/outputDelta") {
@@ -947,7 +909,6 @@ function mapAgentTask(thread: Record<string, unknown>, project: Project): AgentT
 export class CodexAgentProvider implements AgentProvider {
   readonly #client: CodexRpcClient;
   readonly #eventListeners = new Set<AgentProviderEventListener>();
-  readonly #messageItemPhases = new Map<string, CodexMessagePhase>();
   readonly #pendingRequests = new Map<string, PendingCodexRequest>();
   readonly #pendingTaskServerRequests = new Map<string, PendingCodexRequest[]>();
   readonly #pendingTaskEvents = new Map<string, AgentProviderEvent[]>();
@@ -1378,7 +1339,7 @@ export class CodexAgentProvider implements AgentProvider {
     }
     let event: AgentProviderEvent | undefined;
     try {
-      event = mapCodexNotification(method, params, this.#messageItemPhases);
+      event = mapCodexNotification(method, params);
     } catch {
       // 单个原生通知字段漂移不能中断 JSONL Client 或后续关键事件。
       return;

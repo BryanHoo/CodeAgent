@@ -10,12 +10,6 @@ import {
   Attachments,
 } from "./attachments.js";
 import {
-  ChainOfThought,
-  ChainOfThoughtContent,
-  ChainOfThoughtHeader,
-  ChainOfThoughtStep,
-} from "./chain-of-thought.js";
-import {
   Confirmation,
   ConfirmationAction,
   ConfirmationActions,
@@ -100,7 +94,7 @@ describe("AI Elements primitives", () => {
     });
   });
 
-  it("renders a structured agent activity timeline", () => {
+  it("renders a structured agent message and tool timeline", () => {
     const markup = renderToStaticMarkup(
       <Conversation aria-label="会话">
         <ConversationContent>
@@ -109,12 +103,6 @@ describe("AI Elements primitives", () => {
               <MessageResponse>完成工作台结构分析。</MessageResponse>
             </MessageContent>
           </Message>
-          <ChainOfThought defaultOpen>
-            <ChainOfThoughtHeader>分析界面约束</ChainOfThoughtHeader>
-            <ChainOfThoughtContent>
-              <ChainOfThoughtStep description="保持三区域稳定。" label="确认布局" />
-            </ChainOfThoughtContent>
-          </ChainOfThought>
           <Tool defaultOpen>
             <ToolHeader state="output-available" title="读取设计文档" />
             <ToolContent>docs/web-design.md</ToolContent>
@@ -125,8 +113,6 @@ describe("AI Elements primitives", () => {
 
     expect(markup).toContain('role="log"');
     expect(markup).toContain("完成工作台结构分析。");
-    expect(markup).toContain("分析界面约束");
-    expect(markup).toContain('data-ai-chain-of-thought=""');
     expect(markup).toContain("已完成");
     expect(markup).toContain("bg-control");
     expect(markup).toContain("rounded-surface");
