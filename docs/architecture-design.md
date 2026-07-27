@@ -158,7 +158,7 @@ flowchart LR
 Browser
   -> CodeAgent Node.js Process
        -> Fastify HTTP/WebSocket Server
-       -> SQLite Writer Worker
+       -> SQLite Database Worker
        -> codex app-server Child Process
 ```
 
@@ -289,7 +289,7 @@ code-agent start --codex-home /path/to/codex-home
 --codex-home <path>
 ```
 
-CLI 启动一个不绑定 Project 的全局 `codex app-server --listen stdio://`。Project 默认列表为空，由 Web 通过宿主系统目录选择器添加，并原子持久化到 `CODEX_HOME/code-agent/projects.json`。
+CLI 启动一个不绑定 Project 的全局 `codex app-server --listen stdio://`。Project 默认列表为空，由 Web 通过宿主系统目录选择器添加，并持久化到 `CODEX_HOME/code-agent/state.sqlite3`。
 
 ### 6.2 默认配置
 
@@ -308,15 +308,16 @@ CLI 启动一个不绑定 Project 的全局 `codex app-server --listen stdio://`
 ```text
 1. 加载 CLI 参数和配置文件。
 2. 校验 Host、Port、Project 和数据目录。
-3. 定位兼容的 Codex CLI。
-4. 执行 Codex 版本检查。
-5. 启动 codex app-server 子进程。
-6. 完成 initialize / initialized 握手。
-7. 读取模型和 Task 元数据。
-8. 启动 Fastify HTTP/WebSocket Server。
-9. 提供构建后的 React 静态资源。
-10. 打开浏览器。
-11. 监听退出信号并执行有超时的优雅关闭。
+3. 启动数据库 Worker 并应用 Migration。
+4. 定位兼容的 Codex CLI。
+5. 执行 Codex 版本检查。
+6. 启动 codex app-server 子进程。
+7. 完成 initialize / initialized 握手。
+8. 读取模型和 Task 元数据。
+9. 启动 Fastify HTTP/WebSocket Server。
+10. 提供构建后的 React 静态资源。
+11. 打开浏览器。
+12. 监听退出信号并执行有超时的优雅关闭。
 ```
 
 `doctor` 至少检查：
@@ -327,7 +328,8 @@ CLI 启动一个不绑定 Project 的全局 `codex app-server --listen stdio://`
 - Project 是否存在、是否为目录、是否在允许范围内。
 - 配置文件是否有效。
 - 端口是否可用。
-- SQLite 是否可创建和写入。
+- SQLite 是否可写、Migration 是否完整、`integrity_check` 是否通过。
+- SQLite 是否启用 WAL、外键、NORMAL synchronous 和 5000ms busy timeout。
 
 ## 7. Codex CLI 分发策略
 
@@ -732,33 +734,27 @@ Runtime 因凭证或其他 Provider 原因不可用时，Server 返回统一 Pro
 
 ### 12.1 数据来源
 
-Codex 已经持久化原生 Thread 和 Session 历史。CodeAgent 将 Thread 映射为 Task，不逐 Token 重复存储完整历史，只维护统一 Read Model 和断线恢复所需数据。
+Codex 已经持久化原生 Thread 和 Session 历史。CodeAgent 不重复保存完整历史，只保存 Project、Project 新 Task 默认模型设置和 Task 完整设置。
 
 ### 12.2 表结构
 
-MVP 建议包含：
+当前数据库包含：
 
 ```text
-provider_accounts
+schema_migrations
 projects
-task_mappings
-task_metadata
-completed_turns
-completed_items
-pending_requests
-event_checkpoints
-ui_preferences
-audit_logs
+project_defaults
+task_settings
 ```
+
+所有业务表使用 `STRICT`。`project_defaults` 只保存 `model` 和 `reasoning_effort`；`task_settings` 保存 `approval_policy`、`model` 和 `reasoning_effort`，并以 Project 外键隔离。
 
 ### 12.3 写入规则
 
-- `message.delta` 和 `command.output_delta` 默认只进入内存缓冲区。
-- `item.completed` 批量写入 `completed_items`。
-- `turn.completed` 批量写入 `completed_turns`。
-- Pending Approval 立即写入，确保页面刷新后仍可恢复。
-- Audit Log 只保存必要字段，敏感内容需要脱敏。
-- 写入使用事务和 Prepared Statement。
+- Project 和完整设置对象使用显式 SQL、Prepared Statement、事务和原子 upsert。
+- Provider `/v1/models` 是模型目录真相源；数据库只保存模型与思考量 ID。读取 Snapshot、设置 API 和启动 Turn 前均重新校验，无效组合按模型 ID 和 Provider 默认值确定性回退并写回。
+- 新 Task 从 Project 默认值继承 `model` 和 `reasoningEffort`，`approvalPolicy` 固定从 `on-request` 开始。
+- `allow_for_session`、可操作 Pending Approval 和模型目录不持久化；进程重启后不能恢复为可操作 `pending`。
 
 ### 12.4 SQLite 模式
 
@@ -767,10 +763,13 @@ audit_logs
 ```text
 SQLite WAL
 better-sqlite3
-Dedicated Writer Worker
+Dedicated Database Worker
+foreign_keys = ON
+synchronous = NORMAL
+busy_timeout = 5000
 ```
 
-同步 SQLite 调用不得运行在 Fastify 主事件循环中。Writer Worker 负责批量写入和定期 Checkpoint。
+同步 SQLite 调用不得运行在 Fastify 主事件循环中。独立 `worker_threads` Worker 负责数据库初始化、Migration、查询、事务和诊断，Fastify 只通过 Core Repository 端口异步调用 Adapter。
 
 ## 13. 高性能设计
 
@@ -953,7 +952,7 @@ Provider Turn 不因浏览器断开而自动中止。浏览器重新连接后使
 5. 关闭 App Server stdin。
 6. 在超时内等待子进程退出。
 7. 超时后终止子进程。
-8. 关闭 SQLite 和 HTTP Server。
+8. 依次关闭 HTTP Server、SQLite Worker 和 App Server。
 ```
 
 所有步骤必须设置明确超时，不能无限等待。
@@ -1192,7 +1191,7 @@ Codex 升级不应直接导致 Web API 版本变化。
 | 高频 Delta                | CPU、内存和渲染压力  | 合并、批量、细粒度订阅、有界队列     |
 | 浏览器暴露本地能力        | 文件和命令执行风险   | Loopback、权限校验、不透传 RPC       |
 | 多用户共享 Runtime        | 数据和权限越界       | 远程模式独立 UID/容器/CODEX_HOME     |
-| SQLite 同步阻塞           | API 延迟抖动         | Dedicated Writer Worker              |
+| SQLite 同步阻塞           | API 延迟抖动         | Dedicated Database Worker            |
 | Provider 抽象过度统一     | 功能丢失或语义错误   | Capability + Extensions              |
 | 子进程和 Listener 泄漏    | 长时间运行不稳定     | 明确生命周期、超时和压力测试         |
 

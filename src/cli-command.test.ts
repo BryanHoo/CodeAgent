@@ -17,6 +17,10 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     lifecycle.push("server.close");
     return Promise.resolve();
   });
+  const databaseClose = vi.fn(() => {
+    lifecycle.push("database.close");
+    return Promise.resolve();
+  });
   const serverListen = vi.fn(() => {
     lifecycle.push("server.listen");
     return Promise.resolve("http://127.0.0.1:3210");
@@ -56,17 +60,33 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     name: "project",
     rootPath: "/workspace/project",
   };
-  const projectRepository = {
+  const stateRepository = {
+    close: databaseClose,
+    diagnose: vi.fn(() =>
+      Promise.resolve({
+        busyTimeout: 5_000,
+        foreignKeys: true,
+        integrityCheck: "ok",
+        journalMode: "wal",
+        migrationVersion: 1,
+        synchronous: "normal",
+        writable: true,
+      }),
+    ),
     list: vi.fn(() => Promise.resolve([])),
+    readProjectDefaults: vi.fn(() => Promise.resolve(undefined)),
+    readTaskSettings: vi.fn(() => Promise.resolve(undefined)),
     read: vi.fn(() => Promise.resolve(undefined)),
     register: vi.fn(),
+    writeProjectDefaults: vi.fn((_projectId, settings) => Promise.resolve(settings)),
+    writeTaskSettings: vi.fn((_projectId, _taskId, settings) => Promise.resolve(settings)),
   };
   const dependencies: CliDependencies = {
     appVersion: "1.2.3",
     checkCodexVersion: vi.fn(() =>
       Promise.resolve({ raw: "codex-cli 0.145.0", version: "0.145.0" }),
     ),
-    createProjectRepository: vi.fn(() => projectRepository),
+    createStateRepository: vi.fn(() => Promise.resolve(stateRepository)),
     createRuntimeProvider: vi.fn(() => {
       lifecycle.push("provider.create");
       return runtimeProvider;
@@ -93,6 +113,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
   return {
     close,
     client,
+    databaseClose,
     dependencies,
     lifecycle,
     options: {
@@ -105,7 +126,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
       },
     },
     project,
-    projectRepository,
+    stateRepository,
     provider,
     runtimeProvider,
     stderr,
@@ -124,18 +145,29 @@ describe("runCli", () => {
     expect(harness.stderr).toEqual([]);
   });
 
-  it("checks Node.js and the configured Codex binary in doctor", async () => {
+  it("checks Node.js, Codex, and SQLite diagnostics in doctor", async () => {
     const harness = createHarness();
 
-    await expect(runCli(["doctor", "--codex-bin", "/custom/codex"], harness.options)).resolves.toBe(
-      0,
-    );
+    await expect(
+      runCli(
+        ["doctor", "--codex-bin", "/custom/codex", "--codex-home", "/custom/home"],
+        harness.options,
+      ),
+    ).resolves.toBe(0);
     expect(harness.dependencies.locateCodexBinary).toHaveBeenCalledWith({
       explicitPath: "/custom/codex",
     });
     expect(harness.dependencies.checkCodexVersion).toHaveBeenCalledWith("/fake/codex");
     expect(harness.stdout.join("")).toContain("[ok] Node.js 24.1.0");
     expect(harness.stdout.join("")).toContain("[ok] Codex 0.145.0 (/fake/codex)");
+    expect(harness.dependencies.createStateRepository).toHaveBeenCalledWith(
+      "/custom/home/code-agent/state.sqlite3",
+    );
+    expect(harness.stdout.join("")).toContain("[ok] SQLite writable");
+    expect(harness.stdout.join("")).toContain("[ok] SQLite migration 1");
+    expect(harness.stdout.join("")).toContain("[ok] SQLite integrity_check ok");
+    expect(harness.stdout.join("")).toContain("[ok] SQLite journal_mode wal");
+    expect(harness.databaseClose).toHaveBeenCalledOnce();
   });
 
   it("returns a non-zero code when doctor finds an unsupported Node.js", async () => {
@@ -144,6 +176,16 @@ describe("runCli", () => {
     await expect(runCli(["doctor"], harness.options)).resolves.toBe(1);
     expect(harness.stderr.join("")).toContain("Node.js 24 or newer is required");
     expect(harness.dependencies.locateCodexBinary).not.toHaveBeenCalled();
+  });
+
+  it("closes SQLite when doctor diagnostics fail", async () => {
+    const harness = createHarness();
+    harness.stateRepository.diagnose.mockRejectedValue(new Error("integrity unavailable"));
+
+    await expect(runCli(["doctor"], harness.options)).resolves.toBe(1);
+
+    expect(harness.databaseClose).toHaveBeenCalledOnce();
+    expect(harness.stderr.join("")).toContain("integrity unavailable");
   });
 
   it("starts Codex, HTTP, and static Web then closes on abort", async () => {
@@ -168,13 +210,14 @@ describe("runCli", () => {
       client: harness.client,
     });
     expect(harness.dependencies.createServer).toHaveBeenCalledWith({
-      projectRepository: harness.projectRepository,
+      projectRepository: harness.stateRepository,
       provider: harness.runtimeProvider,
       selectProjectDirectory: harness.dependencies.selectProjectDirectory,
+      settingsRepository: harness.stateRepository,
       staticRoot: "/package/dist/web",
     });
-    expect(harness.dependencies.createProjectRepository).toHaveBeenCalledWith(
-      "/custom/home/code-agent/projects.json",
+    expect(harness.dependencies.createStateRepository).toHaveBeenCalledWith(
+      "/custom/home/code-agent/state.sqlite3",
     );
     expect(harness.serverListen).toHaveBeenCalledWith({ host: "127.0.0.1", port: 3210 });
     expect(harness.dependencies.openBrowser).toHaveBeenCalledWith("http://127.0.0.1:3210");
@@ -190,6 +233,7 @@ describe("runCli", () => {
       "server.listen",
       "browser.open",
       "server.close",
+      "database.close",
       "runtime.close",
     ]);
   });
@@ -244,6 +288,19 @@ describe("runCli", () => {
     expect(harness.stderr.join("")).toContain("browser unavailable");
   });
 
+  it("closes SQLite and Codex when HTTP Server creation fails", async () => {
+    const harness = createHarness({
+      createServer: vi.fn(() => Promise.reject(new Error("server startup failed"))),
+    });
+
+    await expect(runCli(["start"], harness.options)).resolves.toBe(1);
+
+    expect(harness.databaseClose).toHaveBeenCalledOnce();
+    expect(harness.close).toHaveBeenCalledOnce();
+    expect(harness.lifecycle).toEqual(["provider.create", "database.close", "runtime.close"]);
+    expect(harness.stderr.join("")).toContain("server startup failed");
+  });
+
   it("closes the runtime when closing the HTTP server fails", async () => {
     const serverClose = vi.fn(() => Promise.reject(new Error("server close failed")));
     const serverListen = vi.fn(() => Promise.resolve("http://127.0.0.1:3210"));
@@ -260,6 +317,7 @@ describe("runCli", () => {
 
     await expect(run).resolves.toBe(1);
     expect(serverClose).toHaveBeenCalledOnce();
+    expect(harness.databaseClose).toHaveBeenCalledOnce();
     expect(harness.close).toHaveBeenCalledOnce();
     expect(harness.stderr.join("")).toContain("server close failed");
   });

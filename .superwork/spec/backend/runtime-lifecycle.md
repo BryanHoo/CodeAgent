@@ -27,8 +27,11 @@
 ## Server 与持久化
 
 - Fastify 资源通过插件封装，并在 `onClose` 中释放。
-- Project 列表默认空，通过宿主系统目录选择器注册，并在 `CODEX_HOME/code-agent/projects.json` 使用同目录临时文件和原子 `rename` 持久化；启动时读取，重复真实路径幂等返回已有 Project。
-- 同步 SQLite 写入放入专用 Worker，主事件循环不执行持久化批处理。
+- Project 列表默认空，通过宿主系统目录选择器注册，并持久化到 `CODEX_HOME/code-agent/state.sqlite3`；重复真实路径幂等返回已有 Project。
+- 数据库使用版本化 Migration、`STRICT` 表、显式 SQL、Prepared Statement 和事务，并固定启用 WAL、外键、NORMAL synchronous 与 5000ms busy timeout。
+- 所有同步 SQLite 操作都放入专用 `worker_threads` Worker，Fastify 主事件循环只通过 Core Repository 端口异步调用。
+- Project defaults 只保存模型与思考量；新 Task 审批固定从 `on-request` 开始。Task settings 保存完整审批、模型和思考量，并在调用 Provider 前按实时模型目录校验和 upsert。
+- Provider 模型目录、`allow_for_session` 和可操作 Pending Approval 不得持久化；进程重启后不得恢复可操作 `pending`。
 - WebSocket 客户端使用独立有界队列，慢客户端不能阻塞 Provider。
 - 每个 Project 创建独立 Event Stream Session，由 Server 分配单调 `sequence` 并维护固定容量缓存；Provider 不分配传输序号。
 - `/v1/projects/:projectId/events` 首帧发送 `connection.ready`，只补发 `afterSequence` 之后仍在缓存窗口内的事件；过期或超前序号发送 `resync.required`。
@@ -36,11 +39,12 @@
 - `resync.required` 发送后由 Server 主动关闭当前 WebSocket；客户端必须使用新 Snapshot checkpoint 建立新连接。
 - Fastify 关闭时取消 Provider Event 订阅并关闭 WebSocket 资源。
 - 所有 Agent Mutation 必须校验非空 `Idempotency-Key`；同操作、同 Key、同 Payload 复用进行中或成功结果，不同 Payload 返回冲突，失败结果不缓存。
+- Task 创建在 Provider 成功但设置持久化失败时必须保留有界恢复状态；同 `Idempotency-Key` 重试只补齐持久化，不得再次调用 Provider 创建 Task。
 - 成功的幂等结果缓存必须同时设置容量上限和过期时间；进行中的请求不得淘汰，Runtime 关闭时清空全部条目。
 - 浏览器附件先经幂等上传进入 Server 的有界 TTL Store，并只返回随机 ID；Turn 成功后消费引用，Provider 失败时保留引用供同一请求重试，Runtime 关闭时清空 Store。
 
 ## 关闭
 
 - `SIGINT` 与 `SIGTERM` 进入同一幂等关闭路径。
-- 停止接收请求、完成写入、处理活动 Turn、关闭子进程、数据库和 HTTP Server。
+- 停止接收请求、完成写入并依次关闭 HTTP Server、数据库 Worker 和 App Server。
 - 每一步都有明确超时；发送 `SIGKILL` 后仍执行有界等待，超时返回可诊断错误，不无限等待。

@@ -16,10 +16,12 @@
     "@code-agent/provider-codex": "workspace:*",
     "@fastify/static": "catalog:",
     "@fastify/websocket": "catalog:",
+    "better-sqlite3": "catalog:",
     "fastify": "catalog:",
     "ws": "catalog:"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "catalog:",
     "@types/ws": "catalog:"
   }
 }

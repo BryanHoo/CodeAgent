@@ -12,6 +12,11 @@ const runtime = {
     pendingRequests: [],
     pinned: false,
     projectId: "code-agent",
+    settings: {
+      approvalPolicy: "on-request",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+    },
     status: "idle",
     title: "CodeAgent Task",
     turns: [],

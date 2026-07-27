@@ -33,6 +33,9 @@ const runtimes: CodexAppServerProcess[] = [];
 const servers: Awaited<ReturnType<typeof createCodeAgentServer>>[] = [];
 
 function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvider>) {
+  const projectDefaults = new Map();
+  const taskSettings = new Map();
+
   return {
     projectRepository: {
       list: () => Promise.resolve([project]),
@@ -41,6 +44,23 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
     },
     provider,
     selectProjectDirectory: () => Promise.resolve(undefined),
+    settingsRepository: {
+      readProjectDefaults: (projectId: string) => Promise.resolve(projectDefaults.get(projectId)),
+      readTaskSettings: (projectId: string, taskId: string) =>
+        Promise.resolve(taskSettings.get(`${projectId}:${taskId}`)),
+      writeProjectDefaults: (projectId: string, settings: typeof turnOptions) => {
+        const defaults = {
+          model: settings.model,
+          reasoningEffort: settings.reasoningEffort,
+        };
+        projectDefaults.set(projectId, defaults);
+        return Promise.resolve(defaults);
+      },
+      writeTaskSettings: (projectId: string, taskId: string, settings: typeof turnOptions) => {
+        taskSettings.set(`${projectId}:${taskId}`, settings);
+        return Promise.resolve(settings);
+      },
+    },
   };
 }
 

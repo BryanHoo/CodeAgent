@@ -4,6 +4,7 @@ export {
   type AgentRuntimeProvider,
   type AgentProviderEvent,
   type AgentProviderEventListener,
+  type AgentProviderTaskSnapshot,
   type AgentProviderTurnInput,
   type ListAgentTasksInput,
   PendingRequestResolutionError,
@@ -11,6 +12,7 @@ export {
   type ResolvePendingRequestInput,
 } from "./agent-provider.js";
 export {
+  type AgentSettingsRepository,
   type ProjectRepository,
   type RegisterProjectInput,
   type TaskRepository,

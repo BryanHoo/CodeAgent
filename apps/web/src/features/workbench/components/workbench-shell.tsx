@@ -2,12 +2,15 @@ import type {
   AgentCapabilities,
   AgentModel,
   AgentPromptInput,
+  AgentProjectDefaults,
   AgentTask,
   AgentTaskPage,
+  AgentTaskSettings,
+  AgentTaskSnapshotResponse,
   AgentTurn,
   PendingRequest,
 } from "@code-agent/protocol";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Ellipsis, ExternalLink, PanelLeft, PanelRight } from "lucide-react";
@@ -24,7 +27,10 @@ import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 import {
   modelsQueryOptions,
+  projectDefaultsMutationOptions,
+  projectDefaultsQueryOptions,
   projectGitStatusQueryOptions,
+  taskSettingsMutationOptions,
   upsertProjectTaskPage,
 } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
@@ -46,6 +52,7 @@ function taskLaunchQueryKey(projectId: string, taskId: string) {
 
 type TaskLaunchState = Readonly<{
   input: AgentPromptInput;
+  settings: AgentTaskSettings;
   task: AgentTask;
   turn: AgentTurn;
 }>;
@@ -88,6 +95,13 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const modelsQuery = useQuery(modelsQueryOptions(client));
+  const projectDefaultsQuery = useQuery(projectDefaultsQueryOptions(projectId, client));
+  const projectDefaultsMutation = useMutation({
+    ...projectDefaultsMutationOptions(projectId, client),
+    onSuccess(response) {
+      queryClient.setQueryData(["projects", projectId, "defaults"], response);
+    },
+  });
   const runtime = useTaskRuntime(projectId, taskId, client);
   const taskLaunchState =
     taskId === undefined
@@ -99,6 +113,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           ...taskLaunchState.task,
           contextUsage: null,
           pendingRequests: [],
+          settings: taskLaunchState.settings,
           status: "running",
           turns: [createStartingTurn(taskLaunchState)],
         }
@@ -163,15 +178,21 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     setFileReviewSelection({ changes, projectId });
   };
   const handleTaskStarted = useCallback(
-    (startedTask: AgentTask, startedTurn?: AgentTurn, startedInput?: AgentPromptInput) => {
+    (
+      startedTask: AgentTask,
+      startedTurn?: AgentTurn,
+      startedInput?: AgentPromptInput,
+      settings?: AgentTaskSettings,
+    ) => {
       // Mutation 返回即代表 Task 已创建，先写列表缓存再导航，不能等待最终一致的列表刷新。
       queryClient.setQueryData<AgentTaskPage>(["projects", projectId, "tasks"], (currentPage) =>
         upsertProjectTaskPage(currentPage, startedTask),
       );
-      if (startedTurn !== undefined && startedInput !== undefined) {
+      if (startedTurn !== undefined && startedInput !== undefined && settings !== undefined) {
         // 跨路由保存首轮启动结果，让 Snapshot 返回前即可渲染用户消息和 AI 运行态。
         queryClient.setQueryData<TaskLaunchState>(taskLaunchQueryKey(projectId, startedTask.id), {
           input: startedInput,
+          settings,
           task: startedTask,
           turn: startedTurn,
         });
@@ -183,6 +204,34 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     },
     [navigate, projectId, queryClient],
   );
+  const models = modelsQuery.data?.data ?? [];
+  const defaultModel =
+    models.find((model) => model.id === projectDefaultsQuery.data?.settings.model) ??
+    models.find((model) => model.isDefault) ??
+    models[0];
+  const draftDefaults: AgentProjectDefaults = {
+    model: defaultModel?.id ?? projectDefaultsQuery.data?.settings.model ?? "",
+    reasoningEffort:
+      projectDefaultsQuery.data?.settings.reasoningEffort ??
+      defaultModel?.defaultReasoningEffort ??
+      "",
+  };
+  const draftSettings: AgentTaskSettings = {
+    approvalPolicy: "on-request",
+    ...draftDefaults,
+  };
+  const updateDraftSettings = async (
+    settings: AgentTaskSettings,
+    field: keyof AgentTaskSettings,
+  ) => {
+    if (field === "approvalPolicy") {
+      return;
+    }
+    await projectDefaultsMutation.mutateAsync({
+      model: settings.model,
+      reasoningEffort: settings.reasoningEffort,
+    });
+  };
   const handleNewTaskProjectChange = useCallback(
     (nextProjectId: string) => {
       // 空聊天切换只移动草稿路由，首次提交时再在目标 Project 中创建真实 Task。
@@ -325,7 +374,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
 
         {error !== null ||
         (projectTaskState?.error ?? null) !== null ||
-        modelsQuery.error !== null ? (
+        modelsQuery.error !== null ||
+        projectDefaultsQuery.error !== null ? (
           <RuntimeUnavailable onRetry={() => void retry()} />
         ) : taskId === undefined ? (
           <>
@@ -337,19 +387,22 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             <WorkbenchComposer
               capabilities={capabilities}
               client={client}
-              models={modelsQuery.data?.data ?? []}
-              modelsError={modelsQuery.error}
-              modelsPending={modelsQuery.isPending}
+              models={models}
+              modelsError={null}
+              modelsPending={modelsQuery.isPending || projectDefaultsQuery.isPending}
+              onSettingsChange={updateDraftSettings}
               onTaskStarted={handleTaskStarted}
               projectId={projectId}
               projectPath={projectPath}
+              settings={draftSettings}
             />
           </>
         ) : (
           <ActiveTaskWorkbench
             capabilities={capabilities}
             client={client}
-            models={modelsQuery.data?.data ?? []}
+            fallbackSettings={draftSettings}
+            models={models}
             modelsError={modelsQuery.error}
             modelsPending={modelsQuery.isPending}
             onTaskStarted={handleTaskStarted}
@@ -409,6 +462,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
 function ActiveTaskWorkbench({
   capabilities,
   client,
+  fallbackSettings,
   models,
   modelsError,
   modelsPending,
@@ -424,10 +478,16 @@ function ActiveTaskWorkbench({
 }: Readonly<{
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentWorkbenchClient;
+  fallbackSettings: AgentTaskSettings;
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;
-  onTaskStarted: (task: AgentTask, turn?: AgentTurn, input?: AgentPromptInput) => void;
+  onTaskStarted: (
+    task: AgentTask,
+    turn?: AgentTurn,
+    input?: AgentPromptInput,
+    settings?: AgentTaskSettings,
+  ) => void;
   projectId: string;
   projectPath: string;
   runtime: TaskRuntimeView;
@@ -438,6 +498,21 @@ function ActiveTaskWorkbench({
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
 }>) {
   const queryClient = useQueryClient();
+  const settingsMutation = useMutation({
+    ...taskSettingsMutationOptions(projectId, taskId, client),
+    onSuccess(response) {
+      queryClient.setQueryData<AgentTaskSnapshotResponse>(
+        ["projects", projectId, "tasks", taskId],
+        (current) =>
+          current === undefined
+            ? current
+            : {
+                ...current,
+                snapshot: { ...current.snapshot, settings: response.settings },
+              },
+      );
+    },
+  });
   const resolvePendingRequest = (
     request: PendingRequest,
     resolution: PendingRequestResolution,
@@ -470,11 +545,15 @@ function ActiveTaskWorkbench({
         client={client}
         models={models}
         modelsError={modelsError}
-        modelsPending={modelsPending}
+        modelsPending={modelsPending || runtime.isPending}
+        onSettingsChange={(settings) =>
+          settingsMutation.mutateAsync(settings).then(() => undefined)
+        }
         onTaskStarted={onTaskStarted}
         projectId={projectId}
         projectPath={projectPath}
         runtime={runtime}
+        settings={runtime.snapshot?.settings ?? startingSnapshot?.settings ?? fallbackSettings}
         taskId={taskId}
       />
     </>

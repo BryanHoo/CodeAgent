@@ -32,7 +32,9 @@ code-agent version
 ```
 
 `start` 支持 `--codex-bin` 和 `--codex-home`。启动后浏览器会打开
-`http://127.0.0.1:3210`。首次启动项目列表为空，通过 Projects 标题右侧的 `+` 使用系统目录选择器添加文件夹；列表原子写入 `CODEX_HOME/code-agent/projects.json`。收到 `SIGINT` 或 `SIGTERM` 后会依次关闭 HTTP Server 和全局长驻 Codex App Server。
+`http://127.0.0.1:3210`。首次启动项目列表为空，通过 Projects 标题右侧的 `+` 使用系统目录选择器添加文件夹；Project、Project 新 Task 默认模型设置和 Task 完整设置写入 `CODEX_HOME/code-agent/state.sqlite3`。收到 `SIGINT` 或 `SIGTERM` 后会依次关闭 HTTP Server、数据库 Worker 和全局长驻 Codex App Server。
+
+`doctor` 会检查数据库可写性、Migration 版本、`PRAGMA integrity_check`、WAL 和运行所需的 SQLite PRAGMA。
 
 在 Composer 起始位置输入 `/`，可执行代码审查、初始化、副任务、上下文压缩、反馈和在新任务中继续。代码审查、压缩、反馈与续接直接调用 Codex App Server 对应能力；初始化和副任务通过正常 Turn 提交。
 

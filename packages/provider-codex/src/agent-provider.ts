@@ -6,6 +6,7 @@ import {
   type AgentProvider,
   type AgentProviderEvent,
   type AgentProviderEventListener,
+  type AgentProviderTaskSnapshot,
   type AgentProviderTurnInput,
   type AgentRuntimeProvider,
   type ListAgentTasksInput,
@@ -18,7 +19,6 @@ import type {
   AgentItemStatus,
   AgentTask,
   AgentTaskPage,
-  AgentTaskSnapshot,
   AgentTurn,
   AgentModelPage,
   AgentTurnOptions,
@@ -420,7 +420,7 @@ function mapContextUsage(value: unknown): AgentContextUsage {
   return { contextWindow: parsedContextWindow, usedTokens };
 }
 
-function mapThreadStatus(value: unknown): AgentTaskSnapshot["status"] {
+function mapThreadStatus(value: unknown): AgentProviderTaskSnapshot["status"] {
   const type = optionalString(isRecord(value) ? value["type"] : undefined);
   if (type === "active") {
     return "running";
@@ -830,7 +830,7 @@ function isThreadNotMaterializedError(error: unknown): boolean {
   );
 }
 
-function createUnmaterializedTaskSnapshot(task: AgentTask): AgentTaskSnapshot {
+function createUnmaterializedTaskSnapshot(task: AgentTask): AgentProviderTaskSnapshot {
   return {
     ...task,
     contextUsage: null,
@@ -1100,7 +1100,7 @@ export class CodexAgentProvider implements AgentProvider {
     return { data, nextCursor: nextCursor ?? null };
   }
 
-  public async readTask(taskId: string): Promise<AgentTaskSnapshot | undefined> {
+  public async readTask(taskId: string): Promise<AgentProviderTaskSnapshot | undefined> {
     this.#pendingTaskReads.set(taskId, (this.#pendingTaskReads.get(taskId) ?? 0) + 1);
     let projectOwnershipVerified = false;
     try {
@@ -1136,7 +1136,7 @@ export class CodexAgentProvider implements AgentProvider {
       if (!Array.isArray(thread["turns"])) {
         throw new CodexProtocolMappingError("thread/read turns must be an array");
       }
-      const snapshot: AgentTaskSnapshot = {
+      const snapshot: AgentProviderTaskSnapshot = {
         ...task,
         contextUsage: this.#taskContextUsage.get(taskId) ?? null,
         pendingRequests: [...this.#pendingRequests.values()]
@@ -1647,7 +1647,7 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     return page;
   }
 
-  public async readTask(taskId: string): Promise<AgentTaskSnapshot | undefined> {
+  public async readTask(taskId: string): Promise<AgentProviderTaskSnapshot | undefined> {
     if (!this.#runtime.beginTaskRead(this.#project, taskId)) {
       return undefined;
     }

@@ -38,6 +38,9 @@ export type AgentProviderEvent = AgentEvent extends infer Event
 
 export type AgentProviderEventListener = (event: AgentProviderEvent) => void;
 
+// Provider Snapshot 不包含本地设置，Server 在交付 HTTP Snapshot 时统一合并持久化结果。
+export type AgentProviderTaskSnapshot = Omit<AgentTaskSnapshot, "settings">;
+
 export type ResolvePendingRequestInput = Readonly<
   ResolvePendingRequestRequest & { requestId: string }
 >;
@@ -62,7 +65,7 @@ export interface AgentProvider {
   listModels(): Promise<AgentModelPage>;
   listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage>;
   // Promise 完成前须让 Snapshot 包含此前状态并同步交付对应通知，使 checkpoint 保持一致。
-  readTask(taskId: string): Promise<AgentTaskSnapshot | undefined>;
+  readTask(taskId: string): Promise<AgentProviderTaskSnapshot | undefined>;
   resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest>;
   rollbackLatestTurn(taskId: string): Promise<void>;
   startReview(taskId: string, target: AgentReviewTarget): Promise<AgentTurn>;

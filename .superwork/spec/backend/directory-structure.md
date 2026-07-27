@@ -3,7 +3,7 @@
 ## 包职责
 
 - `src/cli.ts`：唯一公开 CLI 入口，只负责命令解析、配置装配和进程退出码。
-- `packages/server`：Fastify 插件、HTTP/WebSocket、持久化适配和 Writer Worker。
+- `packages/server`：Fastify 插件、HTTP/WebSocket、持久化适配和 Database Worker。
 - `packages/provider-codex`：Codex Binary 定位、App Server 子进程、JSONL/RPC 和事件映射。
 - `packages/core`：Provider 接口、领域状态机和用例；不得导入 Fastify、SQLite 或 Codex 实现。
 - `packages/protocol`：Provider 无关的 Schema、类型和 API 版本。

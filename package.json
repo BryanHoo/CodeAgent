@@ -34,7 +34,8 @@
     "prepublishOnly": "pnpm run check"
   },
   "dependencies": {
-    "@openai/codex": "catalog:"
+    "@openai/codex": "catalog:",
+    "better-sqlite3": "catalog:"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",

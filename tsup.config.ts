@@ -8,6 +8,7 @@ export default defineConfig({
     "protocol/index": "packages/protocol/src/index.ts",
     "providers/codex/index": "packages/provider-codex/src/index.ts",
     "server/index": "packages/server/src/index.ts",
+    "sqlite-state-worker": "packages/server/src/sqlite-state-worker.js",
   },
   bundle: true,
   clean: false,

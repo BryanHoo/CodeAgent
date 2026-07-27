@@ -1,6 +1,11 @@
 import { CodeAgentClient } from "@code-agent/client";
-import type { AgentTask, AgentTaskPage } from "@code-agent/protocol";
-import { queryOptions } from "@tanstack/react-query";
+import type {
+  AgentProjectDefaults,
+  AgentTask,
+  AgentTaskPage,
+  AgentTaskSettings,
+} from "@code-agent/protocol";
+import { mutationOptions, queryOptions } from "@tanstack/react-query";
 
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
 export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
@@ -8,6 +13,10 @@ export type CodeAgentSourceFileClient = Pick<CodeAgentClient, "readProjectSource
 export type CodeAgentRuntimeClient = Pick<CodeAgentClient, "readTask" | "subscribeEvents">;
 export type CodeAgentCapabilitiesClient = Pick<CodeAgentClient, "getCapabilities">;
 export type CodeAgentModelsClient = Pick<CodeAgentClient, "listModels">;
+export type CodeAgentSettingsClient = Pick<
+  CodeAgentClient,
+  "getProjectDefaults" | "updateProjectDefaults" | "updateTaskSettings"
+>;
 export type CodeAgentMutationClient = Pick<
   CodeAgentClient,
   | "addProject"
@@ -30,6 +39,7 @@ export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentPendingRequestClient &
   CodeAgentCapabilitiesClient &
   CodeAgentModelsClient &
+  CodeAgentSettingsClient &
   CodeAgentSourceFileClient;
 type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
 
@@ -60,6 +70,41 @@ export function modelsQueryOptions(client: CodeAgentModelsClient = codeAgentClie
     queryFn: () => client.listModels(),
     queryKey: ["models"] as const,
     staleTime: 5 * 60_000,
+  });
+}
+
+export function projectDefaultsQueryOptions(
+  projectId: string,
+  client: Pick<CodeAgentClient, "getProjectDefaults"> = codeAgentClient,
+) {
+  return queryOptions({
+    queryFn: () => client.getProjectDefaults(projectId),
+    queryKey: ["projects", projectId, "defaults"] as const,
+  });
+}
+
+export function projectDefaultsMutationOptions(
+  projectId: string,
+  client: Pick<CodeAgentClient, "updateProjectDefaults"> = codeAgentClient,
+) {
+  return mutationOptions({
+    mutationFn: (settings: AgentProjectDefaults) =>
+      client.updateProjectDefaults(projectId, settings),
+    mutationKey: ["projects", projectId, "defaults", "update"] as const,
+    scope: { id: `project-defaults:${projectId}` },
+  });
+}
+
+export function taskSettingsMutationOptions(
+  projectId: string,
+  taskId: string,
+  client: Pick<CodeAgentClient, "updateTaskSettings"> = codeAgentClient,
+) {
+  return mutationOptions({
+    mutationFn: (settings: AgentTaskSettings) =>
+      client.updateTaskSettings(projectId, taskId, settings),
+    mutationKey: ["projects", projectId, "tasks", taskId, "settings", "update"] as const,
+    scope: { id: `task-settings:${projectId}:${taskId}` },
   });
 }
 

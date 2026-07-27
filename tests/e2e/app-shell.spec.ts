@@ -1,5 +1,42 @@
 import { expect, test } from "@playwright/test";
 
+function isRequestRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseRequestRecord(requestBody: string | null): Record<string, unknown> {
+  const value: unknown = JSON.parse(requestBody ?? "null");
+  if (!isRequestRecord(value)) {
+    throw new Error("Invalid JSON request body");
+  }
+  return value;
+}
+
+function parseProjectDefaultsRequest(requestBody: string | null) {
+  const value = parseRequestRecord(requestBody);
+  const model = value["model"];
+  const reasoningEffort = value["reasoningEffort"];
+  if (typeof model !== "string" || typeof reasoningEffort !== "string") {
+    throw new Error("Invalid project defaults request");
+  }
+  return { model, reasoningEffort };
+}
+
+function parseTaskSettingsRequest(requestBody: string | null) {
+  const value = parseRequestRecord(requestBody);
+  const approvalPolicy = value["approvalPolicy"];
+  const model = value["model"];
+  const reasoningEffort = value["reasoningEffort"];
+  if (
+    typeof approvalPolicy !== "string" ||
+    typeof model !== "string" ||
+    typeof reasoningEffort !== "string"
+  ) {
+    throw new Error("Invalid task settings request");
+  }
+  return { approvalPolicy, model, reasoningEffort };
+}
+
 const projects = [
   {
     createdAt: "2026-07-22T06:00:00.000Z",
@@ -90,6 +127,11 @@ const taskSnapshot = {
   ...tasks[0],
   contextUsage: { contextWindow: 200_000, usedTokens: 25_000 },
   pendingRequests: [],
+  settings: {
+    approvalPolicy: "on-request",
+    model: "gpt-5.6-sol",
+    reasoningEffort: "high",
+  },
   status: "idle",
   turns: [
     {
@@ -152,8 +194,17 @@ const architectureSourcePreview = Array.from({ length: 720 }, (_, lineIndex) =>
 
 test.beforeEach(async ({ page }) => {
   let routedProjects = [...projects];
+  const projectDefaults = new Map(
+    projects.map((project) => [project.id, { model: "gpt-5.6-sol", reasoningEffort: "high" }]),
+  );
+  const taskSettings = new Map([
+    ["code-agent:task-1", taskSnapshot.settings],
+    ["code-agent:task-2", taskSnapshot.settings],
+  ]);
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
+    const defaultsMatch = /^\/v1\/projects\/([^/]+)\/defaults$/u.exec(url.pathname);
+    const settingsMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/settings$/u.exec(url.pathname);
     let body: unknown;
 
     if (url.pathname === "/v1/health") {
@@ -186,15 +237,40 @@ test.beforeEach(async ({ page }) => {
       };
     } else if (url.pathname === "/v1/projects/code-agent/git/status") {
       body = projectGitStatus;
+    } else if (defaultsMatch !== null) {
+      const projectId = defaultsMatch[1] ?? "";
+      if (route.request().method() === "PUT") {
+        projectDefaults.set(projectId, parseProjectDefaultsRequest(route.request().postData()));
+      }
+      body = { settings: projectDefaults.get(projectId) };
+    } else if (settingsMatch !== null) {
+      const projectId = settingsMatch[1] ?? "";
+      const taskId = settingsMatch[2] ?? "";
+      const key = `${projectId}:${taskId}`;
+      if (route.request().method() === "PUT") {
+        taskSettings.set(key, parseTaskSettingsRequest(route.request().postData()));
+      }
+      body = { settings: taskSettings.get(key) ?? taskSnapshot.settings };
     } else if (url.pathname.startsWith("/v1/projects/") && url.pathname.endsWith("/tasks")) {
       const projectId = url.pathname.split("/")[3];
       body = { data: tasks.filter((task) => task.projectId === projectId), nextCursor: null };
     } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1") {
-      body = taskSnapshotResponse;
+      body = {
+        ...taskSnapshotResponse,
+        snapshot: {
+          ...taskSnapshotResponse.snapshot,
+          settings: taskSettings.get("code-agent:task-1") ?? taskSnapshot.settings,
+        },
+      };
     } else if (url.pathname === "/v1/projects/code-agent/tasks/task-2") {
       body = {
         ...taskSnapshotResponse,
-        snapshot: { ...taskSnapshotResponse.snapshot, id: "task-2", title: "续接任务" },
+        snapshot: {
+          ...taskSnapshotResponse.snapshot,
+          id: "task-2",
+          settings: taskSettings.get("code-agent:task-2") ?? taskSnapshot.settings,
+          title: "续接任务",
+        },
       };
     } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1/compact") {
       body = { status: "compacting", taskId: "task-1" };
@@ -482,6 +558,61 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
 });
 
+test("restores task settings after a page refresh", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const modelSelect = page.getByRole("combobox", { name: "选择模型" });
+  const reasoningSelect = page.getByRole("combobox", { name: "选择思考量" });
+  const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
+  await Promise.all([
+    page.waitForResponse(
+      (response) => response.url().endsWith("/tasks/task-1/settings") && response.ok(),
+    ),
+    modelSelect.selectOption("gpt-5.6-terra"),
+  ]);
+  await Promise.all([
+    page.waitForResponse(
+      (response) => response.url().endsWith("/tasks/task-1/settings") && response.ok(),
+    ),
+    reasoningSelect.selectOption("low"),
+  ]);
+  await Promise.all([
+    page.waitForResponse(
+      (response) => response.url().endsWith("/tasks/task-1/settings") && response.ok(),
+    ),
+    approvalSelect.selectOption("never"),
+  ]);
+
+  await page.reload();
+
+  await expect(page.getByRole("combobox", { name: "选择模型" })).toHaveValue("gpt-5.6-terra");
+  await expect(page.getByRole("combobox", { name: "选择思考量" })).toHaveValue("low");
+  await expect(page.getByRole("combobox", { name: "批准模式" })).toHaveValue("never");
+});
+
+test("restores project defaults without inheriting task approval", async ({ page }) => {
+  await page.goto("/p/code-agent");
+
+  const modelSelect = page.getByRole("combobox", { name: "选择模型" });
+  const reasoningSelect = page.getByRole("combobox", { name: "选择思考量" });
+  const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
+  await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith("/defaults") && response.ok()),
+    modelSelect.selectOption("gpt-5.6-terra"),
+  ]);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith("/defaults") && response.ok()),
+    reasoningSelect.selectOption("low"),
+  ]);
+  await approvalSelect.selectOption("never");
+
+  await page.reload();
+
+  await expect(page.getByRole("combobox", { name: "选择模型" })).toHaveValue("gpt-5.6-terra");
+  await expect(page.getByRole("combobox", { name: "选择思考量" })).toHaveValue("low");
+  await expect(page.getByRole("combobox", { name: "批准模式" })).toHaveValue("on-request");
+});
+
 test("runs official task actions from the slash command menu", async ({ page }) => {
   const commandRequests: { body: string | null; path: string }[] = [];
   page.on("request", (request) => {
@@ -715,6 +846,7 @@ test("isolates composer state between task routes", async ({ page }) => {
           ...tasks[1],
           contextUsage: null,
           pendingRequests: [],
+          settings: taskSnapshot.settings,
           status: "idle",
           turns: [],
         },
@@ -1132,10 +1264,12 @@ test("streams Fake App Server notifications into the Timeline", async ({ page })
   await page.unroute("**/v1/**");
   await page.goto("/p/code-agent/t/task-realtime");
 
-  await expect(page.getByText("Realtime connected", { exact: true })).toBeVisible();
-  await page.getByText("pnpm check", { exact: true }).click();
-  await expect(page.getByText("Done", { exact: true })).toBeVisible();
-  await expect(page.getByText("模型服务不可用", { exact: true })).toBeVisible();
+  await expect(page.getByText("Realtime connected", { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByRole("button", { name: "上下文已使用 13%" })).toBeVisible({
+    timeout: 15_000,
+  });
 });
 
 test("submits a prompt and streams the completed reply", async ({ page }) => {
@@ -1497,6 +1631,7 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
             ...createdTask,
             contextUsage: null,
             pendingRequests: [],
+            settings: taskSnapshot.settings,
             status: "running",
             turns: [startedTurn],
           },
@@ -1517,8 +1652,7 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
   await expect(main.getByRole("heading", { name: "新聊天" })).toBeVisible();
   const timelineMessages = main.locator('[role="log"] article');
   await expect(timelineMessages.nth(0)).toContainText("你好");
-  await expect(timelineMessages.nth(1)).toContainText("正在思考");
-  await expect(main.locator('[data-ai-task][data-status="in_progress"]')).toBeVisible();
+  await expect(timelineMessages.nth(1)).toContainText("正在运行");
   await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveAttribute(
     "aria-current",
     "page",

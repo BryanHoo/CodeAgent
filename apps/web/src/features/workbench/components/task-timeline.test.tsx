@@ -26,6 +26,11 @@ const snapshot: RuntimeTaskSnapshot = {
   pendingRequests: [],
   pinned: false,
   projectId: "code-agent",
+  settings: {
+    approvalPolicy: "on-request",
+    model: "gpt-5.6-sol",
+    reasoningEffort: "high",
+  },
   status: "idle",
   title: "Markdown 渲染",
   turns: [completedTurn],

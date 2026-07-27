@@ -5,6 +5,7 @@ import type {
   AgentModel,
   AgentPromptInput,
   AgentTask,
+  AgentTaskSettings,
   AgentTaskSnapshot,
   AgentTurn,
   AgentTurnOptions,
@@ -227,10 +228,20 @@ type WorkbenchComposerProps = Readonly<{
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;
-  onTaskStarted: (task: AgentTask, turn?: AgentTurn, input?: AgentPromptInput) => void;
+  onSettingsChange: (
+    settings: AgentTaskSettings,
+    field: keyof AgentTaskSettings,
+  ) => Promise<void> | void;
+  onTaskStarted: (
+    task: AgentTask,
+    turn?: AgentTurn,
+    input?: AgentPromptInput,
+    settings?: AgentTaskSettings,
+  ) => void;
   projectId: string;
   projectPath: string;
   runtime?: TaskRuntimeView;
+  settings: AgentTaskSettings;
   taskId?: string;
 }>;
 
@@ -301,13 +312,18 @@ export function WorkbenchComposer({
   models,
   modelsError,
   modelsPending,
+  onSettingsChange,
   onTaskStarted,
   projectId,
   projectPath,
   runtime,
+  settings,
   taskId,
 }: WorkbenchComposerProps) {
-  const [approvalPolicy, setApprovalPolicy] = useState<AgentApprovalPolicy>("on-request");
+  const [settingsOverride, setSettingsOverride] = useState<{
+    projectId: string;
+    settings: AgentTaskSettings;
+  }>();
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const [attachmentCount, setAttachmentCount] = useState(0);
   const [commandDraftMode, setCommandDraftMode] = useState<CommandDraftMode | null>(null);
@@ -319,8 +335,6 @@ export function WorkbenchComposer({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mutationError, setMutationError] = useState<Error | null>(null);
   const [pendingTask, setPendingTask] = useState<AgentTask>();
-  const [selectedModelId, setSelectedModelId] = useState("");
-  const [selectedReasoningEffortId, setSelectedReasoningEffortId] = useState("");
   const [submittedTurnId, setSubmittedTurnId] = useState<string>();
   const commandMenuId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -344,11 +358,16 @@ export function WorkbenchComposer({
     mutationFailed: mutationError !== null || runtime?.error !== null,
   });
   const trimmedDraft = draft.trim();
+  const activeSettings =
+    settingsOverride?.projectId === projectId ? settingsOverride.settings : settings;
   const selectedModel =
-    models.find((model) => model.id === selectedModelId) ??
+    models.find((model) => model.id === activeSettings.model) ??
     models.find((model) => model.isDefault) ??
     models[0];
-  const selectedReasoningEffort = resolveReasoningEffort(selectedModel, selectedReasoningEffortId);
+  const selectedReasoningEffort = resolveReasoningEffort(
+    selectedModel,
+    activeSettings.reasoningEffort,
+  );
   const contextUsage = runtime?.snapshot?.contextUsage;
   const { attachmentsDisabled, turnControlsDisabled } = deriveComposerInputAvailability(state);
   const filteredCommands = filterPromptCommandItems(promptCommandItems, commandQuery);
@@ -359,6 +378,15 @@ export function WorkbenchComposer({
   const handleAttachmentsChange = useCallback((files: readonly PromptInputAttachment[]) => {
     setAttachmentCount(files.length);
   }, []);
+
+  const updateSettings = (nextSettings: AgentTaskSettings, field: keyof AgentTaskSettings) => {
+    setSettingsOverride({ projectId, settings: nextSettings });
+    setMutationError(null);
+    // 设置写回由用户事件直接触发，避免 effect 重放或并发渲染造成重复请求。
+    void Promise.resolve(onSettingsChange(nextSettings, field)).catch((error: unknown) => {
+      setMutationError(error instanceof Error ? error : new Error("Settings update failed"));
+    });
+  };
 
   useEffect(() => {
     if (turnControlsDisabled) {
@@ -414,7 +442,7 @@ export function WorkbenchComposer({
     }
 
     const turnOptions = {
-      approvalPolicy,
+      approvalPolicy: activeSettings.approvalPolicy,
       model: selectedModel.id,
       reasoningEffort: selectedReasoningEffort,
     } as const;
@@ -455,7 +483,7 @@ export function WorkbenchComposer({
       if (taskId === undefined) {
         const startedTask = result.createdTask ?? pendingTask;
         if (startedTask !== undefined) {
-          onTaskStarted(startedTask, result.turn, input);
+          onTaskStarted(startedTask, result.turn, input, turnOptions);
         }
       }
     } catch (error) {
@@ -795,9 +823,15 @@ export function WorkbenchComposer({
                 aria-label="批准模式"
                 disabled={turnControlsDisabled}
                 onChange={(event) => {
-                  setApprovalPolicy(event.currentTarget.value as AgentApprovalPolicy);
+                  updateSettings(
+                    {
+                      ...activeSettings,
+                      approvalPolicy: event.currentTarget.value as AgentApprovalPolicy,
+                    },
+                    "approvalPolicy",
+                  );
                 }}
-                value={approvalPolicy}
+                value={activeSettings.approvalPolicy}
               >
                 <option value="untrusted">仅不受信任操作</option>
                 <option value="on-request">按需审批</option>
@@ -809,7 +843,21 @@ export function WorkbenchComposer({
                 aria-label="选择模型"
                 disabled={turnControlsDisabled || modelsPending || selectedModel === undefined}
                 onChange={(event) => {
-                  setSelectedModelId(event.currentTarget.value);
+                  const nextModel = models.find((model) => model.id === event.currentTarget.value);
+                  const nextReasoningEffort = resolveReasoningEffort(
+                    nextModel,
+                    activeSettings.reasoningEffort,
+                  );
+                  if (nextModel !== undefined && nextReasoningEffort !== undefined) {
+                    updateSettings(
+                      {
+                        ...activeSettings,
+                        model: nextModel.id,
+                        reasoningEffort: nextReasoningEffort,
+                      },
+                      "model",
+                    );
+                  }
                 }}
                 value={selectedModel?.id ?? ""}
               >
@@ -827,7 +875,10 @@ export function WorkbenchComposer({
                 aria-label="选择思考量"
                 disabled={turnControlsDisabled || modelsPending || selectedModel === undefined}
                 onChange={(event) => {
-                  setSelectedReasoningEffortId(event.currentTarget.value);
+                  updateSettings(
+                    { ...activeSettings, reasoningEffort: event.currentTarget.value },
+                    "reasoningEffort",
+                  );
                 }}
                 title={
                   selectedModel?.supportedReasoningEfforts.find(

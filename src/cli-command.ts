@@ -3,7 +3,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { AgentRuntimeProvider, ProjectRepository } from "@code-agent/core";
+import type {
+  AgentRuntimeProvider,
+  AgentSettingsRepository,
+  ProjectRepository,
+} from "@code-agent/core";
 import {
   checkCodexVersion,
   createCodexRuntimeProvider,
@@ -16,7 +20,11 @@ import {
   type LocateCodexBinaryOptions,
   type StartCodexAppServerOptions,
 } from "@code-agent/provider-codex";
-import { createCodeAgentServer, JsonProjectRepository } from "@code-agent/server";
+import {
+  createCodeAgentServer,
+  SqliteStateRepository,
+  type SqliteDatabaseDiagnostics,
+} from "@code-agent/server";
 
 import packageManifest from "../package.json" with { type: "json" };
 import { selectSystemDirectory } from "./system-directory-picker.js";
@@ -33,6 +41,11 @@ interface CliManagedServer {
   listen: (options: { host: string; port: number }) => Promise<string>;
 }
 
+interface CliManagedStateRepository extends ProjectRepository, AgentSettingsRepository {
+  close: () => Promise<void>;
+  diagnose: () => Promise<SqliteDatabaseDiagnostics>;
+}
+
 interface CreateRuntimeProviderInput {
   client: CodexRpcClient;
 }
@@ -41,13 +54,14 @@ interface CreateServerInput {
   projectRepository: ProjectRepository;
   provider: AgentRuntimeProvider;
   selectProjectDirectory: () => Promise<string | undefined>;
+  settingsRepository: AgentSettingsRepository;
   staticRoot: string;
 }
 
 export interface CliDependencies {
   appVersion: string;
   checkCodexVersion: (binaryPath: string) => Promise<CodexVersionInfo>;
-  createProjectRepository: (filePath: string) => ProjectRepository;
+  createStateRepository: (databasePath: string) => Promise<CliManagedStateRepository>;
   createRuntimeProvider: (
     input: CreateRuntimeProviderInput,
   ) => AgentRuntimeProvider | Promise<AgentRuntimeProvider>;
@@ -97,7 +111,7 @@ interface ParsedCommandOptions {
 const defaultDependencies: CliDependencies = {
   appVersion: packageManifest.version,
   checkCodexVersion,
-  createProjectRepository: (filePath) => new JsonProjectRepository(filePath),
+  createStateRepository: (databasePath) => SqliteStateRepository.open(databasePath),
   createRuntimeProvider: createCodexRuntimeProvider,
   createServer: createCodeAgentServer,
   locateCodexBinary,
@@ -112,7 +126,7 @@ const HELP = `Usage: code-agent <command> [options]
 
 Commands:
   code-agent start [--codex-bin <path>] [--codex-home <path>]
-  code-agent doctor [--codex-bin <path>]
+  code-agent doctor [--codex-bin <path>] [--codex-home <path>]
   code-agent version
 `;
 
@@ -146,6 +160,32 @@ function assertSupportedNodeVersion(version: string): void {
   const major = Number.parseInt(version.split(".")[0] ?? "", 10);
   if (!Number.isInteger(major) || major < 24) {
     throw new Error(`Node.js 24 or newer is required; found ${version}`);
+  }
+}
+
+function resolveCodexHome(options: ParsedCommandOptions): string {
+  return options.codexHome ?? process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
+}
+
+function assertDatabaseDiagnostics(diagnostics: SqliteDatabaseDiagnostics): void {
+  if (!diagnostics.writable) {
+    throw new Error("SQLite database is not writable");
+  }
+  if (diagnostics.migrationVersion < 1) {
+    throw new Error("SQLite migrations are not applied");
+  }
+  if (diagnostics.integrityCheck !== "ok") {
+    throw new Error(`SQLite integrity_check failed: ${diagnostics.integrityCheck}`);
+  }
+  if (diagnostics.journalMode.toLocaleLowerCase() !== "wal") {
+    throw new Error(`SQLite journal_mode must be WAL; found ${diagnostics.journalMode}`);
+  }
+  if (
+    !diagnostics.foreignKeys ||
+    diagnostics.synchronous !== "normal" ||
+    diagnostics.busyTimeout !== 5_000
+  ) {
+    throw new Error("SQLite PRAGMA configuration is invalid");
   }
 }
 
@@ -186,7 +226,7 @@ async function runDoctor(
   dependencies: CliDependencies,
   stdout: (message: string) => void,
 ): Promise<number> {
-  const options = parseCommandOptions(args, new Set(["--codex-bin"]));
+  const options = parseCommandOptions(args, new Set(["--codex-bin", "--codex-home"]));
   assertSupportedNodeVersion(dependencies.nodeVersion);
   stdout(`[ok] Node.js ${dependencies.nodeVersion}\n`);
 
@@ -195,6 +235,23 @@ async function runDoctor(
   );
   const version = await dependencies.checkCodexVersion(binary.path);
   stdout(`[ok] Codex ${version.version} (${binary.path})\n`);
+  const codexHome = resolveCodexHome(options);
+  const stateRepository = await dependencies.createStateRepository(
+    join(codexHome, "code-agent", "state.sqlite3"),
+  );
+  try {
+    const diagnostics = await stateRepository.diagnose();
+    assertDatabaseDiagnostics(diagnostics);
+    stdout(`[ok] SQLite writable (${join(codexHome, "code-agent", "state.sqlite3")})\n`);
+    stdout(`[ok] SQLite migration ${String(diagnostics.migrationVersion)}\n`);
+    stdout(`[ok] SQLite integrity_check ${diagnostics.integrityCheck}\n`);
+    stdout(`[ok] SQLite journal_mode ${diagnostics.journalMode}\n`);
+    stdout(
+      `[ok] SQLite PRAGMA foreign_keys=ON synchronous=NORMAL busy_timeout=${String(diagnostics.busyTimeout)}\n`,
+    );
+  } finally {
+    await stateRepository.close();
+  }
   return 0;
 }
 
@@ -214,13 +271,17 @@ async function runStart(
 
   let runtime: CliManagedRuntime | undefined;
   let server: CliManagedServer | undefined;
+  let stateRepository: CliManagedStateRepository | undefined;
 
   try {
-    const codexHome = options.codexHome ?? process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
+    const codexHome = resolveCodexHome(options);
     const env = {
       ...process.env,
       ...(options.codexHome ? { CODEX_HOME: options.codexHome } : {}),
     };
+    stateRepository = await dependencies.createStateRepository(
+      join(codexHome, "code-agent", "state.sqlite3"),
+    );
     runtime = await dependencies.startCodexAppServer({
       appVersion: dependencies.appVersion,
       env,
@@ -229,13 +290,11 @@ async function runStart(
     const provider = await dependencies.createRuntimeProvider({
       client: runtime.client,
     });
-    const projectRepository = dependencies.createProjectRepository(
-      join(codexHome, "code-agent", "projects.json"),
-    );
     server = await dependencies.createServer({
-      projectRepository,
+      projectRepository: stateRepository,
       provider,
       selectProjectDirectory: dependencies.selectProjectDirectory,
+      settingsRepository: stateRepository,
       staticRoot: dependencies.webRoot,
     });
     const url = await server.listen({ host: "127.0.0.1", port: 3210 });
@@ -266,9 +325,13 @@ async function runStart(
       await server?.close();
     } finally {
       try {
-        await runtime?.close();
+        await stateRepository?.close();
       } finally {
-        ownedShutdown?.cleanup();
+        try {
+          await runtime?.close();
+        } finally {
+          ownedShutdown?.cleanup();
+        }
       }
     }
   }

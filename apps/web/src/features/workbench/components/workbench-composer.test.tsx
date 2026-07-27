@@ -17,6 +17,11 @@ const task = {
   pendingRequests: [],
   pinned: false,
   projectId: "code-agent",
+  settings: {
+    approvalPolicy: "on-request" as const,
+    model: "gpt-5.6-sol",
+    reasoningEffort: "high",
+  },
   title: "新任务",
   updatedAt: "2026-07-23T00:00:00.000Z",
 };

@@ -21,7 +21,7 @@
 ## Global Constraints
 
 - CLI 不接受 `--project`，App Server 启动时不设置 Project `cwd`。
-- 初次启动项目列表为空；只从 `CODEX_HOME/code-agent/projects.json` 读取持久项目。
+- 初次启动项目列表为空；持久 Project 只从当前 SQLite State Repository 读取。
 - Project 路径注册前必须执行绝对路径、`realpath` 和目录校验；重复路径幂等返回已有 Project。
 - Project JSON 必须在同目录临时文件完整写入后原子 `rename`，并串行化并发更新。
 - Provider 只订阅一次底层 RPC 通知与服务端请求；所有 Task 操作显式校验 Project 归属。
@@ -81,7 +81,7 @@ Expected: Provider 测试全部通过。
 - Consumes: `ProjectRepository`、`CODEX_HOME`、Node `fs/promises`、宿主平台目录选择命令。
 - Produces: 原子 JSON Project 存储、可注入的 `selectDirectory()`、不绑定 Project 的 CLI Runtime/Server 装配。
 
-**Behavior Slice:** 启动时从 `CODEX_HOME/code-agent/projects.json` 读取 Project，文件不存在时返回空列表；注册目录时验证真实目录、生成稳定唯一 ID、幂等去重并原子写入。CLI 删除 `--project`，App Server 不传 `cwd`，Server 获得 Repository 和宿主选择器。
+**Behavior Slice:** 启动时从 State Repository 读取 Project；数据库没有记录时返回空列表。注册目录时验证真实目录、生成稳定唯一 ID、幂等去重并原子写入。CLI 删除 `--project`，App Server 不传 `cwd`，Server 获得 Repository 和宿主选择器。
 
 **Proof Intent:** 临时目录测试覆盖空启动、持久化重载、重复注册、并发注册、非法 JSON、非目录与原子文件替换；CLI 测试确认拒绝 `--project` 且 Runtime 启动参数无 `cwd`。
 

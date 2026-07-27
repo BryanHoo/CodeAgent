@@ -15,6 +15,15 @@ const task = {
   title: "结构化历史",
   updatedAt: "2026-07-23T00:01:00.000Z",
 };
+const taskSettings = {
+  approvalPolicy: "never" as const,
+  model: "gpt-5.6-sol",
+  reasoningEffort: "high",
+};
+const projectDefaults = {
+  model: taskSettings.model,
+  reasoningEffort: taskSettings.reasoningEffort,
+};
 
 const modelPage = {
   data: [
@@ -153,7 +162,14 @@ describe("CodeAgentClient", () => {
       .mockResolvedValueOnce(
         jsonResponse({
           checkpoint: { sequence: 0, sessionId: "runtime-1" },
-          snapshot: { ...task, contextUsage: null, pendingRequests: [], status: "idle", turns: [] },
+          snapshot: {
+            ...task,
+            contextUsage: null,
+            pendingRequests: [],
+            settings: taskSettings,
+            status: "idle",
+            turns: [],
+          },
         }),
       );
     const client = new CodeAgentClient({ baseUrl: "http://127.0.0.1:3210/", fetch: fetchMock });
@@ -177,6 +193,63 @@ describe("CodeAgentClient", () => {
     const client = new CodeAgentClient({ fetch: fetchMock });
 
     await expect(client.getHealth()).rejects.toBeInstanceOf(CodeAgentHttpError);
+  });
+
+  it("reads and atomically updates project defaults and task settings", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ settings: projectDefaults }))
+      .mockResolvedValueOnce(jsonResponse({ settings: projectDefaults }))
+      .mockResolvedValueOnce(jsonResponse({ settings: taskSettings }))
+      .mockResolvedValueOnce(jsonResponse({ settings: taskSettings }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.getProjectDefaults("project one")).resolves.toEqual({
+      settings: projectDefaults,
+    });
+    await expect(
+      client.updateProjectDefaults("project one", projectDefaults, {
+        idempotencyKey: "project-defaults-key",
+      }),
+    ).resolves.toEqual({ settings: projectDefaults });
+    await expect(client.getTaskSettings("project one", "task/1")).resolves.toEqual({
+      settings: taskSettings,
+    });
+    await expect(
+      client.updateTaskSettings("project one", "task/1", taskSettings, {
+        idempotencyKey: "task-settings-key",
+      }),
+    ).resolves.toEqual({ settings: taskSettings });
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/v1/projects/project%20one/defaults",
+      "/v1/projects/project%20one/defaults",
+      "/v1/projects/project%20one/tasks/task%2F1/settings",
+      "/v1/projects/project%20one/tasks/task%2F1/settings",
+    ]);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      body: JSON.stringify(projectDefaults),
+      method: "PUT",
+    });
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("idempotency-key")).toBe(
+      "project-defaults-key",
+    );
+    expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({
+      body: JSON.stringify(taskSettings),
+      method: "PUT",
+    });
+  });
+
+  it("rejects malformed settings responses", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(
+      jsonResponse({ settings: { ...taskSettings, approvalPolicy: "allow_for_session" } }),
+    );
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.getTaskSettings("code-agent", "task-1")).rejects.toBeInstanceOf(
+      CodeAgentResponseError,
+    );
   });
 
   it("sends typed task and turn mutations with idempotency keys", async () => {

@@ -156,6 +156,11 @@ describe("Agent Event v1 protocol", () => {
         pinned: false,
         pendingRequests: [pendingRequest],
         projectId: "code-agent",
+        settings: {
+          approvalPolicy: "on-request",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+        },
         status: "idle",
         title: "实时链路",
         turns: [],

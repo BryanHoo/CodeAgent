@@ -7,10 +7,13 @@ import {
   capabilitiesQueryOptions,
   modelsQueryOptions,
   PROJECT_GIT_STATUS_POLL_INTERVAL_MS,
+  projectDefaultsMutationOptions,
+  projectDefaultsQueryOptions,
   projectGitStatusQueryOptions,
   projectTasksQueryOptions,
   projectsQueryOptions,
   taskSnapshotQueryOptions,
+  taskSettingsMutationOptions,
   upsertProjectTaskPage,
 } from "./project-queries.js";
 
@@ -33,6 +36,11 @@ const snapshot = {
   ...task,
   contextUsage: null,
   pendingRequests: [],
+  settings: {
+    approvalPolicy: "never" as const,
+    model: "gpt-5.6-sol",
+    reasoningEffort: "high",
+  },
   status: "idle" as const,
   turns: [
     {
@@ -130,6 +138,11 @@ describe("project queries", () => {
           turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
         }),
       ),
+      getProjectDefaults: vi.fn(() =>
+        Promise.resolve({
+          settings: { model: "gpt-5.6-sol", reasoningEffort: "high" },
+        }),
+      ),
       listProjects: vi.fn(() => Promise.resolve({ data: [project], nextCursor: null })),
       listModels: vi.fn(() =>
         Promise.resolve({
@@ -164,12 +177,39 @@ describe("project queries", () => {
       data: [{ id: "gpt-5.6-sol", isDefault: true }],
     });
     await expect(
+      queryClient.fetchQuery(projectDefaultsQueryOptions("code-agent", client)),
+    ).resolves.toEqual({
+      settings: { model: "gpt-5.6-sol", reasoningEffort: "high" },
+    });
+    await expect(
       queryClient.fetchQuery(projectTasksQueryOptions("code-agent", client)),
     ).resolves.toEqual({ data: [task], nextCursor: null });
     await expect(
       queryClient.fetchQuery(taskSnapshotQueryOptions("code-agent", "task-1", client)),
     ).resolves.toEqual(snapshotResponse);
     expect(client.readTask).toHaveBeenCalledWith("code-agent", "task-1");
+  });
+
+  it("updates complete project defaults and task settings through mutations", async () => {
+    const defaults = { model: "gpt-5.6-sol", reasoningEffort: "high" };
+    const settings = { approvalPolicy: "never" as const, ...defaults };
+    const client = {
+      updateProjectDefaults: vi.fn(() => Promise.resolve({ settings: defaults })),
+      updateTaskSettings: vi.fn(() => Promise.resolve({ settings })),
+    };
+    const queryClient = new QueryClient();
+
+    await queryClient
+      .getMutationCache()
+      .build(queryClient, projectDefaultsMutationOptions("code-agent", client))
+      .execute(defaults);
+    await queryClient
+      .getMutationCache()
+      .build(queryClient, taskSettingsMutationOptions("code-agent", "task-1", client))
+      .execute(settings);
+
+    expect(client.updateProjectDefaults).toHaveBeenCalledWith("code-agent", defaults);
+    expect(client.updateTaskSettings).toHaveBeenCalledWith("code-agent", "task-1", settings);
   });
 
   it("loads and merges every task page returned by the client", async () => {

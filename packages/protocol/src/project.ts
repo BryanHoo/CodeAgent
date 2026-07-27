@@ -281,7 +281,7 @@ export const AgentApprovalPolicySchema = Type.Union([
 
 export type AgentApprovalPolicy = Readonly<Static<typeof AgentApprovalPolicySchema>>;
 
-export const AgentTurnOptionsSchema = Type.Object(
+export const AgentTaskSettingsSchema = Type.Object(
   {
     approvalPolicy: AgentApprovalPolicySchema,
     model: Type.String({ minLength: 1 }),
@@ -290,6 +290,35 @@ export const AgentTurnOptionsSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export type AgentTaskSettings = Readonly<Static<typeof AgentTaskSettingsSchema>>;
+
+export const AgentProjectDefaultsSchema = Type.Object(
+  {
+    model: Type.String({ minLength: 1 }),
+    reasoningEffort: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentProjectDefaults = Readonly<Static<typeof AgentProjectDefaultsSchema>>;
+
+export const AgentProjectDefaultsResponseSchema = Type.Object(
+  { settings: AgentProjectDefaultsSchema },
+  { additionalProperties: false },
+);
+
+export type AgentProjectDefaultsResponse = Readonly<
+  Static<typeof AgentProjectDefaultsResponseSchema>
+>;
+
+export const AgentTaskSettingsResponseSchema = Type.Object(
+  { settings: AgentTaskSettingsSchema },
+  { additionalProperties: false },
+);
+
+export type AgentTaskSettingsResponse = Readonly<Static<typeof AgentTaskSettingsResponseSchema>>;
+
+export const AgentTurnOptionsSchema = AgentTaskSettingsSchema;
 export type AgentTurnOptions = Readonly<Static<typeof AgentTurnOptionsSchema>>;
 
 export const AgentReasoningEffortOptionSchema = Type.Object(
@@ -713,6 +742,7 @@ export const AgentTaskSnapshotSchema = Type.Object(
     pendingRequests: Type.Array(ActivePendingRequestSchema),
     pinned: Type.Boolean(),
     projectId: Type.String({ minLength: 1 }),
+    settings: AgentTaskSettingsSchema,
     status: Type.Union([Type.Literal("idle"), Type.Literal("running"), Type.Literal("failed")]),
     title: Type.String({ minLength: 1 }),
     turns: Type.Array(AgentTurnSchema),

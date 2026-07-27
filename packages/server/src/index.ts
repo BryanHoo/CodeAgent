@@ -5,4 +5,9 @@ export {
   type AgentEventStreamOptions,
 } from "./agent-event-stream.js";
 export { createCodeAgentServer, type CreateCodeAgentServerOptions } from "./app.js";
-export { JsonProjectRepository } from "./json-project-repository.js";
+export {
+  SqliteStateRepository,
+  type SqliteDatabaseDiagnostics,
+  type SqliteMigration,
+  type SqliteStateRepositoryOptions,
+} from "./sqlite-state-repository.js";

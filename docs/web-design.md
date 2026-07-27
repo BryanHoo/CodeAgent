@@ -9,7 +9,7 @@
 
 本文定义 CodeAgent Web 的页面结构、组件边界、状态模型、流式事件处理、性能策略和实施顺序，为 `apps/web`、`packages/client` 与 `packages/protocol` 的后续实现提供统一基线。
 
-本文细化 [总体架构设计](./architecture-design.md) 中的 Web 部分，不重复 Codex App Server 子进程、Provider Adapter、SQLite Writer Worker 和 CLI 的内部实现。跨包依赖仍以 [项目结构与工程约束](./project-structure.md) 为准。
+本文细化 [总体架构设计](./architecture-design.md) 中的 Web 部分，不重复 Codex App Server 子进程、Provider Adapter、SQLite Database Worker 和 CLI 的内部实现。跨包依赖仍以 [项目结构与工程约束](./project-structure.md) 为准。
 
 目标读者包括：
 
@@ -234,7 +234,7 @@ apps/web/src/shared/ai-elements/
 
 Project 和 Task ID 必须来自 Server，URL 只表示导航意图，不能代替权限校验。
 
-Project 不使用独立页面。用户在工作台左栏通过目录选择器添加本地文件夹，文件夹名作为 Project 名称；本地 Runtime 校验真实路径后随 Project 上下文返回，Web 只负责在当前工作台展示，不单独持久化路径。
+Project 不使用独立页面。用户在工作台左栏通过目录选择器添加本地文件夹，文件夹名作为 Project 名称；本地 Runtime 校验真实路径并由 Server 持久化，Web 只通过 Client API 读取和注册 Project，不直接访问数据库。
 
 ### 8.2 应用外壳
 
@@ -432,6 +432,8 @@ Store 规则：
 - 不通过 React Context 直接广播完整运行时状态。
 - 未选中且无活动 Turn 的 Task Store 可以按 LRU 回收。
 - Store 不负责持久化，刷新后以 Server Snapshot 为准。
+- Project 新 Task 默认设置由 TanStack Query 管理；已有 Task 的有效设置随 Task Snapshot 返回，避免打开 Task 后重复读取。
+- 设置控件只在用户事件中提交完整对象；Project defaults 和 Task settings 使用独立串行 Mutation，成功后更新对应 Query 缓存。
 
 ## 13. Agent Event 处理
 
@@ -664,7 +666,9 @@ PromptInputMessage
 
 MVP 附件仅接受 `image/gif`、`image/jpeg`、`image/png` 和 `image/webp`，单文件最大 `2 MiB`，一次最多 `4` 个。预览使用短生命周期 Blob URL；删除、提交成功和组件卸载时立即释放。Server Store 同时限制条目数、总字节数和 TTL，Turn 成功后消费引用。
 
-模型选择通过 `GET /v1/models` 读取真实 Provider 目录并优先选择 `isDefault`。思考量紧邻模型，只展示所选模型的 `supportedReasoningEfforts`，无有效本地选择时使用 `defaultReasoningEffort`。审批策略只使用统一协议的 `untrusted`、`on-request` 和 `never`；模型 ID、思考量与审批策略随 Turn 请求发送并由 Server 再校验。
+模型选择通过 `GET /v1/models` 读取真实 Provider 目录并优先选择 `isDefault`。思考量紧邻模型，只展示所选模型的 `supportedReasoningEfforts`，无有效选择时使用 `defaultReasoningEffort`。Project 新 Task 默认值通过原子 `PUT /v1/projects/:projectId/defaults` 保存模型与思考量；审批固定从 `on-request` 开始。已有 Task 的审批、模型和思考量通过原子 `PUT /v1/projects/:projectId/tasks/:taskId/settings` 保存完整对象。
+
+审批策略只使用统一协议的 `untrusted`、`on-request` 和 `never`。`POST /turns` 仍发送完整 `AgentTurnOptions`，Server 在调用 Provider 前重新校验并 upsert Task 设置。`allow_for_session` 和 Pending Approval 属于当前 Runtime，不进入长期设置。
 
 审批、模型和思考量 Select 隐藏原生箭头并按当前文字收缩。PromptInput 保留透明单像素边框以避免布局跳动，聚焦后切换为主色；分支与项目路径行最右显示 `contextUsage` 百分比，Tooltip 展示 Token 明细，未知时显示 `上下文 --`。
 

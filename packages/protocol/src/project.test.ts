@@ -7,10 +7,14 @@ import {
   AgentAttachmentUploadResponseSchema,
   AgentCapabilitiesSchema,
   AgentModelPageSchema,
+  AgentProjectDefaultsResponseSchema,
+  AgentProjectDefaultsSchema,
   AgentPromptInputSchema,
   AgentMutationErrorSchema,
   AgentTaskPageSchema,
   AgentTaskSchema,
+  AgentTaskSettingsResponseSchema,
+  AgentTaskSettingsSchema,
   AddProjectResponseSchema,
   AgentTaskSnapshotSchema,
   InterruptAgentTurnRequestSchema,
@@ -159,6 +163,11 @@ describe("project protocol", () => {
       pinned: false,
       pendingRequests: [],
       projectId: "code-agent",
+      settings: {
+        approvalPolicy: "on-request",
+        model: "gpt-5.6-sol",
+        reasoningEffort: "high",
+      },
       status: "idle",
       title: "实现真实任务历史",
       turns: [
@@ -233,6 +242,30 @@ describe("project protocol", () => {
       }),
     ).toBe(false);
     expect(Value.Check(AgentTaskSnapshotSchema, { ...snapshot, nativeThread: {} })).toBe(false);
+  });
+
+  it("validates strict project defaults and task settings", () => {
+    const projectDefaults = { model: "gpt-5.6-sol", reasoningEffort: "high" };
+    const taskSettings = { approvalPolicy: "never", ...projectDefaults };
+
+    expect(Value.Check(AgentProjectDefaultsSchema, projectDefaults)).toBe(true);
+    expect(Value.Check(AgentProjectDefaultsResponseSchema, { settings: projectDefaults })).toBe(
+      true,
+    );
+    expect(Value.Check(AgentTaskSettingsSchema, taskSettings)).toBe(true);
+    expect(Value.Check(AgentTaskSettingsResponseSchema, { settings: taskSettings })).toBe(true);
+    expect(
+      Value.Check(AgentProjectDefaultsSchema, { ...projectDefaults, approvalPolicy: "never" }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentTaskSettingsSchema, { ...taskSettings, approvalPolicy: "always" }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentTaskSettingsSchema, { ...taskSettings, reasoningEffort: undefined }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentTaskSettingsResponseSchema, { settings: taskSettings, legacy: true }),
+    ).toBe(false);
   });
 
   it("validates discriminated pending requests and typed resolutions", () => {

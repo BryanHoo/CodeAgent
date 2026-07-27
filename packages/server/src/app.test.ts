@@ -2,10 +2,11 @@ import {
   PendingRequestResolutionError,
   type AgentProvider,
   type AgentProviderEvent,
+  type AgentProviderTaskSnapshot,
   type AgentProviderTurnInput,
   type AgentRuntimeProvider,
 } from "@code-agent/core";
-import type { AgentTaskSnapshot, AgentTurn, PendingRequest } from "@code-agent/protocol";
+import type { AgentTurn, PendingRequest } from "@code-agent/protocol";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -102,8 +103,8 @@ function createProvider() {
       nextCursor: null,
     }),
   );
-  const readTask = vi.fn<(taskId: string) => Promise<AgentTaskSnapshot | undefined>>((taskId) =>
-    Promise.resolve(taskId === task.id ? snapshot : undefined),
+  const readTask = vi.fn<(taskId: string) => Promise<AgentProviderTaskSnapshot | undefined>>(
+    (taskId) => Promise.resolve(taskId === task.id ? snapshot : undefined),
   );
   const resolvePendingRequest = vi.fn(() =>
     Promise.resolve({ ...pendingRequest, status: "resolved" as const }),
@@ -176,6 +177,49 @@ function createProvider() {
   };
 }
 
+function createSettingsRepository() {
+  const readProjectDefaults = vi.fn(() =>
+    Promise.resolve<{ model: string; reasoningEffort: string } | undefined>(undefined),
+  );
+  const readTaskSettings = vi.fn(() =>
+    Promise.resolve<
+      | {
+          approvalPolicy: "never" | "on-request" | "untrusted";
+          model: string;
+          reasoningEffort: string;
+        }
+      | undefined
+    >(undefined),
+  );
+  const writeProjectDefaults = vi.fn(
+    (_projectId: string, settings: { model: string; reasoningEffort: string }) =>
+      Promise.resolve(settings),
+  );
+  const writeTaskSettings = vi.fn(
+    (
+      _projectId: string,
+      _taskId: string,
+      settings: {
+        approvalPolicy: "never" | "on-request" | "untrusted";
+        model: string;
+        reasoningEffort: string;
+      },
+    ) => Promise.resolve(settings),
+  );
+  return {
+    readProjectDefaults,
+    readTaskSettings,
+    repository: {
+      readProjectDefaults,
+      readTaskSettings,
+      writeProjectDefaults,
+      writeTaskSettings,
+    },
+    writeProjectDefaults,
+    writeTaskSettings,
+  };
+}
+
 function createServerOptions(provider: AgentProvider, overrides: Record<string, unknown> = {}) {
   const runtimeProvider: AgentRuntimeProvider = {
     forProject: () => provider,
@@ -192,6 +236,7 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
     },
     provider: runtimeProvider,
     selectProjectDirectory: vi.fn(() => Promise.resolve(undefined)),
+    settingsRepository: createSettingsRepository().repository,
     ...overrides,
   };
 }
@@ -214,7 +259,10 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     startTurn,
     uploadFeedback,
   } = createProvider();
-  const app = await createCodeAgentServer(createServerOptions(provider, { ...options }));
+  const settings = createSettingsRepository();
+  const app = await createCodeAgentServer(
+    createServerOptions(provider, { ...options, settingsRepository: settings.repository }),
+  );
   closeCallbacks.push(() => app.close());
   return {
     app,
@@ -231,6 +279,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     startTask,
     startReview,
     startTurn,
+    ...settings,
     uploadFeedback,
   };
 }
@@ -356,7 +405,7 @@ describe("CodeAgent Server", () => {
   });
 
   it("serves models and resolves uploaded attachments before starting a turn", async () => {
-    const { app, listModels, startTurn } = await createHarness();
+    const { app, listModels, startTurn, writeTaskSettings } = await createHarness();
     const models = await app.inject({ method: "GET", url: "/v1/models" });
     const uploadRequest = {
       headers: { "idempotency-key": "upload-1" },
@@ -376,6 +425,15 @@ describe("CodeAgent Server", () => {
       },
       url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
+    const invalidTurn = await app.inject({
+      headers: { "idempotency-key": "invalid-turn-settings" },
+      method: "POST",
+      payload: {
+        ...turnRequest("无效设置"),
+        options: { ...turnOptions, reasoningEffort: "low" },
+      },
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
+    });
     const consumed = await app.inject({
       headers: { "idempotency-key": "attachment-consumed" },
       method: "POST",
@@ -388,13 +446,16 @@ describe("CodeAgent Server", () => {
 
     expect(models.statusCode).toBe(200);
     expect(models.json()).toMatchObject({ data: [{ id: "gpt-5.6-sol", isDefault: true }] });
-    expect(listModels).toHaveBeenCalledTimes(1);
+    expect(listModels).toHaveBeenCalledTimes(3);
     expect(uploaded.statusCode).toBe(201);
     expect(repeatedUpload.json()).toEqual(uploaded.json());
     expect(uploaded.json()).toMatchObject({
       attachment: { mediaType: "image/png", name: "screen.png", size: 68 },
     });
     expect(turn.statusCode).toBe(201);
+    expect(invalidTurn.statusCode).toBe(400);
+    expect(startTurn).toHaveBeenCalledOnce();
+    expect(writeTaskSettings).toHaveBeenCalledOnce();
     expect(startTurn).toHaveBeenCalledWith(
       "task-1",
       { images: [{ mediaType: "image/png", url: pixelDataUrl }], text: "" },
@@ -430,7 +491,138 @@ describe("CodeAgent Server", () => {
     expect(response.statusCode).toBe(200);
     expect(body.checkpoint.sequence).toBe(0);
     expect(typeof body.checkpoint.sessionId).toBe("string");
-    expect(body.snapshot).toEqual(snapshot);
+    expect(body.snapshot).toEqual({ ...snapshot, settings: turnOptions });
+  });
+
+  it("returns effective settings and atomically validates complete updates", async () => {
+    const {
+      app,
+      listModels,
+      readProjectDefaults,
+      readTaskSettings,
+      writeProjectDefaults,
+      writeTaskSettings,
+    } = await createHarness();
+    listModels.mockResolvedValue({
+      data: [
+        {
+          defaultReasoningEffort: "high",
+          description: "默认模型",
+          displayName: "GPT-5.6 Sol",
+          id: "gpt-5.6-sol",
+          isDefault: true,
+          supportedReasoningEfforts: [
+            { description: "低", id: "low" },
+            { description: "高", id: "high" },
+          ],
+        },
+      ],
+      nextCursor: null,
+    });
+    readProjectDefaults.mockResolvedValue({
+      model: "removed-model",
+      reasoningEffort: "ultra",
+    });
+    readTaskSettings.mockResolvedValue({
+      approvalPolicy: "never",
+      model: "removed-model",
+      reasoningEffort: "ultra",
+    });
+
+    const defaults = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/defaults",
+    });
+    const taskSnapshot = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/task-1",
+    });
+    const invalid = await app.inject({
+      headers: { "idempotency-key": "invalid-defaults" },
+      method: "PUT",
+      payload: { model: "gpt-5.6-sol", reasoningEffort: "ultra" },
+      url: "/v1/projects/code-agent/defaults",
+    });
+    const updated = await app.inject({
+      headers: { "idempotency-key": "task-settings" },
+      method: "PUT",
+      payload: {
+        approvalPolicy: "untrusted",
+        model: "gpt-5.6-sol",
+        reasoningEffort: "low",
+      },
+      url: "/v1/projects/code-agent/tasks/task-1/settings",
+    });
+
+    expect(defaults.json()).toEqual({
+      settings: { model: "gpt-5.6-sol", reasoningEffort: "high" },
+    });
+    expect(taskSnapshot.json()).toMatchObject({
+      snapshot: {
+        settings: {
+          approvalPolicy: "never",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+        },
+      },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toMatchObject({ code: "INVALID_REQUEST" });
+    expect(updated.json()).toEqual({
+      settings: {
+        approvalPolicy: "untrusted",
+        model: "gpt-5.6-sol",
+        reasoningEffort: "low",
+      },
+    });
+    expect(writeProjectDefaults).toHaveBeenCalledWith("code-agent", {
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+    });
+    expect(writeTaskSettings).toHaveBeenCalledWith("code-agent", "task-1", {
+      approvalPolicy: "never",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+    });
+  });
+
+  it("starts new tasks with on-request and persists turn settings before Provider calls", async () => {
+    const { app, readProjectDefaults, readTaskSettings, startTask, startTurn, writeTaskSettings } =
+      await createHarness();
+    readProjectDefaults.mockResolvedValue({
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+    });
+    readTaskSettings.mockResolvedValue({
+      approvalPolicy: "never",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+    });
+
+    const created = await app.inject({
+      headers: { "idempotency-key": "new-task-defaults" },
+      method: "POST",
+      payload: {},
+      url: "/v1/projects/code-agent/tasks",
+    });
+    const turn = await app.inject({
+      headers: { "idempotency-key": "persist-turn-settings" },
+      method: "POST",
+      payload: turnRequest("继续实现"),
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(startTask).toHaveBeenCalledOnce();
+    expect(writeTaskSettings).toHaveBeenCalledWith("code-agent", "task-1", {
+      approvalPolicy: "on-request",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+    });
+    expect(turn.statusCode).toBe(201);
+    expect(writeTaskSettings.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      startTurn.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
   });
 
   it("serves idempotent task and turn mutations", async () => {
@@ -496,6 +688,25 @@ describe("CodeAgent Server", () => {
     expect(replayedInterrupt.statusCode).toBe(202);
     expect(replayedInterrupt.json()).toEqual(interrupted.json());
     expect(interruptTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses a created task when settings persistence is retried", async () => {
+    const { app, startTask, writeTaskSettings } = await createHarness();
+    writeTaskSettings.mockRejectedValueOnce(new Error("database unavailable"));
+    const request = {
+      headers: { "idempotency-key": "retry-task-settings" },
+      method: "POST" as const,
+      payload: {},
+      url: "/v1/projects/code-agent/tasks",
+    };
+
+    const failed = await app.inject(request);
+    const retried = await app.inject(request);
+
+    expect(failed.statusCode).toBe(502);
+    expect(retried.statusCode).toBe(201);
+    expect(startTask).toHaveBeenCalledOnce();
+    expect(writeTaskSettings).toHaveBeenCalledTimes(2);
   });
 
   it("serves idempotent task command mutations", async () => {
@@ -584,6 +795,7 @@ describe("CodeAgent Server", () => {
       },
       provider: runtimeProvider,
       selectProjectDirectory: () => Promise.resolve(undefined),
+      settingsRepository: createSettingsRepository().repository,
     });
     closeCallbacks.push(() => app.close());
     const request = {
@@ -716,7 +928,7 @@ describe("CodeAgent Server", () => {
   });
 
   it("resolves pending requests idempotently with complete identity validation", async () => {
-    const { app, resolvePendingRequest } = await createHarness();
+    const { app, resolvePendingRequest, writeTaskSettings } = await createHarness();
     const request = {
       headers: { "idempotency-key": "resolve-1" },
       method: "POST" as const,
@@ -742,6 +954,8 @@ describe("CodeAgent Server", () => {
       ...request.payload,
       requestId: pendingRequest.requestId,
     });
+    // 会话级授权只交给当前 Provider 进程，不能写入长期 Task 设置。
+    expect(writeTaskSettings).not.toHaveBeenCalled();
   });
 
   it("rejects cross-project and stale pending request resolutions", async () => {

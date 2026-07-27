@@ -5,6 +5,7 @@ import {
   PendingRequestResolutionError,
   type AgentProvider,
   type AgentRuntimeProvider,
+  type AgentSettingsRepository,
   type ProjectRepository,
 } from "@code-agent/core";
 import {
@@ -17,8 +18,12 @@ import {
   AgentAttachmentUploadRequestSchema,
   AgentAttachmentUploadResponseSchema,
   AgentModelPageSchema,
+  AgentProjectDefaultsResponseSchema,
+  AgentProjectDefaultsSchema,
   AgentMutationErrorSchema,
   AgentTaskPageSchema,
+  AgentTaskSettingsResponseSchema,
+  AgentTaskSettingsSchema,
   AgentTaskSnapshotResponseSchema,
   HealthResponseSchema,
   InterruptAgentTurnRequestSchema,
@@ -41,6 +46,10 @@ import {
   MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
   type AgentAttachmentUploadRequest,
   type AgentMutationError,
+  type AgentModel,
+  type AgentProjectDefaults,
+  type AgentTask,
+  type AgentTaskSettings,
   type EventStreamMessage,
   type CompactAgentTaskRequest,
   type ForkAgentTaskRequest,
@@ -74,6 +83,7 @@ export interface CreateCodeAgentServerOptions {
   idempotencyTtlMs?: number;
   projectRepository: ProjectRepository;
   provider: AgentRuntimeProvider;
+  settingsRepository: AgentSettingsRepository;
   readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
   readProjectSourceFile?: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
   prepareTurnFileRollback?: (
@@ -174,11 +184,81 @@ class MutationHttpError extends Error {
   }
 }
 
+function orderById<T extends Readonly<{ id: string }>>(values: readonly T[]): readonly T[] {
+  return [...values].sort((left, right) => left.id.localeCompare(right.id, "en"));
+}
+
+function resolveProjectDefaults(
+  models: readonly AgentModel[],
+  requested?: AgentProjectDefaults,
+): AgentProjectDefaults {
+  const orderedModels = orderById(models);
+  const model =
+    orderedModels.find((item) => item.id === requested?.model) ??
+    orderedModels.find((item) => item.isDefault) ??
+    orderedModels[0];
+  if (model === undefined) {
+    throw new MutationHttpError("PROVIDER_ERROR", "No Agent models are available", 502, true);
+  }
+  const orderedEfforts = orderById(model.supportedReasoningEfforts);
+  const reasoningEffort =
+    orderedEfforts.find((item) => item.id === requested?.reasoningEffort)?.id ??
+    orderedEfforts.find((item) => item.id === model.defaultReasoningEffort)?.id ??
+    orderedEfforts[0]?.id;
+  if (reasoningEffort === undefined) {
+    throw new MutationHttpError(
+      "PROVIDER_ERROR",
+      "The selected Agent model has no reasoning effort",
+      502,
+      true,
+    );
+  }
+  return { model: model.id, reasoningEffort };
+}
+
+function assertValidProjectDefaults(
+  models: readonly AgentModel[],
+  settings: AgentProjectDefaults,
+): void {
+  const effective = resolveProjectDefaults(models, settings);
+  if (
+    effective.model !== settings.model ||
+    effective.reasoningEffort !== settings.reasoningEffort
+  ) {
+    throw new MutationHttpError(
+      "INVALID_REQUEST",
+      "Model and reasoning effort combination is invalid",
+      400,
+    );
+  }
+}
+
+function projectDefaultsEqual(
+  left: AgentProjectDefaults | undefined,
+  right: AgentProjectDefaults,
+): boolean {
+  return left?.model === right.model && left.reasoningEffort === right.reasoningEffort;
+}
+
+function taskSettingsEqual(left: AgentTaskSettings | undefined, right: AgentTaskSettings): boolean {
+  return (
+    left?.approvalPolicy === right.approvalPolicy &&
+    left.model === right.model &&
+    left.reasoningEffort === right.reasoningEffort
+  );
+}
+
 interface IdempotencyEntry {
   expiresAt?: number;
   fingerprint: string;
   promise: Promise<unknown>;
 }
+
+type TaskStartRecovery = Readonly<{
+  fingerprint: string;
+  settings: AgentTaskSettings;
+  task: AgentTask;
+}>;
 
 const DEFAULT_IDEMPOTENCY_CACHE_SIZE = 1_000;
 const DEFAULT_IDEMPOTENCY_TTL_MS = 10 * 60 * 1_000;
@@ -270,11 +350,44 @@ export async function createCodeAgentServer(
     projectContexts.set(projectId, context);
     return context;
   };
+  const listModels = async (): Promise<readonly AgentModel[]> =>
+    (await options.provider.listModels()).data;
+  const readEffectiveProjectDefaults = async (
+    projectId: string,
+    models?: readonly AgentModel[],
+  ): Promise<AgentProjectDefaults> => {
+    const catalog = models ?? (await listModels());
+    const stored = await options.settingsRepository.readProjectDefaults(projectId);
+    const effective = resolveProjectDefaults(catalog, stored);
+    if (!projectDefaultsEqual(stored, effective)) {
+      await options.settingsRepository.writeProjectDefaults(projectId, effective);
+    }
+    return effective;
+  };
+  const readEffectiveTaskSettings = async (
+    projectId: string,
+    taskId: string,
+    models?: readonly AgentModel[],
+  ): Promise<AgentTaskSettings> => {
+    const catalog = models ?? (await listModels());
+    const stored = await options.settingsRepository.readTaskSettings(projectId, taskId);
+    const defaults = await readEffectiveProjectDefaults(projectId, catalog);
+    const effectiveModel = resolveProjectDefaults(catalog, stored ?? defaults);
+    const effective = {
+      approvalPolicy: stored?.approvalPolicy ?? "on-request",
+      ...effectiveModel,
+    } satisfies AgentTaskSettings;
+    if (!taskSettingsEqual(stored, effective)) {
+      await options.settingsRepository.writeTaskSettings(projectId, taskId, effective);
+    }
+    return effective;
+  };
   // 启动时只为已持久化 Project 建立事件流；后续新增项目在首次注册时懒创建。
   for (const project of await options.projectRepository.list()) {
     await getProjectContext(project.id);
   }
   const idempotencyEntries = new Map<string, IdempotencyEntry>();
+  const taskStartRecoveries = new Map<string, TaskStartRecovery>();
   const idempotencyCacheSize = options.idempotencyCacheSize ?? DEFAULT_IDEMPOTENCY_CACHE_SIZE;
   const idempotencyTtlMs = options.idempotencyTtlMs ?? DEFAULT_IDEMPOTENCY_TTL_MS;
   if (!Number.isInteger(idempotencyCacheSize) || idempotencyCacheSize <= 0) {
@@ -359,7 +472,9 @@ export async function createCodeAgentServer(
     }
     if (typeof error === "object" && error !== null && "validation" in error) {
       const key = request.headers["idempotency-key"];
-      const missingKey = request.method === "POST" && (key === undefined || key === "");
+      const missingKey =
+        (request.method === "POST" || request.method === "PUT") &&
+        (key === undefined || key === "");
       return reply.code(400).send({
         code: missingKey ? "IDEMPOTENCY_KEY_REQUIRED" : "INVALID_REQUEST",
         message: missingKey ? "Idempotency-Key header is required" : "Request is invalid",
@@ -375,6 +490,7 @@ export async function createCodeAgentServer(
     projectContexts.clear();
     attachmentStore.clear();
     idempotencyEntries.clear();
+    taskStartRecoveries.clear();
   });
 
   if (options.staticRoot !== undefined) {
@@ -410,6 +526,62 @@ export async function createCodeAgentServer(
     data: await options.projectRepository.list(),
     nextCursor: null,
   }));
+
+  app.get<{ Params: { projectId: string } }>(
+    "/v1/projects/:projectId/defaults",
+    {
+      schema: {
+        params: ProjectParamsSchema,
+        response: { 200: AgentProjectDefaultsResponseSchema, 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      if ((await getProjectContext(request.params.projectId)) === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      return { settings: await readEffectiveProjectDefaults(request.params.projectId) };
+    },
+  );
+
+  app.put<{
+    Body: AgentProjectDefaults;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string };
+  }>(
+    "/v1/projects/:projectId/defaults",
+    {
+      schema: {
+        body: AgentProjectDefaultsSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectParamsSchema,
+        response: {
+          200: AgentProjectDefaultsResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        ["update-project-defaults", request.params.projectId],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          if ((await getProjectContext(request.params.projectId)) === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          assertValidProjectDefaults(await listModels(), request.body);
+          return {
+            settings: await options.settingsRepository.writeProjectDefaults(
+              request.params.projectId,
+              request.body,
+            ),
+          };
+        },
+      ),
+  );
 
   app.post<{
     Body: Record<string, never>;
@@ -587,8 +759,81 @@ export async function createCodeAgentServer(
       }
       // Provider Promise 完成时已交付此前通知，此处 checkpoint 与返回 Snapshot 对齐。
       const checkpoint = context.eventStream.checkpoint;
-      return { checkpoint, snapshot: task };
+      const settings = await readEffectiveTaskSettings(
+        request.params.projectId,
+        request.params.taskId,
+      );
+      return { checkpoint, snapshot: { ...task, settings } };
     },
+  );
+
+  app.get<{ Params: { projectId: string; taskId: string } }>(
+    "/v1/projects/:projectId/tasks/:taskId/settings",
+    {
+      schema: {
+        params: ProjectTaskParamsSchema,
+        response: { 200: AgentTaskSettingsResponseSchema, 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      const task = await context.provider.readTask(request.params.taskId);
+      if (task?.projectId !== context.project.id) {
+        return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
+      }
+      return {
+        settings: await readEffectiveTaskSettings(request.params.projectId, request.params.taskId),
+      };
+    },
+  );
+
+  app.put<{
+    Body: AgentTaskSettings;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string; taskId: string };
+  }>(
+    "/v1/projects/:projectId/tasks/:taskId/settings",
+    {
+      schema: {
+        body: AgentTaskSettingsSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectTaskParamsSchema,
+        response: {
+          200: AgentTaskSettingsResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        ["update-task-settings", request.params.projectId, request.params.taskId],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          assertValidProjectDefaults(await listModels(), request.body);
+          return {
+            settings: await options.settingsRepository.writeTaskSettings(
+              request.params.projectId,
+              request.params.taskId,
+              request.body,
+            ),
+          };
+        },
+      ),
   );
 
   app.post<{
@@ -878,7 +1123,43 @@ export async function createCodeAgentServer(
         ["start-task", request.params.projectId],
         request.headers["idempotency-key"],
         request.body,
-        () => context.provider.startTask(),
+        async () => {
+          const recoveryKey = JSON.stringify([
+            "start-task",
+            request.params.projectId,
+            request.headers["idempotency-key"],
+          ]);
+          const fingerprint = fingerprintPayload(request.body);
+          let recovery = taskStartRecoveries.get(recoveryKey);
+          if (recovery !== undefined && recovery.fingerprint !== fingerprint) {
+            throw new MutationHttpError(
+              "IDEMPOTENCY_CONFLICT",
+              "Idempotency key was already used with another request",
+              409,
+            );
+          }
+          if (recovery === undefined) {
+            if (taskStartRecoveries.size >= idempotencyCacheSize) {
+              throw new Error("Task creation recovery capacity is exhausted");
+            }
+            const defaults = await readEffectiveProjectDefaults(request.params.projectId);
+            const task = await context.provider.startTask();
+            // Provider 已创建 Task 后立即保留恢复状态，后续落库重试不能再次创建 Task。
+            recovery = {
+              fingerprint,
+              settings: { approvalPolicy: "on-request", ...defaults },
+              task,
+            };
+            taskStartRecoveries.set(recoveryKey, recovery);
+          }
+          await options.settingsRepository.writeTaskSettings(
+            request.params.projectId,
+            recovery.task.id,
+            recovery.settings,
+          );
+          taskStartRecoveries.delete(recoveryKey);
+          return recovery.task;
+        },
       );
       return reply.code(201).send({ task });
     },
@@ -939,6 +1220,13 @@ export async function createCodeAgentServer(
             }
             throw error;
           }
+          assertValidProjectDefaults(await listModels(), request.body.options);
+          // Turn 设置先落库，Provider 成功或进程退出后都能恢复用户最后一次完整选择。
+          await options.settingsRepository.writeTaskSettings(
+            request.params.projectId,
+            request.params.taskId,
+            request.body.options,
+          );
           const turn = await context.provider.startTurn(
             request.params.taskId,
             { images, text: request.body.input.text },

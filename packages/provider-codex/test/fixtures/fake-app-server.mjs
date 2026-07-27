@@ -279,7 +279,8 @@ function scheduleRealtimeEvents() {
     });
     // 同一轮读取期间只调度一次，完成后允许 Playwright 重试重新触发场景。
     realtimeRunning = false;
-  }, 250);
+    // 为 Snapshot 设置校验和 WebSocket 建连留出稳定窗口，避免并发 E2E 夹具抢跑。
+  }, 750);
 }
 
 input.on("line", (line) => {

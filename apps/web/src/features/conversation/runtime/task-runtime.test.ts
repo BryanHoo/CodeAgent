@@ -11,6 +11,11 @@ const response: AgentTaskSnapshotResponse = {
     pendingRequests: [],
     pinned: false,
     projectId: "code-agent",
+    settings: {
+      approvalPolicy: "on-request",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+    },
     status: "idle",
     title: "实时链路",
     turns: [],

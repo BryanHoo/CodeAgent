@@ -20,3 +20,4 @@
 - 子进程关闭测试覆盖发送 `SIGKILL` 后仍未退出的路径，并验证关闭 Promise 在截止时间内失败。
 - Provider 集成使用 Fake App Server，不依赖真实账号完成默认 CI。
 - Fastify 路由优先使用 `inject`；完整浏览器链路使用 Playwright。
+- 发布包校验必须从构建产物打开并关闭 `SqliteStateRepository`，真实启动 Worker 以验证 `import.meta.url` 相对路径和文件清单一致。

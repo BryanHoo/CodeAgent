@@ -25,6 +25,8 @@ const project = {
   rootPath: projectRoot,
 };
 const provider = createCodexRuntimeProvider({ client: runtime.client });
+const projectDefaults = new Map();
+const taskSettings = new Map();
 const server = await createCodeAgentServer({
   eventSessionId: "e2e-session",
   projectRepository: {
@@ -34,6 +36,19 @@ const server = await createCodeAgentServer({
   },
   provider,
   selectProjectDirectory: () => Promise.resolve(undefined),
+  settingsRepository: {
+    readProjectDefaults: (projectId) => Promise.resolve(projectDefaults.get(projectId)),
+    readTaskSettings: (projectId, taskId) =>
+      Promise.resolve(taskSettings.get(`${projectId}:${taskId}`)),
+    writeProjectDefaults: (projectId, settings) => {
+      projectDefaults.set(projectId, settings);
+      return Promise.resolve(settings);
+    },
+    writeTaskSettings: (projectId, taskId, settings) => {
+      taskSettings.set(`${projectId}:${taskId}`, settings);
+      return Promise.resolve(settings);
+    },
+  },
   staticRoot,
 });
 

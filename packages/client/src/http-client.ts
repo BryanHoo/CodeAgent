@@ -6,9 +6,11 @@ import {
   AgentAttachmentUploadResponseSchema,
   AgentModelPageSchema,
   AgentMutationErrorSchema,
+  AgentProjectDefaultsResponseSchema,
   InterruptAgentTurnResponseSchema,
   AgentTaskPageSchema,
   AgentTaskSnapshotResponseSchema,
+  AgentTaskSettingsResponseSchema,
   HealthResponseSchema,
   ProjectPageSchema,
   ProjectGitStatusSchema,
@@ -29,8 +31,12 @@ import {
   type AgentTaskPage,
   type AgentModelPage,
   type AgentPromptInput,
+  type AgentProjectDefaults,
+  type AgentProjectDefaultsResponse,
   type AgentTurnOptions,
   type AgentTaskSnapshotResponse,
+  type AgentTaskSettings,
+  type AgentTaskSettingsResponse,
   type HealthResponse,
   type InterruptAgentTurnResponse,
   type ProjectPage,
@@ -151,6 +157,24 @@ export class CodeAgentClient {
     return this.#request("/v1/projects", ProjectPageSchema);
   }
 
+  public async getProjectDefaults(projectId: string): Promise<AgentProjectDefaultsResponse> {
+    return this.#request(`${projectPath(projectId)}/defaults`, AgentProjectDefaultsResponseSchema);
+  }
+
+  public async updateProjectDefaults(
+    projectId: string,
+    settings: AgentProjectDefaults,
+    options: MutationOptions = {},
+  ): Promise<AgentProjectDefaultsResponse> {
+    return this.#mutation(
+      `${projectPath(projectId)}/defaults`,
+      settings,
+      AgentProjectDefaultsResponseSchema,
+      options,
+      "PUT",
+    );
+  }
+
   public async addProject(options: MutationOptions = {}): Promise<AddProjectResponse> {
     return this.#mutation("/v1/projects", {}, AddProjectResponseSchema, options);
   }
@@ -179,6 +203,31 @@ export class CodeAgentClient {
 
   public async readTask(projectId: string, taskId: string): Promise<AgentTaskSnapshotResponse> {
     return this.#request(taskPath(projectId, taskId), AgentTaskSnapshotResponseSchema);
+  }
+
+  public async getTaskSettings(
+    projectId: string,
+    taskId: string,
+  ): Promise<AgentTaskSettingsResponse> {
+    return this.#request(
+      `${taskPath(projectId, taskId)}/settings`,
+      AgentTaskSettingsResponseSchema,
+    );
+  }
+
+  public async updateTaskSettings(
+    projectId: string,
+    taskId: string,
+    settings: AgentTaskSettings,
+    options: MutationOptions = {},
+  ): Promise<AgentTaskSettingsResponse> {
+    return this.#mutation(
+      `${taskPath(projectId, taskId)}/settings`,
+      settings,
+      AgentTaskSettingsResponseSchema,
+      options,
+      "PUT",
+    );
   }
 
   public async startTask(
@@ -337,6 +386,7 @@ export class CodeAgentClient {
     body: unknown,
     schema: T,
     options: MutationOptions,
+    method: "POST" | "PUT" = "POST",
   ): Promise<Static<T>> {
     return this.#request(
       path,
@@ -347,7 +397,7 @@ export class CodeAgentClient {
           "content-type": "application/json",
           "idempotency-key": options.idempotencyKey ?? globalThis.crypto.randomUUID(),
         },
-        method: "POST",
+        method,
       },
       AgentMutationErrorSchema,
     );
