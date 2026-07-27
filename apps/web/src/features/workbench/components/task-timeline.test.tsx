@@ -398,6 +398,8 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain('data-streaming="true"');
     expect(markup).toContain('aria-label="正在接收命令输出"');
     expect(markup).toContain("/workspace/CodeAgent");
+    expect(markup).toContain('aria-label="AI 回复正在运行：pnpm test"');
+    expect(markup).toContain("正在运行 pnpm test");
     expect(markup).not.toContain("输出已截断");
   });
 

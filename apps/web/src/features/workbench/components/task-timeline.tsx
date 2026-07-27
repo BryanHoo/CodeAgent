@@ -5,7 +5,16 @@ import type {
   PendingRequest,
   Project,
 } from "@code-agent/protocol";
-import { Check, ChevronDown, Copy, FilePenLine, Files, FolderGit2, RotateCcw } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  FilePenLine,
+  Files,
+  FolderGit2,
+  RotateCcw,
+  SquareTerminal,
+} from "lucide-react";
 import { useState } from "react";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
@@ -502,6 +511,56 @@ type TurnTimelineGroup =
   | Readonly<{ item: Extract<AgentItem, { type: "message" }>; type: "user" }>
   | Readonly<{ items: readonly IndexedAgentItem[]; key: string; type: "assistant" }>;
 
+type RunningOperation = Readonly<{
+  label: string;
+  type: "command" | "operation";
+}>;
+
+function resolveRunningOperation(items: readonly IndexedAgentItem[]): RunningOperation | undefined {
+  // 从最新的结构化 Item 反推底部状态，避免继续显示没有上下文的“正在运行”。
+  const runningItem = items.findLast(({ item }) => {
+    if (item.type === "command" || item.type === "tool") {
+      return item.status === "pending" || item.status === "running";
+    }
+    if (item.type === "activity") {
+      return item.status === "pending" || item.status === "running";
+    }
+    return false;
+  })?.item;
+
+  if (runningItem?.type === "command") {
+    return { label: runningItem.command, type: "command" };
+  }
+  if (runningItem?.type === "tool") {
+    return { label: runningItem.name, type: "operation" };
+  }
+  if (runningItem?.type === "activity") {
+    return { label: runningItem.label, type: "operation" };
+  }
+  const latestItem = items.at(-1)?.item;
+  if (latestItem?.type === "plan") {
+    return { label: "生成计划", type: "operation" };
+  }
+  return undefined;
+}
+
+function RunningReplyStatus({ operation }: Readonly<{ operation?: RunningOperation | undefined }>) {
+  const statusText = operation === undefined ? "正在运行" : `正在运行 ${operation.label}`;
+  const accessibleLabel =
+    operation === undefined ? "AI 回复正在运行" : `AI 回复正在运行：${operation.label}`;
+
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-muted-foreground" role="status">
+      {operation?.type === "command" ? (
+        <SquareTerminal aria-hidden="true" className="size-3.5 shrink-0" />
+      ) : null}
+      <Shimmer aria-label={accessibleLabel} as="span" className="min-w-0 truncate text-body-small">
+        {statusText}
+      </Shimmer>
+    </div>
+  );
+}
+
 function groupTurnTimelineItems(items: readonly AgentItem[]): TurnTimelineGroup[] {
   const groups: TurnTimelineGroup[] = [];
   let assistantItems: IndexedAgentItem[] = [];
@@ -678,6 +737,7 @@ function TurnTimelineItems({
     const showChangedFilesCard = turn.status !== "running" && responseFileChanges.length > 0;
     const showRunningShimmer =
       turn.status === "running" && groupIndex === timelineGroups.length - 1;
+    const runningOperation = showRunningShimmer ? resolveRunningOperation(group.items) : undefined;
     return (
       <Message from="assistant" key={group.key}>
         <div className="w-full space-y-4">
@@ -692,11 +752,7 @@ function TurnTimelineItems({
               />
             );
           })}
-          {showRunningShimmer ? (
-            <Shimmer aria-label="AI 回复正在运行" as="p" className="text-body-small" role="status">
-              正在运行
-            </Shimmer>
-          ) : null}
+          {showRunningShimmer ? <RunningReplyStatus operation={runningOperation} /> : null}
         </div>
         {showChangedFilesCard ? (
           <ChangedFilesCard
@@ -723,9 +779,7 @@ function TurnTimelineItems({
       {turn.status === "running" && !hasAssistantItems ? (
         <Message from="assistant">
           {/* 首个 Delta 到达前同样用回复尾行的 Shimmer 表达实时运行状态。 */}
-          <Shimmer aria-label="AI 回复正在运行" as="p" className="text-body-small" role="status">
-            正在运行
-          </Shimmer>
+          <RunningReplyStatus />
         </Message>
       ) : null}
     </>
