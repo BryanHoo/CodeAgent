@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@code-agent/protocol";
+import type { AgentEvent, AgentTaskSnapshotResponse } from "@code-agent/protocol";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
@@ -18,6 +18,10 @@ export type TaskRuntimeView = Readonly<{
   error: Error | null;
   isPending: boolean;
   snapshot: TaskRuntimeState["snapshot"] | undefined;
+}>;
+
+type TaskRuntimeOptions = Readonly<{
+  onSnapshot?: (response: AgentTaskSnapshotResponse) => void;
 }>;
 
 function isDeltaEvent(event: AgentEvent): boolean {
@@ -45,13 +49,21 @@ export function useTaskRuntime(
   projectId: string,
   taskId: string | undefined,
   client: CodeAgentRuntimeClient,
+  options: TaskRuntimeOptions = {},
 ): TaskRuntimeView {
+  const { onSnapshot } = options;
   const taskQuery = useQuery({
     ...taskSnapshotQueryOptions(projectId, taskId ?? "no-active-task", client),
     enabled: taskId !== undefined,
   });
   const [runtime, setRuntime] = useState<TaskRuntimeState>();
   const [runtimeError, setRuntimeError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (taskQuery.data !== undefined) {
+      onSnapshot?.(taskQuery.data);
+    }
+  }, [onSnapshot, taskQuery.data]);
 
   useEffect(() => {
     if (taskQuery.data === undefined) {

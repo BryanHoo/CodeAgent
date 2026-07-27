@@ -21,6 +21,7 @@
 - Pending Request 按 `requestId` 合并 Snapshot 与实时生命周期事件；多个未解决请求按到达顺序展示，仅队首允许提交，重连期间全部暂停提交。
 - 在真正引入状态库前，不预先创建抽象 Store 或空 Slice。
 - Timeline 与 Composer 必须共享同一个 Task Runtime 订阅，不能为同一 Task 重复建立 Snapshot Query 和 WebSocket 链路。
+- Sidebar 的轻量活动状态必须按 `projectId + taskId` 保存，并通过已访问 Project 的常驻 Event Stream 更新；切换当前 Task 或 Project 不能清除后台 Task 的运行或审批状态，只有对应 Task 的 Snapshot 或终态事件可以更新该行状态。详细 Timeline Runtime 仍只服务当前 Task，不得把完整历史复制到 Sidebar 状态。
 - Composer 只使用 `idle`、`submitting`、`running`、`reconnecting`、`failed` 五种状态；运行态来自活动 Turn，重连态暂停网络 Mutation，失败态保留草稿。
 - 同一次用户动作在结果尚未确定前重试时必须复用原 `Idempotency-Key`；输入或目标变化后生成新 Key。
 - Turn 撤销的提交、失败和 Idempotency Key 属于对应回复卡片的瞬时状态；同一次撤销重试复用原 Key。撤销成功后主动刷新 Task Snapshot 与 Project Git 状态，因为 Codex 会话回滚不保证产生统一实时事件。

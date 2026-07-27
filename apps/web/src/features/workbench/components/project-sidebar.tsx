@@ -36,6 +36,7 @@ import {
   taskRenameMutationOptions,
 } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
+import { getTaskActivity } from "../../conversation/runtime/task-activity.js";
 
 const primaryActionClassName =
   "flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small font-medium text-foreground transition-colors hover:bg-control-hover";
@@ -47,8 +48,6 @@ const taskActionMenuViewportPadding = 8;
 
 type ProjectSidebarProps = Readonly<{
   connectionState: AgentEventConnectionState;
-  isTaskAwaitingApproval: boolean;
-  isTaskRunning: boolean;
   onClose: () => void;
   projectId?: string;
   taskId?: string;
@@ -104,8 +103,6 @@ export function hasPendingApproval(pendingRequests: readonly PendingRequest[]): 
 
 export function ProjectSidebar({
   connectionState,
-  isTaskAwaitingApproval,
-  isTaskRunning,
   onClose,
   projectId,
   taskId,
@@ -119,6 +116,7 @@ export function ProjectSidebar({
     isProjectPickerOpen,
     projects,
     projectTaskStates,
+    taskActivity,
     tasks,
   } = useProjects();
   const navigate = useNavigate();
@@ -326,22 +324,23 @@ export function ProjectSidebar({
               Pinned
             </h2>
             <div className="space-y-0.5">
-              {pinnedTasks.map((task) => (
-                <TaskLink
-                  active={task.projectId === projectId && task.id === taskId}
-                  icon={<Pin className="size-3.5" aria-hidden="true" />}
-                  isAwaitingApproval={
-                    isTaskAwaitingApproval && task.projectId === projectId && task.id === taskId
-                  }
-                  key={`${task.projectId}:${task.id}`}
-                  isActionPending={taskActionPending}
-                  isRunning={isTaskRunning && task.projectId === projectId && task.id === taskId}
-                  onArchive={(task) => void archiveTask(task)}
-                  onPin={(task) => void pinTask(task)}
-                  onRename={setRenamingTask}
-                  task={task}
-                />
-              ))}
+              {pinnedTasks.map((task) => {
+                const activity = getTaskActivity(taskActivity, task.projectId, task.id);
+                return (
+                  <TaskLink
+                    active={task.projectId === projectId && task.id === taskId}
+                    icon={<Pin className="size-3.5" aria-hidden="true" />}
+                    isAwaitingApproval={activity.isAwaitingApproval}
+                    key={`${task.projectId}:${task.id}`}
+                    isActionPending={taskActionPending}
+                    isRunning={activity.isRunning}
+                    onArchive={(task) => void archiveTask(task)}
+                    onPin={(task) => void pinTask(task)}
+                    onRename={setRenamingTask}
+                    task={task}
+                  />
+                );
+              })}
             </div>
           </section>
         ) : null}
@@ -428,23 +427,22 @@ export function ProjectSidebar({
                       {project.id === projectId && taskId === undefined ? (
                         <NewTaskLink projectId={project.id} />
                       ) : null}
-                      {taskPreview.tasks.map((task) => (
-                        <TaskLink
-                          active={project.id === projectId && task.id === taskId}
-                          isAwaitingApproval={
-                            isTaskAwaitingApproval && project.id === projectId && task.id === taskId
-                          }
-                          isActionPending={taskActionPending}
-                          isRunning={
-                            isTaskRunning && project.id === projectId && task.id === taskId
-                          }
-                          key={`${task.projectId}:${task.id}`}
-                          onArchive={(task) => void archiveTask(task)}
-                          onPin={(task) => void pinTask(task)}
-                          onRename={setRenamingTask}
-                          task={task}
-                        />
-                      ))}
+                      {taskPreview.tasks.map((task) => {
+                        const activity = getTaskActivity(taskActivity, task.projectId, task.id);
+                        return (
+                          <TaskLink
+                            active={project.id === projectId && task.id === taskId}
+                            isAwaitingApproval={activity.isAwaitingApproval}
+                            isActionPending={taskActionPending}
+                            isRunning={activity.isRunning}
+                            key={`${task.projectId}:${task.id}`}
+                            onArchive={(task) => void archiveTask(task)}
+                            onPin={(task) => void pinTask(task)}
+                            onRename={setRenamingTask}
+                            task={task}
+                          />
+                        );
+                      })}
                       {showTaskToggle ? (
                         <button
                           aria-expanded={showAllTasks}

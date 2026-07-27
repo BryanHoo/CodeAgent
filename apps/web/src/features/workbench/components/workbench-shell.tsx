@@ -38,11 +38,7 @@ import {
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
 import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
-import {
-  deriveProjectSidebarConnectionState,
-  hasPendingApproval,
-  ProjectSidebar,
-} from "./project-sidebar.js";
+import { deriveProjectSidebarConnectionState, ProjectSidebar } from "./project-sidebar.js";
 import { ProjectSourceDialog } from "./project-source-dialog.js";
 import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
@@ -102,8 +98,18 @@ function shouldOpenDesktopPanel(query: string) {
 }
 
 export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
-  const { capabilities, client, error, isPending, projects, projectTaskStates, retry, tasks } =
-    useProjects();
+  const {
+    capabilities,
+    client,
+    error,
+    isPending,
+    markTaskRunning,
+    observeTaskSnapshot,
+    projects,
+    projectTaskStates,
+    retry,
+    tasks,
+  } = useProjects();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const modelsQuery = useQuery(modelsQueryOptions(client));
@@ -118,7 +124,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       queryClient.setQueryData(["projects", projectId, "defaults"], response);
     },
   });
-  const runtime = useTaskRuntime(projectId, taskId, client);
+  const runtime = useTaskRuntime(projectId, taskId, client, {
+    onSnapshot: observeTaskSnapshot,
+  });
   const taskLaunchState =
     taskId === undefined
       ? undefined
@@ -143,7 +151,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   });
   const isTaskRunning =
     runtime.snapshot?.status === "running" || startingSnapshot?.status === "running";
-  const isTaskAwaitingApproval = hasPendingApproval(runtime.snapshot?.pendingRequests ?? []);
   const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, isTaskRunning, client));
   const previousTaskRunningRef = useRef(isTaskRunning);
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
@@ -213,13 +220,15 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           task: startedTask,
           turn: startedTurn,
         });
+        // 首轮 Mutation 已确认运行，导航前写入 Sidebar 活动态，避免等待 Snapshot 才出现图标。
+        markTaskRunning(projectId, startedTask.id);
       }
       void navigate({
         params: { projectId, taskId: startedTask.id },
         to: "/p/$projectId/t/$taskId",
       });
     },
-    [navigate, projectId, queryClient],
+    [markTaskRunning, navigate, projectId, queryClient],
   );
   const models = modelsQuery.data?.data ?? [];
   const defaultModel =
@@ -321,8 +330,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     >
       <ProjectSidebar
         connectionState={sidebarConnectionState}
-        isTaskAwaitingApproval={isTaskAwaitingApproval}
-        isTaskRunning={isTaskRunning}
         onClose={closeSidebar}
         projectId={projectId}
         {...(taskId === undefined ? {} : { taskId })}
