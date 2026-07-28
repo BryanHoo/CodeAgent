@@ -1,0 +1,89 @@
+const expandedProjectsStorageKey = "code-agent:project-sidebar:expanded-projects:v1";
+
+export type ProjectSidebarPreferenceStorage = Readonly<{
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+}>;
+
+type ExpandedProjectsPreference = Readonly<{
+  expandedProjectIds: readonly string[];
+  version: 1;
+}>;
+
+export function getProjectSidebarPreferenceStorage(): ProjectSidebarPreferenceStorage | undefined {
+  try {
+    return typeof window === "undefined" ? undefined : window.localStorage;
+  } catch {
+    // 浏览器禁用存储时保持侧栏可用，仅跳过跨会话恢复。
+    return undefined;
+  }
+}
+
+export function readExpandedProjectIds(
+  storage: ProjectSidebarPreferenceStorage | undefined,
+): ReadonlySet<string> | null {
+  if (storage === undefined) {
+    return null;
+  }
+
+  try {
+    const serializedPreference = storage.getItem(expandedProjectsStorageKey);
+    if (serializedPreference === null) {
+      return null;
+    }
+
+    const preference: unknown = JSON.parse(serializedPreference);
+    if (!isExpandedProjectsPreference(preference)) {
+      return null;
+    }
+
+    return new Set(preference.expandedProjectIds);
+  } catch {
+    return null;
+  }
+}
+
+export function writeExpandedProjectIds(
+  storage: ProjectSidebarPreferenceStorage | undefined,
+  expandedProjectIds: ReadonlySet<string>,
+): void {
+  if (storage === undefined) {
+    return;
+  }
+
+  const preference: ExpandedProjectsPreference = {
+    expandedProjectIds: [...expandedProjectIds],
+    version: 1,
+  };
+
+  try {
+    storage.setItem(expandedProjectsStorageKey, JSON.stringify(preference));
+  } catch {
+    // 配额不足或隐私模式禁止写入时，不阻断当前展开/收起操作。
+  }
+}
+
+export function resolveInitialExpandedProjectIds(
+  projectIds: readonly string[],
+  savedExpandedProjectIds: ReadonlySet<string> | null,
+): ReadonlySet<string> {
+  if (savedExpandedProjectIds === null) {
+    const firstProjectId = projectIds[0];
+    return firstProjectId === undefined ? new Set() : new Set([firstProjectId]);
+  }
+
+  return new Set(projectIds.filter((projectId) => savedExpandedProjectIds.has(projectId)));
+}
+
+function isExpandedProjectsPreference(value: unknown): value is ExpandedProjectsPreference {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<ExpandedProjectsPreference>;
+  return (
+    candidate.version === 1 &&
+    Array.isArray(candidate.expandedProjectIds) &&
+    candidate.expandedProjectIds.every((projectId) => typeof projectId === "string")
+  );
+}

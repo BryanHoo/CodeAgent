@@ -417,6 +417,25 @@ test("redirects the root route to the default project workbench", async ({ page 
   await expect(page.getByRole("main", { name: "Task Timeline" })).toBeVisible();
 });
 
+test("restores the project folder expansion preference after reload", async ({ page }) => {
+  await page.goto("/p/code-agent");
+
+  const firstProject = page.getByRole("button", { name: "切换项目 CodeAgent" });
+  const secondProject = page.getByRole("button", { name: "切换项目 superwork" });
+  await expect(firstProject).toHaveAttribute("aria-expanded", "true");
+  await expect(secondProject).toHaveAttribute("aria-expanded", "false");
+
+  await firstProject.click();
+  await secondProject.click();
+  await expect(firstProject).toHaveAttribute("aria-expanded", "false");
+  await expect(secondProject).toHaveAttribute("aria-expanded", "true");
+
+  await page.reload();
+
+  await expect(firstProject).toHaveAttribute("aria-expanded", "false");
+  await expect(secondProject).toHaveAttribute("aria-expanded", "true");
+});
+
 test("provides reusable design tokens for light and dark themes", async ({ page }) => {
   await page.goto("/p/code-agent");
   const readTheme = async (theme: "dark" | "light") =>
@@ -2060,10 +2079,12 @@ test("switches the new chat project from the empty timeline", async ({ page }) =
   await expect(projectSelect).toHaveValue("superwork");
   await expect(prompt).toHaveValue("保留这段新聊天草稿");
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
-  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveAttribute(
-    "aria-current",
-    "page",
+  // 切换当前 Project 不覆盖用户保存的文件夹展开形态。
+  await expect(sidebar.getByRole("button", { name: "切换项目 superwork" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
   );
+  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveCount(0);
 });
 
 test("toggles project tasks from the project name without navigation", async ({ page }) => {

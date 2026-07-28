@@ -38,6 +38,12 @@ import {
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { getTaskActivity } from "../../conversation/runtime/task-activity.js";
 import { useProjectReordering } from "../hooks/use-project-reordering.js";
+import {
+  getProjectSidebarPreferenceStorage,
+  readExpandedProjectIds,
+  resolveInitialExpandedProjectIds,
+  writeExpandedProjectIds,
+} from "../project-sidebar-preferences.js";
 
 const primaryActionClassName =
   "flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small font-medium text-foreground transition-colors hover:bg-control-hover";
@@ -126,9 +132,19 @@ export function ProjectSidebar({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
-  const [expandedProjects, setExpandedProjects] = useState<ReadonlySet<string>>(
-    () => new Set(projects.map((project) => project.id)),
+  const [preferenceStorage] = useState(getProjectSidebarPreferenceStorage);
+  const [initialSavedExpandedProjectIds] = useState(() =>
+    readExpandedProjectIds(preferenceStorage),
   );
+  const savedExpandedProjectIdsRef = useRef(initialSavedExpandedProjectIds);
+  const hasInitializedProjectExpansionRef = useRef(projects.length > 0);
+  const [expandedProjects, setExpandedProjects] = useState<ReadonlySet<string>>(() =>
+    resolveInitialExpandedProjectIds(
+      projects.map((project) => project.id),
+      initialSavedExpandedProjectIds,
+    ),
+  );
+  const expandedProjectsRef = useRef(expandedProjects);
   const [query, setQuery] = useState("");
   const [expandedTaskProjects, setExpandedTaskProjects] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -164,22 +180,45 @@ export function ProjectSidebar({
   const firstProject = orderedProjects[0];
 
   useEffect(() => {
-    // Projects 异步到达后默认展开新项目，保留用户已手动设置的现有项目状态。
-    setExpandedProjects((current) => {
-      const next = new Set(current);
-      let changed = false;
-      for (const project of projects) {
-        if (!next.has(project.id)) {
-          next.add(project.id);
-          changed = true;
-        }
-      }
-      return changed ? next : current;
-    });
+    // 首次加载只展开第一个 Project；已有配置则恢复上次保存的文件夹形态。
+    const projectIds = projects.map((project) => project.id);
+    if (!hasInitializedProjectExpansionRef.current && projectIds.length > 0) {
+      hasInitializedProjectExpansionRef.current = true;
+      const initialExpandedProjectIds = resolveInitialExpandedProjectIds(
+        projectIds,
+        savedExpandedProjectIdsRef.current,
+      );
+      expandedProjectsRef.current = initialExpandedProjectIds;
+      setExpandedProjects(initialExpandedProjectIds);
+      return;
+    }
+
+    const availableProjectIds = new Set(projectIds);
+    const currentExpandedProjectIds = expandedProjectsRef.current;
+    const nextExpandedProjectIds = new Set(
+      [...currentExpandedProjectIds].filter((expandedProjectId) =>
+        availableProjectIds.has(expandedProjectId),
+      ),
+    );
+    if (nextExpandedProjectIds.size !== currentExpandedProjectIds.size) {
+      expandedProjectsRef.current = nextExpandedProjectIds;
+      setExpandedProjects(nextExpandedProjectIds);
+    }
   }, [projects]);
 
+  const updateExpandedProjects = useCallback(
+    (update: (current: ReadonlySet<string>) => ReadonlySet<string>) => {
+      const nextExpandedProjectIds = update(expandedProjectsRef.current);
+      expandedProjectsRef.current = nextExpandedProjectIds;
+      savedExpandedProjectIdsRef.current = nextExpandedProjectIds;
+      writeExpandedProjectIds(preferenceStorage, nextExpandedProjectIds);
+      setExpandedProjects(nextExpandedProjectIds);
+    },
+    [preferenceStorage],
+  );
+
   const toggleProject = (id: string) => {
-    setExpandedProjects((current) => {
+    updateExpandedProjects((current) => {
       const next = new Set(current);
       if (next.has(id)) {
         next.delete(id);
@@ -193,13 +232,14 @@ export function ProjectSidebar({
   const openProjectPicker = async () => {
     const project = await addProject();
     if (project !== undefined) {
+      updateExpandedProjects((current) => new Set(current).add(project.id));
       await navigate({ params: { projectId: project.id }, to: "/p/$projectId" });
     }
   };
 
   const openNewTask = async (targetProjectId: string) => {
     // 新聊天先复用 Project 空任务路由，首次提交时再由 Composer 创建真实 Codex Task。
-    setExpandedProjects((current) => {
+    updateExpandedProjects((current) => {
       if (current.has(targetProjectId)) {
         return current;
       }
@@ -313,7 +353,7 @@ export function ProjectSidebar({
           <Link
             className={primaryActionClassName}
             onClick={() => {
-              setExpandedProjects((current) => new Set(current).add(firstProject.id));
+              updateExpandedProjects((current) => new Set(current).add(firstProject.id));
             }}
             params={{ projectId: firstProject.id }}
             to="/p/$projectId"
