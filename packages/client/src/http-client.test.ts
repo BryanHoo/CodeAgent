@@ -517,6 +517,23 @@ describe("CodeAgentClient", () => {
     ).toEqual(["pin-key", "rename-key", "archive-key"]);
   });
 
+  it("requests best-effort task unsubscribe without an idempotency cache entry", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValueOnce(jsonResponse({ status: "unsubscribed", taskId: task.id }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.unsubscribeTask("code-agent", task.id)).resolves.toEqual({
+      status: "unsubscribed",
+      taskId: task.id,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/v1/projects/code-agent/tasks/task-1/unsubscribe",
+      expect.objectContaining({ body: "{}", method: "POST" }),
+    );
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).has("idempotency-key")).toBe(false);
+  });
+
   it("sends typed pending request resolutions with full identity", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock.mockResolvedValueOnce(

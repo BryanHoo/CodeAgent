@@ -2,17 +2,23 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { ProjectProvider } from "../features/projects/project-context.js";
+import { installInactiveSnapshotMemoryLimit } from "./snapshot-memory.js";
+
+export const DEFAULT_QUERY_GC_TIME_MS = 2 * 60_000;
 
 export function createAppQueryClient() {
-  return new QueryClient({
+  const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
+        gcTime: DEFAULT_QUERY_GC_TIME_MS,
         refetchOnWindowFocus: false,
         retry: 1,
         staleTime: 30_000,
       },
     },
   });
+  installInactiveSnapshotMemoryLimit(queryClient);
+  return queryClient;
 }
 
 const queryClient = createAppQueryClient();

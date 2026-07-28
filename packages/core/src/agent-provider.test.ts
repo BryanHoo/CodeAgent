@@ -154,6 +154,9 @@ describe("AgentProvider", () => {
       terminateBackgroundTerminal() {
         return Promise.resolve(true);
       },
+      unsubscribeTask() {
+        return Promise.resolve("unsubscribed");
+      },
     };
 
     await expect(provider.getCapabilities()).resolves.toEqual({

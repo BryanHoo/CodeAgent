@@ -51,6 +51,7 @@ export type ResolvePendingRequestInput = Readonly<
 >;
 
 export type PendingRequestResolutionErrorCode = "expired" | "mismatch" | "not_found" | "resolved";
+export type AgentTaskUnsubscribeStatus = "busy" | "notLoaded" | "notSubscribed" | "unsubscribed";
 
 export class PendingRequestResolutionError extends Error {
   public constructor(
@@ -88,6 +89,7 @@ export interface AgentProvider {
   interruptTurn(taskId: string, turnId: string): Promise<void>;
   subscribeEvents(listener: AgentProviderEventListener): () => void;
   terminateBackgroundTerminal(taskId: string, terminalId: string): Promise<boolean>;
+  unsubscribeTask(taskId: string): Promise<AgentTaskUnsubscribeStatus>;
   uploadFeedback(taskId: string, input: UploadAgentFeedbackRequest): Promise<void>;
 }
 

@@ -55,6 +55,7 @@ import {
   TerminateAgentBackgroundTerminalResponseSchema,
   UploadAgentFeedbackRequestSchema,
   UploadAgentFeedbackResponseSchema,
+  UnsubscribeAgentTaskResponseSchema,
   MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
   type AgentAttachmentUploadRequest,
   type ArchiveAgentTaskRequest,
@@ -869,6 +870,25 @@ export async function createCodeAgentServer(
       ]);
       const pinned = new Set(pinnedTaskIds);
       return { ...page, data: page.data.map((task) => mergeTaskPinned(task, pinned)) };
+    },
+  );
+
+  app.post<{ Params: { projectId: string; taskId: string } }>(
+    "/v1/projects/:projectId/tasks/:taskId/unsubscribe",
+    {
+      schema: {
+        params: ProjectTaskParamsSchema,
+        response: { 200: UnsubscribeAgentTaskResponseSchema, 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      // Provider 内部再次确认运行 Turn、Pending Request、后台终端和恢复 Promise。
+      const status = await context.provider.unsubscribeTask(request.params.taskId);
+      return { status, taskId: request.params.taskId };
     },
   );
 

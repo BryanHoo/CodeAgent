@@ -26,6 +26,8 @@
 - Codex 用户历史中的 `image` 与 `localImage` 必须映射为统一消息附件；Provider 只接受 GIF、JPEG、PNG、WebP 的有效内容签名和不超过 2 MiB 的图片，并将本地路径转换为 Data URL 后丢弃原生路径。文件缺失、超限或格式不受支持时降级为文本占位，不能使整个 Task Snapshot 失败。
 - Project Skill 目录只通过 `skills/list { cwds: [project.rootPath] }` 获取并过滤禁用项；对外 ID 必须是稳定不透明摘要。`turn/start` 只有在 ID 与名称仍匹配当前目录时，才能加入 Codex 原生 `{ type: "skill", name, path }`，原生绝对路径不得越过 Provider 边界。
 - `thread/tokenUsage/updated` 只使用最近一轮 `last.totalTokens` 计算当前上下文占用，并连同 `modelContextWindow` 写入实时事件和后续 Snapshot；不得使用累计 `total.totalTokens` 冒充当前上下文。
+- Web 最后一个 Task Runtime 消费者释放或不可见 Task 完成后，通过 Provider 无关 `unsubscribeTask` 端口调用实验 `thread/unsubscribe`。只有无运行 Turn、无 Pending Request、无后台终端、无读取或恢复 Promise 时才允许原生释放；`busy`、`notLoaded`、`notSubscribed` 与 `unsubscribed` 都是可恢复的 best-effort 生命周期结果，不能阻断导航。
+- `thread/unsubscribe` 成功或确认未加载后，Codex Provider 必须同步删除该 Task 的 Owner、Context Usage、运行标记、恢复状态、暂存事件、暂存 Server Request、终态 Request 和未 materialize 回退；重新打开时通过 `thread/read` 重新验证 Project 归属并建立状态。Task 级 Map 禁止只增不减。
 - `turn/interrupt` 响应只确认中断请求已接收；`turn/completed` 的 `interrupted` 状态才是 Turn 终态，Server 和 Web 不得提前伪造完成状态。
 - 非重试 `provider.error` 已确认的错误原因不能被随后缺少错误文本的 `turn/completed` 清除；Web Runtime 合并终态时必须保留该失败原因，允许已产生的部分回复与错误共同展示。
 - `thread/rollback` 只用于撤销当前 Task 的最新已完成 Turn，并固定 `numTurns: 1`；它只修改 Codex 会话历史，不能视为本地文件恢复。Server 必须先对当前 Project 内受控文本补丁执行反向预检并恢复文件，再调用 Provider；Provider 失败时正向补偿文件，补偿失败返回明确冲突，禁止路径越界、`.git`、二进制和同文件多段依赖补丁。
@@ -52,6 +54,7 @@
 - 后台终端读取必须先验证 Project/Task 归属；单终端停止是幂等 Mutation，即使进程在请求到达前自然退出也返回已终止语义。
 - Task 创建在 Provider 成功但设置持久化失败时必须保留有界恢复状态；同 `Idempotency-Key` 重试只补齐持久化，不得再次调用 Provider 创建 Task。
 - 成功的幂等结果缓存必须同时设置容量上限和过期时间；进行中的请求不得淘汰，Runtime 关闭时清空全部条目。
+- 任何新增 Task Runtime、Snapshot、历史或终端缓存都必须同时声明按字节容量、Entry 次级上限和明确清理触发点；不得依赖框架默认 TTL 或无界模块级 Map。
 - 浏览器附件先经幂等上传进入 Server 的有界 TTL Store，并只返回随机 ID；Turn 成功后消费引用，Provider 失败时保留引用供同一请求重试，Runtime 关闭时清空 Store。
 
 ## 关闭

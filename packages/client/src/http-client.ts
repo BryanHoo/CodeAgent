@@ -28,6 +28,7 @@ import {
   StartAgentTurnResponseSchema,
   TerminateAgentBackgroundTerminalResponseSchema,
   UploadAgentFeedbackResponseSchema,
+  UnsubscribeAgentTaskResponseSchema,
   type AgentCapabilities,
   type AgentBackgroundTerminalPage,
   type AddProjectResponse,
@@ -65,6 +66,7 @@ import {
   type StartAgentTurnResponse,
   type UploadAgentFeedbackRequest,
   type UploadAgentFeedbackResponse,
+  type UnsubscribeAgentTaskResponse,
   type TerminateAgentBackgroundTerminalResponse,
 } from "@code-agent/protocol";
 import type { Static, TSchema } from "@sinclair/typebox";
@@ -336,6 +338,17 @@ export class CodeAgentClient {
       {},
       ArchiveAgentTaskResponseSchema,
       options,
+    );
+  }
+
+  public async unsubscribeTask(
+    projectId: string,
+    taskId: string,
+  ): Promise<UnsubscribeAgentTaskResponse> {
+    return this.#request(
+      `${taskPath(projectId, taskId)}/unsubscribe`,
+      UnsubscribeAgentTaskResponseSchema,
+      { body: "{}", headers: { "content-type": "application/json" }, method: "POST" },
     );
   }
 

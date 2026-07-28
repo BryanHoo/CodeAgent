@@ -1,7 +1,12 @@
 import type { AgentEvent, AgentTaskSnapshotResponse, PendingRequest } from "@code-agent/protocol";
 import { describe, expect, it } from "vitest";
 
-import { createTaskStore, createTaskStoreRegistry } from "./task-store.js";
+import {
+  createTaskStore,
+  createTaskStoreRegistry,
+  estimateTaskStoreRetainedBytes,
+  MAX_TASK_COMMAND_OUTPUT_BYTES,
+} from "./task-store.js";
 
 const timestamp = "2026-07-28T00:00:00.000Z";
 
@@ -200,6 +205,38 @@ describe("task store", () => {
     );
     expect(commandItem.output).not.toContain("�");
     expect((commandItem.output?.match(/\n/g) ?? []).length).toBeLessThanOrEqual(9_999);
+  });
+
+  it("evicts least-recently-used command output when a task exceeds its byte budget", () => {
+    const commandOutput = "x".repeat(1_000_000);
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({
+        turns: [
+          {
+            completedAt: timestamp,
+            error: null,
+            id: "turn-command-history",
+            items: Array.from({ length: 9 }, (_, commandIndex) => ({
+              command: `command-${String(commandIndex)}`,
+              cwd: "/workspace",
+              id: `command-${String(commandIndex)}`,
+              output: commandOutput,
+              outputTruncated: false,
+              status: "completed" as const,
+              type: "command" as const,
+            })),
+            startedAt: timestamp,
+            status: "completed",
+          },
+        ],
+      }),
+    );
+
+    const state = store.getState();
+    expect(state.commandOutputBytes).toBeLessThanOrEqual(MAX_TASK_COMMAND_OUTPUT_BYTES);
+    expect(state.itemsById["command-0"]).toMatchObject({ outputTruncated: true });
+    expect(state.itemsById["command-8"]).toMatchObject({ output: commandOutput });
   });
 
   it("uses terminal entities as authoritative while preserving confirmed errors", () => {
@@ -470,5 +507,29 @@ describe("task store registry", () => {
     );
     registry.release("project-1", "task-pending");
     expect(registry.peek("project-1", "task-pending")).toBeUndefined();
+  });
+
+  it("evicts inactive stores by aggregate retained bytes", () => {
+    const firstStore = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ title: "first".repeat(200) }),
+    );
+    const singleStoreBytes = estimateTaskStoreRetainedBytes(firstStore);
+    const registry = createTaskStoreRegistry({
+      createStore: (identity) =>
+        identity.taskId === "task-1"
+          ? firstStore
+          : createTaskStore(identity, createResponse({ id: identity.taskId })),
+      maxRetainedBytes: singleStoreBytes + 100,
+      maxRetainedStores: 10,
+    });
+
+    registry.acquire("project-1", "task-1");
+    registry.release("project-1", "task-1");
+    registry.acquire("project-1", "task-2");
+    registry.release("project-1", "task-2");
+
+    expect(registry.peek("project-1", "task-1")).toBeUndefined();
+    expect(registry.peek("project-1", "task-2")).toBeDefined();
   });
 });

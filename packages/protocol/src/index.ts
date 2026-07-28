@@ -109,6 +109,7 @@ export {
   UserInputPendingRequestSchema,
   UploadAgentFeedbackRequestSchema,
   UploadAgentFeedbackResponseSchema,
+  UnsubscribeAgentTaskResponseSchema,
   TerminateAgentBackgroundTerminalResponseSchema,
   MAX_AGENT_ATTACHMENTS,
   MAX_AGENT_ATTACHMENT_BYTES,
@@ -180,5 +181,6 @@ export {
   type StartAgentTurnResponse,
   type UploadAgentFeedbackRequest,
   type UploadAgentFeedbackResponse,
+  type UnsubscribeAgentTaskResponse,
   type TerminateAgentBackgroundTerminalResponse,
 } from "./project.js";

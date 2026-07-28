@@ -11,6 +11,7 @@ import {
   type AgentProviderTaskSnapshot,
   type AgentProviderTurnInput,
   type AgentRuntimeProvider,
+  type AgentTaskUnsubscribeStatus,
   type ListAgentTasksInput,
   type ResolvePendingRequestInput,
 } from "@code-agent/core";
@@ -1284,6 +1285,7 @@ export class CodexAgentProvider implements AgentProvider {
   readonly #taskResumePromises = new Map<string, Promise<void>>();
   readonly #requestExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #resolvingRequests = new Map<string, ResolvingPendingRequest>();
+  readonly #runningTaskIds = new Set<string>();
   readonly #taskContextUsage = new Map<string, AgentContextUsage>();
   readonly #terminalRequests = new Map<string, PendingRequest>();
   readonly #unmaterializedTasks = new Map<string, AgentTask>();
@@ -1509,6 +1511,9 @@ export class CodexAgentProvider implements AgentProvider {
       "turn/start response",
     );
     const turn = mapAgentTurn(response["turn"]);
+    if (turn.status === "running") {
+      this.#runningTaskIds.add(taskId);
+    }
     return turn;
   }
 
@@ -1692,13 +1697,19 @@ export class CodexAgentProvider implements AgentProvider {
       const turns = thread["turns"]
         .map(mapAgentTurn)
         .map((turn) => attachTranscriptSkills(turn, transcriptSkillsByTurnId.get(turn.id) ?? []));
+      const status = mapThreadStatus(thread["status"]);
+      if (status === "running") {
+        this.#runningTaskIds.add(taskId);
+      } else {
+        this.#runningTaskIds.delete(taskId);
+      }
       const snapshot: AgentProviderTaskSnapshot = {
         ...task,
         contextUsage: this.#taskContextUsage.get(taskId) ?? null,
         pendingRequests: [...this.#pendingRequests.values()]
           .map((entry) => entry.request)
           .filter((request) => request.taskId === taskId),
-        status: mapThreadStatus(thread["status"]),
+        status,
         turns,
       };
       return snapshot;
@@ -1799,6 +1810,30 @@ export class CodexAgentProvider implements AgentProvider {
     };
   }
 
+  public async unsubscribeTask(taskId: string): Promise<AgentTaskUnsubscribeStatus> {
+    if (!this.#projectTaskIds.has(taskId)) {
+      return "notLoaded";
+    }
+    if (this.#hasTaskLifecycleObligations(taskId)) {
+      return "busy";
+    }
+    const terminals = await this.listBackgroundTerminals(taskId);
+    if (terminals.data.length > 0 || this.#hasTaskLifecycleObligations(taskId)) {
+      return "busy";
+    }
+
+    const response = expectRecord(
+      await this.#client.request("thread/unsubscribe", { threadId: taskId }),
+      "thread/unsubscribe response",
+    );
+    const status = expectString(response["status"], "thread/unsubscribe status");
+    if (status !== "notLoaded" && status !== "notSubscribed" && status !== "unsubscribed") {
+      throw new CodexProtocolMappingError("thread/unsubscribe returned an unknown status");
+    }
+    this.#clearTaskRuntimeState(taskId);
+    return status;
+  }
+
   public receiveNotification(method: string, params: unknown): void {
     this.#handleNotification(method, params);
   }
@@ -1829,7 +1864,11 @@ export class CodexAgentProvider implements AgentProvider {
       // 快照和实时事件共享同一份最近一轮上下文用量。
       this.#taskContextUsage.set(event.taskId, event.payload.usage);
     }
+    if (event.type === "turn.started") {
+      this.#runningTaskIds.add(event.taskId);
+    }
     if (event.type === "turn.completed") {
+      this.#runningTaskIds.delete(event.taskId);
       this.#removeQueuedRequestsForTurn(event.taskId, event.turnId);
       for (const entry of [...this.#pendingRequests.values()]) {
         if (entry.request.taskId === event.taskId && entry.request.turnId === event.turnId) {
@@ -1838,6 +1877,33 @@ export class CodexAgentProvider implements AgentProvider {
       }
     }
     this.#routeEvent(event);
+  }
+
+  #hasTaskLifecycleObligations(taskId: string): boolean {
+    return (
+      this.#runningTaskIds.has(taskId) ||
+      this.#pendingTaskReads.has(taskId) ||
+      this.#taskResumePromises.has(taskId) ||
+      (this.#pendingTaskServerRequests.get(taskId)?.length ?? 0) > 0 ||
+      [...this.#pendingRequests.values()].some((entry) => entry.request.taskId === taskId)
+    );
+  }
+
+  #clearTaskRuntimeState(taskId: string): void {
+    this.#pendingTaskEvents.delete(taskId);
+    this.#pendingTaskServerRequests.delete(taskId);
+    this.#pendingTaskReads.delete(taskId);
+    this.#projectTaskIds.delete(taskId);
+    this.#resumedTaskIds.delete(taskId);
+    this.#runningTaskIds.delete(taskId);
+    this.#taskContextUsage.delete(taskId);
+    this.#taskResumePromises.delete(taskId);
+    this.#unmaterializedTasks.delete(taskId);
+    for (const [requestId, request] of this.#terminalRequests) {
+      if (request.taskId === taskId) {
+        this.#terminalRequests.delete(requestId);
+      }
+    }
   }
 
   #handleServerRequest(serverRequest: RpcServerRequest): void {
@@ -2202,8 +2268,8 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     this.#runtime = runtime;
   }
 
-  public archiveTask(taskId: string): Promise<void> {
-    this.#runtime.assertTaskOwner(this.#project, taskId);
+  public async archiveTask(taskId: string): Promise<void> {
+    await this.#ensureTaskOwner(taskId);
     return this.#delegate.archiveTask(taskId);
   }
 
@@ -2236,6 +2302,17 @@ class CodexRuntimeProjectProvider implements AgentProvider {
   public terminateBackgroundTerminal(taskId: string, terminalId: string): Promise<boolean> {
     this.#runtime.assertTaskOwner(this.#project, taskId);
     return this.#delegate.terminateBackgroundTerminal(taskId, terminalId);
+  }
+
+  public async unsubscribeTask(taskId: string): Promise<AgentTaskUnsubscribeStatus> {
+    if (!this.#runtime.isTaskOwner(this.#project, taskId)) {
+      return "notLoaded";
+    }
+    const status = await this.#delegate.unsubscribeTask(taskId);
+    if (status !== "busy") {
+      this.#runtime.releaseTask(this.#project, taskId);
+    }
+    return status;
   }
 
   public listModels(): Promise<AgentModelPage> {
@@ -2276,8 +2353,8 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     }
   }
 
-  public renameTask(taskId: string, title: string): Promise<void> {
-    this.#runtime.assertTaskOwner(this.#project, taskId);
+  public async renameTask(taskId: string, title: string): Promise<void> {
+    await this.#ensureTaskOwner(taskId);
     return this.#delegate.renameTask(taskId, title);
   }
 
@@ -2318,6 +2395,16 @@ class CodexRuntimeProjectProvider implements AgentProvider {
   public uploadFeedback(taskId: string, input: UploadAgentFeedbackRequest): Promise<void> {
     this.#runtime.assertTaskOwner(this.#project, taskId);
     return this.#delegate.uploadFeedback(taskId, input);
+  }
+
+  async #ensureTaskOwner(taskId: string): Promise<void> {
+    if (this.#runtime.isTaskOwner(this.#project, taskId)) {
+      return;
+    }
+    // Sidebar 可直接操作已释放的历史 Task，先重新读取并恢复 Project 归属。
+    if ((await this.readTask(taskId)) === undefined) {
+      throw new CodexProtocolMappingError("Codex thread does not belong to the active project");
+    }
   }
 }
 
@@ -2437,14 +2524,24 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
   }
 
   public assertTaskOwner(project: Project, taskId: string): void {
-    const owner = this.#taskOwners.get(taskId);
-    if (
-      owner === undefined ||
-      owner.provisional ||
-      owner.projectId !== project.id ||
-      resolve(owner.rootPath) !== resolve(project.rootPath)
-    ) {
+    if (!this.isTaskOwner(project, taskId)) {
       throw new CodexProtocolMappingError("Codex thread does not belong to the active project");
+    }
+  }
+
+  public isTaskOwner(project: Project, taskId: string): boolean {
+    const owner = this.#taskOwners.get(taskId);
+    return (
+      owner !== undefined &&
+      !owner.provisional &&
+      owner.projectId === project.id &&
+      resolve(owner.rootPath) === resolve(project.rootPath)
+    );
+  }
+
+  public releaseTask(project: Project, taskId: string): void {
+    if (this.isTaskOwner(project, taskId)) {
+      this.#taskOwners.delete(taskId);
     }
   }
 

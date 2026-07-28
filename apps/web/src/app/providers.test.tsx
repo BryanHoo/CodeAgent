@@ -7,6 +7,7 @@ describe("createAppQueryClient", () => {
     const queryClient = createAppQueryClient();
     const queryDefaults = queryClient.getDefaultOptions().queries;
 
+    expect(queryDefaults?.gcTime).toBe(120_000);
     expect(queryDefaults?.retry).toBe(1);
     expect(queryDefaults?.staleTime).toBe(30_000);
     expect(queryDefaults?.refetchOnWindowFocus).toBe(false);

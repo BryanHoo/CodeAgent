@@ -37,6 +37,7 @@ import {
   taskRenameMutationOptions,
   type ProjectTaskInfiniteData,
 } from "../../projects/project-queries.js";
+import { removeRetainedTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { getTaskActivity } from "../../conversation/runtime/task-activity.js";
 import { useProjectReordering } from "../hooks/use-project-reordering.js";
@@ -159,6 +160,7 @@ export function ProjectSidebar({
     client,
     error,
     fetchNextProjectTaskPage,
+    forgetTask,
     isPending,
     isProjectOrderPending,
     isProjectPickerOpen,
@@ -332,9 +334,17 @@ export function ProjectSidebar({
     try {
       await archiveMutation.mutateAsync({ projectId: task.projectId, taskId: task.id });
       await removeArchivedProjectTaskAndRefill(queryClient, task.projectId, task.id);
+      queryClient.removeQueries({
+        exact: true,
+        queryKey: ["projects", task.projectId, "tasks", task.id],
+      });
+      forgetTask(task.projectId, task.id);
       if (task.projectId === projectId && task.id === taskId) {
         await navigate({ params: { projectId: task.projectId }, to: "/p/$projectId" });
       }
+      removeRetainedTaskRuntime(task.projectId, task.id);
+      // 归档后的 Runtime 清理由 Provider 判定安全性，失败不回滚已成功的归档。
+      void client.unsubscribeTask(task.projectId, task.id).catch(() => undefined);
     } catch {
       setTaskActionError("无法归档任务");
     }

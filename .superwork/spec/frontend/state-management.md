@@ -23,10 +23,14 @@
 - Pending Request 按 `requestId` 合并 Snapshot 与实时生命周期事件；多个未解决请求按到达顺序展示，仅队首允许提交，重连期间全部暂停提交。
 - Task Runtime 使用 `zustand/vanilla` 按 `projectId + taskId` 创建独立 Store；Turn、Item 与 Pending Request 必须分别保存有序 ID 和实体映射。
 - 文本 Delta 只替换目标 `itemsById[itemId]`，不得替换既有 Turn、Item 顺序或其他实体引用；Timeline 根节点只订阅 Turn/Pending ID，Item 组件按 `itemId` 原子订阅。
-- 未选中 Task Store 采用 LRU 回收；仍有消费者的 Store 不得回收。最后一个消费者释放时同步关闭实时传输，重新选中后必须从权威 Snapshot 校准，因此运行中、待审批或尚未 Hydrate 的非活动 Store 也可安全进入 LRU。
+- 未选中 Task Store 采用 UTF-8 字节估算 LRU 回收：非活动 Store 合计最多 64 MiB、最多 20 份；仍有消费者的 Store 不得回收且不占非活动预算。最后一个消费者释放时同步关闭实时传输并发起 best-effort `thread/unsubscribe`，重新选中后必须从权威 Snapshot 校准，因此运行中、待审批或尚未 Hydrate 的非活动 Store 也可安全进入 LRU。
+- Command Output 同时受单 Item 1 MiB / 10,000 行和单 Task 8 MiB 总预算约束；总预算按最近写入顺序保留，优先把最久未更新的 Command Output 替换为明确截断标记。界面高度限制不能代替 Payload 字节限制。
+- CodeBlock Token Cache 必须使用 24 MiB / 128 Entry 的字节 LRU，单份超过 512 KiB 的源码不进入缓存；Cache Key 只保存摘要并在命中时核验源码，禁止把完整源码直接作为长期 Map Key。
+- TanStack Query 全局非活动 `gcTime` 固定为 2 分钟，Task Snapshot 使用 30 秒；非活动完整 Snapshot 另受 48 MiB / 12 Entry 字节 LRU 约束。完整 Snapshot 与归一化 Store 不得同时作为无界长期缓存，归档时必须立即移除对应 Snapshot Query。
 - 全量 Snapshot 重建只允许用于低频兼容读取、Mutation 输入或恢复边界，不得作为每个 Delta 的 React 订阅结果。
 - Timeline 与 Composer 必须共享同一个 Task Runtime 订阅；同一 `projectId + taskId + checkpoint` 的多个消费者复用单一 WebSocket 链路，最后一个消费者释放后再关闭连接。
 - Sidebar 的轻量活动状态必须按 `projectId + taskId` 保存，并通过已访问 Project 的常驻 Event Stream 更新；切换当前 Task 或 Project 不能清除后台 Task 的运行或审批状态，只有对应 Task 的 Snapshot 或终态事件可以更新该行状态。详细 Timeline Runtime 仍只服务当前 Task，不得把完整历史复制到 Sidebar 状态。
+- Task 归档成功后必须清理 `taskActivity`、最近 Snapshot 恢复引用、非活动 Runtime Store 与 Task Snapshot Query；不可见 Task 收到 `turn.completed` 后再次尝试安全 unsubscribe，避免首次切换时因运行态跳过后永久保留 Thread。
 - Composer 只使用 `idle`、`submitting`、`running`、`reconnecting`、`failed` 五种状态；运行态来自活动 Turn，重连态暂停网络 Mutation，失败态保留草稿。
 - 同一次用户动作在结果尚未确定前重试时必须复用原 `Idempotency-Key`；输入或目标变化后生成新 Key。
 - Turn 撤销的提交、失败和 Idempotency Key 属于对应回复卡片的瞬时状态；同一次撤销重试复用原 Key。撤销成功后主动刷新 Task Snapshot 与 Project Git 状态，因为 Codex 会话回滚不保证产生统一实时事件。

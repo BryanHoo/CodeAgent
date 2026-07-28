@@ -184,6 +184,27 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
+  it("unsubscribes an idle task and releases provider task state", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread({ turns: [] }) },
+      { data: [], nextCursor: null },
+      { status: "unsubscribed" },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.readTask("task-1");
+
+    await expect(provider.unsubscribeTask("task-1")).resolves.toBe("unsubscribed");
+    await expect(provider.unsubscribeTask("task-1")).resolves.toBe("notLoaded");
+
+    expect(rpc.calls.slice(1)).toEqual([
+      {
+        method: "thread/backgroundTerminals/list",
+        params: { limit: 100, threadId: "task-1" },
+      },
+      { method: "thread/unsubscribe", params: { threadId: "task-1" } },
+    ]);
+  });
+
   it("preserves structured subagent details from Codex collaboration items", async () => {
     const rpc = new FakeRpcClient([
       {
@@ -348,6 +369,33 @@ describe("CodexAgentProvider", () => {
     expect(() => runtime.forProject({ ...project, rootPath: "/workspace/Conflicting" })).toThrow(
       "project identity belongs to another cwd",
     );
+  });
+
+  it("revalidates ownership before a sidebar mutation on a released task", async () => {
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      { data: [], nextCursor: null },
+      { status: "unsubscribed" },
+      { thread: nativeThread({ turns: [] }) },
+      {},
+    ]);
+    const runtime = createCodexRuntimeProvider({ client: rpc });
+    const provider = runtime.forProject(project);
+    await provider.listTasks();
+    await provider.unsubscribeTask("task-1");
+
+    await expect(provider.renameTask("task-1", "释放后重命名")).resolves.toBeUndefined();
+
+    expect(rpc.calls.slice(-2)).toEqual([
+      {
+        method: "thread/read",
+        params: { includeTurns: true, threadId: "task-1" },
+      },
+      {
+        method: "thread/name/set",
+        params: { name: "释放后重命名", threadId: "task-1" },
+      },
+    ]);
   });
 
   it("resumes a persisted Codex task before continuing it after runtime restart", async () => {

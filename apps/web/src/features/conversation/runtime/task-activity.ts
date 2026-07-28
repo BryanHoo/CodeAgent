@@ -92,6 +92,20 @@ export function getTaskActivity(
       };
 }
 
+export function removeTaskActivity(
+  activity: TaskActivityMap,
+  projectId: string,
+  taskId: string,
+): TaskActivityMap {
+  const key = createTaskActivityKey(projectId, taskId);
+  if (!activity.has(key)) {
+    return activity;
+  }
+  const nextActivity = new Map(activity);
+  nextActivity.delete(key);
+  return nextActivity;
+}
+
 export function recordTaskActivitySnapshot(
   activity: TaskActivityMap,
   snapshot: AgentTaskSnapshot,

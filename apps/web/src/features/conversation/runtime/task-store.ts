@@ -9,8 +9,13 @@ import type {
 } from "@code-agent/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
+import { estimateRetainedBytes, getUtf8ByteLength } from "../../../shared/memory/byte-lru.js";
+
 const MAX_COMMAND_OUTPUT_BYTES = 1_048_576;
 const MAX_COMMAND_OUTPUT_LINES = 10_000;
+export const MAX_TASK_COMMAND_OUTPUT_BYTES = 8 * 1_048_576;
+export const MAX_RETAINED_TASK_RUNTIME_BYTES = 64 * 1_048_576;
+const RETAINED_COMMAND_OUTPUT_MARKER = "[较早的命令输出已按内存预算清理]";
 
 export type NormalizedAgentTurn = Omit<AgentTurn, "items">;
 export type TaskSnapshotMetadata = Omit<AgentTaskSnapshot, "pendingRequests" | "turns">;
@@ -29,6 +34,9 @@ export interface TaskStoreIdentity {
 export interface TaskStoreState {
   applyEvents: (events: readonly AgentEvent[]) => void;
   checkpoint: EventCheckpoint | null;
+  commandOutputAccessByItemId: Readonly<Record<string, number>>;
+  commandOutputAccessSequence: number;
+  commandOutputBytes: number;
   connectionState: AgentEventConnectionState;
   error: Error | null;
   hydrate: (response: TaskStoreHydrationResponse) => void;
@@ -53,6 +61,9 @@ export type TaskStore = StoreApi<TaskStoreState>;
 type NormalizedTaskData = Pick<
   TaskStoreState,
   | "checkpoint"
+  | "commandOutputAccessByItemId"
+  | "commandOutputAccessSequence"
+  | "commandOutputBytes"
   | "itemIdsByTurnId"
   | "itemStructureRevision"
   | "itemTurnIdsById"
@@ -92,12 +103,19 @@ function normalizeSnapshot(response: TaskStoreHydrationResponse): NormalizedTask
     pendingRequests.map((request) => [request.requestId, request]),
   );
 
+  const boundedCommandOutputs = enforceCommandOutputBudget(
+    itemsById,
+    {},
+    0,
+    Object.keys(itemsById),
+  );
+
   return {
     checkpoint: response.checkpoint,
+    ...boundedCommandOutputs,
     itemIdsByTurnId,
     itemStructureRevision: 0,
     itemTurnIdsById,
-    itemsById,
     pendingRequestIds,
     pendingRequestsById,
     snapshotMetadata,
@@ -146,6 +164,103 @@ function boundCommandOutput(value: string): Readonly<{
     outputTruncated = true;
   }
   return { output, outputTruncated };
+}
+
+type CommandOutputBudgetState = Pick<
+  TaskStoreState,
+  "commandOutputAccessByItemId" | "commandOutputAccessSequence" | "commandOutputBytes" | "itemsById"
+>;
+
+function enforceCommandOutputBudget(
+  sourceItemsById: Readonly<Record<string, AgentItem>>,
+  previousAccessByItemId: Readonly<Record<string, number>>,
+  previousAccessSequence: number,
+  touchedItemIds: readonly string[],
+): CommandOutputBudgetState {
+  const touchedItemIdSet = new Set(touchedItemIds);
+  const commandOutputAccessByItemId: Record<string, number> = {};
+  let commandOutputAccessSequence = previousAccessSequence;
+  let commandOutputBytes = 0;
+  let itemsById = sourceItemsById;
+  const commandItemIds: string[] = [];
+
+  for (const [itemId, item] of Object.entries(sourceItemsById)) {
+    if (item.type !== "command" || item.output === undefined) {
+      continue;
+    }
+    const boundedOutput = boundCommandOutput(item.output);
+    if (
+      boundedOutput.output !== item.output ||
+      (boundedOutput.outputTruncated && !item.outputTruncated)
+    ) {
+      itemsById = {
+        ...itemsById,
+        [itemId]: {
+          ...item,
+          output: boundedOutput.output,
+          outputTruncated: item.outputTruncated || boundedOutput.outputTruncated,
+        },
+      };
+    }
+    const previousAccess = previousAccessByItemId[itemId];
+    if (touchedItemIdSet.has(itemId) || previousAccess === undefined) {
+      commandOutputAccessSequence += 1;
+      commandOutputAccessByItemId[itemId] = commandOutputAccessSequence;
+    } else {
+      commandOutputAccessByItemId[itemId] = previousAccess;
+    }
+    commandOutputBytes += getUtf8ByteLength(boundedOutput.output);
+    commandItemIds.push(itemId);
+  }
+
+  const leastRecentlyUsedItemIds = commandItemIds.toSorted(
+    (leftItemId, rightItemId) =>
+      (commandOutputAccessByItemId[leftItemId] ?? 0) -
+      (commandOutputAccessByItemId[rightItemId] ?? 0),
+  );
+  for (const itemId of leastRecentlyUsedItemIds) {
+    if (commandOutputBytes <= MAX_TASK_COMMAND_OUTPUT_BYTES) {
+      break;
+    }
+    const item = itemsById[itemId];
+    if (item?.type !== "command" || item.output === undefined) {
+      continue;
+    }
+    const previousOutputBytes = getUtf8ByteLength(item.output);
+    const retainedMarkerBytes = getUtf8ByteLength(RETAINED_COMMAND_OUTPUT_MARKER);
+    itemsById = {
+      ...itemsById,
+      [itemId]: {
+        ...item,
+        output: RETAINED_COMMAND_OUTPUT_MARKER,
+        outputTruncated: true,
+      },
+    };
+    commandOutputBytes -= previousOutputBytes - retainedMarkerBytes;
+  }
+
+  return {
+    commandOutputAccessByItemId,
+    commandOutputAccessSequence,
+    commandOutputBytes,
+    itemsById,
+  };
+}
+
+function getTouchedCommandOutputItemIds(event: AgentEvent): readonly string[] | undefined {
+  if (event.type === "command.output_delta") {
+    return [event.itemId];
+  }
+  if (event.type === "item.started" || event.type === "item.completed") {
+    return event.payload.item.type === "command" ? [event.itemId] : undefined;
+  }
+  if (event.type === "turn.started" || event.type === "turn.completed") {
+    // Turn 终态会整体替换 Item，即使没有 Command 也需要清除旧访问记录。
+    return event.payload.turn.items
+      .filter((item) => item.type === "command")
+      .map((item) => item.id);
+  }
+  return undefined;
 }
 
 function createDeltaItem(event: Extract<AgentEvent, { itemId: string }>): AgentItem | undefined {
@@ -487,6 +602,9 @@ export function createTaskStore(
     initialResponse === undefined
       ? {
           checkpoint: null,
+          commandOutputAccessByItemId: {},
+          commandOutputAccessSequence: 0,
+          commandOutputBytes: 0,
           itemIdsByTurnId: {},
           itemStructureRevision: 0,
           itemTurnIdsById: {},
@@ -526,6 +644,18 @@ export function createTaskStore(
             continue;
           }
           nextState = { ...nextState, ...applyAcceptedEvent(nextState, event) };
+          const touchedCommandOutputItemIds = getTouchedCommandOutputItemIds(event);
+          if (touchedCommandOutputItemIds !== undefined) {
+            nextState = {
+              ...nextState,
+              ...enforceCommandOutputBudget(
+                nextState.itemsById,
+                nextState.commandOutputAccessByItemId,
+                nextState.commandOutputAccessSequence,
+                touchedCommandOutputItemIds,
+              ),
+            };
+          }
         }
         return nextState;
       });
@@ -555,27 +685,37 @@ export function createTaskStore(
 
 interface TaskStoreRegistryEntry {
   consumers: number;
+  identity: TaskStoreIdentity;
   lastAccess: number;
   store: TaskStore;
 }
 
 export interface TaskStoreRegistryOptions {
   createStore?: (identity: TaskStoreIdentity) => TaskStore;
+  maxRetainedBytes?: number;
   maxRetainedStores?: number;
+  onEvict?: (identity: TaskStoreIdentity, store: TaskStore) => void;
 }
 
 export class TaskStoreRegistry {
   readonly #createStore: (identity: TaskStoreIdentity) => TaskStore;
   readonly #entries = new Map<string, TaskStoreRegistryEntry>();
+  readonly #maxRetainedBytes: number;
   readonly #maxRetainedStores: number;
+  readonly #onEvict: TaskStoreRegistryOptions["onEvict"];
   #accessSequence = 0;
 
   public constructor(options: TaskStoreRegistryOptions = {}) {
+    this.#maxRetainedBytes = options.maxRetainedBytes ?? MAX_RETAINED_TASK_RUNTIME_BYTES;
+    if (!Number.isSafeInteger(this.#maxRetainedBytes) || this.#maxRetainedBytes < 0) {
+      throw new RangeError("Task store registry maxRetainedBytes must be non-negative");
+    }
     this.#maxRetainedStores = options.maxRetainedStores ?? 20;
     if (!Number.isInteger(this.#maxRetainedStores) || this.#maxRetainedStores < 0) {
       throw new RangeError("Task store registry maxRetainedStores must be a non-negative integer");
     }
     this.#createStore = options.createStore ?? ((identity) => createTaskStore(identity));
+    this.#onEvict = options.onEvict;
   }
 
   public acquire(projectId: string, taskId: string): TaskStore {
@@ -584,6 +724,7 @@ export class TaskStoreRegistry {
     if (entry === undefined) {
       entry = {
         consumers: 0,
+        identity: { projectId, taskId },
         lastAccess: 0,
         store: this.#createStore({ projectId, taskId }),
       };
@@ -595,14 +736,15 @@ export class TaskStoreRegistry {
     return entry.store;
   }
 
-  public release(projectId: string, taskId: string): void {
+  public release(projectId: string, taskId: string): boolean {
     const entry = this.#entries.get(createRegistryKey(projectId, taskId));
     if (entry === undefined || entry.consumers === 0) {
-      return;
+      return false;
     }
     entry.consumers -= 1;
     entry.lastAccess = ++this.#accessSequence;
     this.#evictIfNeeded();
+    return entry.consumers === 0;
   }
 
   public get size(): number {
@@ -613,19 +755,58 @@ export class TaskStoreRegistry {
     return this.#entries.get(createRegistryKey(projectId, taskId))?.store;
   }
 
+  public hasConsumers(projectId: string, taskId: string): boolean {
+    return (this.#entries.get(createRegistryKey(projectId, taskId))?.consumers ?? 0) > 0;
+  }
+
+  public remove(projectId: string, taskId: string): boolean {
+    const registryKey = createRegistryKey(projectId, taskId);
+    const entry = this.#entries.get(registryKey);
+    if (entry === undefined || entry.consumers > 0) {
+      return false;
+    }
+    this.#entries.delete(registryKey);
+    this.#onEvict?.(entry.identity, entry.store);
+    return true;
+  }
+
   #evictIfNeeded(): void {
     const evictionCandidates = [...this.#entries]
       .filter((candidate) => canEvictEntry(candidate[1]))
       .sort((left, right) => left[1].lastAccess - right[1].lastAccess);
-    const excessStoreCount = evictionCandidates.length - this.#maxRetainedStores;
-    for (let candidateIndex = 0; candidateIndex < excessStoreCount; candidateIndex += 1) {
-      const evictionCandidate = evictionCandidates[candidateIndex];
-      if (evictionCandidate !== undefined) {
-        // 容量只约束安全静止的未选中 Store，活动 Store 不挤占 LRU 配额。
-        this.#entries.delete(evictionCandidate[0]);
+    let retainedBytes = evictionCandidates.reduce(
+      (totalBytes, candidate) => totalBytes + estimateTaskStoreRetainedBytes(candidate[1].store),
+      0,
+    );
+    let retainedStores = evictionCandidates.length;
+    for (const [registryKey, entry] of evictionCandidates) {
+      if (retainedStores <= this.#maxRetainedStores && retainedBytes <= this.#maxRetainedBytes) {
+        break;
       }
+      // 容量只约束安全静止的未选中 Store，活动 Store 不挤占 LRU 配额。
+      const entryBytes = estimateTaskStoreRetainedBytes(entry.store);
+      this.#entries.delete(registryKey);
+      retainedBytes -= entryBytes;
+      retainedStores -= 1;
+      this.#onEvict?.(entry.identity, entry.store);
     }
   }
+}
+
+export function estimateTaskStoreRetainedBytes(store: TaskStore): number {
+  const state = store.getState();
+  return estimateRetainedBytes({
+    checkpoint: state.checkpoint,
+    commandOutputAccessByItemId: state.commandOutputAccessByItemId,
+    itemIdsByTurnId: state.itemIdsByTurnId,
+    itemTurnIdsById: state.itemTurnIdsById,
+    itemsById: state.itemsById,
+    pendingRequestIds: state.pendingRequestIds,
+    pendingRequestsById: state.pendingRequestsById,
+    snapshotMetadata: state.snapshotMetadata,
+    turnIds: state.turnIds,
+    turnsById: state.turnsById,
+  });
 }
 
 function createRegistryKey(projectId: string, taskId: string): string {

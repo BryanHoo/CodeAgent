@@ -150,6 +150,7 @@ function createProvider() {
     Promise.resolve({ data: [] }),
   );
   const terminateBackgroundTerminal = vi.fn(() => Promise.resolve(true));
+  const unsubscribeTask = vi.fn(() => Promise.resolve("unsubscribed" as const));
   const readSandboxMode = vi.fn(() => Promise.resolve("read-only" as const));
   const startReview = vi.fn(() =>
     Promise.resolve({
@@ -187,6 +188,7 @@ function createProvider() {
       };
     },
     terminateBackgroundTerminal,
+    unsubscribeTask,
     uploadFeedback,
   };
   return {
@@ -214,6 +216,7 @@ function createProvider() {
     startReview,
     startTurn,
     terminateBackgroundTerminal,
+    unsubscribeTask,
     uploadFeedback,
   };
 }
@@ -311,6 +314,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     startReview,
     startTurn,
     terminateBackgroundTerminal,
+    unsubscribeTask,
     uploadFeedback,
   } = createProvider();
   const settings = createSettingsRepository();
@@ -343,6 +347,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     startReview,
     startTurn,
     terminateBackgroundTerminal,
+    unsubscribeTask,
     ...settings,
     ...taskMetadata,
     uploadFeedback,
@@ -350,6 +355,20 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
 }
 
 describe("CodeAgent Server", () => {
+  it("releases an invisible task through the provider safety boundary", async () => {
+    const { app, unsubscribeTask } = await createHarness();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {},
+      url: "/v1/projects/code-agent/tasks/task-1/unsubscribe",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: "unsubscribed", taskId: "task-1" });
+    expect(unsubscribeTask).toHaveBeenCalledWith("task-1");
+  });
+
   it("lists and idempotently terminates a running background terminal", async () => {
     const { app, listBackgroundTerminals, terminateBackgroundTerminal } = await createHarness();
     listBackgroundTerminals.mockResolvedValue({

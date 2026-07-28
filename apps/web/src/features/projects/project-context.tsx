@@ -28,8 +28,10 @@ import {
   recordRunningTaskActivity,
   recordTaskActivitySnapshot,
   reduceTaskActivityEvent,
+  removeTaskActivity,
   type TaskActivityMap,
 } from "../conversation/runtime/task-activity.js";
+import { isTaskRuntimeActive } from "../conversation/runtime/use-task-runtime.js";
 import {
   capabilitiesQueryOptions,
   codeAgentClient,
@@ -87,6 +89,7 @@ type ProjectContextValue = Readonly<{
   isProjectPickerOpen: boolean;
   isProjectOrderPending: boolean;
   fetchNextProjectTaskPage: (projectId: string) => Promise<void>;
+  forgetTask: (projectId: string, taskId: string) => void;
   markTaskRunning: (projectId: string, taskId: string) => void;
   observeTaskSnapshot: (response: AgentTaskSnapshotResponse) => void;
   projectTaskStates: ReadonlyMap<string, ProjectTaskListState>;
@@ -245,6 +248,10 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
         projectId,
         onEvent(event) {
           setTaskActivity((current) => reduceTaskActivityEvent(current, projectId, event));
+          if (event.type === "turn.completed" && !isTaskRuntimeActive(projectId, event.taskId)) {
+            // 切走后完成的 Task 再尝试释放；Provider 会阻止仍有终端或请求的 Thread。
+            void client.unsubscribeTask(projectId, event.taskId).catch(() => undefined);
+          }
         },
         onResyncRequired() {
           void recoverTaskActivitySubscriptionRef.current?.(projectId);
@@ -296,6 +303,12 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   recoverTaskActivitySubscriptionRef.current = recoverTaskActivitySubscription;
   const markTaskRunning = useCallback((projectId: string, taskId: string) => {
     setTaskActivity((current) => recordRunningTaskActivity(current, projectId, taskId));
+  }, []);
+  const forgetTask = useCallback((projectId: string, taskId: string) => {
+    setTaskActivity((current) => removeTaskActivity(current, projectId, taskId));
+    if (latestSnapshotTaskByProjectRef.current.get(projectId) === taskId) {
+      latestSnapshotTaskByProjectRef.current.delete(projectId);
+    }
   }, []);
   const addProject = useCallback(async () => {
     if (isProjectPickerOpen) {
@@ -378,6 +391,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           client,
           error: capabilitiesQuery.error ?? projectsQuery.error,
           fetchNextProjectTaskPage,
+          forgetTask,
           isPending,
           isProjectPickerOpen,
           isProjectOrderPending: projectOrderMutation.isPending,

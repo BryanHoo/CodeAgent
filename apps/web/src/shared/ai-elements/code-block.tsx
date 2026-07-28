@@ -18,11 +18,7 @@ import {
   type ThemedToken,
 } from "shiki";
 
-type TokenizedCode = Readonly<{
-  background: string;
-  foreground: string;
-  lines: ThemedToken[][];
-}>;
+import { CodeTokenCache, type TokenizedCode } from "./code-token-cache.js";
 
 export type CodeBlockLanguage = BundledLanguage | "text";
 
@@ -35,7 +31,7 @@ const highlighterCache = new Map<
   BundledLanguage,
   Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>
 >();
-const tokenCache = new Map<string, TokenizedCode>();
+const tokenCache = new CodeTokenCache();
 
 function useCodeBlockContext(): CodeBlockContextValue {
   const context = useContext(CodeBlockContext);
@@ -96,8 +92,7 @@ async function tokenizeCode(code: string, language: CodeBlockLanguage): Promise<
     return createRawTokens(code);
   }
 
-  const cacheKey = `${language}\u0000${code}`;
-  const cached = tokenCache.get(cacheKey);
+  const cached = tokenCache.get(language, code);
   if (cached !== undefined) {
     return cached;
   }
@@ -112,7 +107,7 @@ async function tokenizeCode(code: string, language: CodeBlockLanguage): Promise<
     foreground: result.fg ?? "inherit",
     lines: result.tokens,
   };
-  tokenCache.set(cacheKey, tokenized);
+  tokenCache.set(language, code, tokenized);
   return tokenized;
 }
 

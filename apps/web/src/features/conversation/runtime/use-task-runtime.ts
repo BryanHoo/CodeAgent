@@ -86,9 +86,13 @@ export function useTaskRuntime(
     const acquiredStore = taskStoreRegistry.acquire(projectId, taskId);
     setStore(acquiredStore);
     return () => {
-      taskStoreRegistry.release(projectId, taskId);
+      const becameInactive = taskStoreRegistry.release(projectId, taskId);
+      if (becameInactive) {
+        // 页面卸载不等待释放请求；Provider 会对运行 Turn、审批和后台终端做最终安全检查。
+        void client.unsubscribeTask(projectId, taskId).catch(() => undefined);
+      }
     };
-  }, [projectId, taskId]);
+  }, [client, projectId, taskId]);
 
   useEffect(() => {
     if (taskQuery.data !== undefined) {
@@ -232,6 +236,14 @@ export function useTaskRuntime(
     snapshot,
     store: activeRuntime,
   };
+}
+
+export function removeRetainedTaskRuntime(projectId: string, taskId: string): boolean {
+  return taskStoreRegistry.remove(projectId, taskId);
+}
+
+export function isTaskRuntimeActive(projectId: string, taskId: string): boolean {
+  return taskStoreRegistry.hasConsumers(projectId, taskId);
 }
 
 export function selectActiveTaskStore(

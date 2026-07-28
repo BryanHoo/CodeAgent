@@ -731,6 +731,22 @@ export const ArchiveAgentTaskResponseSchema = Type.Object(
 );
 export type ArchiveAgentTaskResponse = Readonly<Static<typeof ArchiveAgentTaskResponseSchema>>;
 
+export const UnsubscribeAgentTaskResponseSchema = Type.Object(
+  {
+    status: Type.Union([
+      Type.Literal("busy"),
+      Type.Literal("notLoaded"),
+      Type.Literal("notSubscribed"),
+      Type.Literal("unsubscribed"),
+    ]),
+    taskId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+export type UnsubscribeAgentTaskResponse = Readonly<
+  Static<typeof UnsubscribeAgentTaskResponseSchema>
+>;
+
 const AgentReviewTargetFieldsSchema = Type.Object(
   {
     branch: Type.Optional(Type.String({ minLength: 1 })),

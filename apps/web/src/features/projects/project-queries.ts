@@ -18,7 +18,10 @@ import {
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
 export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
 export type CodeAgentSourceFileClient = Pick<CodeAgentClient, "readProjectSourceFile">;
-export type CodeAgentRuntimeClient = Pick<CodeAgentClient, "readTask" | "subscribeEvents">;
+export type CodeAgentRuntimeClient = Pick<
+  CodeAgentClient,
+  "readTask" | "subscribeEvents" | "unsubscribeTask"
+>;
 export type CodeAgentBackgroundTerminalClient = Pick<
   CodeAgentClient,
   "listBackgroundTerminals" | "terminateBackgroundTerminal"
@@ -66,6 +69,7 @@ export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 1_500;
 export const PROJECT_TASK_PAGE_SIZE = 5;
 export const PROJECT_TASK_SEARCH_PAGE_SIZE = 100;
 export const PROJECT_TASK_SEARCH_SOURCE_KEY = "search-source";
+export const TASK_SNAPSHOT_GC_TIME_MS = 30_000;
 
 export const codeAgentClient = new CodeAgentClient();
 
@@ -479,6 +483,7 @@ export function taskSnapshotQueryOptions(
   client: CodeAgentSnapshotClient = codeAgentClient,
 ) {
   return queryOptions({
+    gcTime: TASK_SNAPSHOT_GC_TIME_MS,
     queryFn: () => client.readTask(projectId, taskId),
     queryKey: ["projects", projectId, "tasks", taskId] as const,
   });

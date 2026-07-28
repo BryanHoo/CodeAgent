@@ -2,6 +2,7 @@
 export {
   type AgentProvider,
   type AgentRuntimeProvider,
+  type AgentTaskUnsubscribeStatus,
   type AgentProviderEvent,
   type AgentProviderEventListener,
   type AgentProviderTaskSnapshot,
