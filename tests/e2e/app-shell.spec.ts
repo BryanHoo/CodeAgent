@@ -1972,6 +1972,7 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
     status: "running",
   };
   let releaseSnapshotRequest: () => void = () => undefined;
+  let snapshotResponseSent = false;
   const snapshotGate = new Promise<void>((resolve) => {
     releaseSnapshotRequest = resolve;
   });
@@ -2011,6 +2012,7 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
           },
         },
       });
+      snapshotResponseSent = true;
       return;
     }
     await route.fallback();
@@ -2034,6 +2036,10 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
   await expect(main.getByText(createdTask.id, { exact: true })).toHaveCount(0);
 
   releaseSnapshotRequest();
+  await expect.poll(() => snapshotResponseSent).toBe(true);
+  // 运行中 Snapshot 尚未落入用户 Item 时，已提交消息也不能从 Timeline 消失。
+  await expect(timelineMessages.nth(0)).toContainText("你好");
+  await expect(timelineMessages.nth(1)).toContainText("正在运行");
 });
 
 test("switches the new chat project from the empty timeline", async ({ page }) => {

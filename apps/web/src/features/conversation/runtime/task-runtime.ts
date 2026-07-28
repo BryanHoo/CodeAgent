@@ -1,6 +1,7 @@
 import type {
   AgentEvent,
   AgentItem,
+  AgentPromptInput,
   AgentTaskSnapshot,
   AgentTaskSnapshotResponse,
   AgentTurn,
@@ -30,6 +31,56 @@ export function hydrateTaskRuntime(response: AgentTaskSnapshotResponse): TaskRun
     checkpoint: response.checkpoint,
     connectionState: "connecting",
     snapshot: response.snapshot,
+  };
+}
+
+export function mergeSubmittedPromptIntoSnapshot(
+  snapshot: RuntimeTaskSnapshot,
+  submittedTurn: AgentTurn,
+  input: Pick<AgentPromptInput, "skills" | "text">,
+): RuntimeTaskSnapshot {
+  if (input.text.length === 0 && input.skills.length === 0) {
+    return snapshot;
+  }
+  const turnIndex = snapshot.turns.findIndex((turn) => turn.id === submittedTurn.id);
+  const currentTurn = snapshot.turns[turnIndex] ?? submittedTurn;
+  const alreadyContainsUserMessage = currentTurn.items.some(
+    (item) => item.type === "message" && item.role === "user",
+  );
+  if (turnIndex >= 0 && alreadyContainsUserMessage) {
+    return snapshot;
+  }
+
+  // Provider 的运行中 Snapshot 可能暂时缺少用户项；保留本次提交直到权威消息到达。
+  const mergedTurn: AgentTurn = alreadyContainsUserMessage
+    ? currentTurn
+    : {
+        ...currentTurn,
+        items: [
+          {
+            id: `submitted-user-${submittedTurn.id}`,
+            role: "user",
+            ...(input.skills.length === 0
+              ? {}
+              : { skills: input.skills.map((skill) => ({ name: skill.name })) }),
+            text: input.text,
+            type: "message",
+          },
+          ...currentTurn.items,
+        ],
+      };
+  if (turnIndex < 0) {
+    return {
+      ...snapshot,
+      status: "running",
+      turns: [...snapshot.turns, mergedTurn],
+    };
+  }
+  const turns = [...snapshot.turns];
+  turns[turnIndex] = mergedTurn;
+  return {
+    ...snapshot,
+    turns,
   };
 }
 

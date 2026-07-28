@@ -237,6 +237,7 @@ type WorkbenchComposerProps = Readonly<{
     settings: AgentTaskSettings,
     field: keyof AgentTaskSettings,
   ) => Promise<void> | void;
+  onTurnStarted?: (turn: AgentTurn, input: AgentPromptInput) => void;
   onTaskStarted: (
     task: AgentTask,
     turn?: AgentTurn,
@@ -320,6 +321,7 @@ export function WorkbenchComposer({
   modelsPending,
   onSettingsChange,
   onTaskStarted,
+  onTurnStarted,
   projectId,
   projectPath,
   runtime,
@@ -541,6 +543,8 @@ export function WorkbenchComposer({
       setAttachmentCount(0);
       setComposerRevision((revision) => revision + 1);
       setSubmittedTurnId(result.turn.id);
+      // Mutation 返回后立即上报本次提交，Timeline 不等待 Provider Snapshot 落盘。
+      onTurnStarted?.(result.turn, input);
       startTurnAttempt.current = undefined;
       uploadedAttachments.current.clear();
       uploadAttempts.current.clear();

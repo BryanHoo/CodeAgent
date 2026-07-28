@@ -27,7 +27,7 @@
 - 同一次用户动作在结果尚未确定前重试时必须复用原 `Idempotency-Key`；输入或目标变化后生成新 Key。
 - Turn 撤销的提交、失败和 Idempotency Key 属于对应回复卡片的瞬时状态；同一次撤销重试复用原 Key。撤销成功后主动刷新 Task Snapshot 与 Project Git 状态，因为 Codex 会话回滚不保证产生统一实时事件。
 - 创建 Task 后启动首个 Turn；若 Turn 启动失败，保留已创建 Task ID 和原始草稿，重试不得重复创建 Task。只有 Turn 启动成功后才清空草稿。
-- `startTask` 返回的 Task 必须在导航前 upsert 到对应 Project Task Query，不能依赖可能早于 Provider materialize 的抢跑列表刷新；首次 `startTurn` 返回的 Turn 可作为跨路由短生命周期启动快照。若该 Turn 尚未包含 User Item，必须使用本次提交补齐用户消息，并严格先展示用户消息、再展示“正在思考”，随后由正式 HTTP Snapshot 接管。
+- `startTask` 返回的 Task 必须在导航前 upsert 到对应 Project Task Query，不能依赖可能早于 Provider materialize 的抢跑列表刷新；首次 `startTurn` 返回的 Turn 可作为跨路由短生命周期启动快照。任何 `startTurn` 成功后，若返回 Turn 或后续运行中 Snapshot 尚未包含 User Item，Timeline 必须使用本次提交补齐用户消息，并严格先展示用户消息、再展示“正在思考”；权威 User Item 到达后再无重复地接管展示。
 - 活动 Turn 从运行态进入终态后必须刷新对应 Project Task 列表，以同步 Provider 在执行期间生成的正式标题；中栏标题优先使用 Task Query 或活动 Snapshot，不能向用户暴露原生 Task ID。
 - 中断请求成功后继续保持运行语义，直到实时链路收到 `turn.completed` 的 `interrupted` 终态。
 - 后台终端生命周期独立于 Turn：当前 Task 运行时持续读取权威终端列表，Turn 进入终态时立即补读；只要列表非空就继续轮询并保留右栏展示，直到 Provider 确认终端消失。停止请求成功后必须重新读取列表，不能在点击时乐观删除。

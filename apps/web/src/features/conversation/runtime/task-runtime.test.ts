@@ -1,7 +1,12 @@
 import type { AgentEvent, AgentTaskSnapshotResponse, PendingRequest } from "@code-agent/protocol";
 import { describe, expect, it } from "vitest";
 
-import { AgentEventBuffer, hydrateTaskRuntime, reduceAgentEvent } from "./task-runtime.js";
+import {
+  AgentEventBuffer,
+  hydrateTaskRuntime,
+  mergeSubmittedPromptIntoSnapshot,
+  reduceAgentEvent,
+} from "./task-runtime.js";
 
 const response: AgentTaskSnapshotResponse = {
   checkpoint: { sequence: 10, sessionId: "runtime-1" },
@@ -36,6 +41,73 @@ function envelope(sequence: number) {
 }
 
 describe("task runtime", () => {
+  it("keeps a submitted skill prompt visible while the running snapshot catches up", () => {
+    const submittedTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-1",
+      items: [],
+      startedAt: "2026-07-23T00:00:01.000Z",
+      status: "running" as const,
+    };
+    const runningSnapshot = {
+      ...response.snapshot,
+      status: "running" as const,
+      turns: [submittedTurn],
+    };
+
+    const mergedSnapshot = mergeSubmittedPromptIntoSnapshot(runningSnapshot, submittedTurn, {
+      skills: [{ id: "skill-1", name: "frontend-design" }],
+      text: "检查输入框交互",
+    });
+
+    expect(mergedSnapshot.turns[0]?.items).toEqual([
+      {
+        id: "submitted-user-turn-1",
+        role: "user",
+        skills: [{ name: "frontend-design" }],
+        text: "检查输入框交互",
+        type: "message",
+      },
+    ]);
+
+    const authoritativeSnapshot = {
+      ...runningSnapshot,
+      turns: [
+        {
+          ...submittedTurn,
+          items: [
+            {
+              id: "provider-user-1",
+              role: "user" as const,
+              skills: [{ name: "frontend-design" }],
+              text: "检查输入框交互",
+              type: "message" as const,
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(
+      mergeSubmittedPromptIntoSnapshot(authoritativeSnapshot, submittedTurn, {
+        skills: [{ id: "skill-1", name: "frontend-design" }],
+        text: "检查输入框交互",
+      }),
+    ).toBe(authoritativeSnapshot);
+
+    const staleSnapshot = { ...runningSnapshot, status: "idle" as const, turns: [] };
+    expect(
+      mergeSubmittedPromptIntoSnapshot(staleSnapshot, submittedTurn, {
+        skills: [{ id: "skill-1", name: "frontend-design" }],
+        text: "检查输入框交互",
+      }),
+    ).toMatchObject({
+      status: "running",
+      turns: [{ id: "turn-1", items: mergedSnapshot.turns[0]?.items }],
+    });
+  });
+
   it("hydrates a snapshot and applies stream deltas by turn and item id", () => {
     let state = hydrateTaskRuntime(response);
     const started: AgentEvent = {

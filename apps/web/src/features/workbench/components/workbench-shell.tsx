@@ -21,7 +21,10 @@ import {
   useTaskRuntime,
   type TaskRuntimeView,
 } from "../../conversation/runtime/use-task-runtime.js";
-import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
+import {
+  mergeSubmittedPromptIntoSnapshot,
+  type RuntimeTaskSnapshot,
+} from "../../conversation/runtime/task-runtime.js";
 import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
 import { FileReviewDialog } from "../../diff/file-review-dialog.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
@@ -62,34 +65,10 @@ type TaskLaunchState = Readonly<{
   turn: AgentTurn;
 }>;
 
-function createStartingTurn(launchState: TaskLaunchState): AgentTurn {
-  const alreadyContainsUserMessage = launchState.turn.items.some(
-    (item) => item.type === "message" && item.role === "user",
-  );
-  if (
-    alreadyContainsUserMessage ||
-    (launchState.input.text.length === 0 && launchState.input.skills.length === 0)
-  ) {
-    return launchState.turn;
-  }
-
-  // turn/start 可能只返回空运行态；先补入本次提交，保证用户消息始终排在思考状态之前。
-  return {
-    ...launchState.turn,
-    items: [
-      {
-        id: `submitted-user-${launchState.turn.id}`,
-        role: "user",
-        ...(launchState.input.skills.length === 0
-          ? {}
-          : { skills: launchState.input.skills.map((skill) => ({ name: skill.name })) }),
-        text: launchState.input.text,
-        type: "message",
-      },
-      ...launchState.turn.items,
-    ],
-  };
-}
+type SubmittedPromptState = Readonly<{
+  input: AgentPromptInput;
+  turn: AgentTurn;
+}>;
 
 type WorkbenchShellProps = Readonly<{
   projectId: string;
@@ -135,15 +114,19 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       ? undefined
       : queryClient.getQueryData<TaskLaunchState>(taskLaunchQueryKey(projectId, taskId));
   const startingSnapshot: RuntimeTaskSnapshot | undefined =
-    runtime.snapshot === undefined && taskLaunchState !== undefined
-      ? {
-          ...taskLaunchState.task,
-          contextUsage: null,
-          pendingRequests: [],
-          settings: taskLaunchState.settings,
-          status: "running",
-          turns: [createStartingTurn(taskLaunchState)],
-        }
+    taskLaunchState !== undefined
+      ? mergeSubmittedPromptIntoSnapshot(
+          {
+            ...taskLaunchState.task,
+            contextUsage: null,
+            pendingRequests: [],
+            settings: taskLaunchState.settings,
+            status: "running",
+            turns: [taskLaunchState.turn],
+          },
+          taskLaunchState.turn,
+          taskLaunchState.input,
+        )
       : undefined;
   const projectTaskState = projectTaskStates.get(projectId);
   const sidebarConnectionState = deriveProjectSidebarConnectionState({
@@ -304,14 +287,20 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     });
   };
 
+  const launchTurnHasAuthoritativeUserMessage = taskLaunchState?.turn.id
+    ? runtime.snapshot?.turns
+        .find((turn) => turn.id === taskLaunchState.turn.id)
+        ?.items.some((item) => item.type === "message" && item.role === "user") === true
+    : false;
+
   useEffect(() => {
-    if (taskId !== undefined && runtime.snapshot !== undefined) {
+    if (taskId !== undefined && launchTurnHasAuthoritativeUserMessage) {
       queryClient.removeQueries({
         exact: true,
         queryKey: taskLaunchQueryKey(projectId, taskId),
       });
     }
-  }, [projectId, queryClient, runtime.snapshot, taskId]);
+  }, [launchTurnHasAuthoritativeUserMessage, projectId, queryClient, taskId]);
 
   useEffect(() => {
     if (previousTaskRunningRef.current && !isTaskRunning) {
@@ -449,6 +438,11 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             runtime={runtime}
             skills={skillsQuery.data?.data ?? []}
             startingSnapshot={startingSnapshot}
+            startingPrompt={
+              taskLaunchState === undefined
+                ? undefined
+                : { input: taskLaunchState.input, turn: taskLaunchState.turn }
+            }
             taskId={taskId}
             onOpenFileDiff={openFileDiff}
             onOpenSourceFile={openSourceFile}
@@ -531,6 +525,7 @@ function ActiveTaskWorkbench({
   runtime,
   skills,
   startingSnapshot,
+  startingPrompt,
   taskId,
   onOpenFileDiff,
   onOpenSourceFile,
@@ -553,12 +548,26 @@ function ActiveTaskWorkbench({
   runtime: TaskRuntimeView;
   skills: readonly AgentSkill[];
   startingSnapshot: RuntimeTaskSnapshot | undefined;
+  startingPrompt: SubmittedPromptState | undefined;
   taskId: string;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
 }>) {
   const queryClient = useQueryClient();
+  const [submittedPrompt, setSubmittedPrompt] = useState<SubmittedPromptState | undefined>(
+    () => startingPrompt,
+  );
+  const visibleSnapshot =
+    runtime.snapshot === undefined || submittedPrompt === undefined
+      ? runtime.snapshot
+      : mergeSubmittedPromptIntoSnapshot(
+          runtime.snapshot,
+          submittedPrompt.turn,
+          submittedPrompt.input,
+        );
+  const visibleRuntime: TaskRuntimeView =
+    visibleSnapshot === runtime.snapshot ? runtime : { ...runtime, snapshot: visibleSnapshot };
   const settingsMutation = useMutation({
     ...taskSettingsMutationOptions(projectId, taskId, client),
     onSuccess(response) {
@@ -598,7 +607,7 @@ function ActiveTaskWorkbench({
         onResolvePendingRequest={resolvePendingRequest}
         onRollbackTurn={rollbackTurn}
         projectId={projectId}
-        runtime={runtime}
+        runtime={visibleRuntime}
         taskId={taskId}
         {...(startingSnapshot === undefined ? {} : { startingSnapshot })}
       />
@@ -612,10 +621,13 @@ function ActiveTaskWorkbench({
           settingsMutation.mutateAsync(settings).then(() => undefined)
         }
         onTaskStarted={onTaskStarted}
+        onTurnStarted={(turn, input) => {
+          setSubmittedPrompt({ input, turn });
+        }}
         projectId={projectId}
         projectPath={projectPath}
-        runtime={runtime}
-        settings={runtime.snapshot?.settings ?? startingSnapshot?.settings ?? fallbackSettings}
+        runtime={visibleRuntime}
+        settings={visibleSnapshot?.settings ?? startingSnapshot?.settings ?? fallbackSettings}
         skills={skills}
         taskId={taskId}
       />
