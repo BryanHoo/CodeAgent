@@ -39,9 +39,14 @@ const requiredFiles = [
   "dist/web/index.html",
 ];
 const missingFiles = requiredFiles.filter((path) => !files.has(path));
+const sourceMapFiles = [...files].filter((path) => path.endsWith(".map"));
 
 if (missingFiles.length > 0) {
   throw new Error(`Package is missing required files: ${missingFiles.join(", ")}`);
+}
+
+if (sourceMapFiles.length > 0) {
+  throw new Error(`Package must not include source maps: ${sourceMapFiles.join(", ")}`);
 }
 
 const stateRoot = mkdtempSync(join(tmpdir(), "code-agent-package-check-"));

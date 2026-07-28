@@ -10,27 +10,18 @@ import {
   type CSSProperties,
   type HTMLAttributes,
 } from "react";
-import {
-  createHighlighter,
-  type BundledLanguage,
-  type BundledTheme,
-  type HighlighterGeneric,
-  type ThemedToken,
-} from "shiki";
+import type { ThemedToken } from "shiki/core";
 
+import type { CodeBlockLanguage } from "./code-languages.js";
 import { CodeTokenCache, type TokenizedCode } from "./code-token-cache.js";
 
-export type CodeBlockLanguage = BundledLanguage | "text";
+export type { CodeBlockLanguage } from "./code-languages.js";
 
 type CodeBlockContextValue = Readonly<{
   code: string;
 }>;
 
 const CodeBlockContext = createContext<CodeBlockContextValue | null>(null);
-const highlighterCache = new Map<
-  BundledLanguage,
-  Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>
->();
 const tokenCache = new CodeTokenCache();
 
 function useCodeBlockContext(): CodeBlockContextValue {
@@ -71,22 +62,6 @@ function getTokenStyle(token: ThemedToken): CSSProperties {
   };
 }
 
-function getHighlighter(
-  language: BundledLanguage,
-): Promise<HighlighterGeneric<BundledLanguage, BundledTheme>> {
-  const cached = highlighterCache.get(language);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const highlighter = createHighlighter({
-    langs: [language],
-    themes: ["github-light", "github-dark"],
-  });
-  highlighterCache.set(language, highlighter);
-  return highlighter;
-}
-
 async function tokenizeCode(code: string, language: CodeBlockLanguage): Promise<TokenizedCode> {
   if (language === "text") {
     return createRawTokens(code);
@@ -97,16 +72,9 @@ async function tokenizeCode(code: string, language: CodeBlockLanguage): Promise<
     return cached;
   }
 
-  const highlighter = await getHighlighter(language);
-  const result = highlighter.codeToTokens(code, {
-    lang: language,
-    themes: { dark: "github-dark", light: "github-light" },
-  });
-  const tokenized = {
-    background: result.bg ?? "transparent",
-    foreground: result.fg ?? "inherit",
-    lines: result.tokens,
-  };
+  // Shiki Core、Engine、主题和语法只在代码块真正需要高亮时进入浏览器。
+  const { highlightCode } = await import("./code-highlighter.js");
+  const tokenized = await highlightCode(code, language);
   tokenCache.set(language, code, tokenized);
   return tokenized;
 }

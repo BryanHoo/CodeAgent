@@ -42,7 +42,7 @@ protocol <- core <- provider-codex <- server <- root CLI
 - 内部依赖必须使用 `workspace:*`，外部共享依赖必须使用 `catalog:`。
 - 根 `package.json` 固定 `packageManager`，CI 使用 `pnpm install --frozen-lockfile`。
 - 内部包全部私有且不会发布；根包通过 `tsup` 汇总 Node 产物，通过 Vite 输出 `dist/web`。
-- `tools/verify-package.mjs` 使用 `pnpm pack --dry-run --json` 校验发布包至少包含 CLI、Server 和 Web 入口。
+- `tools/verify-package.mjs` 使用 `pnpm pack --dry-run --json` 校验发布包至少包含 CLI、Server 和 Web 入口，并拒绝发布任何 `.map` 源码映射。
 - 发布工作流使用 npm provenance，不在仓库内保存长期 npm Token。
 
 ## 5. 质量门禁

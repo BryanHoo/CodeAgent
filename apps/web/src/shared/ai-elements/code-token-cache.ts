@@ -1,6 +1,7 @@
-import type { BundledLanguage, ThemedToken } from "shiki";
+import type { ThemedToken } from "shiki/core";
 
 import { ByteLru, estimateRetainedBytes, getUtf8ByteLength } from "../memory/byte-lru.js";
+import type { HighlightLanguage } from "./code-languages.js";
 
 export const MAX_TOKEN_CACHE_BYTES = 24 * 1_024 * 1_024;
 export const MAX_TOKEN_CACHE_ENTRIES = 128;
@@ -26,7 +27,7 @@ function createSourceHash(source: string): string {
   return (hash >>> 0).toString(16);
 }
 
-function createTokenCacheKey(language: BundledLanguage, source: string): string {
+function createTokenCacheKey(language: HighlightLanguage, source: string): string {
   return `${language}:${String(source.length)}:${createSourceHash(source)}`;
 }
 
@@ -53,13 +54,13 @@ export class CodeTokenCache {
     return this.#cache.size;
   }
 
-  public get(language: BundledLanguage, source: string): TokenizedCode | undefined {
+  public get(language: HighlightLanguage, source: string): TokenizedCode | undefined {
     const cached = this.#cache.get(createTokenCacheKey(language, source));
     // 摘要键避免在 Map Key 中复制完整源码，命中时仍核验源码以防哈希碰撞。
     return cached?.source === source ? cached.tokenized : undefined;
   }
 
-  public set(language: BundledLanguage, source: string, tokenized: TokenizedCode): boolean {
+  public set(language: HighlightLanguage, source: string, tokenized: TokenizedCode): boolean {
     if (getUtf8ByteLength(source) > this.maxSourceBytes) {
       return false;
     }

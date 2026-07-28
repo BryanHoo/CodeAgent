@@ -1,9 +1,8 @@
-import type { BundledLanguage } from "shiki";
 import { describe, expect, it } from "vitest";
 
 import { CodeTokenCache, type TokenizedCode } from "./code-token-cache.js";
 
-const language = "typescript" as BundledLanguage;
+const language = "typescript" as const;
 
 function createTokenizedCode(content: string): TokenizedCode {
   return {

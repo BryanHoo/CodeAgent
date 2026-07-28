@@ -30,7 +30,7 @@ export default defineConfig({
   minify: false,
   outDir: "dist",
   platform: "node",
-  sourcemap: true,
+  sourcemap: false,
   splitting: true,
   target: "node24",
   treeshake: true,

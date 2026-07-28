@@ -7,14 +7,32 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
+    alias: [
+      { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
+      {
+        find: /^shiki$/u,
+        replacement: fileURLToPath(
+          new URL("./src/shared/ai-elements/shiki-bundle.ts", import.meta.url),
+        ),
+      },
+      {
+        find: /^shiki\/wasm$/u,
+        replacement: fileURLToPath(
+          new URL("./src/shared/ai-elements/shiki-bundle.ts", import.meta.url),
+        ),
+      },
+      {
+        find: /^@pierre\/theming\/themes$/u,
+        replacement: fileURLToPath(
+          new URL("./src/shared/ai-elements/pierre-themes.ts", import.meta.url),
+        ),
+      },
+    ],
   },
   build: {
     emptyOutDir: false,
     outDir: "../../dist/web",
-    sourcemap: true,
+    sourcemap: false,
   },
   server: {
     host: "127.0.0.1",

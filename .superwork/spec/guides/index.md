@@ -22,6 +22,7 @@
 - 所有改动运行 `pnpm check`。
 - 涉及浏览器装配或用户流程时运行 `pnpm test:e2e`。
 - 涉及发布结构时确认 `pnpm run package:check` 通过。
+- Web 与 Node 发布构建不得生成或打包 `.map` 源码映射，`package:check` 必须拒绝含 `.map` 的发布清单。
 - `.agents/**` 属于代理技能资产，不进入产品 Prettier 与 ESLint 门禁；相关改动使用技能自身校验。
 - 长时间命令使用非交互模式和明确超时。
 

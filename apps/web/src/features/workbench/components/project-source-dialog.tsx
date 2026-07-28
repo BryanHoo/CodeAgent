@@ -10,10 +10,12 @@ import {
   CodeBlockFilename,
   CodeBlockHeader,
   CodeBlockTitle,
-  type CodeBlockLanguage,
 } from "../../../shared/ai-elements/code-block.js";
 import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
+import { getCodeLanguage } from "../../../shared/ai-elements/code-languages.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
+
+export { getCodeLanguage } from "../../../shared/ai-elements/code-languages.js";
 
 type ProjectSourceDialogProps = Readonly<{
   client: CodeAgentWorkbenchClient;
@@ -24,71 +26,6 @@ type ProjectSourceDialogProps = Readonly<{
 
 function getFileName(path: string): string {
   return path.split(/[\\/]/u).at(-1) ?? path;
-}
-
-const languageByExtension: Readonly<Record<string, CodeBlockLanguage>> = {
-  bash: "bash",
-  c: "c",
-  cc: "cpp",
-  cpp: "cpp",
-  cs: "csharp",
-  css: "css",
-  diff: "diff",
-  env: "dotenv",
-  go: "go",
-  graphql: "graphql",
-  h: "c",
-  hpp: "cpp",
-  htm: "html",
-  html: "html",
-  ini: "ini",
-  java: "java",
-  js: "javascript",
-  json: "json",
-  json5: "json5",
-  jsonc: "jsonc",
-  jsx: "jsx",
-  kt: "kotlin",
-  kts: "kotlin",
-  lua: "lua",
-  md: "markdown",
-  mdx: "mdx",
-  mjs: "javascript",
-  php: "php",
-  pl: "perl",
-  py: "python",
-  rb: "ruby",
-  rs: "rust",
-  scss: "scss",
-  sh: "shellscript",
-  sql: "sql",
-  svelte: "svelte",
-  swift: "swift",
-  toml: "toml",
-  ts: "typescript",
-  tsx: "tsx",
-  vue: "vue",
-  xml: "xml",
-  yaml: "yaml",
-  yml: "yaml",
-  zsh: "shellscript",
-};
-
-const languageByFileName: Readonly<Record<string, CodeBlockLanguage>> = {
-  ".env": "dotenv",
-  dockerfile: "dockerfile",
-  makefile: "makefile",
-};
-
-export function getCodeLanguage(path: string): CodeBlockLanguage {
-  const fileName = getFileName(path).toLowerCase();
-  const fileLanguage = languageByFileName[fileName];
-  if (fileLanguage !== undefined) {
-    return fileLanguage;
-  }
-
-  const extension = fileName.includes(".") ? fileName.split(".").at(-1) : undefined;
-  return extension === undefined ? "text" : (languageByExtension[extension] ?? "text");
 }
 
 type SourceHeaderProps = Readonly<{

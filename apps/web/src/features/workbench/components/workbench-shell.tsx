@@ -12,7 +12,7 @@ import type {
 } from "@code-agent/protocol";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Ellipsis, ExternalLink, PanelLeft, PanelRight } from "lucide-react";
 
 import { useProjects } from "../../projects/project-context.js";
@@ -44,7 +44,6 @@ import { IconButton } from "../../../shared/ui/icon-button.js";
 import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
 import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
 import { deriveProjectSidebarConnectionState, ProjectSidebar } from "./project-sidebar.js";
-import { ProjectSourceDialog } from "./project-source-dialog.js";
 import { collectSubagents, type SubagentSelection } from "./subagent.js";
 import { SubagentOutputDialog } from "./subagent-output-dialog.js";
 import { TaskTimeline } from "./task-timeline.js";
@@ -55,6 +54,14 @@ import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
 
 const sidebarOverlayQuery = "(max-width: 760px)";
 const inspectorOverlayQuery = "(max-width: 1100px)";
+
+export function loadProjectSourceDialog() {
+  return import("./project-source-dialog.js");
+}
+
+const LazyProjectSourceDialog = lazy(() =>
+  loadProjectSourceDialog().then((module) => ({ default: module.ProjectSourceDialog })),
+);
 
 function taskLaunchQueryKey(projectId: string, taskId: string) {
   return ["projects", projectId, "tasks", taskId, "launch"] as const;
@@ -201,6 +208,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   };
   const openSourceFile = useCallback(
     (reference: MessageFileReference) => {
+      void loadProjectSourceDialog();
       setSourceFileSelection({ projectId, reference });
     },
     [projectId],
@@ -514,14 +522,18 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           setFileReviewSelection(null);
         }}
       />
-      <ProjectSourceDialog
-        client={client}
-        onClose={() => {
-          setSourceFileSelection(null);
-        }}
-        projectId={projectId}
-        reference={selectedSourceFile}
-      />
+      {selectedSourceFile === null ? null : (
+        <Suspense fallback={null}>
+          <LazyProjectSourceDialog
+            client={client}
+            onClose={() => {
+              setSourceFileSelection(null);
+            }}
+            projectId={projectId}
+            reference={selectedSourceFile}
+          />
+        </Suspense>
+      )}
       <SubagentOutputDialog
         client={client}
         onClose={() => {
