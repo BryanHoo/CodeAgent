@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
+import { readFileSync, statSync } from "node:fs";
+import { basename, extname, resolve } from "node:path";
 
 import {
   PendingRequestResolutionError,
@@ -13,6 +14,7 @@ import {
   type ListAgentTasksInput,
   type ResolvePendingRequestInput,
 } from "@code-agent/core";
+import { MAX_AGENT_ATTACHMENT_BYTES } from "@code-agent/protocol";
 import type {
   AgentCapabilities,
   AgentBackgroundTerminal,
@@ -20,6 +22,7 @@ import type {
   AgentContextUsage,
   AgentItem,
   AgentItemStatus,
+  AgentMessageAttachment,
   AgentTask,
   AgentTaskPage,
   AgentTurn,
@@ -555,12 +558,14 @@ function mapItemStatus(value: unknown): AgentItemStatus {
 }
 
 function mapUserMessageContent(value: unknown): Readonly<{
+  attachments: AgentMessageAttachment[];
   skills: { name: string }[];
   text: string;
 }> {
   if (!Array.isArray(value)) {
     throw new CodexProtocolMappingError("Codex user message content must be an array");
   }
+  const attachments: AgentMessageAttachment[] = [];
   const skills: { name: string }[] = [];
   const textParts: string[] = [];
 
@@ -588,7 +593,12 @@ function mapUserMessageContent(value: unknown): Readonly<{
       continue;
     }
     if (part["type"] === "image" || part["type"] === "localImage") {
-      textParts.push("[图片]");
+      const attachment = mapCodexMessageImage(part, attachments.length);
+      if (attachment === undefined) {
+        textParts.push("[图片]");
+      } else {
+        attachments.push(attachment);
+      }
       continue;
     }
     if (part["type"] === "audio" || part["type"] === "localAudio") {
@@ -596,7 +606,100 @@ function mapUserMessageContent(value: unknown): Readonly<{
     }
   }
 
-  return { skills, text: textParts.join("\n") };
+  return { attachments, skills, text: textParts.join("\n") };
+}
+
+const imageMediaTypesByExtension: Readonly<Record<string, AgentMessageAttachment["mediaType"]>> = {
+  ".gif": "image/gif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+};
+
+function detectImageMediaType(content: Buffer): AgentMessageAttachment["mediaType"] | undefined {
+  if (content.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+    return "image/png";
+  }
+  if (content[0] === 0xff && content[1] === 0xd8 && content[2] === 0xff) {
+    return "image/jpeg";
+  }
+  const header = content.subarray(0, 6).toString("ascii");
+  if (header === "GIF87a" || header === "GIF89a") {
+    return "image/gif";
+  }
+  if (
+    content.subarray(0, 4).toString("ascii") === "RIFF" &&
+    content.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return undefined;
+}
+
+function normalizeImageName(value: string | undefined, fallback: string): string {
+  const trimmedName = value?.trim();
+  return trimmedName === undefined || trimmedName.length === 0
+    ? fallback
+    : trimmedName.slice(0, 255);
+}
+
+function mapCodexMessageImage(
+  part: Record<string, unknown>,
+  imageIndex: number,
+): AgentMessageAttachment | undefined {
+  if (part["type"] === "image") {
+    const url = optionalString(part["url"]);
+    const match = url?.match(/^data:(image\/(?:gif|jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
+    if (url === undefined || match === undefined || match === null) {
+      return undefined;
+    }
+    const mediaType = match[1] as AgentMessageAttachment["mediaType"];
+    const encodedContent = match[2];
+    if (encodedContent === undefined) {
+      return undefined;
+    }
+    const content = Buffer.from(encodedContent, "base64");
+    if (
+      content.byteLength === 0 ||
+      content.byteLength > MAX_AGENT_ATTACHMENT_BYTES ||
+      detectImageMediaType(content) !== mediaType
+    ) {
+      return undefined;
+    }
+    return {
+      mediaType,
+      name: normalizeImageName(optionalString(part["name"]), `图片-${String(imageIndex + 1)}`),
+      url,
+    };
+  }
+
+  const imagePath = optionalString(part["path"]);
+  if (imagePath === undefined) {
+    return undefined;
+  }
+  try {
+    const fileStats = statSync(imagePath);
+    if (!fileStats.isFile() || fileStats.size <= 0 || fileStats.size > MAX_AGENT_ATTACHMENT_BYTES) {
+      return undefined;
+    }
+    const content = readFileSync(imagePath);
+    const mediaType = detectImageMediaType(content);
+    if (mediaType === undefined) {
+      return undefined;
+    }
+    const nativeName = basename(imagePath);
+    const expectedMediaType = imageMediaTypesByExtension[extname(nativeName).toLowerCase()];
+    // 内容签名是最终依据；扩展名冲突时使用通用名称，避免向 Web 传递误导信息。
+    const name = normalizeImageName(
+      expectedMediaType === mediaType ? nativeName : undefined,
+      `图片-${String(imageIndex + 1)}`,
+    );
+    return { mediaType, name, url: `data:${mediaType};base64,${content.toString("base64")}` };
+  } catch {
+    // Codex 临时文件可能已被清理；降级为文本占位而不是让整个历史读取失败。
+    return undefined;
+  }
 }
 
 function mergeExpandedSkillMessages(items: readonly AgentItem[]): AgentItem[] {
@@ -827,6 +930,7 @@ function mapAgentItem(
     case "userMessage": {
       const content = mapUserMessageContent(item["content"]);
       return {
+        ...(content.attachments.length === 0 ? {} : { attachments: content.attachments }),
         id,
         role: "user",
         ...(content.skills.length === 0 ? {} : { skills: content.skills }),

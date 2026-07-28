@@ -143,6 +143,34 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain("space-y-4");
   });
 
+  it("renders user image attachments as viewable previews", () => {
+    const imageUrl = "data:image/png;base64,iVBORw0KGgo=";
+    const imageSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              attachments: [{ mediaType: "image/png", name: "diagram.png", url: imageUrl }],
+              id: "message-user-image",
+              role: "user",
+              text: "",
+              type: "message",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={imageSnapshot} />);
+
+    expect(markup).toContain('aria-label="消息附件"');
+    expect(markup).toContain('aria-label="查看图片 diagram.png"');
+    expect(markup).toContain(`href="${imageUrl}"`);
+    expect(markup).toContain(`src="${imageUrl}"`);
+  });
+
   it("renders a failed turn error after its partial assistant reply", () => {
     const failedSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,

@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import type { AgentProviderEvent, PendingRequestResolutionError } from "@code-agent/core";
@@ -2319,6 +2323,60 @@ describe("CodexAgentProvider", () => {
     expect(JSON.stringify(snapshot)).not.toMatch(
       /modelProvider|sessionId|nativeThread|futureItem.*private/,
     );
+  });
+
+  it("converts Codex local images into bounded browser-renderable message attachments", async () => {
+    const temporaryDirectory = mkdtempSync(join(tmpdir(), "code-agent-image-"));
+    const imagePath = join(temporaryDirectory, "diagram.png");
+    const imageContent = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    writeFileSync(imagePath, imageContent);
+    const rpc = new FakeRpcClient([
+      {
+        thread: nativeThread({
+          turns: [
+            {
+              completedAt: 1_753_232_400,
+              error: null,
+              id: "turn-image",
+              items: [
+                {
+                  content: [
+                    { text: "分析这张图", type: "text" },
+                    { path: imagePath, type: "localImage" },
+                  ],
+                  id: "message-image",
+                  type: "userMessage",
+                },
+              ],
+              startedAt: 1_753_228_800,
+              status: "completed",
+            },
+          ],
+        }),
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    try {
+      const snapshot = await provider.readTask("task-1");
+
+      expect(snapshot?.turns[0]?.items[0]).toEqual({
+        attachments: [
+          {
+            mediaType: "image/png",
+            name: "diagram.png",
+            url: `data:image/png;base64,${imageContent.toString("base64")}`,
+          },
+        ],
+        id: "message-image",
+        role: "user",
+        text: "分析这张图",
+        type: "message",
+      });
+      expect(JSON.stringify(snapshot)).not.toContain(imagePath);
+    } finally {
+      rmSync(temporaryDirectory, { force: true, recursive: true });
+    }
   });
 
   it("preserves failures and bounds command output in task snapshots", async () => {

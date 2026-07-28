@@ -63,6 +63,20 @@ export const AgentItemStatusSchema = Type.Union([
 
 export type AgentItemStatus = Static<typeof AgentItemStatusSchema>;
 
+export const MAX_AGENT_ATTACHMENTS = 4;
+export const MAX_AGENT_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+export const MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH =
+  Math.ceil((MAX_AGENT_ATTACHMENT_BYTES * 4) / 3) + 64;
+
+export const AgentAttachmentMediaTypeSchema = Type.Union([
+  Type.Literal("image/gif"),
+  Type.Literal("image/jpeg"),
+  Type.Literal("image/png"),
+  Type.Literal("image/webp"),
+]);
+
+export type AgentAttachmentMediaType = Readonly<Static<typeof AgentAttachmentMediaTypeSchema>>;
+
 export const AgentMessageSkillSchema = Type.Object(
   { name: Type.String({ minLength: 1 }) },
   { additionalProperties: false },
@@ -70,8 +84,25 @@ export const AgentMessageSkillSchema = Type.Object(
 
 export type AgentMessageSkill = Readonly<Static<typeof AgentMessageSkillSchema>>;
 
+export const AgentMessageAttachmentSchema = Type.Object(
+  {
+    mediaType: AgentAttachmentMediaTypeSchema,
+    name: Type.String({ maxLength: 255, minLength: 1 }),
+    url: Type.String({
+      maxLength: MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
+      pattern: "^data:image/(gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$",
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentMessageAttachment = Readonly<Static<typeof AgentMessageAttachmentSchema>>;
+
 export const AgentMessageItemSchema = Type.Object(
   {
+    attachments: Type.Optional(
+      Type.Array(AgentMessageAttachmentSchema, { maxItems: MAX_AGENT_ATTACHMENTS }),
+    ),
     id: Type.String({ minLength: 1 }),
     role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
     skills: Type.Optional(Type.Array(AgentMessageSkillSchema)),
@@ -242,20 +273,6 @@ export const AgentTurnSchema = Type.Object(
 );
 
 export type AgentTurn = Readonly<Static<typeof AgentTurnSchema>>;
-
-export const MAX_AGENT_ATTACHMENTS = 4;
-export const MAX_AGENT_ATTACHMENT_BYTES = 2 * 1024 * 1024;
-export const MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH =
-  Math.ceil((MAX_AGENT_ATTACHMENT_BYTES * 4) / 3) + 64;
-
-export const AgentAttachmentMediaTypeSchema = Type.Union([
-  Type.Literal("image/gif"),
-  Type.Literal("image/jpeg"),
-  Type.Literal("image/png"),
-  Type.Literal("image/webp"),
-]);
-
-export type AgentAttachmentMediaType = Readonly<Static<typeof AgentAttachmentMediaTypeSchema>>;
 
 export const AgentAttachmentSchema = Type.Object(
   {

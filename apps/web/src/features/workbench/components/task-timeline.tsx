@@ -631,10 +631,12 @@ function TimelineItemContent({
 }>) {
   switch (item.type) {
     case "message": {
+      const attachments = item.role === "user" ? (item.attachments ?? []) : [];
       const skills = item.role === "user" ? (item.skills ?? []) : [];
+      const hasStructuredContent = skills.length > 0 || attachments.length > 0;
       return (
         <MessageContent
-          className={`${item.role === "assistant" ? "w-full" : ""} ${skills.length > 0 ? "space-y-2" : ""}`}
+          className={`${item.role === "assistant" ? "w-full" : ""} ${hasStructuredContent ? "space-y-2" : ""}`}
         >
           {skills.length === 0 ? null : (
             <div className="flex flex-wrap gap-1.5" aria-label="使用的 Skills">
@@ -647,6 +649,30 @@ function TimelineItemContent({
                   <Sparkles aria-hidden="true" className="size-3.5 shrink-0" />
                   <span className="truncate">${skill.name}</span>
                 </span>
+              ))}
+            </div>
+          )}
+          {attachments.length === 0 ? null : (
+            <div className="flex max-w-full flex-wrap gap-2" aria-label="消息附件">
+              {attachments.map((attachment, attachmentIndex) => (
+                <a
+                  aria-label={`查看图片 ${attachment.name}`}
+                  className="group block w-36 overflow-hidden rounded-control bg-raised text-left shadow-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
+                  href={attachment.url}
+                  key={`${attachment.name}-${String(attachmentIndex)}`}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {/* 后端已将 Codex 本地路径转换为受限 Data URL，浏览器无需访问文件系统。 */}
+                  <img
+                    alt={attachment.name}
+                    className="aspect-square w-full object-cover"
+                    src={attachment.url}
+                  />
+                  <span className="block truncate px-2 py-1.5 text-label text-muted-foreground group-hover:text-foreground">
+                    {attachment.name}
+                  </span>
+                </a>
               ))}
             </div>
           )}
@@ -765,6 +791,7 @@ function TurnTimelineItems({
     if (group.type === "user") {
       const copiedText = [
         ...(group.item.skills ?? []).map((skill) => `$${skill.name}`),
+        ...(group.item.attachments ?? []).map((attachment) => `[图片] ${attachment.name}`),
         group.item.text,
       ]
         .filter((part) => part.length > 0)

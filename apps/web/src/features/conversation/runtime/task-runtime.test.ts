@@ -57,6 +57,7 @@ describe("task runtime", () => {
     };
 
     const mergedSnapshot = mergeSubmittedPromptIntoSnapshot(runningSnapshot, submittedTurn, {
+      attachments: [],
       skills: [{ id: "skill-1", name: "frontend-design" }],
       text: "检查输入框交互",
     });
@@ -91,6 +92,7 @@ describe("task runtime", () => {
 
     expect(
       mergeSubmittedPromptIntoSnapshot(authoritativeSnapshot, submittedTurn, {
+        attachments: [],
         skills: [{ id: "skill-1", name: "frontend-design" }],
         text: "检查输入框交互",
       }),
@@ -99,6 +101,7 @@ describe("task runtime", () => {
     const staleSnapshot = { ...runningSnapshot, status: "idle" as const, turns: [] };
     expect(
       mergeSubmittedPromptIntoSnapshot(staleSnapshot, submittedTurn, {
+        attachments: [],
         skills: [{ id: "skill-1", name: "frontend-design" }],
         text: "检查输入框交互",
       }),
@@ -106,6 +109,39 @@ describe("task runtime", () => {
       status: "running",
       turns: [{ id: "turn-1", items: mergedSnapshot.turns[0]?.items }],
     });
+  });
+
+  it("keeps the provider image visible for an image-only submitted turn", () => {
+    const imageUrl = "data:image/png;base64,iVBORw0KGgo=";
+    const submittedTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-image",
+      items: [
+        {
+          attachments: [{ mediaType: "image/png" as const, name: "diagram.png", url: imageUrl }],
+          id: "provider-user-image",
+          role: "user" as const,
+          text: "",
+          type: "message" as const,
+        },
+      ],
+      startedAt: "2026-07-23T00:00:01.000Z",
+      status: "running" as const,
+    };
+    const runningSnapshot = {
+      ...response.snapshot,
+      status: "running" as const,
+      turns: [{ ...submittedTurn, items: [] }],
+    };
+
+    const mergedSnapshot = mergeSubmittedPromptIntoSnapshot(runningSnapshot, submittedTurn, {
+      attachments: [{ id: "attachment-1" }],
+      skills: [],
+      text: "",
+    });
+
+    expect(mergedSnapshot.turns[0]?.items).toEqual(submittedTurn.items);
   });
 
   it("hydrates a snapshot and applies stream deltas by turn and item id", () => {

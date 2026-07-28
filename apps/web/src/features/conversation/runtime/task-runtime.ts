@@ -37,9 +37,17 @@ export function hydrateTaskRuntime(response: AgentTaskSnapshotResponse): TaskRun
 export function mergeSubmittedPromptIntoSnapshot(
   snapshot: RuntimeTaskSnapshot,
   submittedTurn: AgentTurn,
-  input: Pick<AgentPromptInput, "skills" | "text">,
+  input: Pick<AgentPromptInput, "attachments" | "skills" | "text">,
 ): RuntimeTaskSnapshot {
-  if (input.text.length === 0 && input.skills.length === 0) {
+  const submittedUserMessage = submittedTurn.items.find(
+    (item) => item.type === "message" && item.role === "user",
+  );
+  if (
+    input.text.length === 0 &&
+    input.skills.length === 0 &&
+    input.attachments.length === 0 &&
+    submittedUserMessage === undefined
+  ) {
     return snapshot;
   }
   const turnIndex = snapshot.turns.findIndex((turn) => turn.id === submittedTurn.id);
@@ -57,7 +65,7 @@ export function mergeSubmittedPromptIntoSnapshot(
     : {
         ...currentTurn,
         items: [
-          {
+          submittedUserMessage ?? {
             id: `submitted-user-${submittedTurn.id}`,
             role: "user",
             ...(input.skills.length === 0

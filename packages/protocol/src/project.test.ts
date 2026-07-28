@@ -130,6 +130,39 @@ describe("project protocol", () => {
     expect(AgentTaskSchema.required).toEqual(["id", "pinned", "projectId", "title", "updatedAt"]);
   });
 
+  it("carries bounded web-renderable images on user messages", () => {
+    expect(
+      Value.Check(AgentMessageItemSchema, {
+        attachments: [
+          {
+            mediaType: "image/png",
+            name: "diagram.png",
+            url: "data:image/png;base64,iVBORw0KGgo=",
+          },
+        ],
+        id: "message-image",
+        role: "user",
+        text: "",
+        type: "message",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentMessageItemSchema, {
+        attachments: [
+          {
+            mediaType: "image/svg+xml",
+            name: "unsafe.svg",
+            url: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+          },
+        ],
+        id: "message-image",
+        role: "user",
+        text: "",
+        type: "message",
+      }),
+    ).toBe(false);
+  });
+
   it("validates paginated projects and tasks", () => {
     expect(
       Value.Check(ProjectPageSchema, {
