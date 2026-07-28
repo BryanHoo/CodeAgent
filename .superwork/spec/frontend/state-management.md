@@ -12,7 +12,7 @@
 - Project defaults 与 Task settings 只在用户事件中通过原子 `PUT` 更新完整对象；Mutation 按 Project 或 Task 串行，成功后更新对应 Query/Snapshot 缓存。
 - Project 排序以 Server 返回的 `ProjectPage` 为长期真相源；拖动中的顺序只保留在 Sidebar Hook。释放后乐观更新 `["projects"]` Query，并通过串行完整顺序 Mutation 校准，失败时恢复提交前的完整页面。
 - 新 Task 草稿只继承 Project 的模型、思考量与沙盒模式，审批始终初始化为 `on-request`，不得从其他 Task 继承 `never`。
-- Project Task 列表、Task Snapshot、Mutation 和实时订阅必须显式携带 `projectId`；Query Key 与连接状态按 Project 隔离，不能只用 `taskId` 作为跨项目身份。Project Task 列表使用 Cursor Infinite Query，首屏固定 5 项且只有用户触发“显示更多”才读取单个下一页；新建、固定、重命名和归档必须更新所有已加载页并保留 `nextCursor` 与 `pageParams`。
+- Project Task 列表、Task Snapshot、Mutation 和实时订阅必须显式携带 `projectId`；Query Key 与连接状态按 Project 隔离，不能只用 `taskId` 作为跨项目身份。Project Task 列表使用 Cursor Infinite Query，首屏固定 5 项且只有用户触发“显示更多”才读取单个下一页；归档后必须先移除缓存实体，再重新校准活动 Infinite Query，以服务端新 Cursor 边界补足最近 5 项。搜索使用独立的按 Project 全量 Task Query，仅在搜索词非空时启用，各 Project 可并行、单个 Project 内顺序追踪全部 Cursor；新建、固定、重命名和归档必须同步维护普通列表与已存在的搜索源缓存。
 - `sequence` 是 Runtime Session 内的事件顺序依据；断线恢复先刷新 Snapshot，再从检查点补发。
 - Client 必须忽略 `sequence <= lastAppliedSequence` 的重复事件，并在更大缺口或 `sessionId` 变化时停止增量应用、请求 resync。
 - Delta 可在同一动画帧按 Item 与字段合并，但只能合并相邻同 Key 事件，不得跨其他 Item 重排首次出现顺序；关键事件到达时先按 `sequence` 冲刷所有更早 Delta，再应用完整 Item/Turn 终态。

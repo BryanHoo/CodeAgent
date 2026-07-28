@@ -6,7 +6,13 @@ import type {
   Project,
   ProjectPage,
 } from "@code-agent/protocol";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   createContext,
   useCallback,
@@ -29,6 +35,7 @@ import {
   codeAgentClient,
   flattenProjectTaskPages,
   projectTasksInfiniteQueryOptions,
+  projectTaskSearchSourceQueryOptions,
   projectReorderMutationOptions,
   projectsQueryOptions,
   reorderProjectPage,
@@ -397,4 +404,26 @@ export function useProjects() {
     throw new Error("useProjects must be used inside ProjectProvider");
   }
   return context;
+}
+
+export function useProjectTaskSearch(normalizedQuery: string) {
+  const { client, projects } = useProjects();
+  const isSearchEnabled = normalizedQuery.length > 0;
+  const searchQueries = useQueries({
+    queries: projects.map((project) =>
+      projectTaskSearchSourceQueryOptions(project.id, isSearchEnabled, client),
+    ),
+  });
+  const isPending = isSearchEnabled && searchQueries.some((query) => query.isPending);
+  const error = searchQueries.find((query) => query.error !== null)?.error ?? null;
+
+  // 所有 Project 的搜索源完成后再发布结果，避免把“尚未加载”误报为“没有匹配”。
+  const tasks =
+    isPending || error !== null
+      ? emptyTasks
+      : searchQueries
+          .flatMap((query) => query.data ?? emptyTasks)
+          .filter((task) => task.title.toLocaleLowerCase().includes(normalizedQuery));
+
+  return { error, isPending, tasks } as const;
 }

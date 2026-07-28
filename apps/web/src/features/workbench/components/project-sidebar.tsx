@@ -18,7 +18,7 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -27,9 +27,10 @@ import {
   getProjectTaskPreview,
   PROJECT_TASK_PREVIEW_LIMIT,
 } from "../../projects/project-data.js";
-import { useProjects } from "../../projects/project-context.js";
+import { useProjects, useProjectTaskSearch } from "../../projects/project-context.js";
 import {
-  removeProjectTaskFromInfiniteData,
+  PROJECT_TASK_SEARCH_SOURCE_KEY,
+  removeArchivedProjectTaskAndRefill,
   replaceProjectTaskInInfiniteData,
   taskArchiveMutationOptions,
   taskPinMutationOptions,
@@ -194,13 +195,8 @@ export function ProjectSidebar({
   const renameMutation = useMutation(taskRenameMutationOptions(client));
   const archiveMutation = useMutation(taskArchiveMutationOptions(client));
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const visibleTasks = useMemo(
-    () =>
-      normalizedQuery.length === 0
-        ? tasks
-        : tasks.filter((task) => task.title.toLocaleLowerCase().includes(normalizedQuery)),
-    [normalizedQuery, tasks],
-  );
+  const taskSearch = useProjectTaskSearch(normalizedQuery);
+  const visibleTasks = normalizedQuery.length === 0 ? tasks : taskSearch.tasks;
   const pinnedTasks = getPinnedTasks(visibleTasks);
   const hasPendingTasks = [...projectTaskStates.values()].some((state) => state.isPending);
   const hasTaskError = [...projectTaskStates.values()].some((state) => state.error !== null);
@@ -295,6 +291,11 @@ export function ProjectSidebar({
       ["projects", task.projectId, "tasks"],
       (currentData) => replaceProjectTaskInInfiniteData(currentData, task),
     );
+    queryClient.setQueryData<readonly AgentTask[]>(
+      ["projects", task.projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
+      (currentTasks) =>
+        currentTasks?.map((currentTask) => (currentTask.id === task.id ? task : currentTask)),
+    );
   };
 
   const pinTask = async (task: AgentTask) => {
@@ -330,10 +331,7 @@ export function ProjectSidebar({
     setTaskActionError(null);
     try {
       await archiveMutation.mutateAsync({ projectId: task.projectId, taskId: task.id });
-      queryClient.setQueryData<ProjectTaskInfiniteData>(
-        ["projects", task.projectId, "tasks"],
-        (currentData) => removeProjectTaskFromInfiniteData(currentData, task.id),
-      );
+      await removeArchivedProjectTaskAndRefill(queryClient, task.projectId, task.id);
       if (task.projectId === projectId && task.id === taskId) {
         await navigate({ params: { projectId: task.projectId }, to: "/p/$projectId" });
       }
@@ -461,6 +459,9 @@ export function ProjectSidebar({
           {isPending || hasPendingTasks ? (
             <p className="px-2 py-1.5 text-meta text-subtle-foreground">正在加载任务</p>
           ) : null}
+          {taskSearch.isPending ? (
+            <p className="px-2 py-1.5 text-meta text-subtle-foreground">正在搜索全部任务</p>
+          ) : null}
           {error === null && !hasTaskError ? null : (
             <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
               无法加载任务
@@ -474,6 +475,11 @@ export function ProjectSidebar({
           {taskActionError === null ? null : (
             <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
               {taskActionError}
+            </p>
+          )}
+          {taskSearch.error === null ? null : (
+            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
+              无法搜索任务
             </p>
           )}
           {projectOrderError === null ? null : (
@@ -498,7 +504,8 @@ export function ProjectSidebar({
               const taskPaginationControl = getProjectTaskPaginationControl({
                 error: projectTaskState?.error ?? null,
                 hasHiddenLoadedTasks: projectTasks.length > PROJECT_TASK_PREVIEW_LIMIT,
-                hasNextPage: projectTaskState?.hasNextPage ?? false,
+                hasNextPage:
+                  normalizedQuery.length === 0 ? (projectTaskState?.hasNextPage ?? false) : false,
                 isExpanded: showAllTasks,
                 isFetchingNextPage: projectTaskState?.isFetchingNextPage ?? false,
               });
@@ -597,6 +604,14 @@ export function ProjectSidebar({
                       )}
                       {projectTasks.length === 0 && normalizedQuery.length === 0 ? (
                         <p className="px-2 py-1.5 text-meta text-subtle-foreground">暂无任务</p>
+                      ) : null}
+                      {projectTasks.length === 0 &&
+                      normalizedQuery.length > 0 &&
+                      !taskSearch.isPending &&
+                      taskSearch.error === null ? (
+                        <p className="px-2 py-1.5 text-meta text-subtle-foreground">
+                          未找到匹配任务
+                        </p>
                       ) : null}
                     </div>
                   ) : null}

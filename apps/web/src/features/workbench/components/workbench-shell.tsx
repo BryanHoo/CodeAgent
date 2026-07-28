@@ -30,6 +30,7 @@ import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 import {
   modelsQueryOptions,
+  PROJECT_TASK_SEARCH_SOURCE_KEY,
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
   projectGitStatusQueryOptions,
@@ -218,6 +219,13 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       queryClient.setQueryData<ProjectTaskInfiniteData>(
         ["projects", projectId, "tasks"],
         (currentData) => upsertProjectTaskInInfiniteData(currentData, startedTask),
+      );
+      queryClient.setQueryData<readonly AgentTask[]>(
+        ["projects", projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
+        (currentTasks) =>
+          currentTasks === undefined
+            ? undefined
+            : [startedTask, ...currentTasks.filter((task) => task.id !== startedTask.id)],
       );
       if (startedTurn !== undefined && startedInput !== undefined && settings !== undefined) {
         // 跨路由保存首轮启动结果，让 Snapshot 返回前即可渲染用户消息和 AI 运行态。

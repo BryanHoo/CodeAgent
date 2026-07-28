@@ -160,11 +160,12 @@ type ProjectTaskListState = Readonly<{
 }>;
 ```
 
-Context 额外提供 `fetchNextProjectTaskPage(projectId)`。全局搜索只匹配已加载 Task，不因输入搜索词自动读取全部历史；这是有意的性能边界。
+Context 额外提供 `fetchNextProjectTaskPage(projectId)`。常规列表继续保持 5 项首屏边界；非空全局搜索启用独立的按 Project 全量搜索源，不复用当前渲染页。Project 之间并行读取，单个 Project 内顺序追踪全部 Cursor，所有搜索源完成后再过滤标题并发布结果。
 
 #### Sidebar 行为
 
 - Project 收起时只显示已加载数据中的前 5 项。
+- 归档后重新校准对应 Project 的活动 Infinite Query，以新的服务端 Cursor 边界自动补足最近 5 项。
 - 第一次点击“显示更多”时进入展开态，并仅请求该 Project 的下一页。
 - 已展开且仍有下一页时，底部整行按钮继续显示“显示更多”；请求中显示明确加载状态并禁用重复提交。
 - 到达末页后保留“收起”按钮；收起不清理 Query 缓存，重新展开复用已加载页。

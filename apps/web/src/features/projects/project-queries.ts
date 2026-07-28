@@ -11,6 +11,7 @@ import {
   infiniteQueryOptions,
   type InfiniteData,
   mutationOptions,
+  type QueryClient,
   queryOptions,
 } from "@tanstack/react-query";
 
@@ -63,6 +64,8 @@ type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
 
 export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 1_500;
 export const PROJECT_TASK_PAGE_SIZE = 5;
+export const PROJECT_TASK_SEARCH_PAGE_SIZE = 100;
+export const PROJECT_TASK_SEARCH_SOURCE_KEY = "search-source";
 
 export const codeAgentClient = new CodeAgentClient();
 
@@ -223,6 +226,64 @@ export function removeProjectTaskFromInfiniteData(
       data: page.data.filter((task) => task.id !== taskId),
     })),
   };
+}
+
+export async function listProjectTasksForSearch(
+  projectId: string,
+  client: Pick<CodeAgentClient, "listTasks">,
+): Promise<readonly AgentTask[]> {
+  const taskById = new Map<string, AgentTask>();
+  const requestedCursors = new Set<string>();
+  let cursor: string | undefined;
+
+  for (;;) {
+    const page = await client.listTasks(projectId, {
+      ...(cursor === undefined ? {} : { cursor }),
+      limit: PROJECT_TASK_SEARCH_PAGE_SIZE,
+    });
+    for (const task of page.data) {
+      // Cursor 页边界可能重叠，保留首次出现的较新任务版本。
+      if (!taskById.has(task.id)) {
+        taskById.set(task.id, task);
+      }
+    }
+
+    if (page.nextCursor === null || requestedCursors.has(page.nextCursor)) {
+      return [...taskById.values()];
+    }
+    requestedCursors.add(page.nextCursor);
+    cursor = page.nextCursor;
+  }
+}
+
+export function projectTaskSearchSourceQueryOptions(
+  projectId: string,
+  enabled: boolean,
+  client: Pick<CodeAgentClient, "listTasks"> = codeAgentClient,
+) {
+  return queryOptions({
+    enabled,
+    queryFn: () => listProjectTasksForSearch(projectId, client),
+    queryKey: ["projects", projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY] as const,
+  });
+}
+
+export async function removeArchivedProjectTaskAndRefill(
+  queryClient: QueryClient,
+  projectId: string,
+  taskId: string,
+): Promise<void> {
+  const projectTaskQueryKey = ["projects", projectId, "tasks"] as const;
+  queryClient.setQueryData<ProjectTaskInfiniteData>(projectTaskQueryKey, (currentData) =>
+    removeProjectTaskFromInfiniteData(currentData, taskId),
+  );
+  queryClient.setQueryData<readonly AgentTask[]>(
+    [...projectTaskQueryKey, PROJECT_TASK_SEARCH_SOURCE_KEY],
+    (currentTasks) => currentTasks?.filter((task) => task.id !== taskId),
+  );
+
+  // 归档会改变服务端 Cursor 边界，重新校准活动页才能稳定补足最近 5 项。
+  await queryClient.invalidateQueries({ exact: true, queryKey: projectTaskQueryKey });
 }
 
 export function reorderProjectPage(

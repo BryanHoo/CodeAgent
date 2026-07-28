@@ -11,7 +11,9 @@ import {
   projectDefaultsQueryOptions,
   projectGitStatusQueryOptions,
   projectReorderMutationOptions,
+  listProjectTasksForSearch,
   projectTasksInfiniteQueryOptions,
+  removeArchivedProjectTaskAndRefill,
   type ProjectTaskInfiniteData,
   projectsQueryOptions,
   taskSnapshotQueryOptions,
@@ -341,6 +343,58 @@ describe("project queries", () => {
       cursor: "next-page",
       limit: 5,
     });
+    unsubscribe();
+  });
+
+  it("loads every task page for search and removes overlapping tasks", async () => {
+    const secondTask = { ...task, id: "task-2", title: "完整搜索结果" };
+    const listTasks = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [task], nextCursor: "next-page" })
+      .mockResolvedValueOnce({ data: [task, secondTask], nextCursor: null });
+
+    await expect(listProjectTasksForSearch("code-agent", { listTasks })).resolves.toEqual([
+      task,
+      secondTask,
+    ]);
+    expect(listTasks).toHaveBeenNthCalledWith(1, "code-agent", { limit: 100 });
+    expect(listTasks).toHaveBeenNthCalledWith(2, "code-agent", {
+      cursor: "next-page",
+      limit: 100,
+    });
+  });
+
+  it("refetches the active first page after archive to keep five recent tasks visible", async () => {
+    const initialTasks = Array.from({ length: 5 }, (_, index) => ({
+      ...task,
+      id: `task-${String(index + 1)}`,
+      title: `Task ${String(index + 1)}`,
+    }));
+    const replenishedTasks = [...initialTasks.slice(1), { ...task, id: "task-6", title: "Task 6" }];
+    const listTasks = vi
+      .fn()
+      .mockResolvedValueOnce({ data: initialTasks, nextCursor: "next-page" })
+      .mockResolvedValueOnce({ data: replenishedTasks, nextCursor: null });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryOptions = projectTasksInfiniteQueryOptions("code-agent", {
+      listProjects: vi.fn(),
+      listTasks,
+      readTask: vi.fn(),
+    });
+    const queryObserver = new InfiniteQueryObserver(queryClient, queryOptions);
+    const unsubscribe = queryObserver.subscribe(() => undefined);
+    await queryObserver.refetch();
+    queryClient.setQueryData(["projects", "code-agent", "tasks", "search-source"], initialTasks);
+
+    await removeArchivedProjectTaskAndRefill(queryClient, "code-agent", "task-1");
+
+    expect(flattenProjectTaskPages(queryClient.getQueryData(queryOptions.queryKey))).toEqual(
+      replenishedTasks,
+    );
+    expect(queryClient.getQueryData(["projects", "code-agent", "tasks", "search-source"])).toEqual(
+      initialTasks.slice(1),
+    );
+    expect(listTasks).toHaveBeenCalledTimes(2);
     unsubscribe();
   });
 
