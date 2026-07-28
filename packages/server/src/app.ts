@@ -11,6 +11,7 @@ import {
 } from "@code-agent/core";
 import {
   AddProjectResponseSchema,
+  AgentBackgroundTerminalPageSchema,
   ArchiveAgentTaskRequestSchema,
   ArchiveAgentTaskResponseSchema,
   AgentCapabilitiesSchema,
@@ -51,6 +52,7 @@ import {
   StartAgentTaskResponseSchema,
   StartAgentTurnRequestSchema,
   StartAgentTurnResponseSchema,
+  TerminateAgentBackgroundTerminalResponseSchema,
   UploadAgentFeedbackRequestSchema,
   UploadAgentFeedbackResponseSchema,
   MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
@@ -135,6 +137,17 @@ const ProjectTaskTurnParamsSchema = {
     turnId: { minLength: 1, type: "string" },
   },
   required: ["projectId", "taskId", "turnId"],
+  type: "object",
+} as const;
+
+const ProjectTaskTerminalParamsSchema = {
+  additionalProperties: false,
+  properties: {
+    projectId: { minLength: 1, type: "string" },
+    taskId: { minLength: 1, type: "string" },
+    terminalId: { minLength: 1, type: "string" },
+  },
+  required: ["projectId", "taskId", "terminalId"],
   type: "object",
 } as const;
 
@@ -887,6 +900,76 @@ export async function createCodeAgentServer(
       );
       return { checkpoint, snapshot: { ...task, pinned: pinnedTaskIds.has(task.id), settings } };
     },
+  );
+
+  app.get<{ Params: { projectId: string; taskId: string } }>(
+    "/v1/projects/:projectId/tasks/:taskId/background-terminals",
+    {
+      schema: {
+        params: ProjectTaskParamsSchema,
+        response: { 200: AgentBackgroundTerminalPageSchema, 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      const task = await context.provider.readTask(request.params.taskId);
+      if (task?.projectId !== context.project.id) {
+        return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
+      }
+      return context.provider.listBackgroundTerminals(request.params.taskId);
+    },
+  );
+
+  app.post<{
+    Body: Record<string, never>;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string; taskId: string; terminalId: string };
+  }>(
+    "/v1/projects/:projectId/tasks/:taskId/background-terminals/:terminalId/terminate",
+    {
+      schema: {
+        body: { additionalProperties: false, properties: {}, type: "object" },
+        headers: IdempotencyHeadersSchema,
+        params: ProjectTaskTerminalParamsSchema,
+        response: {
+          200: TerminateAgentBackgroundTerminalResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        [
+          "terminate-background-terminal",
+          request.params.projectId,
+          request.params.taskId,
+          request.params.terminalId,
+        ],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          // 终端可能在请求到达前自然退出；终止操作保持幂等成功语义。
+          await context.provider.terminateBackgroundTerminal(
+            request.params.taskId,
+            request.params.terminalId,
+          );
+          return { status: "terminated" as const, terminalId: request.params.terminalId };
+        },
+      ),
   );
 
   app.put<{

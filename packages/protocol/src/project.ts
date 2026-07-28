@@ -105,6 +105,39 @@ export const AgentCommandItemSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const AgentBackgroundTerminalSchema = Type.Object(
+  {
+    command: Type.String({ minLength: 1 }),
+    cwd: Type.String({ minLength: 1 }),
+    id: Type.String({ minLength: 1 }),
+    itemId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentBackgroundTerminal = Readonly<Static<typeof AgentBackgroundTerminalSchema>>;
+
+export const AgentBackgroundTerminalPageSchema = Type.Object(
+  { data: Type.Array(AgentBackgroundTerminalSchema) },
+  { additionalProperties: false },
+);
+
+export type AgentBackgroundTerminalPage = Readonly<
+  Static<typeof AgentBackgroundTerminalPageSchema>
+>;
+
+export const TerminateAgentBackgroundTerminalResponseSchema = Type.Object(
+  {
+    status: Type.Literal("terminated"),
+    terminalId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type TerminateAgentBackgroundTerminalResponse = Readonly<
+  Static<typeof TerminateAgentBackgroundTerminalResponseSchema>
+>;
+
 export const AgentFileChangeSchema = Type.Object(
   {
     diff: Type.String(),

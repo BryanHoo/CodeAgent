@@ -1,5 +1,6 @@
 import {
   AgentCapabilitiesSchema,
+  AgentBackgroundTerminalPageSchema,
   AddProjectResponseSchema,
   ArchiveAgentTaskResponseSchema,
   CompactAgentTaskResponseSchema,
@@ -25,8 +26,10 @@ import {
   ResolvePendingRequestResponseSchema,
   StartAgentTaskResponseSchema,
   StartAgentTurnResponseSchema,
+  TerminateAgentBackgroundTerminalResponseSchema,
   UploadAgentFeedbackResponseSchema,
   type AgentCapabilities,
+  type AgentBackgroundTerminalPage,
   type AddProjectResponse,
   type ArchiveAgentTaskResponse,
   type CompactAgentTaskResponse,
@@ -62,6 +65,7 @@ import {
   type StartAgentTurnResponse,
   type UploadAgentFeedbackRequest,
   type UploadAgentFeedbackResponse,
+  type TerminateAgentBackgroundTerminalResponse,
 } from "@code-agent/protocol";
 import type { Static, TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
@@ -230,6 +234,30 @@ export class CodeAgentClient {
 
   public async readTask(projectId: string, taskId: string): Promise<AgentTaskSnapshotResponse> {
     return this.#request(taskPath(projectId, taskId), AgentTaskSnapshotResponseSchema);
+  }
+
+  public async listBackgroundTerminals(
+    projectId: string,
+    taskId: string,
+  ): Promise<AgentBackgroundTerminalPage> {
+    return this.#request(
+      `${taskPath(projectId, taskId)}/background-terminals`,
+      AgentBackgroundTerminalPageSchema,
+    );
+  }
+
+  public async terminateBackgroundTerminal(
+    projectId: string,
+    taskId: string,
+    terminalId: string,
+    options: MutationOptions = {},
+  ): Promise<TerminateAgentBackgroundTerminalResponse> {
+    return this.#mutation(
+      `${taskPath(projectId, taskId)}/background-terminals/${encodeURIComponent(terminalId)}/terminate`,
+      {},
+      TerminateAgentBackgroundTerminalResponseSchema,
+      options,
+    );
   }
 
   public async getTaskSettings(

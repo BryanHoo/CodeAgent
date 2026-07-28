@@ -21,6 +21,29 @@ const gitStatus = {
 };
 
 describe("WorkbenchInspector", () => {
+  it("keeps running terminals in context with an accessible stop action", () => {
+    const markup = renderToStaticMarkup(
+      <WorkbenchInspector
+        backgroundTerminals={[
+          {
+            command: "pnpm dev",
+            cwd: "/workspace/CodeAgent",
+            id: "terminal-1",
+            itemId: "command-1",
+          },
+        ]}
+        onOpenFileDiff={() => undefined}
+        projectName="CodeAgent"
+      />,
+    );
+
+    expect(markup).toContain('aria-label="运行中的终端"');
+    expect(markup).toContain("pnpm dev");
+    expect(markup).toContain("/workspace/CodeAgent");
+    expect(markup).toContain('aria-label="停止终端 pnpm dev"');
+    expect(markup).toContain('aria-label="终端运行中"');
+  });
+
   it("separates current project staged and unstaged changes as diff triggers", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchInspector

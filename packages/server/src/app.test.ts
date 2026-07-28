@@ -7,6 +7,7 @@ import {
   type AgentRuntimeProvider,
 } from "@code-agent/core";
 import type {
+  AgentBackgroundTerminalPage,
   AgentProjectDefaults,
   AgentTaskSettings,
   AgentTurn,
@@ -145,6 +146,10 @@ function createProvider() {
     }),
   );
   const interruptTurn = vi.fn(() => Promise.resolve());
+  const listBackgroundTerminals = vi.fn<() => Promise<AgentBackgroundTerminalPage>>(() =>
+    Promise.resolve({ data: [] }),
+  );
+  const terminateBackgroundTerminal = vi.fn(() => Promise.resolve(true));
   const readSandboxMode = vi.fn(() => Promise.resolve("read-only" as const));
   const startReview = vi.fn(() =>
     Promise.resolve({
@@ -163,6 +168,7 @@ function createProvider() {
     forkTask,
     getCapabilities,
     interruptTurn,
+    listBackgroundTerminals,
     listModels,
     listSkills,
     listTasks,
@@ -180,6 +186,7 @@ function createProvider() {
         eventListeners.delete(listener);
       };
     },
+    terminateBackgroundTerminal,
     uploadFeedback,
   };
   return {
@@ -196,6 +203,7 @@ function createProvider() {
     listModels,
     listSkills,
     interruptTurn,
+    listBackgroundTerminals,
     provider,
     readSandboxMode,
     readTask,
@@ -205,6 +213,7 @@ function createProvider() {
     startTask,
     startReview,
     startTurn,
+    terminateBackgroundTerminal,
     uploadFeedback,
   };
 }
@@ -289,6 +298,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     eventListeners,
     forkTask,
     interruptTurn,
+    listBackgroundTerminals,
     listTasks,
     listModels,
     listSkills,
@@ -300,6 +310,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     startTask,
     startReview,
     startTurn,
+    terminateBackgroundTerminal,
     uploadFeedback,
   } = createProvider();
   const settings = createSettingsRepository();
@@ -320,6 +331,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     eventListeners,
     forkTask,
     interruptTurn,
+    listBackgroundTerminals,
     listTasks,
     listModels,
     listSkills,
@@ -330,6 +342,7 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     startTask,
     startReview,
     startTurn,
+    terminateBackgroundTerminal,
     ...settings,
     ...taskMetadata,
     uploadFeedback,
@@ -337,6 +350,52 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
 }
 
 describe("CodeAgent Server", () => {
+  it("lists and idempotently terminates a running background terminal", async () => {
+    const { app, listBackgroundTerminals, terminateBackgroundTerminal } = await createHarness();
+    listBackgroundTerminals.mockResolvedValue({
+      data: [
+        {
+          command: "pnpm dev",
+          cwd: "/workspace/CodeAgent",
+          id: "terminal-1",
+          itemId: "command-1",
+        },
+      ],
+    });
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/task-1/background-terminals",
+    });
+    const terminateRequest = {
+      headers: { "idempotency-key": "stop-terminal-1" },
+      method: "POST" as const,
+      payload: {},
+      url: "/v1/projects/code-agent/tasks/task-1/background-terminals/terminal-1/terminate",
+    };
+    const firstTerminateResponse = await app.inject(terminateRequest);
+    const repeatedTerminateResponse = await app.inject(terminateRequest);
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json()).toEqual({
+      data: [
+        {
+          command: "pnpm dev",
+          cwd: "/workspace/CodeAgent",
+          id: "terminal-1",
+          itemId: "command-1",
+        },
+      ],
+    });
+    expect(firstTerminateResponse.statusCode).toBe(200);
+    expect(repeatedTerminateResponse.json()).toEqual({
+      status: "terminated",
+      terminalId: "terminal-1",
+    });
+    expect(terminateBackgroundTerminal).toHaveBeenCalledOnce();
+    expect(terminateBackgroundTerminal).toHaveBeenCalledWith("task-1", "terminal-1");
+  });
+
   it("serves health, capabilities, and projects", async () => {
     const { app } = await createHarness();
 

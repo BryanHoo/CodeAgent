@@ -1,5 +1,6 @@
 import type {
   AgentCapabilities,
+  AgentBackgroundTerminalPage,
   AgentEvent,
   AgentAttachmentMediaType,
   AgentModelPage,
@@ -68,6 +69,7 @@ export interface AgentProvider {
   forkTask(taskId: string): Promise<AgentTask>;
   getCapabilities(): Promise<AgentCapabilities>;
   listModels(): Promise<AgentModelPage>;
+  listBackgroundTerminals(taskId: string): Promise<AgentBackgroundTerminalPage>;
   listSkills(): Promise<AgentSkillPage>;
   listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage>;
   readSandboxMode(): Promise<AgentSandboxMode>;
@@ -85,6 +87,7 @@ export interface AgentProvider {
   ): Promise<AgentTurn>;
   interruptTurn(taskId: string, turnId: string): Promise<void>;
   subscribeEvents(listener: AgentProviderEventListener): () => void;
+  terminateBackgroundTerminal(taskId: string, terminalId: string): Promise<boolean>;
   uploadFeedback(taskId: string, input: UploadAgentFeedbackRequest): Promise<void>;
 }
 

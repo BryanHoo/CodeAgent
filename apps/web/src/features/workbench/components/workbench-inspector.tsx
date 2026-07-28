@@ -1,9 +1,20 @@
-import type { ProjectGitStatus } from "@code-agent/protocol";
-import { Bot, Braces, FileCode2, GitBranch, HardDrive, Plus } from "lucide-react";
+import type { AgentBackgroundTerminal, ProjectGitStatus } from "@code-agent/protocol";
+import {
+  Bot,
+  Braces,
+  FileCode2,
+  GitBranch,
+  HardDrive,
+  LoaderCircle,
+  Plus,
+  Square,
+  SquareTerminal,
+} from "lucide-react";
 import { useState } from "react";
 
 import { countFileChangeLines, getFileName, type AgentFileChange } from "../../diff/file-change.js";
 import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
+import { IconButton } from "../../../shared/ui/icon-button.js";
 import {
   formatSubagentModel,
   toSubagentTaskStatus,
@@ -12,26 +23,38 @@ import {
 } from "./subagent.js";
 
 type WorkbenchInspectorProps = Readonly<{
+  backgroundTerminals?: readonly AgentBackgroundTerminal[];
+  backgroundTerminalsError?: Error | null;
+  backgroundTerminalsPending?: boolean;
   onOpenFileDiff: (change: AgentFileChange) => void;
   gitStatus?: ProjectGitStatus;
   gitStatusError?: Error | null;
   gitStatusPending?: boolean;
   onOpenSubagent?: (selection: SubagentSelection) => void;
+  onTerminateBackgroundTerminal?: (terminalId: string) => Promise<void>;
   projectName: string;
   subagents?: readonly SubagentContextEntry[];
+  terminalMutationError?: Error | null;
+  terminatingTerminalId?: string | null;
 }>;
 
 export function WorkbenchInspector({
+  backgroundTerminals = [],
+  backgroundTerminalsError = null,
+  backgroundTerminalsPending = false,
   gitStatus,
   gitStatusError = null,
   gitStatusPending = false,
   onOpenFileDiff,
   onOpenSubagent = () => undefined,
+  onTerminateBackgroundTerminal = () => Promise.resolve(),
   projectName,
   subagents = [],
+  terminalMutationError = null,
+  terminatingTerminalId = null,
 }: WorkbenchInspectorProps) {
   const [tab, setTab] = useState<"changes" | "context">(() =>
-    subagents.length > 0 ? "context" : "changes",
+    subagents.length > 0 || backgroundTerminals.length > 0 ? "context" : "changes",
   );
   const stagedChanges = gitStatus?.staged ?? [];
   const unstagedChanges = gitStatus?.unstaged ?? [];
@@ -126,6 +149,18 @@ export function WorkbenchInspector({
           </div>
         ) : (
           <div className="h-full space-y-5 overflow-y-auto p-2.5">
+            {backgroundTerminals.length > 0 ||
+            backgroundTerminalsPending ||
+            backgroundTerminalsError !== null ? (
+              <BackgroundTerminalSection
+                error={backgroundTerminalsError}
+                isPending={backgroundTerminalsPending}
+                mutationError={terminalMutationError}
+                onTerminate={onTerminateBackgroundTerminal}
+                terminals={backgroundTerminals}
+                terminatingTerminalId={terminatingTerminalId}
+              />
+            ) : null}
             {subagents.length > 0 ? (
               <SubagentSection onOpenSubagent={onOpenSubagent} subagents={subagents} />
             ) : null}
@@ -148,6 +183,79 @@ export function WorkbenchInspector({
         )}
       </div>
     </aside>
+  );
+}
+
+function BackgroundTerminalSection({
+  error,
+  isPending,
+  mutationError,
+  onTerminate,
+  terminals,
+  terminatingTerminalId,
+}: Readonly<{
+  error: Error | null;
+  isPending: boolean;
+  mutationError: Error | null;
+  onTerminate: (terminalId: string) => Promise<void>;
+  terminals: readonly AgentBackgroundTerminal[];
+  terminatingTerminalId: string | null;
+}>) {
+  return (
+    <InspectorSection icon={<SquareTerminal className="size-3.5" />} title="运行中的终端">
+      <section aria-label="运行中的终端">
+        {isPending && terminals.length === 0 ? (
+          <p className="px-2 py-2 text-caption text-muted-foreground">正在读取终端...</p>
+        ) : error !== null && terminals.length === 0 ? (
+          <p className="px-2 py-2 text-caption text-diff-removed">无法读取运行中的终端</p>
+        ) : (
+          <div className="space-y-1">
+            {terminals.map((terminal) => {
+              const isTerminating = terminatingTerminalId === terminal.id;
+              return (
+                <div
+                  className="flex items-center gap-1 rounded-control px-2 py-1.5 hover:bg-control-hover"
+                  key={terminal.id}
+                >
+                  <LoaderCircle
+                    aria-label="终端运行中"
+                    className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="truncate text-label font-medium text-foreground"
+                      title={terminal.command}
+                    >
+                      {terminal.command}
+                    </p>
+                    <p className="truncate text-caption text-muted-foreground" title={terminal.cwd}>
+                      {terminal.cwd}
+                    </p>
+                  </div>
+                  <IconButton
+                    disabled={terminatingTerminalId !== null}
+                    label={
+                      isTerminating
+                        ? `正在停止 ${terminal.command}`
+                        : `停止终端 ${terminal.command}`
+                    }
+                    onClick={() => void onTerminate(terminal.id)}
+                    size="small"
+                  >
+                    <Square aria-hidden="true" className="size-3" />
+                  </IconButton>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {mutationError === null ? null : (
+          <p className="px-2 pt-1 text-caption text-diff-removed" role="alert">
+            停止终端失败，请重试
+          </p>
+        )}
+      </section>
+    </InspectorSection>
   );
 }
 

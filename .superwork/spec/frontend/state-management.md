@@ -30,3 +30,4 @@
 - `startTask` 返回的 Task 必须在导航前 upsert 到对应 Project Task Query，不能依赖可能早于 Provider materialize 的抢跑列表刷新；首次 `startTurn` 返回的 Turn 可作为跨路由短生命周期启动快照。若该 Turn 尚未包含 User Item，必须使用本次提交补齐用户消息，并严格先展示用户消息、再展示“正在思考”，随后由正式 HTTP Snapshot 接管。
 - 活动 Turn 从运行态进入终态后必须刷新对应 Project Task 列表，以同步 Provider 在执行期间生成的正式标题；中栏标题优先使用 Task Query 或活动 Snapshot，不能向用户暴露原生 Task ID。
 - 中断请求成功后继续保持运行语义，直到实时链路收到 `turn.completed` 的 `interrupted` 终态。
+- 后台终端生命周期独立于 Turn：当前 Task 运行时持续读取权威终端列表，Turn 进入终态时立即补读；只要列表非空就继续轮询并保留右栏展示，直到 Provider 确认终端消失。停止请求成功后必须重新读取列表，不能在点击时乐观删除。

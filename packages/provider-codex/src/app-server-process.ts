@@ -221,6 +221,7 @@ export async function startCodexAppServer(
   try {
     await runtime.waitForSpawn();
     await runtime.client.request("initialize", {
+      capabilities: { experimentalApi: true },
       clientInfo: {
         name: "code_agent",
         title: "CodeAgent",

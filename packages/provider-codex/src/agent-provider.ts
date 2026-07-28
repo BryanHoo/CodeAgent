@@ -15,6 +15,8 @@ import {
 } from "@code-agent/core";
 import type {
   AgentCapabilities,
+  AgentBackgroundTerminal,
+  AgentBackgroundTerminalPage,
   AgentContextUsage,
   AgentItem,
   AgentItemStatus,
@@ -157,6 +159,17 @@ function optionalString(value: unknown): string | undefined {
 
 function optionalInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isInteger(value) ? value : undefined;
+}
+
+function mapBackgroundTerminal(value: unknown): AgentBackgroundTerminal {
+  const terminal = expectRecord(value, "background terminal");
+  return {
+    command: expectString(terminal["command"], "background terminal command"),
+    cwd: expectString(terminal["cwd"], "background terminal cwd"),
+    // Codex processId 只在 Provider 边界出现，统一协议将其视为不透明终端标识。
+    id: expectString(terminal["processId"], "background terminal process id"),
+    itemId: expectString(terminal["itemId"], "background terminal item id"),
+  };
 }
 
 function optionalNullableString(value: unknown): string | null {
@@ -1427,6 +1440,52 @@ export class CodexAgentProvider implements AgentProvider {
     );
   }
 
+  public async listBackgroundTerminals(taskId: string): Promise<AgentBackgroundTerminalPage> {
+    this.#assertKnownProjectTask(taskId);
+    const terminals: AgentBackgroundTerminal[] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+
+    do {
+      const response = expectRecord(
+        await this.#client.request("thread/backgroundTerminals/list", {
+          ...(cursor === undefined ? {} : { cursor }),
+          limit: 100,
+          threadId: taskId,
+        }),
+        "thread/backgroundTerminals/list response",
+      );
+      if (!Array.isArray(response["data"])) {
+        throw new CodexProtocolMappingError("background terminal list data must be an array");
+      }
+      terminals.push(...response["data"].map(mapBackgroundTerminal));
+      const nextCursor = optionalString(response["nextCursor"]);
+      if (nextCursor === undefined) {
+        cursor = undefined;
+      } else {
+        if (seenCursors.has(nextCursor)) {
+          throw new CodexProtocolMappingError("background terminal list cursor must advance");
+        }
+        seenCursors.add(nextCursor);
+        cursor = nextCursor;
+      }
+    } while (cursor !== undefined);
+
+    return { data: terminals };
+  }
+
+  public async terminateBackgroundTerminal(taskId: string, terminalId: string): Promise<boolean> {
+    this.#assertKnownProjectTask(taskId);
+    const response = expectRecord(
+      await this.#client.request("thread/backgroundTerminals/terminate", {
+        processId: terminalId,
+        threadId: taskId,
+      }),
+      "thread/backgroundTerminals/terminate response",
+    );
+    return expectBoolean(response["terminated"], "background terminal terminate result");
+  }
+
   public async rollbackLatestTurn(taskId: string): Promise<void> {
     this.#assertKnownProjectTask(taskId);
     const response = expectRecord(
@@ -2063,6 +2122,16 @@ class CodexRuntimeProjectProvider implements AgentProvider {
   public interruptTurn(taskId: string, turnId: string): Promise<void> {
     this.#runtime.assertTaskOwner(this.#project, taskId);
     return this.#delegate.interruptTurn(taskId, turnId);
+  }
+
+  public listBackgroundTerminals(taskId: string): Promise<AgentBackgroundTerminalPage> {
+    this.#runtime.assertTaskOwner(this.#project, taskId);
+    return this.#delegate.listBackgroundTerminals(taskId);
+  }
+
+  public terminateBackgroundTerminal(taskId: string, terminalId: string): Promise<boolean> {
+    this.#runtime.assertTaskOwner(this.#project, taskId);
+    return this.#delegate.terminateBackgroundTerminal(taskId, terminalId);
   }
 
   public listModels(): Promise<AgentModelPage> {

@@ -8,6 +8,7 @@
 - 包内 Codex 必须解析平台可选依赖中的原生 `codex`/`codex.exe`，不得把会再次派生子进程的 JS launcher 作为受管 App Server 进程。
 - 使用参数数组、`shell: false` 和经过控制的环境变量；Secret 不进入参数或日志。
 - 所有 RPC 设置超时；子进程退出时统一 Reject Pending RPC，并清理 Listener。
+- App Server 初始化必须启用 experimental API；后台终端只通过 `thread/backgroundTerminals/list` 获取，并在 Provider 边界把原生 `processId` 映射为不透明 Terminal ID。停止单个终端固定调用 `thread/backgroundTerminals/terminate`，不能用 `turn/interrupt` 代替。
 - JSONL 字节流必须跨 Buffer 分片保留 UTF-8 解码状态，不得逐块独立转码。
 - JSONL 中同时包含 `id` 与 `method` 的合法帧按服务端请求分发，并使用原 `id` 返回结果；未支持的方法返回 `-32601`，非法参数返回 `-32602`，不得让 Codex 无限等待。
 - JSONL 响应只有在底层写入回调确认后才算成功，所有写入都使用有界超时；异步写入失败必须关闭连接且不能提前发布请求终态。
@@ -47,6 +48,7 @@
 - `resync.required` 发送后由 Server 主动关闭当前 WebSocket；客户端必须使用新 Snapshot checkpoint 建立新连接。
 - Fastify 关闭时取消 Provider Event 订阅并关闭 WebSocket 资源。
 - 所有 Agent Mutation 必须校验非空 `Idempotency-Key`；同操作、同 Key、同 Payload 复用进行中或成功结果，不同 Payload 返回冲突，失败结果不缓存。
+- 后台终端读取必须先验证 Project/Task 归属；单终端停止是幂等 Mutation，即使进程在请求到达前自然退出也返回已终止语义。
 - Task 创建在 Provider 成功但设置持久化失败时必须保留有界恢复状态；同 `Idempotency-Key` 重试只补齐持久化，不得再次调用 Provider 创建 Task。
 - 成功的幂等结果缓存必须同时设置容量上限和过期时间；进行中的请求不得淘汰，Runtime 关闭时清空全部条目。
 - 浏览器附件先经幂等上传进入 Server 的有界 TTL Store，并只返回随机 ID；Turn 成功后消费引用，Provider 失败时保留引用供同一请求重试，Runtime 关闭时清空 Store。

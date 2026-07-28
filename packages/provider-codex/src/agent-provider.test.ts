@@ -135,6 +135,51 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("lists and terminates background terminals through the experimental thread API", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      {
+        data: [
+          {
+            command: "pnpm dev",
+            cpuPercent: 1.5,
+            cwd: "/workspace/CodeAgent",
+            itemId: "command-1",
+            osPid: 2345,
+            processId: "terminal-1",
+            rssKb: 4096,
+          },
+        ],
+        nextCursor: null,
+      },
+      { terminated: true },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.readTask("task-1");
+
+    await expect(provider.listBackgroundTerminals("task-1")).resolves.toEqual({
+      data: [
+        {
+          command: "pnpm dev",
+          cwd: "/workspace/CodeAgent",
+          id: "terminal-1",
+          itemId: "command-1",
+        },
+      ],
+    });
+    await expect(provider.terminateBackgroundTerminal("task-1", "terminal-1")).resolves.toBe(true);
+    expect(rpc.calls.slice(1)).toEqual([
+      {
+        method: "thread/backgroundTerminals/list",
+        params: { limit: 100, threadId: "task-1" },
+      },
+      {
+        method: "thread/backgroundTerminals/terminate",
+        params: { processId: "terminal-1", threadId: "task-1" },
+      },
+    ]);
+  });
+
   it("preserves structured subagent details from Codex collaboration items", async () => {
     const rpc = new FakeRpcClient([
       {

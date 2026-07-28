@@ -46,6 +46,7 @@ import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
 import { WorkbenchComposer } from "./workbench-composer.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
+import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
 
 const sidebarOverlayQuery = "(max-width: 760px)";
 const inspectorOverlayQuery = "(max-width: 1100px)";
@@ -153,6 +154,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   });
   const isTaskRunning =
     runtime.snapshot?.status === "running" || startingSnapshot?.status === "running";
+  const backgroundTerminals = useBackgroundTerminals(client, projectId, taskId, isTaskRunning);
   const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, isTaskRunning, client));
   const previousTaskRunningRef = useRef(isTaskRunning);
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
@@ -465,10 +467,14 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       ) : null}
 
       <WorkbenchInspector
+        backgroundTerminals={backgroundTerminals.terminals}
+        backgroundTerminalsError={backgroundTerminals.error}
+        backgroundTerminalsPending={backgroundTerminals.isPending}
         gitStatusError={gitStatusQuery.error}
         gitStatusPending={gitStatusQuery.isPending}
-        key={`${projectId}:${taskId ?? "draft"}:${subagents.length > 0 ? "with-subagents" : "without-subagents"}`}
+        key={`${projectId}:${taskId ?? "draft"}:${subagents.length > 0 ? "with-subagents" : "without-subagents"}:${backgroundTerminals.terminals.length > 0 ? "with-terminals" : "without-terminals"}`}
         onOpenFileDiff={openFileDiff}
+        onTerminateBackgroundTerminal={backgroundTerminals.terminateTerminal}
         onOpenSubagent={(selection) => {
           if (taskId !== undefined) {
             setSubagentDialogSelection({ parentTaskId: taskId, projectId, selection });
@@ -476,6 +482,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         }}
         projectName={projectName}
         subagents={subagents}
+        terminalMutationError={backgroundTerminals.terminalError}
+        terminatingTerminalId={backgroundTerminals.terminatingTerminalId}
         {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
       />
       <FileDiffDialog

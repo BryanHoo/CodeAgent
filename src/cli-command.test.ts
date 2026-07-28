@@ -39,6 +39,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     forkTask: vi.fn(),
     getCapabilities: vi.fn(),
     interruptTurn: vi.fn(),
+    listBackgroundTerminals: vi.fn(),
     listModels: vi.fn(),
     listSkills: vi.fn(),
     listTasks: vi.fn(),
@@ -51,6 +52,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     startReview: vi.fn(),
     startTurn: vi.fn(),
     subscribeEvents: vi.fn(() => () => undefined),
+    terminateBackgroundTerminal: vi.fn(),
     uploadFeedback: vi.fn(),
   };
   const runtimeProvider = {

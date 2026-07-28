@@ -85,6 +85,42 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
 }
 
 describe("CodeAgentClient", () => {
+  it("lists and terminates a task background terminal", async () => {
+    const terminalPage = {
+      data: [
+        {
+          command: "pnpm dev",
+          cwd: "/workspace/CodeAgent",
+          id: "terminal/1",
+          itemId: "command-1",
+        },
+      ],
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(terminalPage))
+      .mockResolvedValueOnce(jsonResponse({ status: "terminated", terminalId: "terminal/1" }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.listBackgroundTerminals("project one", "task one")).resolves.toEqual(
+      terminalPage,
+    );
+    await expect(
+      client.terminateBackgroundTerminal("project one", "task one", "terminal/1", {
+        idempotencyKey: "stop-terminal",
+      }),
+    ).resolves.toEqual({ status: "terminated", terminalId: "terminal/1" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/projects/project%20one/tasks/task%20one/background-terminals",
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "/v1/projects/project%20one/tasks/task%20one/background-terminals/terminal%2F1/terminate",
+    );
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("idempotency-key")).toBe(
+      "stop-terminal",
+    );
+  });
+
   it("opens the host directory picker through the projects endpoint", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock.mockResolvedValue(jsonResponse({ project: null }));

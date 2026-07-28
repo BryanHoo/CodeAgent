@@ -27,6 +27,8 @@ export {
 } from "./agent-event.js";
 export {
   AgentActivityItemSchema,
+  AgentBackgroundTerminalPageSchema,
+  AgentBackgroundTerminalSchema,
   AddProjectResponseSchema,
   ArchiveAgentTaskRequestSchema,
   ArchiveAgentTaskResponseSchema,
@@ -106,10 +108,13 @@ export {
   UserInputPendingRequestSchema,
   UploadAgentFeedbackRequestSchema,
   UploadAgentFeedbackResponseSchema,
+  TerminateAgentBackgroundTerminalResponseSchema,
   MAX_AGENT_ATTACHMENTS,
   MAX_AGENT_ATTACHMENT_BYTES,
   MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
   type AgentApprovalPolicy,
+  type AgentBackgroundTerminal,
+  type AgentBackgroundTerminalPage,
   type AddProjectResponse,
   type ArchiveAgentTaskRequest,
   type ArchiveAgentTaskResponse,
@@ -173,4 +178,5 @@ export {
   type StartAgentTurnResponse,
   type UploadAgentFeedbackRequest,
   type UploadAgentFeedbackResponse,
+  type TerminateAgentBackgroundTerminalResponse,
 } from "./project.js";

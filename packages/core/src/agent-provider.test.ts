@@ -34,6 +34,9 @@ describe("AgentProvider", () => {
       listTasks() {
         return Promise.resolve({ data: [], nextCursor: null });
       },
+      listBackgroundTerminals() {
+        return Promise.resolve({ data: [] });
+      },
       listModels() {
         return Promise.resolve({
           data: [
@@ -147,6 +150,9 @@ describe("AgentProvider", () => {
         return () => {
           listeners.delete(listener);
         };
+      },
+      terminateBackgroundTerminal() {
+        return Promise.resolve(true);
       },
     };
 

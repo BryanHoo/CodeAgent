@@ -12,6 +12,10 @@ export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTa
 export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
 export type CodeAgentSourceFileClient = Pick<CodeAgentClient, "readProjectSourceFile">;
 export type CodeAgentRuntimeClient = Pick<CodeAgentClient, "readTask" | "subscribeEvents">;
+export type CodeAgentBackgroundTerminalClient = Pick<
+  CodeAgentClient,
+  "listBackgroundTerminals" | "terminateBackgroundTerminal"
+>;
 export type CodeAgentCapabilitiesClient = Pick<CodeAgentClient, "getCapabilities">;
 export type CodeAgentModelsClient = Pick<CodeAgentClient, "listModels">;
 export type CodeAgentSkillsClient = Pick<CodeAgentClient, "listSkills">;
@@ -38,6 +42,7 @@ export type CodeAgentMutationClient = Pick<
 export type CodeAgentRollbackClient = Pick<CodeAgentClient, "rollbackTurn">;
 export type CodeAgentPendingRequestClient = Pick<CodeAgentClient, "resolvePendingRequest">;
 export type CodeAgentWorkbenchClient = CodeAgentReadClient &
+  CodeAgentBackgroundTerminalClient &
   CodeAgentGitStatusClient &
   CodeAgentRuntimeClient &
   CodeAgentMutationClient &
