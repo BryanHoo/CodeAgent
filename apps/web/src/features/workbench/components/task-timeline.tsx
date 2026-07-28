@@ -7,7 +7,6 @@ import type {
 } from "@code-agent/protocol";
 import {
   Check,
-  ChevronDown,
   Copy,
   FilePenLine,
   Files,
@@ -124,29 +123,23 @@ function EmptyTimeline({
         <FolderGit2 className="mx-auto size-9 text-muted-foreground" strokeWidth={1.4} />
         <h2 className="mt-3 flex h-9 items-center justify-center">
           {/* 直接挂载原生选择器，确保首次点击就能打开项目列表。 */}
-          <span className="relative inline-flex max-w-full items-center">
-            <select
-              aria-label="选择新聊天项目"
-              className="h-8 max-w-full cursor-pointer appearance-none rounded-control bg-transparent py-0 pl-2 pr-7 text-base font-semibold text-foreground outline-none transition-colors hover:bg-control-hover focus:bg-control focus:shadow-focus"
-              onChange={(event) => {
-                const nextProjectId = event.currentTarget.value;
-                if (nextProjectId !== projectId) {
-                  onProjectChange(nextProjectId);
-                }
-              }}
-              value={projectId}
-            >
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              className="pointer-events-none absolute right-2 size-3.5 text-muted-foreground"
-              aria-hidden="true"
-            />
-          </span>
+          <select
+            aria-label="选择新聊天项目"
+            className="h-8 max-w-full cursor-pointer appearance-none rounded-control bg-transparent px-2 py-0 text-center text-base font-semibold text-foreground underline decoration-current/35 underline-offset-4 outline-none transition-colors hover:bg-control-hover hover:decoration-current focus:bg-control focus:decoration-current focus:shadow-focus"
+            onChange={(event) => {
+              const nextProjectId = event.currentTarget.value;
+              if (nextProjectId !== projectId) {
+                onProjectChange(nextProjectId);
+              }
+            }}
+            value={projectId}
+          >
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
         </h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">选择一个任务查看历史。</p>
       </div>

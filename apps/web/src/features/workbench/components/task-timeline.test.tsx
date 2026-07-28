@@ -63,6 +63,8 @@ describe("TaskTimeline", () => {
 
     expect(markup).toContain('<select aria-label="选择新聊天项目"');
     expect(markup).toContain(">CodeAgent<");
+    expect(markup).toContain("underline-offset-4");
+    expect(markup).not.toContain("lucide-chevron-down");
     expect(markup).not.toContain('aria-label="切换新聊天项目，当前 CodeAgent"');
   });
 });

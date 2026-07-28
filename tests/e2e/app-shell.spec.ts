@@ -2049,6 +2049,11 @@ test("switches the new chat project from the empty timeline", async ({ page }) =
 
   const projectSelect = page.getByRole("combobox", { name: "选择新聊天项目" });
   await expect(projectSelect).toBeVisible();
+  // 文件夹名称自身表达可切换状态，不再用远离文字的下拉图标提示。
+  await expect(projectSelect).toHaveCSS("appearance", "none");
+  await expect(projectSelect).toHaveCSS("text-align", "center");
+  await expect(projectSelect).toHaveCSS("text-decoration-line", "underline");
+  await expect(projectSelect.locator("xpath=following-sibling::*")).toHaveCount(0);
   await projectSelect.selectOption("superwork");
 
   await expect(page).toHaveURL(/\/p\/superwork$/);
