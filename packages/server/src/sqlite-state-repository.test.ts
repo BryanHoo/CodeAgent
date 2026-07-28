@@ -41,7 +41,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 3,
+      migrationVersion: 4,
       synchronous: "normal",
       writable: true,
     });
@@ -81,6 +81,41 @@ describe("SqliteStateRepository", () => {
 
     expect(duplicate.id).toBe(registered.id);
     await expect(repository.list()).resolves.toHaveLength(1);
+  });
+
+  it("persists complete project ordering and appends newly registered projects", async () => {
+    const root = await createWorkspace();
+    const firstRoot = join(root, "first");
+    const secondRoot = join(root, "second");
+    const thirdRoot = join(root, "third");
+    await Promise.all([mkdir(firstRoot), mkdir(secondRoot), mkdir(thirdRoot)]);
+    const repository = await openRepository(root);
+    const first = await repository.register({ name: "First", rootPath: firstRoot });
+    const second = await repository.register({ name: "Second", rootPath: secondRoot });
+
+    await expect(repository.reorder([second.id, first.id])).resolves.toEqual([second, first]);
+    await repository.close();
+    repositories.splice(repositories.indexOf(repository), 1);
+
+    const reopened = await openRepository(root);
+    const third = await reopened.register({ name: "Third", rootPath: thirdRoot });
+    await expect(reopened.list()).resolves.toEqual([second, first, third]);
+  });
+
+  it("rejects incomplete or duplicated project ordering without partial writes", async () => {
+    const root = await createWorkspace();
+    const firstRoot = join(root, "first");
+    const secondRoot = join(root, "second");
+    await Promise.all([mkdir(firstRoot), mkdir(secondRoot)]);
+    const repository = await openRepository(root);
+    const first = await repository.register({ name: "First", rootPath: firstRoot });
+    const second = await repository.register({ name: "Second", rootPath: secondRoot });
+
+    await expect(repository.reorder([second.id])).rejects.toThrow(/every project exactly once/u);
+    await expect(repository.reorder([first.id, first.id])).rejects.toThrow(
+      /every project exactly once/u,
+    );
+    await expect(repository.list()).resolves.toEqual([first, second]);
   });
 
   it("isolates project defaults and task settings across projects", async () => {

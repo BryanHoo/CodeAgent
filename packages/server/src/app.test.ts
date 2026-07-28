@@ -253,6 +253,7 @@ function createSettingsRepository() {
 }
 
 function createServerOptions(provider: AgentProvider, overrides: Record<string, unknown> = {}) {
+  const orderedProjects = [project];
   const runtimeProvider: AgentRuntimeProvider = {
     forProject: () => provider,
     getCapabilities: () => provider.getCapabilities(),
@@ -260,11 +261,17 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
   };
   return {
     projectRepository: {
-      list: vi.fn(() => Promise.resolve([project])),
+      list: vi.fn(() => Promise.resolve(orderedProjects)),
       read: vi.fn((projectId: string) =>
         Promise.resolve(projectId === project.id ? project : undefined),
       ),
       register: vi.fn(() => Promise.resolve(project)),
+      reorder: vi.fn((projectIds: readonly string[]) => {
+        const reordered = projectIds.map((projectId) =>
+          orderedProjects.find((currentProject) => currentProject.id === projectId),
+        );
+        return Promise.resolve(reordered.filter((item) => item !== undefined));
+      }),
     },
     provider: runtimeProvider,
     selectProjectDirectory: vi.fn(() => Promise.resolve(undefined)),
@@ -349,6 +356,64 @@ describe("CodeAgent Server", () => {
       turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
     });
     expect(projectsResponse.json()).toEqual({ data: [project], nextCursor: null });
+  });
+
+  it("validates and persists a complete project order idempotently", async () => {
+    const provider = createProvider().provider;
+    const secondProject = {
+      ...project,
+      createdAt: "2026-07-23T00:01:00.000Z",
+      id: "superwork",
+      name: "superwork",
+      rootPath: "/workspace/superwork",
+    };
+    let orderedProjects = [project, secondProject];
+    const reorder = vi.fn((projectIds: readonly string[]) => {
+      orderedProjects = projectIds.map((projectId) => {
+        const matchedProject = orderedProjects.find((item) => item.id === projectId);
+        if (matchedProject === undefined) {
+          throw new Error("Unknown project");
+        }
+        return matchedProject;
+      });
+      return Promise.resolve(orderedProjects);
+    });
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, {
+        projectRepository: {
+          list: () => Promise.resolve(orderedProjects),
+          read: (projectId: string) =>
+            Promise.resolve(orderedProjects.find((item) => item.id === projectId)),
+          register: () => Promise.resolve(project),
+          reorder,
+        },
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const request = {
+      headers: { "idempotency-key": "project-order-key" },
+      method: "PUT" as const,
+      payload: { projectIds: [secondProject.id, project.id] },
+      url: "/v1/projects/order",
+    };
+    const firstResponse = await app.inject(request);
+    const repeatedResponse = await app.inject(request);
+    const staleResponse = await app.inject({
+      ...request,
+      headers: { "idempotency-key": "stale-project-order-key" },
+      payload: { projectIds: [project.id] },
+    });
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(firstResponse.json()).toEqual({
+      data: [secondProject, project],
+      nextCursor: null,
+    });
+    expect(repeatedResponse.json()).toEqual(firstResponse.json());
+    expect(reorder).toHaveBeenCalledOnce();
+    expect(staleResponse.statusCode).toBe(409);
+    expect(staleResponse.json()).toMatchObject({ code: "INVALID_REQUEST", retryable: false });
   });
 
   it("adds a project through the host directory selector", async () => {
@@ -902,6 +967,7 @@ describe("CodeAgent Server", () => {
         read: (projectId) =>
           Promise.resolve([project, otherProject].find((item) => item.id === projectId)),
         register: () => Promise.resolve(project),
+        reorder: () => Promise.resolve([project, otherProject]),
       },
       provider: runtimeProvider,
       selectProjectDirectory: () => Promise.resolve(undefined),

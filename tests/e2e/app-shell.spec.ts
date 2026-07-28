@@ -44,6 +44,18 @@ function parseTaskSettingsRequest(requestBody: string | null) {
   return { approvalPolicy, model, reasoningEffort, sandboxMode };
 }
 
+function parseProjectOrderRequest(requestBody: string | null): readonly string[] {
+  const value = parseRequestRecord(requestBody);
+  const projectIds = value["projectIds"];
+  if (
+    !Array.isArray(projectIds) ||
+    !projectIds.every((projectId) => typeof projectId === "string")
+  ) {
+    throw new Error("Invalid project order request");
+  }
+  return projectIds;
+}
+
 const projects = [
   {
     createdAt: "2026-07-22T06:00:00.000Z",
@@ -282,6 +294,16 @@ test.beforeEach(async ({ page }) => {
       body = { data: models, nextCursor: null };
     } else if (/^\/v1\/projects\/[^/]+\/skills$/u.test(url.pathname)) {
       body = { data: skills, nextCursor: null };
+    } else if (url.pathname === "/v1/projects/order" && route.request().method() === "PUT") {
+      const projectIds = parseProjectOrderRequest(route.request().postData());
+      routedProjects = projectIds.map((projectId) => {
+        const project = routedProjects.find((item) => item.id === projectId);
+        if (project === undefined) {
+          throw new Error("Unknown project in order request");
+        }
+        return project;
+      });
+      body = { data: routedProjects, nextCursor: null };
     } else if (url.pathname === "/v1/projects" && route.request().method() === "POST") {
       const addedProject = {
         createdAt: "2026-07-25T00:00:00.000Z",
@@ -460,6 +482,75 @@ test("exposes the documented navigation routes", async ({ page }) => {
       page.getByRole("main").getByRole("heading", { name: route.heading }),
     ).toBeVisible();
   }
+});
+
+test("drags project folders to reorder and restores the persisted order", async ({ page }) => {
+  await page.goto("/p/code-agent");
+  const codeAgentProject = page.getByRole("button", { name: "切换项目 CodeAgent" });
+  const superworkProject = page.getByRole("button", { name: "切换项目 superwork" });
+  await codeAgentProject.click();
+
+  const codeAgentBounds = await codeAgentProject.boundingBox();
+  const superworkBounds = await superworkProject.boundingBox();
+  if (codeAgentBounds === null || superworkBounds === null) {
+    throw new Error("Project rows are not visible");
+  }
+  const reorderRequest = page.waitForRequest(
+    (request) => request.url().endsWith("/v1/projects/order") && request.method() === "PUT",
+  );
+  await page.mouse.move(
+    codeAgentBounds.x + codeAgentBounds.width / 2,
+    codeAgentBounds.y + codeAgentBounds.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    codeAgentBounds.x + codeAgentBounds.width / 2 + 12,
+    codeAgentBounds.y + codeAgentBounds.height / 2,
+  );
+  await expect(codeAgentProject.locator("xpath=..").locator("xpath=..")).toHaveAttribute(
+    "data-project-reordering",
+    "true",
+  );
+  await page.mouse.move(
+    superworkBounds.x + superworkBounds.width / 2,
+    superworkBounds.y + superworkBounds.height * 0.75,
+    { steps: 4 },
+  );
+  await page.mouse.up();
+
+  expect(parseProjectOrderRequest((await reorderRequest).postData())).toEqual([
+    "superwork",
+    "code-agent",
+  ]);
+  await expect
+    .poll(() =>
+      page
+        .locator("[data-project-reorder-id]")
+        .evaluateAll((elements) =>
+          elements.map((element) => element.getAttribute("data-project-reorder-id")),
+        ),
+    )
+    .toEqual(["superwork", "code-agent"]);
+
+  await page.reload();
+  await expect
+    .poll(() =>
+      page
+        .locator("[data-project-reorder-id]")
+        .evaluateAll((elements) =>
+          elements.map((element) => element.getAttribute("data-project-reorder-id")),
+        ),
+    )
+    .toEqual(["superwork", "code-agent"]);
+
+  const keyboardRequest = page.waitForRequest(
+    (request) => request.url().endsWith("/v1/projects/order") && request.method() === "PUT",
+  );
+  await page.getByRole("button", { name: "切换项目 CodeAgent" }).press("Alt+ArrowUp");
+  expect(parseProjectOrderRequest((await keyboardRequest).postData())).toEqual([
+    "code-agent",
+    "superwork",
+  ]);
 });
 
 test("removes the legacy workspace routes", async ({ page }) => {

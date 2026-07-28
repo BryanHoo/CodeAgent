@@ -15,6 +15,7 @@ import {
   AgentTaskSettingsResponseSchema,
   HealthResponseSchema,
   ProjectPageSchema,
+  ReorderProjectsResponseSchema,
   ProjectGitStatusSchema,
   ProjectSourceFileSchema,
   PinAgentTaskResponseSchema,
@@ -46,6 +47,7 @@ import {
   type HealthResponse,
   type InterruptAgentTurnResponse,
   type ProjectPage,
+  type ReorderProjectsResponse,
   type ProjectGitStatus,
   type ProjectSourceFile,
   type PinAgentTaskResponse,
@@ -167,6 +169,19 @@ export class CodeAgentClient {
 
   public async listProjects(): Promise<ProjectPage> {
     return this.#request("/v1/projects", ProjectPageSchema);
+  }
+
+  public async reorderProjects(
+    projectIds: readonly string[],
+    options: MutationOptions = {},
+  ): Promise<ReorderProjectsResponse> {
+    return this.#mutation(
+      "/v1/projects/order",
+      { projectIds },
+      ReorderProjectsResponseSchema,
+      options,
+      "PUT",
+    );
   }
 
   public async getProjectDefaults(projectId: string): Promise<AgentProjectDefaultsResponse> {

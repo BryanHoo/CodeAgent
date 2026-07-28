@@ -43,6 +43,8 @@ import {
   ReviewAgentTaskResponseSchema,
   RenameAgentTaskRequestSchema,
   RenameAgentTaskResponseSchema,
+  ReorderProjectsRequestSchema,
+  ReorderProjectsResponseSchema,
   UploadAgentFeedbackRequestSchema,
   UploadAgentFeedbackResponseSchema,
   RollbackAgentTurnRequestSchema,
@@ -78,6 +80,39 @@ describe("project protocol", () => {
       type: "object",
     });
     expect(ProjectSchema.required).toEqual(["createdAt", "id", "name", "rootPath"]);
+  });
+
+  it("requires a complete non-duplicated project order", () => {
+    expect(
+      Value.Check(ReorderProjectsRequestSchema, {
+        projectIds: ["superwork", "code-agent"],
+      }),
+    ).toBe(true);
+    expect(Value.Check(ReorderProjectsRequestSchema, { projectIds: [] })).toBe(false);
+    expect(
+      Value.Check(ReorderProjectsRequestSchema, {
+        projectIds: ["code-agent", "code-agent"],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ReorderProjectsRequestSchema, {
+        projectIds: ["code-agent"],
+        staleOrder: true,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ReorderProjectsResponseSchema, {
+        data: [
+          {
+            createdAt: "2026-07-23T00:00:00.000Z",
+            id: "code-agent",
+            name: "CodeAgent",
+            rootPath: "/workspace/CodeAgent",
+          },
+        ],
+        nextCursor: null,
+      }),
+    ).toBe(true);
   });
 
   it("scopes every task to a project and records its pinned state", () => {

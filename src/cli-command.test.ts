@@ -72,7 +72,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
         foreignKeys: true,
         integrityCheck: "ok",
         journalMode: "wal",
-        migrationVersion: 3,
+        migrationVersion: 4,
         synchronous: "normal",
         writable: true,
       }),
@@ -83,6 +83,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     readTaskSettings: vi.fn(() => Promise.resolve(undefined)),
     read: vi.fn(() => Promise.resolve(undefined)),
     register: vi.fn(),
+    reorder: vi.fn(() => Promise.resolve([])),
     writeProjectDefaults: vi.fn((_projectId, settings) => Promise.resolve(settings)),
     writeTaskPinned: vi.fn((_projectId, _taskId, pinned) => Promise.resolve(pinned)),
     writeTaskSettings: vi.fn((_projectId, _taskId, settings) => Promise.resolve(settings)),
@@ -170,7 +171,7 @@ describe("runCli", () => {
       "/custom/home/code-agent/state.sqlite3",
     );
     expect(harness.stdout.join("")).toContain("[ok] SQLite writable");
-    expect(harness.stdout.join("")).toContain("[ok] SQLite migration 3");
+    expect(harness.stdout.join("")).toContain("[ok] SQLite migration 4");
     expect(harness.stdout.join("")).toContain("[ok] SQLite integrity_check ok");
     expect(harness.stdout.join("")).toContain("[ok] SQLite journal_mode wal");
     expect(harness.databaseClose).toHaveBeenCalledOnce();

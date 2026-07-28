@@ -43,6 +43,7 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
       list: () => Promise.resolve([project]),
       read: (projectId: string) => Promise.resolve(projectId === project.id ? project : undefined),
       register: () => Promise.resolve(project),
+      reorder: () => Promise.resolve([project]),
     },
     provider,
     selectProjectDirectory: () => Promise.resolve(undefined),

@@ -37,6 +37,7 @@ import {
 } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { getTaskActivity } from "../../conversation/runtime/task-activity.js";
+import { useProjectReordering } from "../hooks/use-project-reordering.js";
 
 const primaryActionClassName =
   "flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small font-medium text-foreground transition-colors hover:bg-control-hover";
@@ -113,11 +114,14 @@ export function ProjectSidebar({
     client,
     error,
     isPending,
+    isProjectOrderPending,
     isProjectPickerOpen,
     projects,
+    projectOrderError,
     projectTaskStates,
     taskActivity,
     tasks,
+    reorderProjects,
   } = useProjects();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -145,9 +149,19 @@ export function ProjectSidebar({
   const pinnedTasks = getPinnedTasks(visibleTasks);
   const hasPendingTasks = [...projectTaskStates.values()].some((state) => state.isPending);
   const hasTaskError = [...projectTaskStates.values()].some((state) => state.error !== null);
-  const firstProject = projects[0];
   const taskActionPending =
     pinMutation.isPending || renameMutation.isPending || archiveMutation.isPending;
+  const {
+    activeProjectId: reorderingProjectId,
+    announcement: projectOrderAnnouncement,
+    getProjectReorderProps,
+    orderedProjects,
+  } = useProjectReordering({
+    disabled: isProjectOrderPending,
+    onReorder: reorderProjects,
+    projects,
+  });
+  const firstProject = orderedProjects[0];
 
   useEffect(() => {
     // Projects 异步到达后默认展开新项目，保留用户已手动设置的现有项目状态。
@@ -382,12 +396,20 @@ export function ProjectSidebar({
               {taskActionError}
             </p>
           )}
+          {projectOrderError === null ? null : (
+            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
+              无法保存项目排序
+            </p>
+          )}
+          <p aria-live="polite" className="sr-only">
+            {projectOrderAnnouncement}
+          </p>
 
           <div
             className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-3"
             data-testid="project-tree-scroll"
           >
-            {projects.map((project) => {
+            {orderedProjects.map((project) => {
               const projectTasks = visibleTasks.filter((task) => task.projectId === project.id);
               const expanded = expandedProjects.has(project.id);
               const showAllTasks = expandedTaskProjects.has(project.id);
@@ -397,16 +419,27 @@ export function ProjectSidebar({
                 (showAllTasks && projectTasks.length > PROJECT_TASK_PREVIEW_LIMIT);
 
               return (
-                <div className="min-w-0" key={project.id}>
+                <div
+                  className={`min-w-0 transition-[opacity,transform] ${
+                    reorderingProjectId === project.id ? "relative z-10 opacity-80" : ""
+                  }`}
+                  data-project-reordering={reorderingProjectId === project.id ? "true" : "false"}
+                  key={project.id}
+                >
                   <div className="flex min-w-0 items-center gap-0.5">
                     <button
                       aria-expanded={expanded}
                       aria-label={`切换项目 ${project.name}`}
-                      className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-body-small font-medium text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+                      className={`flex h-8 min-w-0 flex-1 touch-pan-y select-none items-center gap-2 rounded-control px-2 text-body-small font-medium transition-colors hover:bg-control-hover hover:text-foreground ${
+                        reorderingProjectId === project.id
+                          ? "cursor-grabbing bg-control-active text-foreground shadow-sm"
+                          : "cursor-grab text-muted-foreground"
+                      }`}
                       onClick={() => {
                         toggleProject(project.id);
                       }}
                       type="button"
+                      {...getProjectReorderProps(project.id)}
                     >
                       <Folder className="size-4 shrink-0" aria-hidden="true" />
                       <span className="truncate">{project.name}</span>

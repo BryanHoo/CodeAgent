@@ -90,6 +90,14 @@ const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     `,
     version: 3,
   },
+  {
+    name: "add_project_sort_order",
+    sql: `
+      ALTER TABLE projects
+        ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+    `,
+    version: 4,
+  },
 ];
 
 type WorkerResponse =
@@ -251,6 +259,10 @@ export class SqliteStateRepository implements ProjectRepository, AgentSettingsRe
 
   public read(projectId: string): Promise<Project | undefined> {
     return this.#call("readProject", { projectId });
+  }
+
+  public reorder(projectIds: readonly string[]): Promise<readonly Project[]> {
+    return this.#call("reorderProjects", { projectIds });
   }
 
   public async register(input: RegisterProjectInput): Promise<Project> {

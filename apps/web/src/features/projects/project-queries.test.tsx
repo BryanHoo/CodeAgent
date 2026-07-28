@@ -10,11 +10,13 @@ import {
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
   projectGitStatusQueryOptions,
+  projectReorderMutationOptions,
   projectTasksQueryOptions,
   projectsQueryOptions,
   taskSnapshotQueryOptions,
   taskSettingsMutationOptions,
   removeProjectTaskFromPage,
+  reorderProjectPage,
   replaceProjectTaskInPage,
   upsertProjectTaskPage,
 } from "./project-queries.js";
@@ -124,6 +126,19 @@ describe("project queries", () => {
       data: [sibling],
       nextCursor: null,
     });
+  });
+
+  it("reorders a complete project page and rejects stale project sets", () => {
+    const secondProject = { ...project, id: "superwork", name: "superwork" };
+    const page = { data: [project, secondProject], nextCursor: null };
+
+    expect(reorderProjectPage(page, [secondProject.id, project.id])).toEqual({
+      data: [secondProject, project],
+      nextCursor: null,
+    });
+    expect(reorderProjectPage(page, [project.id])).toBeUndefined();
+    expect(reorderProjectPage(page, [project.id, "missing"])).toBeUndefined();
+    expect(reorderProjectPage(page, [project.id, project.id])).toBeUndefined();
   });
 
   it("polls Git status only while the current task is running", async () => {
@@ -240,6 +255,17 @@ describe("project queries", () => {
 
     expect(client.updateProjectDefaults).toHaveBeenCalledWith("code-agent", defaults);
     expect(client.updateTaskSettings).toHaveBeenCalledWith("code-agent", "task-1", settings);
+  });
+
+  it("sends the complete project order through a serialized mutation", async () => {
+    const reorderProjects = vi.fn(() => Promise.resolve({ data: [project], nextCursor: null }));
+    const queryClient = new QueryClient();
+    const mutationOptions = projectReorderMutationOptions({ reorderProjects });
+
+    await queryClient.getMutationCache().build(queryClient, mutationOptions).execute([project.id]);
+
+    expect(reorderProjects).toHaveBeenCalledWith([project.id]);
+    expect(mutationOptions.scope).toEqual({ id: "projects:reorder" });
   });
 
   it("loads and merges every task page returned by the client", async () => {

@@ -103,10 +103,14 @@ function createOperations(database) {
   const statements = hasTable(database, "projects")
     ? {
         insertProject: database.prepare(
-          "INSERT OR IGNORE INTO projects (id, name, root_path, created_at) VALUES (?, ?, ?, ?)",
+          `INSERT OR IGNORE INTO projects (id, name, root_path, created_at, sort_order)
+           VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order) + 1, 0) FROM projects))`,
         ),
         listProjects: database.prepare(
-          "SELECT id, name, root_path, created_at FROM projects ORDER BY created_at, id",
+          "SELECT id, name, root_path, created_at FROM projects ORDER BY sort_order, created_at, id",
+        ),
+        listProjectIds: database.prepare(
+          "SELECT id FROM projects ORDER BY sort_order, created_at, id",
         ),
         readProject: database.prepare(
           "SELECT id, name, root_path, created_at FROM projects WHERE id = ?",
@@ -114,6 +118,7 @@ function createOperations(database) {
         readProjectByRoot: database.prepare(
           "SELECT id, name, root_path, created_at FROM projects WHERE root_path = ?",
         ),
+        writeProjectSortOrder: database.prepare("UPDATE projects SET sort_order = ? WHERE id = ?"),
         readProjectDefaults: database.prepare(
           "SELECT model, reasoning_effort, sandbox_mode FROM project_defaults WHERE project_id = ?",
         ),
@@ -160,6 +165,25 @@ function createOperations(database) {
     return statements;
   }
 
+  const reorderProjects = database.transaction((projectIds) => {
+    const stateStatements = requireStatements();
+    const storedProjectIds = stateStatements.listProjectIds.all().map((row) => row.id);
+    const requestedProjectIds = new Set(projectIds);
+    const containsCompleteProjectSet =
+      projectIds.length === storedProjectIds.length &&
+      requestedProjectIds.size === storedProjectIds.length &&
+      storedProjectIds.every((projectId) => requestedProjectIds.has(projectId));
+    if (!containsCompleteProjectSet) {
+      throw new Error("Project order must contain every project exactly once");
+    }
+
+    // 完整顺序在同一事务内替换，读取方不会观察到部分重排。
+    projectIds.forEach((projectId, sortOrder) => {
+      stateStatements.writeProjectSortOrder.run(sortOrder, projectId);
+    });
+    return stateStatements.listProjects.all().map(projectFromRow);
+  });
+
   return {
     diagnose() {
       database.exec("BEGIN IMMEDIATE");
@@ -195,6 +219,9 @@ function createOperations(database) {
     },
     readProject(payload) {
       return projectFromRow(requireStatements().readProject.get(payload.projectId));
+    },
+    reorderProjects(payload) {
+      return reorderProjects(payload.projectIds);
     },
     readProjectDefaults(payload) {
       return projectDefaultsFromRow(requireStatements().readProjectDefaults.get(payload.projectId));

@@ -97,6 +97,32 @@ describe("CodeAgentClient", () => {
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ body: "{}", method: "POST" });
   });
 
+  it("persists and validates a complete project order", async () => {
+    const orderedProjects = [
+      {
+        createdAt: "2026-07-23T00:00:00.000Z",
+        id: "superwork",
+        name: "superwork",
+        rootPath: "/workspace/superwork",
+      },
+    ];
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse({ data: orderedProjects, nextCursor: null }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(
+      client.reorderProjects(["superwork"], { idempotencyKey: "project-order-key" }),
+    ).resolves.toEqual({ data: orderedProjects, nextCursor: null });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects/order");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      body: JSON.stringify({ projectIds: ["superwork"] }),
+      method: "PUT",
+    });
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("idempotency-key")).toBe(
+      "project-order-key",
+    );
+  });
+
   it("builds task pagination requests and validates successful responses", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock.mockResolvedValue(jsonResponse({ data: [task], nextCursor: null }));

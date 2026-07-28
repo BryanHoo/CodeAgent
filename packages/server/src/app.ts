@@ -41,6 +41,8 @@ import {
   ReviewAgentTaskResponseSchema,
   RenameAgentTaskRequestSchema,
   RenameAgentTaskResponseSchema,
+  ReorderProjectsRequestSchema,
+  ReorderProjectsResponseSchema,
   RollbackAgentTurnRequestSchema,
   RollbackAgentTurnResponseSchema,
   ResolvePendingRequestRequestSchema,
@@ -70,6 +72,7 @@ import {
   type RollbackAgentTurnRequest,
   type ReviewAgentTaskRequest,
   type RenameAgentTaskRequest,
+  type ReorderProjectsRequest,
   type ResolvePendingRequestRequest,
   type StartAgentTurnRequest,
   type UploadAgentFeedbackRequest,
@@ -577,6 +580,49 @@ export async function createCodeAgentServer(
     data: await options.projectRepository.list(),
     nextCursor: null,
   }));
+
+  app.put<{
+    Body: ReorderProjectsRequest;
+    Headers: { "idempotency-key": string };
+  }>(
+    "/v1/projects/order",
+    {
+      schema: {
+        body: ReorderProjectsRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        response: {
+          200: ReorderProjectsResponseSchema,
+          400: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        ["reorder-projects"],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const projects = await options.projectRepository.list();
+          const storedProjectIds = new Set(projects.map((project) => project.id));
+          const containsCompleteProjectSet =
+            request.body.projectIds.length === projects.length &&
+            request.body.projectIds.every((projectId) => storedProjectIds.has(projectId));
+          if (!containsCompleteProjectSet) {
+            throw new MutationHttpError(
+              "INVALID_REQUEST",
+              "Project order must contain every project exactly once",
+              409,
+            );
+          }
+          return {
+            data: await options.projectRepository.reorder(request.body.projectIds),
+            nextCursor: null,
+          };
+        },
+      ),
+  );
 
   app.get<{ Params: { projectId: string } }>(
     "/v1/projects/:projectId/skills",

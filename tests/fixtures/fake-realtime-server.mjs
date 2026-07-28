@@ -34,6 +34,7 @@ const server = await createCodeAgentServer({
     list: () => Promise.resolve([project]),
     read: (projectId) => Promise.resolve(projectId === project.id ? project : undefined),
     register: () => Promise.resolve(project),
+    reorder: () => Promise.resolve([project]),
   },
   provider,
   selectProjectDirectory: () => Promise.resolve(undefined),

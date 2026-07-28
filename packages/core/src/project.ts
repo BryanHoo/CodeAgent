@@ -14,6 +14,7 @@ export interface ProjectRepository {
   list(): Promise<readonly Project[]>;
   read(projectId: string): Promise<Project | undefined>;
   register(input: RegisterProjectInput): Promise<Project>;
+  reorder(projectIds: readonly string[]): Promise<readonly Project[]>;
 }
 
 // 设置端口只接收完整对象，具体事务与数据库实现留在 Server Adapter。

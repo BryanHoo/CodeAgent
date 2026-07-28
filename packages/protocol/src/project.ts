@@ -27,6 +27,18 @@ export const AddProjectResponseSchema = Type.Object(
 
 export type AddProjectResponse = Readonly<Static<typeof AddProjectResponseSchema>>;
 
+export const ReorderProjectsRequestSchema = Type.Object(
+  {
+    projectIds: Type.Array(Type.String({ minLength: 1 }), {
+      minItems: 1,
+      uniqueItems: true,
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export type ReorderProjectsRequest = Readonly<Static<typeof ReorderProjectsRequestSchema>>;
+
 export const AgentTaskSchema = Type.Object(
   {
     id: Type.String({ minLength: 1 }),
@@ -859,6 +871,9 @@ function createPageSchema<T extends TSchema>(itemSchema: T) {
 
 export const ProjectPageSchema = createPageSchema(ProjectSchema);
 export type ProjectPage = Page<Project>;
+
+export const ReorderProjectsResponseSchema = ProjectPageSchema;
+export type ReorderProjectsResponse = ProjectPage;
 
 export const AgentTaskPageSchema = createPageSchema(AgentTaskSchema);
 export type AgentTaskPage = Page<AgentTask>;

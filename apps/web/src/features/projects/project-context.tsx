@@ -3,8 +3,9 @@ import type {
   AgentTask,
   AgentTaskSnapshotResponse,
   Project,
+  ProjectPage,
 } from "@code-agent/protocol";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -18,7 +19,9 @@ import {
   capabilitiesQueryOptions,
   codeAgentClient,
   projectTasksQueryOptions,
+  projectReorderMutationOptions,
   projectsQueryOptions,
+  reorderProjectPage,
   type CodeAgentWorkbenchClient,
 } from "./project-queries.js";
 
@@ -33,10 +36,13 @@ type ProjectContextValue = Readonly<{
   error: Error | null;
   isPending: boolean;
   isProjectPickerOpen: boolean;
+  isProjectOrderPending: boolean;
   markTaskRunning: (projectId: string, taskId: string) => void;
   observeTaskSnapshot: (response: AgentTaskSnapshotResponse) => void;
   projectTaskStates: ReadonlyMap<string, Readonly<{ error: Error | null; isPending: boolean }>>;
   projects: readonly Project[];
+  projectOrderError: Error | null;
+  reorderProjects: (projectIds: readonly string[]) => Promise<boolean>;
   retry: () => Promise<void>;
   taskActivity: TaskActivityMap;
   tasks: readonly AgentTask[];
@@ -53,6 +59,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   const queryClient = useQueryClient();
   const [addProjectError, setAddProjectError] = useState<Error | null>(null);
   const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false);
+  const [projectOrderError, setProjectOrderError] = useState<Error | null>(null);
   const [taskActivity, setTaskActivity] = useState<TaskActivityMap>(() => new Map());
   const activitySubscriptionsRef = useRef(
     new Map<string, Readonly<{ sessionId: string; unsubscribe: () => void }>>(),
@@ -67,6 +74,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   );
   const capabilitiesQuery = useQuery(capabilitiesQueryOptions(client));
   const projectsQuery = useQuery(projectsQueryOptions(client));
+  const projectOrderMutation = useMutation(projectReorderMutationOptions(client));
   const projects = projectsQuery.data?.data ?? emptyProjects;
   const taskQueries = useQueries({
     queries: projects.map((project) => projectTasksQueryOptions(project.id, client)),
@@ -172,6 +180,30 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
       setIsProjectPickerOpen(false);
     }
   }, [client, isProjectPickerOpen, queryClient]);
+  const reorderProjects = useCallback(
+    async (projectIds: readonly string[]) => {
+      const currentPage = queryClient.getQueryData<ProjectPage>(["projects"]);
+      const optimisticPage = reorderProjectPage(currentPage, projectIds);
+      if (optimisticPage === undefined) {
+        setProjectOrderError(new Error("项目列表已变化，请重试排序"));
+        return false;
+      }
+
+      setProjectOrderError(null);
+      // 拖动释放后立即更新列表；服务端失败时恢复提交前的完整快照。
+      queryClient.setQueryData<ProjectPage>(["projects"], optimisticPage);
+      try {
+        const response = await projectOrderMutation.mutateAsync(projectIds);
+        queryClient.setQueryData<ProjectPage>(["projects"], response);
+        return true;
+      } catch (error) {
+        queryClient.setQueryData<ProjectPage>(["projects"], currentPage);
+        setProjectOrderError(error instanceof Error ? error : new Error("保存项目排序失败"));
+        return false;
+      }
+    },
+    [projectOrderMutation, queryClient],
+  );
   const retry = useCallback(async () => {
     // Runtime 恢复后统一刷新全部服务端状态，避免部分 Query 继续保留失败结果。
     await queryClient.invalidateQueries();
@@ -198,10 +230,13 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
         error: capabilitiesQuery.error ?? projectsQuery.error,
         isPending,
         isProjectPickerOpen,
+        isProjectOrderPending: projectOrderMutation.isPending,
         markTaskRunning,
         observeTaskSnapshot,
         projectTaskStates,
         projects,
+        projectOrderError,
+        reorderProjects,
         retry,
         taskActivity,
         tasks,

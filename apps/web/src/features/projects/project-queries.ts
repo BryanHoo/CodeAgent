@@ -4,6 +4,7 @@ import type {
   AgentTask,
   AgentTaskPage,
   AgentTaskSettings,
+  ProjectPage,
 } from "@code-agent/protocol";
 import { mutationOptions, queryOptions } from "@tanstack/react-query";
 
@@ -27,6 +28,7 @@ export type CodeAgentMutationClient = Pick<
   | "interruptTurn"
   | "pinTask"
   | "renameTask"
+  | "reorderProjects"
   | "startReview"
   | "startTask"
   | "startTurn"
@@ -84,6 +86,30 @@ export function removeProjectTaskFromPage(
     data: (currentPage?.data ?? []).filter((task) => task.id !== taskId),
     nextCursor: currentPage?.nextCursor ?? null,
   };
+}
+
+export function reorderProjectPage(
+  currentPage: ProjectPage | undefined,
+  projectIds: readonly string[],
+): ProjectPage | undefined {
+  if (currentPage === undefined) {
+    return undefined;
+  }
+  if (
+    currentPage.data.length !== projectIds.length ||
+    new Set(projectIds).size !== projectIds.length
+  ) {
+    return undefined;
+  }
+  const projectById = new Map(currentPage.data.map((project) => [project.id, project]));
+  const reorderedProjects = projectIds.flatMap((projectId) => {
+    const project = projectById.get(projectId);
+    return project === undefined ? [] : [project];
+  });
+  if (reorderedProjects.length !== currentPage.data.length) {
+    return undefined;
+  }
+  return { ...currentPage, data: reorderedProjects };
 }
 
 type TaskPinMutationInput = Readonly<{
@@ -192,6 +218,16 @@ export function projectsQueryOptions(client: CodeAgentReadClient = codeAgentClie
   return queryOptions({
     queryFn: () => client.listProjects(),
     queryKey: ["projects"] as const,
+  });
+}
+
+export function projectReorderMutationOptions(
+  client: Pick<CodeAgentClient, "reorderProjects"> = codeAgentClient,
+) {
+  return mutationOptions({
+    mutationFn: (projectIds: readonly string[]) => client.reorderProjects(projectIds),
+    mutationKey: ["projects", "reorder"] as const,
+    scope: { id: "projects:reorder" },
   });
 }
 
