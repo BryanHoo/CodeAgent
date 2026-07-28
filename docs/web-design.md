@@ -259,7 +259,7 @@ Project 名称行短按继续展开或收起 Task；指针移动超过点击容�
 - Composer 在文本开头或空白字符后输入 `/` 时显示外部浮层，连续正文字符后的 `/` 不触发；浮层先展示本地 Task 命令，再在命令组下方展示当前 Project 的 Codex Skills。Skill 选择后仅移除当前 Slash 片段并保留已有正文，以 `skill` 主题色 Token 留在输入框内，可点击或在空草稿时按 Backspace 移除。提交只携带统一 Skill ID 与名称，不拼接文本、不接收原生路径。
 - 用户消息通过统一消息字段携带已使用的 Skill 名称，并在 Timeline 中继续以 `skill` 主题色 Token 展示；该行为同时覆盖提交后的实时 Turn、首轮乐观消息和重新打开 Task 后由 Codex `userMessage.content` 恢复的历史消息。Codex 返回的 Skill 路径在 Provider 映射后丢弃，不进入 Web。
 - 窗口较窄时 Inspector 变为抽屉，Sidebar 变为可关闭侧栏。
-- Sidebar 的 `Projects` 标题固定在项目树滚动区外，Project 行连续排列并支持持久化重排；每个 Project 默认显示 5 个 Task，超出部分经“显示更多”展开。Task 行 hover/focus 时以省略号替换时间，并通过菜单执行固定、重命名和归档。
+- Sidebar 的 `Projects` 标题固定在项目树滚动区外，Project 行连续排列并支持持久化重排；每个 Project 使用独立 Cursor Infinite Query，首屏只请求并显示 5 个 Task。“显示更多”每次只加载该 Project 的一个下一页，失败时保留已有列表并可重试，全部加载后允许收起；搜索范围固定为已加载 Task，不触发全量历史读取。新建、固定、重命名和归档更新 Infinite Query 的所有已加载页并保留 Cursor。Task 行 hover/focus 时以省略号替换时间，并通过菜单执行固定、重命名和归档。
 
 页面不使用营销式 Hero、大量装饰卡片或卡片嵌套。视觉重点是可扫描信息、稳定布局和重复操作效率。
 
@@ -436,10 +436,18 @@ Store 规则：
 - Item 组件通过 `itemId` 原子订阅。
 - 不使用返回不稳定对象的大范围 Selector。
 - 不通过 React Context 直接广播完整运行时状态。
-- 未选中且无活动 Turn 的 Task Store 可以按 LRU 回收。
+- 未选中 Task Store 按 LRU 回收；最后一个消费者释放时关闭实时传输，重新选中时先用 Server Snapshot 校准，因此非活动 Store 即使停留在运行中或待审批状态也不会永久驻留。
+- 同一 Task 的多个界面消费者复用一个实时传输，避免重复 WebSocket 写入共享 Store。
 - Store 不负责持久化，刷新后以 Server Snapshot 为准。
 - Project 新 Task 默认设置由 TanStack Query 管理；已有 Task 的有效设置随 Task Snapshot 返回，避免打开 Task 后重复读取。
 - 设置控件只在用户事件中提交完整对象；Project defaults 和 Task settings 使用独立串行 Mutation，成功后更新对应 Query 缓存。
+
+当前实现补充：
+
+- `task-store.ts` 使用 `zustand/vanilla` 持有归一化实体，`use-task-runtime.ts` 只负责 Snapshot Query、WebSocket、动画帧 Delta Buffer 和恢复控制。
+- Timeline 的 Turn 组件订阅 Turn 元数据与 Item ID 顺序，具体 Item 按 `itemId` 订阅；既有 Item 的文本 Delta 不再通知 Timeline 根节点或已完成 Turn。
+- 注册表以 `projectId + taskId` 为身份并按最近访问顺序回收安全静止的 Store；运行中、待审批、未 Hydrate 或仍有消费者的 Store 保持驻留。
+- 反归一化 Snapshot 只服务 Workbench 的标题、设置、子代理摘要等低频兼容读取，不进入流式 Item 渲染路径。
 
 ## 13. Agent Event 处理
 

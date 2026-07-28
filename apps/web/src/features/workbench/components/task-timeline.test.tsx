@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
+import { createTaskStore } from "../../conversation/runtime/task-store.js";
 import { TaskSnapshotTimeline, TaskTimeline } from "./task-timeline.js";
 
 const completedTurn: RuntimeTaskSnapshot["turns"][number] = {
@@ -66,6 +67,99 @@ describe("TaskTimeline", () => {
     expect(markup).toContain("underline-offset-4");
     expect(markup).not.toContain("lucide-chevron-down");
     expect(markup).not.toContain('aria-label="切换新聊天项目，当前 CodeAgent"');
+  });
+
+  it("renders live item content from the normalized store instead of a stale root snapshot", () => {
+    const runningSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          completedAt: null,
+          error: null,
+          id: "turn-running",
+          items: [
+            {
+              id: "message-running",
+              role: "assistant",
+              text: "开始并继续",
+              type: "message",
+            },
+          ],
+          startedAt: snapshot.updatedAt,
+          status: "running",
+        },
+      ],
+    };
+    const store = createTaskStore(
+      { projectId: snapshot.projectId, taskId: snapshot.id },
+      {
+        checkpoint: { sequence: 1, sessionId: "runtime-1" },
+        snapshot: runningSnapshot,
+      },
+    );
+    const markup = renderToStaticMarkup(
+      <TaskTimeline
+        projectId={snapshot.projectId}
+        runtime={{
+          connectionState: "connected",
+          error: null,
+          isPending: false,
+          snapshot: { ...runningSnapshot, turns: [] },
+          store,
+        }}
+        taskId={snapshot.id}
+      />,
+    );
+
+    expect(markup).toContain("开始并继续");
+  });
+
+  it("does not offer rollback for a failed latest turn in the normalized store", () => {
+    const failedSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "failed",
+      turns: [
+        {
+          ...completedTurn,
+          error: "执行失败",
+          items: [
+            {
+              changes: [{ diff: "+失败前的修改", kind: "update", path: "/workspace/file.ts" }],
+              id: "failed-change",
+              status: "completed",
+              type: "file_change",
+            },
+          ],
+          status: "failed",
+        },
+      ],
+    };
+    const store = createTaskStore(
+      { projectId: snapshot.projectId, taskId: snapshot.id },
+      {
+        checkpoint: { sequence: 1, sessionId: "runtime-1" },
+        snapshot: failedSnapshot,
+      },
+    );
+
+    const markup = renderToStaticMarkup(
+      <TaskTimeline
+        canRollbackTurns
+        projectId={snapshot.projectId}
+        runtime={{
+          connectionState: "connected",
+          error: null,
+          isPending: false,
+          snapshot: failedSnapshot,
+          store,
+        }}
+        taskId={snapshot.id}
+      />,
+    );
+
+    expect(markup).toContain("执行失败");
+    expect(markup).not.toContain(">撤销<");
   });
 });
 

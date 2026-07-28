@@ -1,14 +1,75 @@
 import type { PendingRequest } from "@code-agent/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { requestNextProjectTaskPage } from "../../projects/project-context.js";
 import {
   deriveProjectSidebarConnectionState,
+  getProjectTaskPaginationControl,
   getProjectSidebarConnectionStatus,
   hasPendingApproval,
   TaskStatusIndicator,
   TaskActionMenu,
 } from "./project-sidebar.js";
+
+describe("Project task pagination", () => {
+  it("requests only the selected Project next page", async () => {
+    const fetchFirstProjectNextPage = vi.fn(() => Promise.resolve());
+    const fetchSecondProjectNextPage = vi.fn(() => Promise.resolve());
+    const projectTaskControllers = new Map([
+      ["project-1", { fetchNextPage: fetchFirstProjectNextPage }],
+      ["project-2", { fetchNextPage: fetchSecondProjectNextPage }],
+    ]);
+
+    await requestNextProjectTaskPage(projectTaskControllers, "project-2");
+
+    expect(fetchFirstProjectNextPage).not.toHaveBeenCalled();
+    expect(fetchSecondProjectNextPage).toHaveBeenCalledOnce();
+  });
+
+  it("ignores a next-page request for an unavailable Project", async () => {
+    await expect(requestNextProjectTaskPage(new Map(), "missing-project")).resolves.toBeUndefined();
+  });
+
+  it("separates local expansion, remote loading, retry, and collapse actions", () => {
+    expect(
+      getProjectTaskPaginationControl({
+        error: null,
+        hasHiddenLoadedTasks: false,
+        hasNextPage: true,
+        isExpanded: false,
+        isFetchingNextPage: false,
+      }),
+    ).toEqual({ action: "expand-and-load", disabled: false, label: "显示更多" });
+    expect(
+      getProjectTaskPaginationControl({
+        error: null,
+        hasHiddenLoadedTasks: false,
+        hasNextPage: true,
+        isExpanded: true,
+        isFetchingNextPage: true,
+      }),
+    ).toEqual({ action: "load", disabled: true, label: "正在加载更多" });
+    expect(
+      getProjectTaskPaginationControl({
+        error: new Error("network"),
+        hasHiddenLoadedTasks: false,
+        hasNextPage: true,
+        isExpanded: true,
+        isFetchingNextPage: false,
+      }),
+    ).toEqual({ action: "load", disabled: false, label: "重试加载更多" });
+    expect(
+      getProjectTaskPaginationControl({
+        error: null,
+        hasHiddenLoadedTasks: true,
+        hasNextPage: false,
+        isExpanded: true,
+        isFetchingNextPage: false,
+      }),
+    ).toEqual({ action: "collapse", disabled: false, label: "收起" });
+  });
+});
 
 describe("ProjectSidebar connection status", () => {
   it("uses the active task terminal connection state", () => {

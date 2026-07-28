@@ -1,4 +1,4 @@
-import { QueryClient } from "@tanstack/react-query";
+import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -11,14 +11,17 @@ import {
   projectDefaultsQueryOptions,
   projectGitStatusQueryOptions,
   projectReorderMutationOptions,
-  projectTasksQueryOptions,
+  projectTasksInfiniteQueryOptions,
+  type ProjectTaskInfiniteData,
   projectsQueryOptions,
   taskSnapshotQueryOptions,
   taskSettingsMutationOptions,
-  removeProjectTaskFromPage,
+  updateNewTaskTitleFromSnapshotInInfiniteData,
+  flattenProjectTaskPages,
+  removeProjectTaskFromInfiniteData,
   reorderProjectPage,
-  replaceProjectTaskInPage,
-  upsertProjectTaskPage,
+  replaceProjectTaskInInfiniteData,
+  upsertProjectTaskInInfiniteData,
 } from "./project-queries.js";
 
 const project = {
@@ -98,7 +101,13 @@ const snapshotResponse = {
 
 describe("project queries", () => {
   it("inserts a created task immediately and replaces it when fresh metadata arrives", () => {
-    const initialPage = { data: [task], nextCursor: null };
+    const initialData = {
+      pageParams: [undefined, "next-page"],
+      pages: [
+        { data: [task], nextCursor: "next-page" },
+        { data: [{ ...task, id: "task-older" }], nextCursor: null },
+      ],
+    };
     const createdTask = {
       ...task,
       id: "task-created",
@@ -107,24 +116,46 @@ describe("project queries", () => {
     };
     const materializedTask = { ...createdTask, title: "发送你好" };
 
-    const insertedPage = upsertProjectTaskPage(initialPage, createdTask);
-    const refreshedPage = upsertProjectTaskPage(insertedPage, materializedTask);
+    const insertedData = upsertProjectTaskInInfiniteData(initialData, createdTask);
+    const refreshedData = upsertProjectTaskInInfiniteData(insertedData, materializedTask);
 
-    expect(insertedPage.data).toEqual([createdTask, task]);
-    expect(refreshedPage.data).toEqual([materializedTask, task]);
+    expect(flattenProjectTaskPages(insertedData)).toEqual([
+      createdTask,
+      task,
+      { ...task, id: "task-older" },
+    ]);
+    expect(flattenProjectTaskPages(refreshedData)).toEqual([
+      materializedTask,
+      task,
+      { ...task, id: "task-older" },
+    ]);
+    expect(refreshedData).toMatchObject({
+      pageParams: [undefined, "next-page"],
+      pages: [{ nextCursor: "next-page" }, { nextCursor: null }],
+    });
   });
 
   it("replaces and removes task metadata without changing sibling order", () => {
     const sibling = { ...task, id: "task-2", title: "Sibling" };
-    const page = { data: [task, sibling], nextCursor: null };
+    const infiniteData = {
+      pageParams: [undefined, "next-page"],
+      pages: [
+        { data: [sibling], nextCursor: "next-page" },
+        { data: [task], nextCursor: null },
+      ],
+    };
 
-    expect(replaceProjectTaskInPage(page, { ...task, pinned: true })).toEqual({
-      data: [{ ...task, pinned: true }, sibling],
-      nextCursor: null,
+    const replacedData = replaceProjectTaskInInfiniteData(infiniteData, {
+      ...task,
+      pinned: true,
     });
-    expect(removeProjectTaskFromPage(page, task.id)).toEqual({
-      data: [sibling],
-      nextCursor: null,
+    const removedData = removeProjectTaskFromInfiniteData(infiniteData, task.id);
+
+    expect(flattenProjectTaskPages(replacedData)).toEqual([sibling, { ...task, pinned: true }]);
+    expect(flattenProjectTaskPages(removedData)).toEqual([sibling]);
+    expect(removedData).toMatchObject({
+      pageParams: [undefined, "next-page"],
+      pages: [{ nextCursor: "next-page" }, { nextCursor: null }],
     });
   });
 
@@ -223,8 +254,8 @@ describe("project queries", () => {
       },
     });
     await expect(
-      queryClient.fetchQuery(projectTasksQueryOptions("code-agent", client)),
-    ).resolves.toEqual({ data: [task], nextCursor: null });
+      queryClient.fetchInfiniteQuery(projectTasksInfiniteQueryOptions("code-agent", client)),
+    ).resolves.toEqual({ pageParams: [undefined], pages: [{ data: [task], nextCursor: null }] });
     await expect(
       queryClient.fetchQuery(taskSnapshotQueryOptions("code-agent", "task-1", client)),
     ).resolves.toEqual(snapshotResponse);
@@ -268,7 +299,7 @@ describe("project queries", () => {
     expect(mutationOptions.scope).toEqual({ id: "projects:reorder" });
   });
 
-  it("loads and merges every task page returned by the client", async () => {
+  it("loads only the first task page until the next page is explicitly requested", async () => {
     const nextTask = { ...task, id: "task-2", title: "后续分页任务" };
     const client = {
       listProjects: vi.fn(() => Promise.resolve({ data: [project], nextCursor: null })),
@@ -280,11 +311,98 @@ describe("project queries", () => {
     };
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-    await expect(
-      queryClient.fetchQuery(projectTasksQueryOptions("code-agent", client)),
-    ).resolves.toEqual({ data: [task, nextTask], nextCursor: null });
-    expect(client.listTasks).toHaveBeenNthCalledWith(1, "code-agent");
-    expect(client.listTasks).toHaveBeenNthCalledWith(2, "code-agent", { cursor: "next-page" });
+    const queryOptions = projectTasksInfiniteQueryOptions("code-agent", client);
+    const queryObserver = new InfiniteQueryObserver(queryClient, queryOptions);
+    const unsubscribe = queryObserver.subscribe(() => undefined);
+
+    await expect(queryObserver.refetch()).resolves.toMatchObject({
+      data: {
+        pageParams: [undefined],
+        pages: [{ data: [task], nextCursor: "next-page" }],
+      },
+    });
+    expect(queryClient.getQueryData(queryOptions.queryKey)).toEqual({
+      pageParams: [undefined],
+      pages: [{ data: [task], nextCursor: "next-page" }],
+    });
+    expect(client.listTasks).toHaveBeenCalledTimes(1);
+    expect(client.listTasks).toHaveBeenNthCalledWith(1, "code-agent", { limit: 5 });
+
+    await expect(queryObserver.fetchNextPage()).resolves.toMatchObject({
+      data: {
+        pageParams: [undefined, "next-page"],
+        pages: [
+          { data: [task], nextCursor: "next-page" },
+          { data: [nextTask], nextCursor: null },
+        ],
+      },
+    });
+    expect(client.listTasks).toHaveBeenNthCalledWith(2, "code-agent", {
+      cursor: "next-page",
+      limit: 5,
+    });
+    unsubscribe();
+  });
+
+  it("replaces the new-chat title when the first assistant reply starts", () => {
+    const newTask = { ...task, title: "新聊天" };
+    const currentData = {
+      pageParams: [undefined],
+      pages: [{ data: [newTask], nextCursor: null }],
+    } satisfies ProjectTaskInfiniteData;
+    const runningSnapshot = {
+      ...snapshot,
+      status: "running" as const,
+      title: "新聊天",
+      turns: [
+        {
+          completedAt: null,
+          error: null,
+          id: "turn-running",
+          items: [
+            {
+              id: "user-message",
+              role: "user" as const,
+              text: "修复停止回复后内容消失\n并更新标题",
+              type: "message" as const,
+            },
+            {
+              id: "assistant-message",
+              role: "assistant" as const,
+              text: "我来检查。",
+              type: "message" as const,
+            },
+          ],
+          startedAt: snapshot.updatedAt,
+          status: "running" as const,
+        },
+      ],
+    };
+
+    expect(updateNewTaskTitleFromSnapshotInInfiniteData(currentData, runningSnapshot)).toEqual({
+      pageParams: [undefined],
+      pages: [
+        {
+          data: [{ ...newTask, title: "修复停止回复后内容消失" }],
+          nextCursor: null,
+        },
+      ],
+    });
+  });
+
+  it("stops pagination when the provider repeats the current cursor", () => {
+    const queryOptions = projectTasksInfiniteQueryOptions("code-agent", {
+      listProjects: vi.fn(),
+      listTasks: vi.fn(),
+      readTask: vi.fn(),
+    });
+    const repeatedCursorPage = { data: [task], nextCursor: "same-cursor" };
+
+    expect(
+      queryOptions.getNextPageParam(repeatedCursorPage, [repeatedCursorPage], "same-cursor", [
+        "same-cursor",
+      ]),
+    ).toBeUndefined();
   });
 
   it("renders user-visible structured items without exposing reasoning", () => {

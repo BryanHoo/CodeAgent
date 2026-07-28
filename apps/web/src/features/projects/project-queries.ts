@@ -3,10 +3,16 @@ import type {
   AgentProjectDefaults,
   AgentTask,
   AgentTaskPage,
+  AgentTaskSnapshot,
   AgentTaskSettings,
   ProjectPage,
 } from "@code-agent/protocol";
-import { mutationOptions, queryOptions } from "@tanstack/react-query";
+import {
+  infiniteQueryOptions,
+  type InfiniteData,
+  mutationOptions,
+  queryOptions,
+} from "@tanstack/react-query";
 
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
 export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
@@ -56,40 +62,166 @@ export type CodeAgentWorkbenchClient = CodeAgentReadClient &
 type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
 
 export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 1_500;
+export const PROJECT_TASK_PAGE_SIZE = 5;
 
 export const codeAgentClient = new CodeAgentClient();
 
-export function upsertProjectTaskPage(
-  currentPage: AgentTaskPage | undefined,
-  task: AgentTask,
-): AgentTaskPage {
-  // Mutation 返回的 Task 先进入列表，避免等待 Provider 最终一致的 thread/list。
-  const remainingTasks = (currentPage?.data ?? []).filter(
-    (currentTask) => currentTask.id !== task.id,
-  );
-  return { data: [task, ...remainingTasks], nextCursor: null };
+export type ProjectTaskInfiniteData = InfiniteData<AgentTaskPage, string | undefined>;
+type TaskTitleSnapshot = Pick<
+  AgentTaskSnapshot,
+  "id" | "projectId" | "title" | "turns" | "updatedAt"
+>;
+
+export function flattenProjectTaskPages(currentData: ProjectTaskInfiniteData | undefined) {
+  const taskById = new Map<string, AgentTask>();
+
+  for (const page of currentData?.pages ?? []) {
+    for (const task of page.data) {
+      // 新页可能与旧页边界重叠，首个较新的 Task 版本优先。
+      if (!taskById.has(task.id)) {
+        taskById.set(task.id, task);
+      }
+    }
+  }
+
+  return [...taskById.values()];
 }
 
-export function replaceProjectTaskInPage(
-  currentPage: AgentTaskPage | undefined,
+export function upsertProjectTaskInInfiniteData(
+  currentData: ProjectTaskInfiniteData | undefined,
   task: AgentTask,
-): AgentTaskPage {
-  if (currentPage === undefined) {
-    return { data: [task], nextCursor: null };
+): ProjectTaskInfiniteData {
+  if (currentData === undefined || currentData.pages.length === 0) {
+    return {
+      pageParams: [undefined],
+      pages: [{ data: [task], nextCursor: null }],
+    };
   }
+
+  // Mutation 结果先进入第一页，同时跨页去重并保留服务端 Cursor。
+  const pagesWithoutTask = currentData.pages.map((page) => ({
+    ...page,
+    data: page.data.filter((currentTask) => currentTask.id !== task.id),
+  }));
+  const firstPage = pagesWithoutTask[0];
+
   return {
-    ...currentPage,
-    data: currentPage.data.map((currentTask) => (currentTask.id === task.id ? task : currentTask)),
+    ...currentData,
+    pages: [
+      {
+        ...firstPage,
+        data: [task, ...(firstPage?.data ?? [])],
+        nextCursor: firstPage?.nextCursor ?? null,
+      },
+      ...pagesWithoutTask.slice(1),
+    ],
   };
 }
 
-export function removeProjectTaskFromPage(
-  currentPage: AgentTaskPage | undefined,
-  taskId: string,
-): AgentTaskPage {
+export function replaceProjectTaskInInfiniteData(
+  currentData: ProjectTaskInfiniteData | undefined,
+  task: AgentTask,
+): ProjectTaskInfiniteData {
+  if (currentData === undefined) {
+    return {
+      pageParams: [undefined],
+      pages: [{ data: [task], nextCursor: null }],
+    };
+  }
+
   return {
-    data: (currentPage?.data ?? []).filter((task) => task.id !== taskId),
-    nextCursor: currentPage?.nextCursor ?? null,
+    ...currentData,
+    pages: currentData.pages.map((page) => ({
+      ...page,
+      data: page.data.map((currentTask) => (currentTask.id === task.id ? task : currentTask)),
+    })),
+  };
+}
+
+function deriveStartedTaskTitle(snapshot: TaskTitleSnapshot): string | undefined {
+  const hasAssistantReply = snapshot.turns.some((turn) =>
+    turn.items.some((item) => item.type === "message" && item.role === "assistant"),
+  );
+  if (!hasAssistantReply) {
+    return undefined;
+  }
+  if (snapshot.title !== "新聊天") {
+    return snapshot.title;
+  }
+
+  for (const turn of snapshot.turns) {
+    for (const item of turn.items) {
+      if (item.type !== "message" || item.role !== "user") {
+        continue;
+      }
+      const firstLine = item.text.trim().split(/\r?\n/u)[0]?.trim();
+      if (firstLine) {
+        return firstLine;
+      }
+      const skillName = item.skills?.[0]?.name;
+      if (skillName !== undefined) {
+        return skillName;
+      }
+      const attachmentName = item.attachments?.[0]?.name;
+      if (attachmentName !== undefined) {
+        return attachmentName;
+      }
+    }
+  }
+  return "正在回复";
+}
+
+export function updateNewTaskTitleFromSnapshotInInfiniteData(
+  currentData: ProjectTaskInfiniteData | undefined,
+  snapshot: TaskTitleSnapshot,
+): ProjectTaskInfiniteData | undefined {
+  if (currentData === undefined) {
+    return undefined;
+  }
+  const title = deriveStartedTaskTitle(snapshot);
+  if (title === undefined) {
+    return currentData;
+  }
+
+  const hasNewTask = currentData.pages.some((page) =>
+    page.data.some(
+      (task) =>
+        task.id === snapshot.id && task.projectId === snapshot.projectId && task.title === "新聊天",
+    ),
+  );
+  if (!hasNewTask) {
+    return currentData;
+  }
+  const pages = currentData.pages.map((page) => ({
+    ...page,
+    data: page.data.map((task) => {
+      if (
+        task.id !== snapshot.id ||
+        task.projectId !== snapshot.projectId ||
+        task.title !== "新聊天"
+      ) {
+        return task;
+      }
+      return { ...task, title, updatedAt: snapshot.updatedAt };
+    }),
+  }));
+  return { ...currentData, pages };
+}
+
+export function removeProjectTaskFromInfiniteData(
+  currentData: ProjectTaskInfiniteData | undefined,
+  taskId: string,
+): ProjectTaskInfiniteData | undefined {
+  if (currentData === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...currentData,
+    pages: currentData.pages.map((page) => ({
+      ...page,
+      data: page.data.filter((task) => task.id !== taskId),
+    })),
   };
 }
 
@@ -249,32 +381,33 @@ export function projectGitStatusQueryOptions(
   });
 }
 
-async function listAllProjectTasks(projectId: string, client: CodeAgentReadClient) {
-  const firstPage = await client.listTasks(projectId);
-  const data = [...firstPage.data];
-  let nextCursor = firstPage.nextCursor;
-  const visitedCursors = new Set<string>();
-
-  // Task 树没有“加载更多”入口，因此在 Query 边界顺序读取完整游标链。
-  while (nextCursor !== null) {
-    if (visitedCursors.has(nextCursor)) {
-      throw new Error("CodeAgent task pagination returned a repeated cursor");
-    }
-    visitedCursors.add(nextCursor);
-    const page = await client.listTasks(projectId, { cursor: nextCursor });
-    data.push(...page.data);
-    nextCursor = page.nextCursor;
-  }
-
-  return { data, nextCursor: null };
-}
-
-export function projectTasksQueryOptions(
+export function projectTasksInfiniteQueryOptions(
   projectId: string,
   client: CodeAgentReadClient = codeAgentClient,
 ) {
-  return queryOptions({
-    queryFn: () => listAllProjectTasks(projectId, client),
+  return infiniteQueryOptions<
+    AgentTaskPage,
+    Error,
+    ProjectTaskInfiniteData,
+    readonly ["projects", string, "tasks"],
+    string | undefined
+  >({
+    getNextPageParam: (
+      lastPage: AgentTaskPage,
+      _allPages: AgentTaskPage[],
+      lastPageParam: string | undefined,
+    ) => {
+      if (lastPage.nextCursor === null || lastPage.nextCursor === lastPageParam) {
+        return undefined;
+      }
+      return lastPage.nextCursor;
+    },
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+      client.listTasks(projectId, {
+        ...(pageParam === undefined ? {} : { cursor: pageParam }),
+        limit: PROJECT_TASK_PAGE_SIZE,
+      }),
     queryKey: ["projects", projectId, "tasks"] as const,
   });
 }

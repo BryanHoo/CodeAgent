@@ -361,9 +361,19 @@ test.beforeEach(async ({ page }) => {
       const taskId = archiveMatch[2] ?? "";
       routedTasks = routedTasks.filter((item) => item.id !== taskId);
       body = { status: "archived", taskId };
+    } else if (url.pathname.endsWith("/background-terminals")) {
+      body = { data: [], nextCursor: null };
     } else if (url.pathname.startsWith("/v1/projects/") && url.pathname.endsWith("/tasks")) {
       const projectId = url.pathname.split("/")[3];
-      body = { data: routedTasks.filter((task) => task.projectId === projectId), nextCursor: null };
+      const projectTasks = routedTasks.filter((task) => task.projectId === projectId);
+      const pageLimit = Number(url.searchParams.get("limit") ?? "5");
+      const pageOffset = Number(url.searchParams.get("cursor") ?? "0");
+      const nextOffset = pageOffset + pageLimit;
+      // 测试服务按真实 Cursor 契约分页，避免首屏测试意外读取全部任务。
+      body = {
+        data: projectTasks.slice(pageOffset, nextOffset),
+        nextCursor: nextOffset < projectTasks.length ? String(nextOffset) : null,
+      };
     } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1") {
       body = {
         ...taskSnapshotResponse,
@@ -602,7 +612,7 @@ test("directs unavailable Runtime users to the official Codex CLI", async ({ pag
 
 test("keeps a healthy project usable when another project task query fails", async ({ page }) => {
   let failedProjectRequestCount = 0;
-  await page.route("**/v1/projects/superwork/tasks", async (route) => {
+  await page.route("**/v1/projects/superwork/tasks?*", async (route) => {
     failedProjectRequestCount += 1;
     await route.fulfill({
       contentType: "application/json",
@@ -1159,9 +1169,15 @@ test("submits attachments, approval policy, model, and reasoning effort through 
 
 test("opens file diffs from the timeline and inspector", async ({ page }) => {
   const consoleErrors: string[] = [];
+  const failedResources: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
       consoleErrors.push(message.text());
+    }
+  });
+  page.on("response", (response) => {
+    if (response.status() >= 400) {
+      failedResources.push(response.url());
     }
   });
   await page.goto("/p/code-agent/t/task-1");
@@ -1178,7 +1194,7 @@ test("opens file diffs from the timeline and inspector", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "package.json" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "package.json" })).not.toBeAttached();
-  expect(consoleErrors).toEqual([]);
+  expect({ consoleErrors, failedResources }).toEqual({ consoleErrors: [], failedResources: [] });
 });
 
 test("disables composer mutations that the provider does not support", async ({ page }) => {
@@ -1336,7 +1352,7 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
     });
   });
   await page.addInitScript(() => {
-    let burstSent = false;
+    let connectionCount = 0;
 
     class BurstingWebSocket extends EventTarget {
       public readonly bufferedAmount = 0;
@@ -1344,6 +1360,8 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
 
       public constructor() {
         super();
+        connectionCount += 1;
+        const shouldSendBurst = connectionCount <= 2;
         queueMicrotask(() => {
           if (this.readyState === 3) {
             return;
@@ -1360,10 +1378,9 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
               }),
             }),
           );
-          if (burstSent) {
+          if (!shouldSendBurst) {
             return;
           }
-          burstSent = true;
           for (let sequence = 1; sequence <= 1_001; sequence += 1) {
             this.dispatchEvent(
               new MessageEvent("message", {
@@ -1424,7 +1441,6 @@ test("clears transient realtime errors after the WebSocket reconnects", async ({
     });
   });
   await page.addInitScript(() => {
-    let failureSent = false;
     let connectionCount = 0;
     sessionStorage.setItem("__testWebSocketConnections", String(connectionCount));
     sessionStorage.setItem("__testWebSocketFailed", "false");
@@ -1437,6 +1453,7 @@ test("clears transient realtime errors after the WebSocket reconnects", async ({
       public constructor() {
         super();
         connectionCount += 1;
+        const shouldFail = connectionCount <= 2;
         sessionStorage.setItem("__testWebSocketConnections", String(connectionCount));
         queueMicrotask(() => {
           if (this.readyState === 3) {
@@ -1456,7 +1473,7 @@ test("clears transient realtime errors after the WebSocket reconnects", async ({
               }),
             );
           };
-          if (failureSent) {
+          if (!shouldFail) {
             setTimeout(() => {
               if (this.readyState === 3) {
                 return;
@@ -1467,7 +1484,6 @@ test("clears transient realtime errors after the WebSocket reconnects", async ({
             return;
           }
           sendReady();
-          failureSent = true;
           setTimeout(() => {
             sessionStorage.setItem("__testWebSocketFailed", "true");
             this.dispatchEvent(new Event("error"));
@@ -2104,12 +2120,37 @@ test("toggles project tasks from the project name without navigation", async ({ 
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
 });
 
+test("loads one project task page only after showing more", async ({ page }) => {
+  const taskListRequests: URL[] = [];
+  page.on("request", (request) => {
+    const requestUrl = new URL(request.url());
+    if (requestUrl.pathname === "/v1/projects/code-agent/tasks") {
+      taskListRequests.push(requestUrl);
+    }
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  await expect.poll(() => taskListRequests.length).toBe(1);
+  expect(taskListRequests[0]?.searchParams.get("limit")).toBe("5");
+  expect(taskListRequests[0]?.searchParams.has("cursor")).toBe(false);
+  await expect(sidebar.getByRole("link", { name: "补充 Protocol 契约" })).toHaveCount(0);
+
+  await sidebar.getByRole("button", { name: "显示更多" }).click();
+
+  await expect.poll(() => taskListRequests.length).toBe(2);
+  expect(taskListRequests[1]?.searchParams.get("cursor")).toBe("5");
+  expect(taskListRequests[1]?.searchParams.get("limit")).toBe("5");
+  await expect(sidebar.getByRole("link", { name: "补充 Protocol 契约" })).toBeVisible();
+});
+
 test("keeps project add buttons visible after opening a task", async ({ page }) => {
   const longTask = {
     ...tasks[1],
     title: "这是一个用于验证项目树横向布局不会挤走右侧操作按钮的超长任务名称",
   };
-  await page.route("**/v1/projects/code-agent/tasks", async (route) => {
+  await page.route("**/v1/projects/code-agent/tasks?*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       json: { data: [longTask, ...tasks.slice(2, 7)], nextCursor: null },

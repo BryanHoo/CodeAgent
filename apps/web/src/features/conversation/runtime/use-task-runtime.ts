@@ -1,23 +1,35 @@
 import type { AgentEvent, AgentTaskSnapshotResponse } from "@code-agent/protocol";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useStore } from "zustand";
 
 import {
   taskSnapshotQueryOptions,
   type CodeAgentRuntimeClient,
 } from "../../projects/project-queries.js";
+import { AgentEventBuffer } from "./task-runtime.js";
 import {
-  AgentEventBuffer,
-  hydrateTaskRuntime,
-  reduceAgentEvent,
-  type TaskRuntimeState,
-} from "./task-runtime.js";
+  createTaskStore,
+  createTaskStoreRegistry,
+  type ReconstructedTaskSnapshot,
+  type TaskStore,
+} from "./task-store.js";
+
+const taskStoreRegistry = createTaskStoreRegistry({ maxRetainedStores: 20 });
+const emptyTaskStore = createTaskStore({ projectId: "", taskId: "" });
+interface SharedRuntimeConnection {
+  cleanup: () => void;
+  consumers: number;
+  signature: string;
+}
+const sharedRuntimeConnections = new WeakMap<TaskStore, SharedRuntimeConnection>();
 
 export type TaskRuntimeView = Readonly<{
   connectionState: "closed" | "connected" | "connecting" | "reconnecting";
   error: Error | null;
   isPending: boolean;
-  snapshot: TaskRuntimeState["snapshot"] | undefined;
+  snapshot: ReconstructedTaskSnapshot | undefined;
+  store: TaskStore | undefined;
 }>;
 
 type TaskRuntimeOptions = Readonly<{
@@ -32,17 +44,18 @@ function isDeltaEvent(event: AgentEvent): boolean {
   );
 }
 
-export function selectActiveTaskRuntime(
-  runtime: TaskRuntimeState | undefined,
-  projectId: string,
-  taskId: string | undefined,
-): TaskRuntimeState | undefined {
-  // 统一收口路由身份判断，避免旧 Runtime 状态直接进入渲染层。
-  return taskId !== undefined &&
-    runtime?.snapshot.projectId === projectId &&
-    runtime.snapshot.id === taskId
-    ? runtime
-    : undefined;
+function releaseSharedRuntimeConnection(
+  store: TaskStore,
+  connection: SharedRuntimeConnection,
+): void {
+  connection.consumers -= 1;
+  if (connection.consumers > 0) {
+    return;
+  }
+  connection.cleanup();
+  if (sharedRuntimeConnections.get(store) === connection) {
+    sharedRuntimeConnections.delete(store);
+  }
 }
 
 export function useTaskRuntime(
@@ -56,8 +69,26 @@ export function useTaskRuntime(
     ...taskSnapshotQueryOptions(projectId, taskId ?? "no-active-task", client),
     enabled: taskId !== undefined,
   });
-  const [runtime, setRuntime] = useState<TaskRuntimeState>();
-  const [runtimeError, setRuntimeError] = useState<Error | null>(null);
+  const [store, setStore] = useState<TaskStore>();
+  const subscribedStore = store ?? emptyTaskStore;
+  const connectionState = useStore(subscribedStore, (state) => state.connectionState);
+  const runtimeError = useStore(subscribedStore, (state) => state.error);
+  const taskStatus = useStore(subscribedStore, (state) => state.snapshotMetadata?.status);
+  const taskTitle = useStore(subscribedStore, (state) => state.snapshotMetadata?.title);
+  const taskSettings = useStore(subscribedStore, (state) => state.snapshotMetadata?.settings);
+  const itemStructureRevision = useStore(subscribedStore, (state) => state.itemStructureRevision);
+
+  useEffect(() => {
+    if (taskId === undefined) {
+      setStore(undefined);
+      return;
+    }
+    const acquiredStore = taskStoreRegistry.acquire(projectId, taskId);
+    setStore(acquiredStore);
+    return () => {
+      taskStoreRegistry.release(projectId, taskId);
+    };
+  }, [projectId, taskId]);
 
   useEffect(() => {
     if (taskQuery.data !== undefined) {
@@ -73,18 +104,32 @@ export function useTaskRuntime(
     const buffer = new AgentEventBuffer();
     let frameId: number | undefined;
     let recovering = false;
-    setRuntime(hydrateTaskRuntime(response));
-    setRuntimeError(null);
+    if (store === undefined) {
+      return;
+    }
+    const storeIdentity = store.getState();
+    if (storeIdentity.projectId !== projectId || storeIdentity.taskId !== taskId) {
+      return;
+    }
+    const connectionSignature = `${response.checkpoint.sessionId}:${String(response.checkpoint.sequence)}`;
+    const sharedConnection = sharedRuntimeConnections.get(store);
+    if (sharedConnection?.signature === connectionSignature) {
+      sharedConnection.consumers += 1;
+      return () => {
+        releaseSharedRuntimeConnection(store, sharedConnection);
+      };
+    }
+    if (sharedConnection !== undefined) {
+      sharedConnection.cleanup();
+      sharedRuntimeConnections.delete(store);
+    }
+    store.getState().hydrate(response);
 
     const applyEvents = (events: readonly AgentEvent[]) => {
       if (events.length === 0) {
         return;
       }
-      setRuntime((current) =>
-        current === undefined
-          ? current
-          : events.reduce((state, event) => reduceAgentEvent(state, event), current),
-      );
+      store.getState().applyEvents(events);
     };
     const flushFrame = () => {
       frameId = undefined;
@@ -105,19 +150,17 @@ export function useTaskRuntime(
       afterSequence: response.checkpoint.sequence,
       projectId,
       onConnectionState(connectionState) {
-        setRuntime((current) =>
-          current === undefined ? current : { ...current, connectionState },
-        );
+        store.getState().setConnectionState(connectionState);
         if (connectionState === "connected") {
           // 成功握手后清除上一次连接尝试留下的瞬时错误。
-          setRuntimeError(null);
+          store.getState().setError(null);
         }
         if (connectionState === "reconnecting") {
           refetchSnapshot();
         }
       },
       onError(error) {
-        setRuntimeError(error);
+        store.getState().setError(error);
       },
       onEvent(event) {
         if (isDeltaEvent(event)) {
@@ -142,34 +185,62 @@ export function useTaskRuntime(
         applyEvents([...buffer.flushThrough(event.sequence), event]);
       },
       onResyncRequired() {
-        setRuntime((current) =>
-          current === undefined ? current : { ...current, connectionState: "reconnecting" },
-        );
+        store.getState().setConnectionState("reconnecting");
         refetchSnapshot();
       },
       sessionId: response.checkpoint.sessionId,
     });
 
-    return () => {
-      unsubscribe();
-      if (frameId !== undefined) {
-        cancelAnimationFrame(frameId);
-      }
+    const connection: SharedRuntimeConnection = {
+      cleanup() {
+        unsubscribe();
+        if (frameId !== undefined) {
+          cancelAnimationFrame(frameId);
+        }
+      },
+      consumers: 1,
+      signature: connectionSignature,
     };
-  }, [client, projectId, taskQuery.data, taskQuery.refetch]);
+    sharedRuntimeConnections.set(store, connection);
+    return () => {
+      releaseSharedRuntimeConnection(store, connection);
+    };
+  }, [client, projectId, store, taskQuery.data, taskQuery.refetch]);
 
-  const activeRuntime = selectActiveTaskRuntime(runtime, projectId, taskId);
+  const activeRuntime =
+    store === undefined ? undefined : selectActiveTaskStore(store, projectId, taskId);
+  const hasHydratedSnapshot = activeRuntime?.getState().snapshotMetadata !== null;
   const error =
-    activeRuntime === undefined
+    activeRuntime === undefined || !hasHydratedSnapshot
       ? taskQuery.error
-      : activeRuntime.connectionState === "closed"
+      : connectionState === "closed"
         ? (taskQuery.error ?? runtimeError)
         : null;
+  // 仅在低频 Task 字段变化时重建兼容快照；Delta 不再广播到 Workbench 根节点。
+  void taskStatus;
+  void taskTitle;
+  void taskSettings;
+  void itemStructureRevision;
+  const snapshot = activeRuntime?.getState().reconstructSnapshot();
 
   return {
-    connectionState: activeRuntime?.connectionState ?? "connecting",
+    connectionState: activeRuntime === undefined ? "connecting" : connectionState,
     error,
-    isPending: error === null && (taskQuery.isPending || activeRuntime === undefined),
-    snapshot: activeRuntime?.snapshot,
+    isPending:
+      error === null &&
+      (taskQuery.isPending || activeRuntime === undefined || !hasHydratedSnapshot),
+    snapshot,
+    store: activeRuntime,
   };
+}
+
+export function selectActiveTaskStore(
+  store: TaskStore | undefined,
+  projectId: string,
+  taskId: string | undefined,
+): TaskStore | undefined {
+  const state = store?.getState();
+  return taskId !== undefined && state?.projectId === projectId && state.taskId === taskId
+    ? store
+    : undefined;
 }

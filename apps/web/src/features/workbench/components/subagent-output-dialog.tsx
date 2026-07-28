@@ -6,7 +6,7 @@ import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
 import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
 import type { SubagentSelection } from "./subagent.js";
 import { toSubagentTaskStatus } from "./subagent.js";
-import { TaskSnapshotTimeline } from "./task-timeline.js";
+import { TaskTimeline } from "./task-timeline.js";
 
 type SubagentOutputDialogProps = Readonly<{
   client: CodeAgentRuntimeClient;
@@ -81,10 +81,7 @@ function OpenSubagentOutputDialog({
             子代理实时连接恢复中
           </div>
         ) : null}
-        <TaskSnapshotTimeline
-          connected={runtime.connectionState === "connected"}
-          snapshot={runtime.snapshot}
-        />
+        <TaskTimeline projectId={projectId} runtime={runtime} taskId={selection.taskId} />
       </>
     );
   }

@@ -5,7 +5,6 @@ import type {
   AgentProjectDefaults,
   AgentSkill,
   AgentTask,
-  AgentTaskPage,
   AgentTaskSettings,
   AgentTaskSnapshotResponse,
   AgentTurn,
@@ -36,7 +35,9 @@ import {
   projectGitStatusQueryOptions,
   skillsQueryOptions,
   taskSettingsMutationOptions,
-  upsertProjectTaskPage,
+  updateNewTaskTitleFromSnapshotInInfiniteData,
+  upsertProjectTaskInInfiniteData,
+  type ProjectTaskInfiniteData,
 } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
@@ -214,8 +215,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       settings?: AgentTaskSettings,
     ) => {
       // Mutation 返回即代表 Task 已创建，先写列表缓存再导航，不能等待最终一致的列表刷新。
-      queryClient.setQueryData<AgentTaskPage>(["projects", projectId, "tasks"], (currentPage) =>
-        upsertProjectTaskPage(currentPage, startedTask),
+      queryClient.setQueryData<ProjectTaskInfiniteData>(
+        ["projects", projectId, "tasks"],
+        (currentData) => upsertProjectTaskInInfiniteData(currentData, startedTask),
       );
       if (startedTurn !== undefined && startedInput !== undefined && settings !== undefined) {
         // 跨路由保存首轮启动结果，让 Snapshot 返回前即可渲染用户消息和 AI 运行态。
@@ -301,6 +303,18 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       });
     }
   }, [launchTurnHasAuthoritativeUserMessage, projectId, queryClient, taskId]);
+
+  useEffect(() => {
+    const activeSnapshot = runtime.snapshot;
+    if (taskId === undefined || activeSnapshot === undefined) {
+      return;
+    }
+    // 首个 Assistant Item 出现即移除“新聊天”，Turn 结束后再由服务端正式标题校准。
+    queryClient.setQueryData<ProjectTaskInfiniteData>(
+      ["projects", projectId, "tasks"],
+      (currentData) => updateNewTaskTitleFromSnapshotInInfiniteData(currentData, activeSnapshot),
+    );
+  }, [projectId, queryClient, runtime.snapshot, taskId]);
 
   useEffect(() => {
     if (previousTaskRunningRef.current && !isTaskRunning) {
@@ -568,6 +582,31 @@ function ActiveTaskWorkbench({
         );
   const visibleRuntime: TaskRuntimeView =
     visibleSnapshot === runtime.snapshot ? runtime : { ...runtime, snapshot: visibleSnapshot };
+  useEffect(() => {
+    const store = runtime.store;
+    if (store === undefined || submittedPrompt === undefined) {
+      return;
+    }
+    const state = store.getState();
+    const currentSnapshot = state.reconstructSnapshot();
+    if (currentSnapshot === undefined || state.checkpoint === null) {
+      return;
+    }
+    const mergedSnapshot = mergeSubmittedPromptIntoSnapshot(
+      currentSnapshot,
+      submittedPrompt.turn,
+      submittedPrompt.input,
+    );
+    if (mergedSnapshot === currentSnapshot) {
+      return;
+    }
+    // Snapshot 尚未包含本次提交时写入归一化 Store，由权威用户 Item 到达后原子接管。
+    const previousConnectionState = state.connectionState;
+    const previousError = state.error;
+    state.hydrate({ checkpoint: state.checkpoint, snapshot: mergedSnapshot });
+    store.getState().setConnectionState(previousConnectionState);
+    store.getState().setError(previousError);
+  }, [runtime.snapshot, runtime.store, submittedPrompt]);
   const settingsMutation = useMutation({
     ...taskSettingsMutationOptions(projectId, taskId, client),
     onSuccess(response) {

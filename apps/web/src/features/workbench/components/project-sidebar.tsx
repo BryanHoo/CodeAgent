@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { AgentEventConnectionState } from "@code-agent/client";
-import type { AgentTask, AgentTaskPage, PendingRequest } from "@code-agent/protocol";
+import type { AgentTask, PendingRequest } from "@code-agent/protocol";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -29,11 +29,12 @@ import {
 } from "../../projects/project-data.js";
 import { useProjects } from "../../projects/project-context.js";
 import {
-  removeProjectTaskFromPage,
-  replaceProjectTaskInPage,
+  removeProjectTaskFromInfiniteData,
+  replaceProjectTaskInInfiniteData,
   taskArchiveMutationOptions,
   taskPinMutationOptions,
   taskRenameMutationOptions,
+  type ProjectTaskInfiniteData,
 } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { getTaskActivity } from "../../conversation/runtime/task-activity.js";
@@ -66,6 +67,43 @@ type ProjectSidebarConnectionInput = Readonly<{
   projectDataPending: boolean;
   taskConnectionState: AgentEventConnectionState;
 }>;
+
+type ProjectTaskPaginationControlInput = Readonly<{
+  error: Error | null;
+  hasHiddenLoadedTasks: boolean;
+  hasNextPage: boolean;
+  isExpanded: boolean;
+  isFetchingNextPage: boolean;
+}>;
+
+export function getProjectTaskPaginationControl({
+  error,
+  hasHiddenLoadedTasks,
+  hasNextPage,
+  isExpanded,
+  isFetchingNextPage,
+}: ProjectTaskPaginationControlInput) {
+  if (!isExpanded) {
+    if (hasHiddenLoadedTasks) {
+      return { action: "expand", disabled: false, label: "显示更多" } as const;
+    }
+    return hasNextPage
+      ? ({ action: "expand-and-load", disabled: false, label: "显示更多" } as const)
+      : null;
+  }
+
+  if (hasNextPage) {
+    return {
+      action: "load",
+      disabled: isFetchingNextPage,
+      label: isFetchingNextPage ? "正在加载更多" : error === null ? "显示更多" : "重试加载更多",
+    } as const;
+  }
+
+  return hasHiddenLoadedTasks
+    ? ({ action: "collapse", disabled: false, label: "收起" } as const)
+    : null;
+}
 
 export function deriveProjectSidebarConnectionState({
   hasActiveTask,
@@ -119,6 +157,7 @@ export function ProjectSidebar({
     addProjectError,
     client,
     error,
+    fetchNextProjectTaskPage,
     isPending,
     isProjectOrderPending,
     isProjectPickerOpen,
@@ -252,8 +291,9 @@ export function ProjectSidebar({
 
   const replaceTaskCache = (task: AgentTask) => {
     // Mutation 成功后原位更新对应 Project，避免任务跳到列表顶部或等待 Provider 最终一致。
-    queryClient.setQueryData<AgentTaskPage>(["projects", task.projectId, "tasks"], (currentPage) =>
-      replaceProjectTaskInPage(currentPage, task),
+    queryClient.setQueryData<ProjectTaskInfiniteData>(
+      ["projects", task.projectId, "tasks"],
+      (currentData) => replaceProjectTaskInInfiniteData(currentData, task),
     );
   };
 
@@ -290,9 +330,9 @@ export function ProjectSidebar({
     setTaskActionError(null);
     try {
       await archiveMutation.mutateAsync({ projectId: task.projectId, taskId: task.id });
-      queryClient.setQueryData<AgentTaskPage>(
+      queryClient.setQueryData<ProjectTaskInfiniteData>(
         ["projects", task.projectId, "tasks"],
-        (currentPage) => removeProjectTaskFromPage(currentPage, task.id),
+        (currentData) => removeProjectTaskFromInfiniteData(currentData, task.id),
       );
       if (task.projectId === projectId && task.id === taskId) {
         await navigate({ params: { projectId: task.projectId }, to: "/p/$projectId" });
@@ -454,9 +494,14 @@ export function ProjectSidebar({
               const expanded = expandedProjects.has(project.id);
               const showAllTasks = expandedTaskProjects.has(project.id);
               const taskPreview = getProjectTaskPreview(projectTasks, showAllTasks);
-              const showTaskToggle =
-                taskPreview.hasMore ||
-                (showAllTasks && projectTasks.length > PROJECT_TASK_PREVIEW_LIMIT);
+              const projectTaskState = projectTaskStates.get(project.id);
+              const taskPaginationControl = getProjectTaskPaginationControl({
+                error: projectTaskState?.error ?? null,
+                hasHiddenLoadedTasks: projectTasks.length > PROJECT_TASK_PREVIEW_LIMIT,
+                hasNextPage: projectTaskState?.hasNextPage ?? false,
+                isExpanded: showAllTasks,
+                isFetchingNextPage: projectTaskState?.isFetchingNextPage ?? false,
+              });
 
               return (
                 <div
@@ -516,26 +561,40 @@ export function ProjectSidebar({
                           />
                         );
                       })}
-                      {showTaskToggle ? (
+                      {taskPaginationControl === null ? null : (
                         <button
                           aria-expanded={showAllTasks}
                           className="flex h-7 w-full items-center rounded-control px-2 text-left text-meta font-medium text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+                          disabled={taskPaginationControl.disabled}
                           onClick={() => {
-                            setExpandedTaskProjects((current) => {
-                              const next = new Set(current);
-                              if (showAllTasks) {
+                            if (
+                              taskPaginationControl.action === "expand" ||
+                              taskPaginationControl.action === "expand-and-load"
+                            ) {
+                              setExpandedTaskProjects((current) =>
+                                new Set(current).add(project.id),
+                              );
+                            } else if (taskPaginationControl.action === "collapse") {
+                              setExpandedTaskProjects((current) => {
+                                const next = new Set(current);
                                 next.delete(project.id);
-                              } else {
-                                next.add(project.id);
-                              }
-                              return next;
-                            });
+                                return next;
+                              });
+                            }
+
+                            if (
+                              taskPaginationControl.action === "expand-and-load" ||
+                              taskPaginationControl.action === "load"
+                            ) {
+                              // 下一页错误由对应 Project Query 持有，现有 Task 始终保持可见。
+                              void fetchNextProjectTaskPage(project.id).catch(() => undefined);
+                            }
                           }}
                           type="button"
                         >
-                          {showAllTasks ? "收起" : "显示更多"}
+                          {taskPaginationControl.label}
                         </button>
-                      ) : null}
+                      )}
                       {projectTasks.length === 0 && normalizedQuery.length === 0 ? (
                         <p className="px-2 py-1.5 text-meta text-subtle-foreground">暂无任务</p>
                       ) : null}
