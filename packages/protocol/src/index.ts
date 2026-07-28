@@ -26,6 +26,12 @@ export {
   type ResyncRequired,
 } from "./agent-event.js";
 export {
+  EventStreamMetricsResponseSchema,
+  EventStreamProjectMetricsSchema,
+  type EventStreamMetricsResponse,
+  type EventStreamProjectMetrics,
+} from "./server-metrics.js";
+export {
   AgentActivityItemSchema,
   AgentBackgroundTerminalPageSchema,
   AgentBackgroundTerminalSchema,

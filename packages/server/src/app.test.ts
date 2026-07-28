@@ -1496,7 +1496,14 @@ describe("CodeAgent Server", () => {
     });
     emitEvent({
       itemId: "item-1",
-      payload: { delta: "实时更新" },
+      payload: { delta: "实时" },
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "message.delta",
+    });
+    emitEvent({
+      itemId: "item-1",
+      payload: { delta: "更新" },
       taskId: "task-1",
       turnId: "turn-1",
       type: "message.delta",
@@ -1518,6 +1525,26 @@ describe("CodeAgent Server", () => {
       version: 1,
     });
     expect(typeof (messages[1] as { sessionId: unknown }).sessionId).toBe("string");
+
+    const metricsResponse = await app.inject({ method: "GET", url: "/v1/metrics/events" });
+    expect(metricsResponse.statusCode).toBe(200);
+    expect(metricsResponse.json()).toEqual({
+      projects: [
+        {
+          activeClients: 1,
+          backpressureSignals: 0,
+          coalescedEvents: 1,
+          pendingDeltas: 0,
+          projectId: "code-agent",
+          providerEventsReceived: 2,
+          publishedEvents: 1,
+          retainedEvents: 1,
+          retentionEvictions: 0,
+          slowClientDisconnects: 0,
+        },
+      ],
+      version: 1,
+    });
     socket.terminate();
   });
 
@@ -1535,7 +1562,7 @@ describe("CodeAgent Server", () => {
       type: "message.delta",
     } as const;
     harness.emitEvent(event);
-    harness.emitEvent({ ...event, payload: { delta: "2" } });
+    harness.emitEvent({ ...event, itemId: "item-2", payload: { delta: "2" } });
 
     const replayed: unknown[] = [];
     const replaySocket = await app.injectWS(

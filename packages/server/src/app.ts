@@ -30,6 +30,7 @@ import {
   AgentTaskSettingsResponseSchema,
   AgentTaskSettingsSchema,
   AgentTaskSnapshotResponseSchema,
+  EventStreamMetricsResponseSchema,
   HealthResponseSchema,
   InterruptAgentTurnRequestSchema,
   InterruptAgentTurnResponseSchema,
@@ -319,6 +320,8 @@ type TaskStartRecovery = Readonly<{
 
 const DEFAULT_IDEMPOTENCY_CACHE_SIZE = 1_000;
 const DEFAULT_IDEMPOTENCY_TTL_MS = 10 * 60 * 1_000;
+const EVENT_SOCKET_SOFT_BACKPRESSURE_BYTES = 256 * 1_024;
+const EVENT_SOCKET_HARD_BACKPRESSURE_BYTES = 1_024 * 1_024;
 
 function normalizeJsonForFingerprint(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -375,6 +378,10 @@ export async function createCodeAgentServer(
       eventStream: AgentEventStream;
       project: Project;
       provider: AgentProvider;
+      transportMetrics: {
+        activeClients: number;
+        slowClientDisconnects: number;
+      };
       unsubscribe: () => void;
     }>
   >();
@@ -400,6 +407,7 @@ export async function createCodeAgentServer(
       eventStream,
       project,
       provider,
+      transportMetrics: { activeClients: 0, slowClientDisconnects: 0 },
       unsubscribe: provider.subscribeEvents((event) => {
         eventStream.publish(event);
       }),
@@ -554,6 +562,7 @@ export async function createCodeAgentServer(
   app.addHook("onClose", () => {
     for (const context of projectContexts.values()) {
       context.unsubscribe();
+      context.eventStream.close();
     }
     projectContexts.clear();
     attachmentStore.clear();
@@ -579,6 +588,20 @@ export async function createCodeAgentServer(
     status: "ok" as const,
     version: 1 as const,
   }));
+
+  app.get(
+    "/v1/metrics/events",
+    { schema: { response: { 200: EventStreamMetricsResponseSchema } } },
+    () => ({
+      projects: [...projectContexts.values()].map((context) => ({
+        ...context.eventStream.metrics,
+        activeClients: context.transportMetrics.activeClients,
+        projectId: context.project.id,
+        slowClientDisconnects: context.transportMetrics.slowClientDisconnects,
+      })),
+      version: 1 as const,
+    }),
+  );
 
   app.get(
     "/v1/capabilities",
@@ -1759,13 +1782,30 @@ export async function createCodeAgentServer(
         return;
       }
       const eventStream = context.eventStream;
+      context.transportMetrics.activeClients += 1;
+      let cleanedUp = false;
+      let unsubscribe: () => void = () => undefined;
+      const cleanup = () => {
+        if (cleanedUp) {
+          return;
+        }
+        cleanedUp = true;
+        unsubscribe();
+        context.transportMetrics.activeClients -= 1;
+      };
+      socket.once("close", cleanup);
+      socket.once("error", cleanup);
       const send = (message: EventStreamMessage): boolean => {
         if (socket.readyState !== 1) {
           return false;
         }
-        if (socket.bufferedAmount > 1_048_576) {
+        if (socket.bufferedAmount > EVENT_SOCKET_HARD_BACKPRESSURE_BYTES) {
+          context.transportMetrics.slowClientDisconnects += 1;
           socket.close(1013, "Client is too slow; refresh the snapshot");
           return false;
+        }
+        if (socket.bufferedAmount > EVENT_SOCKET_SOFT_BACKPRESSURE_BYTES) {
+          eventStream.noteBackpressure();
         }
         socket.send(JSON.stringify(message));
         return true;
@@ -1786,14 +1826,9 @@ export async function createCodeAgentServer(
       }
 
       // 同步建立实时订阅并挂载清理回调，避免补发与实时事件之间出现空窗。
-      const unsubscribe = eventStream.subscribe((event) => {
+      unsubscribe = eventStream.subscribe((event) => {
         send(event);
       });
-      const cleanup = () => {
-        unsubscribe();
-      };
-      socket.once("close", cleanup);
-      socket.once("error", cleanup);
       send({
         latestSequence: eventStream.checkpoint.sequence,
         sessionId: eventStream.checkpoint.sessionId,
