@@ -1,17 +1,17 @@
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
 
+import type { ProjectRuntimeManager } from "../../conversation/runtime/project-runtime.js";
 import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
-import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
 import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
 import type { SubagentSelection } from "./subagent.js";
 import { toSubagentTaskStatus } from "./subagent.js";
 import { TaskTimeline } from "./task-timeline.js";
 
 type SubagentOutputDialogProps = Readonly<{
-  client: CodeAgentRuntimeClient;
   onClose: () => void;
   projectId: string;
+  projectRuntime: ProjectRuntimeManager;
   selection: SubagentSelection | null;
 }>;
 
@@ -30,9 +30,9 @@ function SubagentOutputState({
 }
 
 export function SubagentOutputDialog({
-  client,
   onClose,
   projectId,
+  projectRuntime,
   selection,
 }: SubagentOutputDialogProps) {
   if (selection === null) {
@@ -40,22 +40,22 @@ export function SubagentOutputDialog({
   }
   return (
     <OpenSubagentOutputDialog
-      client={client}
       onClose={onClose}
       projectId={projectId}
+      projectRuntime={projectRuntime}
       selection={selection}
     />
   );
 }
 
 function OpenSubagentOutputDialog({
-  client,
   onClose,
   projectId,
+  projectRuntime,
   selection,
 }: Readonly<Omit<SubagentOutputDialogProps, "selection"> & { selection: SubagentSelection }>) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const runtime = useTaskRuntime(projectId, selection.taskId, client);
+  const runtime = useTaskRuntime(projectId, selection.taskId, projectRuntime);
 
   useEffect(() => {
     const dialog = dialogRef.current;

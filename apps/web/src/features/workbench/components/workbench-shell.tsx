@@ -95,7 +95,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     error,
     isPending,
     markTaskRunning,
-    observeTaskSnapshot,
+    projectRuntime,
     projects,
     projectTaskStates,
     retry,
@@ -115,9 +115,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       queryClient.setQueryData(["projects", projectId, "defaults"], response);
     },
   });
-  const runtime = useTaskRuntime(projectId, taskId, client, {
-    onSnapshot: observeTaskSnapshot,
-  });
+  const runtime = useTaskRuntime(projectId, taskId, projectRuntime);
   const taskLaunchState =
     taskId === undefined
       ? undefined
@@ -535,11 +533,11 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         </Suspense>
       )}
       <SubagentOutputDialog
-        client={client}
         onClose={() => {
           setSubagentDialogSelection(null);
         }}
         projectId={projectId}
+        projectRuntime={projectRuntime}
         selection={selectedSubagent}
       />
     </div>

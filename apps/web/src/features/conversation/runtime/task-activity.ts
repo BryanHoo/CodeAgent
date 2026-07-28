@@ -8,6 +8,8 @@ export type TaskActivity = Readonly<{
 type TaskActivityRecord = Readonly<{
   isRunning: boolean;
   pendingApprovalRequestIds: ReadonlySet<string>;
+  projectId: string;
+  taskId: string;
 }>;
 
 export type TaskActivityMap = ReadonlyMap<string, TaskActivityRecord>;
@@ -75,6 +77,8 @@ export function recordRunningTaskActivity(
   return replaceTaskActivity(activity, projectId, taskId, {
     isRunning: true,
     pendingApprovalRequestIds: currentRecord?.pendingApprovalRequestIds ?? new Set(),
+    projectId,
+    taskId,
   });
 }
 
@@ -90,6 +94,18 @@ export function getTaskActivity(
         isAwaitingApproval: record.pendingApprovalRequestIds.size > 0,
         isRunning: record.isRunning,
       };
+}
+
+export function hasActiveProjectTask(activity: TaskActivityMap, projectId: string): boolean {
+  for (const record of activity.values()) {
+    if (
+      record.projectId === projectId &&
+      (record.isRunning || record.pendingApprovalRequestIds.size > 0)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function removeTaskActivity(
@@ -113,6 +129,8 @@ export function recordTaskActivitySnapshot(
   return replaceTaskActivity(activity, snapshot.projectId, snapshot.id, {
     isRunning: snapshot.status === "running",
     pendingApprovalRequestIds: collectPendingApprovalRequestIds(snapshot.pendingRequests),
+    projectId: snapshot.projectId,
+    taskId: snapshot.id,
   });
 }
 
@@ -125,6 +143,8 @@ export function reduceTaskActivityEvent(
   const currentRecord = activity.get(key) ?? {
     isRunning: false,
     pendingApprovalRequestIds: new Set<string>(),
+    projectId,
+    taskId: event.taskId,
   };
   let isRunning = currentRecord.isRunning;
   let pendingApprovalRequestIds = currentRecord.pendingApprovalRequestIds;
@@ -165,5 +185,7 @@ export function reduceTaskActivityEvent(
   return replaceTaskActivity(activity, projectId, event.taskId, {
     isRunning,
     pendingApprovalRequestIds,
+    projectId,
+    taskId: event.taskId,
   });
 }

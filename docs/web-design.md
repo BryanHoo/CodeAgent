@@ -436,17 +436,18 @@ Store 规则：
 - Item 组件通过 `itemId` 原子订阅。
 - 不使用返回不稳定对象的大范围 Selector。
 - 不通过 React Context 直接广播完整运行时状态。
-- 未选中 Task Store 按 LRU 回收；最后一个消费者释放时关闭实时传输，重新选中时先用 Server Snapshot 校准，因此非活动 Store 即使停留在运行中或待审批状态也不会永久驻留。
-- 同一 Task 的多个界面消费者复用一个实时传输，避免重复 WebSocket 写入共享 Store。
+- 未选中 Task Store 按 LRU 回收；最后一个消费者释放时从 Project Runtime 注销并尝试释放 Provider Task，重新选中时先用 Server Snapshot 校准。
+- 同一 Project 的 Sidebar、当前 Task 和子代理详情复用一条 Event Stream；Project Runtime 按 `taskId` 把事件扇出到对应 Store。
 - Store 不负责持久化，刷新后以 Server Snapshot 为准。
 - Project 新 Task 默认设置由 TanStack Query 管理；已有 Task 的有效设置随 Task Snapshot 返回，避免打开 Task 后重复读取。
 - 设置控件只在用户事件中提交完整对象；Project defaults 和 Task settings 使用独立串行 Mutation，成功后更新对应 Query 缓存。
 
 当前实现补充：
 
-- `task-store.ts` 使用 `zustand/vanilla` 持有归一化实体，`use-task-runtime.ts` 只负责 Snapshot Query、WebSocket、动画帧 Delta Buffer 和恢复控制。
+- `project-runtime.ts` 为每个 Project 持有唯一 WebSocket，统一更新 Sidebar Activity，并把事件分发到已注册的 Task Store；有界事件历史补齐 Snapshot 读取期间的事件。
+- `task-store.ts` 使用 `zustand/vanilla` 持有归一化实体，`use-task-runtime.ts` 只负责 Snapshot Query、Store 注册和 Provider Task 释放。
 - Timeline 的 Turn 组件订阅 Turn 元数据与 Item ID 顺序，具体 Item 按 `itemId` 订阅；既有 Item 的文本 Delta 不再通知 Timeline 根节点或已完成 Turn。
-- 注册表以 `projectId + taskId` 为身份并按最近访问顺序回收安全静止的 Store；运行中、待审批、未 Hydrate 或仍有消费者的 Store 保持驻留。
+- Store 注册表以 `projectId + taskId` 为身份并按最近访问顺序回收无消费者 Store；Project Runtime 在无 Store 消费者、无运行 Task、无待审批且连续 2 分钟未访问后关闭连接。
 - 反归一化 Snapshot 只服务 Workbench 的标题、设置、子代理摘要等低频兼容读取，不进入流式 Item 渲染路径。
 
 ## 13. Agent Event 处理
@@ -458,9 +459,12 @@ flowchart LR
     Frame["WebSocket Frame"] --> Validate["Schema Validation"]
     Validate --> Session["sessionId Check"]
     Session --> Sequence["Sequence Dedup / Gap Check"]
-    Sequence --> Classify["Critical or Mergeable"]
-    Classify --> Buffer["Delta Buffer"]
-    Classify --> Critical["Critical Event"]
+    Sequence --> Runtime["Project Runtime Fan-out"]
+    Runtime --> Activity["Sidebar Activity"]
+    Runtime --> Classify["Target Task Event"]
+    Classify --> Mergeable{"Critical or Mergeable"}
+    Mergeable --> Buffer["Delta Buffer"]
+    Mergeable --> Critical["Critical Event"]
     Buffer --> Flush["Animation Frame Flush"]
     Critical --> FlushRelated["Flush Related Delta"]
     Flush --> Reduce["Pure Reducer"]
@@ -510,7 +514,7 @@ Approval、Error 和 Terminal Event 不能因队列压力丢失。
 7. 标记 connectionState = connected。
 ```
 
-当前 `useTaskRuntime` 保留已渲染 Snapshot；Client 报告 `reconnecting`、`resync.required` 或 Session 变化时触发 `tasks.snapshot(taskId)` refetch。新响应完成 Hydration 后，旧订阅随 Effect 清理，并从新 checkpoint 建立订阅。
+Project Runtime 保留已渲染 Store；Client 报告 `reconnecting`、`resync.required` 或 Session 变化时，要求已注册 Task 刷新 Snapshot。新响应完成 Hydration 后继续复用同一 Project Event Stream；没有 Task Store 消费者时读取该 Project 最近一次 Snapshot 的 Task，以新 checkpoint 恢复连接。
 
 ### 14.2 事件过期
 

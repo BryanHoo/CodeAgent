@@ -755,10 +755,6 @@ export class TaskStoreRegistry {
     return this.#entries.get(createRegistryKey(projectId, taskId))?.store;
   }
 
-  public hasConsumers(projectId: string, taskId: string): boolean {
-    return (this.#entries.get(createRegistryKey(projectId, taskId))?.consumers ?? 0) > 0;
-  }
-
   public remove(projectId: string, taskId: string): boolean {
     const registryKey = createRegistryKey(projectId, taskId);
     const entry = this.#entries.get(registryKey);
