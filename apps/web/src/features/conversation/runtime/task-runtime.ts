@@ -233,14 +233,22 @@ export function reduceAgentEvent(state: TaskRuntimeState, event: AgentEvent): Ta
         updatedAt: event.timestamp,
       };
       break;
-    case "turn.completed":
+    case "turn.completed": {
+      const currentTurn = snapshot.turns.find((turn) => turn.id === event.turnId);
+      const nonRetryingProviderError = currentTurn?.status === "failed" ? currentTurn.error : null;
+      // Codex 的终态偶尔不携带此前的上游错误，失败终态必须保留已确认的错误原因。
+      const completedTurn =
+        event.payload.turn.error === null && nonRetryingProviderError !== null
+          ? { ...event.payload.turn, error: nonRetryingProviderError }
+          : event.payload.turn;
       snapshot = {
         ...snapshot,
-        status: event.payload.turn.status === "failed" ? "failed" : "idle",
-        turns: snapshot.turns.map((turn) => (turn.id === event.turnId ? event.payload.turn : turn)),
+        status: completedTurn.status === "failed" ? "failed" : "idle",
+        turns: snapshot.turns.map((turn) => (turn.id === event.turnId ? completedTurn : turn)),
         updatedAt: event.timestamp,
       };
       break;
+    }
     case "usage.updated":
       snapshot = {
         ...snapshot,

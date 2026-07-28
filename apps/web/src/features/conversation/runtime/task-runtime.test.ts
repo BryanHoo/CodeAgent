@@ -231,6 +231,59 @@ describe("task runtime", () => {
     });
   });
 
+  it("preserves a non-retrying provider error when the terminal turn omits it", () => {
+    let state = reduceAgentEvent(hydrateTaskRuntime(response), {
+      ...envelope(11),
+      payload: {
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "turn-1",
+          items: [],
+          startedAt: "2026-07-23T00:00:01.000Z",
+          status: "running",
+        },
+      },
+      turnId: "turn-1",
+      type: "turn.started",
+    });
+    state = reduceAgentEvent(state, {
+      ...envelope(12),
+      itemId: "message-1",
+      payload: { delta: "部分回复" },
+      turnId: "turn-1",
+      type: "message.delta",
+    });
+    state = reduceAgentEvent(state, {
+      ...envelope(13),
+      payload: { message: "上游服务暂时不可用", willRetry: false },
+      turnId: "turn-1",
+      type: "provider.error",
+    });
+    state = reduceAgentEvent(state, {
+      ...envelope(14),
+      payload: {
+        turn: {
+          completedAt: "2026-07-23T00:00:02.000Z",
+          error: null,
+          id: "turn-1",
+          items: [{ id: "message-1", role: "assistant", text: "部分回复", type: "message" }],
+          startedAt: "2026-07-23T00:00:01.000Z",
+          status: "failed",
+        },
+      },
+      turnId: "turn-1",
+      type: "turn.completed",
+    });
+
+    expect(state.snapshot.status).toBe("failed");
+    expect(state.snapshot.turns[0]).toMatchObject({
+      error: "上游服务暂时不可用",
+      items: [{ id: "message-1", text: "部分回复", type: "message" }],
+      status: "failed",
+    });
+  });
+
   it("updates current context usage from realtime events", () => {
     const state = reduceAgentEvent(hydrateTaskRuntime(response), {
       ...envelope(11),

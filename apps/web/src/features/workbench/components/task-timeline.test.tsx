@@ -143,6 +143,35 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain("space-y-4");
   });
 
+  it("renders a failed turn error after its partial assistant reply", () => {
+    const failedSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "failed",
+      turns: [
+        {
+          ...completedTurn,
+          error: "上游服务暂时不可用",
+          items: [
+            {
+              id: "message-assistant-partial",
+              role: "assistant",
+              text: "已经完成部分分析。",
+              type: "message",
+            },
+          ],
+          status: "failed",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={failedSnapshot} />);
+
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("Turn 执行失败");
+    expect(markup).toContain("上游服务暂时不可用");
+    expect(markup.indexOf("已经完成部分分析。")).toBeLessThan(markup.indexOf("上游服务暂时不可用"));
+  });
+
   it("renders skills carried by historical user messages", () => {
     const skillMessageSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,

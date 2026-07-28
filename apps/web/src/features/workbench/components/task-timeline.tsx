@@ -891,15 +891,6 @@ export function TaskSnapshotTimeline({
             data-status={turn.status}
             key={turn.id}
           >
-            {turn.error === null ? null : (
-              <div
-                className="rounded-surface bg-control px-3 py-2 text-label leading-5 text-danger"
-                role="alert"
-              >
-                <p className="font-medium">Turn 执行失败</p>
-                <p className="mt-1">{turn.error}</p>
-              </div>
-            )}
             <TurnTimelineItems
               canRollback={
                 connected &&
@@ -914,6 +905,15 @@ export function TaskSnapshotTimeline({
               onRollbackTurn={onRollbackTurn}
               turn={turn}
             />
+            {turn.error === null ? null : (
+              <div
+                className="rounded-surface bg-control px-3 py-2 text-label leading-5 text-danger"
+                role="alert"
+              >
+                <p className="font-medium">Turn 执行失败</p>
+                <p className="mt-1">{turn.error}</p>
+              </div>
+            )}
           </section>
         ))}
         {visiblePendingRequests.map((request, index) => {

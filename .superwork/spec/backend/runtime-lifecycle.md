@@ -25,6 +25,7 @@
 - Project Skill 目录只通过 `skills/list { cwds: [project.rootPath] }` 获取并过滤禁用项；对外 ID 必须是稳定不透明摘要。`turn/start` 只有在 ID 与名称仍匹配当前目录时，才能加入 Codex 原生 `{ type: "skill", name, path }`，原生绝对路径不得越过 Provider 边界。
 - `thread/tokenUsage/updated` 只使用最近一轮 `last.totalTokens` 计算当前上下文占用，并连同 `modelContextWindow` 写入实时事件和后续 Snapshot；不得使用累计 `total.totalTokens` 冒充当前上下文。
 - `turn/interrupt` 响应只确认中断请求已接收；`turn/completed` 的 `interrupted` 状态才是 Turn 终态，Server 和 Web 不得提前伪造完成状态。
+- 非重试 `provider.error` 已确认的错误原因不能被随后缺少错误文本的 `turn/completed` 清除；Web Runtime 合并终态时必须保留该失败原因，允许已产生的部分回复与错误共同展示。
 - `thread/rollback` 只用于撤销当前 Task 的最新已完成 Turn，并固定 `numTurns: 1`；它只修改 Codex 会话历史，不能视为本地文件恢复。Server 必须先对当前 Project 内受控文本补丁执行反向预检并恢复文件，再调用 Provider；Provider 失败时正向补偿文件，补偿失败返回明确冲突，禁止路径越界、`.git`、二进制和同文件多段依赖补丁。
 - Codex Server Request 只有在 Task 已通过当前 Project 归属验证后才能进入可解决集合；读取期间到达的请求先暂存，原生终态到达时立即清理，归属验证成功后再提升，其他 Project 的请求直接丢弃；归属已确认后即使 Snapshot 映射失败，也不得删除仍在等待响应的请求。
 - Pending Request 在本地解决、原生 `serverRequest/resolved` 或 Turn 终止时只产生一次终态；Snapshot 不保留 `resolved` 或 `expired` 请求。
