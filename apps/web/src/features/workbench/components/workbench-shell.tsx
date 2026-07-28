@@ -40,6 +40,8 @@ import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
 import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
 import { deriveProjectSidebarConnectionState, ProjectSidebar } from "./project-sidebar.js";
 import { ProjectSourceDialog } from "./project-source-dialog.js";
+import { collectSubagents, type SubagentSelection } from "./subagent.js";
+import { SubagentOutputDialog } from "./subagent-output-dialog.js";
 import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
 import { WorkbenchComposer } from "./workbench-composer.js";
@@ -170,6 +172,11 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     projectId: string;
     reference: MessageFileReference;
   } | null>(null);
+  const [subagentDialogSelection, setSubagentDialogSelection] = useState<{
+    parentTaskId: string;
+    projectId: string;
+    selection: SubagentSelection;
+  } | null>(null);
   const project = projects.find((item) => item.id === projectId);
   const projectName = project?.name ?? projectId;
   const projectPath = project?.rootPath ?? projectId;
@@ -188,6 +195,19 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const selectedFileReview =
     fileReviewSelection !== null && fileReviewSelection.projectId === projectId
       ? fileReviewSelection.changes
+      : null;
+  const subagents = collectSubagents(runtime.snapshot ?? startingSnapshot);
+  const selectedSubagent =
+    subagentDialogSelection !== null &&
+    subagentDialogSelection.projectId === projectId &&
+    subagentDialogSelection.parentTaskId === taskId
+      ? {
+          ...subagentDialogSelection.selection,
+          status:
+            subagents.find(
+              (subagent) => subagent.taskId === subagentDialogSelection.selection.taskId,
+            )?.status ?? subagentDialogSelection.selection.status,
+        }
       : null;
   const openFileDiff = (change: AgentFileChange) => {
     setFileDiffSelection({ change, projectId });
@@ -447,8 +467,15 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       <WorkbenchInspector
         gitStatusError={gitStatusQuery.error}
         gitStatusPending={gitStatusQuery.isPending}
+        key={`${projectId}:${taskId ?? "draft"}:${subagents.length > 0 ? "with-subagents" : "without-subagents"}`}
         onOpenFileDiff={openFileDiff}
+        onOpenSubagent={(selection) => {
+          if (taskId !== undefined) {
+            setSubagentDialogSelection({ parentTaskId: taskId, projectId, selection });
+          }
+        }}
         projectName={projectName}
+        subagents={subagents}
         {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
       />
       <FileDiffDialog
@@ -470,6 +497,14 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         }}
         projectId={projectId}
         reference={selectedSourceFile}
+      />
+      <SubagentOutputDialog
+        client={client}
+        onClose={() => {
+          setSubagentDialogSelection(null);
+        }}
+        projectId={projectId}
+        selection={selectedSubagent}
       />
     </div>
   );
@@ -549,7 +584,6 @@ function ActiveTaskWorkbench({
     <>
       <TaskTimeline
         canRollbackTurns={capabilities?.turns.rollback ?? false}
-        client={client}
         onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
         onReviewFileChanges={onReviewFileChanges}

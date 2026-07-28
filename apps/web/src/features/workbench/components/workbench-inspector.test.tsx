@@ -66,4 +66,41 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain("当前项目暂无未提交变更");
     expect(markup).not.toContain("workbench-shell.tsx");
   });
+
+  it("lists every subagent in context and exposes output dialog triggers", () => {
+    const markup = renderToStaticMarkup(
+      <WorkbenchInspector
+        onOpenFileDiff={() => undefined}
+        onOpenSubagent={() => undefined}
+        projectName="CodeAgent"
+        subagents={[
+          {
+            model: "gpt-5.6-sol",
+            nickname: "前端分析",
+            reasoningEffort: "high",
+            status: "running",
+            taskId: "child-frontend",
+          },
+          {
+            nickname: "协议检查",
+            status: "completed",
+            taskId: "child-protocol",
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="子代理"');
+    expect(markup).toContain("2 个子代理");
+    expect(markup).toContain("前端分析");
+    expect(markup).toContain("协议检查");
+    expect(markup).not.toContain(">child-frontend<");
+    expect(markup).not.toContain(">child-protocol<");
+    expect(markup).not.toContain("检查前端实现");
+    expect(markup).toContain("GPT-5.6-Sol · high");
+    expect(markup).toContain('data-status="in_progress"');
+    expect(markup).toContain('data-status="completed"');
+    expect(markup).toContain('aria-haspopup="dialog"');
+    expect(markup).toContain('aria-label="查看子代理 前端分析 的输出"');
+  });
 });

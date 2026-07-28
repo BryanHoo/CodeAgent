@@ -303,6 +303,13 @@ function scheduleRealtimeEvents() {
       receiverThreadIds: ["frontend-analysis"],
       status: "completed",
     };
+    const subagentActivityItem = {
+      agentPath: "/root/frontend_analysis",
+      agentThreadId: "frontend-analysis",
+      id: "subagent-activity-realtime",
+      kind: "started",
+      type: "subAgentActivity",
+    };
     parentRealtimeThread = realtimeThread([realtimeTurn("inProgress", [])]);
     send({
       method: "turn/started",
@@ -380,11 +387,21 @@ function scheduleRealtimeEvents() {
       method: "turn/completed",
       params: {
         threadId: "task-realtime",
-        turn: realtimeTurn("completed", [messageItem, commandItem, completedSubagentItem]),
+        turn: realtimeTurn("completed", [
+          messageItem,
+          commandItem,
+          completedSubagentItem,
+          subagentActivityItem,
+        ]),
       },
     });
     parentRealtimeThread = realtimeThread([
-      realtimeTurn("completed", [messageItem, commandItem, completedSubagentItem]),
+      realtimeTurn("completed", [
+        messageItem,
+        commandItem,
+        completedSubagentItem,
+        subagentActivityItem,
+      ]),
     ]);
     send({
       method: "error",

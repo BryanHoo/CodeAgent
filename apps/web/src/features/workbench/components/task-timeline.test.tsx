@@ -606,7 +606,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain('data-status="pending"');
   });
 
-  it("renders structured subagent calls as dialog triggers instead of inline summaries", () => {
+  it("keeps structured subagent calls as simple non-interactive timeline statuses", () => {
     const subagentSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: [
@@ -640,17 +640,16 @@ describe("TaskSnapshotTimeline", () => {
       ],
     };
 
-    const markup = renderToStaticMarkup(
-      <TaskSnapshotTimeline onOpenSubagent={() => undefined} snapshot={subagentSnapshot} />,
-    );
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={subagentSnapshot} />);
 
-    expect(markup.match(/data-ai-task=""/g)).toHaveLength(2);
+    expect(markup.match(/data-ai-task=""/g)).toHaveLength(1);
     expect(markup).toContain("启动子代理");
-    expect(markup).toContain("子代理 child-frontend");
-    expect(markup).toContain("理解前端项目");
-    expect(markup).toContain("GPT-5.6-Sol");
-    expect(markup).toContain('aria-haspopup="dialog"');
-    expect(markup).toContain('aria-label="打开子代理 child-frontend 的实时输出"');
+    expect(markup).toContain("1 个子代理已完成");
+    expect(markup).not.toContain("子代理 child-frontend");
+    expect(markup).not.toContain("理解前端项目");
+    expect(markup).not.toContain("GPT-5.6-Sol");
+    expect(markup).not.toContain('aria-haspopup="dialog"');
+    expect(markup).not.toContain('aria-label="打开子代理 child-frontend 的实时输出"');
     expect(markup).not.toContain("前端由 React 工作台与类型安全 Client 组成。");
     expect(markup).not.toContain("agent/spawn");
     expect(markup).not.toContain("receiverTaskIds");

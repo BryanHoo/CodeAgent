@@ -15,16 +15,11 @@ import {
   RotateCcw,
   Sparkles,
   SquareTerminal,
-  X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
-import {
-  useTaskRuntime,
-  type TaskRuntimeView,
-} from "../../conversation/runtime/use-task-runtime.js";
-import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
+import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import {
   countFileChangeLines,
   getFileName,
@@ -77,6 +72,13 @@ import {
   type ToolState,
 } from "../../../shared/ai-elements/tool.js";
 import { PendingRequestCard, type PendingRequestResolution } from "./pending-request.js";
+import {
+  formatSubagentOperationSummary,
+  parseSubagentOperation,
+  resolveSubagentOperationStatus,
+  subagentOperationTitles,
+  type SubagentOperation,
+} from "./subagent.js";
 
 type TaskTimelineCommonProps = Readonly<{
   canRollbackTurns?: boolean;
@@ -103,7 +105,6 @@ type TaskTimelineProps = TaskTimelineCommonProps &
       }
     | {
         taskId: string;
-        client: CodeAgentRuntimeClient;
         projectId: string;
       }
   >;
@@ -180,14 +181,12 @@ export function TaskTimeline(props: TaskTimelineProps) {
   }
   const {
     canRollbackTurns = false,
-    client,
     onOpenFileDiff,
     onOpenSourceFile,
     onReviewFileChanges,
     onResolvePendingRequest,
     onRollbackTurn,
     runtime,
-    projectId,
     startingSnapshot,
   } = props;
   if (runtime === undefined) {
@@ -195,7 +194,6 @@ export function TaskTimeline(props: TaskTimelineProps) {
   }
   return (
     <ActiveTaskTimeline
-      client={client}
       onOpenFileDiff={onOpenFileDiff ?? (() => undefined)}
       onOpenSourceFile={onOpenSourceFile ?? (() => undefined)}
       onReviewFileChanges={onReviewFileChanges ?? (() => undefined)}
@@ -203,7 +201,6 @@ export function TaskTimeline(props: TaskTimelineProps) {
       onRollbackTurn={onRollbackTurn ?? (() => Promise.resolve())}
       canRollbackTurns={canRollbackTurns}
       runtime={runtime}
-      projectId={projectId}
       startingSnapshot={startingSnapshot}
     />
   );
@@ -211,14 +208,12 @@ export function TaskTimeline(props: TaskTimelineProps) {
 
 function ActiveTaskTimeline({
   canRollbackTurns,
-  client,
   onOpenFileDiff,
   onOpenSourceFile,
   onReviewFileChanges,
   onResolvePendingRequest,
   onRollbackTurn,
   runtime,
-  projectId,
   startingSnapshot,
 }: Readonly<{
   onResolvePendingRequest: (
@@ -231,13 +226,9 @@ function ActiveTaskTimeline({
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
   canRollbackTurns: boolean;
-  client: CodeAgentRuntimeClient;
-  projectId: string;
   runtime: TaskRuntimeView;
   startingSnapshot: RuntimeTaskSnapshot | undefined;
 }>) {
-  const [selectedSubagent, setSelectedSubagent] = useState<SubagentSelection | null>(null);
-
   if (runtime.error !== null) {
     return <TimelineState message="无法加载任务历史" role="alert" />;
   }
@@ -265,19 +256,8 @@ function ActiveTaskTimeline({
         onReviewFileChanges={onReviewFileChanges}
         onResolvePendingRequest={onResolvePendingRequest}
         onRollbackTurn={onRollbackTurn}
-        onOpenSubagent={setSelectedSubagent}
         snapshot={runtime.snapshot}
       />
-      {selectedSubagent === null ? null : (
-        <SubagentTaskDialog
-          client={client}
-          onClose={() => {
-            setSelectedSubagent(null);
-          }}
-          projectId={projectId}
-          selection={selectedSubagent}
-        />
-      )}
     </>
   );
 }
@@ -320,248 +300,20 @@ function formatStructuredValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-type SubagentOperationName =
-  "agent/close" | "agent/resume" | "agent/send_input" | "agent/spawn" | "agent/wait";
-
-type SubagentOperation = Readonly<{
-  agents: readonly Readonly<{
-    message?: string;
-    status: AgentItemStatus;
-    taskId: string;
-  }>[];
-  model?: string;
-  name: SubagentOperationName;
-  prompt?: string;
-  reasoningEffort?: string;
-}>;
-
-type SubagentSelection = Readonly<{
-  status: AgentItemStatus;
-  taskId: string;
-}>;
-
-const subagentOperationTitles: Readonly<Record<SubagentOperationName, string>> = {
-  "agent/close": "关闭子代理",
-  "agent/resume": "恢复子代理",
-  "agent/send_input": "向子代理发送消息",
-  "agent/spawn": "启动子代理",
-  "agent/wait": "等待子代理",
-};
-
-function isStructuredRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isAgentItemStatus(value: unknown): value is AgentItemStatus {
-  return (
-    value === "pending" ||
-    value === "running" ||
-    value === "completed" ||
-    value === "failed" ||
-    value === "declined" ||
-    value === "interrupted"
-  );
-}
-
-function parseSubagentOperation(
-  item: Extract<AgentItem, { type: "tool" }>,
-): SubagentOperation | null {
-  if (!(item.name in subagentOperationTitles)) {
-    return null;
-  }
-  const input = isStructuredRecord(item.input) ? item.input : {};
-  const output = isStructuredRecord(item.output) ? item.output : {};
-  const nativeAgents = Array.isArray(output["agents"]) ? output["agents"] : [];
-  const agents = nativeAgents.flatMap((value) => {
-    if (!isStructuredRecord(value)) {
-      return [];
-    }
-    const taskId = value["taskId"];
-    const status = value["status"];
-    if (typeof taskId !== "string" || !isAgentItemStatus(status)) {
-      return [];
-    }
-    const message = value["message"];
-    return [
-      {
-        ...(typeof message === "string" ? { message } : {}),
-        status,
-        taskId,
-      },
-    ];
-  });
-  return {
-    agents,
-    ...(typeof input["model"] === "string" ? { model: input["model"] } : {}),
-    name: item.name as SubagentOperationName,
-    ...(typeof input["prompt"] === "string" ? { prompt: input["prompt"] } : {}),
-    ...(typeof input["reasoningEffort"] === "string"
-      ? { reasoningEffort: input["reasoningEffort"] }
-      : {}),
-  };
-}
-
-function formatSubagentModel(model: string): string {
-  return model
-    .split("-")
-    .map((segment) =>
-      segment === "gpt" ? "GPT" : `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`,
-    )
-    .join("-");
-}
-
-function resolveSubagentTaskStatus(
-  operationStatus: AgentItemStatus,
-  agents: SubagentOperation["agents"],
-): TaskStatus {
-  if (agents.some((agent) => agent.status === "running" || agent.status === "pending")) {
-    return "in_progress";
-  }
-  if (
-    agents.some(
-      (agent) =>
-        agent.status === "failed" || agent.status === "declined" || agent.status === "interrupted",
-    )
-  ) {
-    return "error";
-  }
-  return toTaskStatus(operationStatus);
-}
-
 function SubagentToolItem({
   item,
-  onOpenSubagent,
   operation,
 }: Readonly<{
   item: Extract<AgentItem, { type: "tool" }>;
-  onOpenSubagent: (selection: SubagentSelection) => void;
   operation: SubagentOperation;
 }>) {
-  const parentStatus = resolveSubagentTaskStatus(item.status, operation.agents);
-  const metadata = [
-    operation.model === undefined ? undefined : formatSubagentModel(operation.model),
-    operation.reasoningEffort,
-  ].filter((value): value is string => value !== undefined);
+  const operationStatus = resolveSubagentOperationStatus(item.status, operation.agents);
+  const summary = formatSubagentOperationSummary(item.status, operation.agents);
 
   return (
-    <Task defaultOpen status={parentStatus}>
-      <TaskTrigger title={subagentOperationTitles[operation.name]} />
-      <TaskContent className="space-y-1">
-        {operation.prompt === undefined ? null : (
-          <TaskItem>
-            <span className="font-medium text-foreground">任务：</span>
-            <MessageResponse>{operation.prompt}</MessageResponse>
-          </TaskItem>
-        )}
-        {metadata.length === 0 ? null : <TaskItem>{metadata.join(" · ")}</TaskItem>}
-        {operation.agents.map((agent) => (
-          <button
-            aria-haspopup="dialog"
-            aria-label={`打开子代理 ${agent.taskId} 的实时输出`}
-            className="block w-full rounded-control text-left transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none"
-            key={agent.taskId}
-            onClick={() => {
-              onOpenSubagent({ status: agent.status, taskId: agent.taskId });
-            }}
-            type="button"
-          >
-            <Task collapsible={false} status={toTaskStatus(agent.status)}>
-              <TaskTrigger title={`子代理 ${agent.taskId}`} />
-            </Task>
-          </button>
-        ))}
-      </TaskContent>
+    <Task collapsible={false} status={operationStatus}>
+      <TaskTrigger title={`${subagentOperationTitles[operation.name]} · ${summary}`} />
     </Task>
-  );
-}
-
-function SubagentTaskDialog({
-  client,
-  onClose,
-  projectId,
-  selection,
-}: Readonly<{
-  client: CodeAgentRuntimeClient;
-  onClose: () => void;
-  projectId: string;
-  selection: SubagentSelection;
-}>) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const runtime = useTaskRuntime(projectId, selection.taskId, client);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog !== null && !dialog.open) {
-      dialog.showModal();
-    }
-  }, []);
-
-  const titleId = "subagent-output-dialog-title";
-  let content;
-  if (runtime.error !== null) {
-    content = <TimelineState message="无法加载子代理输出" role="alert" />;
-  } else if (runtime.isPending || runtime.snapshot === undefined) {
-    content = <TimelineState message="正在加载子代理输出" role="status" />;
-  } else {
-    content = (
-      <>
-        {runtime.connectionState === "reconnecting" ? (
-          <div
-            className="bg-control px-3 py-1.5 text-center text-label text-muted-foreground"
-            role="status"
-          >
-            子代理实时连接恢复中
-          </div>
-        ) : null}
-        <TaskSnapshotTimeline
-          connected={runtime.connectionState === "connected"}
-          snapshot={runtime.snapshot}
-        />
-      </>
-    );
-  }
-
-  return (
-    <dialog
-      aria-labelledby={titleId}
-      className="m-auto h-[min(86vh,58rem)] w-[min(94vw,76rem)] max-w-none overflow-hidden rounded-surface bg-raised p-0 text-foreground shadow-panel backdrop:bg-scrim"
-      data-subagent-output-dialog=""
-      onCancel={(event) => {
-        event.preventDefault();
-        onClose();
-      }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-      ref={dialogRef}
-    >
-      <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-raised">
-        <header className="flex min-h-toolbar items-center gap-3 px-3 shadow-toolbar sm:px-4">
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-body-small font-semibold" id={titleId}>
-              子代理实时输出
-            </h2>
-            <p className="truncate text-caption text-muted-foreground" title={selection.taskId}>
-              {selection.taskId}
-            </p>
-          </div>
-          <Task collapsible={false} status={toTaskStatus(selection.status)}>
-            <TaskTrigger title={`子代理 ${selection.taskId}`} />
-          </Task>
-          <button
-            aria-label="关闭子代理实时输出"
-            className="grid size-8 shrink-0 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus focus-visible:outline-none"
-            onClick={onClose}
-            type="button"
-          >
-            <X className="size-3.5" aria-hidden="true" />
-          </button>
-        </header>
-        <div className="flex min-h-0 flex-col overflow-hidden bg-content">{content}</div>
-      </section>
-    </dialog>
   );
 }
 
@@ -806,6 +558,10 @@ function resolveRunningOperation(items: readonly IndexedAgentItem[]): RunningOpe
     return { label: runningItem.command, type: "command" };
   }
   if (runningItem?.type === "tool") {
+    const subagentOperation = parseSubagentOperation(runningItem);
+    if (subagentOperation !== null) {
+      return { label: subagentOperationTitles[subagentOperation.name], type: "operation" };
+    }
     return { label: runningItem.name, type: "operation" };
   }
   if (runningItem?.type === "activity") {
@@ -865,13 +621,11 @@ function groupTurnTimelineItems(items: readonly AgentItem[]): TurnTimelineGroup[
 function TimelineItemContent({
   isLastTurnItem,
   item,
-  onOpenSubagent,
   onOpenSourceFile,
   turnStatus,
 }: Readonly<{
   isLastTurnItem: boolean;
   item: AgentItem;
-  onOpenSubagent: (selection: SubagentSelection) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   turnStatus: AgentTurn["status"];
 }>) {
@@ -933,13 +687,7 @@ function TimelineItemContent({
     case "tool": {
       const subagentOperation = parseSubagentOperation(item);
       if (subagentOperation !== null) {
-        return (
-          <SubagentToolItem
-            item={item}
-            onOpenSubagent={onOpenSubagent}
-            operation={subagentOperation}
-          />
-        );
+        return <SubagentToolItem item={item} operation={subagentOperation} />;
       }
       const hasErrorOutput =
         item.status === "failed" || item.status === "declined" || item.status === "interrupted";
@@ -997,7 +745,6 @@ function TurnTimelineItems({
   canRollback,
   latestSnapshotTimestamp,
   onOpenFileDiff,
-  onOpenSubagent,
   onOpenSourceFile,
   onReviewFileChanges,
   onRollbackTurn,
@@ -1006,7 +753,6 @@ function TurnTimelineItems({
   canRollback: boolean;
   latestSnapshotTimestamp: string;
   onOpenFileDiff: (change: AgentFileChange) => void;
-  onOpenSubagent: (selection: SubagentSelection) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
@@ -1028,7 +774,6 @@ function TurnTimelineItems({
           <TimelineItemContent
             isLastTurnItem={false}
             item={group.item}
-            onOpenSubagent={onOpenSubagent}
             onOpenSourceFile={onOpenSourceFile}
             turnStatus={turn.status}
           />
@@ -1062,7 +807,6 @@ function TurnTimelineItems({
                 isLastTurnItem={itemIndex === turn.items.length - 1}
                 item={item}
                 key={item.id}
-                onOpenSubagent={onOpenSubagent}
                 onOpenSourceFile={onOpenSourceFile}
                 turnStatus={turn.status}
               />
@@ -1106,7 +850,6 @@ export function TaskSnapshotTimeline({
   canRollbackTurns = false,
   connected = true,
   onOpenFileDiff = () => undefined,
-  onOpenSubagent = () => undefined,
   onOpenSourceFile = () => undefined,
   onReviewFileChanges = () => undefined,
   onResolvePendingRequest = () => Promise.resolve(),
@@ -1116,7 +859,6 @@ export function TaskSnapshotTimeline({
   canRollbackTurns?: boolean;
   connected?: boolean;
   onOpenFileDiff?: (change: AgentFileChange) => void;
-  onOpenSubagent?: (selection: SubagentSelection) => void;
   onOpenSourceFile?: (reference: MessageFileReference) => void;
   onReviewFileChanges?: (changes: readonly AgentFileChange[]) => void;
   onResolvePendingRequest?: (
@@ -1167,7 +909,6 @@ export function TaskSnapshotTimeline({
               }
               latestSnapshotTimestamp={snapshot.updatedAt}
               onOpenFileDiff={onOpenFileDiff}
-              onOpenSubagent={onOpenSubagent}
               onOpenSourceFile={onOpenSourceFile}
               onReviewFileChanges={onReviewFileChanges}
               onRollbackTurn={onRollbackTurn}

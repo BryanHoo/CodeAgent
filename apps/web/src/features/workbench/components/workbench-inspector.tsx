@@ -1,15 +1,24 @@
 import type { ProjectGitStatus } from "@code-agent/protocol";
-import { Braces, FileCode2, GitBranch, HardDrive, Plus } from "lucide-react";
+import { Bot, Braces, FileCode2, GitBranch, HardDrive, Plus } from "lucide-react";
 import { useState } from "react";
 
 import { countFileChangeLines, getFileName, type AgentFileChange } from "../../diff/file-change.js";
+import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
+import {
+  formatSubagentModel,
+  toSubagentTaskStatus,
+  type SubagentContextEntry,
+  type SubagentSelection,
+} from "./subagent.js";
 
 type WorkbenchInspectorProps = Readonly<{
   onOpenFileDiff: (change: AgentFileChange) => void;
   gitStatus?: ProjectGitStatus;
   gitStatusError?: Error | null;
   gitStatusPending?: boolean;
+  onOpenSubagent?: (selection: SubagentSelection) => void;
   projectName: string;
+  subagents?: readonly SubagentContextEntry[];
 }>;
 
 export function WorkbenchInspector({
@@ -17,9 +26,13 @@ export function WorkbenchInspector({
   gitStatusError = null,
   gitStatusPending = false,
   onOpenFileDiff,
+  onOpenSubagent = () => undefined,
   projectName,
+  subagents = [],
 }: WorkbenchInspectorProps) {
-  const [tab, setTab] = useState<"changes" | "context">("changes");
+  const [tab, setTab] = useState<"changes" | "context">(() =>
+    subagents.length > 0 ? "context" : "changes",
+  );
   const stagedChanges = gitStatus?.staged ?? [];
   const unstagedChanges = gitStatus?.unstaged ?? [];
   const allChanges = [...unstagedChanges, ...stagedChanges];
@@ -113,6 +126,9 @@ export function WorkbenchInspector({
           </div>
         ) : (
           <div className="h-full space-y-5 overflow-y-auto p-2.5">
+            {subagents.length > 0 ? (
+              <SubagentSection onOpenSubagent={onOpenSubagent} subagents={subagents} />
+            ) : null}
             <InspectorSection icon={<HardDrive className="size-3.5" />} title="环境">
               <InspectorRow label="运行位置" value="This Mac" />
               <InspectorRow label="Project" value={projectName} />
@@ -132,6 +148,49 @@ export function WorkbenchInspector({
         )}
       </div>
     </aside>
+  );
+}
+
+function SubagentSection({
+  onOpenSubagent,
+  subagents,
+}: Readonly<{
+  onOpenSubagent: (selection: SubagentSelection) => void;
+  subagents: readonly SubagentContextEntry[];
+}>) {
+  return (
+    <InspectorSection icon={<Bot className="size-3.5" />} title="子代理">
+      <section aria-label="子代理">
+        <p className="mb-1 px-2 text-caption text-muted-foreground">{subagents.length} 个子代理</p>
+        <div className="space-y-1">
+          {subagents.map((subagent) => {
+            const metadata = [
+              subagent.model === undefined ? undefined : formatSubagentModel(subagent.model),
+              subagent.reasoningEffort,
+            ].filter((value): value is string => value !== undefined);
+            return (
+              <button
+                aria-haspopup="dialog"
+                aria-label={`查看子代理 ${subagent.nickname} 的输出`}
+                className="w-full rounded-control px-2 text-left transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none"
+                key={subagent.taskId}
+                onClick={() => {
+                  onOpenSubagent({ status: subagent.status, taskId: subagent.taskId });
+                }}
+                type="button"
+              >
+                <Task collapsible={false} status={toSubagentTaskStatus(subagent.status)}>
+                  <TaskTrigger title={subagent.nickname} />
+                </Task>
+                {metadata.length === 0 ? null : (
+                  <p className="pb-2 text-caption text-muted-foreground">{metadata.join(" · ")}</p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </InspectorSection>
   );
 }
 

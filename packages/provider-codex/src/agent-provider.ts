@@ -719,7 +719,11 @@ function mapCollaborationAgentStatus(value: unknown): AgentItemStatus {
   return mapItemStatus(value);
 }
 
-function mapCollaborationToolItem(item: Record<string, unknown>, id: string): AgentItem {
+function mapCollaborationToolItem(
+  item: Record<string, unknown>,
+  id: string,
+  subagentNicknames: ReadonlyMap<string, string>,
+): AgentItem {
   const nativeToolName = expectString(item["tool"], "Codex collaboration tool");
   if (!(nativeToolName in collaborationToolNames)) {
     throw new CodexProtocolMappingError("Codex collaboration tool is invalid");
@@ -738,8 +742,10 @@ function mapCollaborationToolItem(item: Record<string, unknown>, id: string): Ag
   const agents = Object.entries(agentsStates).map(([taskId, value]) => {
     const agentState = expectRecord(value, "Codex collaboration agent state");
     const message = optionalString(agentState["message"]);
+    const nickname = subagentNicknames.get(taskId);
     return {
       ...(message === undefined ? {} : { message }),
+      ...(nickname === undefined ? {} : { nickname }),
       status: mapCollaborationAgentStatus(agentState["status"]),
       taskId,
     };
@@ -796,7 +802,10 @@ function mapCodexMessagePhase(value: unknown): CodexMessagePhase | undefined {
   throw new CodexProtocolMappingError("Codex agent message phase is invalid");
 }
 
-function mapAgentItem(value: unknown): AgentItem {
+function mapAgentItem(
+  value: unknown,
+  subagentNicknames: ReadonlyMap<string, string> = new Map(),
+): AgentItem {
   const item = expectRecord(value, "Codex item");
   const id = expectString(item["id"], "Codex item id");
   const type = expectString(item["type"], "Codex item type");
@@ -874,7 +883,7 @@ function mapAgentItem(value: unknown): AgentItem {
       return mapToolItem(item, id, namespace ? `${namespace}/${tool}` : tool);
     }
     case "collabAgentToolCall":
-      return mapCollaborationToolItem(item, id);
+      return mapCollaborationToolItem(item, id, subagentNicknames);
     case "webSearch":
       return {
         id,
@@ -936,6 +945,17 @@ function mapAgentTurn(value: unknown): AgentTurn {
   if (!Array.isArray(turn["items"])) {
     throw new CodexProtocolMappingError("Codex turn items must be an array");
   }
+  const subagentNicknames = new Map<string, string>();
+  for (const value of turn["items"]) {
+    const item = expectRecord(value, "Codex turn item");
+    if (item["type"] !== "subAgentActivity") {
+      continue;
+    }
+    const taskId = expectString(item["agentThreadId"], "Codex subagent thread id");
+    const agentPath = expectString(item["agentPath"], "Codex subagent path");
+    const nickname = agentPath.split("/").filter(Boolean).at(-1) ?? agentPath;
+    subagentNicknames.set(taskId, nickname);
+  }
   return {
     completedAt: toNullableDateTime(turn["completedAt"], "Codex turn completedAt"),
     error:
@@ -946,7 +966,10 @@ function mapAgentTurn(value: unknown): AgentTurn {
             "Codex turn error message",
           ),
     id: expectString(turn["id"], "Codex turn id"),
-    items: mergeExpandedSkillMessages(turn["items"].map(mapAgentItem)),
+    // 先收集活动项中的昵称，再回填协作项，避免向 Web 暴露不可读的线程 ID。
+    items: mergeExpandedSkillMessages(
+      turn["items"].map((item) => mapAgentItem(item, subagentNicknames)),
+    ),
     startedAt: toNullableDateTime(turn["startedAt"], "Codex turn startedAt"),
     status: mapTurnStatus(turn["status"]),
   };

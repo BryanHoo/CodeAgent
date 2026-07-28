@@ -193,6 +193,7 @@ describe("CodexAgentProvider", () => {
           agents: [
             {
               message: "前端分析完成",
+              nickname: "frontend_analysis",
               status: "completed",
               taskId: "child-frontend",
             },

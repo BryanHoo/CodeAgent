@@ -27,7 +27,7 @@
 - 通用 Tool 必须使用 AI Elements `ToolInput` 与 `ToolOutput` 分区展示参数、JSON 结果和错误文本；`AgentItemStatus` 只在 Timeline 视图边界映射为 AI Elements Tool 执行状态，不向 Web 引入 `ToolUIPart` 或 AI SDK Runtime。
 - Task Timeline 的 Plan Item 必须使用 AI Elements `Plan` 组合组件并原样展示计划文本；仅当它是运行中 Turn 的当前最后一个 Item 时启用 `isStreaming`，不得为展示状态扩展 Protocol 或使用 `Tool` 模拟 Plan。
 - Task Timeline 仅将 `AgentItem` 中的 `activity` 映射为 AI Elements `Task`，按 Activity 状态映射进度；有 `detail` 时允许展开，没有 `detail` 时保持紧凑。不得继续用 `Tool` 模拟 Activity，也不得把 CodeAgent 的整个 Task 或 Turn 映射为 AI Elements `Task`。
-- Codex 子代理协作使用统一 `agent/*` Tool 数据，但 Timeline 必须用嵌套的 AI Elements `Task` 渲染操作和各子代理状态，展示任务、模型与思考量；不得退化为原始 Tool JSON。单击子代理必须打开可访问的原生 Dialog，并按子线程 Task ID 挂载独立 Runtime，以 AI Elements Timeline 展示 Snapshot 与流式 Item。关闭 Dialog 必须卸载 Runtime 并取消实时订阅，但不能中断 Codex 子代理；再次打开时重新读取最新 Snapshot checkpoint 并继续接收后续事件，不能只展示父协作 Item 的完成摘要。
+- Codex 子代理协作使用统一 `agent/*` Tool 数据；中间 Timeline 只用不可交互的 AI Elements `Task` 展示操作名称、数量与聚合状态，不展示任务正文、模型或子线程 ID。右侧 Inspector 的“上下文”页签必须提供“子代理”栏目，按唯一子线程 Task ID 逐项展示 Codex `agentPath` 提供的昵称、模型、思考量和状态，不展示线程 ID或提示词；父回复完成后继续保留仍存在的子代理，只有明确的 `agent/close` 操作才移除对应项。有子代理的 Task 首次进入时优先展示该页签。单击栏目项打开可访问的原生 Dialog，并按子线程 Task ID 挂载独立 Runtime，以 AI Elements Timeline 展示 Snapshot 与流式 Item。关闭 Dialog 必须卸载 Runtime 并取消实时订阅，但不能中断 Codex 子代理；再次打开时重新读取最新 Snapshot checkpoint 并继续接收后续事件，不能只展示父协作 Item 的完成摘要。
 - Task Timeline 的用户消息和 AI 回复末尾都必须常显可访问的复制操作与本地时间；消息 Item 和相邻 Turn 之间保留明确纵向间距，不能让下一条用户消息贴住上一条回复。
 - Task Timeline 的用户消息必须渲染统一消息协议携带的 Skill Token；实时 Turn、首轮乐观消息和重新打开 Task 后的历史消息使用同一 `skill` 主题色样式。Web 不从普通文本猜测 Skill，Provider 必须解析 Codex `userMessage.content` 中的 `skill` 字段并在丢弃原生路径后提供 Skill 名称。
 - Task Timeline 默认随 AI 流式内容自动滚动到最新位置；用户主动离开底部后暂停跟随，用户再次滚动到底部或使用“回到底部”操作后恢复自动跟随。
