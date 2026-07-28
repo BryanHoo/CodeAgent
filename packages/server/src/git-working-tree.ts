@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { lstat, readFile, readlink, realpath } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
+import { lstat, readdir, readFile, readlink, realpath } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import type { AgentItem, ProjectGitStatus } from "@code-agent/protocol";
@@ -132,17 +132,23 @@ async function createTrackedFileChange(
   };
 }
 
-export async function readGitWorkingTreeStatus(
-  projectRoot: string,
-  gitCommandExecutor: GitCommandExecutor = executeGit,
-): Promise<ProjectGitStatus> {
-  if (!isAbsolute(projectRoot)) {
-    throw new TypeError("Project root must be absolute");
+async function hasGitMetadata(repositoryRoot: string): Promise<boolean> {
+  try {
+    await lstat(join(repositoryRoot, ".git"));
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw error;
   }
+}
 
-  // 每次读取都重新解析真实路径，避免 Project 根目录被符号链接替换后越过配置边界。
-  const resolvedProjectRoot = await realpath(projectRoot);
-  const statusOutput = await gitCommandExecutor(resolvedProjectRoot, [
+async function readRepositoryWorkingTreeStatus(
+  repositoryRoot: string,
+  gitCommandExecutor: GitCommandExecutor,
+): Promise<ProjectGitStatus> {
+  const statusOutput = await gitCommandExecutor(repositoryRoot, [
     "status",
     "--porcelain=v1",
     "-z",
@@ -155,19 +161,100 @@ export async function readGitWorkingTreeStatus(
   for (const entry of entries) {
     if (entry.indexStatus !== " " && entry.indexStatus !== "?" && entry.indexStatus !== "!") {
       staged.push(
-        await createTrackedFileChange(resolvedProjectRoot, entry, "staged", gitCommandExecutor),
+        await createTrackedFileChange(repositoryRoot, entry, "staged", gitCommandExecutor),
       );
     }
     if (entry.indexStatus === "?" && entry.workingTreeStatus === "?") {
-      unstaged.push(await createUntrackedFileDiff(resolvedProjectRoot, entry.path));
+      unstaged.push(await createUntrackedFileDiff(repositoryRoot, entry.path));
     } else if (entry.workingTreeStatus !== " " && entry.workingTreeStatus !== "!") {
       unstaged.push(
-        await createTrackedFileChange(resolvedProjectRoot, entry, "unstaged", gitCommandExecutor),
+        await createTrackedFileChange(repositoryRoot, entry, "unstaged", gitCommandExecutor),
       );
     }
   }
 
+  return { staged, unstaged };
+}
+
+function prefixRepositoryPath(repositoryName: string, change: GitFileChange): GitFileChange {
+  return { ...change, path: `${repositoryName}/${change.path}` };
+}
+
+async function readImmediateChildRepositoryStatuses(
+  projectRoot: string,
+  gitCommandExecutor: GitCommandExecutor,
+): Promise<ProjectGitStatus | undefined> {
+  const childDirectories = (await readdir(projectRoot, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .toSorted((left, right) => left.name.localeCompare(right.name));
+  const repositoryCandidates = await Promise.all(
+    childDirectories.map(async (entry) => {
+      const repositoryRoot = join(projectRoot, entry.name);
+      return (await hasGitMetadata(repositoryRoot))
+        ? { name: entry.name, root: repositoryRoot }
+        : null;
+    }),
+  );
+  const repositories = repositoryCandidates.filter(
+    (candidate): candidate is { name: string; root: string } => candidate !== null,
+  );
+  if (repositories.length === 0) {
+    return undefined;
+  }
+
+  // 子仓库之间互不依赖，并行读取可避免多个 Git 项目形成串行等待。
+  const statuses = await Promise.all(
+    repositories.map(async (repository) => ({
+      name: repository.name,
+      status: await readRepositoryWorkingTreeStatus(repository.root, gitCommandExecutor),
+    })),
+  );
+  const staged: GitFileChange[] = [];
+  const unstaged: GitFileChange[] = [];
+  for (const repository of statuses) {
+    staged.push(
+      ...repository.status.staged.map((change) => prefixRepositoryPath(repository.name, change)),
+    );
+    unstaged.push(
+      ...repository.status.unstaged.map((change) => prefixRepositoryPath(repository.name, change)),
+    );
+  }
+
+  return { staged, unstaged };
+}
+
+export async function readGitWorkingTreeStatus(
+  projectRoot: string,
+  gitCommandExecutor: GitCommandExecutor = executeGit,
+): Promise<ProjectGitStatus> {
+  if (!isAbsolute(projectRoot)) {
+    throw new TypeError("Project root must be absolute");
+  }
+
+  // 每次读取都重新解析真实路径，避免 Project 根目录被符号链接替换后越过配置边界。
+  const resolvedProjectRoot = await realpath(projectRoot);
+  let status: ProjectGitStatus;
+  try {
+    status = await readRepositoryWorkingTreeStatus(resolvedProjectRoot, gitCommandExecutor);
+  } catch (rootStatusError) {
+    // 当前目录不是仓库时只回退一级；当前目录已有 .git 则保留原始错误语义。
+    if (await hasGitMetadata(resolvedProjectRoot)) {
+      throw rootStatusError;
+    }
+    const childStatus = await readImmediateChildRepositoryStatuses(
+      resolvedProjectRoot,
+      gitCommandExecutor,
+    );
+    if (childStatus === undefined) {
+      throw rootStatusError;
+    }
+    status = childStatus;
+  }
+
   const comparePaths = (left: GitFileChange, right: GitFileChange) =>
     left.path.localeCompare(right.path);
-  return { staged: staged.toSorted(comparePaths), unstaged: unstaged.toSorted(comparePaths) };
+  return {
+    staged: status.staged.toSorted(comparePaths),
+    unstaged: status.unstaged.toSorted(comparePaths),
+  };
 }

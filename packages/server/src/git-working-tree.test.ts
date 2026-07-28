@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -40,6 +40,50 @@ describe("readGitWorkingTreeStatus", () => {
       });
       expect(status.staged[0]?.diff).toContain("+staged version");
       expect(status.unstaged[0]?.diff).toContain("+unstaged version");
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("reads and combines immediate child repositories when the project root is not Git", async () => {
+    const projectRoot = await mkdtemp(join(process.cwd(), ".git-status-test-"));
+    const frontendRoot = join(projectRoot, "frontend");
+    const backendRoot = join(projectRoot, "backend");
+    const nestedRepositoryRoot = join(projectRoot, "workspace", "nested");
+    try {
+      await Promise.all([
+        mkdir(join(frontendRoot, ".git"), { recursive: true }),
+        mkdir(join(backendRoot, ".git"), { recursive: true }),
+        mkdir(join(nestedRepositoryRoot, ".git"), { recursive: true }),
+        mkdir(join(projectRoot, "notes"), { recursive: true }),
+      ]);
+      const visitedStatusRoots: string[] = [];
+      const executeGit = (root: string, arguments_: readonly string[]) => {
+        if (arguments_[0] === "status") {
+          visitedStatusRoots.push(root);
+          if (root === projectRoot) {
+            return Promise.reject(new Error("not a git repository"));
+          }
+          if (root === frontendRoot) {
+            return Promise.resolve(" M src/app.ts\0");
+          }
+          if (root === backendRoot) {
+            return Promise.resolve("M  src/server.ts\0");
+          }
+        }
+
+        const path = arguments_.at(-1) ?? "unknown";
+        return Promise.resolve(`--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-old\n+new\n`);
+      };
+
+      const status = await readGitWorkingTreeStatus(projectRoot, executeGit);
+
+      expect(status.staged.map((change) => change.path)).toEqual(["backend/src/server.ts"]);
+      expect(status.unstaged.map((change) => change.path)).toEqual(["frontend/src/app.ts"]);
+      expect(visitedStatusRoots.toSorted()).toEqual(
+        [projectRoot, backendRoot, frontendRoot].toSorted(),
+      );
+      expect(visitedStatusRoots).not.toContain(nestedRepositoryRoot);
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }
