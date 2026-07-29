@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { TaskSnapshotTimeline } from "../workbench/components/task-timeline.js";
 import {
   capabilitiesQueryOptions,
+  type CodeAgentGitStatusClient,
+  type CodeAgentReadClient,
   modelsQueryOptions,
   PROJECT_GIT_STATUS_POLL_INTERVAL_MS,
   projectDefaultsMutationOptions,
@@ -175,7 +177,9 @@ describe("project queries", () => {
   });
 
   it("polls Git status only while the current task is running", async () => {
-    const getProjectGitStatus = vi.fn(() => Promise.resolve({ staged: [], unstaged: [] }));
+    const getProjectGitStatus = vi.fn<CodeAgentGitStatusClient["getProjectGitStatus"]>(() =>
+      Promise.resolve({ staged: [], unstaged: [] }),
+    );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const runningOptions = projectGitStatusQueryOptions("code-agent", true, {
       getProjectGitStatus,
@@ -190,10 +194,14 @@ describe("project queries", () => {
     });
     expect(runningOptions.refetchInterval).toBe(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
     expect(idleOptions.refetchInterval).toBe(false);
-    expect(getProjectGitStatus).toHaveBeenCalledWith("code-agent");
+    expect(getProjectGitStatus.mock.calls[0]?.[0]).toBe("code-agent");
+    expect(getProjectGitStatus.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("loads projects, project tasks, and task snapshots through the client", async () => {
+    const readTask = vi.fn<CodeAgentReadClient["readTask"]>(() =>
+      Promise.resolve(snapshotResponse),
+    );
     const client = {
       getCapabilities: vi.fn(() =>
         Promise.resolve({
@@ -230,7 +238,7 @@ describe("project queries", () => {
         }),
       ),
       listTasks: vi.fn(() => Promise.resolve({ data: [task], nextCursor: null })),
-      readTask: vi.fn(() => Promise.resolve(snapshotResponse)),
+      readTask,
     };
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -261,7 +269,8 @@ describe("project queries", () => {
     await expect(
       queryClient.fetchQuery(taskSnapshotQueryOptions("code-agent", "task-1", client)),
     ).resolves.toEqual(snapshotResponse);
-    expect(client.readTask).toHaveBeenCalledWith("code-agent", "task-1");
+    expect(readTask.mock.calls[0]?.slice(0, 2)).toEqual(["code-agent", "task-1"]);
+    expect(readTask.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("updates complete project defaults and task settings through mutations", async () => {
@@ -303,12 +312,13 @@ describe("project queries", () => {
 
   it("loads only the first task page until the next page is explicitly requested", async () => {
     const nextTask = { ...task, id: "task-2", title: "后续分页任务" };
+    const listTasks = vi
+      .fn<CodeAgentReadClient["listTasks"]>()
+      .mockResolvedValueOnce({ data: [task], nextCursor: "next-page" })
+      .mockResolvedValueOnce({ data: [nextTask], nextCursor: null });
     const client = {
       listProjects: vi.fn(() => Promise.resolve({ data: [project], nextCursor: null })),
-      listTasks: vi
-        .fn()
-        .mockResolvedValueOnce({ data: [task], nextCursor: "next-page" })
-        .mockResolvedValueOnce({ data: [nextTask], nextCursor: null }),
+      listTasks,
       readTask: vi.fn(() => Promise.resolve(snapshotResponse)),
     };
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -327,8 +337,9 @@ describe("project queries", () => {
       pageParams: [undefined],
       pages: [{ data: [task], nextCursor: "next-page" }],
     });
-    expect(client.listTasks).toHaveBeenCalledTimes(1);
-    expect(client.listTasks).toHaveBeenNthCalledWith(1, "code-agent", { limit: 5 });
+    expect(listTasks).toHaveBeenCalledTimes(1);
+    expect(listTasks.mock.calls[0]?.slice(0, 2)).toEqual(["code-agent", { limit: 5 }]);
+    expect(listTasks.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
 
     await expect(queryObserver.fetchNextPage()).resolves.toMatchObject({
       data: {
@@ -339,10 +350,14 @@ describe("project queries", () => {
         ],
       },
     });
-    expect(client.listTasks).toHaveBeenNthCalledWith(2, "code-agent", {
-      cursor: "next-page",
-      limit: 5,
-    });
+    expect(listTasks.mock.calls[1]?.slice(0, 2)).toEqual([
+      "code-agent",
+      {
+        cursor: "next-page",
+        limit: 5,
+      },
+    ]);
+    expect(listTasks.mock.calls[1]?.[2]?.signal).toBeInstanceOf(AbortSignal);
     unsubscribe();
   });
 

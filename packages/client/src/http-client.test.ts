@@ -588,6 +588,38 @@ describe("CodeAgentClient", () => {
     });
   });
 
+  it("applies separate query, read, and mutation cancellation policies", async () => {
+    const timeoutValues: number[] = [];
+    const timeoutControllers: AbortController[] = [];
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout").mockImplementation((timeout) => {
+      timeoutValues.push(timeout);
+      const controller = new AbortController();
+      timeoutControllers.push(controller);
+      return controller.signal;
+    });
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: [], nextCursor: null }))
+      .mockResolvedValueOnce(jsonResponse({ data: [], nextCursor: null }))
+      .mockResolvedValueOnce(jsonResponse({ task }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+    const queryController = new AbortController();
+
+    await client.listProjects({ signal: queryController.signal });
+    await client.listProjects();
+    await client.startTask("code-agent", { idempotencyKey: "start-task" });
+
+    expect(timeoutValues).toEqual([30_000, 15_000, 60_000]);
+    const querySignal = fetchMock.mock.calls[0]?.[1]?.signal;
+    expect(querySignal).toBeInstanceOf(AbortSignal);
+    expect(querySignal).not.toBe(queryController.signal);
+    expect(querySignal?.aborted).toBe(false);
+    queryController.abort(new DOMException("Query cancelled", "AbortError"));
+    expect(querySignal?.aborted).toBe(true);
+    expect(timeoutControllers).toHaveLength(3);
+    timeoutSpy.mockRestore();
+  });
+
   it("rejects malformed mutation error responses at the protocol boundary", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock.mockResolvedValueOnce(

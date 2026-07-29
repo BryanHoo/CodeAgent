@@ -13,6 +13,7 @@
   "dependencies": {
     "@code-agent/core": "workspace:*",
     "@code-agent/protocol": "workspace:*",
-    "@openai/codex": "catalog:"
+    "@openai/codex": "catalog:",
+    "pino": "catalog:"
   }
 }

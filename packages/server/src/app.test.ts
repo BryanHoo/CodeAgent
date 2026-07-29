@@ -272,6 +272,8 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
     listModels: () => provider.listModels(),
   };
   return {
+    handlerTimeoutMs: 0,
+    loggerEnabled: false,
     projectRepository: {
       list: vi.fn(() => Promise.resolve(orderedProjects)),
       read: vi.fn((projectId: string) =>
@@ -353,6 +355,59 @@ async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }
     uploadFeedback,
   };
 }
+
+describe("server diagnostics", () => {
+  it("enables bounded handlers and emits redacted request completion logs", async () => {
+    const { provider } = createProvider();
+    const slowProvider = {
+      ...provider,
+      listTasks: vi.fn(() => new Promise<never>(() => undefined)),
+    };
+    const logLines: string[] = [];
+    const app = await createCodeAgentServer(
+      createServerOptions(slowProvider, {
+        handlerTimeoutMs: 10,
+        loggerEnabled: true,
+        logDestination: {
+          write(message: string) {
+            logLines.push(message);
+          },
+        },
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({
+      headers: {
+        authorization: "Bearer secret-token",
+        cookie: "session=secret-cookie",
+        "x-api-key": "secret-api-key",
+      },
+      method: "GET",
+      url: "/v1/health",
+    });
+    const timedOutResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(timedOutResponse.statusCode).toBe(503);
+    const logs = logLines.map((line) => JSON.parse(line) as Record<string, unknown>);
+    const healthLog = logs.find((entry) => entry["route"] === "/v1/health");
+    expect(healthLog).toMatchObject({
+      method: "GET",
+      msg: "request completed",
+      route: "/v1/health",
+      statusCode: 200,
+    });
+    expect(typeof healthLog?.["durationMs"]).toBe("number");
+    expect(typeof healthLog?.["requestId"]).toBe("string");
+    expect(logLines.join("\n")).not.toContain("secret-token");
+    expect(logLines.join("\n")).not.toContain("secret-cookie");
+    expect(logLines.join("\n")).not.toContain("secret-api-key");
+  });
+});
 
 describe("CodeAgent Server", () => {
   it("releases an invisible task through the provider safety boundary", async () => {

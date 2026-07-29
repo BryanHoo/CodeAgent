@@ -991,6 +991,8 @@ appVersion
 
 默认不记录 Prompt 全文、命令完整输出、文件内容和 Secret。
 
+Fastify 在实例创建阶段默认启用 JSON Pino，Authorization、Cookie、API Key 与 Set-Cookie 字段统一脱敏。普通 HTTP 路由使用 60 秒 `handlerTimeout`，完成日志记录 `requestId`、method、route、statusCode 与 `durationMs`；WebSocket Event Stream 不继承请求处理截止时间，由有界队列、背压和连接生命周期单独约束。
+
 ### 16.2 指标
 
 ```text

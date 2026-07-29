@@ -11,6 +11,7 @@ import {
   CodexAgentProvider,
   createCodexRuntimeProvider,
   CodexProtocolMappingError,
+  type CodexProviderLogger,
   type CodexRpcClient,
 } from "./agent-provider.js";
 import { RpcResponseError, type RpcRequestId } from "./jsonl-rpc-client.js";
@@ -114,9 +115,12 @@ const project = {
 
 function createCodexAgentProvider(options: {
   client: CodexRpcClient;
+  logger?: CodexProviderLogger;
   project: Project;
 }): CodexAgentProvider {
-  return new CodexAgentProvider(options.client, options.project);
+  return new CodexAgentProvider(options.client, options.project, {
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
+  });
 }
 
 function nativeThread(overrides: Record<string, unknown> = {}) {
@@ -139,6 +143,66 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("warns with safe identity fields when dropping unknown or invalid notifications", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const warn = vi.fn<CodexProviderLogger["warn"]>();
+    const provider = createCodexAgentProvider({ client: rpc, logger: { warn }, project });
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+    await provider.listTasks();
+
+    provider.receiveNotification("future/notification", {
+      private: "unknown-secret-body",
+      threadId: "task-1",
+    });
+    provider.receiveNotification("item/agentMessage/delta", {
+      delta: { body: "invalid-secret-body" },
+      itemId: "item-1",
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    provider.receiveNotification("item/agentMessage/delta", {
+      delta: "后续事件",
+      itemId: "item-1",
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    expect(warn.mock.calls).toEqual([
+      [
+        {
+          codexVersion: "0.145.0",
+          diagnosticCode: "unknown_notification",
+          method: "future/notification",
+          projectId: "code-agent",
+          taskId: "task-1",
+        },
+        "Codex notification dropped",
+      ],
+      [
+        {
+          codexVersion: "0.145.0",
+          diagnosticCode: "invalid_notification",
+          method: "item/agentMessage/delta",
+          projectId: "code-agent",
+          taskId: "task-1",
+        },
+        "Codex notification dropped",
+      ],
+    ]);
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("unknown-secret-body");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("invalid-secret-body");
+    expect(events).toEqual([
+      {
+        itemId: "item-1",
+        payload: { delta: "后续事件" },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "message.delta",
+      },
+    ]);
+  });
+
   it("lists and terminates background terminals through the experimental thread API", async () => {
     const rpc = new FakeRpcClient([
       { thread: nativeThread() },
@@ -1629,7 +1693,6 @@ describe("CodexAgentProvider", () => {
       status: "completed",
     };
 
-    rpc.emitNotification("future/notification", { private: true });
     rpc.emitNotification("turn/started", { threadId: "task-1", turn: runningTurn });
     rpc.emitNotification("item/started", {
       item: startedSubagentItem,

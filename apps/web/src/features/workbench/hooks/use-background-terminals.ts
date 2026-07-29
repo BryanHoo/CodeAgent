@@ -33,11 +33,11 @@ export function useBackgroundTerminals(
   const [terminalError, setTerminalError] = useState<Error | null>(null);
   const terminalsQuery = useQuery({
     enabled: taskId !== undefined,
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (taskId === undefined) {
         throw new Error("Background terminal query requires a task");
       }
-      return client.listBackgroundTerminals(projectId, taskId);
+      return client.listBackgroundTerminals(projectId, taskId, { signal });
     },
     queryKey: ["projects", projectId, "tasks", taskId, "background-terminals"] as const,
     refetchInterval(query) {

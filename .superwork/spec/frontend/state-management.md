@@ -27,6 +27,7 @@
 - Command Output 同时受单 Item 1 MiB / 10,000 行和单 Task 8 MiB 总预算约束；总预算按最近写入顺序保留，优先把最久未更新的 Command Output 替换为明确截断标记。界面高度限制不能代替 Payload 字节限制。
 - CodeBlock Token Cache 必须使用 24 MiB / 128 Entry 的字节 LRU，单份超过 512 KiB 的源码不进入缓存；Cache Key 只保存摘要并在命中时核验源码，禁止把完整源码直接作为长期 Map Key。
 - TanStack Query 全局非活动 `gcTime` 固定为 2 分钟，Task Snapshot 使用 30 秒；非活动完整 Snapshot 另受 48 MiB / 12 Entry 字节 LRU 约束。完整 Snapshot 与归一化 Store 不得同时作为无界长期缓存，归档时必须立即移除对应 Snapshot Query。
+- Client HTTP 请求固定使用有界策略：携带 TanStack Query `signal` 的读取同时受调用方取消和 30 秒超时控制，普通直接读取使用 15 秒超时，幂等 Mutation 使用 60 秒超时并允许显式取消；三类请求都必须在 Fetch 边界组合 `AbortSignal.timeout()`。
 - 全量 Snapshot 重建只允许用于低频兼容读取、Mutation 输入或恢复边界，不得作为每个 Delta 的 React 订阅结果。
 - 每个 Project 只允许一个客户端 Project Runtime 和一条 Event Stream；统一完成协议解析、Session/Sequence 校验，并向 Sidebar Activity 与该 Project 内已注册的 Task Store 扇出。Project Runtime 使用最多 2,048 条、4 MiB 的有界事件历史补齐 Snapshot 读取期间的事件，历史不足时必须重新读取 Snapshot。
 - Sidebar 的轻量活动状态必须按 `projectId + taskId` 保存；切换当前 Task 或 Project 不能清除后台 Task 的运行或审批状态，只有对应 Task 的 Snapshot 或终态事件可以更新该行状态。Project 无 Task Store 消费者、无运行 Task、无待审批且连续 2 分钟未访问后必须关闭 Event Stream 并释放 Runtime；详细 Timeline Store 不得把完整历史复制到 Sidebar 状态。

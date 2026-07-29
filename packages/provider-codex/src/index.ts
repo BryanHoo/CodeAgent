@@ -3,6 +3,7 @@ export {
   CodexRuntimeProvider,
   CodexProtocolMappingError,
   createCodexRuntimeProvider,
+  type CodexProviderLogger,
   type CodexRpcClient,
   type CreateCodexRuntimeProviderOptions,
 } from "./agent-provider.js";

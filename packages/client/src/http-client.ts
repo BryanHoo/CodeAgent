@@ -81,8 +81,19 @@ import {
 export interface CodeAgentClientOptions {
   baseUrl?: string;
   fetch?: typeof globalThis.fetch;
+  requestTimeouts?: Partial<CodeAgentRequestTimeouts>;
   webSocketFactory?: WebSocketFactory;
 }
+
+export type CodeAgentRequestTimeouts = Readonly<{
+  mutationMs: number;
+  queryMs: number;
+  readMs: number;
+}>;
+
+export type ReadOptions = Readonly<{
+  signal?: AbortSignal;
+}>;
 
 export type ListTasksOptions = Readonly<{
   cursor?: string;
@@ -91,6 +102,7 @@ export type ListTasksOptions = Readonly<{
 
 export type MutationOptions = Readonly<{
   idempotencyKey?: string;
+  signal?: AbortSignal;
 }>;
 
 export type PendingRequestResolution<T extends PendingRequest> = Extract<
@@ -149,32 +161,38 @@ function taskPath(projectId: string, taskId: string): string {
 export class CodeAgentClient {
   readonly #baseUrl: string;
   readonly #fetch: typeof globalThis.fetch;
+  readonly #requestTimeouts: CodeAgentRequestTimeouts;
   readonly #webSocketFactory: WebSocketFactory;
 
   public constructor(options: CodeAgentClientOptions = {}) {
     this.#baseUrl = options.baseUrl?.replace(/\/$/u, "") ?? "";
     this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
+    this.#requestTimeouts = {
+      mutationMs: options.requestTimeouts?.mutationMs ?? 60_000,
+      queryMs: options.requestTimeouts?.queryMs ?? 30_000,
+      readMs: options.requestTimeouts?.readMs ?? 15_000,
+    };
     this.#webSocketFactory = options.webSocketFactory ?? ((url) => new WebSocket(url));
   }
 
-  public async getHealth(): Promise<HealthResponse> {
-    return this.#request("/v1/health", HealthResponseSchema);
+  public async getHealth(options: ReadOptions = {}): Promise<HealthResponse> {
+    return this.#read("/v1/health", HealthResponseSchema, options);
   }
 
-  public async getCapabilities(): Promise<AgentCapabilities> {
-    return this.#request("/v1/capabilities", AgentCapabilitiesSchema);
+  public async getCapabilities(options: ReadOptions = {}): Promise<AgentCapabilities> {
+    return this.#read("/v1/capabilities", AgentCapabilitiesSchema, options);
   }
 
-  public async listModels(): Promise<AgentModelPage> {
-    return this.#request("/v1/models", AgentModelPageSchema);
+  public async listModels(options: ReadOptions = {}): Promise<AgentModelPage> {
+    return this.#read("/v1/models", AgentModelPageSchema, options);
   }
 
-  public async listSkills(projectId: string): Promise<AgentSkillPage> {
-    return this.#request(`${projectPath(projectId)}/skills`, AgentSkillPageSchema);
+  public async listSkills(projectId: string, options: ReadOptions = {}): Promise<AgentSkillPage> {
+    return this.#read(`${projectPath(projectId)}/skills`, AgentSkillPageSchema, options);
   }
 
-  public async listProjects(): Promise<ProjectPage> {
-    return this.#request("/v1/projects", ProjectPageSchema);
+  public async listProjects(options: ReadOptions = {}): Promise<ProjectPage> {
+    return this.#read("/v1/projects", ProjectPageSchema, options);
   }
 
   public async reorderProjects(
@@ -190,8 +208,15 @@ export class CodeAgentClient {
     );
   }
 
-  public async getProjectDefaults(projectId: string): Promise<AgentProjectDefaultsResponse> {
-    return this.#request(`${projectPath(projectId)}/defaults`, AgentProjectDefaultsResponseSchema);
+  public async getProjectDefaults(
+    projectId: string,
+    options: ReadOptions = {},
+  ): Promise<AgentProjectDefaultsResponse> {
+    return this.#read(
+      `${projectPath(projectId)}/defaults`,
+      AgentProjectDefaultsResponseSchema,
+      options,
+    );
   }
 
   public async updateProjectDefaults(
@@ -212,39 +237,54 @@ export class CodeAgentClient {
     return this.#mutation("/v1/projects", {}, AddProjectResponseSchema, options);
   }
 
-  public async getProjectGitStatus(projectId: string): Promise<ProjectGitStatus> {
-    return this.#request(
+  public async getProjectGitStatus(
+    projectId: string,
+    options: ReadOptions = {},
+  ): Promise<ProjectGitStatus> {
+    return this.#read(
       `/v1/projects/${encodeURIComponent(projectId)}/git/status`,
       ProjectGitStatusSchema,
+      options,
     );
   }
 
-  public async readProjectSourceFile(projectId: string, path: string): Promise<ProjectSourceFile> {
+  public async readProjectSourceFile(
+    projectId: string,
+    path: string,
+    options: ReadOptions = {},
+  ): Promise<ProjectSourceFile> {
     const requestPath = appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/files/source`, {
       path,
     });
-    return this.#request(requestPath, ProjectSourceFileSchema);
+    return this.#read(requestPath, ProjectSourceFileSchema, options);
   }
 
   public async listTasks(
     projectId: string,
     options: ListTasksOptions = {},
+    requestOptions: ReadOptions = {},
   ): Promise<AgentTaskPage> {
     const path = appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/tasks`, options);
-    return this.#request(path, AgentTaskPageSchema);
+    return this.#read(path, AgentTaskPageSchema, requestOptions);
   }
 
-  public async readTask(projectId: string, taskId: string): Promise<AgentTaskSnapshotResponse> {
-    return this.#request(taskPath(projectId, taskId), AgentTaskSnapshotResponseSchema);
+  public async readTask(
+    projectId: string,
+    taskId: string,
+    options: ReadOptions = {},
+  ): Promise<AgentTaskSnapshotResponse> {
+    return this.#read(taskPath(projectId, taskId), AgentTaskSnapshotResponseSchema, options);
   }
 
   public async listBackgroundTerminals(
     projectId: string,
     taskId: string,
+    options: ReadOptions = {},
   ): Promise<AgentBackgroundTerminalPage> {
-    return this.#request(
+    return this.#read(
       `${taskPath(projectId, taskId)}/background-terminals`,
       AgentBackgroundTerminalPageSchema,
+      options,
     );
   }
 
@@ -265,10 +305,12 @@ export class CodeAgentClient {
   public async getTaskSettings(
     projectId: string,
     taskId: string,
+    options: ReadOptions = {},
   ): Promise<AgentTaskSettingsResponse> {
-    return this.#request(
+    return this.#read(
       `${taskPath(projectId, taskId)}/settings`,
       AgentTaskSettingsResponseSchema,
+      options,
     );
   }
 
@@ -510,7 +552,19 @@ export class CodeAgentClient {
         method,
       },
       AgentMutationErrorSchema,
+      {
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+        timeoutMs: this.#requestTimeouts.mutationMs,
+      },
     );
+  }
+
+  #read<T extends TSchema>(path: string, schema: T, options: ReadOptions): Promise<Static<T>> {
+    return this.#request(path, schema, {}, undefined, {
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      timeoutMs:
+        options.signal === undefined ? this.#requestTimeouts.readMs : this.#requestTimeouts.queryMs,
+    });
   }
 
   async #request<T extends TSchema>(
@@ -518,10 +572,20 @@ export class CodeAgentClient {
     schema: T,
     init: RequestInit = {},
     errorSchema?: TSchema,
+    requestOptions: Readonly<{ signal?: AbortSignal; timeoutMs?: number }> = {},
   ): Promise<Static<T>> {
+    // Query 取消与本地截止时间必须共同生效，避免旧响应继续下载、校验并写入缓存。
+    const timeoutSignal = AbortSignal.timeout(
+      requestOptions.timeoutMs ?? this.#requestTimeouts.readMs,
+    );
+    const signal =
+      requestOptions.signal === undefined
+        ? timeoutSignal
+        : AbortSignal.any([requestOptions.signal, timeoutSignal]);
     const response = await this.#fetch(`${this.#baseUrl}${path}`, {
       ...init,
       headers: { accept: "application/json", ...(init.headers as Record<string, string>) },
+      signal,
     });
     if (!response.ok) {
       if (errorSchema !== undefined) {

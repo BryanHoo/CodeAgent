@@ -235,16 +235,21 @@ export function removeProjectTaskFromInfiniteData(
 export async function listProjectTasksForSearch(
   projectId: string,
   client: Pick<CodeAgentClient, "listTasks">,
+  signal?: AbortSignal,
 ): Promise<readonly AgentTask[]> {
   const taskById = new Map<string, AgentTask>();
   const requestedCursors = new Set<string>();
   let cursor: string | undefined;
 
   for (;;) {
-    const page = await client.listTasks(projectId, {
+    const pageOptions = {
       ...(cursor === undefined ? {} : { cursor }),
       limit: PROJECT_TASK_SEARCH_PAGE_SIZE,
-    });
+    };
+    const page =
+      signal === undefined
+        ? await client.listTasks(projectId, pageOptions)
+        : await client.listTasks(projectId, pageOptions, { signal });
     for (const task of page.data) {
       // Cursor 页边界可能重叠，保留首次出现的较新任务版本。
       if (!taskById.has(task.id)) {
@@ -267,7 +272,7 @@ export function projectTaskSearchSourceQueryOptions(
 ) {
   return queryOptions({
     enabled,
-    queryFn: () => listProjectTasksForSearch(projectId, client),
+    queryFn: ({ signal }) => listProjectTasksForSearch(projectId, client, signal),
     queryKey: ["projects", projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY] as const,
   });
 }
@@ -358,14 +363,14 @@ export function taskArchiveMutationOptions(
 
 export function capabilitiesQueryOptions(client: CodeAgentCapabilitiesClient = codeAgentClient) {
   return queryOptions({
-    queryFn: () => client.getCapabilities(),
+    queryFn: ({ signal }) => client.getCapabilities({ signal }),
     queryKey: ["capabilities"] as const,
   });
 }
 
 export function modelsQueryOptions(client: CodeAgentModelsClient = codeAgentClient) {
   return queryOptions({
-    queryFn: () => client.listModels(),
+    queryFn: ({ signal }) => client.listModels({ signal }),
     queryKey: ["models"] as const,
     staleTime: 5 * 60_000,
   });
@@ -376,7 +381,7 @@ export function skillsQueryOptions(
   client: CodeAgentSkillsClient = codeAgentClient,
 ) {
   return queryOptions({
-    queryFn: () => client.listSkills(projectId),
+    queryFn: ({ signal }) => client.listSkills(projectId, { signal }),
     queryKey: ["projects", projectId, "skills"] as const,
   });
 }
@@ -386,7 +391,7 @@ export function projectDefaultsQueryOptions(
   client: Pick<CodeAgentClient, "getProjectDefaults"> = codeAgentClient,
 ) {
   return queryOptions({
-    queryFn: () => client.getProjectDefaults(projectId),
+    queryFn: ({ signal }) => client.getProjectDefaults(projectId, { signal }),
     queryKey: ["projects", projectId, "defaults"] as const,
   });
 }
@@ -418,7 +423,7 @@ export function taskSettingsMutationOptions(
 
 export function projectsQueryOptions(client: CodeAgentReadClient = codeAgentClient) {
   return queryOptions({
-    queryFn: () => client.listProjects(),
+    queryFn: ({ signal }) => client.listProjects({ signal }),
     queryKey: ["projects"] as const,
   });
 }
@@ -439,7 +444,7 @@ export function projectGitStatusQueryOptions(
   client: CodeAgentGitStatusClient = codeAgentClient,
 ) {
   return queryOptions({
-    queryFn: () => client.getProjectGitStatus(projectId),
+    queryFn: ({ signal }) => client.getProjectGitStatus(projectId, { signal }),
     queryKey: ["projects", projectId, "git-status"] as const,
     // Agent 运行时持续采样工作区；空闲时仍保留首次读取和窗口聚焦重验证。
     refetchInterval: isTaskRunning ? PROJECT_GIT_STATUS_POLL_INTERVAL_MS : false,
@@ -468,11 +473,15 @@ export function projectTasksInfiniteQueryOptions(
       return lastPage.nextCursor;
     },
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      client.listTasks(projectId, {
-        ...(pageParam === undefined ? {} : { cursor: pageParam }),
-        limit: PROJECT_TASK_PAGE_SIZE,
-      }),
+    queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
+      client.listTasks(
+        projectId,
+        {
+          ...(pageParam === undefined ? {} : { cursor: pageParam }),
+          limit: PROJECT_TASK_PAGE_SIZE,
+        },
+        { signal },
+      ),
     queryKey: ["projects", projectId, "tasks"] as const,
   });
 }
@@ -484,7 +493,7 @@ export function taskSnapshotQueryOptions(
 ) {
   return queryOptions({
     gcTime: TASK_SNAPSHOT_GC_TIME_MS,
-    queryFn: () => client.readTask(projectId, taskId),
+    queryFn: ({ signal }) => client.readTask(projectId, taskId, { signal }),
     queryKey: ["projects", projectId, "tasks", taskId] as const,
   });
 }

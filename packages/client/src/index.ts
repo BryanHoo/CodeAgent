@@ -11,8 +11,10 @@ export {
   CodeAgentHttpError,
   CodeAgentMutationError,
   CodeAgentResponseError,
+  type CodeAgentRequestTimeouts,
   type CodeAgentClientOptions,
   type ListTasksOptions,
   type MutationOptions,
   type PendingRequestResolution,
+  type ReadOptions,
 } from "./http-client.js";

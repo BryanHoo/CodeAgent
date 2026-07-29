@@ -81,11 +81,11 @@ export function ProjectSourceDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const sourceQuery = useQuery({
     enabled: reference !== null,
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (reference === null) {
         throw new Error("Source file reference is required");
       }
-      return client.readProjectSourceFile(projectId, reference.path);
+      return client.readProjectSourceFile(projectId, reference.path, { signal });
     },
     queryKey: ["projects", projectId, "source-file", reference?.path ?? null] as const,
     staleTime: 30_000,

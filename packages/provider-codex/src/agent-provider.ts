@@ -37,6 +37,7 @@ import type {
   Project,
   UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
+import pino from "pino";
 
 import {
   RpcResponseError,
@@ -45,6 +46,7 @@ import {
   type RpcServerRequest,
 } from "./jsonl-rpc-client.js";
 import { extractCodexTextSkills, readCodexTranscriptTurnSkills } from "./codex-transcript.js";
+import { SUPPORTED_CODEX_VERSION } from "./binary.js";
 
 export interface CodexRpcClient {
   notify(method: string, params?: unknown): void;
@@ -57,6 +59,11 @@ export interface CodexRpcClient {
 
 export interface CreateCodexRuntimeProviderOptions {
   client: CodexRpcClient;
+  logger?: CodexProviderLogger;
+}
+
+export interface CodexProviderLogger {
+  warn(fields: Readonly<Record<string, unknown>>, message: string): void;
 }
 
 export class CodexProtocolMappingError extends Error {
@@ -70,6 +77,21 @@ const MAX_COMMAND_OUTPUT_BYTES = 1_048_576;
 const MAX_COMMAND_OUTPUT_LINES = 10_000;
 const MAX_TERMINAL_PENDING_REQUESTS = 1_000;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const CODEX_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
+  "error",
+  "item/agentMessage/delta",
+  "item/commandExecution/outputDelta",
+  "item/completed",
+  "item/reasoning/summaryTextDelta",
+  "item/reasoning/textDelta",
+  "item/started",
+  "thread/tokenUsage/updated",
+  "turn/completed",
+  "turn/started",
+]);
+const DEFAULT_PROVIDER_LOGGER: CodexProviderLogger = pino({ level: "info" }).child({
+  component: "provider-codex",
+});
 
 interface PendingCodexRequest {
   denyDecision?: "cancel" | "decline";
@@ -1121,18 +1143,7 @@ function attachTranscriptSkills(turn: AgentTurn, skillNames: readonly string[]):
 }
 
 function mapCodexNotification(method: string, value: unknown): AgentProviderEvent | undefined {
-  if (
-    method !== "turn/started" &&
-    method !== "turn/completed" &&
-    method !== "item/started" &&
-    method !== "item/agentMessage/delta" &&
-    method !== "item/reasoning/summaryTextDelta" &&
-    method !== "item/reasoning/textDelta" &&
-    method !== "item/commandExecution/outputDelta" &&
-    method !== "item/completed" &&
-    method !== "thread/tokenUsage/updated" &&
-    method !== "error"
-  ) {
+  if (!CODEX_NOTIFICATION_METHODS.has(method)) {
     return undefined;
   }
 
@@ -1275,6 +1286,7 @@ function mapAgentTask(thread: Record<string, unknown>, project: Project): AgentT
 export class CodexAgentProvider implements AgentProvider {
   readonly #client: CodexRpcClient;
   readonly #eventListeners = new Set<AgentProviderEventListener>();
+  readonly #logger: CodexProviderLogger;
   readonly #pendingRequests = new Map<string, PendingCodexRequest>();
   readonly #pendingTaskServerRequests = new Map<string, PendingCodexRequest[]>();
   readonly #pendingTaskEvents = new Map<string, AgentProviderEvent[]>();
@@ -1294,9 +1306,10 @@ export class CodexAgentProvider implements AgentProvider {
   public constructor(
     client: CodexRpcClient,
     project: Project,
-    options: { subscribeRpc?: boolean } = {},
+    options: { logger?: CodexProviderLogger; subscribeRpc?: boolean } = {},
   ) {
     this.#client = client;
+    this.#logger = options.logger ?? DEFAULT_PROVIDER_LOGGER;
     this.#project = project;
     if (options.subscribeRpc ?? true) {
       this.#client.onNotification((notification) => {
@@ -1852,9 +1865,13 @@ export class CodexAgentProvider implements AgentProvider {
       event = mapCodexNotification(method, params);
     } catch {
       // 单个原生通知字段漂移不能中断 JSONL Client 或后续关键事件。
+      this.#warnDroppedNotification("invalid_notification", method, params);
       return;
     }
     if (event === undefined) {
+      if (!CODEX_NOTIFICATION_METHODS.has(method)) {
+        this.#warnDroppedNotification("unknown_notification", method, params);
+      }
       return;
     }
     if (
@@ -1877,6 +1894,24 @@ export class CodexAgentProvider implements AgentProvider {
       }
     }
     this.#routeEvent(event);
+  }
+
+  #warnDroppedNotification(
+    diagnosticCode: "invalid_notification" | "unknown_notification",
+    method: string,
+    params: unknown,
+  ): void {
+    // 原始通知可能包含 Prompt、命令或文件正文，诊断日志只保留关联身份。
+    this.#logger.warn(
+      {
+        codexVersion: SUPPORTED_CODEX_VERSION,
+        diagnosticCode,
+        method,
+        projectId: this.#project.id,
+        taskId: readTaskId(params) ?? null,
+      },
+      "Codex notification dropped",
+    );
   }
 
   #hasTaskLifecycleObligations(taskId: string): boolean {
@@ -2412,13 +2447,18 @@ type TaskOwner = Readonly<{ projectId: string; provisional: boolean; rootPath: s
 
 export class CodexRuntimeProvider implements AgentRuntimeProvider {
   readonly #client: CodexRpcClient;
+  readonly #logger: CodexProviderLogger;
   readonly #projects = new Map<string, Project>();
   readonly #projectProviders = new Map<string, CodexRuntimeProjectProvider>();
   readonly #rawProviders = new Map<string, CodexAgentProvider>();
   readonly #taskOwners = new Map<string, TaskOwner>();
 
-  public constructor(client: CodexRpcClient) {
+  public constructor(
+    client: CodexRpcClient,
+    logger: CodexProviderLogger = DEFAULT_PROVIDER_LOGGER,
+  ) {
     this.#client = client;
+    this.#logger = logger;
     client.onNotification((notification) => {
       const taskId = readTaskId(notification.params);
       if (taskId !== undefined) {
@@ -2459,7 +2499,10 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
       }
       return current;
     }
-    const rawProvider = new CodexAgentProvider(this.#client, project, { subscribeRpc: false });
+    const rawProvider = new CodexAgentProvider(this.#client, project, {
+      logger: this.#logger,
+      subscribeRpc: false,
+    });
     const provider = new CodexRuntimeProjectProvider(this, rawProvider, project);
     this.#rawProviders.set(project.id, rawProvider);
     this.#projectProviders.set(project.id, provider);
@@ -2489,6 +2532,7 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
       rootPath: resolve("/"),
     };
     return new CodexAgentProvider(this.#client, runtimeProject, {
+      logger: this.#logger,
       subscribeRpc: false,
     }).listModels();
   }
@@ -2556,5 +2600,5 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
 export function createCodexRuntimeProvider(
   options: CreateCodexRuntimeProviderOptions,
 ): CodexRuntimeProvider {
-  return new CodexRuntimeProvider(options.client);
+  return new CodexRuntimeProvider(options.client, options.logger);
 }

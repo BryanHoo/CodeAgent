@@ -83,7 +83,12 @@ import {
 } from "@code-agent/protocol";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, {
+  LogController,
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from "fastify";
 
 import { AgentEventStream } from "./agent-event-stream.js";
 import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js";
@@ -98,8 +103,11 @@ import {
 export interface CreateCodeAgentServerOptions {
   eventBufferSize?: number;
   eventSessionId?: string;
+  handlerTimeoutMs?: number;
   idempotencyCacheSize?: number;
   idempotencyTtlMs?: number;
+  loggerEnabled?: boolean;
+  logDestination?: Readonly<{ write: (message: string) => void }>;
   projectRepository: ProjectRepository;
   provider: AgentRuntimeProvider;
   settingsRepository: AgentSettingsRepository;
@@ -320,8 +328,35 @@ type TaskStartRecovery = Readonly<{
 
 const DEFAULT_IDEMPOTENCY_CACHE_SIZE = 1_000;
 const DEFAULT_IDEMPOTENCY_TTL_MS = 10 * 60 * 1_000;
+const DEFAULT_HANDLER_TIMEOUT_MS = 60_000;
 const EVENT_SOCKET_SOFT_BACKPRESSURE_BYTES = 256 * 1_024;
 const EVENT_SOCKET_HARD_BACKPRESSURE_BYTES = 1_024 * 1_024;
+
+class CodeAgentLogController extends LogController {
+  public override incomingRequest(): void {
+    // 只记录包含耗时和终态的完成日志，避免为每个请求输出重复起始行。
+  }
+
+  public override requestCompleted(
+    error: Error | null,
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): void {
+    const fields = {
+      durationMs: reply.elapsedTime,
+      ...(error ? { errorCode: error.name } : {}),
+      method: request.method,
+      requestId: request.id,
+      route: request.routeOptions.url,
+      statusCode: reply.statusCode,
+    };
+    if (reply.statusCode >= 500) {
+      request.log.error(fields, "request completed");
+      return;
+    }
+    request.log.info(fields, "request completed");
+  }
+}
 
 function normalizeJsonForFingerprint(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -366,7 +401,35 @@ function toPendingRequestHttpError(error: PendingRequestResolutionError): Mutati
 export async function createCodeAgentServer(
   options: CreateCodeAgentServerOptions,
 ): Promise<FastifyInstance> {
-  const app = Fastify({ logger: false });
+  const handlerTimeoutMs = options.handlerTimeoutMs ?? DEFAULT_HANDLER_TIMEOUT_MS;
+  const logger =
+    options.loggerEnabled === false
+      ? false
+      : {
+          level: "info",
+          // 即使后续扩展请求 Serializer，也不能让认证字段进入结构化日志。
+          redact: {
+            censor: "[Redacted]",
+            paths: [
+              "req.headers.authorization",
+              "req.headers.cookie",
+              'req.headers["x-api-key"]',
+              'res.headers["set-cookie"]',
+            ],
+          },
+          ...(options.logDestination === undefined ? {} : { stream: options.logDestination }),
+        };
+  const app = Fastify({
+    handlerTimeout: 0,
+    logController: new CodeAgentLogController(),
+    logger,
+  });
+  app.addHook("onRoute", (routeOptions) => {
+    // WebSocket 是显式长连接；普通 HTTP 路由使用 Fastify 原生 request.signal 协作取消。
+    if (handlerTimeoutMs > 0 && routeOptions.websocket !== true) {
+      routeOptions.handlerTimeout = handlerTimeoutMs;
+    }
+  });
   const readProjectGitStatus = options.readProjectGitStatus ?? readGitWorkingTreeStatus;
   const readSourceFile = options.readProjectSourceFile ?? readProjectSourceFile;
   const prepareFileRollback = options.prepareTurnFileRollback ?? prepareTurnFileRollback;
