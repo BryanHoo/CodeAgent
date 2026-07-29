@@ -40,6 +40,7 @@ function taskSettingsFromRow(row) {
   }
   return {
     approvalPolicy: row.approval_policy,
+    approvalsReviewer: row.approvals_reviewer,
     model: row.model,
     reasoningEffort: row.reasoning_effort,
     sandboxMode: row.sandbox_mode,
@@ -123,7 +124,7 @@ function createOperations(database) {
           "SELECT model, reasoning_effort, sandbox_mode FROM project_defaults WHERE project_id = ?",
         ),
         readTaskSettings: database.prepare(
-          "SELECT approval_policy, model, reasoning_effort, sandbox_mode FROM task_settings WHERE project_id = ? AND task_id = ?",
+          "SELECT approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode FROM task_settings WHERE project_id = ? AND task_id = ?",
         ),
         listPinnedTaskIds: database.prepare(
           "SELECT task_id FROM task_metadata WHERE project_id = ? AND pinned = 1 ORDER BY task_id",
@@ -139,10 +140,11 @@ function createOperations(database) {
     `),
         writeTaskSettings: database.prepare(`
       INSERT INTO task_settings (
-        project_id, task_id, approval_policy, model, reasoning_effort, sandbox_mode, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        project_id, task_id, approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(project_id, task_id) DO UPDATE SET
         approval_policy = excluded.approval_policy,
+        approvals_reviewer = excluded.approvals_reviewer,
         model = excluded.model,
         reasoning_effort = excluded.reasoning_effort,
         sandbox_mode = excluded.sandbox_mode,
@@ -272,6 +274,7 @@ function createOperations(database) {
         payload.projectId,
         payload.taskId,
         settings.approvalPolicy,
+        settings.approvalsReviewer,
         settings.model,
         settings.reasoningEffort,
         settings.sandboxMode,

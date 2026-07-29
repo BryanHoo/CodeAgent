@@ -41,7 +41,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 4,
+      migrationVersion: 5,
       synchronous: "normal",
       writable: true,
     });
@@ -139,12 +139,14 @@ describe("SqliteStateRepository", () => {
     });
     await repository.writeTaskSettings(first.id, "task-1", {
       approvalPolicy: "never",
+      approvalsReviewer: "user",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
       sandboxMode: "danger-full-access",
     });
     await repository.writeTaskSettings(second.id, "task-1", {
       approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
       model: "gpt-5.6-terra",
       reasoningEffort: "low",
       sandboxMode: "read-only",
@@ -162,9 +164,11 @@ describe("SqliteStateRepository", () => {
     });
     await expect(repository.readTaskSettings(first.id, "task-1")).resolves.toMatchObject({
       approvalPolicy: "never",
+      approvalsReviewer: "user",
     });
     await expect(repository.readTaskSettings(second.id, "task-1")).resolves.toMatchObject({
       approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
     });
   });
 
@@ -176,12 +180,14 @@ describe("SqliteStateRepository", () => {
     const project = await repository.register({ name: "Workspace", rootPath: projectRoot });
     await repository.writeTaskSettings(project.id, "task-1", {
       approvalPolicy: "never",
+      approvalsReviewer: "user",
       model: "old-model",
       reasoningEffort: "low",
       sandboxMode: "read-only",
     });
     await repository.writeTaskSettings(project.id, "task-1", {
       approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
       model: "new-model",
       reasoningEffort: "high",
       sandboxMode: "danger-full-access",
@@ -193,6 +199,7 @@ describe("SqliteStateRepository", () => {
 
     await expect(reopened.readTaskSettings(project.id, "task-1")).resolves.toEqual({
       approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
       model: "new-model",
       reasoningEffort: "high",
       sandboxMode: "danger-full-access",

@@ -306,6 +306,7 @@ function projectDefaultsEqual(
 function taskSettingsEqual(left: AgentTaskSettings | undefined, right: AgentTaskSettings): boolean {
   return (
     left?.approvalPolicy === right.approvalPolicy &&
+    left.approvalsReviewer === right.approvalsReviewer &&
     left.model === right.model &&
     left.reasoningEffort === right.reasoningEffort &&
     left.sandboxMode === right.sandboxMode
@@ -602,10 +603,18 @@ export async function createCodeAgentServer(
       stored ?? defaults,
       defaults.sandboxMode,
     );
-    const effective = {
-      approvalPolicy: stored?.approvalPolicy ?? "on-request",
-      ...effectiveModel,
-    } satisfies AgentTaskSettings;
+    const effective: AgentTaskSettings =
+      stored?.approvalsReviewer === "auto_review"
+        ? {
+            approvalPolicy: "on-request",
+            approvalsReviewer: "auto_review",
+            ...effectiveModel,
+          }
+        : {
+            approvalPolicy: stored?.approvalPolicy ?? "on-request",
+            approvalsReviewer: "user",
+            ...effectiveModel,
+          };
     if (!taskSettingsEqual(stored, effective)) {
       await options.settingsRepository.writeTaskSettings(projectId, taskId, effective);
     }
@@ -1704,7 +1713,11 @@ export async function createCodeAgentServer(
             // Provider 已创建 Task 后立即保留恢复状态，后续落库重试不能再次创建 Task。
             recovery = {
               fingerprint,
-              settings: { approvalPolicy: "on-request", ...defaults },
+              settings: {
+                approvalPolicy: "on-request",
+                approvalsReviewer: "user",
+                ...defaults,
+              },
               task,
             };
             taskStartRecoveries.set(recoveryKey, recovery);

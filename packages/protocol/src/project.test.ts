@@ -242,6 +242,7 @@ describe("project protocol", () => {
       projectId: "code-agent",
       settings: {
         approvalPolicy: "on-request",
+        approvalsReviewer: "user",
         model: "gpt-5.6-sol",
         reasoningEffort: "high",
         sandboxMode: "workspace-write",
@@ -346,7 +347,11 @@ describe("project protocol", () => {
       reasoningEffort: "high",
       sandboxMode: "workspace-write",
     };
-    const taskSettings = { approvalPolicy: "never", ...projectDefaults };
+    const taskSettings = {
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      ...projectDefaults,
+    };
 
     expect(Value.Check(AgentProjectDefaultsSchema, projectDefaults)).toBe(true);
     expect(Value.Check(AgentProjectDefaultsResponseSchema, { settings: projectDefaults })).toBe(
@@ -360,6 +365,17 @@ describe("project protocol", () => {
     expect(
       Value.Check(AgentTaskSettingsSchema, { ...taskSettings, approvalPolicy: "always" }),
     ).toBe(false);
+    expect(
+      Value.Check(AgentTaskSettingsSchema, { ...taskSettings, approvalsReviewer: "always" }),
+    ).toBe(false);
+    expect(Value.Check(AgentTaskSettingsSchema, { ...taskSettings, approvalPolicy: "never" })).toBe(
+      false,
+    );
+    const settingsWithoutReviewer = {
+      approvalPolicy: taskSettings.approvalPolicy,
+      ...projectDefaults,
+    };
+    expect(Value.Check(AgentTaskSettingsSchema, settingsWithoutReviewer)).toBe(false);
     expect(
       Value.Check(AgentTaskSettingsSchema, { ...taskSettings, sandboxMode: "host-write" }),
     ).toBe(false);
@@ -729,6 +745,7 @@ describe("project protocol", () => {
         input: prompt,
         options: {
           approvalPolicy: "on-request",
+          approvalsReviewer: "auto_review",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "workspace-write",
@@ -740,6 +757,7 @@ describe("project protocol", () => {
         input: prompt,
         options: {
           approvalPolicy: "always",
+          approvalsReviewer: "user",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "workspace-write",

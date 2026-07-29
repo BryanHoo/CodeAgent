@@ -10,6 +10,7 @@ import {
 
 const taskSettings = {
   approvalPolicy: "on-request",
+  approvalsReviewer: "user",
   model: "gpt-5.6-sol",
   reasoningEffort: "high",
   sandboxMode: "workspace-write",

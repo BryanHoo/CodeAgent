@@ -266,6 +266,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   };
   const draftSettings: AgentTaskSettings = {
     approvalPolicy: "on-request",
+    approvalsReviewer: "user",
     ...draftDefaults,
   };
   const updateDraftSettings = async (

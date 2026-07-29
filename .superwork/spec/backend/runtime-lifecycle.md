@@ -23,7 +23,7 @@
 - Provider 对已成功 `thread/start` 的 Task 必须提供进程内 read-your-writes：在 Codex 原生 `thread/list` 首次返回该 Task 前，将本地未 materialize Task 合并到首个列表页；只有原生列表接管后才能移除该列表回退，`turn/start` 或 `thread/read` 成功不能提前造成列表不可见窗口。
 - Task 命令通过受控 Provider 方法映射：代码审查使用 `review/start`，上下文压缩使用 `thread/compact/start`，新任务续接使用 `thread/fork`，任务反馈使用 `feedback/upload`；每个动作都必须先验证 Task 属于当前 Project，并校验响应中的 Thread ID。
 - Task 重命名固定映射 `thread/name/set`，归档固定映射 `thread/archive`，两者都必须先验证 Task 属于当前 Project；固定状态不是 Codex 原生能力，由 CodeAgent 本地 Task 元数据持久化。
-- 模型列表只通过分页 `model/list` 获取，过滤隐藏模型并保留默认模型、默认思考量和可用思考量；Server Runtime 使用带 TTL、字节容量与 in-flight 去重的模型目录缓存统一服务设置校验和 `/v1/models`，Runtime 关闭时清空且旧请求不得回填；Project 沙盒默认值通过携带 `cwd` 的 `config/read` 读取；`turn/start` 明确映射文本、受控图片 Data URL、`model`、`effort`、`approvalPolicy` 和结构化 `sandboxPolicy`。
+- 模型列表只通过分页 `model/list` 获取，过滤隐藏模型并保留默认模型、默认思考量和可用思考量；Server Runtime 使用带 TTL、字节容量与 in-flight 去重的模型目录缓存统一服务设置校验和 `/v1/models`，Runtime 关闭时清空且旧请求不得回填；Project 沙盒默认值通过携带 `cwd` 的 `config/read` 读取；`turn/start` 明确映射文本、受控图片 Data URL、`model`、`effort`、`approvalPolicy`、`approvalsReviewer` 和结构化 `sandboxPolicy`。自动审批使用 `on-request + auto_review`，不扩展沙盒边界。
 - Codex 用户历史中的 `image` 与 `localImage` 必须映射为只含随机 ID、媒体类型、名称和字节数的统一消息附件；Provider 只接受 GIF、JPEG、PNG、WebP 的有效内容签名和不超过 2 MiB 的图片。Snapshot 不得包含 Base64 或本地路径；本地文件正文只在受权读取时加载并复验大小、修改时间和内容签名。文件缺失、超限、格式不受支持或历史附件 Store 达到预算时降级为文本占位，不能使整个 Task Snapshot 失败。
 - Project Skill 目录只通过 `skills/list { cwds: [project.rootPath] }` 获取并过滤禁用项；对外 ID 必须是稳定不透明摘要。`turn/start` 只有在 ID 与名称仍匹配当前目录时，才能加入 Codex 原生 `{ type: "skill", name, path }`，原生绝对路径不得越过 Provider 边界。
 - `thread/tokenUsage/updated` 只使用最近一轮 `last.totalTokens` 计算当前上下文占用，并连同 `modelContextWindow` 写入实时事件和后续 Snapshot；不得使用累计 `total.totalTokens` 冒充当前上下文。
@@ -43,7 +43,7 @@
 - Project 列表默认空，通过宿主系统目录选择器注册，并持久化到 `CODEX_HOME/code-agent/state.sqlite3`；重复真实路径幂等返回已有 Project。
 - 数据库使用版本化 Migration、`STRICT` 表、显式 SQL、Prepared Statement 和事务，并固定启用 WAL、外键、NORMAL synchronous 与 5000ms busy timeout。
 - 所有同步 SQLite 操作都放入专用 `worker_threads` Worker，Fastify 主事件循环只通过 Core Repository 端口异步调用。
-- Project defaults 保存模型、思考量与沙盒模式；尚未持久化时沙盒使用 Codex Project 有效配置。新 Task 审批固定从 `on-request` 开始。Task settings 保存完整审批、模型、思考量与沙盒模式，并在调用 Provider 前按实时模型目录校验和 upsert。
+- Project defaults 保存模型、思考量与沙盒模式；尚未持久化时沙盒使用 Codex Project 有效配置。新 Task 审批固定从 `approvalPolicy: "on-request"` 与 `approvalsReviewer: "user"` 开始。Task settings 保存完整审批策略、审批审核方、模型、思考量与沙盒模式，并在调用 Provider 前按实时模型目录校验和 upsert。
 - `task_metadata` 只保存 Project 作用域的 Task 固定状态；Task 列表与 Snapshot 在 Server 交付边界合并该状态，不修改 Codex Thread 内容。
 - Provider 模型目录、`allow_for_session` 和可操作 Pending Approval 不得持久化；进程重启后不得恢复可操作 `pending`。
 - WebSocket 客户端使用独立有界队列，慢客户端不能阻塞 Provider；`bufferedAmount` 超过 `256 KiB` 时向 Event Stream 发出软背压信号，超过 `1 MiB` 时以 `1013` 关闭连接并要求刷新 Snapshot。

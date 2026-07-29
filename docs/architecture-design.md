@@ -176,7 +176,7 @@ sequenceDiagram
     U->>W: 提交任务
     W->>S: POST /v1/projects/:projectId/tasks/:taskId/turns
     S->>S: 校验用户和 Project
-    S->>C: turn/start(model, effort, approvalPolicy, sandboxPolicy)
+    S->>C: turn/start(model, effort, approvalPolicy, approvalsReviewer, sandboxPolicy)
     C-->>S: turn/started
     S-->>W: AgentEvent(turn.started)
     C-->>S: item/agentMessage/delta
@@ -299,7 +299,8 @@ CLI 启动一个不绑定 Project 的全局 `codex app-server --listen stdio://`
   "port": 3210,
   "openBrowser": true,
   "sandbox": "workspace-write",
-  "approvalPolicy": "on-request"
+  "approvalPolicy": "on-request",
+  "approvalsReviewer": "user"
 }
 ```
 
@@ -680,7 +681,7 @@ turn id -> runtime state
 | `steerTurn`     | `turn/steer`      |
 | `interruptTurn` | `turn/interrupt`  |
 
-`startTurn` 将统一 Prompt 映射为 Codex `UserInput[]`：已选择 Skill 使用 `{ type: "skill", name, path }`，非空文本使用 `text`，Server 已验证的图片 Data URL 使用 `image`。Skill 目录由 Project Provider 调用 `skills/list { cwds: [project.rootPath] }` 获取；Web 只接收稳定不透明 ID，Provider 在提交时重新验证 ID 与名称并解析原生绝对路径。统一 `model`、`reasoningEffort` 和 `approvalPolicy` 分别映射为 Codex `model`、`effort` 和 `approvalPolicy`，不向 Web 暴露其他原生字段。
+`startTurn` 将统一 Prompt 映射为 Codex `UserInput[]`：已选择 Skill 使用 `{ type: "skill", name, path }`，非空文本使用 `text`，Server 已验证的图片 Data URL 使用 `image`。Skill 目录由 Project Provider 调用 `skills/list { cwds: [project.rootPath] }` 获取；Web 只接收稳定不透明 ID，Provider 在提交时重新验证 ID 与名称并解析原生绝对路径。统一 `model`、`reasoningEffort`、`approvalPolicy` 和 `approvalsReviewer` 分别映射为 Codex `model`、`effort`、`approvalPolicy` 和 `approvalsReviewer`，不向 Web 暴露其他原生字段。自动审批固定映射为 `approvalPolicy: "on-request"` 与 `approvalsReviewer: "auto_review"`；`never` 只表示从不询问，不能替代自动审核。
 
 `readTask` 映射 Codex 历史 `image` 与 `localImage` 时只写入随机附件 ID、媒体类型、名称和字节数。Provider 历史附件 Store 默认最多保留 `128` 个条目、合计 `64 MiB`、TTL `30` 分钟；本地图片只读取固定长度签名头，完整正文延迟到 `readTaskAttachment`，并在交付前复验文件身份和内容签名。Snapshot 重建与 `unsubscribeTask` 都清理对应 Task 的旧授权记录。
 
@@ -760,14 +761,14 @@ task_settings
 task_metadata
 ```
 
-所有业务表使用 `STRICT`。`projects.sort_order` 保存 Sidebar 用户顺序；`project_defaults` 只保存 `model` 和 `reasoning_effort`；`task_settings` 保存 `approval_policy`、`model` 和 `reasoning_effort`；`task_metadata` 保存 CodeAgent 本地导航使用的 `pinned` 状态。设置和 Task 元数据以 Project 外键隔离，本地导航状态不写入 Codex Thread。
+所有业务表使用 `STRICT`。`projects.sort_order` 保存 Sidebar 用户顺序；`project_defaults` 保存 `model`、`reasoning_effort` 和 `sandbox_mode`；`task_settings` 保存 `approval_policy`、`approvals_reviewer`、`model`、`reasoning_effort` 和 `sandbox_mode`；`task_metadata` 保存 CodeAgent 本地导航使用的 `pinned` 状态。设置和 Task 元数据以 Project 外键隔离，本地导航状态不写入 Codex Thread。
 
 ### 12.3 写入规则
 
 - Project 和完整设置对象使用显式 SQL、Prepared Statement、事务和原子 upsert。
 - Project 重排通过 `PUT /v1/projects/order` 提交无重复的完整 ID 集合；Server 校验没有遗漏或未知 Project 后，在 Database Worker 的单个事务中替换 `sort_order`。新注册 Project 使用当前最大顺序追加到末尾。
 - Provider `/v1/models` 是模型目录真相源；数据库只保存模型与思考量 ID。读取 Snapshot、设置 API 和启动 Turn 前均重新校验，无效组合按模型 ID 和 Provider 默认值确定性回退并写回。
-- 新 Task 从 Project 默认值继承 `model` 和 `reasoningEffort`，`approvalPolicy` 固定从 `on-request` 开始。
+- 新 Task 从 Project 默认值继承 `model`、`reasoningEffort` 和 `sandboxMode`，`approvalPolicy` 固定从 `on-request` 开始，`approvalsReviewer` 固定从 `user` 开始。
 - Task 固定通过本地 `task_metadata` 原子 upsert；重命名和归档不在本地复制 Codex 标题或归档状态，分别调用 `thread/name/set` 与 `thread/archive`。
 - `allow_for_session`、可操作 Pending Approval 和模型目录不持久化；进程重启后不能恢复为可操作 `pending`。
 

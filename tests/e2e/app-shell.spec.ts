@@ -30,18 +30,20 @@ function parseProjectDefaultsRequest(requestBody: string | null) {
 function parseTaskSettingsRequest(requestBody: string | null) {
   const value = parseRequestRecord(requestBody);
   const approvalPolicy = value["approvalPolicy"];
+  const approvalsReviewer = value["approvalsReviewer"];
   const model = value["model"];
   const reasoningEffort = value["reasoningEffort"];
   const sandboxMode = value["sandboxMode"];
   if (
     typeof approvalPolicy !== "string" ||
+    typeof approvalsReviewer !== "string" ||
     typeof model !== "string" ||
     typeof reasoningEffort !== "string" ||
     typeof sandboxMode !== "string"
   ) {
     throw new Error("Invalid task settings request");
   }
-  return { approvalPolicy, model, reasoningEffort, sandboxMode };
+  return { approvalPolicy, approvalsReviewer, model, reasoningEffort, sandboxMode };
 }
 
 function parseProjectOrderRequest(requestBody: string | null): readonly string[] {
@@ -193,6 +195,7 @@ const taskSnapshot = {
   pendingRequests: [],
   settings: {
     approvalPolicy: "on-request",
+    approvalsReviewer: "user",
     model: "gpt-5.6-sol",
     reasoningEffort: "high",
     sandboxMode: "workspace-write",
@@ -884,14 +887,14 @@ test("restores task settings after a page refresh", async ({ page }) => {
     page.waitForResponse(
       (response) => response.url().endsWith("/tasks/task-1/settings") && response.ok(),
     ),
-    approvalSelect.selectOption("never"),
+    approvalSelect.selectOption("auto-review"),
   ]);
 
   await page.reload();
 
   await expect(page.getByRole("combobox", { name: "选择模型" })).toHaveValue("gpt-5.6-terra");
   await expect(page.getByRole("combobox", { name: "选择思考量" })).toHaveValue("low");
-  await expect(page.getByRole("combobox", { name: "批准模式" })).toHaveValue("never");
+  await expect(page.getByRole("combobox", { name: "批准模式" })).toHaveValue("auto-review");
 });
 
 test("restores project defaults without inheriting task approval", async ({ page }) => {
@@ -1123,7 +1126,7 @@ test("submits attachments, approval policy, model, and reasoning effort through 
     "aria-label",
     "沙盒模式",
   );
-  await approvalSelect.selectOption("never");
+  await approvalSelect.selectOption("auto-review");
   await sandboxSelect.selectOption("danger-full-access");
   const chooserPromise = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "添加图片" }).click();
@@ -1159,7 +1162,8 @@ test("submits attachments, approval policy, model, and reasoning effort through 
       type: "prompt",
     },
     options: {
-      approvalPolicy: "never",
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
       model: "gpt-5.6-terra",
       reasoningEffort: "low",
       sandboxMode: "danger-full-access",

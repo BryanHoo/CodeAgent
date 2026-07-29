@@ -34,6 +34,7 @@ const pixelDataUrl =
 const historicalImageContent = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const turnOptions = {
   approvalPolicy: "on-request",
+  approvalsReviewer: "user",
   model: "gpt-5.6-sol",
   reasoningEffort: "high",
   sandboxMode: "workspace-write",
@@ -938,6 +939,7 @@ describe("CodeAgent Server", () => {
     });
     readTaskSettings.mockResolvedValue({
       approvalPolicy: "never",
+      approvalsReviewer: "user",
       model: "removed-model",
       reasoningEffort: "ultra",
       sandboxMode: "danger-full-access",
@@ -965,7 +967,8 @@ describe("CodeAgent Server", () => {
       headers: { "idempotency-key": "task-settings" },
       method: "PUT",
       payload: {
-        approvalPolicy: "untrusted",
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
         model: "gpt-5.6-sol",
         reasoningEffort: "low",
         sandboxMode: "workspace-write",
@@ -984,6 +987,7 @@ describe("CodeAgent Server", () => {
       snapshot: {
         settings: {
           approvalPolicy: "never",
+          approvalsReviewer: "user",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "danger-full-access",
@@ -994,7 +998,8 @@ describe("CodeAgent Server", () => {
     expect(invalid.json()).toMatchObject({ code: "INVALID_REQUEST" });
     expect(updated.json()).toEqual({
       settings: {
-        approvalPolicy: "untrusted",
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
         model: "gpt-5.6-sol",
         reasoningEffort: "low",
         sandboxMode: "workspace-write",
@@ -1007,6 +1012,7 @@ describe("CodeAgent Server", () => {
     });
     expect(writeTaskSettings).toHaveBeenCalledWith("code-agent", "task-1", {
       approvalPolicy: "never",
+      approvalsReviewer: "user",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
       sandboxMode: "danger-full-access",
@@ -1023,6 +1029,7 @@ describe("CodeAgent Server", () => {
     });
     readTaskSettings.mockResolvedValue({
       approvalPolicy: "never",
+      approvalsReviewer: "user",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
       sandboxMode: "danger-full-access",
@@ -1045,6 +1052,7 @@ describe("CodeAgent Server", () => {
     expect(startTask).toHaveBeenCalledOnce();
     expect(writeTaskSettings).toHaveBeenCalledWith("code-agent", "task-1", {
       approvalPolicy: "on-request",
+      approvalsReviewer: "user",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
       sandboxMode: "read-only",
@@ -1482,14 +1490,14 @@ describe("CodeAgent Server", () => {
       headers,
       method: "POST",
       payload:
-        '{"input":{"attachments":[],"skills":[],"text":"继续实现","type":"prompt"},"options":{"approvalPolicy":"on-request","model":"gpt-5.6-sol","reasoningEffort":"high","sandboxMode":"workspace-write"}}',
+        '{"input":{"attachments":[],"skills":[],"text":"继续实现","type":"prompt"},"options":{"approvalPolicy":"on-request","approvalsReviewer":"user","model":"gpt-5.6-sol","reasoningEffort":"high","sandboxMode":"workspace-write"}}',
       url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
     const repeated = await app.inject({
       headers,
       method: "POST",
       payload:
-        '{"options":{"sandboxMode":"workspace-write","reasoningEffort":"high","model":"gpt-5.6-sol","approvalPolicy":"on-request"},"input":{"type":"prompt","text":"继续实现","skills":[],"attachments":[]}}',
+        '{"options":{"sandboxMode":"workspace-write","reasoningEffort":"high","model":"gpt-5.6-sol","approvalsReviewer":"user","approvalPolicy":"on-request"},"input":{"type":"prompt","text":"继续实现","skills":[],"attachments":[]}}',
       url: "/v1/projects/code-agent/tasks/task-1/turns",
     });
 

@@ -388,6 +388,13 @@ export const AgentApprovalPolicySchema = Type.Union([
 
 export type AgentApprovalPolicy = Readonly<Static<typeof AgentApprovalPolicySchema>>;
 
+export const AgentApprovalsReviewerSchema = Type.Union([
+  Type.Literal("user"),
+  Type.Literal("auto_review"),
+]);
+
+export type AgentApprovalsReviewer = Readonly<Static<typeof AgentApprovalsReviewerSchema>>;
+
 export const AgentSandboxModeSchema = Type.Union([
   Type.Literal("read-only"),
   Type.Literal("workspace-write"),
@@ -396,15 +403,30 @@ export const AgentSandboxModeSchema = Type.Union([
 
 export type AgentSandboxMode = Readonly<Static<typeof AgentSandboxModeSchema>>;
 
-export const AgentTaskSettingsSchema = Type.Object(
-  {
-    approvalPolicy: AgentApprovalPolicySchema,
-    model: Type.String({ minLength: 1 }),
-    reasoningEffort: Type.String({ minLength: 1 }),
-    sandboxMode: AgentSandboxModeSchema,
-  },
-  { additionalProperties: false },
-);
+const AgentTaskSettingProperties = {
+  model: Type.String({ minLength: 1 }),
+  reasoningEffort: Type.String({ minLength: 1 }),
+  sandboxMode: AgentSandboxModeSchema,
+};
+
+export const AgentTaskSettingsSchema = Type.Union([
+  Type.Object(
+    {
+      approvalPolicy: AgentApprovalPolicySchema,
+      approvalsReviewer: Type.Literal("user"),
+      ...AgentTaskSettingProperties,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      approvalPolicy: Type.Literal("on-request"),
+      approvalsReviewer: Type.Literal("auto_review"),
+      ...AgentTaskSettingProperties,
+    },
+    { additionalProperties: false },
+  ),
+]);
 
 export type AgentTaskSettings = Readonly<Static<typeof AgentTaskSettingsSchema>>;
 

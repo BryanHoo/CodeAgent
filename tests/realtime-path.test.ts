@@ -25,6 +25,7 @@ const pixelDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const turnOptions = {
   approvalPolicy: "on-request",
+  approvalsReviewer: "user",
   model: "gpt-5.6-sol",
   reasoningEffort: "high",
   sandboxMode: "workspace-write",

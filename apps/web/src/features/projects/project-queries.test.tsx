@@ -49,6 +49,7 @@ const snapshot = {
   pendingRequests: [],
   settings: {
     approvalPolicy: "never" as const,
+    approvalsReviewer: "user" as const,
     model: "gpt-5.6-sol",
     reasoningEffort: "high",
     sandboxMode: "workspace-write" as const,
@@ -279,7 +280,11 @@ describe("project queries", () => {
       reasoningEffort: "high",
       sandboxMode: "workspace-write" as const,
     };
-    const settings = { approvalPolicy: "never" as const, ...defaults };
+    const settings = {
+      approvalPolicy: "never" as const,
+      approvalsReviewer: "user" as const,
+      ...defaults,
+    };
     const client = {
       updateProjectDefaults: vi.fn(() => Promise.resolve({ settings: defaults })),
       updateTaskSettings: vi.fn(() => Promise.resolve({ settings })),

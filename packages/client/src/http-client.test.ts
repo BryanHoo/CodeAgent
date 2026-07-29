@@ -17,6 +17,7 @@ const task = {
 };
 const taskSettings = {
   approvalPolicy: "never" as const,
+  approvalsReviewer: "user" as const,
   model: "gpt-5.6-sol",
   reasoningEffort: "high",
   sandboxMode: "workspace-write" as const,
@@ -389,6 +390,7 @@ describe("CodeAgentClient", () => {
       },
       {
         approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
         model: "gpt-5.6-sol",
         reasoningEffort: "high",
         sandboxMode: "read-only",
@@ -423,6 +425,7 @@ describe("CodeAgentClient", () => {
         },
         options: {
           approvalPolicy: "on-request",
+          approvalsReviewer: "auto_review",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "read-only",

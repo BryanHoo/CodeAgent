@@ -131,6 +131,7 @@ describe("AgentProvider", () => {
       startTurn(taskId, input, options) {
         expect(options).toEqual({
           approvalPolicy: "on-request",
+          approvalsReviewer: "user",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "workspace-write",
@@ -216,6 +217,7 @@ describe("AgentProvider", () => {
         },
         {
           approvalPolicy: "on-request",
+          approvalsReviewer: "user",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "workspace-write",

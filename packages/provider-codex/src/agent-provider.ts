@@ -1444,6 +1444,7 @@ export class CodexAgentProvider implements AgentProvider {
     const response = expectRecord(
       await this.#client.request("turn/start", {
         approvalPolicy: options.approvalPolicy,
+        approvalsReviewer: options.approvalsReviewer,
         effort: options.reasoningEffort,
         input: codexInput,
         model: options.model,

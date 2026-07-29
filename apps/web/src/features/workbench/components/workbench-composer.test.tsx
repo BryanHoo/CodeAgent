@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  applyApprovalMode,
   deriveComposerActions,
   deriveComposerInputAvailability,
   deriveComposerState,
+  deriveApprovalMode,
   interruptPromptTurn,
   resolveIdempotencyAttempt,
   resolveActiveTurnId,
@@ -19,6 +21,7 @@ const task = {
   projectId: "code-agent",
   settings: {
     approvalPolicy: "on-request" as const,
+    approvalsReviewer: "user" as const,
     model: "gpt-5.6-sol",
     reasoningEffort: "high",
     sandboxMode: "workspace-write" as const,
@@ -144,6 +147,20 @@ describe("WorkbenchComposer", () => {
     expect(resolveReasoningEffort(undefined, "high")).toBeUndefined();
   });
 
+  it("maps automatic approval to the Codex reviewer setting", () => {
+    const automatic = applyApprovalMode(task.settings, "auto-review");
+
+    expect(automatic).toMatchObject({
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+    });
+    expect(deriveApprovalMode(automatic)).toBe("auto-review");
+    expect(applyApprovalMode(automatic, "never")).toMatchObject({
+      approvalPolicy: "never",
+      approvalsReviewer: "user",
+    });
+  });
+
   it("creates a task before its first turn and continues existing tasks directly", async () => {
     const client = {
       interruptTurn: vi.fn(),
@@ -159,6 +176,7 @@ describe("WorkbenchComposer", () => {
         projectId: "code-agent",
         turnOptions: {
           approvalPolicy: "on-request",
+          approvalsReviewer: "user",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "workspace-write",
@@ -173,6 +191,7 @@ describe("WorkbenchComposer", () => {
         taskId: task.id,
         turnOptions: {
           approvalPolicy: "never",
+          approvalsReviewer: "user",
           model: "gpt-5.6-terra",
           reasoningEffort: "low",
           sandboxMode: "danger-full-access",
@@ -194,6 +213,7 @@ describe("WorkbenchComposer", () => {
       },
       {
         approvalPolicy: "on-request",
+        approvalsReviewer: "user",
         model: "gpt-5.6-sol",
         reasoningEffort: "high",
         sandboxMode: "workspace-write",
@@ -212,6 +232,7 @@ describe("WorkbenchComposer", () => {
       },
       {
         approvalPolicy: "never",
+        approvalsReviewer: "user",
         model: "gpt-5.6-terra",
         reasoningEffort: "low",
         sandboxMode: "danger-full-access",

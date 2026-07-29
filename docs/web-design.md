@@ -686,11 +686,11 @@ PromptInputMessage
 
 MVP 附件仅接受 `image/gif`、`image/jpeg`、`image/png` 和 `image/webp`，单文件最大 `2 MiB`，一次最多 `4` 个。预览使用短生命周期 Blob URL；删除、提交成功和组件卸载时立即释放。Server Store 同时限制条目数、总字节数和 TTL，Turn 成功后消费引用。
 
-模型选择通过 `GET /v1/models` 读取真实 Provider 目录并优先选择 `isDefault`。思考量紧邻模型，只展示所选模型的 `supportedReasoningEfforts`，无有效选择时使用 `defaultReasoningEffort`。Project 新 Task 默认值通过原子 `PUT /v1/projects/:projectId/defaults` 保存模型与思考量；审批固定从 `on-request` 开始。已有 Task 的审批、模型和思考量通过原子 `PUT /v1/projects/:projectId/tasks/:taskId/settings` 保存完整对象。
+模型选择通过 `GET /v1/models` 读取真实 Provider 目录并优先选择 `isDefault`。思考量紧邻模型，只展示所选模型的 `supportedReasoningEfforts`，无有效选择时使用 `defaultReasoningEffort`。Project 新 Task 默认值通过原子 `PUT /v1/projects/:projectId/defaults` 保存模型、思考量与沙盒模式；审批固定从 `approvalPolicy: "on-request"` 和 `approvalsReviewer: "user"` 开始。已有 Task 的审批策略、审核方、模型、思考量与沙盒模式通过原子 `PUT /v1/projects/:projectId/tasks/:taskId/settings` 保存完整对象。
 
-审批策略只使用统一协议的 `untrusted`、`on-request` 和 `never`。`POST /turns` 仍发送完整 `AgentTurnOptions`，Server 在调用 Provider 前重新校验并 upsert Task 设置。`allow_for_session` 和 Pending Approval 属于当前 Runtime，不进入长期设置。
+审批策略使用统一协议的 `untrusted`、`on-request` 和 `never`，审批审核方使用 `user` 和 `auto_review`。批准模式 Select 展示“仅不受信任操作”“按需审批”“自动审批”和“从不询问”；其中“自动审批”映射为 `on-request + auto_review`，其余选项映射为对应策略与 `user`。`POST /turns` 发送完整 `AgentTurnOptions`，Server 在调用 Provider 前重新校验并 upsert Task 设置。`allow_for_session` 和 Pending Approval 属于当前 Runtime，不进入长期设置。
 
-审批、模型和思考量 Select 隐藏原生箭头并按当前文字收缩。PromptInput 保留透明单像素边框以避免布局跳动，聚焦后切换为主色；分支与项目路径行最右显示 `contextUsage` 百分比，Tooltip 展示 Token 明细，未知时显示 `上下文 --`。
+批准模式、模型和思考量 Select 隐藏原生箭头并按当前文字收缩。PromptInput 保留透明单像素边框以避免布局跳动，聚焦后切换为主色；分支与项目路径行最右显示 `contextUsage` 百分比，Tooltip 展示 Token 明细，未知时显示 `上下文 --`。
 
 ### 18.3 Turn Start、Steer 与 Interrupt
 

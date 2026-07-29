@@ -74,6 +74,7 @@ import {
 } from "./prompt-command.js";
 
 export type ComposerState = "failed" | "idle" | "reconnecting" | "running" | "submitting";
+export type ApprovalMode = AgentApprovalPolicy | "auto-review";
 
 export type IdempotencyAttempt = Readonly<{
   fingerprint: string;
@@ -103,6 +104,24 @@ export function resolveReasoningEffort(
   return model.supportedReasoningEfforts.some((option) => option.id === requestedEffort)
     ? requestedEffort
     : model.defaultReasoningEffort;
+}
+
+export function deriveApprovalMode(
+  settings: Pick<AgentTaskSettings, "approvalPolicy" | "approvalsReviewer">,
+): ApprovalMode {
+  return settings.approvalPolicy === "on-request" && settings.approvalsReviewer === "auto_review"
+    ? "auto-review"
+    : settings.approvalPolicy;
+}
+
+export function applyApprovalMode(
+  settings: AgentTaskSettings,
+  mode: ApprovalMode,
+): AgentTaskSettings {
+  // 自动审批是 on-request 策略加自动审核方，不能降级成语义不同的 never。
+  return mode === "auto-review"
+    ? { ...settings, approvalPolicy: "on-request", approvalsReviewer: "auto_review" }
+    : { ...settings, approvalPolicy: mode, approvalsReviewer: "user" };
 }
 
 const reasoningEffortLabels: Readonly<Record<string, string>> = {
@@ -643,12 +662,11 @@ export function WorkbenchComposer({
       return;
     }
 
-    const turnOptions = {
-      approvalPolicy: activeSettings.approvalPolicy,
+    const turnOptions: AgentTurnOptions = {
+      ...activeSettings,
       model: selectedModel.id,
       reasoningEffort: selectedReasoningEffort,
-      sandboxMode: activeSettings.sandboxMode,
-    } as const;
+    };
     const turnAttempt = resolveIdempotencyAttempt(
       startTurnAttempt.current,
       JSON.stringify({ input, options: turnOptions }),
@@ -1142,18 +1160,16 @@ export function WorkbenchComposer({
                 disabled={turnControlsDisabled}
                 onChange={(event) => {
                   updateSettings(
-                    {
-                      ...activeSettings,
-                      approvalPolicy: event.currentTarget.value as AgentApprovalPolicy,
-                    },
+                    applyApprovalMode(activeSettings, event.currentTarget.value as ApprovalMode),
                     "approvalPolicy",
                   );
                 }}
-                value={activeSettings.approvalPolicy}
+                value={deriveApprovalMode(activeSettings)}
               >
                 <option value="untrusted">仅不受信任操作</option>
                 <option value="on-request">按需审批</option>
-                <option value="never">永不询问</option>
+                <option value="auto-review">自动审批</option>
+                <option value="never">从不询问</option>
               </PromptInputSelect>
               <PromptInputSelect
                 aria-label="沙盒模式"

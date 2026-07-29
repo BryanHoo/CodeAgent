@@ -489,6 +489,7 @@ describe("CodexAgentProvider", () => {
         { images: [], skills: [], text: "继续之前的任务" },
         {
           approvalPolicy: "on-request",
+          approvalsReviewer: "user",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "workspace-write",
@@ -531,6 +532,7 @@ describe("CodexAgentProvider", () => {
     const provider = createCodexRuntimeProvider({ client: rpc }).forProject(project);
     const turnOptions = {
       approvalPolicy: "on-request",
+      approvalsReviewer: "user",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
       sandboxMode: "workspace-write",
@@ -1372,6 +1374,7 @@ describe("CodexAgentProvider", () => {
         },
         {
           approvalPolicy: "on-request",
+          approvalsReviewer: "user",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "workspace-write",
@@ -1389,6 +1392,7 @@ describe("CodexAgentProvider", () => {
         method: "turn/start",
         params: {
           approvalPolicy: "on-request",
+          approvalsReviewer: "user",
           effort: "high",
           input: [
             {
@@ -1434,6 +1438,7 @@ describe("CodexAgentProvider", () => {
         },
         {
           approvalPolicy: "on-request",
+          approvalsReviewer: "user",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "workspace-write",
@@ -1493,7 +1498,8 @@ describe("CodexAgentProvider", () => {
           text: "实现写入闭环",
         },
         {
-          approvalPolicy: "untrusted",
+          approvalPolicy: "on-request",
+          approvalsReviewer: "auto_review",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "workspace-write",
@@ -1507,7 +1513,8 @@ describe("CodexAgentProvider", () => {
       {
         method: "turn/start",
         params: {
-          approvalPolicy: "untrusted",
+          approvalPolicy: "on-request",
+          approvalsReviewer: "auto_review",
           input: [
             { text: "实现写入闭环", text_elements: [], type: "text" },
             { type: "image", url: "data:image/png;base64,aW1hZ2U=" },
@@ -1552,6 +1559,7 @@ describe("CodexAgentProvider", () => {
       { images: [], skills: [], text: "只读检查" },
       {
         approvalPolicy: "on-request",
+        approvalsReviewer: "user",
         model: "gpt-5.6-sol",
         reasoningEffort: "high",
         sandboxMode: "read-only",
@@ -1562,6 +1570,7 @@ describe("CodexAgentProvider", () => {
       { images: [], skills: [], text: "完全访问" },
       {
         approvalPolicy: "never",
+        approvalsReviewer: "user",
         model: "gpt-5.6-sol",
         reasoningEffort: "high",
         sandboxMode: "danger-full-access",
