@@ -57,9 +57,13 @@ function createSnapshotResponse(
   };
 }
 
-function createTurnCompletedEvent(taskId: string, sequence: number): AgentEvent {
+function createTurnCompletedEvent(
+  taskId: string,
+  sequence: number,
+  status: Extract<AgentTurn["status"], "completed" | "failed" | "interrupted"> = "completed",
+): AgentEvent {
   return {
-    payload: { turn: createTurn(taskId, "completed") },
+    payload: { turn: createTurn(taskId, status) },
     provider: "codex",
     sequence,
     sessionId: "runtime-1",
@@ -134,6 +138,7 @@ describe("project runtime manager", () => {
     harness.emit(createTurnCompletedEvent("task-1", 1));
 
     expect(getTaskActivity(manager.getTaskActivity(), "project-1", "task-1")).toEqual({
+      attention: "completed",
       isAwaitingApproval: false,
       isRunning: false,
     });
@@ -143,6 +148,55 @@ describe("project runtime manager", () => {
 
     detachFirst();
     detachSecond();
+    manager.dispose();
+  });
+
+  it("clears attention when a task is viewed and only records later background events", () => {
+    const harness = createClientHarness();
+    const manager = createProjectRuntimeManager(harness.client);
+    manager.observeSnapshot(createSnapshotResponse("task-1"));
+
+    harness.emit(createTurnCompletedEvent("task-1", 1));
+    expect(getTaskActivity(manager.getTaskActivity(), "project-1", "task-1").attention).toBe(
+      "completed",
+    );
+
+    manager.viewTask("project-1", "task-1");
+    expect(getTaskActivity(manager.getTaskActivity(), "project-1", "task-1").attention).toBeNull();
+
+    manager.viewTask("project-1", "task-2");
+    harness.emit(createTurnStartedEvent("task-1", 2));
+    harness.emit(createTurnCompletedEvent("task-1", 3));
+    expect(getTaskActivity(manager.getTaskActivity(), "project-1", "task-1").attention).toBe(
+      "completed",
+    );
+    manager.dispose();
+  });
+
+  it("does not create attention for terminal events on the viewed task", () => {
+    const harness = createClientHarness();
+    const manager = createProjectRuntimeManager(harness.client);
+    manager.observeSnapshot(createSnapshotResponse("task-1"));
+    manager.viewTask("project-1", "task-1");
+
+    harness.emit(createTurnCompletedEvent("task-1", 1));
+
+    expect(getTaskActivity(manager.getTaskActivity(), "project-1", "task-1").attention).toBeNull();
+    manager.dispose();
+  });
+
+  it("records an interrupted background reply until the task is viewed", () => {
+    const harness = createClientHarness();
+    const manager = createProjectRuntimeManager(harness.client);
+    manager.observeSnapshot(createSnapshotResponse("task-1"));
+
+    harness.emit(createTurnCompletedEvent("task-1", 1, "interrupted"));
+    expect(getTaskActivity(manager.getTaskActivity(), "project-1", "task-1").attention).toBe(
+      "failed",
+    );
+
+    manager.viewTask("project-1", "task-1");
+    expect(getTaskActivity(manager.getTaskActivity(), "project-1", "task-1").attention).toBeNull();
     manager.dispose();
   });
 

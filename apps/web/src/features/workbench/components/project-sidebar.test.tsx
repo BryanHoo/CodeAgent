@@ -1,4 +1,3 @@
-import type { PendingRequest } from "@code-agent/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -7,7 +6,6 @@ import {
   deriveProjectSidebarConnectionState,
   getProjectTaskPaginationControl,
   getProjectSidebarConnectionStatus,
-  hasPendingApproval,
   TaskStatusIndicator,
   TaskActionMenu,
 } from "./project-sidebar.js";
@@ -158,35 +156,9 @@ describe("TaskActionMenu", () => {
 });
 
 describe("TaskStatusIndicator", () => {
-  it("detects only unresolved command and file change approvals", () => {
-    const pendingCommandApproval: PendingRequest = {
-      availableDecisions: ["allow", "deny"],
-      command: "pnpm check",
-      createdAt: "2026-07-23T00:00:00.000Z",
-      cwd: "/workspace/CodeAgent",
-      expiresAt: null,
-      itemId: "command-1",
-      networkAccess: null,
-      projectId: "code-agent",
-      reason: null,
-      requestId: "number:7",
-      status: "pending",
-      taskId: "task-1",
-      turnId: "turn-1",
-      type: "command_approval",
-    };
-
-    expect(hasPendingApproval([pendingCommandApproval])).toBe(true);
-    expect(hasPendingApproval([{ ...pendingCommandApproval, status: "resolved" }])).toBe(false);
-  });
-
   it("replaces the task age with an accessible spinner while running", () => {
     const markup = renderToStaticMarkup(
-      <TaskStatusIndicator
-        isAwaitingApproval={false}
-        isRunning
-        updatedAt="2026-07-23T00:01:00.000Z"
-      />,
+      <TaskStatusIndicator attention={null} isRunning updatedAt="2026-07-23T00:01:00.000Z" />,
     );
 
     expect(markup).toContain('aria-label="任务运行中"');
@@ -196,7 +168,7 @@ describe("TaskStatusIndicator", () => {
 
   it("shows a primary approval icon instead of the running spinner while awaiting approval", () => {
     const markup = renderToStaticMarkup(
-      <TaskStatusIndicator isAwaitingApproval isRunning updatedAt="2026-07-23T00:01:00.000Z" />,
+      <TaskStatusIndicator attention="approval" isRunning updatedAt="2026-07-23T00:01:00.000Z" />,
     );
 
     expect(markup).toContain('aria-label="任务等待审批"');
@@ -206,10 +178,40 @@ describe("TaskStatusIndicator", () => {
     expect(markup).not.toContain("task-age");
   });
 
+  it("shows an accessible completed reply marker before the task age", () => {
+    const markup = renderToStaticMarkup(
+      <TaskStatusIndicator
+        attention="completed"
+        isRunning={false}
+        updatedAt="2026-07-23T00:01:00.000Z"
+      />,
+    );
+
+    expect(markup).toContain('aria-label="AI 回复已完成"');
+    expect(markup).toContain("text-diff-added");
+    expect(markup).toContain("lucide-circle-check");
+    expect(markup).not.toContain("task-age");
+  });
+
+  it("shows an accessible unfinished reply marker before the task age", () => {
+    const markup = renderToStaticMarkup(
+      <TaskStatusIndicator
+        attention="failed"
+        isRunning={false}
+        updatedAt="2026-07-23T00:01:00.000Z"
+      />,
+    );
+
+    expect(markup).toContain('aria-label="AI 回复未完成"');
+    expect(markup).toContain("text-danger");
+    expect(markup).toContain("lucide-circle-alert");
+    expect(markup).not.toContain("task-age");
+  });
+
   it("keeps showing the task age after the task stops", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator
-        isAwaitingApproval={false}
+        attention={null}
         isRunning={false}
         updatedAt={new Date().toISOString()}
       />,

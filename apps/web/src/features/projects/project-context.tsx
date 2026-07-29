@@ -96,6 +96,7 @@ type ProjectContextValue = Readonly<{
   retry: () => Promise<void>;
   taskActivity: TaskActivityMap;
   tasks: readonly AgentTask[];
+  viewTask: (projectId: string, taskId?: string) => void;
 }>;
 
 const ProjectContext = createContext<ProjectContextValue | undefined>(undefined);
@@ -239,6 +240,12 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
     },
     [projectRuntime],
   );
+  const viewTask = useCallback(
+    (projectId: string, taskId?: string) => {
+      projectRuntime.viewTask(projectId, taskId);
+    },
+    [projectRuntime],
+  );
   const addProject = useCallback(async () => {
     if (isProjectPickerOpen) {
       return undefined;
@@ -329,6 +336,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           retry,
           taskActivity,
           tasks,
+          viewTask,
         }}
       >
         {children}

@@ -2,6 +2,7 @@ import type { AgentEvent, AgentTaskSnapshot, AgentTurn } from "@code-agent/proto
 import { describe, expect, it } from "vitest";
 
 import {
+  clearTaskAttention,
   getTaskActivity,
   recordTaskActivitySnapshot,
   reduceTaskActivityEvent,
@@ -67,6 +68,34 @@ function createTurnEvent(taskId: string, type: "turn.completed" | "turn.started"
       };
 }
 
+function createTerminalTurnEvent(
+  taskId: string,
+  status: Extract<AgentTurn["status"], "failed" | "interrupted">,
+): AgentEvent {
+  const completedEvent = createTurnEvent(taskId, "turn.completed");
+  if (completedEvent.type !== "turn.completed") {
+    throw new Error("Expected a completed turn event");
+  }
+  return {
+    ...completedEvent,
+    payload: { turn: { ...completedEvent.payload.turn, status } },
+  };
+}
+
+function createProviderErrorEvent(taskId: string, willRetry: boolean): AgentEvent {
+  return {
+    payload: { message: "模型服务不可用", willRetry },
+    provider: "codex",
+    sequence: 2,
+    sessionId: "runtime-1",
+    taskId,
+    timestamp: "2026-07-27T00:00:01.000Z",
+    turnId: `turn-${taskId}`,
+    type: "provider.error",
+    version: 2,
+  };
+}
+
 function createApprovalRequest(requestId: string): AgentTaskSnapshot["pendingRequests"][number] {
   return {
     availableDecisions: ["allow", "deny"],
@@ -117,7 +146,103 @@ describe("task activity registry", () => {
     );
 
     expect(getTaskActivity(activity, "code-agent", "task-a").isRunning).toBe(false);
+    expect(getTaskActivity(activity, "code-agent", "task-a").attention).toBe("completed");
     expect(getTaskActivity(activity, "code-agent", "task-b").isRunning).toBe(true);
+  });
+
+  it("clears a completed reply marker when the task is viewed", () => {
+    let activity: TaskActivityMap = new Map();
+    activity = recordTaskActivitySnapshot(activity, createSnapshot("task-a", "running"));
+    activity = reduceTaskActivityEvent(
+      activity,
+      "code-agent",
+      createTurnEvent("task-a", "turn.completed"),
+    );
+
+    expect(getTaskActivity(activity, "code-agent", "task-a").attention).toBe("completed");
+
+    activity = clearTaskAttention(activity, "code-agent", "task-a");
+
+    expect(getTaskActivity(activity, "code-agent", "task-a").attention).toBeNull();
+  });
+
+  it.each(["failed", "interrupted"] as const)(
+    "marks an unviewed %s turn as an unfinished reply",
+    (status) => {
+      let activity: TaskActivityMap = new Map();
+      activity = recordTaskActivitySnapshot(activity, createSnapshot("task-a", "running"));
+
+      activity = reduceTaskActivityEvent(
+        activity,
+        "code-agent",
+        createTerminalTurnEvent("task-a", status),
+      );
+
+      expect(getTaskActivity(activity, "code-agent", "task-a")).toEqual({
+        attention: "failed",
+        isAwaitingApproval: false,
+        isRunning: false,
+      });
+    },
+  );
+
+  it("marks only a non-retrying provider error and clears it when a new turn starts", () => {
+    let activity: TaskActivityMap = new Map();
+    activity = recordTaskActivitySnapshot(activity, createSnapshot("task-a", "running"));
+
+    activity = reduceTaskActivityEvent(
+      activity,
+      "code-agent",
+      createProviderErrorEvent("task-a", true),
+    );
+    expect(getTaskActivity(activity, "code-agent", "task-a")).toMatchObject({
+      attention: null,
+      isRunning: true,
+    });
+
+    activity = reduceTaskActivityEvent(
+      activity,
+      "code-agent",
+      createProviderErrorEvent("task-a", false),
+    );
+    expect(getTaskActivity(activity, "code-agent", "task-a")).toMatchObject({
+      attention: "failed",
+      isRunning: false,
+    });
+
+    activity = reduceTaskActivityEvent(
+      activity,
+      "code-agent",
+      createTurnEvent("task-a", "turn.started"),
+    );
+    expect(getTaskActivity(activity, "code-agent", "task-a")).toMatchObject({
+      attention: null,
+      isRunning: true,
+    });
+  });
+
+  it("preserves an unviewed failure marker across an idle snapshot", () => {
+    let activity: TaskActivityMap = new Map();
+    activity = reduceTaskActivityEvent(
+      activity,
+      "code-agent",
+      createTerminalTurnEvent("task-a", "interrupted"),
+    );
+
+    activity = recordTaskActivitySnapshot(activity, createSnapshot("task-a", "idle"));
+
+    expect(getTaskActivity(activity, "code-agent", "task-a").attention).toBe("failed");
+  });
+
+  it("does not mark an unrecoverable error on the task already being viewed", () => {
+    const activity = reduceTaskActivityEvent(
+      new Map(),
+      "code-agent",
+      createProviderErrorEvent("task-a", false),
+      true,
+    );
+
+    expect(getTaskActivity(activity, "code-agent", "task-a").attention).toBeNull();
   });
 
   it("tracks multiple approval requests independently", () => {
@@ -145,5 +270,32 @@ describe("task activity registry", () => {
     activity = reduceTaskActivityEvent(activity, "code-agent", resolvedEvent);
 
     expect(getTaskActivity(activity, "code-agent", "task-a").isAwaitingApproval).toBe(true);
+    expect(getTaskActivity(activity, "code-agent", "task-a").attention).toBe("approval");
+  });
+
+  it("clears a stale approval marker when the authoritative snapshot has no request", () => {
+    let activity: TaskActivityMap = new Map();
+    activity = recordTaskActivitySnapshot(
+      activity,
+      createSnapshot("task-a", "running", [createApprovalRequest("approval-1")]),
+    );
+
+    activity = recordTaskActivitySnapshot(activity, createSnapshot("task-a", "idle"));
+
+    expect(getTaskActivity(activity, "code-agent", "task-a").attention).toBeNull();
+    expect(getTaskActivity(activity, "code-agent", "task-a").isAwaitingApproval).toBe(false);
+  });
+
+  it("does not create attention markers for a task that is already viewed", () => {
+    let activity: TaskActivityMap = new Map();
+    activity = recordTaskActivitySnapshot(activity, createSnapshot("task-a", "running"), true);
+    activity = reduceTaskActivityEvent(
+      activity,
+      "code-agent",
+      createTurnEvent("task-a", "turn.completed"),
+      true,
+    );
+
+    expect(getTaskActivity(activity, "code-agent", "task-a").attention).toBeNull();
   });
 });

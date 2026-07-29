@@ -1,9 +1,11 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { AgentEventConnectionState } from "@code-agent/client";
-import type { AgentTask, PendingRequest } from "@code-agent/protocol";
+import type { AgentTask } from "@code-agent/protocol";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  CircleAlert,
+  CircleCheck,
   Ellipsis,
   Folder,
   LoaderCircle,
@@ -39,7 +41,7 @@ import {
 } from "../../projects/project-queries.js";
 import { removeRetainedTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
-import { getTaskActivity } from "../../conversation/runtime/task-activity.js";
+import { getTaskActivity, type TaskAttention } from "../../conversation/runtime/task-activity.js";
 import { useProjectReordering } from "../hooks/use-project-reordering.js";
 import {
   getProjectSidebarPreferenceStorage,
@@ -137,15 +139,6 @@ export function getProjectSidebarConnectionStatus(connectionState: AgentEventCon
     case "closed":
       return { label: "Offline", toneClassName: "text-danger" } as const;
   }
-}
-
-export function hasPendingApproval(pendingRequests: readonly PendingRequest[]): boolean {
-  // 只有命令和文件变更属于审批等待，普通用户输入继续沿用运行态提示。
-  return pendingRequests.some(
-    (request) =>
-      request.status === "pending" &&
-      (request.type === "command_approval" || request.type === "file_change_approval"),
-  );
 }
 
 export function ProjectSidebar({
@@ -431,8 +424,8 @@ export function ProjectSidebar({
                 return (
                   <TaskLink
                     active={task.projectId === projectId && task.id === taskId}
+                    attention={activity.attention}
                     icon={<Pin className="size-3.5" aria-hidden="true" />}
-                    isAwaitingApproval={activity.isAwaitingApproval}
                     key={`${task.projectId}:${task.id}`}
                     isActionPending={taskActionPending}
                     isRunning={activity.isRunning}
@@ -567,7 +560,7 @@ export function ProjectSidebar({
                         return (
                           <TaskLink
                             active={project.id === projectId && task.id === taskId}
-                            isAwaitingApproval={activity.isAwaitingApproval}
+                            attention={activity.attention}
                             isActionPending={taskActionPending}
                             isRunning={activity.isRunning}
                             key={`${task.projectId}:${task.id}`}
@@ -696,9 +689,9 @@ function ProjectSidebarConnectionIcon({
 
 type TaskLinkProps = Readonly<{
   active: boolean;
+  attention: TaskAttention;
   icon?: React.ReactNode;
   isActionPending: boolean;
-  isAwaitingApproval: boolean;
   isRunning: boolean;
   onArchive: (task: AgentTask) => void;
   onPin: (task: AgentTask) => void;
@@ -708,9 +701,9 @@ type TaskLinkProps = Readonly<{
 
 function TaskLink({
   active,
+  attention,
   icon,
   isActionPending,
-  isAwaitingApproval,
   isRunning,
   onArchive,
   onPin,
@@ -809,7 +802,7 @@ function TaskLink({
         )}
         <span className="min-w-0 flex-1 truncate">{task.title}</span>
         <TaskStatusIndicator
-          isAwaitingApproval={isAwaitingApproval}
+          attention={attention}
           isRunning={isRunning}
           updatedAt={task.updatedAt}
         />
@@ -860,17 +853,13 @@ function TaskLink({
 }
 
 type TaskStatusIndicatorProps = Readonly<{
-  isAwaitingApproval: boolean;
+  attention: TaskAttention;
   isRunning: boolean;
   updatedAt: string;
 }>;
 
-export function TaskStatusIndicator({
-  isAwaitingApproval,
-  isRunning,
-  updatedAt,
-}: TaskStatusIndicatorProps) {
-  if (isAwaitingApproval) {
+export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskStatusIndicatorProps) {
+  if (attention === "approval") {
     return (
       <span
         aria-label="任务等待审批"
@@ -893,6 +882,30 @@ export function TaskStatusIndicator({
         <span className="inline-flex animate-spin" aria-hidden="true">
           <LoaderCircle className="size-3.5" />
         </span>
+      </span>
+    );
+  }
+
+  if (attention === "completed") {
+    return (
+      <span
+        aria-label="AI 回复已完成"
+        className="task-status ml-auto inline-flex shrink-0 text-diff-added"
+        role="status"
+      >
+        <CircleCheck className="size-3.5" aria-hidden="true" />
+      </span>
+    );
+  }
+
+  if (attention === "failed") {
+    return (
+      <span
+        aria-label="AI 回复未完成"
+        className="task-status ml-auto inline-flex shrink-0 text-danger"
+        role="status"
+      >
+        <CircleAlert className="size-3.5" aria-hidden="true" />
       </span>
     );
   }

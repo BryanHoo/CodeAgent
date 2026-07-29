@@ -12,7 +12,7 @@ import type {
 } from "@code-agent/protocol";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Ellipsis, ExternalLink, PanelLeft, PanelRight } from "lucide-react";
 
 import { useProjects } from "../../projects/project-context.js";
@@ -100,6 +100,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     projectTaskStates,
     retry,
     tasks,
+    viewTask,
   } = useProjects();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -169,6 +170,11 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     projectId: string;
     selection: SubagentSelection;
   } | null>(null);
+
+  useLayoutEffect(() => {
+    // 路由提交后、页面绘制前消费提醒，避免实时终态与被动 Effect 形成竞态。
+    viewTask(projectId, taskId);
+  }, [projectId, taskId, viewTask]);
   const project = projects.find((item) => item.id === projectId);
   const projectName = project?.name ?? projectId;
   const projectPath = project?.rootPath ?? projectId;

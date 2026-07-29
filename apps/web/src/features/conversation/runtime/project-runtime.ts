@@ -4,6 +4,7 @@ import type { AgentEvent, AgentTaskSnapshotResponse, EventCheckpoint } from "@co
 import { estimateRetainedBytes } from "../../../shared/memory/byte-lru.js";
 import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
 import {
+  clearTaskAttention,
   hasActiveProjectTask,
   recordRunningTaskActivity,
   recordTaskActivitySnapshot,
@@ -474,6 +475,7 @@ export class ProjectRuntimeManager {
   readonly #maxEventHistoryEvents: number;
   readonly #projects = new Map<string, ProjectEventRuntime>();
   #taskActivity: TaskActivityMap = new Map();
+  #viewedTask: Readonly<{ projectId: string; taskId: string }> | undefined;
 
   public readonly client: CodeAgentRuntimeClient;
 
@@ -498,7 +500,13 @@ export class ProjectRuntimeManager {
     store: TaskStore,
     recoverSnapshot: RecoverTaskSnapshot,
   ): () => void {
-    this.#updateTaskActivity(recordTaskActivitySnapshot(this.#taskActivity, response.snapshot));
+    this.#updateTaskActivity(
+      recordTaskActivitySnapshot(
+        this.#taskActivity,
+        response.snapshot,
+        this.#isTaskViewed(response.snapshot.projectId, response.snapshot.id),
+      ),
+    );
     return this.#getProject(response.snapshot.projectId).attachTaskStore(
       response,
       store,
@@ -529,8 +537,22 @@ export class ProjectRuntimeManager {
   }
 
   public observeSnapshot(response: AgentTaskSnapshotResponse): void {
-    this.#updateTaskActivity(recordTaskActivitySnapshot(this.#taskActivity, response.snapshot));
+    this.#updateTaskActivity(
+      recordTaskActivitySnapshot(
+        this.#taskActivity,
+        response.snapshot,
+        this.#isTaskViewed(response.snapshot.projectId, response.snapshot.id),
+      ),
+    );
     this.#getProject(response.snapshot.projectId).observeSnapshot(response);
+  }
+
+  public viewTask(projectId: string, taskId?: string): void {
+    this.#viewedTask = taskId === undefined ? undefined : { projectId, taskId };
+    if (taskId !== undefined) {
+      this.#updateTaskActivity(clearTaskAttention(this.#taskActivity, projectId, taskId));
+    }
+    this.#projects.get(projectId)?.markAccess();
   }
 
   public subscribeTaskActivity(listener: ActivityListener): () => void {
@@ -552,7 +574,12 @@ export class ProjectRuntimeManager {
         getTaskActivity: () => this.#taskActivity,
         onActivityEvent: (eventProjectId, event) => {
           this.#updateTaskActivity(
-            reduceTaskActivityEvent(this.#taskActivity, eventProjectId, event),
+            reduceTaskActivityEvent(
+              this.#taskActivity,
+              eventProjectId,
+              event,
+              this.#isTaskViewed(eventProjectId, event.taskId),
+            ),
           );
         },
         onIdle: (idleProject) => {
@@ -582,6 +609,10 @@ export class ProjectRuntimeManager {
     for (const listener of this.#activityListeners) {
       listener();
     }
+  }
+
+  #isTaskViewed(projectId: string, taskId: string): boolean {
+    return this.#viewedTask?.projectId === projectId && this.#viewedTask.taskId === taskId;
   }
 }
 

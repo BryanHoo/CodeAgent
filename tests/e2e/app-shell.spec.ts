@@ -1623,6 +1623,256 @@ test("clears transient realtime errors after the WebSocket reconnects", async ({
   await expect(page.getByRole("alert", { name: "会话内容" })).toHaveCount(0);
 });
 
+test("shows background task attention and clears it after entering the task", async ({ page }) => {
+  await page.route("**/v1/projects/code-agent/tasks/input-design", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: {
+          ...taskSnapshot,
+          id: "input-design",
+          pinned: false,
+          status: "idle",
+          title: "优化输入框交互",
+          turns: [],
+        },
+      },
+    });
+  });
+  await page.addInitScript(() => {
+    type SidebarEventEmitterWindow = Window & {
+      __emitSidebarTaskEvent?: (event: unknown) => void;
+    };
+
+    class ControlledWebSocket extends EventTarget {
+      public readonly bufferedAmount = 0;
+      public readyState = 0;
+
+      public constructor() {
+        super();
+        const connectionGeneration =
+          Number(sessionStorage.getItem("__sidebarEventConnectionGeneration") ?? "0") + 1;
+        sessionStorage.setItem("__sidebarEventConnectionGeneration", String(connectionGeneration));
+        (window as SidebarEventEmitterWindow).__emitSidebarTaskEvent = (event) => {
+          this.dispatchEvent(
+            new MessageEvent("message", {
+              data: JSON.stringify(event),
+            }),
+          );
+        };
+        queueMicrotask(() => {
+          if (this.readyState === 3) {
+            return;
+          }
+          this.readyState = 1;
+          this.dispatchEvent(new Event("open"));
+          this.dispatchEvent(
+            new MessageEvent("message", {
+              data: JSON.stringify({
+                latestSequence: 0,
+                sessionId: "e2e-session",
+                type: "connection.ready",
+                version: 2,
+              }),
+            }),
+          );
+        });
+      }
+
+      public close(code = 1000, reason = ""): void {
+        if (this.readyState === 3) {
+          return;
+        }
+        this.readyState = 3;
+        this.dispatchEvent(new CloseEvent("close", { code, reason }));
+      }
+
+      public send(): void {
+        return undefined;
+      }
+    }
+
+    Object.defineProperty(window, "WebSocket", {
+      configurable: true,
+      value: ControlledWebSocket,
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const backgroundTask = sidebar.getByRole("link", { name: /优化输入框交互/ });
+  const completedTask = sidebar.getByRole("link", { name: /完善 Markdown 渲染/ });
+  const failedTask = sidebar.getByRole("link", { name: /完善 Runtime 状态/ });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          typeof (window as Window & { __emitSidebarTaskEvent?: (value: unknown) => void })
+            .__emitSidebarTaskEvent,
+      ),
+    )
+    .toBe("function");
+  const turn = {
+    completedAt: null,
+    error: null,
+    id: "turn-input-design",
+    items: [],
+    startedAt: "2026-07-29T00:00:00.000Z",
+    status: "running",
+  };
+  const emitTaskEvent = async (event: Record<string, unknown>) => {
+    await page.evaluate((taskEvent) => {
+      const emitter = (window as Window & { __emitSidebarTaskEvent?: (value: unknown) => void })
+        .__emitSidebarTaskEvent;
+      if (emitter === undefined) {
+        throw new Error("Sidebar task event emitter is unavailable");
+      }
+      emitter(taskEvent);
+    }, event);
+  };
+
+  await emitTaskEvent({
+    payload: { turn },
+    provider: "codex",
+    sequence: 1,
+    sessionId: "e2e-session",
+    taskId: "input-design",
+    timestamp: "2026-07-29T00:00:00.000Z",
+    turnId: turn.id,
+    type: "turn.started",
+    version: 2,
+  });
+  await emitTaskEvent({
+    itemId: "approval-input-design",
+    payload: {
+      request: {
+        availableDecisions: ["allow", "deny"],
+        command: "pnpm check",
+        createdAt: "2026-07-29T00:00:01.000Z",
+        cwd: "/workspace/CodeAgent",
+        expiresAt: null,
+        itemId: "approval-input-design",
+        networkAccess: null,
+        projectId: "code-agent",
+        reason: null,
+        requestId: "approval-input-design",
+        status: "pending",
+        taskId: "input-design",
+        turnId: turn.id,
+        type: "command_approval",
+      },
+    },
+    provider: "codex",
+    sequence: 2,
+    sessionId: "e2e-session",
+    taskId: "input-design",
+    timestamp: "2026-07-29T00:00:01.000Z",
+    turnId: turn.id,
+    type: "pending_request.created",
+    version: 2,
+  });
+
+  await expect(backgroundTask.getByRole("status", { name: "任务等待审批" })).toBeVisible();
+  await backgroundTask.click();
+  await expect(backgroundTask.getByRole("status", { name: "任务等待审批" })).toHaveCount(0);
+
+  const previousConnectionGeneration = await page.evaluate(() =>
+    Number(sessionStorage.getItem("__sidebarEventConnectionGeneration") ?? "0"),
+  );
+  await page.goto("/p/code-agent/t/task-1");
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Number(sessionStorage.getItem("__sidebarEventConnectionGeneration") ?? "0"),
+      ),
+    )
+    .toBeGreaterThan(previousConnectionGeneration);
+  const completedTurn = {
+    ...turn,
+    id: "turn-markdown",
+  };
+  await emitTaskEvent({
+    payload: { turn: completedTurn },
+    provider: "codex",
+    sequence: 1,
+    sessionId: "e2e-session",
+    taskId: "markdown",
+    timestamp: "2026-07-29T00:00:00.000Z",
+    turnId: completedTurn.id,
+    type: "turn.started",
+    version: 2,
+  });
+  await expect(completedTask.getByRole("status", { name: "任务运行中" })).toBeVisible();
+  await emitTaskEvent({
+    payload: {
+      turn: {
+        ...completedTurn,
+        completedAt: "2026-07-29T00:00:02.000Z",
+        status: "completed",
+      },
+    },
+    provider: "codex",
+    sequence: 2,
+    sessionId: "e2e-session",
+    taskId: "markdown",
+    timestamp: "2026-07-29T00:00:02.000Z",
+    turnId: completedTurn.id,
+    type: "turn.completed",
+    version: 2,
+  });
+
+  await expect(completedTask.getByRole("status", { name: "AI 回复已完成" })).toBeVisible();
+
+  await completedTask.click();
+  await expect(completedTask.getByRole("status", { name: "AI 回复已完成" })).toHaveCount(0);
+
+  const completedConnectionGeneration = await page.evaluate(() =>
+    Number(sessionStorage.getItem("__sidebarEventConnectionGeneration") ?? "0"),
+  );
+  await page.goto("/p/code-agent/t/task-1");
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Number(sessionStorage.getItem("__sidebarEventConnectionGeneration") ?? "0"),
+      ),
+    )
+    .toBeGreaterThan(completedConnectionGeneration);
+  const failedTurn = {
+    ...turn,
+    id: "turn-runtime",
+  };
+  await emitTaskEvent({
+    payload: { turn: failedTurn },
+    provider: "codex",
+    sequence: 1,
+    sessionId: "e2e-session",
+    taskId: "runtime",
+    timestamp: "2026-07-29T00:00:00.000Z",
+    turnId: failedTurn.id,
+    type: "turn.started",
+    version: 2,
+  });
+  await expect(failedTask.getByRole("status", { name: "任务运行中" })).toBeVisible();
+
+  // Provider 明确停止重试时，后台 Task 必须保留失败提醒直到用户进入。
+  await emitTaskEvent({
+    payload: { message: "模型服务不可用", willRetry: false },
+    provider: "codex",
+    sequence: 2,
+    sessionId: "e2e-session",
+    taskId: "runtime",
+    timestamp: "2026-07-29T00:00:02.000Z",
+    turnId: failedTurn.id,
+    type: "provider.error",
+    version: 2,
+  });
+  await expect(failedTask.getByRole("status", { name: "AI 回复未完成" })).toBeVisible();
+
+  await failedTask.click();
+  await expect(failedTask.getByRole("status", { name: "AI 回复未完成" })).toHaveCount(0);
+});
+
 test("restores network approvals from the task snapshot after refresh", async ({ page }) => {
   let resolutionCount = 0;
   const pendingRequest = {
@@ -1784,12 +2034,10 @@ test("allows a command approval and completes the turn", async ({ page }) => {
   await page.getByRole("textbox", { name: "任务输入" }).fill("审批命令");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
   await expect(page.getByRole("region", { name: "命令审批请求" })).toBeVisible();
-  const approvalStatus = page.getByRole("status", { name: "任务等待审批" });
-  await expect(approvalStatus).toBeVisible();
-  await expect(approvalStatus).toHaveClass(/text-accent/);
+  // 当前 Task 已在用户视野内，审批提醒只保留在 Timeline，不重复占用 Sidebar 状态位。
+  await expect(page.getByRole("status", { name: "任务等待审批" })).toHaveCount(0);
   await page.getByRole("button", { exact: true, name: "允许" }).click();
 
-  await expect(approvalStatus).toBeHidden();
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
 });
