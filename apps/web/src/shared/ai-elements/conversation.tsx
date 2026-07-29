@@ -3,6 +3,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ButtonHTMLAttributes,
@@ -11,7 +12,12 @@ import {
 
 import { createConversationAutoScrollController } from "./conversation-scroll.js";
 
-type ConversationProps = HTMLAttributes<HTMLDivElement>;
+type ConversationProps = HTMLAttributes<HTMLDivElement> &
+  Readonly<{
+    conversationId: string;
+  }>;
+
+type ConversationContentProps = HTMLAttributes<HTMLDivElement>;
 
 type ConversationContextValue = Readonly<{
   atBottom: boolean;
@@ -20,7 +26,13 @@ type ConversationContextValue = Readonly<{
 
 const ConversationContext = createContext<ConversationContextValue | null>(null);
 
-export function Conversation({ children, className = "", onScroll, ...props }: ConversationProps) {
+export function Conversation({
+  children,
+  className = "",
+  conversationId,
+  onScroll,
+  ...props
+}: ConversationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   const autoScrollControllerRef = useRef<
@@ -37,6 +49,40 @@ export function Conversation({ children, className = "", onScroll, ...props }: C
     }
   };
 
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (container === null) {
+      return;
+    }
+
+    // 先开启强制跟随，再等待长 Timeline 的延迟布局连续稳定后执行最终置底。
+    autoScrollController.handleConversationChange(container);
+    let previousScrollHeight = -1;
+    let stableFrameCount = 0;
+    let observedFrameCount = 0;
+    let animationFrameId = 0;
+
+    const settleConversationAtBottom = () => {
+      autoScrollController.handleContentResize(container);
+      const currentScrollHeight = container.scrollHeight;
+      stableFrameCount = currentScrollHeight === previousScrollHeight ? stableFrameCount + 1 : 0;
+      previousScrollHeight = currentScrollHeight;
+      observedFrameCount += 1;
+
+      // 连续两帧高度稳定即可视为消息布局完成；上限避免持续流式内容无限占用动画帧。
+      if (stableFrameCount >= 2 || observedFrameCount >= 60) {
+        autoScrollController.handleConversationRenderComplete(container);
+        return;
+      }
+      animationFrameId = requestAnimationFrame(settleConversationAtBottom);
+    };
+
+    animationFrameId = requestAnimationFrame(settleConversationAtBottom);
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [autoScrollController, conversationId]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (container === null) {
@@ -45,12 +91,14 @@ export function Conversation({ children, className = "", onScroll, ...props }: C
 
     const content = container.firstElementChild;
 
-    // 初次打开及流式内容增长时跟随最新消息；用户离开底部后控制器会暂停跟随。
-    autoScrollController.handleContentResize(container);
     const contentResizeObserver = new ResizeObserver(() => {
       autoScrollController.handleContentResize(container);
     });
-    contentResizeObserver.observe(content ?? container);
+    // Task 切换后消息内容与 Composer 可能分阶段完成布局，两侧尺寸变化都要重新校准到底部。
+    contentResizeObserver.observe(container);
+    if (content !== null) {
+      contentResizeObserver.observe(content);
+    }
 
     return () => {
       contentResizeObserver.disconnect();
@@ -77,7 +125,7 @@ export function Conversation({ children, className = "", onScroll, ...props }: C
   );
 }
 
-export function ConversationContent({ className = "", ...props }: ConversationProps) {
+export function ConversationContent({ className = "", ...props }: ConversationContentProps) {
   return (
     <div
       className={`mx-auto flex w-full max-w-content flex-col px-4 py-6 sm:px-6 sm:py-7 ${className}`}

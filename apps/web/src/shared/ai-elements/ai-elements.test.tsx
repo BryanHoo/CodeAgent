@@ -96,7 +96,7 @@ describe("AI Elements primitives", () => {
 
   it("renders a structured agent message and tool timeline", () => {
     const markup = renderToStaticMarkup(
-      <Conversation aria-label="会话">
+      <Conversation aria-label="会话" conversationId="test-conversation">
         <ConversationContent>
           <Message from="assistant">
             <MessageContent>

@@ -8,6 +8,8 @@ export type ConversationScrollTarget = Pick<
 type AtBottomChangeHandler = (atBottom: boolean) => void;
 
 export function createConversationAutoScrollController(onAtBottomChange: AtBottomChangeHandler) {
+  let conversationRendering = false;
+  let lastObservedClientHeight: number | undefined;
   let lastObservedScrollHeight: number | undefined;
   let shouldFollowNewContent = true;
 
@@ -17,13 +19,25 @@ export function createConversationAutoScrollController(onAtBottomChange: AtBotto
   };
 
   const scrollToBottom = (scrollTarget: ConversationScrollTarget, behavior: ScrollBehavior) => {
+    lastObservedClientHeight = scrollTarget.clientHeight;
     lastObservedScrollHeight = scrollTarget.scrollHeight;
     scrollTarget.scrollTo({ behavior, top: scrollTarget.scrollHeight });
     updateFollowState(true);
   };
 
   return {
+    handleConversationChange(scrollTarget: ConversationScrollTarget) {
+      // Task 消息完成分帧渲染前保持强制跟随，避免临时 scroll 事件关闭自动置底。
+      conversationRendering = true;
+      scrollToBottom(scrollTarget, "auto");
+    },
+    handleConversationRenderComplete(scrollTarget: ConversationScrollTarget) {
+      // 使用最终布局高度完成最后一次置底，随后恢复正常的用户滚动判断。
+      scrollToBottom(scrollTarget, "auto");
+      conversationRendering = false;
+    },
     handleContentResize(scrollTarget: ConversationScrollTarget) {
+      lastObservedClientHeight = scrollTarget.clientHeight;
       lastObservedScrollHeight = scrollTarget.scrollHeight;
       if (!shouldFollowNewContent) {
         return;
@@ -33,13 +47,22 @@ export function createConversationAutoScrollController(onAtBottomChange: AtBotto
       scrollToBottom(scrollTarget, "auto");
     },
     handleScroll(scrollTarget: ConversationScrollTarget) {
+      if (conversationRendering) {
+        scrollToBottom(scrollTarget, "auto");
+        return;
+      }
+
+      const viewportHeightChanged =
+        lastObservedClientHeight !== undefined &&
+        scrollTarget.clientHeight !== lastObservedClientHeight;
       const contentHeightIncreased =
         lastObservedScrollHeight !== undefined &&
         scrollTarget.scrollHeight > lastObservedScrollHeight;
+      lastObservedClientHeight = scrollTarget.clientHeight;
       lastObservedScrollHeight = scrollTarget.scrollHeight;
 
-      if (shouldFollowNewContent && contentHeightIncreased) {
-        // 大段内容插入可能先触发 scroll；这是布局变化，不应被当成用户离开底部。
+      if (shouldFollowNewContent && (contentHeightIncreased || viewportHeightChanged)) {
+        // 内容增长或中栏高度变化可能先触发 scroll；布局变化不应被当成用户离开底部。
         scrollToBottom(scrollTarget, "auto");
         return;
       }

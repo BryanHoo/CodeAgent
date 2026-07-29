@@ -1271,7 +1271,7 @@ function TaskStoreTimeline({
   const latestTurnId = turnIds.at(-1);
 
   return (
-    <Conversation aria-label="会话内容">
+    <Conversation aria-label="会话内容" conversationId={`${projectId}:${taskId}`}>
       <ConversationContent className="gap-6">
         {turnIds.map((turnId, turnIndex) => (
           <StoreTurnTimelineSection
@@ -1335,7 +1335,7 @@ export function TaskSnapshotTimeline({
   const latestTurnId = snapshot.turns.at(-1)?.id;
 
   return (
-    <Conversation aria-label="会话内容">
+    <Conversation aria-label="会话内容" conversationId={`${snapshot.projectId}:${snapshot.id}`}>
       <ConversationContent className="gap-6">
         {snapshot.turns.map((turn, turnIndex) => (
           <section

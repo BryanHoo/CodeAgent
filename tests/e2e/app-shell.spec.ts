@@ -1336,6 +1336,98 @@ test("keeps the composer input mounted when switching task routes", async ({ pag
     .toBe(true);
 });
 
+test("scrolls the conversation area to the bottom whenever the active task changes", async ({
+  page,
+}) => {
+  const longTurns = Array.from({ length: 24 }, (_, turnIndex) => ({
+    completedAt: `2026-07-22T08:${String(turnIndex).padStart(2, "0")}:30.000Z`,
+    error: null,
+    id: `long-turn-${String(turnIndex)}`,
+    items: [
+      {
+        id: `long-user-${String(turnIndex)}`,
+        role: "user",
+        text: `长会话问题 ${String(turnIndex + 1)}`,
+        type: "message",
+      },
+      {
+        id: `long-assistant-${String(turnIndex)}`,
+        role: "assistant",
+        text: `长会话回复 ${String(turnIndex + 1)}：${"持续输出用于验证任务切换后的滚动位置。".repeat(8)}`,
+        type: "message",
+      },
+    ],
+    startedAt: `2026-07-22T08:${String(turnIndex).padStart(2, "0")}:00.000Z`,
+    status: "completed",
+  }));
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: { ...taskSnapshot, turns: longTurns },
+      },
+    });
+  });
+  await page.route("**/v1/projects/code-agent/tasks/input-design", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: {
+          ...taskSnapshot,
+          ...tasks[1],
+          turns: [taskSnapshot.turns[0]],
+        },
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+  const conversation = page.getByRole("log", { name: "会话内容" });
+  await expect
+    .poll(() => conversation.evaluate((element) => element.scrollHeight))
+    .toBeGreaterThan(800);
+
+  await conversation.evaluate((element) => {
+    element.scrollTop = 120;
+    element.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+  await page.getByRole("link", { name: /优化输入框交互/u }).click();
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/input-design$/u);
+  await expect(conversation).toContainText("工作台界面已按统一的 AI Elements 结构重新组织。");
+
+  await page.evaluate(() => {
+    const observer = new MutationObserver(() => {
+      const element = document.querySelector<HTMLElement>('[role="log"][aria-label="会话内容"]');
+      if (!element?.textContent.includes("长会话问题 24")) {
+        return;
+      }
+      observer.disconnect();
+
+      // 模拟长 Timeline 分帧提交时浏览器先报告临时中部位置，随后消息布局继续增高。
+      element.scrollTop = 120;
+      element.dispatchEvent(new Event("scroll", { bubbles: true }));
+      const delayedMessageLayout = document.createElement("div");
+      delayedMessageLayout.style.height = "800px";
+      delayedMessageLayout.style.flexShrink = "0";
+      element.firstElementChild?.append(delayedMessageLayout);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+
+  await page.locator('a[href="/p/code-agent/t/task-1"]').first().click();
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/u);
+
+  // 新 Task 内容完成布局后，聊天区域必须位于最底部，不能继承短会话的 scrollTop。
+  await expect
+    .poll(() =>
+      conversation.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThanOrEqual(1);
+});
+
 test("shows a task error when the initial snapshot request fails", async ({ page }) => {
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     await route.fulfill({
