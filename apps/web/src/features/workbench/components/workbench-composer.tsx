@@ -405,6 +405,14 @@ export function WorkbenchComposer({
     setCommandQuery("");
     setCommandSlashCommand(undefined);
   }, []);
+  const replaceDraft = useCallback((nextDraft: string) => {
+    setDraft(nextDraft);
+    const textarea = textareaRef.current;
+    if (textarea !== null && textarea.value !== nextDraft) {
+      // 输入值由浏览器持有以保护 IME 组合缓冲；命令操作仍需同步修改真实文本框。
+      textarea.value = nextDraft;
+    }
+  }, []);
 
   const updateSettings = (nextSettings: AgentTaskSettings, field: keyof AgentTaskSettings) => {
     setSettingsOverride({ projectId, settings: nextSettings });
@@ -537,7 +545,7 @@ export function WorkbenchComposer({
         ...(activeTaskId === undefined ? {} : { taskId: activeTaskId }),
         turnOptions,
       });
-      setDraft("");
+      replaceDraft("");
       setSelectedSkillState(undefined);
       setCommandDraftMode(null);
       setAttachmentCount(0);
@@ -580,7 +588,7 @@ export function WorkbenchComposer({
     setCommandSlashCommand(undefined);
     setCommandNotice(undefined);
     setSelectedSkillState(undefined);
-    setDraft("");
+    replaceDraft("");
     setAttachmentCount(0);
     setComposerRevision((revision) => revision + 1);
     focusTextarea();
@@ -611,7 +619,7 @@ export function WorkbenchComposer({
       commandAttempts.current.delete("feedback");
       setCommandDraftMode(null);
       setCommandNotice("反馈已发送");
-      setDraft("");
+      replaceDraft("");
     } catch (error) {
       setMutationError(error instanceof Error ? error : new Error("Feedback submission failed"));
     } finally {
@@ -627,7 +635,7 @@ export function WorkbenchComposer({
     setCommandQuery("");
     setCommandSlashCommand(undefined);
     setCommandNotice(undefined);
-    setDraft("");
+    replaceDraft("");
     setSelectedSkillState(undefined);
 
     if (command.action === "feedback" || command.action === "subtask") {
@@ -694,7 +702,7 @@ export function WorkbenchComposer({
     setCommandQuery("");
     setCommandSlashCommand(undefined);
     setCommandNotice(undefined);
-    setDraft(nextDraft);
+    replaceDraft(nextDraft);
     focusTextarea(slashCommand?.start);
   };
 
@@ -842,7 +850,7 @@ export function WorkbenchComposer({
                 className="max-w-full border border-separator-strong bg-control text-foreground"
                 onClick={() => {
                   setCommandDraftMode(null);
-                  setDraft("");
+                  replaceDraft("");
                   focusTextarea();
                 }}
               >
@@ -945,7 +953,7 @@ export function WorkbenchComposer({
                       : "继续这个任务"
               }
               ref={textareaRef}
-              value={draft}
+              defaultValue={draft}
             />
             {mutationError === null ? null : (
               <p className="px-1 pb-1 text-label text-danger" role="alert">

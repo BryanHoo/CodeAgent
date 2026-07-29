@@ -2185,6 +2185,32 @@ test("keeps project add buttons visible after opening a task", async ({ page }) 
   await expect(sidebar.getByRole("button", { name: "在 superwork 中新建任务" })).toBeVisible();
 });
 
+test("preserves provisional IME text across composer rerenders", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.focus();
+  await prompt.dispatchEvent("compositionstart");
+  await prompt.evaluate((textarea) => {
+    if (!(textarea instanceof HTMLTextAreaElement)) {
+      throw new Error("任务输入不是 textarea");
+    }
+    // 中文输入法首键先写入组合缓冲，此时还不会触发 React onChange。
+    textarea.value = "n";
+    textarea.dispatchEvent(new CompositionEvent("compositionupdate", { data: "n" }));
+  });
+
+  await page.getByRole("combobox", { name: "批准模式" }).evaluate((select) => {
+    if (!(select instanceof HTMLSelectElement)) {
+      throw new Error("批准模式不是 select");
+    }
+    select.value = "never";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  await expect(prompt).toHaveValue("n");
+});
+
 test("uses material hierarchy instead of strong workbench borders", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
   await expect(page.locator('[role="log"] > div')).toBeVisible();
