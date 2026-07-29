@@ -338,7 +338,7 @@ describe("TaskSnapshotTimeline", () => {
             {
               id: "message-user-skill",
               role: "user",
-              skills: [{ name: "review-security" }],
+              skills: [{ name: "review-security" }, { name: "documentation-writer" }],
               text: "检查认证边界。",
               type: "message",
             },
@@ -350,7 +350,13 @@ describe("TaskSnapshotTimeline", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={skillMessageSnapshot} />);
 
     expect(markup).toContain('data-message-skill="review-security"');
+    expect(markup).toContain('data-message-skill="documentation-writer"');
+    expect(markup).toContain('data-skill-token=""');
     expect(markup).toContain("$review-security");
+    expect(markup).toContain("$documentation-writer");
+    expect(markup.indexOf("$review-security")).toBeLessThan(
+      markup.indexOf("$documentation-writer"),
+    );
     expect(markup).toContain("检查认证边界。");
     expect(markup).not.toContain("SKILL.md");
   });

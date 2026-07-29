@@ -346,7 +346,7 @@ const AgentAttachmentReferenceSchema = Type.Object(
 
 const AgentPromptInputProperties = {
   attachments: Type.Array(AgentAttachmentReferenceSchema, { maxItems: MAX_AGENT_ATTACHMENTS }),
-  skills: Type.Array(AgentSkillReferenceSchema, { maxItems: 1 }),
+  skills: Type.Array(AgentSkillReferenceSchema),
   text: Type.String({ maxLength: 100_000 }),
   type: Type.Literal("prompt"),
 };
@@ -372,7 +372,7 @@ export const AgentPromptInputSchema = Type.Union([
   Type.Object(
     {
       ...AgentPromptInputProperties,
-      skills: Type.Array(AgentSkillReferenceSchema, { maxItems: 1, minItems: 1 }),
+      skills: Type.Array(AgentSkillReferenceSchema, { minItems: 1 }),
     },
     { additionalProperties: false },
   ),

@@ -178,7 +178,7 @@ export function PromptInput({
       return;
     }
     previousResetKeyRef.current = resetKey;
-    // 外层业务作用域变化时清空附件，但保留表单和 textarea DOM，避免中断原生输入法上下文。
+    // 外层业务作用域变化时清空附件，但保留表单和编辑器 DOM，避免中断原生输入法上下文。
     if (attachments === undefined) {
       clear();
     }

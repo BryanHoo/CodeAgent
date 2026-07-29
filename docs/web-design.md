@@ -256,8 +256,8 @@ Project 名称行短按继续展开或收起 Task；指针移动超过点击容�
 - Inspector 在宽屏工作台默认显示，窄窗口关闭并按需作为抽屉打开。
 - Composer 固定在 Timeline 底部，但不能覆盖滚动内容。
 - Composer 左侧依次展示附件、审批和沙盒模式；沙盒模式使用 Codex 有效 Project 配置初始化，并允许选择只读、工作区可写或完全访问。右侧继续展示模型、思考量和提交操作。
-- Composer 在文本开头或空白字符后输入 `/` 时显示外部浮层，连续正文字符后的 `/` 不触发；浮层先展示本地 Task 命令，再在命令组下方展示当前 Project 的 Codex Skills。Skill 选择后仅移除当前 Slash 片段并保留已有正文，以 `skill` 主题色 Token 留在输入框内，可点击或在空草稿时按 Backspace 移除。提交只携带统一 Skill ID 与名称，不拼接文本、不接收原生路径。
-- 用户消息通过统一消息字段携带已使用的 Skill 名称，并在 Timeline 中继续以 `skill` 主题色 Token 展示；该行为同时覆盖提交后的实时 Turn、首轮乐观消息和重新打开 Task 后由 Codex `userMessage.content` 恢复的历史消息。Codex 返回的 Skill 路径在 Provider 映射后丢弃，不进入 Web。
+- Composer 在文本开头或空白字符后输入 `/` 时显示外部浮层，连续正文字符后的 `/` 不触发；浮层先展示本地 Task 命令，再在命令组下方展示当前 Project 的 Codex Skills。每次选择只移除当前 Slash 片段并保留已有正文，允许在正文任意位置插入多个有序的 `skill` 主题 Token。Token 显示 Skill 展示名，内部值与复制文本为 `$<skill.name>`，可点击或使用邻接删除键移除。提交按 Token 顺序携带统一 Skill ID 与名称，不把 `$name` 拼接进普通正文，也不接收原生路径。
+- 用户消息通过统一消息字段按顺序携带已使用的多个 Skill 名称，并在 Timeline 中复用编辑器的 `skill` 主题 Token 模块；该行为同时覆盖提交后的实时 Turn、首轮乐观消息和重新打开 Task 后由 Codex `userMessage.content` 恢复的历史消息。Codex 返回的 Skill 路径在 Provider 映射后丢弃，不进入 Web。
 - 窗口较窄时 Inspector 变为抽屉，Sidebar 变为可关闭侧栏。
 - Sidebar 的 `Projects` 标题固定在项目树滚动区外，Project 行连续排列并支持持久化重排；每个 Project 使用独立 Cursor Infinite Query，首屏只请求并显示 5 个 Task。“显示更多”每次只加载该 Project 的一个下一页，失败时保留已有列表并可重试，全部加载后允许收起。归档后先移除缓存任务，再重新校准活动 Cursor 页面并自动补足最近 5 项。非空搜索使用独立的按 Project 全量搜索源：Project 之间并行、单个 Project 内追踪全部 Cursor，完整加载后再过滤标题，不能只搜索当前渲染项。新建、固定、重命名和归档同步维护普通 Infinite Query 与已存在的搜索缓存。Task 行 hover/focus 时以省略号替换时间，并通过菜单执行固定、重命名和归档。
 

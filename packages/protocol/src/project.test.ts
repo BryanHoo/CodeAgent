@@ -722,7 +722,7 @@ describe("project protocol", () => {
         text: "run",
         type: "prompt",
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       Value.Check(AgentPromptInputSchema, {
         attachments: [],

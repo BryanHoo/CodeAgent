@@ -1349,6 +1349,18 @@ describe("CodexAgentProvider", () => {
                 shortDescription: null,
               },
               {
+                description: "Documentation specialist",
+                enabled: true,
+                interface: {
+                  displayName: "Documentation writer",
+                  shortDescription: "编写清晰的项目文档",
+                },
+                name: "documentation-writer",
+                path: "/Users/test/.codex/skills/documentation-writer/SKILL.md",
+                scope: "user",
+                shortDescription: null,
+              },
+              {
                 description: "Disabled skill",
                 enabled: false,
                 interface: null,
@@ -1368,8 +1380,9 @@ describe("CodexAgentProvider", () => {
 
     const skillPage = await provider.listSkills();
     const selectedSkill = skillPage.data[0];
-    if (selectedSkill === undefined) {
-      throw new Error("Expected an enabled Codex skill");
+    const secondSkill = skillPage.data[1];
+    if (selectedSkill === undefined || secondSkill === undefined) {
+      throw new Error("Expected two enabled Codex skills");
     }
     expect(selectedSkill.id).toMatch(/^skill_[a-f0-9]{32}$/u);
     expect(skillPage).toEqual({
@@ -1381,6 +1394,13 @@ describe("CodexAgentProvider", () => {
           name: "review-security",
           scope: "system",
         },
+        {
+          description: "编写清晰的项目文档",
+          displayName: "Documentation writer",
+          id: secondSkill.id,
+          name: "documentation-writer",
+          scope: "user",
+        },
       ],
       nextCursor: null,
     });
@@ -1390,7 +1410,10 @@ describe("CodexAgentProvider", () => {
         "task-1",
         {
           images: [],
-          skills: [{ id: selectedSkill.id, name: "review-security" }],
+          skills: [
+            { id: selectedSkill.id, name: "review-security" },
+            { id: secondSkill.id, name: "documentation-writer" },
+          ],
           text: "",
         },
         {
@@ -1419,6 +1442,11 @@ describe("CodexAgentProvider", () => {
             {
               name: "review-security",
               path: "/Users/test/.codex/skills/review-security/SKILL.md",
+              type: "skill",
+            },
+            {
+              name: "documentation-writer",
+              path: "/Users/test/.codex/skills/documentation-writer/SKILL.md",
               type: "skill",
             },
           ],

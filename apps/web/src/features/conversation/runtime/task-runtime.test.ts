@@ -52,7 +52,10 @@ describe("submitted prompt merge", () => {
       submittedTurn,
       {
         attachments: [],
-        skills: [{ id: "skill-1", name: "frontend-design" }],
+        skills: [
+          { id: "skill-1", name: "frontend-design" },
+          { id: "skill-2", name: "documentation-writer" },
+        ],
         text: "检查输入框交互",
       },
     );
@@ -61,7 +64,7 @@ describe("submitted prompt merge", () => {
       {
         id: "submitted-user-turn-1",
         role: "user",
-        skills: [{ name: "frontend-design" }],
+        skills: [{ name: "frontend-design" }, { name: "documentation-writer" }],
         text: "检查输入框交互",
         type: "message",
       },

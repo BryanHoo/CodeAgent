@@ -1419,12 +1419,10 @@ export class CodexAgentProvider implements AgentProvider {
     options: AgentTurnOptions,
   ): Promise<AgentTurn> {
     this.#assertKnownProjectTask(taskId);
-    if (input.skills.length > 1) {
-      throw new CodexProtocolMappingError("Provider turn input supports one skill");
-    }
     if (input.skills.some((skill) => !this.#skillsById.has(skill.id))) {
       await this.listSkills();
     }
+    // 每个引用独立解析为 Codex 原生 Skill part，并保持 Composer 中的选择顺序。
     const skills = input.skills.map((reference) => {
       const skill = this.#skillsById.get(reference.id);
       if (skill?.name !== reference.name) {

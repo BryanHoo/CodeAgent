@@ -13,7 +13,6 @@ import {
   Files,
   FolderGit2,
   RotateCcw,
-  Sparkles,
   SquareTerminal,
 } from "lucide-react";
 import { useState } from "react";
@@ -74,6 +73,7 @@ import {
   type ToolState,
 } from "../../../shared/ai-elements/tool.js";
 import { PendingRequestCard, type PendingRequestResolution } from "./pending-request.js";
+import { SkillToken } from "./skill-token.js";
 import {
   formatSubagentOperationSummary,
   parseSubagentOperation,
@@ -642,23 +642,31 @@ function TimelineItemContent({
     case "message": {
       const attachments = item.role === "user" ? (item.attachments ?? []) : [];
       const skills = item.role === "user" ? (item.skills ?? []) : [];
-      const hasStructuredContent = skills.length > 0 || attachments.length > 0;
       return (
-        <MessageContent
-          className={`${item.role === "assistant" ? "w-full" : ""} ${hasStructuredContent ? "space-y-2" : ""}`}
-        >
-          {skills.length === 0 ? null : (
-            <div className="flex flex-wrap gap-1.5" aria-label="使用的 Skills">
-              {skills.map((skill) => (
-                <span
-                  className="inline-flex max-w-full items-center gap-1 rounded-control bg-raised px-2 py-1 text-label font-medium text-skill"
-                  data-message-skill={skill.name}
-                  key={skill.name}
-                >
-                  <Sparkles aria-hidden="true" className="size-3.5 shrink-0" />
-                  <span className="truncate">${skill.name}</span>
+        <MessageContent className={item.role === "assistant" ? "w-full" : ""}>
+          {skills.length === 0 && item.text.length === 0 ? null : (
+            <div className={attachments.length === 0 ? "" : "mb-2"}>
+              {skills.length === 0 ? null : (
+                <span className="inline" aria-label="使用的 Skills">
+                  {skills.map((skill) => (
+                    <SkillToken
+                      className="relative top-1 me-1.5 bg-raised px-2 text-body leading-6"
+                      data-message-skill={skill.name}
+                      data-skill-token=""
+                      key={skill.name}
+                      name={skill.name}
+                    />
+                  ))}
                 </span>
-              ))}
+              )}
+              {item.text.length === 0 ? null : (
+                <MessageResponse
+                  className={skills.length === 0 ? "" : "inline [&>p:first-child]:inline"}
+                  onOpenFileReference={onOpenSourceFile}
+                >
+                  {item.text}
+                </MessageResponse>
+              )}
             </div>
           )}
           {attachments.length === 0 ? null : (
@@ -691,9 +699,6 @@ function TimelineItemContent({
                 );
               })}
             </div>
-          )}
-          {item.text.length === 0 ? null : (
-            <MessageResponse onOpenFileReference={onOpenSourceFile}>{item.text}</MessageResponse>
           )}
         </MessageContent>
       );

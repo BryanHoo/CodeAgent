@@ -921,6 +921,7 @@ test("restores project defaults without inheriting task approval", async ({ page
 });
 
 test("runs official task actions from the slash command menu", async ({ page }) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   const commandRequests: { body: string | null; path: string }[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -932,6 +933,21 @@ test("runs official task actions from the slash command menu", async ({ page }) 
     }
   });
   await page.goto("/p/code-agent/t/task-1");
+
+  const historicalSkill = page.locator('[data-message-skill="review-security"]');
+  const historicalInlineOffset = await historicalSkill.evaluate((token) => {
+    const labelText = token.lastElementChild?.firstChild;
+    const messageText = token.parentElement?.parentElement?.querySelector("p")?.firstChild;
+    if (!(labelText instanceof Text) || !(messageText instanceof Text)) {
+      throw new Error("Expected inline skill and message text nodes");
+    }
+    const labelRange = document.createRange();
+    labelRange.selectNodeContents(labelText);
+    const messageRange = document.createRange();
+    messageRange.selectNodeContents(messageText);
+    return labelRange.getBoundingClientRect().top - messageRange.getBoundingClientRect().top;
+  });
+  expect(historicalInlineOffset).toBe(0);
 
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   await prompt.fill("");
@@ -987,9 +1003,37 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   await prompt.fill("说明 /security");
   await expect(commandMenu).toBeVisible();
   await prompt.press("Enter");
-  const selectedSkill = page.getByRole("button", { name: "移除 Skill Security review" });
-  await expect(selectedSkill).toContainText("$review-security");
-  await expect(prompt).toHaveValue("说明 ");
+  const selectedSkill = prompt.locator('[data-prompt-skill-id="skill-security"]');
+  await expect(selectedSkill).toContainText("Security review");
+  await expect(selectedSkill).toHaveAttribute("data-serialized-text", "$review-security");
+  await expect(prompt).toHaveAttribute("data-serialized-value", "说明 $review-security");
+  const editorBaselineOffset = await selectedSkill.evaluate((token) => {
+    const labelText = token.lastElementChild?.firstChild;
+    const adjacentText = token.previousSibling;
+    if (!(labelText instanceof Text) || !(adjacentText instanceof Text)) {
+      throw new Error("Expected adjacent editor text nodes");
+    }
+    const labelRange = document.createRange();
+    labelRange.selectNodeContents(labelText);
+    const textRange = document.createRange();
+    textRange.selectNodeContents(adjacentText);
+    return labelRange.getBoundingClientRect().top - textRange.getBoundingClientRect().top;
+  });
+  expect(editorBaselineOffset).toBe(0);
+  await page.keyboard.type(" /documentation");
+  await expect(commandMenu).toBeVisible();
+  await prompt.press("Enter");
+  const selectedDocumentationSkill = prompt.locator('[data-prompt-skill-id="skill-docs"]');
+  await expect(selectedDocumentationSkill).toContainText("Documentation writer");
+  await expect(prompt).toHaveAttribute(
+    "data-serialized-value",
+    "说明 $review-security $documentation-writer",
+  );
+  await prompt.press("Meta+a");
+  await prompt.press("Meta+c");
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe("说明 $review-security $documentation-writer");
   const skillColors = await selectedSkill.evaluate((element) => {
     const probe = document.createElement("span");
     probe.style.color = "var(--ui-color-skill)";
@@ -1004,6 +1048,11 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   expect(skillColors.selected).toBe(skillColors.expected);
   await selectedSkill.click();
   await expect(selectedSkill).toBeHidden();
+  await expect(selectedDocumentationSkill).toBeVisible();
+  await prompt.focus();
+  await prompt.press("End");
+  await prompt.press("Backspace");
+  await expect(selectedDocumentationSkill).toBeHidden();
 
   await prompt.fill("/压缩");
   await prompt.press("Enter");
@@ -1143,13 +1192,17 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   await prompt.fill("/security");
   await prompt.press("Enter");
-  await expect(page.getByRole("button", { name: "移除 Skill Security review" })).toBeVisible();
-  await prompt.fill("按截图完成改造");
+  await expect(prompt.locator('[data-prompt-skill-id="skill-security"]')).toBeVisible();
+  await page.keyboard.type(" /documentation");
+  await prompt.press("Enter");
+  await expect(prompt.locator('[data-prompt-skill-id="skill-docs"]')).toBeVisible();
+  await page.keyboard.type(" 按截图完成改造");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
 
-  await expect(prompt).toHaveValue("");
-  await expect(page.getByRole("button", { name: "移除 Skill Security review" })).toBeHidden();
+  await expect(prompt).toHaveAttribute("data-serialized-value", "");
+  await expect(prompt.locator("[data-prompt-skill-id]")).toHaveCount(0);
   await expect(page.getByText("screen.png", { exact: true })).toHaveCount(0);
+  await expect(page.locator('[data-message-skill="documentation-writer"]')).toBeVisible();
   expect(uploadBody).toMatchObject({
     dataUrl: expect.stringMatching(/^data:image\/png;base64,/),
     name: "screen.png",
@@ -1157,7 +1210,10 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   expect(turnBody).toEqual({
     input: {
       attachments: [{ id: "attachment-1" }],
-      skills: [{ id: "skill-security", name: "review-security" }],
+      skills: [
+        { id: "skill-security", name: "review-security" },
+        { id: "skill-docs", name: "documentation-writer" },
+      ],
       text: "按截图完成改造",
       type: "prompt",
     },
@@ -1262,14 +1318,20 @@ test("stores composer drafts independently between task routes", async ({ page }
   await page.getByRole("link", { name: /优化输入框交互/ }).click();
 
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/input-design$/);
-  await expect(page.getByRole("textbox", { name: "任务输入" })).toHaveValue("");
+  await expect(page.getByRole("textbox", { name: "任务输入" })).toHaveAttribute(
+    "data-serialized-value",
+    "",
+  );
   await expect(page.getByText("task-draft.png", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();
 
   await page.locator('a[href="/p/code-agent/t/task-1"]').first().click();
 
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
-  await expect(page.getByRole("textbox", { name: "任务输入" })).toHaveValue("只属于 Task A 的草稿");
+  await expect(page.getByRole("textbox", { name: "任务输入" })).toHaveAttribute(
+    "data-serialized-value",
+    "只属于 Task A 的草稿",
+  );
   await expect(page.getByText("task-draft.png", { exact: true })).toBeVisible();
 });
 
@@ -1303,8 +1365,8 @@ test("keeps the composer input mounted when switching task routes", async ({ pag
   await page.goto("/p/code-agent/t/task-1");
   const currentPrompt = page.getByRole("textbox", { name: "任务输入" });
   await currentPrompt.fill("只属于 Task A 的草稿");
-  await currentPrompt.evaluate((textarea) => {
-    Reflect.set(globalThis, "__testComposerTextarea", textarea);
+  await currentPrompt.evaluate((editor) => {
+    Reflect.set(globalThis, "__testComposerEditor", editor);
   });
 
   await page.getByRole("link", { name: /优化输入框交互/ }).click();
@@ -1312,26 +1374,24 @@ test("keeps the composer input mounted when switching task routes", async ({ pag
   await snapshotRequested;
 
   const nextPrompt = page.getByRole("textbox", { name: "任务输入" });
-  const inputStateWhileSnapshotLoads = await nextPrompt.evaluate((textarea) => {
-    if (!(textarea instanceof HTMLTextAreaElement)) {
-      throw new Error("任务输入不是 textarea");
+  const inputStateWhileSnapshotLoads = await nextPrompt.evaluate((editor) => {
+    if (!(editor instanceof HTMLDivElement) || editor.contentEditable !== "true") {
+      throw new Error("任务输入不是可编辑区域");
     }
-    const wasEmpty = textarea.value === "";
-    textarea.focus();
-    const acceptsFocus = !textarea.disabled && document.activeElement === textarea;
-    textarea.dispatchEvent(new CompositionEvent("compositionstart"));
-    textarea.value = "n";
-    textarea.dispatchEvent(new CompositionEvent("compositionupdate", { data: "n" }));
+    const wasEmpty = editor.textContent === "";
+    editor.focus();
+    const acceptsFocus = document.activeElement === editor;
+    editor.dispatchEvent(new CompositionEvent("compositionstart"));
+    editor.textContent = "n";
+    editor.dispatchEvent(new CompositionEvent("compositionupdate", { data: "n" }));
     return { acceptsFocus, wasEmpty };
   });
   releaseSnapshot();
   expect(inputStateWhileSnapshotLoads).toEqual({ acceptsFocus: true, wasEmpty: true });
-  await expect(nextPrompt).toHaveValue("n");
+  await expect(nextPrompt).toHaveText("n");
   await expect
     .poll(() =>
-      nextPrompt.evaluate(
-        (textarea) => Reflect.get(globalThis, "__testComposerTextarea") === textarea,
-      ),
+      nextPrompt.evaluate((editor) => Reflect.get(globalThis, "__testComposerEditor") === editor),
     )
     .toBe(true);
 });
@@ -2246,7 +2306,7 @@ test("preserves the prompt draft when submission fails", async ({ page }) => {
   await page.getByRole("button", { exact: true, name: "提交" }).click();
 
   await expect(page.getByRole("alert")).toHaveText("操作失败，请重试");
-  await expect(prompt).toHaveValue("失败后保留这段草稿");
+  await expect(prompt).toHaveAttribute("data-serialized-value", "失败后保留这段草稿");
   await expect(page.getByText("preserved.png", { exact: true })).toBeVisible();
 });
 
@@ -2531,7 +2591,7 @@ test("stores new-chat text and attachments independently between projects", asyn
 
   await expect(page).toHaveURL(/\/p\/superwork$/);
   await expect(projectSelect).toHaveValue("superwork");
-  await expect(prompt).toHaveValue("");
+  await expect(prompt).toHaveAttribute("data-serialized-value", "");
   await expect(page.getByText("draft.png", { exact: true })).toHaveCount(0);
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
   // 切换当前 Project 不覆盖用户保存的文件夹展开形态。
@@ -2544,7 +2604,7 @@ test("stores new-chat text and attachments independently between projects", asyn
   await projectSelect.selectOption("code-agent");
 
   await expect(page).toHaveURL(/\/p\/code-agent$/);
-  await expect(prompt).toHaveValue("保留这段新聊天草稿");
+  await expect(prompt).toHaveAttribute("data-serialized-value", "保留这段新聊天草稿");
   await expect(page.getByText("draft.png", { exact: true })).toBeVisible();
 });
 
@@ -2636,13 +2696,13 @@ test("preserves provisional IME text across composer rerenders", async ({ page }
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   await prompt.focus();
   await prompt.dispatchEvent("compositionstart");
-  await prompt.evaluate((textarea) => {
-    if (!(textarea instanceof HTMLTextAreaElement)) {
-      throw new Error("任务输入不是 textarea");
+  await prompt.evaluate((editor) => {
+    if (!(editor instanceof HTMLDivElement) || editor.contentEditable !== "true") {
+      throw new Error("任务输入不是可编辑区域");
     }
     // 中文输入法首键先写入组合缓冲，此时还不会触发 React onChange。
-    textarea.value = "n";
-    textarea.dispatchEvent(new CompositionEvent("compositionupdate", { data: "n" }));
+    editor.textContent = "n";
+    editor.dispatchEvent(new CompositionEvent("compositionupdate", { data: "n" }));
   });
 
   await page.getByRole("combobox", { name: "批准模式" }).evaluate((select) => {
@@ -2653,7 +2713,7 @@ test("preserves provisional IME text across composer rerenders", async ({ page }
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
 
-  await expect(prompt).toHaveValue("n");
+  await expect(prompt).toHaveText("n");
 });
 
 test("uses material hierarchy instead of strong workbench borders", async ({ page }) => {

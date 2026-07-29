@@ -55,12 +55,19 @@ import {
   PromptInputHeader,
   PromptInputSelect,
   PromptInputSubmit,
-  PromptInputTextarea,
   PromptInputTools,
   usePromptInputAttachments,
   type PromptInputAttachment,
   type PromptInputMessage,
 } from "../../../shared/ai-elements/prompt-input.js";
+import {
+  insertPromptSkill,
+  isPromptSkillContentEmpty,
+  PromptSkillEditor,
+  toPromptSkillSubmission,
+  type PromptSkillContent,
+  type PromptSkillEditorHandle,
+} from "./prompt-skill-editor.js";
 import {
   filterPromptCommandItems,
   filterPromptSkills,
@@ -373,32 +380,22 @@ export function WorkbenchComposer({
   const [commandNotice, setCommandNotice] = useState<string>();
   const [commandQuery, setCommandQuery] = useState("");
   const [commandSlashCommand, setCommandSlashCommand] = useState<PromptSlashCommand>();
-  const [composerRevision, setComposerRevision] = useState(0);
-  const [draft, setDraft] = useState(initialComposerDraft.text);
+  const [promptContent, setPromptContent] = useState<PromptSkillContent>(
+    initialComposerDraft.content,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mutationError, setMutationError] = useState<Error | null>(null);
   const [pendingTaskState, setPendingTaskState] = useState<{
     scope: string;
     task: AgentTask;
   }>();
-  const [selectedSkillState, setSelectedSkillState] = useState<
-    | {
-        scope: string;
-        skill: AgentSkill;
-      }
-    | undefined
-  >(
-    initialComposerDraft.selectedSkill === undefined
-      ? undefined
-      : { scope: routeScope, skill: initialComposerDraft.selectedSkill },
-  );
   const [submittedTurnState, setSubmittedTurnState] = useState<{
     scope: string;
     turnId: string;
   }>();
   const commandMenuId = useId();
   const commandSurfaceRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const skillEditorRef = useRef<PromptSkillEditorHandle>(null);
   const routeScopeRef = useRef(routeScope);
   const previousRouteScopeRef = useRef(routeScope);
   const previousComposerScopeRef = useRef(composerScope);
@@ -425,7 +422,7 @@ export function WorkbenchComposer({
     isSubmitting,
     mutationFailed: mutationError !== null || runtime?.error !== null,
   });
-  const trimmedDraft = draft.trim();
+  const promptSubmission = toPromptSkillSubmission(promptContent);
   const activeSettings =
     settingsOverride?.scope === routeScope ? settingsOverride.settings : settings;
   const selectedModel =
@@ -437,8 +434,6 @@ export function WorkbenchComposer({
     activeSettings.reasoningEffort,
   );
   const contextUsage = runtime?.snapshot?.contextUsage;
-  const selectedSkill =
-    selectedSkillState?.scope === routeScope ? selectedSkillState.skill : undefined;
   const attachmentCount = attachments.length;
   const { attachmentsDisabled, draftInputDisabled, turnControlsDisabled } =
     deriveComposerInputAvailability(state);
@@ -467,28 +462,17 @@ export function WorkbenchComposer({
     setCommandQuery("");
     setCommandSlashCommand(undefined);
   }, []);
-  const replaceDraft = useCallback(
-    (nextDraft: string) => {
-      setDraft(nextDraft);
-      composerDraftStore.update(composerScope, (current) => ({ ...current, text: nextDraft }));
-      const textarea = textareaRef.current;
-      if (textarea !== null && textarea.value !== nextDraft) {
-        // 输入值由浏览器持有以保护 IME 组合缓冲；命令操作仍需同步修改真实文本框。
-        textarea.value = nextDraft;
-      }
-    },
-    [composerDraftStore, composerScope],
-  );
-
-  const replaceSelectedSkill = useCallback(
-    (skill: AgentSkill | undefined) => {
-      setSelectedSkillState(skill === undefined ? undefined : { scope: routeScope, skill });
+  const replacePromptContent = useCallback(
+    (nextContent: PromptSkillContent, cursorOffset?: number) => {
+      setPromptContent(nextContent);
       composerDraftStore.update(composerScope, (current) => ({
         ...current,
-        selectedSkill: skill,
+        content: nextContent,
       }));
+      // 程序化命令直接同步编辑 DOM，避免受控回写破坏 IME 组合缓冲。
+      skillEditorRef.current?.replace(nextContent, cursorOffset);
     },
-    [composerDraftStore, composerScope, routeScope],
+    [composerDraftStore, composerScope],
   );
 
   const replaceCommandDraftMode = useCallback(
@@ -504,14 +488,10 @@ export function WorkbenchComposer({
 
   const clearComposerDraft = useCallback(() => {
     composerDraftStore.clear(composerScope);
-    setDraft("");
+    setPromptContent([]);
     setAttachments([]);
-    setSelectedSkillState(undefined);
     setCommandDraftMode(null);
-    const textarea = textareaRef.current;
-    if (textarea !== null) {
-      textarea.value = "";
-    }
+    skillEditorRef.current?.replace([]);
   }, [composerDraftStore, composerScope]);
 
   useLayoutEffect(() => {
@@ -522,19 +502,11 @@ export function WorkbenchComposer({
     if (previousComposerScopeRef.current !== composerScope) {
       previousComposerScopeRef.current = composerScope;
       const restoredDraft = composerDraftStore.read(composerScope);
-      // 切换聊天时恢复对应草稿，同时保留 textarea 节点和焦点，避免重建原生 IME 会话。
-      setDraft(restoredDraft.text);
+      // 切换聊天时恢复对应草稿，同时保留编辑节点和焦点，避免重建原生 IME 会话。
+      setPromptContent(restoredDraft.content);
       setAttachments(restoredDraft.attachments);
       setCommandDraftMode(restoredDraft.commandDraftMode);
-      setSelectedSkillState(
-        restoredDraft.selectedSkill === undefined
-          ? undefined
-          : { scope: routeScope, skill: restoredDraft.selectedSkill },
-      );
-      const textarea = textareaRef.current;
-      if (textarea !== null && textarea.value !== restoredDraft.text) {
-        textarea.value = restoredDraft.text;
-      }
+      skillEditorRef.current?.replace(restoredDraft.content);
       setSettingsOverride(undefined);
       setActiveCommandIndex(0);
       setCommandMenuOpen(false);
@@ -598,25 +570,24 @@ export function WorkbenchComposer({
     };
   }, [closeCommandMenu, commandMenuOpen]);
 
-  const focusTextarea = (cursorPosition?: number) => {
+  const focusEditor = (cursorPosition?: number) => {
     requestAnimationFrame(() => {
-      const textarea = textareaRef.current;
-      textarea?.focus();
-      if (textarea !== null && cursorPosition !== undefined) {
-        textarea.setSelectionRange(cursorPosition, cursorPosition);
-      }
+      skillEditorRef.current?.focus(cursorPosition);
     });
   };
 
   const submitPrompt = async (
     message: PromptInputMessage,
-    promptSkill: AgentSkill | null = selectedSkill ?? null,
+    promptSkills?: readonly AgentSkill[],
   ) => {
     const requestScope = routeScope;
     const text = message.text.trim();
+    const skills =
+      promptSkills ??
+      toPromptSkillSubmission(skillEditorRef.current?.getContent() ?? promptContent).skills;
     if (
       !canSubmit ||
-      (text === "" && message.files.length === 0 && promptSkill === null) ||
+      (text === "" && message.files.length === 0 && skills.length === 0) ||
       selectedModel === undefined ||
       selectedReasoningEffort === undefined ||
       turnControlsDisabled ||
@@ -650,7 +621,7 @@ export function WorkbenchComposer({
       );
       input = {
         attachments,
-        skills: promptSkill === null ? [] : [{ id: promptSkill.id, name: promptSkill.name }],
+        skills: skills.map((skill) => ({ id: skill.id, name: skill.name })),
         text,
         type: "prompt",
       };
@@ -697,7 +668,6 @@ export function WorkbenchComposer({
       });
       if (routeScopeRef.current === requestScope) {
         clearComposerDraft();
-        setComposerRevision((revision) => revision + 1);
         setSubmittedTurnState({ scope: requestScope, turnId: result.turn.id });
       }
       // Mutation 返回后立即上报本次提交，Timeline 不等待 Provider Snapshot 落盘。
@@ -742,11 +712,9 @@ export function WorkbenchComposer({
     setCommandQuery("");
     setCommandSlashCommand(undefined);
     setCommandNotice(undefined);
-    replaceSelectedSkill(undefined);
-    replaceDraft("");
+    replacePromptContent([]);
     handleAttachmentsChange([]);
-    setComposerRevision((revision) => revision + 1);
-    focusTextarea();
+    focusEditor();
   };
 
   const submitFeedback = async (reason: string) => {
@@ -776,7 +744,7 @@ export function WorkbenchComposer({
         commandAttempts.current.delete("feedback");
         replaceCommandDraftMode(null);
         setCommandNotice("反馈已发送");
-        replaceDraft("");
+        replacePromptContent([]);
       }
     } catch (error) {
       if (routeScopeRef.current === requestScope) {
@@ -798,8 +766,7 @@ export function WorkbenchComposer({
     setCommandQuery("");
     setCommandSlashCommand(undefined);
     setCommandNotice(undefined);
-    replaceDraft("");
-    replaceSelectedSkill(undefined);
+    replacePromptContent([]);
 
     if (command.action === "feedback" || command.action === "subtask") {
       beginCommandDraft(command.action);
@@ -811,7 +778,7 @@ export function WorkbenchComposer({
           files: [],
           text: "请检查当前项目，并在项目根目录创建或完善 AGENTS.md，写入适用于 Codex 的项目说明、常用命令和验证要求。",
         },
-        null,
+        [],
       );
       return;
     }
@@ -866,17 +833,18 @@ export function WorkbenchComposer({
   const selectSkill = (skill: AgentSkill) => {
     // Skill 选择只保存不透明引用；原生路径由 Provider 在提交边界解析。
     const slashCommand = commandSlashCommand;
-    const nextDraft =
-      slashCommand === undefined
-        ? draft
-        : `${draft.slice(0, slashCommand.start)}${draft.slice(slashCommand.end)}`;
-    replaceSelectedSkill(skill);
+    if (slashCommand === undefined) {
+      return;
+    }
+    const currentContent = skillEditorRef.current?.getContent() ?? promptContent;
+    const nextContent = insertPromptSkill(currentContent, slashCommand, skill);
+    const cursorPosition = slashCommand.start + `$${skill.name}`.length;
+    replacePromptContent(nextContent, cursorPosition);
     setCommandMenuOpen(false);
     setCommandQuery("");
     setCommandSlashCommand(undefined);
     setCommandNotice(undefined);
-    replaceDraft(nextDraft);
-    focusTextarea(slashCommand?.start);
+    focusEditor(cursorPosition);
   };
 
   const selectActiveCommandItem = () => {
@@ -999,7 +967,6 @@ export function WorkbenchComposer({
           data-state={state}
           disabled={attachmentsDisabled}
           globalDrop
-          key={composerRevision}
           maxFiles={4}
           maxFileSize={2 * 1024 * 1024}
           multiple
@@ -1029,8 +996,8 @@ export function WorkbenchComposer({
                 className="max-w-full border border-separator-strong bg-control text-foreground"
                 onClick={() => {
                   replaceCommandDraftMode(null);
-                  replaceDraft("");
-                  focusTextarea();
+                  replacePromptContent([]);
+                  focusEditor();
                 }}
               >
                 {commandDraftMode === "feedback" ? (
@@ -1043,47 +1010,28 @@ export function WorkbenchComposer({
               </PromptInputButton>
             </PromptInputHeader>
           )}
-          {selectedSkill === undefined || commandDraftMode !== null ? null : (
-            <PromptInputHeader className="flex items-center">
-              <button
-                aria-label={`移除 Skill ${selectedSkill.displayName}`}
-                className="inline-flex max-w-full items-center gap-1 rounded-control bg-control px-2 py-1 text-label font-medium text-skill transition-colors hover:bg-control-hover"
-                onClick={() => {
-                  replaceSelectedSkill(undefined);
-                  focusTextarea();
-                }}
-                type="button"
-              >
-                <Sparkles aria-hidden="true" className="size-3.5 shrink-0" />
-                <span className="truncate">${selectedSkill.name}</span>
-                <X aria-hidden="true" className="size-3 shrink-0" />
-              </button>
-            </PromptInputHeader>
-          )}
           <ComposerAttachments />
           <PromptInputBody>
-            <PromptInputTextarea
+            <input name="message" type="hidden" value={promptSubmission.text} />
+            <PromptSkillEditor
               aria-activedescendant={activeCommandItemId}
               aria-controls={commandMenuOpen ? commandMenuId : undefined}
               aria-expanded={commandMenuOpen}
               aria-haspopup="listbox"
               aria-label="任务输入"
+              content={promptContent}
               disabled={draftInputDisabled}
-              onChange={(event) => {
-                const nextDraft = event.currentTarget.value;
-                setDraft(nextDraft);
+              onChange={(nextContent, serializedText, cursorOffset) => {
+                setPromptContent(nextContent);
                 composerDraftStore.update(composerScope, (current) => ({
                   ...current,
-                  text: nextDraft,
+                  content: nextContent,
                 }));
                 setCommandNotice(undefined);
                 if (commandDraftMode !== null) {
                   return;
                 }
-                const slashCommand = resolvePromptSlashCommand(
-                  nextDraft,
-                  event.currentTarget.selectionStart,
-                );
+                const slashCommand = resolvePromptSlashCommand(serializedText, cursorOffset);
                 if (slashCommand === null) {
                   setCommandMenuOpen(false);
                   setCommandQuery("");
@@ -1097,16 +1045,6 @@ export function WorkbenchComposer({
                 setCommandSlashCommand(slashCommand);
               }}
               onKeyDown={(event) => {
-                if (
-                  event.key === "Backspace" &&
-                  draft === "" &&
-                  selectedSkill !== undefined &&
-                  !event.nativeEvent.isComposing
-                ) {
-                  event.preventDefault();
-                  replaceSelectedSkill(undefined);
-                  return;
-                }
                 if (!commandMenuOpen || event.nativeEvent.isComposing) {
                   return;
                 }
@@ -1135,8 +1073,8 @@ export function WorkbenchComposer({
                       ? "描述一个新任务"
                       : "继续这个任务"
               }
-              ref={textareaRef}
-              defaultValue={draft}
+              ref={skillEditorRef}
+              scope={composerScope}
             />
             {mutationError === null ? null : (
               <p className="px-1 pb-1 text-label text-danger" role="alert">
@@ -1253,9 +1191,7 @@ export function WorkbenchComposer({
                     (!canSubmit ||
                       selectedModel === undefined ||
                       selectedReasoningEffort === undefined ||
-                      (trimmedDraft === "" &&
-                        attachmentCount === 0 &&
-                        selectedSkill === undefined))) ||
+                      (isPromptSkillContentEmpty(promptContent) && attachmentCount === 0))) ||
                   (state === "running" && (!canInterrupt || activeTurnId === undefined))
                 }
                 onClick={state === "running" ? () => void interruptTurn() : undefined}

@@ -1,4 +1,3 @@
-import type { AgentSkill } from "@code-agent/protocol";
 import {
   createContext,
   useCallback,
@@ -10,21 +9,20 @@ import {
 } from "react";
 
 import type { PromptInputAttachment } from "../../shared/ai-elements/prompt-input.js";
+import type { PromptSkillContent } from "./components/prompt-skill-editor.js";
 
 export type ComposerCommandDraftMode = "feedback" | "subtask";
 
 export type ComposerDraft = Readonly<{
   attachments: readonly PromptInputAttachment[];
   commandDraftMode: ComposerCommandDraftMode | null;
-  selectedSkill: AgentSkill | undefined;
-  text: string;
+  content: PromptSkillContent;
 }>;
 
 const emptyComposerDraft: ComposerDraft = {
   attachments: [],
   commandDraftMode: null,
-  selectedSkill: undefined,
-  text: "",
+  content: [],
 };
 
 type ComposerDraftStore = Readonly<{
@@ -41,10 +39,7 @@ export function createComposerDraftScope(projectId: string, taskId?: string): st
 
 function isEmptyComposerDraft(draft: ComposerDraft): boolean {
   return (
-    draft.text === "" &&
-    draft.attachments.length === 0 &&
-    draft.selectedSkill === undefined &&
-    draft.commandDraftMode === null
+    draft.content.length === 0 && draft.attachments.length === 0 && draft.commandDraftMode === null
   );
 }
 
