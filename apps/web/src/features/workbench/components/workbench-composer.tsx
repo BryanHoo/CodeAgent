@@ -24,7 +24,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
@@ -149,12 +149,15 @@ export function deriveComposerState(
   return input.mutationFailed === true ? "failed" : "idle";
 }
 
-export function deriveComposerInputAvailability(
-  state: ComposerState,
-): Readonly<{ attachmentsDisabled: boolean; turnControlsDisabled: boolean }> {
+export function deriveComposerInputAvailability(state: ComposerState): Readonly<{
+  attachmentsDisabled: boolean;
+  draftInputDisabled: boolean;
+  turnControlsDisabled: boolean;
+}> {
   return {
-    // 附件选择是本地操作，实时连接恢复期间仍允许选择、粘贴和拖放文件。
+    // 草稿与附件都是本地输入，实时连接恢复期间不能禁用，否则浏览器会终止原生 IME 上下文。
     attachmentsDisabled: state === "submitting",
+    draftInputDisabled: state === "submitting",
     turnControlsDisabled: state === "reconnecting" || state === "submitting",
   };
 }
@@ -329,8 +332,10 @@ export function WorkbenchComposer({
   skills,
   taskId,
 }: WorkbenchComposerProps) {
+  const routeScope = `${projectId}:${taskId ?? "draft"}`;
+  const composerScope = taskId === undefined ? "draft" : routeScope;
   const [settingsOverride, setSettingsOverride] = useState<{
-    projectId: string;
+    scope: string;
     settings: AgentTaskSettings;
   }>();
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
@@ -344,21 +349,34 @@ export function WorkbenchComposer({
   const [draft, setDraft] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mutationError, setMutationError] = useState<Error | null>(null);
-  const [pendingTask, setPendingTask] = useState<AgentTask>();
+  const [pendingTaskState, setPendingTaskState] = useState<{
+    scope: string;
+    task: AgentTask;
+  }>();
   const [selectedSkillState, setSelectedSkillState] = useState<{
-    projectId: string;
+    scope: string;
     skill: AgentSkill;
   }>();
-  const [submittedTurnId, setSubmittedTurnId] = useState<string>();
+  const [submittedTurnState, setSubmittedTurnState] = useState<{
+    scope: string;
+    turnId: string;
+  }>();
   const commandMenuId = useId();
   const commandSurfaceRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const routeScopeRef = useRef(routeScope);
+  const previousRouteScopeRef = useRef(routeScope);
+  const previousComposerScopeRef = useRef(composerScope);
+  routeScopeRef.current = routeScope;
   const startTaskAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const startTurnAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const interruptAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const uploadedAttachments = useRef(new Map<string, AgentAttachment>());
   const uploadAttempts = useRef(new Map<string, string>());
   const commandAttempts = useRef(new Map<PromptCommandAction, IdempotencyAttempt>());
+  const submittedTurnId =
+    submittedTurnState?.scope === routeScope ? submittedTurnState.turnId : undefined;
+  const pendingTask = pendingTaskState?.scope === routeScope ? pendingTaskState.task : undefined;
   const activeTurnId = resolveActiveTurnId(runtime?.snapshot, submittedTurnId);
   const activeTaskId = taskId ?? pendingTask?.id;
   const { canInterrupt, canSubmit } = deriveComposerActions(
@@ -374,7 +392,7 @@ export function WorkbenchComposer({
   });
   const trimmedDraft = draft.trim();
   const activeSettings =
-    settingsOverride?.projectId === projectId ? settingsOverride.settings : settings;
+    settingsOverride?.scope === routeScope ? settingsOverride.settings : settings;
   const selectedModel =
     models.find((model) => model.id === activeSettings.model) ??
     models.find((model) => model.isDefault) ??
@@ -385,8 +403,9 @@ export function WorkbenchComposer({
   );
   const contextUsage = runtime?.snapshot?.contextUsage;
   const selectedSkill =
-    selectedSkillState?.projectId === projectId ? selectedSkillState.skill : undefined;
-  const { attachmentsDisabled, turnControlsDisabled } = deriveComposerInputAvailability(state);
+    selectedSkillState?.scope === routeScope ? selectedSkillState.skill : undefined;
+  const { attachmentsDisabled, draftInputDisabled, turnControlsDisabled } =
+    deriveComposerInputAvailability(state);
   const filteredSkills = filterPromptSkills(
     capabilities?.skills.use === true ? skills : [],
     commandQuery,
@@ -414,12 +433,47 @@ export function WorkbenchComposer({
     }
   }, []);
 
+  useLayoutEffect(() => {
+    if (previousRouteScopeRef.current === routeScope) {
+      return;
+    }
+    previousRouteScopeRef.current = routeScope;
+    if (previousComposerScopeRef.current !== composerScope) {
+      previousComposerScopeRef.current = composerScope;
+      // 已有 Task 切换时清理输入状态，但保留 textarea 节点和焦点，避免重建原生 IME 会话。
+      replaceDraft("");
+      setSettingsOverride(undefined);
+      setActiveCommandIndex(0);
+      setAttachmentCount(0);
+      setCommandDraftMode(null);
+      setCommandMenuOpen(false);
+      setCommandNotice(undefined);
+      setCommandQuery("");
+      setCommandSlashCommand(undefined);
+      setPendingTaskState(undefined);
+      setSelectedSkillState(undefined);
+      setSubmittedTurnState(undefined);
+    }
+    // 新聊天切换 Project 时保留草稿和附件，只隔离路由相关的请求结果。
+    setIsSubmitting(false);
+    setMutationError(null);
+    startTaskAttempt.current = undefined;
+    startTurnAttempt.current = undefined;
+    interruptAttempt.current = undefined;
+    uploadedAttachments.current.clear();
+    uploadAttempts.current.clear();
+    commandAttempts.current.clear();
+  }, [composerScope, replaceDraft, routeScope]);
+
   const updateSettings = (nextSettings: AgentTaskSettings, field: keyof AgentTaskSettings) => {
-    setSettingsOverride({ projectId, settings: nextSettings });
+    const requestScope = routeScope;
+    setSettingsOverride({ scope: requestScope, settings: nextSettings });
     setMutationError(null);
     // 设置写回由用户事件直接触发，避免 effect 重放或并发渲染造成重复请求。
     void Promise.resolve(onSettingsChange(nextSettings, field)).catch((error: unknown) => {
-      setMutationError(error instanceof Error ? error : new Error("Settings update failed"));
+      if (routeScopeRef.current === requestScope) {
+        setMutationError(error instanceof Error ? error : new Error("Settings update failed"));
+      }
     });
   };
 
@@ -468,6 +522,7 @@ export function WorkbenchComposer({
     message: PromptInputMessage,
     promptSkill: AgentSkill | null = selectedSkill ?? null,
   ) => {
+    const requestScope = routeScope;
     const text = message.text.trim();
     if (
       !canSubmit ||
@@ -497,7 +552,9 @@ export function WorkbenchComposer({
             { dataUrl: await readFileAsDataUrl(attachment.file), name: attachment.name },
             { idempotencyKey },
           );
-          uploadedAttachments.current.set(attachment.id, response.attachment);
+          if (routeScopeRef.current === requestScope) {
+            uploadedAttachments.current.set(attachment.id, response.attachment);
+          }
           return { id: response.attachment.id };
         }),
       );
@@ -508,8 +565,10 @@ export function WorkbenchComposer({
         type: "prompt",
       };
     } catch (error) {
-      setMutationError(error instanceof Error ? error : new Error("附件上传失败"));
-      setIsSubmitting(false);
+      if (routeScopeRef.current === requestScope) {
+        setMutationError(error instanceof Error ? error : new Error("附件上传失败"));
+        setIsSubmitting(false);
+      }
       return;
     }
 
@@ -538,24 +597,30 @@ export function WorkbenchComposer({
         input,
         onTaskCreated(task) {
           // Turn 启动失败时保留已创建 Task，重试不能重复创建。
-          setPendingTask(task);
-          startTaskAttempt.current = undefined;
+          if (routeScopeRef.current === requestScope) {
+            setPendingTaskState({ scope: requestScope, task });
+            startTaskAttempt.current = undefined;
+          }
         },
         projectId,
         ...(activeTaskId === undefined ? {} : { taskId: activeTaskId }),
         turnOptions,
       });
-      replaceDraft("");
-      setSelectedSkillState(undefined);
-      setCommandDraftMode(null);
-      setAttachmentCount(0);
-      setComposerRevision((revision) => revision + 1);
-      setSubmittedTurnId(result.turn.id);
+      if (routeScopeRef.current === requestScope) {
+        replaceDraft("");
+        setSelectedSkillState(undefined);
+        setCommandDraftMode(null);
+        setAttachmentCount(0);
+        setComposerRevision((revision) => revision + 1);
+        setSubmittedTurnState({ scope: requestScope, turnId: result.turn.id });
+      }
       // Mutation 返回后立即上报本次提交，Timeline 不等待 Provider Snapshot 落盘。
       onTurnStarted?.(result.turn, input);
-      startTurnAttempt.current = undefined;
-      uploadedAttachments.current.clear();
-      uploadAttempts.current.clear();
+      if (routeScopeRef.current === requestScope) {
+        startTurnAttempt.current = undefined;
+        uploadedAttachments.current.clear();
+        uploadAttempts.current.clear();
+      }
       if (taskId === undefined) {
         const startedTask = result.createdTask ?? pendingTask;
         if (startedTask !== undefined) {
@@ -563,9 +628,13 @@ export function WorkbenchComposer({
         }
       }
     } catch (error) {
-      setMutationError(error instanceof Error ? error : new Error("Prompt submission failed"));
+      if (routeScopeRef.current === requestScope) {
+        setMutationError(error instanceof Error ? error : new Error("Prompt submission failed"));
+      }
     } finally {
-      setIsSubmitting(false);
+      if (routeScopeRef.current === requestScope) {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -595,6 +664,7 @@ export function WorkbenchComposer({
   };
 
   const submitFeedback = async (reason: string) => {
+    const requestScope = routeScope;
     const normalizedReason = reason.trim();
     if (
       activeTaskId === undefined ||
@@ -616,18 +686,25 @@ export function WorkbenchComposer({
       await client.uploadFeedback(projectId, activeTaskId, input, {
         idempotencyKey: attempt.key,
       });
-      commandAttempts.current.delete("feedback");
-      setCommandDraftMode(null);
-      setCommandNotice("反馈已发送");
-      replaceDraft("");
+      if (routeScopeRef.current === requestScope) {
+        commandAttempts.current.delete("feedback");
+        setCommandDraftMode(null);
+        setCommandNotice("反馈已发送");
+        replaceDraft("");
+      }
     } catch (error) {
-      setMutationError(error instanceof Error ? error : new Error("Feedback submission failed"));
+      if (routeScopeRef.current === requestScope) {
+        setMutationError(error instanceof Error ? error : new Error("Feedback submission failed"));
+      }
     } finally {
-      setIsSubmitting(false);
+      if (routeScopeRef.current === requestScope) {
+        setIsSubmitting(false);
+      }
     }
   };
 
   const executePromptCommand = async (command: PromptCommandItem) => {
+    const requestScope = routeScope;
     if (!getCommandAvailability(command).available) {
       return;
     }
@@ -671,22 +748,32 @@ export function WorkbenchComposer({
           { target: { type: "uncommitted_changes" } },
           { idempotencyKey: attempt.key },
         );
-        setSubmittedTurnId(response.turn.id);
-        setCommandNotice("代码审查已开始");
+        if (routeScopeRef.current === requestScope) {
+          setSubmittedTurnState({ scope: requestScope, turnId: response.turn.id });
+          setCommandNotice("代码审查已开始");
+        }
       } else if (command.action === "compact") {
         await client.compactTask(projectId, activeTaskId, { idempotencyKey: attempt.key });
-        setCommandNotice("正在压缩上下文");
+        if (routeScopeRef.current === requestScope) {
+          setCommandNotice("正在压缩上下文");
+        }
       } else {
         const response = await client.forkTask(projectId, activeTaskId, {
           idempotencyKey: attempt.key,
         });
         onTaskStarted(response.task);
       }
-      commandAttempts.current.delete(command.action);
+      if (routeScopeRef.current === requestScope) {
+        commandAttempts.current.delete(command.action);
+      }
     } catch (error) {
-      setMutationError(error instanceof Error ? error : new Error("Task command failed"));
+      if (routeScopeRef.current === requestScope) {
+        setMutationError(error instanceof Error ? error : new Error("Task command failed"));
+      }
     } finally {
-      setIsSubmitting(false);
+      if (routeScopeRef.current === requestScope) {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -697,7 +784,7 @@ export function WorkbenchComposer({
       slashCommand === undefined
         ? draft
         : `${draft.slice(0, slashCommand.start)}${draft.slice(slashCommand.end)}`;
-    setSelectedSkillState({ projectId, skill });
+    setSelectedSkillState({ scope: routeScope, skill });
     setCommandMenuOpen(false);
     setCommandQuery("");
     setCommandSlashCommand(undefined);
@@ -719,6 +806,7 @@ export function WorkbenchComposer({
   };
 
   const interruptTurn = async () => {
+    const requestScope = routeScope;
     if (
       !canInterrupt ||
       activeTaskId === undefined ||
@@ -738,9 +826,13 @@ export function WorkbenchComposer({
       // `202` 仅确认请求已接收；同一 Turn 到达终态前继续复用当前 Key。
       await interruptPromptTurn(client, projectId, activeTaskId, activeTurnId, attempt.key);
     } catch (error) {
-      setMutationError(error instanceof Error ? error : new Error("Turn interruption failed"));
+      if (routeScopeRef.current === requestScope) {
+        setMutationError(error instanceof Error ? error : new Error("Turn interruption failed"));
+      }
     } finally {
-      setIsSubmitting(false);
+      if (routeScopeRef.current === requestScope) {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -842,6 +934,7 @@ export function WorkbenchComposer({
             }
             void submitPrompt(message);
           }}
+          resetKey={composerScope}
         >
           {commandDraftMode === null ? null : (
             <PromptInputHeader className="flex items-center">
@@ -889,7 +982,7 @@ export function WorkbenchComposer({
               aria-expanded={commandMenuOpen}
               aria-haspopup="listbox"
               aria-label="任务输入"
-              disabled={turnControlsDisabled}
+              disabled={draftInputDisabled}
               onChange={(event) => {
                 const nextDraft = event.currentTarget.value;
                 setDraft(nextDraft);

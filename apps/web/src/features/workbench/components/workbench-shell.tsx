@@ -460,7 +460,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             modelsError={modelsQuery.error}
             modelsPending={modelsQuery.isPending}
             onTaskStarted={handleTaskStarted}
-            key={`${projectId}:${taskId}`}
             projectId={projectId}
             projectPath={projectPath}
             runtime={runtime}
@@ -587,9 +586,13 @@ function ActiveTaskWorkbench({
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
 }>) {
   const queryClient = useQueryClient();
-  const [submittedPrompt, setSubmittedPrompt] = useState<SubmittedPromptState | undefined>(
-    () => startingPrompt,
-  );
+  const taskScope = `${projectId}:${taskId}`;
+  const [submittedPromptState, setSubmittedPromptState] = useState<{
+    prompt: SubmittedPromptState | undefined;
+    taskScope: string;
+  }>(() => ({ prompt: startingPrompt, taskScope }));
+  const submittedPrompt =
+    submittedPromptState.taskScope === taskScope ? submittedPromptState.prompt : startingPrompt;
   const visibleSnapshot =
     runtime.snapshot === undefined || submittedPrompt === undefined
       ? runtime.snapshot
@@ -664,6 +667,7 @@ function ActiveTaskWorkbench({
         onResolvePendingRequest={resolvePendingRequest}
         onRollbackTurn={rollbackTurn}
         projectId={projectId}
+        key={taskScope}
         runtime={visibleRuntime}
         taskId={taskId}
         {...(startingSnapshot === undefined ? {} : { startingSnapshot })}
@@ -679,7 +683,7 @@ function ActiveTaskWorkbench({
         }
         onTaskStarted={onTaskStarted}
         onTurnStarted={(turn, input) => {
-          setSubmittedPrompt({ input, turn });
+          setSubmittedPromptState({ prompt: { input, turn }, taskScope });
         }}
         projectId={projectId}
         projectPath={projectPath}

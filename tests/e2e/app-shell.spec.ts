@@ -1250,6 +1250,69 @@ test("isolates composer state between task routes", async ({ page }) => {
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();
 });
 
+test("keeps the composer input mounted when switching task routes", async ({ page }) => {
+  let markSnapshotRequested: () => void = () => undefined;
+  const snapshotRequested = new Promise<void>((resolve) => {
+    markSnapshotRequested = resolve;
+  });
+  let releaseSnapshot: () => void = () => undefined;
+  const snapshotGate = new Promise<void>((resolve) => {
+    releaseSnapshot = resolve;
+  });
+  await page.route("**/v1/projects/code-agent/tasks/input-design", async (route) => {
+    markSnapshotRequested();
+    await snapshotGate;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        checkpoint: { sequence: 0, sessionId: "e2e-session" },
+        snapshot: {
+          ...tasks[1],
+          contextUsage: null,
+          pendingRequests: [],
+          settings: taskSnapshot.settings,
+          status: "idle",
+          turns: [],
+        },
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+  const currentPrompt = page.getByRole("textbox", { name: "任务输入" });
+  await currentPrompt.fill("只属于 Task A 的草稿");
+  await currentPrompt.evaluate((textarea) => {
+    Reflect.set(globalThis, "__testComposerTextarea", textarea);
+  });
+
+  await page.getByRole("link", { name: /优化输入框交互/ }).click();
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/input-design$/);
+  await snapshotRequested;
+
+  const nextPrompt = page.getByRole("textbox", { name: "任务输入" });
+  const inputStateWhileSnapshotLoads = await nextPrompt.evaluate((textarea) => {
+    if (!(textarea instanceof HTMLTextAreaElement)) {
+      throw new Error("任务输入不是 textarea");
+    }
+    const wasEmpty = textarea.value === "";
+    textarea.focus();
+    const acceptsFocus = !textarea.disabled && document.activeElement === textarea;
+    textarea.dispatchEvent(new CompositionEvent("compositionstart"));
+    textarea.value = "n";
+    textarea.dispatchEvent(new CompositionEvent("compositionupdate", { data: "n" }));
+    return { acceptsFocus, wasEmpty };
+  });
+  releaseSnapshot();
+  expect(inputStateWhileSnapshotLoads).toEqual({ acceptsFocus: true, wasEmpty: true });
+  await expect(nextPrompt).toHaveValue("n");
+  await expect
+    .poll(() =>
+      nextPrompt.evaluate(
+        (textarea) => Reflect.get(globalThis, "__testComposerTextarea") === textarea,
+      ),
+    )
+    .toBe(true);
+});
+
 test("shows a task error when the initial snapshot request fails", async ({ page }) => {
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     await route.fulfill({

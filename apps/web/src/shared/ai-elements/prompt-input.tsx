@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -62,6 +63,7 @@ type PromptInputProps = Omit<FormHTMLAttributes<HTMLFormElement>, "onError" | "o
   onAttachmentsChange?: (files: readonly PromptInputAttachment[]) => void;
   onError?: (error: PromptInputError) => void;
   onSubmit?: (message: PromptInputMessage, event: SubmitEvent<HTMLFormElement>) => void;
+  resetKey?: string;
 };
 
 function acceptsFile(file: File, accept: string | undefined): boolean {
@@ -93,11 +95,13 @@ export function PromptInput({
   onError,
   onPaste,
   onSubmit,
+  resetKey,
   ...props
 }: PromptInputProps) {
   const [files, setFiles] = useState<PromptInputAttachment[]>([]);
   const filesRef = useRef(files);
   const inputRef = useRef<HTMLInputElement>(null);
+  const previousResetKeyRef = useRef(resetKey);
   filesRef.current = files;
 
   const addFiles = useCallback(
@@ -152,6 +156,15 @@ export function PromptInput({
       inputRef.current.value = "";
     }
   }, []);
+
+  useLayoutEffect(() => {
+    if (previousResetKeyRef.current === resetKey) {
+      return;
+    }
+    previousResetKeyRef.current = resetKey;
+    // 外层业务作用域变化时清空附件，但保留表单和 textarea DOM，避免中断原生输入法上下文。
+    clear();
+  }, [clear, resetKey]);
 
   const remove = useCallback((id: string) => {
     setFiles((current) => {

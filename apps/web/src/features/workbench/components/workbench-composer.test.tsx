@@ -114,13 +114,15 @@ describe("WorkbenchComposer", () => {
     ).toBeUndefined();
   });
 
-  it("keeps local attachment input available while the runtime reconnects", () => {
+  it("keeps local draft and attachment input available while the runtime reconnects", () => {
     expect(deriveComposerInputAvailability("reconnecting")).toEqual({
       attachmentsDisabled: false,
+      draftInputDisabled: false,
       turnControlsDisabled: true,
     });
     expect(deriveComposerInputAvailability("submitting")).toEqual({
       attachmentsDisabled: true,
+      draftInputDisabled: true,
       turnControlsDisabled: true,
     });
   });
