@@ -8,6 +8,7 @@ import {
 } from "@code-agent/core";
 import type {
   AgentBackgroundTerminalPage,
+  AgentModelPage,
   AgentProjectDefaults,
   AgentTaskSettings,
   AgentTurn,
@@ -35,6 +36,20 @@ const turnOptions = {
   reasoningEffort: "high",
   sandboxMode: "workspace-write",
 } as const;
+
+const modelPage: AgentModelPage = {
+  data: [
+    {
+      defaultReasoningEffort: "high",
+      description: "适合复杂编码任务",
+      displayName: "GPT-5.6 Sol",
+      id: "gpt-5.6-sol",
+      isDefault: true,
+      supportedReasoningEfforts: [{ description: "深入分析", id: "high" }],
+    },
+  ],
+  nextCursor: null,
+};
 
 function turnRequest(text: string) {
   return {
@@ -97,21 +112,7 @@ function createProvider() {
   const archiveTask = vi.fn(() => Promise.resolve());
   const forkTask = vi.fn(() => Promise.resolve({ ...task, id: "task-2", title: "续接任务" }));
   const listTasks = vi.fn(() => Promise.resolve({ data: [task], nextCursor: "next" }));
-  const listModels = vi.fn(() =>
-    Promise.resolve({
-      data: [
-        {
-          defaultReasoningEffort: "high",
-          description: "适合复杂编码任务",
-          displayName: "GPT-5.6 Sol",
-          id: "gpt-5.6-sol",
-          isDefault: true,
-          supportedReasoningEfforts: [{ description: "深入分析", id: "high" }],
-        },
-      ],
-      nextCursor: null,
-    }),
-  );
+  const listModels = vi.fn(() => Promise.resolve(modelPage));
   const listSkills = vi.fn(() =>
     Promise.resolve({
       data: [
@@ -295,7 +296,13 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
   };
 }
 
-async function createHarness(options: Readonly<{ idempotencyCacheSize?: number }> = {}) {
+async function createHarness(
+  options: Readonly<{
+    idempotencyCacheSize?: number;
+    modelCatalogCacheMaxBytes?: number;
+    modelCatalogCacheTtlMs?: number;
+  }> = {},
+) {
   const {
     archiveTask,
     compactTask,
@@ -694,7 +701,7 @@ describe("CodeAgent Server", () => {
     expect(skills.statusCode).toBe(200);
     expect(skills.json()).toMatchObject({ data: [{ name: "review-security" }] });
     expect(listSkills).toHaveBeenCalledOnce();
-    expect(listModels).toHaveBeenCalledTimes(3);
+    expect(listModels).toHaveBeenCalledOnce();
     expect(uploaded.statusCode).toBe(201);
     expect(repeatedUpload.json()).toEqual(uploaded.json());
     expect(uploaded.json()).toMatchObject({
@@ -743,6 +750,115 @@ describe("CodeAgent Server", () => {
       ...snapshot,
       settings: { ...turnOptions, sandboxMode: "read-only" },
     });
+  });
+
+  it("deduplicates concurrent model catalog reads and reuses the cached catalog", async () => {
+    const { app, listModels } = await createHarness();
+    let resolveCatalog!: (page: AgentModelPage) => void;
+    listModels.mockImplementationOnce(
+      () =>
+        new Promise<AgentModelPage>((resolve) => {
+          resolveCatalog = resolve;
+        }),
+    );
+
+    const modelsResponse = app.inject({ method: "GET", url: "/v1/models" });
+    const snapshotResponse = app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/task-1",
+    });
+    await vi.waitFor(() => {
+      expect(listModels).toHaveBeenCalledOnce();
+    });
+    resolveCatalog(modelPage);
+
+    expect((await modelsResponse).statusCode).toBe(200);
+    expect((await snapshotResponse).statusCode).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/v1/projects/code-agent/defaults",
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(listModels).toHaveBeenCalledOnce();
+  });
+
+  it("expires, bounds, and clears the model catalog cache with the Runtime lifecycle", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const cached = await createHarness({ modelCatalogCacheTtlMs: 100 });
+    await cached.app.inject({ method: "GET", url: "/v1/models" });
+    await cached.app.inject({ method: "GET", url: "/v1/models" });
+    expect(cached.listModels).toHaveBeenCalledOnce();
+
+    now.mockReturnValue(1_101);
+    await cached.app.inject({ method: "GET", url: "/v1/models" });
+    expect(cached.listModels).toHaveBeenCalledTimes(2);
+
+    const bounded = await createHarness({ modelCatalogCacheMaxBytes: 1 });
+    await bounded.app.inject({ method: "GET", url: "/v1/models" });
+    await bounded.app.inject({ method: "GET", url: "/v1/models" });
+    expect(bounded.listModels).toHaveBeenCalledTimes(2);
+
+    const restartedProvider = createProvider();
+    const firstRuntime = await createCodeAgentServer(
+      createServerOptions(restartedProvider.provider),
+    );
+    await firstRuntime.inject({ method: "GET", url: "/v1/models" });
+    await firstRuntime.close();
+    const secondRuntime = await createCodeAgentServer(
+      createServerOptions(restartedProvider.provider),
+    );
+    closeCallbacks.push(() => secondRuntime.close());
+    await secondRuntime.inject({ method: "GET", url: "/v1/models" });
+    expect(restartedProvider.listModels).toHaveBeenCalledTimes(2);
+    now.mockRestore();
+  });
+
+  it("reads task settings and pinned metadata in parallel after ownership is confirmed", async () => {
+    const { app, listPinnedTaskIds, readTask, readTaskSettings } = await createHarness();
+    let resolveTask!: (value: AgentProviderTaskSnapshot) => void;
+    let resolveSettings!: (value: AgentTaskSettings | undefined) => void;
+    let resolvePinned!: (value: string[]) => void;
+    readTask.mockImplementationOnce(
+      () =>
+        new Promise<AgentProviderTaskSnapshot>((resolve) => {
+          resolveTask = resolve;
+        }),
+    );
+    readTaskSettings.mockImplementationOnce(
+      () =>
+        new Promise<AgentTaskSettings | undefined>((resolve) => {
+          resolveSettings = resolve;
+        }),
+    );
+    listPinnedTaskIds.mockImplementationOnce(
+      () =>
+        new Promise<string[]>((resolve) => {
+          resolvePinned = resolve;
+        }),
+    );
+
+    const response = app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/task-1",
+    });
+    await vi.waitFor(() => {
+      expect(readTask).toHaveBeenCalledOnce();
+    });
+    expect(readTaskSettings).not.toHaveBeenCalled();
+    expect(listPinnedTaskIds).not.toHaveBeenCalled();
+
+    resolveTask(snapshot);
+    await vi.waitFor(() => {
+      expect(readTaskSettings).toHaveBeenCalledOnce();
+      expect(listPinnedTaskIds).toHaveBeenCalledOnce();
+    });
+    resolveSettings(undefined);
+    resolvePinned([task.id]);
+
+    expect((await response).json()).toMatchObject({ snapshot: { pinned: true } });
   });
 
   it("returns effective settings and atomically validates complete updates", async () => {

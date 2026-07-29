@@ -23,7 +23,7 @@
 - Provider 对已成功 `thread/start` 的 Task 必须提供进程内 read-your-writes：在 Codex 原生 `thread/list` 首次返回该 Task 前，将本地未 materialize Task 合并到首个列表页；只有原生列表接管后才能移除该列表回退，`turn/start` 或 `thread/read` 成功不能提前造成列表不可见窗口。
 - Task 命令通过受控 Provider 方法映射：代码审查使用 `review/start`，上下文压缩使用 `thread/compact/start`，新任务续接使用 `thread/fork`，任务反馈使用 `feedback/upload`；每个动作都必须先验证 Task 属于当前 Project，并校验响应中的 Thread ID。
 - Task 重命名固定映射 `thread/name/set`，归档固定映射 `thread/archive`，两者都必须先验证 Task 属于当前 Project；固定状态不是 Codex 原生能力，由 CodeAgent 本地 Task 元数据持久化。
-- 模型列表只通过分页 `model/list` 获取，过滤隐藏模型并保留默认模型、默认思考量和可用思考量；Project 沙盒默认值通过携带 `cwd` 的 `config/read` 读取；`turn/start` 明确映射文本、受控图片 Data URL、`model`、`effort`、`approvalPolicy` 和结构化 `sandboxPolicy`。
+- 模型列表只通过分页 `model/list` 获取，过滤隐藏模型并保留默认模型、默认思考量和可用思考量；Server Runtime 使用带 TTL、字节容量与 in-flight 去重的模型目录缓存统一服务设置校验和 `/v1/models`，Runtime 关闭时清空且旧请求不得回填；Project 沙盒默认值通过携带 `cwd` 的 `config/read` 读取；`turn/start` 明确映射文本、受控图片 Data URL、`model`、`effort`、`approvalPolicy` 和结构化 `sandboxPolicy`。
 - Codex 用户历史中的 `image` 与 `localImage` 必须映射为统一消息附件；Provider 只接受 GIF、JPEG、PNG、WebP 的有效内容签名和不超过 2 MiB 的图片，并将本地路径转换为 Data URL 后丢弃原生路径。文件缺失、超限或格式不受支持时降级为文本占位，不能使整个 Task Snapshot 失败。
 - Project Skill 目录只通过 `skills/list { cwds: [project.rootPath] }` 获取并过滤禁用项；对外 ID 必须是稳定不透明摘要。`turn/start` 只有在 ID 与名称仍匹配当前目录时，才能加入 Codex 原生 `{ type: "skill", name, path }`，原生绝对路径不得越过 Provider 边界。
 - `thread/tokenUsage/updated` 只使用最近一轮 `last.totalTokens` 计算当前上下文占用，并连同 `modelContextWindow` 写入实时事件和后续 Snapshot；不得使用累计 `total.totalTokens` 冒充当前上下文。
@@ -52,7 +52,7 @@
 - Event Stream 使用固定数组环形缓冲区，以 O(1) 写入和淘汰已发布事件；回放必须按 `sequence` 升序返回，窗口外恢复仍发送 `resync.required`。
 - `/v1/projects/:projectId/events` 首帧发送 `connection.ready`，只补发 `afterSequence` 之后仍在缓存窗口内的事件；过期或超前序号发送 `resync.required`。
 - `/v1/metrics/events` 只读暴露每个 Project 的 Provider 输入、发布、合并、pending Delta、保留淘汰、软背压、活动客户端和慢客户端断开计数，不得包含 Prompt、命令输出或文件内容。
-- Provider `readTask` Promise 完成前必须让返回 Snapshot 包含此前状态并同步交付对应通知；Task Snapshot 读取完成后再从当前 Event Stream 固定 checkpoint，避免丢失事件或重复补发已有内容。
+- Provider `readTask` Promise 完成前必须让返回 Snapshot 包含此前状态并同步交付对应通知；Task Snapshot 读取完成后再从当前 Event Stream 固定 checkpoint，避免丢失事件或重复补发已有内容；Task 归属确认后并行读取有效设置与固定元数据，避免无依赖的持久层读取串行等待。
 - `resync.required` 发送后由 Server 主动关闭当前 WebSocket；客户端必须使用新 Snapshot checkpoint 建立新连接。
 - Fastify 关闭时取消 Provider Event 订阅并关闭 WebSocket 资源。
 - 所有 Agent Mutation 必须校验非空 `Idempotency-Key`；同操作、同 Key、同 Payload 复用进行中或成功结果，不同 Payload 返回冲突，失败结果不缓存。

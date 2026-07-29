@@ -62,6 +62,7 @@ import {
   type ArchiveAgentTaskRequest,
   type AgentMutationError,
   type AgentModel,
+  type AgentModelPage,
   type AgentProjectDefaults,
   type AgentSandboxMode,
   type AgentTask,
@@ -108,6 +109,8 @@ export interface CreateCodeAgentServerOptions {
   idempotencyTtlMs?: number;
   loggerEnabled?: boolean;
   logDestination?: Readonly<{ write: (message: string) => void }>;
+  modelCatalogCacheMaxBytes?: number;
+  modelCatalogCacheTtlMs?: number;
   projectRepository: ProjectRepository;
   provider: AgentRuntimeProvider;
   settingsRepository: AgentSettingsRepository;
@@ -320,6 +323,65 @@ interface IdempotencyEntry {
   promise: Promise<unknown>;
 }
 
+type ModelCatalogCacheEntry = Readonly<{
+  expiresAt: number;
+  page: AgentModelPage;
+}>;
+
+class ModelCatalogCache {
+  readonly #load: () => Promise<AgentModelPage>;
+  readonly #maxBytes: number;
+  readonly #ttlMs: number;
+  #entry: ModelCatalogCacheEntry | undefined;
+  #generation = 0;
+  #inFlight: Promise<AgentModelPage> | undefined;
+
+  public constructor(
+    load: () => Promise<AgentModelPage>,
+    options: Readonly<{ maxBytes: number; ttlMs: number }>,
+  ) {
+    this.#load = load;
+    this.#maxBytes = options.maxBytes;
+    this.#ttlMs = options.ttlMs;
+  }
+
+  public read(): Promise<AgentModelPage> {
+    const entry = this.#entry;
+    if (entry !== undefined && entry.expiresAt > Date.now()) {
+      return Promise.resolve(entry.page);
+    }
+    this.#entry = undefined;
+    if (this.#inFlight !== undefined) {
+      return this.#inFlight;
+    }
+
+    const generation = this.#generation;
+    const inFlight = this.#load()
+      .then((page) => {
+        // 仅驻留有界目录；超限响应仍正常返回，并继续共享本次 in-flight 请求。
+        const size = Buffer.byteLength(JSON.stringify(page), "utf8");
+        if (generation === this.#generation && size <= this.#maxBytes) {
+          this.#entry = { expiresAt: Date.now() + this.#ttlMs, page };
+        }
+        return page;
+      })
+      .finally(() => {
+        if (this.#inFlight === inFlight) {
+          this.#inFlight = undefined;
+        }
+      });
+    this.#inFlight = inFlight;
+    return inFlight;
+  }
+
+  public clear(): void {
+    // Runtime 关闭或 Provider 重建时提升代次，阻止旧请求回填缓存。
+    this.#generation += 1;
+    this.#entry = undefined;
+    this.#inFlight = undefined;
+  }
+}
+
 type TaskStartRecovery = Readonly<{
   fingerprint: string;
   settings: AgentTaskSettings;
@@ -329,6 +391,8 @@ type TaskStartRecovery = Readonly<{
 const DEFAULT_IDEMPOTENCY_CACHE_SIZE = 1_000;
 const DEFAULT_IDEMPOTENCY_TTL_MS = 10 * 60 * 1_000;
 const DEFAULT_HANDLER_TIMEOUT_MS = 60_000;
+const DEFAULT_MODEL_CATALOG_CACHE_MAX_BYTES = 1 * 1_024 * 1_024;
+const DEFAULT_MODEL_CATALOG_CACHE_TTL_MS = 30_000;
 const EVENT_SOCKET_SOFT_BACKPRESSURE_BYTES = 256 * 1_024;
 const EVENT_SOCKET_HARD_BACKPRESSURE_BYTES = 1_024 * 1_024;
 
@@ -435,6 +499,20 @@ export async function createCodeAgentServer(
   const prepareFileRollback = options.prepareTurnFileRollback ?? prepareTurnFileRollback;
   const attachmentStore = new AttachmentStore();
   const capabilities = await options.provider.getCapabilities();
+  const modelCatalogCacheMaxBytes =
+    options.modelCatalogCacheMaxBytes ?? DEFAULT_MODEL_CATALOG_CACHE_MAX_BYTES;
+  const modelCatalogCacheTtlMs =
+    options.modelCatalogCacheTtlMs ?? DEFAULT_MODEL_CATALOG_CACHE_TTL_MS;
+  if (!Number.isInteger(modelCatalogCacheMaxBytes) || modelCatalogCacheMaxBytes <= 0) {
+    throw new RangeError("Model catalog cache capacity must be a positive integer");
+  }
+  if (!Number.isFinite(modelCatalogCacheTtlMs) || modelCatalogCacheTtlMs <= 0) {
+    throw new RangeError("Model catalog cache TTL must be a positive number");
+  }
+  const modelCatalogCache = new ModelCatalogCache(() => options.provider.listModels(), {
+    maxBytes: modelCatalogCacheMaxBytes,
+    ttlMs: modelCatalogCacheTtlMs,
+  });
   const projectContexts = new Map<
     string,
     Readonly<{
@@ -479,7 +557,7 @@ export async function createCodeAgentServer(
     return context;
   };
   const listModels = async (): Promise<readonly AgentModel[]> =>
-    (await options.provider.listModels()).data;
+    (await modelCatalogCache.read()).data;
   const readEffectiveProjectDefaults = async (
     projectId: string,
     models?: readonly AgentModel[],
@@ -630,6 +708,7 @@ export async function createCodeAgentServer(
     projectContexts.clear();
     attachmentStore.clear();
     idempotencyEntries.clear();
+    modelCatalogCache.clear();
     taskStartRecoveries.clear();
   });
 
@@ -673,7 +752,7 @@ export async function createCodeAgentServer(
   );
 
   app.get("/v1/models", { schema: { response: { 200: AgentModelPageSchema } } }, () =>
-    options.provider.listModels(),
+    modelCatalogCache.read(),
   );
 
   app.get("/v1/projects", { schema: { response: { 200: ProjectPageSchema } } }, async () => ({
@@ -997,13 +1076,11 @@ export async function createCodeAgentServer(
       }
       // Provider Promise 完成时已交付此前通知，此处 checkpoint 与返回 Snapshot 对齐。
       const checkpoint = context.eventStream.checkpoint;
-      const settings = await readEffectiveTaskSettings(
-        request.params.projectId,
-        request.params.taskId,
-      );
-      const pinnedTaskIds = new Set(
-        await options.taskMetadataRepository.listPinnedTaskIds(request.params.projectId),
-      );
+      const [settings, pinnedTaskIdList] = await Promise.all([
+        readEffectiveTaskSettings(request.params.projectId, request.params.taskId),
+        options.taskMetadataRepository.listPinnedTaskIds(request.params.projectId),
+      ]);
+      const pinnedTaskIds = new Set(pinnedTaskIdList);
       return { checkpoint, snapshot: { ...task, pinned: pinnedTaskIds.has(task.id), settings } };
     },
   );
