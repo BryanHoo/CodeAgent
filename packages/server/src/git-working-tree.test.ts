@@ -9,8 +9,41 @@ describe("readGitWorkingTreeStatus", () => {
   it("reads the repository through the real parameterized Git command", async () => {
     const status = await readGitWorkingTreeStatus(process.cwd());
 
+    expect(status.branch).toBeTypeOf("string");
+    expect(status.baseBranches).toContain("origin/main");
     expect(Array.isArray(status.staged)).toBe(true);
     expect(Array.isArray(status.unstaged)).toBe(true);
+  });
+
+  it("prioritizes the remote default branch in the selectable base branches", async () => {
+    const projectRoot = await mkdtemp(join(process.cwd(), ".git-status-test-"));
+    try {
+      await mkdir(join(projectRoot, ".git"));
+      const executeGit = (_root: string, arguments_: readonly string[]) => {
+        if (arguments_[0] === "status") {
+          return Promise.resolve("");
+        }
+        if (arguments_[0] === "branch") {
+          return Promise.resolve("feat/review\n");
+        }
+        if (arguments_[0] === "for-each-ref") {
+          return Promise.resolve(
+            "main\nfeat/review\norigin/HEAD\norigin/main\norigin/release\nrelease\n",
+          );
+        }
+        if (arguments_[0] === "symbolic-ref") {
+          return Promise.resolve("refs/remotes/origin/main\n");
+        }
+        throw new Error(`Unexpected Git command: ${arguments_.join(" ")}`);
+      };
+
+      await expect(readGitWorkingTreeStatus(projectRoot, executeGit)).resolves.toMatchObject({
+        baseBranches: ["origin/main", "main", "origin/release", "release"],
+        branch: "feat/review",
+      });
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
   });
 
   it("separates staged, unstaged, untracked, and partially staged changes", async () => {
@@ -20,6 +53,15 @@ describe("readGitWorkingTreeStatus", () => {
       const executeGit = (_root: string, arguments_: readonly string[]) => {
         if (arguments_[0] === "status") {
           return Promise.resolve("MM partial.txt\0M  staged.txt\0?? untracked.txt\0");
+        }
+        if (arguments_[0] === "branch") {
+          return Promise.resolve("feat/review\n");
+        }
+        if (arguments_[0] === "for-each-ref") {
+          return Promise.resolve("main\norigin/main\n");
+        }
+        if (arguments_[0] === "symbolic-ref") {
+          return Promise.resolve("refs/remotes/origin/main\n");
         }
         const path = arguments_.at(-1) ?? "unknown";
         const location = arguments_.includes("--cached") ? "staged" : "unstaged";

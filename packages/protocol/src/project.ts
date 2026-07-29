@@ -63,6 +63,37 @@ export const AgentItemStatusSchema = Type.Union([
 
 export type AgentItemStatus = Static<typeof AgentItemStatusSchema>;
 
+const AgentReviewTargetFieldsSchema = Type.Object(
+  {
+    branch: Type.Optional(Type.String({ minLength: 1 })),
+    instructions: Type.Optional(Type.String({ minLength: 1 })),
+    sha: Type.Optional(Type.String({ minLength: 1 })),
+    title: Type.Optional(Type.String({ minLength: 1 })),
+    type: Type.Union([
+      Type.Literal("uncommitted_changes"),
+      Type.Literal("base_branch"),
+      Type.Literal("commit"),
+      Type.Literal("custom"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+// 分支只声明条件必填字段；字段白名单由前一个 Schema 统一控制，避免 Ajv 删除其他分支字段。
+export const AgentReviewTargetSchema = Type.Intersect([
+  AgentReviewTargetFieldsSchema,
+  Type.Union([
+    Type.Object({ type: Type.Literal("uncommitted_changes") }),
+    Type.Object({ branch: Type.String({ minLength: 1 }), type: Type.Literal("base_branch") }),
+    Type.Object({ sha: Type.String({ minLength: 1 }), type: Type.Literal("commit") }),
+    Type.Object({
+      instructions: Type.String({ minLength: 1 }),
+      type: Type.Literal("custom"),
+    }),
+  ]),
+]);
+export type AgentReviewTarget = Readonly<Static<typeof AgentReviewTargetSchema>>;
+
 export const MAX_AGENT_ATTACHMENTS = 4;
 export const MAX_AGENT_ATTACHMENT_BYTES = 2 * 1024 * 1024;
 export const MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH =
@@ -179,6 +210,8 @@ export const AgentFileChangeSchema = Type.Object(
 
 export const ProjectGitStatusSchema = Type.Object(
   {
+    baseBranches: Type.Array(Type.String({ minLength: 1 }), { uniqueItems: true }),
+    branch: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     staged: Type.Array(AgentFileChangeSchema),
     unstaged: Type.Array(AgentFileChangeSchema),
   },
@@ -240,6 +273,39 @@ export const AgentActivityItemSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const AgentReviewItemTargetSchema = Type.Union([
+  Type.Object({ type: Type.Literal("uncommitted_changes") }, { additionalProperties: false }),
+  Type.Object(
+    { branch: Type.String({ minLength: 1 }), type: Type.Literal("base_branch") },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      sha: Type.String({ minLength: 1 }),
+      title: Type.Optional(Type.String({ minLength: 1 })),
+      type: Type.Literal("commit"),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      instructions: Type.String({ minLength: 1 }),
+      type: Type.Literal("custom"),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export const AgentReviewItemSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    // Fastify 响应序列化器要求判别 Union 直接展开，不能复用请求侧 Intersect Schema。
+    target: AgentReviewItemTargetSchema,
+    type: Type.Literal("review"),
+  },
+  { additionalProperties: false },
+);
+
 export const AgentItemSchema = Type.Union([
   AgentMessageItemSchema,
   AgentReasoningItemSchema,
@@ -248,6 +314,7 @@ export const AgentItemSchema = Type.Union([
   AgentToolItemSchema,
   AgentPlanItemSchema,
   AgentActivityItemSchema,
+  AgentReviewItemSchema,
 ]);
 
 export type AgentItem = Readonly<Static<typeof AgentItemSchema>>;
@@ -767,37 +834,6 @@ export const UnsubscribeAgentTaskResponseSchema = Type.Object(
 export type UnsubscribeAgentTaskResponse = Readonly<
   Static<typeof UnsubscribeAgentTaskResponseSchema>
 >;
-
-const AgentReviewTargetFieldsSchema = Type.Object(
-  {
-    branch: Type.Optional(Type.String({ minLength: 1 })),
-    instructions: Type.Optional(Type.String({ minLength: 1 })),
-    sha: Type.Optional(Type.String({ minLength: 1 })),
-    title: Type.Optional(Type.String({ minLength: 1 })),
-    type: Type.Union([
-      Type.Literal("uncommitted_changes"),
-      Type.Literal("base_branch"),
-      Type.Literal("commit"),
-      Type.Literal("custom"),
-    ]),
-  },
-  { additionalProperties: false },
-);
-
-// 分支只声明条件必填字段；字段白名单由前一个 Schema 统一控制，避免 Ajv 删除其他分支字段。
-export const AgentReviewTargetSchema = Type.Intersect([
-  AgentReviewTargetFieldsSchema,
-  Type.Union([
-    Type.Object({ type: Type.Literal("uncommitted_changes") }),
-    Type.Object({ branch: Type.String({ minLength: 1 }), type: Type.Literal("base_branch") }),
-    Type.Object({ sha: Type.String({ minLength: 1 }), type: Type.Literal("commit") }),
-    Type.Object({
-      instructions: Type.String({ minLength: 1 }),
-      type: Type.Literal("custom"),
-    }),
-  ]),
-]);
-export type AgentReviewTarget = Readonly<Static<typeof AgentReviewTargetSchema>>;
 
 export const ReviewAgentTaskRequestSchema = Type.Object(
   { target: AgentReviewTargetSchema },

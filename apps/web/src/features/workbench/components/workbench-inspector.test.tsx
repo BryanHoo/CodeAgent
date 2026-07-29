@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { WorkbenchInspector } from "./workbench-inspector.js";
 
 const gitStatus = {
+  baseBranches: ["origin/main"],
+  branch: "feat/review",
   staged: [
     {
       diff: "--- a/package.json\n+++ b/package.json\n@@ -1,1 +1,2 @@\n-old\n+new\n+next",
@@ -69,7 +71,7 @@ describe("WorkbenchInspector", () => {
   it("hides an empty Git change group", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchInspector
-        gitStatus={{ staged: gitStatus.staged, unstaged: [] }}
+        gitStatus={{ ...gitStatus, unstaged: [] }}
         onOpenFileDiff={() => undefined}
         projectName="CodeAgent"
       />,

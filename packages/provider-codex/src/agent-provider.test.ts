@@ -1640,7 +1640,33 @@ describe("CodexAgentProvider", () => {
       durationMs: null,
       error: null,
       id: "review-turn",
-      items: [],
+      items: [
+        {
+          content: [
+            {
+              text: "Review the current code changes (staged, unstaged, and untracked files) and provide prioritized findings.",
+              type: "text",
+            },
+          ],
+          id: "review-prompt-1",
+          type: "userMessage",
+        },
+        {
+          content: [
+            {
+              text: "Review the current code changes (staged, unstaged, and untracked files) and provide prioritized findings.",
+              type: "text",
+            },
+          ],
+          id: "review-prompt-2",
+          type: "userMessage",
+        },
+        {
+          id: "review-mode",
+          review: "current changes",
+          type: "enteredReviewMode",
+        },
+      ],
       itemsView: { type: "full" },
       startedAt: 1_753_228_800,
       status: "inProgress",
@@ -1661,7 +1687,17 @@ describe("CodexAgentProvider", () => {
     await expect(provider.archiveTask("task-1")).resolves.toBeUndefined();
     await expect(
       provider.startReview("task-1", { type: "base_branch", branch: "main" }),
-    ).resolves.toMatchObject({ id: "review-turn", status: "running" });
+    ).resolves.toMatchObject({
+      id: "review-turn",
+      items: [
+        {
+          id: "review-mode-review-turn",
+          target: { branch: "main", type: "base_branch" },
+          type: "review",
+        },
+      ],
+      status: "running",
+    });
     await expect(provider.compactTask("task-1")).resolves.toBeUndefined();
     await expect(provider.forkTask("task-1")).resolves.toMatchObject({ id: "task-2" });
     await expect(
@@ -1696,6 +1732,72 @@ describe("CodexAgentProvider", () => {
           reason: "体验反馈",
           threadId: "task-1",
         },
+      },
+    ]);
+  });
+
+  it("keeps live review prompts hidden behind one stable review item", async () => {
+    const reviewPrompt = {
+      content: [
+        {
+          text: "Review the current code changes (staged, unstaged, and untracked files) and provide prioritized findings.",
+          type: "text",
+        },
+      ],
+      id: "review-prompt",
+      type: "userMessage",
+    };
+    const runningTurn = {
+      completedAt: null,
+      durationMs: null,
+      error: null,
+      id: "review-live-turn",
+      items: [reviewPrompt],
+      itemsView: { type: "full" },
+      startedAt: 1_753_228_800,
+      status: "inProgress",
+    };
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      { reviewThreadId: "task-1", turn: runningTurn },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+    await provider.listTasks();
+    await provider.startReview("task-1", { type: "uncommitted_changes" });
+
+    rpc.emitNotification("turn/started", { threadId: "task-1", turn: runningTurn });
+    rpc.emitNotification("item/completed", {
+      item: reviewPrompt,
+      threadId: "task-1",
+      turnId: "review-live-turn",
+    });
+    rpc.emitNotification("item/started", {
+      item: { id: "review-mode", review: "current changes", type: "enteredReviewMode" },
+      threadId: "task-1",
+      turnId: "review-live-turn",
+    });
+
+    expect(events).toMatchObject([
+      {
+        payload: {
+          turn: {
+            items: [
+              {
+                id: "review-mode-review-live-turn",
+                target: { type: "uncommitted_changes" },
+                type: "review",
+              },
+            ],
+          },
+        },
+        type: "turn.started",
+      },
+      {
+        itemId: "review-mode-review-live-turn",
+        payload: { item: { type: "review" } },
+        type: "item.started",
       },
     ]);
   });

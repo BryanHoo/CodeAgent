@@ -173,6 +173,7 @@ KaTeX
 | ---------------- | ------------------------------------ | ------------------------------- |
 | `conversation`   | 会话滚动、底部跟随、回到底部按钮     | 包装进 `TaskTimeline`           |
 | `message`        | 用户消息、Commentary 与 Final Answer | 映射消息状态并流式渲染 Markdown |
+| `review`         | 固定审查请求与审查模式标识           | 从结构化 Target 生成本地化文案  |
 | `tool`           | Tool 调用输入、状态和输出            | 映射统一 Tool ViewModel         |
 | `confirmation`   | Command 和 File Change 审批          | 接入 Pending Request Mutation   |
 | `plan`           | Plan 步骤和状态                      | 映射 Plan Item                  |

@@ -116,8 +116,7 @@ describe("prompt slash command", () => {
       available: true,
     });
     expect(getPromptCommandAvailability(review, capabilities, false)).toEqual({
-      available: false,
-      reason: "需要先打开一个任务",
+      available: true,
     });
     expect(getPromptCommandAvailability(initialize, capabilities, false)).toEqual({
       available: true,

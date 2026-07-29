@@ -9,6 +9,7 @@ import type {
   AgentTaskSnapshotResponse,
   AgentTurn,
   PendingRequest,
+  ProjectGitStatus,
 } from "@code-agent/protocol";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -247,7 +248,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           task: startedTask,
           turn: startedTurn,
         });
-        // 首轮 Mutation 已确认运行，导航前写入 Sidebar 活动态，避免等待 Snapshot 才出现图标。
+      }
+      if (startedTurn !== undefined) {
+        // 首轮 Turn 已确认运行，导航前写入 Sidebar 活动态，Review 不需要伪造用户消息。
         markTaskRunning(projectId, startedTask.id);
       }
       void navigate({
@@ -454,6 +457,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               onTaskStarted={handleTaskStarted}
               projectId={projectId}
               projectPath={projectPath}
+              {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
               settings={draftSettings}
               skills={skillsQuery.data?.data ?? []}
             />
@@ -469,6 +473,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             onTaskStarted={handleTaskStarted}
             projectId={projectId}
             projectPath={projectPath}
+            {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
             runtime={runtime}
             skills={skillsQuery.data?.data ?? []}
             startingSnapshot={startingSnapshot}
@@ -560,6 +565,7 @@ function ActiveTaskWorkbench({
   onTaskStarted,
   projectId,
   projectPath,
+  gitStatus,
   runtime,
   skills,
   startingSnapshot,
@@ -583,6 +589,7 @@ function ActiveTaskWorkbench({
   ) => void;
   projectId: string;
   projectPath: string;
+  gitStatus?: ProjectGitStatus;
   runtime: TaskRuntimeView;
   skills: readonly AgentSkill[];
   startingSnapshot: RuntimeTaskSnapshot | undefined;
@@ -694,6 +701,7 @@ function ActiveTaskWorkbench({
         }}
         projectId={projectId}
         projectPath={projectPath}
+        {...(gitStatus === undefined ? {} : { gitStatus })}
         runtime={visibleRuntime}
         settings={visibleSnapshot?.settings ?? startingSnapshot?.settings ?? fallbackSettings}
         skills={skills}

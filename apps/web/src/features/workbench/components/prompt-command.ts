@@ -64,7 +64,7 @@ export function getPromptCommandAvailability(
   if (capabilities === undefined) {
     return { available: false, reason: "运行时能力尚未就绪" };
   }
-  if (item.action !== "initialize" && !hasTask) {
+  if (item.action !== "initialize" && item.action !== "review" && !hasTask) {
     return { available: false, reason: "需要先打开一个任务" };
   }
 
@@ -74,7 +74,7 @@ export function getPromptCommandAvailability(
       : item.action === "subtask"
         ? capabilities.turns.start
         : item.action === "review"
-          ? capabilities.turns.review
+          ? capabilities.turns.review && (hasTask || capabilities.tasks.start)
           : item.action === "compact"
             ? capabilities.turns.compact
             : item.action === "feedback"

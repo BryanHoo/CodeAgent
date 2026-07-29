@@ -8,6 +8,7 @@ import {
   AgentCapabilitiesSchema,
   AgentModelPageSchema,
   AgentMessageItemSchema,
+  AgentReviewItemSchema,
   AgentProjectDefaultsResponseSchema,
   AgentProjectDefaultsSchema,
   AgentPromptInputSchema,
@@ -194,7 +195,7 @@ describe("project protocol", () => {
     ).toBe(true);
   });
 
-  it("separates staged and unstaged Git file changes", () => {
+  it("describes Git branches with staged and unstaged file changes", () => {
     const fileChange = {
       diff: "--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-old\n+new",
       kind: "update",
@@ -203,6 +204,8 @@ describe("project protocol", () => {
 
     expect(
       Value.Check(ProjectGitStatusSchema, {
+        baseBranches: ["origin/main", "main"],
+        branch: "feat/review",
         staged: [fileChange],
         unstaged: [{ ...fileChange, path: "README.md" }],
       }),
@@ -211,7 +214,14 @@ describe("project protocol", () => {
       Value.Check(ProjectGitStatusSchema, {
         staged: [],
         unstaged: [],
-        legacyChanges: [],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ProjectGitStatusSchema, {
+        baseBranches: ["origin/main", "origin/main"],
+        branch: null,
+        staged: [],
+        unstaged: [],
       }),
     ).toBe(false);
   });
@@ -337,6 +347,23 @@ describe("project protocol", () => {
       Value.Check(AgentMessageItemSchema, {
         ...message,
         skills: [{ name: "review-security", path: "/private/SKILL.md" }],
+      }),
+    ).toBe(false);
+  });
+
+  it("validates a structured review timeline item", () => {
+    expect(
+      Value.Check(AgentReviewItemSchema, {
+        id: "review-turn-1",
+        target: { type: "uncommitted_changes" },
+        type: "review",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentReviewItemSchema, {
+        id: "review-turn-1",
+        target: { type: "base_branch" },
+        type: "review",
       }),
     ).toBe(false);
   });

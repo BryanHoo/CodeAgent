@@ -846,6 +846,71 @@ function mapSubagentActivityItem(item: Record<string, unknown>, id: string): Age
 
 type CodexMessagePhase = "commentary" | "final_answer";
 
+const CODEX_UNCOMMITTED_REVIEW_PROMPT =
+  "Review the current code changes (staged, unstaged, and untracked files)";
+
+function mapReviewHint(review: string): AgentReviewTarget {
+  if (review === "current changes") {
+    return { type: "uncommitted_changes" };
+  }
+  const baseBranch = /^changes against '(.+)'$/.exec(review)?.[1];
+  if (baseBranch !== undefined) {
+    return { branch: baseBranch, type: "base_branch" };
+  }
+  const commit = /^commit (\S+)(?:: (.+))?$/.exec(review);
+  if (commit?.[1] !== undefined) {
+    return {
+      sha: commit[1],
+      ...(commit[2] === undefined ? {} : { title: commit[2] }),
+      type: "commit",
+    };
+  }
+  return { instructions: review, type: "custom" };
+}
+
+function readNativeUserMessageText(item: Record<string, unknown>): string | undefined {
+  if (item["type"] !== "userMessage" || !Array.isArray(item["content"])) {
+    return undefined;
+  }
+  return item["content"]
+    .flatMap((part) => {
+      const contentPart = expectRecord(part, "Codex user message content part");
+      return contentPart["type"] === "text" && typeof contentPart["text"] === "string"
+        ? [contentPart["text"]]
+        : [];
+    })
+    .join("\n");
+}
+
+function inferReviewTargetFromPrompt(item: Record<string, unknown>): AgentReviewTarget | undefined {
+  const text = readNativeUserMessageText(item);
+  if (text === undefined) {
+    return undefined;
+  }
+  if (text.startsWith(CODEX_UNCOMMITTED_REVIEW_PROMPT)) {
+    return { type: "uncommitted_changes" };
+  }
+  const baseBranch = /^Review the code changes against the base branch '([^']+)'\./.exec(text)?.[1];
+  if (baseBranch !== undefined) {
+    return { branch: baseBranch, type: "base_branch" };
+  }
+  const commit = /^Review the code changes introduced by commit (\S+?)(?: \("([\s\S]+)"\))?\./.exec(
+    text,
+  );
+  if (commit?.[1] !== undefined) {
+    return {
+      sha: commit[1],
+      ...(commit[2] === undefined ? {} : { title: commit[2] }),
+      type: "commit",
+    };
+  }
+  return undefined;
+}
+
+function createReviewItem(turnId: string, target: AgentReviewTarget): AgentItem {
+  return { id: `review-mode-${turnId}`, target, type: "review" };
+}
+
 function mapCodexMessagePhase(value: unknown): CodexMessagePhase | undefined {
   if (value === null || value === undefined) {
     return undefined;
@@ -980,7 +1045,11 @@ function mapAgentItem(
         type: "activity",
       };
     case "enteredReviewMode":
-      return createActivityItem(id, "进入审查", optionalString(item["review"]));
+      return {
+        id,
+        target: mapReviewHint(expectString(item["review"], "Codex review mode hint")),
+        type: "review",
+      };
     case "exitedReviewMode":
       return createActivityItem(id, "结束审查", optionalString(item["review"]));
     case "contextCompaction":
@@ -996,14 +1065,28 @@ function mapAgentItem(
   }
 }
 
-function mapAgentTurn(value: unknown, mapImage: MapCodexMessageImage = () => undefined): AgentTurn {
+function mapAgentTurn(
+  value: unknown,
+  mapImage: MapCodexMessageImage = () => undefined,
+  explicitReviewTarget?: AgentReviewTarget,
+): AgentTurn {
   const turn = expectRecord(value, "Codex turn");
   if (!Array.isArray(turn["items"])) {
     throw new CodexProtocolMappingError("Codex turn items must be an array");
   }
+  const turnId = expectString(turn["id"], "Codex turn id");
+  const nativeItems = turn["items"].map((item) => expectRecord(item, "Codex turn item"));
+  const enteredReviewMode = nativeItems.find((item) => item["type"] === "enteredReviewMode");
+  const inferredReviewTarget = nativeItems
+    .map(inferReviewTargetFromPrompt)
+    .find((target) => target !== undefined);
+  const reviewTarget =
+    explicitReviewTarget ??
+    (enteredReviewMode === undefined
+      ? inferredReviewTarget
+      : mapReviewHint(expectString(enteredReviewMode["review"], "Codex review mode hint")));
   const subagentNicknames = new Map<string, string>();
-  for (const value of turn["items"]) {
-    const item = expectRecord(value, "Codex turn item");
+  for (const item of nativeItems) {
     if (item["type"] !== "subAgentActivity") {
       continue;
     }
@@ -1021,11 +1104,23 @@ function mapAgentTurn(value: unknown, mapImage: MapCodexMessageImage = () => und
             expectRecord(turn["error"], "Codex turn error")["message"],
             "Codex turn error message",
           ),
-    id: expectString(turn["id"], "Codex turn id"),
+    id: turnId,
     // 先收集活动项中的昵称，再回填协作项，避免向 Web 暴露不可读的线程 ID。
-    items: mergeExpandedSkillMessages(
-      turn["items"].map((item) => mapAgentItem(item, subagentNicknames, mapImage)),
-    ),
+    items: mergeExpandedSkillMessages([
+      ...(reviewTarget === undefined ? [] : [createReviewItem(turnId, reviewTarget)]),
+      ...nativeItems.flatMap((item) => {
+        const type = item["type"];
+        // Review Prompt 是 Codex 内部执行输入；统一时间线只保留一个结构化审查请求。
+        if (
+          type === "enteredReviewMode" ||
+          type === "exitedReviewMode" ||
+          (reviewTarget !== undefined && type === "userMessage")
+        ) {
+          return [];
+        }
+        return [mapAgentItem(item, subagentNicknames, mapImage)];
+      }),
+    ]),
     startedAt: toNullableDateTime(turn["startedAt"], "Codex turn startedAt"),
     status: mapTurnStatus(turn["status"]),
   };
@@ -1066,6 +1161,7 @@ function mapCodexNotification(
     part: Record<string, unknown>,
     imageIndex: number,
   ) => AgentMessageAttachment | undefined,
+  reviewTarget?: AgentReviewTarget,
 ): AgentProviderEvent | undefined {
   if (!CODEX_NOTIFICATION_METHODS.has(method)) {
     return undefined;
@@ -1084,8 +1180,10 @@ function mapCodexNotification(
   }
 
   if (method === "turn/started" || method === "turn/completed") {
-    const turn = mapAgentTurn(params["turn"], (part, imageIndex) =>
-      mapImage(taskId, part, imageIndex),
+    const turn = mapAgentTurn(
+      params["turn"],
+      (part, imageIndex) => mapImage(taskId, part, imageIndex),
+      reviewTarget,
     );
     return {
       payload: { turn },
@@ -1114,6 +1212,13 @@ function mapCodexNotification(
 
   if (method === "item/started") {
     const nativeItem = expectRecord(params["item"], "Codex started item");
+    if (nativeItem["type"] === "enteredReviewMode") {
+      const item = createReviewItem(
+        turnId,
+        reviewTarget ?? mapReviewHint(expectString(nativeItem["review"], "Codex review mode hint")),
+      );
+      return { itemId: item.id, payload: { item }, taskId, turnId, type: "item.started" };
+    }
     // 子代理启动可能持续较久，需立即交付；普通消息与命令已有专用 Delta，避免重复空 Item。
     if (nativeItem["type"] !== "collabAgentToolCall") {
       return undefined;
@@ -1129,7 +1234,23 @@ function mapCodexNotification(
   }
 
   if (method === "item/completed") {
-    const item = mapAgentItem(params["item"], new Map(), (part, imageIndex) =>
+    const nativeItem = expectRecord(params["item"], "Codex completed item");
+    if (nativeItem["type"] === "exitedReviewMode") {
+      return undefined;
+    }
+    const promptReviewTarget = inferReviewTargetFromPrompt(nativeItem);
+    if (nativeItem["type"] === "userMessage" && reviewTarget !== undefined) {
+      return undefined;
+    }
+    if (nativeItem["type"] === "enteredReviewMode" || promptReviewTarget !== undefined) {
+      const target =
+        reviewTarget ??
+        promptReviewTarget ??
+        mapReviewHint(expectString(nativeItem["review"], "Codex review mode hint"));
+      const item = createReviewItem(turnId, target);
+      return { itemId: item.id, payload: { item }, taskId, turnId, type: "item.completed" };
+    }
+    const item = mapAgentItem(nativeItem, new Map(), (part, imageIndex) =>
       mapImage(taskId, part, imageIndex),
     );
     return {
@@ -1221,6 +1342,7 @@ function mapAgentTask(thread: Record<string, unknown>, project: Project): AgentT
 
 export class CodexAgentProvider implements AgentProvider {
   readonly #client: CodexRpcClient;
+  readonly #activeReviewTargets = new Map<string, AgentReviewTarget>();
   readonly #eventListeners = new Set<AgentProviderEventListener>();
   readonly #historicalAttachments = new CodexHistoricalAttachmentStore();
   readonly #logger: CodexProviderLogger;
@@ -1478,20 +1600,34 @@ export class CodexAgentProvider implements AgentProvider {
           : target.type === "commit"
             ? { sha: target.sha, title: target.title ?? null, type: "commit" as const }
             : { instructions: target.instructions, type: "custom" as const };
-    const response = expectRecord(
-      await this.#client.request("review/start", {
-        delivery: "inline",
-        target: nativeTarget,
-        threadId: taskId,
-      }),
-      "review/start response",
-    );
+    // Notification 可能早于 RPC 响应到达，先记录目标以隐藏内部 Prompt 并生成稳定审查 Item。
+    this.#activeReviewTargets.set(taskId, target);
+    let response: Record<string, unknown>;
+    try {
+      response = expectRecord(
+        await this.#client.request("review/start", {
+          delivery: "inline",
+          target: nativeTarget,
+          threadId: taskId,
+        }),
+        "review/start response",
+      );
+    } catch (error) {
+      this.#activeReviewTargets.delete(taskId);
+      throw error;
+    }
     if (expectString(response["reviewThreadId"], "review/start thread id") !== taskId) {
       throw new CodexProtocolMappingError("review/start returned a different thread");
     }
-    return mapAgentTurn(response["turn"], (part, imageIndex) =>
-      this.#mapMessageImage(taskId, part, imageIndex),
+    const turn = mapAgentTurn(
+      response["turn"],
+      (part, imageIndex) => this.#mapMessageImage(taskId, part, imageIndex),
+      target,
     );
+    if (turn.status !== "running") {
+      this.#activeReviewTargets.delete(taskId);
+    }
+    return turn;
   }
 
   public async interruptTurn(taskId: string, turnId: string): Promise<void> {
@@ -1824,8 +1960,11 @@ export class CodexAgentProvider implements AgentProvider {
     }
     let event: AgentProviderEvent | undefined;
     try {
-      event = mapCodexNotification(method, params, (taskId, part, imageIndex) =>
-        this.#mapMessageImage(taskId, part, imageIndex),
+      event = mapCodexNotification(
+        method,
+        params,
+        (taskId, part, imageIndex) => this.#mapMessageImage(taskId, part, imageIndex),
+        this.#activeReviewTargets.get(readTaskId(params) ?? ""),
       );
     } catch {
       // 单个原生通知字段漂移不能中断 JSONL Client 或后续关键事件。
@@ -1850,6 +1989,7 @@ export class CodexAgentProvider implements AgentProvider {
     }
     if (event.type === "turn.completed") {
       this.#runningTaskIds.delete(event.taskId);
+      this.#activeReviewTargets.delete(event.taskId);
       this.#removeQueuedRequestsForTurn(event.taskId, event.turnId);
       for (const entry of [...this.#pendingRequests.values()]) {
         if (entry.request.taskId === event.taskId && entry.request.turnId === event.turnId) {
@@ -1889,6 +2029,7 @@ export class CodexAgentProvider implements AgentProvider {
   }
 
   #clearTaskRuntimeState(taskId: string): void {
+    this.#activeReviewTargets.delete(taskId);
     this.#historicalAttachments.clearTask(taskId);
     this.#pendingTaskEvents.delete(taskId);
     this.#pendingTaskServerRequests.delete(taskId);

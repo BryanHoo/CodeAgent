@@ -77,6 +77,7 @@ export {
   FileChangeApprovalPendingRequestSchema,
   AgentPlanItemSchema,
   AgentReasoningItemSchema,
+  AgentReviewItemSchema,
   AgentTaskPageSchema,
   AgentTaskSchema,
   AgentTaskSettingsResponseSchema,

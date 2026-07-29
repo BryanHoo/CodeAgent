@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import type { AgentItem, ProjectGitStatus } from "@code-agent/protocol";
 
 type GitFileChange = Extract<AgentItem, { type: "file_change" }>["changes"][number];
+type GitWorkingTreeChanges = Pick<ProjectGitStatus, "staged" | "unstaged">;
 
 type WorkingTreeEntry = Readonly<{
   indexStatus: string;
@@ -147,7 +148,7 @@ async function hasGitMetadata(repositoryRoot: string): Promise<boolean> {
 async function readRepositoryWorkingTreeStatus(
   repositoryRoot: string,
   gitCommandExecutor: GitCommandExecutor,
-): Promise<ProjectGitStatus> {
+): Promise<GitWorkingTreeChanges> {
   const statusOutput = await gitCommandExecutor(repositoryRoot, [
     "status",
     "--porcelain=v1",
@@ -176,6 +177,55 @@ async function readRepositoryWorkingTreeStatus(
   return { staged, unstaged };
 }
 
+async function readOptionalGit(
+  repositoryRoot: string,
+  arguments_: readonly string[],
+  gitCommandExecutor: GitCommandExecutor,
+): Promise<string> {
+  try {
+    return await gitCommandExecutor(repositoryRoot, arguments_);
+  } catch {
+    return "";
+  }
+}
+
+async function readRepositoryBranches(
+  repositoryRoot: string,
+  gitCommandExecutor: GitCommandExecutor,
+): Promise<Pick<ProjectGitStatus, "baseBranches" | "branch">> {
+  const [branchOutput, refsOutput, remoteHeadOutput] = await Promise.all([
+    readOptionalGit(repositoryRoot, ["branch", "--show-current"], gitCommandExecutor),
+    readOptionalGit(
+      repositoryRoot,
+      ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"],
+      gitCommandExecutor,
+    ),
+    readOptionalGit(
+      repositoryRoot,
+      ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
+      gitCommandExecutor,
+    ),
+  ]);
+  const branch = branchOutput.trim() || null;
+  const branches = [...new Set(refsOutput.split("\n").map((ref) => ref.trim()))]
+    .filter((ref) => ref !== "" && !ref.endsWith("/HEAD") && ref !== branch)
+    .toSorted((left, right) => left.localeCompare(right));
+  const remoteDefaultBranch = remoteHeadOutput.trim().replace(/^refs\/remotes\//u, "");
+  const preferredBranch = [
+    remoteDefaultBranch,
+    "origin/main",
+    "main",
+    "origin/master",
+    "master",
+  ].find((candidate) => candidate !== "" && branches.includes(candidate));
+
+  if (preferredBranch !== undefined) {
+    branches.splice(branches.indexOf(preferredBranch), 1);
+    branches.unshift(preferredBranch);
+  }
+  return { baseBranches: branches, branch };
+}
+
 function prefixRepositoryPath(repositoryName: string, change: GitFileChange): GitFileChange {
   return { ...change, path: `${repositoryName}/${change.path}` };
 }
@@ -183,7 +233,7 @@ function prefixRepositoryPath(repositoryName: string, change: GitFileChange): Gi
 async function readImmediateChildRepositoryStatuses(
   projectRoot: string,
   gitCommandExecutor: GitCommandExecutor,
-): Promise<ProjectGitStatus | undefined> {
+): Promise<GitWorkingTreeChanges | undefined> {
   const childDirectories = (await readdir(projectRoot, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
     .toSorted((left, right) => left.name.localeCompare(right.name));
@@ -233,9 +283,14 @@ export async function readGitWorkingTreeStatus(
 
   // 每次读取都重新解析真实路径，避免 Project 根目录被符号链接替换后越过配置边界。
   const resolvedProjectRoot = await realpath(projectRoot);
-  let status: ProjectGitStatus;
+  let status: GitWorkingTreeChanges;
+  let repositoryBranches: Pick<ProjectGitStatus, "baseBranches" | "branch"> = {
+    baseBranches: [],
+    branch: null,
+  };
   try {
     status = await readRepositoryWorkingTreeStatus(resolvedProjectRoot, gitCommandExecutor);
+    repositoryBranches = await readRepositoryBranches(resolvedProjectRoot, gitCommandExecutor);
   } catch (rootStatusError) {
     // 当前目录不是仓库时只回退一级；当前目录已有 .git 则保留原始错误语义。
     if (await hasGitMetadata(resolvedProjectRoot)) {
@@ -254,6 +309,7 @@ export async function readGitWorkingTreeStatus(
   const comparePaths = (left: GitFileChange, right: GitFileChange) =>
     left.path.localeCompare(right.path);
   return {
+    ...repositoryBranches,
     staged: status.staged.toSorted(comparePaths),
     unstaged: status.unstaged.toSorted(comparePaths),
   };

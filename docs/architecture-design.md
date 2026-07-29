@@ -680,8 +680,11 @@ turn id -> runtime state
 | `startTurn`     | `turn/start`      |
 | `steerTurn`     | `turn/steer`      |
 | `interruptTurn` | `turn/interrupt`  |
+| `startReview`   | `review/start`    |
 
 `startTurn` 将统一 Prompt 映射为 Codex `UserInput[]`：已选择 Skill 使用 `{ type: "skill", name, path }`，非空文本使用 `text`，Server 已验证的图片 Data URL 使用 `image`。Skill 目录由 Project Provider 调用 `skills/list { cwds: [project.rootPath] }` 获取；Web 只接收稳定不透明 ID，Provider 在提交时重新验证 ID 与名称并解析原生绝对路径。统一 `model`、`reasoningEffort`、`approvalPolicy` 和 `approvalsReviewer` 分别映射为 Codex `model`、`effort`、`approvalPolicy` 和 `approvalsReviewer`，不向 Web 暴露其他原生字段。自动审批固定映射为 `approvalPolicy: "on-request"` 与 `approvalsReviewer: "auto_review"`；`never` 只表示从不询问，不能替代自动审核。
+
+`startReview` 在调用 `review/start` 前记录统一 `AgentReviewTarget`，将响应、实时通知和历史 Snapshot 中的 `enteredReviewMode` 归一为稳定的 `AgentReviewItem`，并过滤 Codex 自动生成的内部 `userMessage` Review Prompt。Web 只根据结构化 Target 生成固定审查请求文案，不展示或复制 Provider 原生 Prompt。
 
 `readTask` 映射 Codex 历史 `image` 与 `localImage` 时只写入随机附件 ID、媒体类型、名称和字节数。Provider 历史附件 Store 默认最多保留 `128` 个条目、合计 `64 MiB`、TTL `30` 分钟；本地图片只读取固定长度签名头，完整正文延迟到 `readTaskAttachment`，并在交付前复验文件身份和内容签名。Snapshot 重建与 `unsubscribeTask` 都清理对应 Task 的旧授权记录。
 

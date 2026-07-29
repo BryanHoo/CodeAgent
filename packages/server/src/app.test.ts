@@ -606,6 +606,8 @@ describe("CodeAgent Server", () => {
     const { provider } = createProvider();
     const readProjectGitStatus = vi.fn(() =>
       Promise.resolve({
+        baseBranches: ["origin/main", "main"],
+        branch: "feat/review",
         staged: [
           {
             diff: "--- a/staged.ts\n+++ b/staged.ts\n@@ -1 +1 @@\n-old\n+new",
@@ -631,7 +633,12 @@ describe("CodeAgent Server", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ staged: [{ path: "staged.ts" }], unstaged: [] });
+    expect(response.json()).toMatchObject({
+      baseBranches: ["origin/main", "main"],
+      branch: "feat/review",
+      staged: [{ path: "staged.ts" }],
+      unstaged: [],
+    });
     expect(readProjectGitStatus).toHaveBeenCalledWith(project.rootPath);
     expect(missingProjectResponse.statusCode).toBe(404);
     expect(readProjectGitStatus).toHaveBeenCalledTimes(1);

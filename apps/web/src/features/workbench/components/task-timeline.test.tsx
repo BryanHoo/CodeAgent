@@ -240,6 +240,42 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain("space-y-4");
   });
 
+  it("renders one fixed review request instead of native review prompts", () => {
+    const reviewSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          ...completedTurn,
+          completedAt: null,
+          items: [
+            {
+              id: "review-mode-turn-1",
+              target: { type: "uncommitted_changes" },
+              type: "review",
+            },
+            {
+              id: "review-command",
+              command: "git diff",
+              cwd: "/workspace/CodeAgent",
+              outputTruncated: false,
+              status: "running",
+              type: "command",
+            },
+          ],
+          status: "running",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={reviewSnapshot} />);
+
+    expect(markup.match(/请检查我未提交的更改/g)).toHaveLength(1);
+    expect(markup).toContain("审查模式");
+    expect(markup).not.toContain("Review the current code changes");
+    expect(markup.indexOf("请检查我未提交的更改")).toBeLessThan(markup.indexOf("git diff"));
+  });
+
   it("renders user image attachments as viewable previews", () => {
     const imageSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,

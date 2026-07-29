@@ -11,6 +11,7 @@ import {
   resolveActiveTurnId,
   resolveReasoningEffort,
   startPromptTurn,
+  startTaskReview,
 } from "./workbench-composer.js";
 
 const task = {
@@ -238,6 +239,53 @@ describe("WorkbenchComposer", () => {
         sandboxMode: "danger-full-access",
       },
       { idempotencyKey: "existing-turn-key" },
+    );
+  });
+
+  it("starts code review from a new chat without creating message history", async () => {
+    const calls: string[] = [];
+    const reviewTurn = { ...turn, id: "review-turn" };
+    const client = {
+      startReview: vi.fn(() => {
+        calls.push("review");
+        return Promise.resolve({ taskId: task.id, turn: reviewTurn });
+      }),
+      startTask: vi.fn(() => {
+        calls.push("task");
+        return Promise.resolve({ task });
+      }),
+    };
+
+    await expect(
+      startTaskReview(client, {
+        idempotencyKey: "review-key",
+        projectId: "code-agent",
+        target: { type: "uncommitted_changes" },
+      }),
+    ).resolves.toEqual({ createdTask: task, taskId: task.id, turn: reviewTurn });
+
+    expect(calls).toEqual(["task", "review"]);
+    expect(client.startTask).toHaveBeenCalledWith("code-agent", {
+      idempotencyKey: "review-key",
+    });
+    expect(client.startReview).toHaveBeenCalledWith(
+      "code-agent",
+      task.id,
+      { target: { type: "uncommitted_changes" } },
+      { idempotencyKey: "review-key" },
+    );
+
+    await startTaskReview(client, {
+      idempotencyKey: "base-review-key",
+      projectId: "code-agent",
+      target: { branch: "origin/main", type: "base_branch" },
+      taskId: task.id,
+    });
+    expect(client.startReview).toHaveBeenLastCalledWith(
+      "code-agent",
+      task.id,
+      { target: { branch: "origin/main", type: "base_branch" } },
+      { idempotencyKey: "base-review-key" },
     );
   });
 

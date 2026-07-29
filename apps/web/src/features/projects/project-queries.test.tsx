@@ -179,7 +179,7 @@ describe("project queries", () => {
 
   it("polls Git status only while the current task is running", async () => {
     const getProjectGitStatus = vi.fn<CodeAgentGitStatusClient["getProjectGitStatus"]>(() =>
-      Promise.resolve({ staged: [], unstaged: [] }),
+      Promise.resolve({ baseBranches: ["origin/main"], branch: "main", staged: [], unstaged: [] }),
     );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const runningOptions = projectGitStatusQueryOptions("code-agent", true, {
@@ -190,6 +190,8 @@ describe("project queries", () => {
     });
 
     await expect(queryClient.fetchQuery(runningOptions)).resolves.toEqual({
+      baseBranches: ["origin/main"],
+      branch: "main",
       staged: [],
       unstaged: [],
     });

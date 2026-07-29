@@ -201,6 +201,8 @@ describe("CodeAgentClient", () => {
 
   it("reads and validates a project's staged and unstaged Git changes", async () => {
     const gitStatus = {
+      baseBranches: ["origin/main", "main"],
+      branch: "feat/review",
       staged: [],
       unstaged: [
         {
@@ -216,6 +218,11 @@ describe("CodeAgentClient", () => {
 
     await expect(client.getProjectGitStatus("project one")).resolves.toEqual(gitStatus);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects/project%20one/git/status");
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ staged: [], unstaged: [] }));
+    await expect(client.getProjectGitStatus("project one")).rejects.toThrow(
+      "CodeAgent response does not match the protocol schema",
+    );
   });
 
   it("reads and validates a bounded project source preview", async () => {

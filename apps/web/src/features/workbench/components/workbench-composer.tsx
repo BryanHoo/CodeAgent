@@ -4,6 +4,7 @@ import type {
   AgentCapabilities,
   AgentModel,
   AgentPromptInput,
+  AgentReviewTarget,
   AgentSandboxMode,
   AgentSkill,
   AgentTask,
@@ -11,6 +12,7 @@ import type {
   AgentTaskSnapshot,
   AgentTurn,
   AgentTurnOptions,
+  ProjectGitStatus,
 } from "@code-agent/protocol";
 import {
   Bug,
@@ -249,6 +251,41 @@ export async function startPromptTurn(
   };
 }
 
+type StartTaskReviewOptions = Readonly<{
+  idempotencyKey: string;
+  onTaskCreated?: (task: AgentTask) => void;
+  projectId: string;
+  target: AgentReviewTarget;
+  taskId?: string;
+}>;
+
+export async function startTaskReview(
+  client: Pick<CodeAgentMutationClient, "startReview" | "startTask">,
+  options: StartTaskReviewOptions,
+): Promise<Readonly<{ createdTask?: AgentTask; taskId: string; turn: AgentTurn }>> {
+  let taskId = options.taskId;
+  let createdTask: AgentTask | undefined;
+  if (taskId === undefined) {
+    const response = await client.startTask(options.projectId, {
+      idempotencyKey: options.idempotencyKey,
+    });
+    createdTask = response.task;
+    taskId = response.task.id;
+    options.onTaskCreated?.(response.task);
+  }
+  const response = await client.startReview(
+    options.projectId,
+    taskId,
+    { target: options.target },
+    { idempotencyKey: options.idempotencyKey },
+  );
+  return {
+    ...(createdTask === undefined ? {} : { createdTask }),
+    taskId,
+    turn: response.turn,
+  };
+}
+
 export function interruptPromptTurn(
   client: Pick<CodeAgentMutationClient, "interruptTurn">,
   projectId: string,
@@ -278,6 +315,7 @@ type WorkbenchComposerProps = Readonly<{
   ) => void;
   projectId: string;
   projectPath: string;
+  gitStatus?: ProjectGitStatus;
   runtime?: TaskRuntimeView;
   settings: AgentTaskSettings;
   skills: readonly AgentSkill[];
@@ -356,6 +394,7 @@ export function WorkbenchComposer({
   onTurnStarted,
   projectId,
   projectPath,
+  gitStatus,
   runtime,
   settings,
   skills,
@@ -377,6 +416,7 @@ export function WorkbenchComposer({
     initialComposerDraft.commandDraftMode,
   );
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
+  const [reviewMenuMode, setReviewMenuMode] = useState<"branches" | "scopes" | null>(null);
   const [commandNotice, setCommandNotice] = useState<string>();
   const [commandQuery, setCommandQuery] = useState("");
   const [commandSlashCommand, setCommandSlashCommand] = useState<PromptSlashCommand>();
@@ -442,7 +482,13 @@ export function WorkbenchComposer({
     commandQuery,
   );
   const filteredCommands = filterPromptCommandItems(promptCommandItems, commandQuery);
-  const menuItemCount = filteredSkills.length + filteredCommands.length;
+  const baseBranches = gitStatus?.baseBranches ?? [];
+  const menuItemCount =
+    reviewMenuMode === "scopes"
+      ? 2
+      : reviewMenuMode === "branches"
+        ? baseBranches.length
+        : filteredSkills.length + filteredCommands.length;
   const activeCommandItemId =
     !commandMenuOpen || menuItemCount === 0
       ? undefined
@@ -461,6 +507,7 @@ export function WorkbenchComposer({
     setCommandMenuOpen(false);
     setCommandQuery("");
     setCommandSlashCommand(undefined);
+    setReviewMenuMode(null);
   }, []);
   const replacePromptContent = useCallback(
     (nextContent: PromptSkillContent, cursorOffset?: number) => {
@@ -510,6 +557,7 @@ export function WorkbenchComposer({
       setSettingsOverride(undefined);
       setActiveCommandIndex(0);
       setCommandMenuOpen(false);
+      setReviewMenuMode(null);
       setCommandNotice(undefined);
       setCommandQuery("");
       setCommandSlashCommand(undefined);
@@ -762,11 +810,18 @@ export function WorkbenchComposer({
     if (!getCommandAvailability(command).available) {
       return;
     }
-    setCommandMenuOpen(false);
     setCommandQuery("");
     setCommandSlashCommand(undefined);
     setCommandNotice(undefined);
     replacePromptContent([]);
+
+    if (command.action === "review") {
+      setActiveCommandIndex(0);
+      setReviewMenuMode("scopes");
+      return;
+    }
+    setCommandMenuOpen(false);
+    setReviewMenuMode(null);
 
     if (command.action === "feedback" || command.action === "subtask") {
       beginCommandDraft(command.action);
@@ -794,18 +849,7 @@ export function WorkbenchComposer({
     );
     commandAttempts.current.set(command.action, attempt);
     try {
-      if (command.action === "review") {
-        const response = await client.startReview(
-          projectId,
-          activeTaskId,
-          { target: { type: "uncommitted_changes" } },
-          { idempotencyKey: attempt.key },
-        );
-        if (routeScopeRef.current === requestScope) {
-          setSubmittedTurnState({ scope: requestScope, turnId: response.turn.id });
-          setCommandNotice("代码审查已开始");
-        }
-      } else if (command.action === "compact") {
+      if (command.action === "compact") {
         await client.compactTask(projectId, activeTaskId, { idempotencyKey: attempt.key });
         if (routeScopeRef.current === requestScope) {
           setCommandNotice("正在压缩上下文");
@@ -822,6 +866,52 @@ export function WorkbenchComposer({
     } catch (error) {
       if (routeScopeRef.current === requestScope) {
         setMutationError(error instanceof Error ? error : new Error("Task command failed"));
+      }
+    } finally {
+      if (routeScopeRef.current === requestScope) {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  const executeReviewTarget = async (target: AgentReviewTarget) => {
+    const requestScope = routeScope;
+    closeCommandMenu();
+    setCommandNotice(undefined);
+    setIsSubmitting(true);
+    setMutationError(null);
+    const attempt = resolveIdempotencyAttempt(
+      commandAttempts.current.get("review"),
+      JSON.stringify({ target, taskId: activeTaskId ?? projectId }),
+    );
+    commandAttempts.current.set("review", attempt);
+    try {
+      const response = await startTaskReview(client, {
+        idempotencyKey: attempt.key,
+        onTaskCreated(task) {
+          // Review 启动失败时保留已创建 Task，重试不能重复创建。
+          if (routeScopeRef.current === requestScope) {
+            setPendingTaskState({ scope: requestScope, task });
+          }
+        },
+        projectId,
+        target,
+        ...(activeTaskId === undefined ? {} : { taskId: activeTaskId }),
+      });
+      if (routeScopeRef.current === requestScope) {
+        commandAttempts.current.delete("review");
+        setSubmittedTurnState({ scope: requestScope, turnId: response.turn.id });
+        setCommandNotice("代码审查已开始");
+        if (taskId === undefined) {
+          const startedTask = response.createdTask ?? pendingTask;
+          if (startedTask !== undefined) {
+            onTaskStarted(startedTask, response.turn);
+          }
+        }
+      }
+    } catch (error) {
+      if (routeScopeRef.current === requestScope) {
+        setMutationError(error instanceof Error ? error : new Error("Review command failed"));
       }
     } finally {
       if (routeScopeRef.current === requestScope) {
@@ -848,6 +938,22 @@ export function WorkbenchComposer({
   };
 
   const selectActiveCommandItem = () => {
+    if (reviewMenuMode === "scopes") {
+      if (activeCommandIndex === 0) {
+        void executeReviewTarget({ type: "uncommitted_changes" });
+      } else if (activeCommandIndex === 1 && baseBranches.length > 0) {
+        setActiveCommandIndex(0);
+        setReviewMenuMode("branches");
+      }
+      return;
+    }
+    if (reviewMenuMode === "branches") {
+      const branch = baseBranches[activeCommandIndex];
+      if (branch !== undefined) {
+        void executeReviewTarget({ branch, type: "base_branch" });
+      }
+      return;
+    }
     const command = filteredCommands[activeCommandIndex];
     if (command !== undefined) {
       void executePromptCommand(command);
@@ -898,59 +1004,108 @@ export function WorkbenchComposer({
         id={commandMenuId}
       >
         <PromptInputCommandList>
-          <PromptInputCommandGroup label="命令">
-            {filteredCommands.map((command, index) => {
-              const availability = getCommandAvailability(command);
-              return (
-                <PromptInputCommandItem
-                  active={index === activeCommandIndex}
-                  aria-description={availability.reason}
-                  disabled={!availability.available}
-                  id={`${commandMenuId}-item-${String(index)}`}
-                  key={command.id}
-                  onClick={() => {
-                    void executePromptCommand(command);
-                  }}
-                >
-                  <PromptCommandIcon action={command.action} />
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="font-medium">{command.label}</span>
-                    <span className="text-caption text-muted-foreground">
-                      {availability.reason ?? command.description}
-                    </span>
+          {reviewMenuMode === "scopes" ? (
+            <PromptInputCommandGroup label="选择审查范围">
+              <PromptInputCommandItem
+                active={activeCommandIndex === 0}
+                id={`${commandMenuId}-item-0`}
+                onClick={() => void executeReviewTarget({ type: "uncommitted_changes" })}
+              >
+                <Bug aria-hidden="true" className="size-4 shrink-0 text-accent" />
+                <span className="font-medium">审查未提交的更改</span>
+              </PromptInputCommandItem>
+              <PromptInputCommandItem
+                active={activeCommandIndex === 1}
+                aria-description={
+                  baseBranches.length === 0 ? "未发现可用的基础分支" : baseBranches[0]
+                }
+                disabled={baseBranches.length === 0}
+                id={`${commandMenuId}-item-1`}
+                onClick={() => {
+                  setActiveCommandIndex(0);
+                  setReviewMenuMode("branches");
+                }}
+              >
+                <GitBranch aria-hidden="true" className="size-4 shrink-0 text-accent" />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="font-medium">基于基础分支进行审查</span>
+                  <span className="truncate text-caption text-muted-foreground">
+                    {baseBranches[0] ?? "未发现可用分支"}
                   </span>
-                </PromptInputCommandItem>
-              );
-            })}
-          </PromptInputCommandGroup>
-          {filteredSkills.length === 0 ? null : (
-            <PromptInputCommandGroup label="Skills">
-              {filteredSkills.map((skill, index) => {
-                const menuIndex = filteredCommands.length + index;
-                return (
-                  <PromptInputCommandItem
-                    active={menuIndex === activeCommandIndex}
-                    id={`${commandMenuId}-item-${String(menuIndex)}`}
-                    key={skill.id}
-                    onClick={() => {
-                      selectSkill(skill);
-                    }}
-                  >
-                    <Sparkles aria-hidden="true" className="size-4 shrink-0 text-skill" />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="font-medium text-skill">{skill.displayName}</span>
-                      <span className="block max-w-full truncate text-caption text-muted-foreground">
-                        /{skill.name} · {skill.description}
-                      </span>
-                    </span>
-                  </PromptInputCommandItem>
-                );
-              })}
+                </span>
+              </PromptInputCommandItem>
             </PromptInputCommandGroup>
+          ) : reviewMenuMode === "branches" ? (
+            <PromptInputCommandGroup label="选择基础分支">
+              {baseBranches.map((branch, index) => (
+                <PromptInputCommandItem
+                  active={activeCommandIndex === index}
+                  id={`${commandMenuId}-item-${String(index)}`}
+                  key={branch}
+                  onClick={() => void executeReviewTarget({ branch, type: "base_branch" })}
+                >
+                  <GitBranch aria-hidden="true" className="size-4 shrink-0 text-accent" />
+                  <span className="truncate font-medium">{branch}</span>
+                </PromptInputCommandItem>
+              ))}
+            </PromptInputCommandGroup>
+          ) : (
+            <>
+              <PromptInputCommandGroup label="命令">
+                {filteredCommands.map((command, index) => {
+                  const availability = getCommandAvailability(command);
+                  return (
+                    <PromptInputCommandItem
+                      active={index === activeCommandIndex}
+                      aria-description={availability.reason}
+                      disabled={!availability.available}
+                      id={`${commandMenuId}-item-${String(index)}`}
+                      key={command.id}
+                      onClick={() => {
+                        void executePromptCommand(command);
+                      }}
+                    >
+                      <PromptCommandIcon action={command.action} />
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="font-medium">{command.label}</span>
+                        <span className="text-caption text-muted-foreground">
+                          {availability.reason ?? command.description}
+                        </span>
+                      </span>
+                    </PromptInputCommandItem>
+                  );
+                })}
+              </PromptInputCommandGroup>
+              {filteredSkills.length === 0 ? null : (
+                <PromptInputCommandGroup label="Skills">
+                  {filteredSkills.map((skill, index) => {
+                    const menuIndex = filteredCommands.length + index;
+                    return (
+                      <PromptInputCommandItem
+                        active={menuIndex === activeCommandIndex}
+                        id={`${commandMenuId}-item-${String(menuIndex)}`}
+                        key={skill.id}
+                        onClick={() => {
+                          selectSkill(skill);
+                        }}
+                      >
+                        <Sparkles aria-hidden="true" className="size-4 shrink-0 text-skill" />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="font-medium text-skill">{skill.displayName}</span>
+                          <span className="block max-w-full truncate text-caption text-muted-foreground">
+                            /{skill.name} · {skill.description}
+                          </span>
+                        </span>
+                      </PromptInputCommandItem>
+                    );
+                  })}
+                </PromptInputCommandGroup>
+              )}
+              {menuItemCount === 0 ? (
+                <PromptInputCommandEmpty>没有匹配的 Skill 或命令</PromptInputCommandEmpty>
+              ) : null}
+            </>
           )}
-          {menuItemCount === 0 ? (
-            <PromptInputCommandEmpty>没有匹配的 Skill 或命令</PromptInputCommandEmpty>
-          ) : null}
         </PromptInputCommandList>
       </PromptInputCommand>
     );
@@ -1034,6 +1189,7 @@ export function WorkbenchComposer({
                 const slashCommand = resolvePromptSlashCommand(serializedText, cursorOffset);
                 if (slashCommand === null) {
                   setCommandMenuOpen(false);
+                  setReviewMenuMode(null);
                   setCommandQuery("");
                   setCommandSlashCommand(undefined);
                   return;
@@ -1041,6 +1197,7 @@ export function WorkbenchComposer({
                 // 文本开头或空白后的 `/` 片段驱动过滤，连续正文中的斜杠保持普通字符。
                 setActiveCommandIndex(0);
                 setCommandMenuOpen(true);
+                setReviewMenuMode(null);
                 setCommandQuery(slashCommand.query);
                 setCommandSlashCommand(slashCommand);
               }}
@@ -1209,7 +1366,7 @@ export function WorkbenchComposer({
       )}
       <div className="mx-auto mt-1.5 flex w-full max-w-content min-w-0 items-center gap-3 px-1 text-caption text-muted-foreground">
         <span className="inline-flex shrink-0 items-center gap-1">
-          <GitBranch className="size-3" aria-hidden="true" /> main
+          <GitBranch className="size-3" aria-hidden="true" /> {gitStatus?.branch ?? "未检出分支"}
         </span>
         <span
           aria-label="项目路径"

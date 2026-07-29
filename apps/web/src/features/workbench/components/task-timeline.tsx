@@ -346,15 +346,17 @@ function getMessageTimestamp(
 }
 
 function MessageMetadata({
+  modeLabel,
   text,
   timestamp,
 }: Readonly<{
+  modeLabel?: string;
   text: string;
-  timestamp: string;
+  timestamp?: string;
 }>) {
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const copied = copiedText === text;
-  const messageDate = new Date(timestamp);
+  const messageDate = timestamp === undefined ? undefined : new Date(timestamp);
 
   const copyMessage = async () => {
     try {
@@ -381,9 +383,12 @@ function MessageMetadata({
           <Copy className="size-3.5" aria-hidden="true" />
         )}
       </MessageAction>
-      <time dateTime={timestamp} title={messageDateTimeFormatter.format(messageDate)}>
-        {messageTimeFormatter.format(messageDate)}
-      </time>
+      {modeLabel === undefined ? null : <span>{modeLabel}</span>}
+      {timestamp === undefined || messageDate === undefined ? null : (
+        <time dateTime={timestamp} title={messageDateTimeFormatter.format(messageDate)}>
+          {messageTimeFormatter.format(messageDate)}
+        </time>
+      )}
     </MessageActions>
   );
 }
@@ -538,8 +543,10 @@ type IndexedAgentItem = Readonly<{
   itemIndex: number;
 }>;
 
+type UserTimelineItem = Extract<AgentItem, { type: "message" | "review" }>;
+
 type TurnTimelineGroup =
-  | Readonly<{ item: Extract<AgentItem, { type: "message" }>; type: "user" }>
+  | Readonly<{ item: UserTimelineItem; type: "user" }>
   | Readonly<{ items: readonly IndexedAgentItem[]; key: string; type: "assistant" }>;
 
 type RunningOperation = Readonly<{
@@ -610,7 +617,7 @@ function groupTurnTimelineItems(items: readonly AgentItem[]): TurnTimelineGroup[
   };
 
   items.forEach((item, itemIndex) => {
-    if (item.type === "message" && item.role === "user") {
+    if (item.type === "review" || (item.type === "message" && item.role === "user")) {
       // 用户消息切断回复分组，其余 Item 都属于当前 Turn 的一次 AI 回复。
       flushAssistantItems();
       groups.push({ item, type: "user" });
@@ -621,6 +628,22 @@ function groupTurnTimelineItems(items: readonly AgentItem[]): TurnTimelineGroup[
   flushAssistantItems();
 
   return groups;
+}
+
+function getReviewMessageText(item: Extract<AgentItem, { type: "review" }>): string {
+  const target = item.target;
+  if (target.type === "uncommitted_changes") {
+    return "请检查我未提交的更改";
+  }
+  if (target.type === "base_branch") {
+    return `请检查我相对于 ${target.branch} 的更改`;
+  }
+  if (target.type === "commit") {
+    return target.title === undefined
+      ? `请检查提交 ${target.sha}`
+      : `请检查提交 ${target.sha}：${target.title}`;
+  }
+  return `请按以下要求检查代码：${target.instructions}`;
 }
 
 function TimelineItemContent({
@@ -703,6 +726,12 @@ function TimelineItemContent({
         </MessageContent>
       );
     }
+    case "review":
+      return (
+        <MessageContent>
+          <p>{getReviewMessageText(item)}</p>
+        </MessageContent>
+      );
     case "reasoning":
       // 原生 Reasoning 仅用于运行时状态同步，避免在界面暴露模型思维链。
       return null;
@@ -814,13 +843,16 @@ function TurnTimelineItems({
 
   const renderedGroups = timelineGroups.map((group, groupIndex) => {
     if (group.type === "user") {
-      const copiedText = [
-        ...(group.item.skills ?? []).map((skill) => `$${skill.name}`),
-        ...(group.item.attachments ?? []).map((attachment) => `[图片] ${attachment.name}`),
-        group.item.text,
-      ]
-        .filter((part) => part.length > 0)
-        .join("\n");
+      const copiedText =
+        group.item.type === "review"
+          ? getReviewMessageText(group.item)
+          : [
+              ...(group.item.skills ?? []).map((skill) => `$${skill.name}`),
+              ...(group.item.attachments ?? []).map((attachment) => `[图片] ${attachment.name}`),
+              group.item.text,
+            ]
+              .filter((part) => part.length > 0)
+              .join("\n");
       return (
         <Message from="user" key={group.item.id}>
           <TimelineItemContent
@@ -832,8 +864,12 @@ function TurnTimelineItems({
             turnStatus={turn.status}
           />
           <MessageMetadata
+            {...(group.item.type === "review"
+              ? { modeLabel: "审查模式" }
+              : {
+                  timestamp: getMessageTimestamp("user", turn, latestSnapshotTimestamp),
+                })}
             text={copiedText}
-            timestamp={getMessageTimestamp("user", turn, latestSnapshotTimestamp)}
           />
         </Message>
       );
@@ -924,7 +960,7 @@ function groupStoredTurnTimelineItems(
 
   for (const itemId of itemIds) {
     const item = itemsById[itemId];
-    if (item?.type === "message" && item.role === "user") {
+    if (item?.type === "review" || (item?.type === "message" && item.role === "user")) {
       flushAssistantItems();
       groups.push({ itemId, type: "user" });
       continue;
@@ -983,16 +1019,22 @@ function StoredUserMessage({
   turn: NormalizedAgentTurn;
 }>) {
   const item = useStore(store, (state) => state.itemsById[itemId]);
-  if (item?.type !== "message" || item.role !== "user") {
+  if (
+    item === undefined ||
+    (item.type !== "review" && (item.type !== "message" || item.role !== "user"))
+  ) {
     return null;
   }
-  const copiedText = [
-    ...(item.skills ?? []).map((skill) => `$${skill.name}`),
-    ...(item.attachments ?? []).map((attachment) => `[图片] ${attachment.name}`),
-    item.text,
-  ]
-    .filter((part) => part.length > 0)
-    .join("\n");
+  const copiedText =
+    item.type === "review"
+      ? getReviewMessageText(item)
+      : [
+          ...(item.skills ?? []).map((skill) => `$${skill.name}`),
+          ...(item.attachments ?? []).map((attachment) => `[图片] ${attachment.name}`),
+          item.text,
+        ]
+          .filter((part) => part.length > 0)
+          .join("\n");
 
   return (
     <Message from="user">
@@ -1005,8 +1047,10 @@ function StoredUserMessage({
         turnStatus={turn.status}
       />
       <MessageMetadata
+        {...(item.type === "review"
+          ? { modeLabel: "审查模式" }
+          : { timestamp: getMessageTimestamp("user", turn, latestSnapshotTimestamp) })}
         text={copiedText}
-        timestamp={getMessageTimestamp("user", turn, latestSnapshotTimestamp)}
       />
     </Message>
   );

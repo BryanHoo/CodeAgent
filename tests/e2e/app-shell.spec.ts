@@ -185,6 +185,8 @@ const packageJsonDiff = [
 ].join("\n");
 
 const projectGitStatus = {
+  baseBranches: ["origin/main", "main", "release"],
+  branch: "feat/review-targets",
   staged: [],
   unstaged: [{ diff: packageJsonDiff, kind: "update", path: "package.json" }],
 };
@@ -399,6 +401,18 @@ test.beforeEach(async ({ page }) => {
       body = { status: "compacting", taskId: "task-1" };
     } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1/feedback") {
       body = { status: "sent", taskId: "task-1" };
+    } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1/review") {
+      body = {
+        taskId: "task-1",
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "review-turn",
+          items: [],
+          startedAt: "2026-07-29T00:00:00.000Z",
+          status: "running",
+        },
+      };
     } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1/fork") {
       body = {
         task: {
@@ -1086,6 +1100,126 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   await expect
     .poll(() => commandRequests.map((request) => request.path))
     .toContain("/v1/projects/code-agent/tasks/task-1/fork");
+});
+
+test("starts code review from a new chat with one fixed review message", async ({ page }) => {
+  const reviewTask = {
+    id: "review-task",
+    pinned: false,
+    projectId: "code-agent",
+    title: "新聊天",
+    updatedAt: "2026-07-29T00:00:00.000Z",
+  };
+  const reviewTurn = {
+    completedAt: null,
+    error: null,
+    id: "review-turn",
+    items: [
+      {
+        id: "review-mode-review-turn",
+        target: { type: "uncommitted_changes" },
+        type: "review",
+      },
+    ],
+    startedAt: "2026-07-29T00:00:00.000Z",
+    status: "running",
+  };
+  const mutationPaths: string[] = [];
+  const reviewBodies: unknown[] = [];
+  await page.route("**/v1/projects/code-agent/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "POST") {
+      mutationPaths.push(url.pathname);
+    }
+    if (url.pathname === "/v1/projects/code-agent/tasks" && request.method() === "POST") {
+      await route.fulfill({ contentType: "application/json", json: { task: reviewTask } });
+      return;
+    }
+    if (
+      url.pathname === "/v1/projects/code-agent/tasks/review-task/review" &&
+      request.method() === "POST"
+    ) {
+      reviewBodies.push(request.postDataJSON());
+      await route.fulfill({
+        contentType: "application/json",
+        json: { taskId: reviewTask.id, turn: reviewTurn },
+      });
+      return;
+    }
+    if (url.pathname === "/v1/projects/code-agent/tasks/review-task") {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          checkpoint: { sequence: 0, sessionId: "review-session" },
+          snapshot: {
+            ...reviewTask,
+            contextUsage: null,
+            pendingRequests: [],
+            settings: taskSnapshot.settings,
+            status: "running",
+            turns: [reviewTurn],
+          },
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/p/code-agent");
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.fill("/");
+  await page.getByRole("option", { name: /代码审查/u }).click();
+  await expect(page.getByRole("group", { name: "选择审查范围" })).toBeVisible();
+  await expect(page.getByRole("option", { name: /审查未提交的更改/u })).toBeVisible();
+  await expect(page.getByRole("option", { name: /基于基础分支进行审查/u })).toContainText(
+    "origin/main",
+  );
+  expect(mutationPaths).toEqual([]);
+  await prompt.fill("重新选择 /初始化");
+  await expect(page.getByRole("group", { name: "选择审查范围" })).toBeHidden();
+  await expect(page.getByRole("option", { name: /初始化/u })).toBeVisible();
+  await prompt.fill("/");
+  await page.getByRole("option", { name: /代码审查/u }).click();
+  await page.getByRole("option", { name: /审查未提交的更改/u }).click();
+
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/review-task$/u);
+  await expect(page.getByText("请检查我未提交的更改", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("审查模式", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Review the current code changes/u)).toHaveCount(0);
+  await expect
+    .poll(() => mutationPaths)
+    .toEqual(["/v1/projects/code-agent/tasks", "/v1/projects/code-agent/tasks/review-task/review"]);
+  expect(reviewBodies).toEqual([{ target: { type: "uncommitted_changes" } }]);
+});
+
+test("selects a real base branch before starting code review", async ({ page }) => {
+  const reviewBodies: unknown[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/v1/projects/code-agent/tasks/task-1/review"
+    ) {
+      reviewBodies.push(request.postDataJSON());
+    }
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.fill("/代码审查");
+  await prompt.press("Enter");
+  await prompt.press("ArrowDown");
+  await prompt.press("Enter");
+
+  const branchGroup = page.getByRole("group", { name: "选择基础分支" });
+  await expect(branchGroup).toBeVisible();
+  await expect(branchGroup.getByRole("option")).toHaveCount(3);
+  await branchGroup.getByRole("option", { name: "release" }).click();
+
+  await expect
+    .poll(() => reviewBodies)
+    .toEqual([{ target: { branch: "release", type: "base_branch" } }]);
 });
 
 test("opens bounded source previews from assistant file references", async ({ context, page }) => {
