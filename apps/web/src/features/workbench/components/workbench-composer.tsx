@@ -29,6 +29,11 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
 import {
+  createComposerDraftScope,
+  useComposerDraftStore,
+  type ComposerCommandDraftMode,
+} from "../composer-draft-context.js";
+import {
   Attachment,
   AttachmentInfo,
   AttachmentPreview,
@@ -109,8 +114,6 @@ const reasoningEffortLabels: Readonly<Record<string, string>> = {
   ultra: "超高",
   xhigh: "极高",
 };
-
-type CommandDraftMode = "feedback" | "subtask";
 
 export function deriveComposerActions(
   capabilities: AgentCapabilities | undefined,
@@ -333,30 +336,43 @@ export function WorkbenchComposer({
   taskId,
 }: WorkbenchComposerProps) {
   const routeScope = `${projectId}:${taskId ?? "draft"}`;
-  const composerScope = taskId === undefined ? "draft" : routeScope;
+  const composerScope = createComposerDraftScope(projectId, taskId);
+  const composerDraftStore = useComposerDraftStore();
+  const initialComposerDraft = composerDraftStore.read(composerScope);
   const [settingsOverride, setSettingsOverride] = useState<{
     scope: string;
     settings: AgentTaskSettings;
   }>();
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
-  const [attachmentCount, setAttachmentCount] = useState(0);
-  const [commandDraftMode, setCommandDraftMode] = useState<CommandDraftMode | null>(null);
+  const [attachments, setAttachments] = useState<readonly PromptInputAttachment[]>(
+    initialComposerDraft.attachments,
+  );
+  const [commandDraftMode, setCommandDraftMode] = useState<ComposerCommandDraftMode | null>(
+    initialComposerDraft.commandDraftMode,
+  );
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [commandNotice, setCommandNotice] = useState<string>();
   const [commandQuery, setCommandQuery] = useState("");
   const [commandSlashCommand, setCommandSlashCommand] = useState<PromptSlashCommand>();
   const [composerRevision, setComposerRevision] = useState(0);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialComposerDraft.text);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mutationError, setMutationError] = useState<Error | null>(null);
   const [pendingTaskState, setPendingTaskState] = useState<{
     scope: string;
     task: AgentTask;
   }>();
-  const [selectedSkillState, setSelectedSkillState] = useState<{
-    scope: string;
-    skill: AgentSkill;
-  }>();
+  const [selectedSkillState, setSelectedSkillState] = useState<
+    | {
+        scope: string;
+        skill: AgentSkill;
+      }
+    | undefined
+  >(
+    initialComposerDraft.selectedSkill === undefined
+      ? undefined
+      : { scope: routeScope, skill: initialComposerDraft.selectedSkill },
+  );
   const [submittedTurnState, setSubmittedTurnState] = useState<{
     scope: string;
     turnId: string;
@@ -404,6 +420,7 @@ export function WorkbenchComposer({
   const contextUsage = runtime?.snapshot?.contextUsage;
   const selectedSkill =
     selectedSkillState?.scope === routeScope ? selectedSkillState.skill : undefined;
+  const attachmentCount = attachments.length;
   const { attachmentsDisabled, draftInputDisabled, turnControlsDisabled } =
     deriveComposerInputAvailability(state);
   const filteredSkills = filterPromptSkills(
@@ -416,22 +433,67 @@ export function WorkbenchComposer({
     !commandMenuOpen || menuItemCount === 0
       ? undefined
       : `${commandMenuId}-item-${String(activeCommandIndex)}`;
-  const handleAttachmentsChange = useCallback((files: readonly PromptInputAttachment[]) => {
-    setAttachmentCount(files.length);
-  }, []);
+  const handleAttachmentsChange = useCallback(
+    (files: readonly PromptInputAttachment[]) => {
+      setAttachments(files);
+      composerDraftStore.update(composerScope, (current) => ({
+        ...current,
+        attachments: files,
+      }));
+    },
+    [composerDraftStore, composerScope],
+  );
   const closeCommandMenu = useCallback(() => {
     setCommandMenuOpen(false);
     setCommandQuery("");
     setCommandSlashCommand(undefined);
   }, []);
-  const replaceDraft = useCallback((nextDraft: string) => {
-    setDraft(nextDraft);
+  const replaceDraft = useCallback(
+    (nextDraft: string) => {
+      setDraft(nextDraft);
+      composerDraftStore.update(composerScope, (current) => ({ ...current, text: nextDraft }));
+      const textarea = textareaRef.current;
+      if (textarea !== null && textarea.value !== nextDraft) {
+        // 输入值由浏览器持有以保护 IME 组合缓冲；命令操作仍需同步修改真实文本框。
+        textarea.value = nextDraft;
+      }
+    },
+    [composerDraftStore, composerScope],
+  );
+
+  const replaceSelectedSkill = useCallback(
+    (skill: AgentSkill | undefined) => {
+      setSelectedSkillState(skill === undefined ? undefined : { scope: routeScope, skill });
+      composerDraftStore.update(composerScope, (current) => ({
+        ...current,
+        selectedSkill: skill,
+      }));
+    },
+    [composerDraftStore, composerScope, routeScope],
+  );
+
+  const replaceCommandDraftMode = useCallback(
+    (mode: ComposerCommandDraftMode | null) => {
+      setCommandDraftMode(mode);
+      composerDraftStore.update(composerScope, (current) => ({
+        ...current,
+        commandDraftMode: mode,
+      }));
+    },
+    [composerDraftStore, composerScope],
+  );
+
+  const clearComposerDraft = useCallback(() => {
+    composerDraftStore.clear(composerScope);
+    setDraft("");
+    setAttachments([]);
+    setSelectedSkillState(undefined);
+    setCommandDraftMode(null);
     const textarea = textareaRef.current;
-    if (textarea !== null && textarea.value !== nextDraft) {
-      // 输入值由浏览器持有以保护 IME 组合缓冲；命令操作仍需同步修改真实文本框。
-      textarea.value = nextDraft;
+    if (textarea !== null) {
+      textarea.value = "";
     }
-  }, []);
+  }, [composerDraftStore, composerScope]);
 
   useLayoutEffect(() => {
     if (previousRouteScopeRef.current === routeScope) {
@@ -440,21 +502,30 @@ export function WorkbenchComposer({
     previousRouteScopeRef.current = routeScope;
     if (previousComposerScopeRef.current !== composerScope) {
       previousComposerScopeRef.current = composerScope;
-      // 已有 Task 切换时清理输入状态，但保留 textarea 节点和焦点，避免重建原生 IME 会话。
-      replaceDraft("");
+      const restoredDraft = composerDraftStore.read(composerScope);
+      // 切换聊天时恢复对应草稿，同时保留 textarea 节点和焦点，避免重建原生 IME 会话。
+      setDraft(restoredDraft.text);
+      setAttachments(restoredDraft.attachments);
+      setCommandDraftMode(restoredDraft.commandDraftMode);
+      setSelectedSkillState(
+        restoredDraft.selectedSkill === undefined
+          ? undefined
+          : { scope: routeScope, skill: restoredDraft.selectedSkill },
+      );
+      const textarea = textareaRef.current;
+      if (textarea !== null && textarea.value !== restoredDraft.text) {
+        textarea.value = restoredDraft.text;
+      }
       setSettingsOverride(undefined);
       setActiveCommandIndex(0);
-      setAttachmentCount(0);
-      setCommandDraftMode(null);
       setCommandMenuOpen(false);
       setCommandNotice(undefined);
       setCommandQuery("");
       setCommandSlashCommand(undefined);
       setPendingTaskState(undefined);
-      setSelectedSkillState(undefined);
       setSubmittedTurnState(undefined);
     }
-    // 新聊天切换 Project 时保留草稿和附件，只隔离路由相关的请求结果。
+    // 路由相关请求结果不能写入刚激活的其他聊天。
     setIsSubmitting(false);
     setMutationError(null);
     startTaskAttempt.current = undefined;
@@ -463,7 +534,7 @@ export function WorkbenchComposer({
     uploadedAttachments.current.clear();
     uploadAttempts.current.clear();
     commandAttempts.current.clear();
-  }, [composerScope, replaceDraft, routeScope]);
+  }, [composerDraftStore, composerScope, routeScope]);
 
   const updateSettings = (nextSettings: AgentTaskSettings, field: keyof AgentTaskSettings) => {
     const requestScope = routeScope;
@@ -607,10 +678,7 @@ export function WorkbenchComposer({
         turnOptions,
       });
       if (routeScopeRef.current === requestScope) {
-        replaceDraft("");
-        setSelectedSkillState(undefined);
-        setCommandDraftMode(null);
-        setAttachmentCount(0);
+        clearComposerDraft();
         setComposerRevision((revision) => revision + 1);
         setSubmittedTurnState({ scope: requestScope, turnId: result.turn.id });
       }
@@ -650,15 +718,15 @@ export function WorkbenchComposer({
     return availability;
   };
 
-  const beginCommandDraft = (mode: CommandDraftMode) => {
-    setCommandDraftMode(mode);
+  const beginCommandDraft = (mode: ComposerCommandDraftMode) => {
+    replaceCommandDraftMode(mode);
     setCommandMenuOpen(false);
     setCommandQuery("");
     setCommandSlashCommand(undefined);
     setCommandNotice(undefined);
-    setSelectedSkillState(undefined);
+    replaceSelectedSkill(undefined);
     replaceDraft("");
-    setAttachmentCount(0);
+    handleAttachmentsChange([]);
     setComposerRevision((revision) => revision + 1);
     focusTextarea();
   };
@@ -688,7 +756,7 @@ export function WorkbenchComposer({
       });
       if (routeScopeRef.current === requestScope) {
         commandAttempts.current.delete("feedback");
-        setCommandDraftMode(null);
+        replaceCommandDraftMode(null);
         setCommandNotice("反馈已发送");
         replaceDraft("");
       }
@@ -713,7 +781,7 @@ export function WorkbenchComposer({
     setCommandSlashCommand(undefined);
     setCommandNotice(undefined);
     replaceDraft("");
-    setSelectedSkillState(undefined);
+    replaceSelectedSkill(undefined);
 
     if (command.action === "feedback" || command.action === "subtask") {
       beginCommandDraft(command.action);
@@ -784,7 +852,7 @@ export function WorkbenchComposer({
       slashCommand === undefined
         ? draft
         : `${draft.slice(0, slashCommand.start)}${draft.slice(slashCommand.end)}`;
-    setSelectedSkillState({ scope: routeScope, skill });
+    replaceSelectedSkill(skill);
     setCommandMenuOpen(false);
     setCommandQuery("");
     setCommandSlashCommand(undefined);
@@ -907,6 +975,7 @@ export function WorkbenchComposer({
         {commandMenu}
         <PromptInput
           accept="image/gif,image/jpeg,image/png,image/webp"
+          attachments={attachments}
           aria-busy={state === "submitting" || state === "reconnecting"}
           className="w-full"
           data-state={state}
@@ -934,7 +1003,6 @@ export function WorkbenchComposer({
             }
             void submitPrompt(message);
           }}
-          resetKey={composerScope}
         >
           {commandDraftMode === null ? null : (
             <PromptInputHeader className="flex items-center">
@@ -942,7 +1010,7 @@ export function WorkbenchComposer({
                 aria-label={`取消${commandDraftMode === "feedback" ? "反馈" : "副任务"}`}
                 className="max-w-full border border-separator-strong bg-control text-foreground"
                 onClick={() => {
-                  setCommandDraftMode(null);
+                  replaceCommandDraftMode(null);
                   replaceDraft("");
                   focusTextarea();
                 }}
@@ -963,7 +1031,7 @@ export function WorkbenchComposer({
                 aria-label={`移除 Skill ${selectedSkill.displayName}`}
                 className="inline-flex max-w-full items-center gap-1 rounded-control bg-control px-2 py-1 text-label font-medium text-skill transition-colors hover:bg-control-hover"
                 onClick={() => {
-                  setSelectedSkillState(undefined);
+                  replaceSelectedSkill(undefined);
                   focusTextarea();
                 }}
                 type="button"
@@ -986,6 +1054,10 @@ export function WorkbenchComposer({
               onChange={(event) => {
                 const nextDraft = event.currentTarget.value;
                 setDraft(nextDraft);
+                composerDraftStore.update(composerScope, (current) => ({
+                  ...current,
+                  text: nextDraft,
+                }));
                 setCommandNotice(undefined);
                 if (commandDraftMode !== null) {
                   return;
@@ -1014,7 +1086,7 @@ export function WorkbenchComposer({
                   !event.nativeEvent.isComposing
                 ) {
                   event.preventDefault();
-                  setSelectedSkillState(undefined);
+                  replaceSelectedSkill(undefined);
                   return;
                 }
                 if (!commandMenuOpen || event.nativeEvent.isComposing) {

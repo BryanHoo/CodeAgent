@@ -11,7 +11,7 @@
 - `shared/ai-elements` 以官方 AI Elements 组件源码和公开 API 为实现基线，只改造样式、基础控件适配与本地化文案以使用本项目设计 Token；不得用功能不完整的自研组件替代官方能力。
 - Task Timeline 不展示原生 Reasoning Item 或 Chain of Thought；Codex Commentary 与 Final Answer 都作为普通 Assistant Message，通过 `MessageResponse` 实时流式展示。Command、Tool 等结构化 Item 保持独立可见，不包裹进思考容器。运行中的 AI 回复必须在回复最后一行使用 AI Elements `Shimmer` 表达持续生成状态；存在运行中的 Command、Tool、Activity 或流式 Plan 时显示当前操作名称，其中 Command 同时显示终端图标；没有结构化操作时回退为通用运行状态，并在 Turn 结束后移除。
 - Composer 使用 AI Elements `PromptInput`、`Attachments` 和组合式工具栏，支持点击、拖放、粘贴、预览与移除图片；草稿输入与附件选择是本地操作，在实时连接恢复期间仍保持可用，仅在正在提交时锁定，提交和设置等网络控件继续暂停；模型来自 Server Query，审批策略、沙盒模式、模型和思考量随同一个 Turn 请求提交，不保留禁用占位控件。
-- Composer 文本草稿必须在 Runtime 重渲染期间保留浏览器的 IME 组合缓冲，不能通过受控 `value` 回写覆盖尚未触发 `onChange` 的临时文本；已有 Task 之间切换时必须复用同一个 `textarea` DOM 节点，并按 Task 清空草稿、附件和瞬时状态，Task Snapshot 加载产生的 `connecting` 或 `reconnecting` 状态不得把该节点设为 `disabled`，不能通过父级重挂载或短暂禁用破坏原生输入法上下文；程序化清空或替换草稿时仍需同步真实 `textarea`，并使用 `compositionstart` 后触发重渲染及切换 Task 的 Playwright 用例覆盖中文首键。
+- Composer 文本草稿必须在 Runtime 重渲染期间保留浏览器的 IME 组合缓冲，不能通过受控 `value` 回写覆盖尚未触发 `onChange` 的临时文本；已有 Task 之间切换时必须复用同一个 `textarea` DOM 节点，并按 `projectId + taskId` 分别保存和恢复草稿、附件及 Skill，新聊天使用 Project 独立草稿；Task Snapshot 加载产生的 `connecting` 或 `reconnecting` 状态不得把该节点设为 `disabled`，不能通过父级重挂载或短暂禁用破坏原生输入法上下文；程序化清空或替换草稿时仍需同步真实 `textarea`，并使用 `compositionstart` 后触发重渲染及切换 Task 的 Playwright 用例覆盖中文首键。
 - Composer 在已有 Task 中使用 Snapshot 携带的完整设置，在新聊天中使用 Project 默认模型、思考量与沙盒模式并固定以 `on-request` 初始化审批；沙盒选择紧邻审批并提供只读、工作区可写和完全访问；设置只由用户事件触发完整对象 Mutation，不得通过 effect 写回或从其他 Task 继承审批。
 - Composer 在文本开头或空白字符后的 `/` 输入使用 AI Elements `PromptInputCommand*` 在输入框外部向上浮出分组列表，连续正文字符后的 `/` 仅作为普通字符；不得把列表嵌入 PromptInput 表面。列表先固定提供代码审查、初始化、副任务、压缩、反馈和在新任务中继续，再在命令组下方展示当前 Project 由 Server 返回的可用 Skills，并支持鼠标、上下方向键、Enter、Escape、点击输入框与列表之外区域关闭，以及明确的 listbox/option 语义。Skill 描述固定为单行省略；键盘高亮移动到滚动区域外时必须自动滚动到可见位置。Skill 选择后仅移除当前 Slash 片段并保留已有正文，在输入框内使用 `skill` 主题色展示可移除 Token；提交结构化不透明引用，不得拼接文本或接触原生路径。代码审查、压缩、反馈和续接必须调用对应 Provider 能力，初始化与副任务复用正常 Turn 提交链路。
 - Composer 的审批、模型和思考量选择隐藏原生箭头并按当前文字收缩，思考量选项直接显示“低”“中”“高”等等级，不重复显示“思考量”前缀；思考量紧邻模型；任一内部控件聚焦时只由 Composer 整体显示主色边框，内部控件不重复显示主色焦点轮廓；分支/路径行最右使用圆环按钮表达真实上下文占比，悬停或键盘聚焦后通过 Tooltip 展示百分比和已用/总 Token 数。
@@ -23,7 +23,7 @@
 - `Projects` 标题右侧使用可访问的 `+` 图标触发宿主系统目录选择器；添加成功后刷新项目树并进入新 Project，取消选择保持当前界面，项目列表为空时不得伪造默认 Project。
 - 左栏 Settings 旁的连接状态必须反映真实 Runtime：活动 Task 使用其实时事件连接状态，新建 Task 页面使用 HTTP Runtime 的加载、可用和失败状态；不得硬编码在线或离线文案。
 - Project 名称只切换任务树的展开状态；名称右侧使用可访问的 `+` 图标进入该 Project 的“新聊天”草稿，顶部“新建任务”始终进入第一个 Project 的草稿，目标草稿已打开时直接复用。
-- 新聊天草稿在首次提交前不得创建 Codex Task；空 Timeline 的 Project 名称直接渲染为原生 Project 选择器，首次点击必须打开选项列表，切换 Project 时保留 Composer 草稿，首次提交后再创建 Task 并由 Codex 返回的名称替换“新聊天”。
+- 新聊天草稿在首次提交前不得创建 Codex Task；空 Timeline 的 Project 名称直接渲染为原生 Project 选择器，首次点击必须打开选项列表，切换 Project 时保存当前 Project 草稿并恢复目标 Project 草稿，首次提交后再创建 Task 并由 Codex 返回的名称替换“新聊天”。
 - 通过显式 Props 或专用 Hook 获取数据，不从组件内部访问 Server 或 Provider。
 - 长列表使用稳定尺寸与虚拟化；流式 Item 独立订阅，避免整个 Task 重渲染。
 - Task Timeline 必须在该 Turn 已产生的消息与结构化结果之后显示归一化错误，使部分回复与最终失败原因保持同一阅读顺序；Command 继续使用 `Tool` 表达调用和状态，输出使用 AI Elements `Terminal` 解析 ANSI、复制、流式跟随和自动滚动，并明确标识截断状态。历史输出保持只读，不提供清空操作；缺少输出时只能展示真实 `cwd`，不得伪造内容。

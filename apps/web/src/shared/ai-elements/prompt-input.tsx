@@ -55,6 +55,7 @@ export function usePromptInputAttachments() {
 
 type PromptInputProps = Omit<FormHTMLAttributes<HTMLFormElement>, "onError" | "onSubmit"> & {
   accept?: string;
+  attachments?: readonly PromptInputAttachment[];
   disabled?: boolean;
   globalDrop?: boolean;
   maxFiles?: number;
@@ -84,6 +85,7 @@ function revokePreview(attachment: PromptInputAttachment) {
 
 export function PromptInput({
   accept,
+  attachments,
   children,
   className = "",
   disabled = false,
@@ -98,15 +100,29 @@ export function PromptInput({
   resetKey,
   ...props
 }: PromptInputProps) {
-  const [files, setFiles] = useState<PromptInputAttachment[]>([]);
+  const [internalFiles, setInternalFiles] = useState<PromptInputAttachment[]>([]);
+  const files = attachments ?? internalFiles;
   const filesRef = useRef(files);
+  const controlledRef = useRef(attachments !== undefined);
   const inputRef = useRef<HTMLInputElement>(null);
   const previousResetKeyRef = useRef(resetKey);
   filesRef.current = files;
+  controlledRef.current = attachments !== undefined;
+
+  const updateFiles = useCallback(
+    (update: (current: readonly PromptInputAttachment[]) => readonly PromptInputAttachment[]) => {
+      if (attachments !== undefined) {
+        onAttachmentsChange?.(update(attachments));
+        return;
+      }
+      setInternalFiles((current) => [...update(current)]);
+    },
+    [attachments, onAttachmentsChange],
+  );
 
   const addFiles = useCallback(
     (incoming: readonly File[]) => {
-      setFiles((current) => {
+      updateFiles((current) => {
         if (disabled) {
           return current;
         }
@@ -144,18 +160,18 @@ export function PromptInput({
         return [...current, ...accepted];
       });
     },
-    [accept, disabled, maxFileSize, maxFiles, multiple, onError],
+    [accept, disabled, maxFileSize, maxFiles, multiple, onError, updateFiles],
   );
 
   const clear = useCallback(() => {
-    setFiles((current) => {
+    updateFiles((current) => {
       current.forEach(revokePreview);
       return [];
     });
     if (inputRef.current !== null) {
       inputRef.current.value = "";
     }
-  }, []);
+  }, [updateFiles]);
 
   useLayoutEffect(() => {
     if (previousResetKeyRef.current === resetKey) {
@@ -163,29 +179,38 @@ export function PromptInput({
     }
     previousResetKeyRef.current = resetKey;
     // 外层业务作用域变化时清空附件，但保留表单和 textarea DOM，避免中断原生输入法上下文。
-    clear();
-  }, [clear, resetKey]);
+    if (attachments === undefined) {
+      clear();
+    }
+  }, [attachments, clear, resetKey]);
 
-  const remove = useCallback((id: string) => {
-    setFiles((current) => {
-      const removed = current.find((file) => file.id === id);
-      if (removed !== undefined) {
-        revokePreview(removed);
-      }
-      return current.filter((file) => file.id !== id);
-    });
-  }, []);
+  const remove = useCallback(
+    (id: string) => {
+      updateFiles((current) => {
+        const removed = current.find((file) => file.id === id);
+        if (removed !== undefined) {
+          revokePreview(removed);
+        }
+        return current.filter((file) => file.id !== id);
+      });
+    },
+    [updateFiles],
+  );
 
   useEffect(
     () => () => {
-      filesRef.current.forEach(revokePreview);
+      if (!controlledRef.current) {
+        filesRef.current.forEach(revokePreview);
+      }
     },
     [],
   );
 
   useEffect(() => {
-    onAttachmentsChange?.(files);
-  }, [files, onAttachmentsChange]);
+    if (attachments === undefined) {
+      onAttachmentsChange?.(internalFiles);
+    }
+  }, [attachments, internalFiles, onAttachmentsChange]);
 
   useEffect(() => {
     if (!globalDrop || disabled) {

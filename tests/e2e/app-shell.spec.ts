@@ -1223,7 +1223,7 @@ test("disables composer mutations that the provider does not support", async ({ 
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();
 });
 
-test("isolates composer state between task routes", async ({ page }) => {
+test("stores composer drafts independently between task routes", async ({ page }) => {
   await page.route("**/v1/projects/code-agent/tasks/input-design", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -1242,12 +1242,31 @@ test("isolates composer state between task routes", async ({ page }) => {
   });
   await page.goto("/p/code-agent/t/task-1");
   await page.getByRole("textbox", { name: "任务输入" }).fill("只属于 Task A 的草稿");
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "添加图片" }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    ),
+    mimeType: "image/png",
+    name: "task-draft.png",
+  });
+  await expect(page.getByText("task-draft.png", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: /优化输入框交互/ }).click();
 
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/input-design$/);
   await expect(page.getByRole("textbox", { name: "任务输入" })).toHaveValue("");
+  await expect(page.getByText("task-draft.png", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();
+
+  await page.locator('a[href="/p/code-agent/t/task-1"]').first().click();
+
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
+  await expect(page.getByRole("textbox", { name: "任务输入" })).toHaveValue("只属于 Task A 的草稿");
+  await expect(page.getByText("task-draft.png", { exact: true })).toBeVisible();
 });
 
 test("keeps the composer input mounted when switching task routes", async ({ page }) => {
@@ -2140,10 +2159,22 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
   await expect(timelineMessages.nth(1)).toContainText("正在运行");
 });
 
-test("switches the new chat project from the empty timeline", async ({ page }) => {
+test("stores new-chat text and attachments independently between projects", async ({ page }) => {
   await page.goto("/p/code-agent");
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   await prompt.fill("保留这段新聊天草稿");
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "添加图片" }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    ),
+    mimeType: "image/png",
+    name: "draft.png",
+  });
+  await expect(page.getByText("draft.png", { exact: true })).toBeVisible();
 
   const projectSelect = page.getByRole("combobox", { name: "选择新聊天项目" });
   await expect(projectSelect).toBeVisible();
@@ -2156,7 +2187,8 @@ test("switches the new chat project from the empty timeline", async ({ page }) =
 
   await expect(page).toHaveURL(/\/p\/superwork$/);
   await expect(projectSelect).toHaveValue("superwork");
-  await expect(prompt).toHaveValue("保留这段新聊天草稿");
+  await expect(prompt).toHaveValue("");
+  await expect(page.getByText("draft.png", { exact: true })).toHaveCount(0);
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
   // 切换当前 Project 不覆盖用户保存的文件夹展开形态。
   await expect(sidebar.getByRole("button", { name: "切换项目 superwork" })).toHaveAttribute(
@@ -2164,6 +2196,12 @@ test("switches the new chat project from the empty timeline", async ({ page }) =
     "false",
   );
   await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveCount(0);
+
+  await projectSelect.selectOption("code-agent");
+
+  await expect(page).toHaveURL(/\/p\/code-agent$/);
+  await expect(prompt).toHaveValue("保留这段新聊天草稿");
+  await expect(page.getByText("draft.png", { exact: true })).toBeVisible();
 });
 
 test("toggles project tasks from the project name without navigation", async ({ page }) => {
