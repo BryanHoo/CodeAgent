@@ -297,6 +297,38 @@ describe("task store", () => {
     });
   });
 
+  it("clears a retrying provider error after the turn resumes output", () => {
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        payload: { message: "连接暂时中断", willRetry: true },
+        turnId: "turn-running",
+        type: "provider.error",
+      },
+    ]);
+    expect(store.getState().turnsById["turn-running"]?.error).toBe("连接暂时中断");
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(12),
+        itemId: "message-running",
+        payload: { delta: "，连接恢复后继续输出" },
+        turnId: "turn-running",
+        type: "message.delta",
+      },
+    ]);
+
+    expect(store.getState().turnsById["turn-running"]).toMatchObject({
+      error: null,
+      status: "running",
+    });
+    expect(store.getState().itemsById["message-running"]).toMatchObject({
+      text: "开始，连接恢复后继续输出",
+    });
+  });
+
   it("preserves streamed assistant content when an interrupted terminal payload is partial", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
 

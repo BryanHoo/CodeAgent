@@ -403,13 +403,18 @@ function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<T
     case "message.delta":
     case "reasoning.delta":
     case "command.output_delta": {
-      const turnExists = state.turnsById[event.turnId] !== undefined;
-      if (!turnExists) {
+      const currentTurn = state.turnsById[event.turnId];
+      if (currentTurn === undefined) {
         return {
           checkpoint,
           snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
         };
       }
+      // 新输出证明可重试故障已经恢复；已失败 Turn 的确认错误继续保留。
+      const turnsById =
+        currentTurn.status === "running" && currentTurn.error !== null
+          ? { ...state.turnsById, [event.turnId]: { ...currentTurn, error: null } }
+          : state.turnsById;
       const currentItem = state.itemsById[event.itemId];
       if (currentItem !== undefined && state.itemTurnIdsById[event.itemId] !== event.turnId) {
         throw new Error(`Agent item ${event.itemId} belongs to another turn`);
@@ -423,6 +428,7 @@ function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<T
               ? state.itemsById
               : { ...state.itemsById, [event.itemId]: updatedItem },
           snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
+          turnsById,
         };
       }
       const createdItem = createDeltaItem(event);
@@ -439,6 +445,7 @@ function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<T
         itemTurnIdsById: { ...state.itemTurnIdsById, [event.itemId]: event.turnId },
         itemsById: { ...state.itemsById, [event.itemId]: createdItem },
         snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
+        turnsById,
       };
     }
     case "item.started":
