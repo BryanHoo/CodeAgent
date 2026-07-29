@@ -248,6 +248,27 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
+  it("returns no background terminals when the historical thread is not loaded", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      new RpcResponseError({
+        code: -32600,
+        data: null,
+        message: "thread not found: task-1",
+      }),
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.readTask("task-1");
+
+    await expect(provider.listBackgroundTerminals("task-1")).resolves.toEqual({ data: [] });
+    expect(rpc.calls.slice(1)).toEqual([
+      {
+        method: "thread/backgroundTerminals/list",
+        params: { limit: 100, threadId: "task-1" },
+      },
+    ]);
+  });
+
   it("unsubscribes an idle task and releases provider task state", async () => {
     const rpc = new FakeRpcClient([
       { thread: nativeThread({ turns: [] }) },

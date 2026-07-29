@@ -1180,6 +1180,14 @@ function isThreadNotLoadedError(error: unknown): boolean {
   );
 }
 
+function isBackgroundTerminalThreadMissingError(error: unknown): boolean {
+  return (
+    error instanceof RpcResponseError &&
+    error.code === -32600 &&
+    error.message.startsWith("thread not found:")
+  );
+}
+
 function isThreadNotMaterializedError(error: unknown): boolean {
   return (
     error instanceof RpcResponseError &&
@@ -1502,30 +1510,38 @@ export class CodexAgentProvider implements AgentProvider {
     const seenCursors = new Set<string>();
     let cursor: string | undefined;
 
-    do {
-      const response = expectRecord(
-        await this.#client.request("thread/backgroundTerminals/list", {
-          ...(cursor === undefined ? {} : { cursor }),
-          limit: 100,
-          threadId: taskId,
-        }),
-        "thread/backgroundTerminals/list response",
-      );
-      if (!Array.isArray(response["data"])) {
-        throw new CodexProtocolMappingError("background terminal list data must be an array");
-      }
-      terminals.push(...response["data"].map(mapBackgroundTerminal));
-      const nextCursor = optionalString(response["nextCursor"]);
-      if (nextCursor === undefined) {
-        cursor = undefined;
-      } else {
-        if (seenCursors.has(nextCursor)) {
-          throw new CodexProtocolMappingError("background terminal list cursor must advance");
+    try {
+      do {
+        const response = expectRecord(
+          await this.#client.request("thread/backgroundTerminals/list", {
+            ...(cursor === undefined ? {} : { cursor }),
+            limit: 100,
+            threadId: taskId,
+          }),
+          "thread/backgroundTerminals/list response",
+        );
+        if (!Array.isArray(response["data"])) {
+          throw new CodexProtocolMappingError("background terminal list data must be an array");
         }
-        seenCursors.add(nextCursor);
-        cursor = nextCursor;
+        terminals.push(...response["data"].map(mapBackgroundTerminal));
+        const nextCursor = optionalString(response["nextCursor"]);
+        if (nextCursor === undefined) {
+          cursor = undefined;
+        } else {
+          if (seenCursors.has(nextCursor)) {
+            throw new CodexProtocolMappingError("background terminal list cursor must advance");
+          }
+          seenCursors.add(nextCursor);
+          cursor = nextCursor;
+        }
+      } while (cursor !== undefined);
+    } catch (error) {
+      if (isBackgroundTerminalThreadMissingError(error)) {
+        // 历史 Task 可从持久化记录读取，但未加载到当前运行时，因此不可能存在后台终端。
+        return { data: [] };
       }
-    } while (cursor !== undefined);
+      throw error;
+    }
 
     return { data: terminals };
   }

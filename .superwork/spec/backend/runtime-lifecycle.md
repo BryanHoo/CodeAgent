@@ -56,7 +56,7 @@
 - `resync.required` 发送后由 Server 主动关闭当前 WebSocket；客户端必须使用新 Snapshot checkpoint 建立新连接。
 - Fastify 关闭时取消 Provider Event 订阅并关闭 WebSocket 资源。
 - 所有 Agent Mutation 必须校验非空 `Idempotency-Key`；同操作、同 Key、同 Payload 复用进行中或成功结果，不同 Payload 返回冲突，失败结果不缓存。
-- 后台终端读取必须先验证 Project/Task 归属；单终端停止是幂等 Mutation，即使进程在请求到达前自然退出也返回已终止语义。
+- 后台终端读取必须先验证 Project/Task 归属；已持久化但未加载到当前 App Server 的历史 Task 将原生 `-32600 thread not found` 归一化为空终端列表，其他 Provider 错误继续上抛；单终端停止是幂等 Mutation，即使进程在请求到达前自然退出也返回已终止语义。
 - Task 创建在 Provider 成功但设置持久化失败时必须保留有界恢复状态；同 `Idempotency-Key` 重试只补齐持久化，不得再次调用 Provider 创建 Task。
 - 成功的幂等结果缓存必须同时设置容量上限和过期时间；进行中的请求不得淘汰，Runtime 关闭时清空全部条目。
 - 任何新增 Task Runtime、Snapshot、历史或终端缓存都必须同时声明按字节容量、Entry 次级上限和明确清理触发点；不得依赖框架默认 TTL 或无界模块级 Map。
