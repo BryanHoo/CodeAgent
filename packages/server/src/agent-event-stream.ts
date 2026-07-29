@@ -213,7 +213,7 @@ export class AgentEventStream {
       sequence: this.#sequence,
       sessionId: this.#sessionId,
       timestamp: this.#now().toISOString(),
-      version: 1 as const,
+      version: 2 as const,
     } as AgentEvent;
     if (this.#eventCount < this.#capacity) {
       const insertionIndex = (this.#eventStart + this.#eventCount) % this.#capacity;

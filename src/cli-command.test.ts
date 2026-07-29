@@ -45,6 +45,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     listTasks: vi.fn(),
     readSandboxMode: vi.fn(() => Promise.resolve("workspace-write" as const)),
     readTask: vi.fn(),
+    readTaskAttachment: vi.fn(() => Promise.resolve(undefined)),
     renameTask: vi.fn(),
     resolvePendingRequest: vi.fn(),
     rollbackLatestTurn: vi.fn(),

@@ -69,6 +69,17 @@ describe("AgentProvider", () => {
       readSandboxMode() {
         return Promise.resolve("workspace-write");
       },
+      readTaskAttachment(taskId, attachmentId) {
+        if (taskId !== "task-1" || attachmentId !== "attachment-1") {
+          return Promise.resolve(undefined);
+        }
+        return Promise.resolve({
+          content: Uint8Array.from([137, 80, 78, 71]),
+          mediaType: "image/png",
+          name: "diagram.png",
+          size: 4,
+        });
+      },
       readTask() {
         return Promise.resolve(undefined);
       },
@@ -178,6 +189,11 @@ describe("AgentProvider", () => {
     });
     await expect(provider.readSandboxMode()).resolves.toBe("workspace-write");
     await expect(provider.readTask("missing-task")).resolves.toBeUndefined();
+    await expect(provider.readTaskAttachment("task-1", "attachment-1")).resolves.toMatchObject({
+      mediaType: "image/png",
+      name: "diagram.png",
+      size: 4,
+    });
     await expect(
       provider.resolvePendingRequest({
         itemId: "item-1",

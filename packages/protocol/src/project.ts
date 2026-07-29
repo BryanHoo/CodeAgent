@@ -84,14 +84,13 @@ export const AgentMessageSkillSchema = Type.Object(
 
 export type AgentMessageSkill = Readonly<Static<typeof AgentMessageSkillSchema>>;
 
+// Snapshot 只保存可授权读取的附件元数据，避免历史二进制随消息缓存复制。
 export const AgentMessageAttachmentSchema = Type.Object(
   {
+    id: Type.String({ minLength: 1 }),
     mediaType: AgentAttachmentMediaTypeSchema,
     name: Type.String({ maxLength: 255, minLength: 1 }),
-    url: Type.String({
-      maxLength: MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
-      pattern: "^data:image/(gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$",
-    }),
+    size: Type.Integer({ maximum: MAX_AGENT_ATTACHMENT_BYTES, minimum: 1 }),
   },
   { additionalProperties: false },
 );

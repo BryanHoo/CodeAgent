@@ -74,7 +74,7 @@ function eventEnvelope(sequence: number) {
     sessionId: "session-1",
     taskId: "task-1",
     timestamp: "2026-07-28T00:00:01.000Z",
-    version: 1,
+    version: 2,
   } as const;
 }
 

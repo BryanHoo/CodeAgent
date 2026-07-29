@@ -7,6 +7,7 @@ export {
   type WebSocketFactory,
 } from "./event-client.js";
 export {
+  buildTaskAttachmentUrl,
   CodeAgentClient,
   CodeAgentHttpError,
   CodeAgentMutationError,

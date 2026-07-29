@@ -20,7 +20,7 @@ const eventEnvelopeProperties = {
   sessionId: SessionIdSchema,
   taskId: Type.String({ minLength: 1 }),
   timestamp: DateTimeSchema,
-  version: Type.Literal(1),
+  version: Type.Literal(2),
 };
 
 function createEventSchema<T extends TProperties>(properties: T) {
@@ -145,7 +145,7 @@ export const ConnectionReadySchema = Type.Object(
     latestSequence: SequenceSchema,
     sessionId: SessionIdSchema,
     type: Type.Literal("connection.ready"),
-    version: Type.Literal(1),
+    version: Type.Literal(2),
   },
   { additionalProperties: false },
 );
@@ -162,7 +162,7 @@ export const ResyncRequiredSchema = Type.Object(
     ]),
     sessionId: SessionIdSchema,
     type: Type.Literal("resync.required"),
-    version: Type.Literal(1),
+    version: Type.Literal(2),
   },
   { additionalProperties: false },
 );

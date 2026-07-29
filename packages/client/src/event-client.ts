@@ -50,7 +50,7 @@ function createResyncRequired(
     reason,
     sessionId,
     type: "resync.required",
-    version: 1,
+    version: 2,
   };
 }
 

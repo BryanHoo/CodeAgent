@@ -66,7 +66,7 @@ function createTurnCompletedEvent(taskId: string, sequence: number): AgentEvent 
     timestamp: "2026-07-28T00:00:01.000Z",
     turnId: `turn-${taskId}`,
     type: "turn.completed",
-    version: 1,
+    version: 2,
   };
 }
 
@@ -80,7 +80,7 @@ function createTurnStartedEvent(taskId: string, sequence: number): AgentEvent {
     timestamp: "2026-07-28T00:00:01.000Z",
     turnId: `turn-${taskId}`,
     type: "turn.started",
-    version: 1,
+    version: 2,
   };
 }
 
@@ -211,7 +211,7 @@ describe("project runtime manager", () => {
       timestamp: "2026-07-28T00:00:01.000Z",
       turnId: pendingRequest.turnId,
       type: "pending_request.resolved",
-      version: 1,
+      version: 2,
     });
     vi.runOnlyPendingTimers();
     expect(harness.closeConnection).toHaveBeenCalledTimes(1);

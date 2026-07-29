@@ -32,7 +32,7 @@ function delta(sequence: number, value: string, itemId = "message-1"): AgentEven
     timestamp: "2026-07-23T00:00:01.000Z",
     turnId: "turn-1",
     type: "message.delta",
-    version: 1,
+    version: 2,
   };
 }
 
@@ -76,9 +76,10 @@ describe("submitted prompt merge", () => {
         {
           attachments: [
             {
+              id: "history-image-1",
               mediaType: "image/png" as const,
               name: "diagram.png",
-              url: "data:image/png;base64,iVBORw0KGgo=",
+              size: 68,
             },
           ],
           id: "provider-user-image",

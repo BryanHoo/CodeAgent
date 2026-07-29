@@ -52,7 +52,7 @@ const ready = {
   latestSequence: 3,
   sessionId: "runtime-1",
   type: "connection.ready",
-  version: 1,
+  version: 2,
 } as const;
 
 function messageEvent(sequence: number, delta = "实时"): AgentEvent {
@@ -66,7 +66,7 @@ function messageEvent(sequence: number, delta = "实时"): AgentEvent {
     timestamp: "2026-07-23T00:00:00.000Z",
     turnId: "turn-1",
     type: "message.delta",
-    version: 1,
+    version: 2,
   };
 }
 
@@ -121,7 +121,7 @@ describe("CodeAgentClient realtime events", () => {
         reason: "sequence_gap",
         sessionId: "runtime-1",
         type: "resync.required",
-        version: 1,
+        version: 2,
       },
     ]);
 
@@ -163,7 +163,7 @@ describe("CodeAgentClient realtime events", () => {
       reason: "event_retention_exceeded",
       sessionId: "runtime-1",
       type: "resync.required",
-      version: 1,
+      version: 2,
     });
 
     expect(resyncs[0]).toMatchObject({ reason: "event_retention_exceeded" });

@@ -1296,14 +1296,14 @@ test("shows an error when the resync snapshot refresh fails", async ({ page }) =
               latestSequence: 0,
               sessionId: "e2e-session",
               type: "connection.ready",
-              version: 1,
+              version: 2,
             },
             {
               latestSequence: 8,
               reason: "event_retention_exceeded",
               sessionId: "e2e-session",
               type: "resync.required",
-              version: 1,
+              version: 2,
             },
           ]) {
             this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(message) }));
@@ -1374,7 +1374,7 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
                 latestSequence: 1_001,
                 sessionId: "e2e-session",
                 type: "connection.ready",
-                version: 1,
+                version: 2,
               }),
             }),
           );
@@ -1394,7 +1394,7 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
                   timestamp: "2026-07-23T00:00:00.000Z",
                   turnId: "turn-1",
                   type: "message.delta",
-                  version: 1,
+                  version: 2,
                 }),
               }),
             );
@@ -1468,7 +1468,7 @@ test("clears transient realtime errors after the WebSocket reconnects", async ({
                   latestSequence: 0,
                   sessionId: "e2e-session",
                   type: "connection.ready",
-                  version: 1,
+                  version: 2,
                 }),
               }),
             );

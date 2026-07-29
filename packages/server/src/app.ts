@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Buffer } from "node:buffer";
 import { basename } from "node:path";
 
 import {
@@ -161,6 +162,17 @@ const ProjectTaskTerminalParamsSchema = {
     terminalId: { minLength: 1, type: "string" },
   },
   required: ["projectId", "taskId", "terminalId"],
+  type: "object",
+} as const;
+
+const ProjectTaskAttachmentParamsSchema = {
+  additionalProperties: false,
+  properties: {
+    attachmentId: { minLength: 1, type: "string" },
+    projectId: { minLength: 1, type: "string" },
+    taskId: { minLength: 1, type: "string" },
+  },
+  required: ["attachmentId", "projectId", "taskId"],
   type: "object",
 } as const;
 
@@ -1085,6 +1097,37 @@ export async function createCodeAgentServer(
     },
   );
 
+  app.get<{ Params: { attachmentId: string; projectId: string; taskId: string } }>(
+    "/v1/projects/:projectId/tasks/:taskId/attachments/:attachmentId",
+    {
+      schema: {
+        params: ProjectTaskAttachmentParamsSchema,
+        response: { 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      const attachment = await context.provider.readTaskAttachment(
+        request.params.taskId,
+        request.params.attachmentId,
+      );
+      if (attachment === undefined) {
+        return reply
+          .code(404)
+          .send({ code: "ATTACHMENT_NOT_FOUND", message: "Attachment not found" });
+      }
+      // 随机 ID 已绑定 Project/Task；响应只交付已复验的图片正文，不暴露本地路径。
+      return reply
+        .header("cache-control", "private, max-age=300")
+        .header("x-content-type-options", "nosniff")
+        .type(attachment.mediaType)
+        .send(Buffer.from(attachment.content));
+    },
+  );
+
   app.get<{ Params: { projectId: string; taskId: string } }>(
     "/v1/projects/:projectId/tasks/:taskId/background-terminals",
     {
@@ -1957,7 +2000,7 @@ export async function createCodeAgentServer(
           reason: replay.reason,
           sessionId: eventStream.checkpoint.sessionId,
           type: "resync.required",
-          version: 1,
+          version: 2,
         });
         if (sent) {
           socket.close(1000, "Snapshot resync required");
@@ -1973,7 +2016,7 @@ export async function createCodeAgentServer(
         latestSequence: eventStream.checkpoint.sequence,
         sessionId: eventStream.checkpoint.sessionId,
         type: "connection.ready",
-        version: 1,
+        version: 2,
       });
       for (const event of replay.events) {
         if (!send(event)) {

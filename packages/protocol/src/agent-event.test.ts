@@ -31,7 +31,7 @@ const baseEvent = {
   sessionId: "runtime-1",
   taskId: "task-1",
   timestamp: "2026-07-23T00:00:00.000Z",
-  version: 1,
+  version: 2,
 } as const;
 
 const pendingRequest = {
@@ -51,7 +51,7 @@ const pendingRequest = {
   type: "command_approval",
 } as const;
 
-describe("Agent Event v1 protocol", () => {
+describe("Agent Event v2 protocol", () => {
   it("validates every supported event variant", () => {
     const events = [
       {
@@ -146,14 +146,14 @@ describe("Agent Event v1 protocol", () => {
       latestSequence: 7,
       sessionId: "runtime-1",
       type: "connection.ready",
-      version: 1,
+      version: 2,
     };
     const resync = {
       latestSequence: 7,
       reason: "event_retention_exceeded",
       sessionId: "runtime-1",
       type: "resync.required",
-      version: 1,
+      version: 2,
     };
     const response = {
       checkpoint: { sequence: 7, sessionId: "runtime-1" },
@@ -230,7 +230,7 @@ describe("Agent Event v1 protocol", () => {
     };
 
     expect(Value.Check(AgentEventSchema, { ...valid, sequence: -1 })).toBe(false);
-    expect(Value.Check(AgentEventSchema, { ...valid, version: 2 })).toBe(false);
+    expect(Value.Check(AgentEventSchema, { ...valid, version: 1 })).toBe(false);
     expect(Value.Check(AgentEventSchema, { ...valid, type: "native.delta" })).toBe(false);
     expect(Value.Check(AgentEventSchema, { ...valid, nativeItem: {} })).toBe(false);
     expect(
@@ -239,7 +239,7 @@ describe("Agent Event v1 protocol", () => {
         reason: "unknown",
         sessionId: "runtime-1",
         type: "resync.required",
-        version: 1,
+        version: 2,
       }),
     ).toBe(false);
   });

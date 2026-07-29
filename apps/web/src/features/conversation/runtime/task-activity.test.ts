@@ -42,7 +42,7 @@ function createTurnEvent(taskId: string, type: "turn.completed" | "turn.started"
     taskId,
     timestamp: "2026-07-27T00:00:00.000Z",
     turnId: `turn-${taskId}`,
-    version: 1,
+    version: 2,
   } as const;
   const turn = {
     completedAt: null,
@@ -138,7 +138,7 @@ describe("task activity registry", () => {
       timestamp: "2026-07-27T00:00:01.000Z",
       turnId: firstRequest.turnId,
       type: "pending_request.resolved",
-      version: 1,
+      version: 2,
     } as const satisfies AgentEvent;
 
     activity = reduceTaskActivityEvent(activity, "code-agent", resolvedEvent);

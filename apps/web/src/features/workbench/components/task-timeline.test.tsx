@@ -240,7 +240,6 @@ describe("TaskSnapshotTimeline", () => {
   });
 
   it("renders user image attachments as viewable previews", () => {
-    const imageUrl = "data:image/png;base64,iVBORw0KGgo=";
     const imageSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: [
@@ -248,7 +247,14 @@ describe("TaskSnapshotTimeline", () => {
           ...completedTurn,
           items: [
             {
-              attachments: [{ mediaType: "image/png", name: "diagram.png", url: imageUrl }],
+              attachments: [
+                {
+                  id: "history/image-1",
+                  mediaType: "image/png",
+                  name: "diagram.png",
+                  size: 68,
+                },
+              ],
               id: "message-user-image",
               role: "user",
               text: "",
@@ -263,8 +269,33 @@ describe("TaskSnapshotTimeline", () => {
 
     expect(markup).toContain('aria-label="消息附件"');
     expect(markup).toContain('aria-label="查看图片 diagram.png"');
-    expect(markup).toContain(`href="${imageUrl}"`);
-    expect(markup).toContain(`src="${imageUrl}"`);
+    expect(markup).toContain(
+      'href="/v1/projects/code-agent/tasks/task-1/attachments/history%2Fimage-1"',
+    );
+    expect(markup).toContain(
+      'src="/v1/projects/code-agent/tasks/task-1/attachments/history%2Fimage-1"',
+    );
+    expect(markup).toContain('loading="lazy"');
+    expect(markup).toContain('decoding="async"');
+    expect(markup).toContain('width="144"');
+    expect(markup).toContain('height="144"');
+    expect(markup).not.toContain("data:image");
+  });
+
+  it("defers rendering work for long task histories with stable intrinsic turn sizes", () => {
+    const longSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: Array.from({ length: 51 }, (_, index) => ({
+        ...completedTurn,
+        id: `turn-${String(index + 1)}`,
+        items: [],
+      })),
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={longSnapshot} />);
+
+    expect(markup.match(/content-visibility:auto/g)).toHaveLength(51);
+    expect(markup.match(/contain-intrinsic-size:auto_300px/g)).toHaveLength(51);
   });
 
   it("renders a failed turn error after its partial assistant reply", () => {

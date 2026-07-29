@@ -1,7 +1,7 @@
 # CodeAgent Web 设计
 
 > 状态：Draft  
-> 更新日期：2026-07-23
+> 更新日期：2026-07-29
 > 目标版本：MVP  
 > 文档类型：架构说明（Explanation）
 
@@ -86,7 +86,7 @@ provider.error
 
 ### 4.4 渐进式性能设计
 
-MVP 使用 AI Elements `Conversation` 完成滚动和底部跟随。当真实数据证明 DOM 规模成为瓶颈时，仅替换 Timeline 内部为 `react-virtuoso`，不提前承担虚拟化复杂度。
+MVP 使用 AI Elements `Conversation` 完成滚动和底部跟随，每个 Turn 使用 `content-visibility: auto` 与稳定内在尺寸跳过可视区外渲染。当真实数据证明 DOM 规模成为瓶颈时，仅替换 Timeline 内部为 `react-virtuoso`，不提前承担完整虚拟化复杂度。
 
 ### 4.5 源码级 UI 复用
 
@@ -568,6 +568,8 @@ TaskTimeline
 | Approval      | AI Elements `Confirmation`                 |
 | Error         | 项目 Error Item                            |
 
+用户历史图片只消费 `AgentMessageAttachment` 的随机 ID、媒体类型、名称和字节数。Timeline 使用 Client 构造 `/v1/projects/:projectId/tasks/:taskId/attachments/:attachmentId`，缩略图固定 `144 × 144` 布局尺寸，并设置 `loading="lazy"` 与 `decoding="async"`；Snapshot、Query Cache 和归一化 Store 都不得保存历史图片 Base64。
+
 ### 15.2 滚动行为
 
 - 首次打开 Task 时定位到最新内容。
@@ -580,7 +582,7 @@ TaskTimeline
 
 ### 15.3 虚拟化升级条件
 
-AI Elements `Conversation` 会保留已渲染 Item 的 DOM。只有真实性能数据满足以下任一条件时，才将 `TaskTimeline` 内部替换为 `react-virtuoso`：
+AI Elements `Conversation` 会保留已渲染 Item 的 DOM。当前先用 Turn 级 `content-visibility: auto` 和 `contain-intrinsic-size` 延迟折叠下方的布局、绘制与图片解码；只有真实性能数据满足以下任一条件时，才将 `TaskTimeline` 内部替换为 `react-virtuoso`：
 
 - 常见 Task 达到约 `300-500` 个已加载 Item。
 - Timeline DOM 节点持续超过约 `2,000-3,000`。
@@ -837,6 +839,7 @@ Server 必须执行最终权限判断。Web 只负责减少误操作和展示已
 - 不在 Render 中解析协议、聚合大型数组或转换完整历史。
 - Stable Callback 和 Selector 只在有实际重渲染价值时引入。
 - Diff、高亮器和非首屏 Inspector 动态加载。
+- 长历史 Turn 使用 `content-visibility: auto` 和稳定内在尺寸；历史图片使用显式尺寸、延迟加载和异步解码。
 - 使用 React Profiler 和浏览器 Performance 数据决定优化，不以组件数量猜测瓶颈。
 
 ### 23.3 内存规则
@@ -844,6 +847,7 @@ Server 必须执行最终权限判断。Web 只负责减少误操作和展示已
 - 未选中且无活动 Turn 的 Task Runtime Store 允许回收。
 - Command Output、Event Buffer 和诊断数据必须有界。
 - Blob URL 在附件删除、提交成功或组件卸载时释放。
+- 历史图片 Base64 不进入 Snapshot、Query Cache 或 Runtime Store，只保留受控附件元数据。
 - Query Cache 为 Task Page 和 Snapshot 设置合理 GC 时间。
 - 浏览器不保存完整 Provider 原始事件日志。
 

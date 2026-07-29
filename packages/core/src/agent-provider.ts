@@ -33,6 +33,13 @@ export type AgentProviderTurnInput = Readonly<{
   text: string;
 }>;
 
+export type AgentProviderAttachment = Readonly<{
+  content: Uint8Array;
+  mediaType: AgentAttachmentMediaType;
+  name: string;
+  size: number;
+}>;
+
 type AgentEventTransportField = "provider" | "sequence" | "sessionId" | "timestamp" | "version";
 
 export type AgentProviderEvent = AgentEvent extends infer Event
@@ -76,6 +83,11 @@ export interface AgentProvider {
   readSandboxMode(): Promise<AgentSandboxMode>;
   // Promise 完成前须让 Snapshot 包含此前状态并同步交付对应通知，使 checkpoint 保持一致。
   readTask(taskId: string): Promise<AgentProviderTaskSnapshot | undefined>;
+  // 附件二进制只通过已验证的 Task 作用域读取，不进入统一 Snapshot。
+  readTaskAttachment(
+    taskId: string,
+    attachmentId: string,
+  ): Promise<AgentProviderAttachment | undefined>;
   renameTask(taskId: string, title: string): Promise<void>;
   resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest>;
   rollbackLatestTurn(taskId: string): Promise<void>;

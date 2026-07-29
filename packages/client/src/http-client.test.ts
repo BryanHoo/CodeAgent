@@ -85,6 +85,14 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
 }
 
 describe("CodeAgentClient", () => {
+  it("builds encoded historical attachment URLs from the configured base URL", () => {
+    const client = new CodeAgentClient({ baseUrl: "http://127.0.0.1:3210/" });
+
+    expect(client.getTaskAttachmentUrl("项目 / one", "task/1", "image?1")).toBe(
+      "http://127.0.0.1:3210/v1/projects/%E9%A1%B9%E7%9B%AE%20%2F%20one/tasks/task%2F1/attachments/image%3F1",
+    );
+  });
+
   it("lists and terminates a task background terminal", async () => {
     const terminalPage = {
       data: [

@@ -1,11 +1,11 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
-import { basename, extname, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import {
   PendingRequestResolutionError,
   type AgentProvider,
+  type AgentProviderAttachment,
   type AgentProviderEvent,
   type AgentProviderEventListener,
   type AgentProviderTaskSnapshot,
@@ -15,7 +15,6 @@ import {
   type ListAgentTasksInput,
   type ResolvePendingRequestInput,
 } from "@code-agent/core";
-import { MAX_AGENT_ATTACHMENT_BYTES } from "@code-agent/protocol";
 import type {
   AgentCapabilities,
   AgentBackgroundTerminal,
@@ -47,6 +46,7 @@ import {
 } from "./jsonl-rpc-client.js";
 import { extractCodexTextSkills, readCodexTranscriptTurnSkills } from "./codex-transcript.js";
 import { SUPPORTED_CODEX_VERSION } from "./binary.js";
+import { CodexHistoricalAttachmentStore } from "./historical-attachment-store.js";
 
 export interface CodexRpcClient {
   notify(method: string, params?: unknown): void;
@@ -580,7 +580,15 @@ function mapItemStatus(value: unknown): AgentItemStatus {
   return "completed";
 }
 
-function mapUserMessageContent(value: unknown): Readonly<{
+type MapCodexMessageImage = (
+  part: Record<string, unknown>,
+  imageIndex: number,
+) => AgentMessageAttachment | undefined;
+
+function mapUserMessageContent(
+  value: unknown,
+  mapImage: MapCodexMessageImage,
+): Readonly<{
   attachments: AgentMessageAttachment[];
   skills: { name: string }[];
   text: string;
@@ -616,7 +624,7 @@ function mapUserMessageContent(value: unknown): Readonly<{
       continue;
     }
     if (part["type"] === "image" || part["type"] === "localImage") {
-      const attachment = mapCodexMessageImage(part, attachments.length);
+      const attachment = mapImage(part, attachments.length);
       if (attachment === undefined) {
         textParts.push("[图片]");
       } else {
@@ -630,99 +638,6 @@ function mapUserMessageContent(value: unknown): Readonly<{
   }
 
   return { attachments, skills, text: textParts.join("\n") };
-}
-
-const imageMediaTypesByExtension: Readonly<Record<string, AgentMessageAttachment["mediaType"]>> = {
-  ".gif": "image/gif",
-  ".jpeg": "image/jpeg",
-  ".jpg": "image/jpeg",
-  ".png": "image/png",
-  ".webp": "image/webp",
-};
-
-function detectImageMediaType(content: Buffer): AgentMessageAttachment["mediaType"] | undefined {
-  if (content.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
-    return "image/png";
-  }
-  if (content[0] === 0xff && content[1] === 0xd8 && content[2] === 0xff) {
-    return "image/jpeg";
-  }
-  const header = content.subarray(0, 6).toString("ascii");
-  if (header === "GIF87a" || header === "GIF89a") {
-    return "image/gif";
-  }
-  if (
-    content.subarray(0, 4).toString("ascii") === "RIFF" &&
-    content.subarray(8, 12).toString("ascii") === "WEBP"
-  ) {
-    return "image/webp";
-  }
-  return undefined;
-}
-
-function normalizeImageName(value: string | undefined, fallback: string): string {
-  const trimmedName = value?.trim();
-  return trimmedName === undefined || trimmedName.length === 0
-    ? fallback
-    : trimmedName.slice(0, 255);
-}
-
-function mapCodexMessageImage(
-  part: Record<string, unknown>,
-  imageIndex: number,
-): AgentMessageAttachment | undefined {
-  if (part["type"] === "image") {
-    const url = optionalString(part["url"]);
-    const match = url?.match(/^data:(image\/(?:gif|jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
-    if (url === undefined || match === undefined || match === null) {
-      return undefined;
-    }
-    const mediaType = match[1] as AgentMessageAttachment["mediaType"];
-    const encodedContent = match[2];
-    if (encodedContent === undefined) {
-      return undefined;
-    }
-    const content = Buffer.from(encodedContent, "base64");
-    if (
-      content.byteLength === 0 ||
-      content.byteLength > MAX_AGENT_ATTACHMENT_BYTES ||
-      detectImageMediaType(content) !== mediaType
-    ) {
-      return undefined;
-    }
-    return {
-      mediaType,
-      name: normalizeImageName(optionalString(part["name"]), `图片-${String(imageIndex + 1)}`),
-      url,
-    };
-  }
-
-  const imagePath = optionalString(part["path"]);
-  if (imagePath === undefined) {
-    return undefined;
-  }
-  try {
-    const fileStats = statSync(imagePath);
-    if (!fileStats.isFile() || fileStats.size <= 0 || fileStats.size > MAX_AGENT_ATTACHMENT_BYTES) {
-      return undefined;
-    }
-    const content = readFileSync(imagePath);
-    const mediaType = detectImageMediaType(content);
-    if (mediaType === undefined) {
-      return undefined;
-    }
-    const nativeName = basename(imagePath);
-    const expectedMediaType = imageMediaTypesByExtension[extname(nativeName).toLowerCase()];
-    // 内容签名是最终依据；扩展名冲突时使用通用名称，避免向 Web 传递误导信息。
-    const name = normalizeImageName(
-      expectedMediaType === mediaType ? nativeName : undefined,
-      `图片-${String(imageIndex + 1)}`,
-    );
-    return { mediaType, name, url: `data:${mediaType};base64,${content.toString("base64")}` };
-  } catch {
-    // Codex 临时文件可能已被清理；降级为文本占位而不是让整个历史读取失败。
-    return undefined;
-  }
 }
 
 function mergeExpandedSkillMessages(items: readonly AgentItem[]): AgentItem[] {
@@ -944,6 +859,7 @@ function mapCodexMessagePhase(value: unknown): CodexMessagePhase | undefined {
 function mapAgentItem(
   value: unknown,
   subagentNicknames: ReadonlyMap<string, string> = new Map(),
+  mapImage: MapCodexMessageImage = () => undefined,
 ): AgentItem {
   const item = expectRecord(value, "Codex item");
   const id = expectString(item["id"], "Codex item id");
@@ -951,7 +867,7 @@ function mapAgentItem(
 
   switch (type) {
     case "userMessage": {
-      const content = mapUserMessageContent(item["content"]);
+      const content = mapUserMessageContent(item["content"], mapImage);
       return {
         ...(content.attachments.length === 0 ? {} : { attachments: content.attachments }),
         id,
@@ -1080,7 +996,7 @@ function mapAgentItem(
   }
 }
 
-function mapAgentTurn(value: unknown): AgentTurn {
+function mapAgentTurn(value: unknown, mapImage: MapCodexMessageImage = () => undefined): AgentTurn {
   const turn = expectRecord(value, "Codex turn");
   if (!Array.isArray(turn["items"])) {
     throw new CodexProtocolMappingError("Codex turn items must be an array");
@@ -1108,7 +1024,7 @@ function mapAgentTurn(value: unknown): AgentTurn {
     id: expectString(turn["id"], "Codex turn id"),
     // 先收集活动项中的昵称，再回填协作项，避免向 Web 暴露不可读的线程 ID。
     items: mergeExpandedSkillMessages(
-      turn["items"].map((item) => mapAgentItem(item, subagentNicknames)),
+      turn["items"].map((item) => mapAgentItem(item, subagentNicknames, mapImage)),
     ),
     startedAt: toNullableDateTime(turn["startedAt"], "Codex turn startedAt"),
     status: mapTurnStatus(turn["status"]),
@@ -1142,7 +1058,15 @@ function attachTranscriptSkills(turn: AgentTurn, skillNames: readonly string[]):
   return { ...turn, items };
 }
 
-function mapCodexNotification(method: string, value: unknown): AgentProviderEvent | undefined {
+function mapCodexNotification(
+  method: string,
+  value: unknown,
+  mapImage: (
+    taskId: string,
+    part: Record<string, unknown>,
+    imageIndex: number,
+  ) => AgentMessageAttachment | undefined,
+): AgentProviderEvent | undefined {
   if (!CODEX_NOTIFICATION_METHODS.has(method)) {
     return undefined;
   }
@@ -1160,7 +1084,9 @@ function mapCodexNotification(method: string, value: unknown): AgentProviderEven
   }
 
   if (method === "turn/started" || method === "turn/completed") {
-    const turn = mapAgentTurn(params["turn"]);
+    const turn = mapAgentTurn(params["turn"], (part, imageIndex) =>
+      mapImage(taskId, part, imageIndex),
+    );
     return {
       payload: { turn },
       taskId,
@@ -1203,7 +1129,9 @@ function mapCodexNotification(method: string, value: unknown): AgentProviderEven
   }
 
   if (method === "item/completed") {
-    const item = mapAgentItem(params["item"]);
+    const item = mapAgentItem(params["item"], new Map(), (part, imageIndex) =>
+      mapImage(taskId, part, imageIndex),
+    );
     return {
       itemId: item.id,
       payload: { item },
@@ -1286,6 +1214,7 @@ function mapAgentTask(thread: Record<string, unknown>, project: Project): AgentT
 export class CodexAgentProvider implements AgentProvider {
   readonly #client: CodexRpcClient;
   readonly #eventListeners = new Set<AgentProviderEventListener>();
+  readonly #historicalAttachments = new CodexHistoricalAttachmentStore();
   readonly #logger: CodexProviderLogger;
   readonly #pendingRequests = new Map<string, PendingCodexRequest>();
   readonly #pendingTaskServerRequests = new Map<string, PendingCodexRequest[]>();
@@ -1523,7 +1452,9 @@ export class CodexAgentProvider implements AgentProvider {
       }),
       "turn/start response",
     );
-    const turn = mapAgentTurn(response["turn"]);
+    const turn = mapAgentTurn(response["turn"], (part, imageIndex) =>
+      this.#mapMessageImage(taskId, part, imageIndex),
+    );
     if (turn.status === "running") {
       this.#runningTaskIds.add(taskId);
     }
@@ -1551,7 +1482,9 @@ export class CodexAgentProvider implements AgentProvider {
     if (expectString(response["reviewThreadId"], "review/start thread id") !== taskId) {
       throw new CodexProtocolMappingError("review/start returned a different thread");
     }
-    return mapAgentTurn(response["turn"]);
+    return mapAgentTurn(response["turn"], (part, imageIndex) =>
+      this.#mapMessageImage(taskId, part, imageIndex),
+    );
   }
 
   public async interruptTurn(taskId: string, turnId: string): Promise<void> {
@@ -1707,8 +1640,12 @@ export class CodexAgentProvider implements AgentProvider {
         throw new CodexProtocolMappingError("thread/read turns must be an array");
       }
       const transcriptSkillsByTurnId = await readCodexTranscriptTurnSkills(taskId);
+      // 新 Snapshot 使用新一批随机授权 ID，旧二进制引用立即从 Provider 内存释放。
+      this.#historicalAttachments.clearTask(taskId);
       const turns = thread["turns"]
-        .map(mapAgentTurn)
+        .map((turn) =>
+          mapAgentTurn(turn, (part, imageIndex) => this.#mapMessageImage(taskId, part, imageIndex)),
+        )
         .map((turn) => attachTranscriptSkills(turn, transcriptSkillsByTurnId.get(turn.id) ?? []));
       const status = mapThreadStatus(thread["status"]);
       if (status === "running") {
@@ -1729,6 +1666,16 @@ export class CodexAgentProvider implements AgentProvider {
     } finally {
       this.#finishTaskRead(taskId, projectOwnershipVerified);
     }
+  }
+
+  public readTaskAttachment(
+    taskId: string,
+    attachmentId: string,
+  ): Promise<AgentProviderAttachment | undefined> {
+    if (!this.#projectTaskIds.has(taskId)) {
+      return Promise.resolve(undefined);
+    }
+    return Promise.resolve(this.#historicalAttachments.read(taskId, attachmentId));
   }
 
   public async resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest> {
@@ -1862,7 +1809,9 @@ export class CodexAgentProvider implements AgentProvider {
     }
     let event: AgentProviderEvent | undefined;
     try {
-      event = mapCodexNotification(method, params);
+      event = mapCodexNotification(method, params, (taskId, part, imageIndex) =>
+        this.#mapMessageImage(taskId, part, imageIndex),
+      );
     } catch {
       // 单个原生通知字段漂移不能中断 JSONL Client 或后续关键事件。
       this.#warnDroppedNotification("invalid_notification", method, params);
@@ -1925,6 +1874,7 @@ export class CodexAgentProvider implements AgentProvider {
   }
 
   #clearTaskRuntimeState(taskId: string): void {
+    this.#historicalAttachments.clearTask(taskId);
     this.#pendingTaskEvents.delete(taskId);
     this.#pendingTaskServerRequests.delete(taskId);
     this.#pendingTaskReads.delete(taskId);
@@ -2238,6 +2188,29 @@ export class CodexAgentProvider implements AgentProvider {
     }
   }
 
+  #mapMessageImage(
+    taskId: string,
+    part: Record<string, unknown>,
+    imageIndex: number,
+  ): AgentMessageAttachment | undefined {
+    if (part["type"] === "image") {
+      const url = optionalString(part["url"]);
+      if (url === undefined) {
+        return undefined;
+      }
+      const name = optionalString(part["name"]);
+      return this.#historicalAttachments.addDataUrl(
+        taskId,
+        { ...(name === undefined ? {} : { name }), url },
+        imageIndex,
+      );
+    }
+    const path = optionalString(part["path"]);
+    return path === undefined
+      ? undefined
+      : this.#historicalAttachments.addLocalImage(taskId, path, imageIndex);
+  }
+
   #assertKnownProjectTask(taskId: string): void {
     if (!this.#projectTaskIds.has(taskId)) {
       throw new CodexProtocolMappingError("Codex thread does not belong to the active project");
@@ -2386,6 +2359,16 @@ class CodexRuntimeProjectProvider implements AgentProvider {
       this.#runtime.releaseProvisionalTask(this.#project, taskId);
       throw error;
     }
+  }
+
+  public readTaskAttachment(
+    taskId: string,
+    attachmentId: string,
+  ): Promise<AgentProviderAttachment | undefined> {
+    if (!this.#runtime.isTaskOwner(this.#project, taskId)) {
+      return Promise.resolve(undefined);
+    }
+    return this.#delegate.readTaskAttachment(taskId, attachmentId);
   }
 
   public async renameTask(taskId: string, title: string): Promise<void> {

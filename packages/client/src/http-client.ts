@@ -158,6 +158,15 @@ function taskPath(projectId: string, taskId: string): string {
   return `${projectPath(projectId)}/tasks/${encodeURIComponent(taskId)}`;
 }
 
+export function buildTaskAttachmentUrl(
+  baseUrl: string,
+  projectId: string,
+  taskId: string,
+  attachmentId: string,
+): string {
+  return `${baseUrl.replace(/\/$/u, "")}${taskPath(projectId, taskId)}/attachments/${encodeURIComponent(attachmentId)}`;
+}
+
 export class CodeAgentClient {
   readonly #baseUrl: string;
   readonly #fetch: typeof globalThis.fetch;
@@ -274,6 +283,10 @@ export class CodeAgentClient {
     options: ReadOptions = {},
   ): Promise<AgentTaskSnapshotResponse> {
     return this.#read(taskPath(projectId, taskId), AgentTaskSnapshotResponseSchema, options);
+  }
+
+  public getTaskAttachmentUrl(projectId: string, taskId: string, attachmentId: string): string {
+    return buildTaskAttachmentUrl(this.#baseUrl, projectId, taskId, attachmentId);
   }
 
   public async listBackgroundTerminals(

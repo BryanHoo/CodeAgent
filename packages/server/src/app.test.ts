@@ -14,6 +14,7 @@ import type {
   AgentTurn,
   PendingRequest,
 } from "@code-agent/protocol";
+import { Buffer } from "node:buffer";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,6 +31,7 @@ const project = {
 
 const pixelDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const historicalImageContent = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const turnOptions = {
   approvalPolicy: "on-request",
   model: "gpt-5.6-sol",
@@ -130,6 +132,18 @@ function createProvider() {
   const readTask = vi.fn<(taskId: string) => Promise<AgentProviderTaskSnapshot | undefined>>(
     (taskId) => Promise.resolve(taskId === task.id ? snapshot : undefined),
   );
+  const readTaskAttachment = vi.fn((taskId: string, attachmentId: string) =>
+    Promise.resolve(
+      taskId === task.id && attachmentId === "history/image-1"
+        ? {
+            content: historicalImageContent,
+            mediaType: "image/png" as const,
+            name: "diagram.png",
+            size: historicalImageContent.byteLength,
+          }
+        : undefined,
+    ),
+  );
   const resolvePendingRequest = vi.fn(() =>
     Promise.resolve({ ...pendingRequest, status: "resolved" as const }),
   );
@@ -176,6 +190,7 @@ function createProvider() {
     listTasks,
     readSandboxMode,
     readTask,
+    readTaskAttachment,
     renameTask,
     resolvePendingRequest,
     rollbackLatestTurn,
@@ -210,6 +225,7 @@ function createProvider() {
     provider,
     readSandboxMode,
     readTask,
+    readTaskAttachment,
     renameTask,
     resolvePendingRequest,
     rollbackLatestTurn,
@@ -316,6 +332,7 @@ async function createHarness(
     listSkills,
     provider,
     readTask,
+    readTaskAttachment,
     renameTask,
     resolvePendingRequest,
     rollbackLatestTurn,
@@ -349,6 +366,7 @@ async function createHarness(
     listModels,
     listSkills,
     readTask,
+    readTaskAttachment,
     renameTask,
     resolvePendingRequest,
     rollbackLatestTurn,
@@ -718,6 +736,33 @@ describe("CodeAgent Server", () => {
     );
     expect(consumed.statusCode).toBe(404);
     expect(consumed.json()).toMatchObject({ code: "ATTACHMENT_NOT_FOUND" });
+  });
+
+  it("serves historical attachment bytes through the project task scope", async () => {
+    const { app, readTaskAttachment } = await createHarness();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/task-1/attachments/history%2Fimage-1",
+    });
+    const missingAttachment = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/task-1/attachments/missing",
+    });
+    const missingProject = await app.inject({
+      method: "GET",
+      url: "/v1/projects/missing/tasks/task-1/attachments/history%2Fimage-1",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.rawPayload).toEqual(historicalImageContent);
+    expect(response.headers["content-type"]).toBe("image/png");
+    expect(response.headers["cache-control"]).toBe("private, max-age=300");
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(missingAttachment.statusCode).toBe(404);
+    expect(missingProject.statusCode).toBe(404);
+    expect(readTaskAttachment).toHaveBeenCalledTimes(2);
+    expect(readTaskAttachment).toHaveBeenNthCalledWith(1, "task-1", "history/image-1");
   });
 
   it("lists project tasks with validated pagination", async () => {
@@ -1686,14 +1731,14 @@ describe("CodeAgent Server", () => {
     expect(messages[0]).toMatchObject({
       latestSequence: 0,
       type: "connection.ready",
-      version: 1,
+      version: 2,
     });
     expect(typeof (messages[0] as { sessionId: unknown }).sessionId).toBe("string");
     expect(messages[1]).toMatchObject({
       payload: { delta: "实时更新" },
       sequence: 1,
       type: "message.delta",
-      version: 1,
+      version: 2,
     });
     expect(typeof (messages[1] as { sessionId: unknown }).sessionId).toBe("string");
 

@@ -130,14 +130,15 @@ describe("project protocol", () => {
     expect(AgentTaskSchema.required).toEqual(["id", "pinned", "projectId", "title", "updatedAt"]);
   });
 
-  it("carries bounded web-renderable images on user messages", () => {
+  it("carries bounded image metadata without snapshot data URLs", () => {
     expect(
       Value.Check(AgentMessageItemSchema, {
         attachments: [
           {
+            id: "attachment-history-1",
             mediaType: "image/png",
             name: "diagram.png",
-            url: "data:image/png;base64,iVBORw0KGgo=",
+            size: 68,
           },
         ],
         id: "message-image",
@@ -150,9 +151,9 @@ describe("project protocol", () => {
       Value.Check(AgentMessageItemSchema, {
         attachments: [
           {
-            mediaType: "image/svg+xml",
-            name: "unsafe.svg",
-            url: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+            mediaType: "image/png",
+            name: "diagram.png",
+            url: "data:image/png;base64,iVBORw0KGgo=",
           },
         ],
         id: "message-image",

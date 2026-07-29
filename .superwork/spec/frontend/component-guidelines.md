@@ -33,7 +33,7 @@
 - 右侧 Inspector 的“上下文”页签必须在“运行中的终端”栏目展示当前 Task 的后台终端命令与工作目录，并提供带可访问名称的停止图标按钮。终端可以晚于 AI 回复结束，Turn 完成不得移除该栏目；停止提交期间禁用操作，失败显示可重试错误，完整输出仍只在 Timeline 展示。
 - Task Timeline 的用户消息和 AI 回复末尾都必须常显可访问的复制操作与本地时间；消息 Item 和相邻 Turn 之间保留明确纵向间距，不能让下一条用户消息贴住上一条回复。
 - Task Timeline 的用户消息必须渲染统一消息协议携带的 Skill Token；实时 Turn、首轮乐观消息和重新打开 Task 后的历史消息使用同一 `skill` 主题色样式。Web 不从普通文本猜测 Skill，Provider 必须解析 Codex `userMessage.content` 中的 `skill` 字段并在丢弃原生路径后提供 Skill 名称。
-- Task Timeline 的用户消息必须渲染统一消息协议携带的图片附件，并提供可访问的缩略图查看入口；Web 只消费后端转换并校验后的 Data URL，不接收或尝试打开 Codex 本地文件路径。纯图片首轮消息必须使用 Provider 返回的用户 Item 完成即时回显。
+- Task Timeline 的用户消息必须渲染统一消息协议携带的图片附件，并提供可访问的缩略图查看入口；Web 只使用随机附件 ID 构造 Project/Task 作用域受控端点，不接收 Base64 Data URL 或 Codex 本地文件路径。历史图片固定使用 `loading="lazy"`、`decoding="async"` 和显式 `width`/`height`；Turn 容器使用稳定内在尺寸与 `content-visibility: auto` 延迟可视区外渲染。纯图片首轮消息必须使用 Provider 返回的用户 Item 完成即时回显。
 - Task Timeline 默认随 AI 流式内容自动滚动到最新位置；用户主动离开底部后暂停跟随，用户再次滚动到底部或使用“回到底部”操作后恢复自动跟随。
 - AI 回复中的 Project 内绝对文件引用必须可点击打开只读源文件弹窗；带行号时定位并高亮对应行。源文件只通过 Server 受控接口读取，超长内容显示明确截断状态，页面不得直接访问本地文件系统。
 - Timeline 展示 Task Snapshot 中的 Agent 文件操作，Inspector 则始终展示当前 Project 的真实 Git 未提交文件，并明确区分非空的未暂存与已暂存分组；变更总览固定在 Inspector 顶部，只有文件列表滚动，不展示未接通的提交入口。当前 Task 运行时 Inspector 定时刷新 Git 状态，停止运行后补做最终刷新。两处文件行都复用 Diff 弹窗；新增或删除文件的行数统计同时支持 Unified Diff 和 Provider 返回的完整文件内容，完整 Viewer 使用 `@pierre/diffs/react` 并仅在打开弹窗后动态加载，不能在消息内展开原始补丁或保留演示变更数据。

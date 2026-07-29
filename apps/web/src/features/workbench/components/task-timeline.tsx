@@ -5,6 +5,7 @@ import type {
   PendingRequest,
   Project,
 } from "@code-agent/protocol";
+import { buildTaskAttachmentUrl } from "@code-agent/client";
 import {
   Check,
   Copy,
@@ -626,11 +627,15 @@ function TimelineItemContent({
   isLastTurnItem,
   item,
   onOpenSourceFile,
+  projectId,
+  taskId,
   turnStatus,
 }: Readonly<{
   isLastTurnItem: boolean;
   item: AgentItem;
   onOpenSourceFile: (reference: MessageFileReference) => void;
+  projectId: string;
+  taskId: string;
   turnStatus: AgentTurn["status"];
 }>) {
   switch (item.type) {
@@ -658,26 +663,33 @@ function TimelineItemContent({
           )}
           {attachments.length === 0 ? null : (
             <div className="flex max-w-full flex-wrap gap-2" aria-label="消息附件">
-              {attachments.map((attachment, attachmentIndex) => (
-                <a
-                  aria-label={`查看图片 ${attachment.name}`}
-                  className="group block w-36 overflow-hidden rounded-control bg-raised text-left shadow-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
-                  href={attachment.url}
-                  key={`${attachment.name}-${String(attachmentIndex)}`}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  {/* 后端已将 Codex 本地路径转换为受限 Data URL，浏览器无需访问文件系统。 */}
-                  <img
-                    alt={attachment.name}
-                    className="aspect-square w-full object-cover"
-                    src={attachment.url}
-                  />
-                  <span className="block truncate px-2 py-1.5 text-label text-muted-foreground group-hover:text-foreground">
-                    {attachment.name}
-                  </span>
-                </a>
-              ))}
+              {attachments.map((attachment) => {
+                const attachmentUrl = buildTaskAttachmentUrl("", projectId, taskId, attachment.id);
+                return (
+                  <a
+                    aria-label={`查看图片 ${attachment.name}`}
+                    className="group block w-36 overflow-hidden rounded-control bg-raised text-left shadow-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
+                    href={attachmentUrl}
+                    key={attachment.id}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {/* 历史图片仅在进入可视区时通过 Task 作用域端点读取和解码。 */}
+                    <img
+                      alt={attachment.name}
+                      className="aspect-square w-full object-cover"
+                      decoding="async"
+                      height={144}
+                      loading="lazy"
+                      src={attachmentUrl}
+                      width={144}
+                    />
+                    <span className="block truncate px-2 py-1.5 text-label text-muted-foreground group-hover:text-foreground">
+                      {attachment.name}
+                    </span>
+                  </a>
+                );
+              })}
             </div>
           )}
           {item.text.length === 0 ? null : (
@@ -778,6 +790,8 @@ function TurnTimelineItems({
   onOpenSourceFile,
   onReviewFileChanges,
   onRollbackTurn,
+  projectId,
+  taskId,
   turn,
 }: Readonly<{
   canRollback: boolean;
@@ -786,6 +800,8 @@ function TurnTimelineItems({
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
+  projectId: string;
+  taskId: string;
   turn: AgentTurn;
 }>) {
   const timelineGroups = groupTurnTimelineItems(turn.items);
@@ -806,6 +822,8 @@ function TurnTimelineItems({
             isLastTurnItem={false}
             item={group.item}
             onOpenSourceFile={onOpenSourceFile}
+            projectId={projectId}
+            taskId={taskId}
             turnStatus={turn.status}
           />
           <MessageMetadata
@@ -839,6 +857,8 @@ function TurnTimelineItems({
                 item={item}
                 key={item.id}
                 onOpenSourceFile={onOpenSourceFile}
+                projectId={projectId}
+                taskId={taskId}
                 turnStatus={turn.status}
               />
             );
@@ -914,13 +934,17 @@ function StoredTimelineItemContent({
   isLastTurnItem,
   itemId,
   onOpenSourceFile,
+  projectId,
   store,
+  taskId,
   turnStatus,
 }: Readonly<{
   isLastTurnItem: boolean;
   itemId: string;
   onOpenSourceFile: (reference: MessageFileReference) => void;
+  projectId: string;
   store: TaskStore;
+  taskId: string;
   turnStatus: AgentTurn["status"];
 }>) {
   const item = useStore(store, (state) => state.itemsById[itemId]);
@@ -929,6 +953,8 @@ function StoredTimelineItemContent({
       isLastTurnItem={isLastTurnItem}
       item={item}
       onOpenSourceFile={onOpenSourceFile}
+      projectId={projectId}
+      taskId={taskId}
       turnStatus={turnStatus}
     />
   );
@@ -938,13 +964,17 @@ function StoredUserMessage({
   itemId,
   latestSnapshotTimestamp,
   onOpenSourceFile,
+  projectId,
   store,
+  taskId,
   turn,
 }: Readonly<{
   itemId: string;
   latestSnapshotTimestamp: string;
   onOpenSourceFile: (reference: MessageFileReference) => void;
+  projectId: string;
   store: TaskStore;
+  taskId: string;
   turn: NormalizedAgentTurn;
 }>) {
   const item = useStore(store, (state) => state.itemsById[itemId]);
@@ -965,6 +995,8 @@ function StoredUserMessage({
         isLastTurnItem={false}
         item={item}
         onOpenSourceFile={onOpenSourceFile}
+        projectId={projectId}
+        taskId={taskId}
         turnStatus={turn.status}
       />
       <MessageMetadata
@@ -1007,8 +1039,10 @@ function StoredAssistantGroup({
   onOpenSourceFile,
   onReviewFileChanges,
   onRollbackTurn,
+  projectId,
   showRunningShimmer,
   store,
+  taskId,
   turn,
 }: Readonly<{
   canRollback: boolean;
@@ -1019,8 +1053,10 @@ function StoredAssistantGroup({
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
+  projectId: string;
   showRunningShimmer: boolean;
   store: TaskStore;
+  taskId: string;
   turn: NormalizedAgentTurn;
 }>) {
   // 完成态聚合只在 Turn 终态或 Item 顺序变化时执行，不参与文本 Delta。
@@ -1048,7 +1084,9 @@ function StoredAssistantGroup({
             itemId={itemId}
             key={itemId}
             onOpenSourceFile={onOpenSourceFile}
+            projectId={projectId}
             store={store}
+            taskId={taskId}
             turnStatus={turn.status}
           />
         ))}
@@ -1079,7 +1117,9 @@ function StoreTurnTimelineSection({
   onOpenSourceFile,
   onReviewFileChanges,
   onRollbackTurn,
+  projectId,
   store,
+  taskId,
   turnId,
   turnIndex,
 }: Readonly<{
@@ -1088,7 +1128,9 @@ function StoreTurnTimelineSection({
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
+  projectId: string;
   store: TaskStore;
+  taskId: string;
   turnId: string;
   turnIndex: number;
 }>) {
@@ -1105,7 +1147,7 @@ function StoreTurnTimelineSection({
   return (
     <section
       aria-label={`Turn ${String(turnIndex + 1)}`}
-      className="space-y-4"
+      className="space-y-4 [contain-intrinsic-size:auto_300px] [content-visibility:auto]"
       data-status={turn.status}
     >
       {timelineGroups.map((group, groupIndex) =>
@@ -1115,7 +1157,9 @@ function StoreTurnTimelineSection({
             key={group.itemId}
             latestSnapshotTimestamp={latestSnapshotTimestamp}
             onOpenSourceFile={onOpenSourceFile}
+            projectId={projectId}
             store={store}
+            taskId={taskId}
             turn={turn}
           />
         ) : (
@@ -1129,10 +1173,12 @@ function StoreTurnTimelineSection({
             onOpenSourceFile={onOpenSourceFile}
             onReviewFileChanges={onReviewFileChanges}
             onRollbackTurn={onRollbackTurn}
+            projectId={projectId}
             showRunningShimmer={
               turn.status === "running" && groupIndex === timelineGroups.length - 1
             }
             store={store}
+            taskId={taskId}
             turn={turn}
           />
         ),
@@ -1211,6 +1257,8 @@ function TaskStoreTimeline({
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
   store: TaskStore;
 }>) {
+  const projectId = store.getState().projectId;
+  const taskId = store.getState().taskId;
   const turnIds = useStore(store, (state) => state.turnIds);
   const pendingRequestIds = useStore(store, (state) => state.pendingRequestIds);
   const pendingRequestsById = useStore(store, (state) => state.pendingRequestsById);
@@ -1233,7 +1281,9 @@ function TaskStoreTimeline({
             onOpenSourceFile={onOpenSourceFile}
             onReviewFileChanges={onReviewFileChanges}
             onRollbackTurn={onRollbackTurn}
+            projectId={projectId}
             store={store}
+            taskId={taskId}
             turnId={turnId}
             turnIndex={turnIndex}
           />
@@ -1290,7 +1340,7 @@ export function TaskSnapshotTimeline({
         {snapshot.turns.map((turn, turnIndex) => (
           <section
             aria-label={`Turn ${String(turnIndex + 1)}`}
-            className="space-y-4"
+            className="space-y-4 [contain-intrinsic-size:auto_300px] [content-visibility:auto]"
             data-status={turn.status}
             key={turn.id}
           >
@@ -1306,6 +1356,8 @@ export function TaskSnapshotTimeline({
               onOpenSourceFile={onOpenSourceFile}
               onReviewFileChanges={onReviewFileChanges}
               onRollbackTurn={onRollbackTurn}
+              projectId={snapshot.projectId}
+              taskId={snapshot.id}
               turn={turn}
             />
             {turn.error === null ? null : (

@@ -42,7 +42,7 @@ describe("AgentEventStream", () => {
       sequence: 1,
       sessionId: "runtime-1",
       timestamp: "2026-07-23T00:00:00.000Z",
-      version: 1,
+      version: 2,
     });
     expect(stream.metrics).toEqual({
       backpressureSignals: 0,

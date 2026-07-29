@@ -2436,7 +2436,7 @@ describe("CodexAgentProvider", () => {
     );
   });
 
-  it("converts Codex local images into bounded browser-renderable message attachments", async () => {
+  it("maps Codex local images to metadata and reads their bytes on demand", async () => {
     const temporaryDirectory = mkdtempSync(join(tmpdir(), "code-agent-image-"));
     const imagePath = join(temporaryDirectory, "diagram.png");
     const imageContent = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -2465,18 +2465,26 @@ describe("CodexAgentProvider", () => {
           ],
         }),
       },
+      { data: [], nextCursor: null },
+      { status: "unsubscribed" },
     ]);
     const provider = createCodexAgentProvider({ client: rpc, project });
 
     try {
       const snapshot = await provider.readTask("task-1");
+      const item = snapshot?.turns[0]?.items[0];
+      const attachmentId = item?.type === "message" ? item.attachments?.[0]?.id : undefined;
+      if (attachmentId === undefined) {
+        throw new Error("Expected historical attachment metadata");
+      }
 
-      expect(snapshot?.turns[0]?.items[0]).toEqual({
+      expect(item).toEqual({
         attachments: [
           {
+            id: attachmentId,
             mediaType: "image/png",
             name: "diagram.png",
-            url: `data:image/png;base64,${imageContent.toString("base64")}`,
+            size: imageContent.byteLength,
           },
         ],
         id: "message-image",
@@ -2484,7 +2492,17 @@ describe("CodexAgentProvider", () => {
         text: "分析这张图",
         type: "message",
       });
+      expect(attachmentId).not.toHaveLength(0);
       expect(JSON.stringify(snapshot)).not.toContain(imagePath);
+      expect(JSON.stringify(snapshot)).not.toContain("data:image");
+      await expect(provider.readTaskAttachment("task-1", attachmentId)).resolves.toMatchObject({
+        content: imageContent,
+        mediaType: "image/png",
+        name: "diagram.png",
+        size: imageContent.byteLength,
+      });
+      await expect(provider.unsubscribeTask("task-1")).resolves.toBe("unsubscribed");
+      await expect(provider.readTaskAttachment("task-1", attachmentId)).resolves.toBeUndefined();
     } finally {
       rmSync(temporaryDirectory, { force: true, recursive: true });
     }
