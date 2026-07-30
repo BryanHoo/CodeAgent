@@ -1349,6 +1349,29 @@ test("opens bounded source previews from assistant file references", async ({ co
   await expect(dialog).toBeHidden();
 });
 
+test("keeps pasted images in attachments instead of the text editor", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  const pasteWasCanceled = await prompt.evaluate((element) => {
+    const clipboardData = new DataTransfer();
+    clipboardData.items.add(
+      new File([new Uint8Array([137, 80, 78, 71])], "pasted.png", { type: "image/png" }),
+    );
+    const event = new ClipboardEvent("paste", {
+      bubbles: true,
+      cancelable: true,
+      clipboardData,
+    });
+
+    return !element.dispatchEvent(event) && event.defaultPrevented;
+  });
+
+  await expect(page.getByText("pasted.png", { exact: true })).toBeVisible();
+  await expect(prompt.locator("img")).toHaveCount(0);
+  expect(pasteWasCanceled).toBe(true);
+});
+
 test("submits attachments, approval policy, model, and reasoning effort through the real client contract", async ({
   page,
 }) => {

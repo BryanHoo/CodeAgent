@@ -264,6 +264,8 @@ export function PromptInput({
           }
           const pastedFiles = [...event.clipboardData.files];
           if (pastedFiles.length > 0) {
+            // 图片由附件预览承载，取消 contenteditable 默认插入，避免正文重复显示。
+            event.preventDefault();
             addFiles(pastedFiles);
           }
         }}
