@@ -12,10 +12,11 @@ import {
   FilePenLine,
   Files,
   FolderGit2,
+  GitFork,
   RotateCcw,
   SquareTerminal,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useStore } from "zustand";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
@@ -82,8 +83,11 @@ import {
   type SubagentOperation,
 } from "./subagent.js";
 
+type ForkTaskAction = (idempotencyKey: string) => Promise<void>;
+
 type TaskTimelineCommonProps = Readonly<{
   canRollbackTurns?: boolean;
+  onForkTask?: ForkTaskAction;
   onOpenFileDiff?: (change: AgentFileChange) => void;
   onReviewFileChanges?: (changes: readonly AgentFileChange[]) => void;
   onRollbackTurn?: (turnId: string, idempotencyKey: string) => Promise<void>;
@@ -183,6 +187,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
   }
   const {
     canRollbackTurns = false,
+    onForkTask,
     onOpenFileDiff,
     onOpenSourceFile,
     onReviewFileChanges,
@@ -202,6 +207,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
       onResolvePendingRequest={onResolvePendingRequest ?? ignorePendingRequest}
       onRollbackTurn={onRollbackTurn ?? ignoreRollback}
       canRollbackTurns={canRollbackTurns}
+      {...(onForkTask === undefined ? {} : { onForkTask })}
       runtime={runtime}
       startingSnapshot={startingSnapshot}
     />
@@ -210,6 +216,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
 
 function ActiveTaskTimeline({
   canRollbackTurns,
+  onForkTask,
   onOpenFileDiff,
   onOpenSourceFile,
   onReviewFileChanges,
@@ -224,6 +231,7 @@ function ActiveTaskTimeline({
     idempotencyKey: string,
   ) => Promise<void>;
   onOpenFileDiff: (change: AgentFileChange) => void;
+  onForkTask?: ForkTaskAction;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
@@ -256,6 +264,7 @@ function ActiveTaskTimeline({
       <TaskStoreTimeline
         canRollbackTurns={canRollbackTurns}
         connected={runtime.connectionState === "connected"}
+        {...(onForkTask === undefined ? {} : { onForkTask })}
         onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
         onReviewFileChanges={onReviewFileChanges}
@@ -347,14 +356,19 @@ function getMessageTimestamp(
 
 function MessageMetadata({
   modeLabel,
+  onForkTask,
   text,
   timestamp,
 }: Readonly<{
   modeLabel?: string;
+  onForkTask?: ForkTaskAction;
   text: string;
   timestamp?: string;
 }>) {
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [forkError, setForkError] = useState(false);
+  const [forkPending, setForkPending] = useState(false);
+  const forkIdempotencyKeyRef = useRef<string | null>(null);
   const copied = copiedText === text;
   const messageDate = timestamp === undefined ? undefined : new Date(timestamp);
 
@@ -365,6 +379,23 @@ function MessageMetadata({
       setCopiedText(text);
     } catch {
       setCopiedText(null);
+    }
+  };
+
+  const forkTask = async () => {
+    if (onForkTask === undefined) {
+      return;
+    }
+    forkIdempotencyKeyRef.current ??= globalThis.crypto.randomUUID();
+    setForkPending(true);
+    setForkError(false);
+    try {
+      // 重试复用同一幂等键，避免响应丢失时重复创建任务。
+      await onForkTask(forkIdempotencyKeyRef.current);
+    } catch {
+      setForkError(true);
+    } finally {
+      setForkPending(false);
     }
   };
 
@@ -383,6 +414,18 @@ function MessageMetadata({
           <Copy className="size-3.5" aria-hidden="true" />
         )}
       </MessageAction>
+      {onForkTask === undefined ? null : (
+        <MessageAction
+          disabled={forkPending}
+          label={forkError ? "复制任务失败，请重试" : forkPending ? "正在复制任务" : "复制任务"}
+          onClick={() => {
+            void forkTask();
+          }}
+          tooltip={forkError ? "复制任务失败，请重试" : "复制任务"}
+        >
+          <GitFork className="size-3.5" aria-hidden="true" />
+        </MessageAction>
+      )}
       {modeLabel === undefined ? null : <span>{modeLabel}</span>}
       {timestamp === undefined || messageDate === undefined ? null : (
         <time dateTime={timestamp} title={messageDateTimeFormatter.format(messageDate)}>
@@ -820,6 +863,7 @@ function TimelineItemContent({
 function TurnTimelineItems({
   canRollback,
   latestSnapshotTimestamp,
+  onForkTask,
   onOpenFileDiff,
   onOpenSourceFile,
   onReviewFileChanges,
@@ -830,6 +874,7 @@ function TurnTimelineItems({
 }: Readonly<{
   canRollback: boolean;
   latestSnapshotTimestamp: string;
+  onForkTask?: ForkTaskAction;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
@@ -840,6 +885,9 @@ function TurnTimelineItems({
 }>) {
   const timelineGroups = groupTurnTimelineItems(turn.items);
   const hasAssistantItems = timelineGroups.some((group) => group.type === "assistant");
+  const latestAssistantGroupIndex = timelineGroups.findLastIndex(
+    (group) => group.type === "assistant",
+  );
 
   const renderedGroups = timelineGroups.map((group, groupIndex) => {
     if (group.type === "user") {
@@ -917,6 +965,9 @@ function TurnTimelineItems({
         ) : null}
         {showCompletedFooter ? (
           <MessageMetadata
+            {...(groupIndex === latestAssistantGroupIndex && onForkTask !== undefined
+              ? { onForkTask }
+              : {})}
             text={assistantText}
             timestamp={getMessageTimestamp("assistant", turn, latestSnapshotTimestamp)}
           />
@@ -1085,6 +1136,7 @@ function StoredAssistantGroup({
   lastTurnItemId,
   latestSnapshotTimestamp,
   onOpenFileDiff,
+  onForkTask,
   onOpenSourceFile,
   onReviewFileChanges,
   onRollbackTurn,
@@ -1099,6 +1151,7 @@ function StoredAssistantGroup({
   lastTurnItemId: string | undefined;
   latestSnapshotTimestamp: string;
   onOpenFileDiff: (change: AgentFileChange) => void;
+  onForkTask?: ForkTaskAction;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
@@ -1152,6 +1205,7 @@ function StoredAssistantGroup({
       ) : null}
       {turn.status !== "running" && assistantText.trim().length > 0 ? (
         <MessageMetadata
+          {...(onForkTask === undefined ? {} : { onForkTask })}
           text={assistantText}
           timestamp={getMessageTimestamp("assistant", turn, latestSnapshotTimestamp)}
         />
@@ -1162,6 +1216,7 @@ function StoredAssistantGroup({
 
 function StoreTurnTimelineSection({
   canRollback,
+  onForkTask,
   onOpenFileDiff,
   onOpenSourceFile,
   onReviewFileChanges,
@@ -1173,6 +1228,7 @@ function StoreTurnTimelineSection({
   turnIndex,
 }: Readonly<{
   canRollback: boolean;
+  onForkTask?: ForkTaskAction;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
@@ -1191,6 +1247,9 @@ function StoreTurnTimelineSection({
   const latestSnapshotTimestamp = store.getState().snapshotMetadata?.updatedAt ?? "";
   const timelineGroups = groupStoredTurnTimelineItems(itemIds, store.getState().itemsById);
   const hasAssistantItems = timelineGroups.some((group) => group.type === "assistant");
+  const latestAssistantGroupIndex = timelineGroups.findLastIndex(
+    (group) => group.type === "assistant",
+  );
   const lastTurnItemId = itemIds.at(-1);
 
   return (
@@ -1219,6 +1278,11 @@ function StoreTurnTimelineSection({
             lastTurnItemId={lastTurnItemId}
             latestSnapshotTimestamp={latestSnapshotTimestamp}
             onOpenFileDiff={onOpenFileDiff}
+            {...(turn.status === "completed" &&
+            groupIndex === latestAssistantGroupIndex &&
+            onForkTask !== undefined
+              ? { onForkTask }
+              : {})}
             onOpenSourceFile={onOpenSourceFile}
             onReviewFileChanges={onReviewFileChanges}
             onRollbackTurn={onRollbackTurn}
@@ -1286,6 +1350,7 @@ function StorePendingRequestList({
 function TaskStoreTimeline({
   canRollbackTurns,
   connected,
+  onForkTask,
   onOpenFileDiff,
   onOpenSourceFile,
   onReviewFileChanges,
@@ -1295,6 +1360,7 @@ function TaskStoreTimeline({
 }: Readonly<{
   canRollbackTurns: boolean;
   connected: boolean;
+  onForkTask?: ForkTaskAction;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
@@ -1326,6 +1392,9 @@ function TaskStoreTimeline({
           <StoreTurnTimelineSection
             canRollback={connected && canRollbackTurns && turnId === latestTurnId}
             key={turnId}
+            {...(connected && turnId === latestTurnId && onForkTask !== undefined
+              ? { onForkTask }
+              : {})}
             onOpenFileDiff={onOpenFileDiff}
             onOpenSourceFile={onOpenSourceFile}
             onReviewFileChanges={onReviewFileChanges}
@@ -1351,6 +1420,7 @@ function TaskStoreTimeline({
 export function TaskSnapshotTimeline({
   canRollbackTurns = false,
   connected = true,
+  onForkTask,
   onOpenFileDiff = () => undefined,
   onOpenSourceFile = () => undefined,
   onReviewFileChanges = () => undefined,
@@ -1360,6 +1430,7 @@ export function TaskSnapshotTimeline({
 }: Readonly<{
   canRollbackTurns?: boolean;
   connected?: boolean;
+  onForkTask?: ForkTaskAction;
   onOpenFileDiff?: (change: AgentFileChange) => void;
   onOpenSourceFile?: (reference: MessageFileReference) => void;
   onReviewFileChanges?: (changes: readonly AgentFileChange[]) => void;
@@ -1401,6 +1472,12 @@ export function TaskSnapshotTimeline({
                 turn.id === latestTurnId
               }
               latestSnapshotTimestamp={snapshot.updatedAt}
+              {...(connected &&
+              turn.status === "completed" &&
+              turn.id === latestTurnId &&
+              onForkTask !== undefined
+                ? { onForkTask }
+                : {})}
               onOpenFileDiff={onOpenFileDiff}
               onOpenSourceFile={onOpenSourceFile}
               onReviewFileChanges={onReviewFileChanges}

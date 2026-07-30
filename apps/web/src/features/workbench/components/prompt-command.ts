@@ -49,10 +49,10 @@ export const promptCommandItems = [
   },
   {
     action: "fork",
-    description: "在当前工作空间中创建新任务",
-    id: "continue-in-new-task",
-    keywords: ["fork", "continue", "new task", "继续", "新任务"],
-    label: "在新任务中继续",
+    description: "复制当前任务及其对话历史",
+    id: "copy-task",
+    keywords: ["fork", "copy", "复制", "任务"],
+    label: "复制",
   },
 ] as const satisfies readonly PromptCommandItem[];
 

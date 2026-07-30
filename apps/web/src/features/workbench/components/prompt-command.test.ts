@@ -96,7 +96,7 @@ describe("prompt slash command", () => {
       "副任务",
       "压缩",
       "反馈",
-      "在新任务中继续",
+      "复制",
     ]);
     expect(promptCommandItems.every((item) => item.description.length > 0)).toBe(true);
   });

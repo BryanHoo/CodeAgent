@@ -1019,7 +1019,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
       }),
     )
     .toEqual(["hidden", "ellipsis", "nowrap"]);
-  for (const label of ["初始化", "副任务", "压缩", "反馈", "在新任务中继续"]) {
+  for (const label of ["初始化", "副任务", "压缩", "反馈", "复制"]) {
     await expect(commandMenu.getByRole("option", { name: new RegExp(label, "u") })).toBeVisible();
   }
 
@@ -1115,12 +1115,34 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   }));
   expect(viewportMetrics.documentWidth).toBeLessThanOrEqual(viewportMetrics.viewportWidth);
 
-  await prompt.fill("/在新任务中继续");
+  await prompt.fill("/复制");
   await prompt.press("Enter");
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-2$/u);
   await expect
     .poll(() => commandRequests.map((request) => request.path))
     .toContain("/v1/projects/code-agent/tasks/task-1/fork");
+});
+
+test("从最新 AI 回复复制任务", async ({ page }) => {
+  const forkRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() === "POST" && url.pathname.endsWith("/fork")) {
+      forkRequests.push(url.pathname);
+    }
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const latestReply = page
+    .locator('article[data-role="assistant"]')
+    .filter({ hasText: "工作台界面已按统一的 AI Elements 结构重新组织。" });
+  await expect(latestReply.getByRole("button", { name: "复制消息" })).toBeVisible();
+  await expect(latestReply.getByRole("button", { name: "复制任务" })).toBeVisible();
+
+  await latestReply.getByRole("button", { name: "复制任务" }).click();
+
+  await expect.poll(() => forkRequests).toContain("/v1/projects/code-agent/tasks/task-1/fork");
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-2$/u);
 });
 
 test("starts code review from a new chat with one fixed review message", async ({ page }) => {

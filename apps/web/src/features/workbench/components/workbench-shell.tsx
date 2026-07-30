@@ -681,11 +681,17 @@ function ActiveTaskWorkbench({
       queryClient.invalidateQueries({ queryKey: ["projects", projectId, "git-status"] }),
     ]);
   };
+  const forkTask = async (idempotencyKey: string) => {
+    const response = await client.forkTask(projectId, taskId, { idempotencyKey });
+    // 复用统一的新任务入口，保证列表缓存先于路由切换更新。
+    onTaskStarted(response.task);
+  };
 
   return (
     <>
       <TaskTimeline
         canRollbackTurns={capabilities?.turns.rollback ?? false}
+        {...(capabilities?.tasks.fork === true ? { onForkTask: forkTask } : {})}
         onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
         onReviewFileChanges={onReviewFileChanges}

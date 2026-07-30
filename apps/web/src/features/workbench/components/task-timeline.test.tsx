@@ -240,6 +240,46 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain("space-y-4");
   });
 
+  it("offers task copy only beside the latest completed AI reply", () => {
+    const messageSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          id: "turn-older",
+          items: [
+            {
+              id: "message-assistant-older",
+              role: "assistant",
+              text: "较早的回复。",
+              type: "message",
+            },
+          ],
+        },
+        {
+          ...completedTurn,
+          id: "turn-latest",
+          items: [
+            {
+              id: "message-assistant-latest",
+              role: "assistant",
+              text: "最新的回复。",
+              type: "message",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      <TaskSnapshotTimeline onForkTask={() => Promise.resolve()} snapshot={messageSnapshot} />,
+    );
+
+    expect(markup.match(/aria-label="复制消息"/g)).toHaveLength(2);
+    expect(markup.match(/aria-label="复制任务"/g)).toHaveLength(1);
+    expect(markup.indexOf('aria-label="复制任务"')).toBeGreaterThan(markup.indexOf("最新的回复。"));
+  });
+
   it("renders one fixed review request instead of native review prompts", () => {
     const reviewSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
@@ -469,10 +509,13 @@ describe("TaskSnapshotTimeline", () => {
       ],
     };
 
-    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningSnapshot} />);
+    const markup = renderToStaticMarkup(
+      <TaskSnapshotTimeline onForkTask={() => Promise.resolve()} snapshot={runningSnapshot} />,
+    );
 
     expect(markup).toContain("正在处理。");
     expect(markup).not.toContain('aria-label="复制消息"');
+    expect(markup).not.toContain('aria-label="复制任务"');
     expect(markup).not.toContain("<time");
     expect(markup).toContain('data-ai-shimmer=""');
     expect(markup).toContain("正在运行");
