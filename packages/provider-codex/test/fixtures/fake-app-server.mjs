@@ -254,6 +254,83 @@ function completeActionTurn(threadId, turnId) {
   send({ method: "turn/completed", params: { threadId, turn: completedTurn } });
 }
 
+function scheduleOperationStatusTurn(threadId, turnId) {
+  const runningCommand = {
+    aggregatedOutput: null,
+    command: "rg --files",
+    commandActions: [],
+    cwd: "/workspace/CodeAgent",
+    durationMs: null,
+    exitCode: null,
+    id: `${turnId}-status-command`,
+    processId: null,
+    source: "agent",
+    status: "inProgress",
+    type: "commandExecution",
+  };
+
+  setTimeout(() => {
+    const thread = actionThreads.get(threadId);
+    const runningTurn = thread?.turns.find((turn) => turn.id === turnId);
+    if (thread === undefined || runningTurn === undefined) {
+      return;
+    }
+    // 先更新读取快照，确保订阅建立在通知之后时仍能恢复当前运行项。
+    actionThreads.set(
+      threadId,
+      actionThread(
+        threadId,
+        thread.turns.map((turn) =>
+          turn.id === turnId
+            ? { ...runningTurn, items: [...runningTurn.items, runningCommand] }
+            : turn,
+        ),
+      ),
+    );
+    send({
+      method: "item/started",
+      params: { item: runningCommand, threadId, turnId },
+    });
+  }, 120);
+
+  setTimeout(() => {
+    const thread = actionThreads.get(threadId);
+    const runningTurn = thread?.turns.find((turn) => turn.id === turnId);
+    if (thread === undefined || runningTurn === undefined) {
+      return;
+    }
+    const completedCommand = {
+      ...runningCommand,
+      aggregatedOutput: "",
+      durationMs: 580,
+      exitCode: 0,
+      status: "completed",
+    };
+    actionThreads.set(
+      threadId,
+      actionThread(
+        threadId,
+        thread.turns.map((turn) =>
+          turn.id === turnId
+            ? {
+                ...runningTurn,
+                items: runningTurn.items.map((item) =>
+                  item.id === completedCommand.id ? completedCommand : item,
+                ),
+              }
+            : turn,
+        ),
+      ),
+    );
+    send({
+      method: "item/completed",
+      params: { item: completedCommand, threadId, turnId },
+    });
+  }, 700);
+
+  setTimeout(() => completeActionTurn(threadId, turnId), 1_400);
+}
+
 function scheduleRealtimeEvents() {
   if (realtimeRunning) {
     return;
@@ -662,6 +739,8 @@ input.on("line", (line) => {
         { itemId: `${turnId}-${pendingKind}`, threadId, turnId },
         true,
       );
+    } else if (prompt.includes("检查运行状态")) {
+      scheduleOperationStatusTurn(threadId, turnId);
     } else if (!prompt.includes("中断")) {
       setTimeout(() => completeActionTurn(threadId, turnId), 120);
     }

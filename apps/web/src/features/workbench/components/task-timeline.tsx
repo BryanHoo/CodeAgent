@@ -107,6 +107,7 @@ type TaskTimelineProps = TaskTimelineCommonProps &
         onProjectChange: (projectId: string) => void;
         projectId: string;
         projects: readonly Project[];
+        submissionPending?: boolean;
         taskId?: undefined;
       }
     | {
@@ -177,6 +178,17 @@ function TimelineState({
 
 export function TaskTimeline(props: TaskTimelineProps) {
   if (props.taskId === undefined) {
+    if (props.submissionPending === true) {
+      return (
+        <Conversation aria-label="会话内容" conversationId={`${props.projectId}:new-chat`}>
+          <ConversationContent className="gap-6">
+            <Message from="assistant">
+              <RunningReplyStatus />
+            </Message>
+          </ConversationContent>
+        </Conversation>
+      );
+    }
     return (
       <EmptyTimeline
         onProjectChange={props.onProjectChange}
@@ -598,7 +610,7 @@ type RunningOperation = Readonly<{
 }>;
 
 function resolveRunningOperation(items: readonly IndexedAgentItem[]): RunningOperation | undefined {
-  // 从最新的结构化 Item 反推底部状态，避免继续显示没有上下文的“正在运行”。
+  // 优先展示仍在运行的操作，避免并发 Item 的完成事件覆盖真实当前状态。
   const runningItem = items.findLast(({ item }) => {
     if (item.type === "command" || item.type === "tool") {
       return item.status === "pending" || item.status === "running";
@@ -613,18 +625,29 @@ function resolveRunningOperation(items: readonly IndexedAgentItem[]): RunningOpe
     return { label: runningItem.command, type: "command" };
   }
   if (runningItem?.type === "tool") {
-    const subagentOperation = parseSubagentOperation(runningItem);
-    if (subagentOperation !== null) {
-      return { label: subagentOperationTitles[subagentOperation.name], type: "operation" };
-    }
     return { label: runningItem.name, type: "operation" };
   }
   if (runningItem?.type === "activity") {
     return { label: runningItem.label, type: "operation" };
   }
+
   const latestItem = items.at(-1)?.item;
   if (latestItem?.type === "plan") {
     return { label: "生成计划", type: "operation" };
+  }
+
+  // 快速操作可能在一次浏览器绘制前完成，Turn 运行期间继续附加最近原始操作。
+  const recentItem = items.findLast(
+    ({ item }) => item.type === "command" || item.type === "tool" || item.type === "activity",
+  )?.item;
+  if (recentItem?.type === "command") {
+    return { label: recentItem.command, type: "command" };
+  }
+  if (recentItem?.type === "tool") {
+    return { label: recentItem.name, type: "operation" };
+  }
+  if (recentItem?.type === "activity") {
+    return { label: recentItem.label, type: "operation" };
   }
   return undefined;
 }

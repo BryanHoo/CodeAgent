@@ -2036,6 +2036,79 @@ describe("CodexAgentProvider", () => {
     expect(events).toHaveLength(10);
   });
 
+  it("publishes structured item starts for live operation status", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+    await provider.listTasks();
+
+    rpc.emitNotification("item/started", {
+      item: {
+        aggregatedOutput: null,
+        command: "sed -n '1,240p' SKILL.md",
+        commandActions: [],
+        cwd: "/workspace/CodeAgent",
+        durationMs: null,
+        exitCode: null,
+        id: "command-read-skill",
+        processId: null,
+        source: "agent",
+        status: "inProgress",
+        type: "commandExecution",
+      },
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("item/started", {
+      item: {
+        arguments: { query: "live operation status" },
+        error: null,
+        id: "tool-search",
+        result: null,
+        server: "fast-context",
+        status: "inProgress",
+        tool: "search",
+        type: "mcpToolCall",
+      },
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("item/started", {
+      item: { id: "image-view", path: "/workspace/CodeAgent/status.png", type: "imageView" },
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    expect(events).toMatchObject([
+      {
+        itemId: "command-read-skill",
+        payload: {
+          item: {
+            command: "sed -n '1,240p' SKILL.md",
+            status: "running",
+            type: "command",
+          },
+        },
+        type: "item.started",
+      },
+      {
+        itemId: "tool-search",
+        payload: {
+          item: { name: "fast-context/search", status: "running", type: "tool" },
+        },
+        type: "item.started",
+      },
+      {
+        itemId: "image-view",
+        payload: {
+          item: { label: "查看图片", status: "running", type: "activity" },
+        },
+        type: "item.started",
+      },
+    ]);
+  });
+
   it("streams commentary and final answers as normal assistant messages", async () => {
     const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
     const provider = createCodexAgentProvider({ client: rpc, project });

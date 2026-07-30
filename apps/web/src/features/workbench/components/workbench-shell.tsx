@@ -156,6 +156,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const [inspectorOpen, setInspectorOpen] = useState(() =>
     shouldOpenDesktopPanel(inspectorOverlayQuery),
   );
+  const [newChatSubmissionPending, setNewChatSubmissionPending] = useState(false);
   const [fileDiffSelection, setFileDiffSelection] = useState<{
     change: AgentFileChange;
     projectId: string;
@@ -441,6 +442,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               onProjectChange={handleNewTaskProjectChange}
               projectId={projectId}
               projects={projects}
+              submissionPending={newChatSubmissionPending}
             />
             <WorkbenchComposer
               capabilities={capabilities}
@@ -450,6 +452,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               modelsPending={modelsQuery.isPending || projectDefaultsQuery.isPending}
               onSettingsChange={updateDraftSettings}
               onRequestNotificationPermission={requestNotificationPermission}
+              onSubmissionStateChange={setNewChatSubmissionPending}
               onTaskStarted={handleTaskStarted}
               projectId={projectId}
               projectPath={projectPath}

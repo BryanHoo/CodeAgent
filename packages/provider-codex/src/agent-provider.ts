@@ -752,6 +752,19 @@ function createActivityItem(id: string, label: string, detail?: string): AgentIt
     : { detail, id, label, type: "activity" };
 }
 
+function markStartedItemRunning(item: AgentItem): AgentItem {
+  // 启动通知代表当前操作，统一覆盖原生缺省状态供 Web 实时展示。
+  if (
+    item.type === "command" ||
+    item.type === "file_change" ||
+    item.type === "tool" ||
+    item.type === "activity"
+  ) {
+    return { ...item, status: "running" };
+  }
+  return item;
+}
+
 const collaborationToolNames = {
   closeAgent: "agent/close",
   resumeAgent: "agent/resume",
@@ -1219,11 +1232,16 @@ function mapCodexNotification(
       );
       return { itemId: item.id, payload: { item }, taskId, turnId, type: "item.started" };
     }
-    // 子代理启动可能持续较久，需立即交付；普通消息与命令已有专用 Delta，避免重复空 Item。
-    if (nativeItem["type"] !== "collabAgentToolCall") {
+    // 文本与推理由专用 Delta 创建；结构化操作必须立即交付当前运行状态。
+    if (
+      nativeItem["type"] === "userMessage" ||
+      nativeItem["type"] === "agentMessage" ||
+      nativeItem["type"] === "reasoning" ||
+      nativeItem["type"] === "exitedReviewMode"
+    ) {
       return undefined;
     }
-    const item = mapAgentItem(nativeItem);
+    const item = markStartedItemRunning(mapAgentItem(nativeItem));
     return {
       itemId: item.id,
       payload: { item },

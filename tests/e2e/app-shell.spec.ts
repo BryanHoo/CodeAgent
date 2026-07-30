@@ -2506,6 +2506,19 @@ test("submits a prompt and streams the completed reply", async ({ page }) => {
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeVisible();
 });
 
+test("shows the latest raw Codex operation throughout a running turn", async ({ page }) => {
+  await page.unroute("**/v1/**");
+  await page.goto("/p/code-agent");
+
+  await page.getByRole("textbox", { name: "任务输入" }).fill("检查运行状态");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+
+  await expect(page.getByText("正在运行 rg --files", { exact: true })).toBeVisible();
+  await expect(page.getByText("已完成", { exact: true })).toBeVisible();
+  await expect(page.getByText("正在运行 rg --files", { exact: true })).toBeVisible();
+  await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
+});
+
 test("allows a command approval and completes the turn", async ({ page }) => {
   await page.unroute("**/v1/**");
   await page.goto("/p/code-agent");
@@ -2883,6 +2896,10 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
     startedAt: "2026-07-26T08:00:00.000Z",
     status: "running",
   };
+  let releaseTurnStartRequest: () => void = () => undefined;
+  const turnStartGate = new Promise<void>((resolve) => {
+    releaseTurnStartRequest = resolve;
+  });
   let releaseSnapshotRequest: () => void = () => undefined;
   let snapshotResponseSent = false;
   const snapshotGate = new Promise<void>((resolve) => {
@@ -2899,6 +2916,7 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
       url.pathname === `/v1/projects/code-agent/tasks/${createdTask.id}/turns` &&
       route.request().method() === "POST"
     ) {
+      await turnStartGate;
       await route.fulfill({
         contentType: "application/json",
         json: { taskId: createdTask.id, turn: startedTurn },
@@ -2933,6 +2951,9 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
   await page.goto("/p/code-agent");
   await page.getByRole("textbox", { name: "任务输入" }).fill("你好");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
+
+  await expect(page.getByText("正在运行", { exact: true })).toBeVisible();
+  releaseTurnStartRequest();
 
   await expect(page).toHaveURL(new RegExp(`/p/code-agent/t/${createdTask.id}$`, "u"));
   const main = page.getByRole("main", { name: "Task Timeline" });

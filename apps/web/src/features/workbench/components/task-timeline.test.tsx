@@ -41,6 +41,28 @@ const snapshot: RuntimeTaskSnapshot = {
 };
 
 describe("TaskTimeline", () => {
+  it("shows the running shimmer while a new chat submission is pending", () => {
+    const markup = renderToStaticMarkup(
+      <TaskTimeline
+        onProjectChange={() => undefined}
+        projectId="code-agent"
+        projects={[
+          {
+            createdAt: "2026-07-22T06:00:00.000Z",
+            id: "code-agent",
+            name: "CodeAgent",
+            rootPath: "/workspace/CodeAgent",
+          },
+        ]}
+        submissionPending
+      />,
+    );
+
+    expect(markup).toContain('data-ai-shimmer=""');
+    expect(markup).toContain('aria-label="AI 回复正在运行"');
+    expect(markup).toContain("正在运行");
+  });
+
   it("renders the empty chat project selector without an intermediate button", () => {
     const markup = renderToStaticMarkup(
       <TaskTimeline
@@ -698,6 +720,43 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain('aria-label="AI 回复正在运行：pnpm test"');
     expect(markup).toContain("正在运行 pnpm test");
     expect(markup).not.toContain("输出已截断");
+  });
+
+  it("keeps the latest completed operation visible while the turn continues", () => {
+    const runningSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          ...completedTurn,
+          completedAt: null,
+          items: [
+            {
+              command: "sed -n '1,240p' SKILL.md",
+              cwd: "/workspace/CodeAgent",
+              id: "command-read-skill",
+              outputTruncated: false,
+              status: "completed",
+              type: "command",
+            },
+            {
+              content: "",
+              id: "reasoning-after-command",
+              summary: "",
+              type: "reasoning",
+            },
+          ],
+          status: "running",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningSnapshot} />);
+
+    expect(markup).toContain('data-ai-shimmer=""');
+    expect(markup).toContain('aria-label="AI 回复正在运行：sed -n &#x27;1,240p&#x27; SKILL.md"');
+    expect(markup).toContain("正在运行 sed -n &#x27;1,240p&#x27; SKILL.md");
+    expect(markup).not.toContain("已运行");
   });
 
   it("renders generic tool input and output in separate structured sections", () => {

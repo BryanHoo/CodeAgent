@@ -307,6 +307,7 @@ type WorkbenchComposerProps = Readonly<{
     field: keyof AgentTaskSettings,
   ) => Promise<void> | void;
   onRequestNotificationPermission: () => void;
+  onSubmissionStateChange?: (submitting: boolean) => void;
   onTurnStarted?: (turn: AgentTurn, input: AgentPromptInput) => void;
   onTaskStarted: (
     task: AgentTask,
@@ -392,6 +393,7 @@ export function WorkbenchComposer({
   modelsPending,
   onRequestNotificationPermission,
   onSettingsChange,
+  onSubmissionStateChange,
   onTaskStarted,
   onTurnStarted,
   projectId,
@@ -448,6 +450,17 @@ export function WorkbenchComposer({
   const uploadedAttachments = useRef(new Map<string, AgentAttachment>());
   const uploadAttempts = useRef(new Map<string, string>());
   const commandAttempts = useRef(new Map<PromptCommandAction, IdempotencyAttempt>());
+
+  useEffect(() => {
+    onSubmissionStateChange?.(isSubmitting);
+  }, [isSubmitting, onSubmissionStateChange]);
+
+  useEffect(
+    () => () => {
+      onSubmissionStateChange?.(false);
+    },
+    [onSubmissionStateChange],
+  );
   const submittedTurnId =
     submittedTurnState?.scope === routeScope ? submittedTurnState.turnId : undefined;
   const pendingTask = pendingTaskState?.scope === routeScope ? pendingTaskState.task : undefined;
