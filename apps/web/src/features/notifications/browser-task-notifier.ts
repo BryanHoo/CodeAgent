@@ -1,0 +1,198 @@
+import type { AgentEvent } from "@code-agent/protocol";
+
+const MAX_FAILED_TURN_KEYS = 256;
+
+export type BrowserNotificationHandle = Readonly<{
+  addClickListener: (listener: () => void) => void;
+  close: () => void;
+}>;
+
+export type BrowserNotificationApi = Readonly<{
+  getPermission: () => NotificationPermission;
+  requestPermission: () => Promise<NotificationPermission>;
+  show: (title: string, options: NotificationOptions) => BrowserNotificationHandle;
+}>;
+
+export type TaskNotifier = Readonly<{
+  notify: (projectId: string, event: AgentEvent, taskTitle: string) => void;
+  requestPermission: () => Promise<void>;
+}>;
+
+type BrowserTaskNotifierOptions = Readonly<{
+  api?: BrowserNotificationApi | undefined;
+  focusPage?: (() => void) | undefined;
+  isPageForeground?: (() => boolean) | undefined;
+  navigate?: ((path: string) => void) | undefined;
+}>;
+
+type TaskNotification = Readonly<{
+  body: string;
+  tag: string;
+}>;
+
+function createDefaultNotificationApi(): BrowserNotificationApi | undefined {
+  if (typeof globalThis.Notification === "undefined") {
+    return undefined;
+  }
+  const BrowserNotification = globalThis.Notification;
+  return {
+    getPermission: () => BrowserNotification.permission,
+    requestPermission: () => BrowserNotification.requestPermission(),
+    show(title, options) {
+      const notification = new BrowserNotification(title, options);
+      return {
+        addClickListener(listener) {
+          notification.addEventListener("click", listener);
+        },
+        close() {
+          notification.close();
+        },
+      };
+    },
+  };
+}
+
+function createTaskPath(projectId: string, taskId: string): string {
+  return `/p/${encodeURIComponent(projectId)}/t/${encodeURIComponent(taskId)}`;
+}
+
+function createTurnKey(event: AgentEvent): string {
+  return `${event.taskId}:${event.turnId}`;
+}
+
+function mapTaskNotification(projectId: string, event: AgentEvent): TaskNotification | undefined {
+  switch (event.type) {
+    case "turn.completed": {
+      const body =
+        event.payload.turn.status === "completed"
+          ? "Task 已完成"
+          : event.payload.turn.status === "interrupted"
+            ? "Task 已中断，无法继续"
+            : event.payload.turn.status === "failed"
+              ? "Task 运行失败"
+              : undefined;
+      return body === undefined
+        ? undefined
+        : {
+            body,
+            tag: `${projectId}:${event.taskId}:${event.turnId}:terminal`,
+          };
+    }
+    case "provider.error":
+      return event.payload.willRetry
+        ? undefined
+        : {
+            body: `Task 运行失败：${event.payload.message}`,
+            tag: `${projectId}:${event.taskId}:${event.turnId}:terminal`,
+          };
+    case "pending_request.created":
+      return {
+        body: event.payload.request.type === "user_input" ? "Task 等待输入" : "Task 等待审批",
+        tag: `${projectId}:${event.taskId}:${event.payload.request.requestId}:request`,
+      };
+    default:
+      return undefined;
+  }
+}
+
+class BrowserTaskNotifier implements TaskNotifier {
+  readonly #api: BrowserNotificationApi | undefined;
+  readonly #failedTurnKeys = new Set<string>();
+  readonly #focusPage: () => void;
+  readonly #isPageForeground: () => boolean;
+  readonly #navigate: (path: string) => void;
+  #permissionRequest: Promise<void> | undefined;
+
+  public constructor(options: BrowserTaskNotifierOptions) {
+    this.#api = options.api;
+    this.#focusPage =
+      options.focusPage ??
+      (() => {
+        globalThis.window.focus();
+      });
+    this.#isPageForeground =
+      options.isPageForeground ??
+      (() => globalThis.document.visibilityState === "visible" && globalThis.document.hasFocus());
+    this.#navigate =
+      options.navigate ??
+      ((path) => {
+        globalThis.window.location.assign(path);
+      });
+  }
+
+  public notify(projectId: string, event: AgentEvent, taskTitle: string): void {
+    if (this.#api?.getPermission() !== "granted" || this.#isPageForeground()) {
+      return;
+    }
+
+    const turnKey = createTurnKey(event);
+    if (event.type === "provider.error" && !event.payload.willRetry) {
+      if (this.#failedTurnKeys.has(turnKey)) {
+        return;
+      }
+      if (this.#failedTurnKeys.size >= MAX_FAILED_TURN_KEYS) {
+        const oldestTurnKey = this.#failedTurnKeys.values().next().value;
+        if (oldestTurnKey !== undefined) {
+          this.#failedTurnKeys.delete(oldestTurnKey);
+        }
+      }
+      this.#failedTurnKeys.add(turnKey);
+    } else if (event.type === "turn.completed" && this.#failedTurnKeys.delete(turnKey)) {
+      // 不可恢复错误已立即提醒；随后同 Turn 的终态只负责清理去重记录。
+      return;
+    }
+
+    const taskNotification = mapTaskNotification(projectId, event);
+    if (taskNotification === undefined) {
+      return;
+    }
+
+    try {
+      const normalizedTaskTitle = taskTitle.trim() || "Task";
+      const notification = this.#api.show(`CodeAgent · ${normalizedTaskTitle}`, {
+        body: taskNotification.body,
+        data: { projectId, taskId: event.taskId },
+        tag: taskNotification.tag,
+      });
+      notification.addClickListener(() => {
+        notification.close();
+        this.#focusPage();
+        this.#navigate(createTaskPath(projectId, event.taskId));
+      });
+    } catch {
+      // 系统通知属于增强能力，浏览器拒绝构造时不能中断实时事件处理。
+    }
+  }
+
+  public requestPermission(): Promise<void> {
+    if (this.#api === undefined) {
+      return Promise.resolve();
+    }
+    if (this.#permissionRequest !== undefined) {
+      return this.#permissionRequest;
+    }
+    let browserPermissionRequest: Promise<NotificationPermission>;
+    try {
+      if (this.#api.getPermission() !== "default") {
+        return Promise.resolve();
+      }
+      browserPermissionRequest = this.#api.requestPermission();
+    } catch {
+      return Promise.resolve();
+    }
+    this.#permissionRequest = browserPermissionRequest
+      .then(() => undefined)
+      .catch(() => undefined)
+      .finally(() => {
+        this.#permissionRequest = undefined;
+      });
+    return this.#permissionRequest;
+  }
+}
+
+export function createBrowserTaskNotifier(options: BrowserTaskNotifierOptions = {}): TaskNotifier {
+  return new BrowserTaskNotifier({
+    ...options,
+    api: options.api ?? createDefaultNotificationApi(),
+  });
+}

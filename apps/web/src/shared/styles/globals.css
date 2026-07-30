@@ -70,7 +70,8 @@
   --ui-layout-workbench-header-height: calc(
     var(--ui-layout-toolbar-height) + var(--ui-space-unit) * 2
   );
-  --ui-layout-sidebar-width: 16.5rem;
+  /* Task 树含缩进、状态和操作位，桌面左栏需保留足够的可扫描宽度。 */
+  --ui-layout-sidebar-width: 18rem;
   --ui-layout-inspector-width: 18rem;
   --ui-layout-content-width: 48.75rem;
   --ui-layout-message-width: 90%;

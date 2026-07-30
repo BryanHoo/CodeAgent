@@ -2815,10 +2815,15 @@ test("keeps project add buttons visible after opening a task", async ({ page }) 
       }),
       hasHorizontalOverflow:
         projectTree === null ? true : projectTree.scrollWidth > projectTree.clientWidth,
+      sidebarWidth: sidebarRect.width,
     };
   });
 
-  expect(layout).toEqual({ addButtonsInsideSidebar: true, hasHorizontalOverflow: false });
+  expect(layout).toEqual({
+    addButtonsInsideSidebar: true,
+    hasHorizontalOverflow: false,
+    sidebarWidth: 288,
+  });
   await expect(sidebar.getByRole("button", { name: "添加项目" })).toBeVisible();
   await expect(sidebar.getByRole("button", { name: "在 CodeAgent 中新建任务" })).toBeVisible();
   await expect(sidebar.getByRole("button", { name: "在 superwork 中新建任务" })).toBeVisible();

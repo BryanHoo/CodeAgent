@@ -7,6 +7,7 @@ import type {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
+import type { TaskNotifier } from "../../notifications/browser-task-notifier.js";
 import { getTaskActivity } from "./task-activity.js";
 import { createProjectRuntimeManager } from "./project-runtime.js";
 import { createTaskStore } from "./task-store.js";
@@ -37,6 +38,7 @@ function createSnapshotResponse(
     sequence?: number;
     sessionId?: string;
     status?: AgentTaskSnapshot["status"];
+    title?: string;
   }> = {},
 ): AgentTaskSnapshotResponse {
   const status = options.status ?? "running";
@@ -50,7 +52,7 @@ function createSnapshotResponse(
       projectId: "project-1",
       settings: taskSettings,
       status,
-      title: taskId,
+      title: options.title ?? taskId,
       turns: status === "running" ? [createTurn(taskId)] : [],
       updatedAt: "2026-07-28T00:00:00.000Z",
     },
@@ -118,11 +120,38 @@ function createClientHarness() {
   };
 }
 
+function createTaskNotifier() {
+  return {
+    notify: vi.fn<TaskNotifier["notify"]>(),
+    requestPermission: vi.fn<TaskNotifier["requestPermission"]>(() => Promise.resolve()),
+  } satisfies TaskNotifier;
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe("project runtime manager", () => {
+  it("forwards permission requests and Project events to the task notifier once", async () => {
+    const harness = createClientHarness();
+    const taskNotifier = createTaskNotifier();
+    const manager = createProjectRuntimeManager(harness.client, { taskNotifier });
+    manager.observeSnapshot(createSnapshotResponse("task-1", { title: "初始任务名称" }));
+    manager.rememberTaskTitles([{ id: "task-1", projectId: "project-1", title: "完善通知功能" }]);
+
+    await manager.requestNotificationPermission();
+    harness.emit(createTurnCompletedEvent("task-1", 1));
+
+    expect(taskNotifier.requestPermission).toHaveBeenCalledOnce();
+    expect(taskNotifier.notify).toHaveBeenCalledOnce();
+    expect(taskNotifier.notify).toHaveBeenCalledWith(
+      "project-1",
+      expect.objectContaining({ taskId: "task-1", type: "turn.completed" }),
+      "完善通知功能",
+    );
+    manager.dispose();
+  });
+
   it("opens one Project connection and fans events out to Activity and matching Task stores", () => {
     const harness = createClientHarness();
     const manager = createProjectRuntimeManager(harness.client);

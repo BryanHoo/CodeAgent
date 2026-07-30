@@ -306,6 +306,7 @@ type WorkbenchComposerProps = Readonly<{
     settings: AgentTaskSettings,
     field: keyof AgentTaskSettings,
   ) => Promise<void> | void;
+  onRequestNotificationPermission: () => void;
   onTurnStarted?: (turn: AgentTurn, input: AgentPromptInput) => void;
   onTaskStarted: (
     task: AgentTask,
@@ -389,6 +390,7 @@ export function WorkbenchComposer({
   models,
   modelsError,
   modelsPending,
+  onRequestNotificationPermission,
   onSettingsChange,
   onTaskStarted,
   onTurnStarted,
@@ -643,6 +645,8 @@ export function WorkbenchComposer({
     ) {
       return;
     }
+    // Notification 权限必须在提交手势内申请，不能等网络 Mutation 完成后再触发。
+    onRequestNotificationPermission();
     setIsSubmitting(true);
     setMutationError(null);
     let input: AgentPromptInput;
@@ -841,6 +845,9 @@ export function WorkbenchComposer({
       return;
     }
 
+    if (command.action === "compact") {
+      onRequestNotificationPermission();
+    }
     setIsSubmitting(true);
     setMutationError(null);
     const attempt = resolveIdempotencyAttempt(
@@ -876,6 +883,7 @@ export function WorkbenchComposer({
 
   const executeReviewTarget = async (target: AgentReviewTarget) => {
     const requestScope = routeScope;
+    onRequestNotificationPermission();
     closeCommandMenu();
     setCommandNotice(undefined);
     setIsSubmitting(true);

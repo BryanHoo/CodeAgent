@@ -99,6 +99,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     projectRuntime,
     projects,
     projectTaskStates,
+    requestNotificationPermission,
     retry,
     tasks,
     viewTask,
@@ -454,6 +455,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               modelsError={null}
               modelsPending={modelsQuery.isPending || projectDefaultsQuery.isPending}
               onSettingsChange={updateDraftSettings}
+              onRequestNotificationPermission={requestNotificationPermission}
               onTaskStarted={handleTaskStarted}
               projectId={projectId}
               projectPath={projectPath}
@@ -470,6 +472,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             models={models}
             modelsError={modelsQuery.error}
             modelsPending={modelsQuery.isPending}
+            onRequestNotificationPermission={requestNotificationPermission}
             onTaskStarted={handleTaskStarted}
             projectId={projectId}
             projectPath={projectPath}
@@ -562,6 +565,7 @@ function ActiveTaskWorkbench({
   models,
   modelsError,
   modelsPending,
+  onRequestNotificationPermission,
   onTaskStarted,
   projectId,
   projectPath,
@@ -581,6 +585,7 @@ function ActiveTaskWorkbench({
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;
+  onRequestNotificationPermission: () => void;
   onTaskStarted: (
     task: AgentTask,
     turn?: AgentTurn,
@@ -692,6 +697,7 @@ function ActiveTaskWorkbench({
         models={models}
         modelsError={modelsError}
         modelsPending={modelsPending || runtime.isPending}
+        onRequestNotificationPermission={onRequestNotificationPermission}
         onSettingsChange={(settings) =>
           settingsMutation.mutateAsync(settings).then(() => undefined)
         }

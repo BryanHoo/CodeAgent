@@ -1,7 +1,16 @@
 import type { AgentEventConnectionState } from "@code-agent/client";
-import type { AgentEvent, AgentTaskSnapshotResponse, EventCheckpoint } from "@code-agent/protocol";
+import type {
+  AgentEvent,
+  AgentTask,
+  AgentTaskSnapshotResponse,
+  EventCheckpoint,
+} from "@code-agent/protocol";
 
 import { estimateRetainedBytes } from "../../../shared/memory/byte-lru.js";
+import {
+  createBrowserTaskNotifier,
+  type TaskNotifier,
+} from "../../notifications/browser-task-notifier.js";
 import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
 import {
   clearTaskAttention,
@@ -18,14 +27,23 @@ import type { TaskStore } from "./task-store.js";
 export const PROJECT_RUNTIME_IDLE_TIMEOUT_MS = 2 * 60_000;
 const MAX_PROJECT_EVENT_HISTORY_BYTES = 4 * 1_048_576;
 const MAX_PROJECT_EVENT_HISTORY_EVENTS = 2_048;
+const MAX_TASK_TITLES = 2_048;
 
 type ActivityListener = () => void;
 type RecoverTaskSnapshot = () => void;
+
+type ProjectEventRuntimeOptions = Required<
+  Pick<
+    ProjectRuntimeManagerOptions,
+    "idleTimeoutMs" | "maxEventHistoryBytes" | "maxEventHistoryEvents"
+  >
+>;
 
 export type ProjectRuntimeManagerOptions = Readonly<{
   idleTimeoutMs?: number;
   maxEventHistoryBytes?: number;
   maxEventHistoryEvents?: number;
+  taskNotifier?: TaskNotifier;
 }>;
 
 type BufferedProjectEvent = Readonly<{
@@ -39,6 +57,10 @@ function isDeltaEvent(event: AgentEvent): boolean {
     event.type === "reasoning.delta" ||
     event.type === "command.output_delta"
   );
+}
+
+function createProjectTaskKey(projectId: string, taskId: string): string {
+  return `${projectId}\u0000${taskId}`;
 }
 
 // 每个 Task Store 独立合并动画帧内 Delta；Project Runtime 只共享传输和协议解析。
@@ -175,7 +197,7 @@ class ProjectEventRuntime {
     projectId: string,
     client: CodeAgentRuntimeClient,
     callbacks: ProjectRuntimeCallbacks,
-    options: Required<ProjectRuntimeManagerOptions>,
+    options: ProjectEventRuntimeOptions,
   ) {
     this.#projectId = projectId;
     this.#client = client;
@@ -474,7 +496,9 @@ export class ProjectRuntimeManager {
   readonly #maxEventHistoryBytes: number;
   readonly #maxEventHistoryEvents: number;
   readonly #projects = new Map<string, ProjectEventRuntime>();
+  readonly #taskNotifier: TaskNotifier;
   #taskActivity: TaskActivityMap = new Map();
+  readonly #taskTitles = new Map<string, string>();
   #viewedTask: Readonly<{ projectId: string; taskId: string }> | undefined;
 
   public readonly client: CodeAgentRuntimeClient;
@@ -484,6 +508,7 @@ export class ProjectRuntimeManager {
     this.#idleTimeoutMs = options.idleTimeoutMs ?? PROJECT_RUNTIME_IDLE_TIMEOUT_MS;
     this.#maxEventHistoryBytes = options.maxEventHistoryBytes ?? MAX_PROJECT_EVENT_HISTORY_BYTES;
     this.#maxEventHistoryEvents = options.maxEventHistoryEvents ?? MAX_PROJECT_EVENT_HISTORY_EVENTS;
+    this.#taskNotifier = options.taskNotifier ?? createBrowserTaskNotifier();
     if (!Number.isSafeInteger(this.#idleTimeoutMs) || this.#idleTimeoutMs < 0) {
       throw new RangeError("Project Runtime idleTimeoutMs must be non-negative");
     }
@@ -500,6 +525,7 @@ export class ProjectRuntimeManager {
     store: TaskStore,
     recoverSnapshot: RecoverTaskSnapshot,
   ): () => void {
+    this.#rememberTaskTitle(response.snapshot);
     this.#updateTaskActivity(
       recordTaskActivitySnapshot(
         this.#taskActivity,
@@ -520,10 +546,12 @@ export class ProjectRuntimeManager {
     }
     this.#projects.clear();
     this.#activityListeners.clear();
+    this.#taskTitles.clear();
   }
 
   public forgetTask(projectId: string, taskId: string): void {
     this.#updateTaskActivity(removeTaskActivity(this.#taskActivity, projectId, taskId));
+    this.#taskTitles.delete(createProjectTaskKey(projectId, taskId));
     this.#projects.get(projectId)?.forgetTask(taskId);
   }
 
@@ -537,6 +565,7 @@ export class ProjectRuntimeManager {
   }
 
   public observeSnapshot(response: AgentTaskSnapshotResponse): void {
+    this.#rememberTaskTitle(response.snapshot);
     this.#updateTaskActivity(
       recordTaskActivitySnapshot(
         this.#taskActivity,
@@ -545,6 +574,16 @@ export class ProjectRuntimeManager {
       ),
     );
     this.#getProject(response.snapshot.projectId).observeSnapshot(response);
+  }
+
+  public requestNotificationPermission(): Promise<void> {
+    return this.#taskNotifier.requestPermission().catch(() => undefined);
+  }
+
+  public rememberTaskTitles(tasks: readonly Pick<AgentTask, "id" | "projectId" | "title">[]): void {
+    for (const task of tasks) {
+      this.#rememberTaskTitle(task);
+    }
   }
 
   public viewTask(projectId: string, taskId?: string): void {
@@ -573,6 +612,11 @@ export class ProjectRuntimeManager {
       {
         getTaskActivity: () => this.#taskActivity,
         onActivityEvent: (eventProjectId, event) => {
+          this.#taskNotifier.notify(
+            eventProjectId,
+            event,
+            this.#taskTitles.get(createProjectTaskKey(eventProjectId, event.taskId)) ?? "Task",
+          );
           this.#updateTaskActivity(
             reduceTaskActivityEvent(
               this.#taskActivity,
@@ -613,6 +657,18 @@ export class ProjectRuntimeManager {
 
   #isTaskViewed(projectId: string, taskId: string): boolean {
     return this.#viewedTask?.projectId === projectId && this.#viewedTask.taskId === taskId;
+  }
+
+  #rememberTaskTitle(task: Pick<AgentTask, "id" | "projectId" | "title">): void {
+    const key = createProjectTaskKey(task.projectId, task.id);
+    this.#taskTitles.delete(key);
+    this.#taskTitles.set(key, task.title);
+    if (this.#taskTitles.size > MAX_TASK_TITLES) {
+      const oldestKey = this.#taskTitles.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.#taskTitles.delete(oldestKey);
+      }
+    }
   }
 }
 

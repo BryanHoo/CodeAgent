@@ -12,3 +12,4 @@
 - TanStack Query 的 `queryFn` 必须把上下文 `signal` 透传到 `packages/client`；Client 将其与本地超时组合，Task、Project 或查询键切换后旧 HTTP 响应不得继续进入 Schema 校验和 Query Cache。
 - Hook 返回明确的加载、错误和终态，不用异常或隐式全局变量传递状态。
 - Delta 合并留在实时状态边界，组件只消费可渲染状态。
+- Browser Notification API 必须封装在独立 Feature 适配器中，由共享 Project 实时事件入口对完成、不可恢复中断或错误、审批和用户输入触发；`document.visibilityState === "visible"` 且 `document.hasFocus()` 时视为页面前台并禁止发送，其他状态才允许使用 Runtime 提供的 Task 名称构造通知。权限只在 Task 启动用户手势内申请，不支持、拒绝或构造失败时静默降级且不得中断事件链路，同一 Turn 的不可恢复错误与随后失败终态必须去重。

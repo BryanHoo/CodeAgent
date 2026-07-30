@@ -92,6 +92,7 @@ type ProjectContextValue = Readonly<{
   projectTaskStates: ReadonlyMap<string, ProjectTaskListState>;
   projects: readonly Project[];
   projectOrderError: Error | null;
+  requestNotificationPermission: () => void;
   reorderProjects: (projectIds: readonly string[]) => Promise<boolean>;
   retry: () => Promise<void>;
   taskActivity: TaskActivityMap;
@@ -180,6 +181,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   projectTaskResultsRef.current = projectTaskResults;
   const updateProjectTaskResult = useCallback(
     (projectId: string, nextResult: ProjectTaskQueryResult) => {
+      projectRuntime.rememberTaskTitles(nextResult.tasks);
       setProjectTaskResults((currentResults) => {
         const currentResult = currentResults.get(projectId);
         if (
@@ -196,7 +198,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
         return nextResults;
       });
     },
-    [],
+    [projectRuntime],
   );
   const removeProjectTaskResult = useCallback((projectId: string) => {
     setProjectTaskResults((currentResults) => {
@@ -246,6 +248,10 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
     },
     [projectRuntime],
   );
+  const requestNotificationPermission = useCallback(() => {
+    // 由 Composer 的用户手势触发；权限失败只关闭增强能力，不阻断 Task 操作。
+    void projectRuntime.requestNotificationPermission();
+  }, [projectRuntime]);
   const addProject = useCallback(async () => {
     if (isProjectPickerOpen) {
       return undefined;
@@ -332,6 +338,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           projectTaskStates,
           projects,
           projectOrderError,
+          requestNotificationPermission,
           reorderProjects,
           retry,
           taskActivity,
