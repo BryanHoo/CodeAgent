@@ -3356,6 +3356,59 @@ test("supports structured activity without Escape changing panel state", async (
   await expect(page.getByRole("complementary", { name: "Context Inspector" })).toBeVisible();
 });
 
+test("resizes desktop workbench panels within bounds", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/p/code-agent/t/task-1");
+
+  await expect(page.getByRole("button", { name: "更多操作" })).toHaveCount(0);
+
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const inspector = page.getByRole("complementary", { name: "Context Inspector" });
+  const sidebarResizer = page.getByRole("separator", { name: "调整项目侧栏宽度" });
+  const inspectorResizer = page.getByRole("separator", { name: "调整上下文面板宽度" });
+
+  await expect(sidebarResizer).toHaveAttribute("aria-valuemin", "220");
+  await expect(sidebarResizer).toHaveAttribute("aria-valuemax", "400");
+  await expect(inspectorResizer).toHaveAttribute("aria-valuemin", "260");
+  await expect(inspectorResizer).toHaveAttribute("aria-valuemax", "480");
+
+  const sidebarResizerBox = await sidebarResizer.boundingBox();
+  expect(sidebarResizerBox).not.toBeNull();
+  await page.mouse.move(
+    (sidebarResizerBox?.x ?? 0) + (sidebarResizerBox?.width ?? 0) / 2,
+    (sidebarResizerBox?.y ?? 0) + 100,
+  );
+  await page.mouse.down();
+  await page.mouse.move(900, 100);
+  await page.mouse.up();
+  expect((await sidebar.boundingBox())?.width).toBe(400);
+
+  const expandedSidebarResizerBox = await sidebarResizer.boundingBox();
+  await page.mouse.move((expandedSidebarResizerBox?.x ?? 0) + 4, 100);
+  await page.mouse.down();
+  await page.mouse.move(0, 100);
+  await page.mouse.up();
+  expect((await sidebar.boundingBox())?.width).toBe(220);
+
+  const inspectorResizerBox = await inspectorResizer.boundingBox();
+  expect(inspectorResizerBox).not.toBeNull();
+  await page.mouse.move(
+    (inspectorResizerBox?.x ?? 0) + (inspectorResizerBox?.width ?? 0) / 2,
+    (inspectorResizerBox?.y ?? 0) + 100,
+  );
+  await page.mouse.down();
+  await page.mouse.move(0, 100);
+  await page.mouse.up();
+  expect((await inspector.boundingBox())?.width).toBe(480);
+
+  const expandedInspectorResizerBox = await inspectorResizer.boundingBox();
+  await page.mouse.move((expandedInspectorResizerBox?.x ?? 0) + 4, 100);
+  await page.mouse.down();
+  await page.mouse.move(1400, 100);
+  await page.mouse.up();
+  expect((await inspector.boundingBox())?.width).toBe(260);
+});
+
 test("keeps the narrow workbench layout stable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/p/code-agent/t/task-1");

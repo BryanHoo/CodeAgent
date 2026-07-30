@@ -13,8 +13,17 @@ import type {
 } from "@code-agent/protocol";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Ellipsis, PanelLeft, PanelRight } from "lucide-react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { PanelLeft, PanelRight } from "lucide-react";
 
 import { useProjects } from "../../projects/project-context.js";
 import {
@@ -55,11 +64,20 @@ import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
 import { WorkbenchComposer } from "./workbench-composer.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
+import { WorkbenchPanelResizer } from "./workbench-panel-resizer.js";
 import { ProjectOpenMenu } from "./project-open-menu.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
 
 const sidebarOverlayQuery = "(max-width: 760px)";
 const inspectorOverlayQuery = "(max-width: 1100px)";
+const sidebarWidthLimits = { default: 288, maximum: 400, minimum: 220 } as const;
+const inspectorWidthLimits = { default: 288, maximum: 480, minimum: 260 } as const;
+
+type WorkbenchShellStyle = CSSProperties &
+  Readonly<{
+    "--inspector-open-width": string;
+    "--sidebar-open-width": string;
+  }>;
 
 export function loadProjectSourceDialog() {
   return import("./project-source-dialog.js");
@@ -181,6 +199,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const [inspectorOpen, setInspectorOpen] = useState(() =>
     shouldOpenDesktopPanel(inspectorOverlayQuery),
   );
+  const [sidebarWidth, setSidebarWidth] = useState<number>(sidebarWidthLimits.default);
+  const [inspectorWidth, setInspectorWidth] = useState<number>(inspectorWidthLimits.default);
+  const workbenchShellRef = useRef<HTMLDivElement>(null);
   const [newChatSubmissionPending, setNewChatSubmissionPending] = useState(false);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
   const [fileDiffSelection, setFileDiffSelection] = useState<{
@@ -411,6 +432,13 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       className="workbench-shell h-full min-h-0 overflow-hidden bg-window"
       data-inspector-open={inspectorOpen}
       data-sidebar-open={sidebarOpen}
+      ref={workbenchShellRef}
+      style={
+        {
+          "--inspector-open-width": `${String(inspectorWidth)}px`,
+          "--sidebar-open-width": `${String(sidebarWidth)}px`,
+        } as WorkbenchShellStyle
+      }
     >
       <ProjectSidebar
         connectionState={sidebarConnectionState}
@@ -428,6 +456,30 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           className="workbench-sidebar-scrim"
           onClick={closeSidebar}
           type="button"
+        />
+      ) : null}
+
+      {sidebarOpen ? (
+        <WorkbenchPanelResizer
+          direction={1}
+          label="调整项目侧栏宽度"
+          maximumWidth={sidebarWidthLimits.maximum}
+          minimumWidth={sidebarWidthLimits.minimum}
+          onResize={(width) => {
+            workbenchShellRef.current?.style.setProperty(
+              "--sidebar-open-width",
+              `${String(width)}px`,
+            );
+          }}
+          onResizeEnd={(width) => {
+            workbenchShellRef.current?.removeAttribute("data-resizing-panel");
+            setSidebarWidth(width);
+          }}
+          onResizeStart={() => {
+            workbenchShellRef.current?.setAttribute("data-resizing-panel", "sidebar");
+          }}
+          panel="sidebar"
+          width={sidebarWidth}
         />
       ) : null}
 
@@ -455,9 +507,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
                 ? {}
                 : { defaultOpenAppId: globalSettingsQuery.data.settings.defaultOpenAppId })}
             />
-            <IconButton label="更多操作" size="small">
-              <Ellipsis className="size-3.5" aria-hidden="true" />
-            </IconButton>
             <IconButton
               id="workbench-inspector-toggle"
               label={inspectorOpen ? "收起上下文面板" : "展开上下文面板"}
@@ -542,6 +591,30 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           className="workbench-inspector-scrim"
           onClick={closeInspector}
           type="button"
+        />
+      ) : null}
+
+      {inspectorOpen ? (
+        <WorkbenchPanelResizer
+          direction={-1}
+          label="调整上下文面板宽度"
+          maximumWidth={inspectorWidthLimits.maximum}
+          minimumWidth={inspectorWidthLimits.minimum}
+          onResize={(width) => {
+            workbenchShellRef.current?.style.setProperty(
+              "--inspector-open-width",
+              `${String(width)}px`,
+            );
+          }}
+          onResizeEnd={(width) => {
+            workbenchShellRef.current?.removeAttribute("data-resizing-panel");
+            setInspectorWidth(width);
+          }}
+          onResizeStart={() => {
+            workbenchShellRef.current?.setAttribute("data-resizing-panel", "inspector");
+          }}
+          panel="inspector"
+          width={inspectorWidth}
         />
       ) : null}
 
