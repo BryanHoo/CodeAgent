@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28">
+  <style>
+    .logo-background { fill: #171717; }
+    .logo-text {
+      fill: #fff;
+      font-family: "Geist", "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Helvetica Neue", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .logo-background { fill: #fff; }
+      .logo-text { fill: #202020; }
+    }
+  </style>
+  <rect class="logo-background" width="28" height="28" rx="6" />
+  <text
+    class="logo-text"
+    x="14"
+    y="14"
+    dominant-baseline="central"
+    font-size="10"
+    font-weight="700"
+    text-anchor="middle"
+  >CA</text>
+</svg>

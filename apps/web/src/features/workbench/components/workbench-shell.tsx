@@ -347,11 +347,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     if (previousTaskRunningRef.current && !isTaskRunning) {
       // 停止轮询前补读一次，确保最后一批落盘变更不会停留在上个采样周期。
       void gitStatusQuery.refetch();
-      // Codex 会在首轮执行期间生成标题，Turn 结束后同步刷新项目 Task 元数据。
-      void queryClient.invalidateQueries({ queryKey: ["projects", projectId, "tasks"] });
     }
     previousTaskRunningRef.current = isTaskRunning;
-  }, [gitStatusQuery.refetch, isTaskRunning, projectId, queryClient]);
+  }, [gitStatusQuery.refetch, isTaskRunning]);
 
   useEffect(() => {
     // 窗口缩窄进入覆盖模式时关闭桌面面板，避免两个抽屉同时遮住主内容。

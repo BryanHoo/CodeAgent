@@ -91,6 +91,21 @@ function createTurnStartedEvent(taskId: string, sequence: number): AgentEvent {
   };
 }
 
+function createMessageDeltaEvent(taskId: string, sequence: number, delta: string): AgentEvent {
+  return {
+    itemId: `message-${taskId}`,
+    payload: { delta },
+    provider: "codex",
+    sequence,
+    sessionId: "runtime-1",
+    taskId,
+    timestamp: "2026-07-28T00:00:01.000Z",
+    turnId: `turn-${taskId}`,
+    type: "message.delta",
+    version: 2,
+  };
+}
+
 function createClientHarness() {
   let subscription: Parameters<CodeAgentRuntimeClient["subscribeEvents"]>[0] | undefined;
   const closeConnection = vi.fn();
@@ -198,6 +213,39 @@ describe("project runtime manager", () => {
     harness.emit(createTurnCompletedEvent("task-1", 3));
     expect(getTaskActivity(manager.getTaskActivity(), "project-1", "task-1").attention).toBe(
       "completed",
+    );
+    manager.dispose();
+  });
+
+  it("requests task metadata refresh when a background turn completes", () => {
+    const harness = createClientHarness();
+    const onTaskMetadataChanged = vi.fn();
+    const manager = createProjectRuntimeManager(harness.client, { onTaskMetadataChanged });
+    manager.observeSnapshot(createSnapshotResponse("task-1", { title: "新聊天" }));
+    manager.viewTask("project-1", "task-2");
+
+    harness.emit(createTurnCompletedEvent("task-1", 1));
+
+    expect(onTaskMetadataChanged).toHaveBeenCalledOnce();
+    expect(onTaskMetadataChanged).toHaveBeenCalledWith("project-1", "task-1", "turn_completed");
+    manager.dispose();
+  });
+
+  it("requests one task metadata refresh when a background assistant reply starts", () => {
+    const harness = createClientHarness();
+    const onTaskMetadataChanged = vi.fn();
+    const manager = createProjectRuntimeManager(harness.client, { onTaskMetadataChanged });
+    manager.observeSnapshot(createSnapshotResponse("task-1", { title: "新聊天" }));
+    manager.viewTask("project-1", "task-2");
+
+    harness.emit(createMessageDeltaEvent("task-1", 1, "正在"));
+    harness.emit(createMessageDeltaEvent("task-1", 2, "回复"));
+
+    expect(onTaskMetadataChanged).toHaveBeenCalledOnce();
+    expect(onTaskMetadataChanged).toHaveBeenCalledWith(
+      "project-1",
+      "task-1",
+      "assistant_reply_started",
     );
     manager.dispose();
   });

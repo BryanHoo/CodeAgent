@@ -466,6 +466,50 @@ describe("project queries", () => {
     });
   });
 
+  it("uses the realtime assistant-start signal when the HTTP snapshot is one event behind", () => {
+    const newTask = { ...task, title: "新聊天" };
+    const currentData = {
+      pageParams: [undefined],
+      pages: [{ data: [newTask], nextCursor: null }],
+    } satisfies ProjectTaskInfiniteData;
+    const laggingSnapshot = {
+      ...snapshot,
+      status: "running" as const,
+      title: "新聊天",
+      turns: [
+        {
+          completedAt: null,
+          error: null,
+          id: "turn-running",
+          items: [
+            {
+              id: "user-message",
+              role: "user" as const,
+              text: "修复后台任务标题同步\n处理流式竞态",
+              type: "message" as const,
+            },
+          ],
+          startedAt: snapshot.updatedAt,
+          status: "running" as const,
+        },
+      ],
+    };
+
+    expect(
+      updateNewTaskTitleFromSnapshotInInfiniteData(currentData, laggingSnapshot, {
+        assistantReplyStarted: true,
+      }),
+    ).toEqual({
+      pageParams: [undefined],
+      pages: [
+        {
+          data: [{ ...newTask, title: "修复后台任务标题同步" }],
+          nextCursor: null,
+        },
+      ],
+    });
+  });
+
   it("stops pagination when the provider repeats the current cursor", () => {
     const queryOptions = projectTasksInfiniteQueryOptions("code-agent", {
       listProjects: vi.fn(),

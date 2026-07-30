@@ -78,6 +78,9 @@ type TaskTitleSnapshot = Pick<
   AgentTaskSnapshot,
   "id" | "projectId" | "title" | "turns" | "updatedAt"
 >;
+type TaskTitleUpdateOptions = Readonly<{
+  assistantReplyStarted?: boolean;
+}>;
 
 export function flattenProjectTaskPages(currentData: ProjectTaskInfiniteData | undefined) {
   const taskById = new Map<string, AgentTask>();
@@ -145,10 +148,16 @@ export function replaceProjectTaskInInfiniteData(
   };
 }
 
-function deriveStartedTaskTitle(snapshot: TaskTitleSnapshot): string | undefined {
-  const hasAssistantReply = snapshot.turns.some((turn) =>
-    turn.items.some((item) => item.type === "message" && item.role === "assistant"),
-  );
+function deriveStartedTaskTitle(
+  snapshot: TaskTitleSnapshot,
+  options: TaskTitleUpdateOptions = {},
+): string | undefined {
+  // 实时 Delta 已确认回复开始时，不等待可能落后一拍的 HTTP Snapshot 补入 Assistant Item。
+  const hasAssistantReply =
+    options.assistantReplyStarted === true ||
+    snapshot.turns.some((turn) =>
+      turn.items.some((item) => item.type === "message" && item.role === "assistant"),
+    );
   if (!hasAssistantReply) {
     return undefined;
   }
@@ -181,38 +190,41 @@ function deriveStartedTaskTitle(snapshot: TaskTitleSnapshot): string | undefined
 export function updateNewTaskTitleFromSnapshotInInfiniteData(
   currentData: ProjectTaskInfiniteData | undefined,
   snapshot: TaskTitleSnapshot,
+  options: TaskTitleUpdateOptions = {},
 ): ProjectTaskInfiniteData | undefined {
   if (currentData === undefined) {
     return undefined;
   }
-  const title = deriveStartedTaskTitle(snapshot);
-  if (title === undefined) {
-    return currentData;
-  }
+  const pages = currentData.pages.map((page) => {
+    const data = updateNewTaskTitleFromSnapshotInTasks(page.data, snapshot, options);
+    if (data === page.data) {
+      return page;
+    }
+    return { ...page, data };
+  });
+  const hasChanged = pages.some((page, pageIndex) => page !== currentData.pages[pageIndex]);
+  return hasChanged ? { ...currentData, pages } : currentData;
+}
 
-  const hasNewTask = currentData.pages.some((page) =>
-    page.data.some(
-      (task) =>
-        task.id === snapshot.id && task.projectId === snapshot.projectId && task.title === "新聊天",
-    ),
-  );
-  if (!hasNewTask) {
-    return currentData;
+export function updateNewTaskTitleFromSnapshotInTasks(
+  currentTasks: readonly AgentTask[],
+  snapshot: TaskTitleSnapshot,
+  options: TaskTitleUpdateOptions = {},
+): readonly AgentTask[] {
+  const title = deriveStartedTaskTitle(snapshot, options);
+  if (title === undefined) {
+    return currentTasks;
   }
-  const pages = currentData.pages.map((page) => ({
-    ...page,
-    data: page.data.map((task) => {
-      if (
-        task.id !== snapshot.id ||
-        task.projectId !== snapshot.projectId ||
-        task.title !== "新聊天"
-      ) {
-        return task;
-      }
-      return { ...task, title, updatedAt: snapshot.updatedAt };
-    }),
-  }));
-  return { ...currentData, pages };
+  const taskIndex = currentTasks.findIndex(
+    (task) =>
+      task.id === snapshot.id && task.projectId === snapshot.projectId && task.title === "新聊天",
+  );
+  if (taskIndex < 0) {
+    return currentTasks;
+  }
+  return currentTasks.map((task, index) =>
+    index === taskIndex ? { ...task, title, updatedAt: snapshot.updatedAt } : task,
+  );
 }
 
 export function removeProjectTaskFromInfiniteData(

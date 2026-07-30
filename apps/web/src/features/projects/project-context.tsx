@@ -33,11 +33,15 @@ import {
   capabilitiesQueryOptions,
   codeAgentClient,
   flattenProjectTaskPages,
+  PROJECT_TASK_SEARCH_SOURCE_KEY,
   projectTasksInfiniteQueryOptions,
   projectTaskSearchSourceQueryOptions,
   projectReorderMutationOptions,
   projectsQueryOptions,
   reorderProjectPage,
+  taskSnapshotQueryOptions,
+  updateNewTaskTitleFromSnapshotInInfiniteData,
+  updateNewTaskTitleFromSnapshotInTasks,
   type CodeAgentWorkbenchClient,
   type ProjectTaskInfiniteData,
 } from "./project-queries.js";
@@ -158,7 +162,64 @@ function ProjectTaskQuery({ client, onRemove, onUpdate, projectId }: ProjectTask
 
 export function ProjectProvider({ children, client = codeAgentClient }: ProjectProviderProps) {
   const queryClient = useQueryClient();
-  const projectRuntime = useMemo(() => createProjectRuntimeManager(client), [client]);
+  const projectRuntime = useMemo(() => {
+    const taskMetadataSyncs = new Map<string, Promise<void>>();
+    return createProjectRuntimeManager(client, {
+      onTaskMetadataChanged(projectId, taskId, reason) {
+        const syncTaskMetadata = async () => {
+          if (reason === "turn_completed") {
+            // 终态先校准服务端列表顺序，再用 Task Snapshot 保证标题不会被旧列表覆盖。
+            await Promise.all([
+              queryClient.invalidateQueries({
+                exact: true,
+                queryKey: ["projects", projectId, "tasks"],
+              }),
+              queryClient.invalidateQueries({
+                exact: true,
+                queryKey: ["projects", projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
+              }),
+            ]);
+          }
+          await queryClient.invalidateQueries({
+            exact: true,
+            queryKey: ["projects", projectId, "tasks", taskId],
+            refetchType: "none",
+          });
+          const response = await queryClient.fetchQuery(
+            taskSnapshotQueryOptions(projectId, taskId, client),
+          );
+          queryClient.setQueryData<ProjectTaskInfiniteData>(
+            ["projects", projectId, "tasks"],
+            (currentData) =>
+              updateNewTaskTitleFromSnapshotInInfiniteData(currentData, response.snapshot, {
+                assistantReplyStarted: reason === "assistant_reply_started",
+              }),
+          );
+          queryClient.setQueryData<readonly AgentTask[]>(
+            ["projects", projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
+            (currentTasks) =>
+              currentTasks === undefined
+                ? undefined
+                : updateNewTaskTitleFromSnapshotInTasks(currentTasks, response.snapshot, {
+                    assistantReplyStarted: reason === "assistant_reply_started",
+                  }),
+          );
+        };
+        const syncKey = `${projectId}\u0000${taskId}`;
+        // 同一 Task 串行同步，避免 Turn 终态复用仍在进行的流式 Snapshot 请求。
+        const sync = (taskMetadataSyncs.get(syncKey) ?? Promise.resolve())
+          .catch(() => undefined)
+          .then(syncTaskMetadata);
+        taskMetadataSyncs.set(syncKey, sync);
+        const clearCompletedSync = () => {
+          if (taskMetadataSyncs.get(syncKey) === sync) {
+            taskMetadataSyncs.delete(syncKey);
+          }
+        };
+        void sync.then(clearCompletedSync, clearCompletedSync);
+      },
+    });
+  }, [client, queryClient]);
   const [addProjectError, setAddProjectError] = useState<Error | null>(null);
   const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false);
   const [projectOrderError, setProjectOrderError] = useState<Error | null>(null);

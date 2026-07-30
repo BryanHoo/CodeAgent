@@ -1952,7 +1952,64 @@ test("clears transient realtime errors after the WebSocket reconnects", async ({
   await expect(page.getByRole("alert", { name: "会话内容" })).toHaveCount(0);
 });
 
-test("shows background task attention and clears it after entering the task", async ({ page }) => {
+test("updates a running background task title and clears attention after entering", async ({
+  page,
+}) => {
+  let backgroundSnapshotReadCount = 0;
+  await page.route("**/v1/projects/code-agent/tasks?*", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+    const projectTasks = tasks
+      .filter((task) => task.projectId === "code-agent")
+      .slice(0, 5)
+      .map((task) => (task.id === "markdown" ? { ...task, title: "新聊天" } : task));
+    await route.fulfill({
+      contentType: "application/json",
+      json: { data: projectTasks, nextCursor: "5" },
+    });
+  });
+  await page.route("**/v1/projects/code-agent/tasks/markdown", async (route) => {
+    backgroundSnapshotReadCount += 1;
+    const hasFormalTitle = backgroundSnapshotReadCount > 1;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        checkpoint: { sequence: 2, sessionId: "e2e-session" },
+        snapshot: {
+          ...taskSnapshot,
+          id: "markdown",
+          pinned: false,
+          status: "running",
+          title: hasFormalTitle ? "后台任务正式标题" : "新聊天",
+          turns: [
+            {
+              completedAt: null,
+              error: null,
+              id: "turn-markdown",
+              items: [
+                { id: "markdown-user", role: "user", text: "更新后台任务标题", type: "message" },
+                ...(hasFormalTitle
+                  ? [
+                      {
+                        id: "markdown-assistant",
+                        role: "assistant" as const,
+                        text: "正在回复",
+                        type: "message" as const,
+                      },
+                    ]
+                  : []),
+              ],
+              startedAt: "2026-07-29T00:00:00.000Z",
+              status: "running",
+            },
+          ],
+          updatedAt: "2026-07-29T00:00:01.000Z",
+        },
+      },
+    });
+  });
   await page.route("**/v1/projects/code-agent/tasks/input-design", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -2031,7 +2088,7 @@ test("shows background task attention and clears it after entering the task", as
   await page.goto("/p/code-agent/t/task-1");
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
   const backgroundTask = sidebar.getByRole("link", { name: /优化输入框交互/ });
-  const completedTask = sidebar.getByRole("link", { name: /完善 Markdown 渲染/ });
+  const completedTask = sidebar.locator('a[href="/p/code-agent/t/markdown"]');
   const failedTask = sidebar.getByRole("link", { name: /完善 Runtime 状态/ });
   await expect
     .poll(() =>
@@ -2134,6 +2191,23 @@ test("shows background task attention and clears it after entering the task", as
   });
   await expect(completedTask.getByRole("status", { name: "任务运行中" })).toBeVisible();
   await emitTaskEvent({
+    itemId: "markdown-assistant",
+    payload: { delta: "正在回复" },
+    provider: "codex",
+    sequence: 2,
+    sessionId: "e2e-session",
+    taskId: "markdown",
+    timestamp: "2026-07-29T00:00:01.000Z",
+    turnId: completedTurn.id,
+    type: "message.delta",
+    version: 2,
+  });
+
+  // 不进入后台 Task，也必须在 AI 仍回复时读取 Snapshot 并替换“新聊天”。
+  await expect.poll(() => backgroundSnapshotReadCount).toBe(1);
+  await expect(completedTask).toContainText("更新后台任务标题");
+  await expect(completedTask.getByRole("status", { name: "任务运行中" })).toBeVisible();
+  await emitTaskEvent({
     payload: {
       turn: {
         ...completedTurn,
@@ -2142,7 +2216,7 @@ test("shows background task attention and clears it after entering the task", as
       },
     },
     provider: "codex",
-    sequence: 2,
+    sequence: 3,
     sessionId: "e2e-session",
     taskId: "markdown",
     timestamp: "2026-07-29T00:00:02.000Z",
@@ -2152,6 +2226,7 @@ test("shows background task attention and clears it after entering the task", as
   });
 
   await expect(completedTask.getByRole("status", { name: "AI 回复已完成" })).toBeVisible();
+  await expect(completedTask).toContainText("后台任务正式标题");
 
   await completedTask.click();
   await expect(completedTask.getByRole("status", { name: "AI 回复已完成" })).toHaveCount(0);
@@ -2519,6 +2594,68 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
   expect(searchBox.y).toBeLessThan(newAgentBox.y);
   expect(newAgentBox.y).toBeLessThan(pinnedBox.y);
   expect(pinnedBox.y).toBeLessThan(projectsBox.y);
+});
+
+test("keeps the original sidebar logo and provides it as favicon", async ({ page }) => {
+  await page.goto("/p/code-agent");
+
+  const productHome = page.getByRole("link", { name: "CodeAgent 首页" });
+  const brandMark = productHome.getByText("CA", { exact: true });
+
+  await expect(brandMark).toBeVisible();
+  await expect(brandMark).toHaveClass(/bg-foreground/);
+  await expect(productHome.locator('img[src="/favicon.svg"]')).toHaveCount(0);
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg?v=2");
+
+  expect(
+    await brandMark.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        borderRadius: style.borderRadius,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        height: style.height,
+        width: style.width,
+      };
+    }),
+  ).toEqual({
+    borderRadius: "6px",
+    fontSize: "10px",
+    fontWeight: "700",
+    height: "28px",
+    width: "28px",
+  });
+
+  const faviconResponse = await page.request.get("/favicon.svg?v=2");
+  expect(faviconResponse.ok()).toBe(true);
+  const favicon = await faviconResponse.text();
+  const faviconDefinition = await page.evaluate((source) => {
+    const document = new DOMParser().parseFromString(source, "image/svg+xml");
+    const root = document.documentElement;
+    const rectangle = document.querySelector("rect");
+    const text = document.querySelector("text");
+    return {
+      fontSize: text?.getAttribute("font-size"),
+      fontWeight: text?.getAttribute("font-weight"),
+      height: rectangle?.getAttribute("height"),
+      label: text?.textContent,
+      radius: rectangle?.getAttribute("rx"),
+      styles: document.querySelector("style")?.textContent,
+      viewBox: root.getAttribute("viewBox"),
+      width: rectangle?.getAttribute("width"),
+    };
+  }, favicon);
+  expect(faviconDefinition).toMatchObject({
+    fontSize: "10",
+    fontWeight: "700",
+    height: "28",
+    label: "CA",
+    radius: "6",
+    viewBox: "0 0 28 28",
+    width: "28",
+  });
+  expect(faviconDefinition.styles).toContain('"Geist", "Inter", -apple-system');
+  expect(faviconDefinition.styles).toContain("@media (prefers-color-scheme: dark)");
 });
 
 test("adds a folder through the host project picker", async ({ page }) => {

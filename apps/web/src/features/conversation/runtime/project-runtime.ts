@@ -43,6 +43,11 @@ export type ProjectRuntimeManagerOptions = Readonly<{
   idleTimeoutMs?: number;
   maxEventHistoryBytes?: number;
   maxEventHistoryEvents?: number;
+  onTaskMetadataChanged?: (
+    projectId: string,
+    taskId: string,
+    reason: "assistant_reply_started" | "turn_completed",
+  ) => void;
   taskNotifier?: TaskNotifier;
 }>;
 
@@ -61,6 +66,10 @@ function isDeltaEvent(event: AgentEvent): boolean {
 
 function createProjectTaskKey(projectId: string, taskId: string): string {
   return `${projectId}\u0000${taskId}`;
+}
+
+function createProjectTurnKey(projectId: string, taskId: string, turnId: string): string {
+  return `${createProjectTaskKey(projectId, taskId)}\u0000${turnId}`;
 }
 
 // 每个 Task Store 独立合并动画帧内 Delta；Project Runtime 只共享传输和协议解析。
@@ -495,10 +504,14 @@ export class ProjectRuntimeManager {
   readonly #idleTimeoutMs: number;
   readonly #maxEventHistoryBytes: number;
   readonly #maxEventHistoryEvents: number;
+  readonly #onTaskMetadataChanged: NonNullable<
+    ProjectRuntimeManagerOptions["onTaskMetadataChanged"]
+  >;
   readonly #projects = new Map<string, ProjectEventRuntime>();
   readonly #taskNotifier: TaskNotifier;
   #taskActivity: TaskActivityMap = new Map();
   readonly #taskTitles = new Map<string, string>();
+  readonly #titleRefreshedRunningTurns = new Set<string>();
   #viewedTask: Readonly<{ projectId: string; taskId: string }> | undefined;
 
   public readonly client: CodeAgentRuntimeClient;
@@ -508,6 +521,7 @@ export class ProjectRuntimeManager {
     this.#idleTimeoutMs = options.idleTimeoutMs ?? PROJECT_RUNTIME_IDLE_TIMEOUT_MS;
     this.#maxEventHistoryBytes = options.maxEventHistoryBytes ?? MAX_PROJECT_EVENT_HISTORY_BYTES;
     this.#maxEventHistoryEvents = options.maxEventHistoryEvents ?? MAX_PROJECT_EVENT_HISTORY_EVENTS;
+    this.#onTaskMetadataChanged = options.onTaskMetadataChanged ?? (() => undefined);
     this.#taskNotifier = options.taskNotifier ?? createBrowserTaskNotifier();
     if (!Number.isSafeInteger(this.#idleTimeoutMs) || this.#idleTimeoutMs < 0) {
       throw new RangeError("Project Runtime idleTimeoutMs must be non-negative");
@@ -547,6 +561,7 @@ export class ProjectRuntimeManager {
     this.#projects.clear();
     this.#activityListeners.clear();
     this.#taskTitles.clear();
+    this.#titleRefreshedRunningTurns.clear();
   }
 
   public forgetTask(projectId: string, taskId: string): void {
@@ -612,6 +627,23 @@ export class ProjectRuntimeManager {
       {
         getTaskActivity: () => this.#taskActivity,
         onActivityEvent: (eventProjectId, event) => {
+          const turnKey = createProjectTurnKey(eventProjectId, event.taskId, event.turnId);
+          if (event.type === "message.delta" && !this.#titleRefreshedRunningTurns.has(turnKey)) {
+            // 首个 Assistant Delta 出现时刷新一次，避免流式 Token 持续触发 HTTP 请求。
+            this.#titleRefreshedRunningTurns.add(turnKey);
+            if (this.#titleRefreshedRunningTurns.size > MAX_TASK_TITLES) {
+              const oldestTurnKey = this.#titleRefreshedRunningTurns.values().next().value;
+              if (oldestTurnKey !== undefined) {
+                this.#titleRefreshedRunningTurns.delete(oldestTurnKey);
+              }
+            }
+            this.#onTaskMetadataChanged(eventProjectId, event.taskId, "assistant_reply_started");
+          }
+          if (event.type === "turn.completed") {
+            this.#titleRefreshedRunningTurns.delete(turnKey);
+            // 标题由 Provider 在 Turn 结束时生成，后台 Task 也必须通知列表读取最新元数据。
+            this.#onTaskMetadataChanged(eventProjectId, event.taskId, "turn_completed");
+          }
           this.#taskNotifier.notify(
             eventProjectId,
             event,
