@@ -14,6 +14,8 @@ pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
+版本发布、npm Trusted Publisher 和标签规则见 [docs/releasing.md](docs/releasing.md)。
+
 ## 变更约束
 
 - 遵守 [docs/project-structure.md](docs/project-structure.md) 中的依赖方向。

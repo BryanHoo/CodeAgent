@@ -43,7 +43,8 @@ protocol <- core <- provider-codex <- server <- root CLI
 - 根 `package.json` 固定 `packageManager`，CI 使用 `pnpm install --frozen-lockfile`。
 - 内部包全部私有且不会发布；根包通过 `tsup` 汇总 Node 产物，通过 Vite 输出 `dist/web`。
 - `tools/verify-package.mjs` 使用 `pnpm pack --dry-run --json` 校验发布包至少包含 CLI、Server 和 Web 入口，并拒绝发布任何 `.map` 源码映射。
-- 发布工作流使用 npm provenance，不在仓库内保存长期 npm Token。
+- 发布工作流由 `v*.*.*` 标签触发，校验标签与根包版本一致后发布 npm 包并创建 GitHub Release。
+- 首个版本使用 GitHub `npm` Environment 中的一次性 Token 初始化包；后续版本使用 npm Trusted Publisher、OIDC 和 provenance，不保留长期 npm Token。
 
 ## 5. 质量门禁
 

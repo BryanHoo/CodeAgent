@@ -1,8 +1,24 @@
 {
   "name": "code-agent",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "通过 Web 操作本地 Coding Agent 的应用",
   "type": "module",
+  "author": "BryanHu",
+  "homepage": "https://github.com/BryanHoo/CodeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BryanHoo/CodeAgent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/BryanHoo/CodeAgent/issues"
+  },
+  "keywords": [
+    "ai",
+    "codex",
+    "coding-agent",
+    "developer-tools",
+    "web"
+  ],
   "packageManager": "pnpm@11.15.1",
   "engines": {
     "node": ">=24"
@@ -13,8 +29,12 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "pnpm run clean && pnpm run typecheck && pnpm --filter @code-agent/web build && pnpm run build:node",
     "build:node": "tsup",

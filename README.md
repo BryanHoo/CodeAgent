@@ -1,18 +1,32 @@
 # CodeAgent
 
-CodeAgent 是一个通过 Web 操作本地 Coding Agent 的应用。`code-agent start` 会启动
-Codex App Server、本地 HTTP API 和静态 Web 工作台。
+CodeAgent 是一个通过 Web 操作本地 Coding Agent 的应用。`code-agent start` 会启动 Codex App Server、本地 HTTP API 和静态 Web 工作台。
 
-## 环境要求
+## 安装与启动
+
+直接运行最新版本：
+
+```bash
+npx code-agent@latest start
+```
+
+也可以全局安装：
+
+```bash
+npm install --global code-agent
+code-agent start
+```
+
+运行前需要：
 
 - Node.js 24 或更高版本
-- pnpm 11.15.1
 - 已使用官方 Codex CLI 在相同 `CODEX_HOME` 中完成 `codex login`
 
-CodeAgent 不提供登录、退出或凭证管理，也不会读取或修改 `auth.json`。Runtime 不可用时，
-请先在官方 Codex CLI 完成登录，再回到 Web 工作台重试。
+CodeAgent 不提供登录、退出或凭证管理，也不会读取或修改 `auth.json`。Runtime 不可用时，请先在官方 Codex CLI 完成登录，再回到 Web 工作台重试。
 
-## 开发命令
+## 本地开发
+
+开发环境使用 pnpm 11.15.1：
 
 ```bash
 pnpm install --frozen-lockfile
@@ -31,8 +45,7 @@ code-agent doctor
 code-agent version
 ```
 
-`start` 支持 `--codex-bin` 和 `--codex-home`。启动后浏览器会打开
-`http://127.0.0.1:3210`。首次启动项目列表为空，通过 Projects 标题右侧的 `+` 使用系统目录选择器添加文件夹；Project、Project 新 Task 默认模型设置和 Task 完整设置写入 `CODEX_HOME/code-agent/state.sqlite3`。收到 `SIGINT` 或 `SIGTERM` 后会依次关闭 HTTP Server、数据库 Worker 和全局长驻 Codex App Server。
+`start` 支持 `--codex-bin` 和 `--codex-home`。启动后浏览器会打开 `http://127.0.0.1:3210`。首次启动项目列表为空，通过 Projects 标题右侧的 `+` 使用系统目录选择器添加文件夹；Project、Project 新 Task 默认模型设置和 Task 完整设置写入 `CODEX_HOME/code-agent/state.sqlite3`。收到 `SIGINT` 或 `SIGTERM` 后会依次关闭 HTTP Server、数据库 Worker 和全局长驻 Codex App Server。
 
 `doctor` 会检查数据库可写性、Migration 版本、`PRAGMA integrity_check`、WAL 和运行所需的 SQLite PRAGMA。
 
@@ -53,4 +66,4 @@ tools/                    构建与发布校验脚本
 
 内部 Workspace 包均为 `private: true`。发布产物只来自根包的 `dist/`，用户只安装 `code-agent`。
 
-架构决策见 [docs/architecture-design.md](docs/architecture-design.md)，工程约束见 [docs/project-structure.md](docs/project-structure.md)。
+架构决策见 [docs/architecture-design.md](docs/architecture-design.md)，工程约束见 [docs/project-structure.md](docs/project-structure.md)，维护者发布步骤见 [docs/releasing.md](docs/releasing.md)。版本变化记录在 [CHANGELOG.md](CHANGELOG.md)。

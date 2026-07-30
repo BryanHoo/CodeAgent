@@ -11,6 +11,8 @@ export default defineConfig({
   reporter: process.env["CI"] ? "github" : "list",
   use: {
     baseURL: e2eBaseUrl,
+    // CI 中的无头 Chromium 默认禁止读取剪贴板，复制相关用例需要显式授权。
+    permissions: ["clipboard-read", "clipboard-write"],
     trace: "on-first-retry",
   },
   projects: [

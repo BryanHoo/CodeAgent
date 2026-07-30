@@ -33,6 +33,7 @@ if (!manifest) {
 
 const files = new Set(manifest.files.map(({ path }) => path));
 const requiredFiles = [
+  "CHANGELOG.md",
   "dist/cli.js",
   "dist/server/index.js",
   "dist/sqlite-state-worker.js",
