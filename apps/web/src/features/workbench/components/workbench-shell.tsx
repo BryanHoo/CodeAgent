@@ -302,9 +302,15 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       "",
     sandboxMode: projectDefaultsQuery.data?.settings.sandboxMode ?? "workspace-write",
   };
+  const globalSettings = globalSettingsQuery.data?.settings;
+  // 新聊天尚无 Task 设置：审批继承 Global，其余字段使用 Project effective defaults。
   const draftSettings: AgentTaskSettings = {
-    approvalPolicy: "on-request",
-    approvalsReviewer: "user",
+    ...(globalSettings?.approvalsReviewer === "auto_review"
+      ? { approvalPolicy: "on-request" as const, approvalsReviewer: "auto_review" as const }
+      : {
+          approvalPolicy: globalSettings?.approvalPolicy ?? "on-request",
+          approvalsReviewer: "user" as const,
+        }),
     ...draftDefaults,
   };
   const inspectorTask = runtime.snapshot ?? startingSnapshot;
@@ -469,7 +475,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         (projectTaskState?.error ?? null) !== null ||
         modelsQuery.error !== null ||
         skillsQuery.error !== null ||
-        projectDefaultsQuery.error !== null ? (
+        projectDefaultsQuery.error !== null ||
+        (taskId === undefined && globalSettingsQuery.error !== null) ? (
           <RuntimeUnavailable onRetry={() => void retry()} />
         ) : taskId === undefined ? (
           <>
@@ -484,7 +491,11 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               client={client}
               models={models}
               modelsError={null}
-              modelsPending={modelsQuery.isPending || projectDefaultsQuery.isPending}
+              modelsPending={
+                modelsQuery.isPending ||
+                projectDefaultsQuery.isPending ||
+                globalSettingsQuery.isPending
+              }
               onSettingsChange={updateDraftSettings}
               onRequestNotificationPermission={requestNotificationPermission}
               onSubmissionStateChange={setNewChatSubmissionPending}

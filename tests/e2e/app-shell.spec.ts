@@ -531,6 +531,43 @@ test("edits global defaults in a dialog without overriding task settings", async
   ).toBe(true);
 });
 
+test("uses global defaults throughout a new task composer", async ({ page }) => {
+  await page.route("**/v1/settings", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        settings: {
+          approvalPolicy: "never",
+          approvalsReviewer: "user",
+          defaultOpenAppId: "finder",
+          model: "gpt-5.6-terra",
+          reasoningEffort: "medium",
+          sandboxMode: "danger-full-access",
+        },
+      },
+    });
+  });
+  await page.route("**/v1/projects/code-agent/defaults", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        settings: {
+          model: "gpt-5.6-terra",
+          reasoningEffort: "medium",
+          sandboxMode: "danger-full-access",
+        },
+      },
+    });
+  });
+
+  await page.goto("/p/code-agent");
+
+  await expect(page.getByRole("combobox", { name: "批准模式" })).toHaveValue("never");
+  await expect(page.getByRole("combobox", { name: "沙盒模式" })).toHaveValue("danger-full-access");
+  await expect(page.getByRole("combobox", { name: "选择模型" })).toHaveValue("gpt-5.6-terra");
+  await expect(page.getByRole("combobox", { name: "选择思考量" })).toHaveValue("medium");
+});
+
 test("project open split control selects, opens, and restores a host app", async ({ page }) => {
   await page.route("**/v1/projects/code-agent/open-capabilities", async (route) => {
     await route.fulfill({
