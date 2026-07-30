@@ -41,7 +41,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 5,
+      migrationVersion: 6,
       synchronous: "normal",
       writable: true,
     });
@@ -205,6 +205,27 @@ describe("SqliteStateRepository", () => {
       sandboxMode: "danger-full-access",
     });
     await expect(reopened.read(project.id)).resolves.toEqual(project);
+  });
+
+  it("persists one complete global settings record across repository restarts", async () => {
+    const root = await createWorkspace();
+    const repository = await openRepository(root);
+    const settings = {
+      approvalPolicy: "on-request" as const,
+      approvalsReviewer: "auto_review" as const,
+      defaultOpenAppId: "visual-studio-code" as const,
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write" as const,
+    };
+
+    await expect(repository.readGlobalSettings()).resolves.toBeUndefined();
+    await expect(repository.writeGlobalSettings(settings)).resolves.toEqual(settings);
+    await repository.close();
+    repositories.splice(repositories.indexOf(repository), 1);
+
+    const reopened = await openRepository(root);
+    await expect(reopened.readGlobalSettings()).resolves.toEqual(settings);
   });
 
   it("persists pinned task metadata across repository restarts", async () => {

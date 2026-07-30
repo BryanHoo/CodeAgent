@@ -6,6 +6,7 @@ import {
   deriveProjectSidebarConnectionState,
   getProjectTaskPaginationControl,
   getProjectSidebarConnectionStatus,
+  SidebarSettingsButton,
   TaskStatusIndicator,
   TaskActionMenu,
 } from "./project-sidebar.js";
@@ -127,6 +128,18 @@ describe("ProjectSidebar connection status", () => {
       label: "Offline",
       toneClassName: "text-danger",
     });
+  });
+});
+
+describe("SidebarSettingsButton", () => {
+  it("opens settings in place without rendering a navigation link", () => {
+    const markup = renderToStaticMarkup(
+      <SidebarSettingsButton connectionState="connected" onOpen={vi.fn()} />,
+    );
+
+    expect(markup).toContain("<button");
+    expect(markup).toContain("Settings");
+    expect(markup).not.toContain("href=");
   });
 });
 

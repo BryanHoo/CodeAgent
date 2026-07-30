@@ -43,7 +43,7 @@
 - Project 列表默认空，通过宿主系统目录选择器注册，并持久化到 `CODEX_HOME/code-agent/state.sqlite3`；重复真实路径幂等返回已有 Project。
 - 数据库使用版本化 Migration、`STRICT` 表、显式 SQL、Prepared Statement 和事务，并固定启用 WAL、外键、NORMAL synchronous 与 5000ms busy timeout。
 - 所有同步 SQLite 操作都放入专用 `worker_threads` Worker，Fastify 主事件循环只通过 Core Repository 端口异步调用。
-- Project defaults 保存模型、思考量与沙盒模式；尚未持久化时沙盒使用 Codex Project 有效配置。新 Task 审批固定从 `approvalPolicy: "on-request"` 与 `approvalsReviewer: "user"` 开始。Task settings 保存完整审批策略、审批审核方、模型、思考量与沙盒模式，并在调用 Provider 前按实时模型目录校验和 upsert。
+- Global settings 以单例记录保存完整审批策略、审批审核方、模型、思考量、沙盒模式与默认打开应用；Project defaults 保存模型、思考量与沙盒模式；Task settings 保存完整运行设置。有效值固定按 `Task > Project > Global` 解析并按实时模型目录校验；读取推导值不得隐式写入局部记录，新 Task 创建和 Turn 启动时才固化完整 Task settings。
 - `task_metadata` 只保存 Project 作用域的 Task 固定状态；Task 列表与 Snapshot 在 Server 交付边界合并该状态，不修改 Codex Thread 内容。
 - Provider 模型目录、`allow_for_session` 和可操作 Pending Approval 不得持久化；进程重启后不得恢复可操作 `pending`。
 - WebSocket 客户端使用独立有界队列，慢客户端不能阻塞 Provider；`bufferedAmount` 超过 `256 KiB` 时向 Event Stream 发出软背压信号，超过 `1 MiB` 时以 `1013` 关闭连接并要求刷新 Snapshot。

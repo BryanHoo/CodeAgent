@@ -51,6 +51,19 @@ export function readProjectOpenAppId(
   return apps.find((app) => app.id === savedAppId)?.id;
 }
 
+export function resolveProjectOpenAppId(
+  storage: ProjectOpenPreferenceStorage | undefined,
+  projectId: string,
+  apps: readonly ProjectOpenApp[],
+  defaultOpenAppId: ProjectOpenAppId | null | undefined,
+): ProjectOpenAppId | undefined {
+  return (
+    readProjectOpenAppId(storage, projectId, apps) ??
+    apps.find((app) => app.id === defaultOpenAppId)?.id ??
+    apps[0]?.id
+  );
+}
+
 export function writeProjectOpenAppId(
   storage: ProjectOpenPreferenceStorage | undefined,
   projectId: string,

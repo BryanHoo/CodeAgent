@@ -4,9 +4,10 @@ import { Check, ChevronDown, Code2, FolderOpen, Terminal, Wrench } from "lucide-
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CodeAgentProjectOpenClient } from "../../projects/project-queries.js";
+import { projectOpenCapabilitiesQueryOptions } from "../../projects/project-queries.js";
 import {
   getProjectOpenPreferenceStorage,
-  readProjectOpenAppId,
+  resolveProjectOpenAppId,
   writeProjectOpenAppId,
 } from "../project-open-preferences.js";
 
@@ -68,28 +69,25 @@ export function ProjectOpenMenuItems({
 
 type ProjectOpenMenuProps = Readonly<{
   client: CodeAgentProjectOpenClient;
+  defaultOpenAppId?: ProjectOpenAppId | null;
   projectId: string;
 }>;
 
-export function ProjectOpenMenu({ client, projectId }: ProjectOpenMenuProps) {
+export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: ProjectOpenMenuProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [actionError, setActionError] = useState(false);
   const [selectedApps, setSelectedApps] = useState<Readonly<Record<string, ProjectOpenAppId>>>({});
   const [preferenceStorage] = useState(getProjectOpenPreferenceStorage);
-  const capabilitiesQuery = useQuery({
-    queryFn: ({ signal }) => client.getProjectOpenCapabilities(projectId, { signal }),
-    queryKey: ["projects", projectId, "open-capabilities"],
-    staleTime: 60_000,
-  });
+  const capabilitiesQuery = useQuery(projectOpenCapabilitiesQueryOptions(projectId, client));
   const apps = capabilitiesQuery.data?.apps ?? emptyApps;
-  const storedAppId = useMemo(
-    () => readProjectOpenAppId(preferenceStorage, projectId, apps),
-    [apps, preferenceStorage, projectId],
+  const inheritedAppId = useMemo(
+    () => resolveProjectOpenAppId(preferenceStorage, projectId, apps, defaultOpenAppId),
+    [apps, defaultOpenAppId, preferenceStorage, projectId],
   );
-  const requestedAppId = selectedApps[projectId] ?? storedAppId;
-  const selectedApp = apps.find((app) => app.id === requestedAppId) ?? apps[0];
+  const requestedAppId = selectedApps[projectId] ?? inheritedAppId;
+  const selectedApp = apps.find((app) => app.id === requestedAppId);
   const openMutation = useMutation({
     mutationFn: (appId: ProjectOpenAppId) => client.openProject(projectId, appId),
     onError() {

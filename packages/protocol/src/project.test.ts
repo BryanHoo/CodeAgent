@@ -6,6 +6,8 @@ import {
   AgentAttachmentUploadRequestSchema,
   AgentAttachmentUploadResponseSchema,
   AgentCapabilitiesSchema,
+  AgentGlobalSettingsResponseSchema,
+  AgentGlobalSettingsSchema,
   AgentModelPageSchema,
   AgentMessageItemSchema,
   AgentReviewItemSchema,
@@ -442,6 +444,34 @@ describe("project protocol", () => {
     expect(
       Value.Check(AgentTaskSettingsResponseSchema, { settings: taskSettings, legacy: true }),
     ).toBe(false);
+  });
+
+  it("validates strict global settings", () => {
+    const settings = {
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      defaultOpenAppId: "visual-studio-code",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write",
+    };
+
+    expect(Value.Check(AgentGlobalSettingsSchema, settings)).toBe(true);
+    expect(Value.Check(AgentGlobalSettingsResponseSchema, { settings })).toBe(true);
+    expect(Value.Check(AgentGlobalSettingsSchema, { ...settings, defaultOpenAppId: null })).toBe(
+      true,
+    );
+    expect(
+      Value.Check(AgentGlobalSettingsSchema, { ...settings, defaultOpenAppId: "unknown-app" }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentGlobalSettingsSchema, {
+        ...settings,
+        approvalPolicy: "never",
+        approvalsReviewer: "auto_review",
+      }),
+    ).toBe(false);
+    expect(Value.Check(AgentGlobalSettingsResponseSchema, { settings, legacy: true })).toBe(false);
   });
 
   it("validates discriminated pending requests and typed resolutions", () => {

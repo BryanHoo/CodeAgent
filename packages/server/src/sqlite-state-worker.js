@@ -47,6 +47,20 @@ function taskSettingsFromRow(row) {
   };
 }
 
+function globalSettingsFromRow(row) {
+  if (row === undefined) {
+    return undefined;
+  }
+  return {
+    approvalPolicy: row.approval_policy,
+    approvalsReviewer: row.approvals_reviewer,
+    defaultOpenAppId: row.default_open_app_id,
+    model: row.model,
+    reasoningEffort: row.reasoning_effort,
+    sandboxMode: row.sandbox_mode,
+  };
+}
+
 function configureDatabase(database) {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
@@ -123,6 +137,9 @@ function createOperations(database) {
         readProjectDefaults: database.prepare(
           "SELECT model, reasoning_effort, sandbox_mode FROM project_defaults WHERE project_id = ?",
         ),
+        readGlobalSettings: database.prepare(
+          "SELECT approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode, default_open_app_id FROM global_settings WHERE id = 1",
+        ),
         readTaskSettings: database.prepare(
           "SELECT approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode FROM task_settings WHERE project_id = ? AND task_id = ?",
         ),
@@ -136,6 +153,19 @@ function createOperations(database) {
         model = excluded.model,
         reasoning_effort = excluded.reasoning_effort,
         sandbox_mode = excluded.sandbox_mode,
+        updated_at = excluded.updated_at
+    `),
+        writeGlobalSettings: database.prepare(`
+      INSERT INTO global_settings (
+        id, approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode, default_open_app_id, updated_at
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        approval_policy = excluded.approval_policy,
+        approvals_reviewer = excluded.approvals_reviewer,
+        model = excluded.model,
+        reasoning_effort = excluded.reasoning_effort,
+        sandbox_mode = excluded.sandbox_mode,
+        default_open_app_id = excluded.default_open_app_id,
         updated_at = excluded.updated_at
     `),
         writeTaskSettings: database.prepare(`
@@ -228,6 +258,9 @@ function createOperations(database) {
     readProjectDefaults(payload) {
       return projectDefaultsFromRow(requireStatements().readProjectDefaults.get(payload.projectId));
     },
+    readGlobalSettings() {
+      return globalSettingsFromRow(requireStatements().readGlobalSettings.get());
+    },
     readTaskSettings(payload) {
       return taskSettingsFromRow(
         requireStatements().readTaskSettings.get(payload.projectId, payload.taskId),
@@ -255,6 +288,19 @@ function createOperations(database) {
         settings.model,
         settings.reasoningEffort,
         settings.sandboxMode,
+        payload.updatedAt,
+      );
+      return settings;
+    },
+    writeGlobalSettings(payload) {
+      const settings = payload.settings;
+      requireStatements().writeGlobalSettings.run(
+        settings.approvalPolicy,
+        settings.approvalsReviewer,
+        settings.model,
+        settings.reasoningEffort,
+        settings.sandboxMode,
+        settings.defaultOpenAppId,
         payload.updatedAt,
       );
       return settings;

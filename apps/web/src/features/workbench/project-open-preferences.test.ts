@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { readProjectOpenAppId, writeProjectOpenAppId } from "./project-open-preferences.js";
+import {
+  readProjectOpenAppId,
+  resolveProjectOpenAppId,
+  writeProjectOpenAppId,
+} from "./project-open-preferences.js";
 
 class MemoryStorage {
   readonly values = new Map<string, string>();
@@ -37,5 +41,14 @@ describe("project open preferences", () => {
 
     writeProjectOpenAppId(storage, "project-1", "ghostty");
     expect(readProjectOpenAppId(storage, "project-1", apps)).toBeUndefined();
+  });
+
+  it("prefers a project choice before the global default and first available app", () => {
+    const storage = new MemoryStorage();
+
+    expect(resolveProjectOpenAppId(storage, "project-1", apps, "zed")).toBe("zed");
+    writeProjectOpenAppId(storage, "project-1", "finder");
+    expect(resolveProjectOpenAppId(storage, "project-1", apps, "zed")).toBe("finder");
+    expect(resolveProjectOpenAppId(storage, "project-2", apps, "ghostty")).toBe("finder");
   });
 });

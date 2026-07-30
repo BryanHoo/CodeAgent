@@ -1,4 +1,5 @@
 import type {
+  AgentGlobalSettings,
   AgentProjectDefaults,
   AgentTask,
   AgentTaskSettings,
@@ -19,12 +20,14 @@ export interface ProjectRepository {
 
 // 设置端口只接收完整对象，具体事务与数据库实现留在 Server Adapter。
 export interface AgentSettingsRepository {
+  readGlobalSettings(): Promise<AgentGlobalSettings | undefined>;
   readProjectDefaults(projectId: string): Promise<AgentProjectDefaults | undefined>;
   readTaskSettings(projectId: string, taskId: string): Promise<AgentTaskSettings | undefined>;
   writeProjectDefaults(
     projectId: string,
     settings: AgentProjectDefaults,
   ): Promise<AgentProjectDefaults>;
+  writeGlobalSettings(settings: AgentGlobalSettings): Promise<AgentGlobalSettings>;
   writeTaskSettings(
     projectId: string,
     taskId: string,

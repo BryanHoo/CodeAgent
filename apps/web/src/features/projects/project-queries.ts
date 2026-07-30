@@ -1,5 +1,6 @@
 import { CodeAgentClient } from "@code-agent/client";
 import type {
+  AgentGlobalSettings,
   AgentProjectDefaults,
   AgentTask,
   AgentTaskPage,
@@ -35,7 +36,11 @@ export type CodeAgentModelsClient = Pick<CodeAgentClient, "listModels">;
 export type CodeAgentSkillsClient = Pick<CodeAgentClient, "listSkills">;
 export type CodeAgentSettingsClient = Pick<
   CodeAgentClient,
-  "getProjectDefaults" | "updateProjectDefaults" | "updateTaskSettings"
+  | "getGlobalSettings"
+  | "getProjectDefaults"
+  | "updateGlobalSettings"
+  | "updateProjectDefaults"
+  | "updateTaskSettings"
 >;
 export type CodeAgentMutationClient = Pick<
   CodeAgentClient,
@@ -390,6 +395,32 @@ export function modelsQueryOptions(client: CodeAgentModelsClient = codeAgentClie
     queryFn: ({ signal }) => client.listModels({ signal }),
     queryKey: ["models"] as const,
     staleTime: 5 * 60_000,
+  });
+}
+
+export function globalSettingsQueryOptions(client: CodeAgentSettingsClient = codeAgentClient) {
+  return queryOptions({
+    queryFn: ({ signal }) => client.getGlobalSettings({ signal }),
+    queryKey: ["settings"] as const,
+  });
+}
+
+export function globalSettingsMutationOptions(client: CodeAgentSettingsClient = codeAgentClient) {
+  return mutationOptions({
+    mutationFn: (settings: AgentGlobalSettings) => client.updateGlobalSettings(settings),
+    mutationKey: ["settings", "update"] as const,
+    scope: { id: "global-settings" },
+  });
+}
+
+export function projectOpenCapabilitiesQueryOptions(
+  projectId: string,
+  client: CodeAgentProjectOpenClient = codeAgentClient,
+) {
+  return queryOptions({
+    queryFn: ({ signal }) => client.getProjectOpenCapabilities(projectId, { signal }),
+    queryKey: ["projects", projectId, "open-capabilities"] as const,
+    staleTime: 60_000,
   });
 }
 

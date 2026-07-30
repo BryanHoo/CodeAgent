@@ -25,6 +25,7 @@ const project = {
   rootPath: projectRoot,
 };
 const provider = createCodexRuntimeProvider({ client: runtime.client });
+let globalSettings;
 const projectDefaults = new Map();
 const pinnedTaskIds = new Map();
 const taskSettings = new Map();
@@ -39,11 +40,17 @@ const server = await createCodeAgentServer({
   provider,
   selectProjectDirectory: () => Promise.resolve(undefined),
   settingsRepository: {
+    // 保持真实服务的全局设置读写契约，确保运行时回退链可正常执行。
+    readGlobalSettings: () => Promise.resolve(globalSettings),
     readProjectDefaults: (projectId) => Promise.resolve(projectDefaults.get(projectId)),
     readTaskSettings: (projectId, taskId) =>
       Promise.resolve(taskSettings.get(`${projectId}:${taskId}`)),
     writeProjectDefaults: (projectId, settings) => {
       projectDefaults.set(projectId, settings);
+      return Promise.resolve(settings);
+    },
+    writeGlobalSettings: (settings) => {
+      globalSettings = settings;
       return Promise.resolve(settings);
     },
     writeTaskSettings: (projectId, taskId, settings) => {

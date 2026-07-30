@@ -6,6 +6,7 @@ import {
   CompactAgentTaskResponseSchema,
   ForkAgentTaskResponseSchema,
   AgentAttachmentUploadResponseSchema,
+  AgentGlobalSettingsResponseSchema,
   AgentModelPageSchema,
   AgentMutationErrorSchema,
   AgentProjectDefaultsResponseSchema,
@@ -40,6 +41,8 @@ import {
   type AgentAttachmentUploadRequest,
   type AgentAttachmentUploadResponse,
   type AgentMutationError,
+  type AgentGlobalSettings,
+  type AgentGlobalSettingsResponse,
   type AgentTaskPage,
   type AgentModelPage,
   type AgentPromptInput,
@@ -199,6 +202,23 @@ export class CodeAgentClient {
 
   public async listModels(options: ReadOptions = {}): Promise<AgentModelPage> {
     return this.#read("/v1/models", AgentModelPageSchema, options);
+  }
+
+  public async getGlobalSettings(options: ReadOptions = {}): Promise<AgentGlobalSettingsResponse> {
+    return this.#read("/v1/settings", AgentGlobalSettingsResponseSchema, options);
+  }
+
+  public async updateGlobalSettings(
+    settings: AgentGlobalSettings,
+    options: MutationOptions = {},
+  ): Promise<AgentGlobalSettingsResponse> {
+    return this.#mutation(
+      "/v1/settings",
+      settings,
+      AgentGlobalSettingsResponseSchema,
+      options,
+      "PUT",
+    );
   }
 
   public async listSkills(projectId: string, options: ReadOptions = {}): Promise<AgentSkillPage> {

@@ -27,6 +27,10 @@ const projectDefaults = {
   reasoningEffort: taskSettings.reasoningEffort,
   sandboxMode: taskSettings.sandboxMode,
 };
+const globalSettings = {
+  ...taskSettings,
+  defaultOpenAppId: "visual-studio-code" as const,
+};
 
 const modelPage = {
   data: [
@@ -368,6 +372,28 @@ describe("CodeAgentClient", () => {
       body: JSON.stringify(taskSettings),
       method: "PUT",
     });
+  });
+
+  it("reads and atomically updates global settings", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ settings: globalSettings }))
+      .mockResolvedValueOnce(jsonResponse({ settings: globalSettings }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.getGlobalSettings()).resolves.toEqual({ settings: globalSettings });
+    await expect(
+      client.updateGlobalSettings(globalSettings, { idempotencyKey: "global-settings-key" }),
+    ).resolves.toEqual({ settings: globalSettings });
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(["/v1/settings", "/v1/settings"]);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      body: JSON.stringify(globalSettings),
+      method: "PUT",
+    });
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("idempotency-key")).toBe(
+      "global-settings-key",
+    );
   });
 
   it("rejects malformed settings responses", async () => {

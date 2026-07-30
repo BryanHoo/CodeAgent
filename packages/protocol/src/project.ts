@@ -571,6 +571,41 @@ export const AgentTaskSettingsSchema = Type.Union([
 
 export type AgentTaskSettings = Readonly<Static<typeof AgentTaskSettingsSchema>>;
 
+const AgentGlobalSettingProperties = {
+  defaultOpenAppId: Type.Union([ProjectOpenAppIdSchema, Type.Null()]),
+  ...AgentTaskSettingProperties,
+};
+
+export const AgentGlobalSettingsSchema = Type.Union([
+  Type.Object(
+    {
+      approvalPolicy: AgentApprovalPolicySchema,
+      approvalsReviewer: Type.Literal("user"),
+      ...AgentGlobalSettingProperties,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      approvalPolicy: Type.Literal("on-request"),
+      approvalsReviewer: Type.Literal("auto_review"),
+      ...AgentGlobalSettingProperties,
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export type AgentGlobalSettings = Readonly<Static<typeof AgentGlobalSettingsSchema>>;
+
+export const AgentGlobalSettingsResponseSchema = Type.Object(
+  { settings: AgentGlobalSettingsSchema },
+  { additionalProperties: false },
+);
+
+export type AgentGlobalSettingsResponse = Readonly<
+  Static<typeof AgentGlobalSettingsResponseSchema>
+>;
+
 export const AgentProjectDefaultsSchema = Type.Object(
   {
     model: Type.String({ minLength: 1 }),

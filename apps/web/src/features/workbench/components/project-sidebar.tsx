@@ -61,6 +61,7 @@ const taskActionMenuViewportPadding = 8;
 type ProjectSidebarProps = Readonly<{
   connectionState: AgentEventConnectionState;
   onClose: () => void;
+  onOpenSettings: () => void;
   projectId?: string;
   taskId?: string;
 }>;
@@ -144,6 +145,7 @@ export function getProjectSidebarConnectionStatus(connectionState: AgentEventCon
 export function ProjectSidebar({
   connectionState,
   onClose,
+  onOpenSettings,
   projectId,
   taskId,
 }: ProjectSidebarProps) {
@@ -166,7 +168,6 @@ export function ProjectSidebar({
   } = useProjects();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
   const [preferenceStorage] = useState(getProjectSidebarPreferenceStorage);
   const [initialSavedExpandedProjectIds] = useState(() =>
     readExpandedProjectIds(preferenceStorage),
@@ -638,23 +639,35 @@ export function ProjectSidebar({
       )}
 
       <div className="p-2">
-        <Link
-          aria-label={`设置，终端连接状态：${connectionStatus.label}`}
-          className="flex h-9 items-center gap-2.5 rounded-control px-2.5 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
-          to="/settings"
-        >
-          <Settings className="size-4" aria-hidden="true" />
-          Settings
-          <span
-            aria-live="polite"
-            className={`ml-auto inline-flex items-center gap-1 text-caption ${connectionStatus.toneClassName}`}
-          >
-            <ProjectSidebarConnectionIcon connectionState={connectionState} />
-            {connectionStatus.label}
-          </span>
-        </Link>
+        <SidebarSettingsButton connectionState={connectionState} onOpen={onOpenSettings} />
       </div>
     </aside>
+  );
+}
+
+export function SidebarSettingsButton({
+  connectionState,
+  onOpen,
+}: Readonly<{ connectionState: AgentEventConnectionState; onOpen: () => void }>) {
+  const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
+  return (
+    <button
+      aria-label={`设置，终端连接状态：${connectionStatus.label}`}
+      className="flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+      id="global-settings-trigger"
+      onClick={onOpen}
+      type="button"
+    >
+      <Settings className="size-4" aria-hidden="true" />
+      Settings
+      <span
+        aria-live="polite"
+        className={`ml-auto inline-flex items-center gap-1 text-caption ${connectionStatus.toneClassName}`}
+      >
+        <ProjectSidebarConnectionIcon connectionState={connectionState} />
+        {connectionStatus.label}
+      </span>
+    </button>
   );
 }
 

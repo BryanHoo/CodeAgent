@@ -16,6 +16,8 @@ import {
   ArchiveAgentTaskRequestSchema,
   ArchiveAgentTaskResponseSchema,
   AgentCapabilitiesSchema,
+  AgentGlobalSettingsResponseSchema,
+  AgentGlobalSettingsSchema,
   CompactAgentTaskRequestSchema,
   CompactAgentTaskResponseSchema,
   ForkAgentTaskRequestSchema,
@@ -63,6 +65,7 @@ import {
   UnsubscribeAgentTaskResponseSchema,
   MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
   type AgentAttachmentUploadRequest,
+  type AgentGlobalSettings,
   type ArchiveAgentTaskRequest,
   type AgentMutationError,
   type AgentModel,
@@ -300,27 +303,6 @@ function assertValidProjectDefaults(
       400,
     );
   }
-}
-
-function projectDefaultsEqual(
-  left: AgentProjectDefaults | undefined,
-  right: AgentProjectDefaults,
-): boolean {
-  return (
-    left?.model === right.model &&
-    left.reasoningEffort === right.reasoningEffort &&
-    left.sandboxMode === right.sandboxMode
-  );
-}
-
-function taskSettingsEqual(left: AgentTaskSettings | undefined, right: AgentTaskSettings): boolean {
-  return (
-    left?.approvalPolicy === right.approvalPolicy &&
-    left.approvalsReviewer === right.approvalsReviewer &&
-    left.model === right.model &&
-    left.reasoningEffort === right.reasoningEffort &&
-    left.sandboxMode === right.sandboxMode
-  );
 }
 
 function mergeTaskPinned(task: AgentTask, pinnedTaskIds: ReadonlySet<string>): AgentTask {
@@ -582,24 +564,59 @@ export async function createCodeAgentServer(
   };
   const listModels = async (): Promise<readonly AgentModel[]> =>
     (await modelCatalogCache.read()).data;
+  const readEffectiveGlobalSettings = async (
+    models?: readonly AgentModel[],
+  ): Promise<AgentGlobalSettings> => {
+    const catalog = models ?? (await listModels());
+    const stored = await options.settingsRepository.readGlobalSettings();
+    const effectiveModel = resolveProjectDefaults(
+      catalog,
+      stored,
+      stored?.sandboxMode ?? "workspace-write",
+    );
+    // 全局记录缺失时只返回运行时默认值；读取不能隐式创建用户配置。
+    return stored?.approvalsReviewer === "auto_review"
+      ? {
+          approvalPolicy: "on-request",
+          approvalsReviewer: "auto_review",
+          defaultOpenAppId: stored.defaultOpenAppId,
+          ...effectiveModel,
+        }
+      : {
+          approvalPolicy: stored?.approvalPolicy ?? "on-request",
+          approvalsReviewer: "user",
+          defaultOpenAppId: stored?.defaultOpenAppId ?? null,
+          ...effectiveModel,
+        };
+  };
   const readEffectiveProjectDefaults = async (
     projectId: string,
     models?: readonly AgentModel[],
+    globalSettings?: AgentGlobalSettings,
   ): Promise<AgentProjectDefaults> => {
     const catalog = models ?? (await listModels());
     const stored = await options.settingsRepository.readProjectDefaults(projectId);
-    const context = stored === undefined ? await getProjectContext(projectId) : undefined;
-    const providerSandboxMode =
-      stored?.sandboxMode ??
-      (context === undefined ? undefined : await context.provider.readSandboxMode());
-    if (providerSandboxMode === undefined) {
-      throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-    }
-    const effective = resolveProjectDefaults(catalog, stored, providerSandboxMode);
-    if (!projectDefaultsEqual(stored, effective)) {
-      await options.settingsRepository.writeProjectDefaults(projectId, effective);
-    }
-    return effective;
+    const inherited = globalSettings ?? (await readEffectiveGlobalSettings(catalog));
+    return resolveProjectDefaults(catalog, stored ?? inherited, inherited.sandboxMode);
+  };
+  const readInheritedTaskSettings = async (
+    projectId: string,
+    models?: readonly AgentModel[],
+  ): Promise<AgentTaskSettings> => {
+    const catalog = models ?? (await listModels());
+    const globalSettings = await readEffectiveGlobalSettings(catalog);
+    const projectDefaults = await readEffectiveProjectDefaults(projectId, catalog, globalSettings);
+    return globalSettings.approvalsReviewer === "auto_review"
+      ? {
+          approvalPolicy: "on-request",
+          approvalsReviewer: "auto_review",
+          ...projectDefaults,
+        }
+      : {
+          approvalPolicy: globalSettings.approvalPolicy,
+          approvalsReviewer: "user",
+          ...projectDefaults,
+        };
   };
   const readEffectiveTaskSettings = async (
     projectId: string,
@@ -608,27 +625,22 @@ export async function createCodeAgentServer(
   ): Promise<AgentTaskSettings> => {
     const catalog = models ?? (await listModels());
     const stored = await options.settingsRepository.readTaskSettings(projectId, taskId);
-    const defaults = await readEffectiveProjectDefaults(projectId, catalog);
-    const effectiveModel = resolveProjectDefaults(
-      catalog,
-      stored ?? defaults,
-      defaults.sandboxMode,
-    );
+    if (stored === undefined) {
+      return readInheritedTaskSettings(projectId, catalog);
+    }
+    const effectiveModel = resolveProjectDefaults(catalog, stored, stored.sandboxMode);
     const effective: AgentTaskSettings =
-      stored?.approvalsReviewer === "auto_review"
+      stored.approvalsReviewer === "auto_review"
         ? {
             approvalPolicy: "on-request",
             approvalsReviewer: "auto_review",
             ...effectiveModel,
           }
         : {
-            approvalPolicy: stored?.approvalPolicy ?? "on-request",
+            approvalPolicy: stored.approvalPolicy,
             approvalsReviewer: "user",
             ...effectiveModel,
           };
-    if (!taskSettingsEqual(stored, effective)) {
-      await options.settingsRepository.writeTaskSettings(projectId, taskId, effective);
-    }
     return effective;
   };
   // 启动时只为已持久化 Project 建立事件流；后续新增项目在首次注册时懒创建。
@@ -785,6 +797,43 @@ export async function createCodeAgentServer(
 
   app.get("/v1/models", { schema: { response: { 200: AgentModelPageSchema } } }, () =>
     modelCatalogCache.read(),
+  );
+
+  app.get(
+    "/v1/settings",
+    { schema: { response: { 200: AgentGlobalSettingsResponseSchema } } },
+    async () => ({ settings: await readEffectiveGlobalSettings() }),
+  );
+
+  app.put<{
+    Body: AgentGlobalSettings;
+    Headers: { "idempotency-key": string };
+  }>(
+    "/v1/settings",
+    {
+      schema: {
+        body: AgentGlobalSettingsSchema,
+        headers: IdempotencyHeadersSchema,
+        response: {
+          200: AgentGlobalSettingsResponseSchema,
+          400: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        ["update-global-settings"],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          assertValidProjectDefaults(await listModels(), request.body);
+          return {
+            settings: await options.settingsRepository.writeGlobalSettings(request.body),
+          };
+        },
+      ),
   );
 
   app.get("/v1/projects", { schema: { response: { 200: ProjectPageSchema } } }, async () => ({
@@ -1783,14 +1832,12 @@ export async function createCodeAgentServer(
             if (taskStartRecoveries.size >= idempotencyCacheSize) {
               throw new Error("Task creation recovery capacity is exhausted");
             }
-            const defaults = await readEffectiveProjectDefaults(request.params.projectId);
+            const defaults = await readInheritedTaskSettings(request.params.projectId);
             const task = await context.provider.startTask();
             // Provider 已创建 Task 后立即保留恢复状态，后续落库重试不能再次创建 Task。
             recovery = {
               fingerprint,
               settings: {
-                approvalPolicy: "on-request",
-                approvalsReviewer: "user",
                 ...defaults,
               },
               task,

@@ -27,14 +27,18 @@ import {
 } from "../../conversation/runtime/task-runtime.js";
 import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
 import { FileReviewDialog } from "../../diff/file-review-dialog.js";
+import { GlobalSettingsDialog } from "../../settings/components/global-settings-dialog.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 import {
   modelsQueryOptions,
+  globalSettingsMutationOptions,
+  globalSettingsQueryOptions,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
   projectGitStatusQueryOptions,
+  projectOpenCapabilitiesQueryOptions,
   skillsQueryOptions,
   taskSettingsMutationOptions,
   updateNewTaskTitleFromSnapshotInInfiniteData,
@@ -108,6 +112,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const modelsQuery = useQuery(modelsQueryOptions(client));
+  const globalSettingsQuery = useQuery(globalSettingsQueryOptions(client));
+  const projectOpenCapabilitiesQuery = useQuery(
+    projectOpenCapabilitiesQueryOptions(projectId, client),
+  );
   const skillsQuery = useQuery({
     ...skillsQueryOptions(projectId, client),
     enabled: capabilities?.skills.list === true,
@@ -117,6 +125,23 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     ...projectDefaultsMutationOptions(projectId, client),
     onSuccess(response) {
       queryClient.setQueryData(["projects", projectId, "defaults"], response);
+    },
+  });
+  const globalSettingsMutation = useMutation({
+    ...globalSettingsMutationOptions(client),
+    async onSuccess(response) {
+      queryClient.setQueryData(["settings"], response);
+      // 局部显式设置仍由 Server 保持优先；刷新只让未配置的当前上下文重新解析全局回退。
+      await queryClient.invalidateQueries({
+        exact: true,
+        queryKey: ["projects", projectId, "defaults"],
+      });
+      if (taskId !== undefined) {
+        await queryClient.invalidateQueries({
+          exact: true,
+          queryKey: ["projects", projectId, "tasks", taskId],
+        });
+      }
     },
   });
   const runtime = useTaskRuntime(projectId, taskId, projectRuntime);
@@ -157,6 +182,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     shouldOpenDesktopPanel(inspectorOverlayQuery),
   );
   const [newChatSubmissionPending, setNewChatSubmissionPending] = useState(false);
+  const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
   const [fileDiffSelection, setFileDiffSelection] = useState<{
     change: AgentFileChange;
     projectId: string;
@@ -383,6 +409,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       <ProjectSidebar
         connectionState={sidebarConnectionState}
         onClose={closeSidebar}
+        onOpenSettings={() => {
+          setGlobalSettingsOpen(true);
+        }}
         projectId={projectId}
         {...(taskId === undefined ? {} : { taskId })}
       />
@@ -413,7 +442,13 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
-            <ProjectOpenMenu client={client} projectId={projectId} />
+            <ProjectOpenMenu
+              client={client}
+              projectId={projectId}
+              {...(globalSettingsQuery.data === undefined
+                ? {}
+                : { defaultOpenAppId: globalSettingsQuery.data.settings.defaultOpenAppId })}
+            />
             <IconButton label="更多操作" size="small">
               <Ellipsis className="size-3.5" aria-hidden="true" />
             </IconButton>
@@ -555,6 +590,37 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         projectRuntime={projectRuntime}
         selection={selectedSubagent}
       />
+      {globalSettingsOpen ? (
+        <GlobalSettingsDialog
+          apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
+          error={
+            globalSettingsQuery.error ?? modelsQuery.error ?? projectOpenCapabilitiesQuery.error
+          }
+          isPending={
+            globalSettingsQuery.isPending ||
+            modelsQuery.isPending ||
+            projectOpenCapabilitiesQuery.isPending
+          }
+          models={models}
+          onClose={() => {
+            setGlobalSettingsOpen(false);
+            requestAnimationFrame(() => {
+              document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
+            });
+          }}
+          onRetry={() =>
+            Promise.all([
+              globalSettingsQuery.refetch(),
+              modelsQuery.refetch(),
+              projectOpenCapabilitiesQuery.refetch(),
+            ])
+          }
+          onSave={(settings) => globalSettingsMutation.mutateAsync(settings).then(() => undefined)}
+          {...(globalSettingsQuery.data === undefined
+            ? {}
+            : { settings: globalSettingsQuery.data.settings })}
+        />
+      ) : null}
     </div>
   );
 }

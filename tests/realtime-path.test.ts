@@ -1,7 +1,12 @@
 import { fileURLToPath } from "node:url";
 
 import { CodeAgentClient } from "@code-agent/client";
-import type { AgentEvent, AgentProjectDefaults, AgentTaskSettings } from "@code-agent/protocol";
+import type {
+  AgentEvent,
+  AgentGlobalSettings,
+  AgentProjectDefaults,
+  AgentTaskSettings,
+} from "@code-agent/protocol";
 import {
   createCodexRuntimeProvider,
   startCodexAppServer,
@@ -35,6 +40,7 @@ const runtimes: CodexAppServerProcess[] = [];
 const servers: Awaited<ReturnType<typeof createCodeAgentServer>>[] = [];
 
 function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvider>) {
+  let globalSettings: AgentGlobalSettings | undefined;
   const projectDefaults = new Map<string, AgentProjectDefaults>();
   const pinnedTaskIds = new Map<string, Set<string>>();
   const taskSettings = new Map<string, AgentTaskSettings>();
@@ -49,9 +55,14 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
     provider,
     selectProjectDirectory: () => Promise.resolve(undefined),
     settingsRepository: {
+      readGlobalSettings: () => Promise.resolve(globalSettings),
       readProjectDefaults: (projectId: string) => Promise.resolve(projectDefaults.get(projectId)),
       readTaskSettings: (projectId: string, taskId: string) =>
         Promise.resolve(taskSettings.get(`${projectId}:${taskId}`)),
+      writeGlobalSettings: (settings: AgentGlobalSettings) => {
+        globalSettings = settings;
+        return Promise.resolve(settings);
+      },
       writeProjectDefaults: (projectId: string, settings: AgentProjectDefaults) => {
         const defaults = {
           model: settings.model,

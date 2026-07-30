@@ -220,21 +220,21 @@ apps/web/src/shared/ai-elements/
 /
 /p/:projectId
 /p/:projectId/t/:taskId
-/settings
 ```
 
 路由职责：
 
-| 路由                      | 页面职责                                      |
-| ------------------------- | --------------------------------------------- |
-| `/`                       | 检查 Runtime 和最近 Project，并进入工作台     |
-| `/p/:projectId`           | 唯一工作台的 Project 空任务状态               |
-| `/p/:projectId/t/:taskId` | 唯一工作台，显示选中 Task 和 Composer         |
-| `/settings`               | 模型、Reasoning、Sandbox、Approval 和外观设置 |
+| 路由                      | 页面职责                                  |
+| ------------------------- | ----------------------------------------- |
+| `/`                       | 检查 Runtime 和最近 Project，并进入工作台 |
+| `/p/:projectId`           | 唯一工作台的 Project 空任务状态           |
+| `/p/:projectId/t/:taskId` | 唯一工作台，显示选中 Task 和 Composer     |
 
 Project 和 Task ID 必须来自 Server，URL 只表示导航意图，不能代替权限校验。
 
 Project 不使用独立页面。用户在工作台左栏通过目录选择器添加本地文件夹，文件夹名作为 Project 名称；本地 Runtime 校验真实路径并由 Server 持久化，Web 只通过 Client API 读取和注册 Project，不直接访问数据库。
+
+左栏 Settings 使用原生 Dialog 在当前工作台内打开，不产生路由跳转。弹窗使用 AI Elements Select 修改全局审批、工作区、模型、思考量与默认打开应用；关闭后焦点返回左栏入口。
 
 Project 名称行短按继续展开或收起 Task；指针移动超过点击容差后立即判定为拖拽并调整 Projects 顺序，不设置固定长按等待。释放时通过 Client 提交当前完整 Project ID 顺序，刷新页面和重启 Runtime 后保持；键盘聚焦名称行后可用 `Alt + ArrowUp/ArrowDown` 完成同样操作。
 
@@ -440,8 +440,8 @@ Store 规则：
 - 未选中 Task Store 按 LRU 回收；最后一个消费者释放时从 Project Runtime 注销并尝试释放 Provider Task，重新选中时先用 Server Snapshot 校准。
 - 同一 Project 的 Sidebar、当前 Task 和子代理详情复用一条 Event Stream；Project Runtime 按 `taskId` 把事件扇出到对应 Store。
 - Store 不负责持久化，刷新后以 Server Snapshot 为准。
-- Project 新 Task 默认设置由 TanStack Query 管理；已有 Task 的有效设置随 Task Snapshot 返回，避免打开 Task 后重复读取。
-- 设置控件只在用户事件中提交完整对象；Project defaults 和 Task settings 使用独立串行 Mutation，成功后更新对应 Query 缓存。
+- Global settings 与 Project 新 Task 默认设置由 TanStack Query 管理；已有 Task 的有效设置随 Task Snapshot 返回，避免打开 Task 后重复读取。
+- 设置控件只在用户事件中提交完整对象；Global settings、Project defaults 和 Task settings 使用独立串行 Mutation，成功后更新对应 Query 缓存。有效设置固定按 `Task > Project > Global` 解析，读取推导值不得创建局部持久化记录。
 
 当前实现补充：
 
@@ -687,7 +687,7 @@ PromptInputMessage
 
 MVP 附件仅接受 `image/gif`、`image/jpeg`、`image/png` 和 `image/webp`，单文件最大 `2 MiB`，一次最多 `4` 个。预览使用短生命周期 Blob URL；删除、提交成功和组件卸载时立即释放。Server Store 同时限制条目数、总字节数和 TTL，Turn 成功后消费引用。
 
-模型选择通过 `GET /v1/models` 读取真实 Provider 目录并优先选择 `isDefault`。思考量紧邻模型，只展示所选模型的 `supportedReasoningEfforts`，无有效选择时使用 `defaultReasoningEffort`。Project 新 Task 默认值通过原子 `PUT /v1/projects/:projectId/defaults` 保存模型、思考量与沙盒模式；审批固定从 `approvalPolicy: "on-request"` 和 `approvalsReviewer: "user"` 开始。已有 Task 的审批策略、审核方、模型、思考量与沙盒模式通过原子 `PUT /v1/projects/:projectId/tasks/:taskId/settings` 保存完整对象。
+模型选择通过 `GET /v1/models` 读取真实 Provider 目录并优先选择 `isDefault`。思考量紧邻模型，只展示所选模型的 `supportedReasoningEfforts`，无有效选择时使用 `defaultReasoningEffort`。全局默认通过原子 `PUT /v1/settings` 保存审批、审核方、模型、思考量、沙盒模式与默认打开应用；Project 默认通过原子 `PUT /v1/projects/:projectId/defaults` 保存模型、思考量与沙盒模式；已有 Task 通过原子 `PUT /v1/projects/:projectId/tasks/:taskId/settings` 保存完整设置。新 Task 创建时按 `Task > Project > Global` 固化当时的有效值，全局修改不得改写已有 Project 或 Task 记录。
 
 审批策略使用统一协议的 `untrusted`、`on-request` 和 `never`，审批审核方使用 `user` 和 `auto_review`。批准模式 Select 展示“仅不受信任操作”“按需审批”“自动审批”和“从不询问”；其中“自动审批”映射为 `on-request + auto_review`，其余选项映射为对应策略与 `user`。`POST /turns` 发送完整 `AgentTurnOptions`，Server 在调用 Provider 前重新校验并 upsert Task 设置。`allow_for_session` 和 Pending Approval 属于当前 Runtime，不进入长期设置。
 

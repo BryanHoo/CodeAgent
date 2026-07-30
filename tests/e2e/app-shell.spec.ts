@@ -46,6 +46,16 @@ function parseTaskSettingsRequest(requestBody: string | null) {
   return { approvalPolicy, approvalsReviewer, model, reasoningEffort, sandboxMode };
 }
 
+function parseGlobalSettingsRequest(requestBody: string | null) {
+  const settings = parseTaskSettingsRequest(requestBody);
+  const value = parseRequestRecord(requestBody);
+  const defaultOpenAppId = value["defaultOpenAppId"];
+  if (defaultOpenAppId !== null && typeof defaultOpenAppId !== "string") {
+    throw new Error("Invalid global settings request");
+  }
+  return { ...settings, defaultOpenAppId };
+}
+
 function parseProjectOrderRequest(requestBody: string | null): readonly string[] {
   const value = parseRequestRecord(requestBody);
   const projectIds = value["projectIds"];
@@ -276,6 +286,14 @@ test.beforeEach(async ({ page }) => {
     ["code-agent:task-1", taskSnapshot.settings],
     ["code-agent:task-2", taskSnapshot.settings],
   ]);
+  let globalSettings = {
+    approvalPolicy: "on-request",
+    approvalsReviewer: "user",
+    defaultOpenAppId: "zed" as string | null,
+    model: "gpt-5.6-sol",
+    reasoningEffort: "high",
+    sandboxMode: "workspace-write",
+  };
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const defaultsMatch = /^\/v1\/projects\/([^/]+)\/defaults$/u.exec(url.pathname);
@@ -297,6 +315,11 @@ test.beforeEach(async ({ page }) => {
       };
     } else if (url.pathname === "/v1/models") {
       body = { data: models, nextCursor: null };
+    } else if (url.pathname === "/v1/settings") {
+      if (route.request().method() === "PUT") {
+        globalSettings = parseGlobalSettingsRequest(route.request().postData());
+      }
+      body = { settings: globalSettings };
     } else if (/^\/v1\/projects\/[^/]+\/skills$/u.test(url.pathname)) {
       body = { data: skills, nextCursor: null };
     } else if (/^\/v1\/projects\/[^/]+\/open-capabilities$/u.test(url.pathname)) {
@@ -459,6 +482,55 @@ test("redirects the root route to the default project workbench", async ({ page 
   await expect(page.getByRole("main", { name: "Task Timeline" })).toBeVisible();
 });
 
+test("edits global defaults in a dialog without overriding task settings", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+  const workbenchUrl = page.url();
+  const taskModel = page.getByRole("combobox", { name: "选择模型" });
+  const taskApproval = page.getByRole("combobox", { name: "批准模式" });
+  await expect(taskModel).toHaveValue("gpt-5.6-sol");
+  await expect(taskApproval).toHaveValue("on-request");
+
+  await page.getByRole("button", { name: /设置，终端连接状态/u }).click();
+  const dialog = page.getByRole("dialog", { name: "全局设置" });
+  await expect(dialog).toBeVisible();
+  await expect(page).toHaveURL(workbenchUrl);
+
+  await dialog.getByRole("combobox", { name: "审批" }).selectOption("never");
+  await dialog.getByRole("combobox", { name: "工作区" }).selectOption("danger-full-access");
+  await dialog.getByRole("combobox", { name: "模型" }).selectOption("gpt-5.6-terra");
+  await expect(dialog.getByRole("combobox", { name: "思考" })).toHaveValue("medium");
+  await dialog.getByRole("combobox", { name: "默认打开方式" }).selectOption("finder");
+  await dialog.getByRole("button", { name: "保存全局默认" }).click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(workbenchUrl);
+  await expect(taskModel).toHaveValue("gpt-5.6-sol");
+  await expect(taskApproval).toHaveValue("on-request");
+  await expect(page.getByRole("button", { name: "在 Finder 中打开" })).toBeVisible();
+
+  await page.getByRole("button", { name: /设置，终端连接状态/u }).click();
+  const reopenedDialog = page.getByRole("dialog", { name: "全局设置" });
+  await expect(reopenedDialog.getByRole("combobox", { name: "审批" })).toHaveValue("never");
+  await expect(reopenedDialog.getByRole("combobox", { name: "工作区" })).toHaveValue(
+    "danger-full-access",
+  );
+  await expect(reopenedDialog.getByRole("combobox", { name: "模型" })).toHaveValue("gpt-5.6-terra");
+  await expect(reopenedDialog.getByRole("combobox", { name: "默认打开方式" })).toHaveValue(
+    "finder",
+  );
+
+  await page.setViewportSize({ height: 844, width: 390 });
+  const dialogBounds = await reopenedDialog.boundingBox();
+  expect(dialogBounds).not.toBeNull();
+  expect(dialogBounds?.x ?? -1).toBeGreaterThanOrEqual(0);
+  expect(dialogBounds?.y ?? -1).toBeGreaterThanOrEqual(0);
+  expect((dialogBounds?.x ?? 0) + (dialogBounds?.width ?? 0)).toBeLessThanOrEqual(390);
+  expect((dialogBounds?.y ?? 0) + (dialogBounds?.height ?? 0)).toBeLessThanOrEqual(844);
+  expect(
+    await reopenedDialog.evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBe(true);
+});
+
 test("project open split control selects, opens, and restores a host app", async ({ page }) => {
   await page.route("**/v1/projects/code-agent/open-capabilities", async (route) => {
     await route.fulfill({
@@ -570,7 +642,6 @@ test("exposes the documented navigation routes", async ({ page }) => {
   const routes = [
     { path: "/p/code-agent", heading: "CodeAgent" },
     { path: "/p/code-agent/t/task-1", heading: "构建 macOS 工作台" },
-    { path: "/settings", heading: "设置" },
   ];
 
   for (const route of routes) {
@@ -712,12 +783,6 @@ test("uses subtle hairline separation across registered routes", async ({ page }
       selector: "main header",
       border: "borderBottomWidth",
       offset: "0px 1px 0px 0px",
-    },
-    {
-      path: "/settings",
-      selector: "aside",
-      border: "borderRightWidth",
-      offset: "1px 0px 0px 0px",
     },
   ] as const;
 
@@ -3061,6 +3126,8 @@ test("toggles project tasks from the project name without navigation", async ({ 
 });
 
 test("loads one project task page only after showing more", async ({ page }) => {
+  // 隔离并行用例的实时广播，只验证用户触发的 Cursor 分页请求。
+  await page.routeWebSocket("**/v1/projects/code-agent/events?*", () => undefined);
   const taskListRequests: URL[] = [];
   page.on("request", (request) => {
     const requestUrl = new URL(request.url());

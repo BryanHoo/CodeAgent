@@ -7,13 +7,13 @@
 ## Rules
 
 - 每个组件只承担一个可描述的界面职责，紧凑工作台界面避免装饰性嵌套卡片。
-- 工作台的项目打开控件使用分段按钮：左侧不显示图标，只显示“在 <应用名称> 中打开”并执行当前选择；右侧 `ChevronDown` 只负责打开应用菜单，hover 不得自动展开。菜单项只能来自 Server 返回的当前宿主应用目录，选择按 Project 写入版本化浏览器偏好，并支持 ArrowDown、Escape、焦点离开和外部点击。
+- 工作台的项目打开控件使用分段按钮：左侧不显示图标，只显示“在 <应用名称> 中打开”并执行当前选择；右侧 `ChevronDown` 只负责打开应用菜单，hover 不得自动展开。菜单项只能来自 Server 返回的当前宿主应用目录，选择按 Project 写入版本化浏览器偏好，并支持 ArrowDown、Escape、焦点离开和外部点击；Project 没有本地偏好时依次使用全局默认和首个可用应用。
 - Web 不提供登录路由或账号控件；Provider 资源不可用时展示 `codex login` 指引和 Query 重试操作，不调用账号接口。
 - `shared/ai-elements` 以官方 AI Elements 组件源码和公开 API 为实现基线，只改造样式、基础控件适配与本地化文案以使用本项目设计 Token；不得用功能不完整的自研组件替代官方能力。
 - Task Timeline 不展示原生 Reasoning Item 或 Chain of Thought；Codex Commentary 与 Final Answer 都作为普通 Assistant Message，通过 `MessageResponse` 实时流式展示。Command、Tool 等结构化 Item 保持独立可见，不包裹进思考容器。新聊天首次提交开始后必须立即显示通用运行状态，不等待 `startTurn` 返回；运行中的 AI 回复必须在回复最后一行始终使用 AI Elements `Shimmer` 表达持续生成状态。存在运行中的 Command、Tool、Activity 或流式 Plan 时，在“正在运行”后直接追加 Codex Item 的原始操作名称，其中 Command 同时显示终端图标，不得解析 `commandActions` 生成映射文案；快速操作已完成但 Turn 仍在运行时继续以 Shimmer 显示最近原始操作，不切换成完成文案；没有结构化操作时回退为通用运行状态，并在 Turn 结束后移除。原始操作名称变化时只能更新 Shimmer 文本，必须保留同一 DOM 与动画时间轴，不得按文案长度改写扫光参数。
 - Composer 使用 AI Elements `PromptInput`、`Attachments` 和组合式工具栏，支持点击、拖放、粘贴、预览与移除图片；草稿输入与附件选择是本地操作，在实时连接恢复期间仍保持可用，仅在正在提交时锁定，提交和设置等网络控件继续暂停；模型来自 Server Query，审批策略、审批审核方、沙盒模式、模型和思考量随同一个 Turn 请求提交，不保留禁用占位控件。
 - Composer 文本草稿必须在 Runtime 重渲染期间保留浏览器的 IME 组合缓冲，不能通过受控内容回写覆盖尚未触发 `input` 的临时文本；已有 Task 之间切换时必须复用同一个编辑区域 DOM 节点，并按 `projectId + taskId` 分别保存和恢复草稿、附件及 Skills，新聊天使用 Project 独立草稿；Task Snapshot 加载产生的 `connecting` 或 `reconnecting` 状态不得把该节点设为不可编辑，不能通过父级重挂载或短暂禁用破坏原生输入法上下文；程序化清空或替换草稿时仍需同步真实编辑区域，并使用 `compositionstart` 后触发重渲染及切换 Task 的 Playwright 用例覆盖中文首键。
-- Composer 在已有 Task 中使用 Snapshot 携带的完整设置，在新聊天中使用 Project 默认模型、思考量与沙盒模式并固定以 `approvalPolicy: "on-request"`、`approvalsReviewer: "user"` 初始化审批；沙盒选择紧邻审批并提供只读、工作区可写和完全访问；设置只由用户事件触发完整对象 Mutation，不得通过 effect 写回或从其他 Task 继承审批。
+- Composer 在已有 Task 中使用 Snapshot 携带的完整设置，在新聊天中按 Project 显式默认优先、Global 默认回退初始化完整设置；沙盒选择紧邻审批并提供只读、工作区可写和完全访问；设置只由用户事件触发完整对象 Mutation，不得通过 effect 写回或从其他 Task 继承审批。
 - Composer 在文本开头或空白字符后的 `/` 输入使用 AI Elements `PromptInputCommand*` 在输入框外部向上浮出分组列表，连续正文字符后的 `/` 仅作为普通字符；不得把列表嵌入 PromptInput 表面。列表先固定提供代码审查、初始化、副任务、压缩、反馈和在新任务中继续，再在命令组下方展示当前 Project 由 Server 返回的可用 Skills，并支持鼠标、上下方向键、Enter、Escape、点击输入框与列表之外区域关闭，以及明确的 listbox/option 语义。Skill 描述固定为单行省略；键盘高亮移动到滚动区域外时必须自动滚动到可见位置。每次选择 Skill 只替换当前 Slash 片段并保留已有正文，允许在正文任意位置插入多个有序 Token；Token 使用 `skill` 主题色和展示名，内部值与复制文本固定序列化为 `$<skill.name>`，可点击或使用邻接删除键移除。提交按 Token 顺序携带结构化不透明引用，不把 `$name` 拼接进普通正文，也不得接触原生路径。代码审查先选择未提交更改或基础分支，基础分支列表必须来自当前 Project 的真实 Git 状态；代码审查、压缩、反馈和续接必须调用对应 Provider 能力；新聊天中的代码审查先创建空 Task，再直接启动 Review，不能伪造用户消息或普通 Turn；初始化与副任务复用正常 Turn 提交链路。
 - Composer 的批准模式、模型和思考量选择隐藏原生箭头并按当前文字收缩；批准模式中的“自动审批”必须映射为 `on-request + auto_review`，切换到其他模式必须恢复 `approvalsReviewer: "user"`，不得把 `never` 当作自动审批；思考量选项直接显示“低”“中”“高”等等级，不重复显示“思考量”前缀；思考量紧邻模型；任一内部控件聚焦时只由 Composer 整体显示主色边框，内部控件不重复显示主色焦点轮廓；分支/路径行最右使用圆环按钮表达真实上下文占比，悬停或键盘聚焦后通过 Tooltip 展示百分比和已用/总 Token 数。
 - 工作台左栏先展示产品标识与名称，浏览器 favicon 必须与左栏 `CA` 方块标识保持相同的尺寸比例、圆角、字体和深浅主题配色；再按常显搜索框、“新建任务”、可选 `Pinned`、`Projects` 排列；没有固定 Task 时不渲染 `Pinned` 区域。
@@ -24,6 +24,7 @@
 - 浏览器获得系统通知权限后，仅当页面隐藏或浏览器窗口失焦时，Task 完成、不可恢复中断或错误、等待审批及等待用户输入才发送系统通知；通知标题必须包含来自 Snapshot 或 Project Task Query 的最新 Task 名称，不能展示原生 Task ID。点击通知聚焦页面并进入对应 Task。首次 Prompt、Review 或 Compact 启动时在当前用户手势内申请权限，权限不可用不得阻断 Task 操作。
 - `Projects` 标题右侧使用可访问的 `+` 图标触发宿主系统目录选择器；添加成功后刷新项目树并进入新 Project，取消选择保持当前界面，项目列表为空时不得伪造默认 Project。
 - 左栏 Settings 旁的连接状态必须反映真实 Runtime：活动 Task 使用其实时事件连接状态，新建 Task 页面使用 HTTP Runtime 的加载、可用和失败状态；不得硬编码在线或离线文案。
+- 左栏 Settings 必须使用按钮在当前工作台打开可访问的原生 Dialog，不注册独立设置路由。弹窗使用 AI Elements `PromptInputSelect` 修改全局审批、工作区、模型、思考量和默认打开应用，支持加载、失败重试、原子保存、Escape、backdrop 与关闭后焦点恢复。
 - Project 名称只切换任务树的展开状态；名称右侧使用可访问的 `+` 图标进入该 Project 的“新聊天”草稿，顶部“新建任务”始终进入第一个 Project 的草稿，目标草稿已打开时直接复用。
 - 新聊天草稿在首次 Prompt 提交或代码审查命令执行前不得创建 Codex Task；空 Timeline 的 Project 名称直接渲染为原生 Project 选择器，首次点击必须打开选项列表，切换 Project 时保存当前 Project 草稿并恢复目标 Project 草稿，首次提交后再创建 Task 并由 Codex 返回的名称替换“新聊天”。
 - 通过显式 Props 或专用 Hook 获取数据，不从组件内部访问 Server 或 Provider。

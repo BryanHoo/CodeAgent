@@ -8,6 +8,7 @@ import {
 } from "@code-agent/core";
 import type {
   AgentBackgroundTerminalPage,
+  AgentGlobalSettings,
   AgentModelPage,
   AgentProjectDefaults,
   AgentTaskSettings,
@@ -258,6 +259,9 @@ function createTaskMetadataRepository() {
 }
 
 function createSettingsRepository() {
+  const readGlobalSettings = vi.fn(() =>
+    Promise.resolve<AgentGlobalSettings | undefined>(undefined),
+  );
   const readProjectDefaults = vi.fn(() =>
     Promise.resolve<AgentProjectDefaults | undefined>(undefined),
   );
@@ -265,18 +269,23 @@ function createSettingsRepository() {
   const writeProjectDefaults = vi.fn((_projectId: string, settings: AgentProjectDefaults) =>
     Promise.resolve(settings),
   );
+  const writeGlobalSettings = vi.fn((_settings: AgentGlobalSettings) => Promise.resolve(_settings));
   const writeTaskSettings = vi.fn(
     (_projectId: string, _taskId: string, settings: AgentTaskSettings) => Promise.resolve(settings),
   );
   return {
+    readGlobalSettings,
     readProjectDefaults,
     readTaskSettings,
     repository: {
+      readGlobalSettings,
       readProjectDefaults,
       readTaskSettings,
+      writeGlobalSettings,
       writeProjectDefaults,
       writeTaskSettings,
     },
+    writeGlobalSettings,
     writeProjectDefaults,
     writeTaskSettings,
   };
@@ -848,7 +857,7 @@ describe("CodeAgent Server", () => {
     expect(typeof body.checkpoint.sessionId).toBe("string");
     expect(body.snapshot).toEqual({
       ...snapshot,
-      settings: { ...turnOptions, sandboxMode: "read-only" },
+      settings: { ...turnOptions, sandboxMode: "workspace-write" },
     });
   });
 
@@ -1059,12 +1068,12 @@ describe("CodeAgent Server", () => {
         sandboxMode: "workspace-write",
       },
     });
-    expect(writeProjectDefaults).toHaveBeenCalledWith("code-agent", {
+    expect(writeProjectDefaults).not.toHaveBeenCalledWith("code-agent", {
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
       sandboxMode: "read-only",
     });
-    expect(writeTaskSettings).toHaveBeenCalledWith("code-agent", "task-1", {
+    expect(writeTaskSettings).not.toHaveBeenCalledWith("code-agent", "task-1", {
       approvalPolicy: "never",
       approvalsReviewer: "user",
       model: "gpt-5.6-sol",
@@ -1073,9 +1082,87 @@ describe("CodeAgent Server", () => {
     });
   });
 
-  it("starts new tasks with on-request and persists turn settings before Provider calls", async () => {
-    const { app, readProjectDefaults, readTaskSettings, startTask, startTurn, writeTaskSettings } =
-      await createHarness();
+  it("uses global settings only when project and task settings are absent", async () => {
+    const {
+      app,
+      readGlobalSettings,
+      readProjectDefaults,
+      readTaskSettings,
+      writeGlobalSettings,
+      writeProjectDefaults,
+      writeTaskSettings,
+    } = await createHarness();
+    const globalSettings = {
+      approvalPolicy: "on-request" as const,
+      approvalsReviewer: "auto_review" as const,
+      defaultOpenAppId: "visual-studio-code" as const,
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "danger-full-access" as const,
+    };
+    readGlobalSettings.mockResolvedValue(globalSettings);
+    readProjectDefaults.mockResolvedValue(undefined);
+    readTaskSettings.mockResolvedValue(undefined);
+
+    const globalResponse = await app.inject({ method: "GET", url: "/v1/settings" });
+    const projectResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/defaults",
+    });
+    const taskResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/task-1",
+    });
+    const updatedResponse = await app.inject({
+      headers: { "idempotency-key": "global-settings" },
+      method: "PUT",
+      payload: globalSettings,
+      url: "/v1/settings",
+    });
+
+    expect(globalResponse.json()).toEqual({ settings: globalSettings });
+    expect(projectResponse.json()).toEqual({
+      settings: {
+        model: globalSettings.model,
+        reasoningEffort: globalSettings.reasoningEffort,
+        sandboxMode: globalSettings.sandboxMode,
+      },
+    });
+    expect(taskResponse.json()).toMatchObject({
+      snapshot: {
+        settings: {
+          approvalPolicy: "on-request",
+          approvalsReviewer: "auto_review",
+          model: globalSettings.model,
+          reasoningEffort: globalSettings.reasoningEffort,
+          sandboxMode: globalSettings.sandboxMode,
+        },
+      },
+    });
+    expect(updatedResponse.json()).toEqual({ settings: globalSettings });
+    expect(writeGlobalSettings).toHaveBeenCalledWith(globalSettings);
+    expect(writeProjectDefaults).not.toHaveBeenCalled();
+    expect(writeTaskSettings).not.toHaveBeenCalled();
+  });
+
+  it("starts new tasks with global approval and persists turn settings before Provider calls", async () => {
+    const {
+      app,
+      readGlobalSettings,
+      readProjectDefaults,
+      readTaskSettings,
+      startTask,
+      startTurn,
+      writeTaskSettings,
+    } = await createHarness();
+    readGlobalSettings.mockResolvedValue({
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      defaultOpenAppId: null,
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write",
+    });
     readProjectDefaults.mockResolvedValue({
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
@@ -1106,7 +1193,7 @@ describe("CodeAgent Server", () => {
     expect(startTask).toHaveBeenCalledOnce();
     expect(writeTaskSettings).toHaveBeenCalledWith("code-agent", "task-1", {
       approvalPolicy: "on-request",
-      approvalsReviewer: "user",
+      approvalsReviewer: "auto_review",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
       sandboxMode: "read-only",
