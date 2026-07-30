@@ -2514,8 +2514,31 @@ test("shows the latest raw Codex operation throughout a running turn", async ({ 
   await page.getByRole("button", { exact: true, name: "提交" }).click();
 
   await expect(page.getByText("正在运行 rg --files", { exact: true })).toBeVisible();
-  await expect(page.getByText("已完成", { exact: true })).toBeVisible();
-  await expect(page.getByText("正在运行 rg --files", { exact: true })).toBeVisible();
+  const runningShimmer = page.locator('[data-ai-shimmer][aria-label^="AI 回复正在运行"]');
+  const initialShimmer = await runningShimmer.elementHandle();
+  if (initialShimmer === null) {
+    throw new Error("未找到运行态 Shimmer");
+  }
+  const initialAnimation = await runningShimmer.evaluate((node) => ({
+    currentTime: Number(node.getAnimations()[0]?.currentTime ?? 0),
+    spread: node.style.getPropertyValue("--ui-shimmer-spread"),
+    startTime: Number(node.getAnimations()[0]?.startTime ?? 0),
+  }));
+
+  await expect(page.getByText("正在运行 fast-context/search", { exact: true })).toBeVisible();
+  const retainedShimmer = await runningShimmer.evaluate(
+    (node, initialNode) => node === initialNode,
+    initialShimmer,
+  );
+  const updatedAnimation = await runningShimmer.evaluate((node) => ({
+    currentTime: Number(node.getAnimations()[0]?.currentTime ?? 0),
+    spread: node.style.getPropertyValue("--ui-shimmer-spread"),
+    startTime: Number(node.getAnimations()[0]?.startTime ?? 0),
+  }));
+  expect(retainedShimmer).toBe(true);
+  expect(updatedAnimation.spread).toBe(initialAnimation.spread);
+  expect(updatedAnimation.startTime).toBe(initialAnimation.startTime);
+  expect(updatedAnimation.currentTime).toBeGreaterThan(initialAnimation.currentTime);
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
 });
 

@@ -268,6 +268,16 @@ function scheduleOperationStatusTurn(threadId, turnId) {
     status: "inProgress",
     type: "commandExecution",
   };
+  const runningTool = {
+    arguments: { query: "live shimmer continuity" },
+    error: null,
+    id: `${turnId}-status-tool`,
+    result: null,
+    server: "fast-context",
+    status: "inProgress",
+    tool: "search",
+    type: "mcpToolCall",
+  };
 
   setTimeout(() => {
     const thread = actionThreads.get(threadId);
@@ -328,7 +338,63 @@ function scheduleOperationStatusTurn(threadId, turnId) {
     });
   }, 700);
 
-  setTimeout(() => completeActionTurn(threadId, turnId), 1_400);
+  setTimeout(() => {
+    const thread = actionThreads.get(threadId);
+    const runningTurn = thread?.turns.find((turn) => turn.id === turnId);
+    if (thread === undefined || runningTurn === undefined) {
+      return;
+    }
+    actionThreads.set(
+      threadId,
+      actionThread(
+        threadId,
+        thread.turns.map((turn) =>
+          turn.id === turnId
+            ? { ...runningTurn, items: [...runningTurn.items, runningTool] }
+            : turn,
+        ),
+      ),
+    );
+    send({
+      method: "item/started",
+      params: { item: runningTool, threadId, turnId },
+    });
+  }, 1_100);
+
+  setTimeout(() => {
+    const thread = actionThreads.get(threadId);
+    const runningTurn = thread?.turns.find((turn) => turn.id === turnId);
+    if (thread === undefined || runningTurn === undefined) {
+      return;
+    }
+    const completedTool = {
+      ...runningTool,
+      result: { matches: [] },
+      status: "completed",
+    };
+    actionThreads.set(
+      threadId,
+      actionThread(
+        threadId,
+        thread.turns.map((turn) =>
+          turn.id === turnId
+            ? {
+                ...runningTurn,
+                items: runningTurn.items.map((item) =>
+                  item.id === completedTool.id ? completedTool : item,
+                ),
+              }
+            : turn,
+        ),
+      ),
+    );
+    send({
+      method: "item/completed",
+      params: { item: completedTool, threadId, turnId },
+    });
+  }, 1_500);
+
+  setTimeout(() => completeActionTurn(threadId, turnId), 1_900);
 }
 
 function scheduleRealtimeEvents() {
