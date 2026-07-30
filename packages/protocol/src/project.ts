@@ -27,6 +27,80 @@ export const AddProjectResponseSchema = Type.Object(
 
 export type AddProjectResponse = Readonly<Static<typeof AddProjectResponseSchema>>;
 
+export const ProjectOpenAppIdSchema = Type.Union([
+  Type.Literal("visual-studio-code"),
+  Type.Literal("zed"),
+  Type.Literal("windsurf"),
+  Type.Literal("finder"),
+  Type.Literal("terminal"),
+  Type.Literal("ghostty"),
+  Type.Literal("xcode"),
+  Type.Literal("android-studio"),
+  Type.Literal("file-manager"),
+  Type.Literal("gnome-terminal"),
+  Type.Literal("konsole"),
+  Type.Literal("xfce-terminal"),
+  Type.Literal("explorer"),
+  Type.Literal("windows-terminal"),
+  Type.Literal("command-prompt"),
+]);
+
+export type ProjectOpenAppId = Static<typeof ProjectOpenAppIdSchema>;
+
+export const ProjectOpenAppKindSchema = Type.Union([
+  Type.Literal("editor"),
+  Type.Literal("file-manager"),
+  Type.Literal("terminal"),
+  Type.Literal("tool"),
+]);
+
+export type ProjectOpenAppKind = Static<typeof ProjectOpenAppKindSchema>;
+
+export const ProjectOpenAppSchema = Type.Object(
+  {
+    id: ProjectOpenAppIdSchema,
+    kind: ProjectOpenAppKindSchema,
+    name: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectOpenApp = Readonly<Static<typeof ProjectOpenAppSchema>>;
+
+export const ProjectOpenPlatformSchema = Type.Union([
+  Type.Literal("darwin"),
+  Type.Literal("linux"),
+  Type.Literal("win32"),
+]);
+
+export type ProjectOpenPlatform = Static<typeof ProjectOpenPlatformSchema>;
+
+export const ProjectOpenCapabilitiesResponseSchema = Type.Object(
+  {
+    apps: Type.Array(ProjectOpenAppSchema, { uniqueItems: true }),
+    platform: ProjectOpenPlatformSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectOpenCapabilitiesResponse = Readonly<
+  Static<typeof ProjectOpenCapabilitiesResponseSchema>
+>;
+
+export const OpenProjectRequestSchema = Type.Object(
+  { appId: ProjectOpenAppIdSchema },
+  { additionalProperties: false },
+);
+
+export type OpenProjectRequest = Readonly<Static<typeof OpenProjectRequestSchema>>;
+
+export const OpenProjectResponseSchema = Type.Object(
+  { appId: ProjectOpenAppIdSchema },
+  { additionalProperties: false },
+);
+
+export type OpenProjectResponse = Readonly<Static<typeof OpenProjectResponseSchema>>;
+
 export const ReorderProjectsRequestSchema = Type.Object(
   {
     projectIds: Type.Array(Type.String({ minLength: 1 }), {

@@ -16,9 +16,11 @@ import {
   AgentTaskSettingsResponseSchema,
   HealthResponseSchema,
   ProjectPageSchema,
+  ProjectOpenCapabilitiesResponseSchema,
   ReorderProjectsResponseSchema,
   ProjectGitStatusSchema,
   ProjectSourceFileSchema,
+  OpenProjectResponseSchema,
   PinAgentTaskResponseSchema,
   ReviewAgentTaskResponseSchema,
   RenameAgentTaskResponseSchema,
@@ -51,9 +53,12 @@ import {
   type HealthResponse,
   type InterruptAgentTurnResponse,
   type ProjectPage,
+  type ProjectOpenAppId,
+  type ProjectOpenCapabilitiesResponse,
   type ReorderProjectsResponse,
   type ProjectGitStatus,
   type ProjectSourceFile,
+  type OpenProjectResponse,
   type PinAgentTaskResponse,
   type ReviewAgentTaskRequest,
   type ReviewAgentTaskResponse,
@@ -244,6 +249,30 @@ export class CodeAgentClient {
 
   public async addProject(options: MutationOptions = {}): Promise<AddProjectResponse> {
     return this.#mutation("/v1/projects", {}, AddProjectResponseSchema, options);
+  }
+
+  public async getProjectOpenCapabilities(
+    projectId: string,
+    options: ReadOptions = {},
+  ): Promise<ProjectOpenCapabilitiesResponse> {
+    return this.#read(
+      `${projectPath(projectId)}/open-capabilities`,
+      ProjectOpenCapabilitiesResponseSchema,
+      options,
+    );
+  }
+
+  public async openProject(
+    projectId: string,
+    appId: ProjectOpenAppId,
+    options: MutationOptions = {},
+  ): Promise<OpenProjectResponse> {
+    return this.#mutation(
+      `${projectPath(projectId)}/open`,
+      { appId },
+      OpenProjectResponseSchema,
+      options,
+    );
   }
 
   public async getProjectGitStatus(

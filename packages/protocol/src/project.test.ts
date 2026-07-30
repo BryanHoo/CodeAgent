@@ -32,6 +32,10 @@ import {
   HealthResponseSchema,
   ProjectPageSchema,
   ProjectGitStatusSchema,
+  ProjectOpenAppSchema,
+  ProjectOpenCapabilitiesResponseSchema,
+  OpenProjectRequestSchema,
+  OpenProjectResponseSchema,
   ProjectSourceFileSchema,
   ProjectSchema,
   PinAgentTaskRequestSchema,
@@ -114,6 +118,32 @@ describe("project protocol", () => {
         nextCursor: null,
       }),
     ).toBe(true);
+  });
+
+  it("strictly validates the supported project open app catalog", () => {
+    expect(
+      Value.Check(ProjectOpenCapabilitiesResponseSchema, {
+        apps: [
+          { id: "zed", kind: "editor", name: "Zed" },
+          { id: "finder", kind: "file-manager", name: "Finder" },
+          { id: "ghostty", kind: "terminal", name: "Ghostty" },
+        ],
+        platform: "darwin",
+      }),
+    ).toBe(true);
+    expect(Value.Check(ProjectOpenAppSchema, { id: "zed", kind: "editor" })).toBe(false);
+    expect(Value.Check(OpenProjectRequestSchema, { appId: "zed" })).toBe(true);
+    expect(Value.Check(OpenProjectRequestSchema, { appId: "custom-command" })).toBe(false);
+    expect(Value.Check(OpenProjectRequestSchema, { appId: "finder", path: "/tmp/project" })).toBe(
+      false,
+    );
+    expect(Value.Check(OpenProjectResponseSchema, { appId: "ghostty" })).toBe(true);
+    expect(
+      Value.Check(ProjectOpenCapabilitiesResponseSchema, {
+        platform: "darwin",
+        targets: ["folder", "vscode", "terminal"],
+      }),
+    ).toBe(false);
   });
 
   it("scopes every task to a project and records its pinned state", () => {

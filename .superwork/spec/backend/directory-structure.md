@@ -12,6 +12,7 @@
 
 - Fastify 路由只做 Schema 校验、身份与 Project 校验、用例调用和响应映射。
 - Project Git 状态只通过固定的只读端点暴露，不接受浏览器传入的命令或文件路径；优先读取已配置 Project 根目录并同时返回当前分支和去重的本地/远端基础分支候选，远端默认分支可解析时必须排在首位。根目录不是 Git 仓库时仅聚合其直属子目录中的 Git 仓库，以子目录名作为变更路径前缀，并返回空分支上下文。
+- Project 宿主打开能力只返回固定白名单中的具体应用 ID、名称与类别；浏览器只提交 `projectId` 与应用 ID，Server 必须从 Repository 读取根目录、按宿主实际可执行程序或应用包过滤目录，并使用参数数组和 `shell: false` 启动。
 - Core、Protocol 和 Server 公开使用 Project/Task；Codex 原生 Thread 命名只允许出现在 `provider-codex` 适配边界。
 - 基础设施通过 Core 端口接入，不让同步 SQLite 或子进程细节进入领域层。
 - 每个包只从 `src/index.ts` 暴露公共入口。

@@ -299,6 +299,21 @@ test.beforeEach(async ({ page }) => {
       body = { data: models, nextCursor: null };
     } else if (/^\/v1\/projects\/[^/]+\/skills$/u.test(url.pathname)) {
       body = { data: skills, nextCursor: null };
+    } else if (/^\/v1\/projects\/[^/]+\/open-capabilities$/u.test(url.pathname)) {
+      body = {
+        apps: [
+          { id: "zed", kind: "editor", name: "Zed" },
+          { id: "finder", kind: "file-manager", name: "Finder" },
+          { id: "terminal", kind: "terminal", name: "Terminal" },
+        ],
+        platform: "darwin",
+      };
+    } else if (
+      /^\/v1\/projects\/[^/]+\/open$/u.test(url.pathname) &&
+      route.request().method() === "POST"
+    ) {
+      const request = parseRequestRecord(route.request().postData());
+      body = { appId: request["appId"] };
     } else if (url.pathname === "/v1/projects/order" && route.request().method() === "PUT") {
       const projectIds = parseProjectOrderRequest(route.request().postData());
       routedProjects = projectIds.map((projectId) => {
@@ -442,6 +457,42 @@ test("redirects the root route to the default project workbench", async ({ page 
   await expect(page.getByTestId("app-root")).toBeAttached();
   await expect(page).toHaveURL(/\/p\/code-agent$/);
   await expect(page.getByRole("main", { name: "Task Timeline" })).toBeVisible();
+});
+
+test("project open split control selects, opens, and restores a host app", async ({ page }) => {
+  await page.route("**/v1/projects/code-agent/open-capabilities", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        apps: [
+          { id: "explorer", kind: "file-manager", name: "文件资源管理器" },
+          { id: "zed", kind: "editor", name: "Zed" },
+        ],
+        platform: "win32",
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const menuTrigger = page.getByRole("button", { name: "选择打开方式" });
+  await menuTrigger.hover();
+  await expect(page.getByRole("menu", { name: "项目打开方式" })).toHaveCount(0);
+  await menuTrigger.click();
+  const menu = page.getByRole("menu", { name: "项目打开方式" });
+  await expect(menu).toBeVisible();
+  await menu.getByRole("menuitemradio", { name: "Zed" }).click();
+  const openButton = page.getByRole("button", { name: "在 Zed 中打开" });
+  await expect(openButton).toBeVisible();
+
+  const openRequest = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/v1/projects/code-agent/open") && request.method() === "POST",
+  );
+  await openButton.click();
+  expect(parseRequestRecord((await openRequest).postData())).toEqual({ appId: "zed" });
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "在 Zed 中打开" })).toBeVisible();
 });
 
 test("restores the project folder expansion preference after reload", async ({ page }) => {

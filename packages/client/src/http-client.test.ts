@@ -142,6 +142,35 @@ describe("CodeAgentClient", () => {
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ body: "{}", method: "POST" });
   });
 
+  it("reads available project open targets and opens a selected target", async () => {
+    const capabilities = {
+      apps: [
+        { id: "zed", kind: "editor", name: "Zed" },
+        { id: "finder", kind: "file-manager", name: "Finder" },
+      ],
+      platform: "darwin",
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(capabilities))
+      .mockResolvedValueOnce(jsonResponse({ appId: "zed" }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.getProjectOpenCapabilities("project one")).resolves.toEqual(capabilities);
+    await expect(
+      client.openProject("project one", "zed", { idempotencyKey: "open-project-key" }),
+    ).resolves.toEqual({ appId: "zed" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects/project%20one/open-capabilities");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/v1/projects/project%20one/open");
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      body: JSON.stringify({ appId: "zed" }),
+      method: "POST",
+    });
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("idempotency-key")).toBe(
+      "open-project-key",
+    );
+  });
+
   it("persists and validates a complete project order", async () => {
     const orderedProjects = [
       {

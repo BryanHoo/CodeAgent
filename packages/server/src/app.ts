@@ -37,7 +37,10 @@ import {
   InterruptAgentTurnResponseSchema,
   ProjectPageSchema,
   ProjectGitStatusSchema,
+  ProjectOpenCapabilitiesResponseSchema,
   ProjectSourceFileSchema,
+  OpenProjectRequestSchema,
+  OpenProjectResponseSchema,
   PinAgentTaskRequestSchema,
   PinAgentTaskResponseSchema,
   ReviewAgentTaskRequestSchema,
@@ -73,6 +76,7 @@ import {
   type ForkAgentTaskRequest,
   type Project,
   type ProjectGitStatus,
+  type OpenProjectRequest,
   type ProjectSourceFile,
   type PinAgentTaskRequest,
   type RollbackAgentTurnRequest,
@@ -97,6 +101,11 @@ import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js"
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
 import { readProjectSourceFile } from "./project-source-file.js";
 import {
+  createProjectOpenService,
+  ProjectOpenAppUnavailableError,
+  type ProjectOpenService,
+} from "./project-open.js";
+import {
   prepareTurnFileRollback,
   TurnFileRollbackError,
   type PreparedTurnFileRollback,
@@ -113,6 +122,7 @@ export interface CreateCodeAgentServerOptions {
   modelCatalogCacheMaxBytes?: number;
   modelCatalogCacheTtlMs?: number;
   projectRepository: ProjectRepository;
+  projectOpenService?: ProjectOpenService;
   provider: AgentRuntimeProvider;
   settingsRepository: AgentSettingsRepository;
   taskMetadataRepository: AgentTaskMetadataRepository;
@@ -509,6 +519,7 @@ export async function createCodeAgentServer(
   });
   const readProjectGitStatus = options.readProjectGitStatus ?? readGitWorkingTreeStatus;
   const readSourceFile = options.readProjectSourceFile ?? readProjectSourceFile;
+  const projectOpenService = options.projectOpenService ?? createProjectOpenService();
   const prepareFileRollback = options.prepareTurnFileRollback ?? prepareTurnFileRollback;
   const attachmentStore = new AttachmentStore();
   const capabilities = await options.provider.getCapabilities();
@@ -780,6 +791,70 @@ export async function createCodeAgentServer(
     data: await options.projectRepository.list(),
     nextCursor: null,
   }));
+
+  app.get<{ Params: { projectId: string } }>(
+    "/v1/projects/:projectId/open-capabilities",
+    {
+      schema: {
+        params: ProjectParamsSchema,
+        response: { 200: ProjectOpenCapabilitiesResponseSchema, 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const project = await options.projectRepository.read(request.params.projectId);
+      if (project === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      return projectOpenService.getCapabilities();
+    },
+  );
+
+  app.post<{
+    Body: OpenProjectRequest;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string };
+  }>(
+    "/v1/projects/:projectId/open",
+    {
+      schema: {
+        body: OpenProjectRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectParamsSchema,
+        response: {
+          200: OpenProjectResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        ["open-project", request.params.projectId],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const project = await options.projectRepository.read(request.params.projectId);
+          if (project === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          try {
+            await projectOpenService.open(project.rootPath, request.body.appId);
+          } catch (error) {
+            if (error instanceof ProjectOpenAppUnavailableError) {
+              throw new MutationHttpError(
+                "INVALID_REQUEST",
+                "Project open app is unavailable",
+                409,
+              );
+            }
+            throw new MutationHttpError("PROVIDER_ERROR", "Project could not be opened", 502, true);
+          }
+          return { appId: request.body.appId };
+        },
+      ),
+  );
 
   app.put<{
     Body: ReorderProjectsRequest;

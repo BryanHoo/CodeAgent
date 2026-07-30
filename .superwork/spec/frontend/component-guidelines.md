@@ -7,6 +7,7 @@
 ## Rules
 
 - 每个组件只承担一个可描述的界面职责，紧凑工作台界面避免装饰性嵌套卡片。
+- 工作台的项目打开控件使用分段按钮：左侧不显示图标，只显示“在 <应用名称> 中打开”并执行当前选择；右侧 `ChevronDown` 只负责打开应用菜单，hover 不得自动展开。菜单项只能来自 Server 返回的当前宿主应用目录，选择按 Project 写入版本化浏览器偏好，并支持 ArrowDown、Escape、焦点离开和外部点击。
 - Web 不提供登录路由或账号控件；Provider 资源不可用时展示 `codex login` 指引和 Query 重试操作，不调用账号接口。
 - `shared/ai-elements` 以官方 AI Elements 组件源码和公开 API 为实现基线，只改造样式、基础控件适配与本地化文案以使用本项目设计 Token；不得用功能不完整的自研组件替代官方能力。
 - Task Timeline 不展示原生 Reasoning Item 或 Chain of Thought；Codex Commentary 与 Final Answer 都作为普通 Assistant Message，通过 `MessageResponse` 实时流式展示。Command、Tool 等结构化 Item 保持独立可见，不包裹进思考容器。运行中的 AI 回复必须在回复最后一行使用 AI Elements `Shimmer` 表达持续生成状态；存在运行中的 Command、Tool、Activity 或流式 Plan 时显示当前操作名称，其中 Command 同时显示终端图标；没有结构化操作时回退为通用运行状态，并在 Turn 结束后移除。

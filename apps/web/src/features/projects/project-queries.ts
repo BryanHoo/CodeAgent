@@ -18,6 +18,10 @@ import {
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
 export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
 export type CodeAgentSourceFileClient = Pick<CodeAgentClient, "readProjectSourceFile">;
+export type CodeAgentProjectOpenClient = Pick<
+  CodeAgentClient,
+  "getProjectOpenCapabilities" | "openProject"
+>;
 export type CodeAgentRuntimeClient = Pick<
   CodeAgentClient,
   "readTask" | "subscribeEvents" | "unsubscribeTask"
@@ -54,6 +58,7 @@ export type CodeAgentPendingRequestClient = Pick<CodeAgentClient, "resolvePendin
 export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentBackgroundTerminalClient &
   CodeAgentGitStatusClient &
+  CodeAgentProjectOpenClient &
   CodeAgentRuntimeClient &
   CodeAgentMutationClient &
   CodeAgentRollbackClient &

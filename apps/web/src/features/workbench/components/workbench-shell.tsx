@@ -14,7 +14,7 @@ import type {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Ellipsis, ExternalLink, PanelLeft, PanelRight } from "lucide-react";
+import { Ellipsis, PanelLeft, PanelRight } from "lucide-react";
 
 import { useProjects } from "../../projects/project-context.js";
 import {
@@ -51,6 +51,7 @@ import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
 import { WorkbenchComposer } from "./workbench-composer.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
+import { ProjectOpenMenu } from "./project-open-menu.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
 
 const sidebarOverlayQuery = "(max-width: 760px)";
@@ -411,14 +412,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
-            <button
-              className="hidden h-7 items-center gap-1.5 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover sm:inline-flex"
-              disabled
-              type="button"
-            >
-              <ExternalLink className="size-3.5" aria-hidden="true" />
-              打开位置
-            </button>
+            <ProjectOpenMenu client={client} projectId={projectId} />
             <IconButton label="更多操作" size="small">
               <Ellipsis className="size-3.5" aria-hidden="true" />
             </IconButton>

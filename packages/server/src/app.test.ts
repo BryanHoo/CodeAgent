@@ -517,6 +517,53 @@ describe("CodeAgent Server", () => {
     expect(projectsResponse.json()).toEqual({ data: [project], nextCursor: null });
   });
 
+  it("opens only a registered project through a supported host app idempotently", async () => {
+    const provider = createProvider().provider;
+    const open = vi.fn(() => Promise.resolve());
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, {
+        projectOpenService: {
+          getCapabilities: () =>
+            Promise.resolve({
+              apps: [
+                { id: "zed" as const, kind: "editor" as const, name: "Zed" },
+                { id: "finder" as const, kind: "file-manager" as const, name: "Finder" },
+              ],
+              platform: "darwin" as const,
+            }),
+          open,
+        },
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const capabilitiesResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/open-capabilities",
+    });
+    const request = {
+      headers: { "idempotency-key": "open-project-key" },
+      method: "POST" as const,
+      payload: { appId: "zed" },
+      url: "/v1/projects/code-agent/open",
+    };
+    const firstResponse = await app.inject(request);
+    const repeatedResponse = await app.inject(request);
+
+    expect(capabilitiesResponse.json()).toEqual({
+      apps: [
+        { id: "zed", kind: "editor", name: "Zed" },
+        { id: "finder", kind: "file-manager", name: "Finder" },
+      ],
+      platform: "darwin",
+    });
+    expect(firstResponse.statusCode).toBe(200);
+    expect(firstResponse.json()).toEqual({ appId: "zed" });
+    expect(repeatedResponse.json()).toEqual({ appId: "zed" });
+    expect(open).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledWith("/workspace/CodeAgent", "zed");
+  });
+
   it("validates and persists a complete project order idempotently", async () => {
     const provider = createProvider().provider;
     const secondProject = {
