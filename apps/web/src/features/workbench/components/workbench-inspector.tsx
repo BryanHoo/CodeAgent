@@ -1,16 +1,22 @@
-import type { AgentBackgroundTerminal, ProjectGitStatus } from "@code-agent/protocol";
+import type {
+  AgentBackgroundTerminal,
+  AgentSkill,
+  AgentTaskSettings,
+  AgentTurn,
+  ProjectGitStatus,
+} from "@code-agent/protocol";
 import {
   Bot,
-  Braces,
   FileCode2,
-  GitBranch,
+  FolderRoot,
   HardDrive,
   LoaderCircle,
-  Plus,
+  Paperclip,
+  Sparkles,
   Square,
   SquareTerminal,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { countFileChangeLines, getFileName, type AgentFileChange } from "../../diff/file-change.js";
 import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
@@ -33,10 +39,108 @@ type WorkbenchInspectorProps = Readonly<{
   onOpenSubagent?: (selection: SubagentSelection) => void;
   onTerminateBackgroundTerminal?: (terminalId: string) => Promise<void>;
   projectName: string;
+  projectPath: string;
+  settings: AgentTaskSettings;
+  skills?: readonly AgentSkill[];
   subagents?: readonly SubagentContextEntry[];
+  task?: Readonly<{ turns: readonly AgentTurn[] }>;
   terminalMutationError?: Error | null;
   terminatingTerminalId?: string | null;
 }>;
+
+type InspectorSource = Readonly<{
+  detail: string;
+  id: string;
+  kind: "attachment" | "project" | "skill";
+  name: string;
+}>;
+
+const reasoningEffortLabels: Readonly<Record<string, string>> = {
+  high: "高",
+  low: "低",
+  max: "最大",
+  medium: "中",
+  minimal: "最低",
+  none: "无",
+  xhigh: "较高",
+};
+
+const sandboxModeLabels: Readonly<Record<AgentTaskSettings["sandboxMode"], string>> = {
+  "danger-full-access": "完全访问",
+  "read-only": "只读",
+  "workspace-write": "工作区可写",
+};
+
+function formatApprovalMode(settings: AgentTaskSettings) {
+  if (settings.approvalsReviewer === "auto_review") {
+    return "自动审批";
+  }
+  const labels: Readonly<Record<AgentTaskSettings["approvalPolicy"], string>> = {
+    never: "从不询问",
+    "on-request": "按需审批",
+    untrusted: "仅不受信任操作",
+  };
+  return labels[settings.approvalPolicy];
+}
+
+function collectInspectorSources(
+  projectName: string,
+  projectPath: string,
+  turns: readonly AgentTurn[],
+  skills: readonly AgentSkill[],
+): InspectorSource[] {
+  const sources: InspectorSource[] = [
+    { detail: projectPath, id: `project:${projectPath}`, kind: "project", name: projectName },
+  ];
+  const skillsByName = new Map(skills.map((skill) => [skill.name, skill]));
+  const seenSkills = new Set<string>();
+  const seenAttachments = new Set<string>();
+
+  // 同一来源可能在多个 Turn 中重复出现，Inspector 只保留首次使用位置的稳定条目。
+  for (const turn of turns) {
+    for (const item of turn.items) {
+      if (item.type !== "message" || item.role !== "user") {
+        continue;
+      }
+      for (const skillReference of item.skills ?? []) {
+        if (seenSkills.has(skillReference.name)) {
+          continue;
+        }
+        seenSkills.add(skillReference.name);
+        const skill = skillsByName.get(skillReference.name);
+        sources.push({
+          detail: skill === undefined ? "Skill" : `Skill · ${formatSkillScope(skill.scope)}`,
+          id: `skill:${skillReference.name}`,
+          kind: "skill",
+          name: skill?.displayName ?? skillReference.name,
+        });
+      }
+      for (const attachment of item.attachments ?? []) {
+        if (seenAttachments.has(attachment.id)) {
+          continue;
+        }
+        seenAttachments.add(attachment.id);
+        sources.push({
+          detail: "图片附件",
+          id: `attachment:${attachment.id}`,
+          kind: "attachment",
+          name: attachment.name,
+        });
+      }
+    }
+  }
+  return sources;
+}
+
+function formatSkillScope(scope: AgentSkill["scope"]) {
+  const labels: Readonly<Record<AgentSkill["scope"], string>> = {
+    admin: "管理员",
+    repo: "项目",
+    system: "系统",
+    user: "用户",
+  };
+  return labels[scope];
+}
 
 export function WorkbenchInspector({
   backgroundTerminals = [],
@@ -49,7 +153,11 @@ export function WorkbenchInspector({
   onOpenSubagent = () => undefined,
   onTerminateBackgroundTerminal = () => Promise.resolve(),
   projectName,
+  projectPath,
+  settings,
+  skills = [],
   subagents = [],
+  task,
   terminalMutationError = null,
   terminatingTerminalId = null,
 }: WorkbenchInspectorProps) {
@@ -66,6 +174,13 @@ export function WorkbenchInspector({
     additions += fileStats.additions;
     removals += fileStats.removals;
   }
+  const sources = useMemo(
+    () => collectInspectorSources(projectName, projectPath, task?.turns ?? [], skills),
+    [projectName, projectPath, skills, task?.turns],
+  );
+  const branch =
+    gitStatus?.branch ??
+    (gitStatusPending ? "正在读取" : gitStatusError === null ? "未检出分支" : "不可用");
 
   return (
     <aside
@@ -165,19 +280,22 @@ export function WorkbenchInspector({
               <SubagentSection onOpenSubagent={onOpenSubagent} subagents={subagents} />
             ) : null}
             <InspectorSection icon={<HardDrive className="size-3.5" />} title="环境">
-              <InspectorRow label="运行位置" value="This Mac" />
-              <InspectorRow label="Project" value={projectName} />
-              <InspectorRow icon={<GitBranch className="size-3" />} label="分支" value="main" />
+              <InspectorRow label="模型" value={settings.model} />
+              <InspectorRow
+                label="思考量"
+                value={reasoningEffortLabels[settings.reasoningEffort] ?? settings.reasoningEffort}
+              />
+              <InspectorRow label="审批" value={formatApprovalMode(settings)} />
+              <InspectorRow label="沙盒" value={sandboxModeLabels[settings.sandboxMode]} />
+              <InspectorRow label="工作目录" value={projectPath} />
+              <InspectorRow label="分支" value={branch} />
             </InspectorSection>
-            <InspectorSection icon={<Braces className="size-3.5" />} title="来源">
-              <InspectorRow label="设计系统" value="AI Elements" />
-              <InspectorRow label="规范" value="Web Design" />
-              <button
-                className="mt-1 flex h-7 items-center gap-1.5 text-meta text-muted-foreground hover:text-foreground"
-                type="button"
-              >
-                <Plus className="size-3" aria-hidden="true" /> 添加来源
-              </button>
+            <InspectorSection icon={<FolderRoot className="size-3.5" />} title="来源">
+              <div aria-label="上下文来源" className="space-y-0.5">
+                {sources.map((source) => (
+                  <InspectorSourceRow key={source.id} source={source} />
+                ))}
+              </div>
             </InspectorSection>
           </div>
         )}
@@ -354,7 +472,7 @@ type InspectorSectionProps = Readonly<{
 
 function InspectorSection({ children, icon, title }: InspectorSectionProps) {
   return (
-    <section>
+    <section aria-label={title}>
       <div className="mb-2 flex items-center gap-2 text-xs font-medium text-foreground">
         <span className="text-muted-foreground">{icon}</span>
         {title}
@@ -365,17 +483,50 @@ function InspectorSection({ children, icon, title }: InspectorSectionProps) {
 }
 
 type InspectorRowProps = Readonly<{
-  icon?: React.ReactNode;
   label: string;
   value: string;
 }>;
 
-function InspectorRow({ icon, label, value }: InspectorRowProps) {
+function InspectorRow({ label, value }: InspectorRowProps) {
   return (
     <div className="flex min-h-7 items-center gap-2 rounded-control px-2 text-meta">
-      {icon}
       <span className="text-muted-foreground">{label}</span>
-      <span className="ml-auto max-w-32 truncate font-medium text-foreground">{value}</span>
+      <span
+        className="ml-auto min-w-0 truncate text-right font-medium text-foreground"
+        title={value}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function InspectorSourceRow({ source }: Readonly<{ source: InspectorSource }>) {
+  const icon =
+    source.kind === "project" ? (
+      <FolderRoot aria-hidden="true" className="size-3.5" />
+    ) : source.kind === "skill" ? (
+      <Sparkles aria-hidden="true" className="size-3.5 text-skill" />
+    ) : (
+      <Paperclip aria-hidden="true" className="size-3.5" />
+    );
+  return (
+    <div className="flex min-h-10 items-center gap-2 rounded-control px-2 py-1.5">
+      <span className="shrink-0 text-muted-foreground">{icon}</span>
+      <div className="min-w-0">
+        <p className="truncate text-label font-medium text-foreground" title={source.name}>
+          {source.name}
+        </p>
+        {source.kind === "project" ? (
+          <p className="truncate text-caption text-muted-foreground" title={source.detail}>
+            <span>项目目录</span>
+            <span aria-hidden="true"> · </span>
+            <span>{source.detail}</span>
+          </p>
+        ) : (
+          <p className="truncate text-caption text-muted-foreground">{source.detail}</p>
+        )}
+      </div>
     </div>
   );
 }

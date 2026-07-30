@@ -22,6 +22,14 @@ const gitStatus = {
   ],
 };
 
+const taskSettings = {
+  approvalPolicy: "on-request" as const,
+  approvalsReviewer: "auto_review" as const,
+  model: "gpt-5.6-sol",
+  reasoningEffort: "high",
+  sandboxMode: "workspace-write" as const,
+};
+
 describe("WorkbenchInspector", () => {
   it("keeps running terminals in context with an accessible stop action", () => {
     const markup = renderToStaticMarkup(
@@ -36,6 +44,8 @@ describe("WorkbenchInspector", () => {
         ]}
         onOpenFileDiff={() => undefined}
         projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        settings={taskSettings}
       />,
     );
 
@@ -51,6 +61,8 @@ describe("WorkbenchInspector", () => {
       <WorkbenchInspector
         onOpenFileDiff={() => undefined}
         projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        settings={taskSettings}
         gitStatus={gitStatus}
       />,
     );
@@ -74,6 +86,8 @@ describe("WorkbenchInspector", () => {
         gitStatus={{ ...gitStatus, unstaged: [] }}
         onOpenFileDiff={() => undefined}
         projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        settings={taskSettings}
       />,
     );
 
@@ -84,7 +98,12 @@ describe("WorkbenchInspector", () => {
 
   it("renders an explicit empty state without demo files", () => {
     const markup = renderToStaticMarkup(
-      <WorkbenchInspector onOpenFileDiff={() => undefined} projectName="CodeAgent" />,
+      <WorkbenchInspector
+        onOpenFileDiff={() => undefined}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        settings={taskSettings}
+      />,
     );
 
     expect(markup).toContain("0 个变更");
@@ -98,6 +117,8 @@ describe("WorkbenchInspector", () => {
         onOpenFileDiff={() => undefined}
         onOpenSubagent={() => undefined}
         projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        settings={taskSettings}
         subagents={[
           {
             model: "gpt-5.6-sol",
@@ -127,5 +148,77 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain('data-status="completed"');
     expect(markup).toContain('aria-haspopup="dialog"');
     expect(markup).toContain('aria-label="查看子代理 前端分析 的输出"');
+  });
+
+  it("renders real environment settings and deduplicated task sources", () => {
+    const markup = renderToStaticMarkup(
+      <WorkbenchInspector
+        backgroundTerminals={[
+          {
+            command: "pnpm check",
+            cwd: "/workspace/CodeAgent",
+            id: "terminal-1",
+            itemId: "command-1",
+          },
+        ]}
+        gitStatus={gitStatus}
+        onOpenFileDiff={() => undefined}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        settings={taskSettings}
+        skills={[
+          {
+            description: "Review security-sensitive changes",
+            displayName: "安全审查",
+            id: "skill-security",
+            name: "review-security",
+            scope: "repo",
+          },
+        ]}
+        task={{
+          turns: [
+            {
+              completedAt: "2026-07-30T10:01:00.000Z",
+              error: null,
+              id: "turn-1",
+              items: [
+                {
+                  attachments: [
+                    {
+                      id: "attachment-1",
+                      mediaType: "image/png",
+                      name: "layout.png",
+                      size: 1024,
+                    },
+                  ],
+                  id: "message-1",
+                  role: "user",
+                  skills: [{ name: "review-security" }, { name: "review-security" }],
+                  text: "检查布局",
+                  type: "message",
+                },
+              ],
+              startedAt: "2026-07-30T10:00:00.000Z",
+              status: "completed",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(markup).toContain("gpt-5.6-sol");
+    expect(markup).toContain("高");
+    expect(markup).toContain("自动审批");
+    expect(markup).toContain("工作区可写");
+    expect(markup).toContain("/workspace/CodeAgent");
+    expect(markup).toContain("feat/review");
+    expect(markup).toContain("项目目录");
+    expect(markup).toContain("安全审查");
+    expect(markup.match(/lucide-sparkles/gu)).toHaveLength(1);
+    expect(markup).toContain("layout.png");
+    expect(markup).not.toContain("This Mac");
+    expect(markup).not.toContain("AI Elements");
+    expect(markup).not.toContain("Web Design");
+    expect(markup).not.toContain("添加来源");
   });
 });

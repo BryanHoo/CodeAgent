@@ -279,6 +279,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     approvalsReviewer: "user",
     ...draftDefaults,
   };
+  const inspectorTask = runtime.snapshot ?? startingSnapshot;
+  const inspectorSettings = inspectorTask?.settings ?? draftSettings;
   const updateDraftSettings = async (
     settings: AgentTaskSettings,
     field: keyof AgentTaskSettings,
@@ -517,9 +519,13 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           }
         }}
         projectName={projectName}
+        projectPath={projectPath}
+        settings={inspectorSettings}
+        skills={skillsQuery.data?.data ?? []}
         subagents={subagents}
         terminalMutationError={backgroundTerminals.terminalError}
         terminatingTerminalId={backgroundTerminals.terminatingTerminalId}
+        {...(inspectorTask === undefined ? {} : { task: inspectorTask })}
         {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
       />
       <FileDiffDialog

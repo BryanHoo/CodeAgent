@@ -792,6 +792,27 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
 });
 
+test("renders real environment and sources in inspector", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const inspector = page.getByRole("complementary", { name: "Context Inspector" });
+  await inspector.getByRole("tab", { name: "上下文" }).click();
+  const environment = inspector.getByRole("region", { name: "环境" });
+  const sources = inspector.getByRole("region", { name: "来源" });
+
+  await expect(environment.getByText("gpt-5.6-sol", { exact: true })).toBeVisible();
+  await expect(environment.getByText("高", { exact: true })).toBeVisible();
+  await expect(environment.getByText("按需审批", { exact: true })).toBeVisible();
+  await expect(environment.getByText("工作区可写", { exact: true })).toBeVisible();
+  await expect(environment.getByText("~/Develop/person/CodeAgent", { exact: true })).toBeVisible();
+  await expect(environment.getByText("feat/review-targets", { exact: true })).toBeVisible();
+  await expect(sources.getByText("Security review", { exact: true })).toBeVisible();
+  await expect(sources.getByText("项目目录", { exact: true })).toBeVisible();
+  await expect(inspector.getByText("This Mac", { exact: true })).toHaveCount(0);
+  await expect(inspector.getByText("AI Elements", { exact: true })).toHaveCount(0);
+  await expect(inspector.getByRole("button", { name: "添加来源" })).toHaveCount(0);
+});
+
 test("keeps Projects fixed and manages task actions from the compact tree", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
