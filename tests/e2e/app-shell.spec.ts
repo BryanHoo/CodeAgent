@@ -966,6 +966,67 @@ test("renders real environment and sources in inspector", async ({ page }) => {
   await expect(inspector.getByRole("button", { name: "添加来源" })).toHaveCount(0);
 });
 
+test("renders message images as standalone previews above the text bubble", async ({ page }) => {
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: {
+          ...taskSnapshotResponse.snapshot,
+          turns: taskSnapshot.turns.map((turn) => ({
+            ...turn,
+            items: turn.items.map((item) =>
+              item.id === "message-1"
+                ? {
+                    ...item,
+                    attachments: [
+                      {
+                        id: "history/image-1",
+                        mediaType: "image/png",
+                        name: "diagram.png",
+                        size: 68,
+                      },
+                    ],
+                    skills: [],
+                    text: "阅读并理解项目",
+                  }
+                : item,
+            ),
+          })),
+        },
+      },
+    });
+  });
+  await page.route("**/attachments/history%2Fimage-1", async (route) => {
+    await route.fulfill({
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+      contentType: "image/png",
+    });
+  });
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const userMessage = page.locator('article[data-role="user"]').first();
+  const attachment = userMessage.locator('[data-message-attachment="image"]');
+  const textBubble = userMessage.locator('[data-message-text="true"]');
+  await expect(attachment).toBeVisible();
+  await expect(attachment).toHaveCSS("border-radius", "8px");
+  await expect(attachment).toHaveCSS("height", "160px");
+  await expect(attachment).toHaveCSS("width", "160px");
+  await expect(userMessage.getByText("diagram.png", { exact: true })).toHaveCount(0);
+
+  const attachmentBounds = await attachment.boundingBox();
+  const textBounds = await textBubble.boundingBox();
+  expect(attachmentBounds).not.toBeNull();
+  expect(textBounds).not.toBeNull();
+  expect(attachmentBounds?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(textBounds?.y ?? 0);
+  expect((attachmentBounds?.x ?? 0) + (attachmentBounds?.width ?? 0)).toBeLessThanOrEqual(390);
+});
+
 test("keeps Projects fixed and manages task actions from the compact tree", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 

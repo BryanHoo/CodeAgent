@@ -731,65 +731,72 @@ function TimelineItemContent({
     case "message": {
       const attachments = item.role === "user" ? (item.attachments ?? []) : [];
       const skills = item.role === "user" ? (item.skills ?? []) : [];
-      return (
-        <MessageContent className={item.role === "assistant" ? "w-full" : ""}>
-          {skills.length === 0 && item.text.length === 0 ? null : (
-            <div className={attachments.length === 0 ? "" : "mb-2"}>
-              {skills.length === 0 ? null : (
-                <span className="inline" aria-label="使用的 Skills">
-                  {skills.map((skill) => (
-                    <SkillToken
-                      className="relative top-1 me-1.5 bg-raised px-2 text-body leading-6"
-                      data-message-skill={skill.name}
-                      data-skill-token=""
-                      key={skill.name}
-                      name={skill.name}
-                    />
-                  ))}
-                </span>
-              )}
-              {item.text.length === 0 ? null : (
-                <MessageResponse
-                  className={skills.length === 0 ? "" : "inline [&>p:first-child]:inline"}
-                  onOpenFileReference={onOpenSourceFile}
-                >
-                  {item.text}
-                </MessageResponse>
-              )}
-            </div>
+      const hasTextContent = skills.length > 0 || item.text.length > 0;
+      const messageBody = hasTextContent ? (
+        <div>
+          {skills.length === 0 ? null : (
+            <span className="inline" aria-label="使用的 Skills">
+              {skills.map((skill) => (
+                <SkillToken
+                  className="relative top-1 me-1.5 bg-raised px-2 text-body leading-6"
+                  data-message-skill={skill.name}
+                  data-skill-token=""
+                  key={skill.name}
+                  name={skill.name}
+                />
+              ))}
+            </span>
           )}
+          {item.text.length === 0 ? null : (
+            <MessageResponse
+              className={skills.length === 0 ? "" : "inline [&>p:first-child]:inline"}
+              onOpenFileReference={onOpenSourceFile}
+            >
+              {item.text}
+            </MessageResponse>
+          )}
+        </div>
+      ) : null;
+
+      if (item.role === "assistant") {
+        return <MessageContent className="w-full">{messageBody}</MessageContent>;
+      }
+
+      return (
+        <div className="flex max-w-full flex-col items-end gap-2">
           {attachments.length === 0 ? null : (
-            <div className="flex max-w-full flex-wrap gap-2" aria-label="消息附件">
+            <div className="flex max-w-full flex-wrap justify-end gap-2" aria-label="消息附件">
               {attachments.map((attachment) => {
                 const attachmentUrl = buildTaskAttachmentUrl("", projectId, taskId, attachment.id);
                 return (
                   <a
                     aria-label={`查看图片 ${attachment.name}`}
-                    className="group block w-36 overflow-hidden rounded-control bg-raised text-left shadow-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
+                    className="block size-40 max-w-full overflow-hidden rounded-surface bg-control shadow-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
+                    data-message-attachment="image"
                     href={attachmentUrl}
                     key={attachment.id}
                     rel="noreferrer"
                     target="_blank"
                   >
-                    {/* 历史图片仅在进入可视区时通过 Task 作用域端点读取和解码。 */}
+                    {/* 附件与文本气泡分层；历史图片只在进入可视区时读取和解码。 */}
                     <img
                       alt={attachment.name}
-                      className="aspect-square w-full object-cover"
+                      className="size-full object-cover"
                       decoding="async"
-                      height={144}
+                      height={160}
                       loading="lazy"
                       src={attachmentUrl}
-                      width={144}
+                      width={160}
                     />
-                    <span className="block truncate px-2 py-1.5 text-label text-muted-foreground group-hover:text-foreground">
-                      {attachment.name}
-                    </span>
                   </a>
                 );
               })}
             </div>
           )}
-        </MessageContent>
+          {messageBody === null ? null : (
+            <MessageContent data-message-text="true">{messageBody}</MessageContent>
+          )}
+        </div>
       );
     }
     case "review":

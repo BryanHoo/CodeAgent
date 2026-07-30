@@ -2741,6 +2741,49 @@ describe("CodexAgentProvider", () => {
     }
   });
 
+  it("keeps attachment authorization stable across repeated snapshot reads", async () => {
+    const imageContent = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const imageUrl = `data:image/png;base64,${imageContent.toString("base64")}`;
+    const thread = nativeThread({
+      turns: [
+        {
+          completedAt: 1_753_232_400,
+          error: null,
+          id: "turn-image",
+          items: [
+            {
+              content: [
+                { text: "分析这张图", type: "text" },
+                { name: "diagram.png", type: "image", url: imageUrl },
+              ],
+              id: "message-image",
+              type: "userMessage",
+            },
+          ],
+          startedAt: 1_753_228_800,
+          status: "completed",
+        },
+      ],
+    });
+    const rpc = new FakeRpcClient([{ thread }, { thread }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    const firstSnapshot = await provider.readTask("task-1");
+    const secondSnapshot = await provider.readTask("task-1");
+    const firstItem = firstSnapshot?.turns[0]?.items[0];
+    const secondItem = secondSnapshot?.turns[0]?.items[0];
+    const firstAttachmentId =
+      firstItem?.type === "message" ? firstItem.attachments?.[0]?.id : undefined;
+    const secondAttachmentId =
+      secondItem?.type === "message" ? secondItem.attachments?.[0]?.id : undefined;
+
+    expect(firstAttachmentId).toBeDefined();
+    expect(secondAttachmentId).toBe(firstAttachmentId);
+    await expect(
+      provider.readTaskAttachment("task-1", firstAttachmentId ?? ""),
+    ).resolves.toMatchObject({ content: imageContent, mediaType: "image/png" });
+  });
+
   it("preserves failures and bounds command output in task snapshots", async () => {
     const lineLimitedOutput = Array.from(
       { length: 10_001 },

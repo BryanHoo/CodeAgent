@@ -141,11 +141,20 @@ export class CodexHistoricalAttachmentStore {
     ) {
       return undefined;
     }
-    const attachment = this.#createAttachment(
-      declaredMediaType,
-      normalizeImageName(input.name, `图片-${String(imageIndex + 1)}`),
-      content.byteLength,
-    );
+    const name = normalizeImageName(input.name, `图片-${String(imageIndex + 1)}`);
+    for (const entry of this.#entries.values()) {
+      if (
+        entry.source === "inline" &&
+        entry.projectTaskId === taskId &&
+        entry.attachment.mediaType === declaredMediaType &&
+        entry.attachment.name === name &&
+        entry.content.equals(content)
+      ) {
+        // 重复 Snapshot 继续使用同一随机授权 ID，避免旧页面引用被后续读取立即作废。
+        return this.#refresh(entry);
+      }
+    }
+    const attachment = this.#createAttachment(declaredMediaType, name, content.byteLength);
     if (attachment === undefined) {
       return undefined;
     }
@@ -184,6 +193,19 @@ export class CodexHistoricalAttachmentStore {
         expectedMediaType === mediaType ? nativeName : undefined,
         `图片-${String(imageIndex + 1)}`,
       );
+      for (const entry of this.#entries.values()) {
+        if (
+          entry.source === "local" &&
+          entry.projectTaskId === taskId &&
+          entry.attachment.mediaType === mediaType &&
+          entry.attachment.name === name &&
+          entry.attachment.size === stats.size &&
+          entry.mtimeMs === stats.mtimeMs &&
+          entry.path === path
+        ) {
+          return this.#refresh(entry);
+        }
+      }
       const attachment = this.#createAttachment(mediaType, name, stats.size);
       if (attachment === undefined) {
         return undefined;
@@ -244,6 +266,14 @@ export class CodexHistoricalAttachmentStore {
         this.#delete(attachmentId);
       }
     }
+  }
+
+  #refresh(entry: StoredAttachment): AgentMessageAttachment {
+    this.#entries.set(entry.attachment.id, {
+      ...entry,
+      expiresAt: this.#clock() + this.#ttlMs,
+    });
+    return entry.attachment;
   }
 
   #createAttachment(

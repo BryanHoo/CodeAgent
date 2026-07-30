@@ -338,7 +338,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup.indexOf("请检查我未提交的更改")).toBeLessThan(markup.indexOf("git diff"));
   });
 
-  it("renders user image attachments as viewable previews", () => {
+  it("renders user image attachments as standalone previews before the text bubble", () => {
     const imageSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: [
@@ -356,7 +356,7 @@ describe("TaskSnapshotTimeline", () => {
               ],
               id: "message-user-image",
               role: "user",
-              text: "",
+              text: "阅读并理解项目",
               type: "message",
             },
           ],
@@ -376,8 +376,14 @@ describe("TaskSnapshotTimeline", () => {
     );
     expect(markup).toContain('loading="lazy"');
     expect(markup).toContain('decoding="async"');
-    expect(markup).toContain('width="144"');
-    expect(markup).toContain('height="144"');
+    expect(markup).toContain('data-message-attachment="image"');
+    expect(markup).toContain('data-message-text="true"');
+    expect(markup).toContain('width="160"');
+    expect(markup).toContain('height="160"');
+    expect(markup.indexOf('aria-label="消息附件"')).toBeLessThan(
+      markup.indexOf('data-message-text="true"'),
+    );
+    expect(markup.match(/diagram\.png/g)).toHaveLength(2);
     expect(markup).not.toContain("data:image");
   });
 

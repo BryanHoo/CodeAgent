@@ -1809,8 +1809,7 @@ export class CodexAgentProvider implements AgentProvider {
         throw new CodexProtocolMappingError("thread/read turns must be an array");
       }
       const transcriptSkillsByTurnId = await readCodexTranscriptTurnSkills(taskId);
-      // 新 Snapshot 使用新一批随机授权 ID，旧二进制引用立即从 Provider 内存释放。
-      this.#historicalAttachments.clearTask(taskId);
+      // Store 为未变化的来源复用随机授权 ID，重复读取不能使已交付的 Snapshot 图片失效。
       const turns = thread["turns"]
         .map((turn) =>
           mapAgentTurn(turn, (part, imageIndex) => this.#mapMessageImage(taskId, part, imageIndex)),
