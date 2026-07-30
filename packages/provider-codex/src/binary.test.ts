@@ -56,6 +56,18 @@ describe("locateCodexBinary", () => {
     ).resolves.toEqual({ path: environmentPath, source: "environment" });
   });
 
+  it("reads Windows environment variable names case-insensitively", async () => {
+    const environmentPath = await createExecutable("environment", 0, "codex.exe");
+
+    await expect(
+      locateCodexBinary({
+        bundledBinaryPath: null,
+        env: { code_agent_codex_bin: environmentPath, Path: "" },
+        platform: "win32",
+      }),
+    ).resolves.toEqual({ path: environmentPath, source: "environment" });
+  });
+
   it("prefers the bundled binary before a PATH binary", async () => {
     const bundledPath = await createExecutable("bundled");
     const pathBinary = await createExecutable("path");

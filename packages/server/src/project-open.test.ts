@@ -1,3 +1,7 @@
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { createProjectOpenService } from "./project-open.js";
@@ -144,4 +148,30 @@ describe("createProjectOpenService", () => {
       name: "ProjectOpenAppUnavailableError",
     });
   });
+
+  it.runIf(process.platform !== "win32")(
+    "rejects a host app that exits unsuccessfully during launch",
+    async () => {
+      const commandRoot = await mkdtemp(join(tmpdir(), "code-agent-project-open-"));
+      const projectRoot = await mkdtemp(join(tmpdir(), "code-agent-project-root-"));
+      const launcher = join(commandRoot, "xdg-open");
+      try {
+        await writeFile(launcher, "#!/bin/sh\nexit 23\n");
+        await chmod(launcher, 0o755);
+        const service = createProjectOpenService({
+          environment: { PATH: commandRoot },
+          platform: "linux",
+        });
+
+        await expect(service.open(projectRoot, "file-manager")).rejects.toThrow(
+          "exited with code 23",
+        );
+      } finally {
+        await Promise.all([
+          rm(commandRoot, { force: true, recursive: true }),
+          rm(projectRoot, { force: true, recursive: true }),
+        ]);
+      }
+    },
+  );
 });

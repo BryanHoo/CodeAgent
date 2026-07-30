@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
+import { realpath } from "node:fs/promises";
+import { resolve, win32 } from "node:path";
 
 import {
   PendingRequestResolutionError,
@@ -1300,13 +1301,47 @@ function mapCodexNotification(
   };
 }
 
-function isProjectThread(thread: Record<string, unknown>, project: Project): boolean {
-  const cwd = expectString(thread["cwd"], "Codex thread cwd");
-  return resolve(cwd) === resolve(project.rootPath);
+function normalizedPathIdentity(path: string): string {
+  if (win32.isAbsolute(path)) {
+    return win32.resolve(path).toLocaleLowerCase("en-US");
+  }
+  return resolve(path);
 }
 
-function assertProjectThread(thread: Record<string, unknown>, project: Project): void {
-  if (!isProjectThread(thread, project)) {
+function isSameResolvedPath(left: string, right: string): boolean {
+  return normalizedPathIdentity(left) === normalizedPathIdentity(right);
+}
+
+async function canonicalPathIdentity(path: string): Promise<string> {
+  try {
+    // 历史 Thread 可能保留符号链接路径，归属校验需要与已注册 Project 的真实路径对齐。
+    return normalizedPathIdentity(await realpath(path));
+  } catch {
+    return normalizedPathIdentity(path);
+  }
+}
+
+async function isSameCanonicalPath(left: string, right: string): Promise<boolean> {
+  const [leftIdentity, rightIdentity] = await Promise.all([
+    canonicalPathIdentity(left),
+    canonicalPathIdentity(right),
+  ]);
+  return leftIdentity === rightIdentity;
+}
+
+async function isProjectThread(
+  thread: Record<string, unknown>,
+  project: Project,
+): Promise<boolean> {
+  const cwd = expectString(thread["cwd"], "Codex thread cwd");
+  return isSameCanonicalPath(cwd, project.rootPath);
+}
+
+async function assertProjectThread(
+  thread: Record<string, unknown>,
+  project: Project,
+): Promise<void> {
+  if (!(await isProjectThread(thread, project))) {
     throw new CodexProtocolMappingError("Codex thread does not belong to the active project");
   }
 }
@@ -1347,8 +1382,8 @@ function createUnmaterializedTaskSnapshot(task: AgentTask): AgentProviderTaskSna
   };
 }
 
-function mapAgentTask(thread: Record<string, unknown>, project: Project): AgentTask {
-  assertProjectThread(thread, project);
+async function mapAgentTask(thread: Record<string, unknown>, project: Project): Promise<AgentTask> {
+  await assertProjectThread(thread, project);
   return {
     id: expectString(thread["id"], "Codex thread id"),
     pinned: false,
@@ -1439,7 +1474,7 @@ export class CodexAgentProvider implements AgentProvider {
       await this.#client.request("thread/fork", { threadId: taskId }),
       "thread/fork response",
     );
-    const task = mapAgentTask(
+    const task = await mapAgentTask(
       expectRecord(response["thread"], "thread/fork thread"),
       this.#project,
     );
@@ -1509,13 +1544,19 @@ export class CodexAgentProvider implements AgentProvider {
     if (!Array.isArray(response["data"])) {
       throw new CodexProtocolMappingError("skills/list data must be an array");
     }
-    const projectEntry = response["data"]
-      .map((value) => expectRecord(value, "skills/list entry"))
-      .find(
-        (entry) =>
-          resolve(expectString(entry["cwd"], "skills/list cwd")) ===
-          resolve(this.#project.rootPath),
-      );
+    let projectEntry: Record<string, unknown> | undefined;
+    for (const value of response["data"]) {
+      const entry = expectRecord(value, "skills/list entry");
+      if (
+        await isSameCanonicalPath(
+          expectString(entry["cwd"], "skills/list cwd"),
+          this.#project.rootPath,
+        )
+      ) {
+        projectEntry = entry;
+        break;
+      }
+    }
     if (projectEntry === undefined || !Array.isArray(projectEntry["skills"])) {
       throw new CodexProtocolMappingError("skills/list did not return the active project");
     }
@@ -1542,7 +1583,7 @@ export class CodexAgentProvider implements AgentProvider {
       await this.#client.request("thread/start", { cwd: this.#project.rootPath }),
       "thread/start response",
     );
-    const task = mapAgentTask(
+    const task = await mapAgentTask(
       expectRecord(response["thread"], "thread/start thread"),
       this.#project,
     );
@@ -1754,8 +1795,10 @@ export class CodexAgentProvider implements AgentProvider {
     if (nextCursor !== null && nextCursor !== undefined && typeof nextCursor !== "string") {
       throw new CodexProtocolMappingError("thread/list nextCursor must be a string or null");
     }
-    const nativeTasks = response["data"].map((thread) =>
-      mapAgentTask(expectRecord(thread, "Codex thread"), this.#project),
+    const nativeTasks = await Promise.all(
+      response["data"].map((thread) =>
+        mapAgentTask(expectRecord(thread, "Codex thread"), this.#project),
+      ),
     );
     for (const task of nativeTasks) {
       this.#projectTaskIds.add(task.id);
@@ -1798,13 +1841,13 @@ export class CodexAgentProvider implements AgentProvider {
       }
       const response = expectRecord(nativeResponse, "thread/read response");
       const thread = expectRecord(response["thread"], "thread/read thread");
-      if (!isProjectThread(thread, this.#project)) {
+      if (!(await isProjectThread(thread, this.#project))) {
         return undefined;
       }
       projectOwnershipVerified = true;
       // Project 归属确认后才提升读取期间暂存的 Server Request。
       this.#promotePendingServerRequests(taskId);
-      const task = mapAgentTask(thread, this.#project);
+      const task = await mapAgentTask(thread, this.#project);
       if (!Array.isArray(thread["turns"])) {
         throw new CodexProtocolMappingError("thread/read turns must be an array");
       }
@@ -2408,7 +2451,7 @@ export class CodexAgentProvider implements AgentProvider {
       if (expectString(thread["id"], "thread/resume thread id") !== taskId) {
         throw new CodexProtocolMappingError("thread/resume returned a different thread");
       }
-      assertProjectThread(thread, this.#project);
+      await assertProjectThread(thread, this.#project);
       // 恢复成功后，本次 App Server 生命周期内可直接继续后续 Turn。
       this.#resumedTaskIds.add(taskId);
     })();
@@ -2649,7 +2692,7 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
       const registeredProject = this.#projects.get(project.id);
       if (
         registeredProject === undefined ||
-        resolve(registeredProject.rootPath) !== resolve(project.rootPath)
+        !isSameResolvedPath(registeredProject.rootPath, project.rootPath)
       ) {
         throw new CodexProtocolMappingError("Codex project identity belongs to another cwd");
       }
@@ -2696,9 +2739,7 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
   public beginTaskRead(project: Project, taskId: string): boolean {
     const owner = this.#taskOwners.get(taskId);
     if (owner !== undefined) {
-      return (
-        owner.projectId === project.id && resolve(owner.rootPath) === resolve(project.rootPath)
-      );
+      return owner.projectId === project.id && isSameResolvedPath(owner.rootPath, project.rootPath);
     }
     this.#taskOwners.set(taskId, {
       projectId: project.id,
@@ -2712,7 +2753,7 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
     const owner = this.#taskOwners.get(taskId);
     if (
       owner !== undefined &&
-      (owner.projectId !== project.id || resolve(owner.rootPath) !== resolve(project.rootPath))
+      (owner.projectId !== project.id || !isSameResolvedPath(owner.rootPath, project.rootPath))
     ) {
       throw new CodexProtocolMappingError("Codex thread belongs to another project");
     }
@@ -2735,7 +2776,7 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
       owner !== undefined &&
       !owner.provisional &&
       owner.projectId === project.id &&
-      resolve(owner.rootPath) === resolve(project.rootPath)
+      isSameResolvedPath(owner.rootPath, project.rootPath)
     );
   }
 

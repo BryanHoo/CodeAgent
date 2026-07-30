@@ -24,6 +24,8 @@ code-agent start
 
 CodeAgent 不提供登录、退出或凭证管理，也不会读取或修改 `auth.json`。Runtime 不可用时，请先在官方 Codex CLI 完成登录，再回到 Web 工作台重试。
 
+支持 Windows 10/11 和主流 Linux 桌面发行版的 x64、arm64 环境。Linux 目录选择依次尝试 `zenity`、`kdialog`；无桌面会话时可在终端输入绝对路径。系统浏览器或外部应用启动失败时，CLI 会输出本地访问地址供手动打开。
+
 ## 本地开发
 
 开发环境使用 pnpm 11.15.1：

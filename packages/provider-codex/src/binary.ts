@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { dirname, posix, resolve, win32 } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -109,14 +109,30 @@ function pathCandidateNames(platform: NodeJS.Platform): readonly string[] {
   return platform === "win32" ? ["codex.exe"] : ["codex"];
 }
 
+function readEnvironmentValue(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  platform: NodeJS.Platform,
+): string | undefined {
+  const direct = env[name];
+  if (direct !== undefined || platform !== "win32") {
+    return direct;
+  }
+  // Windows 环境变量名不区分大小写，复制 process.env 后也要保留该语义。
+  return Object.entries(env).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1];
+}
+
 async function findOnPath(
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
 ): Promise<string | null> {
-  const directories = (env["PATH"] ?? "").split(delimiter).filter(Boolean);
+  const pathApi = platform === "win32" ? win32 : posix;
+  const directories = (readEnvironmentValue(env, "PATH", platform) ?? "")
+    .split(pathApi.delimiter)
+    .filter(Boolean);
   for (const directory of directories) {
     for (const candidateName of pathCandidateNames(platform)) {
-      const candidate = join(directory, candidateName);
+      const candidate = pathApi.join(directory, candidateName);
       if (await isExecutable(candidate, platform)) {
         return candidate;
       }
@@ -149,7 +165,7 @@ export async function locateCodexBinary(
   if (options.explicitPath) {
     return requireExecutable(options.explicitPath, "explicit", platform);
   }
-  const environmentPath = env["CODE_AGENT_CODEX_BIN"];
+  const environmentPath = readEnvironmentValue(env, "CODE_AGENT_CODEX_BIN", platform);
   if (environmentPath) {
     return requireExecutable(environmentPath, "environment", platform);
   }

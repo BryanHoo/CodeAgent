@@ -1,8 +1,9 @@
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import {
+  CodexAppServerProcess,
   createCodexRuntimeProvider,
-  startCodexAppServer,
 } from "../../dist/providers/codex/index.js";
 import { createCodeAgentServer } from "../../dist/server/index.js";
 
@@ -12,12 +13,29 @@ const fakeAppServerPath = fileURLToPath(
 );
 const staticRoot = fileURLToPath(new URL("../../dist/web", import.meta.url));
 
-const runtime = await startCodexAppServer({
-  binaryPath: fakeAppServerPath,
-  env: { ...process.env, FAKE_APP_SERVER_SCENARIO: "realtime-actions" },
-  rpcTimeoutMs: 1_000,
-  shutdownTimeoutMs: 500,
+// Fake Server 由当前 Node.js 执行，确保 Windows 不会把测试脚本当成原生 .exe。
+const fakeAppServer = spawn(
+  process.execPath,
+  [fakeAppServerPath, "app-server", "--listen", "stdio://"],
+  {
+    env: { ...process.env, FAKE_APP_SERVER_SCENARIO: "realtime-actions" },
+    shell: false,
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  },
+);
+const runtime = new CodexAppServerProcess(
+  fakeAppServer,
+  { path: process.execPath, source: "explicit" },
+  { raw: "codex-cli 0.145.0", version: "0.145.0" },
+  { rpcTimeoutMs: 1_000, shutdownTimeoutMs: 500 },
+);
+await runtime.waitForSpawn();
+await runtime.client.request("initialize", {
+  capabilities: { experimentalApi: true },
+  clientInfo: { name: "code_agent", title: "CodeAgent", version: "0.0.0" },
 });
+runtime.client.notify("initialized", {});
 const project = {
   createdAt: "2026-07-23T00:00:00.000Z",
   id: "code-agent",

@@ -31,6 +31,8 @@ type ProjectOpenCommand = Readonly<{
 
 type ProjectOpenCommandMap = Map<ProjectOpenAppId, ProjectOpenCommand>;
 
+const LAUNCH_CONFIRMATION_MS = 500;
+
 export interface ProjectOpenService {
   getCapabilities: () => Promise<ProjectOpenCapabilitiesResponse>;
   open: (projectRoot: string, appId: ProjectOpenAppId) => Promise<void>;
@@ -71,10 +73,41 @@ function defaultSpawnDetached(
       detached: true,
       stdio: "ignore",
     });
-    child.once("error", reject);
+    let settled = false;
+    let confirmationTimer: ReturnType<typeof setTimeout> | undefined;
+    const settle = (action: () => void): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (confirmationTimer !== undefined) {
+        clearTimeout(confirmationTimer);
+      }
+      action();
+    };
+    child.once("error", (error) => {
+      settle(() => {
+        reject(error);
+      });
+    });
     child.once("spawn", () => {
-      child.unref();
-      resolve();
+      // GUI 进程可能长驻；短暂观察可捕获启动失败，同时避免等待应用整个生命周期。
+      confirmationTimer = setTimeout(() => {
+        settle(() => {
+          child.unref();
+          resolve();
+        });
+      }, LAUNCH_CONFIRMATION_MS);
+    });
+    child.once("exit", (exitCode, signal) => {
+      if (exitCode === 0) {
+        settle(resolve);
+        return;
+      }
+      const reason = signal ? `signal ${signal}` : `code ${String(exitCode)}`;
+      settle(() => {
+        reject(new Error(`${file} exited with ${reason}`));
+      });
     });
   });
 }

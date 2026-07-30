@@ -93,15 +93,20 @@ describe("selectSystemDirectory", () => {
     ).rejects.toThrow("No supported directory picker is installed");
   });
 
-  it("does not treat picker failures as user cancellation", async () => {
+  it("falls back after a Linux picker cannot access the desktop session", async () => {
     const error = Object.assign(new Error("display unavailable"), {
       code: 1,
       stderr: "cannot open display",
     });
+    const execute = vi
+      .fn()
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce({ stderr: "", stdout: "/srv/CodeAgent\n" });
 
-    await expect(
-      selectSystemDirectory({ execute: vi.fn(() => Promise.reject(error)), platform: "linux" }),
-    ).rejects.toThrow("display unavailable");
+    await expect(selectSystemDirectory({ execute, platform: "linux" })).resolves.toBe(
+      "/srv/CodeAgent",
+    );
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 
   it("forces UTF-8 output for Windows paths", async () => {

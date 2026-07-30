@@ -1,3 +1,5 @@
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { runCli, type CliDependencies } from "./cli-command.js";
@@ -174,7 +176,7 @@ describe("runCli", () => {
     expect(harness.stdout.join("")).toContain("[ok] Node.js 24.1.0");
     expect(harness.stdout.join("")).toContain("[ok] Codex 0.145.0 (/fake/codex)");
     expect(harness.dependencies.createStateRepository).toHaveBeenCalledWith(
-      "/custom/home/code-agent/state.sqlite3",
+      join("/custom/home", "code-agent", "state.sqlite3"),
     );
     expect(harness.stdout.join("")).toContain("[ok] SQLite writable");
     expect(harness.stdout.join("")).toContain("[ok] SQLite migration 4");
@@ -231,7 +233,7 @@ describe("runCli", () => {
       taskMetadataRepository: harness.stateRepository,
     });
     expect(harness.dependencies.createStateRepository).toHaveBeenCalledWith(
-      "/custom/home/code-agent/state.sqlite3",
+      join("/custom/home", "code-agent", "state.sqlite3"),
     );
     expect(harness.serverListen).toHaveBeenCalledWith({ host: "127.0.0.1", port: 3210 });
     expect(harness.dependencies.openBrowser).toHaveBeenCalledWith("http://127.0.0.1:3210");

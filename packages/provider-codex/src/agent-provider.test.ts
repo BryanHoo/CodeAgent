@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -455,6 +456,45 @@ describe("CodexAgentProvider", () => {
       "project identity belongs to another cwd",
     );
   });
+
+  it("matches Windows project paths without case sensitivity", async () => {
+    const windowsProject = { ...project, rootPath: "C:\\Users\\Test\\CodeAgent" };
+    const rpc = new FakeRpcClient([
+      {
+        data: [nativeThread({ cwd: "c:\\users\\test\\codeagent" })],
+        nextCursor: null,
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project: windowsProject });
+
+    await expect(provider.listTasks()).resolves.toMatchObject({
+      data: [{ id: "task-1", projectId: project.id }],
+    });
+  });
+
+  it.runIf(process.platform !== "win32")(
+    "matches Linux project paths through symbolic links",
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "code-agent-provider-path-"));
+      const projectRoot = join(root, "project");
+      const projectAlias = join(root, "project-alias");
+      try {
+        await mkdir(projectRoot);
+        await symlink(projectRoot, projectAlias);
+        const linkedProject = { ...project, rootPath: projectRoot };
+        const rpc = new FakeRpcClient([
+          { data: [nativeThread({ cwd: projectAlias })], nextCursor: null },
+        ]);
+        const provider = createCodexAgentProvider({ client: rpc, project: linkedProject });
+
+        await expect(provider.listTasks()).resolves.toMatchObject({
+          data: [{ id: "task-1", projectId: project.id }],
+        });
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+  );
 
   it("revalidates ownership before a sidebar mutation on a released task", async () => {
     const rpc = new FakeRpcClient([

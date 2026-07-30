@@ -1,15 +1,11 @@
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  CodexAppServerExitedError,
-  CodexAppServerProcess,
-  startCodexAppServer,
-} from "./app-server-process.js";
+import { CodexAppServerExitedError, CodexAppServerProcess } from "./app-server-process.js";
 import { RpcConnectionClosedError, RpcProtocolError, RpcTimeoutError } from "./jsonl-rpc-client.js";
 
 const fakeAppServerPath = fileURLToPath(
@@ -27,13 +23,25 @@ async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
 }
 
 async function startFake(scenario = "normal"): Promise<CodexAppServerProcess> {
-  const runtime = await startCodexAppServer({
-    appVersion: "1.2.3",
-    binaryPath: fakeAppServerPath,
+  // Fake Server 由当前 Node.js 执行，避免 Windows 把测试脚本误当成原生 Codex Binary。
+  const child = spawn(process.execPath, [fakeAppServerPath, "app-server", "--listen", "stdio://"], {
     env: { ...process.env, FAKE_APP_SERVER_SCENARIO: scenario },
-    rpcTimeoutMs: 100,
-    shutdownTimeoutMs: 100,
+    shell: false,
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
   });
+  const runtime = new CodexAppServerProcess(
+    child,
+    { path: process.execPath, source: "explicit" },
+    { raw: "codex-cli 0.145.0", version: "0.145.0" },
+    { rpcTimeoutMs: 100, shutdownTimeoutMs: 100 },
+  );
+  await runtime.waitForSpawn();
+  await runtime.client.request("initialize", {
+    capabilities: { experimentalApi: true },
+    clientInfo: { name: "code_agent", title: "CodeAgent", version: "1.2.3" },
+  });
+  runtime.client.notify("initialized", {});
   runtimes.push(runtime);
   return runtime;
 }

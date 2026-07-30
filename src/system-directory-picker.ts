@@ -105,7 +105,7 @@ export async function selectSystemDirectory(
   const platform = options.platform ?? process.platform;
   const commands = pickerCommands(platform);
   const execute = options.execute ?? executeFile;
-  let lastMissingError: unknown;
+  let lastPickerError: unknown;
 
   for (const command of commands) {
     try {
@@ -120,7 +120,12 @@ export async function selectSystemDirectory(
         return undefined;
       }
       if (isMissingExecutable(error)) {
-        lastMissingError = error;
+        lastPickerError = error;
+        continue;
+      }
+      if (platform === "linux") {
+        // 桌面会话不可用时继续尝试其他选择器，最终仍可回退到 CLI 绝对路径输入。
+        lastPickerError = error;
         continue;
       }
       throw error;
@@ -139,6 +144,6 @@ export async function selectSystemDirectory(
 
   const commandNames = commands.map((command) => command.file).join(" or ");
   throw new Error(`No supported directory picker is installed; expected ${commandNames}`, {
-    cause: lastMissingError,
+    cause: lastPickerError,
   });
 }

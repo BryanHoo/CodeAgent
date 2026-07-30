@@ -28,6 +28,19 @@ describe("openSystemBrowser", () => {
     });
   });
 
+  it("falls back when an installed Linux launcher exits unsuccessfully", async () => {
+    const launch = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error("xdg-open exited with code 3"), { code: "LAUNCHER_EXIT" }),
+      )
+      .mockResolvedValueOnce(undefined);
+
+    await openSystemBrowser("http://127.0.0.1:3210", { launch, platform: "linux" });
+
+    expect(launch).toHaveBeenCalledTimes(2);
+  });
+
   it("reports missing Linux browser launchers", async () => {
     const launch = vi.fn(() =>
       Promise.reject(Object.assign(new Error("not found"), { code: "ENOENT" })),
