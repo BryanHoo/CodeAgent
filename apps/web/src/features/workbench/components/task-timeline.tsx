@@ -520,7 +520,7 @@ function ChangedFilesCard({
   return (
     <section
       aria-label={`本次修改了 ${String(summary.changes.length)} 个文件`}
-      className="w-full overflow-hidden rounded-surface border border-separator-strong bg-raised shadow-control"
+      className="mt-4 w-full overflow-hidden rounded-surface border border-separator-strong bg-raised shadow-control"
     >
       <header className="flex min-h-16 items-center gap-3 px-3 py-2.5 shadow-toolbar">
         <span className="grid size-9 shrink-0 place-items-center rounded-control bg-control text-muted-foreground">

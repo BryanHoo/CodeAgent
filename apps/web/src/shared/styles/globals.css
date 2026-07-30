@@ -9,14 +9,15 @@
   --ui-color-sidebar: light-dark(#ffffff, #181818);
   --ui-color-panel: light-dark(#ffffff, #181818);
   --ui-color-raised: light-dark(#ffffff, #202020);
-  --ui-color-control: light-dark(rgb(23 23 23 / 0.055), rgb(255 255 255 / 0.07));
+  --ui-color-control: light-dark(rgb(17 17 17 / 0.04), rgb(255 255 255 / 0.07));
+  --ui-color-code-inline: light-dark(rgb(17 17 17 / 0.08), rgb(255 255 255 / 0.12));
   --ui-color-control-hover: light-dark(rgb(23 23 23 / 0.075), rgb(255 255 255 / 0.1));
   --ui-color-control-active: light-dark(rgb(0 106 255 / 0.09), rgb(51 156 255 / 0.14));
   --ui-color-separator: light-dark(rgb(23 23 23 / 0.06), rgb(255 255 255 / 0.07));
   --ui-color-separator-strong: light-dark(rgb(23 23 23 / 0.11), rgb(255 255 255 / 0.13));
-  --ui-color-text: light-dark(#171717, #ffffff);
-  --ui-color-text-muted: light-dark(rgb(23 23 23 / 0.64), rgb(255 255 255 / 0.64));
-  --ui-color-text-subtle: light-dark(rgb(23 23 23 / 0.44), rgb(255 255 255 / 0.44));
+  --ui-color-text: light-dark(#111111, #ffffff);
+  --ui-color-text-muted: light-dark(rgb(17 17 17 / 0.72), rgb(255 255 255 / 0.68));
+  --ui-color-text-subtle: light-dark(rgb(17 17 17 / 0.52), rgb(255 255 255 / 0.5));
   --ui-color-accent: light-dark(#006aff, #339cff);
   --ui-color-accent-strong: light-dark(#0057d6, #69b7ff);
   --ui-color-accent-soft: light-dark(rgb(0 106 255 / 0.09), rgb(51 156 255 / 0.14));
@@ -47,6 +48,11 @@
     "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --ui-font-family-mono:
     "Geist Mono", ui-monospace, "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", monospace;
+  /* 提升各层级字重但保留明确级差，增强紧凑工作台中的快速扫描能力。 */
+  --ui-font-weight-regular: 450;
+  --ui-font-weight-medium: 550;
+  --ui-font-weight-semibold: 650;
+  --ui-font-weight-bold: 700;
   --ui-font-size-caption: 0.625rem;
   --ui-font-size-meta: 0.6875rem;
   --ui-font-size-label: 0.75rem;
@@ -149,6 +155,10 @@
 
   --font-sans: var(--ui-font-family-text);
   --font-mono: var(--ui-font-family-mono);
+  --font-weight-normal: var(--ui-font-weight-regular);
+  --font-weight-medium: var(--ui-font-weight-medium);
+  --font-weight-semibold: var(--ui-font-weight-semibold);
+  --font-weight-bold: var(--ui-font-weight-bold);
   --text-xs: var(--ui-font-size-label);
   --text-xs--line-height: var(--ui-line-height-normal);
   --text-sm: var(--ui-font-size-body);
@@ -224,6 +234,7 @@ body {
   background: var(--ui-color-window);
   color: var(--ui-color-text);
   font-family: var(--font-sans);
+  font-weight: var(--ui-font-weight-regular);
   letter-spacing: 0;
   text-rendering: optimizeLegibility;
 }
@@ -250,7 +261,7 @@ a {
 /* Streamdown 保留官方结构，视觉层统一映射到项目 Token，避免默认主题形成嵌套卡片。 */
 [data-streamdown="inline-code"] {
   border-radius: var(--ui-radius-control) !important;
-  background: var(--ui-color-control) !important;
+  background: var(--ui-color-code-inline) !important;
   padding: 0.1rem 0.35rem !important;
   color: var(--ui-color-text) !important;
   font-family: var(--ui-font-family-mono) !important;

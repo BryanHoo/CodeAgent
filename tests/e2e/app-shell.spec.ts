@@ -638,39 +638,68 @@ test("provides reusable design tokens for light and dark themes", async ({ page 
         probe.remove();
         return color;
       };
+      const inlineCode = document.createElement("code");
+      inlineCode.dataset["streamdown"] = "inline-code";
+      root.append(inlineCode);
+      const inlineCodeBackground = getComputedStyle(inlineCode).backgroundColor;
+      inlineCode.remove();
       const styles = getComputedStyle(root);
 
       return {
         accent: resolveColor("--ui-color-accent"),
+        bodyFontWeight: getComputedStyle(document.body).fontWeight,
         bodyFontSize: styles.getPropertyValue("--ui-font-size-body").trim(),
+        content: resolveColor("--ui-color-content"),
+        control: resolveColor("--ui-color-control"),
         diffAdded: resolveColor("--ui-color-diff-added"),
         diffRemoved: resolveColor("--ui-color-diff-removed"),
         ink: resolveColor("--ui-color-text"),
+        inlineCodeBackground,
+        mutedInk: resolveColor("--ui-color-text-muted"),
+        panel: resolveColor("--ui-color-panel"),
+        sidebar: resolveColor("--ui-color-sidebar"),
         skill: resolveColor("--ui-color-skill"),
         spaceUnit: styles.getPropertyValue("--ui-space-unit").trim(),
+        subtleInk: resolveColor("--ui-color-text-subtle"),
         surface: styles.backgroundColor,
       };
     }, theme);
 
   expect(await readTheme("light")).toEqual({
     accent: "rgb(0, 106, 255)",
+    bodyFontWeight: "450",
     bodyFontSize: expect.stringMatching(/^0?\.875rem$/),
+    content: "rgb(255, 255, 255)",
+    control: "rgba(17, 17, 17, 0.04)",
     diffAdded: "rgb(40, 169, 72)",
     diffRemoved: "rgb(235, 0, 29)",
-    ink: "rgb(23, 23, 23)",
+    ink: "rgb(17, 17, 17)",
+    inlineCodeBackground: "rgba(17, 17, 17, 0.08)",
+    mutedInk: "rgba(17, 17, 17, 0.72)",
+    panel: "rgb(255, 255, 255)",
+    sidebar: "rgb(255, 255, 255)",
     skill: "rgb(161, 0, 248)",
     spaceUnit: expect.stringMatching(/^0?\.25rem$/),
+    subtleInk: "rgba(17, 17, 17, 0.52)",
     surface: "rgb(255, 255, 255)",
   });
 
   expect(await readTheme("dark")).toEqual({
     accent: "rgb(51, 156, 255)",
+    bodyFontWeight: "450",
     bodyFontSize: expect.stringMatching(/^0?\.875rem$/),
+    content: "rgb(24, 24, 24)",
+    control: "rgba(255, 255, 255, 0.07)",
     diffAdded: "rgb(64, 201, 119)",
     diffRemoved: "rgb(250, 66, 62)",
     ink: "rgb(255, 255, 255)",
+    inlineCodeBackground: "rgba(255, 255, 255, 0.12)",
+    mutedInk: "rgba(255, 255, 255, 0.68)",
+    panel: "rgb(24, 24, 24)",
+    sidebar: "rgb(24, 24, 24)",
     skill: "rgb(173, 123, 249)",
     spaceUnit: expect.stringMatching(/^0?\.25rem$/),
+    subtleInk: "rgba(255, 255, 255, 0.5)",
     surface: "rgb(24, 24, 24)",
   });
 });
@@ -1656,6 +1685,10 @@ test("opens file diffs from the timeline and inspector", async ({ page }) => {
   });
   await page.goto("/p/code-agent/t/task-1");
 
+  await expect(page.getByRole("region", { name: "本次修改了 1 个文件" })).toHaveCSS(
+    "margin-top",
+    "16px",
+  );
   await page.getByRole("button", { name: /已编辑 package\.json.*打开 Diff/ }).click();
   const dialog = page.getByRole("dialog", { name: "package.json" });
   await expect(dialog).toBeVisible();
