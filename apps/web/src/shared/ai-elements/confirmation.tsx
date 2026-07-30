@@ -6,6 +6,7 @@ import {
   useContext,
   type ButtonHTMLAttributes,
   type HTMLAttributes,
+  type Ref,
   type ReactNode,
 } from "react";
 
@@ -122,11 +123,13 @@ export function ConfirmationActions({ className = "", ...props }: HTMLAttributes
 }
 
 type ConfirmationActionProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  ref?: Ref<HTMLButtonElement>;
   tone?: "danger" | "neutral" | "primary";
 };
 
 export function ConfirmationAction({
   className = "",
+  ref,
   tone = "neutral",
   type = "button",
   ...props
@@ -142,6 +145,7 @@ export function ConfirmationAction({
   return (
     <button
       className={`inline-flex h-8 items-center justify-center rounded-control px-3 text-label font-medium shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${toneClass} ${className}`}
+      ref={ref}
       type={type}
       {...props}
     />

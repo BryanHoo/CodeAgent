@@ -3,7 +3,7 @@ import type {
   PendingRequest,
   ResolvePendingRequestRequest,
 } from "@code-agent/protocol";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   Confirmation,
@@ -76,6 +76,7 @@ function ApprovalRequestCard({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState<PendingRequestResolutionAttempt>();
+  const allowButtonRef = useRef<HTMLButtonElement>(null);
   const networkAccess = request.type === "command_approval" ? request.networkAccess : null;
   const title =
     networkAccess !== null
@@ -90,6 +91,14 @@ function ApprovalRequestCard({
         ? [request.command, request.cwd].filter(Boolean).join("\n")
         : (request.grantRoot ?? "待确认文件变更");
   const canSubmit = interactive && request.status === "pending" && !submitting;
+  const canFocusAllow = canSubmit && request.availableDecisions.includes("allow");
+
+  useEffect(() => {
+    if (canFocusAllow) {
+      // 进入待审批 Task 或当前请求变为队首时聚焦“允许”，让 Enter 可直接确认。
+      allowButtonRef.current?.focus();
+    }
+  }, [canFocusAllow, request.requestId]);
 
   const resolve = async (decision: PendingApprovalDecision) => {
     if (!canSubmit) return;
@@ -150,6 +159,7 @@ function ApprovalRequestCard({
               <ConfirmationAction
                 disabled={!canSubmit}
                 onClick={() => void resolve("allow")}
+                ref={allowButtonRef}
                 tone="primary"
               >
                 允许

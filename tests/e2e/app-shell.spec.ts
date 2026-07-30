@@ -2251,7 +2251,8 @@ test("restores network approvals from the task snapshot after refresh", async ({
   await expect(page.getByRole("region", { name: "网络访问审批请求" })).toBeVisible();
   const allow = page.getByRole("button", { exact: true, name: "允许" });
   await expect(allow).toBeEnabled();
-  await allow.dblclick();
+  await expect(allow).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect.poll(() => resolutionCount).toBe(1);
   await expect(allow).toBeDisabled();
 });
@@ -2365,7 +2366,9 @@ test("allows a command approval and completes the turn", async ({ page }) => {
   await expect(page.getByRole("region", { name: "命令审批请求" })).toBeVisible();
   // 当前 Task 已在用户视野内，审批提醒只保留在 Timeline，不重复占用 Sidebar 状态位。
   await expect(page.getByRole("status", { name: "任务等待审批" })).toHaveCount(0);
-  await page.getByRole("button", { exact: true, name: "允许" }).click();
+  const allow = page.getByRole("button", { exact: true, name: "允许" });
+  await expect(allow).toBeFocused();
+  await page.keyboard.press("Enter");
 
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
