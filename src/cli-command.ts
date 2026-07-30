@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +27,7 @@ import {
 } from "@code-agent/server";
 
 import packageManifest from "../package.json" with { type: "json" };
+import { openSystemBrowser } from "./system-browser.js";
 import { selectSystemDirectory } from "./system-directory-picker.js";
 
 interface CliManagedRuntime {
@@ -77,28 +77,6 @@ export interface CliDependencies {
   webRoot: string;
 }
 
-async function openBrowser(url: string): Promise<void> {
-  const command =
-    process.platform === "darwin"
-      ? { args: [url], executable: "open" }
-      : process.platform === "win32"
-        ? { args: ["/c", "start", "", url], executable: "cmd.exe" }
-        : { args: [url], executable: "xdg-open" };
-
-  await new Promise<void>((resolveOpen, reject) => {
-    const child = spawn(command.executable, command.args, {
-      detached: true,
-      shell: false,
-      stdio: "ignore",
-    });
-    child.once("error", reject);
-    child.once("spawn", () => {
-      child.unref();
-      resolveOpen();
-    });
-  });
-}
-
 export interface RunCliOptions {
   dependencies?: CliDependencies;
   signal?: AbortSignal;
@@ -119,7 +97,7 @@ const defaultDependencies: CliDependencies = {
   createServer: createCodeAgentServer,
   locateCodexBinary,
   nodeVersion: process.versions.node,
-  openBrowser,
+  openBrowser: openSystemBrowser,
   selectProjectDirectory: selectSystemDirectory,
   startCodexAppServer,
   webRoot: fileURLToPath(new URL("../dist/web", import.meta.url)),

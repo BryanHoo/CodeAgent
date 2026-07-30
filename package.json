@@ -44,7 +44,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
-    "lint:architecture": "depcruise --config dependency-cruiser.config.cjs src apps/web/src packages/*/src",
+    "lint:architecture": "depcruise --config dependency-cruiser.config.cjs src apps/web/src packages/client/src packages/core/src packages/protocol/src packages/provider-codex/src packages/server/src",
     "package:check": "node ./tools/verify-package.mjs",
     "start": "pnpm run build && node ./dist/cli.js start",
     "test": "vitest run --passWithNoTests",

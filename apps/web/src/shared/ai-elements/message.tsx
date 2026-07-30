@@ -35,7 +35,11 @@ const MessageFileReferenceContext = createContext<
 >(null);
 
 // Agent 输出使用“绝对路径:行号”表达文件定位；渲染时拆出行号，避免把路径暴露给用户。
-const LOCAL_FILE_REFERENCE_PATTERN = /^(?<path>\/.+?\.[a-z0-9]+?)(?::(?<line>\d+)(?::\d+)?)?$/i;
+const LOCAL_FILE_REFERENCE_PATTERN =
+  /^(?<path>(?:\/|[a-z]:[\\/]|\\\\).+?\.[a-z0-9]+?)(?::(?<line>\d+)(?::\d+)?)?$/i;
+const WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN =
+  /(?<=\]\()(?:[a-z]:[\\/]|\\\\)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
+const UNC_FILE_REFERENCE_PREFIX = "/__code_agent_unc__/";
 
 function getFileReferenceMetadata(href: string | undefined): FileReferenceMetadata | null {
   if (href === undefined) {
@@ -48,7 +52,12 @@ function getFileReferenceMetadata(href: string | undefined): FileReferenceMetada
     return null;
   }
 
-  const filePath = matchedGroups["path"];
+  const matchedPath = matchedGroups["path"];
+  const filePath = matchedPath?.startsWith(UNC_FILE_REFERENCE_PREFIX)
+    ? `//${matchedPath.slice(UNC_FILE_REFERENCE_PREFIX.length)}`
+    : matchedPath?.match(/^\/[a-z]:[\\/]/i)
+      ? matchedPath.slice(1)
+      : matchedPath;
   if (filePath === undefined) {
     return null;
   }
@@ -57,6 +66,17 @@ function getFileReferenceMetadata(href: string | undefined): FileReferenceMetada
     lineNumber: matchedGroups["line"] ?? null,
     path: filePath,
   };
+}
+
+function normalizeWindowsMarkdownFileReferences(markdown: string): string {
+  // 将 Windows 路径转成 Markdown 可安全解析的斜杠形式，盘符路径点击时再移除前导斜杠。
+  return markdown.replace(WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN, (reference) => {
+    const normalizedReference = reference.replaceAll("\\", "/");
+    if (/^[a-z]:/i.test(normalizedReference)) {
+      return `/${normalizedReference}`;
+    }
+    return `${UNC_FILE_REFERENCE_PREFIX}${normalizedReference.slice(2)}`;
+  });
 }
 
 function MarkdownLink({ children, className = "", href, node, ...props }: MarkdownLinkProps) {
@@ -358,6 +378,7 @@ function MessageResponseContent({
   ...props
 }: MessageResponseProps) {
   const parsedResponse = parseCodeComments(children ?? "");
+  const normalizedMarkdown = normalizeWindowsMarkdownFileReferences(parsedResponse.markdown);
   const markdownComponents: Components = {
     ...components,
     a: MarkdownLink,
@@ -371,7 +392,7 @@ function MessageResponseContent({
         {...props}
         components={markdownComponents}
       >
-        {parsedResponse.markdown}
+        {normalizedMarkdown}
       </Streamdown>
       <CodeComments comments={parsedResponse.comments} />
     </MessageFileReferenceContext.Provider>

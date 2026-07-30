@@ -61,14 +61,19 @@ export interface CodexVersionInfo {
   version: string;
 }
 
+export interface CheckCodexVersionOptions {
+  execute?: (binaryPath: string) => Promise<string>;
+}
+
 export interface LocateCodexBinaryOptions {
   explicitPath?: string;
   env?: NodeJS.ProcessEnv;
   bundledBinaryPath?: string | null;
+  platform?: NodeJS.Platform;
 }
 
-function resolveBundledBinary(): string | null {
-  const targetKey = `${process.platform}-${process.arch}`;
+function resolveBundledBinary(platform: NodeJS.Platform): string | null {
+  const targetKey = `${platform}-${process.arch}`;
   const target = BUNDLED_CODEX_TARGETS[targetKey];
   if (!target) {
     return null;
@@ -91,30 +96,28 @@ function resolveBundledBinary(): string | null {
   }
 }
 
-async function isExecutable(filePath: string): Promise<boolean> {
+async function isExecutable(filePath: string, platform: NodeJS.Platform): Promise<boolean> {
   try {
-    await access(filePath, process.platform === "win32" ? undefined : constants.X_OK);
+    await access(filePath, platform === "win32" ? undefined : constants.X_OK);
     return true;
   } catch {
     return false;
   }
 }
 
-function pathCandidateNames(env: NodeJS.ProcessEnv): readonly string[] {
-  if (process.platform !== "win32") {
-    return ["codex"];
-  }
-
-  const extensions = (env["PATHEXT"] ?? ".EXE;.CMD;.BAT;.COM").split(";");
-  return extensions.map((extension) => `codex${extension.toLowerCase()}`);
+function pathCandidateNames(platform: NodeJS.Platform): readonly string[] {
+  return platform === "win32" ? ["codex.exe"] : ["codex"];
 }
 
-async function findOnPath(env: NodeJS.ProcessEnv): Promise<string | null> {
+async function findOnPath(
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): Promise<string | null> {
   const directories = (env["PATH"] ?? "").split(delimiter).filter(Boolean);
   for (const directory of directories) {
-    for (const candidateName of pathCandidateNames(env)) {
+    for (const candidateName of pathCandidateNames(platform)) {
       const candidate = join(directory, candidateName);
-      if (await isExecutable(candidate)) {
+      if (await isExecutable(candidate, platform)) {
         return candidate;
       }
     }
@@ -122,9 +125,16 @@ async function findOnPath(env: NodeJS.ProcessEnv): Promise<string | null> {
   return null;
 }
 
-async function requireExecutable(path: string, source: CodexBinarySource): Promise<CodexBinary> {
+async function requireExecutable(
+  path: string,
+  source: CodexBinarySource,
+  platform: NodeJS.Platform,
+): Promise<CodexBinary> {
   const resolvedPath = resolve(path);
-  if (!(await isExecutable(resolvedPath))) {
+  if (platform === "win32" && !resolvedPath.toLowerCase().endsWith(".exe")) {
+    throw new Error("Windows Codex binary must be a native .exe executable");
+  }
+  if (!(await isExecutable(resolvedPath, platform))) {
     throw new Error(`Codex binary is not executable: ${resolvedPath}`);
   }
   return { path: resolvedPath, source };
@@ -134,23 +144,26 @@ export async function locateCodexBinary(
   options: LocateCodexBinaryOptions = {},
 ): Promise<CodexBinary> {
   const env = options.env ?? process.env;
+  const platform = options.platform ?? process.platform;
 
   if (options.explicitPath) {
-    return requireExecutable(options.explicitPath, "explicit");
+    return requireExecutable(options.explicitPath, "explicit", platform);
   }
   const environmentPath = env["CODE_AGENT_CODEX_BIN"];
   if (environmentPath) {
-    return requireExecutable(environmentPath, "environment");
+    return requireExecutable(environmentPath, "environment", platform);
   }
 
   // 包内固定版本优先，避免用户 PATH 中的 Codex 协议发生漂移。
   const bundledPath =
-    options.bundledBinaryPath === undefined ? resolveBundledBinary() : options.bundledBinaryPath;
-  if (bundledPath && (await isExecutable(bundledPath))) {
+    options.bundledBinaryPath === undefined
+      ? resolveBundledBinary(platform)
+      : options.bundledBinaryPath;
+  if (bundledPath && (await isExecutable(bundledPath, platform))) {
     return { path: resolve(bundledPath), source: "bundled" };
   }
 
-  const pathBinary = await findOnPath(env);
+  const pathBinary = await findOnPath(env, platform);
   if (pathBinary) {
     return { path: resolve(pathBinary), source: "path" };
   }
@@ -158,14 +171,22 @@ export async function locateCodexBinary(
   throw new Error("Codex binary was not found; install @openai/codex or configure --codex-bin");
 }
 
-export async function checkCodexVersion(binaryPath: string): Promise<CodexVersionInfo> {
+async function executeCodexVersion(binaryPath: string): Promise<string> {
+  const { stdout } = await execFileAsync(binaryPath, ["--version"], {
+    encoding: "utf8",
+    timeout: 5_000,
+    windowsHide: true,
+  });
+  return stdout;
+}
+
+export async function checkCodexVersion(
+  binaryPath: string,
+  options: CheckCodexVersionOptions = {},
+): Promise<CodexVersionInfo> {
   let stdout: string;
   try {
-    ({ stdout } = await execFileAsync(binaryPath, ["--version"], {
-      encoding: "utf8",
-      timeout: 5_000,
-      windowsHide: true,
-    }));
+    stdout = await (options.execute ?? executeCodexVersion)(binaryPath);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(`Codex version check failed: ${reason}`, { cause: error });

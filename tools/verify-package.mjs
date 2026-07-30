@@ -13,7 +13,13 @@ if (cliResult.status !== 0 || !cliResult.stdout.includes("Usage: code-agent")) {
   throw new Error("Built CLI is not executable");
 }
 
-const result = spawnSync("pnpm", ["pack", "--dry-run", "--json"], {
+const packageManagerCli = process.env["npm_execpath"];
+if (!packageManagerCli) {
+  throw new Error("package:check must run through pnpm so npm_execpath is available");
+}
+
+// 通过 Node 执行 pnpm 的 JS 入口，避免 Windows 无法直接 spawn pnpm.cmd。
+const result = spawnSync(process.execPath, [packageManagerCli, "pack", "--dry-run", "--json"], {
   encoding: "utf8",
   shell: false,
 });

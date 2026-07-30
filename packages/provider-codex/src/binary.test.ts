@@ -2,7 +2,7 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SUPPORTED_CODEX_VERSION, checkCodexVersion, locateCodexBinary } from "./binary.js";
 
@@ -39,6 +39,7 @@ describe("locateCodexBinary", () => {
         bundledBinaryPath: bundledPath,
         env: { CODE_AGENT_CODEX_BIN: environmentPath, PATH: "" },
         explicitPath,
+        platform: "linux",
       }),
     ).resolves.toEqual({ path: explicitPath, source: "explicit" });
   });
@@ -50,6 +51,7 @@ describe("locateCodexBinary", () => {
       locateCodexBinary({
         bundledBinaryPath: null,
         env: { CODE_AGENT_CODEX_BIN: environmentPath, PATH: "" },
+        platform: "linux",
       }),
     ).resolves.toEqual({ path: environmentPath, source: "environment" });
   });
@@ -59,7 +61,11 @@ describe("locateCodexBinary", () => {
     const pathBinary = await createExecutable("path");
 
     await expect(
-      locateCodexBinary({ bundledBinaryPath: bundledPath, env: { PATH: join(pathBinary, "..") } }),
+      locateCodexBinary({
+        bundledBinaryPath: bundledPath,
+        env: { PATH: join(pathBinary, "..") },
+        platform: "linux",
+      }),
     ).resolves.toEqual({ path: bundledPath, source: "bundled" });
   });
 
@@ -79,47 +85,64 @@ describe("locateCodexBinary", () => {
     await chmod(pathBinary, 0o755);
 
     await expect(
-      locateCodexBinary({ bundledBinaryPath: null, env: { PATH: directory } }),
+      locateCodexBinary({ bundledBinaryPath: null, env: { PATH: directory }, platform: "linux" }),
     ).resolves.toEqual({ path: pathBinary, source: "path" });
   });
 
-  it("rejects a configured path that is not executable", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "code-agent-codex-invalid-"));
-    temporaryDirectories.push(directory);
-    const filePath = join(directory, "codex");
-    await writeFile(filePath, "not executable");
+  it.runIf(process.platform !== "win32")(
+    "rejects a configured path that is not executable",
+    async () => {
+      const directory = await mkdtemp(join(tmpdir(), "code-agent-codex-invalid-"));
+      temporaryDirectories.push(directory);
+      const filePath = join(directory, "codex");
+      await writeFile(filePath, "not executable");
 
-    await expect(locateCodexBinary({ explicitPath: filePath })).rejects.toThrow(
-      "Codex binary is not executable",
-    );
+      await expect(
+        locateCodexBinary({ explicitPath: filePath, platform: "linux" }),
+      ).rejects.toThrow("Codex binary is not executable");
+    },
+  );
+
+  it("rejects a configured path that does not exist", async () => {
+    await expect(
+      locateCodexBinary({ explicitPath: join(tmpdir(), "missing-codex"), platform: "linux" }),
+    ).rejects.toThrow("Codex binary is not executable");
+  });
+
+  it("rejects Windows command shims instead of treating them as native Codex binaries", async () => {
+    const commandShim = await createExecutable("shim", 0, "codex.cmd");
+
+    await expect(
+      locateCodexBinary({ bundledBinaryPath: null, explicitPath: commandShim, platform: "win32" }),
+    ).rejects.toThrow("Windows Codex binary must be a native .exe executable");
   });
 });
 
 describe("checkCodexVersion", () => {
   it("accepts the pinned supported Codex version", async () => {
-    const binaryPath = await createExecutable(`codex-cli ${SUPPORTED_CODEX_VERSION}\n`);
+    const execute = vi.fn(() => Promise.resolve(`codex-cli ${SUPPORTED_CODEX_VERSION}\n`));
 
-    await expect(checkCodexVersion(binaryPath)).resolves.toEqual({
+    await expect(checkCodexVersion("codex", { execute })).resolves.toEqual({
       raw: `codex-cli ${SUPPORTED_CODEX_VERSION}`,
       version: SUPPORTED_CODEX_VERSION,
     });
+    expect(execute).toHaveBeenCalledWith("codex");
   });
 
   it("rejects an unsupported Codex version", async () => {
-    const binaryPath = await createExecutable("codex-cli 0.144.0\n");
-
-    await expect(checkCodexVersion(binaryPath)).rejects.toThrow(
-      `Unsupported Codex version 0.144.0; expected ${SUPPORTED_CODEX_VERSION}`,
-    );
+    await expect(
+      checkCodexVersion("codex", {
+        execute: () => Promise.resolve("codex-cli 0.144.0\n"),
+      }),
+    ).rejects.toThrow(`Unsupported Codex version 0.144.0; expected ${SUPPORTED_CODEX_VERSION}`);
   });
 
   it("rejects malformed version output and non-zero exits", async () => {
-    const malformedBinary = await createExecutable("unknown\n");
-    const failingBinary = await createExecutable("failed\n", 2);
-
-    await expect(checkCodexVersion(malformedBinary)).rejects.toThrow(
-      "Invalid Codex version output",
-    );
-    await expect(checkCodexVersion(failingBinary)).rejects.toThrow("Codex version check failed");
+    await expect(
+      checkCodexVersion("codex", { execute: () => Promise.resolve("unknown\n") }),
+    ).rejects.toThrow("Invalid Codex version output");
+    await expect(
+      checkCodexVersion("codex", { execute: () => Promise.reject(new Error("exit code 2")) }),
+    ).rejects.toThrow("Codex version check failed");
   });
 });

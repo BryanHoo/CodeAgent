@@ -228,6 +228,31 @@ describe("AI Elements primitives", () => {
     expect(markup).not.toContain('href="/workspace/docs/architecture-design.md:716"');
   });
 
+  it("renders Windows Markdown file references as source preview buttons", () => {
+    const markup = renderToStaticMarkup(
+      <Message from="assistant">
+        <MessageContent>
+          <MessageResponse onOpenFileReference={() => undefined}>
+            {
+              "[app.ts](C:/workspace/CodeAgent/src/app.ts:12)\n\n[server.ts](C:\\workspace\\CodeAgent\\src\\server.ts:24)\n\n[share.ts](\\\\server\\share\\share.ts:3)"
+            }
+          </MessageResponse>
+        </MessageContent>
+      </Message>,
+    );
+
+    expect(markup).toContain('<button class="markdown-file-reference');
+    expect(markup).toContain('data-file-reference="true"');
+    expect(markup).toContain("(line 12)");
+    expect(markup).toContain("(line 24)");
+    expect(markup).toContain("(line 3)");
+    expect(markup.match(/data-file-reference="true"/g)).toHaveLength(3);
+    expect(markup).toContain('title="C:/workspace/CodeAgent/src/app.ts"');
+    expect(markup).toContain('title="C:/workspace/CodeAgent/src/server.ts"');
+    expect(markup).toContain('title="//server/share/share.ts"');
+    expect(markup).not.toContain('href="C:/workspace/CodeAgent/src/app.ts:12"');
+  });
+
   it("extracts code review directives into a dedicated comments summary", () => {
     const reviewMarkdown = `发现 3 个需要修复的问题：
 
