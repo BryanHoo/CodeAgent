@@ -43,7 +43,7 @@
 - Project 列表默认空，通过宿主系统目录选择器注册，并持久化到 `CODEX_HOME/code-agent/state.sqlite3`；重复真实路径幂等返回已有 Project。
 - Project 与 Codex Thread 的 `cwd` 归属必须按真实路径比较；Windows 路径忽略大小写，Linux 符号链接解析到同一实体，不能仅比较原始路径字符串。
 - Linux 系统目录选择器在某个桌面启动器缺失或无法连接桌面会话时必须继续尝试下一个启动器，全部不可用后再回退终端输入；用户取消选择不得触发回退。
-- 浏览器与外部应用启动必须观察短时退出结果；启动器快速非零退出视为失败，Linux 浏览器按候选顺序继续回退，不能在仅收到子进程 `spawn` 事件后报告成功。
+- 浏览器与外部应用启动必须观察短时退出结果；启动器快速非零退出视为失败，Linux 浏览器按候选顺序继续回退，不能在仅收到子进程 `spawn` 事件后报告成功。Windows `explorer.exe` 是系统请求转交器，成功 `spawn` 后不得用代理进程随后的退出码误报失败；Windows Terminal 固定使用 `-w new -d <projectRoot>` 打开独立新窗口，不受用户 `windowingBehavior` 设置影响。
 - 数据库使用版本化 Migration、`STRICT` 表、显式 SQL、Prepared Statement 和事务，并固定启用 WAL、外键、NORMAL synchronous 与 5000ms busy timeout。
 - 所有同步 SQLite 操作都放入专用 `worker_threads` Worker，Fastify 主事件循环只通过 Core Repository 端口异步调用。
 - Global settings 以单例记录保存完整审批策略、审批审核方、模型、思考量、沙盒模式与默认打开应用；Project defaults 保存模型、思考量与沙盒模式；Task settings 保存完整运行设置。有效值固定按 `Task > Project > Global` 解析并按实时模型目录校验；读取推导值不得隐式写入局部记录，新 Task 创建和 Turn 启动时才固化完整 Task settings。

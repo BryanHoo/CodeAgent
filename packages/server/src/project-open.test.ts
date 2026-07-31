@@ -135,6 +135,40 @@ describe("createProjectOpenService", () => {
     );
   });
 
+  it("uses Windows broker launch semantics for Explorer and opens Terminal in a new window", async () => {
+    const existingPaths = new Set([
+      "C:\\Windows\\explorer.exe",
+      "C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\wt.exe",
+    ]);
+    const spawnDetached = vi.fn(() => Promise.resolve());
+    const service = createProjectOpenService({
+      environment: {
+        LOCALAPPDATA: "C:\\Users\\test\\AppData\\Local",
+        SystemRoot: "C:\\Windows",
+      },
+      pathExists: (path) => Promise.resolve(existingPaths.has(path)),
+      platform: "win32",
+      spawnDetached,
+    });
+    const projectRoot = "C:\\workspace\\CodeAgent";
+
+    await service.open(projectRoot, "explorer");
+    await service.open(projectRoot, "windows-terminal");
+
+    expect(spawnDetached).toHaveBeenNthCalledWith(
+      1,
+      "C:\\Windows\\explorer.exe",
+      [projectRoot],
+      expect.objectContaining({ observeEarlyExit: false }),
+    );
+    expect(spawnDetached).toHaveBeenNthCalledWith(
+      2,
+      "C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\wt.exe",
+      ["-w", "new", "-d", projectRoot],
+      expect.objectContaining({ observeEarlyExit: true }),
+    );
+  });
+
   it("rejects apps that are not available on the current host", async () => {
     const service = createProjectOpenService({
       environment: { PATH: "/usr/bin" },

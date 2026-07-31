@@ -13,6 +13,7 @@ import type {
 
 type SpawnDetachedOptions = Readonly<{
   cwd: string;
+  observeEarlyExit: boolean;
   shell: false;
   windowsHide: boolean;
 }>;
@@ -27,6 +28,7 @@ type ProjectOpenCommand = Readonly<{
   app: ProjectOpenApp;
   args: (projectRoot: string) => readonly string[];
   file: string;
+  observeEarlyExit: boolean;
 }>;
 
 type ProjectOpenCommandMap = Map<ProjectOpenAppId, ProjectOpenCommand>;
@@ -70,8 +72,9 @@ function defaultSpawnDetached(
   launchConfirmationMs: number,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    const { observeEarlyExit, ...spawnOptions } = options;
     const child = spawn(file, [...args], {
-      ...options,
+      ...spawnOptions,
       detached: true,
       stdio: "ignore",
     });
@@ -93,6 +96,14 @@ function defaultSpawnDetached(
       });
     });
     child.once("spawn", () => {
+      if (!observeEarlyExit) {
+        // Windows 系统代理只负责转交请求，成功转交后的退出码不代表目标窗口启动失败。
+        settle(() => {
+          child.unref();
+          resolve();
+        });
+        return;
+      }
       // GUI 进程可能长驻；短暂观察可捕获启动失败，同时避免等待应用整个生命周期。
       confirmationTimer = setTimeout(() => {
         settle(() => {
@@ -168,9 +179,10 @@ function addCommand(
   app: Readonly<{ id: ProjectOpenAppId; kind: ProjectOpenAppKind; name: string }>,
   file: string | undefined,
   args: (projectRoot: string) => readonly string[],
+  observeEarlyExit = true,
 ): void {
   if (file !== undefined) {
-    commands.set(app.id, { app, args, file });
+    commands.set(app.id, { app, args, file, observeEarlyExit });
   }
 }
 
@@ -355,6 +367,7 @@ async function resolveWindowsCommands(
     { id: "explorer", kind: "file-manager", name: "文件资源管理器" },
     explorer,
     (root) => [root],
+    false,
   );
   const windowsTerminal = await firstExisting(
     [
@@ -369,7 +382,7 @@ async function resolveWindowsCommands(
     commands,
     { id: "windows-terminal", kind: "terminal", name: "Windows Terminal" },
     windowsTerminal,
-    (root) => ["-d", root],
+    (root) => ["-w", "new", "-d", root],
   );
   const commandPrompt = await firstExisting(
     [
@@ -441,6 +454,7 @@ export function createProjectOpenService(
       }
       await spawnDetached(command.file, command.args(projectRoot), {
         cwd: projectRoot,
+        observeEarlyExit: command.observeEarlyExit,
         shell: false,
         windowsHide: false,
       });
