@@ -40,17 +40,19 @@ pnpm check
 pnpm test:e2e
 ```
 
+`package:check` 会检查真实 tarball 的 `package.json`；发布必须使用 `pnpm publish`，确保 `catalog:` 和 `workspace:` 被转换为 npm 可安装的版本。
+
 4. 提交发布准备并创建与包版本一致的标签：
 
 ```bash
-git tag -a v0.0.1 -m "发布 v0.0.1"
+git tag -a v0.0.2 -m "发布 v0.0.2"
 git push origin main
-git push origin v0.0.1
+git push origin v0.0.2
 ```
 
 `.github/workflows/release.yml` 会依次执行以下操作：
 
-1. 校验标签 `v0.0.1` 与 `package.json` 的 `0.0.1` 一致。
+1. 校验标签 `v0.0.2` 与 `package.json` 的 `0.0.2` 一致。
 2. 安装锁定依赖并运行 `pnpm check`。
 3. 发布带 provenance 的公开 npm 包。
 4. 根据提交记录创建 GitHub Release。
@@ -63,5 +65,6 @@ GitHub Release 只会在 npm 发布成功后创建，避免 npm 失败时产生�
 - `ENEEDAUTH`：检查 npm Publisher 的仓库、`release.yml`、`npm` Environment 是否完全匹配，并确认工作流具有 `id-token: write`。
 - npm 发布成功但 GitHub Release 创建失败：不要修改版本；重新运行失败 Job，工作流会跳过已经存在的 npm 版本并继续创建 GitHub Release。
 - npm 拒绝重复版本：提升 `package.json` 版本并重新更新 `CHANGELOG.md`，然后创建新标签。
+- `EUNSUPPORTEDPROTOCOL`：确认工作流使用 `pnpm publish`，并检查 `package:check` 已验证 tarball 内没有 `catalog:` 或 `workspace:`。
 
 发布记录以 [npm 的 @bryanhu/codea-gent 页面](https://www.npmjs.com/package/@bryanhu/codea-gent)和 [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases) 为准。

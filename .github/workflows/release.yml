@@ -48,12 +48,12 @@ jobs:
           package_name="$(node --print "require('./package.json').name")"
           package_version="$(node --print "require('./package.json').version")"
           if npm view "${package_name}@${package_version}" version --json >/dev/null 2>&1; then
-            echo "${package_name}@${package_version} is already published; skipping npm publish."
+            echo "${package_name}@${package_version} is already published; skipping pnpm publish."
           else
-            npm publish --access public --provenance
+            pnpm publish --access public --provenance --no-git-checks
           fi
         env:
-          # v0.0.1 使用一次性 Secret；绑定 npm Trusted Publisher 后删除该 Secret，OIDC 会自动接管。
+          # 绑定 npm Trusted Publisher 后删除该 Secret，OIDC 会自动接管。
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create GitHub release
         run: gh release create "${GITHUB_REF_NAME}" --generate-notes --title "CodeAgent ${GITHUB_REF_NAME}" --verify-tag

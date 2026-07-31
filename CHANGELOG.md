@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-07-31
+
+### 修复
+
+- 修复 npm 发布包保留 `catalog:` 依赖协议而导致安装失败的问题。
+
 ## [0.0.1] - 2026-07-31
 
 ### 新增
@@ -22,5 +28,6 @@
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/BryanHoo/CodeAgent/releases/tag/v0.0.1
