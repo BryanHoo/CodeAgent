@@ -95,7 +95,7 @@ Expected: 搜索无结果，安装命令均使用 `@bryanhu/code-agent`。
 
 - 任一质量门禁失败、远端分支出现未合并更新、npm 身份无权发布作用域包，或发布工作流失败时停止。
 
-- [ ] **Task Status:** pending
+- [x] **Task Status:** completed
 
 Run: `pnpm check && pnpm test:e2e`
 
