@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { CodeAgentClient } from "@code-agent/client";
@@ -8,9 +9,9 @@ import type {
   AgentTaskSettings,
 } from "@code-agent/protocol";
 import {
+  CodexAppServerProcess,
+  SUPPORTED_CODEX_VERSION,
   createCodexRuntimeProvider,
-  startCodexAppServer,
-  type CodexAppServerProcess,
 } from "@code-agent/provider-codex";
 import { createCodeAgentServer } from "@code-agent/server";
 import { afterEach, describe, expect, it } from "vitest";
@@ -38,6 +39,35 @@ const turnOptions = {
 
 const runtimes: CodexAppServerProcess[] = [];
 const servers: Awaited<ReturnType<typeof createCodeAgentServer>>[] = [];
+
+async function startFakeAppServer(scenario: string): Promise<CodexAppServerProcess> {
+  // Fake Server 是 Node.js 脚本，Windows 必须通过原生 node.exe 启动。
+  const child = spawn(process.execPath, [fakeAppServerPath, "app-server", "--listen", "stdio://"], {
+    env: { ...process.env, FAKE_APP_SERVER_SCENARIO: scenario },
+    shell: false,
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  const runtime = new CodexAppServerProcess(
+    child,
+    { path: process.execPath, source: "explicit" },
+    { raw: `codex-cli ${SUPPORTED_CODEX_VERSION}`, version: SUPPORTED_CODEX_VERSION },
+    { rpcTimeoutMs: 1_000, shutdownTimeoutMs: 200 },
+  );
+  try {
+    await runtime.waitForSpawn();
+    await runtime.client.request("initialize", {
+      capabilities: { experimentalApi: true },
+      clientInfo: { name: "code_agent", title: "CodeAgent", version: "0.0.0" },
+    });
+    runtime.client.notify("initialized", {});
+    runtimes.push(runtime);
+    return runtime;
+  } catch (error) {
+    await runtime.close();
+    throw error;
+  }
+}
 
 function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvider>) {
   let globalSettings: AgentGlobalSettings | undefined;
@@ -101,13 +131,7 @@ afterEach(async () => {
 
 describe("Realtime Path", () => {
   it("delivers Fake App Server notifications through Provider and WebSocket", async () => {
-    const runtime = await startCodexAppServer({
-      binaryPath: fakeAppServerPath,
-      env: { ...process.env, FAKE_APP_SERVER_SCENARIO: "realtime" },
-      rpcTimeoutMs: 1_000,
-      shutdownTimeoutMs: 200,
-    });
-    runtimes.push(runtime);
+    const runtime = await startFakeAppServer("realtime");
     const provider = createCodexRuntimeProvider({ client: runtime.client });
     const server = await createCodeAgentServer({
       ...createServerOptions(provider),
@@ -177,13 +201,7 @@ describe("Realtime Path", () => {
   });
 
   it("submits a prompt and streams the completed turn through the full mutation path", async () => {
-    const runtime = await startCodexAppServer({
-      binaryPath: fakeAppServerPath,
-      env: { ...process.env, FAKE_APP_SERVER_SCENARIO: "agent-actions" },
-      rpcTimeoutMs: 1_000,
-      shutdownTimeoutMs: 200,
-    });
-    runtimes.push(runtime);
+    const runtime = await startFakeAppServer("agent-actions");
     const provider = createCodexRuntimeProvider({ client: runtime.client });
     const server = await createCodeAgentServer({
       ...createServerOptions(provider),
@@ -262,13 +280,7 @@ describe("Realtime Path", () => {
   });
 
   it("submits and interrupts a running turn through the full mutation path", async () => {
-    const runtime = await startCodexAppServer({
-      binaryPath: fakeAppServerPath,
-      env: { ...process.env, FAKE_APP_SERVER_SCENARIO: "agent-actions" },
-      rpcTimeoutMs: 1_000,
-      shutdownTimeoutMs: 200,
-    });
-    runtimes.push(runtime);
+    const runtime = await startFakeAppServer("agent-actions");
     const provider = createCodexRuntimeProvider({ client: runtime.client });
     const server = await createCodeAgentServer({
       ...createServerOptions(provider),

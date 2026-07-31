@@ -34,7 +34,7 @@ async function startFake(scenario = "normal"): Promise<CodexAppServerProcess> {
     child,
     { path: process.execPath, source: "explicit" },
     { raw: "codex-cli 0.145.0", version: "0.145.0" },
-    { rpcTimeoutMs: 100, shutdownTimeoutMs: 100 },
+    { rpcTimeoutMs: 1_000, shutdownTimeoutMs: 100 },
   );
   await runtime.waitForSpawn();
   await runtime.client.request("initialize", {

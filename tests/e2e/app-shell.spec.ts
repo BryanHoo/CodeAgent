@@ -842,6 +842,66 @@ test("renders skills from a reopened task history", async ({ page }) => {
   await expect(page.getByText("完成 macOS 原生风格的三栏工作台页面。")).toBeVisible();
 });
 
+test("uses the available user message width before wrapping or truncating", async ({ page }) => {
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: {
+          ...taskSnapshotResponse.snapshot,
+          turns: [
+            {
+              ...taskSnapshot.turns[0],
+              items: [
+                {
+                  id: "message-short-text",
+                  role: "user",
+                  skills: [],
+                  text: "现在系统的 gh cli 是可以用的",
+                  type: "message",
+                },
+              ],
+            },
+            {
+              ...taskSnapshot.turns[0],
+              id: "turn-skill-only",
+              items: [
+                {
+                  id: "message-skill-only",
+                  role: "user",
+                  skills: [{ name: "git-commit" }],
+                  text: "",
+                  type: "message",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const shortText = page.getByText("现在系统的 gh cli 是可以用的", { exact: true });
+  const shortTextLineCount = await shortText.evaluate((element) => {
+    const textNode = element.firstChild;
+    if (!(textNode instanceof Text)) {
+      throw new Error("Expected a short user message text node");
+    }
+    const range = document.createRange();
+    range.selectNodeContents(textNode);
+    return range.getClientRects().length;
+  });
+  expect(shortTextLineCount).toBe(1);
+
+  const skillLabel = page.locator('[data-message-skill="git-commit"] > span');
+  const skillOverflow = await skillLabel.evaluate(
+    (element) => element.scrollWidth - element.clientWidth,
+  );
+  expect(skillOverflow).toBeLessThanOrEqual(0);
+});
+
 test("uses subtle hairline separation across registered routes", async ({ page }) => {
   const surfaces = [
     {
@@ -1531,7 +1591,13 @@ test("opens bounded source previews from assistant file references", async ({ co
   await dialog.getByRole("button", { name: "复制代码" }).click();
   await expect(dialog.getByRole("button", { name: "代码已复制" })).toBeVisible();
   await expect
-    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .poll(() =>
+      page.evaluate(async () => {
+        const clipboardText = await navigator.clipboard.readText();
+        // Windows 剪贴板会把多行文本规范化为 CRLF，比较前统一为 LF。
+        return clipboardText.replace(/\r\n?/gu, "\n");
+      }),
+    )
     .toBe(architectureSourcePreview);
 
   await page.keyboard.press("Escape");

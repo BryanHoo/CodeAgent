@@ -763,7 +763,8 @@ function TimelineItemContent({
       }
 
       return (
-        <div className="flex max-w-full flex-col items-end gap-2">
+        // 确定横向可用空间，避免用户气泡在嵌套收缩容器中提前换行或截断。
+        <div className="flex w-full flex-col items-end gap-2">
           {attachments.length === 0 ? null : (
             <div className="flex max-w-full flex-wrap justify-end gap-2" aria-label="消息附件">
               {attachments.map((attachment) => {
