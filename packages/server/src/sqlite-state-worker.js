@@ -133,6 +133,8 @@ function createOperations(database) {
         readProjectByRoot: database.prepare(
           "SELECT id, name, root_path, created_at FROM projects WHERE root_path = ?",
         ),
+        removeProject: database.prepare("DELETE FROM projects WHERE id = ?"),
+        renameProject: database.prepare("UPDATE projects SET name = ? WHERE id = ?"),
         writeProjectSortOrder: database.prepare("UPDATE projects SET sort_order = ? WHERE id = ?"),
         readProjectDefaults: database.prepare(
           "SELECT model, reasoning_effort, sandbox_mode FROM project_defaults WHERE project_id = ?",
@@ -251,6 +253,17 @@ function createOperations(database) {
     },
     readProject(payload) {
       return projectFromRow(requireStatements().readProject.get(payload.projectId));
+    },
+    removeProject(payload) {
+      // 外键级联只清理 CodeAgent 本地关联状态，不执行任何磁盘操作。
+      return requireStatements().removeProject.run(payload.projectId).changes > 0;
+    },
+    renameProject(payload) {
+      const stateStatements = requireStatements();
+      if (stateStatements.renameProject.run(payload.name, payload.projectId).changes === 0) {
+        return undefined;
+      }
+      return projectFromRow(stateStatements.readProject.get(payload.projectId));
     },
     reorderProjects(payload) {
       return reorderProjects(payload.projectIds);

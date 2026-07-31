@@ -291,6 +291,22 @@ describe("project runtime manager", () => {
     manager.dispose();
   });
 
+  it("immediately forgets a removed Project runtime and task activity", () => {
+    const harness = createClientHarness();
+    const manager = createProjectRuntimeManager(harness.client);
+    manager.observeSnapshot(createSnapshotResponse("task-1"));
+
+    manager.forgetProject("project-1");
+
+    expect(harness.closeConnection).toHaveBeenCalledOnce();
+    expect(getTaskActivity(manager.getTaskActivity(), "project-1", "task-1")).toEqual({
+      attention: null,
+      isAwaitingApproval: false,
+      isRunning: false,
+    });
+    manager.dispose();
+  });
+
   it("keeps a running Project connected until its terminal event", () => {
     vi.useFakeTimers();
     const harness = createClientHarness();

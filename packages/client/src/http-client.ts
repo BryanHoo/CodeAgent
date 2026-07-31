@@ -25,6 +25,8 @@ import {
   PinAgentTaskResponseSchema,
   ReviewAgentTaskResponseSchema,
   RenameAgentTaskResponseSchema,
+  RenameProjectResponseSchema,
+  RemoveProjectResponseSchema,
   RollbackAgentTurnResponseSchema,
   ResolvePendingRequestResponseSchema,
   StartAgentTaskResponseSchema,
@@ -66,6 +68,8 @@ import {
   type ReviewAgentTaskRequest,
   type ReviewAgentTaskResponse,
   type RenameAgentTaskResponse,
+  type RenameProjectResponse,
+  type RemoveProjectResponse,
   type RollbackAgentTurnResponse,
   type PendingRequest,
   type ResolvePendingRequestRequest,
@@ -269,6 +273,31 @@ export class CodeAgentClient {
 
   public async addProject(options: MutationOptions = {}): Promise<AddProjectResponse> {
     return this.#mutation("/v1/projects", {}, AddProjectResponseSchema, options);
+  }
+
+  public async renameProject(
+    projectId: string,
+    name: string,
+    options: MutationOptions = {},
+  ): Promise<RenameProjectResponse> {
+    return this.#mutation(
+      `${projectPath(projectId)}/rename`,
+      { name },
+      RenameProjectResponseSchema,
+      options,
+    );
+  }
+
+  public async removeProject(
+    projectId: string,
+    options: MutationOptions = {},
+  ): Promise<RemoveProjectResponse> {
+    return this.#mutation(
+      `${projectPath(projectId)}/remove`,
+      {},
+      RemoveProjectResponseSchema,
+      options,
+    );
   }
 
   public async getProjectOpenCapabilities(

@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { AgentEventConnectionState } from "@code-agent/client";
-import type { AgentTask } from "@code-agent/protocol";
+import type { AgentTask, Project } from "@code-agent/protocol";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -17,6 +17,7 @@ import {
   Send,
   Settings,
   ShieldQuestion,
+  Trash2,
   Wifi,
   WifiOff,
 } from "lucide-react";
@@ -48,6 +49,8 @@ import {
   writeExpandedProjectIds,
 } from "../project-sidebar-preferences.js";
 import { TaskRenameDialog } from "./task-rename-dialog.js";
+import { ProjectRemoveDialog } from "./project-remove-dialog.js";
+import { ProjectRenameDialog } from "./project-rename-dialog.js";
 
 const primaryActionClassName =
   "flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small font-medium text-foreground transition-colors hover:bg-control-hover";
@@ -56,6 +59,7 @@ const taskActionMenuGap = 2;
 const taskActionMenuHeight = 104;
 const taskActionMenuWidth = 128;
 const taskActionMenuViewportPadding = 8;
+const projectActionMenuHeight = 72;
 
 type ProjectSidebarProps = Readonly<{
   connectionState: AgentEventConnectionState;
@@ -156,14 +160,18 @@ export function ProjectSidebar({
     fetchNextProjectTaskPage,
     forgetTask,
     isPending,
+    isProjectActionPending,
     isProjectOrderPending,
     isProjectPickerOpen,
     projects,
     projectOrderError,
+    projectActionError,
     projectTaskStates,
     taskActivity,
     tasks,
     reorderProjects,
+    removeProject,
+    renameProject,
   } = useProjects();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -185,6 +193,9 @@ export function ProjectSidebar({
     () => new Set(),
   );
   const [renamingTask, setRenamingTask] = useState<AgentTask | null>(null);
+  const [renamingProject, setRenamingProject] = useState<Project | null>(null);
+  const [removingProject, setRemovingProject] = useState<Project | null>(null);
+  const [hasSubmittedProjectAction, setHasSubmittedProjectAction] = useState(false);
   const [taskActionError, setTaskActionError] = useState<string | null>(null);
   const pinMutation = useMutation(taskPinMutationOptions(client));
   const renameMutation = useMutation(taskRenameMutationOptions(client));
@@ -208,6 +219,21 @@ export function ProjectSidebar({
     projects,
   });
   const firstProject = orderedProjects[0];
+
+  useEffect(() => {
+    if (
+      isPending ||
+      projectId === undefined ||
+      projects.some((project) => project.id === projectId)
+    ) {
+      return;
+    }
+    // 缓存提交后再修正已删除 Project 的路由，避免事件回调与 React Query 渲染竞态。
+    const nextProject = projects[0];
+    void (nextProject === undefined
+      ? navigate({ replace: true, to: "/" })
+      : navigate({ params: { projectId: nextProject.id }, replace: true, to: "/p/$projectId" }));
+  }, [isPending, navigate, projectId, projects]);
 
   useEffect(() => {
     // 首次加载只展开第一个 Project；已有配置则恢复上次保存的文件夹形态。
@@ -333,6 +359,31 @@ export function ProjectSidebar({
     } catch {
       setTaskActionError("无法归档任务");
     }
+  };
+
+  const closeProjectDialog = (targetProjectId: string) => {
+    setRenamingProject(null);
+    setRemovingProject(null);
+    setHasSubmittedProjectAction(false);
+    requestAnimationFrame(() => {
+      document.getElementById(`project-actions-${targetProjectId}`)?.focus();
+    });
+  };
+
+  const submitProjectRename = async (project: Project, name: string) => {
+    setHasSubmittedProjectAction(true);
+    if (await renameProject(project.id, name)) {
+      closeProjectDialog(project.id);
+    }
+  };
+
+  const confirmProjectRemoval = async (project: Project) => {
+    setHasSubmittedProjectAction(true);
+    const remainingProjects = await removeProject(project.id);
+    if (remainingProjects === undefined) {
+      return;
+    }
+    setRemovingProject(null);
   };
 
   return (
@@ -526,6 +577,18 @@ export function ProjectSidebar({
                       <Folder className="size-4 shrink-0" aria-hidden="true" />
                       <span className="truncate">{project.name}</span>
                     </button>
+                    <ProjectActions
+                      isPending={isProjectActionPending}
+                      onRemove={(targetProject) => {
+                        setHasSubmittedProjectAction(false);
+                        setRemovingProject(targetProject);
+                      }}
+                      onRename={(targetProject) => {
+                        setHasSubmittedProjectAction(false);
+                        setRenamingProject(targetProject);
+                      }}
+                      project={project}
+                    />
                     <IconButton
                       label={`在 ${project.name} 中新建任务`}
                       onClick={() => {
@@ -624,10 +687,210 @@ export function ProjectSidebar({
         />
       )}
 
+      {renamingProject === null ? null : (
+        <ProjectRenameDialog
+          error={hasSubmittedProjectAction ? (projectActionError?.message ?? null) : null}
+          initialName={renamingProject.name}
+          isPending={isProjectActionPending}
+          key={renamingProject.id}
+          onClose={() => {
+            closeProjectDialog(renamingProject.id);
+          }}
+          onRename={(name) => {
+            void submitProjectRename(renamingProject, name);
+          }}
+        />
+      )}
+
+      {removingProject === null ? null : (
+        <ProjectRemoveDialog
+          error={hasSubmittedProjectAction ? (projectActionError?.message ?? null) : null}
+          isPending={isProjectActionPending}
+          key={removingProject.id}
+          onClose={() => {
+            closeProjectDialog(removingProject.id);
+          }}
+          onRemove={() => {
+            void confirmProjectRemoval(removingProject);
+          }}
+          project={removingProject}
+        />
+      )}
+
       <div className="p-2">
         <SidebarSettingsButton connectionState={connectionState} onOpen={onOpenSettings} />
       </div>
     </aside>
+  );
+}
+
+type ProjectActionsProps = Readonly<{
+  isPending: boolean;
+  onRemove: (project: Project) => void;
+  onRename: (project: Project) => void;
+  project: Project;
+}>;
+
+function ProjectActions({ isPending, onRemove, onRename, project }: ProjectActionsProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<Readonly<{ left: number; top: number }>>();
+  const menuContainerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const updateMenuPosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (trigger === null) {
+      return;
+    }
+    const triggerRect = trigger.getBoundingClientRect();
+    const maximumLeft = Math.max(
+      taskActionMenuViewportPadding,
+      window.innerWidth - taskActionMenuWidth - taskActionMenuViewportPadding,
+    );
+    const belowTop = triggerRect.bottom + taskActionMenuGap;
+    const maximumTop = window.innerHeight - projectActionMenuHeight - taskActionMenuViewportPadding;
+    setMenuPosition({
+      left: Math.min(Math.max(triggerRect.left, taskActionMenuViewportPadding), maximumLeft),
+      top:
+        belowTop <= maximumTop
+          ? belowTop
+          : Math.max(
+              taskActionMenuViewportPadding,
+              triggerRect.top - projectActionMenuHeight - taskActionMenuGap,
+            ),
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) {
+      setMenuPosition(undefined);
+      return;
+    }
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [menuOpen, updateMenuPosition]);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (
+        !menuContainerRef.current?.contains(event.target as Node) &&
+        !menuRef.current?.contains(event.target as Node)
+      ) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [menuOpen]);
+
+  return (
+    <div
+      className="relative shrink-0"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && menuOpen) {
+          event.preventDefault();
+          setMenuOpen(false);
+          triggerRef.current?.focus();
+        }
+      }}
+      ref={menuContainerRef}
+    >
+      <button
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
+        aria-label={`打开 ${project.name} 的项目操作菜单`}
+        className="grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus"
+        disabled={isPending}
+        id={`project-actions-${project.id}`}
+        onClick={() => {
+          setMenuOpen((open) => !open);
+        }}
+        ref={triggerRef}
+        type="button"
+      >
+        <Ellipsis className="size-3.5" aria-hidden="true" />
+      </button>
+      {menuOpen && menuPosition !== undefined && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed z-50"
+              ref={menuRef}
+              style={{ left: menuPosition.left, top: menuPosition.top }}
+            >
+              <ProjectActionMenu
+                isPending={isPending}
+                onRemove={() => {
+                  setMenuOpen(false);
+                  onRemove(project);
+                }}
+                onRename={() => {
+                  setMenuOpen(false);
+                  onRename(project);
+                }}
+                project={project}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
+type ProjectActionMenuProps = Readonly<{
+  isPending: boolean;
+  onRemove: () => void;
+  onRename: () => void;
+  project: Project;
+}>;
+
+const projectActionClassName =
+  "flex h-8 w-full items-center gap-2 rounded-control px-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover disabled:opacity-50";
+
+export function ProjectActionMenu({
+  isPending,
+  onRemove,
+  onRename,
+  project,
+}: ProjectActionMenuProps) {
+  return (
+    <div
+      aria-label={`${project.name} 的项目操作`}
+      className="w-32 rounded-surface bg-raised p-1 shadow-floating"
+      role="menu"
+    >
+      <button
+        className={projectActionClassName}
+        disabled={isPending}
+        onClick={onRename}
+        role="menuitem"
+        type="button"
+      >
+        <Pencil className="size-3.5" aria-hidden="true" />
+        重命名
+      </button>
+      <button
+        className={`${projectActionClassName} text-danger`}
+        disabled={isPending}
+        onClick={onRemove}
+        role="menuitem"
+        type="button"
+      >
+        <Trash2 className="size-3.5" aria-hidden="true" />
+        删除
+      </button>
+    </div>
   );
 }
 

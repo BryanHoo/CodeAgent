@@ -301,6 +301,8 @@ test.beforeEach(async ({ page }) => {
     const pinMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/pin$/u.exec(url.pathname);
     const renameMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/rename$/u.exec(url.pathname);
     const archiveMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/archive$/u.exec(url.pathname);
+    const projectRenameMatch = /^\/v1\/projects\/([^/]+)\/rename$/u.exec(url.pathname);
+    const projectRemoveMatch = /^\/v1\/projects\/([^/]+)\/remove$/u.exec(url.pathname);
     let body: unknown;
 
     if (url.pathname === "/v1/health") {
@@ -356,6 +358,22 @@ test.beforeEach(async ({ page }) => {
       };
       routedProjects = [...routedProjects, addedProject];
       body = { project: addedProject };
+    } else if (projectRenameMatch !== null && route.request().method() === "POST") {
+      const projectId = projectRenameMatch[1] ?? "";
+      const request = parseRequestRecord(route.request().postData());
+      const name = request["name"];
+      const projectIndex = routedProjects.findIndex((project) => project.id === projectId);
+      const project = routedProjects[projectIndex];
+      if (project === undefined || typeof name !== "string") {
+        throw new Error("Invalid rename project request");
+      }
+      const renamedProject = { ...project, name };
+      routedProjects[projectIndex] = renamedProject;
+      body = { project: renamedProject };
+    } else if (projectRemoveMatch !== null && route.request().method() === "POST") {
+      const projectId = projectRemoveMatch[1] ?? "";
+      routedProjects = routedProjects.filter((project) => project.id !== projectId);
+      body = { projectId, status: "removed" };
     } else if (url.pathname === "/v1/projects") {
       body = { data: routedProjects, nextCursor: null };
     } else if (url.pathname === "/v1/projects/code-agent/files/source") {
@@ -791,6 +809,87 @@ test("drags project folders to reorder and restores the persisted order", async 
     "code-agent",
     "superwork",
   ]);
+});
+
+test("项目文件夹操作支持重命名和删除且不修改磁盘目录", async ({ page }) => {
+  await page.goto("/p/code-agent");
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const projectMenuTrigger = sidebar.getByRole("button", {
+    name: "打开 CodeAgent 的项目操作菜单",
+  });
+  const addTaskButton = sidebar.getByRole("button", { name: "在 CodeAgent 中新建任务" });
+  const [menuTriggerBounds, addTaskBounds] = await Promise.all([
+    projectMenuTrigger.boundingBox(),
+    addTaskButton.boundingBox(),
+  ]);
+  if (menuTriggerBounds === null || addTaskBounds === null) {
+    throw new Error("Project action buttons are not visible");
+  }
+  expect(menuTriggerBounds.x).toBeLessThan(addTaskBounds.x);
+
+  await projectMenuTrigger.click();
+  const projectMenu = page.getByRole("menu", { name: "CodeAgent 的项目操作" });
+  await expect(projectMenu.getByRole("menuitem")).toHaveCount(2);
+  await expect(projectMenu.getByRole("menuitem").allTextContents()).resolves.toEqual([
+    "重命名",
+    "删除",
+  ]);
+  await projectMenu.getByRole("menuitem", { name: "重命名" }).click();
+  const renameDialog = page.getByRole("dialog", { name: "重命名项目" });
+  await expect(renameDialog).toContainText("不会修改磁盘上的文件夹名称");
+  await renameDialog.getByRole("textbox", { name: "项目名称" }).fill("本地工作台");
+  const renameRequestPromise = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/v1/projects/code-agent/rename") && request.method() === "POST",
+  );
+  const renameResponsePromise = page.waitForResponse((response) =>
+    response.url().endsWith("/v1/projects/code-agent/rename"),
+  );
+  await renameDialog.getByRole("button", { name: "保存" }).click();
+  const [renameRequest, renameResponse] = await Promise.all([
+    renameRequestPromise,
+    renameResponsePromise,
+  ]);
+  expect(parseRequestRecord(renameRequest.postData())).toEqual({ name: "本地工作台" });
+  expect(renameRequest.headers()["idempotency-key"]).toBeTruthy();
+  await expect(renameResponse.json()).resolves.toMatchObject({
+    project: { name: "本地工作台", rootPath: "~/Develop/person/CodeAgent" },
+  });
+  await expect(sidebar.getByRole("button", { name: "切换项目 本地工作台" })).toBeVisible();
+  await expect(page).toHaveURL(/\/p\/code-agent$/u);
+
+  await sidebar.getByRole("button", { name: "打开 本地工作台 的项目操作菜单" }).click();
+  await page
+    .getByRole("menu", { name: "本地工作台 的项目操作" })
+    .getByRole("menuitem", { name: "删除" })
+    .click();
+  const removeDialog = page.getByRole("dialog", { name: "删除项目" });
+  await expect(removeDialog).toContainText("不会删除磁盘上的文件夹及文件");
+  const removeRequestPromise = page.waitForRequest((request) =>
+    request.url().endsWith("/v1/projects/code-agent/remove"),
+  );
+  await removeDialog.getByRole("button", { name: "删除" }).click();
+  const removeRequest = await removeRequestPromise;
+  expect(removeRequest.headers()["idempotency-key"]).toBeTruthy();
+  await expect(page).toHaveURL(/\/p\/superwork$/u);
+  await expect(sidebar.getByRole("button", { name: "切换项目 本地工作台" })).toHaveCount(0);
+
+  await sidebar.getByRole("button", { name: "打开 superwork 的项目操作菜单" }).click();
+  await page
+    .getByRole("menu", { name: "superwork 的项目操作" })
+    .getByRole("menuitem", { name: "删除" })
+    .click();
+  const removeLastProjectRequest = page.waitForRequest((request) =>
+    request.url().endsWith("/v1/projects/superwork/remove"),
+  );
+  await page
+    .getByRole("dialog", { name: "删除项目" })
+    .getByRole("button", { name: "删除" })
+    .click();
+  await removeLastProjectRequest;
+
+  await expect(page).toHaveURL(/\/$/u);
+  await expect(page.getByText("尚未添加项目", { exact: true })).toBeVisible();
 });
 
 test("removes the legacy workspace routes", async ({ page }) => {

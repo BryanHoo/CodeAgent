@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -116,6 +116,38 @@ describe("SqliteStateRepository", () => {
       /every project exactly once/u,
     );
     await expect(repository.list()).resolves.toEqual([first, second]);
+  });
+
+  it("renames only the project display name and removes only local registration state", async () => {
+    const root = await createWorkspace();
+    const projectRoot = join(root, "workspace");
+    await mkdir(projectRoot);
+    const repository = await openRepository(root);
+    const project = await repository.register({ name: "Workspace", rootPath: projectRoot });
+    await repository.writeProjectDefaults(project.id, {
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write",
+    });
+    await repository.writeTaskPinned(project.id, "task-1", true);
+
+    const renamed = await repository.rename(project.id, "  工作区别名  ");
+
+    expect(renamed).toEqual({ ...project, name: "工作区别名" });
+    expect(renamed?.rootPath).toBe(project.rootPath);
+    await expect(repository.rename("missing", "未找到")).resolves.toBeUndefined();
+    await expect(repository.remove("missing")).resolves.toBe(false);
+    await expect(repository.remove(project.id)).resolves.toBe(true);
+    await expect(repository.read(project.id)).resolves.toBeUndefined();
+    await expect(repository.readProjectDefaults(project.id)).resolves.toBeUndefined();
+    await expect(repository.listPinnedTaskIds(project.id)).resolves.toEqual([]);
+    await expect(stat(projectRoot)).resolves.toMatchObject({});
+
+    await repository.close();
+    repositories.splice(repositories.indexOf(repository), 1);
+    const reopened = await openRepository(root);
+    await expect(reopened.list()).resolves.toEqual([]);
+    await expect(stat(projectRoot)).resolves.toMatchObject({});
   });
 
   it("isolates project defaults and task settings across projects", async () => {

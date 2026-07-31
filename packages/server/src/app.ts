@@ -49,8 +49,12 @@ import {
   ReviewAgentTaskResponseSchema,
   RenameAgentTaskRequestSchema,
   RenameAgentTaskResponseSchema,
+  RenameProjectRequestSchema,
+  RenameProjectResponseSchema,
   ReorderProjectsRequestSchema,
   ReorderProjectsResponseSchema,
+  RemoveProjectRequestSchema,
+  RemoveProjectResponseSchema,
   RollbackAgentTurnRequestSchema,
   RollbackAgentTurnResponseSchema,
   ResolvePendingRequestRequestSchema,
@@ -85,7 +89,9 @@ import {
   type RollbackAgentTurnRequest,
   type ReviewAgentTaskRequest,
   type RenameAgentTaskRequest,
+  type RenameProjectRequest,
   type ReorderProjectsRequest,
+  type RemoveProjectRequest,
   type ResolvePendingRequestRequest,
   type StartAgentTurnRequest,
   type UploadAgentFeedbackRequest,
@@ -561,6 +567,16 @@ export async function createCodeAgentServer(
     };
     projectContexts.set(projectId, context);
     return context;
+  };
+  const releaseProjectContext = (projectId: string) => {
+    const context = projectContexts.get(projectId);
+    if (context === undefined) {
+      return;
+    }
+    // Project 移除后立即停止对应事件链路，其他 Project 的 Runtime 保持不变。
+    context.unsubscribe();
+    context.eventStream.close();
+    projectContexts.delete(projectId);
   };
   const listModels = async (): Promise<readonly AgentModel[]> =>
     (await modelCatalogCache.read()).data;
@@ -1050,6 +1066,79 @@ export async function createCodeAgentServer(
         });
         return { project };
       }),
+  );
+
+  app.post<{
+    Body: RenameProjectRequest;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string };
+  }>(
+    "/v1/projects/:projectId/rename",
+    {
+      schema: {
+        body: RenameProjectRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectParamsSchema,
+        response: {
+          200: RenameProjectResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        ["rename-project", request.params.projectId],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const project = await options.projectRepository.rename(
+            request.params.projectId,
+            request.body.name.trim(),
+          );
+          if (project === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          return { project };
+        },
+      ),
+  );
+
+  app.post<{
+    Body: RemoveProjectRequest;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string };
+  }>(
+    "/v1/projects/:projectId/remove",
+    {
+      schema: {
+        body: RemoveProjectRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectParamsSchema,
+        response: {
+          200: RemoveProjectResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        ["remove-project", request.params.projectId],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          if (!(await options.projectRepository.remove(request.params.projectId))) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          releaseProjectContext(request.params.projectId);
+          return { projectId: request.params.projectId, status: "removed" as const };
+        },
+      ),
   );
 
   app.get<{ Params: { projectId: string } }>(

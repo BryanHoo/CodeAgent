@@ -90,6 +90,8 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     readTaskSettings: vi.fn(() => Promise.resolve(undefined)),
     read: vi.fn(() => Promise.resolve(undefined)),
     register: vi.fn(),
+    remove: vi.fn(() => Promise.resolve(false)),
+    rename: vi.fn(() => Promise.resolve(undefined)),
     reorder: vi.fn(() => Promise.resolve([])),
     writeGlobalSettings: vi.fn((settings) => Promise.resolve(settings)),
     writeProjectDefaults: vi.fn((_projectId, settings) => Promise.resolve(settings)),

@@ -301,6 +301,18 @@ export class SqliteStateRepository implements ProjectRepository, AgentSettingsRe
     return this.#call("readProject", { projectId });
   }
 
+  public remove(projectId: string): Promise<boolean> {
+    return this.#call("removeProject", { projectId });
+  }
+
+  public rename(projectId: string, name: string): Promise<Project | undefined> {
+    const normalizedName = name.trim();
+    if (normalizedName.length === 0) {
+      throw new Error("Project name must not be empty");
+    }
+    return this.#call("renameProject", { name: normalizedName, projectId });
+  }
+
   public reorder(projectIds: readonly string[]): Promise<readonly Project[]> {
     return this.#call("reorderProjects", { projectIds });
   }

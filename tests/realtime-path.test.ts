@@ -80,6 +80,8 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
       list: () => Promise.resolve([project]),
       read: (projectId: string) => Promise.resolve(projectId === project.id ? project : undefined),
       register: () => Promise.resolve(project),
+      remove: () => Promise.resolve(false),
+      rename: () => Promise.resolve(undefined),
       reorder: () => Promise.resolve([project]),
     },
     provider,

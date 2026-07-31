@@ -50,8 +50,12 @@ import {
   ReviewAgentTaskResponseSchema,
   RenameAgentTaskRequestSchema,
   RenameAgentTaskResponseSchema,
+  RenameProjectRequestSchema,
+  RenameProjectResponseSchema,
   ReorderProjectsRequestSchema,
   ReorderProjectsResponseSchema,
+  RemoveProjectRequestSchema,
+  RemoveProjectResponseSchema,
   UploadAgentFeedbackRequestSchema,
   UploadAgentFeedbackResponseSchema,
   RollbackAgentTurnRequestSchema,
@@ -118,6 +122,30 @@ describe("project protocol", () => {
           },
         ],
         nextCursor: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("strictly validates project display-name and removal mutations", () => {
+    expect(Value.Check(RenameProjectRequestSchema, { name: "工作区别名" })).toBe(true);
+    expect(Value.Check(RenameProjectRequestSchema, { name: "   " })).toBe(false);
+    expect(Value.Check(RenameProjectRequestSchema, { name: "x".repeat(201) })).toBe(false);
+    expect(
+      Value.Check(RenameProjectResponseSchema, {
+        project: {
+          createdAt: "2026-07-25T00:00:00.000Z",
+          id: "code-agent",
+          name: "工作区别名",
+          rootPath: "/workspace/CodeAgent",
+        },
+      }),
+    ).toBe(true);
+    expect(Value.Check(RemoveProjectRequestSchema, {})).toBe(true);
+    expect(Value.Check(RemoveProjectRequestSchema, { removeFromDisk: true })).toBe(false);
+    expect(
+      Value.Check(RemoveProjectResponseSchema, {
+        projectId: "code-agent",
+        status: "removed",
       }),
     ).toBe(true);
   });

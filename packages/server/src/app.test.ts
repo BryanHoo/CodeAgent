@@ -14,6 +14,7 @@ import type {
   AgentTaskSettings,
   AgentTurn,
   PendingRequest,
+  Project,
 } from "@code-agent/protocol";
 import { Buffer } from "node:buffer";
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -292,7 +293,7 @@ function createSettingsRepository() {
 }
 
 function createServerOptions(provider: AgentProvider, overrides: Record<string, unknown> = {}) {
-  const orderedProjects = [project];
+  const orderedProjects: Project[] = [project];
   const runtimeProvider: AgentRuntimeProvider = {
     forProject: () => provider,
     getCapabilities: () => provider.getCapabilities(),
@@ -307,6 +308,24 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
         Promise.resolve(projectId === project.id ? project : undefined),
       ),
       register: vi.fn(() => Promise.resolve(project)),
+      remove: vi.fn((projectId: string) => {
+        const projectIndex = orderedProjects.findIndex((item) => item.id === projectId);
+        if (projectIndex < 0) {
+          return Promise.resolve(false);
+        }
+        orderedProjects.splice(projectIndex, 1);
+        return Promise.resolve(true);
+      }),
+      rename: vi.fn((projectId: string, name: string) => {
+        const projectIndex = orderedProjects.findIndex((item) => item.id === projectId);
+        const currentProject = orderedProjects[projectIndex];
+        if (currentProject === undefined) {
+          return Promise.resolve(undefined);
+        }
+        const renamedProject = { ...currentProject, name };
+        orderedProjects[projectIndex] = renamedProject;
+        return Promise.resolve(renamedProject);
+      }),
       reorder: vi.fn((projectIds: readonly string[]) => {
         const reordered = projectIds.map((projectId) =>
           orderedProjects.find((currentProject) => currentProject.id === projectId),
@@ -656,6 +675,78 @@ describe("CodeAgent Server", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ project });
     expect(register).toHaveBeenCalledWith({ name: "CodeAgent", rootPath: project.rootPath });
+  });
+
+  it("renames and removes only the registered project idempotently", async () => {
+    const providerHarness = createProvider();
+    let storedProject: Project | undefined = project;
+    const rename = vi.fn((_projectId: string, name: string) => {
+      storedProject = storedProject === undefined ? undefined : { ...storedProject, name };
+      return Promise.resolve(storedProject);
+    });
+    const remove = vi.fn((projectId: string) => {
+      if (storedProject?.id !== projectId) {
+        return Promise.resolve(false);
+      }
+      storedProject = undefined;
+      return Promise.resolve(true);
+    });
+    const app = await createCodeAgentServer(
+      createServerOptions(providerHarness.provider, {
+        projectRepository: {
+          list: () => Promise.resolve(storedProject === undefined ? [] : [storedProject]),
+          read: (projectId: string) =>
+            Promise.resolve(storedProject?.id === projectId ? storedProject : undefined),
+          register: () => Promise.resolve(project),
+          remove,
+          rename,
+          reorder: () => Promise.resolve(storedProject === undefined ? [] : [storedProject]),
+        },
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+    await app.inject({ method: "GET", url: "/v1/projects/code-agent/skills" });
+    expect(providerHarness.eventListeners.size).toBe(1);
+
+    const renameRequest = {
+      headers: { "idempotency-key": "rename-project-key" },
+      method: "POST" as const,
+      payload: { name: "  工作区别名  " },
+      url: "/v1/projects/code-agent/rename",
+    };
+    const firstRenameResponse = await app.inject(renameRequest);
+    const repeatedRenameResponse = await app.inject(renameRequest);
+    const invalidRenameResponse = await app.inject({
+      ...renameRequest,
+      headers: { "idempotency-key": "invalid-project-name" },
+      payload: { name: "   " },
+    });
+    const removeRequest = {
+      headers: { "idempotency-key": "remove-project-key" },
+      method: "POST" as const,
+      payload: {},
+      url: "/v1/projects/code-agent/remove",
+    };
+    const firstRemoveResponse = await app.inject(removeRequest);
+    const repeatedRemoveResponse = await app.inject(removeRequest);
+    const missingRemoveResponse = await app.inject({
+      ...removeRequest,
+      headers: { "idempotency-key": "missing-project-key" },
+    });
+
+    expect(firstRenameResponse.json()).toEqual({
+      project: { ...project, name: "工作区别名" },
+    });
+    expect(repeatedRenameResponse.json()).toEqual(firstRenameResponse.json());
+    expect(rename).toHaveBeenCalledOnce();
+    expect(rename).toHaveBeenCalledWith(project.id, "工作区别名");
+    expect(invalidRenameResponse.statusCode).toBe(400);
+    expect(firstRemoveResponse.json()).toEqual({ projectId: project.id, status: "removed" });
+    expect(repeatedRemoveResponse.json()).toEqual(firstRemoveResponse.json());
+    // 成功请求只执行一次；第二次调用来自使用新 Key 的缺失资源验证。
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(providerHarness.eventListeners.size).toBe(0);
+    expect(missingRemoveResponse.statusCode).toBe(404);
   });
 
   it("serves the configured project's Git working tree status", async () => {
@@ -1410,6 +1501,8 @@ describe("CodeAgent Server", () => {
         read: (projectId) =>
           Promise.resolve([project, otherProject].find((item) => item.id === projectId)),
         register: () => Promise.resolve(project),
+        remove: () => Promise.resolve(false),
+        rename: () => Promise.resolve(undefined),
         reorder: () => Promise.resolve([project, otherProject]),
       },
       provider: runtimeProvider,

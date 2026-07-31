@@ -113,6 +113,35 @@ export const ReorderProjectsRequestSchema = Type.Object(
 
 export type ReorderProjectsRequest = Readonly<Static<typeof ReorderProjectsRequestSchema>>;
 
+export const RenameProjectRequestSchema = Type.Object(
+  { name: Type.String({ maxLength: 200, minLength: 1, pattern: "\\S" }) },
+  { additionalProperties: false },
+);
+
+export type RenameProjectRequest = Readonly<Static<typeof RenameProjectRequestSchema>>;
+
+export const RenameProjectResponseSchema = Type.Object(
+  { project: ProjectSchema },
+  { additionalProperties: false },
+);
+
+export type RenameProjectResponse = Readonly<Static<typeof RenameProjectResponseSchema>>;
+
+// 移除仅删除 CodeAgent 注册信息，请求体不接受任何磁盘删除选项。
+export const RemoveProjectRequestSchema = Type.Object({}, { additionalProperties: false });
+
+export type RemoveProjectRequest = Readonly<Static<typeof RemoveProjectRequestSchema>>;
+
+export const RemoveProjectResponseSchema = Type.Object(
+  {
+    projectId: Type.String({ minLength: 1 }),
+    status: Type.Literal("removed"),
+  },
+  { additionalProperties: false },
+);
+
+export type RemoveProjectResponse = Readonly<Static<typeof RemoveProjectResponseSchema>>;
+
 export const AgentTaskSchema = Type.Object(
   {
     id: Type.String({ minLength: 1 }),

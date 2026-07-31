@@ -6,10 +6,13 @@ import {
   deriveProjectSidebarConnectionState,
   getProjectTaskPaginationControl,
   getProjectSidebarConnectionStatus,
+  ProjectActionMenu,
   SidebarSettingsButton,
   TaskStatusIndicator,
   TaskActionMenu,
 } from "./project-sidebar.js";
+import { ProjectRemoveDialog } from "./project-remove-dialog.js";
+import { ProjectRenameDialog } from "./project-rename-dialog.js";
 
 describe("Project task pagination", () => {
   it("requests only the selected Project next page", async () => {
@@ -165,6 +168,53 @@ describe("TaskActionMenu", () => {
     expect(markup).toContain("固定");
     expect(markup).toContain("重命名");
     expect(markup).toContain("归档");
+  });
+});
+
+describe("Project folder actions", () => {
+  const project = {
+    createdAt: "2026-07-23T00:00:00.000Z",
+    id: "code-agent",
+    name: "CodeAgent",
+    rootPath: "/workspace/CodeAgent",
+  };
+
+  it("offers only rename and remove commands in that order", () => {
+    const markup = renderToStaticMarkup(
+      <ProjectActionMenu
+        isPending={false}
+        onRemove={() => undefined}
+        onRename={() => undefined}
+        project={project}
+      />,
+    );
+
+    expect(markup).toContain('role="menu"');
+    expect(markup.indexOf("重命名")).toBeLessThan(markup.indexOf("删除"));
+    expect(markup).not.toContain("新建任务");
+    expect(markup).not.toContain("归档");
+  });
+
+  it("explains that rename and removal do not change the disk folder", () => {
+    const renameMarkup = renderToStaticMarkup(
+      <ProjectRenameDialog
+        initialName={project.name}
+        isPending={false}
+        onClose={() => undefined}
+        onRename={() => undefined}
+      />,
+    );
+    const removeMarkup = renderToStaticMarkup(
+      <ProjectRemoveDialog
+        isPending={false}
+        onClose={() => undefined}
+        onRemove={() => undefined}
+        project={project}
+      />,
+    );
+
+    expect(renameMarkup).toContain("不会修改磁盘上的文件夹名称");
+    expect(removeMarkup).toContain("不会删除磁盘上的文件夹及文件");
   });
 });
 

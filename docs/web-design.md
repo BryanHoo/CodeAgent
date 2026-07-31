@@ -234,6 +234,8 @@ Project 和 Task ID 必须来自 Server，URL 只表示导航意图，不能代�
 
 Project 不使用独立页面。用户在工作台左栏通过目录选择器添加本地文件夹，文件夹名作为 Project 名称；本地 Runtime 校验真实路径并由 Server 持久化，Web 只通过 Client API 读取和注册 Project，不直接访问数据库。
 
+每个 Project 名称行在新建 Task 的 `+` 左侧显示省略号菜单，菜单只提供重命名和删除。重命名仅更新 CodeAgent 持久化的展示名，不修改 `rootPath` 或磁盘文件夹名；删除仅移除 Project 注册、关联的本地设置/元数据以及对应 Web/Server Runtime，不删除磁盘目录、文件或 Codex Task。删除当前 Project 后进入剩余列表首项，删除最后一个 Project 后进入工作台空状态。
+
 左栏 Settings 使用原生 Dialog 在当前工作台内打开，不产生路由跳转。弹窗使用 AI Elements Select 修改全局审批、工作区、模型、思考量与默认打开应用；关闭后焦点返回左栏入口。
 
 Project 名称行短按继续展开或收起 Task；指针移动超过点击容差后立即判定为拖拽并调整 Projects 顺序，不设置固定长按等待。释放时通过 Client 提交当前完整 Project ID 顺序，刷新页面和重启 Runtime 后保持；键盘聚焦名称行后可用 `Alt + ArrowUp/ArrowDown` 完成同样操作。

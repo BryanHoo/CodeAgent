@@ -15,6 +15,8 @@ export interface ProjectRepository {
   list(): Promise<readonly Project[]>;
   read(projectId: string): Promise<Project | undefined>;
   register(input: RegisterProjectInput): Promise<Project>;
+  remove(projectId: string): Promise<boolean>;
+  rename(projectId: string, name: string): Promise<Project | undefined>;
   reorder(projectIds: readonly string[]): Promise<readonly Project[]>;
 }
 

@@ -570,6 +570,35 @@ export class ProjectRuntimeManager {
     this.#projects.get(projectId)?.forgetTask(taskId);
   }
 
+  public forgetProject(projectId: string): void {
+    const project = this.#projects.get(projectId);
+    project?.dispose();
+    this.#projects.delete(projectId);
+
+    let nextActivity = this.#taskActivity;
+    for (const record of this.#taskActivity.values()) {
+      if (record.projectId === projectId) {
+        nextActivity = removeTaskActivity(nextActivity, projectId, record.taskId);
+      }
+    }
+    this.#updateTaskActivity(nextActivity);
+
+    const projectKeyPrefix = `${projectId}\u0000`;
+    for (const key of this.#taskTitles.keys()) {
+      if (key.startsWith(projectKeyPrefix)) {
+        this.#taskTitles.delete(key);
+      }
+    }
+    for (const key of this.#titleRefreshedRunningTurns) {
+      if (key.startsWith(projectKeyPrefix)) {
+        this.#titleRefreshedRunningTurns.delete(key);
+      }
+    }
+    if (this.#viewedTask?.projectId === projectId) {
+      this.#viewedTask = undefined;
+    }
+  }
+
   public getTaskActivity(): TaskActivityMap {
     return this.#taskActivity;
   }

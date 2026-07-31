@@ -36,6 +36,8 @@ import {
   PROJECT_TASK_SEARCH_SOURCE_KEY,
   projectTasksInfiniteQueryOptions,
   projectTaskSearchSourceQueryOptions,
+  projectRemoveMutationOptions,
+  projectRenameMutationOptions,
   projectReorderMutationOptions,
   projectsQueryOptions,
   reorderProjectPage,
@@ -89,6 +91,7 @@ type ProjectContextValue = Readonly<{
   isPending: boolean;
   isProjectPickerOpen: boolean;
   isProjectOrderPending: boolean;
+  isProjectActionPending: boolean;
   fetchNextProjectTaskPage: (projectId: string) => Promise<void>;
   forgetTask: (projectId: string, taskId: string) => void;
   markTaskRunning: (projectId: string, taskId: string) => void;
@@ -96,8 +99,11 @@ type ProjectContextValue = Readonly<{
   projectTaskStates: ReadonlyMap<string, ProjectTaskListState>;
   projects: readonly Project[];
   projectOrderError: Error | null;
+  projectActionError: Error | null;
   requestNotificationPermission: () => void;
   reorderProjects: (projectIds: readonly string[]) => Promise<boolean>;
+  removeProject: (projectId: string) => Promise<readonly Project[] | undefined>;
+  renameProject: (projectId: string, name: string) => Promise<boolean>;
   retry: () => Promise<void>;
   taskActivity: TaskActivityMap;
   tasks: readonly AgentTask[];
@@ -223,6 +229,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   const [addProjectError, setAddProjectError] = useState<Error | null>(null);
   const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false);
   const [projectOrderError, setProjectOrderError] = useState<Error | null>(null);
+  const [projectActionError, setProjectActionError] = useState<Error | null>(null);
   const [projectTaskResults, setProjectTaskResults] = useState<
     ReadonlyMap<string, ProjectTaskQueryResult>
   >(() => new Map());
@@ -237,6 +244,8 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   const capabilitiesQuery = useQuery(capabilitiesQueryOptions(client));
   const projectsQuery = useQuery(projectsQueryOptions(client));
   const projectOrderMutation = useMutation(projectReorderMutationOptions(client));
+  const projectRenameMutation = useMutation(projectRenameMutationOptions(client));
+  const projectRemoveMutation = useMutation(projectRemoveMutationOptions(client));
   const projects = projectsQuery.data?.data ?? emptyProjects;
   const projectTaskResultsRef = useRef(projectTaskResults);
   projectTaskResultsRef.current = projectTaskResults;
@@ -359,6 +368,53 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
     },
     [projectOrderMutation, queryClient],
   );
+  const renameProject = useCallback(
+    async (projectId: string, name: string) => {
+      setProjectActionError(null);
+      try {
+        const response = await projectRenameMutation.mutateAsync({ name, projectId });
+        queryClient.setQueryData<ProjectPage>(["projects"], (currentPage) =>
+          currentPage === undefined
+            ? undefined
+            : {
+                ...currentPage,
+                data: currentPage.data.map((project) =>
+                  project.id === projectId ? response.project : project,
+                ),
+              },
+        );
+        return true;
+      } catch {
+        setProjectActionError(new Error("无法重命名项目"));
+        return false;
+      }
+    },
+    [projectRenameMutation, queryClient],
+  );
+  const removeProject = useCallback(
+    async (projectId: string) => {
+      setProjectActionError(null);
+      try {
+        await projectRemoveMutation.mutateAsync(projectId);
+        // 先停止该 Project 的请求和实时连接，再从列表移除，避免旧响应回填缓存。
+        await queryClient.cancelQueries({ queryKey: ["projects", projectId] });
+        queryClient.removeQueries({ queryKey: ["projects", projectId] });
+        projectRuntime.forgetProject(projectId);
+        const currentPage = queryClient.getQueryData<ProjectPage>(["projects"]);
+        const remainingProjects =
+          currentPage?.data.filter((project) => project.id !== projectId) ?? emptyProjects;
+        queryClient.setQueryData<ProjectPage>(
+          ["projects"],
+          currentPage === undefined ? undefined : { ...currentPage, data: remainingProjects },
+        );
+        return remainingProjects;
+      } catch {
+        setProjectActionError(new Error("无法删除项目"));
+        return undefined;
+      }
+    },
+    [projectRemoveMutation, projectRuntime, queryClient],
+  );
   const retry = useCallback(async () => {
     // Runtime 恢复后统一刷新全部服务端状态，避免部分 Query 继续保留失败结果。
     await queryClient.invalidateQueries();
@@ -393,14 +449,19 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           forgetTask,
           isPending,
           isProjectPickerOpen,
+          isProjectActionPending:
+            projectRenameMutation.isPending || projectRemoveMutation.isPending,
           isProjectOrderPending: projectOrderMutation.isPending,
           markTaskRunning,
           projectRuntime,
           projectTaskStates,
           projects,
           projectOrderError,
+          projectActionError,
           requestNotificationPermission,
           reorderProjects,
+          removeProject,
+          renameProject,
           retry,
           taskActivity,
           tasks,

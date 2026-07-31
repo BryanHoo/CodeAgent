@@ -50,6 +50,8 @@ export type CodeAgentMutationClient = Pick<
   | "forkTask"
   | "interruptTurn"
   | "pinTask"
+  | "removeProject"
+  | "renameProject"
   | "renameTask"
   | "reorderProjects"
   | "startReview"
@@ -367,6 +369,7 @@ type TaskRenameMutationInput = Readonly<{
 }>;
 
 type TaskArchiveMutationInput = Readonly<{ projectId: string; taskId: string }>;
+type ProjectRenameMutationInput = Readonly<{ name: string; projectId: string }>;
 
 export function taskPinMutationOptions(client: Pick<CodeAgentClient, "pinTask"> = codeAgentClient) {
   return mutationOptions({
@@ -393,6 +396,27 @@ export function taskArchiveMutationOptions(
     mutationFn: ({ projectId, taskId }: TaskArchiveMutationInput) =>
       client.archiveTask(projectId, taskId),
     mutationKey: ["tasks", "archive"] as const,
+  });
+}
+
+export function projectRenameMutationOptions(
+  client: Pick<CodeAgentClient, "renameProject"> = codeAgentClient,
+) {
+  return mutationOptions({
+    mutationFn: ({ name, projectId }: ProjectRenameMutationInput) =>
+      client.renameProject(projectId, name),
+    mutationKey: ["projects", "rename"] as const,
+    scope: { id: "projects:actions" },
+  });
+}
+
+export function projectRemoveMutationOptions(
+  client: Pick<CodeAgentClient, "removeProject"> = codeAgentClient,
+) {
+  return mutationOptions({
+    mutationFn: (projectId: string) => client.removeProject(projectId),
+    mutationKey: ["projects", "remove"] as const,
+    scope: { id: "projects:actions" },
   });
 }
 

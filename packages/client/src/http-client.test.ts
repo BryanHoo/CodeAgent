@@ -146,6 +146,43 @@ describe("CodeAgentClient", () => {
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ body: "{}", method: "POST" });
   });
 
+  it("renames and removes an encoded project id with idempotency keys", async () => {
+    const renamedProject = {
+      createdAt: "2026-07-23T00:00:00.000Z",
+      id: "project / one",
+      name: "工作区别名",
+      rootPath: "/workspace/CodeAgent",
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ project: renamedProject }))
+      .mockResolvedValueOnce(jsonResponse({ projectId: renamedProject.id, status: "removed" }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(
+      client.renameProject(renamedProject.id, "工作区别名", {
+        idempotencyKey: "rename-project-key",
+      }),
+    ).resolves.toEqual({ project: renamedProject });
+    await expect(
+      client.removeProject(renamedProject.id, { idempotencyKey: "remove-project-key" }),
+    ).resolves.toEqual({ projectId: renamedProject.id, status: "removed" });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects/project%20%2F%20one/rename");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      body: JSON.stringify({ name: "工作区别名" }),
+      method: "POST",
+    });
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("idempotency-key")).toBe(
+      "rename-project-key",
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/v1/projects/project%20%2F%20one/remove");
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ body: "{}", method: "POST" });
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("idempotency-key")).toBe(
+      "remove-project-key",
+    );
+  });
+
   it("reads available project open targets and opens a selected target", async () => {
     const capabilities = {
       apps: [

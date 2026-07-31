@@ -9,6 +9,7 @@
 - Project、Task 等 Protocol 类型必须有对应 JSON Schema 或明确生成来源，运行时边界不得只依赖 TypeScript 类型。
 - 代码审查请求使用携带严格 `AgentReviewTarget` 的 `AgentReviewItem` 进入 Snapshot 和实时事件，禁止用普通用户消息或 Provider 原生 Prompt 表达审查模式。
 - `Project.rootPath` 由本地 Runtime 校验后随 Project 契约返回，用于当前工作台展示，并由 `ProjectSchema` 校验为非空字符串。
+- Project 重命名只允许更新本地 `projects.name` 展示名，必须保持 `id`、`rootPath`、`createdAt` 和磁盘目录不变；Project 删除只移除 CodeAgent 注册及级联的本地设置/元数据，并释放对应 Web/Server Runtime，不得删除磁盘文件或归档 Provider Task。两种操作均使用独立严格 Mutation Schema 和 `Idempotency-Key`。
 - `ProjectGitStatus` 必须同时返回可空的当前 `branch`、无重复的 `baseBranches`、`staged` 和 `unstaged`；Client 与 Fastify 响应边界必须使用同一严格 Schema 校验，Web 不得硬编码分支名称。
 - Project 排序使用携带 `Idempotency-Key` 的 `PUT /v1/projects/order`，请求必须包含无重复的完整 Project ID 集合；Server 校验集合后在 SQLite 事务中原子替换顺序，新注册 Project 追加到末尾。
 - Agent Event 保持版本字段、单调 `sequence` 和可判别事件类型。
