@@ -273,6 +273,19 @@ export function ProjectSidebar({
     [preferenceStorage],
   );
 
+  const toggleProject = (targetProjectId: string) => {
+    // Project 名称只控制任务树展开形态，新聊天导航由独立的“+”入口负责。
+    updateExpandedProjects((current) => {
+      const next = new Set(current);
+      if (next.has(targetProjectId)) {
+        next.delete(targetProjectId);
+      } else {
+        next.add(targetProjectId);
+      }
+      return next;
+    });
+  };
+
   const openProjectPicker = async () => {
     const project = await addProject();
     if (project !== undefined) {
@@ -557,7 +570,7 @@ export function ProjectSidebar({
                           : "cursor-grab text-muted-foreground"
                       }`}
                       onClick={() => {
-                        void openProjectDraft(project.id);
+                        toggleProject(project.id);
                       }}
                       type="button"
                       {...getProjectReorderProps(project.id)}

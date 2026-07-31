@@ -622,7 +622,7 @@ test("project open split control selects, opens, and restores a host app", async
   await expect(page.getByRole("button", { name: "在 Zed 中打开" })).toBeVisible();
 });
 
-test("switches projects and restores the expanded folder after reload", async ({ page }) => {
+test("restores the project folder expansion preference after reload", async ({ page }) => {
   await page.goto("/p/code-agent");
 
   const firstProject = page.getByRole("button", { name: "切换项目 CodeAgent" });
@@ -630,14 +630,15 @@ test("switches projects and restores the expanded folder after reload", async ({
   await expect(firstProject).toHaveAttribute("aria-expanded", "true");
   await expect(secondProject).toHaveAttribute("aria-expanded", "false");
 
+  await firstProject.click();
   await secondProject.click();
-  await expect(page).toHaveURL(/\/p\/superwork$/u);
-  await expect(firstProject).toHaveAttribute("aria-expanded", "true");
+  await expect(page).toHaveURL(/\/p\/code-agent$/u);
+  await expect(firstProject).toHaveAttribute("aria-expanded", "false");
   await expect(secondProject).toHaveAttribute("aria-expanded", "true");
 
   await page.reload();
 
-  await expect(firstProject).toHaveAttribute("aria-expanded", "true");
+  await expect(firstProject).toHaveAttribute("aria-expanded", "false");
   await expect(secondProject).toHaveAttribute("aria-expanded", "true");
 });
 
@@ -3434,21 +3435,21 @@ test("stores new-chat text and attachments independently between projects", asyn
   await expect(page.getByText("draft.png", { exact: true })).toBeVisible();
 });
 
-test("switches to a project draft from the project name without creating a sidebar task", async ({
-  page,
-}) => {
+test("toggles project tasks from the project name without navigation", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
-  await sidebar.getByRole("button", { name: "切换项目 superwork" }).click();
-
-  await expect(page).toHaveURL(/\/p\/superwork$/);
-  await expect(page.getByRole("main", { name: "Task Timeline" }).getByText("新聊天")).toBeVisible();
-  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveCount(0);
+  const task = sidebar.getByRole("link", { name: /优化输入框交互/ });
+  await expect(task).toBeVisible();
 
   await sidebar.getByRole("button", { name: "切换项目 CodeAgent" }).click();
-  await expect(page).toHaveURL(/\/p\/code-agent$/);
-  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveCount(0);
+  await expect(task).not.toBeVisible();
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
+
+  await expect(sidebar.getByRole("button", { name: "在 CodeAgent 中新建任务" })).toBeVisible();
+  await sidebar.getByRole("button", { name: "切换项目 CodeAgent" }).click();
+  await expect(task).toBeVisible();
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
 });
 
 test("loads one project task page only after showing more", async ({ page }) => {
