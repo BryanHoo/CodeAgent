@@ -92,12 +92,17 @@ describe("locateCodexBinary", () => {
   it("falls back to a PATH binary", async () => {
     const directory = await mkdtemp(join(tmpdir(), "code-agent-codex-path-"));
     temporaryDirectories.push(directory);
-    const pathBinary = join(directory, "codex");
+    // 使用当前宿主的路径语义，避免 Windows 临时目录被错误地当作 POSIX 路径解析。
+    const pathBinary = join(directory, process.platform === "win32" ? "codex.exe" : "codex");
     await writeFile(pathBinary, "#!/usr/bin/env node\n");
     await chmod(pathBinary, 0o755);
 
     await expect(
-      locateCodexBinary({ bundledBinaryPath: null, env: { PATH: directory }, platform: "linux" }),
+      locateCodexBinary({
+        bundledBinaryPath: null,
+        env: { PATH: directory },
+        platform: process.platform,
+      }),
     ).resolves.toEqual({ path: pathBinary, source: "path" });
   });
 

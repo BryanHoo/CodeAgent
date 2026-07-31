@@ -83,18 +83,7 @@ function resolveBundledBinary(platform: NodeJS.Platform): string | null {
     const rootRequire = createRequire(import.meta.url);
     const codexPackagePath = rootRequire.resolve("@openai/codex/package.json");
     const codexRequire = createRequire(codexPackagePath);
-    let platformPackagePath: string;
-    try {
-      platformPackagePath = codexRequire.resolve(`${target.packageName}/package.json`);
-    } catch {
-      // npm、pnpm 和 Yarn 都会把别名平台包放在 @openai/codex 的同级目录。
-      platformPackagePath = resolve(
-        dirname(codexPackagePath),
-        "..",
-        target.packageName.slice("@openai/".length),
-        "package.json",
-      );
-    }
+    const platformPackagePath = codexRequire.resolve(`${target.packageName}/package.json`);
     return resolve(
       dirname(platformPackagePath),
       "vendor",
