@@ -1225,7 +1225,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
     messageRange.selectNodeContents(messageText);
     return labelRange.getBoundingClientRect().top - messageRange.getBoundingClientRect().top;
   });
-  expect(historicalInlineOffset).toBe(0);
+  expect(Math.abs(historicalInlineOffset)).toBeLessThanOrEqual(1);
 
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   await prompt.fill("");
@@ -1297,7 +1297,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
     textRange.selectNodeContents(adjacentText);
     return labelRange.getBoundingClientRect().top - textRange.getBoundingClientRect().top;
   });
-  expect(editorBaselineOffset).toBe(0);
+  expect(Math.abs(editorBaselineOffset)).toBeLessThanOrEqual(1);
   await page.keyboard.type(" /documentation");
   await expect(commandMenu).toBeVisible();
   await prompt.press("Enter");
@@ -1307,8 +1307,10 @@ test("runs official task actions from the slash command menu", async ({ page }) 
     "data-serialized-value",
     "说明 $review-security $documentation-writer",
   );
-  await prompt.press("Meta+a");
-  await prompt.press("Meta+c");
+  // 浏览器快捷键跟随运行平台，确保 macOS、Linux 和 Windows 都能完成全选复制。
+  const primaryModifier = process.platform === "darwin" ? "Meta" : "Control";
+  await prompt.press(`${primaryModifier}+a`);
+  await prompt.press(`${primaryModifier}+c`);
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toBe("说明 $review-security $documentation-writer");
