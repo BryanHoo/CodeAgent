@@ -26,7 +26,7 @@ catalog:
   "@vitejs/plugin-react": 6.0.3
   "@vitest/coverage-v8": 4.1.10
   ansi-to-react: 6.2.6
-  better-sqlite3: 13.0.1
+  better-sqlite3: 13.0.2
   dependency-cruiser: 18.1.0
   eslint: 10.7.0
   eslint-config-prettier: 10.1.8

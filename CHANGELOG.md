@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-07-31
+
+### 修复
+
+- 修复 Windows 通过 npm 全局安装时 `better-sqlite3` 触发 `node-gyp rebuild` 的问题。
+- 添加原生发布依赖安装钩子校验，阻止需要本机构建工具的依赖进入发布包。
+
 ## [0.0.3] - 2026-07-31
 
 ### 修复
@@ -34,7 +41,8 @@
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/BryanHoo/CodeAgent/releases/tag/v0.0.1

@@ -1,7 +1,27 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+
+const require = createRequire(import.meta.url);
+
+function verifyNativeDependencyInstall(name) {
+  const manifestPath = require.resolve(`${name}/package.json`);
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const hasBindingConfig = existsSync(join(dirname(manifestPath), "binding.gyp"));
+  const overridesImplicitInstall =
+    manifest.gypfile === false ||
+    Boolean(manifest.scripts?.preinstall) ||
+    Boolean(manifest.scripts?.install);
+
+  // npm 会为未声明安装钩子的 binding.gyp 包自动执行 node-gyp rebuild。
+  if (hasBindingConfig && !overridesImplicitInstall) {
+    throw new Error(
+      `${name}@${manifest.version} triggers npm's implicit node-gyp rebuild during installation`,
+    );
+  }
+}
 
 const cliResult = spawnSync(process.execPath, ["dist/cli.js", "--help"], {
   encoding: "utf8",
@@ -19,6 +39,8 @@ if (cliResult.status !== 0 || !cliResult.stdout.includes("Usage: code-agent")) {
   process.stderr.write(cliResult.stderr);
   throw new Error("Built CLI is not executable");
 }
+
+verifyNativeDependencyInstall("better-sqlite3");
 
 const packageManagerCli = process.env["npm_execpath"];
 if (!packageManagerCli) {
