@@ -31,7 +31,7 @@ type ProjectOpenCommand = Readonly<{
 
 type ProjectOpenCommandMap = Map<ProjectOpenAppId, ProjectOpenCommand>;
 
-const LAUNCH_CONFIRMATION_MS = 500;
+const DEFAULT_LAUNCH_CONFIRMATION_MS = 500;
 
 export interface ProjectOpenService {
   getCapabilities: () => Promise<ProjectOpenCapabilitiesResponse>;
@@ -40,6 +40,7 @@ export interface ProjectOpenService {
 
 export interface CreateProjectOpenServiceOptions {
   environment?: NodeJS.ProcessEnv;
+  launchConfirmationMs?: number;
   pathExists?: (path: string) => Promise<boolean>;
   platform?: ProjectOpenPlatform;
   spawnDetached?: SpawnDetached;
@@ -66,6 +67,7 @@ function defaultSpawnDetached(
   file: string,
   args: readonly string[],
   options: SpawnDetachedOptions,
+  launchConfirmationMs: number,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(file, [...args], {
@@ -97,7 +99,7 @@ function defaultSpawnDetached(
           child.unref();
           resolve();
         });
-      }, LAUNCH_CONFIRMATION_MS);
+      }, launchConfirmationMs);
     });
     child.once("exit", (exitCode, signal) => {
       if (exitCode === 0) {
@@ -409,7 +411,12 @@ export function createProjectOpenService(
   const platform = options.platform ?? (process.platform as ProjectOpenPlatform);
   const environment = options.environment ?? process.env;
   const pathExists = options.pathExists ?? defaultPathExists;
-  const spawnDetached = options.spawnDetached ?? defaultSpawnDetached;
+  // 生产保持短确认窗；测试和慢速宿主可延长观察时间，避免把迟到的失败退出判为成功。
+  const launchConfirmationMs = options.launchConfirmationMs ?? DEFAULT_LAUNCH_CONFIRMATION_MS;
+  const spawnDetached =
+    options.spawnDetached ??
+    ((file, args, spawnOptions) =>
+      defaultSpawnDetached(file, args, spawnOptions, launchConfirmationMs));
 
   const resolveCommands = () => {
     switch (platform) {

@@ -160,6 +160,8 @@ describe("createProjectOpenService", () => {
         await chmod(launcher, 0o755);
         const service = createProjectOpenService({
           environment: { PATH: commandRoot },
+          // CI Worker 启动临时脚本可能超过生产默认观察窗，退出事件仍应决定结果。
+          launchConfirmationMs: 5_000,
           platform: "linux",
         });
 
