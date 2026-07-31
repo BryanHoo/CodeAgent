@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-07-31
+
+### 修复
+
+- 修复 Windows Explorer 成功转交后误报失败，并强制 Windows Terminal 在项目目录打开独立窗口。
+- 统一 Composer、Timeline 和 Inspector 中的 Skill 展示使用主题主色。
+
 ## [0.0.4] - 2026-07-31
 
 ### 修复
@@ -41,7 +48,8 @@
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.1...v0.0.2
