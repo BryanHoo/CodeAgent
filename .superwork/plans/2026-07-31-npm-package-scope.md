@@ -117,7 +117,7 @@ Expected: 不再出现旧 npm 包安装、执行、链接或命名约束。
 
 - 任一质量检查失败，或 npm/GitHub 已存在冲突的 `0.0.1` 发布物时停止。
 
-- [ ] **Task Status:** pending
+- [x] **Task Status:** completed
 
 Run: `pnpm check && pnpm test:e2e && pnpm pack --dry-run --json`
 
