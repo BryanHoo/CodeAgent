@@ -23,7 +23,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { PanelLeft, PanelRight } from "lucide-react";
+import { PanelLeft, PanelRight, Pencil } from "lucide-react";
 
 import { useProjects } from "../../projects/project-context.js";
 import {
@@ -48,7 +48,9 @@ import {
   projectDefaultsQueryOptions,
   projectGitStatusQueryOptions,
   projectOpenCapabilitiesQueryOptions,
+  replaceProjectTaskInQueryCaches,
   skillsQueryOptions,
+  taskRenameMutationOptions,
   taskSettingsMutationOptions,
   updateNewTaskTitleFromSnapshotInInfiniteData,
   upsertProjectTaskInInfiniteData,
@@ -60,6 +62,7 @@ import type { MessageFileReference } from "../../../shared/ai-elements/message.j
 import { deriveProjectSidebarConnectionState, ProjectSidebar } from "./project-sidebar.js";
 import { collectSubagents, type SubagentSelection } from "./subagent.js";
 import { SubagentOutputDialog } from "./subagent-output-dialog.js";
+import { TaskRenameDialog } from "./task-rename-dialog.js";
 import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
 import { WorkbenchComposer } from "./workbench-composer.js";
@@ -203,6 +206,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const [inspectorWidth, setInspectorWidth] = useState<number>(inspectorWidthLimits.default);
   const workbenchShellRef = useRef<HTMLDivElement>(null);
   const [newChatSubmissionPending, setNewChatSubmissionPending] = useState(false);
+  const [taskRenameOpen, setTaskRenameOpen] = useState(false);
+  const [taskRenameError, setTaskRenameError] = useState<string | null>(null);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
   const [fileDiffSelection, setFileDiffSelection] = useState<{
     change: AgentFileChange;
@@ -233,6 +238,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     tasks.find((task) => task.projectId === projectId && task.id === taskId)?.title ??
     runtime.snapshot?.title ??
     "新聊天";
+  const renameMutation = useMutation(taskRenameMutationOptions(client));
   const selectedFileChange =
     fileDiffSelection !== null && fileDiffSelection.projectId === projectId
       ? fileDiffSelection.change
@@ -270,6 +276,27 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   );
   const openFileReview = (changes: readonly AgentFileChange[]) => {
     setFileReviewSelection({ changes, projectId });
+  };
+  const closeTaskRenameDialog = () => {
+    setTaskRenameOpen(false);
+    setTaskRenameError(null);
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>("#workbench-task-title-rename")?.focus();
+    });
+  };
+  const renameActiveTask = async (nextTitle: string) => {
+    if (taskId === undefined) {
+      return;
+    }
+    setTaskRenameError(null);
+    try {
+      const response = await renameMutation.mutateAsync({ projectId, taskId, title: nextTitle });
+      // 服务端结果同时覆盖普通列表与已加载的搜索源，确保中栏和侧栏立即一致。
+      replaceProjectTaskInQueryCaches(queryClient, response.task);
+      closeTaskRenameDialog();
+    } catch {
+      setTaskRenameError("无法重命名任务");
+    }
   };
   const handleTaskStarted = useCallback(
     (
@@ -496,7 +523,31 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             >
               <PanelLeft className="size-3.5" aria-hidden="true" />
             </IconButton>
-            <h1 className="truncate text-body-small font-semibold text-foreground">{title}</h1>
+            <h1
+              aria-label={title}
+              className="min-w-0 text-body-small font-semibold text-foreground"
+            >
+              {taskId === undefined ? (
+                <span className="block truncate">{title}</span>
+              ) : (
+                <button
+                  aria-label={`重命名任务 ${title}`}
+                  className="group flex max-w-full items-center gap-1 rounded-control px-1 py-0.5 text-left hover:bg-control-hover focus-visible:shadow-focus"
+                  id="workbench-task-title-rename"
+                  onClick={() => {
+                    setTaskRenameError(null);
+                    setTaskRenameOpen(true);
+                  }}
+                  type="button"
+                >
+                  <span className="truncate">{title}</span>
+                  <Pencil
+                    aria-hidden="true"
+                    className="size-3 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
+                  />
+                </button>
+              )}
+            </h1>
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
@@ -678,6 +729,16 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         projectRuntime={projectRuntime}
         selection={selectedSubagent}
       />
+      {taskRenameOpen && taskId !== undefined ? (
+        <TaskRenameDialog
+          error={taskRenameError}
+          initialTitle={title}
+          isPending={renameMutation.isPending}
+          key={`${projectId}:${taskId}`}
+          onClose={closeTaskRenameDialog}
+          onRename={(nextTitle) => void renameActiveTask(nextTitle)}
+        />
+      ) : null}
       {globalSettingsOpen ? (
         <GlobalSettingsDialog
           apps={projectOpenCapabilitiesQuery.data?.apps ?? []}

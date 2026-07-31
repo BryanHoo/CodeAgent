@@ -31,13 +31,11 @@ import {
 } from "../../projects/project-data.js";
 import { useProjects, useProjectTaskSearch } from "../../projects/project-context.js";
 import {
-  PROJECT_TASK_SEARCH_SOURCE_KEY,
   removeArchivedProjectTaskAndRefill,
-  replaceProjectTaskInInfiniteData,
+  replaceProjectTaskInQueryCaches,
   taskArchiveMutationOptions,
   taskPinMutationOptions,
   taskRenameMutationOptions,
-  type ProjectTaskInfiniteData,
 } from "../../projects/project-queries.js";
 import { removeRetainedTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
@@ -49,6 +47,7 @@ import {
   resolveInitialExpandedProjectIds,
   writeExpandedProjectIds,
 } from "../project-sidebar-preferences.js";
+import { TaskRenameDialog } from "./task-rename-dialog.js";
 
 const primaryActionClassName =
   "flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small font-medium text-foreground transition-colors hover:bg-control-hover";
@@ -283,15 +282,7 @@ export function ProjectSidebar({
 
   const replaceTaskCache = (task: AgentTask) => {
     // Mutation 成功后原位更新对应 Project，避免任务跳到列表顶部或等待 Provider 最终一致。
-    queryClient.setQueryData<ProjectTaskInfiniteData>(
-      ["projects", task.projectId, "tasks"],
-      (currentData) => replaceProjectTaskInInfiniteData(currentData, task),
-    );
-    queryClient.setQueryData<readonly AgentTask[]>(
-      ["projects", task.projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
-      (currentTasks) =>
-        currentTasks?.map((currentTask) => (currentTask.id === task.id ? task : currentTask)),
-    );
+    replaceProjectTaskInQueryCaches(queryClient, task);
   };
 
   const pinTask = async (task: AgentTask) => {
@@ -350,13 +341,8 @@ export function ProjectSidebar({
       className="workbench-sidebar z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] bg-sidebar shadow-divider"
     >
       <div className="flex h-workbench-header items-center gap-2 px-3">
-        <Link
-          aria-label="CodeAgent 首页"
-          className="flex min-w-0 flex-1 items-center gap-2 text-body-small font-semibold text-foreground"
-          {...(projectId === undefined
-            ? { to: "/" as const }
-            : { params: { projectId }, to: "/p/$projectId" as const })}
-        >
+        {/* 品牌标识只承担展示职责，新聊天由下方的显式入口创建。 */}
+        <div className="flex min-w-0 flex-1 items-center gap-2 text-body-small font-semibold text-foreground">
           <span
             aria-hidden="true"
             className="grid size-7 shrink-0 place-items-center rounded-control bg-foreground text-caption font-bold text-raised shadow-sm"
@@ -364,7 +350,7 @@ export function ProjectSidebar({
             CA
           </span>
           <span className="truncate">CodeAgent</span>
-        </Link>
+        </div>
         <IconButton
           className="min-workbench:hidden"
           label="关闭项目侧栏"
@@ -628,13 +614,13 @@ export function ProjectSidebar({
 
       {renamingTask === null ? null : (
         <TaskRenameDialog
+          initialTitle={renamingTask.title}
           isPending={renameMutation.isPending}
           key={renamingTask.id}
           onClose={() => {
             setRenamingTask(null);
           }}
           onRename={(title) => void renameTask(renamingTask, title)}
-          task={renamingTask}
         />
       )}
 
@@ -985,87 +971,5 @@ export function TaskActionMenu({
         归档
       </button>
     </div>
-  );
-}
-
-type TaskRenameDialogProps = Readonly<{
-  isPending: boolean;
-  onClose: () => void;
-  onRename: (title: string) => void;
-  task: AgentTask;
-}>;
-
-function TaskRenameDialog({ isPending, onClose, onRename, task }: TaskRenameDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const [title, setTitle] = useState(task.title);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog !== null && !dialog.open) {
-      // 原生 dialog 负责焦点圈定和 Escape，避免侧栏弹层泄漏键盘焦点。
-      dialog.showModal();
-    }
-  }, []);
-
-  return (
-    <dialog
-      aria-labelledby="task-rename-title"
-      className="m-auto w-[min(90vw,24rem)] max-w-none rounded-surface bg-raised p-0 text-foreground shadow-panel backdrop:bg-scrim"
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!isPending) {
-          onClose();
-        }
-      }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !isPending) {
-          onClose();
-        }
-      }}
-      ref={dialogRef}
-    >
-      <form
-        className="p-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const normalizedTitle = title.trim();
-          if (normalizedTitle.length > 0) {
-            onRename(normalizedTitle);
-          }
-        }}
-      >
-        <h2 className="text-heading font-semibold" id="task-rename-title">
-          重命名任务
-        </h2>
-        <input
-          aria-label="任务名称"
-          autoFocus
-          className="mt-3 h-9 w-full rounded-control bg-control px-3 text-body text-foreground outline-none focus:shadow-focus"
-          disabled={isPending}
-          maxLength={200}
-          onChange={(event) => {
-            setTitle(event.currentTarget.value);
-          }}
-          value={title}
-        />
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            className="h-8 rounded-control px-3 text-body-small text-muted-foreground hover:bg-control-hover hover:text-foreground"
-            disabled={isPending}
-            onClick={onClose}
-            type="button"
-          >
-            取消
-          </button>
-          <button
-            className="h-8 rounded-control bg-accent px-3 text-body-small font-medium text-white hover:bg-accent-strong disabled:opacity-50"
-            disabled={isPending || title.trim().length === 0}
-            type="submit"
-          >
-            保存
-          </button>
-        </div>
-      </form>
-    </dialog>
   );
 }

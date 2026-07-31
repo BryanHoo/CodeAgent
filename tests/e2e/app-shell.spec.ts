@@ -715,6 +715,15 @@ test("exposes the documented navigation routes", async ({ page }) => {
   }
 });
 
+test("keeps the current task open when the product logo is clicked", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  await sidebar.getByText("CodeAgent", { exact: true }).first().click();
+
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
+});
+
 test("drags project folders to reorder and restores the persisted order", async ({ page }) => {
   await page.goto("/p/code-agent");
   const codeAgentProject = page.getByRole("button", { name: "切换项目 CodeAgent" });
@@ -932,7 +941,10 @@ test("aligns the center toolbar divider with sidebar controls", async ({ page })
   await page.goto("/p/code-agent/t/task-1");
 
   const mainHeader = page.getByRole("main", { name: "Task Timeline" }).locator(":scope > header");
-  const leftTitle = page.getByRole("link", { name: "CodeAgent 首页" });
+  const leftTitle = page
+    .getByRole("complementary", { name: "Project Sidebar" })
+    .getByText("CodeAgent", { exact: true })
+    .first();
   const centerTitle = page.getByRole("heading", { name: "构建 macOS 工作台", level: 1 });
   const rightTitle = page.getByRole("heading", { name: "环境信息", level: 2 });
   const search = page.getByRole("textbox", { name: "搜索任务" });
@@ -1198,6 +1210,24 @@ test("keeps Projects fixed and manages task actions from the compact tree", asyn
   await page.getByRole("menuitem", { name: "归档" }).click();
   await expect(page).toHaveURL(/\/p\/code-agent$/u);
   await expect(projectGroup.getByText("构建 macOS 工作台", { exact: true })).toHaveCount(0);
+});
+
+test("renames the active task from the center title", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const main = page.getByRole("main", { name: "Task Timeline" });
+  await main.getByRole("button", { name: "重命名任务 构建 macOS 工作台" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "重命名任务" });
+  await dialog.getByRole("textbox", { name: "任务名称" }).fill("重命名中栏任务");
+  await dialog.getByRole("button", { name: "保存" }).click();
+
+  await expect(main.getByRole("heading", { name: "重命名中栏任务" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("complementary", { name: "Project Sidebar" })
+      .getByRole("link", { name: /重命名中栏任务/u }),
+  ).toHaveCount(2);
 });
 
 test("restores task settings after a page refresh", async ({ page }) => {
@@ -2944,9 +2974,8 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
   const newAgent = sidebar.getByRole("link", { name: "新建任务" });
   const search = sidebar.getByRole("textbox", { name: "搜索任务" });
-  const productHome = sidebar.getByRole("link", { name: "CodeAgent 首页" });
-  await expect(productHome).toBeVisible();
-  await expect(productHome.getByText("CodeAgent", { exact: true })).toBeVisible();
+  const productBrand = sidebar.getByText("CodeAgent", { exact: true }).first();
+  await expect(productBrand).toBeVisible();
   await expect(search).toBeVisible();
   await expect(sidebar.getByRole("button", { name: "搜索" })).toHaveCount(0);
   await expect(sidebar.getByRole("button", { name: "添加项目" })).toBeVisible();
@@ -2970,12 +2999,13 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
 test("keeps the original sidebar logo and provides it as favicon", async ({ page }) => {
   await page.goto("/p/code-agent");
 
-  const productHome = page.getByRole("link", { name: "CodeAgent 首页" });
-  const brandMark = productHome.getByText("CA", { exact: true });
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const productBrand = sidebar.getByText("CodeAgent", { exact: true }).first().locator("..");
+  const brandMark = productBrand.getByText("CA", { exact: true });
 
   await expect(brandMark).toBeVisible();
   await expect(brandMark).toHaveClass(/bg-foreground/);
-  await expect(productHome.locator('img[src="/favicon.svg"]')).toHaveCount(0);
+  await expect(productBrand.locator('img[src="/favicon.svg"]')).toHaveCount(0);
   await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg?v=2");
 
   expect(

@@ -158,6 +158,19 @@ export function replaceProjectTaskInInfiniteData(
   };
 }
 
+export function replaceProjectTaskInQueryCaches(queryClient: QueryClient, task: AgentTask) {
+  // 重命名和固定操作必须同步普通分页与已加载的全量搜索源。
+  queryClient.setQueryData<ProjectTaskInfiniteData>(
+    ["projects", task.projectId, "tasks"],
+    (currentData) => replaceProjectTaskInInfiniteData(currentData, task),
+  );
+  queryClient.setQueryData<readonly AgentTask[]>(
+    ["projects", task.projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
+    (currentTasks) =>
+      currentTasks?.map((currentTask) => (currentTask.id === task.id ? task : currentTask)),
+  );
+}
+
 function deriveStartedTaskTitle(
   snapshot: TaskTitleSnapshot,
   options: TaskTitleUpdateOptions = {},
