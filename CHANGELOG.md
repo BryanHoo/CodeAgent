@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-07-31
+
+### 新增
+
+- 添加中栏标题任务重命名入口，并同步更新任务列表、固定任务和搜索缓存。
+- 添加项目重命名与删除操作，保持展示名和磁盘目录隔离，并清理关联运行时状态。
+
 ## [0.0.5] - 2026-07-31
 
 ### 修复
@@ -48,7 +55,8 @@
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.2...v0.0.3
