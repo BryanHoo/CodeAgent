@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -7,6 +7,13 @@ const cliResult = spawnSync(process.execPath, ["dist/cli.js", "--help"], {
   encoding: "utf8",
   shell: false,
 });
+
+const packageManifest = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+);
+if (packageManifest.bin?.["code-agent"] !== "dist/cli.js") {
+  throw new Error(`Unexpected code-agent bin path: ${packageManifest.bin?.["code-agent"]}`);
+}
 
 if (cliResult.status !== 0 || !cliResult.stdout.includes("Usage: code-agent")) {
   process.stderr.write(cliResult.stderr);

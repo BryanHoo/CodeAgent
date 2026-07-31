@@ -235,7 +235,7 @@ LICENSE
   "type": "module",
   "packageManager": "pnpm@<pinned-version>",
   "bin": {
-    "code-agent": "./dist/cli.js"
+    "code-agent": "dist/cli.js"
   },
   "files": ["dist"],
   "engines": {

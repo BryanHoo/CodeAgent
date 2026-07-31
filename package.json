@@ -24,7 +24,7 @@
     "node": ">=24"
   },
   "bin": {
-    "code-agent": "./dist/cli.js"
+    "code-agent": "dist/cli.js"
   },
   "files": [
     "dist",
