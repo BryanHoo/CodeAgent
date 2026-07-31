@@ -1913,6 +1913,23 @@ test("submits attachments, approval policy, model, and reasoning effort through 
 test("opens file diffs from the timeline and uncommitted review button", async ({ page }) => {
   const consoleErrors: string[] = [];
   const failedResources: string[] = [];
+  await page.route("**/v1/projects/code-agent/git/status", async (route) => {
+    // 此用例使用两个不同目录的文件，覆盖平铺列表与四方向导航，避免改变全局 Fixture。
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...projectGitStatus,
+        unstaged: [
+          ...projectGitStatus.unstaged,
+          {
+            diff: "export const reviewList = true;",
+            kind: "create",
+            path: "apps/web/src/review-list.tsx",
+          },
+        ],
+      },
+    });
+  });
   page.on("console", (message) => {
     if (message.type() === "error") {
       consoleErrors.push(message.text());
@@ -1937,12 +1954,12 @@ test("opens file diffs from the timeline and uncommitted review button", async (
   await page.getByRole("button", { name: "关闭文件 Diff" }).click();
   await expect(dialog).not.toBeAttached();
 
-  const reviewButton = page.getByRole("button", { name: "审核 1 个未提交变更" });
-  const commitButton = page.getByRole("button", { name: "提交 1 个未提交变更" });
+  const reviewButton = page.getByRole("button", { name: "审核 2 个未提交变更" });
+  const commitButton = page.getByRole("button", { name: "提交 2 个未提交变更" });
   const changeStats = page.getByLabel("变更统计");
   await expect(reviewButton).toHaveText("审核");
   await expect(commitButton).toHaveText("提交");
-  await expect(changeStats).toHaveText("1 个变更+1-1");
+  await expect(changeStats).toHaveText("2 个变更+2-1");
   const [statsBox, reviewBox, commitBox, reviewBackground, commitBackground] = await Promise.all([
     changeStats.boundingBox(),
     reviewButton.boundingBox(),
@@ -1954,9 +1971,43 @@ test("opens file diffs from the timeline and uncommitted review button", async (
   expect(reviewBox?.y).toBe(commitBox?.y);
   expect(commitBackground).toBe(reviewBackground);
   await reviewButton.click();
-  await expect(page.getByRole("dialog", { name: "package.json" })).toBeVisible();
+  const reviewDialog = page.getByRole("dialog");
+  const reviewContent = reviewDialog.getByRole("region", { name: "审核文件内容" });
+  const reviewNavigation = reviewDialog.getByLabel("变更文件导航");
+  const changedFileList = reviewDialog.getByRole("list", { name: "变更文件列表" });
+  const packageFileListItem = changedFileList.getByRole("button", {
+    name: "package.json，新增 1 行，删除 1 行",
+  });
+  const reviewFileListItem = changedFileList.getByRole("button", {
+    name: "apps/web/src/review-list.tsx，新增 1 行，删除 0 行",
+  });
+  await expect(reviewDialog).toHaveAccessibleName("package.json");
+  await expect(reviewDialog.getByRole("tree")).toHaveCount(0);
+  await expect(packageFileListItem).toHaveAttribute("aria-current", "true");
+  await expect(reviewFileListItem).toBeVisible();
+  const [reviewContentBox, reviewNavigationBox] = await Promise.all([
+    reviewContent.boundingBox(),
+    reviewNavigation.boundingBox(),
+  ]);
+  expect(reviewContentBox?.x).toBeLessThan(reviewNavigationBox?.x ?? 0);
+  await reviewFileListItem.click();
+  await expect(reviewDialog).toHaveAccessibleName("review-list.tsx");
+  await packageFileListItem.click();
+  await expect(reviewDialog).toHaveAccessibleName("package.json");
+  await page.keyboard.press("ArrowRight");
+  await expect(reviewDialog).toHaveAccessibleName("review-list.tsx");
+  await page.keyboard.press("ArrowLeft");
+  await expect(reviewDialog).toHaveAccessibleName("package.json");
+  await page.keyboard.press("ArrowDown");
+  await expect(reviewDialog).toHaveAccessibleName("review-list.tsx");
+  await expect(reviewContent.locator(".file-diff-renderer")).toContainText(
+    "export const reviewList = true;",
+  );
+  await expect(reviewFileListItem).toHaveAttribute("aria-current", "true");
+  await page.keyboard.press("ArrowUp");
+  await expect(reviewDialog).toHaveAccessibleName("package.json");
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "package.json" })).not.toBeAttached();
+  await expect(reviewDialog).not.toBeAttached();
   expect({ consoleErrors, failedResources }).toEqual({ consoleErrors: [], failedResources: [] });
 });
 
