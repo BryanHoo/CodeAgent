@@ -18,6 +18,7 @@
     "@fastify/websocket": "catalog:",
     "better-sqlite3": "catalog:",
     "fastify": "catalog:",
+    "ignore": "catalog:",
     "ws": "catalog:"
   },
   "devDependencies": {

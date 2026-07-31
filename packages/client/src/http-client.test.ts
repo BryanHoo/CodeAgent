@@ -316,6 +316,30 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("reads and validates a project file tree directory", async () => {
+    const fileTree = {
+      entries: [{ path: "src/components/app.tsx", type: "file" }],
+      path: "src/components",
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse(fileTree));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.listProjectFiles("project one", "src/components")).resolves.toEqual(
+      fileTree,
+    );
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/projects/project%20one/files/tree?path=src%2Fcomponents",
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ entries: [{ path: "/absolute.ts", type: "file" }], path: null }),
+    );
+    await expect(client.listProjectFiles("project one", null)).rejects.toThrow(
+      "CodeAgent response does not match the protocol schema",
+    );
+  });
+
   it("uses the configured base URL for all read methods", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock

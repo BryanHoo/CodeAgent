@@ -38,6 +38,8 @@ import {
   InterruptAgentTurnRequestSchema,
   InterruptAgentTurnResponseSchema,
   ProjectPageSchema,
+  ProjectFileTreeQuerySchema,
+  ProjectFileTreeSchema,
   ProjectGitStatusSchema,
   ProjectOpenCapabilitiesResponseSchema,
   ProjectSourceFileSchema,
@@ -82,6 +84,8 @@ import {
   type CompactAgentTaskRequest,
   type ForkAgentTaskRequest,
   type Project,
+  type ProjectFileTree,
+  type ProjectFileTreeQuery,
   type ProjectGitStatus,
   type OpenProjectRequest,
   type ProjectSourceFile,
@@ -108,6 +112,7 @@ import Fastify, {
 import { AgentEventStream } from "./agent-event-stream.js";
 import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js";
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
+import { readProjectFileTree } from "./project-file-tree.js";
 import { readProjectSourceFile } from "./project-source-file.js";
 import {
   createProjectOpenService,
@@ -136,6 +141,7 @@ export interface CreateCodeAgentServerOptions {
   settingsRepository: AgentSettingsRepository;
   taskMetadataRepository: AgentTaskMetadataRepository;
   readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
+  readProjectFileTree?: (projectRoot: string, directoryPath?: string) => Promise<ProjectFileTree>;
   readProjectSourceFile?: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
   prepareTurnFileRollback?: (
     projectRoot: string,
@@ -506,6 +512,7 @@ export async function createCodeAgentServer(
     }
   });
   const readProjectGitStatus = options.readProjectGitStatus ?? readGitWorkingTreeStatus;
+  const readFileTree = options.readProjectFileTree ?? readProjectFileTree;
   const readSourceFile = options.readProjectSourceFile ?? readProjectSourceFile;
   const projectOpenService = options.projectOpenService ?? createProjectOpenService();
   const prepareFileRollback = options.prepareTurnFileRollback ?? prepareTurnFileRollback;
@@ -1165,6 +1172,36 @@ export async function createCodeAgentServer(
         return reply.code(500).send({
           code: "GIT_STATUS_UNAVAILABLE",
           message: "Git working tree status is unavailable",
+        });
+      }
+    },
+  );
+
+  app.get<{ Params: { projectId: string }; Querystring: ProjectFileTreeQuery }>(
+    "/v1/projects/:projectId/files/tree",
+    {
+      schema: {
+        params: ProjectParamsSchema,
+        querystring: ProjectFileTreeQuerySchema,
+        response: {
+          200: ProjectFileTreeSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      try {
+        return await readFileTree(context.project.rootPath, request.query.path);
+      } catch {
+        // 文件系统错误在交付边界收敛，响应不泄露 Project 的本机路径。
+        return reply.code(500).send({
+          code: "PROJECT_FILE_TREE_UNAVAILABLE",
+          message: "Project file tree is unavailable",
         });
       }
     },

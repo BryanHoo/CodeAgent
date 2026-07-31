@@ -11,6 +11,7 @@
 - `Project.rootPath` 由本地 Runtime 校验后随 Project 契约返回，用于当前工作台展示，并由 `ProjectSchema` 校验为非空字符串。
 - Project 重命名只允许更新本地 `projects.name` 展示名，必须保持 `id`、`rootPath`、`createdAt` 和磁盘目录不变；Project 删除只移除 CodeAgent 注册及级联的本地设置/元数据，并释放对应 Web/Server Runtime，不得删除磁盘文件或归档 Provider Task。两种操作均使用独立严格 Mutation Schema 和 `Idempotency-Key`。
 - `ProjectGitStatus` 必须同时返回可空的当前 `branch`、无重复的 `baseBranches`、`staged` 和 `unstaged`；Client 与 Fastify 响应边界必须使用同一严格 Schema 校验，Web 不得硬编码分支名称。
+- `ProjectFileTree` 必须返回目标 Project 相对目录 `path` 及其直接目录/文件条目，不包含 `truncated` 或条目数量上限；可选目录查询必须拒绝绝对路径、点路径、反斜杠和额外字段。Server 必须沿已注册 Project 根目录逐层应用任意层级的 `.gitignore`，不依赖根目录是否为 Git 仓库或是否存在根级规则；同时跳过符号链接、`.git`、`node_modules`、构建与覆盖率目录，并将目录深度限制为 `20` 层，Client 与 Fastify 必须使用同一严格 Schema。
 - Project 排序使用携带 `Idempotency-Key` 的 `PUT /v1/projects/order`，请求必须包含无重复的完整 Project ID 集合；Server 校验集合后在 SQLite 事务中原子替换顺序，新注册 Project 追加到末尾。
 - Agent Event 保持版本字段、单调 `sequence` 和可判别事件类型。
 - `EventStreamMetricsResponse` 使用版本化严格 Schema，按 Project 只返回非负累计计数和当前活动量；字段覆盖 Provider 输入、合并、发布、pending Delta、保留淘汰、软背压、活动客户端与慢客户端断开，不得携带 Prompt、命令输出、文件内容或额外字段。

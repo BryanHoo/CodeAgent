@@ -201,6 +201,26 @@ const projectGitStatus = {
   unstaged: [{ diff: packageJsonDiff, kind: "update", path: "package.json" }],
 };
 
+const projectFileTreeByDirectory = new Map<string | null, object>([
+  [
+    null,
+    {
+      entries: [
+        { path: "docs", type: "directory" },
+        { path: "package.json", type: "file" },
+      ],
+      path: null,
+    },
+  ],
+  [
+    "docs",
+    {
+      entries: [{ path: "docs/architecture-design.md", type: "file" }],
+      path: "docs",
+    },
+  ],
+]);
+
 const taskSnapshot = {
   ...tasks[0],
   contextUsage: { contextWindow: 200_000, usedTokens: 25_000 },
@@ -376,6 +396,10 @@ test.beforeEach(async ({ page }) => {
       body = { projectId, status: "removed" };
     } else if (url.pathname === "/v1/projects") {
       body = { data: routedProjects, nextCursor: null };
+    } else if (/^\/v1\/projects\/[^/]+\/files\/tree$/u.test(url.pathname)) {
+      const directoryPath = url.searchParams.get("path");
+      // 文件树接口只返回当前目录的直接子项，用于验证点击目录后才按需加载。
+      body = projectFileTreeByDirectory.get(directoryPath) ?? { entries: [], path: directoryPath };
     } else if (url.pathname === "/v1/projects/code-agent/files/source") {
       body = {
         content: architectureSourcePreview,
@@ -1736,6 +1760,27 @@ test("opens bounded source previews from assistant file references", async ({ co
   await expect(dialog).toBeHidden();
 });
 
+test("project file tree opens source files", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const inspector = page.getByRole("complementary", { name: "Context Inspector" });
+  const fileTree = inspector.getByRole("tree", { name: "项目文件" });
+  await expect(fileTree).toBeVisible();
+  await expect(fileTree.getByRole("treeitem", { name: "architecture-design.md" })).toHaveCount(0);
+
+  const docsRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/v1/projects/code-agent/files/tree" &&
+      url.searchParams.get("path") === "docs"
+    );
+  });
+  await fileTree.getByRole("treeitem", { name: "docs" }).click();
+  await docsRequest;
+  await fileTree.getByRole("treeitem", { name: "architecture-design.md" }).click();
+  await expect(page.getByRole("dialog", { name: "architecture-design.md" })).toBeVisible();
+});
+
 test("keeps pasted images in attachments instead of the text editor", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
@@ -1865,7 +1910,7 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   });
 });
 
-test("opens file diffs from the timeline and inspector", async ({ page }) => {
+test("opens file diffs from the timeline and uncommitted review button", async ({ page }) => {
   const consoleErrors: string[] = [];
   const failedResources: string[] = [];
   page.on("console", (message) => {
@@ -1892,7 +1937,23 @@ test("opens file diffs from the timeline and inspector", async ({ page }) => {
   await page.getByRole("button", { name: "关闭文件 Diff" }).click();
   await expect(dialog).not.toBeAttached();
 
-  await page.getByRole("button", { name: "打开 未暂存文件 package.json 的 Diff" }).click();
+  const reviewButton = page.getByRole("button", { name: "审核 1 个未提交变更" });
+  const commitButton = page.getByRole("button", { name: "提交 1 个未提交变更" });
+  const changeStats = page.getByLabel("变更统计");
+  await expect(reviewButton).toHaveText("审核");
+  await expect(commitButton).toHaveText("提交");
+  await expect(changeStats).toHaveText("1 个变更+1-1");
+  const [statsBox, reviewBox, commitBox, reviewBackground, commitBackground] = await Promise.all([
+    changeStats.boundingBox(),
+    reviewButton.boundingBox(),
+    commitButton.boundingBox(),
+    reviewButton.evaluate((element) => getComputedStyle(element).backgroundColor),
+    commitButton.evaluate((element) => getComputedStyle(element).backgroundColor),
+  ]);
+  expect(statsBox?.x).toBeLessThan(reviewBox?.x ?? 0);
+  expect(reviewBox?.y).toBe(commitBox?.y);
+  expect(commitBackground).toBe(reviewBackground);
+  await reviewButton.click();
   await expect(page.getByRole("dialog", { name: "package.json" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "package.json" })).not.toBeAttached();

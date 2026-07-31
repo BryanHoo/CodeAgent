@@ -446,7 +446,16 @@ POST /v1/projects/:projectId/tasks/:taskId/feedback
 
 `turn/interrupt` 只返回 `{ status: "interrupting", taskId, turnId }`；Turn 是否真正中断由后续 `turn.completed` 事件决定。错误统一映射为 Protocol 定义的 `{ code, message, retryable }`，不得向 Web 暴露原生 RPC 细节。
 
-### 8.5 Project 源文件预览 API
+### 8.5 Project 文件 API
+
+Inspector 通过以下只读端点获取受限文件树：
+
+```text
+GET /v1/projects/:projectId/files/tree
+GET /v1/projects/:projectId/files/tree?path=src/components
+```
+
+Server 固定从已注册 Project 的根目录解析可选的 Project 相对目录，每次返回目标目录 `path` 与其直接目录/文件条目，不设置条目数量上限。目录解析沿根目录逐层应用 Project 内任意层级的 `.gitignore`，不依赖根目录是否为 Git 仓库或是否存在根级规则；同时跳过符号链接、`.git`、`node_modules`、构建和覆盖率目录，并限制为 `20` 层。`path` 必须通过严格 Schema 校验，拒绝绝对路径、点路径、反斜杠和额外字段，不能透传任意文件系统路径。
 
 AI 回复中的本地文件引用通过以下只读端点打开：
 

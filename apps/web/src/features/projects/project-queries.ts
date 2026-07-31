@@ -18,6 +18,7 @@ import {
 
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
 export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
+export type CodeAgentFileTreeClient = Pick<CodeAgentClient, "listProjectFiles">;
 export type CodeAgentSourceFileClient = Pick<CodeAgentClient, "readProjectSourceFile">;
 export type CodeAgentProjectOpenClient = Pick<
   CodeAgentClient,
@@ -65,6 +66,7 @@ export type CodeAgentPendingRequestClient = Pick<CodeAgentClient, "resolvePendin
 export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentBackgroundTerminalClient &
   CodeAgentGitStatusClient &
+  CodeAgentFileTreeClient &
   CodeAgentProjectOpenClient &
   CodeAgentRuntimeClient &
   CodeAgentMutationClient &
@@ -540,6 +542,18 @@ export function projectGitStatusQueryOptions(
       ? (query) => projectGitStatusRefetchInterval(query.state.error)
       : false,
     retry: 1,
+  });
+}
+
+export function projectFileTreeQueryOptions(
+  projectId: string,
+  directoryPath: string | null,
+  client: CodeAgentFileTreeClient = codeAgentClient,
+) {
+  return queryOptions({
+    queryFn: ({ signal }) => client.listProjectFiles(projectId, directoryPath, { signal }),
+    queryKey: ["projects", projectId, "file-tree", directoryPath] as const,
+    staleTime: 30_000,
   });
 }
 

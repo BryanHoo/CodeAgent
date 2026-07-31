@@ -6,6 +6,7 @@ import { TaskSnapshotTimeline } from "../workbench/components/task-timeline.js";
 import {
   capabilitiesQueryOptions,
   type CodeAgentGitStatusClient,
+  type CodeAgentFileTreeClient,
   type CodeAgentReadClient,
   modelsQueryOptions,
   PROJECT_GIT_STATUS_POLL_INTERVAL_MS,
@@ -13,6 +14,7 @@ import {
   projectDefaultsQueryOptions,
   projectGitStatusRefetchInterval,
   projectGitStatusQueryOptions,
+  projectFileTreeQueryOptions,
   projectReorderMutationOptions,
   listProjectTasksForSearch,
   projectTasksInfiniteQueryOptions,
@@ -200,6 +202,26 @@ describe("project queries", () => {
     expect(idleOptions.refetchInterval).toBe(false);
     expect(getProjectGitStatus.mock.calls[0]?.[0]).toBe("code-agent");
     expect(getProjectGitStatus.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("loads a project-scoped file tree directory with query cancellation", async () => {
+    const listProjectFiles = vi.fn<CodeAgentFileTreeClient["listProjectFiles"]>(() =>
+      Promise.resolve({
+        entries: [{ path: "src/components", type: "directory" }],
+        path: "src",
+      }),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const options = projectFileTreeQueryOptions("code-agent", "src", { listProjectFiles });
+
+    await expect(queryClient.fetchQuery(options)).resolves.toEqual({
+      entries: [{ path: "src/components", type: "directory" }],
+      path: "src",
+    });
+    expect(options.queryKey).toEqual(["projects", "code-agent", "file-tree", "src"]);
+    expect(listProjectFiles.mock.calls[0]?.[0]).toBe("code-agent");
+    expect(listProjectFiles.mock.calls[0]?.[1]).toBe("src");
+    expect(listProjectFiles.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("stops failed Git polling until a manual refresh succeeds", () => {

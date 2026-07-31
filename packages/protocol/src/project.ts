@@ -323,6 +323,43 @@ export const ProjectGitStatusSchema = Type.Object(
 
 export type ProjectGitStatus = Readonly<Static<typeof ProjectGitStatusSchema>>;
 
+export const ProjectFileTreeEntrySchema = Type.Object(
+  {
+    path: Type.String({
+      minLength: 1,
+      pattern: "^(?![A-Za-z]:[\\\\/])(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.?(?:[/\\\\]|$)).+",
+    }),
+    type: Type.Union([Type.Literal("directory"), Type.Literal("file")]),
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectFileTreeEntry = Readonly<Static<typeof ProjectFileTreeEntrySchema>>;
+
+const ProjectFileTreeDirectoryPathSchema = Type.String({
+  minLength: 1,
+  pattern: "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)(?!.*\\\\)(?!.*\\/$).+$",
+});
+
+export const ProjectFileTreeQuerySchema = Type.Object(
+  {
+    path: Type.Optional(ProjectFileTreeDirectoryPathSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectFileTreeQuery = Readonly<Static<typeof ProjectFileTreeQuerySchema>>;
+
+export const ProjectFileTreeSchema = Type.Object(
+  {
+    entries: Type.Array(ProjectFileTreeEntrySchema),
+    path: Type.Union([ProjectFileTreeDirectoryPathSchema, Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectFileTree = Readonly<Static<typeof ProjectFileTreeSchema>>;
+
 export const ProjectSourceFileSchema = Type.Object(
   {
     content: Type.String(),

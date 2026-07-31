@@ -3,11 +3,12 @@ import type {
   AgentSkill,
   AgentTaskSettings,
   AgentTurn,
+  ProjectFileTree,
+  ProjectFileTreeEntry,
   ProjectGitStatus,
 } from "@code-agent/protocol";
 import {
   Bot,
-  FileCode2,
   FolderRoot,
   HardDrive,
   LoaderCircle,
@@ -19,7 +20,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { countFileChangeLines, getFileName, type AgentFileChange } from "../../diff/file-change.js";
+import { countFileChangeLines, type AgentFileChange } from "../../diff/file-change.js";
+import { FileTree, FileTreeFile, FileTreeFolder } from "../../../shared/ai-elements/file-tree.js";
 import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import {
@@ -33,13 +35,18 @@ type WorkbenchInspectorProps = Readonly<{
   backgroundTerminals?: readonly AgentBackgroundTerminal[];
   backgroundTerminalsError?: Error | null;
   backgroundTerminalsPending?: boolean;
-  onOpenFileDiff: (change: AgentFileChange) => void;
+  expandedFileTreePaths?: Set<string>;
+  fileTreeDirectories?: readonly ProjectFileTreeDirectoryState[];
   gitStatus?: ProjectGitStatus;
   gitStatusError?: Error | null;
   gitStatusPending?: boolean;
   gitStatusRefreshing?: boolean;
+  onFileTreeExpandedChange?: (expandedPaths: Set<string>) => void;
+  onOpenSourceFile?: (path: string) => void;
   onOpenSubagent?: (selection: SubagentSelection) => void;
+  onRefreshFileTreeDirectory?: (directoryPath: string | null) => void;
   onRefreshGitStatus?: () => void;
+  onReviewChanges?: (changes: readonly AgentFileChange[]) => void;
   onTerminateBackgroundTerminal?: (terminalId: string) => Promise<void>;
   projectName: string;
   projectPath: string;
@@ -51,12 +58,111 @@ type WorkbenchInspectorProps = Readonly<{
   terminatingTerminalId?: string | null;
 }>;
 
+export type ProjectFileTreeDirectoryState = Readonly<{
+  data?: ProjectFileTree;
+  error: Error | null;
+  isFetching: boolean;
+  isPending: boolean;
+  path: string | null;
+}>;
+
+const emptyExpandedFileTreePaths = new Set<string>();
+
 type InspectorSource = Readonly<{
   detail: string;
   id: string;
   kind: "attachment" | "project" | "skill";
   name: string;
 }>;
+
+function getProjectFileName(path: string): string {
+  return path.split("/").at(-1) ?? path;
+}
+
+type ProjectFileTreeNodesProps = Readonly<{
+  directoryStates: ReadonlyMap<string | null, ProjectFileTreeDirectoryState>;
+  entries: readonly ProjectFileTreeEntry[];
+  onRefreshDirectory: (directoryPath: string | null) => void;
+}>;
+
+function ProjectFileTreeDirectoryChildren({
+  directoryPath,
+  directoryStates,
+  onRefreshDirectory,
+}: Readonly<{
+  directoryPath: string;
+  directoryStates: ReadonlyMap<string | null, ProjectFileTreeDirectoryState>;
+  onRefreshDirectory: (directoryPath: string | null) => void;
+}>) {
+  const state = directoryStates.get(directoryPath);
+  const name = getProjectFileName(directoryPath);
+  if (state?.error !== null && state?.error !== undefined) {
+    return (
+      <div
+        className="flex min-h-7 items-center gap-2 px-1.5 text-caption text-diff-removed"
+        role="treeitem"
+      >
+        <span className="min-w-0 flex-1 truncate">无法读取文件夹 {name}</span>
+        <IconButton
+          label={`重新读取文件夹 ${name}`}
+          onClick={() => {
+            onRefreshDirectory(directoryPath);
+          }}
+          size="small"
+        >
+          <RefreshCw aria-hidden="true" className="size-3.5" />
+        </IconButton>
+      </div>
+    );
+  }
+  if (state === undefined || (state.isPending && state.data === undefined)) {
+    return (
+      <div
+        aria-label={`正在读取文件夹 ${name}`}
+        className="flex min-h-7 items-center gap-1.5 px-1.5 text-caption text-muted-foreground"
+        role="treeitem"
+      >
+        <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+        <span>正在读取...</span>
+      </div>
+    );
+  }
+  if (state.data?.entries.length === 0) {
+    return (
+      <div className="min-h-7 px-1.5 py-1.5 text-caption text-muted-foreground" role="treeitem">
+        空文件夹
+      </div>
+    );
+  }
+  return (
+    <ProjectFileTreeNodes
+      directoryStates={directoryStates}
+      entries={state.data?.entries ?? []}
+      onRefreshDirectory={onRefreshDirectory}
+    />
+  );
+}
+
+function ProjectFileTreeNodes({
+  directoryStates,
+  entries,
+  onRefreshDirectory,
+}: ProjectFileTreeNodesProps) {
+  return entries.map((entry) => {
+    const name = getProjectFileName(entry.path);
+    return entry.type === "directory" ? (
+      <FileTreeFolder key={entry.path} name={name} path={entry.path}>
+        <ProjectFileTreeDirectoryChildren
+          directoryPath={entry.path}
+          directoryStates={directoryStates}
+          onRefreshDirectory={onRefreshDirectory}
+        />
+      </FileTreeFolder>
+    ) : (
+      <FileTreeFile key={entry.path} name={name} path={entry.path} />
+    );
+  });
+}
 
 const reasoningEffortLabels: Readonly<Record<string, string>> = {
   high: "高",
@@ -149,13 +255,18 @@ export function WorkbenchInspector({
   backgroundTerminals = [],
   backgroundTerminalsError = null,
   backgroundTerminalsPending = false,
+  expandedFileTreePaths = emptyExpandedFileTreePaths,
+  fileTreeDirectories = [],
   gitStatus,
   gitStatusError = null,
   gitStatusPending = false,
   gitStatusRefreshing = false,
-  onOpenFileDiff,
+  onFileTreeExpandedChange = () => undefined,
+  onOpenSourceFile = () => undefined,
   onOpenSubagent = () => undefined,
+  onRefreshFileTreeDirectory = () => undefined,
   onRefreshGitStatus = () => undefined,
+  onReviewChanges = () => undefined,
   onTerminateBackgroundTerminal = () => Promise.resolve(),
   projectName,
   projectPath,
@@ -172,6 +283,7 @@ export function WorkbenchInspector({
   const stagedChanges = gitStatus?.staged ?? [];
   const unstagedChanges = gitStatus?.unstaged ?? [];
   const allChanges = [...unstagedChanges, ...stagedChanges];
+  const [selectedFilePath, setSelectedFilePath] = useState<string>();
   let additions = 0;
   let removals = 0;
   for (const change of allChanges) {
@@ -182,6 +294,23 @@ export function WorkbenchInspector({
   const sources = useMemo(
     () => collectInspectorSources(projectName, projectPath, task?.turns ?? [], skills),
     [projectName, projectPath, skills, task?.turns],
+  );
+  const fileTreeDirectoryStates = useMemo(
+    () => new Map(fileTreeDirectories.map((state) => [state.path, state])),
+    [fileTreeDirectories],
+  );
+  const rootFileTreeState = fileTreeDirectoryStates.get(null);
+  const filePaths = useMemo(
+    () =>
+      new Set(
+        fileTreeDirectories.flatMap(
+          (state) =>
+            state.data?.entries
+              .filter((entry) => entry.type === "file")
+              .map((entry) => entry.path) ?? [],
+        ),
+      ),
+    [fileTreeDirectories],
   );
   const branch =
     gitStatus?.branch ??
@@ -222,64 +351,129 @@ export function WorkbenchInspector({
       <div className="min-h-0 overflow-hidden" role="tabpanel">
         {tab === "changes" ? (
           <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-            <div className="flex items-center justify-between px-2.5 pb-3 pt-2.5">
-              <div>
+            <div
+              aria-label="未提交变更摘要"
+              className="flex w-full items-center justify-between gap-2 px-2.5 pb-3 pt-2.5"
+              role="group"
+            >
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-foreground">未提交变更</p>
-                <p className="mt-0.5 text-caption text-muted-foreground">
-                  {allChanges.length} 个变更
+                <p
+                  aria-label="变更统计"
+                  className="mt-0.5 flex items-center gap-1.5 text-caption text-muted-foreground"
+                >
+                  <span>{allChanges.length} 个变更</span>
+                  <span className="font-medium text-diff-added">+{additions}</span>
+                  <span className="font-medium text-diff-removed">-{removals}</span>
                 </p>
               </div>
-              <span className="text-meta font-medium">
-                <span className="text-diff-added">+{additions}</span>{" "}
-                <span className="text-diff-removed">-{removals}</span>
-              </span>
+              <div
+                aria-label="变更操作"
+                className="flex shrink-0 items-center justify-end gap-1.5"
+                role="group"
+              >
+                <button
+                  aria-haspopup="dialog"
+                  aria-label={
+                    allChanges.length === 0
+                      ? "暂无未提交变更可审核"
+                      : `审核 ${String(allChanges.length)} 个未提交变更`
+                  }
+                  className="h-7 shrink-0 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-control"
+                  disabled={allChanges.length === 0}
+                  onClick={() => {
+                    onReviewChanges(allChanges);
+                  }}
+                  type="button"
+                >
+                  审核
+                </button>
+                {/* 提交入口按当前产品范围仅展示，暂不绑定 Git Mutation。 */}
+                <button
+                  aria-label={
+                    allChanges.length === 0
+                      ? "暂无未提交变更可提交"
+                      : `提交 ${String(allChanges.length)} 个未提交变更`
+                  }
+                  className="h-7 shrink-0 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-control"
+                  disabled={allChanges.length === 0}
+                  type="button"
+                >
+                  提交
+                </button>
+              </div>
             </div>
-            <div aria-label="Git 变更文件" className="min-h-0 overflow-y-auto px-2.5 pb-2.5">
+            <div className="min-h-0 overflow-y-auto px-2.5 pb-2.5">
               {gitStatusError !== null ? (
-                <div className="flex flex-col items-center px-2 py-5 text-center">
-                  <p className="text-label text-diff-removed">Git 变更自动检测已停止</p>
-                  <p className="mt-1 text-caption text-muted-foreground">
-                    当前目录可能不是 Git 仓库，或检测连续失败
-                  </p>
-                  <button
-                    aria-label="手动刷新 Git 变更"
-                    className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-control bg-control px-3 text-label font-medium text-foreground transition-colors hover:bg-raised disabled:cursor-not-allowed disabled:opacity-60"
+                <div className="mb-2 flex items-center gap-2 rounded-control bg-control px-2 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-label text-diff-removed">Git 变更自动检测已停止</p>
+                  </div>
+                  <IconButton
                     disabled={gitStatusRefreshing}
+                    label="手动刷新 Git 变更"
                     onClick={onRefreshGitStatus}
-                    type="button"
+                    size="small"
                   >
                     <RefreshCw
                       aria-hidden="true"
                       className={`size-3.5 ${gitStatusRefreshing ? "animate-spin" : ""}`}
                     />
-                    {gitStatusRefreshing ? "正在刷新" : "手动刷新"}
-                  </button>
+                  </IconButton>
                 </div>
               ) : gitStatusPending && gitStatus === undefined ? (
+                <p className="mb-2 px-2 text-caption text-muted-foreground">正在读取 Git 变更...</p>
+              ) : null}
+              <div className="mb-1 flex items-center justify-between px-1.5 text-meta font-medium text-muted-foreground">
+                <span>项目文件</span>
+              </div>
+              {rootFileTreeState?.error !== null && rootFileTreeState?.error !== undefined ? (
+                <div className="flex flex-col items-center px-2 py-5 text-center">
+                  <p className="text-label text-diff-removed">无法读取项目文件</p>
+                  <button
+                    aria-label="重新读取项目文件"
+                    className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-control bg-control px-3 text-label font-medium text-foreground transition-colors hover:bg-raised disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={rootFileTreeState.isFetching}
+                    onClick={() => {
+                      onRefreshFileTreeDirectory(null);
+                    }}
+                    type="button"
+                  >
+                    <RefreshCw
+                      aria-hidden="true"
+                      className={`size-3.5 ${rootFileTreeState.isFetching ? "animate-spin" : ""}`}
+                    />
+                    {rootFileTreeState.isFetching ? "正在读取" : "重新读取"}
+                  </button>
+                </div>
+              ) : rootFileTreeState?.isPending === true && rootFileTreeState.data === undefined ? (
                 <p className="px-2 py-5 text-center text-label text-muted-foreground">
-                  正在读取 Git 变更...
+                  正在读取项目文件...
                 </p>
-              ) : allChanges.length === 0 ? (
+              ) : (rootFileTreeState?.data?.entries.length ?? 0) === 0 ? (
                 <p className="px-2 py-5 text-center text-label text-muted-foreground">
-                  当前项目暂无未提交变更
+                  当前项目没有可显示的文件
                 </p>
               ) : (
-                <div className="space-y-4">
-                  {unstagedChanges.length > 0 ? (
-                    <GitChangeSection
-                      changes={unstagedChanges}
-                      label="未暂存"
-                      onOpenFileDiff={onOpenFileDiff}
-                    />
-                  ) : null}
-                  {stagedChanges.length > 0 ? (
-                    <GitChangeSection
-                      changes={stagedChanges}
-                      label="已暂存"
-                      onOpenFileDiff={onOpenFileDiff}
-                    />
-                  ) : null}
-                </div>
+                <FileTree
+                  aria-label="项目文件"
+                  expanded={expandedFileTreePaths}
+                  onExpandedChange={onFileTreeExpandedChange}
+                  onSelect={(path) => {
+                    if (!filePaths.has(path)) {
+                      return;
+                    }
+                    setSelectedFilePath(path);
+                    onOpenSourceFile(path);
+                  }}
+                  {...(selectedFilePath === undefined ? {} : { selectedPath: selectedFilePath })}
+                >
+                  <ProjectFileTreeNodes
+                    directoryStates={fileTreeDirectoryStates}
+                    entries={rootFileTreeState?.data?.entries ?? []}
+                    onRefreshDirectory={onRefreshFileTreeDirectory}
+                  />
+                </FileTree>
               )}
             </div>
           </div>
@@ -438,50 +632,6 @@ function SubagentSection({
         </div>
       </section>
     </InspectorSection>
-  );
-}
-
-function GitChangeSection({
-  changes,
-  label,
-  onOpenFileDiff,
-}: Readonly<{
-  changes: readonly AgentFileChange[];
-  label: string;
-  onOpenFileDiff: (change: AgentFileChange) => void;
-}>) {
-  return (
-    <section aria-label={label}>
-      <div className="mb-1 flex items-center justify-between px-2 text-meta font-medium text-muted-foreground">
-        <span>{label}</span>
-        <span>{changes.length}</span>
-      </div>
-      <div className="space-y-0.5">
-        {changes.map((change) => {
-          const fileName = getFileName(change.path);
-          const { additions, removals } = countFileChangeLines(change);
-          return (
-            <button
-              aria-haspopup="dialog"
-              aria-label={`打开 ${label}文件 ${fileName} 的 Diff`}
-              className="flex w-full items-center gap-2 rounded-control px-2 py-2 text-left transition-colors hover:bg-control-hover"
-              key={change.path}
-              onClick={() => {
-                onOpenFileDiff(change);
-              }}
-              type="button"
-            >
-              <FileCode2 aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-xs text-foreground" title={change.path}>
-                {fileName}
-              </span>
-              <span className="text-caption text-diff-added">+{additions}</span>
-              <span className="text-caption text-diff-removed">-{removals}</span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
   );
 }
 

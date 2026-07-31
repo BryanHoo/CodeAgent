@@ -182,6 +182,7 @@ KaTeX
 | `attachments`    | 附件 Chip、预览和删除                | 使用 Server 返回的受控引用      |
 | `terminal`       | ANSI Command Output                  | 增加输出上限和截断状态          |
 | `code-block`     | 稳定代码块                           | 按需高亮                        |
+| `file-tree`      | Inspector Project 文件目录           | 组合受限文件树与源码预览        |
 | `model-selector` | Model 选择                           | 数据来自 `/v1/models`           |
 
 ### 7.2 不直接采用的组件
@@ -257,6 +258,7 @@ Project 名称行短按继续展开或收起 Task；指针移动超过点击容�
 - Sidebar 默认宽度为 `264px`，支持折叠。
 - Timeline 占据剩余空间，宽度使用合理上限保证 Markdown 可读性。
 - Inspector 在宽屏工作台默认显示，窄窗口关闭并按需作为抽屉打开。
+- Inspector 的“变更”页签固定保留只读的未提交变更摘要：左侧在标题下方同行展示变更总数和增删统计，最右侧并排展示相同中性背景的“审核”与“提交”按钮。“审核”打开统一文件审核 Dialog，“提交”暂不绑定操作；摘要下方使用 AI Elements `FileTree` 展示受限 Project 文件树，目录默认折叠并在用户展开时按需加载直接子项，文件选择打开受控源码预览。
 - Composer 固定在 Timeline 底部，但不能覆盖滚动内容。
 - Composer 左侧依次展示附件、审批和沙盒模式；沙盒模式使用 Codex 有效 Project 配置初始化，并允许选择只读、工作区可写或完全访问。右侧继续展示模型、思考量和提交操作。
 - Composer 在文本开头或空白字符后输入 `/` 时显示外部浮层，连续正文字符后的 `/` 不触发；浮层先展示本地 Task 命令，再在命令组下方展示当前 Project 的 Codex Skills。每次选择只移除当前 Slash 片段并保留已有正文，允许在正文任意位置插入多个有序的 `accent` 主色 Token。Token 显示 Skill 展示名，内部值与复制文本为 `$<skill.name>`，可点击或使用邻接删除键移除。提交按 Token 顺序携带统一 Skill ID 与名称，不把 `$name` 拼接进普通正文，也不接收原生路径。

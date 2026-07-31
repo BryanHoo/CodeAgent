@@ -11,7 +11,7 @@ import type {
   PendingRequest,
   ProjectGitStatus,
 } from "@code-agent/protocol";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
   lazy,
@@ -47,6 +47,7 @@ import {
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
   projectGitStatusQueryOptions,
+  projectFileTreeQueryOptions,
   projectOpenCapabilitiesQueryOptions,
   replaceProjectTaskInQueryCaches,
   skillsQueryOptions,
@@ -66,7 +67,7 @@ import { TaskRenameDialog } from "./task-rename-dialog.js";
 import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
 import { WorkbenchComposer } from "./workbench-composer.js";
-import { WorkbenchInspector } from "./workbench-inspector.js";
+import { WorkbenchInspector, type ProjectFileTreeDirectoryState } from "./workbench-inspector.js";
 import { WorkbenchPanelResizer } from "./workbench-panel-resizer.js";
 import { ProjectOpenMenu } from "./project-open-menu.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
@@ -75,6 +76,7 @@ const sidebarOverlayQuery = "(max-width: 760px)";
 const inspectorOverlayQuery = "(max-width: 1100px)";
 const sidebarWidthLimits = { default: 288, maximum: 400, minimum: 220 } as const;
 const inspectorWidthLimits = { default: 288, maximum: 480, minimum: 260 } as const;
+const emptyExpandedFileTreePaths = new Set<string>();
 
 type WorkbenchShellStyle = CSSProperties &
   Readonly<{
@@ -196,6 +198,32 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     runtime.snapshot?.status === "running" || startingSnapshot?.status === "running";
   const backgroundTerminals = useBackgroundTerminals(client, projectId, taskId, isTaskRunning);
   const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, isTaskRunning, client));
+  const [fileTreeExpansion, setFileTreeExpansion] = useState(() => ({
+    paths: new Set<string>(),
+    projectId,
+  }));
+  const expandedFileTreePaths =
+    fileTreeExpansion.projectId === projectId
+      ? fileTreeExpansion.paths
+      : emptyExpandedFileTreePaths;
+  const fileTreeDirectoryPaths: readonly (string | null)[] = [null, ...expandedFileTreePaths];
+  const fileTreeQueries = useQueries({
+    queries: fileTreeDirectoryPaths.map((directoryPath) =>
+      projectFileTreeQueryOptions(projectId, directoryPath, client),
+    ),
+  });
+  const fileTreeDirectories: readonly ProjectFileTreeDirectoryState[] = fileTreeDirectoryPaths.map(
+    (path, index) => {
+      const query = fileTreeQueries[index];
+      return {
+        ...(query?.data === undefined ? {} : { data: query.data }),
+        error: query?.error ?? null,
+        isFetching: query?.isFetching ?? false,
+        isPending: query?.isPending ?? true,
+        path,
+      };
+    },
+  );
   const previousTaskRunningRef = useRef(isTaskRunning);
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
   const [sidebarOpen, setSidebarOpen] = useState(() => shouldOpenDesktopPanel(sidebarOverlayQuery));
@@ -696,14 +724,41 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         backgroundTerminals={backgroundTerminals.terminals}
         backgroundTerminalsError={backgroundTerminals.error}
         backgroundTerminalsPending={backgroundTerminals.isPending}
+        expandedFileTreePaths={expandedFileTreePaths}
+        fileTreeDirectories={fileTreeDirectories}
         gitStatusError={gitStatusQuery.error}
         gitStatusPending={gitStatusQuery.isPending}
         gitStatusRefreshing={gitStatusQuery.isFetching}
         key={`${projectId}:${taskId ?? "draft"}:${subagents.length > 0 ? "with-subagents" : "without-subagents"}:${backgroundTerminals.terminals.length > 0 ? "with-terminals" : "without-terminals"}`}
-        onOpenFileDiff={openFileDiff}
+        onFileTreeExpandedChange={(nextExpandedPaths) => {
+          setFileTreeExpansion((current) => {
+            const previousPaths =
+              current.projectId === projectId ? current.paths : emptyExpandedFileTreePaths;
+            const collapsedPaths = [...previousPaths].filter(
+              (path) => !nextExpandedPaths.has(path),
+            );
+            return {
+              paths: new Set(
+                [...nextExpandedPaths].filter(
+                  (path) =>
+                    !collapsedPaths.some((collapsedPath) => path.startsWith(`${collapsedPath}/`)),
+                ),
+              ),
+              projectId,
+            };
+          });
+        }}
+        onOpenSourceFile={(path) => {
+          openSourceFile({ lineNumber: null, path });
+        }}
         onRefreshGitStatus={() => {
           void gitStatusQuery.refetch();
         }}
+        onRefreshFileTreeDirectory={(directoryPath) => {
+          const directoryIndex = fileTreeDirectoryPaths.indexOf(directoryPath);
+          void fileTreeQueries[directoryIndex]?.refetch();
+        }}
+        onReviewChanges={openFileReview}
         onTerminateBackgroundTerminal={backgroundTerminals.terminateTerminal}
         onOpenSubagent={(selection) => {
           if (taskId !== undefined) {

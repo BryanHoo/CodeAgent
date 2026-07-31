@@ -17,6 +17,7 @@ import {
   AgentTaskSettingsResponseSchema,
   HealthResponseSchema,
   ProjectPageSchema,
+  ProjectFileTreeSchema,
   ProjectOpenCapabilitiesResponseSchema,
   ReorderProjectsResponseSchema,
   ProjectGitStatusSchema,
@@ -58,6 +59,7 @@ import {
   type HealthResponse,
   type InterruptAgentTurnResponse,
   type ProjectPage,
+  type ProjectFileTree,
   type ProjectOpenAppId,
   type ProjectOpenCapabilitiesResponse,
   type ReorderProjectsResponse,
@@ -333,6 +335,17 @@ export class CodeAgentClient {
       ProjectGitStatusSchema,
       options,
     );
+  }
+
+  public async listProjectFiles(
+    projectId: string,
+    directoryPath: string | null,
+    options: ReadOptions = {},
+  ): Promise<ProjectFileTree> {
+    const requestPath = appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/files/tree`, {
+      path: directoryPath ?? undefined,
+    });
+    return this.#read(requestPath, ProjectFileTreeSchema, options);
   }
 
   public async readProjectSourceFile(

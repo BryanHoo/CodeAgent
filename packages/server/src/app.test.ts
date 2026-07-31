@@ -828,6 +828,36 @@ describe("CodeAgent Server", () => {
     expect(readProjectSourceFile).toHaveBeenCalledTimes(1);
   });
 
+  it("serves one file tree directory only for the configured project", async () => {
+    const { provider } = createProvider();
+    const readProjectFileTree = vi.fn(() =>
+      Promise.resolve({
+        entries: [{ path: "src/main.tsx", type: "file" as const }],
+        path: "src",
+      }),
+    );
+    const app = await createCodeAgentServer(createServerOptions(provider, { readProjectFileTree }));
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/files/tree?path=src",
+    });
+    const missingProjectResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/other/files/tree",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      entries: [{ path: "src/main.tsx", type: "file" }],
+      path: "src",
+    });
+    expect(readProjectFileTree).toHaveBeenCalledWith(project.rootPath, "src");
+    expect(missingProjectResponse.statusCode).toBe(404);
+    expect(readProjectFileTree).toHaveBeenCalledTimes(1);
+  });
+
   it("serves models and resolves uploaded attachments before starting a turn", async () => {
     const { app, listModels, listSkills, startTurn, writeTaskSettings } = await createHarness();
     const models = await app.inject({ method: "GET", url: "/v1/models" });

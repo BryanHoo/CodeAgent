@@ -25,6 +25,7 @@ import {
   CodeBlockTitle,
 } from "./code-block.js";
 import { Context, ContextTrigger, formatContextUsage } from "./context.js";
+import { FileTree, FileTreeFile, FileTreeFolder } from "./file-tree.js";
 import { Message, MessageContent, MessageResponse } from "./message.js";
 import {
   PromptInput,
@@ -44,6 +45,24 @@ import { Shimmer } from "./shimmer.js";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "./tool.js";
 
 describe("AI Elements primitives", () => {
+  it("renders an accessible file tree with folders collapsed by default", () => {
+    const markup = renderToStaticMarkup(
+      <FileTree aria-label="项目文件" selectedPath="README.md">
+        <FileTreeFolder name="src" path="src">
+          <FileTreeFile name="main.tsx" path="src/main.tsx" />
+        </FileTreeFolder>
+        <FileTreeFile name="README.md" path="README.md" />
+      </FileTree>,
+    );
+
+    expect(markup).toContain('role="tree"');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('aria-label="展开文件夹 src"');
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).not.toContain("main.tsx");
+    expect(markup).toContain("README.md");
+  });
+
   it("renders a code block with line numbers and a highlighted line", () => {
     const markup = renderToStaticMarkup(
       <CodeBlock

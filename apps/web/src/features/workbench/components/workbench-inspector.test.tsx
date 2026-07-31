@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { WorkbenchInspector } from "./workbench-inspector.js";
+import { WorkbenchInspector, type ProjectFileTreeDirectoryState } from "./workbench-inspector.js";
 
 const gitStatus = {
   baseBranches: ["origin/main"],
@@ -30,6 +30,38 @@ const taskSettings = {
   sandboxMode: "workspace-write" as const,
 };
 
+const fileTree = {
+  entries: [
+    { path: "src", type: "directory" as const },
+    { path: "README.md", type: "file" as const },
+  ],
+  path: null,
+};
+
+const fileTreeDirectories: readonly ProjectFileTreeDirectoryState[] = [
+  { data: fileTree, error: null, isFetching: false, isPending: false, path: null },
+  {
+    data: {
+      entries: [{ path: "src/components", type: "directory" as const }],
+      path: "src",
+    },
+    error: null,
+    isFetching: false,
+    isPending: false,
+    path: "src",
+  },
+  {
+    data: {
+      entries: [{ path: "src/components/app.tsx", type: "file" as const }],
+      path: "src/components",
+    },
+    error: null,
+    isFetching: false,
+    isPending: false,
+    path: "src/components",
+  },
+];
+
 describe("WorkbenchInspector", () => {
   it("keeps running terminals in context with an accessible stop action", () => {
     const markup = renderToStaticMarkup(
@@ -42,7 +74,7 @@ describe("WorkbenchInspector", () => {
             itemId: "command-1",
           },
         ]}
-        onOpenFileDiff={() => undefined}
+        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         settings={taskSettings}
@@ -56,10 +88,12 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain('aria-label="终端运行中"');
   });
 
-  it("separates current project staged and unstaged changes as diff triggers", () => {
+  it("integrates inline change stats with neutral review and commit actions", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchInspector
-        onOpenFileDiff={() => undefined}
+        fileTreeDirectories={fileTreeDirectories}
+        onOpenSourceFile={() => undefined}
+        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         settings={taskSettings}
@@ -68,38 +102,64 @@ describe("WorkbenchInspector", () => {
     );
 
     expect(markup).toContain("2 个变更");
-    expect(markup).toContain("未暂存");
-    expect(markup).toContain("已暂存");
-    expect(markup).toContain("package.json");
-    expect(markup).toContain("new-file.ts");
-    expect(markup).toContain('aria-label="打开 已暂存文件 package.json 的 Diff"');
-    expect(markup).toContain('aria-label="打开 未暂存文件 new-file.ts 的 Diff"');
-    expect(markup).toContain(
-      'aria-label="Git 变更文件" class="min-h-0 overflow-y-auto px-2.5 pb-2.5"',
+    expect(markup).toContain('aria-label="未提交变更摘要"');
+    expect(markup).toContain('aria-label="变更统计"');
+    expect(markup).toContain('aria-label="变更操作"');
+    expect(markup).toContain('aria-label="审核 2 个未提交变更"');
+    expect(markup).toContain('aria-label="提交 2 个未提交变更"');
+    expect(markup).toContain('aria-haspopup="dialog"');
+    expect(markup).toContain(">审核</button>");
+    expect(markup).toContain(">提交</button>");
+    expect(markup).toMatch(
+      /aria-label="变更统计"[^>]*><span>2 个变更<\/span><span[^>]*>\+3<\/span><span[^>]*>-1<\/span>/u,
     );
-    expect(markup).not.toContain(">提交变更</button>");
+    expect(markup).toMatch(/aria-label="审核 2 个未提交变更"[^>]*class="[^"]*bg-control/u);
+    expect(markup).toMatch(/aria-label="提交 2 个未提交变更"[^>]*class="[^"]*bg-control/u);
+    expect(markup).not.toContain("bg-accent");
+    expect(markup).toContain('aria-label="项目文件"');
+    expect(markup).toContain('role="tree"');
+    expect(markup).toContain("src");
+    expect(markup).toContain('aria-label="展开文件夹 src"');
+    expect(markup).toContain("README.md");
+    expect(markup).not.toContain("components");
+    expect(markup).not.toContain('aria-label="Git 变更文件"');
+    expect(markup).not.toContain("未暂存");
+    expect(markup).not.toContain("已暂存");
   });
 
-  it("hides an empty Git change group", () => {
-    const markup = renderToStaticMarkup(
+  it("renders loaded directory children only while their folders are expanded", () => {
+    const srcExpandedMarkup = renderToStaticMarkup(
       <WorkbenchInspector
-        gitStatus={{ ...gitStatus, unstaged: [] }}
-        onOpenFileDiff={() => undefined}
+        expandedFileTreePaths={new Set(["src"])}
+        fileTreeDirectories={fileTreeDirectories}
+        onReviewChanges={() => undefined}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        settings={taskSettings}
+      />,
+    );
+    const componentsExpandedMarkup = renderToStaticMarkup(
+      <WorkbenchInspector
+        expandedFileTreePaths={new Set(["src", "src/components"])}
+        fileTreeDirectories={fileTreeDirectories}
+        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         settings={taskSettings}
       />,
     );
 
-    expect(markup).toContain('aria-label="已暂存"');
-    expect(markup).not.toContain('aria-label="未暂存"');
-    expect(markup).not.toContain("暂无文件");
+    expect(srcExpandedMarkup).toContain('aria-label="展开文件夹 components"');
+    expect(srcExpandedMarkup).not.toContain("app.tsx");
+    expect(componentsExpandedMarkup).toContain("app.tsx");
   });
 
   it("renders an explicit empty state without demo files", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchInspector
-        onOpenFileDiff={() => undefined}
+        fileTreeDirectories={fileTreeDirectories}
+        onOpenSourceFile={() => undefined}
+        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         settings={taskSettings}
@@ -107,15 +167,22 @@ describe("WorkbenchInspector", () => {
     );
 
     expect(markup).toContain("0 个变更");
-    expect(markup).toContain("当前项目暂无未提交变更");
+    expect(markup).toContain('aria-label="暂无未提交变更可审核"');
+    expect(markup).toContain('aria-label="暂无未提交变更可提交"');
+    expect(markup).toContain(">审核</button>");
+    expect(markup).toContain(">提交</button>");
+    expect(markup).toContain("disabled");
+    expect(markup).toContain("README.md");
     expect(markup).not.toContain("workbench-shell.tsx");
   });
 
   it("offers a manual refresh after Git detection stops", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchInspector
+        fileTreeDirectories={fileTreeDirectories}
         gitStatusError={new Error("not a git repository")}
-        onOpenFileDiff={() => undefined}
+        onOpenSourceFile={() => undefined}
+        onReviewChanges={() => undefined}
         onRefreshGitStatus={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
@@ -128,10 +195,45 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain('aria-label="手动刷新 Git 变更"');
   });
 
+  it("renders project file tree root loading and error states", () => {
+    const loadingMarkup = renderToStaticMarkup(
+      <WorkbenchInspector
+        fileTreeDirectories={[{ error: null, isFetching: true, isPending: true, path: null }]}
+        onOpenSourceFile={() => undefined}
+        onReviewChanges={() => undefined}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        settings={taskSettings}
+      />,
+    );
+    const errorMarkup = renderToStaticMarkup(
+      <WorkbenchInspector
+        fileTreeDirectories={[
+          {
+            error: new Error("unavailable"),
+            isFetching: false,
+            isPending: false,
+            path: null,
+          },
+        ]}
+        onOpenSourceFile={() => undefined}
+        onRefreshFileTreeDirectory={() => undefined}
+        onReviewChanges={() => undefined}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        settings={taskSettings}
+      />,
+    );
+    expect(loadingMarkup).toContain("正在读取项目文件...");
+    expect(errorMarkup).toContain("无法读取项目文件");
+    expect(errorMarkup).toContain('aria-label="重新读取项目文件"');
+    expect(errorMarkup).not.toContain("仅显示前 2000 个条目");
+  });
+
   it("lists every subagent in context and exposes output dialog triggers", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchInspector
-        onOpenFileDiff={() => undefined}
+        onReviewChanges={() => undefined}
         onOpenSubagent={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
@@ -179,7 +281,7 @@ describe("WorkbenchInspector", () => {
           },
         ]}
         gitStatus={gitStatus}
-        onOpenFileDiff={() => undefined}
+        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         settings={taskSettings}

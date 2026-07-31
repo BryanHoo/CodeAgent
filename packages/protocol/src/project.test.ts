@@ -33,7 +33,9 @@ import {
   StartAgentTurnResponseSchema,
   HealthResponseSchema,
   ProjectPageSchema,
+  ProjectFileTreeQuerySchema,
   ProjectGitStatusSchema,
+  ProjectFileTreeSchema,
   ProjectOpenAppSchema,
   ProjectOpenCapabilitiesResponseSchema,
   OpenProjectRequestSchema,
@@ -301,6 +303,42 @@ describe("project protocol", () => {
         truncated: false,
       }),
     ).toBe(false);
+  });
+
+  it("describes an unbounded project-relative directory listing", () => {
+    expect(
+      Value.Check(ProjectFileTreeSchema, {
+        entries: Array.from({ length: 2_001 }, (_, index) => ({
+          path: `src/file-${String(index)}.ts`,
+          type: "file",
+        })),
+        path: "src",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ProjectFileTreeSchema, {
+        entries: [{ path: "/workspace/CodeAgent/src", type: "directory" }],
+        path: null,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ProjectFileTreeSchema, {
+        entries: [{ extra: true, path: "src", type: "directory" }],
+        path: null,
+      }),
+    ).toBe(false);
+    expect(Value.Check(ProjectFileTreeSchema, { entries: [], path: null, truncated: false })).toBe(
+      false,
+    );
+  });
+
+  it("validates optional project-relative file tree directory queries", () => {
+    expect(Value.Check(ProjectFileTreeQuerySchema, {})).toBe(true);
+    expect(Value.Check(ProjectFileTreeQuerySchema, { path: "src/components" })).toBe(true);
+    expect(Value.Check(ProjectFileTreeQuerySchema, { path: "/workspace/src" })).toBe(false);
+    expect(Value.Check(ProjectFileTreeQuerySchema, { path: "../src" })).toBe(false);
+    expect(Value.Check(ProjectFileTreeQuerySchema, { path: "." })).toBe(false);
+    expect(Value.Check(ProjectFileTreeQuerySchema, { extra: true })).toBe(false);
   });
 
   it("validates a structured task snapshot", () => {

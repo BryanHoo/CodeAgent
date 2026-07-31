@@ -78,6 +78,9 @@ catalogs:
     globals:
       specifier: 17.7.0
       version: 17.7.0
+    ignore:
+      specifier: 7.0.6
+      version: 7.0.6
     lucide-react:
       specifier: 1.25.0
       version: 1.25.0
@@ -292,6 +295,9 @@ importers:
       fastify:
         specifier: 'catalog:'
         version: 5.10.0
+      ignore:
+        specifier: 'catalog:'
+        version: 7.0.6
       ws:
         specifier: 'catalog:'
         version: 8.21.1
