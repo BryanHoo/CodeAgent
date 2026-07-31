@@ -206,6 +206,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const [inspectorWidth, setInspectorWidth] = useState<number>(inspectorWidthLimits.default);
   const workbenchShellRef = useRef<HTMLDivElement>(null);
   const [newChatSubmissionPending, setNewChatSubmissionPending] = useState(false);
+  const [pendingTaskSelection, setPendingTaskSelection] = useState<{
+    projectId: string;
+    taskId: string;
+  }>();
   const [taskRenameOpen, setTaskRenameOpen] = useState(false);
   const [taskRenameError, setTaskRenameError] = useState<string | null>(null);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
@@ -298,6 +302,30 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       setTaskRenameError("无法重命名任务");
     }
   };
+  const cacheProjectTask = useCallback(
+    (startedTask: AgentTask) => {
+      queryClient.setQueryData<ProjectTaskInfiniteData>(
+        ["projects", startedTask.projectId, "tasks"],
+        (currentData) => upsertProjectTaskInInfiniteData(currentData, startedTask),
+      );
+      queryClient.setQueryData<readonly AgentTask[]>(
+        ["projects", startedTask.projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
+        (currentTasks) =>
+          currentTasks === undefined
+            ? undefined
+            : [startedTask, ...currentTasks.filter((task) => task.id !== startedTask.id)],
+      );
+    },
+    [queryClient],
+  );
+  const handleTaskCreated = useCallback(
+    (startedTask: AgentTask) => {
+      // 真实 taskId 返回后立即展示并选中，但保持 Project Composer 以支持失败重试。
+      cacheProjectTask(startedTask);
+      setPendingTaskSelection({ projectId: startedTask.projectId, taskId: startedTask.id });
+    },
+    [cacheProjectTask],
+  );
   const handleTaskStarted = useCallback(
     (
       startedTask: AgentTask,
@@ -305,18 +333,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       startedInput?: AgentPromptInput,
       settings?: AgentTaskSettings,
     ) => {
-      // Mutation 返回即代表 Task 已创建，先写列表缓存再导航，不能等待最终一致的列表刷新。
-      queryClient.setQueryData<ProjectTaskInfiniteData>(
-        ["projects", projectId, "tasks"],
-        (currentData) => upsertProjectTaskInInfiniteData(currentData, startedTask),
-      );
-      queryClient.setQueryData<readonly AgentTask[]>(
-        ["projects", projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
-        (currentTasks) =>
-          currentTasks === undefined
-            ? undefined
-            : [startedTask, ...currentTasks.filter((task) => task.id !== startedTask.id)],
-      );
+      cacheProjectTask(startedTask);
       if (startedTurn !== undefined && startedInput !== undefined && settings !== undefined) {
         // 跨路由保存首轮启动结果，让 Snapshot 返回前即可渲染用户消息和 AI 运行态。
         queryClient.setQueryData<TaskLaunchState>(taskLaunchQueryKey(projectId, startedTask.id), {
@@ -330,12 +347,13 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         // 首轮 Turn 已确认运行，导航前写入 Sidebar 活动态，Review 不需要伪造用户消息。
         markTaskRunning(projectId, startedTask.id);
       }
+      setPendingTaskSelection(undefined);
       void navigate({
         params: { projectId, taskId: startedTask.id },
         to: "/p/$projectId/t/$taskId",
       });
     },
-    [markTaskRunning, navigate, projectId, queryClient],
+    [cacheProjectTask, markTaskRunning, navigate, projectId, queryClient],
   );
   const models = modelsQuery.data?.data ?? [];
   const defaultModel =
@@ -474,7 +492,11 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           setGlobalSettingsOpen(true);
         }}
         projectId={projectId}
-        {...(taskId === undefined ? {} : { taskId })}
+        {...(taskId === undefined && pendingTaskSelection?.projectId === projectId
+          ? { taskId: pendingTaskSelection.taskId }
+          : taskId === undefined
+            ? {}
+            : { taskId })}
       />
 
       {sidebarOpen ? (
@@ -599,6 +621,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               onSettingsChange={updateDraftSettings}
               onRequestNotificationPermission={requestNotificationPermission}
               onSubmissionStateChange={setNewChatSubmissionPending}
+              onTaskCreated={handleTaskCreated}
               onTaskStarted={handleTaskStarted}
               projectId={projectId}
               projectPath={projectPath}

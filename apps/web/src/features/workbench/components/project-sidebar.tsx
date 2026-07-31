@@ -273,18 +273,6 @@ export function ProjectSidebar({
     [preferenceStorage],
   );
 
-  const toggleProject = (id: string) => {
-    updateExpandedProjects((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
   const openProjectPicker = async () => {
     const project = await addProject();
     if (project !== undefined) {
@@ -293,8 +281,8 @@ export function ProjectSidebar({
     }
   };
 
-  const openNewTask = async (targetProjectId: string) => {
-    // 新聊天先复用 Project 空任务路由，首次提交时再由 Composer 创建真实 Codex Task。
+  const openProjectDraft = async (targetProjectId: string) => {
+    // 项目切换和新建入口都只打开 Project 草稿，首次提交后才展示真实 Task。
     updateExpandedProjects((current) => {
       if (current.has(targetProjectId)) {
         return current;
@@ -569,7 +557,7 @@ export function ProjectSidebar({
                           : "cursor-grab text-muted-foreground"
                       }`}
                       onClick={() => {
-                        toggleProject(project.id);
+                        void openProjectDraft(project.id);
                       }}
                       type="button"
                       {...getProjectReorderProps(project.id)}
@@ -592,7 +580,7 @@ export function ProjectSidebar({
                     <IconButton
                       label={`在 ${project.name} 中新建任务`}
                       onClick={() => {
-                        void openNewTask(project.id);
+                        void openProjectDraft(project.id);
                       }}
                       size="small"
                     >
@@ -602,9 +590,6 @@ export function ProjectSidebar({
 
                   {expanded ? (
                     <div className="mt-0.5 min-w-0 space-y-0.5 pl-5">
-                      {project.id === projectId && taskId === undefined ? (
-                        <NewTaskLink projectId={project.id} />
-                      ) : null}
                       {taskPreview.tasks.map((task) => {
                         const activity = getTaskActivity(taskActivity, task.projectId, task.id);
                         return (
@@ -917,19 +902,6 @@ export function SidebarSettingsButton({
         {connectionStatus.label}
       </span>
     </button>
-  );
-}
-
-function NewTaskLink({ projectId }: Readonly<{ projectId: string }>) {
-  return (
-    <Link
-      aria-current="page"
-      className="flex h-8 min-w-0 items-center rounded-control bg-control-active px-2 text-body-small font-medium text-foreground"
-      params={{ projectId }}
-      to="/p/$projectId"
-    >
-      <span className="min-w-0 flex-1 truncate">新聊天</span>
-    </Link>
   );
 }
 

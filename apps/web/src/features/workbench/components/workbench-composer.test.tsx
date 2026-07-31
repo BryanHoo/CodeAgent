@@ -163,10 +163,14 @@ describe("WorkbenchComposer", () => {
   });
 
   it("creates a task before its first turn and continues existing tasks directly", async () => {
+    const onTaskCreated = vi.fn();
     const client = {
       interruptTurn: vi.fn(),
       startTask: vi.fn(() => Promise.resolve({ task })),
-      startTurn: vi.fn(() => Promise.resolve({ taskId: task.id, turn })),
+      startTurn: vi.fn(() => {
+        expect(onTaskCreated).toHaveBeenCalledWith(task);
+        return Promise.resolve({ taskId: task.id, turn });
+      }),
       uploadAttachment: vi.fn(),
     };
 
@@ -174,6 +178,7 @@ describe("WorkbenchComposer", () => {
       startPromptTurn(client, {
         idempotencyKeys: { startTask: "task-key", startTurn: "turn-key" },
         input: { attachments: [], skills: [], text: "首次提交", type: "prompt" },
+        onTaskCreated,
         projectId: "code-agent",
         turnOptions: {
           approvalPolicy: "on-request",
@@ -201,6 +206,7 @@ describe("WorkbenchComposer", () => {
     ).resolves.toEqual({ taskId: task.id, turn });
 
     expect(client.startTask).toHaveBeenCalledTimes(1);
+    expect(onTaskCreated).toHaveBeenCalledOnce();
     expect(client.startTask).toHaveBeenCalledWith("code-agent", { idempotencyKey: "task-key" });
     expect(client.startTurn).toHaveBeenNthCalledWith(
       1,

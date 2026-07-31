@@ -308,6 +308,7 @@ type WorkbenchComposerProps = Readonly<{
   ) => Promise<void> | void;
   onRequestNotificationPermission: () => void;
   onSubmissionStateChange?: (submitting: boolean) => void;
+  onTaskCreated?: (task: AgentTask) => void;
   onTurnStarted?: (turn: AgentTurn, input: AgentPromptInput) => void;
   onTaskStarted: (
     task: AgentTask,
@@ -394,6 +395,7 @@ export function WorkbenchComposer({
   onRequestNotificationPermission,
   onSettingsChange,
   onSubmissionStateChange,
+  onTaskCreated,
   onTaskStarted,
   onTurnStarted,
   projectId,
@@ -725,6 +727,8 @@ export function WorkbenchComposer({
           if (routeScopeRef.current === requestScope) {
             setPendingTaskState({ scope: requestScope, task });
             startTaskAttempt.current = undefined;
+            // 真实 taskId 可用后立即交给工作台缓存并选中，不等待 turn/start。
+            onTaskCreated?.(task);
           }
         },
         projectId,
@@ -913,6 +917,7 @@ export function WorkbenchComposer({
           // Review 启动失败时保留已创建 Task，重试不能重复创建。
           if (routeScopeRef.current === requestScope) {
             setPendingTaskState({ scope: requestScope, task });
+            onTaskCreated?.(task);
           }
         },
         projectId,

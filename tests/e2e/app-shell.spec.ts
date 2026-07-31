@@ -622,7 +622,7 @@ test("project open split control selects, opens, and restores a host app", async
   await expect(page.getByRole("button", { name: "在 Zed 中打开" })).toBeVisible();
 });
 
-test("restores the project folder expansion preference after reload", async ({ page }) => {
+test("switches projects and restores the expanded folder after reload", async ({ page }) => {
   await page.goto("/p/code-agent");
 
   const firstProject = page.getByRole("button", { name: "切换项目 CodeAgent" });
@@ -630,14 +630,14 @@ test("restores the project folder expansion preference after reload", async ({ p
   await expect(firstProject).toHaveAttribute("aria-expanded", "true");
   await expect(secondProject).toHaveAttribute("aria-expanded", "false");
 
-  await firstProject.click();
   await secondProject.click();
-  await expect(firstProject).toHaveAttribute("aria-expanded", "false");
+  await expect(page).toHaveURL(/\/p\/superwork$/u);
+  await expect(firstProject).toHaveAttribute("aria-expanded", "true");
   await expect(secondProject).toHaveAttribute("aria-expanded", "true");
 
   await page.reload();
 
-  await expect(firstProject).toHaveAttribute("aria-expanded", "false");
+  await expect(firstProject).toHaveAttribute("aria-expanded", "true");
   await expect(secondProject).toHaveAttribute("aria-expanded", "true");
 });
 
@@ -3165,6 +3165,11 @@ test("adds a folder through the host project picker", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/p\/added-project$/);
   await expect(page.getByRole("heading", { name: "AddedProject" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("complementary", { name: "Project Sidebar" })
+      .getByRole("link", { name: "新聊天" }),
+  ).toHaveCount(0);
 });
 
 test("handles a host project picker failure without an unhandled rejection", async ({ page }) => {
@@ -3273,20 +3278,14 @@ test("opens and reuses project new chats without creating empty Codex tasks", as
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
   await sidebar.getByRole("link", { name: "新建任务" }).click();
   await expect(page).toHaveURL(/\/p\/code-agent$/);
-  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveCount(0);
 
   // 已经位于首个项目的新聊天时继续复用当前草稿，不创建空 Codex Task。
   await sidebar.getByRole("link", { name: "新建任务" }).click();
   await expect(page).toHaveURL(/\/p\/code-agent$/);
   await sidebar.getByRole("button", { name: "在 superwork 中新建任务" }).click();
   await expect(page).toHaveURL(/\/p\/superwork$/);
-  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveCount(0);
   expect(taskCreationRequests).toEqual([]);
 });
 
@@ -3365,18 +3364,20 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
   await page.getByRole("textbox", { name: "任务输入" }).fill("你好");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
 
-  await expect(page.getByText("正在运行", { exact: true })).toBeVisible();
+  // Codex 返回真实 taskId 后立即写入并选中 Sidebar，中栏仍保留可重试的 Project 草稿。
+  await expect(page).toHaveURL(/\/p\/code-agent$/u);
+  const main = page.getByRole("main", { name: "Task Timeline" });
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const runningTaskLink = sidebar.getByRole("link", { name: "新聊天" });
+  await expect(runningTaskLink).toHaveAttribute("aria-current", "page");
+
   releaseTurnStartRequest();
 
   await expect(page).toHaveURL(new RegExp(`/p/code-agent/t/${createdTask.id}$`, "u"));
-  const main = page.getByRole("main", { name: "Task Timeline" });
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
   await expect(main.getByRole("heading", { name: "新聊天" })).toBeVisible();
   const timelineMessages = main.locator('[role="log"] article');
   await expect(timelineMessages.nth(0)).toContainText("你好");
   await expect(timelineMessages.nth(1)).toContainText("正在运行");
-  const runningTaskLink = sidebar.getByRole("link", { name: "新聊天" });
-  await expect(runningTaskLink).toHaveAttribute("aria-current", "page");
   await expect(runningTaskLink.getByRole("status", { name: "任务运行中" })).toBeVisible();
   await expect(runningTaskLink.locator(".task-age")).toHaveCount(0);
   await expect(main.getByText(createdTask.id, { exact: true })).toHaveCount(0);
@@ -3433,21 +3434,21 @@ test("stores new-chat text and attachments independently between projects", asyn
   await expect(page.getByText("draft.png", { exact: true })).toBeVisible();
 });
 
-test("toggles project tasks from the project name without navigation", async ({ page }) => {
+test("switches to a project draft from the project name without creating a sidebar task", async ({
+  page,
+}) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
-  const task = sidebar.getByRole("link", { name: /优化输入框交互/ });
-  await expect(task).toBeVisible();
+  await sidebar.getByRole("button", { name: "切换项目 superwork" }).click();
+
+  await expect(page).toHaveURL(/\/p\/superwork$/);
+  await expect(page.getByRole("main", { name: "Task Timeline" }).getByText("新聊天")).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveCount(0);
 
   await sidebar.getByRole("button", { name: "切换项目 CodeAgent" }).click();
-  await expect(task).not.toBeVisible();
-  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
-
-  await expect(sidebar.getByRole("button", { name: "在 CodeAgent 中新建任务" })).toBeVisible();
-  await sidebar.getByRole("button", { name: "切换项目 CodeAgent" }).click();
-  await expect(task).toBeVisible();
-  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
+  await expect(page).toHaveURL(/\/p\/code-agent$/);
+  await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveCount(0);
 });
 
 test("loads one project task page only after showing more", async ({ page }) => {
