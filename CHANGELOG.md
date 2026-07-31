@@ -9,7 +9,7 @@
 ### 新增
 
 - 添加基于 Codex App Server 的本地 Web 工作台，支持 Project、Task、Turn、流式回复、审批、Skill、终端和上下文管理。
-- 添加 `start`、`doctor` 和 `version` CLI 命令，并将 Web、Server、Provider 和 SQLite Worker 打包为单一 `code-agent` npm 包。
+- 添加 `start`、`doctor` 和 `version` CLI 命令，并将 Web、Server、Provider 和 SQLite Worker 打包为单一 `@bryanhu/codea-gent` npm 包。
 - 添加文件预览、Diff、历史图片、系统通知、全局默认设置及任务恢复能力。
 
 ### 优化

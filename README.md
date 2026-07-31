@@ -7,13 +7,13 @@ CodeAgent 是一个通过 Web 操作本地 Coding Agent 的应用。`code-agent 
 直接运行最新版本：
 
 ```bash
-npx code-agent@latest start
+npx --package @bryanhu/codea-gent@latest code-agent start
 ```
 
 也可以全局安装：
 
 ```bash
-npm install --global code-agent
+npm install --global @bryanhu/codea-gent
 code-agent start
 ```
 
@@ -66,6 +66,6 @@ src/cli.ts                唯一公开 npm 包的 CLI 入口
 tools/                    构建与发布校验脚本
 ```
 
-内部 Workspace 包均为 `private: true`。发布产物只来自根包的 `dist/`，用户只安装 `code-agent`。
+内部 Workspace 包均为 `private: true`。发布产物只来自根包的 `dist/`，用户只安装 `@bryanhu/codea-gent`。
 
 架构决策见 [docs/architecture-design.md](docs/architecture-design.md)，工程约束见 [docs/project-structure.md](docs/project-structure.md)，维护者发布步骤见 [docs/releasing.md](docs/releasing.md)。版本变化记录在 [CHANGELOG.md](CHANGELOG.md)。

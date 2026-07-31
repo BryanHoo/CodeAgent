@@ -1,6 +1,6 @@
 # 发布 CodeAgent
 
-本文面向仓库维护者，说明如何通过版本标签自动发布 npm 包和 GitHub Release。仓库只发布根包 `code-agent`，内部 Workspace 包保持私有。
+本文面向仓库维护者，说明如何通过版本标签自动发布 npm 包和 GitHub Release。仓库只发布根包 `@bryanhu/codea-gent`，内部 Workspace 包保持私有。
 
 ## 发布前配置
 
@@ -17,7 +17,7 @@ Token 只用于首个版本，禁止写入仓库、`.npmrc` 或工作流文件�
 
 ### 后续发布
 
-`0.0.1` 发布成功后，在 npm 的 `code-agent > Settings > Trusted Publisher` 中添加 GitHub Actions Publisher：
+`0.0.1` 发布成功后，在 npm 的 `@bryanhu/codea-gent > Settings > Trusted Publisher` 中添加 GitHub Actions Publisher：
 
 | 配置项               | 值            |
 | -------------------- | ------------- |
@@ -64,4 +64,4 @@ GitHub Release 只会在 npm 发布成功后创建，避免 npm 失败时产生�
 - npm 发布成功但 GitHub Release 创建失败：不要修改版本；重新运行失败 Job，工作流会跳过已经存在的 npm 版本并继续创建 GitHub Release。
 - npm 拒绝重复版本：提升 `package.json` 版本并重新更新 `CHANGELOG.md`，然后创建新标签。
 
-发布记录以 [npm 的 code-agent 页面](https://www.npmjs.com/package/code-agent)和 [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases) 为准。
+发布记录以 [npm 的 @bryanhu/codea-gent 页面](https://www.npmjs.com/package/@bryanhu/codea-gent)和 [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases) 为准。

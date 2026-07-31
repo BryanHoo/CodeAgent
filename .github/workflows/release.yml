@@ -45,9 +45,10 @@ jobs:
       - name: Publish with provenance
         shell: bash
         run: |
+          package_name="$(node --print "require('./package.json').name")"
           package_version="$(node --print "require('./package.json').version")"
-          if npm view "code-agent@${package_version}" version --json >/dev/null 2>&1; then
-            echo "code-agent@${package_version} is already published; skipping npm publish."
+          if npm view "${package_name}@${package_version}" version --json >/dev/null 2>&1; then
+            echo "${package_name}@${package_version} is already published; skipping npm publish."
           else
             npm publish --access public --provenance
           fi

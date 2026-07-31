@@ -37,6 +37,10 @@ if (!manifest) {
   throw new Error("Package manifest is missing from pack output");
 }
 
+if (manifest.name !== "@bryanhu/codea-gent") {
+  throw new Error(`Unexpected package name: ${manifest.name}`);
+}
+
 const files = new Set(manifest.files.map(({ path }) => path));
 const requiredFiles = [
   "CHANGELOG.md",

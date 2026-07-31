@@ -9,7 +9,8 @@ describe("readGitWorkingTreeStatus", () => {
   it("reads the repository through the real parameterized Git command", async () => {
     const status = await readGitWorkingTreeStatus(process.cwd());
 
-    expect(status.branch).toBeTypeOf("string");
+    // 标签检出会处于 detached HEAD，此时 Git 不提供当前分支名。
+    expect(status.branch === null || typeof status.branch === "string").toBe(true);
     expect(status.baseBranches).toContain("origin/main");
     expect(Array.isArray(status.staged)).toBe(true);
     expect(Array.isArray(status.unstaged)).toBe(true);
