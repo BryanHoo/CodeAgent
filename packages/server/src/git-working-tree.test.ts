@@ -11,7 +11,8 @@ describe("readGitWorkingTreeStatus", () => {
 
     // 标签检出会处于 detached HEAD，此时 Git 不提供当前分支名。
     expect(status.branch === null || typeof status.branch === "string").toBe(true);
-    expect(status.baseBranches).toContain("origin/main");
+    // actions/checkout 的标签检出可能不包含任何远端分支引用。
+    expect(Array.isArray(status.baseBranches)).toBe(true);
     expect(Array.isArray(status.staged)).toBe(true);
     expect(Array.isArray(status.unstaged)).toBe(true);
   });
