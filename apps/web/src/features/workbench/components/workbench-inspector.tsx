@@ -12,6 +12,7 @@ import {
   HardDrive,
   LoaderCircle,
   Paperclip,
+  RefreshCw,
   Sparkles,
   Square,
   SquareTerminal,
@@ -36,7 +37,9 @@ type WorkbenchInspectorProps = Readonly<{
   gitStatus?: ProjectGitStatus;
   gitStatusError?: Error | null;
   gitStatusPending?: boolean;
+  gitStatusRefreshing?: boolean;
   onOpenSubagent?: (selection: SubagentSelection) => void;
+  onRefreshGitStatus?: () => void;
   onTerminateBackgroundTerminal?: (terminalId: string) => Promise<void>;
   projectName: string;
   projectPath: string;
@@ -149,8 +152,10 @@ export function WorkbenchInspector({
   gitStatus,
   gitStatusError = null,
   gitStatusPending = false,
+  gitStatusRefreshing = false,
   onOpenFileDiff,
   onOpenSubagent = () => undefined,
+  onRefreshGitStatus = () => undefined,
   onTerminateBackgroundTerminal = () => Promise.resolve(),
   projectName,
   projectPath,
@@ -231,9 +236,25 @@ export function WorkbenchInspector({
             </div>
             <div aria-label="Git 变更文件" className="min-h-0 overflow-y-auto px-2.5 pb-2.5">
               {gitStatusError !== null ? (
-                <p className="px-2 py-5 text-center text-label text-diff-removed">
-                  无法读取当前项目的 Git 变更
-                </p>
+                <div className="flex flex-col items-center px-2 py-5 text-center">
+                  <p className="text-label text-diff-removed">Git 变更自动检测已停止</p>
+                  <p className="mt-1 text-caption text-muted-foreground">
+                    当前目录可能不是 Git 仓库，或检测连续失败
+                  </p>
+                  <button
+                    aria-label="手动刷新 Git 变更"
+                    className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-control bg-control px-3 text-label font-medium text-foreground transition-colors hover:bg-raised disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={gitStatusRefreshing}
+                    onClick={onRefreshGitStatus}
+                    type="button"
+                  >
+                    <RefreshCw
+                      aria-hidden="true"
+                      className={`size-3.5 ${gitStatusRefreshing ? "animate-spin" : ""}`}
+                    />
+                    {gitStatusRefreshing ? "正在刷新" : "手动刷新"}
+                  </button>
+                </div>
               ) : gitStatusPending && gitStatus === undefined ? (
                 <p className="px-2 py-5 text-center text-label text-muted-foreground">
                   正在读取 Git 变更...

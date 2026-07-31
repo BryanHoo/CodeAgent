@@ -111,6 +111,23 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain("workbench-shell.tsx");
   });
 
+  it("offers a manual refresh after Git detection stops", () => {
+    const markup = renderToStaticMarkup(
+      <WorkbenchInspector
+        gitStatusError={new Error("not a git repository")}
+        onOpenFileDiff={() => undefined}
+        onRefreshGitStatus={() => undefined}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        settings={taskSettings}
+      />,
+    );
+
+    expect(markup).toContain("Git 变更自动检测已停止");
+    expect(markup).toContain("手动刷新");
+    expect(markup).toContain('aria-label="手动刷新 Git 变更"');
+  });
+
   it("lists every subagent in context and exposes output dialog triggers", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchInspector

@@ -624,8 +624,12 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         backgroundTerminalsPending={backgroundTerminals.isPending}
         gitStatusError={gitStatusQuery.error}
         gitStatusPending={gitStatusQuery.isPending}
+        gitStatusRefreshing={gitStatusQuery.isFetching}
         key={`${projectId}:${taskId ?? "draft"}:${subagents.length > 0 ? "with-subagents" : "without-subagents"}:${backgroundTerminals.terminals.length > 0 ? "with-terminals" : "without-terminals"}`}
         onOpenFileDiff={openFileDiff}
+        onRefreshGitStatus={() => {
+          void gitStatusQuery.refetch();
+        }}
         onTerminateBackgroundTerminal={backgroundTerminals.terminateTerminal}
         onOpenSubagent={(selection) => {
           if (taskId !== undefined) {

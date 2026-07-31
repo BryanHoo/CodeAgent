@@ -486,6 +486,10 @@ export function projectReorderMutationOptions(
   });
 }
 
+export function projectGitStatusRefetchInterval(error: Error | null) {
+  return error === null ? PROJECT_GIT_STATUS_POLL_INTERVAL_MS : false;
+}
+
 export function projectGitStatusQueryOptions(
   projectId: string,
   isTaskRunning: boolean,
@@ -494,8 +498,11 @@ export function projectGitStatusQueryOptions(
   return queryOptions({
     queryFn: ({ signal }) => client.getProjectGitStatus(projectId, { signal }),
     queryKey: ["projects", projectId, "git-status"] as const,
-    // Agent 运行时持续采样工作区；空闲时仍保留首次读取和窗口聚焦重验证。
-    refetchInterval: isTaskRunning ? PROJECT_GIT_STATUS_POLL_INTERVAL_MS : false,
+    // 单次检测最多重试一次；最终失败后关闭轮询，手动刷新成功会清空错误并恢复采样。
+    refetchInterval: isTaskRunning
+      ? (query) => projectGitStatusRefetchInterval(query.state.error)
+      : false,
+    retry: 1,
   });
 }
 

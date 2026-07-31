@@ -11,6 +11,7 @@ import {
   PROJECT_GIT_STATUS_POLL_INTERVAL_MS,
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
+  projectGitStatusRefetchInterval,
   projectGitStatusQueryOptions,
   projectReorderMutationOptions,
   listProjectTasksForSearch,
@@ -195,10 +196,27 @@ describe("project queries", () => {
       staged: [],
       unstaged: [],
     });
-    expect(runningOptions.refetchInterval).toBe(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
+    expect(runningOptions.refetchInterval).toBeTypeOf("function");
     expect(idleOptions.refetchInterval).toBe(false);
     expect(getProjectGitStatus.mock.calls[0]?.[0]).toBe("code-agent");
     expect(getProjectGitStatus.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("stops failed Git polling until a manual refresh succeeds", () => {
+    const gitStatus = {
+      baseBranches: ["origin/main"],
+      branch: "main",
+      staged: [],
+      unstaged: [],
+    };
+    const getProjectGitStatus = vi.fn<CodeAgentGitStatusClient["getProjectGitStatus"]>(() =>
+      Promise.resolve(gitStatus),
+    );
+    const options = projectGitStatusQueryOptions("code-agent", true, { getProjectGitStatus });
+
+    expect(options.refetchInterval).toBeTypeOf("function");
+    expect(projectGitStatusRefetchInterval(new Error("not a git repository"))).toBe(false);
+    expect(projectGitStatusRefetchInterval(null)).toBe(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
   });
 
   it("loads projects, project tasks, and task snapshots through the client", async () => {
