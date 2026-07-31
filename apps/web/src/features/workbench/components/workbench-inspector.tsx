@@ -527,7 +527,7 @@ function InspectorSourceRow({ source }: Readonly<{ source: InspectorSource }>) {
     source.kind === "project" ? (
       <FolderRoot aria-hidden="true" className="size-3.5" />
     ) : source.kind === "skill" ? (
-      <Sparkles aria-hidden="true" className="size-3.5 text-skill" />
+      <Sparkles aria-hidden="true" className="size-3.5 text-accent" />
     ) : (
       <Paperclip aria-hidden="true" className="size-3.5" />
     );

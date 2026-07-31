@@ -23,7 +23,6 @@
   --ui-color-accent-soft: light-dark(rgb(0 106 255 / 0.09), rgb(51 156 255 / 0.14));
   --ui-color-diff-added: light-dark(#28a948, #40c977);
   --ui-color-diff-removed: light-dark(#eb001d, #fa423e);
-  --ui-color-skill: light-dark(#a100f8, #ad7bf9);
   --ui-color-warning: light-dark(#b25900, #ffb347);
   --ui-color-danger: var(--ui-color-diff-removed);
   --ui-color-focus: var(--ui-color-accent);
@@ -147,7 +146,6 @@
   --color-accent-soft: var(--ui-color-accent-soft);
   --color-diff-added: var(--ui-color-diff-added);
   --color-diff-removed: var(--ui-color-diff-removed);
-  --color-skill: var(--ui-color-skill);
   --color-warning: var(--ui-color-warning);
   --color-danger: var(--ui-color-danger);
   --color-focus: var(--ui-color-focus);

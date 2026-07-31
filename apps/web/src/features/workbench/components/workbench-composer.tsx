@@ -1110,9 +1110,9 @@ export function WorkbenchComposer({
                           selectSkill(skill);
                         }}
                       >
-                        <Sparkles aria-hidden="true" className="size-4 shrink-0 text-skill" />
+                        <Sparkles aria-hidden="true" className="size-4 shrink-0 text-accent" />
                         <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="font-medium text-skill">{skill.displayName}</span>
+                          <span className="font-medium text-accent">{skill.displayName}</span>
                           <span className="block max-w-full truncate text-caption text-muted-foreground">
                             /{skill.name} · {skill.description}
                           </span>

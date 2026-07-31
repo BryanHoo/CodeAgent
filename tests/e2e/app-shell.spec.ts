@@ -658,7 +658,6 @@ test("provides reusable design tokens for light and dark themes", async ({ page 
         mutedInk: resolveColor("--ui-color-text-muted"),
         panel: resolveColor("--ui-color-panel"),
         sidebar: resolveColor("--ui-color-sidebar"),
-        skill: resolveColor("--ui-color-skill"),
         spaceUnit: styles.getPropertyValue("--ui-space-unit").trim(),
         subtleInk: resolveColor("--ui-color-text-subtle"),
         surface: styles.backgroundColor,
@@ -678,7 +677,6 @@ test("provides reusable design tokens for light and dark themes", async ({ page 
     mutedInk: "rgba(17, 17, 17, 0.72)",
     panel: "rgb(255, 255, 255)",
     sidebar: "rgb(255, 255, 255)",
-    skill: "rgb(161, 0, 248)",
     spaceUnit: expect.stringMatching(/^0?\.25rem$/),
     subtleInk: "rgba(17, 17, 17, 0.52)",
     surface: "rgb(255, 255, 255)",
@@ -697,7 +695,6 @@ test("provides reusable design tokens for light and dark themes", async ({ page 
     mutedInk: "rgba(255, 255, 255, 0.68)",
     panel: "rgb(24, 24, 24)",
     sidebar: "rgb(24, 24, 24)",
-    skill: "rgb(173, 123, 249)",
     spaceUnit: expect.stringMatching(/^0?\.25rem$/),
     subtleInk: "rgba(255, 255, 255, 0.5)",
     surface: "rgb(24, 24, 24)",
@@ -838,7 +835,7 @@ test("renders skills from a reopened task history", async ({ page }) => {
 
   const historicalSkill = page.locator('[data-message-skill="review-security"]');
   await expect(historicalSkill).toContainText("$review-security");
-  await expect(historicalSkill).toHaveCSS("color", "rgb(161, 0, 248)");
+  await expect(historicalSkill).toHaveCSS("color", "rgb(0, 106, 255)");
   await expect(page.getByText("完成 macOS 原生风格的三栏工作台页面。")).toBeVisible();
 });
 
@@ -1376,7 +1373,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
     .toBe("说明 $review-security $documentation-writer");
   const skillColors = await selectedSkill.evaluate((element) => {
     const probe = document.createElement("span");
-    probe.style.color = "var(--ui-color-skill)";
+    probe.style.color = "var(--ui-color-accent)";
     document.body.append(probe);
     const colors = {
       expected: getComputedStyle(probe).color,
