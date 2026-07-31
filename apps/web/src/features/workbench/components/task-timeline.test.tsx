@@ -63,7 +63,7 @@ describe("TaskTimeline", () => {
     expect(markup).toContain("正在运行");
   });
 
-  it("renders the empty chat project selector without an intermediate button", () => {
+  it("renders the official-style empty chat prompt around the project selector", () => {
     const markup = renderToStaticMarkup(
       <TaskTimeline
         onProjectChange={() => undefined}
@@ -87,7 +87,21 @@ describe("TaskTimeline", () => {
 
     expect(markup).toContain('<select aria-label="选择新聊天项目"');
     expect(markup).toContain(">CodeAgent<");
+    expect(markup).toContain("我们应该在");
+    expect(markup).toContain("中做些什么？");
+    expect(markup).toContain("lucide-message-square-code");
+    expect(markup).toContain("size-12");
+    expect(markup).toContain("text-xl");
+    expect(markup).toContain("mt-5");
     expect(markup).toContain("underline-offset-4");
+    expect(markup).not.toContain("选择一个任务查看历史。");
+    expect(markup).not.toContain("lucide-folder-git-2");
+    expect(markup).not.toContain("lucide-cloud");
+    expect(markup).not.toContain("lucide-chevron-right");
+    expect(markup).not.toContain("lucide-minus");
+    expect(markup).not.toContain("size-20");
+    expect(markup).not.toContain("text-3xl");
+    expect(markup).not.toContain("text-4xl");
     expect(markup).not.toContain("lucide-chevron-down");
     expect(markup).not.toContain('aria-label="切换新聊天项目，当前 CodeAgent"');
   });

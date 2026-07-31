@@ -11,8 +11,8 @@ import {
   Copy,
   FilePenLine,
   Files,
-  FolderGit2,
   GitFork,
+  MessageSquareCode,
   RotateCcw,
   SquareTerminal,
 } from "lucide-react";
@@ -133,13 +133,18 @@ function EmptyTimeline({
 }>) {
   return (
     <section className="grid min-h-0 flex-1 place-items-center px-6" aria-label="会话内容">
-      <div className="max-w-sm text-center">
-        <FolderGit2 className="mx-auto size-9 text-muted-foreground" strokeWidth={1.4} />
-        <h2 className="mt-3 flex h-9 items-center justify-center">
+      <div className="w-full max-w-xl text-center">
+        <MessageSquareCode
+          aria-hidden="true"
+          className="mx-auto size-12 text-muted-foreground/55"
+          strokeWidth={1.35}
+        />
+        <h2 className="mt-5 text-balance text-xl font-normal leading-tight text-foreground">
+          我们应该在
           {/* 直接挂载原生选择器，确保首次点击就能打开项目列表。 */}
           <select
             aria-label="选择新聊天项目"
-            className="h-8 max-w-full cursor-pointer appearance-none rounded-control bg-transparent px-2 py-0 text-center text-base font-semibold text-foreground underline decoration-current/35 underline-offset-4 outline-none transition-colors hover:bg-control-hover hover:decoration-current focus:bg-control focus:decoration-current focus:shadow-focus"
+            className="mx-1 max-w-full cursor-pointer appearance-none bg-transparent px-0 py-0 text-center font-sans font-normal text-foreground underline decoration-current/35 underline-offset-4 outline-none transition-colors hover:decoration-current focus-visible:rounded-control focus-visible:shadow-focus"
             onChange={(event) => {
               const nextProjectId = event.currentTarget.value;
               if (nextProjectId !== projectId) {
@@ -154,8 +159,8 @@ function EmptyTimeline({
               </option>
             ))}
           </select>
+          中做些什么？
         </h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">选择一个任务查看历史。</p>
       </div>
     </section>
   );
