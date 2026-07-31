@@ -28,6 +28,24 @@ describe("selectSystemDirectory", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("treats Linux exit code 1 as cancellation when stderr only contains a warning", async () => {
+    const execute = vi.fn(() =>
+      Promise.reject(
+        Object.assign(new Error("cancelled"), {
+          code: 1,
+          stderr: "Gtk-WARNING **: Theme parsing warning",
+        }),
+      ),
+    );
+    const prompt = vi.fn(() => Promise.resolve("/srv/CodeAgent"));
+
+    await expect(
+      selectSystemDirectory({ execute, platform: "linux", prompt }),
+    ).resolves.toBeUndefined();
+    expect(execute).toHaveBeenCalledOnce();
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
   it("recognizes native macOS and Windows cancellation results", async () => {
     const macCancellation = Object.assign(new Error("User canceled"), {
       code: 1,

@@ -86,6 +86,16 @@ function isMissingExecutable(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
 }
 
+function isLinuxPickerStartupFailure(stderr: string): boolean {
+  return [
+    /cannot open display/iu,
+    /could not connect to display/iu,
+    /failed to open display/iu,
+    /no display name.*\$DISPLAY/iu,
+    /unable to init server/iu,
+  ].some((pattern) => pattern.test(stderr));
+}
+
 function isPickerCancellation(error: unknown, platform: string): boolean {
   const code = (error as ExecFileException).code;
   const errorStderr = (error as { stderr?: unknown }).stderr;
@@ -96,7 +106,8 @@ function isPickerCancellation(error: unknown, platform: string): boolean {
   if (platform === "win32") {
     return code === 2;
   }
-  return (code === 1 || code === 130) && stderr.length === 0;
+  // Zenity 与 KDialog 都使用退出码 1 表示取消；非致命 GTK 警告不能触发终端回退。
+  return code === 130 || (code === 1 && !isLinuxPickerStartupFailure(stderr));
 }
 
 export async function selectSystemDirectory(
