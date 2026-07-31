@@ -14,13 +14,13 @@ Web 页面、组件、浏览器状态和渐进式性能策略由 [Web 设计](./
 产品对用户只暴露一个 npm 包和一个 CLI 命令：
 
 ```bash
-npx --package @bryanhu/codea-gent@latest code-agent start
+npx --package @bryanhu/code-agent@latest code-agent start
 ```
 
 或全局安装后运行：
 
 ```bash
-npm install -g @bryanhu/codea-gent
+npm install -g @bryanhu/code-agent
 code-agent start
 ```
 
@@ -58,7 +58,7 @@ MVP 不包含以下能力：
 CodeAgent 只发布一个公开 npm 包：
 
 ```text
-@bryanhu/codea-gent
+@bryanhu/code-agent
 ```
 
 内部使用 pnpm workspace 和多个私有模块，但它们只用于维护、测试和构建，不单独发布。
@@ -120,7 +120,7 @@ codex app-server --listen stdio://
 项目内部统一使用 pnpm 管理依赖、Workspace、开发脚本和发布流程；用户侧仍推荐通过 `npx` 直接启动，不要求用户预先安装 pnpm：
 
 ```bash
-npx --package @bryanhu/codea-gent@latest code-agent start
+npx --package @bryanhu/code-agent@latest code-agent start
 ```
 
 仓库内部使用：
@@ -231,7 +231,7 @@ LICENSE
 
 ```json
 {
-  "name": "@bryanhu/codea-gent",
+  "name": "@bryanhu/code-agent",
   "type": "module",
   "packageManager": "pnpm@<pinned-version>",
   "bin": {
@@ -244,7 +244,7 @@ LICENSE
 }
 ```
 
-文档和发布配置使用 npm 包名 `@bryanhu/codea-gent`；唯一 CLI 命令保持 `code-agent`，不保留冗余兼容别名。
+文档和发布配置使用 npm 包名 `@bryanhu/code-agent`；唯一 CLI 命令保持 `code-agent`，不保留冗余兼容别名。
 
 根 `pnpm-workspace.yaml` 至少包含：
 
@@ -1229,7 +1229,7 @@ Codex 升级不应直接导致 Web API 版本变化。
 
 ### 22.3 发布多个公开 npm 包
 
-不采用。内部模块化仍然保留，但用户只安装 `@bryanhu/codea-gent`。
+不采用。内部模块化仍然保留，但用户只安装 `@bryanhu/code-agent`。
 
 ### 22.4 MVP 引入分布式消息系统
 

@@ -1,6 +1,6 @@
 {
-  "name": "@bryanhu/codea-gent",
-  "version": "0.0.2",
+  "name": "@bryanhu/code-agent",
+  "version": "0.0.3",
   "description": "通过 Web 操作本地 Coding Agent 的应用",
   "type": "module",
   "author": "BryanHu",

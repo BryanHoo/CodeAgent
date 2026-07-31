@@ -51,7 +51,7 @@ try {
     throw new Error("Package manifest is missing from pack output");
   }
 
-  if (manifest.name !== "@bryanhu/codea-gent") {
+  if (manifest.name !== "@bryanhu/code-agent") {
     throw new Error(`Unexpected package name: ${manifest.name}`);
   }
 

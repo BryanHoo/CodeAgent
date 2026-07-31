@@ -7,7 +7,7 @@
 ## Naming
 
 - 产品展示名称统一使用 `CodeAgent`。
-- 根 npm 包使用 `@bryanhu/codea-gent`，唯一 CLI 命令使用 `code-agent`，不提供额外兼容别名。
+- 根 npm 包使用 `@bryanhu/code-agent`，唯一 CLI 命令使用 `code-agent`，不提供额外兼容别名。
 - 内部私有 Workspace 包统一使用 `@code-agent/*` 作用域。
 
 ## Pre-Development Checklist

@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-07-31
+
+### 修复
+
+- 修复公开 npm 包名为 `@bryanhu/code-agent`，并同步安装文档与发布校验。
+
 ## [0.0.2] - 2026-07-31
 
 ### 修复
@@ -15,7 +21,7 @@
 ### 新增
 
 - 添加基于 Codex App Server 的本地 Web 工作台，支持 Project、Task、Turn、流式回复、审批、Skill、终端和上下文管理。
-- 添加 `start`、`doctor` 和 `version` CLI 命令，并将 Web、Server、Provider 和 SQLite Worker 打包为单一 `@bryanhu/codea-gent` npm 包。
+- 添加 `start`、`doctor` 和 `version` CLI 命令，并将 Web、Server、Provider 和 SQLite Worker 打包为单一公开 npm 包。
 - 添加文件预览、Diff、历史图片、系统通知、全局默认设置及任务恢复能力。
 
 ### 优化
@@ -28,6 +34,7 @@
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/BryanHoo/CodeAgent/releases/tag/v0.0.1

@@ -1,12 +1,12 @@
 # 发布 CodeAgent
 
-本文面向仓库维护者，说明如何通过版本标签自动发布 npm 包和 GitHub Release。仓库只发布根包 `@bryanhu/codea-gent`，内部 Workspace 包保持私有。
+本文面向仓库维护者，说明如何通过版本标签自动发布 npm 包和 GitHub Release。仓库只发布根包 `@bryanhu/code-agent`，内部 Workspace 包保持私有。
 
 ## 发布前配置
 
 ### 首次发布
 
-npm Trusted Publisher 需要先进入一个已存在包的 Settings 页面配置，因此 `0.0.1` 使用一次性 npm Token 完成初始化。
+npm Trusted Publisher 需要先进入一个已存在包的 Settings 页面配置，因此新包 `@bryanhu/code-agent` 的 `0.0.3` 使用一次性 npm Token 完成初始化。
 
 1. 在 npm 创建允许发布公开包并可绕过发布 2FA 的 Granular Access Token。
 2. 在 GitHub 仓库的 `Settings > Environments` 中创建 `npm` Environment。
@@ -17,7 +17,7 @@ Token 只用于首个版本，禁止写入仓库、`.npmrc` 或工作流文件�
 
 ### 后续发布
 
-`0.0.1` 发布成功后，在 npm 的 `@bryanhu/codea-gent > Settings > Trusted Publisher` 中添加 GitHub Actions Publisher：
+`0.0.3` 发布成功后，在 npm 的 `@bryanhu/code-agent > Settings > Trusted Publisher` 中添加 GitHub Actions Publisher：
 
 | 配置项               | 值            |
 | -------------------- | ------------- |
@@ -45,14 +45,14 @@ pnpm test:e2e
 4. 提交发布准备并创建与包版本一致的标签：
 
 ```bash
-git tag -a v0.0.2 -m "发布 v0.0.2"
+git tag -a v0.0.3 -m "发布 v0.0.3"
 git push origin main
-git push origin v0.0.2
+git push origin v0.0.3
 ```
 
 `.github/workflows/release.yml` 会依次执行以下操作：
 
-1. 校验标签 `v0.0.2` 与 `package.json` 的 `0.0.2` 一致。
+1. 校验标签 `v0.0.3` 与 `package.json` 的 `0.0.3` 一致。
 2. 安装锁定依赖并运行 `pnpm check`。
 3. 发布带 provenance 的公开 npm 包。
 4. 根据提交记录创建 GitHub Release。
@@ -67,4 +67,4 @@ GitHub Release 只会在 npm 发布成功后创建，避免 npm 失败时产生�
 - npm 拒绝重复版本：提升 `package.json` 版本并重新更新 `CHANGELOG.md`，然后创建新标签。
 - `EUNSUPPORTEDPROTOCOL`：确认工作流使用 `pnpm publish`，并检查 `package:check` 已验证 tarball 内没有 `catalog:` 或 `workspace:`。
 
-发布记录以 [npm 的 @bryanhu/codea-gent 页面](https://www.npmjs.com/package/@bryanhu/codea-gent)和 [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases) 为准。
+发布记录以 [npm 的 @bryanhu/code-agent 页面](https://www.npmjs.com/package/@bryanhu/code-agent)和 [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases) 为准。
