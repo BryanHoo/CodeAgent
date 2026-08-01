@@ -14,6 +14,7 @@
     "@code-agent/core": "workspace:*",
     "@code-agent/protocol": "workspace:*",
     "@code-agent/provider-codex": "workspace:*",
+    "@fastify/compress": "catalog:",
     "@fastify/static": "catalog:",
     "@fastify/websocket": "catalog:",
     "better-sqlite3": "catalog:",

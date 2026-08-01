@@ -3,6 +3,7 @@
 ## 边界与安全
 
 - Fastify 使用 JSON Schema 验证输入并序列化输出。
+- 生产静态资源必须协商 Brotli 或 Gzip 响应压缩；`/assets/*` 内容哈希资源固定返回一年 `immutable` 公共缓存，HTML 与 SPA 回退入口保持 `max-age=0` 重新验证。
 - Project 路径每次操作都执行绝对路径、`realpath` 和允许根目录包含关系校验。
 - 默认只监听 `127.0.0.1`；WebSocket 校验 Origin，远程模式必须增加认证和 TLS 边界。
 - Approval 同时校验用户、Runtime、Task、Turn、Request 身份与状态。
@@ -24,5 +25,6 @@
 - 子进程关闭测试覆盖发送 `SIGKILL` 后仍未退出的路径，并验证关闭 Promise 在截止时间内失败。
 - Provider 集成使用 Fake App Server，不依赖真实账号完成默认 CI。
 - Fastify 路由优先使用 `inject`；完整浏览器链路使用 Playwright。
+- 静态资源 `inject` 测试必须覆盖 Brotli/Gzip 解压后的正文、哈希资源长期缓存头和 SPA HTML 重新验证头。
 - Event Stream 单元测试使用 fake timers 覆盖普通与软背压合并窗口、完整 Delta key 隔离、关键事件冲刷、环形覆盖、连续 Sequence 和窗口外 resync；WebSocket 路由测试验证合并后帧数与指标响应。
 - 发布包校验必须从构建产物打开并关闭 `SqliteStateRepository`，真实启动 Worker 以验证 `import.meta.url` 相对路径和文件清单一致。

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
-import { basename } from "node:path";
+import { basename, relative, sep } from "node:path";
 
 import {
   PendingRequestResolutionError,
@@ -115,6 +115,7 @@ import {
   type SteerAgentTurnRequest,
   type UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
+import fastifyCompress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, {
@@ -1072,9 +1073,26 @@ export async function createCodeAgentServer(
     taskStartRecoveries.clear();
   });
 
-  if (options.staticRoot !== undefined) {
+  const { staticRoot } = options;
+  if (staticRoot !== undefined) {
+    // 压缩插件必须先于静态插件注册，确保静态文件流进入响应压缩钩子。
+    await app.register(fastifyCompress, {
+      encodings: ["br", "gzip"],
+      globalDecompression: false,
+    });
     await app.register(fastifyStatic, {
-      root: options.staticRoot,
+      cacheControl: false,
+      root: staticRoot,
+      setHeaders: (response, filePath) => {
+        const [topLevelDirectory] = relative(staticRoot, filePath).split(sep);
+        // Vite 的 assets 目录使用内容哈希命名，可安全长期缓存；HTML 等入口继续重新验证。
+        response.setHeader(
+          "Cache-Control",
+          topLevelDirectory === "assets"
+            ? "public, max-age=31536000, immutable"
+            : "public, max-age=0",
+        );
+      },
       wildcard: false,
     });
     app.setNotFoundHandler((request, reply) => {

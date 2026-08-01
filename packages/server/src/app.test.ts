@@ -17,9 +17,10 @@ import type {
   Project,
 } from "@code-agent/protocol";
 import { Buffer } from "node:buffer";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { brotliDecompressSync, gunzipSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createCodeAgentServer } from "./app.js";
@@ -2595,22 +2596,41 @@ describe("CodeAgent Server", () => {
     expect(listTasks).not.toHaveBeenCalled();
   });
 
-  it("serves static assets and falls back to index.html for SPA routes", async () => {
+  it("compresses static assets and applies content-aware cache policies", async () => {
     const staticRoot = await mkdtemp(join(tmpdir(), "code-agent-web-"));
+    const assetsRoot = join(staticRoot, "assets");
+    const assetBody = "export const value = 'CodeAgent';\n".repeat(128);
+    await mkdir(assetsRoot);
     await writeFile(join(staticRoot, "index.html"), "<main>CodeAgent Web</main>", "utf8");
-    await writeFile(join(staticRoot, "app.js"), "export {};", "utf8");
+    await writeFile(join(assetsRoot, "index-CqRfgh3W.js"), assetBody, "utf8");
     const app = await createCodeAgentServer(
       createServerOptions(createProvider().provider, { staticRoot }),
     );
     closeCallbacks.push(() => app.close());
 
     const routeResponse = await app.inject({ method: "GET", url: "/p/code-agent/t/task-1" });
-    const assetResponse = await app.inject({ method: "GET", url: "/app.js" });
+    const brotliAssetResponse = await app.inject({
+      headers: { "accept-encoding": "br" },
+      method: "GET",
+      url: "/assets/index-CqRfgh3W.js",
+    });
+    const gzipAssetResponse = await app.inject({
+      headers: { "accept-encoding": "gzip" },
+      method: "GET",
+      url: "/assets/index-CqRfgh3W.js",
+    });
     const apiResponse = await app.inject({ method: "GET", url: "/v1/missing" });
 
     expect(routeResponse.statusCode).toBe(200);
     expect(routeResponse.body).toContain("CodeAgent Web");
-    expect(assetResponse.body).toBe("export {};");
+    expect(routeResponse.headers["cache-control"]).toBe("public, max-age=0");
+    expect(brotliAssetResponse.headers["cache-control"]).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(brotliAssetResponse.headers["content-encoding"]).toBe("br");
+    expect(brotliDecompressSync(brotliAssetResponse.rawPayload).toString("utf8")).toBe(assetBody);
+    expect(gzipAssetResponse.headers["content-encoding"]).toBe("gzip");
+    expect(gunzipSync(gzipAssetResponse.rawPayload).toString("utf8")).toBe(assetBody);
     expect(apiResponse.statusCode).toBe(404);
     expect(apiResponse.headers["content-type"]).toContain("application/json");
   });
