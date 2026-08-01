@@ -2196,7 +2196,9 @@ for (const scenario of [
     await dialog.getByRole("button", { name: scenario.actionName, exact: true }).click();
 
     await expect(dialog).not.toBeAttached();
-    await expect(page.locator('[data-toast="success"]')).toHaveText(scenario.toastMessage);
+    const successToast = page.locator('[data-sonner-toast][data-type="success"]');
+    await expect(successToast).toBeVisible();
+    await expect(successToast).toHaveText(scenario.toastMessage);
   });
 }
 

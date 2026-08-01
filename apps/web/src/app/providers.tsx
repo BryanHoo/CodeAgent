@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { Toaster } from "sonner";
 
 import { ProjectProvider } from "../features/projects/project-context.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
@@ -35,6 +36,15 @@ export function AppProviders({ children }: AppProvidersProps) {
       <ProjectProvider>
         <ComposerDraftProvider>{children}</ComposerDraftProvider>
       </ProjectProvider>
+      <Toaster
+        closeButton
+        containerAriaLabel="通知"
+        duration={5_000}
+        position="top-right"
+        richColors
+        theme="system"
+        toastOptions={{ closeButtonAriaLabel: "关闭通知" }}
+      />
     </QueryClientProvider>
   );
 }
