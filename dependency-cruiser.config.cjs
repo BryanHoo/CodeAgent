@@ -50,6 +50,8 @@ module.exports = {
   options: {
     doNotFollow: { path: "node_modules" },
     exclude: { path: "(^|/)(dist|coverage|node_modules)/" },
+    // 分析编译前的 TypeScript 类型依赖，避免纯类型契约被误判为 orphan。
+    tsPreCompilationDeps: true,
     tsConfig: { fileName: "tsconfig.json" },
     enhancedResolveOptions: {
       conditionNames: ["types", "import", "default"],
