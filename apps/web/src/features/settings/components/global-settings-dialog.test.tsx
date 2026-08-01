@@ -47,6 +47,7 @@ describe("GlobalSettingsDialog", () => {
           commitMessagePrompt: "突出用户可见影响。",
           commitMessageReasoningEffort: "medium",
           defaultOpenAppId: "visual-studio-code",
+          followUpBehavior: "queue",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "workspace-write",
@@ -64,13 +65,16 @@ describe("GlobalSettingsDialog", () => {
     expect(markup).toContain('aria-label="深色模式"');
     expect(markup).toContain('aria-label="审批"');
     expect(markup).toContain('aria-label="工作区"');
+    expect(markup).toContain('aria-label="跟进消息"');
+    expect(markup).toContain("排队");
+    expect(markup).toContain("引导");
     expect(markup).toContain('aria-label="模型"');
     expect(markup).toContain('aria-label="思考"');
     expect(markup).toContain('aria-label="默认打开方式"');
     expect(markup).toContain('aria-label="提交模型"');
     expect(markup).toContain('aria-label="提交思考量"');
     expect(markup).toContain('aria-label="提交提示词"');
-    expect(markup.match(/<select/gu)).toHaveLength(7);
+    expect(markup.match(/<select/gu)).toHaveLength(8);
     expect(markup).toContain("突出用户可见影响。");
     expect(markup).toContain("保存全局默认");
   });

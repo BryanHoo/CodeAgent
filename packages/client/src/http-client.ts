@@ -34,6 +34,7 @@ import {
   ResolvePendingRequestResponseSchema,
   StartAgentTaskResponseSchema,
   StartAgentTurnResponseSchema,
+  SteerAgentTurnResponseSchema,
   TerminateAgentBackgroundTerminalResponseSchema,
   UploadAgentFeedbackResponseSchema,
   UnsubscribeAgentTaskResponseSchema,
@@ -84,6 +85,7 @@ import {
   type ResolvePendingRequestResponse,
   type StartAgentTaskResponse,
   type StartAgentTurnResponse,
+  type SteerAgentTurnResponse,
   type UploadAgentFeedbackRequest,
   type UploadAgentFeedbackResponse,
   type UnsubscribeAgentTaskResponse,
@@ -608,6 +610,21 @@ export class CodeAgentClient {
       `${taskPath(projectId, taskId)}/turns`,
       { input, options: turnOptions },
       StartAgentTurnResponseSchema,
+      options,
+    );
+  }
+
+  public async steerTurn(
+    projectId: string,
+    taskId: string,
+    turnId: string,
+    input: AgentPromptInput,
+    options: MutationOptions = {},
+  ): Promise<SteerAgentTurnResponse> {
+    return this.#mutation(
+      `${taskPath(projectId, taskId)}/turns/${encodeURIComponent(turnId)}/steer`,
+      { input, taskId },
+      SteerAgentTurnResponseSchema,
       options,
     );
   }

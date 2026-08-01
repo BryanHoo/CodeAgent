@@ -2,6 +2,7 @@ import type {
   AgentApprovalPolicy,
   AgentAttachment,
   AgentCapabilities,
+  AgentGlobalSettings,
   AgentModel,
   AgentPromptInput,
   AgentReviewTarget,
@@ -23,6 +24,7 @@ import {
   GitFork,
   MessageCirclePlus,
   MessageSquareText,
+  SendHorizontal,
   Sparkles,
   X,
 } from "lucide-react";
@@ -34,6 +36,7 @@ import {
   createComposerDraftScope,
   useComposerDraftStore,
   type ComposerCommandDraftMode,
+  type QueuedComposerPrompt,
 } from "../composer-draft-context.js";
 import {
   Attachment,
@@ -62,6 +65,7 @@ import {
   type PromptInputAttachment,
   type PromptInputMessage,
 } from "../../../shared/ai-elements/prompt-input.js";
+import { IconButton } from "../../../shared/ui/icon-button.js";
 import {
   insertPromptSkill,
   isPromptSkillContentEmpty,
@@ -149,14 +153,32 @@ const reasoningEffortLabels: Readonly<Record<string, string>> = {
 export function deriveComposerActions(
   capabilities: AgentCapabilities | undefined,
   hasTask: boolean,
-): Readonly<{ canInterrupt: boolean; canSubmit: boolean }> {
+): Readonly<{ canInterrupt: boolean; canSubmit: boolean; canSteer: boolean }> {
   return {
     canInterrupt: capabilities?.turns.interrupt ?? false,
     canSubmit:
       capabilities !== undefined &&
       capabilities.turns.start &&
       (hasTask || capabilities.tasks.start),
+    canSteer: capabilities?.turns.steer === true && hasTask,
   };
+}
+
+export type ComposerSubmitAction = "blocked" | "interrupt" | "queue" | "start" | "steer";
+
+export function resolveComposerSubmitAction(
+  state: ComposerState,
+  hasInput: boolean,
+  followUpBehavior: AgentGlobalSettings["followUpBehavior"],
+  canSteer: boolean,
+): ComposerSubmitAction {
+  if (state !== "running") {
+    return hasInput ? "start" : "blocked";
+  }
+  if (!hasInput) {
+    return "interrupt";
+  }
+  return followUpBehavior === "queue" ? "queue" : canSteer ? "steer" : "blocked";
 }
 
 export function deriveComposerState(
@@ -299,9 +321,21 @@ export function interruptPromptTurn(
   return client.interruptTurn(projectId, taskId, turnId, { idempotencyKey });
 }
 
+export function steerPromptTurn(
+  client: Pick<CodeAgentMutationClient, "steerTurn">,
+  projectId: string,
+  taskId: string,
+  turnId: string,
+  input: AgentPromptInput,
+  idempotencyKey: string,
+) {
+  return client.steerTurn(projectId, taskId, turnId, input, { idempotencyKey });
+}
+
 type WorkbenchComposerProps = Readonly<{
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentMutationClient;
+  followUpBehavior: AgentGlobalSettings["followUpBehavior"];
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;
@@ -392,6 +426,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 export function WorkbenchComposer({
   capabilities,
   client,
+  followUpBehavior,
   models,
   modelsError,
   modelsPending,
@@ -432,6 +467,9 @@ export function WorkbenchComposer({
   const [promptContent, setPromptContent] = useState<PromptSkillContent>(
     initialComposerDraft.content,
   );
+  const [queuedPrompts, setQueuedPrompts] = useState<readonly QueuedComposerPrompt[]>(
+    initialComposerDraft.queuedPrompts,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mutationError, setMutationError] = useState<Error | null>(null);
   const [pendingTaskState, setPendingTaskState] = useState<{
@@ -451,7 +489,9 @@ export function WorkbenchComposer({
   routeScopeRef.current = routeScope;
   const startTaskAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const startTurnAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
+  const steerTurnAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
   const interruptAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
+  const autoStartedQueueIds = useRef(new Set<string>());
   const uploadedAttachments = useRef(new Map<string, AgentAttachment>());
   const uploadAttempts = useRef(new Map<string, string>());
   const commandAttempts = useRef(new Map<PromptCommandAction, IdempotencyAttempt>());
@@ -471,7 +511,7 @@ export function WorkbenchComposer({
   const pendingTask = pendingTaskState?.scope === routeScope ? pendingTaskState.task : undefined;
   const activeTurnId = resolveActiveTurnId(runtime?.snapshot, submittedTurnId);
   const activeTaskId = taskId ?? pendingTask?.id;
-  const { canInterrupt, canSubmit } = deriveComposerActions(
+  const { canInterrupt, canSubmit, canSteer } = deriveComposerActions(
     capabilities,
     activeTaskId !== undefined,
   );
@@ -553,13 +593,29 @@ export function WorkbenchComposer({
     [composerDraftStore, composerScope],
   );
 
-  const clearComposerDraft = useCallback(() => {
-    composerDraftStore.clear(composerScope);
+  const clearComposerInput = useCallback(() => {
+    composerDraftStore.update(composerScope, (current) => ({
+      ...current,
+      attachments: [],
+      commandDraftMode: null,
+      content: [],
+    }));
     setPromptContent([]);
     setAttachments([]);
     setCommandDraftMode(null);
     skillEditorRef.current?.replace([]);
   }, [composerDraftStore, composerScope]);
+
+  const replaceQueuedPrompts = useCallback(
+    (nextQueuedPrompts: readonly QueuedComposerPrompt[]) => {
+      setQueuedPrompts(nextQueuedPrompts);
+      composerDraftStore.update(composerScope, (current) => ({
+        ...current,
+        queuedPrompts: nextQueuedPrompts,
+      }));
+    },
+    [composerDraftStore, composerScope],
+  );
 
   useLayoutEffect(() => {
     if (previousRouteScopeRef.current === routeScope) {
@@ -573,6 +629,7 @@ export function WorkbenchComposer({
       setPromptContent(restoredDraft.content);
       setAttachments(restoredDraft.attachments);
       setCommandDraftMode(restoredDraft.commandDraftMode);
+      setQueuedPrompts(restoredDraft.queuedPrompts);
       skillEditorRef.current?.replace(restoredDraft.content);
       setSettingsOverride(undefined);
       setActiveCommandIndex(0);
@@ -589,7 +646,9 @@ export function WorkbenchComposer({
     setMutationError(null);
     startTaskAttempt.current = undefined;
     startTurnAttempt.current = undefined;
+    steerTurnAttempt.current = undefined;
     interruptAttempt.current = undefined;
+    autoStartedQueueIds.current.clear();
     uploadedAttachments.current.clear();
     uploadAttempts.current.clear();
     commandAttempts.current.clear();
@@ -647,22 +706,57 @@ export function WorkbenchComposer({
   const submitPrompt = async (
     message: PromptInputMessage,
     promptSkills?: readonly AgentSkill[],
-  ) => {
+    options: Readonly<{
+      clearInputOnSuccess?: boolean;
+      forceAction?: "start" | "steer";
+    }> = {},
+  ): Promise<boolean> => {
     const requestScope = routeScope;
     const text = message.text.trim();
     const skills =
       promptSkills ??
       toPromptSkillSubmission(skillEditorRef.current?.getContent() ?? promptContent).skills;
+    const hasInput = text !== "" || message.files.length > 0 || skills.length > 0;
+    const action =
+      options.forceAction ??
+      resolveComposerSubmitAction(state, hasInput, followUpBehavior, canSteer);
     if (
-      !canSubmit ||
-      (text === "" && message.files.length === 0 && skills.length === 0) ||
+      action === "blocked" ||
+      action === "interrupt" ||
+      !hasInput ||
       selectedModel === undefined ||
       selectedReasoningEffort === undefined ||
       turnControlsDisabled ||
-      state === "running"
+      (action !== "steer" && !canSubmit) ||
+      (action === "steer" &&
+        (!canSteer || activeTaskId === undefined || activeTurnId === undefined))
     ) {
-      return;
+      return false;
     }
+
+    if (action === "queue") {
+      const queuedPrompt: QueuedComposerPrompt = {
+        files: message.files,
+        id: globalThis.crypto.randomUUID(),
+        skills,
+        text,
+      };
+      const nextQueuedPrompts = [...queuedPrompts, queuedPrompt];
+      setQueuedPrompts(nextQueuedPrompts);
+      composerDraftStore.update(composerScope, (current) => ({
+        ...current,
+        attachments: [],
+        commandDraftMode: null,
+        content: [],
+        queuedPrompts: nextQueuedPrompts,
+      }));
+      setPromptContent([]);
+      setAttachments([]);
+      setCommandDraftMode(null);
+      skillEditorRef.current?.replace([]);
+      return true;
+    }
+
     // Notification 权限必须在提交手势内申请，不能等网络 Mutation 完成后再触发。
     onRequestNotificationPermission();
     setIsSubmitting(true);
@@ -700,7 +794,46 @@ export function WorkbenchComposer({
         setMutationError(error instanceof Error ? error : new Error("附件上传失败"));
         setIsSubmitting(false);
       }
-      return;
+      return false;
+    }
+
+    if (action === "steer") {
+      if (activeTaskId === undefined || activeTurnId === undefined) {
+        return false;
+      }
+      const steerAttempt = resolveIdempotencyAttempt(
+        steerTurnAttempt.current,
+        JSON.stringify({ input, taskId: activeTaskId, turnId: activeTurnId }),
+      );
+      steerTurnAttempt.current = steerAttempt;
+      try {
+        await steerPromptTurn(
+          client,
+          projectId,
+          activeTaskId,
+          activeTurnId,
+          input,
+          steerAttempt.key,
+        );
+        if (routeScopeRef.current === requestScope) {
+          if (options.clearInputOnSuccess !== false) {
+            clearComposerInput();
+          }
+          steerTurnAttempt.current = undefined;
+          uploadedAttachments.current.clear();
+          uploadAttempts.current.clear();
+        }
+        return true;
+      } catch (error) {
+        if (routeScopeRef.current === requestScope) {
+          setMutationError(error instanceof Error ? error : new Error("Prompt steering failed"));
+        }
+        return false;
+      } finally {
+        if (routeScopeRef.current === requestScope) {
+          setIsSubmitting(false);
+        }
+      }
     }
 
     const turnOptions: AgentTurnOptions = {
@@ -739,7 +872,9 @@ export function WorkbenchComposer({
         turnOptions,
       });
       if (routeScopeRef.current === requestScope) {
-        clearComposerDraft();
+        if (options.clearInputOnSuccess !== false) {
+          clearComposerInput();
+        }
         setSubmittedTurnState({ scope: requestScope, turnId: result.turn.id });
       }
       // Mutation 返回后立即上报本次提交，Timeline 不等待 Provider Snapshot 落盘。
@@ -755,16 +890,51 @@ export function WorkbenchComposer({
           onTaskStarted(startedTask, result.turn, input, turnOptions);
         }
       }
+      return true;
     } catch (error) {
       if (routeScopeRef.current === requestScope) {
         setMutationError(error instanceof Error ? error : new Error("Prompt submission failed"));
       }
+      return false;
     } finally {
       if (routeScopeRef.current === requestScope) {
         setIsSubmitting(false);
       }
     }
   };
+
+  useEffect(() => {
+    const queuedScope = routeScope;
+    const queuedPrompt = queuedPrompts[0];
+    if (
+      queuedPrompt === undefined ||
+      activeTurnId !== undefined ||
+      activeTaskId === undefined ||
+      isSubmitting ||
+      connectionState !== "connected" ||
+      autoStartedQueueIds.current.has(queuedPrompt.id)
+    ) {
+      return;
+    }
+    autoStartedQueueIds.current.add(queuedPrompt.id);
+    void submitPrompt({ files: queuedPrompt.files, text: queuedPrompt.text }, queuedPrompt.skills, {
+      clearInputOnSuccess: false,
+      forceAction: "start",
+    }).then((sent) => {
+      if (sent && routeScopeRef.current === queuedScope) {
+        replaceQueuedPrompts(queuedPrompts.filter((prompt) => prompt.id !== queuedPrompt.id));
+      }
+    });
+  }, [
+    activeTaskId,
+    activeTurnId,
+    connectionState,
+    isSubmitting,
+    queuedPrompts,
+    replaceQueuedPrompts,
+    routeScope,
+    submitPrompt,
+  ]);
 
   const getCommandAvailability = (command: PromptCommandItem) => {
     const availability = getPromptCommandAvailability(
@@ -1139,10 +1309,78 @@ export function WorkbenchComposer({
       </PromptInputCommand>
     );
 
+  const removeQueuedPrompt = (queuedPromptId: string) => {
+    replaceQueuedPrompts(queuedPrompts.filter((prompt) => prompt.id !== queuedPromptId));
+  };
+
+  const steerQueuedPrompt = async (queuedPrompt: QueuedComposerPrompt) => {
+    const sent = await submitPrompt(
+      { files: queuedPrompt.files, text: queuedPrompt.text },
+      queuedPrompt.skills,
+      { clearInputOnSuccess: false, forceAction: "steer" },
+    );
+    if (sent && routeScopeRef.current === routeScope) {
+      removeQueuedPrompt(queuedPrompt.id);
+    }
+  };
+
+  const hasComposerInput = !isPromptSkillContentEmpty(promptContent) || attachmentCount > 0;
+  const submitAction = resolveComposerSubmitAction(
+    state,
+    hasComposerInput,
+    followUpBehavior,
+    canSteer,
+  );
+
   return (
     <section className="shrink-0 bg-content px-3 pb-2 sm:px-5" aria-label="Composer">
       <div className="relative mx-auto w-full max-w-content" ref={commandSurfaceRef}>
         {commandMenu}
+        {queuedPrompts.length === 0 ? null : (
+          <div aria-label="已排队消息" className="mb-2 space-y-1.5" role="list">
+            {queuedPrompts.map((queuedPrompt) => {
+              const summary =
+                queuedPrompt.text ||
+                queuedPrompt.skills.map((skill) => `$${skill.name}`).join(" ") ||
+                `${String(queuedPrompt.files.length)} 个附件`;
+              return (
+                <div
+                  className="flex min-w-0 items-center gap-2 rounded-control border border-separator bg-control px-2 py-1.5"
+                  key={queuedPrompt.id}
+                  role="listitem"
+                >
+                  <span className="min-w-0 flex-1 truncate text-label text-foreground">
+                    {summary}
+                  </span>
+                  <IconButton
+                    className="hover:text-accent"
+                    disabled={!canSteer || activeTurnId === undefined || isSubmitting}
+                    label={`立即引导：${summary}`}
+                    onClick={() => {
+                      void steerQueuedPrompt(queuedPrompt);
+                    }}
+                    size="small"
+                    tooltip="立即作为引导发送"
+                  >
+                    <SendHorizontal aria-hidden="true" className="size-3.5" />
+                  </IconButton>
+                  <IconButton
+                    className="hover:text-danger"
+                    disabled={isSubmitting}
+                    label={`取消排队：${summary}`}
+                    onClick={() => {
+                      removeQueuedPrompt(queuedPrompt.id);
+                    }}
+                    size="small"
+                    tooltip="取消排队"
+                  >
+                    <X aria-hidden="true" className="size-3.5" />
+                  </IconButton>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <PromptInput
           accept="image/gif,image/jpeg,image/png,image/webp"
           attachments={attachments}
@@ -1376,19 +1614,27 @@ export function WorkbenchComposer({
                 ))}
               </PromptInputSelect>
               <PromptInputSubmit
-                aria-label={state === "running" ? "停止" : "提交"}
+                aria-label={
+                  submitAction === "queue"
+                    ? "排队消息"
+                    : submitAction === "steer"
+                      ? "发送引导"
+                      : submitAction === "interrupt"
+                        ? "停止"
+                        : "提交"
+                }
                 disabled={
                   turnControlsDisabled ||
-                  (state !== "running" &&
+                  submitAction === "blocked" ||
+                  (submitAction === "start" &&
                     (!canSubmit ||
                       selectedModel === undefined ||
-                      selectedReasoningEffort === undefined ||
-                      (isPromptSkillContentEmpty(promptContent) && attachmentCount === 0))) ||
-                  (state === "running" && (!canInterrupt || activeTurnId === undefined))
+                      selectedReasoningEffort === undefined)) ||
+                  (submitAction === "interrupt" && (!canInterrupt || activeTurnId === undefined))
                 }
-                onClick={state === "running" ? () => void interruptTurn() : undefined}
-                status={state}
-                type={state === "running" ? "button" : "submit"}
+                onClick={submitAction === "interrupt" ? () => void interruptTurn() : undefined}
+                status={state === "running" && hasComposerInput ? "idle" : state}
+                type={submitAction === "interrupt" ? "button" : "submit"}
               />
             </div>
           </PromptInputFooter>

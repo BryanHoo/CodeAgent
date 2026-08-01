@@ -33,6 +33,7 @@ const globalSettings = {
   commitMessagePrompt: "",
   commitMessageReasoningEffort: "high",
   defaultOpenAppId: "visual-studio-code" as const,
+  followUpBehavior: "queue" as const,
 };
 
 const modelPage = {
@@ -403,7 +404,14 @@ describe("CodeAgentClient", () => {
           provider: "codex",
           skills: { list: true, use: true },
           tasks: { fork: true, list: true, read: true, start: true },
-          turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+          turns: {
+            compact: true,
+            interrupt: true,
+            review: true,
+            rollback: true,
+            start: true,
+            steer: true,
+          },
         }),
       )
       .mockResolvedValueOnce(jsonResponse({ data: [], nextCursor: null }))
@@ -537,6 +545,9 @@ describe("CodeAgentClient", () => {
       .mockResolvedValueOnce(jsonResponse({ attachment }))
       .mockResolvedValueOnce(jsonResponse({ taskId: task.id, turn: runningTurn }))
       .mockResolvedValueOnce(
+        jsonResponse({ status: "accepted", taskId: task.id, turnId: runningTurn.id }),
+      )
+      .mockResolvedValueOnce(
         jsonResponse({ status: "interrupting", taskId: task.id, turnId: runningTurn.id }),
       )
       .mockResolvedValueOnce(
@@ -573,6 +584,13 @@ describe("CodeAgentClient", () => {
       },
       { idempotencyKey: "turn-key" },
     );
+    await client.steerTurn(
+      "code-agent",
+      task.id,
+      runningTurn.id,
+      { attachments: [], skills: [], text: "优先修复测试", type: "prompt" },
+      { idempotencyKey: "steer-key" },
+    );
     await client.interruptTurn("code-agent", task.id, runningTurn.id, {
       idempotencyKey: "interrupt-key",
     });
@@ -580,7 +598,8 @@ describe("CodeAgentClient", () => {
       idempotencyKey: "rollback-key",
     });
 
-    const [taskCall, attachmentCall, turnCall, interruptCall, rollbackCall] = fetchMock.mock.calls;
+    const [taskCall, attachmentCall, turnCall, steerCall, interruptCall, rollbackCall] =
+      fetchMock.mock.calls;
     expect(taskCall?.[0]).toBe("/v1/projects/code-agent/tasks");
     expect(taskCall?.[1]).toMatchObject({ body: "{}", method: "POST" });
     expect(new Headers(taskCall?.[1]?.headers).get("idempotency-key")).toBe("task-key");
@@ -609,6 +628,15 @@ describe("CodeAgentClient", () => {
       }),
       method: "POST",
     });
+    expect(steerCall?.[0]).toBe("/v1/projects/code-agent/tasks/task-1/turns/turn-1/steer");
+    expect(steerCall?.[1]).toMatchObject({
+      body: JSON.stringify({
+        input: { attachments: [], skills: [], text: "优先修复测试", type: "prompt" },
+        taskId: "task-1",
+      }),
+      method: "POST",
+    });
+    expect(new Headers(steerCall?.[1]?.headers).get("idempotency-key")).toBe("steer-key");
     expect(new Headers(turnCall?.[1]?.headers).get("idempotency-key")).toBe("turn-key");
     expect(interruptCall?.[0]).toBe("/v1/projects/code-agent/tasks/task-1/turns/turn-1/interrupt");
     expect(interruptCall?.[1]).toMatchObject({

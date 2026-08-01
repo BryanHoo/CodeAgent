@@ -1439,7 +1439,14 @@ export class CodexAgentProvider implements AgentProvider {
       provider: "codex",
       skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
-      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+      turns: {
+        compact: true,
+        interrupt: true,
+        review: true,
+        rollback: true,
+        start: true,
+        steer: true,
+      },
     });
   }
 
@@ -1600,6 +1607,51 @@ export class CodexAgentProvider implements AgentProvider {
     options: AgentTurnOptions,
   ): Promise<AgentTurn> {
     this.#assertKnownProjectTask(taskId);
+    const codexInput = await this.#mapTurnInput(input);
+    await this.#resumeTask(taskId);
+    const response = expectRecord(
+      await this.#client.request("turn/start", {
+        approvalPolicy: options.approvalPolicy,
+        approvalsReviewer: options.approvalsReviewer,
+        effort: options.reasoningEffort,
+        input: codexInput,
+        model: options.model,
+        ...(input.outputSchema === undefined ? {} : { outputSchema: input.outputSchema }),
+        sandboxPolicy: mapSandboxPolicy(options.sandboxMode),
+        threadId: taskId,
+      }),
+      "turn/start response",
+    );
+    const turn = mapAgentTurn(response["turn"], (part, imageIndex) =>
+      this.#mapMessageImage(taskId, part, imageIndex),
+    );
+    if (turn.status === "running") {
+      this.#runningTaskIds.add(taskId);
+    }
+    return turn;
+  }
+
+  public async steerTurn(
+    taskId: string,
+    turnId: string,
+    input: AgentProviderTurnInput,
+  ): Promise<void> {
+    this.#assertKnownProjectTask(taskId);
+    const codexInput = await this.#mapTurnInput(input);
+    const response = expectRecord(
+      await this.#client.request("turn/steer", {
+        expectedTurnId: turnId,
+        input: codexInput,
+        threadId: taskId,
+      }),
+      "turn/steer response",
+    );
+    if (response["turnId"] !== turnId) {
+      throw new CodexProtocolMappingError("turn/steer returned an unexpected turn id");
+    }
+  }
+
+  async #mapTurnInput(input: AgentProviderTurnInput) {
     if (input.skills.some((skill) => !this.#skillsById.has(skill.id))) {
       await this.listSkills();
     }
@@ -1638,27 +1690,7 @@ export class CodexAgentProvider implements AgentProvider {
     if (codexInput.length === 0) {
       throw new CodexProtocolMappingError("Provider turn input must not be empty");
     }
-    await this.#resumeTask(taskId);
-    const response = expectRecord(
-      await this.#client.request("turn/start", {
-        approvalPolicy: options.approvalPolicy,
-        approvalsReviewer: options.approvalsReviewer,
-        effort: options.reasoningEffort,
-        input: codexInput,
-        model: options.model,
-        ...(input.outputSchema === undefined ? {} : { outputSchema: input.outputSchema }),
-        sandboxPolicy: mapSandboxPolicy(options.sandboxMode),
-        threadId: taskId,
-      }),
-      "turn/start response",
-    );
-    const turn = mapAgentTurn(response["turn"], (part, imageIndex) =>
-      this.#mapMessageImage(taskId, part, imageIndex),
-    );
-    if (turn.status === "running") {
-      this.#runningTaskIds.add(taskId);
-    }
-    return turn;
+    return codexInput;
   }
 
   public async startReview(taskId: string, target: AgentReviewTarget): Promise<AgentTurn> {
@@ -2634,6 +2666,11 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     return this.#delegate.startTurn(taskId, input, options);
   }
 
+  public steerTurn(taskId: string, turnId: string, input: AgentProviderTurnInput): Promise<void> {
+    this.#runtime.assertTaskOwner(this.#project, taskId);
+    return this.#delegate.steerTurn(taskId, turnId, input);
+  }
+
   public subscribeEvents(listener: AgentProviderEventListener): () => void {
     return this.#delegate.subscribeEvents(listener);
   }
@@ -2727,7 +2764,14 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
       provider: "codex",
       skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
-      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+      turns: {
+        compact: true,
+        interrupt: true,
+        review: true,
+        rollback: true,
+        start: true,
+        steer: true,
+      },
     });
   }
 

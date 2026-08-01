@@ -107,7 +107,14 @@ describe("prompt slash command", () => {
       provider: "codex",
       skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
-      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+      turns: {
+        compact: true,
+        interrupt: true,
+        review: true,
+        rollback: true,
+        start: true,
+        steer: true,
+      },
     };
     const review = findCommand("review");
     const initialize = findCommand("initialize");

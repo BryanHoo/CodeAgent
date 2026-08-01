@@ -6,6 +6,7 @@ import {
   PendingRequestResolutionError,
   type AgentProvider,
   type AgentProviderEvent,
+  type AgentProviderTurnInput,
   type AgentRuntimeProvider,
   type AgentSettingsRepository,
   type AgentTaskMetadataRepository,
@@ -70,6 +71,8 @@ import {
   StartAgentTaskResponseSchema,
   StartAgentTurnRequestSchema,
   StartAgentTurnResponseSchema,
+  SteerAgentTurnRequestSchema,
+  SteerAgentTurnResponseSchema,
   TerminateAgentBackgroundTerminalResponseSchema,
   UploadAgentFeedbackRequestSchema,
   UploadAgentFeedbackResponseSchema,
@@ -81,6 +84,7 @@ import {
   type AgentMutationError,
   type AgentModel,
   type AgentModelPage,
+  type AgentPromptInput,
   type AgentProjectDefaults,
   type AgentSandboxMode,
   type AgentTask,
@@ -107,6 +111,7 @@ import {
   type RemoveProjectRequest,
   type ResolvePendingRequestRequest,
   type StartAgentTurnRequest,
+  type SteerAgentTurnRequest,
   type UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
 import fastifyStatic from "@fastify/static";
@@ -743,6 +748,46 @@ export async function createCodeAgentServer(
   const projectOpenService = options.projectOpenService ?? createProjectOpenService();
   const prepareFileRollback = options.prepareTurnFileRollback ?? prepareTurnFileRollback;
   const attachmentStore = new AttachmentStore();
+  const resolveProviderTurnInput = (
+    projectId: string,
+    input: AgentPromptInput,
+  ): Readonly<{ attachmentIds: readonly string[]; providerInput: AgentProviderTurnInput }> => {
+    const attachmentIds = input.attachments.map((attachment) => attachment.id);
+    if (new Set(attachmentIds).size !== attachmentIds.length) {
+      throw new MutationHttpError("INVALID_REQUEST", "Duplicate attachments are not allowed", 400);
+    }
+    let resolvedAttachments;
+    try {
+      resolvedAttachments = attachmentStore.resolve(projectId, attachmentIds);
+    } catch (error) {
+      if (error instanceof AttachmentNotFoundError) {
+        throw new MutationHttpError(
+          "ATTACHMENT_NOT_FOUND",
+          "Attachment was not found or has expired",
+          404,
+        );
+      }
+      throw error;
+    }
+    // Start 与 steer 共用同一映射，保证附件校验和 Provider 输入语义一致。
+    return {
+      attachmentIds,
+      providerInput: {
+        images: resolvedAttachments.flatMap((attachment) =>
+          attachment.mediaType === "text/plain"
+            ? []
+            : [{ mediaType: attachment.mediaType, url: attachment.url }],
+        ),
+        skills: input.skills,
+        text: input.text,
+        textAttachments: resolvedAttachments.flatMap((attachment) =>
+          attachment.mediaType === "text/plain"
+            ? [{ name: attachment.name, text: attachment.text }]
+            : [],
+        ),
+      },
+    };
+  };
   const capabilities = await options.provider.getCapabilities();
   const modelCatalogCacheMaxBytes =
     options.modelCatalogCacheMaxBytes ?? DEFAULT_MODEL_CATALOG_CACHE_MAX_BYTES;
@@ -843,6 +888,7 @@ export async function createCodeAgentServer(
           commitMessagePrompt: stored.commitMessagePrompt,
           commitMessageReasoningEffort: effectiveCommitModel.reasoningEffort,
           defaultOpenAppId: stored.defaultOpenAppId,
+          followUpBehavior: stored.followUpBehavior,
           ...effectiveModel,
         }
       : {
@@ -852,6 +898,7 @@ export async function createCodeAgentServer(
           commitMessagePrompt: stored?.commitMessagePrompt ?? "",
           commitMessageReasoningEffort: effectiveCommitModel.reasoningEffort,
           defaultOpenAppId: stored?.defaultOpenAppId ?? null,
+          followUpBehavior: stored?.followUpBehavior ?? "queue",
           ...effectiveModel,
         };
   };
@@ -2377,27 +2424,10 @@ export async function createCodeAgentServer(
           if (task?.projectId !== context.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
-          const attachmentIds = request.body.input.attachments.map((attachment) => attachment.id);
-          if (new Set(attachmentIds).size !== attachmentIds.length) {
-            throw new MutationHttpError(
-              "INVALID_REQUEST",
-              "Duplicate attachments are not allowed",
-              400,
-            );
-          }
-          let resolvedAttachments;
-          try {
-            resolvedAttachments = attachmentStore.resolve(request.params.projectId, attachmentIds);
-          } catch (error) {
-            if (error instanceof AttachmentNotFoundError) {
-              throw new MutationHttpError(
-                "ATTACHMENT_NOT_FOUND",
-                "Attachment was not found or has expired",
-                404,
-              );
-            }
-            throw error;
-          }
+          const { attachmentIds, providerInput } = resolveProviderTurnInput(
+            request.params.projectId,
+            request.body.input,
+          );
           assertValidProjectDefaults(await listModels(), request.body.options);
           // Turn 设置先落库，Provider 成功或进程退出后都能恢复用户最后一次完整选择。
           await options.settingsRepository.writeTaskSettings(
@@ -2407,20 +2437,7 @@ export async function createCodeAgentServer(
           );
           const turn = await context.provider.startTurn(
             request.params.taskId,
-            {
-              images: resolvedAttachments.flatMap((attachment) =>
-                attachment.mediaType === "text/plain"
-                  ? []
-                  : [{ mediaType: attachment.mediaType, url: attachment.url }],
-              ),
-              skills: request.body.input.skills,
-              text: request.body.input.text,
-              textAttachments: resolvedAttachments.flatMap((attachment) =>
-                attachment.mediaType === "text/plain"
-                  ? [{ name: attachment.name, text: attachment.text }]
-                  : [],
-              ),
-            },
+            providerInput,
             request.body.options,
           );
           // 只有 Provider 确认启动成功后才消费附件，网络失败仍允许原请求重试。
@@ -2429,6 +2446,73 @@ export async function createCodeAgentServer(
         },
       );
       return reply.code(201).send({ taskId: request.params.taskId, turn });
+    },
+  );
+
+  app.post<{
+    Body: SteerAgentTurnRequest;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string; taskId: string; turnId: string };
+  }>(
+    "/v1/projects/:projectId/tasks/:taskId/turns/:turnId/steer",
+    {
+      schema: {
+        body: SteerAgentTurnRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectTaskTurnParamsSchema,
+        response: {
+          202: SteerAgentTurnResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const response = await runIdempotent(
+        ["steer-turn", request.params.projectId, request.params.taskId, request.params.turnId],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          if (request.body.taskId !== request.params.taskId) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          const context = await getProjectContext(request.params.projectId);
+          if (context === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await context.provider.readTask(request.params.taskId);
+          if (task?.projectId !== context.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          const turn = task.turns.find((item) => item.id === request.params.turnId);
+          if (turn === undefined) {
+            throw new MutationHttpError("TURN_NOT_FOUND", "Turn not found", 404);
+          }
+          if (turn.status !== "running") {
+            throw new MutationHttpError("TURN_NOT_RUNNING", "Turn is not running", 409);
+          }
+
+          const { attachmentIds, providerInput } = resolveProviderTurnInput(
+            request.params.projectId,
+            request.body.input,
+          );
+          await context.provider.steerTurn(
+            request.params.taskId,
+            request.params.turnId,
+            providerInput,
+          );
+          // Provider 接受引导后才消费附件，失败时原请求仍可安全重试。
+          attachmentStore.consume(request.params.projectId, attachmentIds);
+          return {
+            status: "accepted" as const,
+            taskId: request.params.taskId,
+            turnId: request.params.turnId,
+          };
+        },
+      );
+      return reply.code(202).send(response);
     },
   );
 

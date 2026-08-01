@@ -111,7 +111,14 @@ function createProvider() {
       provider: "codex",
       skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
-      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+      turns: {
+        compact: true,
+        interrupt: true,
+        review: true,
+        rollback: true,
+        start: true,
+        steer: true,
+      },
     }),
   );
   const compactTask = vi.fn(() => Promise.resolve());
@@ -167,6 +174,7 @@ function createProvider() {
         status: "running" as const,
       }),
   );
+  const steerTurn = vi.fn<AgentProvider["steerTurn"]>(() => Promise.resolve());
   const interruptTurn = vi.fn(() => Promise.resolve());
   const listBackgroundTerminals = vi.fn<() => Promise<AgentBackgroundTerminalPage>>(() =>
     Promise.resolve({ data: [] }),
@@ -204,6 +212,7 @@ function createProvider() {
     startTask,
     startReview,
     startTurn,
+    steerTurn,
     subscribeEvents(listener) {
       eventListeners.add(listener);
       return () => {
@@ -239,6 +248,7 @@ function createProvider() {
     startTask,
     startReview,
     startTurn,
+    steerTurn,
     terminateBackgroundTerminal,
     unsubscribeTask,
     uploadFeedback,
@@ -372,6 +382,7 @@ async function createHarness(
     startTask,
     startReview,
     startTurn,
+    steerTurn,
     terminateBackgroundTerminal,
     unsubscribeTask,
     uploadFeedback,
@@ -406,6 +417,7 @@ async function createHarness(
     startTask,
     startReview,
     startTurn,
+    steerTurn,
     terminateBackgroundTerminal,
     unsubscribeTask,
     ...settings,
@@ -546,7 +558,14 @@ describe("CodeAgent Server", () => {
       provider: "codex",
       skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
-      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+      turns: {
+        compact: true,
+        interrupt: true,
+        review: true,
+        rollback: true,
+        start: true,
+        steer: true,
+      },
     });
     expect(projectsResponse.json()).toEqual({ data: [project], nextCursor: null });
   });
@@ -826,6 +845,7 @@ describe("CodeAgent Server", () => {
       commitMessagePrompt: "优先说明行为变化，不要罗列文件名。",
       commitMessageReasoningEffort: "low",
       defaultOpenAppId: null,
+      followUpBehavior: "queue",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
       sandboxMode: "workspace-write",
@@ -1555,6 +1575,7 @@ describe("CodeAgent Server", () => {
       commitMessagePrompt: "",
       commitMessageReasoningEffort: "high",
       defaultOpenAppId: "visual-studio-code" as const,
+      followUpBehavior: "steer" as const,
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
       sandboxMode: "danger-full-access" as const,
@@ -1621,6 +1642,7 @@ describe("CodeAgent Server", () => {
       commitMessagePrompt: "",
       commitMessageReasoningEffort: "high",
       defaultOpenAppId: null,
+      followUpBehavior: "queue",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
       sandboxMode: "workspace-write",
@@ -1667,7 +1689,7 @@ describe("CodeAgent Server", () => {
   });
 
   it("serves idempotent task and turn mutations", async () => {
-    const { app, interruptTurn, readTask, startTask, startTurn } = await createHarness();
+    const { app, interruptTurn, readTask, startTask, startTurn, steerTurn } = await createHarness();
     const headers = { "idempotency-key": "mutation-1" };
 
     const created = await app.inject({
@@ -1694,6 +1716,20 @@ describe("CodeAgent Server", () => {
       status: "running",
       turns: [turnBody.turn],
     });
+    const steered = await app.inject({
+      headers: { "idempotency-key": "steer-1" },
+      method: "POST",
+      payload: {
+        input: { attachments: [], skills: [], text: "优先修复测试", type: "prompt" },
+        taskId: "task-1",
+      },
+      url: "/v1/projects/code-agent/tasks/task-1/turns/turn-1/steer",
+    });
+    readTask.mockResolvedValueOnce({
+      ...snapshot,
+      status: "running",
+      turns: [turnBody.turn],
+    });
     const interrupted = await app.inject({
       headers: { "idempotency-key": "interrupt-1" },
       method: "POST",
@@ -1711,6 +1747,14 @@ describe("CodeAgent Server", () => {
       { images: [], skills: [], text: "继续实现", textAttachments: [] },
       turnOptions,
     );
+    expect(steered.statusCode).toBe(202);
+    expect(steered.json()).toEqual({ status: "accepted", taskId: "task-1", turnId: "turn-1" });
+    expect(steerTurn).toHaveBeenCalledWith("task-1", "turn-1", {
+      images: [],
+      skills: [],
+      text: "优先修复测试",
+      textAttachments: [],
+    });
     expect(interrupted.statusCode).toBe(202);
     expect(interrupted.json()).toEqual({
       status: "interrupting",

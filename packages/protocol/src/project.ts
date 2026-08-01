@@ -720,6 +720,7 @@ const AgentGlobalSettingProperties = {
   commitMessagePrompt: Type.String({ maxLength: 4_000 }),
   commitMessageReasoningEffort: Type.String({ minLength: 1 }),
   defaultOpenAppId: Type.Union([ProjectOpenAppIdSchema, Type.Null()]),
+  followUpBehavior: Type.Union([Type.Literal("queue"), Type.Literal("steer")]),
   ...AgentTaskSettingProperties,
 };
 
@@ -1154,6 +1155,25 @@ export const StartAgentTurnResponseSchema = Type.Object(
 );
 export type StartAgentTurnResponse = Readonly<Static<typeof StartAgentTurnResponseSchema>>;
 
+export const SteerAgentTurnRequestSchema = Type.Object(
+  {
+    input: AgentPromptInputSchema,
+    taskId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+export type SteerAgentTurnRequest = Readonly<Static<typeof SteerAgentTurnRequestSchema>>;
+
+export const SteerAgentTurnResponseSchema = Type.Object(
+  {
+    status: Type.Literal("accepted"),
+    taskId: Type.String({ minLength: 1 }),
+    turnId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+export type SteerAgentTurnResponse = Readonly<Static<typeof SteerAgentTurnResponseSchema>>;
+
 export const InterruptAgentTurnRequestSchema = Type.Object(
   { taskId: Type.String({ minLength: 1 }) },
   { additionalProperties: false },
@@ -1303,6 +1323,7 @@ export const AgentCapabilitiesSchema = Type.Object(
         review: Type.Boolean(),
         rollback: Type.Boolean(),
         start: Type.Boolean(),
+        steer: Type.Boolean(),
       },
       { additionalProperties: false },
     ),

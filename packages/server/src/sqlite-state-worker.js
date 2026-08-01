@@ -58,6 +58,7 @@ function globalSettingsFromRow(row) {
     commitMessagePrompt: row.commit_message_prompt,
     commitMessageReasoningEffort: row.commit_message_reasoning_effort,
     defaultOpenAppId: row.default_open_app_id,
+    followUpBehavior: row.follow_up_behavior,
     model: row.model,
     reasoningEffort: row.reasoning_effort,
     sandboxMode: row.sandbox_mode,
@@ -145,7 +146,7 @@ function createOperations(database) {
         readGlobalSettings: database.prepare(
           `SELECT approval_policy, approvals_reviewer, commit_message_model,
                   commit_message_prompt, commit_message_reasoning_effort, model,
-                  reasoning_effort, sandbox_mode, default_open_app_id
+                  reasoning_effort, sandbox_mode, default_open_app_id, follow_up_behavior
            FROM global_settings WHERE id = 1`,
         ),
         readTaskSettings: database.prepare(
@@ -167,8 +168,8 @@ function createOperations(database) {
       INSERT INTO global_settings (
         id, approval_policy, approvals_reviewer, commit_message_model, commit_message_prompt,
         commit_message_reasoning_effort, model, reasoning_effort, sandbox_mode,
-        default_open_app_id, updated_at
-      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        default_open_app_id, follow_up_behavior, updated_at
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         approval_policy = excluded.approval_policy,
         approvals_reviewer = excluded.approvals_reviewer,
@@ -179,6 +180,7 @@ function createOperations(database) {
         reasoning_effort = excluded.reasoning_effort,
         sandbox_mode = excluded.sandbox_mode,
         default_open_app_id = excluded.default_open_app_id,
+        follow_up_behavior = excluded.follow_up_behavior,
         updated_at = excluded.updated_at
     `),
         writeTaskSettings: database.prepare(`
@@ -328,6 +330,7 @@ function createOperations(database) {
         settings.reasoningEffort,
         settings.sandboxMode,
         settings.defaultOpenAppId,
+        settings.followUpBehavior,
         payload.updatedAt,
       );
       return settings;

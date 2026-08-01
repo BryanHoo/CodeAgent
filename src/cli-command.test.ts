@@ -54,6 +54,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     startTask: vi.fn(),
     startReview: vi.fn(),
     startTurn: vi.fn(),
+    steerTurn: vi.fn(),
     subscribeEvents: vi.fn(() => () => undefined),
     terminateBackgroundTerminal: vi.fn(),
     unsubscribeTask: vi.fn(),

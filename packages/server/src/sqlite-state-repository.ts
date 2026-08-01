@@ -155,6 +155,15 @@ const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     `,
     version: 7,
   },
+  {
+    name: "add_follow_up_behavior_setting",
+    sql: `
+      ALTER TABLE global_settings
+        ADD COLUMN follow_up_behavior TEXT NOT NULL DEFAULT 'queue'
+        CHECK (follow_up_behavior IN ('queue', 'steer'));
+    `,
+    version: 8,
+  },
 ];
 
 type WorkerResponse =

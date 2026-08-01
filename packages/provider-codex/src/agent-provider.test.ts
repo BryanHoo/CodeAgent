@@ -569,6 +569,33 @@ describe("CodexAgentProvider", () => {
     });
   });
 
+  it("steers the active Codex turn with the expected turn id", async () => {
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      { turnId: "turn-1" },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.listTasks();
+
+    await expect(
+      provider.steerTurn("task-1", "turn-1", {
+        images: [],
+        skills: [],
+        text: "优先修复失败测试",
+        textAttachments: [],
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(rpc.calls.at(-1)).toEqual({
+      method: "turn/steer",
+      params: {
+        expectedTurnId: "turn-1",
+        input: [{ text: "优先修复失败测试", text_elements: [], type: "text" }],
+        threadId: "task-1",
+      },
+    });
+  });
+
   it("shares one resume request across concurrent turns for a restored task", async () => {
     let resolveResume!: (response: unknown) => void;
     const resumeResponse = new Promise<unknown>((resolveResponse) => {
@@ -2543,7 +2570,14 @@ describe("CodexAgentProvider", () => {
       provider: "codex",
       skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
-      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+      turns: {
+        compact: true,
+        interrupt: true,
+        review: true,
+        rollback: true,
+        start: true,
+        steer: true,
+      },
     });
     await expect(provider.listTasks({ cursor: "cursor", limit: 25 })).resolves.toEqual({
       data: [

@@ -11,9 +11,11 @@ import {
   PASTED_TEXT_ATTACHMENT_NAME,
   resolveIdempotencyAttempt,
   resolveActiveTurnId,
+  resolveComposerSubmitAction,
   resolveReasoningEffort,
   startPromptTurn,
   startTaskReview,
+  steerPromptTurn,
 } from "./workbench-composer.js";
 
 const task = {
@@ -66,21 +68,39 @@ describe("WorkbenchComposer", () => {
       provider: "fake",
       skills: { list: false, use: false },
       tasks: { fork: false, list: true, read: true, start: false },
-      turns: { compact: false, interrupt: false, review: false, rollback: false, start: true },
+      turns: {
+        compact: false,
+        interrupt: false,
+        review: false,
+        rollback: false,
+        start: true,
+        steer: false,
+      },
     };
 
     expect(deriveComposerActions(undefined, false)).toEqual({
       canInterrupt: false,
       canSubmit: false,
+      canSteer: false,
     });
     expect(deriveComposerActions(capabilities, false)).toEqual({
       canInterrupt: false,
       canSubmit: false,
+      canSteer: false,
     });
     expect(deriveComposerActions(capabilities, true)).toEqual({
       canInterrupt: false,
       canSubmit: true,
+      canSteer: false,
     });
+  });
+
+  it("routes active-turn submissions to steer or queue while preserving interrupt", () => {
+    expect(resolveComposerSubmitAction("idle", true, "queue", true)).toBe("start");
+    expect(resolveComposerSubmitAction("running", false, "queue", true)).toBe("interrupt");
+    expect(resolveComposerSubmitAction("running", true, "queue", true)).toBe("queue");
+    expect(resolveComposerSubmitAction("running", true, "steer", true)).toBe("steer");
+    expect(resolveComposerSubmitAction("running", true, "steer", false)).toBe("blocked");
   });
 
   it("derives all mutation states from runtime and local state", () => {
@@ -319,6 +339,22 @@ describe("WorkbenchComposer", () => {
     });
     expect(client.interruptTurn).toHaveBeenCalledWith("code-agent", task.id, turn.id, {
       idempotencyKey: "interrupt-key",
+    });
+  });
+
+  it("steers the active turn through the client", async () => {
+    const client = {
+      steerTurn: vi.fn(() =>
+        Promise.resolve({ status: "accepted" as const, taskId: task.id, turnId: turn.id }),
+      ),
+    };
+    const input = { attachments: [], skills: [], text: "补充约束", type: "prompt" as const };
+
+    await expect(
+      steerPromptTurn(client, "code-agent", task.id, turn.id, input, "steer-key"),
+    ).resolves.toMatchObject({ status: "accepted" });
+    expect(client.steerTurn).toHaveBeenCalledWith("code-agent", task.id, turn.id, input, {
+      idempotencyKey: "steer-key",
     });
   });
 });

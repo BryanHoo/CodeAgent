@@ -87,6 +87,7 @@ function createFallbackSettings(models: readonly AgentModel[]): AgentGlobalSetti
     commitMessagePrompt: "",
     commitMessageReasoningEffort: model?.defaultReasoningEffort ?? "",
     defaultOpenAppId: null,
+    followUpBehavior: "queue",
     model: model?.id ?? "",
     reasoningEffort: model?.defaultReasoningEffort ?? "",
     sandboxMode: "workspace-write",
@@ -321,6 +322,21 @@ export function GlobalSettingsDialog({
                       <option value="read-only">只读</option>
                       <option value="workspace-write">工作区可写</option>
                       <option value="danger-full-access">完全访问</option>
+                    </SettingsSelect>
+                  </SettingsField>
+                  <SettingsField label="跟进消息">
+                    <SettingsSelect
+                      aria-label="跟进消息"
+                      disabled={isSaving}
+                      onChange={(event) => {
+                        const followUpBehavior = event.currentTarget
+                          .value as AgentGlobalSettings["followUpBehavior"];
+                        setDraft((current) => ({ ...current, followUpBehavior }));
+                      }}
+                      value={draft.followUpBehavior}
+                    >
+                      <option value="queue">排队</option>
+                      <option value="steer">引导</option>
                     </SettingsSelect>
                   </SettingsField>
                   <SettingsField label="模型">

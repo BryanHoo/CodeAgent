@@ -14,7 +14,8 @@
 - Provider 丢弃未知 Notification 或隔离单条字段映射失败时必须通过 Pino 告警，固定记录 `diagnosticCode`、method、Codex version、Project ID 和可提取的 Task ID；禁止记录原始 params、Prompt、命令输出或文件正文。
 - JSONL 响应只有在底层写入回调确认后才算成功，所有写入都使用有界超时；异步写入失败必须关闭连接且不能提前发布请求终态。
 - 过载错误使用带 jitter 的有上限指数退避，不做同步密集重试。
-- Task/Turn 写入只通过 `thread/start`、`turn/start` 和 `turn/interrupt` 映射；文本输入必须转换为当前 Codex Schema 要求的 `UserInput[]`，Provider 不向上泄漏原生字段。
+- Task/Turn 写入只通过 `thread/start`、`turn/start`、`turn/steer` 和 `turn/interrupt` 映射；文本输入必须转换为当前 Codex Schema 要求的 `UserInput[]`，Provider 不向上泄漏原生字段。
+- `turn/steer` 只允许写入当前 Task 的活动 Turn，必须传递 `expectedTurnId` 且不能携带模型、思考量或审批等 Turn 设置覆盖；Provider 必须校验响应 `turnId` 与预期 Turn 一致。
 - Server 内部生成 Git commit message 时，必须启动一次隐藏的结构化 Turn，将受限长度的选中文件 diff 作为不可信数据传入，并固定使用 `read-only`、`never` 和 `{ message }` `outputSchema`。最终 assistant message 必须从独立 `item.completed` 事件收集，`turn.completed` 只作为终态信号，不能假设其重复携带完整 items。Codex 不执行 Git Mutation；Turn 完成、失败或超时都必须移除监听器，并 best-effort 中断、归档和取消订阅隐藏 Thread。
 - App Server 重启后，从 `thread/list` 或 `thread/read` 重新发现的持久化 Task 在首次 `turn/start` 前必须调用一次 `thread/resume`；同一进程内由 `thread/start` 或 `thread/fork` 创建的已加载 Task 不得重复恢复，并发续写必须复用同一个恢复 Promise。
 - `agentMessage.phase` 中的 `commentary` 与 `final_answer` 都必须映射为 Assistant Message，并通过 `message.delta` 实时交付；原生 `reasoning` Item 仍映射为统一 Reasoning Item，但 Web 不展示其内容。
@@ -47,7 +48,7 @@
 - 浏览器与外部应用启动必须观察短时退出结果；启动器快速非零退出视为失败，Linux 浏览器按候选顺序继续回退，不能在仅收到子进程 `spawn` 事件后报告成功。Windows `explorer.exe` 是系统请求转交器，成功 `spawn` 后不得用代理进程随后的退出码误报失败；Windows Terminal 固定使用 `-w new -d <projectRoot>` 打开独立新窗口，不受用户 `windowingBehavior` 设置影响。
 - 数据库使用版本化 Migration、`STRICT` 表、显式 SQL、Prepared Statement 和事务，并固定启用 WAL、外键、NORMAL synchronous 与 5000ms busy timeout。
 - 所有同步 SQLite 操作都放入专用 `worker_threads` Worker，Fastify 主事件循环只通过 Core Repository 端口异步调用。
-- Global settings 以单例记录保存完整审批策略、审批审核方、模型、思考量、沙盒模式与默认打开应用；Project defaults 保存模型、思考量与沙盒模式；Task settings 保存完整运行设置。有效值固定按 `Task > Project > Global` 解析并按实时模型目录校验；读取推导值不得隐式写入局部记录，新 Task 创建和 Turn 启动时才固化完整 Task settings。
+- Global settings 以单例记录保存完整审批策略、审批审核方、模型、思考量、沙盒模式、默认跟进行为与默认打开应用；默认跟进行为只允许 `queue` 或 `steer`，新记录与迁移记录固定使用 `queue`。Project defaults 保存模型、思考量与沙盒模式；Task settings 保存完整运行设置。有效值固定按 `Task > Project > Global` 解析并按实时模型目录校验；读取推导值不得隐式写入局部记录，新 Task 创建和 Turn 启动时才固化完整 Task settings。
 - `task_metadata` 只保存 Project 作用域的 Task 固定状态；Task 列表与 Snapshot 在 Server 交付边界合并该状态，不修改 Codex Thread 内容。
 - Provider 模型目录、`allow_for_session` 和可操作 Pending Approval 不得持久化；进程重启后不得恢复可操作 `pending`。
 - WebSocket 客户端使用独立有界队列，慢客户端不能阻塞 Provider；`bufferedAmount` 超过 `256 KiB` 时向 Event Stream 发出软背压信号，超过 `1 MiB` 时以 `1013` 关闭连接并要求刷新 Snapshot。

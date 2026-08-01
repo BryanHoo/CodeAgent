@@ -33,6 +33,8 @@ import {
   StartAgentTaskResponseSchema,
   StartAgentTurnRequestSchema,
   StartAgentTurnResponseSchema,
+  SteerAgentTurnRequestSchema,
+  SteerAgentTurnResponseSchema,
   HealthResponseSchema,
   GenerateCommitMessageRequestSchema,
   GenerateCommitMessageResponseSchema,
@@ -620,6 +622,7 @@ describe("project protocol", () => {
       commitMessagePrompt: "突出说明用户可见影响。",
       commitMessageReasoningEffort: "medium",
       defaultOpenAppId: "visual-studio-code",
+      followUpBehavior: "queue",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
       sandboxMode: "workspace-write",
@@ -627,6 +630,15 @@ describe("project protocol", () => {
 
     expect(Value.Check(AgentGlobalSettingsSchema, settings)).toBe(true);
     expect(Value.Check(AgentGlobalSettingsResponseSchema, { settings })).toBe(true);
+    expect(Value.Check(AgentGlobalSettingsSchema, { ...settings, followUpBehavior: "steer" })).toBe(
+      true,
+    );
+    expect(Value.Check(AgentGlobalSettingsSchema, { ...settings, followUpBehavior: "later" })).toBe(
+      false,
+    );
+    const settingsWithoutFollowUpBehavior = { ...settings };
+    Reflect.deleteProperty(settingsWithoutFollowUpBehavior, "followUpBehavior");
+    expect(Value.Check(AgentGlobalSettingsSchema, settingsWithoutFollowUpBehavior)).toBe(false);
     expect(Value.Check(AgentGlobalSettingsSchema, { ...settings, defaultOpenAppId: null })).toBe(
       true,
     );
@@ -797,7 +809,14 @@ describe("project protocol", () => {
         provider: "codex",
         skills: { list: true, use: true },
         tasks: { fork: true, list: true, read: true, start: true },
-        turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+        turns: {
+          compact: true,
+          interrupt: true,
+          review: true,
+          rollback: true,
+          start: true,
+          steer: true,
+        },
       }),
     ).toBe(true);
   });
@@ -1044,6 +1063,21 @@ describe("project protocol", () => {
       }),
     ).toBe(false);
     expect(Value.Check(StartAgentTurnResponseSchema, { taskId: task.id, turn })).toBe(true);
+    expect(Value.Check(SteerAgentTurnRequestSchema, { input: prompt, taskId: task.id })).toBe(true);
+    expect(
+      Value.Check(SteerAgentTurnResponseSchema, {
+        status: "accepted",
+        taskId: task.id,
+        turnId: turn.id,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(SteerAgentTurnRequestSchema, {
+        input: prompt,
+        options: { model: "gpt-5.6-sol" },
+        taskId: task.id,
+      }),
+    ).toBe(false);
     expect(Value.Check(InterruptAgentTurnRequestSchema, { taskId: task.id })).toBe(true);
     expect(
       Value.Check(InterruptAgentTurnResponseSchema, {

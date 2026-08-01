@@ -104,6 +104,7 @@ export interface AgentProvider {
     input: AgentProviderTurnInput,
     options: AgentTurnOptions,
   ): Promise<AgentTurn>;
+  steerTurn(taskId: string, turnId: string, input: AgentProviderTurnInput): Promise<void>;
   interruptTurn(taskId: string, turnId: string): Promise<void>;
   subscribeEvents(listener: AgentProviderEventListener): () => void;
   terminateBackgroundTerminal(taskId: string, terminalId: string): Promise<boolean>;

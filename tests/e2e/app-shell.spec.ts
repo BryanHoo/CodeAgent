@@ -53,20 +53,25 @@ function parseGlobalSettingsRequest(requestBody: string | null) {
   const commitMessagePrompt = value["commitMessagePrompt"];
   const commitMessageReasoningEffort = value["commitMessageReasoningEffort"];
   const defaultOpenAppId = value["defaultOpenAppId"];
+  const followUpBehavior = value["followUpBehavior"];
   if (
     typeof commitMessageModel !== "string" ||
     typeof commitMessagePrompt !== "string" ||
     typeof commitMessageReasoningEffort !== "string" ||
+    (followUpBehavior !== "queue" && followUpBehavior !== "steer") ||
     (defaultOpenAppId !== null && typeof defaultOpenAppId !== "string")
   ) {
     throw new Error("Invalid global settings request");
   }
+  const normalizedFollowUpBehavior: "queue" | "steer" =
+    followUpBehavior === "queue" ? "queue" : "steer";
   return {
     ...settings,
     commitMessageModel,
     commitMessagePrompt,
     commitMessageReasoningEffort,
     defaultOpenAppId,
+    followUpBehavior: normalizedFollowUpBehavior,
   };
 }
 
@@ -329,6 +334,7 @@ test.beforeEach(async ({ page }) => {
     commitMessagePrompt: "",
     commitMessageReasoningEffort: "high",
     defaultOpenAppId: "zed" as string | null,
+    followUpBehavior: "queue" as "queue" | "steer",
     model: "gpt-5.6-sol",
     reasoningEffort: "high",
     sandboxMode: "workspace-write",
@@ -352,7 +358,14 @@ test.beforeEach(async ({ page }) => {
         provider: "codex",
         skills: { list: true, use: true },
         tasks: { fork: true, list: true, read: true, start: true },
-        turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+        turns: {
+          compact: true,
+          interrupt: true,
+          review: true,
+          rollback: true,
+          start: true,
+          steer: true,
+        },
       };
     } else if (url.pathname === "/v1/models") {
       body = { data: models, nextCursor: null };
@@ -564,6 +577,7 @@ test("edits global defaults in a dialog without overriding task settings", async
   await dialog.getByRole("button", { name: "Agent 默认值" }).click();
   await dialog.getByRole("combobox", { name: "审批" }).selectOption("never");
   await dialog.getByRole("combobox", { name: "工作区" }).selectOption("danger-full-access");
+  await dialog.getByRole("combobox", { name: "跟进消息" }).selectOption("steer");
   await dialog.getByRole("combobox", { name: "模型" }).selectOption("gpt-5.6-terra");
   await expect(dialog.getByRole("combobox", { name: "思考" })).toHaveValue("medium");
   await dialog.getByRole("button", { name: "提交消息" }).click();
@@ -591,6 +605,7 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(reopenedDialog.getByRole("combobox", { name: "工作区" })).toHaveValue(
     "danger-full-access",
   );
+  await expect(reopenedDialog.getByRole("combobox", { name: "跟进消息" })).toHaveValue("steer");
   await expect(reopenedDialog.getByRole("combobox", { name: "模型" })).toHaveValue("gpt-5.6-terra");
   await reopenedDialog.getByRole("button", { name: "提交消息" }).click();
   await expect(reopenedDialog.getByRole("combobox", { name: "提交模型" })).toHaveValue(
@@ -629,6 +644,7 @@ test("uses global defaults throughout a new task composer", async ({ page }) => 
           commitMessagePrompt: "",
           commitMessageReasoningEffort: "high",
           defaultOpenAppId: "finder",
+          followUpBehavior: "queue",
           model: "gpt-5.6-terra",
           reasoningEffort: "medium",
           sandboxMode: "danger-full-access",
@@ -3306,6 +3322,76 @@ test("streams Fake App Server notifications into the Timeline", async ({ page })
   await page.getByRole("button", { name: "查看子代理 frontend_analysis 的输出" }).click();
   await expect(page.getByRole("dialog", { name: "子代理输出" })).toContainText("前端流式分析完成");
   await expect(page.getByText("agent/spawn", { exact: true })).toHaveCount(0);
+});
+
+test("queues follow-up messages and can steer or cancel them during an active turn", async ({
+  page,
+}) => {
+  await page.unroute("**/v1/**");
+  await page.route("**/v1/settings", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { settings: Record<string, unknown> };
+    await route.fulfill({
+      response,
+      json: { settings: { ...body.settings, followUpBehavior: "queue" } },
+    });
+  });
+  await page.goto("/p/code-agent");
+  const input = page.getByRole("textbox", { name: "任务输入" });
+  await input.fill("等待中断");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-action-\d+$/u);
+  await expect(page.getByRole("button", { name: "停止" })).toBeVisible();
+  await expect(input).toHaveAttribute("data-placeholder", "继续这个任务");
+
+  let steerPayload: unknown;
+  await page.route("**/v1/projects/code-agent/tasks/*/turns/*/steer", async (route) => {
+    const request = route.request();
+    const pathParts = new URL(request.url()).pathname.split("/");
+    const payload = request.postDataJSON() as { taskId: string };
+    const turnId = pathParts[7] ?? "";
+    steerPayload = payload;
+    await route.fulfill({
+      contentType: "application/json",
+      json: { status: "accepted", taskId: payload.taskId, turnId },
+      status: 202,
+    });
+  });
+  const queueMessage = page.getByRole("button", { name: "排队消息" });
+  await input.fill("先补充失败测试");
+  await expect(queueMessage).toBeVisible();
+  await queueMessage.click();
+
+  await expect(page.getByText("先补充失败测试", { exact: true })).toBeVisible();
+  const queuedList = page.getByRole("list", { name: "已排队消息" });
+  expect(await queuedList.evaluate((element) => element.closest("form") === null)).toBe(true);
+  const steerQueued = page.getByRole("button", { name: "立即引导：先补充失败测试" });
+  await expect(steerQueued).toBeEnabled();
+  await steerQueued.hover();
+  await expect(page.getByRole("tooltip")).toHaveText("立即作为引导发送");
+  await steerQueued.click();
+  await expect
+    .poll(() => steerPayload)
+    .toEqual({
+      input: { attachments: [], skills: [], text: "先补充失败测试", type: "prompt" },
+      taskId: expect.stringMatching(/^task-action-\d+$/u),
+    });
+  await expect(page.getByText("先补充失败测试", { exact: true })).toHaveCount(0);
+
+  await input.fill("无需继续的消息");
+  await queueMessage.click();
+  const cancelQueued = page.getByRole("button", { name: "取消排队：无需继续的消息" });
+  await cancelQueued.hover();
+  await expect(page.getByRole("tooltip")).toHaveText("取消排队");
+  await cancelQueued.click();
+  await expect(page.getByText("无需继续的消息", { exact: true })).toHaveCount(0);
+
+  await input.fill("自动续发消息");
+  await queueMessage.click();
+  await page.getByRole("button", { name: "停止" }).click();
+  const nextTurn = page.getByLabel("Turn 2");
+  await expect(nextTurn.getByText("自动续发消息", { exact: true })).toBeVisible();
+  await expect(nextTurn).toHaveAttribute("data-status", "completed");
 });
 
 test("submits a prompt and streams the completed reply", async ({ page }) => {

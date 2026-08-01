@@ -1,5 +1,6 @@
 import type {
   AgentCapabilities,
+  AgentGlobalSettings,
   AgentModel,
   AgentPromptInput,
   AgentSkill,
@@ -665,6 +666,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             <WorkbenchComposer
               capabilities={capabilities}
               client={client}
+              followUpBehavior={globalSettings?.followUpBehavior ?? "queue"}
               models={models}
               modelsError={null}
               modelsPending={
@@ -689,6 +691,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             capabilities={capabilities}
             client={client}
             fallbackSettings={draftSettings}
+            followUpBehavior={globalSettings?.followUpBehavior ?? "queue"}
             models={models}
             modelsError={modelsQuery.error}
             modelsPending={modelsQuery.isPending}
@@ -897,6 +900,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   capabilities,
   client,
   fallbackSettings,
+  followUpBehavior,
   models,
   modelsError,
   modelsPending,
@@ -917,6 +921,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentWorkbenchClient;
   fallbackSettings: AgentTaskSettings;
+  followUpBehavior: AgentGlobalSettings["followUpBehavior"];
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;
@@ -1035,6 +1040,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
       <WorkbenchComposer
         capabilities={capabilities}
         client={client}
+        followUpBehavior={followUpBehavior}
         models={models}
         modelsError={modelsError}
         modelsPending={modelsPending || runtime.isPending}

@@ -15,7 +15,14 @@ describe("AgentProvider", () => {
           provider: "fake",
           skills: { list: true, use: true },
           tasks: { fork: true, list: true, read: true, start: true },
-          turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+          turns: {
+            compact: true,
+            interrupt: true,
+            review: true,
+            rollback: true,
+            start: true,
+            steer: true,
+          },
         });
       },
       compactTask(taskId) {
@@ -151,6 +158,14 @@ describe("AgentProvider", () => {
           status: "running",
         });
       },
+      steerTurn(taskId, turnId, input) {
+        expect({ taskId, text: input.text, turnId }).toEqual({
+          taskId: "task-1",
+          text: "补充约束",
+          turnId: "turn-1",
+        });
+        return Promise.resolve();
+      },
       interruptTurn(taskId, turnId) {
         expect(taskId).toBe("task-1");
         expect(turnId).toBe("turn-1");
@@ -182,7 +197,14 @@ describe("AgentProvider", () => {
       provider: "fake",
       skills: { list: true, use: true },
       tasks: { fork: true, list: true, read: true, start: true },
-      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+      turns: {
+        compact: true,
+        interrupt: true,
+        review: true,
+        rollback: true,
+        start: true,
+        steer: true,
+      },
     });
     await expect(provider.listTasks({ limit: 25 })).resolves.toEqual({
       data: [],
@@ -237,6 +259,14 @@ describe("AgentProvider", () => {
         },
       ),
     ).resolves.toMatchObject({ id: "task-1-turn", status: "running" });
+    await expect(
+      provider.steerTurn("task-1", "turn-1", {
+        images: [],
+        skills: [],
+        text: "补充约束",
+        textAttachments: [],
+      }),
+    ).resolves.toBeUndefined();
     await expect(provider.interruptTurn("task-1", "turn-1")).resolves.toBeUndefined();
     await expect(provider.rollbackLatestTurn("task-1")).resolves.toBeUndefined();
     await expect(provider.compactTask("task-1")).resolves.toBeUndefined();

@@ -1,32 +1,35 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+import type { AgentSkill } from "@code-agent/protocol";
 
 import type { PromptInputAttachment } from "../../shared/ai-elements/prompt-input.js";
 import type { PromptSkillContent } from "./components/prompt-skill-editor.js";
 
 export type ComposerCommandDraftMode = "feedback" | "subtask";
 
+export type QueuedComposerPrompt = Readonly<{
+  files: readonly PromptInputAttachment[];
+  id: string;
+  skills: readonly AgentSkill[];
+  text: string;
+}>;
+
 export type ComposerDraft = Readonly<{
   attachments: readonly PromptInputAttachment[];
   commandDraftMode: ComposerCommandDraftMode | null;
   content: PromptSkillContent;
+  queuedPrompts: readonly QueuedComposerPrompt[];
 }>;
 
 const emptyComposerDraft: ComposerDraft = {
   attachments: [],
   commandDraftMode: null,
   content: [],
+  queuedPrompts: [],
 };
 
 type ComposerDraftStore = Readonly<{
   clear: (scope: string) => void;
+  dispose: () => void;
   read: (scope: string) => ComposerDraft;
   update: (scope: string, update: (draft: ComposerDraft) => ComposerDraft) => void;
 }>;
@@ -39,67 +42,76 @@ export function createComposerDraftScope(projectId: string, taskId?: string): st
 
 function isEmptyComposerDraft(draft: ComposerDraft): boolean {
   return (
-    draft.content.length === 0 && draft.attachments.length === 0 && draft.commandDraftMode === null
+    draft.content.length === 0 &&
+    draft.attachments.length === 0 &&
+    draft.commandDraftMode === null &&
+    draft.queuedPrompts.length === 0
   );
 }
 
+function draftPreviewUrls(draft: ComposerDraft): readonly string[] {
+  return [
+    ...draft.attachments.map((attachment) => attachment.previewUrl),
+    ...draft.queuedPrompts.flatMap((prompt) =>
+      prompt.files.map((attachment) => attachment.previewUrl),
+    ),
+  ];
+}
+
 function revokeDraftPreviews(draft: ComposerDraft) {
-  for (const attachment of draft.attachments) {
-    if (attachment.previewUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(attachment.previewUrl);
+  for (const previewUrl of new Set(draftPreviewUrls(draft))) {
+    if (previewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
     }
   }
 }
 
 function revokeRemovedDraftPreviews(previousDraft: ComposerDraft, nextDraft: ComposerDraft) {
-  const retainedPreviewUrls = new Set(
-    nextDraft.attachments.map((attachment) => attachment.previewUrl),
-  );
-  for (const attachment of previousDraft.attachments) {
-    if (
-      !retainedPreviewUrls.has(attachment.previewUrl) &&
-      attachment.previewUrl.startsWith("blob:")
-    ) {
-      URL.revokeObjectURL(attachment.previewUrl);
+  const retainedPreviewUrls = new Set(draftPreviewUrls(nextDraft));
+  for (const previewUrl of new Set(draftPreviewUrls(previousDraft))) {
+    if (!retainedPreviewUrls.has(previewUrl) && previewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
     }
   }
 }
 
-export function ComposerDraftProvider({ children }: Readonly<{ children: ReactNode }>) {
-  const draftsRef = useRef(new Map<string, ComposerDraft>());
-  const read = useCallback(
-    (scope: string) => draftsRef.current.get(scope) ?? emptyComposerDraft,
-    [],
-  );
-  const clear = useCallback((scope: string) => {
-    const draft = draftsRef.current.get(scope);
+export function createComposerDraftStore(): ComposerDraftStore {
+  const drafts = new Map<string, ComposerDraft>();
+  const read = (scope: string) => drafts.get(scope) ?? emptyComposerDraft;
+  const clear = (scope: string) => {
+    const draft = drafts.get(scope);
     if (draft !== undefined) {
       revokeDraftPreviews(draft);
-      draftsRef.current.delete(scope);
+      drafts.delete(scope);
     }
-  }, []);
-  const update = useCallback(
-    (scope: string, applyUpdate: (draft: ComposerDraft) => ComposerDraft) => {
-      const previousDraft = read(scope);
-      const nextDraft = applyUpdate(previousDraft);
-      revokeRemovedDraftPreviews(previousDraft, nextDraft);
-      if (isEmptyComposerDraft(nextDraft)) {
-        draftsRef.current.delete(scope);
-      } else {
-        draftsRef.current.set(scope, nextDraft);
-      }
-    },
-    [read],
-  );
-  const store = useMemo<ComposerDraftStore>(() => ({ clear, read, update }), [clear, read, update]);
+  };
+  const update = (scope: string, applyUpdate: (draft: ComposerDraft) => ComposerDraft) => {
+    const previousDraft = read(scope);
+    const nextDraft = applyUpdate(previousDraft);
+    revokeRemovedDraftPreviews(previousDraft, nextDraft);
+    if (isEmptyComposerDraft(nextDraft)) {
+      drafts.delete(scope);
+    } else {
+      drafts.set(scope, nextDraft);
+    }
+  };
+  const dispose = () => {
+    drafts.forEach(revokeDraftPreviews);
+    drafts.clear();
+  };
+  return { clear, dispose, read, update };
+}
+
+export function ComposerDraftProvider({ children }: Readonly<{ children: ReactNode }>) {
+  const storeRef = useRef(createComposerDraftStore());
+  const store = storeRef.current;
 
   useEffect(
     () => () => {
-      // Provider 生命周期结束时统一释放仍由草稿持有的附件预览。
-      draftsRef.current.forEach(revokeDraftPreviews);
-      draftsRef.current.clear();
+      // Provider 生命周期结束时统一释放仍由草稿或队列持有的附件预览。
+      store.dispose();
     },
-    [],
+    [store],
   );
 
   return <ComposerDraftContext.Provider value={store}>{children}</ComposerDraftContext.Provider>;

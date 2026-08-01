@@ -64,6 +64,7 @@ export type CodeAgentMutationClient = Pick<
   | "startReview"
   | "startTask"
   | "startTurn"
+  | "steerTurn"
   | "uploadAttachment"
   | "uploadFeedback"
 >;

@@ -265,7 +265,14 @@ describe("project queries", () => {
           provider: "codex",
           skills: { list: true, use: true },
           tasks: { fork: true, list: true, read: true, start: true },
-          turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+          turns: {
+            compact: true,
+            interrupt: true,
+            review: true,
+            rollback: true,
+            start: true,
+            steer: true,
+          },
         }),
       ),
       getProjectDefaults: vi.fn(() =>
@@ -305,7 +312,14 @@ describe("project queries", () => {
     await expect(queryClient.fetchQuery(capabilitiesQueryOptions(client))).resolves.toMatchObject({
       feedback: { upload: true },
       tasks: { fork: true, start: true },
-      turns: { compact: true, interrupt: true, review: true, rollback: true, start: true },
+      turns: {
+        compact: true,
+        interrupt: true,
+        review: true,
+        rollback: true,
+        start: true,
+        steer: true,
+      },
     });
     await expect(queryClient.fetchQuery(modelsQueryOptions(client))).resolves.toMatchObject({
       data: [{ id: "gpt-5.6-sol", isDefault: true }],
