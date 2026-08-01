@@ -2740,13 +2740,15 @@ export async function createCodeAgentServer(
         return;
       }
 
+      // checkpoint getter 会同步冲刷待发送增量，必须在注册连接监听器前读取。
+      const checkpoint = eventStream.checkpoint;
       // 同步建立实时订阅并挂载清理回调，避免补发与实时事件之间出现空窗。
       unsubscribe = eventStream.subscribe((event) => {
         send(event);
       });
       send({
-        latestSequence: eventStream.checkpoint.sequence,
-        sessionId: eventStream.checkpoint.sessionId,
+        latestSequence: checkpoint.sequence,
+        sessionId: checkpoint.sessionId,
         type: "connection.ready",
         version: 2,
       });

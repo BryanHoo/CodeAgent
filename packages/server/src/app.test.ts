@@ -23,6 +23,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createCodeAgentServer } from "./app.js";
+import { AgentEventStream } from "./agent-event-stream.js";
 
 const project = {
   createdAt: "2026-07-23T00:00:00.000Z",
@@ -2435,6 +2436,52 @@ describe("CodeAgent Server", () => {
       ],
       version: 1,
     });
+    socket.terminate();
+  });
+
+  it("sends connection.ready before a delta queued during WebSocket initialization", async () => {
+    const { app } = await createHarness();
+    const messages: unknown[] = [];
+    const subscribeSpy = vi
+      .spyOn(AgentEventStream.prototype, "subscribe")
+      .mockImplementationOnce(function (this: AgentEventStream, listener) {
+        subscribeSpy.mockRestore();
+        const unsubscribe = this.subscribe(listener);
+        // 在监听器就绪后同步排入增量，触发初始化期间的 checkpoint flush 竞态。
+        this.publish({
+          itemId: "item-race",
+          payload: { delta: "初始化增量" },
+          taskId: "task-1",
+          turnId: "turn-1",
+          type: "message.delta",
+        });
+        return unsubscribe;
+      });
+
+    let socket: Awaited<ReturnType<typeof app.injectWS>> | undefined;
+    try {
+      socket = await app.injectWS(
+        "/v1/projects/code-agent/events?afterSequence=0",
+        { headers: { host: "127.0.0.1:3210", origin: "http://127.0.0.1:3210" } },
+        {
+          onInit(webSocket) {
+            webSocket.on("message", (data: { toString(): string }) => {
+              messages.push(JSON.parse(data.toString()) as unknown);
+            });
+          },
+        },
+      );
+    } finally {
+      subscribeSpy.mockRestore();
+    }
+
+    await vi.waitFor(() => {
+      expect(messages).toHaveLength(2);
+    });
+    expect(messages).toMatchObject([
+      { latestSequence: 0, type: "connection.ready" },
+      { payload: { delta: "初始化增量" }, sequence: 1, type: "message.delta" },
+    ]);
     socket.terminate();
   });
 
