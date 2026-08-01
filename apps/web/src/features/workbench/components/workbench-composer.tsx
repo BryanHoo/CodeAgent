@@ -92,6 +92,20 @@ export type ApprovalMode = AgentApprovalPolicy | "auto-review";
 export const LARGE_PASTE_CHARACTER_THRESHOLD = 1_000;
 export const PASTED_TEXT_ATTACHMENT_NAME = "Pasted text.txt";
 
+export function resolveComposerPlaceholder(
+  commandDraftMode: ComposerCommandDraftMode | null,
+  taskId: string | undefined,
+): string {
+  // 命令草稿需要优先说明当前输入目标，普通草稿再按任务上下文提示。
+  if (commandDraftMode === "feedback") {
+    return "输入关于此任务的反馈";
+  }
+  if (commandDraftMode === "subtask") {
+    return "描述需要交给子代理的任务";
+  }
+  return taskId === undefined ? "告诉 CodeAgent 你想完成什么" : "输入后续要求";
+}
+
 export type IdempotencyAttempt = Readonly<{
   fingerprint: string;
   key: string;
@@ -1494,15 +1508,7 @@ export function WorkbenchComposer({
                   selectActiveCommandItem();
                 }
               }}
-              placeholder={
-                commandDraftMode === "feedback"
-                  ? "输入关于此任务的反馈"
-                  : commandDraftMode === "subtask"
-                    ? "描述需要交给子代理的任务"
-                    : taskId === undefined
-                      ? "描述一个新任务"
-                      : "继续这个任务"
-              }
+              placeholder={resolveComposerPlaceholder(commandDraftMode, taskId)}
               ref={skillEditorRef}
               scope={composerScope}
             />

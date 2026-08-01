@@ -3342,7 +3342,7 @@ test("queues follow-up messages and can steer or cancel them during an active tu
   await page.getByRole("button", { exact: true, name: "提交" }).click();
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-action-\d+$/u);
   await expect(page.getByRole("button", { name: "停止" })).toBeVisible();
-  await expect(input).toHaveAttribute("data-placeholder", "继续这个任务");
+  await expect(input).toHaveAttribute("data-placeholder", "输入后续要求");
 
   let steerPayload: unknown;
   await page.route("**/v1/projects/code-agent/tasks/*/turns/*/steer", async (route) => {

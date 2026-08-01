@@ -12,6 +12,7 @@ import {
   resolveIdempotencyAttempt,
   resolveActiveTurnId,
   resolveComposerSubmitAction,
+  resolveComposerPlaceholder,
   resolveReasoningEffort,
   startPromptTurn,
   startTaskReview,
@@ -57,6 +58,13 @@ const turn = {
 };
 
 describe("WorkbenchComposer", () => {
+  it("uses concise placeholders for new and existing tasks", () => {
+    expect(resolveComposerPlaceholder(null, undefined)).toBe("告诉 CodeAgent 你想完成什么");
+    expect(resolveComposerPlaceholder(null, "task-1")).toBe("输入后续要求");
+    expect(resolveComposerPlaceholder("feedback", "task-1")).toBe("输入关于此任务的反馈");
+    expect(resolveComposerPlaceholder("subtask", "task-1")).toBe("描述需要交给子代理的任务");
+  });
+
   it("uses the official large-paste threshold and attachment name", () => {
     expect(LARGE_PASTE_CHARACTER_THRESHOLD).toBe(1_000);
     expect(PASTED_TEXT_ATTACHMENT_NAME).toBe("Pasted text.txt");

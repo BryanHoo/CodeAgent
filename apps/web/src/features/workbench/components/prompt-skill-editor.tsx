@@ -483,7 +483,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
           {...props}
           aria-disabled={disabled || undefined}
           aria-multiline="true"
-          className={`max-h-40 min-h-12 w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-1 py-1 text-sm leading-5 text-foreground outline-none before:pointer-events-none before:text-muted-foreground data-[empty=true]:before:content-[attr(data-placeholder)] ${disabled ? "cursor-not-allowed opacity-60" : ""} ${className}`}
+          className={`max-h-40 min-h-12 w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-1 py-1 text-sm leading-5 text-foreground outline-none before:pointer-events-none before:text-muted-foreground/60 data-[empty=true]:before:content-[attr(data-placeholder)] ${disabled ? "cursor-not-allowed opacity-60" : ""} ${className}`}
           contentEditable={!disabled}
           data-empty={content.length === 0}
           data-placeholder={placeholder}
