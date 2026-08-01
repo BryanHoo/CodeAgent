@@ -1213,7 +1213,7 @@ describe("CodeAgent Server", () => {
     const uploadRequest = {
       headers: { "idempotency-key": "upload-1" },
       method: "POST" as const,
-      payload: { dataUrl: pixelDataUrl, name: "screen.png" },
+      payload: { dataUrl: pixelDataUrl, kind: "image", name: "screen.png" },
       url: "/v1/projects/code-agent/attachments",
     };
     const uploaded = await app.inject(uploadRequest);
@@ -1261,7 +1261,7 @@ describe("CodeAgent Server", () => {
     expect(uploaded.statusCode).toBe(201);
     expect(repeatedUpload.json()).toEqual(uploaded.json());
     expect(uploaded.json()).toMatchObject({
-      attachment: { mediaType: "image/png", name: "screen.png", size: 68 },
+      attachment: { kind: "image", mediaType: "image/png", name: "screen.png", size: 68 },
     });
     expect(turn.statusCode).toBe(201);
     expect(invalidTurn.statusCode).toBe(400);
@@ -1270,6 +1270,7 @@ describe("CodeAgent Server", () => {
     expect(startTurn).toHaveBeenCalledWith(
       "task-1",
       {
+        files: [],
         images: [{ mediaType: "image/png", url: pixelDataUrl }],
         skills: [],
         text: "",
@@ -1286,7 +1287,7 @@ describe("CodeAgent Server", () => {
     const uploaded = await app.inject({
       headers: { "idempotency-key": "upload-pasted-text" },
       method: "POST",
-      payload: { dataUrl: pastedTextDataUrl, name: "Pasted text.txt" },
+      payload: { dataUrl: pastedTextDataUrl, kind: "text", name: "Pasted text.txt" },
       url: "/v1/projects/code-agent/attachments",
     });
     const attachment = uploaded.json<{ attachment: { id: string } }>().attachment;
@@ -1303,12 +1304,18 @@ describe("CodeAgent Server", () => {
 
     expect(uploaded.statusCode).toBe(201);
     expect(uploaded.json()).toMatchObject({
-      attachment: { mediaType: "text/plain", name: "Pasted text.txt", size: 16 },
+      attachment: {
+        kind: "text",
+        mediaType: "text/plain",
+        name: "Pasted text.txt",
+        size: 16,
+      },
     });
     expect(turn.statusCode).toBe(201);
     expect(startTurn).toHaveBeenCalledWith(
       "task-1",
       {
+        files: [],
         images: [],
         skills: [],
         text: "",
@@ -1784,12 +1791,13 @@ describe("CodeAgent Server", () => {
     expect(turn.json()).toMatchObject({ taskId: "task-1", turn: { id: "turn-1" } });
     expect(startTurn).toHaveBeenCalledWith(
       "task-1",
-      { images: [], skills: [], text: "继续实现", textAttachments: [] },
+      { files: [], images: [], skills: [], text: "继续实现", textAttachments: [] },
       turnOptions,
     );
     expect(steered.statusCode).toBe(202);
     expect(steered.json()).toEqual({ status: "accepted", taskId: "task-1", turnId: "turn-1" });
     expect(steerTurn).toHaveBeenCalledWith("task-1", "turn-1", {
+      files: [],
       images: [],
       skills: [],
       text: "优先修复测试",
@@ -2221,13 +2229,13 @@ describe("CodeAgent Server", () => {
     expect(startTurn).toHaveBeenNthCalledWith(
       1,
       "task:a",
-      { images: [], skills: [], text: payload.input.text, textAttachments: [] },
+      { files: [], images: [], skills: [], text: payload.input.text, textAttachments: [] },
       payload.options,
     );
     expect(startTurn).toHaveBeenNthCalledWith(
       2,
       "task:a:b",
-      { images: [], skills: [], text: payload.input.text, textAttachments: [] },
+      { files: [], images: [], skills: [], text: payload.input.text, textAttachments: [] },
       payload.options,
     );
   });

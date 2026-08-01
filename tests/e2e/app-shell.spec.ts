@@ -1210,7 +1210,7 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   const composerForm = page.getByRole("region", { name: "Composer" }).locator("form");
   const composerControls = [
     prompt,
-    page.getByRole("button", { name: "添加图片" }),
+    page.getByRole("button", { name: "添加图片或文件" }),
     ...compactSelects,
   ];
   for (const control of composerControls) {
@@ -1946,6 +1946,7 @@ test("converts large pasted text into a submitted file attachment", async ({ pag
       json: {
         attachment: {
           id: "attachment-pasted-text",
+          kind: "text",
           mediaType: "text/plain",
           name: "Pasted text.txt",
           size: 1_001,
@@ -2000,6 +2001,7 @@ test("converts large pasted text into a submitted file attachment", async ({ pag
 
   expect(uploadBody).toMatchObject({
     dataUrl: expect.stringMatching(/^data:text\/plain;base64,/u),
+    kind: "text",
     name: "Pasted text.txt",
   });
   expect(turnBody).toMatchObject({
@@ -2023,6 +2025,7 @@ test("submits attachments, approval policy, model, and reasoning effort through 
       json: {
         attachment: {
           id: "attachment-1",
+          kind: "image",
           mediaType: "image/png",
           name: "screen.png",
           size: 68,
@@ -2068,7 +2071,8 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   await approvalSelect.selectOption("auto-review");
   await sandboxSelect.selectOption("danger-full-access");
   const chooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "添加图片" }).click();
+  await page.getByRole("button", { name: "添加图片或文件" }).click();
+  await page.getByRole("menuitem", { name: "添加图片" }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
     buffer: Buffer.from(
@@ -2095,6 +2099,7 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   await expect(page.locator('[data-message-skill="documentation-writer"]')).toBeVisible();
   expect(uploadBody).toMatchObject({
     dataUrl: expect.stringMatching(/^data:image\/png;base64,/),
+    kind: "image",
     name: "screen.png",
   });
   expect(turnBody).toEqual({
@@ -2113,6 +2118,73 @@ test("submits attachments, approval policy, model, and reasoning effort through 
       model: "gpt-5.6-terra",
       reasoningEffort: "low",
       sandboxMode: "danger-full-access",
+    },
+  });
+});
+
+test("selects and submits an official file input as an attachment", async ({ page }) => {
+  let uploadBody: unknown;
+  let turnBody: unknown;
+  await page.route("**/v1/projects/code-agent/attachments", async (route) => {
+    uploadBody = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        attachment: {
+          id: "attachment-pdf",
+          kind: "file",
+          mediaType: "application/pdf",
+          name: "specification.pdf",
+          size: 8,
+        },
+      },
+      status: 201,
+    });
+  });
+  await page.route("**/v1/projects/code-agent/tasks/task-1/turns", async (route) => {
+    turnBody = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        taskId: "task-1",
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "turn-file-attachment",
+          items: [],
+          startedAt: "2026-08-02T00:00:00.000Z",
+          status: "running",
+        },
+      },
+      status: 201,
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "添加图片或文件" }).click();
+  await page.getByRole("menuitem", { name: "添加文件" }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    buffer: Buffer.from("%PDF-1.4"),
+    mimeType: "application/pdf",
+    name: "specification.pdf",
+  });
+  await expect(page.getByText("specification.pdf", { exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: "任务输入" }).fill("总结附件");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await expect.poll(() => turnBody).not.toBeUndefined();
+
+  expect(uploadBody).toMatchObject({
+    dataUrl: expect.stringMatching(/^data:application\/pdf;base64,/u),
+    kind: "file",
+    name: "specification.pdf",
+  });
+  expect(turnBody).toMatchObject({
+    input: {
+      attachments: [{ id: "attachment-pdf" }],
+      text: "总结附件",
+      type: "prompt",
     },
   });
 });
@@ -2401,7 +2473,8 @@ test("stores composer drafts independently between task routes", async ({ page }
   await page.goto("/p/code-agent/t/task-1");
   await page.getByRole("textbox", { name: "任务输入" }).fill("只属于 Task A 的草稿");
   const chooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "添加图片" }).click();
+  await page.getByRole("button", { name: "添加图片或文件" }).click();
+  await page.getByRole("menuitem", { name: "添加图片" }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
     buffer: Buffer.from(
@@ -3554,6 +3627,7 @@ test("preserves the prompt draft when submission fails", async ({ page }) => {
       json: {
         attachment: {
           id: "attachment-preserved",
+          kind: "image",
           mediaType: "image/png",
           name: "preserved.png",
           size: 68,
@@ -3576,7 +3650,8 @@ test("preserves the prompt draft when submission fails", async ({ page }) => {
   await page.goto("/p/code-agent");
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   const chooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "添加图片" }).click();
+  await page.getByRole("button", { name: "添加图片或文件" }).click();
+  await page.getByRole("menuitem", { name: "添加图片" }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
     buffer: Buffer.from(
@@ -3924,7 +3999,8 @@ test("stores new-chat text and attachments independently between projects", asyn
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   await prompt.fill("保留这段新聊天草稿");
   const chooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "添加图片" }).click();
+  await page.getByRole("button", { name: "添加图片或文件" }).click();
+  await page.getByRole("menuitem", { name: "添加图片" }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({
     buffer: Buffer.from(

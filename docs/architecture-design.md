@@ -442,7 +442,7 @@ POST /v1/projects/:projectId/tasks/:taskId/feedback
 
 所有写请求必须携带非空 `Idempotency-Key`。Server 以操作、资源和 Key 共同确定幂等范围：相同 Payload 复用进行中或成功结果，不同 Payload 返回 `IDEMPOTENCY_CONFLICT`，失败结果允许同 Key 重试。
 
-新上传图片先进入有容量和过期时间限制的 Server Store，浏览器只获得随机附件 ID。Turn 启动前由 Server 将 ID 解析为 Provider Data URL 输入；成功后消费引用，失败时保留引用供重试。历史图片采用独立的 Provider 授权记录，Task Snapshot 只返回 `{ id, mediaType, name, size }`；浏览器通过 Project/Task 作用域 GET 端点按需读取二进制，Server 不再次重建 Snapshot，也不暴露 Codex 本地路径。`GET /v1/models` 直接映射 Provider 模型目录及其默认、可用思考量，页面不得把硬编码模型或思考量作为成功态数据。`GET /v1/projects/:projectId/skills` 返回当前 Project 的统一 Skill 目录，只包含不透明 ID 和展示元数据；原生路径不得进入 HTTP 契约。
+新上传图片、文件与生成文本先进入有容量和过期时间限制的 Server Store，浏览器只获得随机附件 ID。Turn 启动前由 Server 将图片解析为 Provider Data URL、将普通文件解析为 Runtime 隔离临时路径；Provider 分别映射为 Codex `image` 与 `mention`。成功后消费图片和文本引用，普通文件保留到 Turn 终态，失败时保留引用供重试。历史图片采用独立的 Provider 授权记录，Task Snapshot 只返回 `{ id, mediaType, name, size }`；浏览器通过 Project/Task 作用域 GET 端点按需读取二进制，Server 不再次重建 Snapshot，也不暴露 Codex 本地路径。`GET /v1/models` 直接映射 Provider 模型目录及其默认、可用思考量，页面不得把硬编码模型或思考量作为成功态数据。`GET /v1/projects/:projectId/skills` 返回当前 Project 的统一 Skill 目录，只包含不透明 ID 和展示元数据；原生路径不得进入 HTTP 契约。
 
 `turn/interrupt` 只返回 `{ status: "interrupting", taskId, turnId }`；Turn 是否真正中断由后续 `turn.completed` 事件决定。错误统一映射为 Protocol 定义的 `{ code, message, retryable }`，不得向 Web 暴露原生 RPC 细节。
 
@@ -691,11 +691,11 @@ turn id -> runtime state
 | `interruptTurn` | `turn/interrupt`  |
 | `startReview`   | `review/start`    |
 
-`startTurn` 将统一 Prompt 映射为 Codex `UserInput[]`：已选择 Skill 使用 `{ type: "skill", name, path }`，非空文本使用 `text`，Server 已验证的图片 Data URL 使用 `image`。Skill 目录由 Project Provider 调用 `skills/list { cwds: [project.rootPath] }` 获取；Web 只接收稳定不透明 ID，Provider 在提交时重新验证 ID 与名称并解析原生绝对路径。统一 `model`、`reasoningEffort`、`approvalPolicy` 和 `approvalsReviewer` 分别映射为 Codex `model`、`effort`、`approvalPolicy` 和 `approvalsReviewer`，不向 Web 暴露其他原生字段。自动审批固定映射为 `approvalPolicy: "on-request"` 与 `approvalsReviewer: "auto_review"`；`never` 只表示从不询问，不能替代自动审核。
+`startTurn` 将统一 Prompt 映射为 Codex `UserInput[]`：已选择 Skill 使用 `{ type: "skill", name, path }`，非空文本使用 `text`，Server 已验证的图片 Data URL 使用 `image`，受控临时文件使用 `{ type: "mention", name, path }`。Skill 目录由 Project Provider 调用 `skills/list { cwds: [project.rootPath] }` 获取；Web 只接收稳定不透明 ID，Provider 在提交时重新验证 ID 与名称并解析原生绝对路径。统一 `model`、`reasoningEffort`、`approvalPolicy` 和 `approvalsReviewer` 分别映射为 Codex `model`、`effort`、`approvalPolicy` 和 `approvalsReviewer`，不向 Web 暴露其他原生字段。自动审批固定映射为 `approvalPolicy: "on-request"` 与 `approvalsReviewer: "auto_review"`；`never` 只表示从不询问，不能替代自动审核。
 
 `startReview` 在调用 `review/start` 前记录统一 `AgentReviewTarget`，将响应、实时通知和历史 Snapshot 中的 `enteredReviewMode` 归一为稳定的 `AgentReviewItem`，并过滤 Codex 自动生成的内部 `userMessage` Review Prompt。Web 只根据结构化 Target 生成固定审查请求文案，不展示或复制 Provider 原生 Prompt。
 
-`readTask` 映射 Codex 历史 `image` 与 `localImage` 时只写入随机附件 ID、媒体类型、名称和字节数。Provider 历史附件 Store 默认最多保留 `128` 个条目、合计 `64 MiB`、TTL `30` 分钟；本地图片只读取固定长度签名头，完整正文延迟到 `readTaskAttachment`，并在交付前复验文件身份和内容签名。Snapshot 重建与 `unsubscribeTask` 都清理对应 Task 的旧授权记录。
+`readTask` 映射 Codex 历史 `image` 与 `localImage` 时只写入随机附件 ID、媒体类型、名称和字节数。Provider 历史附件 Store 默认最多保留 `1,500` 个条目、合计 `512 MiB`、TTL `30` 分钟；本地图片只读取固定长度签名头，完整正文延迟到 `readTaskAttachment`，并在交付前复验文件身份和内容签名。Snapshot 重建与 `unsubscribeTask` 都清理对应 Task 的旧授权记录。
 
 ### 11.5 事件映射
 

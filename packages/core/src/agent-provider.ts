@@ -26,6 +26,11 @@ export type ListAgentTasksInput = Readonly<{
 }>;
 
 export type AgentProviderTurnInput = Readonly<{
+  files: readonly Readonly<{
+    mediaType: string;
+    name: string;
+    path: string;
+  }>[];
   images: readonly Readonly<{
     mediaType: AgentImageMediaType;
     url: string;

@@ -1,4 +1,4 @@
-import { ArrowUp, LoaderCircle, Paperclip, Plus, Square } from "lucide-react";
+import { ArrowUp, FilePlus2, ImagePlus, LoaderCircle, Paperclip, Plus, Square } from "lucide-react";
 import {
   createContext,
   forwardRef,
@@ -13,7 +13,7 @@ import {
   type ChangeEvent,
   type FormHTMLAttributes,
   type HTMLAttributes,
-  type KeyboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type SelectHTMLAttributes,
   type SubmitEvent,
   type TextareaHTMLAttributes,
@@ -29,15 +29,17 @@ export type PromptInputMessage = Readonly<{
 }>;
 
 type PromptInputError = Readonly<{
-  code: "file_too_large" | "invalid_file_type" | "too_many_files";
+  code: "file_too_large" | "invalid_file_type" | "too_many_images" | "total_size_exceeded";
   message: string;
 }>;
+
+type PromptInputAttachmentKind = "file" | "image";
 
 type PromptInputAttachmentsContextValue = Readonly<{
   clear: () => void;
   disabled: boolean;
   files: readonly PromptInputAttachment[];
-  openFileDialog: () => void;
+  openFileDialog: (kind: PromptInputAttachmentKind) => void;
   remove: (id: string) => void;
 }>;
 
@@ -54,12 +56,15 @@ export function usePromptInputAttachments() {
 }
 
 type PromptInputProps = Omit<FormHTMLAttributes<HTMLFormElement>, "onError" | "onSubmit"> & {
-  accept?: string;
   attachments?: readonly PromptInputAttachment[];
   disabled?: boolean;
+  fileAccept?: string;
   globalDrop?: boolean;
-  maxFiles?: number;
+  imageAccept?: string;
+  maxFileTotalSize?: number;
   maxFileSize?: number;
+  maxImages?: number;
+  maxImageTotalSize?: number;
   multiple?: boolean;
   largePasteCharacterThreshold?: number;
   onAttachmentsChange?: (files: readonly PromptInputAttachment[]) => void;
@@ -96,6 +101,9 @@ function acceptsFile(file: File, accept: string | undefined): boolean {
   }
   return accept.split(",").some((value) => {
     const rule = value.trim();
+    if (rule.startsWith(".")) {
+      return file.name.toLowerCase().endsWith(rule.toLowerCase());
+    }
     return rule.endsWith("/*") ? file.type.startsWith(rule.slice(0, -1)) : file.type === rule;
   });
 }
@@ -107,15 +115,18 @@ function revokePreview(attachment: PromptInputAttachment) {
 }
 
 export function PromptInput({
-  accept,
   attachments,
   children,
   className = "",
   disabled = false,
+  fileAccept,
   globalDrop = false,
+  imageAccept,
   largePasteCharacterThreshold = Number.POSITIVE_INFINITY,
-  maxFiles = Number.POSITIVE_INFINITY,
+  maxFileTotalSize = Number.POSITIVE_INFINITY,
   maxFileSize = Number.POSITIVE_INFINITY,
+  maxImages = Number.POSITIVE_INFINITY,
+  maxImageTotalSize = Number.POSITIVE_INFINITY,
   multiple = false,
   onAttachmentsChange,
   onError,
@@ -130,7 +141,8 @@ export function PromptInput({
   const files = attachments ?? internalFiles;
   const filesRef = useRef(files);
   const controlledRef = useRef(attachments !== undefined);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const previousResetKeyRef = useRef(resetKey);
   filesRef.current = files;
   controlledRef.current = attachments !== undefined;
@@ -153,40 +165,80 @@ export function PromptInput({
           return current;
         }
         const accepted: PromptInputAttachment[] = [];
-        const maximum = Math.min(maxFiles, multiple ? Number.POSITIVE_INFINITY : 1);
-        const available = Math.max(0, maximum - current.length);
-        let limitExceeded = false;
+        let imageCount = current.filter((file) => file.kind === "image").length;
+        let imageBytes = current.reduce(
+          (total, file) => total + (file.kind === "image" ? file.size : 0),
+          0,
+        );
+        let fileBytes = current.reduce(
+          (total, file) => total + (file.kind === "image" ? 0 : file.size),
+          0,
+        );
 
         // 逐个校验后再占用容量，避免一个非法文件挤掉后续合法文件。
         for (const file of incoming) {
-          if (!allowGeneratedText && !acceptsFile(file, accept)) {
+          const kind = allowGeneratedText
+            ? "text"
+            : acceptsFile(file, imageAccept)
+              ? "image"
+              : "file";
+          const acceptedByType =
+            kind === "text" ||
+            (kind === "image" ? acceptsFile(file, imageAccept) : acceptsFile(file, fileAccept));
+          if (!acceptedByType) {
             onError?.({ code: "invalid_file_type", message: `${file.name} 的文件类型不受支持` });
             continue;
           }
-          if (file.size > maxFileSize) {
+          if (kind !== "image" && file.size > maxFileSize) {
             onError?.({ code: "file_too_large", message: `${file.name} 超过大小限制` });
             continue;
           }
-          if (accepted.length >= available) {
-            limitExceeded = true;
+          if (kind === "image" && imageCount >= maxImages) {
+            onError?.({ code: "too_many_images", message: `最多添加 ${String(maxImages)} 张图片` });
+            continue;
+          }
+          if (kind === "image" && imageBytes + file.size > maxImageTotalSize) {
+            onError?.({ code: "total_size_exceeded", message: "图片总大小超过限制" });
+            continue;
+          }
+          if (kind !== "image" && fileBytes + file.size > maxFileTotalSize) {
+            onError?.({ code: "total_size_exceeded", message: "附件总大小超过限制" });
             continue;
           }
           accepted.push({
             file,
             id: globalThis.crypto.randomUUID(),
+            kind,
             mediaType: file.type,
             name: file.name,
             previewUrl: URL.createObjectURL(file),
             size: file.size,
           });
-        }
-        if (limitExceeded) {
-          onError?.({ code: "too_many_files", message: `最多添加 ${String(maximum)} 个附件` });
+          if (kind === "image") {
+            imageCount += 1;
+            imageBytes += file.size;
+          } else {
+            fileBytes += file.size;
+          }
+          if (!multiple) {
+            break;
+          }
         }
         return [...current, ...accepted];
       });
     },
-    [accept, disabled, maxFileSize, maxFiles, multiple, onError, updateFiles],
+    [
+      disabled,
+      fileAccept,
+      imageAccept,
+      maxFileSize,
+      maxFileTotalSize,
+      maxImages,
+      maxImageTotalSize,
+      multiple,
+      onError,
+      updateFiles,
+    ],
   );
 
   const clear = useCallback(() => {
@@ -194,9 +246,8 @@ export function PromptInput({
       current.forEach(revokePreview);
       return [];
     });
-    if (inputRef.current !== null) {
-      inputRef.current.value = "";
-    }
+    if (fileInputRef.current !== null) fileInputRef.current.value = "";
+    if (imageInputRef.current !== null) imageInputRef.current.value = "";
   }, [updateFiles]);
 
   useLayoutEffect(() => {
@@ -266,9 +317,9 @@ export function PromptInput({
       clear,
       disabled,
       files,
-      openFileDialog: () => {
+      openFileDialog: (kind) => {
         if (!disabled) {
-          inputRef.current?.click();
+          (kind === "image" ? imageInputRef : fileInputRef).current?.click();
         }
       },
       remove,
@@ -281,7 +332,7 @@ export function PromptInput({
       <form
         {...props}
         aria-disabled={disabled || undefined}
-        className={`overflow-hidden rounded-surface border border-transparent bg-raised shadow-floating transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-focus ${className}`}
+        className={`overflow-visible rounded-surface border border-transparent bg-raised shadow-floating transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-focus ${className}`}
         data-prompt-input=""
         onPasteCapture={(event) => {
           onPasteCapture?.(event);
@@ -319,7 +370,7 @@ export function PromptInput({
         }}
       >
         <input
-          accept={accept}
+          accept={imageAccept}
           className="sr-only"
           disabled={disabled}
           multiple={multiple}
@@ -327,7 +378,20 @@ export function PromptInput({
             addFiles([...(event.currentTarget.files ?? [])]);
             event.currentTarget.value = "";
           }}
-          ref={inputRef}
+          ref={imageInputRef}
+          tabIndex={-1}
+          type="file"
+        />
+        <input
+          accept={fileAccept}
+          className="sr-only"
+          disabled={disabled}
+          multiple={multiple}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => {
+            addFiles([...(event.currentTarget.files ?? [])]);
+            event.currentTarget.value = "";
+          }}
+          ref={fileInputRef}
           tabIndex={-1}
           type="file"
         />
@@ -458,7 +522,7 @@ export const PromptInputTextarea = forwardRef<HTMLTextAreaElement, PromptInputTe
       <textarea
         className={`max-h-40 min-h-12 w-full resize-none bg-transparent px-1 py-1 text-sm leading-5 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed ${className}`}
         name={name}
-        onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+        onKeyDown={(event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
           onKeyDown?.(event);
           if (
             !event.defaultPrevented &&
@@ -482,25 +546,78 @@ type PromptInputActionAddAttachmentsProps = PromptInputButtonProps & { label?: s
 
 export function PromptInputActionAddAttachments({
   children,
-  label = "添加附件",
+  label = "添加图片或文件",
   onClick,
   ...props
 }: PromptInputActionAddAttachmentsProps) {
   const attachments = usePromptInputAttachments();
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const disabled = props.disabled === true || attachments.disabled;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOutside = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
   return (
-    <PromptInputButton
-      {...props}
-      aria-label={label}
-      onClick={(event) => {
-        onClick?.(event);
-        if (!event.defaultPrevented) {
-          attachments.openFileDialog();
-        }
-      }}
-      title={label}
-    >
-      {children ?? <Paperclip className="size-3.5" aria-hidden="true" />}
-    </PromptInputButton>
+    <div className="relative" ref={menuRef}>
+      <PromptInputButton
+        {...props}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={label}
+        disabled={disabled}
+        onClick={(event) => {
+          onClick?.(event);
+          if (!event.defaultPrevented) setOpen((current) => !current);
+        }}
+        title={label}
+      >
+        {children ?? <Paperclip className="size-3.5" aria-hidden="true" />}
+      </PromptInputButton>
+      <div
+        className="absolute bottom-9 left-0 z-50 min-w-36 rounded-control border border-separator-strong bg-raised p-1 shadow-floating"
+        hidden={!open}
+        role="menu"
+      >
+        <button
+          className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-left text-label text-foreground hover:bg-control-hover"
+          onClick={() => {
+            setOpen(false);
+            attachments.openFileDialog("image");
+          }}
+          role="menuitem"
+          type="button"
+        >
+          <ImagePlus aria-hidden="true" className="size-4 text-muted-foreground" />
+          添加图片
+        </button>
+        <button
+          className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-left text-label text-foreground hover:bg-control-hover"
+          onClick={() => {
+            setOpen(false);
+            attachments.openFileDialog("file");
+          }}
+          role="menuitem"
+          type="button"
+        >
+          <FilePlus2 aria-hidden="true" className="size-4 text-muted-foreground" />
+          添加文件
+        </button>
+      </div>
+    </div>
   );
 }
 

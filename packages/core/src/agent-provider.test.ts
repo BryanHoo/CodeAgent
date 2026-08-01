@@ -245,6 +245,7 @@ describe("AgentProvider", () => {
       provider.startTurn(
         "task-1",
         {
+          files: [],
           images: [{ mediaType: "image/png", url: "data:image/png;base64,aW1hZ2U=" }],
           outputSchema: {
             additionalProperties: false,
@@ -267,6 +268,7 @@ describe("AgentProvider", () => {
     ).resolves.toMatchObject({ id: "task-1-turn", status: "running" });
     await expect(
       provider.steerTurn("task-1", "turn-1", {
+        files: [],
         images: [],
         skills: [],
         text: "补充约束",

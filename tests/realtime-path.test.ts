@@ -216,7 +216,7 @@ describe("Realtime Path", () => {
     const created = await client.startTask(project.id, { idempotencyKey: "create-complete" });
     const uploaded = await client.uploadAttachment(
       project.id,
-      { dataUrl: pixelDataUrl, name: "screen.png" },
+      { dataUrl: pixelDataUrl, kind: "image", name: "screen.png" },
       { idempotencyKey: "upload-complete" },
     );
     const snapshot = await client.readTask(project.id, created.task.id);

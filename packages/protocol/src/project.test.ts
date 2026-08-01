@@ -29,6 +29,10 @@ import {
   AgentTaskSnapshotSchema,
   InterruptAgentTurnRequestSchema,
   InterruptAgentTurnResponseSchema,
+  MAX_AGENT_FILE_BYTES,
+  MAX_AGENT_FILE_TOTAL_BYTES,
+  MAX_AGENT_IMAGES,
+  MAX_AGENT_IMAGE_TOTAL_BYTES,
   PendingRequestSchema,
   StartAgentTaskRequestSchema,
   StartAgentTaskResponseSchema,
@@ -919,6 +923,7 @@ describe("project protocol", () => {
 
     const attachment = {
       id: "attachment-1",
+      kind: "image",
       mediaType: "image/png",
       name: "screen.png",
       size: 68,
@@ -978,6 +983,7 @@ describe("project protocol", () => {
       Value.Check(AgentAttachmentUploadRequestSchema, {
         dataUrl:
           "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        kind: "image",
         name: attachment.name,
       }),
     ).toBe(true);
@@ -1029,12 +1035,14 @@ describe("project protocol", () => {
     expect(
       Value.Check(AgentAttachmentUploadRequestSchema, {
         dataUrl: "data:text/plain;base64,SGVsbG8=",
+        kind: "text",
         name: "Pasted text.txt",
       }),
     ).toBe(true);
     expect(
       Value.Check(AgentAttachmentSchema, {
         id: "attachment-text",
+        kind: "text",
         mediaType: "text/plain",
         name: "Pasted text.txt",
         size: 5,
@@ -1042,10 +1050,11 @@ describe("project protocol", () => {
     ).toBe(true);
     expect(
       Value.Check(AgentAttachmentUploadRequestSchema, {
-        dataUrl: "data:application/json;base64,e30=",
-        name: "payload.json",
+        dataUrl: "data:application/pdf;base64,JVBERi0xLjQ=",
+        kind: "file",
+        name: "specification.pdf",
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(Value.Check(StartAgentTaskRequestSchema, {})).toBe(true);
     expect(Value.Check(StartAgentTaskRequestSchema, { nativeOptions: {} })).toBe(false);
     expect(Value.Check(StartAgentTaskResponseSchema, { task })).toBe(true);
@@ -1104,5 +1113,12 @@ describe("project protocol", () => {
         retryable: false,
       }),
     ).toBe(true);
+  });
+
+  it("matches the official Codex image and file input limits", () => {
+    expect(MAX_AGENT_FILE_BYTES).toBe(50 * 1024 * 1024);
+    expect(MAX_AGENT_FILE_TOTAL_BYTES).toBe(50 * 1024 * 1024);
+    expect(MAX_AGENT_IMAGES).toBe(1_500);
+    expect(MAX_AGENT_IMAGE_TOTAL_BYTES).toBe(512 * 1024 * 1024);
   });
 });

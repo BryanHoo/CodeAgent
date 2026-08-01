@@ -9,6 +9,7 @@ import {
 
 export type AttachmentData = Readonly<{
   id: string;
+  kind: "file" | "image" | "text";
   mediaType: string;
   name: string;
   previewUrl: string;
@@ -75,7 +76,12 @@ export function AttachmentPreview({ className = "", ...props }: HTMLAttributes<H
 
 export function AttachmentInfo({ className = "", ...props }: HTMLAttributes<HTMLDivElement>) {
   const { data } = useAttachment();
-  const size = data.size < 1024 ? `${String(data.size)} B` : `${(data.size / 1024).toFixed(1)} KB`;
+  const size =
+    data.size < 1024
+      ? `${String(data.size)} B`
+      : data.size < 1024 * 1024
+        ? `${(data.size / 1024).toFixed(1)} KB`
+        : `${(data.size / (1024 * 1024)).toFixed(1)} MB`;
   return (
     <div className={`min-w-0 flex-1 ${className}`} {...props}>
       <div className="truncate font-medium">{data.name}</div>

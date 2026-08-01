@@ -330,13 +330,18 @@ describe("AI Elements primitives", () => {
 
   it("renders an accessible prompt input composition", () => {
     const markup = renderToStaticMarkup(
-      <PromptInput accept="image/png,image/jpeg" disabled maxFiles={4} multiple>
+      <PromptInput
+        disabled
+        fileAccept=".pdf,.docx,.xlsx,.txt,.md"
+        imageAccept=".png,.jpg,.jpeg,.webp,.gif"
+        multiple
+      >
         <PromptInputBody>
           <PromptInputTextarea aria-label="任务输入" disabled />
         </PromptInputBody>
         <PromptInputFooter>
           <PromptInputTools>
-            <PromptInputActionAddAttachments label="添加图片" />
+            <PromptInputActionAddAttachments />
           </PromptInputTools>
           <PromptInputSubmit aria-label="提交" disabled status="idle" />
         </PromptInputFooter>
@@ -348,8 +353,11 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain("disabled");
     expect(markup).toContain("shadow-floating");
     expect(markup).toContain('type="file"');
-    expect(markup).toContain('accept="image/png,image/jpeg"');
-    expect(markup).toContain('aria-label="添加图片"');
+    expect(markup).toContain('accept=".png,.jpg,.jpeg,.webp,.gif"');
+    expect(markup).toContain('accept=".pdf,.docx,.xlsx,.txt,.md"');
+    expect(markup).toContain('aria-label="添加图片或文件"');
+    expect(markup).toContain("添加图片");
+    expect(markup).toContain("添加文件");
     expect(markup).toContain('aria-disabled="true"');
     expect(markup).toContain('data-prompt-input=""');
   });
@@ -372,6 +380,7 @@ describe("AI Elements primitives", () => {
         <Attachment
           data={{
             id: "attachment-1",
+            kind: "image",
             mediaType: "image/png",
             name: "screen.png",
             previewUrl: "data:image/png;base64,aW1hZ2U=",
@@ -396,6 +405,7 @@ describe("AI Elements primitives", () => {
         <Attachment
           data={{
             id: "attachment-text",
+            kind: "text",
             mediaType: "text/plain",
             name: "Pasted text.txt",
             previewUrl: "blob:text",

@@ -79,6 +79,9 @@ import {
   UploadAgentFeedbackResponseSchema,
   UnsubscribeAgentTaskResponseSchema,
   MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
+  MAX_AGENT_FILE_TOTAL_BYTES,
+  MAX_AGENT_IMAGES,
+  MAX_AGENT_IMAGE_TOTAL_BYTES,
   type AgentAttachmentUploadRequest,
   type AgentGlobalSettings,
   type ArchiveAgentTaskRequest,
@@ -661,6 +664,7 @@ async function generateCommitMessageWithCodex(
     const startedTurn = await provider.startTurn(
       task.id,
       {
+        files: [],
         images: [],
         outputSchema: COMMIT_MESSAGE_OUTPUT_SCHEMA,
         skills: [],
@@ -772,20 +776,46 @@ export async function createCodeAgentServer(
       throw error;
     }
     // Start 与 steer 共用同一映射，保证附件校验和 Provider 输入语义一致。
+    const imageBytes = resolvedAttachments.reduce(
+      (total, attachment) => total + (attachment.kind === "image" ? attachment.size : 0),
+      0,
+    );
+    const fileBytes = resolvedAttachments.reduce(
+      (total, attachment) => total + (attachment.kind === "file" ? attachment.size : 0),
+      0,
+    );
+    const imageCount = resolvedAttachments.filter(
+      (attachment) => attachment.kind === "image",
+    ).length;
+    if (imageCount > MAX_AGENT_IMAGES || imageBytes > MAX_AGENT_IMAGE_TOTAL_BYTES) {
+      throw new MutationHttpError("INVALID_REQUEST", "Image input limit exceeded", 400);
+    }
+    if (fileBytes > MAX_AGENT_FILE_TOTAL_BYTES) {
+      throw new MutationHttpError("INVALID_REQUEST", "File input limit exceeded", 400);
+    }
     return {
       attachmentIds,
       providerInput: {
+        files: resolvedAttachments.flatMap((attachment) =>
+          attachment.kind === "file"
+            ? [
+                {
+                  mediaType: attachment.mediaType,
+                  name: attachment.name,
+                  path: attachment.path,
+                },
+              ]
+            : [],
+        ),
         images: resolvedAttachments.flatMap((attachment) =>
-          attachment.mediaType === "text/plain"
-            ? []
-            : [{ mediaType: attachment.mediaType, url: attachment.url }],
+          attachment.kind === "image"
+            ? [{ mediaType: attachment.mediaType, url: attachment.url }]
+            : [],
         ),
         skills: input.skills,
         text: input.text,
         textAttachments: resolvedAttachments.flatMap((attachment) =>
-          attachment.mediaType === "text/plain"
-            ? [{ name: attachment.name, text: attachment.text }]
-            : [],
+          attachment.kind === "text" ? [{ name: attachment.name, text: attachment.text }] : [],
         ),
       },
     };
@@ -840,6 +870,9 @@ export async function createCodeAgentServer(
       provider,
       transportMetrics: { activeClients: 0, slowClientDisconnects: 0 },
       unsubscribe: provider.subscribeEvents((event) => {
+        if (event.type === "turn.completed") {
+          attachmentStore.releaseTurn(projectId, event.payload.turn.id);
+        }
         eventStream.publish(event);
       }),
     };
@@ -1064,7 +1097,7 @@ export async function createCodeAgentServer(
       context.eventStream.close();
     }
     projectContexts.clear();
-    attachmentStore.clear();
+    attachmentStore.dispose();
     activeGitMutations.clear();
     idempotencyEntries.clear();
     modelCatalogCache.clear();
@@ -2479,7 +2512,11 @@ export async function createCodeAgentServer(
             request.body.options,
           );
           // 只有 Provider 确认启动成功后才消费附件，网络失败仍允许原请求重试。
-          attachmentStore.consume(request.params.projectId, attachmentIds);
+          attachmentStore.consume(
+            request.params.projectId,
+            attachmentIds,
+            turn.status === "running" ? turn.id : undefined,
+          );
           return turn;
         },
       );
@@ -2542,7 +2579,7 @@ export async function createCodeAgentServer(
             providerInput,
           );
           // Provider 接受引导后才消费附件，失败时原请求仍可安全重试。
-          attachmentStore.consume(request.params.projectId, attachmentIds);
+          attachmentStore.consume(request.params.projectId, attachmentIds, request.params.turnId);
           return {
             status: "accepted" as const,
             taskId: request.params.taskId,

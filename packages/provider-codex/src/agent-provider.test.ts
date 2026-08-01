@@ -547,7 +547,7 @@ describe("CodexAgentProvider", () => {
     await expect(
       provider.startTurn(
         "task-1",
-        { images: [], skills: [], text: "继续之前的任务", textAttachments: [] },
+        { files: [], images: [], skills: [], text: "继续之前的任务", textAttachments: [] },
         {
           approvalPolicy: "on-request",
           approvalsReviewer: "user",
@@ -579,6 +579,7 @@ describe("CodexAgentProvider", () => {
 
     await expect(
       provider.steerTurn("task-1", "turn-1", {
+        files: [],
         images: [],
         skills: [],
         text: "优先修复失败测试",
@@ -629,12 +630,12 @@ describe("CodexAgentProvider", () => {
     await provider.readTask("task-1");
     const firstTurn = provider.startTurn(
       "task-1",
-      { images: [], skills: [], text: "并发消息一", textAttachments: [] },
+      { files: [], images: [], skills: [], text: "并发消息一", textAttachments: [] },
       turnOptions,
     );
     const secondTurn = provider.startTurn(
       "task-1",
-      { images: [], skills: [], text: "并发消息二", textAttachments: [] },
+      { files: [], images: [], skills: [], text: "并发消息二", textAttachments: [] },
       turnOptions,
     );
     await Promise.resolve();
@@ -1476,6 +1477,7 @@ describe("CodexAgentProvider", () => {
       provider.startTurn(
         "task-1",
         {
+          files: [],
           images: [],
           skills: [
             { id: selectedSkill.id, name: "review-security" },
@@ -1549,6 +1551,7 @@ describe("CodexAgentProvider", () => {
       inputProvider.startTurn(
         "task-1",
         {
+          files: [],
           images: [{ mediaType: "image/png", url: "data:image/jpeg;base64,aW1hZ2U=" }],
           skills: [],
           text: "",
@@ -1639,6 +1642,13 @@ describe("CodexAgentProvider", () => {
               url: "data:image/png;base64,aW1hZ2U=",
             },
           ],
+          files: [
+            {
+              mediaType: "application/pdf",
+              name: "specification.pdf",
+              path: "/tmp/specification.pdf",
+            },
+          ],
           outputSchema: {
             additionalProperties: false,
             properties: { message: { type: "string" } },
@@ -1678,6 +1688,11 @@ describe("CodexAgentProvider", () => {
                 },
               ],
               type: "text",
+            },
+            {
+              name: "specification.pdf",
+              path: "/tmp/specification.pdf",
+              type: "mention",
             },
             { type: "image", url: "data:image/png;base64,aW1hZ2U=" },
           ],
@@ -1724,7 +1739,7 @@ describe("CodexAgentProvider", () => {
 
     await provider.startTurn(
       "task-1",
-      { images: [], skills: [], text: "只读检查", textAttachments: [] },
+      { files: [], images: [], skills: [], text: "只读检查", textAttachments: [] },
       {
         approvalPolicy: "on-request",
         approvalsReviewer: "user",
@@ -1735,7 +1750,7 @@ describe("CodexAgentProvider", () => {
     );
     await provider.startTurn(
       "task-1",
-      { images: [], skills: [], text: "完全访问", textAttachments: [] },
+      { files: [], images: [], skills: [], text: "完全访问", textAttachments: [] },
       {
         approvalPolicy: "never",
         approvalsReviewer: "user",

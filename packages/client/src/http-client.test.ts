@@ -67,6 +67,7 @@ const pixelDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const attachment = {
   id: "attachment-1",
+  kind: "image",
   mediaType: "image/png",
   name: "screen.png",
   size: 68,
@@ -575,7 +576,7 @@ describe("CodeAgentClient", () => {
     await client.startTask("code-agent", { idempotencyKey: "task-key" });
     await client.uploadAttachment(
       "code-agent",
-      { dataUrl: pixelDataUrl, name: attachment.name },
+      { dataUrl: pixelDataUrl, kind: "image", name: attachment.name },
       { idempotencyKey: "attachment-key" },
     );
     await client.startTurn(
@@ -617,7 +618,7 @@ describe("CodeAgentClient", () => {
     expect(new Headers(taskCall?.[1]?.headers).get("idempotency-key")).toBe("task-key");
     expect(attachmentCall?.[0]).toBe("/v1/projects/code-agent/attachments");
     expect(attachmentCall?.[1]).toMatchObject({
-      body: JSON.stringify({ dataUrl: pixelDataUrl, name: "screen.png" }),
+      body: JSON.stringify({ dataUrl: pixelDataUrl, kind: "image", name: "screen.png" }),
       method: "POST",
     });
     expect(new Headers(attachmentCall?.[1]?.headers).get("idempotency-key")).toBe("attachment-key");

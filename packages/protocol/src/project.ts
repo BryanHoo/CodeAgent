@@ -210,10 +210,190 @@ export const AgentReviewTargetSchema = Type.Intersect([
 ]);
 export type AgentReviewTarget = Readonly<Static<typeof AgentReviewTargetSchema>>;
 
-export const MAX_AGENT_ATTACHMENTS = 4;
-export const MAX_AGENT_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+export const MAX_AGENT_FILE_BYTES = 50 * 1024 * 1024;
+export const MAX_AGENT_FILE_TOTAL_BYTES = 50 * 1024 * 1024;
+export const MAX_AGENT_IMAGES = 1_500;
+export const MAX_AGENT_IMAGE_TOTAL_BYTES = 512 * 1024 * 1024;
+export const MAX_AGENT_ATTACHMENT_BYTES = MAX_AGENT_IMAGE_TOTAL_BYTES;
 export const MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH =
   Math.ceil((MAX_AGENT_ATTACHMENT_BYTES * 4) / 3) + 64;
+
+export const AGENT_IMAGE_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif";
+export const AGENT_FILE_EXTENSIONS = [
+  ".asm",
+  ".astro",
+  ".awk",
+  ".bash",
+  ".bat",
+  ".c",
+  ".cc",
+  ".conf",
+  ".cs",
+  ".cpp",
+  ".css",
+  ".csv",
+  ".cxx",
+  ".def",
+  ".dic",
+  ".diff",
+  ".doc",
+  ".docx",
+  ".dot",
+  ".eml",
+  ".ejs",
+  ".ex",
+  ".exs",
+  ".go",
+  ".gradle",
+  ".graphql",
+  ".groovy",
+  ".h",
+  ".hh",
+  ".htm",
+  ".html",
+  ".hbs",
+  ".hcl",
+  ".hs",
+  ".ics",
+  ".ifb",
+  ".iif",
+  ".in",
+  ".ini",
+  ".jade",
+  ".java",
+  ".jinja2",
+  ".jl",
+  ".js",
+  ".jsx",
+  ".json",
+  ".json5",
+  ".kt",
+  ".kts",
+  ".ksh",
+  ".list",
+  ".liquid",
+  ".lua",
+  ".log",
+  ".markdown",
+  ".md",
+  ".mht",
+  ".mhtml",
+  ".mime",
+  ".mjs",
+  ".nws",
+  ".ndjson",
+  ".odt",
+  ".pdf",
+  ".pl",
+  ".patch",
+  ".php",
+  ".pot",
+  ".ppa",
+  ".pps",
+  ".ppt",
+  ".pptx",
+  ".pwz",
+  ".py",
+  ".properties",
+  ".proto",
+  ".ps1",
+  ".pug",
+  ".r",
+  ".rb",
+  ".rst",
+  ".rtf",
+  ".rs",
+  ".s",
+  ".sass",
+  ".scala",
+  ".scss",
+  ".sh",
+  ".sql",
+  ".srt",
+  ".text",
+  ".tex",
+  ".tf",
+  ".tmpl",
+  ".toml",
+  ".ts",
+  ".tsx",
+  ".tsv",
+  ".txt",
+  ".vcf",
+  ".vtt",
+  ".vbs",
+  ".wiz",
+  ".xla",
+  ".xlb",
+  ".xlc",
+  ".xlm",
+  ".xls",
+  ".xlsx",
+  ".xlt",
+  ".xlw",
+  ".xml",
+  ".yaml",
+  ".yml",
+  ".zsh",
+] as const;
+export const AGENT_FILE_MEDIA_TYPES = [
+  "application/csv",
+  "application/graphql",
+  "application/javascript",
+  "application/json",
+  "application/msword",
+  "application/pdf",
+  "application/rtf",
+  "application/toml",
+  "application/typescript",
+  "application/vnd.ms-excel",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/x-httpd-php",
+  "application/x-iif",
+  "application/x-ndjson",
+  "application/x-patch",
+  "application/x-protobuf",
+  "application/x-rust",
+  "application/x-shellscript",
+  "application/x-sql",
+  "application/x-toml",
+  "application/x-typescript",
+  "application/x-yaml",
+  "application/yaml",
+  "message/rfc822",
+  "text/calendar",
+  "text/csv",
+  "text/css",
+  "text/html",
+  "text/javascript",
+  "text/jsx",
+  "text/markdown",
+  "text/plain",
+  "text/rtf",
+  "text/tsx",
+  "text/tsv",
+  "text/vtt",
+  "text/x-c",
+  "text/x-c++",
+  "text/x-csharp",
+  "text/x-diff",
+  "text/x-go",
+  "text/x-java",
+  "text/x-makefile",
+  "text/x-python",
+  "text/x-rst",
+  "text/x-rust",
+  "text/x-shellscript",
+  "text/x-sql",
+  "text/x-typescript",
+  "text/x-yaml",
+  "text/xml",
+] as const;
+export const AGENT_FILE_ACCEPT = [...AGENT_FILE_EXTENSIONS, ...AGENT_FILE_MEDIA_TYPES].join(",");
 
 export const AgentImageMediaTypeSchema = Type.Union([
   Type.Literal("image/gif"),
@@ -224,12 +404,17 @@ export const AgentImageMediaTypeSchema = Type.Union([
 
 export type AgentImageMediaType = Readonly<Static<typeof AgentImageMediaTypeSchema>>;
 
-export const AgentAttachmentMediaTypeSchema = Type.Union([
-  AgentImageMediaTypeSchema,
-  Type.Literal("text/plain"),
-]);
+export const AgentAttachmentMediaTypeSchema = Type.String({ maxLength: 255, minLength: 1 });
 
 export type AgentAttachmentMediaType = Readonly<Static<typeof AgentAttachmentMediaTypeSchema>>;
+
+export const AgentAttachmentKindSchema = Type.Union([
+  Type.Literal("file"),
+  Type.Literal("image"),
+  Type.Literal("text"),
+]);
+
+export type AgentAttachmentKind = Readonly<Static<typeof AgentAttachmentKindSchema>>;
 
 export const AgentMessageSkillSchema = Type.Object(
   { name: Type.String({ minLength: 1 }) },
@@ -244,7 +429,7 @@ export const AgentMessageAttachmentSchema = Type.Object(
     id: Type.String({ minLength: 1 }),
     mediaType: AgentImageMediaTypeSchema,
     name: Type.String({ maxLength: 255, minLength: 1 }),
-    size: Type.Integer({ maximum: MAX_AGENT_ATTACHMENT_BYTES, minimum: 1 }),
+    size: Type.Integer({ maximum: MAX_AGENT_IMAGE_TOTAL_BYTES, minimum: 1 }),
   },
   { additionalProperties: false },
 );
@@ -254,7 +439,7 @@ export type AgentMessageAttachment = Readonly<Static<typeof AgentMessageAttachme
 export const AgentMessageItemSchema = Type.Object(
   {
     attachments: Type.Optional(
-      Type.Array(AgentMessageAttachmentSchema, { maxItems: MAX_AGENT_ATTACHMENTS }),
+      Type.Array(AgentMessageAttachmentSchema, { maxItems: MAX_AGENT_IMAGES }),
     ),
     id: Type.String({ minLength: 1 }),
     role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
@@ -561,6 +746,7 @@ export type AgentTurn = Readonly<Static<typeof AgentTurnSchema>>;
 export const AgentAttachmentSchema = Type.Object(
   {
     id: Type.String({ minLength: 1 }),
+    kind: AgentAttachmentKindSchema,
     mediaType: AgentAttachmentMediaTypeSchema,
     name: Type.String({ maxLength: 255, minLength: 1 }),
     size: Type.Integer({ maximum: MAX_AGENT_ATTACHMENT_BYTES, minimum: 1 }),
@@ -574,8 +760,9 @@ export const AgentAttachmentUploadRequestSchema = Type.Object(
   {
     dataUrl: Type.String({
       maxLength: MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
-      pattern: "^data:(image/(gif|jpeg|png|webp)|text/plain);base64,[A-Za-z0-9+/]+={0,2}$",
+      pattern: "^data:[A-Za-z0-9][A-Za-z0-9!#$&^_.+/-]*;base64,[A-Za-z0-9+/]+={0,2}$",
     }),
+    kind: AgentAttachmentKindSchema,
     name: Type.String({ maxLength: 255, minLength: 1 }),
   },
   { additionalProperties: false },
@@ -644,7 +831,7 @@ const AgentAttachmentReferenceSchema = Type.Object(
 );
 
 const AgentPromptInputProperties = {
-  attachments: Type.Array(AgentAttachmentReferenceSchema, { maxItems: MAX_AGENT_ATTACHMENTS }),
+  attachments: Type.Array(AgentAttachmentReferenceSchema),
   skills: Type.Array(AgentSkillReferenceSchema),
   text: Type.String({ maxLength: 100_000 }),
   type: Type.Literal("prompt"),
@@ -661,10 +848,7 @@ export const AgentPromptInputSchema = Type.Union([
   Type.Object(
     {
       ...AgentPromptInputProperties,
-      attachments: Type.Array(AgentAttachmentReferenceSchema, {
-        maxItems: MAX_AGENT_ATTACHMENTS,
-        minItems: 1,
-      }),
+      attachments: Type.Array(AgentAttachmentReferenceSchema, { minItems: 1 }),
     },
     { additionalProperties: false },
   ),

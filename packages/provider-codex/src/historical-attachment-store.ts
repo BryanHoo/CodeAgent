@@ -6,13 +6,15 @@ import { basename, extname, isAbsolute } from "node:path";
 import type { AgentProviderAttachment } from "@code-agent/core";
 import {
   MAX_AGENT_ATTACHMENT_BYTES,
+  MAX_AGENT_IMAGES,
+  MAX_AGENT_IMAGE_TOTAL_BYTES,
   type AgentImageMediaType,
   type AgentMessageAttachment,
 } from "@code-agent/protocol";
 
 const DEFAULT_ATTACHMENT_TTL_MS = 30 * 60 * 1_000;
-const DEFAULT_MAX_ENTRIES = 128;
-const DEFAULT_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
+const DEFAULT_MAX_ENTRIES = MAX_AGENT_IMAGES;
+const DEFAULT_MAX_TOTAL_BYTES = MAX_AGENT_IMAGE_TOTAL_BYTES;
 const DATA_URL_PATTERN = /^data:(image\/(?:gif|jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/u;
 
 type HistoricalFileStats = Readonly<{ isFile: boolean; mtimeMs: number; size: number }>;

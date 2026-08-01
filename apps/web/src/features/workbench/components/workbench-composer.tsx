@@ -1,19 +1,25 @@
-import type {
-  AgentApprovalPolicy,
-  AgentAttachment,
-  AgentCapabilities,
-  AgentGlobalSettings,
-  AgentModel,
-  AgentPromptInput,
-  AgentReviewTarget,
-  AgentSandboxMode,
-  AgentSkill,
-  AgentTask,
-  AgentTaskSettings,
-  AgentTaskSnapshot,
-  AgentTurn,
-  AgentTurnOptions,
-  ProjectGitStatus,
+import {
+  AGENT_FILE_ACCEPT,
+  AGENT_IMAGE_ACCEPT,
+  MAX_AGENT_FILE_BYTES,
+  MAX_AGENT_FILE_TOTAL_BYTES,
+  MAX_AGENT_IMAGES,
+  MAX_AGENT_IMAGE_TOTAL_BYTES,
+  type AgentApprovalPolicy,
+  type AgentAttachment,
+  type AgentCapabilities,
+  type AgentGlobalSettings,
+  type AgentModel,
+  type AgentPromptInput,
+  type AgentReviewTarget,
+  type AgentSandboxMode,
+  type AgentSkill,
+  type AgentTask,
+  type AgentTaskSettings,
+  type AgentTaskSnapshot,
+  type AgentTurn,
+  type AgentTurnOptions,
+  type ProjectGitStatus,
 } from "@code-agent/protocol";
 import {
   Bug,
@@ -428,7 +434,8 @@ function readFileAsDataUrl(file: File): Promise<string> {
     });
     reader.addEventListener("load", () => {
       if (typeof reader.result === "string") {
-        resolve(reader.result);
+        // 浏览器对部分代码文件不给 MIME，使用通用二进制类型保持 Data URL 合法。
+        resolve(reader.result.replace(/^data:;base64,/u, "data:application/octet-stream;base64,"));
       } else {
         reject(new Error("附件读取失败"));
       }
@@ -788,7 +795,11 @@ export function WorkbenchComposer({
           uploadAttempts.current.set(attachment.id, idempotencyKey);
           const response = await client.uploadAttachment(
             projectId,
-            { dataUrl: await readFileAsDataUrl(attachment.file), name: attachment.name },
+            {
+              dataUrl: await readFileAsDataUrl(attachment.file),
+              kind: attachment.kind,
+              name: attachment.name,
+            },
             { idempotencyKey },
           );
           if (routeScopeRef.current === requestScope) {
@@ -1396,20 +1407,23 @@ export function WorkbenchComposer({
           </div>
         )}
         <PromptInput
-          accept="image/gif,image/jpeg,image/png,image/webp"
           attachments={attachments}
           aria-busy={state === "submitting" || state === "reconnecting"}
           className="w-full"
           data-state={state}
           disabled={attachmentsDisabled}
+          fileAccept={AGENT_FILE_ACCEPT}
           globalDrop
+          imageAccept={AGENT_IMAGE_ACCEPT}
           largePasteCharacterThreshold={
             commandDraftMode === "feedback"
               ? Number.POSITIVE_INFINITY
               : LARGE_PASTE_CHARACTER_THRESHOLD
           }
-          maxFiles={4}
-          maxFileSize={2 * 1024 * 1024}
+          maxFileSize={MAX_AGENT_FILE_BYTES}
+          maxFileTotalSize={MAX_AGENT_FILE_TOTAL_BYTES}
+          maxImages={MAX_AGENT_IMAGES}
+          maxImageTotalSize={MAX_AGENT_IMAGE_TOTAL_BYTES}
           multiple
           onAttachmentsChange={handleAttachmentsChange}
           onError={(error) => {
@@ -1527,7 +1541,6 @@ export function WorkbenchComposer({
             <PromptInputTools>
               <PromptInputActionAddAttachments
                 disabled={attachmentsDisabled || commandDraftMode === "feedback"}
-                label="添加图片"
               />
               <PromptInputSelect
                 aria-label="批准模式"

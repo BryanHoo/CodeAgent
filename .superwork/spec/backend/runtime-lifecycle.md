@@ -25,8 +25,8 @@
 - Provider 对已成功 `thread/start` 的 Task 必须提供进程内 read-your-writes：在 Codex 原生 `thread/list` 首次返回该 Task 前，将本地未 materialize Task 合并到首个列表页；只有原生列表接管后才能移除该列表回退，`turn/start` 或 `thread/read` 成功不能提前造成列表不可见窗口。
 - Task 命令通过受控 Provider 方法映射：代码审查使用 `review/start`，上下文压缩使用 `thread/compact/start`，新任务续接使用 `thread/fork`，任务反馈使用 `feedback/upload`；每个动作都必须先验证 Task 属于当前 Project，并校验响应中的 Thread ID。Review Turn 中 Codex 自动生成的 `userMessage` 只作为内部执行 Prompt，Provider 必须在响应、实时事件和历史 Snapshot 中将重复 Prompt 折叠为单个统一 `review` Item。
 - Task 重命名固定映射 `thread/name/set`，归档固定映射 `thread/archive`，两者都必须先验证 Task 属于当前 Project；固定状态不是 Codex 原生能力，由 CodeAgent 本地 Task 元数据持久化。
-- 模型列表只通过分页 `model/list` 获取，过滤隐藏模型并保留默认模型、默认思考量和可用思考量；Server Runtime 使用带 TTL、字节容量与 in-flight 去重的模型目录缓存统一服务设置校验和 `/v1/models`，Runtime 关闭时清空且旧请求不得回填；Project 沙盒默认值通过携带 `cwd` 的 `config/read` 读取；`turn/start` 明确映射文本、受控图片 Data URL、`model`、`effort`、`approvalPolicy`、`approvalsReviewer` 和结构化 `sandboxPolicy`。自动审批使用 `on-request + auto_review`，不扩展沙盒边界。
-- Codex 用户历史中的 `image` 与 `localImage` 必须映射为只含随机 ID、媒体类型、名称和字节数的统一消息附件；Provider 只接受 GIF、JPEG、PNG、WebP 的有效内容签名和不超过 2 MiB 的图片。同一 Task 中来源、名称和内容状态未变化的图片必须在重复 `thread/read` 间复用当前随机授权 ID 并刷新 TTL，后续 Snapshot 读取不得让已交付页面的附件 URL 立即失效；TTL 到期、来源变化或 Task 释放时才清理对应授权。Snapshot 不得包含 Base64 或本地路径；本地文件正文只在受权读取时加载并复验大小、修改时间和内容签名。文件缺失、超限、格式不受支持或历史附件 Store 达到预算时降级为文本占位，不能使整个 Task Snapshot 失败。
+- 模型列表只通过分页 `model/list` 获取，过滤隐藏模型并保留默认模型、默认思考量和可用思考量；Server Runtime 使用带 TTL、字节容量与 in-flight 去重的模型目录缓存统一服务设置校验和 `/v1/models`，Runtime 关闭时清空且旧请求不得回填；Project 沙盒默认值通过携带 `cwd` 的 `config/read` 读取；`turn/start` 明确将文本、受控图片 Data URL 和受控临时文件分别映射为 Codex `text`、`image` 与 `mention`，同时映射 `model`、`effort`、`approvalPolicy`、`approvalsReviewer` 和结构化 `sandboxPolicy`。自动审批使用 `on-request + auto_review`，不扩展沙盒边界。
+- Codex 用户历史中的 `image` 与 `localImage` 必须映射为只含随机 ID、媒体类型、名称和字节数的统一消息附件；Provider 只接受 GIF、JPEG、PNG、WebP 的有效内容签名，历史附件 Store 最多保留 `1,500` 张、合计 `512 MiB`。同一 Task 中来源、名称和内容状态未变化的图片必须在重复 `thread/read` 间复用当前随机授权 ID 并刷新 TTL，后续 Snapshot 读取不得让已交付页面的附件 URL 立即失效；TTL 到期、来源变化或 Task 释放时才清理对应授权。Snapshot 不得包含 Base64 或本地路径；本地文件正文只在受权读取时加载并复验大小、修改时间和内容签名。文件缺失、超限、格式不受支持或历史附件 Store 达到预算时降级为文本占位，不能使整个 Task Snapshot 失败。
 - Project Skill 目录只通过 `skills/list { cwds: [project.rootPath] }` 获取并过滤禁用项；对外 ID 必须是稳定不透明摘要。`turn/start` 只有在 ID 与名称仍匹配当前目录时，才能加入 Codex 原生 `{ type: "skill", name, path }`，原生绝对路径不得越过 Provider 边界。
 - 当前 Project 启用的 MCP 服务只通过携带 `cwd` 的 `config/read` 读取 `mcp_servers`；Provider 必须过滤 `enabled: false` 并只向 Core、Protocol 和 Web 暴露服务名称，禁止让 command、args、env、URL 或 Secret 越过 Provider 边界。
 - `thread/tokenUsage/updated` 只使用最近一轮 `last.totalTokens` 计算当前上下文占用，并连同 `modelContextWindow` 写入实时事件和后续 Snapshot；不得使用累计 `total.totalTokens` 冒充当前上下文。
@@ -69,7 +69,7 @@
 - Task 创建在 Provider 成功但设置持久化失败时必须保留有界恢复状态；同 `Idempotency-Key` 重试只补齐持久化，不得再次调用 Provider 创建 Task。
 - 成功的幂等结果缓存必须同时设置容量上限和过期时间；进行中的请求不得淘汰，Runtime 关闭时清空全部条目。
 - 任何新增 Task Runtime、Snapshot、历史或终端缓存都必须同时声明按字节容量、Entry 次级上限和明确清理触发点；不得依赖框架默认 TTL 或无界模块级 Map。
-- 浏览器图片与粘贴文本附件先经幂等上传进入 Server 的有界 TTL Store，并只返回随机 ID；文本附件必须严格解码 UTF-8，Provider 将其映射为独立 Codex `text` UserInput，并用覆盖完整 UTF-8 字节范围的 `text_elements` 和文件名表达附件占位；Turn 成功后消费引用，Provider 失败时保留引用供同一请求重试，Runtime 关闭时清空 Store。
+- 浏览器图片、文件与粘贴文本先经幂等上传进入 Server 的有界 TTL Store，并只返回随机 ID；普通文件以随机文件名写入 Runtime 专用临时目录，原始名称只用于 Codex `mention` 展示，不能成为磁盘路径。文本附件必须严格解码 UTF-8，并映射为带完整 UTF-8 字节范围 `text_elements` 的 Codex `text`；图片映射为 Data URL `image`。Provider 失败时保留引用供同一请求重试；Provider 接受后立即消费图片和文本引用，普通文件保留到对应 Turn 终态或 TTL 到期，Runtime 关闭时删除整个临时目录。
 
 ## 关闭
 
