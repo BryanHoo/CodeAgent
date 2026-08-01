@@ -31,7 +31,7 @@
 - TanStack Query 全局非活动 `gcTime` 固定为 2 分钟，Task Snapshot 使用 30 秒；非活动完整 Snapshot 另受 48 MiB / 12 Entry 字节 LRU 约束。完整 Snapshot 与归一化 Store 不得同时作为无界长期缓存，归档时必须立即移除对应 Snapshot Query。
 - Client HTTP 请求固定使用有界策略：携带 TanStack Query `signal` 的读取同时受调用方取消和 30 秒超时控制，普通直接读取使用 15 秒超时，幂等 Mutation 使用 60 秒超时并允许显式取消；三类请求都必须在 Fetch 边界组合 `AbortSignal.timeout()`。
 - 全量 Snapshot 重建只允许用于低频兼容读取、Mutation 输入或恢复边界，不得作为每个 Delta 的 React 订阅结果。
-- 每个 Project 只允许一个客户端 Project Runtime 和一条 Event Stream；统一完成协议解析、Session/Sequence 校验，并向 Sidebar Activity 与该 Project 内已注册的 Task Store 扇出。Project Runtime 使用最多 2,048 条、4 MiB 的有界事件历史补齐 Snapshot 读取期间的事件，历史不足时必须重新读取 Snapshot。
+- 每个 Project 只允许一个客户端 Project Runtime 和一条 Event Stream；统一完成协议解析、Session/Sequence 校验，并向 Sidebar Activity 与该 Project 内已注册的 Task Store 扇出。Project Runtime 使用最多 2,048 条、4 MiB 的固定容量环形事件历史，以 O(1) 追加和头部淘汰补齐 Snapshot 读取期间的事件，不得通过 `Array.shift()` 反复移动大数组；历史不足时必须重新读取 Snapshot。
 - 每个 Project 只允许一个 Git 状态协调器；任一 Task 运行时每 10 秒执行一次兜底刷新，页面隐藏时跳过周期刷新。完成的 `file_change` Item 触发 300ms 防抖刷新，每个 `turn.completed` 必须最终刷新；最后一个活动 Task 完成后先最终刷新再停止周期调度。同一 Project 的并发刷新必须串行合并，失败后暂停周期调度，直到新活动或手动刷新恢复。
 - Sidebar 的轻量活动状态必须按 `projectId + taskId` 保存；切换当前 Task 或 Project 不能清除后台 Task 的运行或审批状态，只有对应 Task 的 Snapshot 或终态事件可以更新该行状态。Project 无 Task Store 消费者、无运行 Task、无待审批且连续 2 分钟未访问后必须关闭 Event Stream 并释放 Runtime；详细 Timeline Store 不得把完整历史复制到 Sidebar 状态。
 - Task 归档成功后必须清理 `taskActivity`、最近 Snapshot 恢复引用、非活动 Runtime Store 与 Task Snapshot Query；不可见 Task 收到 `turn.completed` 后再次尝试安全 unsubscribe，避免首次切换时因运行态跳过后永久保留 Thread。

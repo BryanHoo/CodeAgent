@@ -8,8 +8,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
 import type { TaskNotifier } from "../../notifications/browser-task-notifier.js";
+import { estimateRetainedBytes } from "../../../shared/memory/byte-lru.js";
 import { getTaskActivity } from "./task-activity.js";
-import { createProjectRuntimeManager } from "./project-runtime.js";
+import { createProjectRuntimeManager, ProjectEventHistory } from "./project-runtime.js";
 import { createTaskStore } from "./task-store.js";
 
 const taskSettings = {
@@ -444,6 +445,77 @@ describe("project runtime manager", () => {
     expect(secondStore.getState().checkpoint?.sequence).toBe(1);
     detach();
     manager.dispose();
+  });
+
+  it("replays wrapped Project history without shifting the backing array", () => {
+    const harness = createClientHarness();
+    const manager = createProjectRuntimeManager(harness.client, {
+      maxEventHistoryEvents: 2,
+      taskNotifier: createTaskNotifier(),
+    });
+    manager.observeSnapshot(createSnapshotResponse("task-1", { status: "idle" }));
+    const retainedHistory = new ProjectEventHistory({
+      maxBytes: Number.MAX_SAFE_INTEGER,
+      maxEvents: 2,
+    });
+    const retainedEvents: AgentEvent[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    try {
+      const firstEvent = createTurnStartedEvent("task-1", 1);
+      const secondEvent = createTurnStartedEvent("task-2", 2);
+      const thirdEvent = createMessageDeltaEvent("task-2", 3, "环绕后继续输出");
+      retainedHistory.append(firstEvent);
+      retainedHistory.append(secondEvent);
+      retainedHistory.append(thirdEvent);
+      retainedHistory.forEachAfter(1, (event) => {
+        retainedEvents.push(event);
+      });
+      harness.emit(firstEvent);
+      harness.emit(secondEvent);
+      harness.emit(thirdEvent);
+
+      const secondStore = createTaskStore({ projectId: "project-1", taskId: "task-2" });
+      const detach = manager.attachTaskStore(
+        createSnapshotResponse("task-2", { sequence: 1, status: "idle" }),
+        secondStore,
+        vi.fn(),
+      );
+
+      expect(secondStore.getState().checkpoint?.sequence).toBe(3);
+      expect(secondStore.getState().itemsById["message-task-2"]).toMatchObject({
+        text: "环绕后继续输出",
+      });
+      expect(retainedHistory.floorSequence).toBe(1);
+      expect(retainedEvents.map((event) => event.sequence)).toEqual([2, 3]);
+      detach();
+    } finally {
+      manager.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("evicts the oldest Project event when the byte budget is exceeded", () => {
+    const firstEvent = createTurnStartedEvent("task-1", 1);
+    const secondEvent = createTurnStartedEvent("task-2", 2);
+    const history = new ProjectEventHistory({
+      maxBytes: Math.max(estimateRetainedBytes(firstEvent), estimateRetainedBytes(secondEvent)),
+      maxEvents: 10,
+    });
+    const retainedSequences: number[] = [];
+
+    history.append(firstEvent);
+    history.append(secondEvent);
+    history.forEachAfter(0, (event) => {
+      retainedSequences.push(event.sequence);
+    });
+
+    expect(history.floorSequence).toBe(1);
+    expect(retainedSequences).toEqual([2]);
   });
 
   it("refreshes stores that still belong to an earlier Project Session", () => {

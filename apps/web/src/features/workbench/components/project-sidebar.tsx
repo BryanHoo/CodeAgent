@@ -21,7 +21,7 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -60,6 +60,7 @@ const taskActionMenuHeight = 104;
 const taskActionMenuWidth = 128;
 const taskActionMenuViewportPadding = 8;
 const projectActionMenuHeight = 72;
+const EMPTY_PROJECT_TASKS: readonly AgentTask[] = [];
 
 type ProjectSidebarProps = Readonly<{
   connectionState: AgentEventConnectionState;
@@ -83,6 +84,21 @@ type ProjectTaskPaginationControlInput = Readonly<{
   isExpanded: boolean;
   isFetchingNextPage: boolean;
 }>;
+
+export function groupTasksByProjectId(
+  tasks: readonly AgentTask[],
+): ReadonlyMap<string, readonly AgentTask[]> {
+  const tasksByProjectId = new Map<string, AgentTask[]>();
+  for (const task of tasks) {
+    const projectTasks = tasksByProjectId.get(task.projectId);
+    if (projectTasks === undefined) {
+      tasksByProjectId.set(task.projectId, [task]);
+    } else {
+      projectTasks.push(task);
+    }
+  }
+  return tasksByProjectId;
+}
 
 export function getProjectTaskPaginationControl({
   error,
@@ -204,6 +220,8 @@ export function ProjectSidebar({
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const taskSearch = useProjectTaskSearch(normalizedQuery);
   const visibleTasks = normalizedQuery.length === 0 ? tasks : taskSearch.tasks;
+  // 大列表只分组一次，Project 渲染不再重复扫描全部 Task。
+  const tasksByProjectId = useMemo(() => groupTasksByProjectId(visibleTasks), [visibleTasks]);
   const pinnedTasks = getPinnedTasks(visibleTasks);
   const hasPendingTasks = [...projectTaskStates.values()].some((state) => state.isPending);
   const hasTaskError = [...projectTaskStates.values()].some((state) => state.error !== null);
@@ -544,7 +562,7 @@ export function ProjectSidebar({
             data-testid="project-tree-scroll"
           >
             {orderedProjects.map((project) => {
-              const projectTasks = visibleTasks.filter((task) => task.projectId === project.id);
+              const projectTasks = tasksByProjectId.get(project.id) ?? EMPTY_PROJECT_TASKS;
               const expanded = expandedProjects.has(project.id);
               const showAllTasks = expandedTaskProjects.has(project.id);
               const taskPreview = getProjectTaskPreview(projectTasks, showAllTasks);

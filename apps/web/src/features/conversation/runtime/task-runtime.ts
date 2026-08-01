@@ -90,10 +90,18 @@ function deltaKey(event: Extract<AgentEvent, { itemId: string }>): string {
   return `${event.taskId}:${event.turnId}:${event.itemId}:${event.type}:${field}`;
 }
 
+type BufferedDeltaEvent = Readonly<{
+  event: Extract<
+    AgentEvent,
+    { type: "command.output_delta" | "message.delta" | "reasoning.delta" }
+  >;
+  retainedBytes: number;
+}>;
+
 export class AgentEventBuffer {
   readonly #maxBytes: number;
   readonly #maxEvents: number;
-  readonly #events: AgentEvent[] = [];
+  readonly #events: BufferedDeltaEvent[] = [];
   #bufferedBytes = 0;
 
   public constructor(options: Readonly<{ maxBytes?: number; maxEvents?: number }> = {}) {
@@ -112,9 +120,9 @@ export class AgentEventBuffer {
       throw new TypeError("Only Agent Event deltas can be buffered");
     }
     const key = deltaKey(event);
-    const previous = this.#events.at(-1);
-    const mergesPrevious =
-      previous !== undefined && isDeltaEvent(previous) && deltaKey(previous) === key;
+    const previousEntry = this.#events.at(-1);
+    const previous = previousEntry?.event;
+    const mergesPrevious = previous !== undefined && deltaKey(previous) === key;
     const deltaBytes = textEncoder.encode(event.payload.delta).byteLength;
     const nextEventCount = this.#events.length + (mergesPrevious ? 0 : 1);
     if (nextEventCount > this.#maxEvents || this.#bufferedBytes + deltaBytes > this.#maxBytes) {
@@ -125,14 +133,17 @@ export class AgentEventBuffer {
     }
     this.#bufferedBytes += deltaBytes;
     if (!mergesPrevious) {
-      this.#events.push(event);
+      this.#events.push({ event, retainedBytes: deltaBytes });
       return true;
     }
     // 仅合并相邻 Delta，避免跨 Item 覆盖较早事件并改变 Timeline 顺序。
     this.#events[this.#events.length - 1] = {
-      ...event,
-      payload: { ...event.payload, delta: `${previous.payload.delta}${event.payload.delta}` },
-    } as AgentEvent;
+      event: {
+        ...event,
+        payload: { ...event.payload, delta: `${previous.payload.delta}${event.payload.delta}` },
+      } as BufferedDeltaEvent["event"],
+      retainedBytes: (previousEntry?.retainedBytes ?? 0) + deltaBytes,
+    };
     return true;
   }
 
@@ -141,14 +152,12 @@ export class AgentEventBuffer {
   }
 
   public flushThrough(sequence: number): AgentEvent[] {
-    const retainedIndex = this.#events.findIndex((event) => event.sequence >= sequence);
+    const retainedIndex = this.#events.findIndex(({ event }) => event.sequence >= sequence);
     const flushCount = retainedIndex < 0 ? this.#events.length : retainedIndex;
     const flushed = this.#events.splice(0, flushCount);
-    for (const event of flushed) {
-      if (isDeltaEvent(event)) {
-        this.#bufferedBytes -= textEncoder.encode(event.payload.delta).byteLength;
-      }
+    for (const entry of flushed) {
+      this.#bufferedBytes -= entry.retainedBytes;
     }
-    return flushed;
+    return flushed.map(({ event }) => event);
   }
 }

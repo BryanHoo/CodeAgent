@@ -240,11 +240,12 @@ export class JsonlRpcClient {
       typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk,
     );
 
-    // 保留最后一个不完整帧，直到后续 chunk 补齐换行符。
-    let newlineIndex = this.#buffer.indexOf("\n");
+    // 使用游标扫描 burst，避免每处理一帧都复制尚未消费的剩余 Buffer。
+    let lineStart = 0;
+    let newlineIndex = this.#buffer.indexOf("\n", lineStart);
     while (newlineIndex >= 0) {
-      const line = this.#buffer.slice(0, newlineIndex).replace(/\r$/, "");
-      this.#buffer = this.#buffer.slice(newlineIndex + 1);
+      const line = this.#buffer.slice(lineStart, newlineIndex).replace(/\r$/, "");
+      lineStart = newlineIndex + 1;
       if (line.trim()) {
         try {
           this.#handleLine(line);
@@ -257,8 +258,10 @@ export class JsonlRpcClient {
           return;
         }
       }
-      newlineIndex = this.#buffer.indexOf("\n");
+      newlineIndex = this.#buffer.indexOf("\n", lineStart);
     }
+    // 保留最后一个不完整帧，直到后续 chunk 补齐换行符。
+    this.#buffer = this.#buffer.slice(lineStart);
   };
 
   readonly #handleInputEnd = (): void => {

@@ -1,7 +1,24 @@
 import type { AgentEvent, ResyncRequired } from "@code-agent/protocol";
+import type * as TypeBoxValue from "@sinclair/typebox/value";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CodeAgentClient } from "./http-client.js";
+
+const { decodeSpy } = vi.hoisted(() => ({ decodeSpy: vi.fn() }));
+
+vi.mock("@sinclair/typebox/value", async (importOriginal) => {
+  const original = await importOriginal<typeof TypeBoxValue>();
+  return {
+    ...original,
+    Value: {
+      ...original.Value,
+      Decode(...args: Parameters<typeof original.Value.Decode>) {
+        decodeSpy();
+        return original.Value.Decode(...args);
+      },
+    },
+  };
+});
 
 class FakeWebSocket extends EventTarget {
   public readonly url: string;
@@ -72,6 +89,7 @@ function messageEvent(sequence: number, delta = "实时"): AgentEvent {
 
 afterEach(() => {
   vi.useRealTimers();
+  decodeSpy.mockClear();
 });
 
 describe("CodeAgentClient realtime events", () => {
@@ -99,6 +117,24 @@ describe("CodeAgentClient realtime events", () => {
     expect(states).toEqual(["connecting", "connected"]);
     unsubscribe();
     expect(socket?.readyState).toBe(WebSocket.CLOSED);
+  });
+
+  it("does not decode a frame again after schema validation", () => {
+    const { client, sockets } = createHarness();
+    const onEvent = vi.fn();
+    client.subscribeEvents({
+      afterSequence: 3,
+      projectId: "code-agent",
+      onEvent,
+      onResyncRequired: vi.fn(),
+      sessionId: "runtime-1",
+    });
+    sockets[0]?.open();
+    sockets[0]?.receive(ready);
+    sockets[0]?.receive(messageEvent(4));
+
+    expect(onEvent).toHaveBeenCalledOnce();
+    expect(decodeSpy).not.toHaveBeenCalled();
   });
 
   it("turns sequence gaps and session changes into resync requests", () => {

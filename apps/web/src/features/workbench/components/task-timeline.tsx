@@ -780,6 +780,22 @@ function getReviewMessageText(item: Extract<AgentItem, { type: "review" }>): str
   return `请按以下要求检查代码：${target.instructions}`;
 }
 
+export function resolveMessageResponseRendering({
+  isLastTurnItem,
+  role,
+  turnStatus,
+}: Readonly<{
+  isLastTurnItem: boolean;
+  role: Extract<AgentItem, { type: "message" }>["role"];
+  turnStatus: AgentTurn["status"];
+}>): Readonly<{ isAnimating: boolean; mode: "static" | "streaming" }> {
+  const isActiveAssistantTail = role === "assistant" && isLastTurnItem && turnStatus === "running";
+  return {
+    isAnimating: isActiveAssistantTail,
+    mode: isActiveAssistantTail ? "streaming" : "static",
+  };
+}
+
 function TimelineItemContent({
   isLastTurnItem,
   item,
@@ -799,6 +815,11 @@ function TimelineItemContent({
     case "message": {
       const attachments = item.role === "user" ? (item.attachments ?? []) : [];
       const skills = item.role === "user" ? (item.skills ?? []) : [];
+      const responseRendering = resolveMessageResponseRendering({
+        isLastTurnItem,
+        role: item.role,
+        turnStatus,
+      });
       const hasTextContent = skills.length > 0 || item.text.length > 0;
       const messageBody = hasTextContent ? (
         <div>
@@ -818,6 +839,7 @@ function TimelineItemContent({
           {item.text.length === 0 ? null : (
             <MessageResponse
               className={skills.length === 0 ? "" : "inline [&>p:first-child]:inline"}
+              {...responseRendering}
               onOpenFileReference={onOpenSourceFile}
             >
               {item.text}

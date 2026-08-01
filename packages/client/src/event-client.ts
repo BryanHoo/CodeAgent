@@ -1,6 +1,7 @@
 import {
   EventStreamMessageSchema,
   type AgentEvent,
+  type EventStreamMessage,
   type ResyncRequired,
 } from "@code-agent/protocol";
 import { Value } from "@sinclair/typebox/value";
@@ -123,7 +124,8 @@ export function startAgentEventSubscription(
         failProtocol("CodeAgent event frame does not match the protocol schema");
         return;
       }
-      const message = Value.Decode(EventStreamMessageSchema, frame);
+      // Agent Event Schema 不含 Transform，Check 成功后直接使用已验证数据，避免二次深遍历。
+      const message = frame as EventStreamMessage;
 
       if (message.type === "resync.required") {
         stopForResync(message);

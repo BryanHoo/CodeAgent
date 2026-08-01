@@ -1,5 +1,5 @@
 import type { AgentEvent, AgentTaskSnapshotResponse } from "@code-agent/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { AgentEventBuffer, mergeSubmittedPromptIntoSnapshot } from "./task-runtime.js";
 
@@ -128,6 +128,23 @@ describe("AgentEventBuffer", () => {
 
     expect(buffer.flushThrough(3)).toMatchObject([{ sequence: 1 }]);
     expect(buffer.drain()).toMatchObject([{ sequence: 3 }]);
+  });
+
+  it("reuses cached UTF-8 byte lengths while flushing", () => {
+    const buffer = new AgentEventBuffer({ maxBytes: 6 });
+    const encodeSpy = vi.spyOn(TextEncoder.prototype, "encode");
+
+    try {
+      expect(buffer.push(delta(1, "你"))).toBe(true);
+      expect(buffer.push(delta(2, "好"))).toBe(true);
+      expect(encodeSpy).toHaveBeenCalledTimes(2);
+
+      expect(buffer.drain()).toMatchObject([{ payload: { delta: "你好" } }]);
+      expect(encodeSpy).toHaveBeenCalledTimes(2);
+      expect(buffer.push(delta(3, "！"))).toBe(true);
+    } finally {
+      encodeSpy.mockRestore();
+    }
   });
 
   it("drops buffered deltas after bounded capacity is exceeded", () => {

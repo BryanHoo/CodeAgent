@@ -63,6 +63,79 @@ type BufferedProjectEvent = Readonly<{
   retainedBytes: number;
 }>;
 
+export class ProjectEventHistory {
+  #count = 0;
+  #entries: (BufferedProjectEvent | undefined)[];
+  #floorSequence = 0;
+  readonly #maxBytes: number;
+  readonly #maxEvents: number;
+  #retainedBytes = 0;
+  #start = 0;
+
+  public constructor(options: Readonly<{ maxBytes: number; maxEvents: number }>) {
+    if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 0) {
+      throw new RangeError("Project Event history maxBytes must be non-negative");
+    }
+    if (!Number.isSafeInteger(options.maxEvents) || options.maxEvents < 0) {
+      throw new RangeError("Project Event history maxEvents must be non-negative");
+    }
+    this.#maxBytes = options.maxBytes;
+    this.#maxEvents = options.maxEvents;
+    this.#entries = new Array<BufferedProjectEvent | undefined>(options.maxEvents);
+  }
+
+  public get floorSequence(): number {
+    return this.#floorSequence;
+  }
+
+  public append(event: AgentEvent): void {
+    const retainedBytes = estimateRetainedBytes(event);
+    if (retainedBytes > this.#maxBytes || this.#maxEvents === 0) {
+      this.reset(event.sequence);
+      return;
+    }
+    if (this.#count === this.#maxEvents) {
+      this.#evictOldest();
+    }
+    const insertionIndex = (this.#start + this.#count) % this.#maxEvents;
+    this.#entries[insertionIndex] = { event, retainedBytes };
+    this.#count += 1;
+    this.#retainedBytes += retainedBytes;
+    while (this.#retainedBytes > this.#maxBytes) {
+      this.#evictOldest();
+    }
+  }
+
+  public forEachAfter(sequence: number, visit: (event: AgentEvent) => void): void {
+    for (let offset = 0; offset < this.#count; offset += 1) {
+      const entry = this.#entries[(this.#start + offset) % this.#maxEvents];
+      if (entry !== undefined && entry.event.sequence > sequence) {
+        visit(entry.event);
+      }
+    }
+  }
+
+  public reset(floorSequence = this.#floorSequence): void {
+    this.#entries = new Array<BufferedProjectEvent | undefined>(this.#maxEvents);
+    this.#count = 0;
+    this.#floorSequence = floorSequence;
+    this.#retainedBytes = 0;
+    this.#start = 0;
+  }
+
+  #evictOldest(): void {
+    const oldestEntry = this.#entries[this.#start];
+    if (oldestEntry === undefined) {
+      return;
+    }
+    this.#entries[this.#start] = undefined;
+    this.#start = (this.#start + 1) % this.#maxEvents;
+    this.#count -= 1;
+    this.#retainedBytes -= oldestEntry.retainedBytes;
+    this.#floorSequence = oldestEntry.event.sequence;
+  }
+}
+
 function isDeltaEvent(event: AgentEvent): boolean {
   return (
     event.type === "message.delta" ||
@@ -190,17 +263,13 @@ type ProjectRuntimeCallbacks = Readonly<{
 class ProjectEventRuntime {
   readonly #callbacks: ProjectRuntimeCallbacks;
   readonly #client: CodeAgentRuntimeClient;
+  readonly #eventHistory: ProjectEventHistory;
   readonly #idleTimeoutMs: number;
-  readonly #maxEventHistoryBytes: number;
-  readonly #maxEventHistoryEvents: number;
   readonly #projectId: string;
   readonly #targets = new Map<TaskStore, TaskEventTarget>();
   #connectionCleanup: (() => void) | undefined;
   #connectionState: AgentEventConnectionState = "closed";
   #disposed = false;
-  #eventHistory: BufferedProjectEvent[] = [];
-  #eventHistoryBytes = 0;
-  #historyFloorSequence = 0;
   #idleTimer: ReturnType<typeof setTimeout> | undefined;
   #lastAccessAt = Date.now();
   #latestSequence = 0;
@@ -219,8 +288,10 @@ class ProjectEventRuntime {
     this.#client = client;
     this.#callbacks = callbacks;
     this.#idleTimeoutMs = options.idleTimeoutMs;
-    this.#maxEventHistoryBytes = options.maxEventHistoryBytes;
-    this.#maxEventHistoryEvents = options.maxEventHistoryEvents;
+    this.#eventHistory = new ProjectEventHistory({
+      maxBytes: options.maxEventHistoryBytes,
+      maxEvents: options.maxEventHistoryEvents,
+    });
   }
 
   public attachTaskStore(
@@ -311,25 +382,7 @@ class ProjectEventRuntime {
 
   #appendEventHistory(event: AgentEvent): void {
     // 有界历史用于补齐 Snapshot 请求期间到达的事件，超出预算后由 Snapshot 恢复兜底。
-    const retainedBytes = estimateRetainedBytes(event);
-    if (retainedBytes > this.#maxEventHistoryBytes || this.#maxEventHistoryEvents === 0) {
-      this.#clearEventHistory();
-      this.#historyFloorSequence = event.sequence;
-      return;
-    }
-    this.#eventHistory.push({ event, retainedBytes });
-    this.#eventHistoryBytes += retainedBytes;
-    while (
-      this.#eventHistory.length > this.#maxEventHistoryEvents ||
-      this.#eventHistoryBytes > this.#maxEventHistoryBytes
-    ) {
-      const removed = this.#eventHistory.shift();
-      if (removed === undefined) {
-        break;
-      }
-      this.#eventHistoryBytes -= removed.retainedBytes;
-      this.#historyFloorSequence = removed.event.sequence;
-    }
+    this.#eventHistory.append(event);
   }
 
   #assertSnapshotProject(response: AgentTaskSnapshotResponse): void {
@@ -339,8 +392,7 @@ class ProjectEventRuntime {
   }
 
   #clearEventHistory(): void {
-    this.#eventHistory = [];
-    this.#eventHistoryBytes = 0;
+    this.#eventHistory.reset();
   }
 
   #clearIdleTimer(): void {
@@ -358,10 +410,9 @@ class ProjectEventRuntime {
       return;
     }
     this.#stopConnection();
-    this.#clearEventHistory();
     this.#sessionId = checkpoint.sessionId;
     this.#latestSequence = checkpoint.sequence;
-    this.#historyFloorSequence = checkpoint.sequence;
+    this.#eventHistory.reset(checkpoint.sequence);
 
     // 连接只在 Project Runtime 创建一次，Sidebar 与所有 Task Store 消费同一事件源。
     const cleanup = this.#client.subscribeEvents({
@@ -453,21 +504,18 @@ class ProjectEventRuntime {
       return;
     }
     if (
-      checkpoint.sequence < this.#historyFloorSequence &&
+      checkpoint.sequence < this.#eventHistory.floorSequence &&
       checkpoint.sequence < this.#latestSequence
     ) {
       // Snapshot checkpoint 早于客户端保留窗口时禁止猜测缺失事件，直接请求权威快照。
       target.requestRecovery();
       return;
     }
-    for (const bufferedEvent of this.#eventHistory) {
-      if (
-        bufferedEvent.event.taskId === target.taskId &&
-        bufferedEvent.event.sequence > checkpoint.sequence
-      ) {
-        target.apply(bufferedEvent.event);
+    this.#eventHistory.forEachAfter(checkpoint.sequence, (event) => {
+      if (event.taskId === target.taskId) {
+        target.apply(event);
       }
-    }
+    });
   }
 
   #requestSnapshotRecovery(): void {

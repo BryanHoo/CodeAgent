@@ -404,6 +404,7 @@ export const MessageResponse = memo(
   (previousProps, nextProps) =>
     previousProps.children === nextProps.children &&
     previousProps.isAnimating === nextProps.isAnimating &&
+    previousProps.mode === nextProps.mode &&
     previousProps.onOpenFileReference === nextProps.onOpenFileReference,
 );
 

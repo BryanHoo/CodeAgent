@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import { createTaskStore } from "../../conversation/runtime/task-store.js";
-import { TaskSnapshotTimeline, TaskTimeline } from "./task-timeline.js";
+import {
+  resolveMessageResponseRendering,
+  TaskSnapshotTimeline,
+  TaskTimeline,
+} from "./task-timeline.js";
 
 const completedTurn: RuntimeTaskSnapshot["turns"][number] = {
   completedAt: "2026-07-24T00:01:00.000Z",
@@ -41,6 +45,37 @@ const snapshot: RuntimeTaskSnapshot = {
 };
 
 describe("TaskTimeline", () => {
+  it("uses streaming Markdown only for the active assistant tail item", () => {
+    expect(
+      resolveMessageResponseRendering({
+        isLastTurnItem: true,
+        role: "assistant",
+        turnStatus: "running",
+      }),
+    ).toEqual({ isAnimating: true, mode: "streaming" });
+    expect(
+      resolveMessageResponseRendering({
+        isLastTurnItem: false,
+        role: "assistant",
+        turnStatus: "running",
+      }),
+    ).toEqual({ isAnimating: false, mode: "static" });
+    expect(
+      resolveMessageResponseRendering({
+        isLastTurnItem: true,
+        role: "user",
+        turnStatus: "running",
+      }),
+    ).toEqual({ isAnimating: false, mode: "static" });
+    expect(
+      resolveMessageResponseRendering({
+        isLastTurnItem: true,
+        role: "assistant",
+        turnStatus: "completed",
+      }),
+    ).toEqual({ isAnimating: false, mode: "static" });
+  });
+
   it("shows the running shimmer while a new chat submission is pending", () => {
     const markup = renderToStaticMarkup(
       <TaskTimeline

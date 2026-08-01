@@ -6,6 +6,7 @@ import {
   deriveProjectSidebarConnectionState,
   getProjectTaskPaginationControl,
   getProjectSidebarConnectionStatus,
+  groupTasksByProjectId,
   ProjectActionMenu,
   SidebarSettingsButton,
   TaskStatusIndicator,
@@ -15,6 +16,28 @@ import { ProjectRemoveDialog } from "./project-remove-dialog.js";
 import { ProjectRenameDialog } from "./project-rename-dialog.js";
 
 describe("Project task pagination", () => {
+  it("groups a large task list by Project while preserving task order", () => {
+    const tasks = Array.from({ length: 300 }, (_, index) => ({
+      id: `task-${String(index)}`,
+      pinned: false,
+      projectId: `project-${String(index % 3)}`,
+      title: `Task ${String(index)}`,
+      updatedAt: "2026-07-23T00:01:00.000Z",
+    }));
+
+    const tasksByProjectId = groupTasksByProjectId(tasks);
+
+    expect(tasksByProjectId.get("project-0")).toHaveLength(100);
+    expect(
+      tasksByProjectId
+        .get("project-0")
+        ?.map((task) => task.id)
+        .slice(0, 3),
+    ).toEqual(["task-0", "task-3", "task-6"]);
+    expect(tasksByProjectId.get("project-2")?.at(-1)?.id).toBe("task-299");
+    expect(tasksByProjectId.get("missing-project")).toBeUndefined();
+  });
+
   it("requests only the selected Project next page", async () => {
     const fetchFirstProjectNextPage = vi.fn(() => Promise.resolve());
     const fetchSecondProjectNextPage = vi.fn(() => Promise.resolve());

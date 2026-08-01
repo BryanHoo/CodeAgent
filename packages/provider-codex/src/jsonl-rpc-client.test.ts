@@ -75,6 +75,32 @@ describe("JsonlRpcClient", () => {
     client.close();
   });
 
+  it("removes a consumed JSONL burst prefix only once", () => {
+    const { client, serverOutput } = createHarness();
+    const onNotification = vi.fn();
+    client.onNotification(onNotification);
+    const frameCount = 200;
+    const burst = Array.from({ length: frameCount }, (_, index) =>
+      JSON.stringify({ method: "message/delta", params: { index } }),
+    ).join("\n");
+    const sliceSpy = vi.spyOn(String.prototype, "slice");
+
+    try {
+      serverOutput.write(`${burst}\n`);
+
+      expect(onNotification).toHaveBeenCalledTimes(frameCount);
+      expect(onNotification.mock.calls.at(-1)?.[0]).toEqual({
+        method: "message/delta",
+        params: { index: frameCount - 1 },
+      });
+      // 每帧只截取当前行，全部扫描结束后再统一移除已消费前缀。
+      expect(sliceSpy).toHaveBeenCalledTimes(frameCount + 1);
+    } finally {
+      sliceSpy.mockRestore();
+      client.close();
+    }
+  });
+
   it("rejects a request after its configured timeout", async () => {
     const { client } = createHarness(20);
 
