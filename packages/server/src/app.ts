@@ -441,7 +441,7 @@ const COMMIT_MESSAGE_OUTPUT_SCHEMA = {
 
 class CodeAgentLogController extends LogController {
   public override incomingRequest(): void {
-    // 只记录包含耗时和终态的完成日志，避免为每个请求输出重复起始行。
+    // 正常请求不写终端日志，只保留服务端错误的完成上下文。
   }
 
   public override requestCompleted(
@@ -459,9 +459,7 @@ class CodeAgentLogController extends LogController {
     };
     if (reply.statusCode >= 500) {
       request.log.error(fields, "request completed");
-      return;
     }
-    request.log.info(fields, "request completed");
   }
 }
 
@@ -704,7 +702,8 @@ export async function createCodeAgentServer(
     options.loggerEnabled === false
       ? false
       : {
-          level: "info",
+          // CLI 运行时只向终端输出警告和错误。
+          level: "warn",
           // 即使后续扩展请求 Serializer，也不能让认证字段进入结构化日志。
           redact: {
             censor: "[Redacted]",

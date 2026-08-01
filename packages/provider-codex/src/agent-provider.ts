@@ -90,7 +90,7 @@ const CODEX_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
   "turn/completed",
   "turn/started",
 ]);
-const DEFAULT_PROVIDER_LOGGER: CodexProviderLogger = pino({ level: "info" }).child({
+const DEFAULT_PROVIDER_LOGGER: CodexProviderLogger = pino({ level: "warn" }).child({
   component: "provider-codex",
 });
 

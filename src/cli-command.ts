@@ -33,7 +33,6 @@ import { selectSystemDirectory } from "./system-directory-picker.js";
 interface CliManagedRuntime {
   client: CodexRpcClient;
   close: () => Promise<void>;
-  pid: number | undefined;
   waitForExit: () => Promise<CodexProcessExit>;
 }
 
@@ -241,7 +240,6 @@ async function runStart(
   dependencies: CliDependencies,
   signal: AbortSignal | undefined,
   stderr: (message: string) => void,
-  stdout: (message: string) => void,
 ): Promise<number> {
   const options = parseCommandOptions(args, new Set(["--codex-bin", "--codex-home"]));
   const ownedShutdown = signal ? null : createProcessShutdownSignal();
@@ -280,7 +278,6 @@ async function runStart(
       taskMetadataRepository: stateRepository,
     });
     const url = await server.listen({ host: "127.0.0.1", port: 3210 });
-    stdout(`CodeAgent started at ${url} (Codex pid ${String(runtime.pid ?? "unknown")})\n`);
 
     try {
       await dependencies.openBrowser(url);
@@ -344,7 +341,7 @@ export async function runCli(
       return await runDoctor(args, dependencies, stdout);
     }
     if (command === "start") {
-      return await runStart(args, dependencies, options.signal, stderr, stdout);
+      return await runStart(args, dependencies, options.signal, stderr);
     }
     throw new Error(`Unknown command: ${command}`);
   } catch (error) {

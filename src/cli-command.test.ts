@@ -239,7 +239,7 @@ describe("runCli", () => {
     );
     expect(harness.serverListen).toHaveBeenCalledWith({ host: "127.0.0.1", port: 3210 });
     expect(harness.dependencies.openBrowser).toHaveBeenCalledWith("http://127.0.0.1:3210");
-    expect(harness.stdout.join("")).toContain("CodeAgent started at http://127.0.0.1:3210");
+    expect(harness.stdout).toEqual([]);
 
     controller.abort();
 

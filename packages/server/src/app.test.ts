@@ -414,7 +414,7 @@ async function createHarness(
 }
 
 describe("server diagnostics", () => {
-  it("enables bounded handlers and emits redacted request completion logs", async () => {
+  it("only emits redacted warning and error logs", async () => {
     const { provider } = createProvider();
     const slowProvider = {
       ...provider,
@@ -451,15 +451,17 @@ describe("server diagnostics", () => {
     expect(response.statusCode).toBe(200);
     expect(timedOutResponse.statusCode).toBe(503);
     const logs = logLines.map((line) => JSON.parse(line) as Record<string, unknown>);
-    const healthLog = logs.find((entry) => entry["route"] === "/v1/health");
-    expect(healthLog).toMatchObject({
+    const timeoutLog = logs.find((entry) => entry["statusCode"] === 503);
+    expect(timeoutLog).toMatchObject({
+      level: 50,
       method: "GET",
       msg: "request completed",
-      route: "/v1/health",
-      statusCode: 200,
+      statusCode: 503,
     });
-    expect(typeof healthLog?.["durationMs"]).toBe("number");
-    expect(typeof healthLog?.["requestId"]).toBe("string");
+    expect(typeof timeoutLog?.["durationMs"]).toBe("number");
+    expect(typeof timeoutLog?.["requestId"]).toBe("string");
+    expect(logs.every((entry) => Number(entry["level"]) >= 40)).toBe(true);
+    expect(logs.some((entry) => entry["route"] === "/v1/health")).toBe(false);
     expect(logLines.join("\n")).not.toContain("secret-token");
     expect(logLines.join("\n")).not.toContain("secret-cookie");
     expect(logLines.join("\n")).not.toContain("secret-api-key");
