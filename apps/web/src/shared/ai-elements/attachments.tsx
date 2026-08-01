@@ -1,4 +1,4 @@
-import { FileImage, X } from "lucide-react";
+import { FileText, X } from "lucide-react";
 import {
   createContext,
   useContext,
@@ -61,12 +61,13 @@ export function AttachmentPreview({ className = "", ...props }: HTMLAttributes<H
   return (
     <div
       className={`grid size-7 shrink-0 place-items-center overflow-hidden rounded-control bg-raised ${className}`}
+      data-attachment-preview={data.mediaType.startsWith("image/") ? "image" : "file"}
       {...props}
     >
       {data.mediaType.startsWith("image/") ? (
         <img alt="" className="size-full object-cover" src={data.previewUrl} />
       ) : (
-        <FileImage className="size-4 text-muted-foreground" aria-hidden="true" />
+        <FileText className="size-4 text-muted-foreground" aria-hidden="true" />
       )}
     </div>
   );

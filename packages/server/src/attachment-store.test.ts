@@ -4,6 +4,7 @@ import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js"
 
 const pixelDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const pastedTextDataUrl = "data:text/plain;base64,5L2g5aW9IENvZGVBZ2VudA==";
 
 describe("AttachmentStore", () => {
   it("stores validated image data behind an opaque reference", () => {
@@ -21,6 +22,29 @@ describe("AttachmentStore", () => {
       { mediaType: "image/png", url: pixelDataUrl },
     ]);
     expect(() => store.resolve("other", [attachment.id])).toThrow(AttachmentNotFoundError);
+  });
+
+  it("stores pasted UTF-8 text as a bounded text attachment", () => {
+    const store = new AttachmentStore({ createId: () => "attachment-text" });
+
+    const attachment = store.add("code-agent", {
+      dataUrl: pastedTextDataUrl,
+      name: "Pasted text.txt",
+    });
+
+    expect(attachment).toEqual({
+      id: "attachment-text",
+      mediaType: "text/plain",
+      name: "Pasted text.txt",
+      size: 16,
+    });
+    expect(store.resolve("code-agent", [attachment.id])).toEqual([
+      {
+        mediaType: "text/plain",
+        name: "Pasted text.txt",
+        text: "你好 CodeAgent",
+      },
+    ]);
   });
 
   it("expires, consumes, and clears stored attachments", () => {

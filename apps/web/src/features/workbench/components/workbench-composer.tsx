@@ -85,6 +85,9 @@ import {
 export type ComposerState = "failed" | "idle" | "reconnecting" | "running" | "submitting";
 export type ApprovalMode = AgentApprovalPolicy | "auto-review";
 
+export const LARGE_PASTE_CHARACTER_THRESHOLD = 1_000;
+export const PASTED_TEXT_ATTACHMENT_NAME = "Pasted text.txt";
+
 export type IdempotencyAttempt = Readonly<{
   fingerprint: string;
   key: string;
@@ -1148,6 +1151,11 @@ export function WorkbenchComposer({
           data-state={state}
           disabled={attachmentsDisabled}
           globalDrop
+          largePasteCharacterThreshold={
+            commandDraftMode === "feedback"
+              ? Number.POSITIVE_INFINITY
+              : LARGE_PASTE_CHARACTER_THRESHOLD
+          }
           maxFiles={4}
           maxFileSize={2 * 1024 * 1024}
           multiple
@@ -1169,6 +1177,7 @@ export function WorkbenchComposer({
             }
             void submitPrompt(message);
           }}
+          pastedTextFileName={PASTED_TEXT_ATTACHMENT_NAME}
         >
           {commandDraftMode === null ? null : (
             <PromptInputHeader className="flex items-center">

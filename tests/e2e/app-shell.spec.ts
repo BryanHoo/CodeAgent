@@ -1863,6 +1863,81 @@ test("keeps pasted images in attachments instead of the text editor", async ({ p
   expect(pasteWasCanceled).toBe(true);
 });
 
+test("converts large pasted text into a submitted file attachment", async ({ page }) => {
+  let uploadBody: unknown;
+  let turnBody: unknown;
+  await page.route("**/v1/projects/code-agent/attachments", async (route) => {
+    uploadBody = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        attachment: {
+          id: "attachment-pasted-text",
+          mediaType: "text/plain",
+          name: "Pasted text.txt",
+          size: 1_001,
+        },
+      },
+      status: 201,
+    });
+  });
+  await page.route("**/v1/projects/code-agent/tasks/task-1/turns", async (route) => {
+    turnBody = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        taskId: "task-1",
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "turn-pasted-text",
+          items: [],
+          startedAt: "2026-08-01T00:00:00.000Z",
+          status: "running",
+        },
+      },
+      status: 201,
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  const pasteResult = await prompt.evaluate((element) => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", "x".repeat(1_001));
+    const event = new ClipboardEvent("paste", {
+      bubbles: true,
+      cancelable: true,
+      clipboardData,
+    });
+
+    const dispatchResult = element.dispatchEvent(event);
+    return {
+      clipboardTextLength: clipboardData.getData("text/plain").length,
+      pasteWasCanceled: !dispatchResult && event.defaultPrevented,
+    };
+  });
+
+  expect(pasteResult).toEqual({ clipboardTextLength: 1_001, pasteWasCanceled: true });
+  await expect(prompt).toHaveAttribute("data-serialized-value", "");
+  await expect(page.getByText("Pasted text.txt", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await expect(page.getByText("Pasted text.txt", { exact: true })).toHaveCount(0);
+
+  expect(uploadBody).toMatchObject({
+    dataUrl: expect.stringMatching(/^data:text\/plain;base64,/u),
+    name: "Pasted text.txt",
+  });
+  expect(turnBody).toMatchObject({
+    input: {
+      attachments: [{ id: "attachment-pasted-text" }],
+      text: "",
+      type: "prompt",
+    },
+  });
+});
+
 test("submits attachments, approval policy, model, and reasoning effort through the real client contract", async ({
   page,
 }) => {

@@ -33,6 +33,7 @@ const project = {
 
 const pixelDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const pastedTextDataUrl = "data:text/plain;base64,5L2g5aW9IENvZGVBZ2VudA==";
 const historicalImageContent = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const turnOptions = {
   approvalPolicy: "on-request",
@@ -1173,11 +1174,53 @@ describe("CodeAgent Server", () => {
     expect(writeTaskSettings).toHaveBeenCalledOnce();
     expect(startTurn).toHaveBeenCalledWith(
       "task-1",
-      { images: [{ mediaType: "image/png", url: pixelDataUrl }], skills: [], text: "" },
+      {
+        images: [{ mediaType: "image/png", url: pixelDataUrl }],
+        skills: [],
+        text: "",
+        textAttachments: [],
+      },
       turnOptions,
     );
     expect(consumed.statusCode).toBe(404);
     expect(consumed.json()).toMatchObject({ code: "ATTACHMENT_NOT_FOUND" });
+  });
+
+  it("resolves pasted text attachments separately from image inputs", async () => {
+    const { app, startTurn } = await createHarness();
+    const uploaded = await app.inject({
+      headers: { "idempotency-key": "upload-pasted-text" },
+      method: "POST",
+      payload: { dataUrl: pastedTextDataUrl, name: "Pasted text.txt" },
+      url: "/v1/projects/code-agent/attachments",
+    });
+    const attachment = uploaded.json<{ attachment: { id: string } }>().attachment;
+
+    const turn = await app.inject({
+      headers: { "idempotency-key": "pasted-text-turn" },
+      method: "POST",
+      payload: {
+        input: { attachments: [{ id: attachment.id }], skills: [], text: "", type: "prompt" },
+        options: turnOptions,
+      },
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
+    });
+
+    expect(uploaded.statusCode).toBe(201);
+    expect(uploaded.json()).toMatchObject({
+      attachment: { mediaType: "text/plain", name: "Pasted text.txt", size: 16 },
+    });
+    expect(turn.statusCode).toBe(201);
+    expect(startTurn).toHaveBeenCalledWith(
+      "task-1",
+      {
+        images: [],
+        skills: [],
+        text: "",
+        textAttachments: [{ name: "Pasted text.txt", text: "你好 CodeAgent" }],
+      },
+      turnOptions,
+    );
   });
 
   it("serves historical attachment bytes through the project task scope", async () => {
@@ -1624,7 +1667,7 @@ describe("CodeAgent Server", () => {
     expect(turn.json()).toMatchObject({ taskId: "task-1", turn: { id: "turn-1" } });
     expect(startTurn).toHaveBeenCalledWith(
       "task-1",
-      { images: [], skills: [], text: "继续实现" },
+      { images: [], skills: [], text: "继续实现", textAttachments: [] },
       turnOptions,
     );
     expect(interrupted.statusCode).toBe(202);
@@ -2053,13 +2096,13 @@ describe("CodeAgent Server", () => {
     expect(startTurn).toHaveBeenNthCalledWith(
       1,
       "task:a",
-      { images: [], skills: [], text: payload.input.text },
+      { images: [], skills: [], text: payload.input.text, textAttachments: [] },
       payload.options,
     );
     expect(startTurn).toHaveBeenNthCalledWith(
       2,
       "task:a:b",
-      { images: [], skills: [], text: payload.input.text },
+      { images: [], skills: [], text: payload.input.text, textAttachments: [] },
       payload.options,
     );
   });

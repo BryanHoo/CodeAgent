@@ -40,6 +40,7 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
+  createPastedTextFile,
 } from "./prompt-input.js";
 import { Shimmer } from "./shimmer.js";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "./tool.js";
@@ -353,6 +354,18 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('data-prompt-input=""');
   });
 
+  it("creates a text file only when pasted text exceeds the configured threshold", () => {
+    expect(createPastedTextFile("x".repeat(1_000), 1_000, "Pasted text.txt")).toBeUndefined();
+
+    const attachment = createPastedTextFile("你".repeat(1_001), 1_000, "Pasted text.txt");
+
+    expect(attachment).toMatchObject({
+      name: "Pasted text.txt",
+      size: 3_003,
+      type: "text/plain",
+    });
+  });
+
   it("renders attachment previews and removal controls", () => {
     const markup = renderToStaticMarkup(
       <Attachments>
@@ -375,6 +388,29 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain("screen.png");
     expect(markup).toContain('src="data:image/png;base64,aW1hZ2U="');
     expect(markup).toContain('aria-label="移除 screen.png"');
+  });
+
+  it("renders pasted text attachments as files", () => {
+    const markup = renderToStaticMarkup(
+      <Attachments>
+        <Attachment
+          data={{
+            id: "attachment-text",
+            mediaType: "text/plain",
+            name: "Pasted text.txt",
+            previewUrl: "blob:text",
+            size: 1_001,
+          }}
+        >
+          <AttachmentPreview />
+          <AttachmentInfo />
+        </Attachment>
+      </Attachments>,
+    );
+
+    expect(markup).toContain('data-attachment-preview="file"');
+    expect(markup).toContain("Pasted text.txt");
+    expect(markup).not.toContain("<img");
   });
 
   it("renders an accessible prompt command composition", () => {

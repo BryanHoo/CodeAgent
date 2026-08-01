@@ -547,7 +547,7 @@ describe("CodexAgentProvider", () => {
     await expect(
       provider.startTurn(
         "task-1",
-        { images: [], skills: [], text: "继续之前的任务" },
+        { images: [], skills: [], text: "继续之前的任务", textAttachments: [] },
         {
           approvalPolicy: "on-request",
           approvalsReviewer: "user",
@@ -602,12 +602,12 @@ describe("CodexAgentProvider", () => {
     await provider.readTask("task-1");
     const firstTurn = provider.startTurn(
       "task-1",
-      { images: [], skills: [], text: "并发消息一" },
+      { images: [], skills: [], text: "并发消息一", textAttachments: [] },
       turnOptions,
     );
     const secondTurn = provider.startTurn(
       "task-1",
-      { images: [], skills: [], text: "并发消息二" },
+      { images: [], skills: [], text: "并发消息二", textAttachments: [] },
       turnOptions,
     );
     await Promise.resolve();
@@ -1455,6 +1455,7 @@ describe("CodexAgentProvider", () => {
             { id: secondSkill.id, name: "documentation-writer" },
           ],
           text: "",
+          textAttachments: [],
         },
         {
           approvalPolicy: "on-request",
@@ -1524,6 +1525,7 @@ describe("CodexAgentProvider", () => {
           images: [{ mediaType: "image/png", url: "data:image/jpeg;base64,aW1hZ2U=" }],
           skills: [],
           text: "",
+          textAttachments: [],
         },
         {
           approvalPolicy: "on-request",
@@ -1591,6 +1593,7 @@ describe("CodexAgentProvider", () => {
           },
           skills: [],
           text: "实现写入闭环",
+          textAttachments: [{ name: "Pasted text.txt", text: "第一行\n你好" }],
         },
         {
           approvalPolicy: "on-request",
@@ -1612,6 +1615,16 @@ describe("CodexAgentProvider", () => {
           approvalsReviewer: "auto_review",
           input: [
             { text: "实现写入闭环", text_elements: [], type: "text" },
+            {
+              text: "第一行\n你好",
+              text_elements: [
+                {
+                  byteRange: { end: 16, start: 0 },
+                  placeholder: "Pasted text.txt",
+                },
+              ],
+              type: "text",
+            },
             { type: "image", url: "data:image/png;base64,aW1hZ2U=" },
           ],
           model: "gpt-5.6-sol",
@@ -1657,7 +1670,7 @@ describe("CodexAgentProvider", () => {
 
     await provider.startTurn(
       "task-1",
-      { images: [], skills: [], text: "只读检查" },
+      { images: [], skills: [], text: "只读检查", textAttachments: [] },
       {
         approvalPolicy: "on-request",
         approvalsReviewer: "user",
@@ -1668,7 +1681,7 @@ describe("CodexAgentProvider", () => {
     );
     await provider.startTurn(
       "task-1",
-      { images: [], skills: [], text: "完全访问" },
+      { images: [], skills: [], text: "完全访问", textAttachments: [] },
       {
         approvalPolicy: "never",
         approvalsReviewer: "user",

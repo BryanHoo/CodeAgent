@@ -650,6 +650,7 @@ async function generateCommitMessageWithCodex(
         outputSchema: COMMIT_MESSAGE_OUTPUT_SCHEMA,
         skills: [],
         text: prompt,
+        textAttachments: [],
       },
       {
         ...settings,
@@ -2352,9 +2353,9 @@ export async function createCodeAgentServer(
               400,
             );
           }
-          let images;
+          let resolvedAttachments;
           try {
-            images = attachmentStore.resolve(request.params.projectId, attachmentIds);
+            resolvedAttachments = attachmentStore.resolve(request.params.projectId, attachmentIds);
           } catch (error) {
             if (error instanceof AttachmentNotFoundError) {
               throw new MutationHttpError(
@@ -2375,9 +2376,18 @@ export async function createCodeAgentServer(
           const turn = await context.provider.startTurn(
             request.params.taskId,
             {
-              images,
+              images: resolvedAttachments.flatMap((attachment) =>
+                attachment.mediaType === "text/plain"
+                  ? []
+                  : [{ mediaType: attachment.mediaType, url: attachment.url }],
+              ),
               skills: request.body.input.skills,
               text: request.body.input.text,
+              textAttachments: resolvedAttachments.flatMap((attachment) =>
+                attachment.mediaType === "text/plain"
+                  ? [{ name: attachment.name, text: attachment.text }]
+                  : [],
+              ),
             },
             request.body.options,
           );

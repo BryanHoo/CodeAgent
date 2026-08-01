@@ -6,7 +6,7 @@ import { basename, extname, isAbsolute } from "node:path";
 import type { AgentProviderAttachment } from "@code-agent/core";
 import {
   MAX_AGENT_ATTACHMENT_BYTES,
-  type AgentAttachmentMediaType,
+  type AgentImageMediaType,
   type AgentMessageAttachment,
 } from "@code-agent/protocol";
 
@@ -39,7 +39,7 @@ type StoredAttachment =
   | (StoredAttachmentBase & Readonly<{ content: Buffer; source: "inline" }>)
   | (StoredAttachmentBase & Readonly<{ mtimeMs: number; path: string; source: "local" }>);
 
-const imageMediaTypesByExtension: Readonly<Record<string, AgentAttachmentMediaType>> = {
+const imageMediaTypesByExtension: Readonly<Record<string, AgentImageMediaType>> = {
   ".gif": "image/gif",
   ".jpeg": "image/jpeg",
   ".jpg": "image/jpeg",
@@ -47,7 +47,7 @@ const imageMediaTypesByExtension: Readonly<Record<string, AgentAttachmentMediaTy
   ".webp": "image/webp",
 };
 
-function detectImageMediaType(content: Uint8Array): AgentAttachmentMediaType | undefined {
+function detectImageMediaType(content: Uint8Array): AgentImageMediaType | undefined {
   const header = Buffer.from(content.buffer, content.byteOffset, content.byteLength);
   if (header.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
     return "image/png";
@@ -124,7 +124,7 @@ export class CodexHistoricalAttachmentStore {
     this.#pruneExpired();
     const match = DATA_URL_PATTERN.exec(input.url);
     const encoded = match?.[2];
-    const declaredMediaType = match?.[1] as AgentAttachmentMediaType | undefined;
+    const declaredMediaType = match?.[1] as AgentImageMediaType | undefined;
     if (
       encoded === undefined ||
       declaredMediaType === undefined ||
@@ -277,7 +277,7 @@ export class CodexHistoricalAttachmentStore {
   }
 
   #createAttachment(
-    mediaType: AgentAttachmentMediaType,
+    mediaType: AgentImageMediaType,
     name: string,
     size: number,
   ): AgentMessageAttachment | undefined {

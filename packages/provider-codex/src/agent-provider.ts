@@ -1617,11 +1617,22 @@ export class CodexAgentProvider implements AgentProvider {
       }
       return { type: "image" as const, url: image.url };
     });
+    const textAttachments = input.textAttachments.map((attachment) => ({
+      text: attachment.text,
+      text_elements: [
+        {
+          byteRange: { end: Buffer.byteLength(attachment.text, "utf8"), start: 0 },
+          placeholder: attachment.name,
+        },
+      ],
+      type: "text" as const,
+    }));
     const codexInput = [
       ...skills,
       ...(input.text.length === 0
         ? []
         : [{ text: input.text, text_elements: [], type: "text" as const }]),
+      ...textAttachments,
       ...images,
     ];
     if (codexInput.length === 0) {

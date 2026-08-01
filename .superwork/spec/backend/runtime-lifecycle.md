@@ -65,7 +65,7 @@
 - Task 创建在 Provider 成功但设置持久化失败时必须保留有界恢复状态；同 `Idempotency-Key` 重试只补齐持久化，不得再次调用 Provider 创建 Task。
 - 成功的幂等结果缓存必须同时设置容量上限和过期时间；进行中的请求不得淘汰，Runtime 关闭时清空全部条目。
 - 任何新增 Task Runtime、Snapshot、历史或终端缓存都必须同时声明按字节容量、Entry 次级上限和明确清理触发点；不得依赖框架默认 TTL 或无界模块级 Map。
-- 浏览器附件先经幂等上传进入 Server 的有界 TTL Store，并只返回随机 ID；Turn 成功后消费引用，Provider 失败时保留引用供同一请求重试，Runtime 关闭时清空 Store。
+- 浏览器图片与粘贴文本附件先经幂等上传进入 Server 的有界 TTL Store，并只返回随机 ID；文本附件必须严格解码 UTF-8，Provider 将其映射为独立 Codex `text` UserInput，并用覆盖完整 UTF-8 字节范围的 `text_elements` 和文件名表达附件占位；Turn 成功后消费引用，Provider 失败时保留引用供同一请求重试，Runtime 关闭时清空 Store。
 
 ## 关闭
 

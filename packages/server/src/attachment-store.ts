@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
+import { TextDecoder } from "node:util";
 
 import {
   MAX_AGENT_ATTACHMENT_BYTES,
@@ -11,7 +12,8 @@ import {
 const DEFAULT_ATTACHMENT_TTL_MS = 30 * 60 * 1_000;
 const DEFAULT_MAX_ENTRIES = 32;
 const DEFAULT_MAX_TOTAL_BYTES = 32 * 1024 * 1024;
-const DATA_URL_PATTERN = /^data:(image\/(?:gif|jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/u;
+const DATA_URL_PATTERN =
+  /^data:(image\/(?:gif|jpeg|png|webp)|text\/plain);base64,([A-Za-z0-9+/]+={0,2})$/u;
 
 export class AttachmentNotFoundError extends Error {
   public constructor() {
@@ -32,13 +34,18 @@ export interface AttachmentStoreOptions {
 interface StoredAttachment {
   attachment: AgentAttachment;
   expiresAt: number;
+  payload: ResolvedAttachment;
   projectId: string;
-  url: string;
 }
+
+export type ResolvedAttachment =
+  | Readonly<{ mediaType: "text/plain"; name: string; text: string }>
+  | Readonly<{ mediaType: Exclude<AgentAttachmentMediaType, "text/plain">; url: string }>;
 
 function parseDataUrl(dataUrl: string): Readonly<{
   bytes: number;
   mediaType: AgentAttachmentMediaType;
+  value: Buffer;
 }> {
   const match = DATA_URL_PATTERN.exec(dataUrl);
   const encoded = match?.[2];
@@ -57,6 +64,7 @@ function parseDataUrl(dataUrl: string): Readonly<{
   return {
     bytes: decoded.length,
     mediaType: mediaType as AgentAttachmentMediaType,
+    value: decoded,
   };
 }
 
@@ -101,27 +109,29 @@ export class AttachmentStore {
     this.#entries.set(id, {
       attachment,
       expiresAt: this.#clock() + this.#ttlMs,
+      payload:
+        parsed.mediaType === "text/plain"
+          ? {
+              mediaType: "text/plain",
+              name: input.name,
+              // fatal 模式拒绝替换字符，避免损坏的粘贴内容静默进入 Prompt。
+              text: new TextDecoder("utf-8", { fatal: true }).decode(parsed.value),
+            }
+          : { mediaType: parsed.mediaType, url: input.dataUrl },
       projectId,
-      url: input.dataUrl,
     });
     this.#totalBytes += parsed.bytes;
     return attachment;
   }
 
-  public resolve(
-    projectId: string,
-    ids: readonly string[],
-  ): readonly Readonly<{
-    mediaType: AgentAttachmentMediaType;
-    url: string;
-  }>[] {
+  public resolve(projectId: string, ids: readonly string[]): readonly ResolvedAttachment[] {
     this.#pruneExpired();
     return ids.map((id) => {
       const entry = this.#entries.get(id);
       if (entry?.projectId !== projectId) {
         throw new AttachmentNotFoundError();
       }
-      return { mediaType: entry.attachment.mediaType, url: entry.url };
+      return entry.payload;
     });
   }
 

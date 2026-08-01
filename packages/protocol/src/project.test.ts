@@ -987,7 +987,21 @@ describe("project protocol", () => {
     expect(
       Value.Check(AgentAttachmentUploadRequestSchema, {
         dataUrl: "data:text/plain;base64,SGVsbG8=",
-        name: "notes.txt",
+        name: "Pasted text.txt",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentAttachmentSchema, {
+        id: "attachment-text",
+        mediaType: "text/plain",
+        name: "Pasted text.txt",
+        size: 5,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentAttachmentUploadRequestSchema, {
+        dataUrl: "data:application/json;base64,e30=",
+        name: "payload.json",
       }),
     ).toBe(false);
     expect(Value.Check(StartAgentTaskRequestSchema, {})).toBe(true);

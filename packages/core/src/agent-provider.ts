@@ -2,7 +2,7 @@ import type {
   AgentCapabilities,
   AgentBackgroundTerminalPage,
   AgentEvent,
-  AgentAttachmentMediaType,
+  AgentImageMediaType,
   AgentModelPage,
   AgentSkillPage,
   AgentSkillReference,
@@ -26,18 +26,22 @@ export type ListAgentTasksInput = Readonly<{
 
 export type AgentProviderTurnInput = Readonly<{
   images: readonly Readonly<{
-    mediaType: AgentAttachmentMediaType;
+    mediaType: AgentImageMediaType;
     url: string;
   }>[];
   // 仅供 Server 内部的结构化任务使用，浏览器协议不接受任意 Schema。
   outputSchema?: Readonly<Record<string, unknown>>;
   skills: readonly AgentSkillReference[];
   text: string;
+  textAttachments: readonly Readonly<{
+    name: string;
+    text: string;
+  }>[];
 }>;
 
 export type AgentProviderAttachment = Readonly<{
   content: Uint8Array;
-  mediaType: AgentAttachmentMediaType;
+  mediaType: AgentImageMediaType;
   name: string;
   size: number;
 }>;

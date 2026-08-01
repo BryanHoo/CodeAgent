@@ -7,6 +7,8 @@ import {
   deriveComposerState,
   deriveApprovalMode,
   interruptPromptTurn,
+  LARGE_PASTE_CHARACTER_THRESHOLD,
+  PASTED_TEXT_ATTACHMENT_NAME,
   resolveIdempotencyAttempt,
   resolveActiveTurnId,
   resolveReasoningEffort,
@@ -53,6 +55,11 @@ const turn = {
 };
 
 describe("WorkbenchComposer", () => {
+  it("uses the official large-paste threshold and attachment name", () => {
+    expect(LARGE_PASTE_CHARACTER_THRESHOLD).toBe(1_000);
+    expect(PASTED_TEXT_ATTACHMENT_NAME).toBe("Pasted text.txt");
+  });
+
   it("derives available actions from provider capabilities and task context", () => {
     const capabilities = {
       feedback: { upload: false },

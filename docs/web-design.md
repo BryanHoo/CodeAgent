@@ -687,9 +687,9 @@ PromptInputMessage
   -> POST /v1/projects/:projectId/tasks/:taskId/turns
 ```
 
-附件必须先通过幂等 `POST /v1/projects/:projectId/attachments` 转换为 Server 受控引用。浏览器只把附件 ID 放入 `AgentPromptInput`，不得提交任意本地绝对路径作为已授权文件。
+附件必须先通过幂等 `POST /v1/projects/:projectId/attachments` 转换为 Server 受控引用。浏览器只把附件 ID 放入 `AgentPromptInput`，不得提交任意本地绝对路径作为已授权文件。纯文本粘贴严格超过 1,000 个 Unicode 字符时，Composer 将其转换为名为 `Pasted text.txt` 的 `text/plain` 附件，不把全文插入编辑器；Server 严格解码 UTF-8 后由 Provider 以带完整字节范围 `text_elements` 的独立 Codex 文本输入提交。
 
-MVP 附件仅接受 `image/gif`、`image/jpeg`、`image/png` 和 `image/webp`，单文件最大 `2 MiB`，一次最多 `4` 个。预览使用短生命周期 Blob URL；删除、提交成功和组件卸载时立即释放。Server Store 同时限制条目数、总字节数和 TTL，Turn 成功后消费引用。
+MVP 附件仅接受 `image/gif`、`image/jpeg`、`image/png`、`image/webp` 和自动生成的 `text/plain` 粘贴附件，单文件最大 `2 MiB`，一次最多 `4` 个。预览使用短生命周期 Blob URL；删除、提交成功和组件卸载时立即释放。Server Store 同时限制条目数、总字节数和 TTL，Turn 成功后消费引用。
 
 模型选择通过 `GET /v1/models` 读取真实 Provider 目录并优先选择 `isDefault`。思考量紧邻模型，只展示所选模型的 `supportedReasoningEfforts`，无有效选择时使用 `defaultReasoningEffort`。全局默认通过原子 `PUT /v1/settings` 保存审批、审核方、模型、思考量、沙盒模式与默认打开应用；Project 默认通过原子 `PUT /v1/projects/:projectId/defaults` 保存模型、思考量与沙盒模式；已有 Task 通过原子 `PUT /v1/projects/:projectId/tasks/:taskId/settings` 保存完整设置。新 Task 创建时按 `Task > Project > Global` 固化当时的有效值，全局修改不得改写已有 Project 或 Task 记录。
 

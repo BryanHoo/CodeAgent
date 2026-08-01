@@ -226,6 +226,7 @@ describe("AgentProvider", () => {
           },
           skills: [{ id: "skill-security", name: "review-security" }],
           text: "继续",
+          textAttachments: [{ name: "Pasted text.txt", text: "附加说明" }],
         },
         {
           approvalPolicy: "on-request",

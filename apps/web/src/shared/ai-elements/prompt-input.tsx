@@ -61,11 +61,34 @@ type PromptInputProps = Omit<FormHTMLAttributes<HTMLFormElement>, "onError" | "o
   maxFiles?: number;
   maxFileSize?: number;
   multiple?: boolean;
+  largePasteCharacterThreshold?: number;
   onAttachmentsChange?: (files: readonly PromptInputAttachment[]) => void;
   onError?: (error: PromptInputError) => void;
   onSubmit?: (message: PromptInputMessage, event: SubmitEvent<HTMLFormElement>) => void;
+  pastedTextFileName?: string;
   resetKey?: string;
 };
+
+export function createPastedTextFile(
+  text: string,
+  characterThreshold: number,
+  fileName: string,
+): File | undefined {
+  let characterCount = 0;
+  // 按 Unicode 字符计数，并在越过阈值时立即返回，避免复制整段大文本。
+  for (let offset = 0; offset < text.length;) {
+    const codePoint = text.codePointAt(offset);
+    if (codePoint === undefined) {
+      break;
+    }
+    offset += codePoint > 0xffff ? 2 : 1;
+    characterCount += 1;
+    if (characterCount > characterThreshold) {
+      return new File([text], fileName, { type: "text/plain" });
+    }
+  }
+  return undefined;
+}
 
 function acceptsFile(file: File, accept: string | undefined): boolean {
   if (accept === undefined || accept.trim() === "") {
@@ -90,13 +113,16 @@ export function PromptInput({
   className = "",
   disabled = false,
   globalDrop = false,
+  largePasteCharacterThreshold = Number.POSITIVE_INFINITY,
   maxFiles = Number.POSITIVE_INFINITY,
   maxFileSize = Number.POSITIVE_INFINITY,
   multiple = false,
   onAttachmentsChange,
   onError,
   onPaste,
+  onPasteCapture,
   onSubmit,
+  pastedTextFileName = "Pasted text.txt",
   resetKey,
   ...props
 }: PromptInputProps) {
@@ -121,7 +147,7 @@ export function PromptInput({
   );
 
   const addFiles = useCallback(
-    (incoming: readonly File[]) => {
+    (incoming: readonly File[], allowGeneratedText = false) => {
       updateFiles((current) => {
         if (disabled) {
           return current;
@@ -133,7 +159,7 @@ export function PromptInput({
 
         // 逐个校验后再占用容量，避免一个非法文件挤掉后续合法文件。
         for (const file of incoming) {
-          if (!acceptsFile(file, accept)) {
+          if (!allowGeneratedText && !acceptsFile(file, accept)) {
             onError?.({ code: "invalid_file_type", message: `${file.name} 的文件类型不受支持` });
             continue;
           }
@@ -257,6 +283,22 @@ export function PromptInput({
         aria-disabled={disabled || undefined}
         className={`overflow-hidden rounded-surface border border-transparent bg-raised shadow-floating transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-focus ${className}`}
         data-prompt-input=""
+        onPasteCapture={(event) => {
+          onPasteCapture?.(event);
+          if (disabled || event.defaultPrevented || event.clipboardData.files.length > 0) {
+            return;
+          }
+          const pastedTextFile = createPastedTextFile(
+            event.clipboardData.getData("text/plain"),
+            largePasteCharacterThreshold,
+            pastedTextFileName,
+          );
+          if (pastedTextFile !== undefined) {
+            // capture 阶段先阻止编辑器写入全文，再交给统一附件约束处理。
+            event.preventDefault();
+            addFiles([pastedTextFile], true);
+          }
+        }}
         onPaste={(event) => {
           onPaste?.(event);
           if (disabled || event.defaultPrevented) {

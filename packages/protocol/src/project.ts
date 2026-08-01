@@ -215,11 +215,18 @@ export const MAX_AGENT_ATTACHMENT_BYTES = 2 * 1024 * 1024;
 export const MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH =
   Math.ceil((MAX_AGENT_ATTACHMENT_BYTES * 4) / 3) + 64;
 
-export const AgentAttachmentMediaTypeSchema = Type.Union([
+export const AgentImageMediaTypeSchema = Type.Union([
   Type.Literal("image/gif"),
   Type.Literal("image/jpeg"),
   Type.Literal("image/png"),
   Type.Literal("image/webp"),
+]);
+
+export type AgentImageMediaType = Readonly<Static<typeof AgentImageMediaTypeSchema>>;
+
+export const AgentAttachmentMediaTypeSchema = Type.Union([
+  AgentImageMediaTypeSchema,
+  Type.Literal("text/plain"),
 ]);
 
 export type AgentAttachmentMediaType = Readonly<Static<typeof AgentAttachmentMediaTypeSchema>>;
@@ -235,7 +242,7 @@ export type AgentMessageSkill = Readonly<Static<typeof AgentMessageSkillSchema>>
 export const AgentMessageAttachmentSchema = Type.Object(
   {
     id: Type.String({ minLength: 1 }),
-    mediaType: AgentAttachmentMediaTypeSchema,
+    mediaType: AgentImageMediaTypeSchema,
     name: Type.String({ maxLength: 255, minLength: 1 }),
     size: Type.Integer({ maximum: MAX_AGENT_ATTACHMENT_BYTES, minimum: 1 }),
   },
@@ -567,7 +574,7 @@ export const AgentAttachmentUploadRequestSchema = Type.Object(
   {
     dataUrl: Type.String({
       maxLength: MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
-      pattern: "^data:image/(gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$",
+      pattern: "^data:(image/(gif|jpeg|png|webp)|text/plain);base64,[A-Za-z0-9+/]+={0,2}$",
     }),
     name: Type.String({ maxLength: 255, minLength: 1 }),
   },
