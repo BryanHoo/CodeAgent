@@ -11,10 +11,8 @@ import {
   type CodeAgentMcpServersClient,
   mcpServersQueryOptions,
   modelsQueryOptions,
-  PROJECT_GIT_STATUS_POLL_INTERVAL_MS,
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
-  projectGitStatusRefetchInterval,
   projectGitStatusQueryOptions,
   projectCommitChangesMutationOptions,
   projectCommitMessageMutationOptions,
@@ -184,7 +182,7 @@ describe("project queries", () => {
     expect(reorderProjectPage(page, [project.id, project.id])).toBeUndefined();
   });
 
-  it("polls Git status only while the current task is running", async () => {
+  it("loads shared Project Git status without owning a polling interval", async () => {
     const getProjectGitStatus = vi.fn<CodeAgentGitStatusClient["getProjectGitStatus"]>(() =>
       Promise.resolve({
         baseBranches: ["origin/main"],
@@ -196,14 +194,11 @@ describe("project queries", () => {
       }),
     );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const runningOptions = projectGitStatusQueryOptions("code-agent", true, {
-      getProjectGitStatus,
-    });
-    const idleOptions = projectGitStatusQueryOptions("code-agent", false, {
+    const options = projectGitStatusQueryOptions("code-agent", {
       getProjectGitStatus,
     });
 
-    await expect(queryClient.fetchQuery(runningOptions)).resolves.toEqual({
+    await expect(queryClient.fetchQuery(options)).resolves.toEqual({
       baseBranches: ["origin/main"],
       branch: "main",
       repositoryMode: "root",
@@ -211,8 +206,8 @@ describe("project queries", () => {
       staged: [],
       unstaged: [],
     });
-    expect(runningOptions.refetchInterval).toBeTypeOf("function");
-    expect(idleOptions.refetchInterval).toBe(false);
+    expect(options.queryKey).toEqual(["projects", "code-agent", "git-status"]);
+    expect(options.refetchInterval).toBeUndefined();
     expect(getProjectGitStatus.mock.calls[0]?.[0]).toBe("code-agent");
     expect(getProjectGitStatus.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
@@ -250,25 +245,6 @@ describe("project queries", () => {
     expect(options.queryKey).toEqual(["projects", "code-agent", "mcp-servers"]);
     expect(listMcpServers.mock.calls[0]?.[0]).toBe("code-agent");
     expect(listMcpServers.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
-  });
-
-  it("stops failed Git polling until a manual refresh succeeds", () => {
-    const gitStatus = {
-      baseBranches: ["origin/main"],
-      branch: "main",
-      repositoryMode: "root" as const,
-      snapshot: "a".repeat(64),
-      staged: [],
-      unstaged: [],
-    };
-    const getProjectGitStatus = vi.fn<CodeAgentGitStatusClient["getProjectGitStatus"]>(() =>
-      Promise.resolve(gitStatus),
-    );
-    const options = projectGitStatusQueryOptions("code-agent", true, { getProjectGitStatus });
-
-    expect(options.refetchInterval).toBeTypeOf("function");
-    expect(projectGitStatusRefetchInterval(new Error("not a git repository"))).toBe(false);
-    expect(projectGitStatusRefetchInterval(null)).toBe(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
   });
 
   it("loads projects, project tasks, and task snapshots through the client", async () => {

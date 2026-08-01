@@ -29,6 +29,7 @@ import {
   type ProjectRuntimeManager,
 } from "../conversation/runtime/project-runtime.js";
 import type { TaskActivityMap } from "../conversation/runtime/task-activity.js";
+import { ProjectGitStatusCoordinator } from "./project-git-status-coordinator.js";
 import {
   capabilitiesQueryOptions,
   codeAgentClient,
@@ -104,6 +105,7 @@ type ProjectContextValue = Readonly<{
   reorderProjects: (projectIds: readonly string[]) => Promise<boolean>;
   removeProject: (projectId: string) => Promise<readonly Project[] | undefined>;
   renameProject: (projectId: string, name: string) => Promise<boolean>;
+  refreshProjectGitStatus: (projectId: string) => Promise<void>;
   retry: () => Promise<void>;
   setExpandedProjectTaskIds: (projectIds: ReadonlySet<string>) => void;
   taskActivity: TaskActivityMap;
@@ -169,9 +171,16 @@ function ProjectTaskQuery({ client, onRemove, onUpdate, projectId }: ProjectTask
 
 export function ProjectProvider({ children, client = codeAgentClient }: ProjectProviderProps) {
   const queryClient = useQueryClient();
+  const gitStatusCoordinator = useMemo(
+    () => new ProjectGitStatusCoordinator(queryClient, client),
+    [client, queryClient],
+  );
   const projectRuntime = useMemo(() => {
     const taskMetadataSyncs = new Map<string, Promise<void>>();
     return createProjectRuntimeManager(client, {
+      onProjectGitActivity(projectId, taskId, reason) {
+        gitStatusCoordinator.handleActivity(projectId, taskId, reason);
+      },
       onTaskMetadataChanged(projectId, taskId, reason) {
         const syncTaskMetadata = async () => {
           if (reason === "turn_completed") {
@@ -226,7 +235,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
         void sync.then(clearCompletedSync, clearCompletedSync);
       },
     });
-  }, [client, queryClient]);
+  }, [client, gitStatusCoordinator, queryClient]);
   const [addProjectError, setAddProjectError] = useState<Error | null>(null);
   const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false);
   const [projectOrderError, setProjectOrderError] = useState<Error | null>(null);
@@ -427,6 +436,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
         // 先停止该 Project 的请求和实时连接，再从列表移除，避免旧响应回填缓存。
         await queryClient.cancelQueries({ queryKey: ["projects", projectId] });
         queryClient.removeQueries({ queryKey: ["projects", projectId] });
+        gitStatusCoordinator.forgetProject(projectId);
         projectRuntime.forgetProject(projectId);
         const currentPage = queryClient.getQueryData<ProjectPage>(["projects"]);
         const remainingProjects =
@@ -441,7 +451,11 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
         return undefined;
       }
     },
-    [projectRemoveMutation, projectRuntime, queryClient],
+    [gitStatusCoordinator, projectRemoveMutation, projectRuntime, queryClient],
+  );
+  const refreshProjectGitStatus = useCallback(
+    (projectId: string) => gitStatusCoordinator.refreshProject(projectId),
+    [gitStatusCoordinator],
   );
   const retry = useCallback(async () => {
     // Runtime 恢复后统一刷新全部服务端状态，避免部分 Query 继续保留失败结果。
@@ -451,8 +465,9 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   useEffect(
     () => () => {
       projectRuntime.dispose();
+      gitStatusCoordinator.dispose();
     },
-    [projectRuntime],
+    [gitStatusCoordinator, projectRuntime],
   );
 
   return (
@@ -490,6 +505,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           reorderProjects,
           removeProject,
           renameProject,
+          refreshProjectGitStatus,
           retry,
           setExpandedProjectTaskIds,
           taskActivity,

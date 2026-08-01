@@ -2,6 +2,7 @@ import type { AgentEventConnectionState } from "@code-agent/client";
 import type {
   AgentEvent,
   AgentTask,
+  AgentTaskSnapshot,
   AgentTaskSnapshotResponse,
   EventCheckpoint,
 } from "@code-agent/protocol";
@@ -14,6 +15,7 @@ import {
 import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
 import {
   clearTaskAttention,
+  getTaskActivity,
   hasActiveProjectTask,
   recordRunningTaskActivity,
   recordTaskActivitySnapshot,
@@ -43,6 +45,11 @@ export type ProjectRuntimeManagerOptions = Readonly<{
   idleTimeoutMs?: number;
   maxEventHistoryBytes?: number;
   maxEventHistoryEvents?: number;
+  onProjectGitActivity?: (
+    projectId: string,
+    taskId: string,
+    reason: "file_changed" | "turn_completed" | "turn_started",
+  ) => void;
   onTaskMetadataChanged?: (
     projectId: string,
     taskId: string,
@@ -504,6 +511,7 @@ export class ProjectRuntimeManager {
   readonly #idleTimeoutMs: number;
   readonly #maxEventHistoryBytes: number;
   readonly #maxEventHistoryEvents: number;
+  readonly #onProjectGitActivity: NonNullable<ProjectRuntimeManagerOptions["onProjectGitActivity"]>;
   readonly #onTaskMetadataChanged: NonNullable<
     ProjectRuntimeManagerOptions["onTaskMetadataChanged"]
   >;
@@ -521,6 +529,7 @@ export class ProjectRuntimeManager {
     this.#idleTimeoutMs = options.idleTimeoutMs ?? PROJECT_RUNTIME_IDLE_TIMEOUT_MS;
     this.#maxEventHistoryBytes = options.maxEventHistoryBytes ?? MAX_PROJECT_EVENT_HISTORY_BYTES;
     this.#maxEventHistoryEvents = options.maxEventHistoryEvents ?? MAX_PROJECT_EVENT_HISTORY_EVENTS;
+    this.#onProjectGitActivity = options.onProjectGitActivity ?? (() => undefined);
     this.#onTaskMetadataChanged = options.onTaskMetadataChanged ?? (() => undefined);
     this.#taskNotifier = options.taskNotifier ?? createBrowserTaskNotifier();
     if (!Number.isSafeInteger(this.#idleTimeoutMs) || this.#idleTimeoutMs < 0) {
@@ -540,13 +549,7 @@ export class ProjectRuntimeManager {
     recoverSnapshot: RecoverTaskSnapshot,
   ): () => void {
     this.#rememberTaskTitle(response.snapshot);
-    this.#updateTaskActivity(
-      recordTaskActivitySnapshot(
-        this.#taskActivity,
-        response.snapshot,
-        this.#isTaskViewed(response.snapshot.projectId, response.snapshot.id),
-      ),
-    );
+    this.#recordSnapshotActivity(response.snapshot);
     return this.#getProject(response.snapshot.projectId).attachTaskStore(
       response,
       store,
@@ -605,18 +608,13 @@ export class ProjectRuntimeManager {
 
   public markTaskRunning(projectId: string, taskId: string): void {
     this.#updateTaskActivity(recordRunningTaskActivity(this.#taskActivity, projectId, taskId));
+    this.#onProjectGitActivity(projectId, taskId, "turn_started");
     this.#projects.get(projectId)?.markAccess();
   }
 
   public observeSnapshot(response: AgentTaskSnapshotResponse): void {
     this.#rememberTaskTitle(response.snapshot);
-    this.#updateTaskActivity(
-      recordTaskActivitySnapshot(
-        this.#taskActivity,
-        response.snapshot,
-        this.#isTaskViewed(response.snapshot.projectId, response.snapshot.id),
-      ),
-    );
+    this.#recordSnapshotActivity(response.snapshot);
     this.#getProject(response.snapshot.projectId).observeSnapshot(response);
   }
 
@@ -657,6 +655,16 @@ export class ProjectRuntimeManager {
         getTaskActivity: () => this.#taskActivity,
         onActivityEvent: (eventProjectId, event) => {
           const turnKey = createProjectTurnKey(eventProjectId, event.taskId, event.turnId);
+          if (event.type === "turn.started") {
+            this.#onProjectGitActivity(eventProjectId, event.taskId, "turn_started");
+          } else if (
+            event.type === "item.completed" &&
+            event.payload.item.type === "file_change" &&
+            event.payload.item.status === "completed"
+          ) {
+            // 文件 Item 是高价值失效信号，避免等待下一个周期才更新 Inspector。
+            this.#onProjectGitActivity(eventProjectId, event.taskId, "file_changed");
+          }
           if (event.type === "message.delta" && !this.#titleRefreshedRunningTurns.has(turnKey)) {
             // 首个 Assistant Delta 出现时刷新一次，避免流式 Token 持续触发 HTTP 请求。
             this.#titleRefreshedRunningTurns.add(turnKey);
@@ -670,6 +678,7 @@ export class ProjectRuntimeManager {
           }
           if (event.type === "turn.completed") {
             this.#titleRefreshedRunningTurns.delete(turnKey);
+            this.#onProjectGitActivity(eventProjectId, event.taskId, "turn_completed");
             // 标题由 Provider 在 Turn 结束时生成，后台 Task 也必须通知列表读取最新元数据。
             this.#onTaskMetadataChanged(eventProjectId, event.taskId, "turn_completed");
           }
@@ -718,6 +727,29 @@ export class ProjectRuntimeManager {
 
   #isTaskViewed(projectId: string, taskId: string): boolean {
     return this.#viewedTask?.projectId === projectId && this.#viewedTask.taskId === taskId;
+  }
+
+  #recordSnapshotActivity(snapshot: AgentTaskSnapshot): void {
+    const wasRunning = getTaskActivity(
+      this.#taskActivity,
+      snapshot.projectId,
+      snapshot.id,
+    ).isRunning;
+    const isRunning = snapshot.status === "running";
+    if (isRunning !== wasRunning) {
+      this.#onProjectGitActivity(
+        snapshot.projectId,
+        snapshot.id,
+        isRunning ? "turn_started" : "turn_completed",
+      );
+    }
+    this.#updateTaskActivity(
+      recordTaskActivitySnapshot(
+        this.#taskActivity,
+        snapshot,
+        this.#isTaskViewed(snapshot.projectId, snapshot.id),
+      ),
+    );
   }
 
   #rememberTaskTitle(task: Pick<AgentTask, "id" | "projectId" | "title">): void {

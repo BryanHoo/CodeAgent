@@ -106,6 +106,28 @@ function createMessageDeltaEvent(taskId: string, sequence: number, delta: string
   };
 }
 
+function createFileChangeCompletedEvent(taskId: string, sequence: number): AgentEvent {
+  return {
+    itemId: `file-change-${taskId}`,
+    payload: {
+      item: {
+        changes: [{ diff: "+changed", kind: "update", path: "src/app.ts" }],
+        id: `file-change-${taskId}`,
+        status: "completed",
+        type: "file_change",
+      },
+    },
+    provider: "codex",
+    sequence,
+    sessionId: "runtime-1",
+    taskId,
+    timestamp: "2026-07-28T00:00:01.000Z",
+    turnId: `turn-${taskId}`,
+    type: "item.completed",
+    version: 2,
+  };
+}
+
 function createClientHarness() {
   let subscription: Parameters<CodeAgentRuntimeClient["subscribeEvents"]>[0] | undefined;
   const closeConnection = vi.fn();
@@ -228,6 +250,44 @@ describe("project runtime manager", () => {
 
     expect(onTaskMetadataChanged).toHaveBeenCalledOnce();
     expect(onTaskMetadataChanged).toHaveBeenCalledWith("project-1", "task-1", "turn_completed");
+    manager.dispose();
+  });
+
+  it("reports optimistic and realtime Project Git activity", () => {
+    const harness = createClientHarness();
+    const onProjectGitActivity = vi.fn();
+    const manager = createProjectRuntimeManager(harness.client, { onProjectGitActivity });
+    manager.observeSnapshot(createSnapshotResponse("task-1"));
+
+    manager.markTaskRunning("project-1", "task-optimistic");
+    harness.emit(createTurnStartedEvent("task-1", 1));
+    harness.emit(createFileChangeCompletedEvent("task-1", 2));
+    harness.emit(createTurnCompletedEvent("task-1", 3));
+
+    expect(onProjectGitActivity.mock.calls).toEqual([
+      ["project-1", "task-1", "turn_started"],
+      ["project-1", "task-optimistic", "turn_started"],
+      ["project-1", "task-1", "turn_started"],
+      ["project-1", "task-1", "file_changed"],
+      ["project-1", "task-1", "turn_completed"],
+    ]);
+    manager.dispose();
+  });
+
+  it("reports Project Git activity when a Snapshot changes running state", () => {
+    const harness = createClientHarness();
+    const onProjectGitActivity = vi.fn();
+    const manager = createProjectRuntimeManager(harness.client, { onProjectGitActivity });
+
+    manager.observeSnapshot(createSnapshotResponse("task-1"));
+    manager.observeSnapshot(createSnapshotResponse("task-1"));
+    manager.observeSnapshot(createSnapshotResponse("task-1", { status: "idle" }));
+    manager.observeSnapshot(createSnapshotResponse("task-1", { status: "idle" }));
+
+    expect(onProjectGitActivity.mock.calls).toEqual([
+      ["project-1", "task-1", "turn_started"],
+      ["project-1", "task-1", "turn_completed"],
+    ]);
     manager.dispose();
   });
 

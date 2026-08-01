@@ -1,0 +1,129 @@
+import type { ProjectGitStatus } from "@code-agent/protocol";
+import { QueryClient } from "@tanstack/react-query";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type { CodeAgentGitStatusClient } from "./project-queries.js";
+import {
+  PROJECT_GIT_STATUS_FILE_CHANGE_DEBOUNCE_MS,
+  PROJECT_GIT_STATUS_POLL_INTERVAL_MS,
+  ProjectGitStatusCoordinator,
+} from "./project-git-status-coordinator.js";
+
+const gitStatus: ProjectGitStatus = {
+  baseBranches: ["origin/main"],
+  branch: "main",
+  repositoryMode: "root",
+  snapshot: "a".repeat(64),
+  staged: [],
+  unstaged: [],
+};
+
+function createHarness(isPageVisible: () => boolean = () => true) {
+  const getProjectGitStatus = vi.fn<CodeAgentGitStatusClient["getProjectGitStatus"]>(() =>
+    Promise.resolve(gitStatus),
+  );
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const coordinator = new ProjectGitStatusCoordinator(
+    queryClient,
+    { getProjectGitStatus },
+    {
+      isPageVisible,
+    },
+  );
+  return { coordinator, getProjectGitStatus, queryClient };
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("ProjectGitStatusCoordinator", () => {
+  it("uses one Project polling cycle across multiple running Tasks and stops after the final refresh", async () => {
+    vi.useFakeTimers();
+    const { coordinator, getProjectGitStatus } = createHarness();
+
+    coordinator.handleActivity("project-1", "task-1", "turn_started");
+    coordinator.handleActivity("project-1", "task-1", "turn_started");
+    coordinator.handleActivity("project-1", "task-2", "turn_started");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
+
+    coordinator.handleActivity("project-1", "task-1", "turn_completed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(4);
+
+    coordinator.handleActivity("project-1", "task-2", "turn_completed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(5);
+    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS * 2);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(5);
+    coordinator.dispose();
+  });
+
+  it("debounces file events and serializes a pending refresh behind the in-flight request", async () => {
+    vi.useFakeTimers();
+    let resolveFirstRequest: ((status: ProjectGitStatus) => void) | undefined;
+    const firstRequest = new Promise<ProjectGitStatus>((resolve) => {
+      resolveFirstRequest = resolve;
+    });
+    const getProjectGitStatus = vi
+      .fn<CodeAgentGitStatusClient["getProjectGitStatus"]>()
+      .mockReturnValueOnce(firstRequest)
+      .mockResolvedValue(gitStatus);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const coordinator = new ProjectGitStatusCoordinator(queryClient, { getProjectGitStatus });
+
+    coordinator.handleActivity("project-1", "task-1", "turn_started");
+    coordinator.handleActivity("project-1", "task-1", "file_changed");
+    coordinator.handleActivity("project-1", "task-1", "file_changed");
+    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_FILE_CHANGE_DEBOUNCE_MS);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(1);
+
+    resolveFirstRequest?.(gitStatus);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
+  it("skips periodic work while the page is hidden but still performs the terminal refresh", async () => {
+    vi.useFakeTimers();
+    const { coordinator, getProjectGitStatus } = createHarness(() => false);
+
+    coordinator.handleActivity("project-1", "task-1", "turn_started");
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS * 2);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(1);
+
+    coordinator.handleActivity("project-1", "task-1", "turn_completed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
+  it("suspends failed polling until a manual refresh succeeds", async () => {
+    vi.useFakeTimers();
+    const getProjectGitStatus = vi
+      .fn<CodeAgentGitStatusClient["getProjectGitStatus"]>()
+      .mockRejectedValueOnce(new Error("Git unavailable"))
+      .mockRejectedValueOnce(new Error("Git unavailable"))
+      .mockResolvedValue(gitStatus);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const coordinator = new ProjectGitStatusCoordinator(queryClient, { getProjectGitStatus });
+
+    coordinator.handleActivity("project-1", "task-1", "turn_started");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS * 2);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
+
+    await coordinator.refreshProject("project-1");
+    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(4);
+    coordinator.dispose();
+  });
+});

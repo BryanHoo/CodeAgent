@@ -89,7 +89,6 @@ export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentSourceFileClient;
 type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
 
-export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 1_500;
 export const PROJECT_TASK_PAGE_SIZE = 5;
 export const PROJECT_TASK_SEARCH_PAGE_SIZE = 100;
 export const PROJECT_TASK_SEARCH_SOURCE_KEY = "search-source";
@@ -545,22 +544,14 @@ export function projectReorderMutationOptions(
   });
 }
 
-export function projectGitStatusRefetchInterval(error: Error | null) {
-  return error === null ? PROJECT_GIT_STATUS_POLL_INTERVAL_MS : false;
-}
-
 export function projectGitStatusQueryOptions(
   projectId: string,
-  isTaskRunning: boolean,
   client: CodeAgentGitStatusClient = codeAgentClient,
 ) {
   return queryOptions({
     queryFn: ({ signal }) => client.getProjectGitStatus(projectId, { signal }),
     queryKey: ["projects", projectId, "git-status"] as const,
-    // 单次检测最多重试一次；最终失败后关闭轮询，手动刷新成功会清空错误并恢复采样。
-    refetchInterval: isTaskRunning
-      ? (query) => projectGitStatusRefetchInterval(query.state.error)
-      : false,
+    // Project 级协调器负责刷新生命周期，Query 只维护共享服务端状态。
     retry: 1,
   });
 }

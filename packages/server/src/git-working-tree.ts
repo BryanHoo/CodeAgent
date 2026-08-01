@@ -23,6 +23,8 @@ const GIT_COMMAND_TIMEOUT_MS = 10_000;
 async function executeGit(projectRoot: string, arguments_: readonly string[]): Promise<string> {
   const result = await executeFile("git", ["-C", projectRoot, ...arguments_], {
     encoding: "utf8",
+    // 后台状态读取不需要刷新索引，避免与用户发起的 Git 写操作争用可选锁。
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
     maxBuffer: MAX_GIT_OUTPUT_BYTES,
     timeout: GIT_COMMAND_TIMEOUT_MS,
     windowsHide: true,

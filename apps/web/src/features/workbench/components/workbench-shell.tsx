@@ -135,6 +135,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     projectRuntime,
     projects,
     projectTaskStates,
+    refreshProjectGitStatus,
     requestNotificationPermission,
     retry,
     tasks,
@@ -213,7 +214,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const isTaskRunning =
     runtime.snapshot?.status === "running" || startingSnapshot?.status === "running";
   const backgroundTerminals = useBackgroundTerminals(client, projectId, taskId, isTaskRunning);
-  const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, isTaskRunning, client));
+  const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, client));
   const [fileTreeExpansion, setFileTreeExpansion] = useState(() => ({
     paths: new Set<string>(),
     projectId,
@@ -243,7 +244,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       };
     },
   );
-  const previousTaskRunningRef = useRef(isTaskRunning);
   // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
   const [sidebarOpen, setSidebarOpen] = useState(() => shouldOpenDesktopPanel(sidebarOverlayQuery));
   const [inspectorOpen, setInspectorOpen] = useState(() =>
@@ -498,14 +498,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       (currentData) => updateNewTaskTitleFromSnapshotInInfiniteData(currentData, activeSnapshot),
     );
   }, [projectId, queryClient, runtime.snapshot, taskId]);
-
-  useEffect(() => {
-    if (previousTaskRunningRef.current && !isTaskRunning) {
-      // 停止轮询前补读一次，确保最后一批落盘变更不会停留在上个采样周期。
-      void gitStatusQuery.refetch();
-    }
-    previousTaskRunningRef.current = isTaskRunning;
-  }, [gitStatusQuery.refetch, isTaskRunning]);
 
   useEffect(() => {
     // 窗口缩窄进入覆盖模式时关闭桌面面板，避免两个抽屉同时遮住主内容。
@@ -786,7 +778,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           openSourceFile({ lineNumber: null, path });
         }}
         onRefreshGitStatus={() => {
-          void gitStatusQuery.refetch();
+          void refreshProjectGitStatus(projectId);
         }}
         onCommitChanges={() => {
           commitChangesLauncherRef.current?.open();
