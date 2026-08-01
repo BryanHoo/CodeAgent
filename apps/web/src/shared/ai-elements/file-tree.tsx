@@ -97,6 +97,7 @@ export type FileTreeFolderProps = HTMLAttributes<HTMLDivElement> &
   Readonly<{
     name: string;
     path: string;
+    trailing?: ReactNode;
   }>;
 
 export function FileTreeFolder({
@@ -104,6 +105,7 @@ export function FileTreeFolder({
   className = "",
   name,
   path,
+  trailing,
   ...props
 }: FileTreeFolderProps) {
   const { expandedPaths, onSelect, selectedPath, togglePath } = useContext(FileTreeContext);
@@ -166,6 +168,7 @@ export function FileTreeFolder({
           </FileTreeIcon>
           <FileTreeName title={name}>{name}</FileTreeName>
         </button>
+        {trailing}
       </div>
       {isExpanded ? (
         <div className="ml-3 border-l border-separator pl-1" role="group">
@@ -181,6 +184,7 @@ export type FileTreeFileProps = HTMLAttributes<HTMLDivElement> &
     icon?: ReactNode;
     name: string;
     path: string;
+    trailing?: ReactNode;
   }>;
 
 export function FileTreeFile({
@@ -189,6 +193,7 @@ export function FileTreeFile({
   icon,
   name,
   path,
+  trailing,
   ...props
 }: FileTreeFileProps) {
   const { onSelect, selectedPath } = useContext(FileTreeContext);
@@ -221,6 +226,7 @@ export function FileTreeFile({
           <FileTreeName title={path}>{name}</FileTreeName>
         </>
       )}
+      {trailing}
     </div>
   );
 }

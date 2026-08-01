@@ -1760,13 +1760,21 @@ test("opens bounded source previews from assistant file references", async ({ co
   await expect(dialog).toBeHidden();
 });
 
-test("project file tree opens source files", async ({ page }) => {
+test("project file tree opens diffs for changed files and source previews for unchanged files", async ({
+  page,
+}) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const inspector = page.getByRole("complementary", { name: "Context Inspector" });
   const fileTree = inspector.getByRole("tree", { name: "项目文件" });
   await expect(fileTree).toBeVisible();
   await expect(fileTree.getByRole("treeitem", { name: "architecture-design.md" })).toHaveCount(0);
+
+  await fileTree.getByRole("treeitem", { name: /package\.json/u }).click();
+  const diffDialog = page.getByRole("dialog", { name: "package.json" });
+  await expect(diffDialog.locator(".file-diff-renderer")).toContainText("pnpm run dev");
+  await page.getByRole("button", { name: "关闭文件 Diff" }).click();
+  await expect(diffDialog).not.toBeAttached();
 
   const docsRequest = page.waitForRequest((request) => {
     const url = new URL(request.url());

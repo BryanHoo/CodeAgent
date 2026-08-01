@@ -748,6 +748,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             };
           });
         }}
+        onOpenFileDiff={openFileDiff}
         onOpenSourceFile={(path) => {
           openSourceFile({ lineNumber: null, path });
         }}

@@ -22,6 +22,19 @@ const gitStatus = {
   ],
 };
 
+const nestedGitStatus = {
+  baseBranches: ["origin/main"],
+  branch: "feat/tree-status",
+  staged: [],
+  unstaged: [
+    {
+      diff: "--- a/src/components/app.tsx\n+++ b/src/components/app.tsx\n@@ -1,1 +1,2 @@\n-old\n+new\n+next",
+      kind: "update" as const,
+      path: "src/components/app.tsx",
+    },
+  ],
+};
+
 const taskSettings = {
   approvalPolicy: "on-request" as const,
   approvalsReviewer: "auto_review" as const,
@@ -152,6 +165,64 @@ describe("WorkbenchInspector", () => {
     expect(srcExpandedMarkup).toContain('aria-label="展开文件夹 components"');
     expect(srcExpandedMarkup).not.toContain("app.tsx");
     expect(componentsExpandedMarkup).toContain("app.tsx");
+  });
+
+  it("moves Git change stats from the nearest collapsed ancestor to the visible file", () => {
+    const renderInspector = (expandedFileTreePaths: Set<string>) =>
+      renderToStaticMarkup(
+        <WorkbenchInspector
+          expandedFileTreePaths={expandedFileTreePaths}
+          fileTreeDirectories={fileTreeDirectories}
+          gitStatus={nestedGitStatus}
+          onReviewChanges={() => undefined}
+          projectName="CodeAgent"
+          projectPath="/workspace/CodeAgent"
+          settings={taskSettings}
+        />,
+      );
+
+    const collapsedMarkup = renderInspector(new Set());
+    const srcExpandedMarkup = renderInspector(new Set(["src"]));
+    const fileVisibleMarkup = renderInspector(new Set(["src", "src/components"]));
+
+    expect(collapsedMarkup).toContain('aria-label="src，后代新增 2 行，删除 1 行"');
+    expect(collapsedMarkup).not.toContain('aria-label="src/components，后代新增 2 行，删除 1 行"');
+    expect(srcExpandedMarkup).not.toContain('aria-label="src，后代新增 2 行，删除 1 行"');
+    expect(srcExpandedMarkup).toContain('aria-label="src/components，后代新增 2 行，删除 1 行"');
+    expect(fileVisibleMarkup).not.toContain("后代新增");
+    expect(fileVisibleMarkup).toContain(
+      'aria-label="src/components/app.tsx，新增 2 行，删除 1 行"',
+    );
+    expect(fileVisibleMarkup).toMatch(
+      /app\.tsx<\/span><span[^>]*aria-label="src\/components\/app\.tsx，新增 2 行，删除 1 行"/u,
+    );
+  });
+
+  it("keeps stats on the deepest visible ancestor when the changed file is absent", () => {
+    const markup = renderToStaticMarkup(
+      <WorkbenchInspector
+        expandedFileTreePaths={new Set(["src", "src/components"])}
+        fileTreeDirectories={fileTreeDirectories}
+        gitStatus={{
+          ...nestedGitStatus,
+          unstaged: [
+            {
+              diff: "--- a/src/components/removed.tsx\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-old\n-content",
+              kind: "delete",
+              path: "src/components/removed.tsx",
+            },
+          ],
+        }}
+        onReviewChanges={() => undefined}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        settings={taskSettings}
+      />,
+    );
+
+    expect(markup).not.toContain("removed.tsx</span>");
+    expect(markup).toContain('aria-label="src/components，后代新增 0 行，删除 2 行"');
+    expect(markup).not.toContain('aria-label="src，后代新增 0 行，删除 2 行"');
   });
 
   it("renders an explicit empty state without demo files", () => {
