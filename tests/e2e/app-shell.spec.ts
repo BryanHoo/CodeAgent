@@ -2196,9 +2196,14 @@ for (const scenario of [
     await dialog.getByRole("button", { name: scenario.actionName, exact: true }).click();
 
     await expect(dialog).not.toBeAttached();
+    const toaster = page.locator("[data-sonner-toaster]");
+    await expect(toaster).toHaveAttribute("data-x-position", "center");
+    await expect(toaster).toHaveAttribute("data-y-position", "top");
     const successToast = page.locator('[data-sonner-toast][data-type="success"]');
     await expect(successToast).toBeVisible();
     await expect(successToast).toHaveText(scenario.toastMessage);
+    await expect(successToast.getByRole("button", { name: "关闭通知" })).toHaveCount(0);
+    await expect(successToast).not.toBeAttached({ timeout: 7_000 });
   });
 }
 

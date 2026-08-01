@@ -37,13 +37,11 @@ export function AppProviders({ children }: AppProvidersProps) {
         <ComposerDraftProvider>{children}</ComposerDraftProvider>
       </ProjectProvider>
       <Toaster
-        closeButton
         containerAriaLabel="通知"
         duration={5_000}
-        position="top-right"
+        position="top-center"
         richColors
         theme="system"
-        toastOptions={{ closeButtonAriaLabel: "关闭通知" }}
       />
     </QueryClientProvider>
   );
