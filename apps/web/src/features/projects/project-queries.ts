@@ -6,6 +6,8 @@ import type {
   AgentTaskPage,
   AgentTaskSnapshot,
   AgentTaskSettings,
+  CommitProjectChangesRequest,
+  GenerateCommitMessageRequest,
   ProjectPage,
 } from "@code-agent/protocol";
 import {
@@ -18,6 +20,10 @@ import {
 
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
 export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
+export type CodeAgentGitMutationClient = Pick<
+  CodeAgentClient,
+  "commitProjectChanges" | "generateCommitMessage"
+>;
 export type CodeAgentFileTreeClient = Pick<CodeAgentClient, "listProjectFiles">;
 export type CodeAgentSourceFileClient = Pick<CodeAgentClient, "readProjectSourceFile">;
 export type CodeAgentProjectOpenClient = Pick<
@@ -66,6 +72,7 @@ export type CodeAgentPendingRequestClient = Pick<CodeAgentClient, "resolvePendin
 export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentBackgroundTerminalClient &
   CodeAgentGitStatusClient &
+  CodeAgentGitMutationClient &
   CodeAgentFileTreeClient &
   CodeAgentProjectOpenClient &
   CodeAgentRuntimeClient &
@@ -542,6 +549,30 @@ export function projectGitStatusQueryOptions(
       ? (query) => projectGitStatusRefetchInterval(query.state.error)
       : false,
     retry: 1,
+  });
+}
+
+export function projectCommitMessageMutationOptions(
+  projectId: string,
+  client: Pick<CodeAgentClient, "generateCommitMessage"> = codeAgentClient,
+) {
+  return mutationOptions({
+    mutationFn: (request: GenerateCommitMessageRequest) =>
+      client.generateCommitMessage(projectId, request),
+    mutationKey: ["projects", projectId, "git", "commit-message"] as const,
+    scope: { id: `project-git-message:${projectId}` },
+  });
+}
+
+export function projectCommitChangesMutationOptions(
+  projectId: string,
+  client: Pick<CodeAgentClient, "commitProjectChanges"> = codeAgentClient,
+) {
+  return mutationOptions({
+    mutationFn: (request: CommitProjectChangesRequest) =>
+      client.commitProjectChanges(projectId, request),
+    mutationKey: ["projects", projectId, "git", "commit"] as const,
+    scope: { id: `project-git-mutation:${projectId}` },
   });
 }
 

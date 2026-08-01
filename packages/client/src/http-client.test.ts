@@ -277,6 +277,8 @@ describe("CodeAgentClient", () => {
     const gitStatus = {
       baseBranches: ["origin/main", "main"],
       branch: "feat/review",
+      repositoryMode: "root",
+      snapshot: "a".repeat(64),
       staged: [],
       unstaged: [
         {
@@ -297,6 +299,50 @@ describe("CodeAgentClient", () => {
     await expect(client.getProjectGitStatus("project one")).rejects.toThrow(
       "CodeAgent response does not match the protocol schema",
     );
+  });
+
+  it("generates a commit message and commits selected files with idempotency", async () => {
+    const snapshot = "a".repeat(64);
+    const generationRequest = {
+      expectedSnapshot: snapshot,
+      paths: ["packages/server/src/app.ts"],
+    };
+    const commitRequest = {
+      action: "commit_and_push" as const,
+      expectedSnapshot: snapshot,
+      message: "feat(git): 添加选择文件提交",
+      paths: generationRequest.paths,
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ message: "feat(git): 添加选择文件提交", snapshot }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          branch: "feat/commit",
+          commitSha: "0123456789abcdef0123456789abcdef01234567",
+          message: commitRequest.message,
+          pushStatus: "pushed",
+        }),
+      );
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await client.generateCommitMessage("project one", generationRequest, {
+      idempotencyKey: "generate-key",
+    });
+    await client.commitProjectChanges("project one", commitRequest, {
+      idempotencyKey: "commit-key",
+    });
+
+    const [generateCall, commitCall] = fetchMock.mock.calls;
+    expect(generateCall?.[0]).toBe("/v1/projects/project%20one/git/commit-message");
+    expect(generateCall?.[1]).toMatchObject({
+      body: JSON.stringify(generationRequest),
+      method: "POST",
+    });
+    expect(new Headers(generateCall?.[1]?.headers).get("idempotency-key")).toBe("generate-key");
+    expect(commitCall?.[0]).toBe("/v1/projects/project%20one/git/commits");
+    expect(commitCall?.[1]).toMatchObject({ body: JSON.stringify(commitRequest), method: "POST" });
+    expect(new Headers(commitCall?.[1]?.headers).get("idempotency-key")).toBe("commit-key");
   });
 
   it("reads and validates a bounded project source preview", async () => {

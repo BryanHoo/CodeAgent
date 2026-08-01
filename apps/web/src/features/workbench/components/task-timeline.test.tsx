@@ -673,7 +673,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain(">推理<");
   });
 
-  it("renders completed ANSI command output in a copyable Terminal", () => {
+  it("defers completed ANSI command output until the tool is opened", () => {
     const ansiOutput = "\u001B[31m失败\u001B[0m\n请检查日志";
     const commandSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
@@ -699,13 +699,11 @@ describe("TaskSnapshotTimeline", () => {
 
     expect(markup).toContain("pnpm check");
     expect(markup).toContain("已完成");
-    expect(markup).toContain('data-terminal=""');
-    expect(markup).toContain('data-streaming="false"');
-    expect(markup).toContain('aria-label="复制命令输出"');
-    expect(markup).toContain("失败");
+    expect(markup).not.toContain('data-terminal=""');
+    expect(markup).not.toContain('aria-label="复制命令输出"');
+    expect(markup).not.toContain("请检查日志");
     expect(markup).not.toContain("\u001B[31m");
-    expect(markup).toContain("输出已截断，仅显示最新内容。");
-    expect(markup).not.toContain("清空");
+    expect(markup).not.toContain("输出已截断，仅显示最新内容。");
   });
 
   it("renders a running command as a streaming Terminal with its real cwd fallback", () => {
@@ -779,7 +777,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("已运行");
   });
 
-  it("renders generic tool input and output in separate structured sections", () => {
+  it("defers completed generic tool input and output until the tool is opened", () => {
     const toolSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: [
@@ -803,10 +801,10 @@ describe("TaskSnapshotTimeline", () => {
 
     expect(markup).toContain("read_file");
     expect(markup).toContain("已完成");
-    expect(markup).toContain(">参数<");
-    expect(markup).toContain(">结果<");
-    expect(markup).toContain("&quot;path&quot;: &quot;src/index.ts&quot;");
-    expect(markup).toContain("&quot;lines&quot;: 1");
+    expect(markup).not.toContain(">参数<");
+    expect(markup).not.toContain(">结果<");
+    expect(markup).not.toContain("&quot;path&quot;: &quot;src/index.ts&quot;");
+    expect(markup).not.toContain("&quot;lines&quot;: 1");
   });
 
   it("maps declined and interrupted agent items to official tool terminal states", () => {

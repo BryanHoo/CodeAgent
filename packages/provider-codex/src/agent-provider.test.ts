@@ -1583,6 +1583,12 @@ describe("CodexAgentProvider", () => {
               url: "data:image/png;base64,aW1hZ2U=",
             },
           ],
+          outputSchema: {
+            additionalProperties: false,
+            properties: { message: { type: "string" } },
+            required: ["message"],
+            type: "object",
+          },
           skills: [],
           text: "实现写入闭环",
         },
@@ -1609,6 +1615,12 @@ describe("CodexAgentProvider", () => {
             { type: "image", url: "data:image/png;base64,aW1hZ2U=" },
           ],
           model: "gpt-5.6-sol",
+          outputSchema: {
+            additionalProperties: false,
+            properties: { message: { type: "string" } },
+            required: ["message"],
+            type: "object",
+          },
           effort: "high",
           sandboxPolicy: {
             excludeSlashTmp: false,

@@ -6,6 +6,8 @@ import { WorkbenchInspector, type ProjectFileTreeDirectoryState } from "./workbe
 const gitStatus = {
   baseBranches: ["origin/main"],
   branch: "feat/review",
+  repositoryMode: "root" as const,
+  snapshot: "a".repeat(64),
   staged: [
     {
       diff: "--- a/package.json\n+++ b/package.json\n@@ -1,1 +1,2 @@\n-old\n+new\n+next",
@@ -25,6 +27,8 @@ const gitStatus = {
 const nestedGitStatus = {
   baseBranches: ["origin/main"],
   branch: "feat/tree-status",
+  repositoryMode: "root" as const,
+  snapshot: "b".repeat(64),
   staged: [],
   unstaged: [
     {

@@ -16,6 +16,8 @@ import {
   AgentPromptInputSchema,
   AgentSkillPageSchema,
   AgentMutationErrorSchema,
+  CommitProjectChangesRequestSchema,
+  CommitProjectChangesResponseSchema,
   AgentTaskPageSchema,
   AgentTaskSchema,
   AgentTaskSettingsResponseSchema,
@@ -32,6 +34,8 @@ import {
   StartAgentTurnRequestSchema,
   StartAgentTurnResponseSchema,
   HealthResponseSchema,
+  GenerateCommitMessageRequestSchema,
+  GenerateCommitMessageResponseSchema,
   ProjectPageSchema,
   ProjectFileTreeQuerySchema,
   ProjectGitStatusSchema,
@@ -192,6 +196,68 @@ describe("project protocol", () => {
     ).toBe(false);
   });
 
+  it("strictly validates selected-file commit generation and mutation contracts", () => {
+    const snapshot = "a".repeat(64);
+    const paths = ["packages/server/src/app.ts", "apps/web/src/app.tsx"];
+
+    expect(
+      Value.Check(GenerateCommitMessageRequestSchema, { expectedSnapshot: snapshot, paths }),
+    ).toBe(true);
+    expect(
+      Value.Check(GenerateCommitMessageResponseSchema, {
+        message: "feat(git): 添加选择文件提交",
+        snapshot,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(CommitProjectChangesRequestSchema, {
+        action: "commit_and_push",
+        expectedSnapshot: snapshot,
+        message: "feat(git): 添加选择文件提交",
+        paths,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(CommitProjectChangesResponseSchema, {
+        branch: "feat/commit",
+        commitSha: "0123456789abcdef0123456789abcdef01234567",
+        message: "feat(git): 添加选择文件提交",
+        pushStatus: "pushed",
+      }),
+    ).toBe(true);
+
+    for (const invalidPaths of [
+      [],
+      ["src/app.ts", "src/app.ts"],
+      ["../secret"],
+      ["/tmp/secret"],
+      ["src\\app.ts"],
+    ]) {
+      expect(
+        Value.Check(GenerateCommitMessageRequestSchema, {
+          expectedSnapshot: snapshot,
+          paths: invalidPaths,
+        }),
+      ).toBe(false);
+    }
+    expect(
+      Value.Check(CommitProjectChangesRequestSchema, {
+        action: "commit",
+        expectedSnapshot: "stale",
+        message: "   ",
+        paths,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CommitProjectChangesResponseSchema, {
+        branch: null,
+        commitSha: "not-a-sha",
+        message: "fix(git): 修复提交",
+        pushStatus: "unknown",
+      }),
+    ).toBe(false);
+  });
+
   it("scopes every task to a project and records its pinned state", () => {
     expect(AgentTaskSchema).toMatchObject({
       additionalProperties: false,
@@ -282,6 +348,8 @@ describe("project protocol", () => {
       Value.Check(ProjectGitStatusSchema, {
         baseBranches: ["origin/main", "main"],
         branch: "feat/review",
+        repositoryMode: "root",
+        snapshot: "a".repeat(64),
         staged: [fileChange],
         unstaged: [{ ...fileChange, path: "README.md" }],
       }),
@@ -296,7 +364,19 @@ describe("project protocol", () => {
       Value.Check(ProjectGitStatusSchema, {
         baseBranches: ["origin/main", "origin/main"],
         branch: null,
+        repositoryMode: "children",
+        snapshot: "a".repeat(64),
         staged: [],
+        unstaged: [],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ProjectGitStatusSchema, {
+        baseBranches: ["main"],
+        branch: "feat/review",
+        repositoryMode: "root",
+        snapshot: "a".repeat(64),
+        staged: [{ ...fileChange, path: "/workspace/CodeAgent/src/index.ts" }],
         unstaged: [],
       }),
     ).toBe(false);
@@ -394,7 +474,13 @@ describe("project protocol", () => {
               type: "command",
             },
             {
-              changes: [{ diff: "+export {}", kind: "update", path: "src/index.ts" }],
+              changes: [
+                {
+                  diff: "+export {}",
+                  kind: "update",
+                  path: "/workspace/CodeAgent/src/index.ts",
+                },
+              ],
               id: "item-4",
               status: "completed",
               type: "file_change",

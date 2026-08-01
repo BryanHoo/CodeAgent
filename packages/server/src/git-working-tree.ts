@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { lstat, readdir, readFile, readlink, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -288,29 +289,35 @@ export async function readGitWorkingTreeStatus(
     baseBranches: [],
     branch: null,
   };
-  try {
+  let repositoryMode: ProjectGitStatus["repositoryMode"] = "root";
+  if (await hasGitMetadata(resolvedProjectRoot)) {
     status = await readRepositoryWorkingTreeStatus(resolvedProjectRoot, gitCommandExecutor);
     repositoryBranches = await readRepositoryBranches(resolvedProjectRoot, gitCommandExecutor);
-  } catch (rootStatusError) {
-    // 当前目录不是仓库时只回退一级；当前目录已有 .git 则保留原始错误语义。
-    if (await hasGitMetadata(resolvedProjectRoot)) {
-      throw rootStatusError;
-    }
+  } else {
+    // 只认 Project 自身的 .git，避免把上级仓库误判为可提交根仓库。
     const childStatus = await readImmediateChildRepositoryStatuses(
       resolvedProjectRoot,
       gitCommandExecutor,
     );
     if (childStatus === undefined) {
-      throw rootStatusError;
+      throw new Error("Project root is not a Git repository");
     }
     status = childStatus;
+    repositoryMode = "children";
   }
 
   const comparePaths = (left: GitFileChange, right: GitFileChange) =>
     left.path.localeCompare(right.path);
+  const staged = status.staged.toSorted(comparePaths);
+  const unstaged = status.unstaged.toSorted(comparePaths);
+  const snapshot = createHash("sha256")
+    .update(JSON.stringify({ branch: repositoryBranches.branch, repositoryMode, staged, unstaged }))
+    .digest("hex");
   return {
     ...repositoryBranches,
-    staged: status.staged.toSorted(comparePaths),
-    unstaged: status.unstaged.toSorted(comparePaths),
+    repositoryMode,
+    snapshot,
+    staged,
+    unstaged,
   };
 }

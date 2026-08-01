@@ -129,6 +129,12 @@ describe("AgentProvider", () => {
         });
       },
       startTurn(taskId, input, options) {
+        expect(input.outputSchema).toEqual({
+          additionalProperties: false,
+          properties: { message: { type: "string" } },
+          required: ["message"],
+          type: "object",
+        });
         expect(options).toEqual({
           approvalPolicy: "on-request",
           approvalsReviewer: "user",
@@ -212,6 +218,12 @@ describe("AgentProvider", () => {
         "task-1",
         {
           images: [{ mediaType: "image/png", url: "data:image/png;base64,aW1hZ2U=" }],
+          outputSchema: {
+            additionalProperties: false,
+            properties: { message: { type: "string" } },
+            required: ["message"],
+            type: "object",
+          },
           skills: [{ id: "skill-security", name: "review-security" }],
           text: "继续",
         },

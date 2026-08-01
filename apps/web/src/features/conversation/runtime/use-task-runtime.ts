@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "zustand";
 
 import { taskSnapshotQueryOptions } from "../../projects/project-queries.js";
@@ -39,6 +39,11 @@ export function useTaskRuntime(
   const taskStatus = useStore(subscribedStore, (state) => state.snapshotMetadata?.status);
   const taskTitle = useStore(subscribedStore, (state) => state.snapshotMetadata?.title);
   const taskSettings = useStore(subscribedStore, (state) => state.snapshotMetadata?.settings);
+  const taskContextUsage = useStore(
+    subscribedStore,
+    (state) => state.snapshotMetadata?.contextUsage,
+  );
+  const taskPinned = useStore(subscribedStore, (state) => state.snapshotMetadata?.pinned);
   const itemStructureRevision = useStore(subscribedStore, (state) => state.itemStructureRevision);
 
   useEffect(() => {
@@ -84,22 +89,32 @@ export function useTaskRuntime(
         : connectionState === "closed"
           ? (taskQuery.error ?? runtimeError)
           : null;
-  // 仅在低频 Task 字段变化时重建兼容快照；Delta 不再广播到 Workbench 根节点。
-  void taskStatus;
-  void taskTitle;
-  void taskSettings;
-  void itemStructureRevision;
-  const snapshot = activeRuntime?.getState().reconstructSnapshot();
+  // 轮询等无关父级更新不得重建完整历史；只在结构或可见 Task 元数据变化时读取兼容快照。
+  const snapshot = useMemo(
+    () => activeRuntime?.getState().reconstructSnapshot(),
+    [
+      activeRuntime,
+      itemStructureRevision,
+      taskContextUsage,
+      taskPinned,
+      taskSettings,
+      taskStatus,
+      taskTitle,
+    ],
+  );
+  const isRuntimePending =
+    error === null && (taskQuery.isPending || activeRuntime === undefined || !hasHydratedSnapshot);
 
-  return {
-    connectionState: activeRuntime === undefined ? "connecting" : connectionState,
-    error,
-    isPending:
-      error === null &&
-      (taskQuery.isPending || activeRuntime === undefined || !hasHydratedSnapshot),
-    snapshot,
-    store: activeRuntime,
-  };
+  return useMemo(
+    () => ({
+      connectionState: activeRuntime === undefined ? "connecting" : connectionState,
+      error,
+      isPending: isRuntimePending,
+      snapshot,
+      store: activeRuntime,
+    }),
+    [activeRuntime, connectionState, error, isRuntimePending, snapshot],
+  );
 }
 
 export function removeRetainedTaskRuntime(projectId: string, taskId: string): boolean {

@@ -14,6 +14,8 @@ import {
   projectDefaultsQueryOptions,
   projectGitStatusRefetchInterval,
   projectGitStatusQueryOptions,
+  projectCommitChangesMutationOptions,
+  projectCommitMessageMutationOptions,
   projectFileTreeQueryOptions,
   projectReorderMutationOptions,
   listProjectTasksForSearch,
@@ -182,7 +184,14 @@ describe("project queries", () => {
 
   it("polls Git status only while the current task is running", async () => {
     const getProjectGitStatus = vi.fn<CodeAgentGitStatusClient["getProjectGitStatus"]>(() =>
-      Promise.resolve({ baseBranches: ["origin/main"], branch: "main", staged: [], unstaged: [] }),
+      Promise.resolve({
+        baseBranches: ["origin/main"],
+        branch: "main",
+        repositoryMode: "root",
+        snapshot: "a".repeat(64),
+        staged: [],
+        unstaged: [],
+      }),
     );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const runningOptions = projectGitStatusQueryOptions("code-agent", true, {
@@ -195,6 +204,8 @@ describe("project queries", () => {
     await expect(queryClient.fetchQuery(runningOptions)).resolves.toEqual({
       baseBranches: ["origin/main"],
       branch: "main",
+      repositoryMode: "root",
+      snapshot: "a".repeat(64),
       staged: [],
       unstaged: [],
     });
@@ -228,6 +239,8 @@ describe("project queries", () => {
     const gitStatus = {
       baseBranches: ["origin/main"],
       branch: "main",
+      repositoryMode: "root" as const,
+      snapshot: "a".repeat(64),
       staged: [],
       unstaged: [],
     };
@@ -355,6 +368,43 @@ describe("project queries", () => {
 
     expect(reorderProjects).toHaveBeenCalledWith([project.id]);
     expect(mutationOptions.scope).toEqual({ id: "projects:reorder" });
+  });
+
+  it("generates and commits selected Git paths through project-scoped mutations", async () => {
+    const messageRequest = { expectedSnapshot: "a".repeat(64), paths: ["src/app.ts"] };
+    const commitRequest = {
+      action: "commit" as const,
+      expectedSnapshot: "a".repeat(64),
+      message: "feat(git): 提交选择文件",
+      paths: ["src/app.ts"],
+    };
+    const client = {
+      commitProjectChanges: vi.fn(() =>
+        Promise.resolve({
+          branch: "feat/commit",
+          commitSha: "0123456789abcdef0123456789abcdef01234567",
+          message: commitRequest.message,
+          pushStatus: "not_requested" as const,
+        }),
+      ),
+      generateCommitMessage: vi.fn(() =>
+        Promise.resolve({
+          message: commitRequest.message,
+          snapshot: messageRequest.expectedSnapshot,
+        }),
+      ),
+    };
+    const queryClient = new QueryClient();
+    const messageOptions = projectCommitMessageMutationOptions("code-agent", client);
+    const commitOptions = projectCommitChangesMutationOptions("code-agent", client);
+
+    await queryClient.getMutationCache().build(queryClient, messageOptions).execute(messageRequest);
+    await queryClient.getMutationCache().build(queryClient, commitOptions).execute(commitRequest);
+
+    expect(client.generateCommitMessage).toHaveBeenCalledWith("code-agent", messageRequest);
+    expect(client.commitProjectChanges).toHaveBeenCalledWith("code-agent", commitRequest);
+    expect(messageOptions.scope).toEqual({ id: "project-git-message:code-agent" });
+    expect(commitOptions.scope).toEqual({ id: "project-git-mutation:code-agent" });
   });
 
   it("loads only the first task page until the next page is explicitly requested", async () => {
@@ -573,7 +623,6 @@ describe("project queries", () => {
       "Turn 执行失败",
       "模型服务不可用",
       "pnpm check",
-      "输出已截断",
       "src/index.ts",
       "filesystem/read_file",
       "1. 定义协议",
@@ -581,6 +630,7 @@ describe("project queries", () => {
     ]) {
       expect(markup).toContain(text);
     }
+    expect(markup).not.toContain("输出已截断");
     expect(markup).not.toContain("分析协议");
     expect(markup).not.toContain("按统一边界实现");
   });

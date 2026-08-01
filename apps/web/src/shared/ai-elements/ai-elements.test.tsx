@@ -170,6 +170,25 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('data-language="json"');
   });
 
+  it("does not render tool details until the tool is opened", () => {
+    const collapsedMarkup = renderToStaticMarkup(
+      <Tool>
+        <ToolHeader state="output-available" title="读取大型结果" />
+        <ToolContent>仅展开后渲染的大型内容</ToolContent>
+      </Tool>,
+    );
+    const expandedMarkup = renderToStaticMarkup(
+      <Tool defaultOpen>
+        <ToolHeader state="output-available" title="读取大型结果" />
+        <ToolContent>仅展开后渲染的大型内容</ToolContent>
+      </Tool>,
+    );
+
+    expect(collapsedMarkup).toContain("读取大型结果");
+    expect(collapsedMarkup).not.toContain("仅展开后渲染的大型内容");
+    expect(expandedMarkup).toContain("仅展开后渲染的大型内容");
+  });
+
   it("renders denied and failed tools as distinct error states", () => {
     const deniedMarkup = renderToStaticMarkup(
       <Tool>

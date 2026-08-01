@@ -153,15 +153,18 @@ function createProvider() {
   const rollbackLatestTurn = vi.fn(() => Promise.resolve());
   const renameTask = vi.fn(() => Promise.resolve());
   const startTask = vi.fn(() => Promise.resolve(task));
-  const startTurn = vi.fn((taskId: string, input: AgentProviderTurnInput) =>
-    Promise.resolve({
-      completedAt: null,
-      error: null,
-      id: "turn-1",
-      items: [{ id: "input-1", role: "user" as const, text: input.text, type: "message" as const }],
-      startedAt: "2026-07-23T00:02:00.000Z",
-      status: "running" as const,
-    }),
+  const startTurn = vi.fn<AgentProvider["startTurn"]>(
+    (taskId: string, input: AgentProviderTurnInput) =>
+      Promise.resolve({
+        completedAt: null,
+        error: null,
+        id: "turn-1",
+        items: [
+          { id: "input-1", role: "user" as const, text: input.text, type: "message" as const },
+        ],
+        startedAt: "2026-07-23T00:02:00.000Z",
+        status: "running" as const,
+      }),
   );
   const interruptTurn = vi.fn(() => Promise.resolve());
   const listBackgroundTerminals = vi.fn<() => Promise<AgentBackgroundTerminalPage>>(() =>
@@ -755,6 +758,8 @@ describe("CodeAgent Server", () => {
       Promise.resolve({
         baseBranches: ["origin/main", "main"],
         branch: "feat/review",
+        repositoryMode: "root" as const,
+        snapshot: "c".repeat(64),
         staged: [
           {
             diff: "--- a/staged.ts\n+++ b/staged.ts\n@@ -1 +1 @@\n-old\n+new",
@@ -789,6 +794,256 @@ describe("CodeAgent Server", () => {
     expect(readProjectGitStatus).toHaveBeenCalledWith(project.rootPath);
     expect(missingProjectResponse.statusCode).toBe(404);
     expect(readProjectGitStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("generates a selected-file commit message through a hidden read-only turn", async () => {
+    const providerHarness = createProvider();
+    const snapshot = "a".repeat(64);
+    const readProjectGitStatus = vi.fn(() =>
+      Promise.resolve({
+        baseBranches: ["main"],
+        branch: "feat/commit",
+        repositoryMode: "root" as const,
+        snapshot,
+        staged: [],
+        unstaged: [
+          {
+            diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new",
+            kind: "update" as const,
+            path: "src/app.ts",
+          },
+        ],
+      }),
+    );
+    const app = await createCodeAgentServer(
+      createServerOptions(providerHarness.provider, { readProjectGitStatus }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const responsePromise = app.inject({
+      headers: { "idempotency-key": "generate-message" },
+      method: "POST",
+      payload: { expectedSnapshot: snapshot, paths: ["src/app.ts"] },
+      url: "/v1/projects/code-agent/git/commit-message",
+    });
+    await vi.waitFor(() => {
+      expect(providerHarness.startTurn).toHaveBeenCalledOnce();
+    });
+    providerHarness.emitEvent({
+      itemId: "message-1",
+      payload: {
+        item: {
+          id: "message-1",
+          role: "assistant",
+          text: JSON.stringify({ message: "feat(git): 生成提交信息" }),
+          type: "message",
+        },
+      },
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "item.completed",
+    });
+    providerHarness.emitEvent({
+      payload: {
+        turn: {
+          completedAt: "2026-08-01T00:00:01.000Z",
+          error: null,
+          id: "turn-1",
+          items: [],
+          startedAt: "2026-08-01T00:00:00.000Z",
+          status: "completed",
+        },
+      },
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "turn.completed",
+    });
+    const response = await responsePromise;
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ message: "feat(git): 生成提交信息", snapshot });
+    const startTurnCall = providerHarness.startTurn.mock.calls[0];
+    expect(startTurnCall?.[0]).toBe("task-1");
+    expect(startTurnCall?.[1].outputSchema).toMatchObject({ type: "object" });
+    expect(startTurnCall?.[1].text).toContain("src/app.ts");
+    expect(startTurnCall?.[2]).toMatchObject({
+      approvalPolicy: "never",
+      approvalsReviewer: "user",
+      sandboxMode: "read-only",
+    });
+    expect(providerHarness.archiveTask).toHaveBeenCalledWith("task-1");
+    expect(providerHarness.unsubscribeTask).toHaveBeenCalledWith("task-1");
+  });
+
+  it("rejects stale commit-message snapshots before starting Codex", async () => {
+    const providerHarness = createProvider();
+    const readProjectGitStatus = vi.fn(() =>
+      Promise.resolve({
+        baseBranches: ["main"],
+        branch: "feat/commit",
+        repositoryMode: "root" as const,
+        snapshot: "d".repeat(64),
+        staged: [],
+        unstaged: [{ diff: "+new", kind: "update" as const, path: "src/app.ts" }],
+      }),
+    );
+    const app = await createCodeAgentServer(
+      createServerOptions(providerHarness.provider, { readProjectGitStatus }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({
+      headers: { "idempotency-key": "stale-message" },
+      method: "POST",
+      payload: { expectedSnapshot: "e".repeat(64), paths: ["src/app.ts"] },
+      url: "/v1/projects/code-agent/git/commit-message",
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: "GIT_STATUS_CHANGED" });
+    expect(providerHarness.startTask).not.toHaveBeenCalled();
+  });
+
+  it("cleans up the hidden task when commit-message generation fails", async () => {
+    const providerHarness = createProvider();
+    const snapshot = "f".repeat(64);
+    const readProjectGitStatus = vi.fn(() =>
+      Promise.resolve({
+        baseBranches: ["main"],
+        branch: "feat/commit",
+        repositoryMode: "root" as const,
+        snapshot,
+        staged: [],
+        unstaged: [{ diff: "+new", kind: "update" as const, path: "src/app.ts" }],
+      }),
+    );
+    const app = await createCodeAgentServer(
+      createServerOptions(providerHarness.provider, { readProjectGitStatus }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const responsePromise = app.inject({
+      headers: { "idempotency-key": "failed-message" },
+      method: "POST",
+      payload: { expectedSnapshot: snapshot, paths: ["src/app.ts"] },
+      url: "/v1/projects/code-agent/git/commit-message",
+    });
+    await vi.waitFor(() => {
+      expect(providerHarness.startTurn).toHaveBeenCalledOnce();
+    });
+    providerHarness.emitEvent({
+      payload: { message: "model failed", willRetry: false },
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "provider.error",
+    });
+    const response = await responsePromise;
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toMatchObject({ code: "COMMIT_MESSAGE_GENERATION_FAILED" });
+    expect(providerHarness.interruptTurn).toHaveBeenCalledWith("task-1", "turn-1");
+    expect(providerHarness.archiveTask).toHaveBeenCalledWith("task-1");
+    expect(providerHarness.unsubscribeTask).toHaveBeenCalledWith("task-1");
+  });
+
+  it("commits selected files idempotently and preserves push partial success", async () => {
+    const { provider } = createProvider();
+    const snapshot = "b".repeat(64);
+    const commitProjectChanges = vi.fn(() =>
+      Promise.resolve({
+        branch: "feat/commit",
+        commitSha: "0123456789abcdef0123456789abcdef01234567",
+        message: "feat(git): 提交选择文件",
+        pushStatus: "failed" as const,
+      }),
+    );
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, { commitProjectChanges }),
+    );
+    closeCallbacks.push(() => app.close());
+    const request = {
+      action: "commit_and_push",
+      expectedSnapshot: snapshot,
+      message: "feat(git): 提交选择文件",
+      paths: ["src/app.ts"],
+    } as const;
+
+    const first = await app.inject({
+      headers: { "idempotency-key": "commit-selected" },
+      method: "POST",
+      payload: request,
+      url: "/v1/projects/code-agent/git/commits",
+    });
+    const repeated = await app.inject({
+      headers: { "idempotency-key": "commit-selected" },
+      method: "POST",
+      payload: request,
+      url: "/v1/projects/code-agent/git/commits",
+    });
+
+    expect(first.statusCode).toBe(201);
+    expect(first.json()).toMatchObject({ pushStatus: "failed" });
+    expect(repeated.json()).toEqual(first.json());
+    expect(commitProjectChanges).toHaveBeenCalledOnce();
+    expect(commitProjectChanges).toHaveBeenCalledWith(project.rootPath, request);
+  });
+
+  it("rejects concurrent Git mutations for the same project", async () => {
+    const { provider } = createProvider();
+    let resolveCommit!: (result: {
+      branch: string;
+      commitSha: string;
+      message: string;
+      pushStatus: "not_requested";
+    }) => void;
+    const commitProjectChanges = vi.fn(
+      () =>
+        new Promise<{
+          branch: string;
+          commitSha: string;
+          message: string;
+          pushStatus: "not_requested";
+        }>((resolve) => {
+          resolveCommit = resolve;
+        }),
+    );
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, { commitProjectChanges }),
+    );
+    closeCallbacks.push(() => app.close());
+    const payload = {
+      action: "commit",
+      expectedSnapshot: "1".repeat(64),
+      message: "feat(git): 提交选择文件",
+      paths: ["src/app.ts"],
+    } as const;
+
+    const firstResponse = app.inject({
+      headers: { "idempotency-key": "first-commit" },
+      method: "POST",
+      payload,
+      url: "/v1/projects/code-agent/git/commits",
+    });
+    await vi.waitFor(() => {
+      expect(commitProjectChanges).toHaveBeenCalledOnce();
+    });
+    const concurrentResponse = await app.inject({
+      headers: { "idempotency-key": "concurrent-commit" },
+      method: "POST",
+      payload,
+      url: "/v1/projects/code-agent/git/commits",
+    });
+    resolveCommit({
+      branch: "feat/commit",
+      commitSha: "0123456789abcdef0123456789abcdef01234567",
+      message: payload.message,
+      pushStatus: "not_requested",
+    });
+
+    expect(concurrentResponse.statusCode).toBe(409);
+    expect(concurrentResponse.json()).toMatchObject({ code: "GIT_MUTATION_IN_PROGRESS" });
+    expect((await firstResponse).statusCode).toBe(201);
+    expect(commitProjectChanges).toHaveBeenCalledOnce();
   });
 
   it("serves bounded source previews only for the configured project", async () => {

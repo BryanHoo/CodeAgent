@@ -29,6 +29,8 @@ export type AgentProviderTurnInput = Readonly<{
     mediaType: AgentAttachmentMediaType;
     url: string;
   }>[];
+  // 仅供 Server 内部的结构化任务使用，浏览器协议不接受任意 Schema。
+  outputSchema?: Readonly<Record<string, unknown>>;
   skills: readonly AgentSkillReference[];
   text: string;
 }>;

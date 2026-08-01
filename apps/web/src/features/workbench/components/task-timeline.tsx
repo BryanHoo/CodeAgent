@@ -67,6 +67,7 @@ import {
 } from "../../../shared/ai-elements/task.js";
 import {
   Tool,
+  ToolBody,
   ToolContent,
   ToolHeader,
   ToolInput,
@@ -308,6 +309,18 @@ function toToolState(status: AgentItemStatus): ToolState {
     return "output-error";
   }
   return "output-available";
+}
+
+function shouldOpenToolByDefault(
+  status: AgentItemStatus,
+  turnStatus: AgentTurn["status"],
+): boolean {
+  return (
+    (turnStatus === "running" && status === "running") ||
+    status === "declined" ||
+    status === "failed" ||
+    status === "interrupted"
+  );
 }
 
 function toTaskStatus(status: AgentItemStatus): TaskStatus {
@@ -818,21 +831,23 @@ function TimelineItemContent({
       const commandOutput = item.output ?? item.cwd;
       const isStreamingCommand = turnStatus === "running" && item.status === "running";
       return (
-        <Tool>
+        <Tool defaultOpen={shouldOpenToolByDefault(item.status, turnStatus)}>
           <ToolHeader state={toToolState(item.status)} title={item.command} />
-          <Terminal isStreaming={isStreamingCommand} output={commandOutput}>
-            <TerminalHeader>
-              <TerminalTitle>输出</TerminalTitle>
-              <TerminalActions>
-                <TerminalCopyButton />
-              </TerminalActions>
-            </TerminalHeader>
-            <TerminalContent>
-              {item.outputTruncated ? (
-                <p className="mt-2 text-warning">输出已截断，仅显示最新内容。</p>
-              ) : null}
-            </TerminalContent>
-          </Terminal>
+          <ToolBody>
+            <Terminal isStreaming={isStreamingCommand} output={commandOutput}>
+              <TerminalHeader>
+                <TerminalTitle>输出</TerminalTitle>
+                <TerminalActions>
+                  <TerminalCopyButton />
+                </TerminalActions>
+              </TerminalHeader>
+              <TerminalContent>
+                {item.outputTruncated ? (
+                  <p className="mt-2 text-warning">输出已截断，仅显示最新内容。</p>
+                ) : null}
+              </TerminalContent>
+            </Terminal>
+          </ToolBody>
         </Tool>
       );
     }
@@ -852,7 +867,7 @@ function TimelineItemContent({
           : undefined;
 
       return (
-        <Tool>
+        <Tool defaultOpen={shouldOpenToolByDefault(item.status, turnStatus)}>
           <ToolHeader state={toToolState(item.status)} title={item.name} />
           <ToolContent>
             {item.input === undefined ? null : <ToolInput input={item.input} />}

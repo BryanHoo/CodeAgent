@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -13,12 +14,16 @@ describe("readGitWorkingTreeStatus", () => {
     expect(status.branch === null || typeof status.branch === "string").toBe(true);
     // actions/checkout 的标签检出可能不包含任何远端分支引用。
     expect(Array.isArray(status.baseBranches)).toBe(true);
+    expect(status.repositoryMode).toBe("root");
+    expect(status.snapshot).toMatch(/^[a-f0-9]{64}$/u);
     expect(Array.isArray(status.staged)).toBe(true);
     expect(Array.isArray(status.unstaged)).toBe(true);
   });
 
   it("prioritizes the remote default branch in the selectable base branches", async () => {
-    const projectRoot = await mkdtemp(join(process.cwd(), ".git-status-test-"));
+    const projectRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "code-agent-git-status-test-")),
+    );
     try {
       await mkdir(join(projectRoot, ".git"));
       const executeGit = (_root: string, arguments_: readonly string[]) => {
@@ -49,8 +54,11 @@ describe("readGitWorkingTreeStatus", () => {
   });
 
   it("separates staged, unstaged, untracked, and partially staged changes", async () => {
-    const projectRoot = await mkdtemp(join(process.cwd(), ".git-status-test-"));
+    const projectRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "code-agent-git-status-test-")),
+    );
     try {
+      await mkdir(join(projectRoot, ".git"));
       await writeFile(join(projectRoot, "untracked.txt"), "new file\n");
       const executeGit = (_root: string, arguments_: readonly string[]) => {
         if (arguments_[0] === "status") {
@@ -90,7 +98,9 @@ describe("readGitWorkingTreeStatus", () => {
   });
 
   it("reads and combines immediate child repositories when the project root is not Git", async () => {
-    const projectRoot = await mkdtemp(join(process.cwd(), ".git-status-test-"));
+    const projectRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "code-agent-git-status-test-")),
+    );
     const frontendRoot = join(projectRoot, "frontend");
     const backendRoot = join(projectRoot, "backend");
     const nestedRepositoryRoot = join(projectRoot, "workspace", "nested");
@@ -124,10 +134,43 @@ describe("readGitWorkingTreeStatus", () => {
 
       expect(status.staged.map((change) => change.path)).toEqual(["backend/src/server.ts"]);
       expect(status.unstaged.map((change) => change.path)).toEqual(["frontend/src/app.ts"]);
-      expect(visitedStatusRoots.toSorted()).toEqual(
-        [projectRoot, backendRoot, frontendRoot].toSorted(),
-      );
+      expect(status.repositoryMode).toBe("children");
+      expect(status.snapshot).toMatch(/^[a-f0-9]{64}$/u);
+      expect(visitedStatusRoots.toSorted()).toEqual([backendRoot, frontendRoot].toSorted());
+      expect(visitedStatusRoots).not.toContain(projectRoot);
       expect(visitedStatusRoots).not.toContain(nestedRepositoryRoot);
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("changes the snapshot when selected file content changes", async () => {
+    const projectRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "code-agent-git-status-test-")),
+    );
+    try {
+      await mkdir(join(projectRoot, ".git"));
+      await writeFile(join(projectRoot, "tracked.txt"), "first\n");
+      const executeGit = (_root: string, arguments_: readonly string[]) => {
+        if (arguments_[0] === "status") {
+          return Promise.resolve(" M tracked.txt\0");
+        }
+        if (arguments_[0] === "branch") {
+          return Promise.resolve("main\n");
+        }
+        if (arguments_[0] === "for-each-ref" || arguments_[0] === "symbolic-ref") {
+          return Promise.resolve("");
+        }
+        return Promise.resolve(
+          `--- a/tracked.txt\n+++ b/tracked.txt\n@@ -1 +1 @@\n-first\n+${awaitText}\n`,
+        );
+      };
+      let awaitText = "second";
+      const first = await readGitWorkingTreeStatus(projectRoot, executeGit);
+      awaitText = "third";
+      const second = await readGitWorkingTreeStatus(projectRoot, executeGit);
+
+      expect(first.snapshot).not.toBe(second.snapshot);
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }

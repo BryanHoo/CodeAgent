@@ -7,7 +7,14 @@ import {
   Clock,
   Wrench,
 } from "lucide-react";
-import { isValidElement, type HTMLAttributes, type ReactNode } from "react";
+import {
+  createContext,
+  isValidElement,
+  useContext,
+  useState,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 
 import { CodeBlock } from "./code-block.js";
 
@@ -24,13 +31,25 @@ type ToolProps = HTMLAttributes<HTMLDetailsElement> & {
   defaultOpen?: boolean;
 };
 
-export function Tool({ className = "", defaultOpen, ...props }: ToolProps) {
+const ToolOpenContext = createContext<boolean | null>(null);
+
+export function Tool({ className = "", defaultOpen = false, onToggle, ...props }: ToolProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
   return (
-    <details
-      className={`group/tool w-full rounded-surface bg-control px-3 py-1 ${className}`}
-      open={defaultOpen}
-      {...props}
-    />
+    <ToolOpenContext.Provider value={isOpen}>
+      <details
+        className={`group/tool w-full rounded-surface bg-control px-3 py-1 ${className}`}
+        onToggle={(event) => {
+          onToggle?.(event);
+          if (!event.defaultPrevented) {
+            setIsOpen(event.currentTarget.open);
+          }
+        }}
+        open={isOpen}
+        {...props}
+      />
+    </ToolOpenContext.Provider>
   );
 }
 
@@ -98,12 +117,21 @@ export function ToolHeader({ className = "", state, title, ...props }: ToolHeade
 
 type ToolContentProps = HTMLAttributes<HTMLDivElement>;
 
+export function ToolBody({ children }: Readonly<{ children: ReactNode }>) {
+  const isOpen = useContext(ToolOpenContext);
+
+  // 原生 details 只隐藏内容，不会减少 DOM；关闭时直接卸载大型 Tool 输出。
+  return isOpen === false ? null : children;
+}
+
 export function ToolContent({ className = "", ...props }: ToolContentProps) {
   return (
-    <div
-      className={`mb-2 space-y-4 rounded-control bg-raised px-3 py-3 text-muted-foreground shadow-sm ${className}`}
-      {...props}
-    />
+    <ToolBody>
+      <div
+        className={`mb-2 space-y-4 rounded-control bg-raised px-3 py-3 text-muted-foreground shadow-sm ${className}`}
+        {...props}
+      />
+    </ToolBody>
   );
 }
 

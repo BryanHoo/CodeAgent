@@ -5,6 +5,7 @@ export {
   type AgentEventStreamOptions,
 } from "./agent-event-stream.js";
 export { createCodeAgentServer, type CreateCodeAgentServerOptions } from "./app.js";
+export { commitSelectedProjectChanges, GitCommitError } from "./git-commit.js";
 export {
   SqliteStateRepository,
   type SqliteDatabaseDiagnostics,

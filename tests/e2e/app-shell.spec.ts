@@ -197,6 +197,8 @@ const packageJsonDiff = [
 const projectGitStatus = {
   baseBranches: ["origin/main", "main", "release"],
   branch: "feat/review-targets",
+  repositoryMode: "root",
+  snapshot: "a".repeat(64),
   staged: [],
   unstaged: [{ diff: packageJsonDiff, kind: "update", path: "package.json" }],
 };
@@ -2066,6 +2068,103 @@ test("opens file diffs from the timeline and uncommitted review button", async (
   await page.keyboard.press("Escape");
   await expect(reviewDialog).not.toBeAttached();
   expect({ consoleErrors, failedResources }).toEqual({ consoleErrors: [], failedResources: [] });
+});
+
+test("generates a message and commits only selected files", async ({ page }) => {
+  const snapshot = "c".repeat(64);
+  const additionalChanges = Array.from({ length: 16 }, (_, index) => ({
+    diff: `+export const generated${String(index + 1)} = true;`,
+    kind: "create",
+    path: `apps/web/src/generated-${String(index + 1).padStart(2, "0")}.ts`,
+  }));
+  let messageRequest: Record<string, unknown> | undefined;
+  let commitRequest: Record<string, unknown> | undefined;
+  let commitIdempotencyKey: string | undefined;
+  await page.route("**/v1/projects/code-agent/git/status", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...projectGitStatus,
+        snapshot,
+        unstaged: [...projectGitStatus.unstaged, ...additionalChanges],
+      },
+    });
+  });
+  await page.route("**/v1/projects/code-agent/git/commit-message", async (route) => {
+    messageRequest = parseRequestRecord(route.request().postData());
+    await route.fulfill({
+      contentType: "application/json",
+      json: { message: "feat(git): 生成选中文件提交", snapshot },
+    });
+  });
+  await page.route("**/v1/projects/code-agent/git/commits", async (route) => {
+    commitRequest = parseRequestRecord(route.request().postData());
+    commitIdempotencyKey = route.request().headers()["idempotency-key"];
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        branch: "feat/review-targets",
+        commitSha: "0123456789abcdef0123456789abcdef01234567",
+        message: commitRequest["message"],
+        pushStatus: "failed",
+      },
+      status: 201,
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+  await page.getByRole("button", { name: "提交 17 个未提交变更" }).click();
+  const dialog = page.getByRole("dialog", { name: "提交变更" });
+  await expect(dialog).toBeVisible();
+  const fileDisclosure = dialog.getByRole("button", {
+    name: "选择文件，已选择 17/17 个文件",
+  });
+  await expect(fileDisclosure).toHaveAttribute("aria-expanded", "false");
+  await expect(dialog.getByRole("checkbox")).toHaveCount(0);
+  await fileDisclosure.click();
+  await expect(fileDisclosure).toHaveAttribute("aria-expanded", "true");
+
+  const fileList = dialog.locator('[data-commit-file-list=""]');
+  const allFilesCheckbox = fileList.getByRole("checkbox", { name: "全选文件" });
+  await expect(allFilesCheckbox).toBeChecked();
+  const messageInput = dialog.getByRole("textbox", { name: "提交信息" });
+  const messageBoxBeforeScroll = await messageInput.boundingBox();
+  const scrollMetrics = await fileList.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    return {
+      clientHeight: element.clientHeight,
+      overflowY: getComputedStyle(element).overflowY,
+      scrollHeight: element.scrollHeight,
+      scrollTop: element.scrollTop,
+    };
+  });
+  const messageBoxAfterScroll = await messageInput.boundingBox();
+  expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
+  expect(scrollMetrics.overflowY).toBe("auto");
+  expect(scrollMetrics.scrollTop).toBeGreaterThan(0);
+  expect(await dialog.evaluate((element) => element.scrollTop)).toBe(0);
+  expect(messageBoxAfterScroll?.y).toBe(messageBoxBeforeScroll?.y);
+
+  await allFilesCheckbox.uncheck();
+  await expect(dialog.getByText("已选择 0 个文件")).toBeVisible();
+  const packageCheckbox = fileList.getByRole("checkbox", { name: /package\.json/u });
+  await expect(packageCheckbox).not.toBeChecked();
+  await packageCheckbox.check();
+  await expect(dialog.getByText("已选择 1 个文件")).toBeVisible();
+  await dialog.getByRole("button", { name: "生成 message" }).click();
+  await expect(messageInput).toHaveValue("feat(git): 生成选中文件提交");
+  await messageInput.fill("feat(git): 提交选中文件");
+  await dialog.getByRole("button", { name: "提交并推送" }).click();
+
+  await expect(dialog.getByText("提交已完成，但推送失败")).toBeVisible();
+  expect(messageRequest).toEqual({ expectedSnapshot: snapshot, paths: ["package.json"] });
+  expect(commitRequest).toEqual({
+    action: "commit_and_push",
+    expectedSnapshot: snapshot,
+    message: "feat(git): 提交选中文件",
+    paths: ["package.json"],
+  });
+  expect(commitIdempotencyKey).toBeTruthy();
 });
 
 test("disables composer mutations that the provider does not support", async ({ page }) => {

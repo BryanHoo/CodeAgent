@@ -1635,6 +1635,7 @@ export class CodexAgentProvider implements AgentProvider {
         effort: options.reasoningEffort,
         input: codexInput,
         model: options.model,
+        ...(input.outputSchema === undefined ? {} : { outputSchema: input.outputSchema }),
         sandboxPolicy: mapSandboxPolicy(options.sandboxMode),
         threadId: taskId,
       }),

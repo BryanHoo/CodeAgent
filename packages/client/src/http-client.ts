@@ -4,6 +4,7 @@ import {
   AddProjectResponseSchema,
   ArchiveAgentTaskResponseSchema,
   CompactAgentTaskResponseSchema,
+  CommitProjectChangesResponseSchema,
   ForkAgentTaskResponseSchema,
   AgentAttachmentUploadResponseSchema,
   AgentGlobalSettingsResponseSchema,
@@ -16,6 +17,7 @@ import {
   AgentTaskSnapshotResponseSchema,
   AgentTaskSettingsResponseSchema,
   HealthResponseSchema,
+  GenerateCommitMessageResponseSchema,
   ProjectPageSchema,
   ProjectFileTreeSchema,
   ProjectOpenCapabilitiesResponseSchema,
@@ -40,6 +42,8 @@ import {
   type AddProjectResponse,
   type ArchiveAgentTaskResponse,
   type CompactAgentTaskResponse,
+  type CommitProjectChangesRequest,
+  type CommitProjectChangesResponse,
   type ForkAgentTaskResponse,
   type AgentAttachmentUploadRequest,
   type AgentAttachmentUploadResponse,
@@ -57,6 +61,8 @@ import {
   type AgentTaskSettings,
   type AgentTaskSettingsResponse,
   type HealthResponse,
+  type GenerateCommitMessageRequest,
+  type GenerateCommitMessageResponse,
   type InterruptAgentTurnResponse,
   type ProjectPage,
   type ProjectFileTree,
@@ -333,6 +339,32 @@ export class CodeAgentClient {
     return this.#read(
       `/v1/projects/${encodeURIComponent(projectId)}/git/status`,
       ProjectGitStatusSchema,
+      options,
+    );
+  }
+
+  public async generateCommitMessage(
+    projectId: string,
+    request: GenerateCommitMessageRequest,
+    options: MutationOptions = {},
+  ): Promise<GenerateCommitMessageResponse> {
+    return this.#mutation(
+      `${projectPath(projectId)}/git/commit-message`,
+      request,
+      GenerateCommitMessageResponseSchema,
+      options,
+    );
+  }
+
+  public async commitProjectChanges(
+    projectId: string,
+    request: CommitProjectChangesRequest,
+    options: MutationOptions = {},
+  ): Promise<CommitProjectChangesResponse> {
+    return this.#mutation(
+      `${projectPath(projectId)}/git/commits`,
+      request,
+      CommitProjectChangesResponseSchema,
       options,
     );
   }

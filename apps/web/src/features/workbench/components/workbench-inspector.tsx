@@ -51,6 +51,7 @@ type WorkbenchInspectorProps = Readonly<{
   onOpenSubagent?: (selection: SubagentSelection) => void;
   onRefreshFileTreeDirectory?: (directoryPath: string | null) => void;
   onRefreshGitStatus?: () => void;
+  onCommitChanges?: () => void;
   onReviewChanges?: (changes: readonly AgentFileChange[]) => void;
   onTerminateBackgroundTerminal?: (terminalId: string) => Promise<void>;
   projectName: string;
@@ -451,6 +452,7 @@ export function WorkbenchInspector({
   onOpenSubagent = () => undefined,
   onRefreshFileTreeDirectory = () => undefined,
   onRefreshGitStatus = () => undefined,
+  onCommitChanges = () => undefined,
   onReviewChanges = () => undefined,
   onTerminateBackgroundTerminal = () => Promise.resolve(),
   projectName,
@@ -577,15 +579,17 @@ export function WorkbenchInspector({
                 >
                   审核
                 </button>
-                {/* 提交入口按当前产品范围仅展示，暂不绑定 Git Mutation。 */}
                 <button
+                  aria-haspopup="dialog"
                   aria-label={
                     allChanges.length === 0
                       ? "暂无未提交变更可提交"
                       : `提交 ${String(allChanges.length)} 个未提交变更`
                   }
                   className="h-7 shrink-0 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-control"
-                  disabled={allChanges.length === 0}
+                  disabled={allChanges.length === 0 || gitStatus?.repositoryMode === "children"}
+                  id="workbench-commit-changes"
+                  onClick={onCommitChanges}
                   type="button"
                 >
                   提交

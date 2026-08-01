@@ -15,6 +15,7 @@
 - JSONL 响应只有在底层写入回调确认后才算成功，所有写入都使用有界超时；异步写入失败必须关闭连接且不能提前发布请求终态。
 - 过载错误使用带 jitter 的有上限指数退避，不做同步密集重试。
 - Task/Turn 写入只通过 `thread/start`、`turn/start` 和 `turn/interrupt` 映射；文本输入必须转换为当前 Codex Schema 要求的 `UserInput[]`，Provider 不向上泄漏原生字段。
+- Server 内部生成 Git commit message 时，必须启动一次隐藏的结构化 Turn，将受限长度的选中文件 diff 作为不可信数据传入，并固定使用 `read-only`、`never` 和 `{ message }` `outputSchema`。最终 assistant message 必须从独立 `item.completed` 事件收集，`turn.completed` 只作为终态信号，不能假设其重复携带完整 items。Codex 不执行 Git Mutation；Turn 完成、失败或超时都必须移除监听器，并 best-effort 中断、归档和取消订阅隐藏 Thread。
 - App Server 重启后，从 `thread/list` 或 `thread/read` 重新发现的持久化 Task 在首次 `turn/start` 前必须调用一次 `thread/resume`；同一进程内由 `thread/start` 或 `thread/fork` 创建的已加载 Task 不得重复恢复，并发续写必须复用同一个恢复 Promise。
 - `agentMessage.phase` 中的 `commentary` 与 `final_answer` 都必须映射为 Assistant Message，并通过 `message.delta` 实时交付；原生 `reasoning` Item 仍映射为统一 Reasoning Item，但 Web 不展示其内容。
 - Codex 协作 Item 的 `item/started` 必须映射为统一 `item.started` 实时事件，不能丢弃长时间运行的子代理操作；协作 Item 必须保留子代理任务、模型、思考量和代理状态，并使用 Provider 无关的 `agent/*` Tool 名称。普通消息和命令继续使用专用 Delta，不重复交付空的 Started Item。
@@ -59,6 +60,7 @@
 - `resync.required` 发送后由 Server 主动关闭当前 WebSocket；客户端必须使用新 Snapshot checkpoint 建立新连接。
 - Fastify 关闭时取消 Provider Event 订阅并关闭 WebSocket 资源。
 - 所有 Agent Mutation 必须校验非空 `Idempotency-Key`；同操作、同 Key、同 Payload 复用进行中或成功结果，不同 Payload 返回冲突，失败结果不缓存。
+- Git message 生成与 commit/commit+push 同样必须使用 `Idempotency-Key` 并复验 `expectedSnapshot`；每个 Project 同时只允许一个 Git Mutation，冲突请求返回稳定错误。用户 message 原样交给 Git，Codex 生成只提供可编辑候选。
 - 后台终端读取必须先验证 Project/Task 归属；已持久化但未加载到当前 App Server 的历史 Task 将原生 `-32600 thread not found` 归一化为空终端列表，其他 Provider 错误继续上抛；单终端停止是幂等 Mutation，即使进程在请求到达前自然退出也返回已终止语义。
 - Task 创建在 Provider 成功但设置持久化失败时必须保留有界恢复状态；同 `Idempotency-Key` 重试只补齐持久化，不得再次调用 Provider 创建 Task。
 - 成功的幂等结果缓存必须同时设置容量上限和过期时间；进行中的请求不得淘汰，Runtime 关闭时清空全部条目。

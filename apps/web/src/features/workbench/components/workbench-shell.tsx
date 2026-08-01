@@ -2,7 +2,6 @@ import type {
   AgentCapabilities,
   AgentModel,
   AgentPromptInput,
-  AgentProjectDefaults,
   AgentSkill,
   AgentTask,
   AgentTaskSettings,
@@ -16,10 +15,12 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { useNavigate } from "@tanstack/react-router";
 import {
   lazy,
+  memo,
   Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -69,6 +70,10 @@ import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
 import { WorkbenchComposer } from "./workbench-composer.js";
 import { WorkbenchInspector, type ProjectFileTreeDirectoryState } from "./workbench-inspector.js";
+import {
+  CommitChangesLauncher,
+  type CommitChangesLauncherHandle,
+} from "./commit-changes-launcher.js";
 import { WorkbenchPanelResizer } from "./workbench-panel-resizer.js";
 import { ProjectOpenMenu } from "./project-open-menu.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
@@ -177,21 +182,24 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     taskId === undefined
       ? undefined
       : queryClient.getQueryData<TaskLaunchState>(taskLaunchQueryKey(projectId, taskId));
-  const startingSnapshot: RuntimeTaskSnapshot | undefined =
-    taskLaunchState !== undefined
-      ? mergeSubmittedPromptIntoSnapshot(
-          {
-            ...taskLaunchState.task,
-            contextUsage: null,
-            pendingRequests: [],
-            settings: taskLaunchState.settings,
-            status: "running",
-            turns: [taskLaunchState.turn],
-          },
-          taskLaunchState.turn,
-          taskLaunchState.input,
-        )
-      : undefined;
+  const startingSnapshot = useMemo<RuntimeTaskSnapshot | undefined>(
+    () =>
+      taskLaunchState === undefined
+        ? undefined
+        : mergeSubmittedPromptIntoSnapshot(
+            {
+              ...taskLaunchState.task,
+              contextUsage: null,
+              pendingRequests: [],
+              settings: taskLaunchState.settings,
+              status: "running",
+              turns: [taskLaunchState.turn],
+            },
+            taskLaunchState.turn,
+            taskLaunchState.input,
+          ),
+    [taskLaunchState],
+  );
   const projectTaskState = projectTaskStates.get(projectId);
   const sidebarConnectionState = deriveProjectSidebarConnectionState({
     hasActiveTask: taskId !== undefined,
@@ -211,7 +219,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     fileTreeExpansion.projectId === projectId
       ? fileTreeExpansion.paths
       : emptyExpandedFileTreePaths;
-  const fileTreeDirectoryPaths: readonly (string | null)[] = [null, ...expandedFileTreePaths];
+  const fileTreeDirectoryPaths = useMemo<readonly (string | null)[]>(
+    () => [null, ...expandedFileTreePaths],
+    [expandedFileTreePaths],
+  );
   const fileTreeQueries = useQueries({
     queries: fileTreeDirectoryPaths.map((directoryPath) =>
       projectFileTreeQueryOptions(projectId, directoryPath, client),
@@ -238,6 +249,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const [sidebarWidth, setSidebarWidth] = useState<number>(sidebarWidthLimits.default);
   const [inspectorWidth, setInspectorWidth] = useState<number>(inspectorWidthLimits.default);
   const workbenchShellRef = useRef<HTMLDivElement>(null);
+  const commitChangesLauncherRef = useRef<CommitChangesLauncherHandle>(null);
   const [newChatSubmissionPending, setNewChatSubmissionPending] = useState(false);
   const [pendingTaskSelection, setPendingTaskSelection] = useState<{
     projectId: string;
@@ -288,7 +300,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     fileReviewSelection !== null && fileReviewSelection.projectId === projectId
       ? fileReviewSelection.changes
       : null;
-  const subagents = collectSubagents(runtime.snapshot ?? startingSnapshot);
+  const subagents = useMemo(
+    () => collectSubagents(runtime.snapshot ?? startingSnapshot),
+    [runtime.snapshot, startingSnapshot],
+  );
   const selectedSubagent =
     subagentDialogSelection !== null &&
     subagentDialogSelection.projectId === projectId &&
@@ -301,9 +316,12 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             )?.status ?? subagentDialogSelection.selection.status,
         }
       : null;
-  const openFileDiff = (change: AgentFileChange) => {
-    setFileDiffSelection({ change, projectId });
-  };
+  const openFileDiff = useCallback(
+    (change: AgentFileChange) => {
+      setFileDiffSelection({ change, projectId });
+    },
+    [projectId],
+  );
   const openSourceFile = useCallback(
     (reference: MessageFileReference) => {
       void loadProjectSourceDialog();
@@ -311,9 +329,12 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     },
     [projectId],
   );
-  const openFileReview = (changes: readonly AgentFileChange[]) => {
-    setFileReviewSelection({ changes, projectId });
-  };
+  const openFileReview = useCallback(
+    (changes: readonly AgentFileChange[]) => {
+      setFileReviewSelection({ changes, projectId });
+    },
+    [projectId],
+  );
   const closeTaskRenameDialog = () => {
     setTaskRenameOpen(false);
     setTaskRenameError(null);
@@ -393,25 +414,25 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     models.find((model) => model.id === projectDefaultsQuery.data?.settings.model) ??
     models.find((model) => model.isDefault) ??
     models[0];
-  const draftDefaults: AgentProjectDefaults = {
-    model: defaultModel?.id ?? projectDefaultsQuery.data?.settings.model ?? "",
-    reasoningEffort:
-      projectDefaultsQuery.data?.settings.reasoningEffort ??
-      defaultModel?.defaultReasoningEffort ??
-      "",
-    sandboxMode: projectDefaultsQuery.data?.settings.sandboxMode ?? "workspace-write",
-  };
   const globalSettings = globalSettingsQuery.data?.settings;
   // 新聊天尚无 Task 设置：审批继承 Global，其余字段使用 Project effective defaults。
-  const draftSettings: AgentTaskSettings = {
-    ...(globalSettings?.approvalsReviewer === "auto_review"
-      ? { approvalPolicy: "on-request" as const, approvalsReviewer: "auto_review" as const }
-      : {
-          approvalPolicy: globalSettings?.approvalPolicy ?? "on-request",
-          approvalsReviewer: "user" as const,
-        }),
-    ...draftDefaults,
-  };
+  const draftSettings = useMemo<AgentTaskSettings>(
+    () => ({
+      ...(globalSettings?.approvalsReviewer === "auto_review"
+        ? { approvalPolicy: "on-request" as const, approvalsReviewer: "auto_review" as const }
+        : {
+            approvalPolicy: globalSettings?.approvalPolicy ?? "on-request",
+            approvalsReviewer: "user" as const,
+          }),
+      model: defaultModel?.id ?? projectDefaultsQuery.data?.settings.model ?? "",
+      reasoningEffort:
+        projectDefaultsQuery.data?.settings.reasoningEffort ??
+        defaultModel?.defaultReasoningEffort ??
+        "",
+      sandboxMode: projectDefaultsQuery.data?.settings.sandboxMode ?? "workspace-write",
+    }),
+    [defaultModel, globalSettings, projectDefaultsQuery.data?.settings],
+  );
   const inspectorTask = runtime.snapshot ?? startingSnapshot;
   const inspectorSettings = inspectorTask?.settings ?? draftSettings;
   const updateDraftSettings = async (
@@ -679,11 +700,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             runtime={runtime}
             skills={skillsQuery.data?.data ?? []}
             startingSnapshot={startingSnapshot}
-            startingPrompt={
-              taskLaunchState === undefined
-                ? undefined
-                : { input: taskLaunchState.input, turn: taskLaunchState.turn }
-            }
+            startingPrompt={taskLaunchState}
             taskId={taskId}
             onOpenFileDiff={openFileDiff}
             onOpenSourceFile={openSourceFile}
@@ -764,6 +781,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         onRefreshGitStatus={() => {
           void gitStatusQuery.refetch();
         }}
+        onCommitChanges={() => {
+          commitChangesLauncherRef.current?.open();
+        }}
         onRefreshFileTreeDirectory={(directoryPath) => {
           const directoryIndex = fileTreeDirectoryPaths.indexOf(directoryPath);
           void fileTreeQueries[directoryIndex]?.refetch();
@@ -800,6 +820,14 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           setFileReviewSelection(null);
         }}
       />
+      {gitStatusQuery.data === undefined ? null : (
+        <CommitChangesLauncher
+          client={client}
+          gitStatus={gitStatusQuery.data}
+          projectId={projectId}
+          ref={commitChangesLauncherRef}
+        />
+      )}
       {selectedSourceFile === null ? null : (
         <Suspense fallback={null}>
           <LazyProjectSourceDialog
@@ -865,7 +893,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   );
 }
 
-function ActiveTaskWorkbench({
+const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   capabilities,
   client,
   fallbackSettings,
@@ -1028,4 +1056,4 @@ function ActiveTaskWorkbench({
       />
     </>
   );
-}
+});
