@@ -19,6 +19,8 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 
+import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import type { NormalizedAgentTurn, TaskStore } from "../../conversation/runtime/task-store.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
@@ -449,35 +451,38 @@ function MessageMetadata({
   const [forkError, setForkError] = useState(false);
   const [forkPending, setForkPending] = useState(false);
   const forkIdempotencyKeyRef = useRef<string | null>(null);
+  const messageActionLockRef = useRef(createAsyncActionLock());
   const copied = copiedText === text;
   const messageDate = timestamp === undefined ? undefined : new Date(timestamp);
 
-  const copyMessage = async () => {
-    try {
-      // 只在明确点击时访问 Clipboard，避免渲染阶段触发浏览器权限请求。
-      await navigator.clipboard.writeText(text);
-      setCopiedText(text);
-    } catch {
-      setCopiedText(null);
-    }
-  };
+  const copyMessage = () =>
+    messageActionLockRef.current.run(async () => {
+      try {
+        // 只在明确点击时访问 Clipboard，避免渲染阶段触发浏览器权限请求。
+        await navigator.clipboard.writeText(text);
+        setCopiedText(text);
+      } catch {
+        setCopiedText(null);
+      }
+    });
 
-  const forkTask = async () => {
-    if (onForkTask === undefined) {
-      return;
-    }
-    forkIdempotencyKeyRef.current ??= globalThis.crypto.randomUUID();
-    setForkPending(true);
-    setForkError(false);
-    try {
-      // 重试复用同一幂等键，避免响应丢失时重复创建任务。
-      await onForkTask(forkIdempotencyKeyRef.current);
-    } catch {
-      setForkError(true);
-    } finally {
-      setForkPending(false);
-    }
-  };
+  const forkTask = () =>
+    messageActionLockRef.current.run(async () => {
+      if (onForkTask === undefined) {
+        return;
+      }
+      forkIdempotencyKeyRef.current ??= globalThis.crypto.randomUUID();
+      setForkPending(true);
+      setForkError(false);
+      try {
+        // 重试复用同一幂等键，避免响应丢失时重复创建任务。
+        await onForkTask(forkIdempotencyKeyRef.current);
+      } catch {
+        setForkError(true);
+      } finally {
+        setForkPending(false);
+      }
+    });
 
   return (
     <MessageActions className="mt-2 text-label text-muted-foreground">
@@ -569,21 +574,23 @@ function ChangedFilesCard({
   const [rollbackError, setRollbackError] = useState<string | null>(null);
   const [rollbackPending, setRollbackPending] = useState(false);
   const [rollbackIdempotencyKey] = useState(() => globalThis.crypto.randomUUID());
+  const rollbackLockRef = useRef(createAsyncActionLock());
   const summary = summarizeFileChanges(changes);
   const visibleChanges = expanded ? summary.changes : summary.changes.slice(0, 3);
   const hiddenChangeCount = summary.changes.length - visibleChanges.length;
 
-  const rollback = async () => {
-    setRollbackPending(true);
-    setRollbackError(null);
-    try {
-      await onRollback(rollbackIdempotencyKey);
-    } catch (error) {
-      setRollbackError(error instanceof Error ? error.message : "无法撤销本次更改");
-    } finally {
-      setRollbackPending(false);
-    }
-  };
+  const rollback = () =>
+    rollbackLockRef.current.run(async () => {
+      setRollbackPending(true);
+      setRollbackError(null);
+      try {
+        await onRollback(rollbackIdempotencyKey);
+      } catch (error) {
+        setRollbackError(error instanceof Error ? error.message : "无法撤销本次更改");
+      } finally {
+        setRollbackPending(false);
+      }
+    });
 
   return (
     <section

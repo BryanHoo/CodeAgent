@@ -29,6 +29,7 @@ import {
   type ProjectRuntimeManager,
 } from "../conversation/runtime/project-runtime.js";
 import type { TaskActivityMap } from "../conversation/runtime/task-activity.js";
+import { createAsyncActionLock } from "../../shared/utils/async-action-lock.js";
 import { ProjectGitStatusCoordinator } from "./project-git-status-coordinator.js";
 import {
   capabilitiesQueryOptions,
@@ -260,6 +261,9 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   const projectOrderMutation = useMutation(projectReorderMutationOptions(client));
   const projectRenameMutation = useMutation(projectRenameMutationOptions(client));
   const projectRemoveMutation = useMutation(projectRemoveMutationOptions(client));
+  const addProjectLockRef = useRef(createAsyncActionLock());
+  const projectActionLockRef = useRef(createAsyncActionLock());
+  const projectOrderLockRef = useRef(createAsyncActionLock());
   const projects = projectsQuery.data?.data ?? emptyProjects;
   const queriedProjectIds = useMemo(() => {
     const projectIds = new Set(expandedProjectTaskIds);
@@ -359,98 +363,102 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
     // 由 Composer 的用户手势触发；权限失败只关闭增强能力，不阻断 Task 操作。
     void projectRuntime.requestNotificationPermission();
   }, [projectRuntime]);
-  const addProject = useCallback(async () => {
-    if (isProjectPickerOpen) {
-      return undefined;
-    }
-    setIsProjectPickerOpen(true);
-    setAddProjectError(null);
-    try {
-      const response = await client.addProject();
-      if (response.project !== null) {
-        await queryClient.invalidateQueries({ queryKey: ["projects"] });
-        return response.project;
-      }
-      return undefined;
-    } catch (error) {
-      const normalizedError = error instanceof Error ? error : new Error("添加项目失败");
-      setAddProjectError(normalizedError);
-      // 错误已进入可见状态，避免按钮事件产生未处理的 Promise rejection。
-      return undefined;
-    } finally {
-      setIsProjectPickerOpen(false);
-    }
-  }, [client, isProjectPickerOpen, queryClient]);
+  const addProject = useCallback(
+    () =>
+      addProjectLockRef.current.run(async () => {
+        setIsProjectPickerOpen(true);
+        setAddProjectError(null);
+        try {
+          const response = await client.addProject();
+          if (response.project !== null) {
+            await queryClient.invalidateQueries({ queryKey: ["projects"] });
+            return response.project;
+          }
+          return undefined;
+        } catch (error) {
+          const normalizedError = error instanceof Error ? error : new Error("添加项目失败");
+          setAddProjectError(normalizedError);
+          // 错误已进入可见状态，避免按钮事件产生未处理的 Promise rejection。
+          return undefined;
+        } finally {
+          setIsProjectPickerOpen(false);
+        }
+      }),
+    [client, queryClient],
+  );
   const reorderProjects = useCallback(
-    async (projectIds: readonly string[]) => {
-      const currentPage = queryClient.getQueryData<ProjectPage>(["projects"]);
-      const optimisticPage = reorderProjectPage(currentPage, projectIds);
-      if (optimisticPage === undefined) {
-        setProjectOrderError(new Error("项目列表已变化，请重试排序"));
-        return false;
-      }
+    async (projectIds: readonly string[]) =>
+      (await projectOrderLockRef.current.run(async () => {
+        const currentPage = queryClient.getQueryData<ProjectPage>(["projects"]);
+        const optimisticPage = reorderProjectPage(currentPage, projectIds);
+        if (optimisticPage === undefined) {
+          setProjectOrderError(new Error("项目列表已变化，请重试排序"));
+          return false;
+        }
 
-      setProjectOrderError(null);
-      // 拖动释放后立即更新列表；服务端失败时恢复提交前的完整快照。
-      queryClient.setQueryData<ProjectPage>(["projects"], optimisticPage);
-      try {
-        const response = await projectOrderMutation.mutateAsync(projectIds);
-        queryClient.setQueryData<ProjectPage>(["projects"], response);
-        return true;
-      } catch (error) {
-        queryClient.setQueryData<ProjectPage>(["projects"], currentPage);
-        setProjectOrderError(error instanceof Error ? error : new Error("保存项目排序失败"));
-        return false;
-      }
-    },
+        setProjectOrderError(null);
+        // 拖动释放后立即更新列表；服务端失败时恢复提交前的完整快照。
+        queryClient.setQueryData<ProjectPage>(["projects"], optimisticPage);
+        try {
+          const response = await projectOrderMutation.mutateAsync(projectIds);
+          queryClient.setQueryData<ProjectPage>(["projects"], response);
+          return true;
+        } catch (error) {
+          queryClient.setQueryData<ProjectPage>(["projects"], currentPage);
+          setProjectOrderError(error instanceof Error ? error : new Error("保存项目排序失败"));
+          return false;
+        }
+      })) ?? false,
     [projectOrderMutation, queryClient],
   );
   const renameProject = useCallback(
-    async (projectId: string, name: string) => {
-      setProjectActionError(null);
-      try {
-        const response = await projectRenameMutation.mutateAsync({ name, projectId });
-        queryClient.setQueryData<ProjectPage>(["projects"], (currentPage) =>
-          currentPage === undefined
-            ? undefined
-            : {
-                ...currentPage,
-                data: currentPage.data.map((project) =>
-                  project.id === projectId ? response.project : project,
-                ),
-              },
-        );
-        return true;
-      } catch {
-        setProjectActionError(new Error("无法重命名项目"));
-        return false;
-      }
-    },
+    async (projectId: string, name: string) =>
+      (await projectActionLockRef.current.run(async () => {
+        setProjectActionError(null);
+        try {
+          const response = await projectRenameMutation.mutateAsync({ name, projectId });
+          queryClient.setQueryData<ProjectPage>(["projects"], (currentPage) =>
+            currentPage === undefined
+              ? undefined
+              : {
+                  ...currentPage,
+                  data: currentPage.data.map((project) =>
+                    project.id === projectId ? response.project : project,
+                  ),
+                },
+          );
+          return true;
+        } catch {
+          setProjectActionError(new Error("无法重命名项目"));
+          return false;
+        }
+      })) ?? false,
     [projectRenameMutation, queryClient],
   );
   const removeProject = useCallback(
-    async (projectId: string) => {
-      setProjectActionError(null);
-      try {
-        await projectRemoveMutation.mutateAsync(projectId);
-        // 先停止该 Project 的请求和实时连接，再从列表移除，避免旧响应回填缓存。
-        await queryClient.cancelQueries({ queryKey: ["projects", projectId] });
-        queryClient.removeQueries({ queryKey: ["projects", projectId] });
-        gitStatusCoordinator.forgetProject(projectId);
-        projectRuntime.forgetProject(projectId);
-        const currentPage = queryClient.getQueryData<ProjectPage>(["projects"]);
-        const remainingProjects =
-          currentPage?.data.filter((project) => project.id !== projectId) ?? emptyProjects;
-        queryClient.setQueryData<ProjectPage>(
-          ["projects"],
-          currentPage === undefined ? undefined : { ...currentPage, data: remainingProjects },
-        );
-        return remainingProjects;
-      } catch {
-        setProjectActionError(new Error("无法删除项目"));
-        return undefined;
-      }
-    },
+    (projectId: string) =>
+      projectActionLockRef.current.run(async () => {
+        setProjectActionError(null);
+        try {
+          await projectRemoveMutation.mutateAsync(projectId);
+          // 先停止该 Project 的请求和实时连接，再从列表移除，避免旧响应回填缓存。
+          await queryClient.cancelQueries({ queryKey: ["projects", projectId] });
+          queryClient.removeQueries({ queryKey: ["projects", projectId] });
+          gitStatusCoordinator.forgetProject(projectId);
+          projectRuntime.forgetProject(projectId);
+          const currentPage = queryClient.getQueryData<ProjectPage>(["projects"]);
+          const remainingProjects =
+            currentPage?.data.filter((project) => project.id !== projectId) ?? emptyProjects;
+          queryClient.setQueryData<ProjectPage>(
+            ["projects"],
+            currentPage === undefined ? undefined : { ...currentPage, data: remainingProjects },
+          );
+          return remainingProjects;
+        } catch {
+          setProjectActionError(new Error("无法删除项目"));
+          return undefined;
+        }
+      }),
     [gitStatusCoordinator, projectRemoveMutation, projectRuntime, queryClient],
   );
   const refreshProjectGitStatus = useCallback(

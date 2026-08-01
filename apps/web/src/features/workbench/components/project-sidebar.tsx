@@ -24,6 +24,7 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import {
   formatTaskAge,
   getPinnedTasks,
@@ -217,6 +218,7 @@ export function ProjectSidebar({
   const pinMutation = useMutation(taskPinMutationOptions(client));
   const renameMutation = useMutation(taskRenameMutationOptions(client));
   const archiveMutation = useMutation(taskArchiveMutationOptions(client));
+  const taskActionLockRef = useRef(createAsyncActionLock());
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const taskSearch = useProjectTaskSearch(normalizedQuery);
   const visibleTasks = normalizedQuery.length === 0 ? tasks : taskSearch.tasks;
@@ -336,55 +338,58 @@ export function ProjectSidebar({
     replaceProjectTaskInQueryCaches(queryClient, task);
   };
 
-  const pinTask = async (task: AgentTask) => {
-    setTaskActionError(null);
-    try {
-      const response = await pinMutation.mutateAsync({
-        pinned: !task.pinned,
-        projectId: task.projectId,
-        taskId: task.id,
-      });
-      replaceTaskCache(response.task);
-    } catch {
-      setTaskActionError("无法更新固定状态");
-    }
-  };
-
-  const renameTask = async (task: AgentTask, title: string) => {
-    setTaskActionError(null);
-    try {
-      const response = await renameMutation.mutateAsync({
-        projectId: task.projectId,
-        taskId: task.id,
-        title,
-      });
-      replaceTaskCache(response.task);
-      setRenamingTask(null);
-    } catch {
-      setTaskActionError("无法重命名任务");
-    }
-  };
-
-  const archiveTask = async (task: AgentTask) => {
-    setTaskActionError(null);
-    try {
-      await archiveMutation.mutateAsync({ projectId: task.projectId, taskId: task.id });
-      await removeArchivedProjectTaskAndRefill(queryClient, task.projectId, task.id);
-      queryClient.removeQueries({
-        exact: true,
-        queryKey: ["projects", task.projectId, "tasks", task.id],
-      });
-      forgetTask(task.projectId, task.id);
-      if (task.projectId === projectId && task.id === taskId) {
-        await navigate({ params: { projectId: task.projectId }, to: "/p/$projectId" });
+  const pinTask = (task: AgentTask) =>
+    taskActionLockRef.current.run(async () => {
+      setTaskActionError(null);
+      try {
+        const response = await pinMutation.mutateAsync({
+          pinned: !task.pinned,
+          projectId: task.projectId,
+          taskId: task.id,
+        });
+        replaceTaskCache(response.task);
+      } catch {
+        setTaskActionError("无法更新固定状态");
       }
-      removeRetainedTaskRuntime(task.projectId, task.id);
-      // 归档后的 Runtime 清理由 Provider 判定安全性，失败不回滚已成功的归档。
-      void client.unsubscribeTask(task.projectId, task.id).catch(() => undefined);
-    } catch {
-      setTaskActionError("无法归档任务");
-    }
-  };
+    });
+
+  const renameTask = (task: AgentTask, title: string) =>
+    taskActionLockRef.current.run(async () => {
+      setTaskActionError(null);
+      try {
+        const response = await renameMutation.mutateAsync({
+          projectId: task.projectId,
+          taskId: task.id,
+          title,
+        });
+        replaceTaskCache(response.task);
+        setRenamingTask(null);
+      } catch {
+        setTaskActionError("无法重命名任务");
+      }
+    });
+
+  const archiveTask = (task: AgentTask) =>
+    taskActionLockRef.current.run(async () => {
+      setTaskActionError(null);
+      try {
+        await archiveMutation.mutateAsync({ projectId: task.projectId, taskId: task.id });
+        await removeArchivedProjectTaskAndRefill(queryClient, task.projectId, task.id);
+        queryClient.removeQueries({
+          exact: true,
+          queryKey: ["projects", task.projectId, "tasks", task.id],
+        });
+        forgetTask(task.projectId, task.id);
+        if (task.projectId === projectId && task.id === taskId) {
+          await navigate({ params: { projectId: task.projectId }, to: "/p/$projectId" });
+        }
+        removeRetainedTaskRuntime(task.projectId, task.id);
+        // 归档后的 Runtime 清理由 Provider 判定安全性，失败不回滚已成功的归档。
+        void client.unsubscribeTask(task.projectId, task.id).catch(() => undefined);
+      } catch {
+        setTaskActionError("无法归档任务");
+      }
+    });
 
   const closeProjectDialog = (targetProjectId: string) => {
     setRenamingProject(null);

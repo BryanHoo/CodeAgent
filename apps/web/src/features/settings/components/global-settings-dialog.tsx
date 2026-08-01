@@ -19,6 +19,7 @@ import {
 import { useEffect, useRef, useState, type SelectHTMLAttributes } from "react";
 
 import { PromptInputSelect } from "../../../shared/ai-elements/prompt-input.js";
+import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import {
   applyThemePreference,
   readThemePreference,
@@ -120,6 +121,7 @@ export function GlobalSettingsDialog({
   settings,
 }: GlobalSettingsDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const saveLockRef = useRef(createAsyncActionLock());
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("appearance");
   const [draft, setDraft] = useState<AgentGlobalSettings>(
     () => settings ?? createFallbackSettings(models),
@@ -182,16 +184,18 @@ export function GlobalSettingsDialog({
           if (settings === undefined || isPending || isSaving) {
             return;
           }
-          setSaveError(false);
-          setIsSaving(true);
-          void onSave(draft)
-            .then(onClose)
-            .catch(() => {
+          void saveLockRef.current.run(async () => {
+            setSaveError(false);
+            setIsSaving(true);
+            try {
+              await onSave(draft);
+              onClose();
+            } catch {
               setSaveError(true);
-            })
-            .finally(() => {
+            } finally {
               setIsSaving(false);
-            });
+            }
+          });
         }}
       >
         <header className="flex h-12 items-center gap-2.5 px-4 shadow-toolbar">

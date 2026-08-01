@@ -63,6 +63,7 @@ import {
 } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
+import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
 import { deriveProjectSidebarConnectionState, ProjectSidebar } from "./project-sidebar.js";
 import { collectSubagents, type SubagentSelection } from "./subagent.js";
@@ -153,6 +154,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     mutationFn: ({ appId, path }: Readonly<{ appId: ProjectOpenAppId; path: string }>) =>
       client.openProject(projectId, { appId, path }),
   });
+  const projectPathOpenLockRef = useRef(createAsyncActionLock());
   const skillsQuery = useQuery({
     ...skillsQueryOptions(projectId, client),
     enabled: capabilities?.skills.list === true,
@@ -291,6 +293,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     runtime.snapshot?.title ??
     "新聊天";
   const renameMutation = useMutation(taskRenameMutationOptions(client));
+  const activeTaskRenameLockRef = useRef(createAsyncActionLock());
   const selectedFileChange =
     fileDiffSelection !== null && fileDiffSelection.projectId === projectId
       ? fileDiffSelection.change
@@ -345,20 +348,21 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       document.querySelector<HTMLButtonElement>("#workbench-task-title-rename")?.focus();
     });
   };
-  const renameActiveTask = async (nextTitle: string) => {
-    if (taskId === undefined) {
-      return;
-    }
-    setTaskRenameError(null);
-    try {
-      const response = await renameMutation.mutateAsync({ projectId, taskId, title: nextTitle });
-      // 服务端结果同时覆盖普通列表与已加载的搜索源，确保中栏和侧栏立即一致。
-      replaceProjectTaskInQueryCaches(queryClient, response.task);
-      closeTaskRenameDialog();
-    } catch {
-      setTaskRenameError("无法重命名任务");
-    }
-  };
+  const renameActiveTask = (nextTitle: string) =>
+    activeTaskRenameLockRef.current.run(async () => {
+      if (taskId === undefined) {
+        return;
+      }
+      setTaskRenameError(null);
+      try {
+        const response = await renameMutation.mutateAsync({ projectId, taskId, title: nextTitle });
+        // 服务端结果同时覆盖普通列表与已加载的搜索源，确保中栏和侧栏立即一致。
+        replaceProjectTaskInQueryCaches(queryClient, response.task);
+        closeTaskRenameDialog();
+      } catch {
+        setTaskRenameError("无法重命名任务");
+      }
+    });
   const cacheProjectTask = useCallback(
     (startedTask: AgentTask) => {
       queryClient.setQueryData<ProjectTaskInfiniteData>(
@@ -772,7 +776,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         onOpenFileDiff={openFileDiff}
         onOpenProjectPath={(appId, path) => {
           projectPathOpenMutation.reset();
-          projectPathOpenMutation.mutate({ appId, path });
+          void projectPathOpenLockRef.current.run(() =>
+            projectPathOpenMutation.mutateAsync({ appId, path }),
+          );
         }}
         onOpenSourceFile={(path) => {
           openSourceFile({ lineNumber: null, path });

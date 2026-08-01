@@ -34,7 +34,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
@@ -72,6 +72,7 @@ import {
   type PromptInputMessage,
 } from "../../../shared/ai-elements/prompt-input.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
+import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import {
   insertPromptSkill,
   isPromptSkillContentEmpty,
@@ -516,6 +517,7 @@ export function WorkbenchComposer({
   const uploadedAttachments = useRef(new Map<string, AgentAttachment>());
   const uploadAttempts = useRef(new Map<string, string>());
   const commandAttempts = useRef(new Map<PromptCommandAction, IdempotencyAttempt>());
+  const composerActionLock = useMemo(() => createAsyncActionLock(), [routeScope]);
 
   useEffect(() => {
     onSubmissionStateChange?.(isSubmitting);
@@ -558,6 +560,7 @@ export function WorkbenchComposer({
   const attachmentCount = attachments.length;
   const { attachmentsDisabled, draftInputDisabled, turnControlsDisabled } =
     deriveComposerInputAvailability(state);
+
   const filteredSkills = filterPromptSkills(
     capabilities?.skills.use === true ? skills : [],
     commandQuery,
@@ -724,7 +727,7 @@ export function WorkbenchComposer({
     });
   };
 
-  const submitPrompt = async (
+  const performPromptSubmission = async (
     message: PromptInputMessage,
     promptSkills?: readonly AgentSkill[],
     options: Readonly<{
@@ -928,6 +931,18 @@ export function WorkbenchComposer({
     }
   };
 
+  const submitPrompt = (
+    message: PromptInputMessage,
+    promptSkills?: readonly AgentSkill[],
+    options: Readonly<{
+      clearInputOnSuccess?: boolean;
+      forceAction?: "start" | "steer";
+    }> = {},
+  ): Promise<boolean> =>
+    composerActionLock
+      .run(() => performPromptSubmission(message, promptSkills, options))
+      .then((submitted) => submitted ?? false);
+
   useEffect(() => {
     const queuedScope = routeScope;
     const queuedPrompt = queuedPrompts[0];
@@ -984,45 +999,48 @@ export function WorkbenchComposer({
     focusEditor();
   };
 
-  const submitFeedback = async (reason: string) => {
-    const requestScope = routeScope;
-    const normalizedReason = reason.trim();
-    if (
-      activeTaskId === undefined ||
-      normalizedReason === "" ||
-      !capabilities?.feedback.upload ||
-      turnControlsDisabled
-    ) {
-      return;
-    }
-    setIsSubmitting(true);
-    setMutationError(null);
-    const input = { classification: "other", includeLogs: true, reason: normalizedReason };
-    const attempt = resolveIdempotencyAttempt(
-      commandAttempts.current.get("feedback"),
-      JSON.stringify({ input, taskId: activeTaskId }),
-    );
-    commandAttempts.current.set("feedback", attempt);
-    try {
-      await client.uploadFeedback(projectId, activeTaskId, input, {
-        idempotencyKey: attempt.key,
-      });
-      if (routeScopeRef.current === requestScope) {
-        commandAttempts.current.delete("feedback");
-        replaceCommandDraftMode(null);
-        setCommandNotice("反馈已发送");
-        replacePromptContent([]);
+  const submitFeedback = (reason: string) =>
+    composerActionLock.run(async () => {
+      const requestScope = routeScope;
+      const normalizedReason = reason.trim();
+      if (
+        activeTaskId === undefined ||
+        normalizedReason === "" ||
+        !capabilities?.feedback.upload ||
+        turnControlsDisabled
+      ) {
+        return;
       }
-    } catch (error) {
-      if (routeScopeRef.current === requestScope) {
-        setMutationError(error instanceof Error ? error : new Error("Feedback submission failed"));
+      setIsSubmitting(true);
+      setMutationError(null);
+      const input = { classification: "other", includeLogs: true, reason: normalizedReason };
+      const attempt = resolveIdempotencyAttempt(
+        commandAttempts.current.get("feedback"),
+        JSON.stringify({ input, taskId: activeTaskId }),
+      );
+      commandAttempts.current.set("feedback", attempt);
+      try {
+        await client.uploadFeedback(projectId, activeTaskId, input, {
+          idempotencyKey: attempt.key,
+        });
+        if (routeScopeRef.current === requestScope) {
+          commandAttempts.current.delete("feedback");
+          replaceCommandDraftMode(null);
+          setCommandNotice("反馈已发送");
+          replacePromptContent([]);
+        }
+      } catch (error) {
+        if (routeScopeRef.current === requestScope) {
+          setMutationError(
+            error instanceof Error ? error : new Error("Feedback submission failed"),
+          );
+        }
+      } finally {
+        if (routeScopeRef.current === requestScope) {
+          setIsSubmitting(false);
+        }
       }
-    } finally {
-      if (routeScopeRef.current === requestScope) {
-        setIsSubmitting(false);
-      }
-    }
-  };
+    });
 
   const executePromptCommand = async (command: PromptCommandItem) => {
     const requestScope = routeScope;
@@ -1060,89 +1078,92 @@ export function WorkbenchComposer({
       return;
     }
 
-    if (command.action === "compact") {
-      onRequestNotificationPermission();
-    }
-    setIsSubmitting(true);
-    setMutationError(null);
-    const attempt = resolveIdempotencyAttempt(
-      commandAttempts.current.get(command.action),
-      `${command.action}:${activeTaskId}`,
-    );
-    commandAttempts.current.set(command.action, attempt);
-    try {
+    await composerActionLock.run(async () => {
       if (command.action === "compact") {
-        await client.compactTask(projectId, activeTaskId, { idempotencyKey: attempt.key });
-        if (routeScopeRef.current === requestScope) {
-          setCommandNotice("正在压缩上下文");
+        onRequestNotificationPermission();
+      }
+      setIsSubmitting(true);
+      setMutationError(null);
+      const attempt = resolveIdempotencyAttempt(
+        commandAttempts.current.get(command.action),
+        `${command.action}:${activeTaskId}`,
+      );
+      commandAttempts.current.set(command.action, attempt);
+      try {
+        if (command.action === "compact") {
+          await client.compactTask(projectId, activeTaskId, { idempotencyKey: attempt.key });
+          if (routeScopeRef.current === requestScope) {
+            setCommandNotice("正在压缩上下文");
+          }
+        } else {
+          const response = await client.forkTask(projectId, activeTaskId, {
+            idempotencyKey: attempt.key,
+          });
+          onTaskStarted(response.task);
         }
-      } else {
-        const response = await client.forkTask(projectId, activeTaskId, {
-          idempotencyKey: attempt.key,
-        });
-        onTaskStarted(response.task);
+        if (routeScopeRef.current === requestScope) {
+          commandAttempts.current.delete(command.action);
+        }
+      } catch (error) {
+        if (routeScopeRef.current === requestScope) {
+          setMutationError(error instanceof Error ? error : new Error("Task command failed"));
+        }
+      } finally {
+        if (routeScopeRef.current === requestScope) {
+          setIsSubmitting(false);
+        }
       }
-      if (routeScopeRef.current === requestScope) {
-        commandAttempts.current.delete(command.action);
-      }
-    } catch (error) {
-      if (routeScopeRef.current === requestScope) {
-        setMutationError(error instanceof Error ? error : new Error("Task command failed"));
-      }
-    } finally {
-      if (routeScopeRef.current === requestScope) {
-        setIsSubmitting(false);
-      }
-    }
+    });
   };
 
-  const executeReviewTarget = async (target: AgentReviewTarget) => {
-    const requestScope = routeScope;
-    onRequestNotificationPermission();
-    closeCommandMenu();
-    setCommandNotice(undefined);
-    setIsSubmitting(true);
-    setMutationError(null);
-    const attempt = resolveIdempotencyAttempt(
-      commandAttempts.current.get("review"),
-      JSON.stringify({ target, taskId: activeTaskId ?? projectId }),
-    );
-    commandAttempts.current.set("review", attempt);
-    try {
-      const response = await startTaskReview(client, {
-        idempotencyKey: attempt.key,
-        onTaskCreated(task) {
-          // Review 启动失败时保留已创建 Task，重试不能重复创建。
-          if (routeScopeRef.current === requestScope) {
-            setPendingTaskState({ scope: requestScope, task });
-            onTaskCreated?.(task);
-          }
-        },
-        projectId,
-        target,
-        ...(activeTaskId === undefined ? {} : { taskId: activeTaskId }),
-      });
-      if (routeScopeRef.current === requestScope) {
-        commandAttempts.current.delete("review");
-        setSubmittedTurnState({ scope: requestScope, turnId: response.turn.id });
-        setCommandNotice("代码审查已开始");
-        if (taskId === undefined) {
-          const startedTask = response.createdTask ?? pendingTask;
-          if (startedTask !== undefined) {
-            onTaskStarted(startedTask, response.turn);
+  const executeReviewTarget = (target: AgentReviewTarget) =>
+    composerActionLock.run(async () => {
+      const requestScope = routeScope;
+      onRequestNotificationPermission();
+      closeCommandMenu();
+      setCommandNotice(undefined);
+      setIsSubmitting(true);
+      setMutationError(null);
+      const attempt = resolveIdempotencyAttempt(
+        commandAttempts.current.get("review"),
+        JSON.stringify({ target, taskId: activeTaskId ?? projectId }),
+      );
+      commandAttempts.current.set("review", attempt);
+      try {
+        const response = await startTaskReview(client, {
+          idempotencyKey: attempt.key,
+          onTaskCreated(task) {
+            // Review 启动失败时保留已创建 Task，重试不能重复创建。
+            if (routeScopeRef.current === requestScope) {
+              setPendingTaskState({ scope: requestScope, task });
+              onTaskCreated?.(task);
+            }
+          },
+          projectId,
+          target,
+          ...(activeTaskId === undefined ? {} : { taskId: activeTaskId }),
+        });
+        if (routeScopeRef.current === requestScope) {
+          commandAttempts.current.delete("review");
+          setSubmittedTurnState({ scope: requestScope, turnId: response.turn.id });
+          setCommandNotice("代码审查已开始");
+          if (taskId === undefined) {
+            const startedTask = response.createdTask ?? pendingTask;
+            if (startedTask !== undefined) {
+              onTaskStarted(startedTask, response.turn);
+            }
           }
         }
+      } catch (error) {
+        if (routeScopeRef.current === requestScope) {
+          setMutationError(error instanceof Error ? error : new Error("Review command failed"));
+        }
+      } finally {
+        if (routeScopeRef.current === requestScope) {
+          setIsSubmitting(false);
+        }
       }
-    } catch (error) {
-      if (routeScopeRef.current === requestScope) {
-        setMutationError(error instanceof Error ? error : new Error("Review command failed"));
-      }
-    } finally {
-      if (routeScopeRef.current === requestScope) {
-        setIsSubmitting(false);
-      }
-    }
-  };
+    });
 
   const selectSkill = (skill: AgentSkill) => {
     // Skill 选择只保存不透明引用；原生路径由 Provider 在提交边界解析。
@@ -1199,25 +1220,25 @@ export function WorkbenchComposer({
     ) {
       return;
     }
-    setIsSubmitting(true);
-    setMutationError(null);
-    const attempt = resolveIdempotencyAttempt(
-      interruptAttempt.current,
-      `${activeTaskId}:${activeTurnId}`,
-    );
-    interruptAttempt.current = attempt;
-    try {
-      // `202` 仅确认请求已接收；同一 Turn 到达终态前继续复用当前 Key。
-      await interruptPromptTurn(client, projectId, activeTaskId, activeTurnId, attempt.key);
-    } catch (error) {
-      if (routeScopeRef.current === requestScope) {
-        setMutationError(error instanceof Error ? error : new Error("Turn interruption failed"));
+    await composerActionLock.run(async () => {
+      const fingerprint = `${activeTaskId}:${activeTurnId}`;
+      setIsSubmitting(true);
+      setMutationError(null);
+      const attempt = resolveIdempotencyAttempt(interruptAttempt.current, fingerprint);
+      interruptAttempt.current = attempt;
+      try {
+        // `202` 仅确认请求已接收；后续显式重试继续复用同一幂等键。
+        await interruptPromptTurn(client, projectId, activeTaskId, activeTurnId, attempt.key);
+      } catch (error) {
+        if (routeScopeRef.current === requestScope) {
+          setMutationError(error instanceof Error ? error : new Error("Turn interruption failed"));
+        }
+      } finally {
+        if (routeScopeRef.current === requestScope) {
+          setIsSubmitting(false);
+        }
       }
-    } finally {
-      if (routeScopeRef.current === requestScope) {
-        setIsSubmitting(false);
-      }
-    }
+    });
   };
 
   const commandMenu =

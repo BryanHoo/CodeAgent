@@ -14,6 +14,7 @@ import {
   ConfirmationTitle,
   type ConfirmationState,
 } from "../../../shared/ai-elements/confirmation.js";
+import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 
 export type PendingRequestResolution = ResolvePendingRequestRequest["resolution"];
 
@@ -77,6 +78,7 @@ function ApprovalRequestCard({
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState<PendingRequestResolutionAttempt>();
   const allowButtonRef = useRef<HTMLButtonElement>(null);
+  const resolutionLockRef = useRef(createAsyncActionLock());
   const networkAccess = request.type === "command_approval" ? request.networkAccess : null;
   const title =
     networkAccess !== null
@@ -100,21 +102,22 @@ function ApprovalRequestCard({
     }
   }, [canFocusAllow, request.requestId]);
 
-  const resolve = async (decision: PendingApprovalDecision) => {
-    if (!canSubmit) return;
-    const resolution = { decision } as const;
-    // 同一决策失败重试时保留原 Key，用户改选决策后才创建新 Key。
-    const nextAttempt = resolvePendingRequestAttempt(attempt, resolution);
-    setAttempt(nextAttempt);
-    setSubmitting(true);
-    setError(null);
-    try {
-      await onResolve(request, resolution, nextAttempt.key);
-    } catch {
-      setError("请求处理失败，请重试");
-      setSubmitting(false);
-    }
-  };
+  const resolve = (decision: PendingApprovalDecision) =>
+    resolutionLockRef.current.run(async () => {
+      if (!canSubmit) return;
+      const resolution = { decision } as const;
+      // 同一决策失败重试时保留原 Key，用户改选决策后才创建新 Key。
+      const nextAttempt = resolvePendingRequestAttempt(attempt, resolution);
+      setAttempt(nextAttempt);
+      setSubmitting(true);
+      setError(null);
+      try {
+        await onResolve(request, resolution, nextAttempt.key);
+      } catch {
+        setError("请求处理失败，请重试");
+        setSubmitting(false);
+      }
+    });
 
   return (
     <Confirmation approval={{ id: request.requestId }} state={approvalState(request, submitting)}>
@@ -180,29 +183,31 @@ function UserInputRequestCard({ interactive, onResolve, request }: PendingReques
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState<PendingRequestResolutionAttempt>();
+  const resolutionLockRef = useRef(createAsyncActionLock());
   const complete = request.questions.every(
     (question) => (answers[question.id] ?? "").trim() !== "",
   );
   const canSubmit = interactive && request.status === "pending" && complete && !submitting;
   const controlsDisabled = !interactive || submitting;
 
-  const submit = async () => {
-    if (!canSubmit) return;
-    setSubmitting(true);
-    setError(null);
-    const mappedAnswers = Object.fromEntries(
-      request.questions.map((question) => [question.id, [(answers[question.id] ?? "").trim()]]),
-    );
-    const resolution = { answers: mappedAnswers };
-    const nextAttempt = resolvePendingRequestAttempt(attempt, resolution);
-    setAttempt(nextAttempt);
-    try {
-      await onResolve(request, resolution, nextAttempt.key);
-    } catch {
-      setError("回答提交失败，请重试");
-      setSubmitting(false);
-    }
-  };
+  const submit = () =>
+    resolutionLockRef.current.run(async () => {
+      if (!canSubmit) return;
+      setSubmitting(true);
+      setError(null);
+      const mappedAnswers = Object.fromEntries(
+        request.questions.map((question) => [question.id, [(answers[question.id] ?? "").trim()]]),
+      );
+      const resolution = { answers: mappedAnswers };
+      const nextAttempt = resolvePendingRequestAttempt(attempt, resolution);
+      setAttempt(nextAttempt);
+      try {
+        await onResolve(request, resolution, nextAttempt.key);
+      } catch {
+        setError("回答提交失败，请重试");
+        setSubmitting(false);
+      }
+    });
 
   if (request.status !== "pending") {
     return (

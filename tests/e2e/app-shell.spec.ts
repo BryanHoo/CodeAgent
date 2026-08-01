@@ -678,6 +678,11 @@ test("uses global defaults throughout a new task composer", async ({ page }) => 
 });
 
 test("project open split control selects, opens, and restores a host app", async ({ page }) => {
+  const openRequests: Record<string, unknown>[] = [];
+  await page.route("**/v1/projects/code-agent/open", async (route) => {
+    openRequests.push(parseRequestRecord(route.request().postData()));
+    await route.fallback();
+  });
   await page.route("**/v1/projects/code-agent/open-capabilities", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -702,12 +707,11 @@ test("project open split control selects, opens, and restores a host app", async
   const openButton = page.getByRole("button", { name: "在 Zed 中打开" });
   await expect(openButton).toBeVisible();
 
-  const openRequest = page.waitForRequest(
-    (request) =>
-      request.url().endsWith("/v1/projects/code-agent/open") && request.method() === "POST",
-  );
-  await openButton.click();
-  expect(parseRequestRecord((await openRequest).postData())).toEqual({ appId: "zed" });
+  await openButton.evaluate((button) => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await expect.poll(() => openRequests).toEqual([{ appId: "zed" }]);
 
   await page.reload();
   await expect(page.getByRole("button", { name: "在 Zed 中打开" })).toBeVisible();
@@ -3592,32 +3596,29 @@ test("interrupts a running turn from the composer", async ({ page }) => {
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeVisible();
 });
 
-test("reuses the interrupt idempotency key until the terminal event arrives", async ({ page }) => {
+test("ignores repeated interrupt clicks while the request is in flight", async ({ page }) => {
   await page.unroute("**/v1/**");
+  const idempotencyKeys: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && /\/turns\/[^/]+\/interrupt$/u.test(request.url())) {
+      idempotencyKeys.push(request.headers()["idempotency-key"] ?? "");
+    }
+  });
   await page.goto("/p/code-agent");
 
   await page.getByRole("textbox", { name: "任务输入" }).fill("等待中断");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-action-\d+$/);
 
-  const idempotencyKeys: string[] = [];
-  await page.route("**/v1/projects/code-agent/tasks/*/turns/*/interrupt", async (route) => {
-    const request = route.request();
-    const payload = request.postDataJSON() as { taskId: string };
-    const turnId = new URL(request.url()).pathname.split("/")[7] ?? "";
-    idempotencyKeys.push(request.headers()["idempotency-key"] ?? "");
-    await route.fulfill({
-      contentType: "application/json",
-      json: { status: "interrupting", taskId: payload.taskId, turnId },
-      status: 202,
-    });
+  const stopButton = page.getByRole("button", { exact: true, name: "停止" });
+  await expect(stopButton).toBeEnabled();
+  await stopButton.evaluate((button) => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 
-  await page.getByRole("button", { exact: true, name: "停止" }).click();
-  await page.getByRole("button", { exact: true, name: "停止" }).click();
-
-  await expect.poll(() => idempotencyKeys).toHaveLength(2);
-  expect(idempotencyKeys[0]).toBe(idempotencyKeys[1]);
+  await expect.poll(() => idempotencyKeys).toHaveLength(1);
+  expect(idempotencyKeys[0]).toBeTruthy();
 });
 
 test("preserves the prompt draft when submission fails", async ({ page }) => {
@@ -3764,11 +3765,22 @@ test("keeps the original sidebar logo and provides it as favicon", async ({ page
 });
 
 test("adds a folder through the host project picker", async ({ page }) => {
+  let addProjectRequestCount = 0;
+  await page.route("**/v1/projects", async (route) => {
+    if (route.request().method() === "POST") {
+      addProjectRequestCount += 1;
+    }
+    await route.fallback();
+  });
   await page.goto("/p/code-agent");
 
-  await page.getByRole("button", { name: "添加项目" }).click();
+  await page.getByRole("button", { name: "添加项目" }).evaluate((button) => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
 
   await expect(page).toHaveURL(/\/p\/added-project$/);
+  expect(addProjectRequestCount).toBe(1);
   await expect(page.getByRole("heading", { name: "AddedProject" })).toBeVisible();
   await expect(
     page
@@ -3897,6 +3909,7 @@ test("opens and reuses project new chats without creating empty Codex tasks", as
 test("shows a newly submitted task and AI reply state before the task snapshot loads", async ({
   page,
 }) => {
+  let taskStartRequestCount = 0;
   const createdTask = {
     id: "019f9d81-13ab-7863-9676-beae70726117",
     pinned: false,
@@ -3926,6 +3939,7 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/v1/projects/code-agent/tasks" && route.request().method() === "POST") {
+      taskStartRequestCount += 1;
       await route.fulfill({ contentType: "application/json", json: { task: createdTask } });
       return;
     }
@@ -3967,7 +3981,11 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
 
   await page.goto("/p/code-agent");
   await page.getByRole("textbox", { name: "任务输入" }).fill("你好");
-  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await page.getByRole("button", { exact: true, name: "提交" }).evaluate((button) => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await expect.poll(() => taskStartRequestCount).toBe(1);
 
   // Codex 返回真实 taskId 后立即写入并选中 Sidebar，中栏仍保留可重试的 Project 草稿。
   await expect(page).toHaveURL(/\/p\/code-agent$/u);

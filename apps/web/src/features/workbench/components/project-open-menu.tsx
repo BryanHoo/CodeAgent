@@ -4,6 +4,7 @@ import { Check, ChevronDown, Code2, FolderOpen, Terminal, Wrench } from "lucide-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import type { CodeAgentProjectOpenClient } from "../../projects/project-queries.js";
 import { projectOpenCapabilitiesQueryOptions } from "../../projects/project-queries.js";
 import {
@@ -216,6 +217,7 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
   const [actionError, setActionError] = useState(false);
   const [selectedApps, setSelectedApps] = useState<Readonly<Record<string, ProjectOpenAppId>>>({});
   const [preferenceStorage] = useState(getProjectOpenPreferenceStorage);
+  const openActionLockRef = useRef(createAsyncActionLock());
   const capabilitiesQuery = useQuery(projectOpenCapabilitiesQueryOptions(projectId, client));
   const apps = capabilitiesQuery.data?.apps ?? emptyApps;
   const inheritedAppId = useMemo(
@@ -289,7 +291,7 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
           onClick={() => {
             if (selectedApp !== undefined) {
               setActionError(false);
-              openMutation.mutate(selectedApp.id);
+              void openActionLockRef.current.run(() => openMutation.mutateAsync(selectedApp.id));
             }
           }}
           title={openButtonLabel}

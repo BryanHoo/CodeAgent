@@ -7,6 +7,8 @@ import type {
 import { ChevronDown, LoaderCircle, Sparkles, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+
 type CommitFileEntry = Readonly<{
   path: string;
   staged: boolean;
@@ -67,6 +69,7 @@ export function CommitChangesDialog({
   );
   const [filesExpanded, setFilesExpanded] = useState(false);
   const [message, setMessage] = useState("");
+  const commitActionLockRef = useRef(createAsyncActionLock());
   const isPending = isGenerating || isCommitting;
   const repositoryAvailable = gitStatus.repositoryMode === "root";
   const allSelected = entries.length > 0 && selectedPaths.size === entries.length;
@@ -81,22 +84,24 @@ export function CommitChangesDialog({
     }
   }, []);
 
-  const generateMessage = async () => {
-    const generated = await onGenerateMessage({
-      expectedSnapshot: gitStatus.snapshot,
-      paths: [...selectedPaths],
+  const generateMessage = () =>
+    commitActionLockRef.current.run(async () => {
+      const generated = await onGenerateMessage({
+        expectedSnapshot: gitStatus.snapshot,
+        paths: [...selectedPaths],
+      });
+      setMessage(generated);
     });
-    setMessage(generated);
-  };
 
-  const commit = async (action: CommitProjectChangesRequest["action"]) => {
-    await onCommit({
-      action,
-      expectedSnapshot: gitStatus.snapshot,
-      message,
-      paths: [...selectedPaths],
-    });
-  };
+  const commit = (action: CommitProjectChangesRequest["action"]) =>
+    commitActionLockRef.current.run(() =>
+      onCommit({
+        action,
+        expectedSnapshot: gitStatus.snapshot,
+        message,
+        paths: [...selectedPaths],
+      }),
+    );
 
   return (
     <dialog
