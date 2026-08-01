@@ -237,7 +237,7 @@ Project 不使用独立页面。用户在工作台左栏通过目录选择器添
 
 每个 Project 名称行在新建 Task 的 `+` 左侧显示省略号菜单，菜单只提供重命名和删除。重命名仅更新 CodeAgent 持久化的展示名，不修改 `rootPath` 或磁盘文件夹名；删除仅移除 Project 注册、关联的本地设置/元数据以及对应 Web/Server Runtime，不删除磁盘目录、文件或 Codex Task。删除当前 Project 后进入剩余列表首项，删除最后一个 Project 后进入工作台空状态。
 
-左栏 Settings 使用原生 Dialog 在当前工作台内打开，不产生路由跳转。弹窗使用 AI Elements Select 修改全局审批、工作区、模型、思考量与默认打开应用；关闭后焦点返回左栏入口。
+左栏 Settings 使用原生 Dialog 在当前工作台内打开，不产生路由跳转。弹窗采用 macOS 设置式双栏结构，将字段归入“外观”“Agent 默认值”“提交消息”“应用集成”；窄屏时分类导航改为顶部横向排列。Agent 与提交配置继续使用 AI Elements Select，外观提供浅色/深色分段控件，关闭后焦点返回左栏入口。
 
 Project 名称行短按继续展开或收起 Task；指针移动超过点击容差后立即判定为拖拽并调整 Projects 顺序，不设置固定长按等待。释放时通过 Client 提交当前完整 Project ID 顺序，刷新页面和重启 Runtime 后保持；键盘聚焦名称行后可用 `Alt + ArrowUp/ArrowDown` 完成同样操作。
 
@@ -691,7 +691,9 @@ PromptInputMessage
 
 MVP 附件仅接受 `image/gif`、`image/jpeg`、`image/png`、`image/webp` 和自动生成的 `text/plain` 粘贴附件，单文件最大 `2 MiB`，一次最多 `4` 个。预览使用短生命周期 Blob URL；删除、提交成功和组件卸载时立即释放。Server Store 同时限制条目数、总字节数和 TTL，Turn 成功后消费引用。
 
-模型选择通过 `GET /v1/models` 读取真实 Provider 目录并优先选择 `isDefault`。思考量紧邻模型，只展示所选模型的 `supportedReasoningEfforts`，无有效选择时使用 `defaultReasoningEffort`。全局默认通过原子 `PUT /v1/settings` 保存审批、审核方、模型、思考量、沙盒模式与默认打开应用；Project 默认通过原子 `PUT /v1/projects/:projectId/defaults` 保存模型、思考量与沙盒模式；已有 Task 通过原子 `PUT /v1/projects/:projectId/tasks/:taskId/settings` 保存完整设置。新 Task 创建时按 `Task > Project > Global` 固化当时的有效值，全局修改不得改写已有 Project 或 Task 记录。
+模型选择通过 `GET /v1/models` 读取真实 Provider 目录并优先选择 `isDefault`。思考量紧邻模型，只展示所选模型的 `supportedReasoningEfforts`，无有效选择时使用 `defaultReasoningEffort`。全局默认通过原子 `PUT /v1/settings` 保存审批、审核方、Agent 模型与思考量、沙盒模式、提交消息模型与思考量、提交提示词及默认打开应用；Project 默认通过原子 `PUT /v1/projects/:projectId/defaults` 保存模型、思考量与沙盒模式；已有 Task 通过原子 `PUT /v1/projects/:projectId/tasks/:taskId/settings` 保存完整设置。新 Task 创建时按 `Task > Project > Global` 固化当时的有效值，全局修改不得改写已有 Project 或 Task 记录。提交消息生成始终使用独立的全局提交配置，不继承已有 Task 或 Project 默认值。
+
+颜色模式属于浏览器本地偏好，使用版本化 `localStorage` 记录并在 React 挂载前同步到根节点 `data-theme`；它不进入 Agent 设置 API，也不受设置表单取消影响。
 
 审批策略使用统一协议的 `untrusted`、`on-request` 和 `never`，审批审核方使用 `user` 和 `auto_review`。批准模式 Select 展示“仅不受信任操作”“按需审批”“自动审批”和“从不询问”；其中“自动审批”映射为 `on-request + auto_review`，其余选项映射为对应策略与 `user`。`POST /turns` 发送完整 `AgentTurnOptions`，Server 在调用 Provider 前重新校验并 upsert Task 设置。`allow_for_session` 和 Pending Approval 属于当前 Runtime，不进入长期设置。
 

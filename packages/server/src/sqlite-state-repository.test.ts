@@ -41,7 +41,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 6,
+      migrationVersion: 7,
       synchronous: "normal",
       writable: true,
     });
@@ -245,6 +245,9 @@ describe("SqliteStateRepository", () => {
     const settings = {
       approvalPolicy: "on-request" as const,
       approvalsReviewer: "auto_review" as const,
+      commitMessageModel: "gpt-5.6-terra",
+      commitMessagePrompt: "突出说明用户可见影响。",
+      commitMessageReasoningEffort: "medium",
       defaultOpenAppId: "visual-studio-code" as const,
       model: "gpt-5.6-sol",
       reasoningEffort: "high",

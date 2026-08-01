@@ -759,7 +759,7 @@ Runtime 因凭证或其他 Provider 原因不可用时，Server 返回统一 Pro
 
 ### 12.1 数据来源
 
-Codex 已经持久化原生 Thread 和 Session 历史。CodeAgent 不重复保存完整历史，只保存 Project 及其用户排序、Project 新 Task 默认模型设置、Task 完整设置和本地导航使用的固定状态。
+Codex 已经持久化原生 Thread 和 Session 历史。CodeAgent 不重复保存完整历史，只保存 Project 及其用户排序、全局 Agent 与提交消息设置、Project 新 Task 默认模型设置、Task 完整设置和本地导航使用的固定状态。浅色/深色模式仅由浏览器本地保存，不进入 Server 数据库。
 
 ### 12.2 表结构
 
@@ -773,13 +773,13 @@ task_settings
 task_metadata
 ```
 
-所有业务表使用 `STRICT`。`projects.sort_order` 保存 Sidebar 用户顺序；`project_defaults` 保存 `model`、`reasoning_effort` 和 `sandbox_mode`；`task_settings` 保存 `approval_policy`、`approvals_reviewer`、`model`、`reasoning_effort` 和 `sandbox_mode`；`task_metadata` 保存 CodeAgent 本地导航使用的 `pinned` 状态。设置和 Task 元数据以 Project 外键隔离，本地导航状态不写入 Codex Thread。
+所有业务表使用 `STRICT`。`projects.sort_order` 保存 Sidebar 用户顺序；`global_settings` 保存全局审批、Agent 模型组合、提交消息模型组合、提交提示词、沙盒模式和默认打开应用；`project_defaults` 保存 `model`、`reasoning_effort` 和 `sandbox_mode`；`task_settings` 保存 `approval_policy`、`approvals_reviewer`、`model`、`reasoning_effort` 和 `sandbox_mode`；`task_metadata` 保存 CodeAgent 本地导航使用的 `pinned` 状态。设置和 Task 元数据以 Project 外键隔离，本地导航状态不写入 Codex Thread。
 
 ### 12.3 写入规则
 
 - Project 和完整设置对象使用显式 SQL、Prepared Statement、事务和原子 upsert。
 - Project 重排通过 `PUT /v1/projects/order` 提交无重复的完整 ID 集合；Server 校验没有遗漏或未知 Project 后，在 Database Worker 的单个事务中替换 `sort_order`。新注册 Project 使用当前最大顺序追加到末尾。
-- Provider `/v1/models` 是模型目录真相源；数据库只保存模型与思考量 ID。读取 Snapshot、设置 API 和启动 Turn 前均重新校验，无效组合按模型 ID 和 Provider 默认值确定性回退并写回。
+- Provider `/v1/models` 是模型目录真相源；数据库只保存 Agent 及提交消息使用的模型与思考量 ID。读取 Snapshot、设置 API、启动 Turn 和生成提交消息前均重新校验，无效组合按模型 ID 和 Provider 默认值确定性回退。
 - 新 Task 从 Project 默认值继承 `model`、`reasoningEffort` 和 `sandboxMode`，`approvalPolicy` 固定从 `on-request` 开始，`approvalsReviewer` 固定从 `user` 开始。
 - Task 固定通过本地 `task_metadata` 原子 upsert；重命名和归档不在本地复制 Codex 标题或归档状态，分别调用 `thread/name/set` 与 `thread/archive`。
 - `allow_for_session`、可操作 Pending Approval 和模型目录不持久化；进程重启后不能恢复为可操作 `pending`。

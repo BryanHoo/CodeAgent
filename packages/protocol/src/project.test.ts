@@ -616,6 +616,9 @@ describe("project protocol", () => {
     const settings = {
       approvalPolicy: "on-request",
       approvalsReviewer: "auto_review",
+      commitMessageModel: "gpt-5.6-terra",
+      commitMessagePrompt: "突出说明用户可见影响。",
+      commitMessageReasoningEffort: "medium",
       defaultOpenAppId: "visual-studio-code",
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
@@ -638,6 +641,15 @@ describe("project protocol", () => {
       }),
     ).toBe(false);
     expect(Value.Check(AgentGlobalSettingsResponseSchema, { settings, legacy: true })).toBe(false);
+    expect(
+      Value.Check(AgentGlobalSettingsSchema, { ...settings, commitMessageModel: undefined }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentGlobalSettingsSchema, {
+        ...settings,
+        commitMessagePrompt: "x".repeat(4_001),
+      }),
+    ).toBe(false);
   });
 
   it("validates discriminated pending requests and typed resolutions", () => {

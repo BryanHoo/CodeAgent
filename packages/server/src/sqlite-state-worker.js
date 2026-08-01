@@ -54,6 +54,9 @@ function globalSettingsFromRow(row) {
   return {
     approvalPolicy: row.approval_policy,
     approvalsReviewer: row.approvals_reviewer,
+    commitMessageModel: row.commit_message_model,
+    commitMessagePrompt: row.commit_message_prompt,
+    commitMessageReasoningEffort: row.commit_message_reasoning_effort,
     defaultOpenAppId: row.default_open_app_id,
     model: row.model,
     reasoningEffort: row.reasoning_effort,
@@ -140,7 +143,10 @@ function createOperations(database) {
           "SELECT model, reasoning_effort, sandbox_mode FROM project_defaults WHERE project_id = ?",
         ),
         readGlobalSettings: database.prepare(
-          "SELECT approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode, default_open_app_id FROM global_settings WHERE id = 1",
+          `SELECT approval_policy, approvals_reviewer, commit_message_model,
+                  commit_message_prompt, commit_message_reasoning_effort, model,
+                  reasoning_effort, sandbox_mode, default_open_app_id
+           FROM global_settings WHERE id = 1`,
         ),
         readTaskSettings: database.prepare(
           "SELECT approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode FROM task_settings WHERE project_id = ? AND task_id = ?",
@@ -159,11 +165,16 @@ function createOperations(database) {
     `),
         writeGlobalSettings: database.prepare(`
       INSERT INTO global_settings (
-        id, approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode, default_open_app_id, updated_at
-      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+        id, approval_policy, approvals_reviewer, commit_message_model, commit_message_prompt,
+        commit_message_reasoning_effort, model, reasoning_effort, sandbox_mode,
+        default_open_app_id, updated_at
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         approval_policy = excluded.approval_policy,
         approvals_reviewer = excluded.approvals_reviewer,
+        commit_message_model = excluded.commit_message_model,
+        commit_message_prompt = excluded.commit_message_prompt,
+        commit_message_reasoning_effort = excluded.commit_message_reasoning_effort,
         model = excluded.model,
         reasoning_effort = excluded.reasoning_effort,
         sandbox_mode = excluded.sandbox_mode,
@@ -310,6 +321,9 @@ function createOperations(database) {
       requireStatements().writeGlobalSettings.run(
         settings.approvalPolicy,
         settings.approvalsReviewer,
+        settings.commitMessageModel,
+        settings.commitMessagePrompt,
+        settings.commitMessageReasoningEffort,
         settings.model,
         settings.reasoningEffort,
         settings.sandboxMode,

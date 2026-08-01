@@ -801,6 +801,35 @@ describe("CodeAgent Server", () => {
 
   it("generates a selected-file commit message through a hidden read-only turn", async () => {
     const providerHarness = createProvider();
+    const settings = createSettingsRepository();
+    providerHarness.listModels.mockResolvedValue({
+      data: [
+        ...modelPage.data,
+        {
+          defaultReasoningEffort: "medium",
+          description: "适合日常任务",
+          displayName: "GPT-5.6 Terra",
+          id: "gpt-5.6-terra",
+          isDefault: false,
+          supportedReasoningEfforts: [
+            { description: "低", id: "low" },
+            { description: "中", id: "medium" },
+          ],
+        },
+      ],
+      nextCursor: null,
+    });
+    settings.readGlobalSettings.mockResolvedValue({
+      approvalPolicy: "on-request",
+      approvalsReviewer: "user",
+      commitMessageModel: "gpt-5.6-terra",
+      commitMessagePrompt: "优先说明行为变化，不要罗列文件名。",
+      commitMessageReasoningEffort: "low",
+      defaultOpenAppId: null,
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write",
+    });
     const snapshot = "a".repeat(64);
     const readProjectGitStatus = vi.fn(() =>
       Promise.resolve({
@@ -819,7 +848,10 @@ describe("CodeAgent Server", () => {
       }),
     );
     const app = await createCodeAgentServer(
-      createServerOptions(providerHarness.provider, { readProjectGitStatus }),
+      createServerOptions(providerHarness.provider, {
+        readProjectGitStatus,
+        settingsRepository: settings.repository,
+      }),
     );
     closeCallbacks.push(() => app.close());
 
@@ -869,9 +901,12 @@ describe("CodeAgent Server", () => {
     expect(startTurnCall?.[0]).toBe("task-1");
     expect(startTurnCall?.[1].outputSchema).toMatchObject({ type: "object" });
     expect(startTurnCall?.[1].text).toContain("src/app.ts");
+    expect(startTurnCall?.[1].text).toContain("优先说明行为变化，不要罗列文件名。");
     expect(startTurnCall?.[2]).toMatchObject({
       approvalPolicy: "never",
       approvalsReviewer: "user",
+      model: "gpt-5.6-terra",
+      reasoningEffort: "low",
       sandboxMode: "read-only",
     });
     expect(providerHarness.archiveTask).toHaveBeenCalledWith("task-1");
@@ -1516,6 +1551,9 @@ describe("CodeAgent Server", () => {
     const globalSettings = {
       approvalPolicy: "on-request" as const,
       approvalsReviewer: "auto_review" as const,
+      commitMessageModel: "gpt-5.6-sol",
+      commitMessagePrompt: "",
+      commitMessageReasoningEffort: "high",
       defaultOpenAppId: "visual-studio-code" as const,
       model: "gpt-5.6-sol",
       reasoningEffort: "high",
@@ -1579,6 +1617,9 @@ describe("CodeAgent Server", () => {
     readGlobalSettings.mockResolvedValue({
       approvalPolicy: "on-request",
       approvalsReviewer: "auto_review",
+      commitMessageModel: "gpt-5.6-sol",
+      commitMessagePrompt: "",
+      commitMessageReasoningEffort: "high",
       defaultOpenAppId: null,
       model: "gpt-5.6-sol",
       reasoningEffort: "high",

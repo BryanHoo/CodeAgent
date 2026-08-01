@@ -10,6 +10,7 @@
 - HTTP Snapshot 由服务端状态层持有；实时事件按 Task、Turn 和 Item ID 归一化合并。
 - Global settings 与 Project 新 Task 默认设置使用 TanStack Query 独立缓存；Task Snapshot 必须直接携带 Server 校验后的完整 Task 设置。
 - Global settings、Project defaults 与 Task settings 只在用户事件中通过原子 `PUT` 更新完整对象；Mutation 按 Global、Project 或 Task 串行，成功后更新对应 Query/Snapshot 缓存。
+- 主题偏好属于浏览器本地状态，必须使用版本化存储并在 React 挂载前应用；不得混入 Global settings Query 或服务端持久化。
 - Project 排序以 Server 返回的 `ProjectPage` 为长期真相源；拖动中的顺序只保留在 Sidebar Hook。释放后乐观更新 `["projects"]` Query，并通过串行完整顺序 Mutation 校准，失败时恢复提交前的完整页面。
 - 有效设置固定按 `Task > Project > Global` 解析；读取回退值不得隐式写入 Project 或 Task 记录。新 Task 创建时固化当时的完整有效设置，不得从其他 Task 继承任何设置。
 - Project Task 列表、Task Snapshot、Mutation 和实时订阅必须显式携带 `projectId`；Query Key 与连接状态按 Project 隔离，不能只用 `taskId` 作为跨项目身份。Project Task 列表使用 Cursor Infinite Query，首屏固定 5 项且只有用户触发“显示更多”才读取单个下一页；归档后必须先移除缓存实体，再重新校准活动 Infinite Query，以服务端新 Cursor 边界补足最近 5 项。搜索使用独立的按 Project 全量 Task Query，仅在搜索词非空时启用，各 Project 可并行、单个 Project 内顺序追踪全部 Cursor；新建、固定、重命名和归档必须同步维护普通列表与已存在的搜索源缓存。

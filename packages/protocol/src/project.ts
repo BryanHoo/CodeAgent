@@ -716,6 +716,9 @@ export const AgentTaskSettingsSchema = Type.Union([
 export type AgentTaskSettings = Readonly<Static<typeof AgentTaskSettingsSchema>>;
 
 const AgentGlobalSettingProperties = {
+  commitMessageModel: Type.String({ minLength: 1 }),
+  commitMessagePrompt: Type.String({ maxLength: 4_000 }),
+  commitMessageReasoningEffort: Type.String({ minLength: 1 }),
   defaultOpenAppId: Type.Union([ProjectOpenAppIdSchema, Type.Null()]),
   ...AgentTaskSettingProperties,
 };

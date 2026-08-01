@@ -138,6 +138,23 @@ const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     `,
     version: 6,
   },
+  {
+    name: "add_commit_message_settings",
+    sql: `
+      ALTER TABLE global_settings
+        ADD COLUMN commit_message_model TEXT NOT NULL DEFAULT '';
+      ALTER TABLE global_settings
+        ADD COLUMN commit_message_reasoning_effort TEXT NOT NULL DEFAULT '';
+      ALTER TABLE global_settings
+        ADD COLUMN commit_message_prompt TEXT NOT NULL DEFAULT '';
+
+      -- 现有用户继承原 Agent 模型，升级后无需重新选择即可继续生成提交信息。
+      UPDATE global_settings
+      SET commit_message_model = model,
+          commit_message_reasoning_effort = reasoning_effort;
+    `,
+    version: 7,
+  },
 ];
 
 type WorkerResponse =

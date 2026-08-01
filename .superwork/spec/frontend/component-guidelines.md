@@ -26,7 +26,7 @@
 - 浏览器获得系统通知权限后，仅当页面隐藏或浏览器窗口失焦时，Task 完成、不可恢复中断或错误、等待审批及等待用户输入才发送系统通知；通知标题必须包含来自 Snapshot 或 Project Task Query 的最新 Task 名称，不能展示原生 Task ID。点击通知聚焦页面并进入对应 Task。首次 Prompt、Review 或 Compact 启动时在当前用户手势内申请权限，权限不可用不得阻断 Task 操作。
 - `Projects` 标题右侧使用可访问的 `+` 图标触发宿主系统目录选择器；添加成功后刷新项目树并进入新 Project，取消选择保持当前界面，项目列表为空时不得伪造默认 Project。
 - 左栏 Settings 旁的连接状态必须反映真实 Runtime：活动 Task 使用其实时事件连接状态，新建 Task 页面使用 HTTP Runtime 的加载、可用和失败状态；不得硬编码在线或离线文案。
-- 左栏 Settings 必须使用按钮在当前工作台打开可访问的原生 Dialog，不注册独立设置路由。弹窗使用 AI Elements `PromptInputSelect` 修改全局审批、工作区、模型、思考量和默认打开应用，支持加载、失败重试、原子保存、Escape、backdrop 与关闭后焦点恢复。
+- 左栏 Settings 必须使用按钮在当前工作台打开可访问的原生 Dialog，不注册独立设置路由。弹窗使用 macOS 设置式双栏，将字段归入“外观”“Agent 默认值”“提交消息”“应用集成”，窄屏改为顶部横向分类；模型与思考量使用带边界和 Chevron 的 AI Elements `PromptInputSelect`。Dialog 必须支持加载、失败重试、全局设置完整对象原子保存、Escape、backdrop 与关闭后焦点恢复。
 - Project 名称只切换对应任务树的展开状态；名称右侧的可访问 `+` 图标进入该 Project 的“新聊天”草稿，顶部“新建任务”始终进入第一个 Project 的草稿，新增文件夹后进入该 Project 草稿，目标草稿已打开时直接复用。新聊天入口只能重置中栏和切换 Project，左栏不得出现临时“新聊天”Task。
 - 新聊天草稿在首次 Prompt 提交或代码审查命令执行前不得创建 Codex Task；空 Timeline 的 Project 名称直接渲染为原生 Project 选择器，首次点击必须打开选项列表，切换 Project 时保存当前 Project 草稿并恢复目标 Project 草稿。首次提交后，`startTask` 返回真实 `taskId` 时立即把 Task 写入对应 Project 列表并选中，`startTurn` 成功后再进入 Task 路由并由 Codex 返回的名称替换“新聊天”。
 - 通过显式 Props 或专用 Hook 获取数据，不从组件内部访问 Server 或 Provider。
@@ -50,6 +50,7 @@
 - 可能位于裁剪容器或视口边缘的 Tooltip 必须脱离局部层叠上下文渲染，并在桌面与窄屏中自动翻转、限制到视口安全边距；同时验证 Hover 和键盘焦点行为。
 - `shared/styles/globals.css` 是颜色、字体、间距、圆角、阴影、动效和固定布局尺寸的唯一设计 Token 来源；组件使用语义化 Tailwind Token，不散落视觉字面值。
 - 浅色与深色主题在同一语义 Token 中使用 `light-dark()` 定义，`data-theme` 只切换 `color-scheme`，禁止复制整套主题变量。
+- 颜色模式只提供 `light` 与 `dark`，使用版本化浏览器存储保存并在 React 挂载前同步到根节点；主题切换即时生效，不进入 Agent 设置 API，也不因取消设置表单而回滚。
 - 主题色固定为浅色 `surface #ffffff`、`ink #111111`、`accent #006aff`、`diffAdded #28a948`、`diffRemoved #eb001d`，深色 `surface #181818`、`ink #ffffff`、`accent #339cff`、`diffAdded #40c977`、`diffRemoved #fa423e`；Skill 展示统一复用 `accent`，不维护独立颜色；浅色大面积区域保持纯白，普通文字使用 `450` 字重，不添加固定浅灰底。
 - 工作台区域优先使用材质背景、淡阴影和留白区分层级，不使用贯穿面板的高对比边框；视口进入覆盖模式时关闭已打开的桌面面板。左右栏的打开状态仅由各自工具栏按钮、窄屏遮罩或响应式视口变化控制，任何情况下都不得由 Escape 键关闭。桌面常驻布局必须提供可拖拽且支持方向键的语义化分隔线，左栏宽度限制为 `220px` 至 `400px`，右栏限制为 `260px` 至 `480px`；窄屏覆盖模式不显示分隔线。
 - 永久 Sidebar 和 Inspector 使用连续同色背景，仅在其纵向边界添加低对比单像素分隔；三栏标题行使用相同高度并保持文字、图标垂直居中，侧栏顶栏不与下方内容分隔，主内容 Toolbar 的单像素底部分隔与左栏搜索框、右栏 Tab 的顶部对齐。不使用模糊或多层重阴影，浮动阴影只用于 Composer、弹层和独立表面。

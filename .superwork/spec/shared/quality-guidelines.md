@@ -27,7 +27,7 @@
 - Task 固定、重命名和归档必须使用独立的严格 Mutation Schema 并携带 `Idempotency-Key`；Server 校验 `projectId + taskId` 归属后，固定写本地元数据，重命名和归档调用 Provider 端口。
 - 模型目录使用统一 `AgentModelPage` 并保留每个模型的默认与可用思考量；上传附件只接受 GIF、JPEG、PNG、WebP 与 `text/plain`，并返回不含 Data URL 和本地路径的 `AgentAttachment`；Turn 只接收附件 ID、`AgentApprovalPolicy`、`AgentApprovalsReviewer`、`AgentSandboxMode`、非空模型 ID 和该模型支持的思考量。历史消息的 `AgentMessageAttachment` 仍只表示受控图片，只包含随机 ID、媒体类型、名称和字节数；同一未变图片在重复 Task Snapshot 中必须保持当前附件 ID 稳定，避免仍在渲染的受控 URL 因快照重读返回 404。二进制固定通过 `GET /v1/projects/:projectId/tasks/:taskId/attachments/:attachmentId` 按需读取，Server 必须验证 Project/Task 归属并禁止 MIME sniffing。
 - Skill 目录使用 Project 作用域的统一 `AgentSkillPage`，只向 Web 暴露不透明 ID、名称、描述和作用域；`AgentPromptInput.skills` 接收按编辑器 Token 顺序排列的多个不透明 ID 与名称，Provider 必须逐项解析为 Codex 原生 Skill 输入，禁止暴露或接收 Codex Skill 绝对路径。
-- `AgentTaskSettings` 必须是审批策略、审批审核方、模型、思考量和沙盒模式的严格完整对象，Task Snapshot 直接返回 Server 校验后的有效设置；Project defaults 包含模型、思考量和沙盒模式。完整设置更新使用原子 `PUT`，Client 必须对所有设置响应执行 Protocol Schema 校验。
+- `AgentTaskSettings` 必须是审批策略、审批审核方、模型、思考量和沙盒模式的严格完整对象，Task Snapshot 直接返回 Server 校验后的有效设置；Project defaults 包含模型、思考量和沙盒模式。`AgentGlobalSettings` 还必须包含独立的提交消息模型、思考量、最多 `4,000` 字符的提示词和默认打开应用；提交生成使用这组独立模型设置，不继承 Project 或 Task。完整设置更新使用原子 `PUT`，Client 必须对所有设置响应执行 Protocol Schema 校验。
 - Provider 模型目录和 Codex Project 有效沙盒配置分别是初始模型能力与沙盒默认值的真相源，持久层只保存统一设置值；新 Task 继承 Project 模型、思考量和沙盒默认值，审批固定初始化为 `approvalPolicy: "on-request"` 与 `approvalsReviewer: "user"`，会话级授权和 Pending Request 不得进入长期设置。
 - Task Snapshot 使用 `contextUsage` 保存最近一轮上下文用量，实时链路使用 `usage.updated` 同步更新；占用值必须来自 Provider 的最近一轮 Token Usage 与模型上下文窗口。
 - 运行能力独立声明 Task 的 `list`、`read`、`start`、`fork`，Turn 的 `start`、`interrupt`、`rollback`、`review`、`compact`，Skill 的 `list`、`use`，以及 Feedback 的 `upload`；消费者不得通过 Provider 名称推断能力。

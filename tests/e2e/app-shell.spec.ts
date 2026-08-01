@@ -49,11 +49,25 @@ function parseTaskSettingsRequest(requestBody: string | null) {
 function parseGlobalSettingsRequest(requestBody: string | null) {
   const settings = parseTaskSettingsRequest(requestBody);
   const value = parseRequestRecord(requestBody);
+  const commitMessageModel = value["commitMessageModel"];
+  const commitMessagePrompt = value["commitMessagePrompt"];
+  const commitMessageReasoningEffort = value["commitMessageReasoningEffort"];
   const defaultOpenAppId = value["defaultOpenAppId"];
-  if (defaultOpenAppId !== null && typeof defaultOpenAppId !== "string") {
+  if (
+    typeof commitMessageModel !== "string" ||
+    typeof commitMessagePrompt !== "string" ||
+    typeof commitMessageReasoningEffort !== "string" ||
+    (defaultOpenAppId !== null && typeof defaultOpenAppId !== "string")
+  ) {
     throw new Error("Invalid global settings request");
   }
-  return { ...settings, defaultOpenAppId };
+  return {
+    ...settings,
+    commitMessageModel,
+    commitMessagePrompt,
+    commitMessageReasoningEffort,
+    defaultOpenAppId,
+  };
 }
 
 function parseProjectOrderRequest(requestBody: string | null): readonly string[] {
@@ -311,6 +325,9 @@ test.beforeEach(async ({ page }) => {
   let globalSettings = {
     approvalPolicy: "on-request",
     approvalsReviewer: "user",
+    commitMessageModel: "gpt-5.6-sol",
+    commitMessagePrompt: "",
+    commitMessageReasoningEffort: "high",
     defaultOpenAppId: "zed" as string | null,
     model: "gpt-5.6-sol",
     reasoningEffort: "high",
@@ -542,10 +559,18 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(dialog).toBeVisible();
   await expect(page).toHaveURL(workbenchUrl);
 
+  await dialog.getByRole("button", { name: "深色模式" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await dialog.getByRole("button", { name: "Agent 默认值" }).click();
   await dialog.getByRole("combobox", { name: "审批" }).selectOption("never");
   await dialog.getByRole("combobox", { name: "工作区" }).selectOption("danger-full-access");
   await dialog.getByRole("combobox", { name: "模型" }).selectOption("gpt-5.6-terra");
   await expect(dialog.getByRole("combobox", { name: "思考" })).toHaveValue("medium");
+  await dialog.getByRole("button", { name: "提交消息" }).click();
+  await dialog.getByRole("combobox", { name: "提交模型" }).selectOption("gpt-5.6-terra");
+  await dialog.getByRole("combobox", { name: "提交思考量" }).selectOption("low");
+  await dialog.getByRole("textbox", { name: "提交提示词" }).fill("突出用户可见影响。");
+  await dialog.getByRole("button", { name: "应用集成" }).click();
   await dialog.getByRole("combobox", { name: "默认打开方式" }).selectOption("finder");
   await dialog.getByRole("button", { name: "保存全局默认" }).click();
 
@@ -557,11 +582,25 @@ test("edits global defaults in a dialog without overriding task settings", async
 
   await page.getByRole("button", { name: /设置，终端连接状态/u }).click();
   const reopenedDialog = page.getByRole("dialog", { name: "全局设置" });
+  await expect(reopenedDialog.getByRole("button", { name: "深色模式" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await reopenedDialog.getByRole("button", { name: "Agent 默认值" }).click();
   await expect(reopenedDialog.getByRole("combobox", { name: "审批" })).toHaveValue("never");
   await expect(reopenedDialog.getByRole("combobox", { name: "工作区" })).toHaveValue(
     "danger-full-access",
   );
   await expect(reopenedDialog.getByRole("combobox", { name: "模型" })).toHaveValue("gpt-5.6-terra");
+  await reopenedDialog.getByRole("button", { name: "提交消息" }).click();
+  await expect(reopenedDialog.getByRole("combobox", { name: "提交模型" })).toHaveValue(
+    "gpt-5.6-terra",
+  );
+  await expect(reopenedDialog.getByRole("combobox", { name: "提交思考量" })).toHaveValue("low");
+  await expect(reopenedDialog.getByRole("textbox", { name: "提交提示词" })).toHaveValue(
+    "突出用户可见影响。",
+  );
+  await reopenedDialog.getByRole("button", { name: "应用集成" }).click();
   await expect(reopenedDialog.getByRole("combobox", { name: "默认打开方式" })).toHaveValue(
     "finder",
   );
@@ -586,6 +625,9 @@ test("uses global defaults throughout a new task composer", async ({ page }) => 
         settings: {
           approvalPolicy: "never",
           approvalsReviewer: "user",
+          commitMessageModel: "gpt-5.6-sol",
+          commitMessagePrompt: "",
+          commitMessageReasoningEffort: "high",
           defaultOpenAppId: "finder",
           model: "gpt-5.6-terra",
           reasoningEffort: "medium",
