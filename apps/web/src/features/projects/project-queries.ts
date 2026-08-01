@@ -40,6 +40,7 @@ export type CodeAgentBackgroundTerminalClient = Pick<
 >;
 export type CodeAgentCapabilitiesClient = Pick<CodeAgentClient, "getCapabilities">;
 export type CodeAgentModelsClient = Pick<CodeAgentClient, "listModels">;
+export type CodeAgentMcpServersClient = Pick<CodeAgentClient, "listMcpServers">;
 export type CodeAgentSkillsClient = Pick<CodeAgentClient, "listSkills">;
 export type CodeAgentSettingsClient = Pick<
   CodeAgentClient,
@@ -82,6 +83,7 @@ export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentPendingRequestClient &
   CodeAgentCapabilitiesClient &
   CodeAgentModelsClient &
+  CodeAgentMcpServersClient &
   CodeAgentSkillsClient &
   CodeAgentSettingsClient &
   CodeAgentSourceFileClient;
@@ -478,6 +480,16 @@ export function skillsQueryOptions(
   return queryOptions({
     queryFn: ({ signal }) => client.listSkills(projectId, { signal }),
     queryKey: ["projects", projectId, "skills"] as const,
+  });
+}
+
+export function mcpServersQueryOptions(
+  projectId: string,
+  client: CodeAgentMcpServersClient = codeAgentClient,
+) {
+  return queryOptions({
+    queryFn: ({ signal }) => client.listMcpServers(projectId, { signal }),
+    queryKey: ["projects", projectId, "mcp-servers"] as const,
   });
 }
 

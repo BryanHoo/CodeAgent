@@ -39,14 +39,6 @@ const nestedGitStatus = {
   ],
 };
 
-const taskSettings = {
-  approvalPolicy: "on-request" as const,
-  approvalsReviewer: "auto_review" as const,
-  model: "gpt-5.6-sol",
-  reasoningEffort: "high",
-  sandboxMode: "workspace-write" as const,
-};
-
 const fileTree = {
   entries: [
     { path: "src", type: "directory" as const },
@@ -94,7 +86,6 @@ describe("WorkbenchInspector", () => {
         onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
-        settings={taskSettings}
       />,
     );
 
@@ -113,7 +104,6 @@ describe("WorkbenchInspector", () => {
         onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
-        settings={taskSettings}
         gitStatus={gitStatus}
       />,
     );
@@ -158,7 +148,6 @@ describe("WorkbenchInspector", () => {
         onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
-        settings={taskSettings}
       />,
     );
     const componentsExpandedMarkup = renderToStaticMarkup(
@@ -168,7 +157,6 @@ describe("WorkbenchInspector", () => {
         onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
-        settings={taskSettings}
       />,
     );
 
@@ -187,7 +175,6 @@ describe("WorkbenchInspector", () => {
           onReviewChanges={() => undefined}
           projectName="CodeAgent"
           projectPath="/workspace/CodeAgent"
-          settings={taskSettings}
         />,
       );
 
@@ -226,7 +213,6 @@ describe("WorkbenchInspector", () => {
         onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
-        settings={taskSettings}
       />,
     );
 
@@ -243,7 +229,6 @@ describe("WorkbenchInspector", () => {
         onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
-        settings={taskSettings}
       />,
     );
 
@@ -266,7 +251,6 @@ describe("WorkbenchInspector", () => {
         onRefreshGitStatus={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
-        settings={taskSettings}
       />,
     );
 
@@ -283,7 +267,6 @@ describe("WorkbenchInspector", () => {
         onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
-        settings={taskSettings}
       />,
     );
     const errorMarkup = renderToStaticMarkup(
@@ -301,7 +284,6 @@ describe("WorkbenchInspector", () => {
         onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
-        settings={taskSettings}
       />,
     );
     expect(loadingMarkup).toContain("正在读取项目文件...");
@@ -317,7 +299,6 @@ describe("WorkbenchInspector", () => {
         onOpenSubagent={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
-        settings={taskSettings}
         subagents={[
           {
             model: "gpt-5.6-sol",
@@ -349,7 +330,7 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain('aria-label="查看子代理 前端分析 的输出"');
   });
 
-  it("renders real environment settings and deduplicated task sources", () => {
+  it("renders enabled MCP servers without the removed environment module", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchInspector
         backgroundTerminals={[
@@ -361,10 +342,10 @@ describe("WorkbenchInspector", () => {
           },
         ]}
         gitStatus={gitStatus}
+        mcpServers={[{ name: "fast-context" }, { name: "chrome-devtools" }]}
         onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
-        settings={taskSettings}
         skills={[
           {
             description: "Review security-sensitive changes",
@@ -405,12 +386,16 @@ describe("WorkbenchInspector", () => {
       />,
     );
 
-    expect(markup).toContain("gpt-5.6-sol");
-    expect(markup).toContain("高");
-    expect(markup).toContain("自动审批");
-    expect(markup).toContain("工作区可写");
+    expect(markup).toContain('aria-label="MCP"');
+    expect(markup).toContain("fast-context");
+    expect(markup).toContain("chrome-devtools");
+    expect(markup).not.toContain("gpt-5.6-sol");
+    expect(markup).not.toContain("自动审批");
+    expect(markup).not.toContain("工作区可写");
+    expect(markup).not.toContain("思考量");
+    expect(markup).not.toContain("沙盒");
+    expect(markup).not.toContain("分支");
     expect(markup).toContain("/workspace/CodeAgent");
-    expect(markup).toContain("feat/review");
     expect(markup).toContain("项目目录");
     expect(markup).toContain("安全审查");
     expect(markup.match(/lucide-sparkles/gu)).toHaveLength(1);
@@ -419,5 +404,37 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain("AI Elements");
     expect(markup).not.toContain("Web Design");
     expect(markup).not.toContain("添加来源");
+  });
+
+  it("renders MCP loading, error, and empty states inside the context tab", () => {
+    const renderState = (
+      props: Readonly<{
+        mcpServers?: readonly Readonly<{ name: string }>[];
+        mcpServersError?: Error;
+        mcpServersPending?: boolean;
+      }>,
+    ) =>
+      renderToStaticMarkup(
+        <WorkbenchInspector
+          backgroundTerminals={[
+            {
+              command: "pnpm check",
+              cwd: "/workspace/CodeAgent",
+              id: "terminal-1",
+              itemId: "command-1",
+            },
+          ]}
+          onReviewChanges={() => undefined}
+          projectName="CodeAgent"
+          projectPath="/workspace/CodeAgent"
+          {...props}
+        />,
+      );
+
+    expect(renderState({ mcpServersPending: true })).toContain("正在读取 MCP...");
+    expect(renderState({ mcpServersError: new Error("MCP unavailable") })).toContain(
+      "无法读取 MCP",
+    );
+    expect(renderState({ mcpServers: [] })).toContain("当前项目未启用 MCP");
   });
 });

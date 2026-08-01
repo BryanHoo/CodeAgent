@@ -144,6 +144,8 @@ const skills = [
   },
 ];
 
+const mcpServers = [{ name: "fast-context" }, { name: "chrome-devtools" }];
+
 const tasks = [
   {
     id: "task-1",
@@ -376,6 +378,8 @@ test.beforeEach(async ({ page }) => {
       body = { settings: globalSettings };
     } else if (/^\/v1\/projects\/[^/]+\/skills$/u.test(url.pathname)) {
       body = { data: skills, nextCursor: null };
+    } else if (/^\/v1\/projects\/[^/]+\/mcp-servers$/u.test(url.pathname)) {
+      body = { data: mcpServers };
     } else if (/^\/v1\/projects\/[^/]+\/open-capabilities$/u.test(url.pathname)) {
       body = {
         apps: [
@@ -1133,7 +1137,7 @@ test("aligns the center toolbar divider with sidebar controls", async ({ page })
     .getByText("CodeAgent", { exact: true })
     .first();
   const centerTitle = page.getByRole("heading", { name: "构建 macOS 工作台", level: 1 });
-  const rightTitle = page.getByRole("heading", { name: "环境信息", level: 2 });
+  const rightTitle = page.getByRole("heading", { name: "项目检查器", level: 2 });
   const search = page.getByRole("textbox", { name: "搜索任务" });
   const tabs = page.getByRole("tablist");
   const [mainHeaderBox, leftTitleBox, centerTitleBox, rightTitleBox, searchBox, tabsBox] =
@@ -1182,7 +1186,7 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(page.getByRole("complementary", { name: "Project Sidebar" })).toBeVisible();
   await expect(main).toBeVisible();
   await expect(inspector).toBeVisible();
-  await expect(page.getByRole("heading", { name: "环境信息" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "项目检查器" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Composer" })).toBeVisible();
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
@@ -1230,20 +1234,20 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
 });
 
-test("renders real environment and sources in inspector", async ({ page }) => {
+test("renders enabled MCP servers and sources in inspector", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const inspector = page.getByRole("complementary", { name: "Context Inspector" });
   await inspector.getByRole("tab", { name: "上下文" }).click();
-  const environment = inspector.getByRole("region", { name: "环境" });
+  const mcp = inspector.getByRole("region", { name: "MCP" });
   const sources = inspector.getByRole("region", { name: "来源" });
 
-  await expect(environment.getByText("gpt-5.6-sol", { exact: true })).toBeVisible();
-  await expect(environment.getByText("高", { exact: true })).toBeVisible();
-  await expect(environment.getByText("按需审批", { exact: true })).toBeVisible();
-  await expect(environment.getByText("工作区可写", { exact: true })).toBeVisible();
-  await expect(environment.getByText("~/Develop/person/CodeAgent", { exact: true })).toBeVisible();
-  await expect(environment.getByText("feat/review-targets", { exact: true })).toBeVisible();
+  await expect(mcp.getByText("fast-context", { exact: true })).toBeVisible();
+  await expect(mcp.getByText("chrome-devtools", { exact: true })).toBeVisible();
+  await expect(inspector.getByRole("region", { name: "环境" })).toHaveCount(0);
+  await expect(inspector.getByText("gpt-5.6-sol", { exact: true })).toHaveCount(0);
+  await expect(inspector.getByText("工作区可写", { exact: true })).toHaveCount(0);
+  await expect(inspector.getByText("feat/review-targets", { exact: true })).toHaveCount(0);
   await expect(sources.getByText("Security review", { exact: true })).toBeVisible();
   await expect(sources.getByText("项目目录", { exact: true })).toBeVisible();
   await expect(inspector.getByText("This Mac", { exact: true })).toHaveCount(0);
@@ -3306,6 +3310,9 @@ test("streams Fake App Server notifications into the Timeline", async ({ page })
   });
   await expect(page.getByText("启动子代理 · 1 个子代理已完成", { exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "上下文" })).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("region", { name: "MCP" }).getByText("fast-context", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "查看子代理 frontend_analysis 的输出" }),
   ).toBeVisible();

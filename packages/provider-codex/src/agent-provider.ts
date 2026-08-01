@@ -24,6 +24,7 @@ import type {
   AgentItem,
   AgentItemStatus,
   AgentMessageAttachment,
+  AgentMcpServerPage,
   AgentTask,
   AgentTaskPage,
   AgentTurn,
@@ -1499,6 +1500,37 @@ export class CodexAgentProvider implements AgentProvider {
     );
   }
 
+  public async listMcpServers(): Promise<AgentMcpServerPage> {
+    const response = expectRecord(
+      await this.#client.request("config/read", { cwd: this.#project.rootPath }),
+      "config/read response",
+    );
+    const config = expectRecord(response["config"], "config/read config");
+    const rawMcpServers = config["mcp_servers"];
+    if (rawMcpServers === undefined) {
+      return { data: [] };
+    }
+
+    const mcpServers = expectRecord(rawMcpServers, "config/read mcp_servers");
+    // 配置只在 Provider 边界判定启用状态，对外只保留名称以隔离命令、环境变量和 Secret。
+    const data = Object.entries(mcpServers)
+      .filter(([name, value]) => {
+        if (name.length === 0) {
+          throw new CodexProtocolMappingError("config/read MCP server name is invalid");
+        }
+        const server = expectRecord(value, `config/read MCP server ${name}`);
+        const enabled = server["enabled"];
+        if (enabled !== undefined && typeof enabled !== "boolean") {
+          throw new CodexProtocolMappingError("config/read MCP server enabled is invalid");
+        }
+        return enabled !== false;
+      })
+      .map(([name]) => ({ name }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    return { data };
+  }
+
   public async listModels(): Promise<AgentModelPage> {
     const data: AgentModelPage["data"][number][] = [];
     const visitedCursors = new Set<string>();
@@ -2585,6 +2617,10 @@ class CodexRuntimeProjectProvider implements AgentProvider {
 
   public listModels(): Promise<AgentModelPage> {
     return this.#delegate.listModels();
+  }
+
+  public listMcpServers(): Promise<AgentMcpServerPage> {
+    return this.#delegate.listMcpServers();
   }
 
   public listSkills(): Promise<AgentSkillPage> {

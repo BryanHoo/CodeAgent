@@ -46,6 +46,7 @@ import {
   modelsQueryOptions,
   globalSettingsMutationOptions,
   globalSettingsQueryOptions,
+  mcpServersQueryOptions,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
@@ -142,6 +143,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const modelsQuery = useQuery(modelsQueryOptions(client));
+  const mcpServersQuery = useQuery(mcpServersQueryOptions(projectId, client));
   const globalSettingsQuery = useQuery(globalSettingsQueryOptions(client));
   const projectOpenCapabilitiesQuery = useQuery(
     projectOpenCapabilitiesQueryOptions(projectId, client),
@@ -435,7 +437,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     [defaultModel, globalSettings, projectDefaultsQuery.data?.settings],
   );
   const inspectorTask = runtime.snapshot ?? startingSnapshot;
-  const inspectorSettings = inspectorTask?.settings ?? draftSettings;
   const updateDraftSettings = async (
     settings: AgentTaskSettings,
     field: keyof AgentTaskSettings,
@@ -754,6 +755,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         gitStatusError={gitStatusQuery.error}
         gitStatusPending={gitStatusQuery.isPending}
         gitStatusRefreshing={gitStatusQuery.isFetching}
+        mcpServers={mcpServersQuery.data?.data ?? []}
+        mcpServersError={mcpServersQuery.error}
+        mcpServersPending={mcpServersQuery.isPending}
         key={`${projectId}:${taskId ?? "draft"}:${subagents.length > 0 ? "with-subagents" : "without-subagents"}:${backgroundTerminals.terminals.length > 0 ? "with-terminals" : "without-terminals"}`}
         onFileTreeExpandedChange={(nextExpandedPaths) => {
           setFileTreeExpansion((current) => {
@@ -803,7 +807,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         projectOpenError={projectPathOpenMutation.error}
         projectOpenPending={projectPathOpenMutation.isPending}
         projectPath={projectPath}
-        settings={inspectorSettings}
         skills={skillsQuery.data?.data ?? []}
         subagents={subagents}
         terminalMutationError={backgroundTerminals.terminalError}

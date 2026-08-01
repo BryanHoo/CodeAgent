@@ -8,6 +8,8 @@ import {
   type CodeAgentGitStatusClient,
   type CodeAgentFileTreeClient,
   type CodeAgentReadClient,
+  type CodeAgentMcpServersClient,
+  mcpServersQueryOptions,
   modelsQueryOptions,
   PROJECT_GIT_STATUS_POLL_INTERVAL_MS,
   projectDefaultsMutationOptions,
@@ -233,6 +235,21 @@ describe("project queries", () => {
     expect(listProjectFiles.mock.calls[0]?.[0]).toBe("code-agent");
     expect(listProjectFiles.mock.calls[0]?.[1]).toBe("src");
     expect(listProjectFiles.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("loads enabled MCP servers with a project-scoped query key", async () => {
+    const listMcpServers = vi.fn<CodeAgentMcpServersClient["listMcpServers"]>(() =>
+      Promise.resolve({ data: [{ name: "fast-context" }] }),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const options = mcpServersQueryOptions("code-agent", { listMcpServers });
+
+    await expect(queryClient.fetchQuery(options)).resolves.toEqual({
+      data: [{ name: "fast-context" }],
+    });
+    expect(options.queryKey).toEqual(["projects", "code-agent", "mcp-servers"]);
+    expect(listMcpServers.mock.calls[0]?.[0]).toBe("code-agent");
+    expect(listMcpServers.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("stops failed Git polling until a manual refresh succeeds", () => {

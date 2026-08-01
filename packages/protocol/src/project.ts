@@ -614,6 +614,20 @@ export const AgentSkillSchema = Type.Object(
 
 export type AgentSkill = Readonly<Static<typeof AgentSkillSchema>>;
 
+export const AgentMcpServerSchema = Type.Object(
+  { name: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+
+export type AgentMcpServer = Readonly<Static<typeof AgentMcpServerSchema>>;
+
+export const AgentMcpServerPageSchema = Type.Object(
+  { data: Type.Array(AgentMcpServerSchema, { uniqueItems: true }) },
+  { additionalProperties: false },
+);
+
+export type AgentMcpServerPage = Readonly<Static<typeof AgentMcpServerPageSchema>>;
+
 export const AgentSkillReferenceSchema = Type.Object(
   {
     id: Type.String({ minLength: 1 }),

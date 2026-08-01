@@ -1584,6 +1584,33 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
+  it("lists only enabled project MCP servers without exposing their configuration", async () => {
+    const rpc = new FakeRpcClient([
+      {
+        config: {
+          mcp_servers: {
+            disabled: { command: "disabled-command", enabled: false },
+            "fast-context": { command: "fast-context", enabled: true },
+            playwright: { command: "npx" },
+          },
+        },
+        layers: null,
+        origins: {},
+      },
+      { config: {}, layers: null, origins: {} },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await expect(provider.listMcpServers()).resolves.toEqual({
+      data: [{ name: "fast-context" }, { name: "playwright" }],
+    });
+    await expect(provider.listMcpServers()).resolves.toEqual({ data: [] });
+    expect(rpc.calls).toEqual([
+      { method: "config/read", params: { cwd: project.rootPath } },
+      { method: "config/read", params: { cwd: project.rootPath } },
+    ]);
+  });
+
   it("maps task and turn mutations to Codex App Server RPC", async () => {
     const runningTurn = {
       completedAt: null,

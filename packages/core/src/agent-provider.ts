@@ -3,6 +3,7 @@ import type {
   AgentBackgroundTerminalPage,
   AgentEvent,
   AgentImageMediaType,
+  AgentMcpServerPage,
   AgentModelPage,
   AgentSkillPage,
   AgentSkillReference,
@@ -83,6 +84,7 @@ export interface AgentProvider {
   forkTask(taskId: string): Promise<AgentTask>;
   getCapabilities(): Promise<AgentCapabilities>;
   listModels(): Promise<AgentModelPage>;
+  listMcpServers(): Promise<AgentMcpServerPage>;
   listBackgroundTerminals(taskId: string): Promise<AgentBackgroundTerminalPage>;
   listSkills(): Promise<AgentSkillPage>;
   listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage>;

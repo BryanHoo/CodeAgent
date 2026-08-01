@@ -42,6 +42,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     getCapabilities: vi.fn(),
     interruptTurn: vi.fn(),
     listBackgroundTerminals: vi.fn(),
+    listMcpServers: vi.fn(),
     listModels: vi.fn(),
     listSkills: vi.fn(),
     listTasks: vi.fn(),

@@ -666,7 +666,13 @@ input.on("line", (line) => {
     send({
       id: message.id,
       result: {
-        config: { sandbox_mode: "workspace-write" },
+        config: {
+          mcp_servers: {
+            disabled: { command: "disabled-mcp", enabled: false },
+            "fast-context": { command: "fast-context", enabled: true },
+          },
+          sandbox_mode: "workspace-write",
+        },
         layers: null,
         origins: {},
       },

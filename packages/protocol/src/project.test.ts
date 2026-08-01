@@ -10,6 +10,7 @@ import {
   AgentGlobalSettingsSchema,
   AgentModelPageSchema,
   AgentMessageItemSchema,
+  AgentMcpServerPageSchema,
   AgentReviewItemSchema,
   AgentProjectDefaultsResponseSchema,
   AgentProjectDefaultsSchema,
@@ -943,6 +944,16 @@ describe("project protocol", () => {
         nextCursor: null,
       }),
     ).toBe(true);
+    expect(
+      Value.Check(AgentMcpServerPageSchema, {
+        data: [{ name: "fast-context" }, { name: "chrome-devtools" }],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentMcpServerPageSchema, {
+        data: [{ command: "npx", name: "fast-context" }],
+      }),
+    ).toBe(false);
 
     expect(
       Value.Check(AgentModelPageSchema, {

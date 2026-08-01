@@ -20,6 +20,7 @@ import {
   AgentCapabilitiesSchema,
   AgentGlobalSettingsResponseSchema,
   AgentGlobalSettingsSchema,
+  AgentMcpServerPageSchema,
   CompactAgentTaskRequestSchema,
   CompactAgentTaskResponseSchema,
   CommitProjectChangesRequestSchema,
@@ -1264,6 +1265,23 @@ export async function createCodeAgentServer(
           };
         },
       ),
+  );
+
+  app.get<{ Params: { projectId: string } }>(
+    "/v1/projects/:projectId/mcp-servers",
+    {
+      schema: {
+        params: ProjectParamsSchema,
+        response: { 200: AgentMcpServerPageSchema, 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      return context.provider.listMcpServers();
+    },
   );
 
   app.get<{ Params: { projectId: string } }>(

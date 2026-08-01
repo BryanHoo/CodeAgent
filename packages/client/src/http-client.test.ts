@@ -60,6 +60,9 @@ const skillPage = {
   data: [skill],
   nextCursor: null,
 };
+const mcpServerPage = {
+  data: [{ name: "fast-context" }, { name: "chrome-devtools" }],
+};
 const pixelDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const attachment = {
@@ -275,6 +278,15 @@ describe("CodeAgentClient", () => {
 
     await expect(client.listSkills("project one")).resolves.toEqual(skillPage);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects/project%20one/skills");
+  });
+
+  it("reads and validates the current project's enabled MCP servers", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse(mcpServerPage));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.listMcpServers("project one")).resolves.toEqual(mcpServerPage);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects/project%20one/mcp-servers");
   });
 
   it("reads and validates a project's staged and unstaged Git changes", async () => {

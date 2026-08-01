@@ -1,7 +1,7 @@
 import type {
   AgentBackgroundTerminal,
+  AgentMcpServer,
   AgentSkill,
-  AgentTaskSettings,
   AgentTurn,
   ProjectFileTree,
   ProjectFileTreeEntry,
@@ -12,9 +12,9 @@ import type {
 import {
   Bot,
   FolderRoot,
-  HardDrive,
   LoaderCircle,
   Paperclip,
+  Plug,
   RefreshCw,
   Sparkles,
   Square,
@@ -44,6 +44,9 @@ type WorkbenchInspectorProps = Readonly<{
   gitStatusError?: Error | null;
   gitStatusPending?: boolean;
   gitStatusRefreshing?: boolean;
+  mcpServers?: readonly AgentMcpServer[];
+  mcpServersError?: Error | null;
+  mcpServersPending?: boolean;
   onFileTreeExpandedChange?: (expandedPaths: Set<string>) => void;
   onOpenFileDiff?: (change: AgentFileChange) => void;
   onOpenProjectPath?: (appId: ProjectOpenAppId, path: string) => void;
@@ -59,7 +62,6 @@ type WorkbenchInspectorProps = Readonly<{
   projectOpenError?: Error | null;
   projectOpenPending?: boolean;
   projectPath: string;
-  settings: AgentTaskSettings;
   skills?: readonly AgentSkill[];
   subagents?: readonly SubagentContextEntry[];
   task?: Readonly<{ turns: readonly AgentTurn[] }>;
@@ -348,34 +350,6 @@ function ProjectFileTreeNodes({
   });
 }
 
-const reasoningEffortLabels: Readonly<Record<string, string>> = {
-  high: "高",
-  low: "低",
-  max: "最大",
-  medium: "中",
-  minimal: "最低",
-  none: "无",
-  xhigh: "较高",
-};
-
-const sandboxModeLabels: Readonly<Record<AgentTaskSettings["sandboxMode"], string>> = {
-  "danger-full-access": "完全访问",
-  "read-only": "只读",
-  "workspace-write": "工作区可写",
-};
-
-function formatApprovalMode(settings: AgentTaskSettings) {
-  if (settings.approvalsReviewer === "auto_review") {
-    return "自动审批";
-  }
-  const labels: Readonly<Record<AgentTaskSettings["approvalPolicy"], string>> = {
-    never: "从不询问",
-    "on-request": "按需审批",
-    untrusted: "仅不受信任操作",
-  };
-  return labels[settings.approvalPolicy];
-}
-
 function collectInspectorSources(
   projectName: string,
   projectPath: string,
@@ -445,6 +419,9 @@ export function WorkbenchInspector({
   gitStatusError = null,
   gitStatusPending = false,
   gitStatusRefreshing = false,
+  mcpServers = [],
+  mcpServersError = null,
+  mcpServersPending = false,
   onFileTreeExpandedChange = () => undefined,
   onOpenFileDiff = () => undefined,
   onOpenProjectPath = () => undefined,
@@ -460,7 +437,6 @@ export function WorkbenchInspector({
   projectOpenError = null,
   projectOpenPending = false,
   projectPath,
-  settings,
   skills = [],
   subagents = [],
   task,
@@ -503,17 +479,13 @@ export function WorkbenchInspector({
       ),
     [fileTreeDirectories],
   );
-  const branch =
-    gitStatus?.branch ??
-    (gitStatusPending ? "正在读取" : gitStatusError === null ? "未检出分支" : "不可用");
-
   return (
     <aside
       aria-label="Context Inspector"
       className="workbench-inspector relative z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse"
     >
       <div className="flex h-workbench-header items-center px-3">
-        <h2 className="text-body-small font-semibold text-foreground">环境信息</h2>
+        <h2 className="text-body-small font-semibold text-foreground">项目检查器</h2>
       </div>
 
       <div className="px-2.5 pb-1.5">
@@ -699,17 +671,11 @@ export function WorkbenchInspector({
             {subagents.length > 0 ? (
               <SubagentSection onOpenSubagent={onOpenSubagent} subagents={subagents} />
             ) : null}
-            <InspectorSection icon={<HardDrive className="size-3.5" />} title="环境">
-              <InspectorRow label="模型" value={settings.model} />
-              <InspectorRow
-                label="思考量"
-                value={reasoningEffortLabels[settings.reasoningEffort] ?? settings.reasoningEffort}
-              />
-              <InspectorRow label="审批" value={formatApprovalMode(settings)} />
-              <InspectorRow label="沙盒" value={sandboxModeLabels[settings.sandboxMode]} />
-              <InspectorRow label="工作目录" value={projectPath} />
-              <InspectorRow label="分支" value={branch} />
-            </InspectorSection>
+            <McpServerSection
+              error={mcpServersError}
+              isPending={mcpServersPending}
+              servers={mcpServers}
+            />
             <InspectorSection icon={<FolderRoot className="size-3.5" />} title="来源">
               <div aria-label="上下文来源" className="space-y-0.5">
                 {sources.map((source) => (
@@ -859,6 +825,40 @@ function SubagentSection({
   );
 }
 
+function McpServerSection({
+  error,
+  isPending,
+  servers,
+}: Readonly<{
+  error: Error | null;
+  isPending: boolean;
+  servers: readonly AgentMcpServer[];
+}>) {
+  return (
+    <InspectorSection icon={<Plug className="size-3.5" />} title="MCP">
+      {isPending && servers.length === 0 ? (
+        <p className="px-2 py-2 text-caption text-muted-foreground">正在读取 MCP...</p>
+      ) : error !== null && servers.length === 0 ? (
+        <p className="px-2 py-2 text-caption text-diff-removed">无法读取 MCP</p>
+      ) : servers.length === 0 ? (
+        <p className="px-2 py-2 text-caption text-muted-foreground">当前项目未启用 MCP</p>
+      ) : (
+        <div aria-label="已启用的 MCP" className="space-y-0.5">
+          {servers.map((server) => (
+            <div
+              className="flex min-h-7 items-center rounded-control px-2 text-label font-medium text-foreground"
+              key={server.name}
+              title={server.name}
+            >
+              <span className="min-w-0 truncate">{server.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </InspectorSection>
+  );
+}
+
 type InspectorSectionProps = Readonly<{
   children: React.ReactNode;
   icon: React.ReactNode;
@@ -874,25 +874,6 @@ function InspectorSection({ children, icon, title }: InspectorSectionProps) {
       </div>
       <div className="space-y-0.5">{children}</div>
     </section>
-  );
-}
-
-type InspectorRowProps = Readonly<{
-  label: string;
-  value: string;
-}>;
-
-function InspectorRow({ label, value }: InspectorRowProps) {
-  return (
-    <div className="flex min-h-7 items-center gap-2 rounded-control px-2 text-meta">
-      <span className="text-muted-foreground">{label}</span>
-      <span
-        className="ml-auto min-w-0 truncate text-right font-medium text-foreground"
-        title={value}
-      >
-        {value}
-      </span>
-    </div>
   );
 }
 

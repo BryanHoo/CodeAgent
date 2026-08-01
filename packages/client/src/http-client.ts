@@ -8,6 +8,7 @@ import {
   ForkAgentTaskResponseSchema,
   AgentAttachmentUploadResponseSchema,
   AgentGlobalSettingsResponseSchema,
+  AgentMcpServerPageSchema,
   AgentModelPageSchema,
   AgentMutationErrorSchema,
   AgentProjectDefaultsResponseSchema,
@@ -51,6 +52,7 @@ import {
   type AgentMutationError,
   type AgentGlobalSettings,
   type AgentGlobalSettingsResponse,
+  type AgentMcpServerPage,
   type AgentTaskPage,
   type AgentModelPage,
   type AgentPromptInput,
@@ -237,6 +239,13 @@ export class CodeAgentClient {
 
   public async listSkills(projectId: string, options: ReadOptions = {}): Promise<AgentSkillPage> {
     return this.#read(`${projectPath(projectId)}/skills`, AgentSkillPageSchema, options);
+  }
+
+  public async listMcpServers(
+    projectId: string,
+    options: ReadOptions = {},
+  ): Promise<AgentMcpServerPage> {
+    return this.#read(`${projectPath(projectId)}/mcp-servers`, AgentMcpServerPageSchema, options);
   }
 
   public async listProjects(options: ReadOptions = {}): Promise<ProjectPage> {

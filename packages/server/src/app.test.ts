@@ -126,6 +126,9 @@ function createProvider() {
   const forkTask = vi.fn(() => Promise.resolve({ ...task, id: "task-2", title: "续接任务" }));
   const listTasks = vi.fn(() => Promise.resolve({ data: [task], nextCursor: "next" }));
   const listModels = vi.fn(() => Promise.resolve(modelPage));
+  const listMcpServers = vi.fn(() =>
+    Promise.resolve({ data: [{ name: "fast-context" }, { name: "chrome-devtools" }] }),
+  );
   const listSkills = vi.fn(() =>
     Promise.resolve({
       data: [
@@ -200,6 +203,7 @@ function createProvider() {
     getCapabilities,
     interruptTurn,
     listBackgroundTerminals,
+    listMcpServers,
     listModels,
     listSkills,
     listTasks,
@@ -234,6 +238,7 @@ function createProvider() {
     eventListeners,
     forkTask,
     listTasks,
+    listMcpServers,
     listModels,
     listSkills,
     interruptTurn,
@@ -371,6 +376,7 @@ async function createHarness(
     interruptTurn,
     listBackgroundTerminals,
     listTasks,
+    listMcpServers,
     listModels,
     listSkills,
     provider,
@@ -407,6 +413,7 @@ async function createHarness(
     interruptTurn,
     listBackgroundTerminals,
     listTasks,
+    listMcpServers,
     listModels,
     listSkills,
     readTask,
@@ -1172,8 +1179,13 @@ describe("CodeAgent Server", () => {
   });
 
   it("serves models and resolves uploaded attachments before starting a turn", async () => {
-    const { app, listModels, listSkills, startTurn, writeTaskSettings } = await createHarness();
+    const { app, listMcpServers, listModels, listSkills, startTurn, writeTaskSettings } =
+      await createHarness();
     const models = await app.inject({ method: "GET", url: "/v1/models" });
+    const mcpServers = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/mcp-servers",
+    });
     const skills = await app.inject({ method: "GET", url: "/v1/projects/code-agent/skills" });
     const uploadRequest = {
       headers: { "idempotency-key": "upload-1" },
@@ -1214,6 +1226,11 @@ describe("CodeAgent Server", () => {
 
     expect(models.statusCode).toBe(200);
     expect(models.json()).toMatchObject({ data: [{ id: "gpt-5.6-sol", isDefault: true }] });
+    expect(mcpServers.statusCode).toBe(200);
+    expect(mcpServers.json()).toEqual({
+      data: [{ name: "fast-context" }, { name: "chrome-devtools" }],
+    });
+    expect(listMcpServers).toHaveBeenCalledOnce();
     expect(skills.statusCode).toBe(200);
     expect(skills.json()).toMatchObject({ data: [{ name: "review-security" }] });
     expect(listSkills).toHaveBeenCalledOnce();
