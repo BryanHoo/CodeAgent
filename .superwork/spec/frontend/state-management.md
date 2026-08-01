@@ -26,7 +26,7 @@
 - Task Runtime 使用 `zustand/vanilla` 按 `projectId + taskId` 创建独立 Store；Turn、Item 与 Pending Request 必须分别保存有序 ID 和实体映射。
 - 文本 Delta 只替换目标 `itemsById[itemId]`，不得替换既有 Turn、Item 顺序或其他实体引用；Timeline 根节点只订阅 Turn/Pending ID，Item 组件按 `itemId` 原子订阅。
 - 未选中 Task Store 采用 UTF-8 字节估算 LRU 回收：非活动 Store 合计最多 64 MiB、最多 20 份；仍有消费者的 Store 不得回收且不占非活动预算。最后一个消费者释放时从 Project Runtime 注销 Store 并发起 best-effort `thread/unsubscribe`，重新选中后必须从权威 Snapshot 校准，因此运行中、待审批或尚未 Hydrate 的非活动 Store 也可安全进入 LRU。
-- Command Output 同时受单 Item 1 MiB / 10,000 行和单 Task 8 MiB 总预算约束；总预算按最近写入顺序保留，优先把最久未更新的 Command Output 替换为明确截断标记。界面高度限制不能代替 Payload 字节限制。
+- Command Output 同时受单 Item 1 MiB / 10,000 行和单 Task 8 MiB 总预算约束；流式 Delta 只重新裁剪和计量目标 Command，总字节数按 Item 计量增量维护，只有超出 Task 预算时才遍历 LRU 索引并回收最久未更新的 Command Output。回收结果使用明确截断标记，界面高度限制不能代替 Payload 字节限制。
 - CodeBlock Token Cache 必须使用 24 MiB / 128 Entry 的字节 LRU，单份超过 512 KiB 的源码不进入缓存；Cache Key 只保存摘要并在命中时核验源码，禁止把完整源码直接作为长期 Map Key。
 - TanStack Query 全局非活动 `gcTime` 固定为 2 分钟，Task Snapshot 使用 30 秒；非活动完整 Snapshot 另受 48 MiB / 12 Entry 字节 LRU 约束。完整 Snapshot 与归一化 Store 不得同时作为无界长期缓存，归档时必须立即移除对应 Snapshot Query。
 - Client HTTP 请求固定使用有界策略：携带 TanStack Query `signal` 的读取同时受调用方取消和 30 秒超时控制，普通直接读取使用 15 秒超时，幂等 Mutation 使用 60 秒超时并允许显式取消；三类请求都必须在 Fetch 边界组合 `AbortSignal.timeout()`。

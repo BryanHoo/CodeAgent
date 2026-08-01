@@ -1,5 +1,5 @@
 import type { AgentEvent, AgentTaskSnapshotResponse, PendingRequest } from "@code-agent/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createTaskStore,
@@ -238,6 +238,64 @@ describe("task store", () => {
     expect(state.commandOutputBytes).toBeLessThanOrEqual(MAX_TASK_COMMAND_OUTPUT_BYTES);
     expect(state.itemsById["command-0"]).toMatchObject({ outputTruncated: true });
     expect(state.itemsById["command-8"]).toMatchObject({ output: commandOutput });
+  });
+
+  it("does not rescan untouched command output for an in-budget delta", () => {
+    const untouchedOutput = `untouched-${"x".repeat(1_000)}`;
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({
+        turns: [
+          {
+            completedAt: null,
+            error: null,
+            id: "turn-running",
+            items: [
+              {
+                command: "active",
+                cwd: "/workspace",
+                id: "command-active",
+                output: "active",
+                outputTruncated: false,
+                status: "running",
+                type: "command",
+              },
+              {
+                command: "untouched",
+                cwd: "/workspace",
+                id: "command-untouched",
+                output: untouchedOutput,
+                outputTruncated: false,
+                status: "completed",
+                type: "command",
+              },
+            ],
+            startedAt: timestamp,
+            status: "running",
+          },
+        ],
+      }),
+    );
+    const encodeSpy = vi.spyOn(TextEncoder.prototype, "encode");
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        itemId: "command-active",
+        payload: { delta: "-delta" },
+        turnId: "turn-running",
+        type: "command.output_delta",
+      },
+    ]);
+
+    try {
+      expect(encodeSpy.mock.calls.map(([value]) => value)).toEqual(["active-delta"]);
+      expect(store.getState().itemsById["command-active"]).toMatchObject({
+        output: "active-delta",
+      });
+    } finally {
+      encodeSpy.mockRestore();
+    }
   });
 
   it("uses terminal entities as authoritative while preserving confirmed errors", () => {

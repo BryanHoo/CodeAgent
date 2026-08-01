@@ -9,13 +9,18 @@ import type {
 } from "@code-agent/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
-import { estimateRetainedBytes, getUtf8ByteLength } from "../../../shared/memory/byte-lru.js";
+import { estimateRetainedBytes } from "../../../shared/memory/byte-lru.js";
 
 const MAX_COMMAND_OUTPUT_BYTES = 1_048_576;
 const MAX_COMMAND_OUTPUT_LINES = 10_000;
 export const MAX_TASK_COMMAND_OUTPUT_BYTES = 8 * 1_048_576;
 export const MAX_RETAINED_TASK_RUNTIME_BYTES = 64 * 1_048_576;
 const RETAINED_COMMAND_OUTPUT_MARKER = "[较早的命令输出已按内存预算清理]";
+const textDecoder = new TextDecoder();
+const textEncoder = new TextEncoder();
+const retainedCommandOutputMarkerBytes = textEncoder.encode(
+  RETAINED_COMMAND_OUTPUT_MARKER,
+).byteLength;
 
 export type NormalizedAgentTurn = Omit<AgentTurn, "items">;
 export type TaskSnapshotMetadata = Omit<AgentTaskSnapshot, "pendingRequests" | "turns">;
@@ -36,6 +41,7 @@ export interface TaskStoreState {
   checkpoint: EventCheckpoint | null;
   commandOutputAccessByItemId: Readonly<Record<string, number>>;
   commandOutputAccessSequence: number;
+  commandOutputBytesByItemId: Readonly<Record<string, number>>;
   commandOutputBytes: number;
   connectionState: AgentEventConnectionState;
   error: Error | null;
@@ -63,6 +69,7 @@ type NormalizedTaskData = Pick<
   | "checkpoint"
   | "commandOutputAccessByItemId"
   | "commandOutputAccessSequence"
+  | "commandOutputBytesByItemId"
   | "commandOutputBytes"
   | "itemIdsByTurnId"
   | "itemStructureRevision"
@@ -103,12 +110,16 @@ function normalizeSnapshot(response: TaskStoreHydrationResponse): NormalizedTask
     pendingRequests.map((request) => [request.requestId, request]),
   );
 
-  const boundedCommandOutputs = enforceCommandOutputBudget(
-    itemsById,
-    {},
-    0,
-    Object.keys(itemsById),
-  );
+  const boundedCommandOutputs = updateCommandOutputBudget({
+    previousBudget: {
+      commandOutputAccessByItemId: {},
+      commandOutputAccessSequence: 0,
+      commandOutputBytes: 0,
+      commandOutputBytesByItemId: {},
+    },
+    sourceItemsById: itemsById,
+    touchedItemIds: Object.keys(itemsById),
+  });
 
   return {
     checkpoint: response.checkpoint,
@@ -124,8 +135,13 @@ function normalizeSnapshot(response: TaskStoreHydrationResponse): NormalizedTask
   };
 }
 
-function sliceUtf8Tail(value: string, maxBytes: number): string {
-  const encodedValue = new TextEncoder().encode(value);
+function sliceUtf8Tail(
+  encodedValue: Uint8Array,
+  maxBytes: number,
+): Readonly<{
+  output: string;
+  outputBytes: number;
+}> {
   let startIndex = Math.max(0, encodedValue.length - maxBytes);
 
   // 跳过 UTF-8 续字节，避免截断后产生乱码。
@@ -136,11 +152,16 @@ function sliceUtf8Tail(value: string, maxBytes: number): string {
     }
     startIndex += 1;
   }
-  return new TextDecoder().decode(encodedValue.subarray(startIndex));
+  const retainedValue = encodedValue.subarray(startIndex);
+  return {
+    output: textDecoder.decode(retainedValue),
+    outputBytes: retainedValue.byteLength,
+  };
 }
 
 function boundCommandOutput(value: string): Readonly<{
   output: string;
+  outputBytes: number;
   outputTruncated: boolean;
 }> {
   let output = value;
@@ -159,35 +180,54 @@ function boundCommandOutput(value: string): Readonly<{
     }
   }
 
-  if (new TextEncoder().encode(output).byteLength > MAX_COMMAND_OUTPUT_BYTES) {
-    output = sliceUtf8Tail(output, MAX_COMMAND_OUTPUT_BYTES);
-    outputTruncated = true;
+  const encodedOutput = textEncoder.encode(output);
+  if (encodedOutput.byteLength <= MAX_COMMAND_OUTPUT_BYTES) {
+    return { output, outputBytes: encodedOutput.byteLength, outputTruncated };
   }
-  return { output, outputTruncated };
+  return {
+    ...sliceUtf8Tail(encodedOutput, MAX_COMMAND_OUTPUT_BYTES),
+    outputTruncated: true,
+  };
 }
 
 type CommandOutputBudgetState = Pick<
   TaskStoreState,
-  "commandOutputAccessByItemId" | "commandOutputAccessSequence" | "commandOutputBytes" | "itemsById"
+  | "commandOutputAccessByItemId"
+  | "commandOutputAccessSequence"
+  | "commandOutputBytes"
+  | "commandOutputBytesByItemId"
+  | "itemsById"
 >;
 
-function enforceCommandOutputBudget(
-  sourceItemsById: Readonly<Record<string, AgentItem>>,
-  previousAccessByItemId: Readonly<Record<string, number>>,
-  previousAccessSequence: number,
-  touchedItemIds: readonly string[],
-): CommandOutputBudgetState {
-  const touchedItemIdSet = new Set(touchedItemIds);
-  const commandOutputAccessByItemId: Record<string, number> = {};
-  let commandOutputAccessSequence = previousAccessSequence;
-  let commandOutputBytes = 0;
-  let itemsById = sourceItemsById;
-  const commandItemIds: string[] = [];
+type CommandOutputBudgetInput = Readonly<{
+  previousBudget: Pick<
+    TaskStoreState,
+    | "commandOutputAccessByItemId"
+    | "commandOutputAccessSequence"
+    | "commandOutputBytes"
+    | "commandOutputBytesByItemId"
+  >;
+  sourceItemsById: Readonly<Record<string, AgentItem>>;
+  touchedItemIds: readonly string[];
+}>;
 
-  for (const [itemId, item] of Object.entries(sourceItemsById)) {
-    if (item.type !== "command" || item.output === undefined) {
+function updateCommandOutputBudget(input: CommandOutputBudgetInput): CommandOutputBudgetState {
+  const commandOutputAccessByItemId = { ...input.previousBudget.commandOutputAccessByItemId };
+  const commandOutputBytesByItemId = { ...input.previousBudget.commandOutputBytesByItemId };
+  let commandOutputAccessSequence = input.previousBudget.commandOutputAccessSequence;
+  let commandOutputBytes = input.previousBudget.commandOutputBytes;
+  let itemsById = input.sourceItemsById;
+
+  for (const itemId of new Set(input.touchedItemIds)) {
+    const previousOutputBytes = commandOutputBytesByItemId[itemId] ?? 0;
+    const item = itemsById[itemId];
+    if (item?.type !== "command" || item.output === undefined) {
+      Reflect.deleteProperty(commandOutputAccessByItemId, itemId);
+      Reflect.deleteProperty(commandOutputBytesByItemId, itemId);
+      commandOutputBytes -= previousOutputBytes;
       continue;
     }
+
     const boundedOutput = boundCommandOutput(item.output);
     if (
       boundedOutput.output !== item.output ||
@@ -202,18 +242,24 @@ function enforceCommandOutputBudget(
         },
       };
     }
-    const previousAccess = previousAccessByItemId[itemId];
-    if (touchedItemIdSet.has(itemId) || previousAccess === undefined) {
-      commandOutputAccessSequence += 1;
-      commandOutputAccessByItemId[itemId] = commandOutputAccessSequence;
-    } else {
-      commandOutputAccessByItemId[itemId] = previousAccess;
-    }
-    commandOutputBytes += getUtf8ByteLength(boundedOutput.output);
-    commandItemIds.push(itemId);
+    commandOutputAccessSequence += 1;
+    commandOutputAccessByItemId[itemId] = commandOutputAccessSequence;
+    commandOutputBytesByItemId[itemId] = boundedOutput.outputBytes;
+    commandOutputBytes += boundedOutput.outputBytes - previousOutputBytes;
   }
 
-  const leastRecentlyUsedItemIds = commandItemIds.toSorted(
+  if (commandOutputBytes <= MAX_TASK_COMMAND_OUTPUT_BYTES) {
+    return {
+      commandOutputAccessByItemId,
+      commandOutputAccessSequence,
+      commandOutputBytes,
+      commandOutputBytesByItemId,
+      itemsById,
+    };
+  }
+
+  // 仅在任务预算溢出时遍历 LRU 索引，流式热路径无需扫描全部 Timeline Item。
+  const leastRecentlyUsedItemIds = Object.keys(commandOutputAccessByItemId).toSorted(
     (leftItemId, rightItemId) =>
       (commandOutputAccessByItemId[leftItemId] ?? 0) -
       (commandOutputAccessByItemId[rightItemId] ?? 0),
@@ -226,8 +272,7 @@ function enforceCommandOutputBudget(
     if (item?.type !== "command" || item.output === undefined) {
       continue;
     }
-    const previousOutputBytes = getUtf8ByteLength(item.output);
-    const retainedMarkerBytes = getUtf8ByteLength(RETAINED_COMMAND_OUTPUT_MARKER);
+    const previousOutputBytes = commandOutputBytesByItemId[itemId] ?? 0;
     itemsById = {
       ...itemsById,
       [itemId]: {
@@ -236,29 +281,46 @@ function enforceCommandOutputBudget(
         outputTruncated: true,
       },
     };
-    commandOutputBytes -= previousOutputBytes - retainedMarkerBytes;
+    commandOutputBytesByItemId[itemId] = retainedCommandOutputMarkerBytes;
+    commandOutputBytes -= previousOutputBytes - retainedCommandOutputMarkerBytes;
   }
 
   return {
     commandOutputAccessByItemId,
     commandOutputAccessSequence,
     commandOutputBytes,
+    commandOutputBytesByItemId,
     itemsById,
   };
 }
 
-function getTouchedCommandOutputItemIds(event: AgentEvent): readonly string[] | undefined {
+function getTouchedCommandOutputItemIds(
+  previousState: TaskStoreState,
+  nextState: TaskStoreState,
+  event: AgentEvent,
+): readonly string[] | undefined {
   if (event.type === "command.output_delta") {
     return [event.itemId];
   }
   if (event.type === "item.started" || event.type === "item.completed") {
-    return event.payload.item.type === "command" ? [event.itemId] : undefined;
+    return event.payload.item.type === "command" ||
+      previousState.itemsById[event.itemId]?.type === "command"
+      ? [event.itemId]
+      : undefined;
   }
   if (event.type === "turn.started" || event.type === "turn.completed") {
-    // Turn 终态会整体替换 Item，即使没有 Command 也需要清除旧访问记录。
-    return event.payload.turn.items
-      .filter((item) => item.type === "command")
-      .map((item) => item.id);
+    const candidateItemIds = new Set([
+      ...(previousState.itemIdsByTurnId[event.turnId] ?? []),
+      ...(nextState.itemIdsByTurnId[event.turnId] ?? []),
+    ]);
+    return [...candidateItemIds].filter((itemId) => {
+      const previousItem = previousState.itemsById[itemId];
+      const nextItem = nextState.itemsById[itemId];
+      return (
+        previousItem !== nextItem &&
+        (previousItem?.type === "command" || nextItem?.type === "command")
+      );
+    });
   }
   return undefined;
 }
@@ -280,13 +342,12 @@ function createDeltaItem(event: Extract<AgentEvent, { itemId: string }>): AgentI
         type: "reasoning",
       };
     case "command.output_delta": {
-      const boundedOutput = boundCommandOutput(event.payload.delta);
       return {
         command: "正在执行命令",
         cwd: "",
         id: event.itemId,
-        output: boundedOutput.output,
-        outputTruncated: boundedOutput.outputTruncated,
+        output: event.payload.delta,
+        outputTruncated: false,
         status: "running",
         type: "command",
       };
@@ -311,11 +372,9 @@ function updateDeltaItem(currentItem: AgentItem, event: AgentEvent): AgentItem {
       : currentItem;
   }
   if (event.type === "command.output_delta" && currentItem.type === "command") {
-    const boundedOutput = boundCommandOutput(`${currentItem.output ?? ""}${event.payload.delta}`);
     return {
       ...currentItem,
-      output: boundedOutput.output,
-      outputTruncated: currentItem.outputTruncated || boundedOutput.outputTruncated,
+      output: `${currentItem.output ?? ""}${event.payload.delta}`,
     };
   }
   return currentItem;
@@ -611,6 +670,7 @@ export function createTaskStore(
           checkpoint: null,
           commandOutputAccessByItemId: {},
           commandOutputAccessSequence: 0,
+          commandOutputBytesByItemId: {},
           commandOutputBytes: 0,
           itemIdsByTurnId: {},
           itemStructureRevision: 0,
@@ -650,17 +710,21 @@ export function createTaskStore(
           if (event.taskId !== nextState.taskId || !hasValidSequence) {
             continue;
           }
+          const previousState = nextState;
           nextState = { ...nextState, ...applyAcceptedEvent(nextState, event) };
-          const touchedCommandOutputItemIds = getTouchedCommandOutputItemIds(event);
+          const touchedCommandOutputItemIds = getTouchedCommandOutputItemIds(
+            previousState,
+            nextState,
+            event,
+          );
           if (touchedCommandOutputItemIds !== undefined) {
             nextState = {
               ...nextState,
-              ...enforceCommandOutputBudget(
-                nextState.itemsById,
-                nextState.commandOutputAccessByItemId,
-                nextState.commandOutputAccessSequence,
-                touchedCommandOutputItemIds,
-              ),
+              ...updateCommandOutputBudget({
+                previousBudget: previousState,
+                sourceItemsById: nextState.itemsById,
+                touchedItemIds: touchedCommandOutputItemIds,
+              }),
             };
           }
         }
@@ -801,6 +865,7 @@ export function estimateTaskStoreRetainedBytes(store: TaskStore): number {
   return estimateRetainedBytes({
     checkpoint: state.checkpoint,
     commandOutputAccessByItemId: state.commandOutputAccessByItemId,
+    commandOutputBytesByItemId: state.commandOutputBytesByItemId,
     itemIdsByTurnId: state.itemIdsByTurnId,
     itemTurnIdsById: state.itemTurnIdsById,
     itemsById: state.itemsById,
