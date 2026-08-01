@@ -8,6 +8,13 @@ if (!FormatRegistry.Has("date-time")) {
 const DateTimeSchema = Type.String({ format: "date-time" });
 const NullableDateTimeSchema = Type.Union([DateTimeSchema, Type.Null()]);
 
+export const ProjectRelativePathSchema = Type.String({
+  minLength: 1,
+  pattern: "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)(?!.*\\\\)(?!.*\\/$).+$",
+});
+
+export type ProjectRelativePath = Static<typeof ProjectRelativePathSchema>;
+
 export const ProjectSchema = Type.Object(
   {
     createdAt: DateTimeSchema,
@@ -88,14 +95,20 @@ export type ProjectOpenCapabilitiesResponse = Readonly<
 >;
 
 export const OpenProjectRequestSchema = Type.Object(
-  { appId: ProjectOpenAppIdSchema },
+  {
+    appId: ProjectOpenAppIdSchema,
+    path: Type.Optional(ProjectRelativePathSchema),
+  },
   { additionalProperties: false },
 );
 
 export type OpenProjectRequest = Readonly<Static<typeof OpenProjectRequestSchema>>;
 
 export const OpenProjectResponseSchema = Type.Object(
-  { appId: ProjectOpenAppIdSchema },
+  {
+    appId: ProjectOpenAppIdSchema,
+    path: Type.Optional(ProjectRelativePathSchema),
+  },
   { additionalProperties: false },
 );
 
@@ -325,10 +338,7 @@ export type ProjectGitStatus = Readonly<Static<typeof ProjectGitStatusSchema>>;
 
 export const ProjectFileTreeEntrySchema = Type.Object(
   {
-    path: Type.String({
-      minLength: 1,
-      pattern: "^(?![A-Za-z]:[\\\\/])(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.?(?:[/\\\\]|$)).+",
-    }),
+    path: ProjectRelativePathSchema,
     type: Type.Union([Type.Literal("directory"), Type.Literal("file")]),
   },
   { additionalProperties: false },
@@ -336,14 +346,9 @@ export const ProjectFileTreeEntrySchema = Type.Object(
 
 export type ProjectFileTreeEntry = Readonly<Static<typeof ProjectFileTreeEntrySchema>>;
 
-const ProjectFileTreeDirectoryPathSchema = Type.String({
-  minLength: 1,
-  pattern: "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)(?!.*\\\\)(?!.*\\/$).+$",
-});
-
 export const ProjectFileTreeQuerySchema = Type.Object(
   {
-    path: Type.Optional(ProjectFileTreeDirectoryPathSchema),
+    path: Type.Optional(ProjectRelativePathSchema),
   },
   { additionalProperties: false },
 );
@@ -353,7 +358,7 @@ export type ProjectFileTreeQuery = Readonly<Static<typeof ProjectFileTreeQuerySc
 export const ProjectFileTreeSchema = Type.Object(
   {
     entries: Type.Array(ProjectFileTreeEntrySchema),
-    path: Type.Union([ProjectFileTreeDirectoryPathSchema, Type.Null()]),
+    path: Type.Union([ProjectRelativePathSchema, Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -363,7 +368,7 @@ export type ProjectFileTree = Readonly<Static<typeof ProjectFileTreeSchema>>;
 export const ProjectSourceFileSchema = Type.Object(
   {
     content: Type.String(),
-    path: Type.String({ minLength: 1, pattern: "^(?![A-Za-z]:[\\\\/])(?!/).+" }),
+    path: ProjectRelativePathSchema,
     truncated: Type.Boolean(),
   },
   { additionalProperties: false },

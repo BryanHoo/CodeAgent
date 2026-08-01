@@ -358,7 +358,10 @@ test.beforeEach(async ({ page }) => {
       route.request().method() === "POST"
     ) {
       const request = parseRequestRecord(route.request().postData());
-      body = { appId: request["appId"] };
+      body = {
+        appId: request["appId"],
+        ...(typeof request["path"] === "string" ? { path: request["path"] } : {}),
+      };
     } else if (url.pathname === "/v1/projects/order" && route.request().method() === "PUT") {
       const projectIds = parseProjectOrderRequest(route.request().postData());
       routedProjects = projectIds.map((projectId) => {
@@ -1787,6 +1790,52 @@ test("project file tree opens diffs for changed files and source previews for un
   await docsRequest;
   await fileTree.getByRole("treeitem", { name: "architecture-design.md" }).click();
   await expect(page.getByRole("dialog", { name: "architecture-design.md" })).toBeVisible();
+});
+
+test("project file tree context menu opens files and folders with a selected app", async ({
+  page,
+}) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const inspector = page.getByRole("complementary", { name: "Context Inspector" });
+  const fileTree = inspector.getByRole("tree", { name: "项目文件" });
+  const defaultOpenButton = page.getByRole("button", { name: "在 Zed 中打开" });
+  await expect(defaultOpenButton).toBeVisible();
+
+  const folderRequest = page.waitForRequest((request) => {
+    if (!/^\/v1\/projects\/code-agent\/open$/u.test(new URL(request.url()).pathname)) {
+      return false;
+    }
+    const body = parseRequestRecord(request.postData());
+    return body["appId"] === "finder" && body["path"] === "docs";
+  });
+  const docsTreeItem = fileTree.getByRole("treeitem", { name: "docs" });
+  await docsTreeItem.click({ button: "right" });
+  const folderMenu = page.getByRole("menu", { name: "打开 docs 的方式" });
+  await expect(folderMenu).toBeVisible();
+  await expect(folderMenu.getByText("打开方式", { exact: true })).toBeVisible();
+  await expect(folderMenu.getByText("docs", { exact: true })).toBeVisible();
+  await expect(docsTreeItem).toHaveAttribute("aria-selected", "true");
+  await folderMenu.getByRole("menuitem", { name: "Finder" }).click();
+  await folderRequest;
+  await expect(folderMenu).not.toBeAttached();
+  await expect(defaultOpenButton).toBeVisible();
+
+  const fileRequest = page.waitForRequest((request) => {
+    if (!/^\/v1\/projects\/code-agent\/open$/u.test(new URL(request.url()).pathname)) {
+      return false;
+    }
+    const body = parseRequestRecord(request.postData());
+    return body["appId"] === "zed" && body["path"] === "package.json";
+  });
+  const packageTreeItem = fileTree.getByRole("treeitem", { name: /package\.json/u });
+  await packageTreeItem.click({ button: "right" });
+  const fileMenu = page.getByRole("menu", { name: "打开 package.json 的方式" });
+  await expect(packageTreeItem).toHaveAttribute("aria-selected", "true");
+  await expect(packageTreeItem).toHaveClass(/bg-control/u);
+  await fileMenu.getByRole("menuitem", { name: "Zed" }).click();
+  await fileRequest;
+  await expect(fileMenu).not.toBeAttached();
 });
 
 test("keeps pasted images in attachments instead of the text editor", async ({ page }) => {

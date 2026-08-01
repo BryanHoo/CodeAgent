@@ -2,6 +2,7 @@ import type { ProjectOpenApp, ProjectOpenAppId, ProjectOpenAppKind } from "@code
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Code2, FolderOpen, Terminal, Wrench } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import type { CodeAgentProjectOpenClient } from "../../projects/project-queries.js";
 import { projectOpenCapabilitiesQueryOptions } from "../../projects/project-queries.js";
@@ -22,29 +23,46 @@ const appKindIcons = {
 
 type ProjectOpenMenuItemsProps = Readonly<{
   apps: readonly ProjectOpenApp[];
+  ariaLabel?: string;
+  detail?: string;
   isPending: boolean;
+  mode?: "command" | "selection";
   onSelect: (appId: ProjectOpenAppId) => void;
-  selectedAppId: ProjectOpenAppId | undefined;
+  selectedAppId?: ProjectOpenAppId;
+  title?: string;
 }>;
 
 export function ProjectOpenMenuItems({
   apps,
+  ariaLabel = "项目打开方式",
+  detail,
   isPending,
+  mode = "selection",
   onSelect,
   selectedAppId,
+  title,
 }: ProjectOpenMenuItemsProps) {
   return (
     <div
-      aria-label="项目打开方式"
+      aria-label={ariaLabel}
       className="w-60 rounded-surface border border-separator-strong bg-raised p-1.5 shadow-floating"
       role="menu"
     >
+      {title === undefined ? null : (
+        <div className="mb-1 border-b border-separator px-2 pb-1.5 pt-0.5" role="presentation">
+          <p className="text-label font-medium text-foreground">{title}</p>
+          {detail === undefined ? null : (
+            <p className="mt-0.5 truncate text-meta text-muted-foreground" title={detail}>
+              {detail}
+            </p>
+          )}
+        </div>
+      )}
       {apps.map((app) => {
         const Icon = appKindIcons[app.kind];
         const selected = app.id === selectedAppId;
         return (
           <button
-            aria-checked={selected}
             aria-label={app.name}
             className="flex h-9 w-full items-center gap-2.5 rounded-control px-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover focus-visible:bg-control-hover focus-visible:shadow-focus disabled:opacity-50"
             disabled={isPending}
@@ -52,18 +70,136 @@ export function ProjectOpenMenuItems({
             onClick={() => {
               onSelect(app.id);
             }}
-            role="menuitemradio"
+            role={mode === "selection" ? "menuitemradio" : "menuitem"}
             type="button"
+            {...(mode === "selection" ? { "aria-checked": selected } : {})}
           >
             <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate">{app.name}</span>
-            {selected ? (
+            {mode === "selection" && selected ? (
               <Check className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
             ) : null}
           </button>
         );
       })}
     </div>
+  );
+}
+
+const contextMenuViewportPadding = 8;
+const contextMenuWidth = 240;
+const contextMenuItemHeight = 36;
+const contextMenuVerticalChrome = 12;
+// 标题区使用固定估算高度，确保菜单靠近视口底部时不会被裁切。
+const contextMenuHeaderHeight = 46;
+
+type ProjectOpenContextMenuPositionInput = Readonly<{
+  appCount: number;
+  pointerX: number;
+  pointerY: number;
+  viewportHeight: number;
+  viewportWidth: number;
+}>;
+
+export function getProjectOpenContextMenuPosition({
+  appCount,
+  pointerX,
+  pointerY,
+  viewportHeight,
+  viewportWidth,
+}: ProjectOpenContextMenuPositionInput) {
+  const estimatedHeight =
+    appCount * contextMenuItemHeight + contextMenuVerticalChrome + contextMenuHeaderHeight;
+  return {
+    left: Math.max(
+      contextMenuViewportPadding,
+      Math.min(pointerX, viewportWidth - contextMenuWidth - contextMenuViewportPadding),
+    ),
+    top: Math.max(
+      contextMenuViewportPadding,
+      Math.min(pointerY, viewportHeight - estimatedHeight - contextMenuViewportPadding),
+    ),
+  };
+}
+
+export type ProjectOpenContextMenuTarget = Readonly<{
+  path: string;
+  pointerX: number;
+  pointerY: number;
+}>;
+
+type ProjectOpenContextMenuProps = Readonly<{
+  apps: readonly ProjectOpenApp[];
+  isPending: boolean;
+  onClose: () => void;
+  onSelect: (appId: ProjectOpenAppId, path: string) => void;
+  target: ProjectOpenContextMenuTarget;
+}>;
+
+export function ProjectOpenContextMenu({
+  apps,
+  isPending,
+  onClose,
+  onSelect,
+  target,
+}: ProjectOpenContextMenuProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const focusFrame = requestAnimationFrame(() => {
+      containerRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    });
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose]);
+
+  const position = getProjectOpenContextMenuPosition({
+    appCount: apps.length,
+    pointerX: target.pointerX,
+    pointerY: target.pointerY,
+    viewportHeight: window.innerHeight,
+    viewportWidth: window.innerWidth,
+  });
+
+  return createPortal(
+    <div
+      className="fixed z-50"
+      onContextMenu={(event) => {
+        event.preventDefault();
+      }}
+      ref={containerRef}
+      style={position}
+    >
+      <ProjectOpenMenuItems
+        apps={apps}
+        ariaLabel={`打开 ${target.path} 的方式`}
+        detail={target.path}
+        isPending={isPending}
+        mode="command"
+        onSelect={(appId) => {
+          onClose();
+          onSelect(appId, target.path);
+        }}
+        title="打开方式"
+      />
+    </div>,
+    document.body,
   );
 }
 
@@ -89,7 +225,7 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
   const requestedAppId = selectedApps[projectId] ?? inheritedAppId;
   const selectedApp = apps.find((app) => app.id === requestedAppId);
   const openMutation = useMutation({
-    mutationFn: (appId: ProjectOpenAppId) => client.openProject(projectId, appId),
+    mutationFn: (appId: ProjectOpenAppId) => client.openProject(projectId, { appId }),
     onError() {
       setActionError(true);
     },
@@ -198,7 +334,7 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
             apps={apps}
             isPending={openMutation.isPending}
             onSelect={selectApp}
-            selectedAppId={selectedApp?.id}
+            {...(selectedApp === undefined ? {} : { selectedAppId: selectedApp.id })}
           />
         </div>
       ) : null}

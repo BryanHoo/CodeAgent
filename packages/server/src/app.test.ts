@@ -572,7 +572,7 @@ describe("CodeAgent Server", () => {
     const request = {
       headers: { "idempotency-key": "open-project-key" },
       method: "POST" as const,
-      payload: { appId: "zed" },
+      payload: { appId: "zed", path: "src/components/app.tsx" },
       url: "/v1/projects/code-agent/open",
     };
     const firstResponse = await app.inject(request);
@@ -586,10 +586,10 @@ describe("CodeAgent Server", () => {
       platform: "darwin",
     });
     expect(firstResponse.statusCode).toBe(200);
-    expect(firstResponse.json()).toEqual({ appId: "zed" });
-    expect(repeatedResponse.json()).toEqual({ appId: "zed" });
+    expect(firstResponse.json()).toEqual({ appId: "zed", path: "src/components/app.tsx" });
+    expect(repeatedResponse.json()).toEqual({ appId: "zed", path: "src/components/app.tsx" });
     expect(open).toHaveBeenCalledOnce();
-    expect(open).toHaveBeenCalledWith("/workspace/CodeAgent", "zed");
+    expect(open).toHaveBeenCalledWith("/workspace/CodeAgent", "zed", "src/components/app.tsx");
   });
 
   it("validates and persists a complete project order idempotently", async () => {

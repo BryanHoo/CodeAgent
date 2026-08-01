@@ -117,6 +117,7 @@ import { readProjectSourceFile } from "./project-source-file.js";
 import {
   createProjectOpenService,
   ProjectOpenAppUnavailableError,
+  ProjectOpenTargetInvalidError,
   type ProjectOpenService,
 } from "./project-open.js";
 import {
@@ -912,7 +913,7 @@ export async function createCodeAgentServer(
             throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
           }
           try {
-            await projectOpenService.open(project.rootPath, request.body.appId);
+            await projectOpenService.open(project.rootPath, request.body.appId, request.body.path);
           } catch (error) {
             if (error instanceof ProjectOpenAppUnavailableError) {
               throw new MutationHttpError(
@@ -921,9 +922,12 @@ export async function createCodeAgentServer(
                 409,
               );
             }
+            if (error instanceof ProjectOpenTargetInvalidError) {
+              throw new MutationHttpError("INVALID_REQUEST", "Project open target is invalid", 400);
+            }
             throw new MutationHttpError("PROVIDER_ERROR", "Project could not be opened", 502, true);
           }
-          return { appId: request.body.appId };
+          return request.body;
         },
       ),
   );

@@ -10,6 +10,7 @@ import type {
   AgentTurn,
   PendingRequest,
   ProjectGitStatus,
+  ProjectOpenAppId,
 } from "@code-agent/protocol";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -139,6 +140,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const projectOpenCapabilitiesQuery = useQuery(
     projectOpenCapabilitiesQueryOptions(projectId, client),
   );
+  const projectPathOpenMutation = useMutation({
+    mutationFn: ({ appId, path }: Readonly<{ appId: ProjectOpenAppId; path: string }>) =>
+      client.openProject(projectId, { appId, path }),
+  });
   const skillsQuery = useQuery({
     ...skillsQueryOptions(projectId, client),
     enabled: capabilities?.skills.list === true,
@@ -749,6 +754,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           });
         }}
         onOpenFileDiff={openFileDiff}
+        onOpenProjectPath={(appId, path) => {
+          projectPathOpenMutation.reset();
+          projectPathOpenMutation.mutate({ appId, path });
+        }}
         onOpenSourceFile={(path) => {
           openSourceFile({ lineNumber: null, path });
         }}
@@ -767,6 +776,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           }
         }}
         projectName={projectName}
+        projectOpenApps={projectOpenCapabilitiesQuery.data?.apps ?? []}
+        projectOpenError={projectPathOpenMutation.error}
+        projectOpenPending={projectPathOpenMutation.isPending}
         projectPath={projectPath}
         settings={inspectorSettings}
         skills={skillsQuery.data?.data ?? []}

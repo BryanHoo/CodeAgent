@@ -1,7 +1,15 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access } from "node:fs/promises";
-import { posix, win32 } from "node:path";
+import { access, lstat, realpath } from "node:fs/promises";
+import {
+  dirname,
+  isAbsolute,
+  posix,
+  relative,
+  resolve as resolvePath,
+  sep,
+  win32,
+} from "node:path";
 
 import type {
   ProjectOpenApp,
@@ -26,9 +34,16 @@ type SpawnDetached = (
 
 type ProjectOpenCommand = Readonly<{
   app: ProjectOpenApp;
-  args: (projectRoot: string) => readonly string[];
+  args: (target: ProjectOpenTarget) => readonly string[];
   file: string;
   observeEarlyExit: boolean;
+}>;
+
+type ProjectOpenTarget = Readonly<{
+  absolutePath: string;
+  directoryPath: string;
+  projectRoot: string;
+  type: "directory" | "file";
 }>;
 
 type ProjectOpenCommandMap = Map<ProjectOpenAppId, ProjectOpenCommand>;
@@ -37,7 +52,11 @@ const DEFAULT_LAUNCH_CONFIRMATION_MS = 500;
 
 export interface ProjectOpenService {
   getCapabilities: () => Promise<ProjectOpenCapabilitiesResponse>;
-  open: (projectRoot: string, appId: ProjectOpenAppId) => Promise<void>;
+  open: (
+    projectRoot: string,
+    appId: ProjectOpenAppId,
+    projectRelativePath?: string,
+  ) => Promise<void>;
 }
 
 export interface CreateProjectOpenServiceOptions {
@@ -52,6 +71,79 @@ export class ProjectOpenAppUnavailableError extends Error {
   public constructor(appId: ProjectOpenAppId) {
     super(`Project open app is unavailable: ${appId}`);
     this.name = "ProjectOpenAppUnavailableError";
+  }
+}
+
+export class ProjectOpenTargetInvalidError extends Error {
+  public constructor() {
+    super("Project open target is invalid");
+    this.name = "ProjectOpenTargetInvalidError";
+  }
+}
+
+function isOutsideProject(relativePath: string): boolean {
+  return relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath);
+}
+
+async function resolveProjectOpenTarget(
+  projectRoot: string,
+  projectRelativePath: string | undefined,
+): Promise<ProjectOpenTarget> {
+  if (projectRelativePath === undefined) {
+    return {
+      absolutePath: projectRoot,
+      directoryPath: projectRoot,
+      projectRoot,
+      type: "directory",
+    };
+  }
+
+  try {
+    if (
+      !isAbsolute(projectRoot) ||
+      projectRelativePath.startsWith("/") ||
+      projectRelativePath.endsWith("/") ||
+      projectRelativePath.includes("\\") ||
+      projectRelativePath.includes("//") ||
+      /^[A-Za-z]:/u.test(projectRelativePath)
+    ) {
+      throw new ProjectOpenTargetInvalidError();
+    }
+    const segments = projectRelativePath.split("/");
+    if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+      throw new ProjectOpenTargetInvalidError();
+    }
+
+    const resolvedProjectRoot = await realpath(projectRoot);
+    let candidatePath = resolvedProjectRoot;
+    let targetStats;
+    // 逐段拒绝符号链接，避免即使最终 realpath 位于 Project 内也打开树中不可见的别名目标。
+    for (const segment of segments) {
+      candidatePath = resolvePath(candidatePath, segment);
+      targetStats = await lstat(candidatePath);
+      if (targetStats.isSymbolicLink()) {
+        throw new ProjectOpenTargetInvalidError();
+      }
+    }
+    const resolvedTargetPath = await realpath(candidatePath);
+    if (isOutsideProject(relative(resolvedProjectRoot, resolvedTargetPath))) {
+      throw new ProjectOpenTargetInvalidError();
+    }
+    if (targetStats === undefined || (!targetStats.isDirectory() && !targetStats.isFile())) {
+      throw new ProjectOpenTargetInvalidError();
+    }
+    const type = targetStats.isDirectory() ? "directory" : "file";
+    return {
+      absolutePath: resolvedTargetPath,
+      directoryPath: type === "directory" ? resolvedTargetPath : dirname(resolvedTargetPath),
+      projectRoot: resolvedProjectRoot,
+      type,
+    };
+  } catch (error) {
+    if (error instanceof ProjectOpenTargetInvalidError) {
+      throw error;
+    }
+    throw new ProjectOpenTargetInvalidError();
   }
 }
 
@@ -178,7 +270,7 @@ function addCommand(
   commands: ProjectOpenCommandMap,
   app: Readonly<{ id: ProjectOpenAppId; kind: ProjectOpenAppKind; name: string }>,
   file: string | undefined,
-  args: (projectRoot: string) => readonly string[],
+  args: (target: ProjectOpenTarget) => readonly string[],
   observeEarlyExit = true,
 ): void {
   if (file !== undefined) {
@@ -206,10 +298,10 @@ async function resolveMacCommands(
   const resolveApp = (name: string) => firstExisting(macAppCandidates(home, name), pathExists);
   const addMacApp = async (id: ProjectOpenAppId, name: string, kind: ProjectOpenAppKind) => {
     const appPath = await resolveApp(name);
-    addCommand(commands, { id, kind, name }, appPath === undefined ? undefined : open, (root) => [
+    addCommand(commands, { id, kind, name }, appPath === undefined ? undefined : open, (target) => [
       "-a",
       name,
-      root,
+      kind === "terminal" ? target.directoryPath : target.absolutePath,
     ]);
   };
 
@@ -217,9 +309,9 @@ async function resolveMacCommands(
   await addMacApp("zed", "Zed", "editor");
   await addMacApp("windsurf", "Windsurf", "editor");
   await addMacApp("visual-studio-code", "Visual Studio Code", "editor");
-  addCommand(commands, { id: "finder", kind: "file-manager", name: "Finder" }, open, (root) => [
-    root,
-  ]);
+  addCommand(commands, { id: "finder", kind: "file-manager", name: "Finder" }, open, (target) =>
+    target.type === "file" ? ["-R", target.absolutePath] : [target.absolutePath],
+  );
   const terminalPath = await firstExisting(
     ["/System/Applications/Utilities/Terminal.app", "/Applications/Utilities/Terminal.app"],
     pathExists,
@@ -228,7 +320,7 @@ async function resolveMacCommands(
     commands,
     { id: "terminal", kind: "terminal", name: "Terminal" },
     terminalPath === undefined ? undefined : open,
-    (root) => ["-a", "Terminal", root],
+    (target) => ["-a", "Terminal", target.directoryPath],
   );
   await addMacApp("ghostty", "Ghostty", "terminal");
   await addMacApp("xcode", "Xcode", "editor");
@@ -243,50 +335,50 @@ async function resolveLinuxCommands(
   const commands: ProjectOpenCommandMap = new Map();
   const find = (command: string) => findPathExecutable(command, "linux", environment, pathExists);
 
-  addCommand(commands, { id: "zed", kind: "editor", name: "Zed" }, await find("zed"), (root) => [
-    root,
+  addCommand(commands, { id: "zed", kind: "editor", name: "Zed" }, await find("zed"), (target) => [
+    target.absolutePath,
   ]);
   addCommand(
     commands,
     { id: "windsurf", kind: "editor", name: "Windsurf" },
     await find("windsurf"),
-    (root) => [root],
+    (target) => [target.absolutePath],
   );
   addCommand(
     commands,
     { id: "visual-studio-code", kind: "editor", name: "Visual Studio Code" },
     await find("code"),
-    (root) => [root],
+    (target) => [target.absolutePath],
   );
   addCommand(
     commands,
     { id: "file-manager", kind: "file-manager", name: "文件管理器" },
     await find("xdg-open"),
-    (root) => [root],
+    (target) => [target.directoryPath],
   );
   addCommand(
     commands,
     { id: "ghostty", kind: "terminal", name: "Ghostty" },
     await find("ghostty"),
-    (root) => [`--working-directory=${root}`],
+    (target) => [`--working-directory=${target.directoryPath}`],
   );
   addCommand(
     commands,
     { id: "gnome-terminal", kind: "terminal", name: "GNOME Terminal" },
     await find("gnome-terminal"),
-    (root) => [`--working-directory=${root}`],
+    (target) => [`--working-directory=${target.directoryPath}`],
   );
   addCommand(
     commands,
     { id: "konsole", kind: "terminal", name: "Konsole" },
     await find("konsole"),
-    (root) => ["--workdir", root],
+    (target) => ["--workdir", target.directoryPath],
   );
   addCommand(
     commands,
     { id: "xfce-terminal", kind: "terminal", name: "Xfce Terminal" },
     await find("xfce4-terminal"),
-    (root) => ["--working-directory", root],
+    (target) => ["--working-directory", target.directoryPath],
   );
   const androidStudio = await firstExisting(
     ["/opt/android-studio/bin/studio.sh", await find("android-studio"), await find("studio.sh")],
@@ -296,7 +388,7 @@ async function resolveLinuxCommands(
     commands,
     { id: "android-studio", kind: "editor", name: "Android Studio" },
     androidStudio,
-    (root) => [root],
+    (target) => [target.absolutePath],
   );
   return commands;
 }
@@ -321,7 +413,9 @@ async function resolveWindowsCommands(
     ],
     pathExists,
   );
-  addCommand(commands, { id: "zed", kind: "editor", name: "Zed" }, zed, (root) => [root]);
+  addCommand(commands, { id: "zed", kind: "editor", name: "Zed" }, zed, (target) => [
+    target.absolutePath,
+  ]);
   const windsurf = await firstExisting(
     [
       localAppData === undefined
@@ -331,8 +425,8 @@ async function resolveWindowsCommands(
     ],
     pathExists,
   );
-  addCommand(commands, { id: "windsurf", kind: "editor", name: "Windsurf" }, windsurf, (root) => [
-    root,
+  addCommand(commands, { id: "windsurf", kind: "editor", name: "Windsurf" }, windsurf, (target) => [
+    target.absolutePath,
   ]);
   const vscode = await firstExisting(
     [
@@ -353,7 +447,7 @@ async function resolveWindowsCommands(
     commands,
     { id: "visual-studio-code", kind: "editor", name: "Visual Studio Code" },
     vscode,
-    (root) => [root],
+    (target) => [target.absolutePath],
   );
   const explorer = await firstExisting(
     [
@@ -366,7 +460,8 @@ async function resolveWindowsCommands(
     commands,
     { id: "explorer", kind: "file-manager", name: "文件资源管理器" },
     explorer,
-    (root) => [root],
+    (target) =>
+      target.type === "file" ? ["/select,", target.absolutePath] : [target.absolutePath],
     false,
   );
   const windowsTerminal = await firstExisting(
@@ -382,7 +477,7 @@ async function resolveWindowsCommands(
     commands,
     { id: "windows-terminal", kind: "terminal", name: "Windows Terminal" },
     windowsTerminal,
-    (root) => ["-w", "new", "-d", root],
+    (target) => ["-w", "new", "-d", target.directoryPath],
   );
   const commandPrompt = await firstExisting(
     [
@@ -413,7 +508,7 @@ async function resolveWindowsCommands(
     commands,
     { id: "android-studio", kind: "editor", name: "Android Studio" },
     androidStudio,
-    (root) => [root],
+    (target) => [target.absolutePath],
   );
   return commands;
 }
@@ -447,13 +542,14 @@ export function createProjectOpenService(
       const commands = await resolveCommands();
       return { apps: [...commands.values()].map((command) => command.app), platform };
     },
-    async open(projectRoot, appId) {
+    async open(projectRoot, appId, projectRelativePath) {
       const command = (await resolveCommands()).get(appId);
       if (command === undefined) {
         throw new ProjectOpenAppUnavailableError(appId);
       }
-      await spawnDetached(command.file, command.args(projectRoot), {
-        cwd: projectRoot,
+      const target = await resolveProjectOpenTarget(projectRoot, projectRelativePath);
+      await spawnDetached(command.file, command.args(target), {
+        cwd: command.app.kind === "terminal" ? target.directoryPath : target.projectRoot,
         observeEarlyExit: command.observeEarlyExit,
         shell: false,
         windowsHide: false,

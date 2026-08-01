@@ -165,11 +165,25 @@ describe("project protocol", () => {
     ).toBe(true);
     expect(Value.Check(ProjectOpenAppSchema, { id: "zed", kind: "editor" })).toBe(false);
     expect(Value.Check(OpenProjectRequestSchema, { appId: "zed" })).toBe(true);
+    expect(
+      Value.Check(OpenProjectRequestSchema, { appId: "zed", path: "src/components/app.tsx" }),
+    ).toBe(true);
     expect(Value.Check(OpenProjectRequestSchema, { appId: "custom-command" })).toBe(false);
-    expect(Value.Check(OpenProjectRequestSchema, { appId: "finder", path: "/tmp/project" })).toBe(
-      false,
-    );
+    for (const path of [
+      "/tmp/project",
+      "C:\\workspace\\project",
+      "src\\app.ts",
+      "src//app.ts",
+      "src/./app.ts",
+      "src/../app.ts",
+      "src/",
+    ]) {
+      expect(Value.Check(OpenProjectRequestSchema, { appId: "finder", path })).toBe(false);
+    }
     expect(Value.Check(OpenProjectResponseSchema, { appId: "ghostty" })).toBe(true);
+    expect(
+      Value.Check(OpenProjectResponseSchema, { appId: "ghostty", path: "src/components" }),
+    ).toBe(true);
     expect(
       Value.Check(ProjectOpenCapabilitiesResponseSchema, {
         platform: "darwin",

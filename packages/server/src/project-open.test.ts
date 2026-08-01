@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -167,6 +167,144 @@ describe("createProjectOpenService", () => {
       ["-w", "new", "-d", projectRoot],
       expect.objectContaining({ observeEarlyExit: true }),
     );
+  });
+
+  it("opens file targets with platform-appropriate editor, file manager, and terminal semantics", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "code-agent-open-target-"));
+    const sourceDirectory = join(projectRoot, "src");
+    const sourceFile = join(sourceDirectory, "app.ts");
+    await mkdir(sourceDirectory);
+    await writeFile(sourceFile, "export {};\n");
+    const resolvedProjectRoot = await realpath(projectRoot);
+    const resolvedSourceDirectory = join(resolvedProjectRoot, "src");
+    const resolvedSourceFile = join(resolvedSourceDirectory, "app.ts");
+
+    try {
+      const macSpawn = vi.fn(() => Promise.resolve());
+      const macService = createProjectOpenService({
+        environment: { HOME: "/Users/test" },
+        pathExists: (path) =>
+          Promise.resolve(
+            new Set([
+              "/usr/bin/open",
+              "/Applications/Zed.app",
+              "/System/Applications/Utilities/Terminal.app",
+            ]).has(path),
+          ),
+        platform: "darwin",
+        spawnDetached: macSpawn,
+      });
+      await macService.open(projectRoot, "zed", "src/app.ts");
+      await macService.open(projectRoot, "finder", "src/app.ts");
+      await macService.open(projectRoot, "terminal", "src/app.ts");
+
+      expect(macSpawn).toHaveBeenNthCalledWith(
+        1,
+        "/usr/bin/open",
+        ["-a", "Zed", resolvedSourceFile],
+        expect.objectContaining({ cwd: resolvedProjectRoot }),
+      );
+      expect(macSpawn).toHaveBeenNthCalledWith(
+        2,
+        "/usr/bin/open",
+        ["-R", resolvedSourceFile],
+        expect.objectContaining({ cwd: resolvedProjectRoot }),
+      );
+      expect(macSpawn).toHaveBeenNthCalledWith(
+        3,
+        "/usr/bin/open",
+        ["-a", "Terminal", resolvedSourceDirectory],
+        expect.objectContaining({ cwd: resolvedSourceDirectory }),
+      );
+
+      const linuxSpawn = vi.fn(() => Promise.resolve());
+      const linuxService = createProjectOpenService({
+        environment: { PATH: "/usr/bin" },
+        pathExists: (path) =>
+          Promise.resolve(new Set(["/usr/bin/xdg-open", "/usr/bin/konsole"]).has(path)),
+        platform: "linux",
+        spawnDetached: linuxSpawn,
+      });
+      await linuxService.open(projectRoot, "file-manager", "src/app.ts");
+      await linuxService.open(projectRoot, "konsole", "src/app.ts");
+
+      expect(linuxSpawn).toHaveBeenNthCalledWith(
+        1,
+        "/usr/bin/xdg-open",
+        [resolvedSourceDirectory],
+        expect.objectContaining({ cwd: resolvedProjectRoot }),
+      );
+      expect(linuxSpawn).toHaveBeenNthCalledWith(
+        2,
+        "/usr/bin/konsole",
+        ["--workdir", resolvedSourceDirectory],
+        expect.objectContaining({ cwd: resolvedSourceDirectory }),
+      );
+
+      const windowsSpawn = vi.fn(() => Promise.resolve());
+      const windowsService = createProjectOpenService({
+        environment: {
+          LOCALAPPDATA: "C:\\Users\\test\\AppData\\Local",
+          SystemRoot: "C:\\Windows",
+        },
+        pathExists: (path) =>
+          Promise.resolve(
+            new Set([
+              "C:\\Windows\\explorer.exe",
+              "C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\wt.exe",
+            ]).has(path),
+          ),
+        platform: "win32",
+        spawnDetached: windowsSpawn,
+      });
+      await windowsService.open(projectRoot, "explorer", "src/app.ts");
+      await windowsService.open(projectRoot, "windows-terminal", "src/app.ts");
+
+      expect(windowsSpawn).toHaveBeenNthCalledWith(
+        1,
+        "C:\\Windows\\explorer.exe",
+        ["/select,", resolvedSourceFile],
+        expect.objectContaining({ cwd: resolvedProjectRoot }),
+      );
+      expect(windowsSpawn).toHaveBeenNthCalledWith(
+        2,
+        "C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\wt.exe",
+        ["-w", "new", "-d", resolvedSourceDirectory],
+        expect.objectContaining({ cwd: resolvedSourceDirectory }),
+      );
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects missing, escaping, and symbolic-link targets before spawning", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "code-agent-open-secure-"));
+    const outsideRoot = await mkdtemp(join(tmpdir(), "code-agent-open-outside-"));
+    const outsideFile = join(outsideRoot, "outside.ts");
+    await writeFile(outsideFile, "export {};\n");
+    await symlink(outsideFile, join(projectRoot, "linked.ts"));
+    const spawnDetached = vi.fn(() => Promise.resolve());
+    const service = createProjectOpenService({
+      environment: { HOME: "/Users/test" },
+      pathExists: (path) =>
+        Promise.resolve(new Set(["/usr/bin/open", "/Applications/Zed.app"]).has(path)),
+      platform: "darwin",
+      spawnDetached,
+    });
+
+    try {
+      for (const path of ["missing.ts", "../outside.ts", "linked.ts"]) {
+        await expect(service.open(projectRoot, "zed", path)).rejects.toMatchObject({
+          name: "ProjectOpenTargetInvalidError",
+        });
+      }
+      expect(spawnDetached).not.toHaveBeenCalled();
+    } finally {
+      await Promise.all([
+        rm(projectRoot, { force: true, recursive: true }),
+        rm(outsideRoot, { force: true, recursive: true }),
+      ]);
+    }
   });
 
   it("rejects apps that are not available on the current host", async () => {

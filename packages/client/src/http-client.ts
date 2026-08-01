@@ -60,11 +60,11 @@ import {
   type InterruptAgentTurnResponse,
   type ProjectPage,
   type ProjectFileTree,
-  type ProjectOpenAppId,
   type ProjectOpenCapabilitiesResponse,
   type ReorderProjectsResponse,
   type ProjectGitStatus,
   type ProjectSourceFile,
+  type OpenProjectRequest,
   type OpenProjectResponse,
   type PinAgentTaskResponse,
   type ReviewAgentTaskRequest,
@@ -315,12 +315,12 @@ export class CodeAgentClient {
 
   public async openProject(
     projectId: string,
-    appId: ProjectOpenAppId,
+    request: OpenProjectRequest,
     options: MutationOptions = {},
   ): Promise<OpenProjectResponse> {
     return this.#mutation(
       `${projectPath(projectId)}/open`,
-      { appId },
+      request,
       OpenProjectResponseSchema,
       options,
     );

@@ -6,6 +6,8 @@ import type {
   ProjectFileTree,
   ProjectFileTreeEntry,
   ProjectGitStatus,
+  ProjectOpenApp,
+  ProjectOpenAppId,
 } from "@code-agent/protocol";
 import {
   Bot,
@@ -24,6 +26,7 @@ import { countFileChangeLines, type AgentFileChange } from "../../diff/file-chan
 import { FileTree, FileTreeFile, FileTreeFolder } from "../../../shared/ai-elements/file-tree.js";
 import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
+import { ProjectOpenContextMenu, type ProjectOpenContextMenuTarget } from "./project-open-menu.js";
 import {
   formatSubagentModel,
   toSubagentTaskStatus,
@@ -43,6 +46,7 @@ type WorkbenchInspectorProps = Readonly<{
   gitStatusRefreshing?: boolean;
   onFileTreeExpandedChange?: (expandedPaths: Set<string>) => void;
   onOpenFileDiff?: (change: AgentFileChange) => void;
+  onOpenProjectPath?: (appId: ProjectOpenAppId, path: string) => void;
   onOpenSourceFile?: (path: string) => void;
   onOpenSubagent?: (selection: SubagentSelection) => void;
   onRefreshFileTreeDirectory?: (directoryPath: string | null) => void;
@@ -50,6 +54,9 @@ type WorkbenchInspectorProps = Readonly<{
   onReviewChanges?: (changes: readonly AgentFileChange[]) => void;
   onTerminateBackgroundTerminal?: (terminalId: string) => Promise<void>;
   projectName: string;
+  projectOpenApps?: readonly ProjectOpenApp[];
+  projectOpenError?: Error | null;
+  projectOpenPending?: boolean;
   projectPath: string;
   settings: AgentTaskSettings;
   skills?: readonly AgentSkill[];
@@ -85,6 +92,7 @@ type ProjectFileTreeNodesProps = Readonly<{
   directoryStates: ReadonlyMap<string | null, ProjectFileTreeDirectoryState>;
   entries: readonly ProjectFileTreeEntry[];
   expandedPaths: ReadonlySet<string>;
+  onOpenContextMenu: (target: ProjectOpenContextMenuTarget) => void;
   onRefreshDirectory: (directoryPath: string | null) => void;
 }>;
 
@@ -210,12 +218,14 @@ function ProjectFileTreeDirectoryChildren({
   directoryPath,
   directoryStates,
   expandedPaths,
+  onOpenContextMenu,
   onRefreshDirectory,
 }: Readonly<{
   changeStatsByPath: ReadonlyMap<string, FileTreeChangeStats>;
   directoryPath: string;
   directoryStates: ReadonlyMap<string | null, ProjectFileTreeDirectoryState>;
   expandedPaths: ReadonlySet<string>;
+  onOpenContextMenu: (target: ProjectOpenContextMenuTarget) => void;
   onRefreshDirectory: (directoryPath: string | null) => void;
 }>) {
   const state = directoryStates.get(directoryPath);
@@ -264,6 +274,7 @@ function ProjectFileTreeDirectoryChildren({
       directoryStates={directoryStates}
       entries={state.data?.entries ?? []}
       expandedPaths={expandedPaths}
+      onOpenContextMenu={onOpenContextMenu}
       onRefreshDirectory={onRefreshDirectory}
     />
   );
@@ -274,6 +285,7 @@ function ProjectFileTreeNodes({
   directoryStates,
   entries,
   expandedPaths,
+  onOpenContextMenu,
   onRefreshDirectory,
 }: ProjectFileTreeNodesProps) {
   return entries.map((entry) => {
@@ -293,17 +305,44 @@ function ProjectFileTreeNodes({
         />
       );
     return entry.type === "directory" ? (
-      <FileTreeFolder key={entry.path} name={name} path={entry.path} trailing={trailing}>
+      <FileTreeFolder
+        key={entry.path}
+        name={name}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onOpenContextMenu({
+            path: entry.path,
+            pointerX: event.clientX,
+            pointerY: event.clientY,
+          });
+        }}
+        path={entry.path}
+        trailing={trailing}
+      >
         <ProjectFileTreeDirectoryChildren
           changeStatsByPath={changeStatsByPath}
           directoryPath={entry.path}
           directoryStates={directoryStates}
           expandedPaths={expandedPaths}
+          onOpenContextMenu={onOpenContextMenu}
           onRefreshDirectory={onRefreshDirectory}
         />
       </FileTreeFolder>
     ) : (
-      <FileTreeFile key={entry.path} name={name} path={entry.path} trailing={trailing} />
+      <FileTreeFile
+        key={entry.path}
+        name={name}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onOpenContextMenu({
+            path: entry.path,
+            pointerX: event.clientX,
+            pointerY: event.clientY,
+          });
+        }}
+        path={entry.path}
+        trailing={trailing}
+      />
     );
   });
 }
@@ -407,6 +446,7 @@ export function WorkbenchInspector({
   gitStatusRefreshing = false,
   onFileTreeExpandedChange = () => undefined,
   onOpenFileDiff = () => undefined,
+  onOpenProjectPath = () => undefined,
   onOpenSourceFile = () => undefined,
   onOpenSubagent = () => undefined,
   onRefreshFileTreeDirectory = () => undefined,
@@ -414,6 +454,9 @@ export function WorkbenchInspector({
   onReviewChanges = () => undefined,
   onTerminateBackgroundTerminal = () => Promise.resolve(),
   projectName,
+  projectOpenApps = [],
+  projectOpenError = null,
+  projectOpenPending = false,
   projectPath,
   settings,
   skills = [],
@@ -432,7 +475,10 @@ export function WorkbenchInspector({
   const allChanges = changeSummary.changes;
   const fileChangesByPath = changeSummary.changesByPath;
   const fileTreeChangeStats = changeSummary.statsByPath;
-  const [selectedFilePath, setSelectedFilePath] = useState<string>();
+  const [selectedTreePath, setSelectedTreePath] = useState<string>();
+  const [projectOpenTarget, setProjectOpenTarget] = useState<ProjectOpenContextMenuTarget | null>(
+    null,
+  );
   const { additions, removals } = changeSummary;
   const sources = useMemo(
     () => collectInspectorSources(projectName, projectPath, task?.turns ?? [], skills),
@@ -462,7 +508,7 @@ export function WorkbenchInspector({
   return (
     <aside
       aria-label="Context Inspector"
-      className="workbench-inspector z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse"
+      className="workbench-inspector relative z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse"
     >
       <div className="flex h-workbench-header items-center px-3">
         <h2 className="text-body-small font-semibold text-foreground">环境信息</h2>
@@ -606,7 +652,7 @@ export function WorkbenchInspector({
                     if (!filePaths.has(path)) {
                       return;
                     }
-                    setSelectedFilePath(path);
+                    setSelectedTreePath(path);
                     const fileChange = fileChangesByPath.get(path);
                     if (fileChange === undefined) {
                       onOpenSourceFile(path);
@@ -614,13 +660,20 @@ export function WorkbenchInspector({
                       onOpenFileDiff(fileChange);
                     }
                   }}
-                  {...(selectedFilePath === undefined ? {} : { selectedPath: selectedFilePath })}
+                  {...(selectedTreePath === undefined ? {} : { selectedPath: selectedTreePath })}
                 >
                   <ProjectFileTreeNodes
                     changeStatsByPath={fileTreeChangeStats}
                     directoryStates={fileTreeDirectoryStates}
                     entries={rootFileTreeState?.data?.entries ?? []}
                     expandedPaths={expandedFileTreePaths}
+                    onOpenContextMenu={(target) => {
+                      // 右键目标先进入文件树选中态，让菜单与当前操作对象保持一致。
+                      setSelectedTreePath(target.path);
+                      if (projectOpenApps.length > 0) {
+                        setProjectOpenTarget(target);
+                      }
+                    }}
                     onRefreshDirectory={onRefreshFileTreeDirectory}
                   />
                 </FileTree>
@@ -665,6 +718,25 @@ export function WorkbenchInspector({
           </div>
         )}
       </div>
+      {projectOpenTarget === null ? null : (
+        <ProjectOpenContextMenu
+          apps={projectOpenApps}
+          isPending={projectOpenPending}
+          onClose={() => {
+            setProjectOpenTarget(null);
+          }}
+          onSelect={onOpenProjectPath}
+          target={projectOpenTarget}
+        />
+      )}
+      {projectOpenError === null ? null : (
+        <p
+          className="absolute bottom-3 right-3 z-40 w-60 rounded-control bg-danger-soft px-2 py-1.5 text-meta text-danger shadow-floating"
+          role="alert"
+        >
+          无法使用所选应用打开目标
+        </p>
+      )}
     </aside>
   );
 }

@@ -8,6 +8,7 @@
 
 - 每个组件只承担一个可描述的界面职责，紧凑工作台界面避免装饰性嵌套卡片。
 - 工作台的项目打开控件使用分段按钮：左侧不显示图标，只显示“在 <应用名称> 中打开”并执行当前选择；右侧 `ChevronDown` 只负责打开应用菜单，hover 不得自动展开。菜单项只能来自 Server 返回的当前宿主应用目录，选择按 Project 写入版本化浏览器偏好，并支持 ArrowDown、Escape、焦点离开和外部点击；Project 没有本地偏好时依次使用全局默认和首个可用应用。
+- Inspector Project 文件树的文件与目录节点使用右键菜单复用同一宿主应用目录；右键目标立即进入文件树选中高亮态，菜单顶部显示“打开方式”和当前目标路径。菜单项是立即打开目标的命令，不修改中栏保存的默认应用。菜单必须脱离滚动容器裁剪并限制在视口内，打开后聚焦首项，支持 Escape 和外部点击关闭，请求期间禁用重复操作。
 - Web 不提供登录路由或账号控件；Provider 资源不可用时展示 `codex login` 指引和 Query 重试操作，不调用账号接口。
 - `shared/ai-elements` 以官方 AI Elements 组件源码和公开 API 为实现基线，只改造样式、基础控件适配与本地化文案以使用本项目设计 Token；不得用功能不完整的自研组件替代官方能力。
 - Task Timeline 不展示原生 Reasoning Item 或 Chain of Thought；Codex Commentary 与 Final Answer 都作为普通 Assistant Message，通过 `MessageResponse` 实时流式展示。Command、Tool 等结构化 Item 保持独立可见，不包裹进思考容器。新聊天首次提交开始后必须立即显示通用运行状态，不等待 `startTurn` 返回；运行中的 AI 回复必须在回复最后一行始终使用 AI Elements `Shimmer` 表达持续生成状态。存在运行中的 Command、Tool、Activity 或流式 Plan 时，在“正在运行”后直接追加 Codex Item 的原始操作名称，其中 Command 同时显示终端图标，不得解析 `commandActions` 生成映射文案；快速操作已完成但 Turn 仍在运行时继续以 Shimmer 显示最近原始操作，不切换成完成文案；没有结构化操作时回退为通用运行状态，并在 Turn 结束后移除。原始操作名称变化时只能更新 Shimmer 文本，必须保留同一 DOM 与动画时间轴，不得按文案长度改写扫光参数。
