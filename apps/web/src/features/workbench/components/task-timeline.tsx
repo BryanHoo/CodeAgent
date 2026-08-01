@@ -16,7 +16,7 @@ import {
   RotateCcw,
   SquareTerminal,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
@@ -359,6 +359,68 @@ const messageDateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
   dateStyle: "medium",
   timeStyle: "medium",
 });
+
+const TURN_PROCESSING_TIMER_INTERVAL_MS = 1_000;
+
+function formatTurnProcessingDuration(totalSeconds: number): Readonly<{
+  dateTime: string;
+  label: string;
+}> {
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  return {
+    dateTime: `PT${hours > 0 ? `${String(hours)}H` : ""}${minutes > 0 ? `${String(minutes)}M` : ""}${String(seconds)}S`,
+    label:
+      hours > 0
+        ? `${String(hours)}h ${String(minutes)}m ${String(seconds)}s`
+        : minutes > 0
+          ? `${String(minutes)}m ${String(seconds)}s`
+          : `${String(seconds)}s`,
+  };
+}
+
+function TurnProcessingTime({
+  completedAt,
+  startedAt,
+}: Pick<AgentTurn, "completedAt" | "startedAt">) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (startedAt === null || completedAt !== null) {
+      return;
+    }
+
+    // 只更新独立计时行，Turn 完成后立即清理并改用服务端终态时间。
+    const intervalId = globalThis.setInterval(() => {
+      setNow(Date.now());
+    }, TURN_PROCESSING_TIMER_INTERVAL_MS);
+    return () => {
+      globalThis.clearInterval(intervalId);
+    };
+  }, [completedAt, startedAt]);
+
+  if (startedAt === null) {
+    return null;
+  }
+  const startedAtMs = Date.parse(startedAt);
+  const endedAtMs = completedAt === null ? now : Date.parse(completedAt);
+  if (!Number.isFinite(startedAtMs) || !Number.isFinite(endedAtMs)) {
+    return null;
+  }
+  const totalSeconds = Math.max(0, Math.floor((endedAtMs - startedAtMs) / 1_000));
+  const duration = formatTurnProcessingDuration(totalSeconds);
+
+  return (
+    <div
+      className="mb-4 flex w-full items-center border-b border-separator pb-2.5 text-label font-medium text-muted-foreground"
+      data-turn-processing-time=""
+    >
+      <span>已处理&nbsp;</span>
+      <time dateTime={duration.dateTime}>{duration.label}</time>
+    </div>
+  );
+}
 
 function getMessageTimestamp(
   role: "assistant" | "user",
@@ -923,7 +985,8 @@ function TurnTimelineItems({
   turn: AgentTurn;
 }>) {
   const timelineGroups = groupTurnTimelineItems(turn.items);
-  const hasAssistantItems = timelineGroups.some((group) => group.type === "assistant");
+  const firstAssistantGroupIndex = timelineGroups.findIndex((group) => group.type === "assistant");
+  const hasAssistantItems = firstAssistantGroupIndex >= 0;
   const latestAssistantGroupIndex = timelineGroups.findLastIndex(
     (group) => group.type === "assistant",
   );
@@ -977,6 +1040,9 @@ function TurnTimelineItems({
     const runningOperation = showRunningShimmer ? resolveRunningOperation(group.items) : undefined;
     return (
       <Message from="assistant" key={group.key}>
+        {groupIndex === firstAssistantGroupIndex ? (
+          <TurnProcessingTime completedAt={turn.completedAt} startedAt={turn.startedAt} />
+        ) : null}
         <div className="w-full space-y-4">
           {group.items.map(({ item, itemIndex }) => {
             return (
@@ -1020,6 +1086,7 @@ function TurnTimelineItems({
       {renderedGroups}
       {turn.status === "running" && !hasAssistantItems ? (
         <Message from="assistant">
+          <TurnProcessingTime completedAt={turn.completedAt} startedAt={turn.startedAt} />
           {/* 首个 Delta 到达前同样用回复尾行的 Shimmer 表达实时运行状态。 */}
           <RunningReplyStatus />
         </Message>
@@ -1180,6 +1247,7 @@ function StoredAssistantGroup({
   onReviewFileChanges,
   onRollbackTurn,
   projectId,
+  showProcessingTime,
   showRunningShimmer,
   store,
   taskId,
@@ -1195,6 +1263,7 @@ function StoredAssistantGroup({
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
   projectId: string;
+  showProcessingTime: boolean;
   showRunningShimmer: boolean;
   store: TaskStore;
   taskId: string;
@@ -1218,6 +1287,9 @@ function StoredAssistantGroup({
 
   return (
     <Message from="assistant">
+      {showProcessingTime ? (
+        <TurnProcessingTime completedAt={turn.completedAt} startedAt={turn.startedAt} />
+      ) : null}
       <div className="w-full space-y-4">
         {itemIds.map((itemId) => (
           <StoredTimelineItemContent
@@ -1285,7 +1357,8 @@ function StoreTurnTimelineSection({
   }
   const latestSnapshotTimestamp = store.getState().snapshotMetadata?.updatedAt ?? "";
   const timelineGroups = groupStoredTurnTimelineItems(itemIds, store.getState().itemsById);
-  const hasAssistantItems = timelineGroups.some((group) => group.type === "assistant");
+  const firstAssistantGroupIndex = timelineGroups.findIndex((group) => group.type === "assistant");
+  const hasAssistantItems = firstAssistantGroupIndex >= 0;
   const latestAssistantGroupIndex = timelineGroups.findLastIndex(
     (group) => group.type === "assistant",
   );
@@ -1326,6 +1399,7 @@ function StoreTurnTimelineSection({
             onReviewFileChanges={onReviewFileChanges}
             onRollbackTurn={onRollbackTurn}
             projectId={projectId}
+            showProcessingTime={groupIndex === firstAssistantGroupIndex}
             showRunningShimmer={
               turn.status === "running" && groupIndex === timelineGroups.length - 1
             }
@@ -1337,6 +1411,7 @@ function StoreTurnTimelineSection({
       )}
       {turn.status === "running" && !hasAssistantItems ? (
         <Message from="assistant">
+          <TurnProcessingTime completedAt={turn.completedAt} startedAt={turn.startedAt} />
           <RunningReplyStatus />
         </Message>
       ) : null}

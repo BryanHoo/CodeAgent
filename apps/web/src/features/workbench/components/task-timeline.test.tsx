@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import { createTaskStore } from "../../conversation/runtime/task-store.js";
@@ -276,6 +276,88 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain("space-y-4");
   });
 
+  it("keeps the completed AI processing duration visible", () => {
+    const messageSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          completedAt: "2026-07-24T00:05:07.000Z",
+          items: [
+            {
+              id: "message-assistant-duration",
+              role: "assistant",
+              text: "回复完成。",
+              type: "message",
+            },
+          ],
+        },
+      ],
+      updatedAt: "2026-07-24T00:05:07.000Z",
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={messageSnapshot} />);
+
+    expect(markup).toContain('data-turn-processing-time=""');
+    expect(markup).toContain("已处理");
+    expect(markup).toContain('dateTime="PT5M7S"');
+    expect(markup).toContain(">5m 7s</time>");
+  });
+
+  it("derives the running AI processing duration from the current time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-24T00:02:05.000Z"));
+    try {
+      const runningSnapshot: RuntimeTaskSnapshot = {
+        ...snapshot,
+        status: "running",
+        turns: [
+          {
+            ...completedTurn,
+            completedAt: null,
+            items: [
+              {
+                id: "message-assistant-running-duration",
+                role: "assistant",
+                text: "正在回复。",
+                type: "message",
+              },
+            ],
+            status: "running",
+          },
+        ],
+        updatedAt: "2026-07-24T00:02:05.000Z",
+      };
+
+      const store = createTaskStore(
+        { projectId: runningSnapshot.projectId, taskId: runningSnapshot.id },
+        {
+          checkpoint: { sequence: 1, sessionId: "runtime-duration" },
+          snapshot: runningSnapshot,
+        },
+      );
+      const markup = renderToStaticMarkup(
+        <TaskTimeline
+          projectId={runningSnapshot.projectId}
+          runtime={{
+            connectionState: "connected",
+            error: null,
+            isPending: false,
+            snapshot: runningSnapshot,
+            store,
+          }}
+          taskId={runningSnapshot.id}
+        />,
+      );
+
+      expect(markup).toContain('data-turn-processing-time=""');
+      expect(markup).toContain('dateTime="PT2M5S"');
+      expect(markup).toContain(">2m 5s</time>");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("offers task copy only beside the latest completed AI reply", () => {
     const messageSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
@@ -524,7 +606,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("data-ai-chain-of-thought");
   });
 
-  it("does not render an assistant footer while its turn is still running", () => {
+  it("does not render assistant actions while its turn is still running", () => {
     const runningSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       status: "running",
@@ -558,7 +640,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain("正在处理。");
     expect(markup).not.toContain('aria-label="复制消息"');
     expect(markup).not.toContain('aria-label="复制任务"');
-    expect(markup).not.toContain("<time");
+    expect(markup).toContain('data-turn-processing-time=""');
     expect(markup).toContain('data-ai-shimmer=""');
     expect(markup).toContain("正在运行");
     expect(markup.indexOf("正在处理。")).toBeLessThan(markup.indexOf("正在运行"));
