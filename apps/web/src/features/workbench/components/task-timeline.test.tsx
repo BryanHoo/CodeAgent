@@ -706,7 +706,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("输出已截断，仅显示最新内容。");
   });
 
-  it("renders a running command as a streaming Terminal with its real cwd fallback", () => {
+  it("keeps a running command collapsed while preserving its visible running status", () => {
     const runningCommandSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       status: "running",
@@ -731,13 +731,11 @@ describe("TaskSnapshotTimeline", () => {
 
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningCommandSnapshot} />);
 
-    expect(markup).toContain('data-terminal=""');
-    expect(markup).toContain('data-streaming="true"');
-    expect(markup).toContain('aria-label="正在接收命令输出"');
-    expect(markup).toContain("/workspace/CodeAgent");
+    expect(markup).not.toMatch(/<details[^>]* open/u);
+    expect(markup).not.toContain('data-terminal=""');
+    expect(markup).not.toContain("/workspace/CodeAgent");
     expect(markup).toContain('aria-label="AI 回复正在运行：pnpm test"');
     expect(markup).toContain("正在运行 pnpm test");
-    expect(markup).not.toContain("输出已截断");
   });
 
   it("keeps the latest completed operation visible while the turn continues", () => {
@@ -836,8 +834,9 @@ describe("TaskSnapshotTimeline", () => {
 
     expect(markup).toContain("已拒绝");
     expect(markup).toContain("失败");
-    expect(markup).toContain(">错误<");
-    expect(markup).toContain("连接已中断");
+    expect(markup).not.toMatch(/<details[^>]* open/u);
+    expect(markup).not.toContain(">错误<");
+    expect(markup).not.toContain("连接已中断");
   });
 
   it("renders the active plan as a streaming, expanded Plan", () => {

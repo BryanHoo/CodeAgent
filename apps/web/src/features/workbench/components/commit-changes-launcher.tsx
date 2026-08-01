@@ -11,6 +11,9 @@ import {
 } from "react";
 
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
+import { SuccessToast } from "../../../shared/ui/success-toast.js";
+
+const SUCCESS_TOAST_DURATION_MS = 4_000;
 
 const LazyCommitChangesController = lazy(() =>
   import("./commit-changes-controller.js").then((module) => ({
@@ -33,6 +36,11 @@ export const CommitChangesLauncher = forwardRef<
   CommitChangesLauncherProps
 >(function CommitChangesLauncher(props, ref) {
   const [isOpen, setIsOpen] = useState(false);
+  const [successToast, setSuccessToast] = useState<Readonly<{
+    id: number;
+    message: string;
+  }> | null>(null);
+  const nextToastIdRef = useRef(0);
   const shouldRestoreFocusRef = useRef(false);
   const open = useCallback(() => {
     setIsOpen(true);
@@ -40,6 +48,10 @@ export const CommitChangesLauncher = forwardRef<
   const close = useCallback(() => {
     shouldRestoreFocusRef.current = true;
     setIsOpen(false);
+  }, []);
+  const showSuccessToast = useCallback((message: string) => {
+    nextToastIdRef.current += 1;
+    setSuccessToast({ id: nextToastIdRef.current, message });
   }, []);
 
   useImperativeHandle(ref, () => ({ open }), [open]);
@@ -52,9 +64,35 @@ export const CommitChangesLauncher = forwardRef<
     }
   }, [isOpen]);
 
-  return isOpen ? (
-    <Suspense fallback={null}>
-      <LazyCommitChangesController {...props} onClose={close} />
-    </Suspense>
-  ) : null;
+  useEffect(() => {
+    if (successToast === null) {
+      return;
+    }
+    // 每次成功都重置可见时长，连续提交不会沿用上一次的剩余计时。
+    const timeoutId = window.setTimeout(() => {
+      setSuccessToast(null);
+    }, SUCCESS_TOAST_DURATION_MS);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [successToast]);
+
+  return (
+    <>
+      {isOpen ? (
+        <Suspense fallback={null}>
+          <LazyCommitChangesController {...props} onClose={close} onSuccess={showSuccessToast} />
+        </Suspense>
+      ) : null}
+      {successToast === null ? null : (
+        <SuccessToast
+          key={successToast.id}
+          message={successToast.message}
+          onDismiss={() => {
+            setSuccessToast(null);
+          }}
+        />
+      )}
+    </>
+  );
 });

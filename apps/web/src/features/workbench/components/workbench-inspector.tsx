@@ -541,64 +541,58 @@ export function WorkbenchInspector({
 
       <div className="min-h-0 overflow-hidden" role="tabpanel">
         {tab === "changes" ? (
-          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-            <div
-              aria-label="未提交变更摘要"
-              className="flex w-full items-center justify-between gap-2 px-2.5 pb-3 pt-2.5"
-              role="group"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-foreground">未提交变更</p>
-                <p
-                  aria-label="变更统计"
-                  className="mt-0.5 flex items-center gap-1.5 text-caption text-muted-foreground"
-                >
-                  <span>{allChanges.length} 个变更</span>
-                  <span className="font-medium text-diff-added">+{additions}</span>
-                  <span className="font-medium text-diff-removed">-{removals}</span>
-                </p>
-              </div>
+          <div className="flex h-full min-h-0 flex-col">
+            {/* 工作区干净时省略整个摘要模块，把空间完整留给项目文件。 */}
+            {allChanges.length > 0 ? (
               <div
-                aria-label="变更操作"
-                className="flex shrink-0 items-center justify-end gap-1.5"
+                aria-label="未提交变更摘要"
+                className="flex w-full items-center justify-between gap-2 px-2.5 pb-3 pt-2.5"
                 role="group"
               >
-                <button
-                  aria-haspopup="dialog"
-                  aria-label={
-                    allChanges.length === 0
-                      ? "暂无未提交变更可审核"
-                      : `审核 ${String(allChanges.length)} 个未提交变更`
-                  }
-                  className="h-7 shrink-0 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-control"
-                  disabled={allChanges.length === 0}
-                  onClick={() => {
-                    onReviewChanges(allChanges);
-                  }}
-                  type="button"
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-foreground">未提交变更</p>
+                  <p
+                    aria-label="变更统计"
+                    className="mt-0.5 flex items-center gap-1.5 text-caption text-muted-foreground"
+                  >
+                    <span>{allChanges.length} 个变更</span>
+                    <span className="font-medium text-diff-added">+{additions}</span>
+                    <span className="font-medium text-diff-removed">-{removals}</span>
+                  </p>
+                </div>
+                <div
+                  aria-label="变更操作"
+                  className="flex shrink-0 items-center justify-end gap-1.5"
+                  role="group"
                 >
-                  审核
-                </button>
-                <button
-                  aria-haspopup="dialog"
-                  aria-label={
-                    allChanges.length === 0
-                      ? "暂无未提交变更可提交"
-                      : `提交 ${String(allChanges.length)} 个未提交变更`
-                  }
-                  className="h-7 shrink-0 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-control"
-                  disabled={allChanges.length === 0 || gitStatus?.repositoryMode === "children"}
-                  id="workbench-commit-changes"
-                  onClick={onCommitChanges}
-                  type="button"
-                >
-                  提交
-                </button>
+                  <button
+                    aria-haspopup="dialog"
+                    aria-label={`审核 ${String(allChanges.length)} 个未提交变更`}
+                    className="h-7 shrink-0 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none"
+                    onClick={() => {
+                      onReviewChanges(allChanges);
+                    }}
+                    type="button"
+                  >
+                    审核
+                  </button>
+                  <button
+                    aria-haspopup="dialog"
+                    aria-label={`提交 ${String(allChanges.length)} 个未提交变更`}
+                    className="h-7 shrink-0 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-control"
+                    disabled={gitStatus?.repositoryMode === "children"}
+                    id="workbench-commit-changes"
+                    onClick={onCommitChanges}
+                    type="button"
+                  >
+                    提交
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="min-h-0 overflow-y-auto px-2.5 pb-2.5">
+            ) : null}
+            <div className="flex min-h-0 flex-1 flex-col">
               {gitStatusError !== null ? (
-                <div className="mb-2 flex items-center gap-2 rounded-control bg-control px-2 py-2">
+                <div className="mx-2.5 mb-2 flex items-center gap-2 rounded-control bg-control px-2 py-2">
                   <div className="min-w-0 flex-1">
                     <p className="text-label text-diff-removed">Git 变更自动检测已停止</p>
                   </div>
@@ -615,73 +609,77 @@ export function WorkbenchInspector({
                   </IconButton>
                 </div>
               ) : gitStatusPending && gitStatus === undefined ? (
-                <p className="mb-2 px-2 text-caption text-muted-foreground">正在读取 Git 变更...</p>
+                <p className="mb-2 px-4 text-caption text-muted-foreground">正在读取 Git 变更...</p>
               ) : null}
-              <div className="mb-1 flex items-center justify-between px-1.5 text-meta font-medium text-muted-foreground">
+              {/* 标题固定在文件树滚动容器外，滚动长目录时始终保持可见。 */}
+              <div className="mb-1 flex shrink-0 items-center justify-between px-4 text-meta font-medium text-muted-foreground">
                 <span>项目文件</span>
               </div>
-              {rootFileTreeState?.error !== null && rootFileTreeState?.error !== undefined ? (
-                <div className="flex flex-col items-center px-2 py-5 text-center">
-                  <p className="text-label text-diff-removed">无法读取项目文件</p>
-                  <button
-                    aria-label="重新读取项目文件"
-                    className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-control bg-control px-3 text-label font-medium text-foreground transition-colors hover:bg-raised disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={rootFileTreeState.isFetching}
-                    onClick={() => {
-                      onRefreshFileTreeDirectory(null);
-                    }}
-                    type="button"
-                  >
-                    <RefreshCw
-                      aria-hidden="true"
-                      className={`size-3.5 ${rootFileTreeState.isFetching ? "animate-spin" : ""}`}
-                    />
-                    {rootFileTreeState.isFetching ? "正在读取" : "重新读取"}
-                  </button>
-                </div>
-              ) : rootFileTreeState?.isPending === true && rootFileTreeState.data === undefined ? (
-                <p className="px-2 py-5 text-center text-label text-muted-foreground">
-                  正在读取项目文件...
-                </p>
-              ) : (rootFileTreeState?.data?.entries.length ?? 0) === 0 ? (
-                <p className="px-2 py-5 text-center text-label text-muted-foreground">
-                  当前项目没有可显示的文件
-                </p>
-              ) : (
-                <FileTree
-                  aria-label="项目文件"
-                  expanded={expandedFileTreePaths}
-                  onExpandedChange={onFileTreeExpandedChange}
-                  onSelect={(path) => {
-                    if (!filePaths.has(path)) {
-                      return;
-                    }
-                    setSelectedTreePath(path);
-                    const fileChange = fileChangesByPath.get(path);
-                    if (fileChange === undefined) {
-                      onOpenSourceFile(path);
-                    } else {
-                      onOpenFileDiff(fileChange);
-                    }
-                  }}
-                  {...(selectedTreePath === undefined ? {} : { selectedPath: selectedTreePath })}
-                >
-                  <ProjectFileTreeNodes
-                    changeStatsByPath={fileTreeChangeStats}
-                    directoryStates={fileTreeDirectoryStates}
-                    entries={rootFileTreeState?.data?.entries ?? []}
-                    expandedPaths={expandedFileTreePaths}
-                    onOpenContextMenu={(target) => {
-                      // 右键目标先进入文件树选中态，让菜单与当前操作对象保持一致。
-                      setSelectedTreePath(target.path);
-                      if (projectOpenApps.length > 0) {
-                        setProjectOpenTarget(target);
+              <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2.5">
+                {rootFileTreeState?.error !== null && rootFileTreeState?.error !== undefined ? (
+                  <div className="flex flex-col items-center px-2 py-5 text-center">
+                    <p className="text-label text-diff-removed">无法读取项目文件</p>
+                    <button
+                      aria-label="重新读取项目文件"
+                      className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-control bg-control px-3 text-label font-medium text-foreground transition-colors hover:bg-raised disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={rootFileTreeState.isFetching}
+                      onClick={() => {
+                        onRefreshFileTreeDirectory(null);
+                      }}
+                      type="button"
+                    >
+                      <RefreshCw
+                        aria-hidden="true"
+                        className={`size-3.5 ${rootFileTreeState.isFetching ? "animate-spin" : ""}`}
+                      />
+                      {rootFileTreeState.isFetching ? "正在读取" : "重新读取"}
+                    </button>
+                  </div>
+                ) : rootFileTreeState?.isPending === true &&
+                  rootFileTreeState.data === undefined ? (
+                  <p className="px-2 py-5 text-center text-label text-muted-foreground">
+                    正在读取项目文件...
+                  </p>
+                ) : (rootFileTreeState?.data?.entries.length ?? 0) === 0 ? (
+                  <p className="px-2 py-5 text-center text-label text-muted-foreground">
+                    当前项目没有可显示的文件
+                  </p>
+                ) : (
+                  <FileTree
+                    aria-label="项目文件"
+                    expanded={expandedFileTreePaths}
+                    onExpandedChange={onFileTreeExpandedChange}
+                    onSelect={(path) => {
+                      if (!filePaths.has(path)) {
+                        return;
+                      }
+                      setSelectedTreePath(path);
+                      const fileChange = fileChangesByPath.get(path);
+                      if (fileChange === undefined) {
+                        onOpenSourceFile(path);
+                      } else {
+                        onOpenFileDiff(fileChange);
                       }
                     }}
-                    onRefreshDirectory={onRefreshFileTreeDirectory}
-                  />
-                </FileTree>
-              )}
+                    {...(selectedTreePath === undefined ? {} : { selectedPath: selectedTreePath })}
+                  >
+                    <ProjectFileTreeNodes
+                      changeStatsByPath={fileTreeChangeStats}
+                      directoryStates={fileTreeDirectoryStates}
+                      entries={rootFileTreeState?.data?.entries ?? []}
+                      expandedPaths={expandedFileTreePaths}
+                      onOpenContextMenu={(target) => {
+                        // 右键目标先进入文件树选中态，让菜单与当前操作对象保持一致。
+                        setSelectedTreePath(target.path);
+                        if (projectOpenApps.length > 0) {
+                          setProjectOpenTarget(target);
+                        }
+                      }}
+                      onRefreshDirectory={onRefreshFileTreeDirectory}
+                    />
+                  </FileTree>
+                )}
+              </div>
             </div>
           </div>
         ) : (

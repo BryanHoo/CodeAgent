@@ -311,18 +311,6 @@ function toToolState(status: AgentItemStatus): ToolState {
   return "output-available";
 }
 
-function shouldOpenToolByDefault(
-  status: AgentItemStatus,
-  turnStatus: AgentTurn["status"],
-): boolean {
-  return (
-    (turnStatus === "running" && status === "running") ||
-    status === "declined" ||
-    status === "failed" ||
-    status === "interrupted"
-  );
-}
-
 function toTaskStatus(status: AgentItemStatus): TaskStatus {
   // Activity 使用 AI Elements 的四态模型，协议中的拒绝与中断都属于失败终态。
   if (status === "pending") {
@@ -831,7 +819,7 @@ function TimelineItemContent({
       const commandOutput = item.output ?? item.cwd;
       const isStreamingCommand = turnStatus === "running" && item.status === "running";
       return (
-        <Tool defaultOpen={shouldOpenToolByDefault(item.status, turnStatus)}>
+        <Tool>
           <ToolHeader state={toToolState(item.status)} title={item.command} />
           <ToolBody>
             <Terminal isStreaming={isStreamingCommand} output={commandOutput}>
@@ -867,7 +855,7 @@ function TimelineItemContent({
           : undefined;
 
       return (
-        <Tool defaultOpen={shouldOpenToolByDefault(item.status, turnStatus)}>
+        <Tool>
           <ToolHeader state={toToolState(item.status)} title={item.name} />
           <ToolContent>
             {item.input === undefined ? null : <ToolInput input={item.input} />}

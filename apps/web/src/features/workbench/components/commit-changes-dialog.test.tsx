@@ -44,6 +44,8 @@ describe("CommitChangesDialog", () => {
     expect(markup).toContain('id="commit-message"');
     expect(markup).toContain(">提交</button>");
     expect(markup).toContain("提交并推送");
+    expect(markup).toMatch(/class="[^"]*bg-accent[^"]*text-white[^"]*"/u);
+    expect(markup).not.toContain("text-accent-foreground");
   });
 
   it("disables commit actions for aggregated child repositories", () => {

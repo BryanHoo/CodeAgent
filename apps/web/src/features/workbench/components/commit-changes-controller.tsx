@@ -13,13 +13,22 @@ type CommitChangesControllerProps = Readonly<{
   client: CodeAgentWorkbenchClient;
   gitStatus: ProjectGitStatus;
   onClose: () => void;
+  onSuccess: (message: string) => void;
   projectId: string;
 }>;
+
+function getCommitSuccessMessage(result: CommitProjectChangesResponse): string | null {
+  if (result.pushStatus === "pushed") {
+    return "提交并推送成功";
+  }
+  return result.pushStatus === "not_requested" ? "提交成功" : null;
+}
 
 export function CommitChangesController({
   client,
   gitStatus,
   onClose,
+  onSuccess,
   projectId,
 }: CommitChangesControllerProps) {
   const queryClient = useQueryClient();
@@ -44,11 +53,18 @@ export function CommitChangesController({
       onClose={close}
       onCommit={async (request) => {
         const response = await commitMutation.mutateAsync(request);
-        setResult(response);
-        await queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           exact: true,
           queryKey: ["projects", projectId, "git-status"],
         });
+        const successMessage = getCommitSuccessMessage(response);
+        if (successMessage !== null) {
+          // 完整成功立即结束提交流程；toast 由常驻 Launcher 持有，关闭弹窗后仍可见。
+          onSuccess(successMessage);
+          close();
+          return;
+        }
+        setResult(response);
       }}
       onGenerateMessage={async (request) => {
         const response = await messageMutation.mutateAsync(request);

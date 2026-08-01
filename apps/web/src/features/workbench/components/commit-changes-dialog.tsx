@@ -294,7 +294,7 @@ export function CommitChangesDialog({
                 提交
               </button>
               <button
-                className="inline-flex h-8 items-center gap-1.5 rounded-control bg-accent px-3 text-label font-medium text-accent-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-8 items-center gap-1.5 rounded-control bg-accent px-3 text-label font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!canCommit}
                 onClick={() => {
                   void commit("commit_and_push").catch(() => undefined);

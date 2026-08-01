@@ -142,6 +142,12 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain('aria-label="Git 变更文件"');
     expect(markup).not.toContain("未暂存");
     expect(markup).not.toContain("已暂存");
+
+    const projectFilesTitleIndex = markup.indexOf(">项目文件</span>");
+    const fileTreeScrollContainerIndex = markup.indexOf("overflow-y-auto px-2.5 pb-2.5");
+    expect(projectFilesTitleIndex).toBeGreaterThan(-1);
+    expect(fileTreeScrollContainerIndex).toBeGreaterThan(-1);
+    expect(projectFilesTitleIndex).toBeLessThan(fileTreeScrollContainerIndex);
   });
 
   it("renders loaded directory children only while their folders are expanded", () => {
@@ -229,7 +235,7 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain('aria-label="src，后代新增 0 行，删除 2 行"');
   });
 
-  it("renders an explicit empty state without demo files", () => {
+  it("omits the uncommitted changes module when the working tree is clean", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
@@ -241,12 +247,11 @@ describe("WorkbenchInspector", () => {
       />,
     );
 
-    expect(markup).toContain("0 个变更");
-    expect(markup).toContain('aria-label="暂无未提交变更可审核"');
-    expect(markup).toContain('aria-label="暂无未提交变更可提交"');
-    expect(markup).toContain(">审核</button>");
-    expect(markup).toContain(">提交</button>");
-    expect(markup).toContain("disabled");
+    expect(markup).not.toContain('aria-label="未提交变更摘要"');
+    expect(markup).not.toContain('aria-label="变更操作"');
+    expect(markup).not.toContain(">审核</button>");
+    expect(markup).not.toContain(">提交</button>");
+    expect(markup).toContain(">项目文件</span>");
     expect(markup).toContain("README.md");
     expect(markup).not.toContain("workbench-shell.tsx");
   });

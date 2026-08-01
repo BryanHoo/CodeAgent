@@ -2167,6 +2167,39 @@ test("generates a message and commits only selected files", async ({ page }) => 
   expect(commitIdempotencyKey).toBeTruthy();
 });
 
+for (const scenario of [
+  { actionName: "提交", pushStatus: "not_requested", toastMessage: "提交成功" },
+  { actionName: "提交并推送", pushStatus: "pushed", toastMessage: "提交并推送成功" },
+] as const) {
+  test(`${scenario.actionName}成功后关闭弹窗并显示 toast`, async ({ page }) => {
+    await page.route("**/v1/projects/code-agent/git/status", async (route) => {
+      await route.fulfill({ contentType: "application/json", json: projectGitStatus });
+    });
+    await page.route("**/v1/projects/code-agent/git/commits", async (route) => {
+      const request = parseRequestRecord(route.request().postData());
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          branch: "feat/review-targets",
+          commitSha: "0123456789abcdef0123456789abcdef01234567",
+          message: request["message"],
+          pushStatus: scenario.pushStatus,
+        },
+        status: 201,
+      });
+    });
+
+    await page.goto("/p/code-agent/t/task-1");
+    await page.getByRole("button", { name: /提交 \d+ 个未提交变更/u }).click();
+    const dialog = page.getByRole("dialog", { name: "提交变更" });
+    await dialog.getByRole("textbox", { name: "提交信息" }).fill("fix(git): 验证提交成功反馈");
+    await dialog.getByRole("button", { name: scenario.actionName, exact: true }).click();
+
+    await expect(dialog).not.toBeAttached();
+    await expect(page.locator('[data-toast="success"]')).toHaveText(scenario.toastMessage);
+  });
+}
+
 test("disables composer mutations that the provider does not support", async ({ page }) => {
   await page.route("**/v1/capabilities", async (route) => {
     await route.fulfill({
