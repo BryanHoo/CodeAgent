@@ -819,16 +819,14 @@ export async function createCodeAgentServer(
     }>
   >();
   const getProjectContext = async (projectId: string) => {
+    const existing = projectContexts.get(projectId);
+    if (existing !== undefined) {
+      return existing;
+    }
+    // 已激活 Runtime 的身份由创建时校验；仅缓存未命中时访问持久层。
     const project = await options.projectRepository.read(projectId);
     if (project === undefined) {
       return undefined;
-    }
-    const existing = projectContexts.get(projectId);
-    if (existing !== undefined) {
-      if (existing.project.rootPath !== project.rootPath) {
-        throw new Error("Project identity changed while the runtime was active");
-      }
-      return existing;
     }
     const provider = options.provider.forProject(project);
     const eventStream = new AgentEventStream({
@@ -1438,6 +1436,10 @@ export async function createCodeAgentServer(
           );
           if (project === undefined) {
             throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const existingContext = projectContexts.get(project.id);
+          if (existingContext !== undefined) {
+            projectContexts.set(project.id, { ...existingContext, project });
           }
           return { project };
         },

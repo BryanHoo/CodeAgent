@@ -714,6 +714,9 @@ describe("CodeAgent Server", () => {
   it("renames and removes only the registered project idempotently", async () => {
     const providerHarness = createProvider();
     let storedProject: Project | undefined = project;
+    const read = vi.fn((projectId: string) =>
+      Promise.resolve(storedProject?.id === projectId ? storedProject : undefined),
+    );
     const rename = vi.fn((_projectId: string, name: string) => {
       storedProject = storedProject === undefined ? undefined : { ...storedProject, name };
       return Promise.resolve(storedProject);
@@ -729,8 +732,7 @@ describe("CodeAgent Server", () => {
       createServerOptions(providerHarness.provider, {
         projectRepository: {
           list: () => Promise.resolve(storedProject === undefined ? [] : [storedProject]),
-          read: (projectId: string) =>
-            Promise.resolve(storedProject?.id === projectId ? storedProject : undefined),
+          read,
           register: () => Promise.resolve(project),
           remove,
           rename,
@@ -740,7 +742,14 @@ describe("CodeAgent Server", () => {
     );
     closeCallbacks.push(() => app.close());
     await app.inject({ method: "GET", url: "/v1/projects/code-agent/skills" });
+    const readsAfterContextCreation = read.mock.calls.length;
+    const cachedContextResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks",
+    });
     expect(providerHarness.eventListeners.size).toBe(1);
+    expect(cachedContextResponse.statusCode).toBe(200);
+    expect(read).toHaveBeenCalledTimes(readsAfterContextCreation);
 
     const renameRequest = {
       headers: { "idempotency-key": "rename-project-key" },
@@ -750,6 +759,12 @@ describe("CodeAgent Server", () => {
     };
     const firstRenameResponse = await app.inject(renameRequest);
     const repeatedRenameResponse = await app.inject(renameRequest);
+    const renamedContextResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks",
+    });
+    expect(renamedContextResponse.statusCode).toBe(200);
+    expect(read).toHaveBeenCalledTimes(readsAfterContextCreation);
     const invalidRenameResponse = await app.inject({
       ...renameRequest,
       headers: { "idempotency-key": "invalid-project-name" },
@@ -767,6 +782,10 @@ describe("CodeAgent Server", () => {
       ...removeRequest,
       headers: { "idempotency-key": "missing-project-key" },
     });
+    const removedContextResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks",
+    });
 
     expect(firstRenameResponse.json()).toEqual({
       project: { ...project, name: "工作区别名" },
@@ -781,6 +800,8 @@ describe("CodeAgent Server", () => {
     expect(remove).toHaveBeenCalledTimes(2);
     expect(providerHarness.eventListeners.size).toBe(0);
     expect(missingRemoveResponse.statusCode).toBe(404);
+    expect(removedContextResponse.statusCode).toBe(404);
+    expect(read).toHaveBeenCalledTimes(readsAfterContextCreation + 1);
   });
 
   it("serves the configured project's Git working tree status", async () => {

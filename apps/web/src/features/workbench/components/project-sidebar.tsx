@@ -172,6 +172,7 @@ export function ProjectSidebar({
     reorderProjects,
     removeProject,
     renameProject,
+    setExpandedProjectTaskIds,
   } = useProjects();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -261,6 +262,11 @@ export function ProjectSidebar({
       setExpandedProjects(nextExpandedProjectIds);
     }
   }, [projects]);
+
+  useEffect(() => {
+    // 任务列表请求跟随可见文件夹；当前路由 Project 由 ProjectProvider 单独保持激活。
+    setExpandedProjectTaskIds(expandedProjects);
+  }, [expandedProjects, setExpandedProjectTaskIds]);
 
   const updateExpandedProjects = useCallback(
     (update: (current: ReadonlySet<string>) => ReadonlySet<string>) => {

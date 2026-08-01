@@ -105,6 +105,7 @@ type ProjectContextValue = Readonly<{
   removeProject: (projectId: string) => Promise<readonly Project[] | undefined>;
   renameProject: (projectId: string, name: string) => Promise<boolean>;
   retry: () => Promise<void>;
+  setExpandedProjectTaskIds: (projectIds: ReadonlySet<string>) => void;
   taskActivity: TaskActivityMap;
   tasks: readonly AgentTask[];
   viewTask: (projectId: string, taskId?: string) => void;
@@ -233,6 +234,10 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   const [projectTaskResults, setProjectTaskResults] = useState<
     ReadonlyMap<string, ProjectTaskQueryResult>
   >(() => new Map());
+  const [activeProjectId, setActiveProjectId] = useState<string>();
+  const [expandedProjectTaskIds, setExpandedProjectTaskIdsState] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const taskActivity = useSyncExternalStore(
     useCallback(
       (listener: () => void) => projectRuntime.subscribeTaskActivity(listener),
@@ -247,6 +252,14 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   const projectRenameMutation = useMutation(projectRenameMutationOptions(client));
   const projectRemoveMutation = useMutation(projectRemoveMutationOptions(client));
   const projects = projectsQuery.data?.data ?? emptyProjects;
+  const queriedProjectIds = useMemo(() => {
+    const projectIds = new Set(expandedProjectTaskIds);
+    if (activeProjectId !== undefined) {
+      projectIds.add(activeProjectId);
+    }
+    return projectIds;
+  }, [activeProjectId, expandedProjectTaskIds]);
+  const queriedProjects = projects.filter((project) => queriedProjectIds.has(project.id));
   const projectTaskResultsRef = useRef(projectTaskResults);
   projectTaskResultsRef.current = projectTaskResults;
   const updateProjectTaskResult = useCallback(
@@ -280,12 +293,12 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
       return nextResults;
     });
   }, []);
-  const tasks = projects.flatMap(
+  const tasks = queriedProjects.flatMap(
     (project) => projectTaskResults.get(project.id)?.tasks ?? emptyTasks,
   );
   // Project Task 查询状态按 Project 隔离，单个目录失败不能阻断其他工作台。
   const projectTaskStates = new Map(
-    projects.map((project) => [
+    queriedProjects.map((project) => [
       project.id,
       projectTaskResults.get(project.id)?.state ?? pendingProjectTaskState,
     ]),
@@ -314,10 +327,25 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   );
   const viewTask = useCallback(
     (projectId: string, taskId?: string) => {
+      // 当前路由始终激活对应列表，即使用户把该 Project 的任务树收起。
+      setActiveProjectId((currentProjectId) =>
+        currentProjectId === projectId ? currentProjectId : projectId,
+      );
       projectRuntime.viewTask(projectId, taskId);
     },
     [projectRuntime],
   );
+  const setExpandedProjectTaskIds = useCallback((projectIds: ReadonlySet<string>) => {
+    setExpandedProjectTaskIdsState((currentProjectIds) => {
+      if (
+        currentProjectIds.size === projectIds.size &&
+        [...currentProjectIds].every((projectId) => projectIds.has(projectId))
+      ) {
+        return currentProjectIds;
+      }
+      return new Set(projectIds);
+    });
+  }, []);
   const requestNotificationPermission = useCallback(() => {
     // 由 Composer 的用户手势触发；权限失败只关闭增强能力，不阻断 Task 操作。
     void projectRuntime.requestNotificationPermission();
@@ -429,7 +457,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
 
   return (
     <>
-      {projects.map((project) => (
+      {queriedProjects.map((project) => (
         <ProjectTaskQuery
           client={client}
           key={project.id}
@@ -463,6 +491,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           removeProject,
           renameProject,
           retry,
+          setExpandedProjectTaskIds,
           taskActivity,
           tasks,
           viewTask,

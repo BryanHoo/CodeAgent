@@ -1025,6 +1025,10 @@ test("keeps a healthy project usable when another project task query fails", asy
 
   await page.goto("/p/code-agent/t/task-1");
 
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  expect(failedProjectRequestCount).toBe(0);
+  await sidebar.getByRole("button", { name: "切换项目 superwork" }).click();
+
   await expect.poll(() => failedProjectRequestCount).toBe(2);
   await expect(page.getByRole("heading", { name: "构建 macOS 工作台" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Codex Runtime 不可用" })).toHaveCount(0);
@@ -3975,6 +3979,24 @@ test("toggles project tasks from the project name without navigation", async ({ 
   await sidebar.getByRole("button", { name: "切换项目 CodeAgent" }).click();
   await expect(task).toBeVisible();
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
+});
+
+test("loads tasks only for the current or expanded projects", async ({ page }) => {
+  let superworkTaskRequests = 0;
+  await page.route("**/v1/projects/superwork/tasks?*", async (route) => {
+    superworkTaskRequests += 1;
+    await route.fallback();
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+
+  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  await expect(sidebar.getByRole("link", { name: "优化输入框交互" })).toBeVisible();
+  expect(superworkTaskRequests).toBe(0);
+
+  await sidebar.getByRole("button", { name: "切换项目 superwork" }).click();
+
+  await expect.poll(() => superworkTaskRequests).toBe(1);
 });
 
 test("loads one project task page only after showing more", async ({ page }) => {
