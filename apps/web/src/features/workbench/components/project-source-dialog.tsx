@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { FileCode2, X } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { Code2, Eye, FileCode2, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 import {
@@ -11,7 +11,7 @@ import {
   CodeBlockHeader,
   CodeBlockTitle,
 } from "../../../shared/ai-elements/code-block.js";
-import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
+import { MessageResponse, type MessageFileReference } from "../../../shared/ai-elements/message.js";
 import { getCodeLanguage } from "../../../shared/ai-elements/code-languages.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 
@@ -79,6 +79,8 @@ export function ProjectSourceDialog({
   reference,
 }: ProjectSourceDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  // 渲染状态绑定源文件路径，切换文件或关闭弹窗后必须回到原始内容。
+  const [renderedMarkdownPath, setRenderedMarkdownPath] = useState<string | null>(null);
   const sourceQuery = useQuery({
     enabled: reference !== null,
     queryFn: ({ signal }) => {
@@ -101,7 +103,12 @@ export function ProjectSourceDialog({
 
   useEffect(() => {
     const lineNumber = reference?.lineNumber;
-    if (sourceQuery.data === undefined || lineNumber === null || lineNumber === undefined) {
+    if (
+      sourceQuery.data === undefined ||
+      lineNumber === null ||
+      lineNumber === undefined ||
+      renderedMarkdownPath === sourceQuery.data.path
+    ) {
       return;
     }
 
@@ -109,17 +116,24 @@ export function ProjectSourceDialog({
     dialogRef.current
       ?.querySelector(`[data-code-line="${String(lineNumber)}"]`)
       ?.scrollIntoView({ block: "center" });
-  }, [reference?.lineNumber, sourceQuery.data]);
+  }, [reference?.lineNumber, renderedMarkdownPath, sourceQuery.data]);
 
   if (reference === null) {
     return null;
   }
 
   const sourcePath = sourceQuery.data?.path ?? reference.path;
+  const sourceLanguage = getCodeLanguage(sourcePath);
+  const canRenderMarkdown = sourceLanguage === "markdown" || sourceLanguage === "mdx";
+  const showRenderedMarkdown = canRenderMarkdown && renderedMarkdownPath === sourcePath;
   const titleId = "project-source-dialog-title";
+  const handleClose = () => {
+    setRenderedMarkdownPath(null);
+    onClose();
+  };
   const headerProps = {
     lineNumber: reference.lineNumber,
-    onClose,
+    onClose: handleClose,
     sourcePath,
     titleId,
     truncated: sourceQuery.data?.truncated === true,
@@ -131,11 +145,11 @@ export function ProjectSourceDialog({
       className="file-diff-dialog m-auto h-[min(82vh,54rem)] w-[min(92vw,72rem)] max-w-none overflow-hidden rounded-surface bg-raised p-0 text-foreground shadow-panel backdrop:bg-scrim"
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        handleClose();
       }}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
-          onClose();
+          handleClose();
         }
       }}
       ref={dialogRef}
@@ -161,15 +175,55 @@ export function ProjectSourceDialog({
               无法加载源文件
             </div>
           </div>
+        ) : showRenderedMarkdown ? (
+          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">
+            <SourceHeader
+              {...headerProps}
+              actions={
+                <IconButton
+                  label="显示原始内容"
+                  onClick={() => {
+                    setRenderedMarkdownPath(null);
+                  }}
+                  size="small"
+                >
+                  <Code2 className="size-3.5" aria-hidden="true" />
+                </IconButton>
+              }
+            />
+            <div className="min-h-0 overflow-auto px-5 py-4 sm:px-8 sm:py-6">
+              <MessageResponse className="mx-auto max-w-4xl">
+                {sourceQuery.data.content}
+              </MessageResponse>
+            </div>
+          </div>
         ) : (
           <CodeBlock
             className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] rounded-none bg-content shadow-none"
             code={sourceQuery.data.content}
             highlightedLine={reference.lineNumber}
-            language={getCodeLanguage(sourcePath)}
+            language={sourceLanguage}
             showLineNumbers
           >
-            <SourceHeader {...headerProps} actions={<CodeBlockCopyButton />} />
+            <SourceHeader
+              {...headerProps}
+              actions={
+                <>
+                  {canRenderMarkdown ? (
+                    <IconButton
+                      label="预览 Markdown"
+                      onClick={() => {
+                        setRenderedMarkdownPath(sourcePath);
+                      }}
+                      size="small"
+                    >
+                      <Eye className="size-3.5" aria-hidden="true" />
+                    </IconButton>
+                  ) : null}
+                  <CodeBlockCopyButton />
+                </>
+              }
+            />
           </CodeBlock>
         )}
       </section>

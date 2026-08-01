@@ -1806,6 +1806,13 @@ test("opens bounded source previews from assistant file references", async ({ co
   await expect(highlightedLine).toHaveAttribute("data-highlighted", "true");
   await expect(highlightedLine).toBeInViewport();
 
+  await dialog.getByRole("button", { name: "预览 Markdown" }).click();
+  await expect(dialog.getByRole("heading", { name: "11.7 外部登录边界" })).toBeVisible();
+  await expect(dialog.locator('[data-language="markdown"]')).not.toBeAttached();
+
+  await dialog.getByRole("button", { name: "显示原始内容" }).click();
+  await expect(dialog.locator('[data-language="markdown"]')).toBeVisible();
+
   await dialog.getByRole("button", { name: "复制代码" }).click();
   await expect(dialog.getByRole("button", { name: "代码已复制" })).toBeVisible();
   await expect
