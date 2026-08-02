@@ -30,9 +30,12 @@ export const PROJECT_RUNTIME_IDLE_TIMEOUT_MS = 2 * 60_000;
 const MAX_PROJECT_EVENT_HISTORY_BYTES = 4 * 1_048_576;
 const MAX_PROJECT_EVENT_HISTORY_EVENTS = 2_048;
 const MAX_TASK_TITLES = 2_048;
+const SNAPSHOT_RECOVERY_RETRY_INITIAL_MS = 1_000;
+const SNAPSHOT_RECOVERY_RETRY_MAX_MS = 30_000;
 
 type ActivityListener = () => void;
-type RecoverTaskSnapshot = () => void;
+type RecoverTaskSnapshot = () => Promise<AgentTaskSnapshotResponse | undefined>;
+type TaskRecoveryState = "disposed" | "ready" | "recovering" | "waiting_to_retry";
 
 type ProjectEventRuntimeOptions = Required<
   Pick<
@@ -155,14 +158,26 @@ function createProjectTurnKey(projectId: string, taskId: string, turnId: string)
 // 每个 Task Store 独立合并动画帧内 Delta；Project Runtime 只共享传输和协议解析。
 class TaskEventTarget {
   readonly #buffer = new AgentEventBuffer();
+  readonly #onRecoveredSnapshot: (
+    response: AgentTaskSnapshotResponse,
+    target: TaskEventTarget,
+  ) => void;
   readonly #recoverSnapshots = new Set<RecoverTaskSnapshot>();
   readonly #store: TaskStore;
   #frameId: number | undefined;
-  #pausedForRecovery = false;
+  #recoveryAttempt = 0;
+  #recoveryGeneration = 0;
+  #recoveryState: TaskRecoveryState = "ready";
+  #retryTimer: ReturnType<typeof setTimeout> | undefined;
 
-  public constructor(store: TaskStore, recoverSnapshot: RecoverTaskSnapshot) {
+  public constructor(
+    store: TaskStore,
+    recoverSnapshot: RecoverTaskSnapshot,
+    onRecoveredSnapshot: (response: AgentTaskSnapshotResponse, target: TaskEventTarget) => void,
+  ) {
     this.#store = store;
     this.#recoverSnapshots.add(recoverSnapshot);
+    this.#onRecoveredSnapshot = onRecoveredSnapshot;
   }
 
   public get sessionId(): string | undefined {
@@ -184,16 +199,22 @@ class TaskEventTarget {
 
   public resetForSnapshot(): void {
     // 新 Snapshot 是当前 Store 的权威基线，清除旧帧并允许后续事件重新进入增量路径。
+    if (this.#recoveryState === "disposed") {
+      return;
+    }
     if (this.#frameId !== undefined) {
       cancelAnimationFrame(this.#frameId);
       this.#frameId = undefined;
     }
+    this.#clearRetryTimer();
     this.#buffer.drain();
-    this.#pausedForRecovery = false;
+    this.#recoveryAttempt = 0;
+    this.#recoveryGeneration += 1;
+    this.#recoveryState = "ready";
   }
 
   public apply(event: AgentEvent): void {
-    if (this.#pausedForRecovery) {
+    if (this.#recoveryState !== "ready") {
       return;
     }
     if (isDeltaEvent(event)) {
@@ -212,6 +233,9 @@ class TaskEventTarget {
   }
 
   public dispose(): void {
+    this.#recoveryState = "disposed";
+    this.#recoveryGeneration += 1;
+    this.#clearRetryTimer();
     if (this.#frameId !== undefined) {
       cancelAnimationFrame(this.#frameId);
       this.#frameId = undefined;
@@ -220,22 +244,23 @@ class TaskEventTarget {
   }
 
   public requestRecovery(): void {
-    if (this.#pausedForRecovery) {
+    if (this.#recoveryState !== "ready") {
       return;
     }
-    this.#pausedForRecovery = true;
     if (this.#frameId !== undefined) {
       cancelAnimationFrame(this.#frameId);
       this.#frameId = undefined;
     }
     this.#buffer.drain();
-    this.#store.getState().setConnectionState("reconnecting");
-    this.#recoverSnapshots.values().next().value?.();
+    this.#startRecoveryAttempt();
   }
 
   public setConnectionState(state: AgentEventConnectionState): void {
-    this.#store.getState().setConnectionState(state);
-    if (state === "connected") {
+    // Socket 连通不代表 Snapshot 已校准，恢复状态优先于底层传输状态。
+    const visibleState =
+      state === "connected" && this.#recoveryState !== "ready" ? "reconnecting" : state;
+    this.#store.getState().setConnectionState(visibleState);
+    if (visibleState === "connected") {
       this.#store.getState().setError(null);
     }
   }
@@ -250,6 +275,67 @@ class TaskEventTarget {
       this.#frameId = undefined;
     }
     this.#store.getState().applyEvents(this.#buffer.flushThrough(sequence));
+  }
+
+  #clearRetryTimer(): void {
+    if (this.#retryTimer !== undefined) {
+      clearTimeout(this.#retryTimer);
+      this.#retryTimer = undefined;
+    }
+  }
+
+  #scheduleRecoveryRetry(): void {
+    if (this.#recoveryState === "disposed") {
+      return;
+    }
+    this.#recoveryState = "waiting_to_retry";
+    const retryDelay = Math.min(
+      SNAPSHOT_RECOVERY_RETRY_INITIAL_MS * 2 ** this.#recoveryAttempt,
+      SNAPSHOT_RECOVERY_RETRY_MAX_MS,
+    );
+    this.#recoveryAttempt += 1;
+    this.#retryTimer = setTimeout(() => {
+      this.#retryTimer = undefined;
+      this.#startRecoveryAttempt();
+    }, retryDelay);
+  }
+
+  #startRecoveryAttempt(): void {
+    if (this.#recoveryState === "disposed") {
+      return;
+    }
+    const recoverSnapshot = this.#recoverSnapshots.values().next().value;
+    if (recoverSnapshot === undefined) {
+      this.#scheduleRecoveryRetry();
+      return;
+    }
+
+    this.#recoveryState = "recovering";
+    this.#store.getState().setConnectionState("reconnecting");
+    const recoveryGeneration = this.#recoveryGeneration;
+    void Promise.resolve(recoverSnapshot())
+      .then((response) => {
+        if (
+          this.#recoveryState !== "recovering" ||
+          recoveryGeneration !== this.#recoveryGeneration
+        ) {
+          return;
+        }
+        if (response === undefined) {
+          this.#scheduleRecoveryRetry();
+          return;
+        }
+        // 只有权威 Snapshot 完成 Hydrate 后，Runtime 才能重新接收并回放实时事件。
+        this.#onRecoveredSnapshot(response, this);
+      })
+      .catch(() => {
+        if (
+          this.#recoveryState === "recovering" &&
+          recoveryGeneration === this.#recoveryGeneration
+        ) {
+          this.#scheduleRecoveryRetry();
+        }
+      });
   }
 }
 
@@ -309,7 +395,9 @@ class ProjectEventRuntime {
     storeState.hydrate(response);
     let target = this.#targets.get(store);
     if (target === undefined) {
-      target = new TaskEventTarget(store, recoverSnapshot);
+      target = new TaskEventTarget(store, recoverSnapshot, (recoveredResponse, recoveredTarget) => {
+        this.#hydrateRecoveredSnapshot(recoveredResponse, store, recoveredTarget);
+      });
       this.#targets.set(store, target);
     } else {
       target.addConsumer(recoverSnapshot);
@@ -473,6 +561,26 @@ class ProjectEventRuntime {
       }
     }
     return false;
+  }
+
+  #hydrateRecoveredSnapshot(
+    response: AgentTaskSnapshotResponse,
+    store: TaskStore,
+    target: TaskEventTarget,
+  ): void {
+    if (this.#targets.get(store) !== target) {
+      return;
+    }
+    this.#assertSnapshotProject(response);
+    const storeState = store.getState();
+    if (storeState.projectId !== this.#projectId || storeState.taskId !== response.snapshot.id) {
+      throw new Error("Task store identity does not match the recovered snapshot");
+    }
+
+    storeState.hydrate(response);
+    target.resetForSnapshot();
+    this.#callbacks.onSnapshot(response);
+    this.#replayEvents(response.checkpoint, target);
   }
 
   #reevaluateIdleRelease(): void {

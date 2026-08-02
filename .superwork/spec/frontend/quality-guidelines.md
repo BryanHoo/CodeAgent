@@ -14,6 +14,7 @@
 - `pnpm test:performance` 必须以固定 10,000 Item 历史验证归一化、虚拟挂载规模与渲染预算，以固定高频 Delta 验证 Item 级通知合并，并通过显式 GC 验证重复 Store 生命周期 Heap；规模与阈值只维护在 `tests/performance-budgets.json`。
 - Web 语法高亮必须使用 `shiki/core`、JavaScript Regex Engine、项目语言白名单和 `github-light`/`github-dark` 两个主题；高亮器、源码查看器与 Diff Viewer 只在对应内容或交互出现后动态加载，生产构建不得重新引入完整 `shiki`、全量主题或 Oniguruma WASM。
 - 测试断言用户可观察行为，不复制实现细节。
+- Snapshot 恢复 E2E 必须覆盖至少一次请求失败、旧 Timeline 与非阻塞恢复状态持续可见、自动重试成功，以及成功后新实时事件继续渲染。
 - i18n 单元测试必须覆盖语言匹配、损坏存储回退、资源 key 对齐和 `<html lang>` 同步；关键 E2E 必须覆盖设置内切换英文、刷新后持久化、Codex 官方英文术语，以及用户/Assistant/服务端动态内容保持原样。
 - Agent 消息中的本地文件引用必须覆盖 POSIX、Windows 盘符和 UNC 路径；这些路径只能进入受控源码预览，外部 URL 仍使用 Markdown 渲染器的默认安全策略。
 - 持有事件序号、Session 或场景状态的 E2E Server 每次测试运行使用全新进程，不复用上一次运行的内存状态或静态资源缓存。

@@ -149,11 +149,37 @@ function createClientHarness() {
   return {
     client,
     closeConnection,
+    connectionState(
+      state: Parameters<
+        NonNullable<Parameters<CodeAgentRuntimeClient["subscribeEvents"]>[0]["onConnectionState"]>
+      >[0],
+    ) {
+      if (subscription === undefined) {
+        throw new Error("Project event subscription has not started");
+      }
+      const onConnectionState = subscription.onConnectionState;
+      if (onConnectionState === undefined) {
+        throw new Error("Project event subscription does not observe connection state");
+      }
+      onConnectionState(state);
+    },
     emit(event: AgentEvent) {
       if (subscription === undefined) {
         throw new Error("Project event subscription has not started");
       }
       subscription.onEvent(event);
+    },
+    requireResync() {
+      if (subscription === undefined) {
+        throw new Error("Project event subscription has not started");
+      }
+      subscription.onResyncRequired({
+        latestSequence: 8,
+        reason: "event_retention_exceeded",
+        sessionId: "runtime-1",
+        type: "resync.required",
+        version: 2,
+      });
     },
   };
 }
@@ -544,6 +570,43 @@ describe("project runtime manager", () => {
 
     detachFirst();
     detachSecond();
+    manager.dispose();
+  });
+
+  it("retries a failed Snapshot recovery before accepting later realtime events", async () => {
+    vi.useFakeTimers();
+    const harness = createClientHarness();
+    const manager = createProjectRuntimeManager(harness.client);
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" });
+    const recoveredSnapshot = createSnapshotResponse("task-1", { sequence: 8 });
+    const recoverSnapshot = vi
+      .fn<() => Promise<AgentTaskSnapshotResponse | undefined>>()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(recoveredSnapshot);
+    const detach = manager.attachTaskStore(
+      createSnapshotResponse("task-1"),
+      store,
+      recoverSnapshot,
+    );
+
+    harness.requireResync();
+    await Promise.resolve();
+    expect(recoverSnapshot).toHaveBeenCalledTimes(1);
+
+    // Socket 提前连通不能绕过 Snapshot 校准，恢复成功前始终保持非阻塞恢复状态。
+    harness.connectionState("connected");
+    expect(store.getState().connectionState).toBe("reconnecting");
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(recoverSnapshot).toHaveBeenCalledTimes(2);
+    harness.connectionState("connected");
+    harness.emit(createFileChangeCompletedEvent("task-1", 9));
+
+    expect(store.getState().connectionState).toBe("connected");
+    expect(store.getState().getItem("file-change-task-1")).toBeDefined();
+    expect(store.getState().checkpoint?.sequence).toBe(9);
+
+    detach();
     manager.dispose();
   });
 });

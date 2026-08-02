@@ -16,7 +16,7 @@ test("shows a task error when the initial snapshot request fails", async ({ page
   await expect(page.getByRole("alert", { name: "会话内容" })).toHaveText("无法加载任务历史");
 });
 
-test("shows an error when the resync snapshot refresh fails", async ({ page }) => {
+test("keeps retrying Snapshot recovery and applies later realtime events", async ({ page }) => {
   let snapshotRequestCount = 0;
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     snapshotRequestCount += 1;
@@ -24,40 +24,83 @@ test("shows an error when the resync snapshot refresh fails", async ({ page }) =
       await route.fulfill({ contentType: "application/json", json: taskSnapshotResponse });
       return;
     }
+    if (snapshotRequestCount <= 3) {
+      await route.fulfill({
+        contentType: "application/json",
+        json: { code: "SNAPSHOT_FAILED", message: "Snapshot failed" },
+        status: 503,
+      });
+      return;
+    }
     await route.fulfill({
       contentType: "application/json",
-      json: { code: "SNAPSHOT_FAILED", message: "Snapshot failed" },
-      status: 503,
+      json: {
+        ...taskSnapshotResponse,
+        checkpoint: { sequence: 8, sessionId: "e2e-session" },
+      },
     });
   });
   await page.addInitScript(() => {
     class ResyncWebSocket extends EventTarget {
+      static connectionCount = 0;
       public readonly bufferedAmount = 0;
       public readyState = 0;
 
       public constructor() {
         super();
+        ResyncWebSocket.connectionCount += 1;
+        const connectionCount = ResyncWebSocket.connectionCount;
         queueMicrotask(() => {
           if (this.readyState === 3) {
             return;
           }
           this.readyState = 1;
           this.dispatchEvent(new Event("open"));
-          for (const message of [
-            {
-              latestSequence: 0,
-              sessionId: "e2e-session",
-              type: "connection.ready",
-              version: 2,
-            },
-            {
-              latestSequence: 8,
-              reason: "event_retention_exceeded",
-              sessionId: "e2e-session",
-              type: "resync.required",
-              version: 2,
-            },
-          ]) {
+          const messages =
+            connectionCount === 1
+              ? [
+                  {
+                    latestSequence: 0,
+                    sessionId: "e2e-session",
+                    type: "connection.ready",
+                    version: 2,
+                  },
+                  {
+                    latestSequence: 8,
+                    reason: "event_retention_exceeded",
+                    sessionId: "e2e-session",
+                    type: "resync.required",
+                    version: 2,
+                  },
+                ]
+              : [
+                  {
+                    latestSequence: 8,
+                    sessionId: "e2e-session",
+                    type: "connection.ready",
+                    version: 2,
+                  },
+                  {
+                    itemId: "message-recovered",
+                    payload: {
+                      item: {
+                        id: "message-recovered",
+                        role: "assistant",
+                        text: "恢复失败后收到的实时消息",
+                        type: "message",
+                      },
+                    },
+                    provider: "codex",
+                    sequence: 9,
+                    sessionId: "e2e-session",
+                    taskId: "task-1",
+                    timestamp: "2026-07-23T00:00:00.000Z",
+                    turnId: "turn-1",
+                    type: "item.completed",
+                    version: 2,
+                  },
+                ];
+          for (const message of messages) {
             this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(message) }));
           }
         });
@@ -84,8 +127,13 @@ test("shows an error when the resync snapshot refresh fails", async ({ page }) =
 
   await page.goto("/p/code-agent/t/task-1");
 
-  await expect.poll(() => snapshotRequestCount).toBeGreaterThanOrEqual(2);
-  await expect(page.getByRole("alert", { name: "会话内容" })).toHaveText("无法加载任务历史");
+  await expect.poll(() => snapshotRequestCount).toBeGreaterThanOrEqual(3);
+  await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+  await expect(page.getByText("实时连接恢复中")).toBeVisible();
+
+  await expect.poll(() => snapshotRequestCount).toBeGreaterThanOrEqual(4);
+  await expect(page.getByText("恢复失败后收到的实时消息")).toBeVisible();
+  await expect(page.getByText("实时连接恢复中")).toHaveCount(0);
 });
 
 test("refreshes the snapshot when the realtime delta buffer overflows", async ({ page }) => {

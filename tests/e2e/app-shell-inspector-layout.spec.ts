@@ -291,7 +291,7 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
       await route.fulfill({
         contentType: "application/json",
         json: {
-          checkpoint: { sequence: 0, sessionId: "new-task-session" },
+          checkpoint: { sequence: 0, sessionId: "e2e-session" },
           snapshot: {
             ...createdTask,
             contextUsage: null,

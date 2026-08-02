@@ -78,8 +78,9 @@ export function useTaskRuntime(
     if (storeIdentity.projectId !== projectId || storeIdentity.taskId !== taskId) {
       return;
     }
-    return projectRuntime.attachTaskStore(taskData, store, () => {
-      void refetchTask();
+    return projectRuntime.attachTaskStore(taskData, store, async () => {
+      const result = await refetchTask();
+      return result.isSuccess ? result.data : undefined;
     });
   }, [projectId, projectRuntime, refetchTask, store, taskData, taskId]);
 
@@ -89,11 +90,9 @@ export function useTaskRuntime(
   const error =
     activeRuntime === undefined || !hasHydratedSnapshot
       ? taskQueryError
-      : taskQueryError !== null && connectionState !== "connected"
-        ? taskQueryError
-        : connectionState === "closed"
-          ? (taskQueryError ?? runtimeError)
-          : null;
+      : connectionState === "closed"
+        ? runtimeError
+        : null;
   // 轮询等无关父级更新不得重建完整历史；只在结构或可见 Task 元数据变化时读取兼容快照。
   const snapshot = useMemo(() => {
     // Store 选择器值是快照重建的失效信号；读取它们可避免无关父级更新触发重建。

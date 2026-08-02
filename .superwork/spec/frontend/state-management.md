@@ -19,6 +19,7 @@
 - Client 必须忽略 `sequence <= lastAppliedSequence` 的重复事件，并在更大缺口或 `sessionId` 变化时停止增量应用、请求 resync。
 - Delta 可在同一动画帧按 Item 与字段合并，但只能合并相邻同 Key 事件，不得跨其他 Item 重排首次出现顺序；关键事件到达时先按 `sequence` 冲刷所有更早 Delta，再应用完整 Item/Turn 终态。
 - `reconnecting`、`resync.required` 和 Session 变化触发 Snapshot refetch；旧订阅、Socket、Timer 和动画帧回调必须在替换或卸载时清理。
+- Snapshot 恢复必须使用明确状态机并在请求失败后有界退避重试；成功 Hydrate 权威 Snapshot 前始终保持非阻塞 `reconnecting`，底层 Socket 的 `connected` 不得提前解除恢复状态或放行增量事件。恢复期间保留已渲染 Timeline，成功后从 Snapshot checkpoint 回放保留事件。
 - Snapshot 请求错误优先于加载状态展示；WebSocket 成功恢复为 `connected` 后清除上一次连接尝试产生的瞬时错误。
 - `provider.error` 标记 `willRetry` 时只作为当前 Turn 的临时提示；后续收到新的 Message、Reasoning 或 Command Delta 即清除。不可重试错误继续保留到权威终态，不能因部分回复或缺少错误文本的终态被覆盖。
 - Approval、Error 和 Terminal State 不得因合并或反压丢失。
