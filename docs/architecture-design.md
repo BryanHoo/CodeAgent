@@ -693,7 +693,7 @@ turn id -> runtime state
 | `interruptTurn` | `turn/interrupt`  |
 | `startReview`   | `review/start`    |
 
-Server 内部生成提交消息时调用 `startTask({ ephemeral: true })`。Server 已在校验 Snapshot 时取得选中变更：完整 Git diff 不超过 `64 KiB` 时，将带 staged/unstaged 标识的精确 diff 直接放入 Prompt，禁止 Codex 再读取文件或运行命令；完整 diff 超过预算时不做截断，只提供选中路径并要求 Codex 在 Project `cwd` 仅读取这些路径的 Git 变更。默认 Prompt 只固定结构化输出和不可信 diff 边界，不预设 Conventional Commits、语言或其他客户级提交规范；全局提交提示词负责定义提交格式和语言。临时 Thread 不持久化、不进入 `listTasks` 回退，结束后只取消订阅。
+Server 内部生成提交消息时调用 `startTask({ ephemeral: true })`。Server 已在校验 Snapshot 时取得选中变更：完整 Git diff 不超过 `64 KiB` 时，将带 staged/unstaged 标识的精确 diff 直接放入 Prompt；超过预算时改为有界的逐文件统计摘要，并从整个选择范围等距抽取最多 16 个变更，提供首尾 diff 片段。两种输入都禁止 Codex 再读取文件或运行命令，避免文件数量放大工具调用和延迟。发送给 Codex 的固定默认指令使用英语，用户配置的全局提交提示词保持原文且不翻译。默认 Prompt 不预设 Conventional Commits 或提交信息语言；没有全局提交提示词时只补充祈使语气、简洁标题和正文说明动机的通用质量规则，全局提交提示词负责定义客户级格式和语言。临时 Thread 不持久化、不进入 `listTasks` 回退，结束后只取消订阅。
 
 `startTurn` 将统一 Prompt 映射为 Codex `UserInput[]`：已选择 Skill 使用 `{ type: "skill", name, path }`，非空文本使用 `text`，Server 已验证的图片 Data URL 使用 `image`，受控临时文件使用 `{ type: "mention", name, path }`。Skill 目录由 Project Provider 调用 `skills/list { cwds: [project.rootPath] }` 获取；Web 只接收稳定不透明 ID，Provider 在提交时重新验证 ID 与名称并解析原生绝对路径。统一 `model`、`reasoningEffort`、`approvalPolicy` 和 `approvalsReviewer` 分别映射为 Codex `model`、`effort`、`approvalPolicy` 和 `approvalsReviewer`，不向 Web 暴露其他原生字段。自动审批固定映射为 `approvalPolicy: "on-request"` 与 `approvalsReviewer: "auto_review"`；`never` 只表示从不询问，不能替代自动审核。
 

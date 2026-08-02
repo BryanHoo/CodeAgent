@@ -1042,14 +1042,17 @@ describe("CodeAgent Server", () => {
     expect(startTurnCall?.[0]).toBe("task-1");
     expect(startTurnCall?.[1].outputSchema).toMatchObject({ type: "object" });
     expect(startTurnCall?.[1].text).toContain(
-      "只根据提示词中给出的精确 Git diff 生成提交信息，不要读取文件或运行命令。",
+      "Generate the commit message only from the exact Git diff in this prompt. Do not read files or run commands.",
     );
-    expect(startTurnCall?.[1].text).toContain("当前分支：feat/commit");
+    expect(startTurnCall?.[1].text).toContain("Current branch: feat/commit");
     expect(startTurnCall?.[1].text).toContain(
       "<selected-diff>\n\n[unstaged] src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n\n</selected-diff>",
     );
     expect(startTurnCall?.[1].text).toContain(
       "<user-preferences>\n优先说明行为变化，不要罗列文件名。\n</user-preferences>",
+    );
+    expect(startTurnCall?.[1].text).toContain(
+      "The following user preferences define the commit message format and language.",
     );
     expect(startTurnCall?.[1].text).not.toContain("Conventional Commits");
     expect(startTurnCall?.[1].text).not.toContain("简体中文");
@@ -1094,10 +1097,26 @@ describe("CodeAgent Server", () => {
     expect(providerHarness.startTask).not.toHaveBeenCalled();
   });
 
-  it("unsubscribes the ephemeral task when commit-message generation fails", async () => {
+  it("uses bounded change summaries and diff excerpts for oversized commit-message input", async () => {
     const providerHarness = createProvider();
     const snapshot = "f".repeat(64);
-    const oversizedDiff = `+${"x".repeat(70_000)}\n+END_OF_LARGE_DIFF`;
+    const oversizedChanges = Array.from({ length: 120 }, (_, index) => {
+      const path = `src/file-${String(index).padStart(3, "0")}.ts`;
+      return {
+        diff: [
+          `diff --git a/${path} b/${path}`,
+          `--- a/${path}`,
+          `+++ b/${path}`,
+          "@@ -1 +1 @@",
+          `-old behavior ${String(index)}`,
+          `+new behavior ${String(index)}`,
+          `+${index === 0 ? "x".repeat(70_000) : "x".repeat(600)}`,
+          ...(index === 0 ? ["+END_OF_LARGE_DIFF"] : []),
+        ].join("\n"),
+        kind: "update" as const,
+        path,
+      };
+    });
     const readProjectGitStatus = vi.fn(() =>
       Promise.resolve({
         baseBranches: ["main"],
@@ -1105,7 +1124,7 @@ describe("CodeAgent Server", () => {
         repositoryMode: "root" as const,
         snapshot,
         staged: [],
-        unstaged: [{ diff: oversizedDiff, kind: "update" as const, path: "src/app.ts" }],
+        unstaged: oversizedChanges,
       }),
     );
     const app = await createCodeAgentServer(
@@ -1116,7 +1135,7 @@ describe("CodeAgent Server", () => {
     const responsePromise = app.inject({
       headers: { "idempotency-key": "failed-message" },
       method: "POST",
-      payload: { expectedSnapshot: snapshot, paths: ["src/app.ts"] },
+      payload: { expectedSnapshot: snapshot, paths: oversizedChanges.map((change) => change.path) },
       url: "/v1/projects/code-agent/git/commit-message",
     });
     await vi.waitFor(() => {
@@ -1124,11 +1143,18 @@ describe("CodeAgent Server", () => {
     });
     const prompt = providerHarness.startTurn.mock.calls[0]?.[1].text;
     expect(prompt).toContain(
-      "所选变更超过提示词上下文预算，请读取当前项目中以下所选文件的 Git 变更。",
+      "Generate the commit message only from the following change summary and representative diff excerpts.",
     );
-    expect(prompt).toContain("- src/app.ts");
+    expect(prompt).toContain("Do not read files or run commands.");
+    expect(prompt).toContain("[unstaged] update src/file-000.ts (+3 -1");
+    expect(prompt).toContain("[unstaged] update src/file-119.ts (+2 -1");
+    expect(prompt).toContain("<selected-diff-excerpts>");
+    expect(prompt).toContain("+new behavior 0");
+    expect(prompt).toContain("+new behavior 119");
+    expect(prompt).toContain("END_OF_LARGE_DIFF");
     expect(prompt).not.toContain("<selected-diff>");
-    expect(prompt).not.toContain("END_OF_LARGE_DIFF");
+    expect(prompt).not.toMatch(/[\u3400-\u9fff]/u);
+    expect(Buffer.byteLength(prompt ?? "", "utf8")).toBeLessThanOrEqual(70 * 1_024);
     providerHarness.emitEvent({
       payload: { message: "model failed", willRetry: false },
       taskId: "task-1",
