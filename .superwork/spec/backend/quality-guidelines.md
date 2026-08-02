@@ -28,4 +28,5 @@
 - 附件上传路由测试必须覆盖 `multipart/form-data` 流式成功路径、旧 JSON 请求拒绝、按类型执行单文件限制，以及声明长度明显超限时在解析文件数据前返回 `413`。
 - 静态资源 `inject` 测试必须覆盖 Brotli/Gzip 解压后的正文、哈希资源长期缓存头和 SPA HTML 重新验证头。
 - Event Stream 单元测试使用 fake timers 覆盖普通与软背压合并窗口、完整 Delta key 隔离、关键事件冲刷、环形覆盖、连续 Sequence 和窗口外 resync；WebSocket 路由测试验证合并后帧数与指标响应。
+- `pnpm test:performance` 必须使用固定离线负载覆盖高频 Delta 合并、慢 WebSocket 软/硬背压、50 MiB 流式附件、数百 Git 变更和重复 Event Stream 生命周期 Heap；规模与阈值只维护在 `tests/performance-budgets.json`，压力文件不得混入普通 `pnpm test`。
 - 发布包校验必须从构建产物打开并关闭 `SqliteStateRepository`，真实启动 Worker 以验证 `import.meta.url` 相对路径和文件清单一致。

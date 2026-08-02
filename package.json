@@ -38,7 +38,7 @@
   "scripts": {
     "build": "pnpm run clean && pnpm run typecheck && pnpm --filter @code-agent/web build && pnpm run build:node",
     "build:node": "tsup",
-    "check": "pnpm run format:check && pnpm run lint && pnpm run lint:architecture && pnpm run test && pnpm run build && pnpm run package:check",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run lint:architecture && pnpm run test && pnpm run test:performance && pnpm run build && pnpm run package:check",
     "clean": "node ./tools/clean.mjs",
     "dev": "pnpm --filter @code-agent/web dev",
     "format": "prettier --write .",
@@ -50,6 +50,7 @@
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
     "test:e2e": "pnpm build && playwright test",
+    "test:performance": "node --expose-gc ./node_modules/vitest/vitest.mjs run --config vitest.performance.config.ts",
     "typecheck": "tsc -b --pretty false",
     "prepublishOnly": "pnpm run check"
   },

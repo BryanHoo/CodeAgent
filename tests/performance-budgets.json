@@ -1,0 +1,35 @@
+{
+  "attachment": {
+    "bytes": 52428800,
+    "maxDurationMs": 8000,
+    "maxHeapGrowthBytes": 16777216
+  },
+  "delta": {
+    "clientEvents": 50000,
+    "maxClientReplayMs": 1500,
+    "maxServerPublishMs": 1500,
+    "serverEvents": 100000
+  },
+  "git": {
+    "changes": 500,
+    "maxDiffCommands": 2,
+    "maxDurationMs": 1000
+  },
+  "heap": {
+    "deltasPerIteration": 1000,
+    "iterations": 100,
+    "maxGrowthBytes": 33554432
+  },
+  "longHistory": {
+    "items": 10000,
+    "itemsPerTurn": 10,
+    "maxHydrationMs": 1500,
+    "maxMarkupBytes": 131072,
+    "maxMountedTurns": 8,
+    "maxRenderMs": 1000
+  },
+  "slowWebSocket": {
+    "maxDispatchMs": 500,
+    "messages": 10000
+  }
+}

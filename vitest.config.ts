@@ -1,30 +1,36 @@
 import { fileURLToPath } from "node:url";
 
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
+
+export const vitestAliases = {
+  "@code-agent/core": fileURLToPath(new URL("./packages/core/src/index.ts", import.meta.url)),
+  "@code-agent/client": fileURLToPath(new URL("./packages/client/src/index.ts", import.meta.url)),
+  "@code-agent/protocol": fileURLToPath(
+    new URL("./packages/protocol/src/index.ts", import.meta.url),
+  ),
+  "@code-agent/provider-codex": fileURLToPath(
+    new URL("./packages/provider-codex/src/index.ts", import.meta.url),
+  ),
+  "@code-agent/server": fileURLToPath(new URL("./packages/server/src/index.ts", import.meta.url)),
+};
 
 export default defineConfig({
   resolve: {
-    alias: {
-      "@code-agent/core": fileURLToPath(new URL("./packages/core/src/index.ts", import.meta.url)),
-      "@code-agent/client": fileURLToPath(
-        new URL("./packages/client/src/index.ts", import.meta.url),
-      ),
-      "@code-agent/protocol": fileURLToPath(
-        new URL("./packages/protocol/src/index.ts", import.meta.url),
-      ),
-      "@code-agent/provider-codex": fileURLToPath(
-        new URL("./packages/provider-codex/src/index.ts", import.meta.url),
-      ),
-      "@code-agent/server": fileURLToPath(
-        new URL("./packages/server/src/index.ts", import.meta.url),
-      ),
-    },
+    alias: vitestAliases,
   },
   test: {
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "lcov"],
+      // 锁住当前覆盖率整数基线，性能验收由独立压力套件负责。
+      thresholds: {
+        branches: 59,
+        functions: 59,
+        lines: 64,
+        statements: 63,
+      },
     },
+    exclude: [...configDefaults.exclude, "**/*.performance.test.{ts,tsx}"],
     include: ["{apps,packages,src}/**/*.test.{ts,tsx}", "tests/*.test.ts"],
     passWithNoTests: true,
     restoreMocks: true,

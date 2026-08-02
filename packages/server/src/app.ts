@@ -138,6 +138,7 @@ import {
   type StoredAttachmentUpload,
 } from "./attachment-store.js";
 import { commitSelectedProjectChanges, GitCommitError } from "./git-commit.js";
+import { sendEventStreamMessage } from "./event-socket-sender.js";
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
 import { readProjectFileTree } from "./project-file-tree.js";
 import { readProjectSourceFile } from "./project-source-file.js";
@@ -463,9 +464,6 @@ const DEFAULT_MODEL_CATALOG_CACHE_MAX_BYTES = 1 * 1_024 * 1_024;
 const DEFAULT_MODEL_CATALOG_CACHE_TTL_MS = 30_000;
 const COMMIT_MESSAGE_TIMEOUT_MS = 55_000;
 const MAX_INLINE_COMMIT_DIFF_BYTES = 64 * 1_024;
-const EVENT_SOCKET_SOFT_BACKPRESSURE_BYTES = 256 * 1_024;
-const EVENT_SOCKET_HARD_BACKPRESSURE_BYTES = 1_024 * 1_024;
-
 const COMMIT_MESSAGE_OUTPUT_SCHEMA = {
   additionalProperties: false,
   properties: {
@@ -2863,21 +2861,17 @@ export async function createCodeAgentServer(
       };
       socket.once("close", cleanup);
       socket.once("error", cleanup);
-      const send = (message: EventStreamMessage): boolean => {
-        if (socket.readyState !== 1) {
-          return false;
-        }
-        if (socket.bufferedAmount > EVENT_SOCKET_HARD_BACKPRESSURE_BYTES) {
-          context.transportMetrics.slowClientDisconnects += 1;
-          socket.close(1013, "Client is too slow; refresh the snapshot");
-          return false;
-        }
-        if (socket.bufferedAmount > EVENT_SOCKET_SOFT_BACKPRESSURE_BYTES) {
-          eventStream.noteBackpressure();
-        }
-        socket.send(JSON.stringify(message));
-        return true;
-      };
+      const send = (message: EventStreamMessage): boolean =>
+        sendEventStreamMessage(
+          socket,
+          message,
+          () => {
+            eventStream.noteBackpressure();
+          },
+          () => {
+            context.transportMetrics.slowClientDisconnects += 1;
+          },
+        );
       const replay = eventStream.replayAfter(request.query.afterSequence);
       if (replay.type === "resync") {
         const sent = send({

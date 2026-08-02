@@ -921,6 +921,16 @@ Turn Steer / Interrupt
 - 记录 DOM 节点、Long Task 和 Heap 变化。
 - 记录可见 Turn 数、动态测高修正和底部跟随稳定性。
 
+可重复执行的默认验收命令为：
+
+```bash
+pnpm test:performance
+```
+
+Web 压力套件使用固定的 1,000 Turn、每 Turn 10 Item 历史验证归一化耗时、SSR 耗时、输出字节数和虚拟挂载 Turn 上限；使用 50,000 个同 Item Delta 验证一次批量只发布一次 Item 通知；使用重复 Store 生命周期和显式 GC 检查 Heap 增量。具体预算只维护在 `tests/performance-budgets.json`，避免文档与门禁产生两套数值。
+
+性能测试由 `vitest.performance.config.ts` 串行执行，普通单元测试排除 `*.performance.test.ts(x)`，统一 `pnpm check` 仍必须包含性能门禁。调整时间或 Heap 阈值前必须保留相同 Runner 的重复测量依据；DOM 挂载数量、Item 数量和通知次数等确定性上限不得因机器差异放宽。
+
 ## 25. 分阶段实施
 
 ### 阶段一：Web Foundation

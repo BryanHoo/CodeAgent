@@ -1149,6 +1149,16 @@ Schema 变化必须经过人工评审和 Adapter 测试更新。
 - SQLite 批量写入延迟。
 - 多 Task 并发调度。
 
+默认 CI 性能门禁使用：
+
+```bash
+pnpm test:performance
+```
+
+当前可执行套件固定覆盖 10,000 Item 历史、50,000 个浏览器 Store Delta、100,000 个 Server Delta、10,000 次慢 WebSocket 发送判定、50 MiB 流式附件、500 个 Git 变更，以及重复 Store/Event Stream 生命周期 Heap 增长。负载规模和回归阈值统一保存在 `tests/performance-budgets.json`；`vitest.performance.config.ts` 使用单 Worker 串行执行，并由显式 GC 提供 Heap 验收。
+
+性能文件使用 `*.performance.test.ts(x)`，不进入普通 `pnpm test`，但 `pnpm check` 必须执行该套件。阈值调整必须附带相同机器或 CI Runner 上的重复测量证据，不能用放宽预算掩盖算法复杂度、DOM 挂载量、批量命令次数或资源释放回归。覆盖率门禁仅锁住当前整数基线，不能替代这些负载验收。
+
 ## 19. 版本策略
 
 App Server Schema 与 Codex CLI 版本绑定，因此必须：
