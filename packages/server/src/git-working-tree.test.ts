@@ -6,6 +6,17 @@ import { describe, expect, it } from "vitest";
 
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
 
+function createGitDiffOutput(paths: readonly string[], replacement: string): string {
+  const rawChanges = paths.map((path) => `:100644 100644 1111111 2222222 M\0${path}\0`).join("");
+  const patches = paths
+    .map(
+      (path) =>
+        `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-original\n+${replacement}\n`,
+    )
+    .join("");
+  return `${rawChanges}\0${patches}`;
+}
+
 describe("readGitWorkingTreeStatus", () => {
   it("reads the repository through the real parameterized Git command", async () => {
     const status = await readGitWorkingTreeStatus(process.cwd());
@@ -73,11 +84,9 @@ describe("readGitWorkingTreeStatus", () => {
         if (arguments_[0] === "symbolic-ref") {
           return Promise.resolve("refs/remotes/origin/main\n");
         }
-        const path = arguments_.at(-1) ?? "unknown";
         const location = arguments_.includes("--cached") ? "staged" : "unstaged";
-        return Promise.resolve(
-          `--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-original\n+${location} version\n`,
-        );
+        const paths = location === "staged" ? ["partial.txt", "staged.txt"] : ["partial.txt"];
+        return Promise.resolve(createGitDiffOutput(paths, `${location} version`));
       };
 
       const status = await readGitWorkingTreeStatus(projectRoot, executeGit);
@@ -92,6 +101,56 @@ describe("readGitWorkingTreeStatus", () => {
       });
       expect(status.staged[0]?.diff).toContain("+staged version");
       expect(status.unstaged[0]?.diff).toContain("+unstaged version");
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("reads all tracked changes with one staged and one unstaged diff command", async () => {
+    const projectRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "code-agent-git-status-test-")),
+    );
+    try {
+      await mkdir(join(projectRoot, ".git"));
+      const diffCommands: string[][] = [];
+      const executeGit = (_root: string, arguments_: readonly string[]) => {
+        if (arguments_[0] === "status") {
+          return Promise.resolve("MM partial.txt\0M  staged.txt\0 M first.txt\0 M second.txt\0");
+        }
+        if (arguments_[0] !== "diff") {
+          return Promise.resolve("");
+        }
+
+        diffCommands.push([...arguments_]);
+        const location = arguments_.includes("--cached") ? "staged" : "unstaged";
+        const requestedPath = arguments_.find((argument) => argument.startsWith(":(literal)"));
+        if (requestedPath !== undefined) {
+          const path = requestedPath.replace(":(literal)", "");
+          return Promise.resolve(
+            `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-old\n+${location}\n`,
+          );
+        }
+
+        const paths =
+          location === "staged"
+            ? ["partial.txt", "staged.txt"]
+            : ["first.txt", "partial.txt", "second.txt"];
+        return Promise.resolve(createGitDiffOutput(paths, location));
+      };
+
+      const status = await readGitWorkingTreeStatus(projectRoot, executeGit);
+
+      expect(diffCommands).toHaveLength(2);
+      expect(diffCommands.filter((arguments_) => arguments_.includes("--cached"))).toHaveLength(1);
+      expect(status.staged.map((change) => change.diff)).toEqual([
+        expect.stringContaining("+staged"),
+        expect.stringContaining("+staged"),
+      ]);
+      expect(status.unstaged.map((change) => change.diff)).toEqual([
+        expect.stringContaining("+unstaged"),
+        expect.stringContaining("+unstaged"),
+        expect.stringContaining("+unstaged"),
+      ]);
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }
@@ -126,8 +185,8 @@ describe("readGitWorkingTreeStatus", () => {
           }
         }
 
-        const path = arguments_.at(-1) ?? "unknown";
-        return Promise.resolve(`--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-old\n+new\n`);
+        const path = root === frontendRoot ? "src/app.ts" : "src/server.ts";
+        return Promise.resolve(createGitDiffOutput([path], "new"));
       };
 
       const status = await readGitWorkingTreeStatus(projectRoot, executeGit);
@@ -161,9 +220,7 @@ describe("readGitWorkingTreeStatus", () => {
         if (arguments_[0] === "for-each-ref" || arguments_[0] === "symbolic-ref") {
           return Promise.resolve("");
         }
-        return Promise.resolve(
-          `--- a/tracked.txt\n+++ b/tracked.txt\n@@ -1 +1 @@\n-first\n+${awaitText}\n`,
-        );
+        return Promise.resolve(createGitDiffOutput(["tracked.txt"], awaitText));
       };
       let awaitText = "second";
       const first = await readGitWorkingTreeStatus(projectRoot, executeGit);

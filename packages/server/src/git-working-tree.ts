@@ -114,26 +114,72 @@ async function createUntrackedFileDiff(projectRoot: string, path: string): Promi
   };
 }
 
-async function createTrackedFileChange(
+function parseTrackedDiffs(output: string): ReadonlyMap<string, string> {
+  if (output === "") {
+    return new Map();
+  }
+  const patchSeparatorIndex = output.indexOf("\0\0");
+  if (patchSeparatorIndex < 0) {
+    throw new Error("Git diff output is missing raw patch metadata");
+  }
+
+  // `--patch-with-raw -z` 的 raw 区使用 NUL 保留原始路径；按其顺序关联 patch，避免解析转义后的标题路径。
+  const rawTokens = output.slice(0, patchSeparatorIndex).split("\0");
+  const paths: string[] = [];
+  for (let tokenIndex = 0; tokenIndex < rawTokens.length;) {
+    const metadata = rawTokens[tokenIndex];
+    const firstPath = rawTokens[tokenIndex + 1];
+    if (metadata === undefined || !metadata.startsWith(":") || firstPath === undefined) {
+      throw new Error("Git diff raw metadata is malformed");
+    }
+    tokenIndex += 2;
+
+    const status = / ([A-Z])[0-9]*$/u.exec(metadata)?.[1];
+    if (status === "R" || status === "C") {
+      const destinationPath = rawTokens[tokenIndex];
+      if (destinationPath === undefined) {
+        throw new Error("Git diff rename metadata is missing a destination path");
+      }
+      paths.push(destinationPath);
+      tokenIndex += 1;
+    } else {
+      paths.push(firstPath);
+    }
+  }
+
+  const patchOutput = output.slice(patchSeparatorIndex + 2);
+  const patches = patchOutput === "" ? [] : patchOutput.split(/(?=^diff --(?:git|cc|combined) )/mu);
+  if (patches.length !== paths.length) {
+    throw new Error("Git diff patch count does not match raw metadata");
+  }
+
+  return new Map(paths.map((path, index) => [path, patches[index] ?? ""]));
+}
+
+async function readTrackedFileChanges(
   projectRoot: string,
-  entry: WorkingTreeEntry,
+  entries: readonly WorkingTreeEntry[],
   location: "staged" | "unstaged",
   gitCommandExecutor: GitCommandExecutor,
-): Promise<GitFileChange> {
-  const status = location === "staged" ? entry.indexStatus : entry.workingTreeStatus;
-  const diffArguments = [
+): Promise<GitFileChange[]> {
+  if (entries.length === 0) {
+    return [];
+  }
+  const output = await gitCommandExecutor(projectRoot, [
     "diff",
     ...(location === "staged" ? ["--cached"] : []),
     "--no-color",
     "--no-ext-diff",
-    "--",
-    `:(literal)${entry.path}`,
-  ];
-  return {
-    diff: await gitCommandExecutor(projectRoot, diffArguments),
-    kind: resolveChangeKind(status),
+    "--patch-with-raw",
+    "-z",
+  ]);
+  const diffs = parseTrackedDiffs(output);
+
+  return entries.map((entry) => ({
+    diff: diffs.get(entry.path) ?? "",
+    kind: resolveChangeKind(location === "staged" ? entry.indexStatus : entry.workingTreeStatus),
     path: entry.path,
-  };
+  }));
 }
 
 async function hasGitMetadata(repositoryRoot: string): Promise<boolean> {
@@ -159,25 +205,29 @@ async function readRepositoryWorkingTreeStatus(
     "--untracked-files=all",
   ]);
   const entries = parsePorcelainStatus(statusOutput);
-  const staged: GitFileChange[] = [];
-  const unstaged: GitFileChange[] = [];
+  const stagedEntries = entries.filter(
+    (entry) => entry.indexStatus !== " " && entry.indexStatus !== "?" && entry.indexStatus !== "!",
+  );
+  const trackedUnstagedEntries = entries.filter(
+    (entry) =>
+      entry.indexStatus !== "?" &&
+      entry.workingTreeStatus !== " " &&
+      entry.workingTreeStatus !== "!",
+  );
+  const untrackedEntries = entries.filter(
+    (entry) => entry.indexStatus === "?" && entry.workingTreeStatus === "?",
+  );
 
-  for (const entry of entries) {
-    if (entry.indexStatus !== " " && entry.indexStatus !== "?" && entry.indexStatus !== "!") {
-      staged.push(
-        await createTrackedFileChange(repositoryRoot, entry, "staged", gitCommandExecutor),
-      );
-    }
-    if (entry.indexStatus === "?" && entry.workingTreeStatus === "?") {
-      unstaged.push(await createUntrackedFileDiff(repositoryRoot, entry.path));
-    } else if (entry.workingTreeStatus !== " " && entry.workingTreeStatus !== "!") {
-      unstaged.push(
-        await createTrackedFileChange(repositoryRoot, entry, "unstaged", gitCommandExecutor),
-      );
-    }
-  }
+  // 每个仓库最多启动两个 Diff 子进程，文件数量不会再线性放大轮询成本。
+  const [staged, trackedUnstaged, untracked] = await Promise.all([
+    readTrackedFileChanges(repositoryRoot, stagedEntries, "staged", gitCommandExecutor),
+    readTrackedFileChanges(repositoryRoot, trackedUnstagedEntries, "unstaged", gitCommandExecutor),
+    Promise.all(
+      untrackedEntries.map((entry) => createUntrackedFileDiff(repositoryRoot, entry.path)),
+    ),
+  ]);
 
-  return { staged, unstaged };
+  return { staged, unstaged: [...trackedUnstaged, ...untracked] };
 }
 
 async function readOptionalGit(
