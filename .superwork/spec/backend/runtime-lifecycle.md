@@ -56,7 +56,7 @@
 - WebSocket 客户端使用独立有界队列，慢客户端不能阻塞 Provider；`bufferedAmount` 超过 `256 KiB` 时向 Event Stream 发出软背压信号，超过 `1 MiB` 时以 `1013` 关闭连接并要求刷新 Snapshot。
 - 每个 Project 创建独立 Event Stream Session，Provider 不分配传输序号。Server 在分配单调 `sequence` 前，按 `taskId + turnId + itemId + type + field` 合并 `message.delta`、`reasoning.delta` 和 `command.output_delta`：普通窗口固定为 `16ms`，收到软背压信号后的下一窗口固定为 `32ms`。
 - 非 Delta 事件、Snapshot checkpoint、事件回放和 Runtime 关闭前必须立即冲刷所有更早 Delta；不同 key 按首次进入窗口的顺序分配连续 `sequence`，关键终态不得越过待发送 Delta。
-- Event Stream 使用固定数组环形缓冲区，以 O(1) 写入和淘汰已发布事件；回放必须按 `sequence` 升序返回，窗口外恢复仍发送 `resync.required`。
+- Event Stream 使用固定数组环形缓冲区，每个 Project 最多保留 `1,000` 条、合计 `4 MiB` 的已发布事件，单事件最多保留 `1 MiB`；容量按序列化 UTF-8 字节计量并从最旧事件开始淘汰。回放必须按 `sequence` 升序返回，跨越已淘汰或因单事件超限而未保留的序列时发送 `resync.required`。
 - `/v1/projects/:projectId/events` 首帧发送 `connection.ready`，只补发 `afterSequence` 之后仍在缓存窗口内的事件；过期或超前序号发送 `resync.required`。
 - `/v1/metrics/events` 只读暴露每个 Project 的 Provider 输入、发布、合并、pending Delta、保留淘汰、软背压、活动客户端和慢客户端断开计数，不得包含 Prompt、命令输出或文件内容。
 - Provider `readTask` Promise 完成前必须让返回 Snapshot 包含此前状态并同步交付对应通知；Task Snapshot 读取完成后再从当前 Event Stream 固定 checkpoint，避免丢失事件或重复补发已有内容；Task 归属确认后并行读取有效设置与固定元数据，避免无依赖的持久层读取串行等待。

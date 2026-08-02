@@ -1,9 +1,12 @@
+import { Buffer } from "node:buffer";
+
 import type { AgentProviderEvent } from "@code-agent/core";
 import type { AgentEvent, EventCheckpoint } from "@code-agent/protocol";
 
 type AgentEventListener = (event: AgentEvent) => void;
 type DeltaEventType = "command.output_delta" | "message.delta" | "reasoning.delta";
 type DeltaProviderEvent = Extract<AgentProviderEvent, Readonly<{ type: DeltaEventType }>>;
+type RetainedAgentEvent = Readonly<{ event: AgentEvent; retainedBytes: number }>;
 
 export type AgentEventReplay =
   | Readonly<{ events: readonly AgentEvent[]; type: "events" }>
@@ -26,6 +29,8 @@ export interface AgentEventStreamMetrics {
 export interface AgentEventStreamOptions {
   capacity?: number;
   coalescingWindowMs?: number;
+  maxEventBytes?: number;
+  maxRetainedBytes?: number;
   now?: () => Date;
   pressureCoalescingWindowMs?: number;
   provider: string;
@@ -33,6 +38,8 @@ export interface AgentEventStreamOptions {
 }
 
 const DEFAULT_COALESCING_WINDOW_MS = 16;
+const DEFAULT_MAX_EVENT_BYTES = 1_048_576;
+const DEFAULT_MAX_RETAINED_BYTES = 4 * 1_048_576;
 const DEFAULT_PRESSURE_COALESCING_WINDOW_MS = 32;
 
 function isDeltaEvent(event: AgentProviderEvent): event is DeltaProviderEvent {
@@ -58,8 +65,10 @@ function mergeDelta(left: DeltaProviderEvent, right: DeltaProviderEvent): DeltaP
 export class AgentEventStream {
   readonly #capacity: number;
   readonly #coalescingWindowMs: number;
-  readonly #events: (AgentEvent | undefined)[];
+  readonly #events: (RetainedAgentEvent | undefined)[];
   readonly #listeners = new Set<AgentEventListener>();
+  readonly #maxEventBytes: number;
+  readonly #maxRetainedBytes: number;
   readonly #now: () => Date;
   readonly #pendingDeltas = new Map<string, DeltaProviderEvent>();
   readonly #pressureCoalescingWindowMs: number;
@@ -71,8 +80,10 @@ export class AgentEventStream {
   #eventCount = 0;
   #eventStart = 0;
   #flushTimer: ReturnType<typeof setTimeout> | undefined;
+  #historyFloorSequence = 0;
   #providerEventsReceived = 0;
   #publishedEvents = 0;
+  #retainedBytes = 0;
   #retentionEvictions = 0;
   #sequence = 0;
   #usePressureWindow = false;
@@ -83,6 +94,8 @@ export class AgentEventStream {
       throw new RangeError("Agent Event capacity must be a positive integer");
     }
     const coalescingWindowMs = options.coalescingWindowMs ?? DEFAULT_COALESCING_WINDOW_MS;
+    const maxEventBytes = options.maxEventBytes ?? DEFAULT_MAX_EVENT_BYTES;
+    const maxRetainedBytes = options.maxRetainedBytes ?? DEFAULT_MAX_RETAINED_BYTES;
     const pressureCoalescingWindowMs =
       options.pressureCoalescingWindowMs ?? DEFAULT_PRESSURE_COALESCING_WINDOW_MS;
     if (!Number.isFinite(coalescingWindowMs) || coalescingWindowMs <= 0) {
@@ -96,9 +109,17 @@ export class AgentEventStream {
         "Agent Event pressure coalescing window must not be shorter than the normal window",
       );
     }
+    if (!Number.isSafeInteger(maxEventBytes) || maxEventBytes < 0) {
+      throw new RangeError("Agent Event maxEventBytes must be a non-negative safe integer");
+    }
+    if (!Number.isSafeInteger(maxRetainedBytes) || maxRetainedBytes < 0) {
+      throw new RangeError("Agent Event maxRetainedBytes must be a non-negative safe integer");
+    }
     this.#capacity = capacity;
     this.#coalescingWindowMs = coalescingWindowMs;
-    this.#events = new Array<AgentEvent | undefined>(capacity);
+    this.#events = new Array<RetainedAgentEvent | undefined>(capacity);
+    this.#maxEventBytes = maxEventBytes;
+    this.#maxRetainedBytes = maxRetainedBytes;
     this.#now = options.now ?? (() => new Date());
     this.#pressureCoalescingWindowMs = pressureCoalescingWindowMs;
     this.#provider = options.provider;
@@ -160,8 +181,7 @@ export class AgentEventStream {
       return { latestSequence: this.#sequence, reason: "session_changed", type: "resync" };
     }
     const retained = this.#retainedEvents();
-    const oldestSequence = retained[0]?.sequence;
-    if (oldestSequence !== undefined && sequence < oldestSequence - 1) {
+    if (sequence < this.#historyFloorSequence) {
       return {
         latestSequence: this.#sequence,
         reason: "event_retention_exceeded",
@@ -215,30 +235,58 @@ export class AgentEventStream {
       timestamp: this.#now().toISOString(),
       version: 2 as const,
     } as AgentEvent;
-    if (this.#eventCount < this.#capacity) {
-      const insertionIndex = (this.#eventStart + this.#eventCount) % this.#capacity;
-      this.#events[insertionIndex] = published;
-      this.#eventCount += 1;
-    } else {
-      this.#events[this.#eventStart] = published;
-      this.#eventStart = (this.#eventStart + 1) % this.#capacity;
-      this.#retentionEvictions += 1;
-    }
+    this.#retain(published);
     this.#publishedEvents += 1;
     for (const listener of this.#listeners) {
       listener(published);
     }
   }
 
+  #retain(event: AgentEvent): void {
+    const retainedBytes = Buffer.byteLength(JSON.stringify(event));
+    if (retainedBytes > this.#maxEventBytes || retainedBytes > this.#maxRetainedBytes) {
+      // 单事件无法安全保留时清空不可连续回放的旧窗口，旧 Checkpoint 必须重读 Snapshot。
+      while (this.#eventCount > 0) {
+        this.#evictOldest();
+      }
+      this.#historyFloorSequence = event.sequence;
+      this.#retentionEvictions += 1;
+      return;
+    }
+    if (this.#eventCount === this.#capacity) {
+      this.#evictOldest();
+    }
+    while (this.#eventCount > 0 && this.#retainedBytes + retainedBytes > this.#maxRetainedBytes) {
+      this.#evictOldest();
+    }
+    const insertionIndex = (this.#eventStart + this.#eventCount) % this.#capacity;
+    this.#events[insertionIndex] = { event, retainedBytes };
+    this.#eventCount += 1;
+    this.#retainedBytes += retainedBytes;
+  }
+
   #retainedEvents(): AgentEvent[] {
     const retained: AgentEvent[] = [];
     for (let offset = 0; offset < this.#eventCount; offset += 1) {
-      const event = this.#events[(this.#eventStart + offset) % this.#capacity];
-      if (event !== undefined) {
-        retained.push(event);
+      const entry = this.#events[(this.#eventStart + offset) % this.#capacity];
+      if (entry !== undefined) {
+        retained.push(entry.event);
       }
     }
     return retained;
+  }
+
+  #evictOldest(): void {
+    const oldest = this.#events[this.#eventStart];
+    if (oldest === undefined) {
+      return;
+    }
+    this.#events[this.#eventStart] = undefined;
+    this.#eventStart = (this.#eventStart + 1) % this.#capacity;
+    this.#eventCount -= 1;
+    this.#retainedBytes -= oldest.retainedBytes;
+    this.#historyFloorSequence = oldest.event.sequence;
+    this.#retentionEvictions += 1;
   }
 
   #scheduleFlush(): void {

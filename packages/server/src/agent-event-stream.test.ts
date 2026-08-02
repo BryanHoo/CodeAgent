@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+
 import type { AgentEvent } from "@code-agent/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -10,6 +12,22 @@ const deltaEvent = {
   turnId: "turn-1",
   type: "message.delta",
 } as const;
+
+const fixedTimestamp = "2026-07-23T00:00:00.000Z";
+
+function publishedEventBytes(delta: string, sequence = 1): number {
+  return Buffer.byteLength(
+    JSON.stringify({
+      ...deltaEvent,
+      payload: { delta },
+      provider: "codex",
+      sequence,
+      sessionId: "runtime-1",
+      timestamp: fixedTimestamp,
+      version: 2,
+    }),
+  );
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -155,5 +173,61 @@ describe("AgentEventStream", () => {
       type: "resync",
     });
     expect(stream.metrics).toMatchObject({ retainedEvents: 2, retentionEvictions: 1 });
+  });
+
+  it("evicts oldest events until the retained history fits the byte budget", () => {
+    vi.useFakeTimers();
+    const delta = "你".repeat(20);
+    const eventBytes = publishedEventBytes(delta);
+    const stream = new AgentEventStream({
+      maxEventBytes: eventBytes,
+      maxRetainedBytes: eventBytes * 2 - 1,
+      now: () => new Date(fixedTimestamp),
+      provider: "codex",
+      sessionId: "runtime-1",
+    });
+
+    stream.publish({ ...deltaEvent, itemId: "item-1", payload: { delta } });
+    vi.advanceTimersByTime(16);
+    stream.publish({ ...deltaEvent, itemId: "item-2", payload: { delta } });
+    vi.advanceTimersByTime(16);
+
+    expect(stream.replayAfter(0)).toEqual({
+      latestSequence: 2,
+      reason: "event_retention_exceeded",
+      type: "resync",
+    });
+    expect(stream.replayAfter(1)).toMatchObject({
+      events: [{ itemId: "item-2", sequence: 2 }],
+      type: "events",
+    });
+    expect(stream.metrics).toMatchObject({ retainedEvents: 1, retentionEvictions: 1 });
+  });
+
+  it("does not retain an oversized event and requires resync across its sequence", () => {
+    vi.useFakeTimers();
+    const delta = "大".repeat(20);
+    const eventBytes = publishedEventBytes(delta);
+    const stream = new AgentEventStream({
+      maxEventBytes: eventBytes - 1,
+      maxRetainedBytes: eventBytes * 2,
+      now: () => new Date(fixedTimestamp),
+      provider: "codex",
+      sessionId: "runtime-1",
+    });
+    const listener = vi.fn<(event: AgentEvent) => void>();
+    stream.subscribe(listener);
+
+    stream.publish({ ...deltaEvent, payload: { delta } });
+    vi.advanceTimersByTime(16);
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(stream.replayAfter(0)).toEqual({
+      latestSequence: 1,
+      reason: "event_retention_exceeded",
+      type: "resync",
+    });
+    expect(stream.replayAfter(1)).toEqual({ events: [], type: "events" });
+    expect(stream.metrics).toMatchObject({ retainedEvents: 0, retentionEvictions: 1 });
   });
 });

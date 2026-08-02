@@ -591,7 +591,9 @@ WS /v1/projects/:projectId/events?afterSequence=<sequence>
 }
 ```
 
-如果 `afterSequence` 已被有界缓存淘汰，或大于当前 Session 的最新序号，服务端发送控制帧并要求刷新 Snapshot：
+每个 Project 的 Server 事件历史使用固定环形缓冲区，最多保留 `1,000` 条、合计 `4 MiB` 的事件，单事件最多保留 `1 MiB`。Server 按事件序列化后的 UTF-8 字节数从最旧事件开始淘汰；单事件超限时不进入历史，并记录不可连续回放的 Sequence 边界。
+
+如果 `afterSequence` 跨越已淘汰或因单事件超限而未保留的序列，或大于当前 Session 的最新序号，服务端发送控制帧并要求刷新 Snapshot：
 
 ```json
 {
