@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, FileCode2, Files, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { IconButton } from "../../shared/ui/icon-button.js";
 import { useTranslation } from "../../i18n/i18n.js";
@@ -61,6 +61,7 @@ type FileReviewDialogProps = Readonly<{
 export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
   const { t } = useTranslation("workbench");
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const reviewContentRef = useRef<HTMLElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const fileItems = useMemo(() => buildReviewFileList(changes ?? []), [changes]);
 
@@ -92,6 +93,13 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
       window.removeEventListener("keydown", handleReviewKeyDown);
     };
   }, [changes]);
+
+  useLayoutEffect(() => {
+    // 左侧容器会跨文件复用，切换后必须主动清除上一个 Diff 的纵向滚动位置。
+    if (reviewContentRef.current !== null) {
+      reviewContentRef.current.scrollTop = 0;
+    }
+  }, [currentIndex]);
 
   if (changes === null || changes.length === 0) {
     return null;
@@ -164,7 +172,11 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
           </div>
         </header>
         <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(12rem,26%)] bg-content">
-          <section aria-label={t("diff.reviewContent")} className="min-h-0 overflow-auto">
+          <section
+            aria-label={t("diff.reviewContent")}
+            className="min-h-0 overflow-auto"
+            ref={reviewContentRef}
+          >
             <Suspense
               fallback={
                 <div

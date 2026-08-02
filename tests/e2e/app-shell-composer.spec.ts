@@ -826,8 +826,19 @@ test("opens file diffs from the timeline and uncommitted review button", async (
     reviewNavigation.boundingBox(),
   ]);
   expect(reviewContentBox?.x).toBeLessThan(reviewNavigationBox?.x ?? 0);
+  await reviewContent.locator(".file-diff-renderer").evaluate((element) => {
+    // 模拟长 Diff，确保左侧审核区产生真实滚动距离。
+    element.setAttribute("style", "min-height: 2000px");
+  });
+  await reviewContent.evaluate((element) => {
+    element.scrollTop = 320;
+  });
+  await expect
+    .poll(() => reviewContent.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
   await reviewFileListItem.click();
   await expect(reviewDialog).toHaveAccessibleName("review-list.tsx");
+  await expect.poll(() => reviewContent.evaluate((element) => element.scrollTop)).toBe(0);
   await packageFileListItem.click();
   await expect(reviewDialog).toHaveAccessibleName("package.json");
   await page.keyboard.press("ArrowRight");
