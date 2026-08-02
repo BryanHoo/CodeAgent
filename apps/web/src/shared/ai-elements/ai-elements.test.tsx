@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { Conversation, ConversationContent } from "./conversation.js";
+import { Conversation, ConversationContent, ConversationVirtualList } from "./conversation.js";
 import {
   Attachment,
   AttachmentInfo,
@@ -136,6 +136,25 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain("已完成");
     expect(markup).toContain("bg-control");
     expect(markup).toContain("rounded-surface");
+  });
+
+  it("only renders the visible Turn range in a long conversation", () => {
+    const turns = Array.from({ length: 100 }, (_, index) => `turn-${String(index + 1)}`);
+    const markup = renderToStaticMarkup(
+      <Conversation aria-label="长会话" conversationId="long-conversation">
+        <ConversationVirtualList
+          getItemKey={(turnId) => turnId}
+          items={turns}
+          renderItem={(turnId, turnIndex) => (
+            <section aria-label={`Turn ${String(turnIndex + 1)}`}>{turnId}</section>
+          )}
+        />
+      </Conversation>,
+    );
+
+    expect(markup).toContain("turn-1");
+    expect(markup).not.toContain("turn-100");
+    expect(markup.match(/aria-label="Turn /g)?.length).toBeLessThan(turns.length);
   });
 
   it("renders a polymorphic running Shimmer with an accessible status", () => {

@@ -34,6 +34,7 @@ import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
+  ConversationVirtualList,
 } from "../../../shared/ai-elements/conversation.js";
 import {
   Message,
@@ -124,6 +125,8 @@ const ignoreSourceFile = () => undefined;
 const ignoreFileChanges = () => undefined;
 const ignorePendingRequest = () => Promise.resolve();
 const ignoreRollback = () => Promise.resolve();
+const getTurnId = (turn: AgentTurn) => turn.id;
+const getTurnIdKey = (turnId: string) => turnId;
 
 function EmptyTimeline({
   onProjectChange,
@@ -1396,7 +1399,7 @@ function StoreTurnTimelineSection({
   return (
     <section
       aria-label={`Turn ${String(turnIndex + 1)}`}
-      className="space-y-4 [contain-intrinsic-size:auto_300px] [content-visibility:auto]"
+      className="space-y-4"
       data-status={turn.status}
     >
       {timelineGroups.map((group, groupIndex) =>
@@ -1530,11 +1533,23 @@ function TaskStoreTimeline({
 
   return (
     <Conversation aria-label="会话内容" conversationId={`${projectId}:${taskId}`}>
-      <ConversationContent className="gap-6">
-        {turnIds.map((turnId, turnIndex) => (
+      <ConversationVirtualList
+        {...(hasVisiblePendingRequest
+          ? {
+              footer: (
+                <StorePendingRequestList
+                  connected={connected}
+                  onResolvePendingRequest={onResolvePendingRequest}
+                  store={store}
+                />
+              ),
+            }
+          : {})}
+        getItemKey={getTurnIdKey}
+        items={turnIds}
+        renderItem={(turnId, turnIndex) => (
           <StoreTurnTimelineSection
             canRollback={connected && canRollbackTurns && turnId === latestTurnId}
-            key={turnId}
             {...(connected && turnId === latestTurnId && onForkTask !== undefined
               ? { onForkTask }
               : {})}
@@ -1548,13 +1563,8 @@ function TaskStoreTimeline({
             turnId={turnId}
             turnIndex={turnIndex}
           />
-        ))}
-        <StorePendingRequestList
-          connected={connected}
-          onResolvePendingRequest={onResolvePendingRequest}
-          store={store}
-        />
-      </ConversationContent>
+        )}
+      />
       <ConversationScrollButton />
     </Conversation>
   );
@@ -1599,13 +1609,31 @@ export function TaskSnapshotTimeline({
 
   return (
     <Conversation aria-label="会话内容" conversationId={`${snapshot.projectId}:${snapshot.id}`}>
-      <ConversationContent className="gap-6">
-        {snapshot.turns.map((turn, turnIndex) => (
+      <ConversationVirtualList
+        {...(visiblePendingRequests.length === 0
+          ? {}
+          : {
+              footer: visiblePendingRequests.map((request, index) => {
+                // 只开放队首未解决请求，避免并发响应改变 Provider 的请求顺序。
+                return (
+                  <PendingRequestCard
+                    interactive={
+                      connected && request.status === "pending" && index === firstPendingIndex
+                    }
+                    key={request.requestId}
+                    onResolve={onResolvePendingRequest}
+                    request={request}
+                  />
+                );
+              }),
+            })}
+        getItemKey={getTurnId}
+        items={snapshot.turns}
+        renderItem={(turn, turnIndex) => (
           <section
             aria-label={`Turn ${String(turnIndex + 1)}`}
-            className="space-y-4 [contain-intrinsic-size:auto_300px] [content-visibility:auto]"
+            className="space-y-4"
             data-status={turn.status}
-            key={turn.id}
           >
             <TurnTimelineItems
               canRollback={
@@ -1639,19 +1667,8 @@ export function TaskSnapshotTimeline({
               </div>
             )}
           </section>
-        ))}
-        {visiblePendingRequests.map((request, index) => {
-          // 只开放队首未解决请求，避免并发响应改变 Provider 的请求顺序。
-          return (
-            <PendingRequestCard
-              interactive={connected && request.status === "pending" && index === firstPendingIndex}
-              key={request.requestId}
-              onResolve={onResolvePendingRequest}
-              request={request}
-            />
-          );
-        })}
-      </ConversationContent>
+        )}
+      />
       <ConversationScrollButton />
     </Conversation>
   );

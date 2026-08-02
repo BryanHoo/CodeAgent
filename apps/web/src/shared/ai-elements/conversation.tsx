@@ -1,13 +1,19 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown } from "lucide-react";
 import {
+  useCallback,
   createContext,
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ButtonHTMLAttributes,
   type HTMLAttributes,
+  type Key,
+  type ReactNode,
+  type RefObject,
 } from "react";
 
 import { createConversationAutoScrollController } from "./conversation-scroll.js";
@@ -21,16 +27,30 @@ type ConversationContentProps = HTMLAttributes<HTMLDivElement>;
 
 type ConversationContextValue = Readonly<{
   atBottom: boolean;
+  containerRef: RefObject<HTMLDivElement | null>;
   scrollToBottom: () => void;
 }>;
 
 const ConversationContext = createContext<ConversationContextValue | null>(null);
+const CONVERSATION_INITIAL_RECT = { height: 768, width: 1_024 };
+const DEFAULT_TURN_ESTIMATED_HEIGHT_PX = 300;
+const TURN_GAP_PX = 24;
+const TURN_OVERSCAN = 3;
+
+function useConversationContext(): ConversationContextValue {
+  const context = useContext(ConversationContext);
+  if (context === null) {
+    throw new Error("Conversation virtual components must be used within Conversation");
+  }
+  return context;
+}
 
 export function Conversation({
   children,
   className = "",
   conversationId,
   onScroll,
+  style,
   ...props
 }: ConversationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -42,12 +62,16 @@ export function Conversation({
     autoScrollControllerRef.current ??
     (autoScrollControllerRef.current = createConversationAutoScrollController(setAtBottom));
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     const container = containerRef.current;
     if (container !== null) {
       autoScrollController.scrollToBottom(container);
     }
-  };
+  }, [autoScrollController]);
+  const contextValue = useMemo(
+    () => ({ atBottom, containerRef, scrollToBottom }),
+    [atBottom, scrollToBottom],
+  );
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -106,7 +130,7 @@ export function Conversation({
   }, [autoScrollController]);
 
   return (
-    <ConversationContext.Provider value={{ atBottom, scrollToBottom }}>
+    <ConversationContext.Provider value={contextValue}>
       <div
         className={`relative min-h-0 flex-1 overflow-y-auto overscroll-contain ${className}`}
         onScroll={(event) => {
@@ -117,6 +141,7 @@ export function Conversation({
         ref={containerRef}
         role="log"
         aria-live="off"
+        style={{ ...style, overflowAnchor: "none" }}
         {...props}
       >
         {children}
@@ -131,6 +156,74 @@ export function ConversationContent({ className = "", ...props }: ConversationCo
       className={`mx-auto flex w-full max-w-content flex-col px-4 py-6 sm:px-6 sm:py-7 ${className}`}
       {...props}
     />
+  );
+}
+
+export type ConversationVirtualListProps<TItem> = Omit<HTMLAttributes<HTMLDivElement>, "children"> &
+  Readonly<{
+    estimateSize?: (item: TItem, index: number) => number;
+    footer?: ReactNode;
+    getItemKey: (item: TItem, index: number) => Key;
+    items: readonly TItem[];
+    renderItem: (item: TItem, index: number) => ReactNode;
+  }>;
+
+export function ConversationVirtualList<TItem>({
+  className = "",
+  estimateSize,
+  footer,
+  getItemKey,
+  items,
+  renderItem,
+  ...props
+}: ConversationVirtualListProps<TItem>) {
+  const context = useConversationContext();
+  const getScrollElement = useCallback(() => context.containerRef.current, [context.containerRef]);
+  const estimateTurnSize = useCallback(
+    (index: number) =>
+      estimateSize?.(items[index] as TItem, index) ?? DEFAULT_TURN_ESTIMATED_HEIGHT_PX,
+    [estimateSize, items],
+  );
+  const getTurnKey = useCallback(
+    (index: number) => getItemKey(items[index] as TItem, index),
+    [getItemKey, items],
+  );
+  // Turn 是最小虚拟化边界；内部 AI Elements 保持完整挂载，由动态测量处理流式高度变化。
+  const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+    anchorTo: "end",
+    count: items.length,
+    estimateSize: estimateTurnSize,
+    followOnAppend: "auto",
+    gap: TURN_GAP_PX,
+    getItemKey: getTurnKey,
+    getScrollElement,
+    initialRect: CONVERSATION_INITIAL_RECT,
+    overscan: TURN_OVERSCAN,
+    scrollEndThreshold: 24,
+  });
+
+  return (
+    <div
+      className={`mx-auto w-full max-w-content px-4 py-6 sm:px-6 sm:py-7 ${className}`}
+      {...props}
+    >
+      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+        {virtualizer.getVirtualItems().map((virtualTurn) => (
+          <div
+            className="absolute left-0 top-0 w-full"
+            data-index={virtualTurn.index}
+            key={virtualTurn.key}
+            ref={virtualizer.measureElement}
+            style={{ transform: `translateY(${String(virtualTurn.start)}px)` }}
+          >
+            {renderItem(items[virtualTurn.index] as TItem, virtualTurn.index)}
+          </div>
+        ))}
+      </div>
+      {footer === undefined ? null : (
+        <div className={items.length === 0 ? "space-y-6" : "mt-6 space-y-6"}>{footer}</div>
+      )}
+    </div>
   );
 }
 

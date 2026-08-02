@@ -187,6 +187,40 @@ describe("TaskTimeline", () => {
     expect(markup).toContain("开始并继续");
   });
 
+  it("virtualizes Turn sections from the normalized store", () => {
+    const longSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: Array.from({ length: 100 }, (_, index) => ({
+        ...completedTurn,
+        id: `turn-${String(index + 1)}`,
+        items: [],
+      })),
+    };
+    const store = createTaskStore(
+      { projectId: longSnapshot.projectId, taskId: longSnapshot.id },
+      {
+        checkpoint: { sequence: 1, sessionId: "runtime-long-history" },
+        snapshot: longSnapshot,
+      },
+    );
+    const markup = renderToStaticMarkup(
+      <TaskTimeline
+        projectId={longSnapshot.projectId}
+        runtime={{
+          connectionState: "connected",
+          error: null,
+          isPending: false,
+          snapshot: longSnapshot,
+          store,
+        }}
+        taskId={longSnapshot.id}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="Turn 1"');
+    expect(markup).not.toContain('aria-label="Turn 100"');
+  });
+
   it("does not offer rollback for a failed latest turn in the normalized store", () => {
     const failedSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
@@ -236,6 +270,21 @@ describe("TaskTimeline", () => {
 });
 
 describe("TaskSnapshotTimeline", () => {
+  it("virtualizes Turn sections from a long snapshot", () => {
+    const longSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: Array.from({ length: 100 }, (_, index) => ({
+        ...completedTurn,
+        id: `turn-${String(index + 1)}`,
+        items: [],
+      })),
+    };
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={longSnapshot} />);
+
+    expect(markup).toContain('aria-label="Turn 1"');
+    expect(markup).not.toContain('aria-label="Turn 100"');
+  });
+
   it("removes resolved approvals while keeping pending approvals visible", () => {
     const approvalSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
@@ -307,7 +356,6 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup.match(/aria-label="复制消息"/g)).toHaveLength(2);
     expect(markup).toContain('dateTime="2026-07-24T00:00:00.000Z"');
     expect(markup).toContain('dateTime="2026-07-24T00:01:00.000Z"');
-    expect(markup).toContain("gap-6");
     expect(markup).toContain("space-y-4");
   });
 
@@ -518,7 +566,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("data:image");
   });
 
-  it("defers rendering work for long task histories with stable intrinsic turn sizes", () => {
+  it("removes the old content-visibility fallback after Turn virtualization", () => {
     const longSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: Array.from({ length: 51 }, (_, index) => ({
@@ -530,8 +578,9 @@ describe("TaskSnapshotTimeline", () => {
 
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={longSnapshot} />);
 
-    expect(markup.match(/content-visibility:auto/g)).toHaveLength(51);
-    expect(markup.match(/contain-intrinsic-size:auto_300px/g)).toHaveLength(51);
+    expect(markup.match(/data-index=/g)?.length).toBeLessThan(longSnapshot.turns.length);
+    expect(markup).not.toContain("content-visibility:auto");
+    expect(markup).not.toContain("contain-intrinsic-size:auto_300px");
   });
 
   it("renders a failed turn error after its partial assistant reply", () => {

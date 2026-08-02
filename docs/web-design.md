@@ -86,7 +86,7 @@ provider.error
 
 ### 4.4 渐进式性能设计
 
-MVP 使用 AI Elements `Conversation` 完成滚动和底部跟随，每个 Turn 使用 `content-visibility: auto` 与稳定内在尺寸跳过可视区外渲染。当真实数据证明 DOM 规模成为瓶颈时，仅替换 Timeline 内部为 `react-virtuoso`，不提前承担完整虚拟化复杂度。
+Task Timeline 使用本地 AI Elements `Conversation` 保留滚动语义和底部跟随，并用 `@tanstack/react-virtual` 按 Turn 动态测高。虚拟列表只替换 Turn 列表与滚动职责，Message、Tool、Plan、Task、Terminal、Approval 等内容组件保持原有渲染边界。
 
 ### 4.5 源码级 UI 复用
 
@@ -107,8 +107,8 @@ flowchart LR
 
     Runtime --> VM["Agent ViewModel"]
     VM --> Timeline["TaskTimeline"]
-    Timeline --> Elements["AI Elements"]
-    Timeline -. "性能升级" .-> Virtuoso["react-virtuoso"]
+    Timeline --> VirtualList["ConversationVirtualList<br/>@tanstack/react-virtual"]
+    VirtualList --> Elements["AI Elements"]
     VM --> Diff["@pierre/diffs"]
 ```
 
@@ -132,21 +132,21 @@ WebSocket AgentEvent
 
 ## 6. 技术选型
 
-| 领域         | 选择                          | MVP 策略                                 |
-| ------------ | ----------------------------- | ---------------------------------------- |
-| Web Runtime  | React 19.2 + Vite 8           | 保留现有架构，不引入 Next.js             |
-| 路由         | `@tanstack/react-router`      | 管理 Project、Task、Settings 深链接      |
-| HTTP 状态    | `@tanstack/react-query`       | 管理 Snapshot、分页、Mutation 和缓存失效 |
-| 实时状态     | `zustand/vanilla`             | 创建 Task 级归一化 Store                 |
-| Schema       | TypeBox / JSON Schema         | 复用 `@code-agent/protocol` 契约         |
-| UI 基础      | Tailwind CSS 4 + shadcn/ui    | 为 AI Elements 提供主题和 Primitive      |
-| AI UI        | AI Elements                   | 选择性复制并适配，不安装全部组件         |
-| Markdown     | AI Elements `MessageResponse` | 底层使用 Streamdown，裁剪无用插件        |
-| Conversation | AI Elements `Conversation`    | MVP 使用，保留后续虚拟化替换边界         |
-| Diff         | `@pierre/diffs/react`         | 仅在打开 Diff 时动态加载                 |
-| 图标         | `lucide-react`                | 用于按钮和状态标识                       |
-| 单元测试     | Vitest + Testing Library      | 覆盖状态、组件和交互                     |
-| E2E          | Playwright                    | 覆盖真实浏览器关键流程                   |
+| 领域         | 选择                                                   | MVP 策略                                 |
+| ------------ | ------------------------------------------------------ | ---------------------------------------- |
+| Web Runtime  | React 19.2 + Vite 8                                    | 保留现有架构，不引入 Next.js             |
+| 路由         | `@tanstack/react-router`                               | 管理 Project、Task、Settings 深链接      |
+| HTTP 状态    | `@tanstack/react-query`                                | 管理 Snapshot、分页、Mutation 和缓存失效 |
+| 实时状态     | `zustand/vanilla`                                      | 创建 Task 级归一化 Store                 |
+| Schema       | TypeBox / JSON Schema                                  | 复用 `@code-agent/protocol` 契约         |
+| UI 基础      | Tailwind CSS 4 + shadcn/ui                             | 为 AI Elements 提供主题和 Primitive      |
+| AI UI        | AI Elements                                            | 选择性复制并适配，不安装全部组件         |
+| Markdown     | AI Elements `MessageResponse`                          | 底层使用 Streamdown，裁剪无用插件        |
+| Conversation | AI Elements `Conversation` + `@tanstack/react-virtual` | 按 Turn 动态测高并保留底部跟随           |
+| Diff         | `@pierre/diffs/react`                                  | 仅在打开 Diff 时动态加载                 |
+| 图标         | `lucide-react`                                         | 用于按钮和状态标识                       |
+| 单元测试     | Vitest + Testing Library                               | 覆盖状态、组件和交互                     |
+| E2E          | Playwright                                             | 覆盖真实浏览器关键流程                   |
 
 以下依赖不进入 MVP：
 
@@ -156,12 +156,9 @@ Vercel AI SDK Runtime
 Lexical
 Monaco Editor
 xterm.js
-react-virtuoso
 Mermaid
 KaTeX
 ```
-
-`react-virtuoso` 是明确的性能升级候选，不是永久排除项。
 
 ## 7. AI Elements 使用策略
 
@@ -556,7 +553,7 @@ MVP 内部使用：
 ```text
 TaskTimeline
   -> AI Elements Conversation
-    -> ConversationContent
+    -> ConversationVirtualList(turnId)
       -> AgentItemRenderer(itemId)
     -> ConversationScrollButton
 ```
@@ -587,18 +584,11 @@ TaskTimeline
 - 打开 Diff Inspector 不改变 Timeline 的滚动位置。
 - 每次切换 Task 时等待消息分帧布局稳定，再将中栏聊天消息区域直接滚动到最底部，不恢复该 Task 离开前的滚动位置。
 
-### 15.3 虚拟化升级条件
+### 15.3 Turn 级虚拟化
 
-AI Elements `Conversation` 会保留已渲染 Item 的 DOM。当前先用 Turn 级 `content-visibility: auto` 和 `contain-intrinsic-size` 延迟折叠下方的布局、绘制与图片解码；只有真实性能数据满足以下任一条件时，才将 `TaskTimeline` 内部替换为 `react-virtuoso`：
+`ConversationVirtualList` 以稳定 Turn ID 作为 Key，使用约 `300px` 初始高度、动态 `measureElement` 和 3 个 Turn overscan。Virtualizer 使用 end anchoring 保持流式回复测高后的视觉位置，只在用户原本位于底部时跟随新增 Turn。
 
-- 常见 Task 达到约 `300-500` 个已加载 Item。
-- Timeline DOM 节点持续超过约 `2,000-3,000`。
-- 打开长 Task 的前端渲染耗时超过 `200ms`。
-- 流式输出或滚动期间频繁出现超过 `50ms` 的 Long Task。
-- 滚动帧预算持续超过 `16ms`，产生用户可见卡顿。
-- Task 切换后内存无法回落到稳定范围。
-
-这些数值是启动性能评审的工程阈值，不是产品硬限制。升级后仍复用 `AgentItemRenderer`、ViewModel 和 Store，不改变页面与协议。
+虚拟化不改变 `AgentItemRenderer`、ViewModel、Store 或 Protocol；Pending Request 保持在 Turn 列表尾部，Message、Tool、Plan、Task、Terminal 与 Approval 继续使用现有 AI Elements 内容组件。旧 `content-visibility` 与稳定内在尺寸逻辑不再叠加，避免两套离屏布局策略相互干扰。
 
 ## 16. Markdown 与代码
 
@@ -838,7 +828,7 @@ Server 必须执行最终权限判断。Web 只负责减少误操作和展示已
 | Composer 输入          | 常规输入无可感知延迟               |
 | 流式渲染               | 不持续产生超过 `50ms` 的 Long Task |
 | 布局                   | 流式更新不引起无关区域明显位移     |
-| DOM                    | 未虚拟化阶段受分页和已加载窗口约束 |
+| DOM                    | Turn 虚拟窗口限制长历史挂载规模    |
 
 ### 23.2 渲染规则
 
@@ -848,7 +838,7 @@ Server 必须执行最终权限判断。Web 只负责减少误操作和展示已
 - 不在 Render 中解析协议、聚合大型数组或转换完整历史。
 - Stable Callback 和 Selector 只在有实际重渲染价值时引入。
 - Diff、高亮器和非首屏 Inspector 动态加载。
-- 长历史 Turn 使用 `content-visibility: auto` 和稳定内在尺寸；历史图片使用显式尺寸、延迟加载和异步解码。
+- 长历史按 Turn 虚拟化并动态测高；历史图片使用显式尺寸、延迟加载和异步解码。
 - 使用 React Profiler 和浏览器 Performance 数据决定优化，不以组件数量猜测瓶颈。
 
 ### 23.3 内存规则
@@ -929,7 +919,7 @@ Turn Steer / Interrupt
 - 测量 `delta received -> paint` 延迟。
 - 测量长 Task 首次打开和切换耗时。
 - 记录 DOM 节点、Long Task 和 Heap 变化。
-- 达到虚拟化评审阈值时建立 Conversation 与 Virtuoso 对照基准。
+- 记录可见 Turn 数、动态测高修正和底部跟随稳定性。
 
 ## 25. 分阶段实施
 
@@ -976,7 +966,7 @@ Turn Steer / Interrupt
 - 完成可访问性和键盘检查。
 - 完成关键 Playwright E2E。
 - 回放长历史和高频 Delta。
-- 根据真实指标决定是否引入 `react-virtuoso`。
+- 验证 Turn 虚拟窗口、动态测高和长历史滚动。
 
 完成标准：达到性能预算，并通过 Web MVP 验收流程。
 
@@ -1009,12 +999,7 @@ ansi-to-react
 
 ```text
 @pierre/diffs
-```
-
-按性能数据决定：
-
-```text
-react-virtuoso
+@tanstack/react-virtual
 ```
 
 禁止只为使用 AI Elements 示例而引入：
@@ -1034,11 +1019,11 @@ ai
 
 原因：它覆盖 Message、Reasoning、Tool、Approval、Plan、PromptInput、Terminal 等高成本 UI，但不提供项目需要的 Snapshot、Sequence、恢复和 Provider 抽象。
 
-### 27.2 MVP 使用 Conversation，不提前使用 Virtuoso
+### 27.2 Conversation 使用 Turn 级 TanStack Virtual
 
-决定：采用 AI Elements `Conversation`。
+决定：采用 AI Elements `Conversation` 与 `@tanstack/react-virtual`。
 
-原因：真实长历史规模尚未建立，先用简单完整的滚动体验。通过 `TaskTimeline` 隔离实现，达到明确性能阈值后再替换。
+原因：长历史只需要替换 Turn 列表、动态测高和滚动职责；内容组件、Runtime Store 和协议保持独立，避免引入第二套 AI UI 模型。
 
 ### 27.3 MVP 不使用 Lexical
 
@@ -1096,7 +1081,7 @@ ai
 - [Streamdown](https://github.com/vercel/streamdown)
 - [TanStack Query Render Optimizations](https://tanstack.com/query/latest/docs/framework/react/guides/render-optimizations)
 - [Zustand Selectors](https://zustand.docs.pmnd.rs/learn/guides/prevent-rerenders-with-use-shallow)
-- [React Virtuoso](https://virtuoso.dev/react-virtuoso/api-reference/virtuoso/)
+- [TanStack Virtual](https://tanstack.com/virtual/latest/docs/framework/react)
 - [Pierre Diffs](https://diffs.com/docs)
 
 社区组件只作为 UI 与工程模式参考。协议、权限和恢复行为以 CodeAgent Protocol、Codex 官方文档和目标 Codex CLI 版本的契约测试为准。

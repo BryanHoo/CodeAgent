@@ -51,6 +51,7 @@ catalog:
   "@pierre/diffs": 1.2.12
   zustand: 5.0.14
   sonner: 2.0.7
+  "@tanstack/react-virtual": 3.14.9
 
 catalogMode: strict
 cleanupUnusedCatalogs: true

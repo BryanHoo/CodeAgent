@@ -2622,6 +2622,9 @@ test("scrolls the conversation area to the bottom whenever the active task chang
   await expect
     .poll(() => conversation.evaluate((element) => element.scrollHeight))
     .toBeGreaterThan(800);
+  const mountedTurns = conversation.locator('section[aria-label^="Turn "]');
+  await expect.poll(() => mountedTurns.count()).toBeLessThan(longTurns.length);
+  await expect(conversation.locator('section[aria-label="Turn 24"]')).toBeVisible();
 
   await conversation.evaluate((element) => {
     element.scrollTop = 120;
