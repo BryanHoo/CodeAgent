@@ -1,41 +1,17 @@
-import {
-  AGENT_FILE_ACCEPT,
-  AGENT_IMAGE_ACCEPT,
-  MAX_AGENT_FILE_BYTES,
-  MAX_AGENT_FILE_TOTAL_BYTES,
-  MAX_AGENT_IMAGE_BYTES,
-  MAX_AGENT_IMAGES,
-  MAX_AGENT_IMAGE_TOTAL_BYTES,
-  type AgentApprovalPolicy,
-  type AgentAttachment,
-  type AgentCapabilities,
-  type AgentGlobalSettings,
-  type AgentModel,
-  type AgentPromptInput,
-  type AgentReviewTarget,
-  type AgentSandboxMode,
-  type AgentSkill,
-  type AgentTask,
-  type AgentTaskSettings,
-  type AgentTaskSnapshot,
-  type AgentTurn,
-  type AgentTurnOptions,
-  type ProjectGitStatus,
+import type {
+  AgentCapabilities,
+  AgentGlobalSettings,
+  AgentModel,
+  AgentPromptInput,
+  AgentReviewTarget,
+  AgentSkill,
+  AgentTask,
+  AgentTaskSettings,
+  AgentTurn,
+  AgentTurnOptions,
+  ProjectGitStatus,
 } from "@code-agent/protocol";
-import {
-  Bug,
-  CircleGauge,
-  FilePlus2,
-  Folder,
-  GitBranch,
-  GitFork,
-  MessageCirclePlus,
-  MessageSquareText,
-  SendHorizontal,
-  Sparkles,
-  X,
-} from "lucide-react";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
@@ -45,40 +21,16 @@ import {
   type ComposerCommandDraftMode,
   type QueuedComposerPrompt,
 } from "../composer-draft-context.js";
-import {
-  Attachment,
-  AttachmentInfo,
-  AttachmentPreview,
-  AttachmentRemove,
-  Attachments,
-} from "../../../shared/ai-elements/attachments.js";
-import { Context, ContextTrigger } from "../../../shared/ai-elements/context.js";
-import {
-  PromptInput,
-  PromptInputActionAddAttachments,
-  PromptInputBody,
-  PromptInputButton,
-  PromptInputCommand,
-  PromptInputCommandEmpty,
-  PromptInputCommandGroup,
-  PromptInputCommandItem,
-  PromptInputCommandList,
-  PromptInputFooter,
-  PromptInputHeader,
-  PromptInputSelect,
-  PromptInputSubmit,
-  PromptInputTools,
-  usePromptInputAttachments,
-  type PromptInputAttachment,
-  type PromptInputMessage,
+import type {
+  PromptInputAttachment,
+  PromptInputMessage,
 } from "../../../shared/ai-elements/prompt-input.js";
-import { IconButton } from "../../../shared/ui/icon-button.js";
-import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
-import { i18n, useTranslation } from "../../../i18n/i18n.js";
+import { useTranslation } from "../../../i18n/i18n.js";
+import { useWorkbenchComposerController } from "../hooks/use-workbench-composer-controller.js";
+import { WorkbenchComposerView } from "./workbench-composer-view.js";
 import {
   insertPromptSkill,
   isPromptSkillContentEmpty,
-  PromptSkillEditor,
   toPromptSkillSubmission,
   type PromptSkillContent,
   type PromptSkillEditorHandle,
@@ -88,265 +40,46 @@ import {
   filterPromptSkills,
   getPromptCommandItems,
   getPromptCommandAvailability,
-  movePromptCommandSelection,
   resolvePromptSlashCommand,
-  type PromptCommandAction,
   type PromptCommandItem,
   type PromptSlashCommand,
 } from "./prompt-command.js";
 
-export type ComposerState = "failed" | "idle" | "reconnecting" | "running" | "submitting";
-export type ApprovalMode = AgentApprovalPolicy | "auto-review";
-
-export const LARGE_PASTE_CHARACTER_THRESHOLD = 1_000;
-export const PASTED_TEXT_ATTACHMENT_NAME = "Pasted text.txt";
-
-export function resolveComposerPlaceholder(
-  commandDraftMode: ComposerCommandDraftMode | null,
-  taskId: string | undefined,
-): string {
-  // 命令草稿需要优先说明当前输入目标，普通草稿再按任务上下文提示。
-  if (commandDraftMode === "feedback") {
-    return i18n.t("composer.feedbackPlaceholder", { ns: "workbench" });
-  }
-  if (commandDraftMode === "subtask") {
-    return i18n.t("composer.subtaskPlaceholder", { ns: "workbench" });
-  }
-  return taskId === undefined
-    ? i18n.t("composer.placeholder", { ns: "workbench" })
-    : i18n.t("composer.followUpPlaceholder", { ns: "workbench" });
-}
-
-export type IdempotencyAttempt = Readonly<{
-  fingerprint: string;
-  key: string;
-}>;
-
-export function resolveIdempotencyAttempt(
-  previous: IdempotencyAttempt | undefined,
-  fingerprint: string,
-  createKey: () => string = () => globalThis.crypto.randomUUID(),
-): IdempotencyAttempt {
-  return previous?.fingerprint === fingerprint ? previous : { fingerprint, key: createKey() };
-}
-
-export function resolveReasoningEffort(
-  model:
-    | Readonly<{
-        defaultReasoningEffort: string;
-        supportedReasoningEfforts: readonly Readonly<{ id: string }>[];
-      }>
-    | undefined,
-  requestedEffort: string,
-): string | undefined {
-  if (model === undefined) {
-    return undefined;
-  }
-  return model.supportedReasoningEfforts.some((option) => option.id === requestedEffort)
-    ? requestedEffort
-    : model.defaultReasoningEffort;
-}
-
-export function deriveApprovalMode(
-  settings: Pick<AgentTaskSettings, "approvalPolicy" | "approvalsReviewer">,
-): ApprovalMode {
-  return settings.approvalPolicy === "on-request" && settings.approvalsReviewer === "auto_review"
-    ? "auto-review"
-    : settings.approvalPolicy;
-}
-
-export function applyApprovalMode(
-  settings: AgentTaskSettings,
-  mode: ApprovalMode,
-): AgentTaskSettings {
-  // 自动审批是 on-request 策略加自动审核方，不能降级成语义不同的 never。
-  return mode === "auto-review"
-    ? { ...settings, approvalPolicy: "on-request", approvalsReviewer: "auto_review" }
-    : { ...settings, approvalPolicy: mode, approvalsReviewer: "user" };
-}
-
-export function deriveComposerActions(
-  capabilities: AgentCapabilities | undefined,
-  hasTask: boolean,
-): Readonly<{ canInterrupt: boolean; canSubmit: boolean; canSteer: boolean }> {
-  return {
-    canInterrupt: capabilities?.turns.interrupt ?? false,
-    canSubmit:
-      capabilities !== undefined &&
-      capabilities.turns.start &&
-      (hasTask || capabilities.tasks.start),
-    canSteer: capabilities?.turns.steer === true && hasTask,
-  };
-}
-
-export type ComposerSubmitAction = "blocked" | "interrupt" | "queue" | "start" | "steer";
-
-export function resolveComposerSubmitAction(
-  state: ComposerState,
-  hasInput: boolean,
-  followUpBehavior: AgentGlobalSettings["followUpBehavior"],
-  canSteer: boolean,
-): ComposerSubmitAction {
-  if (state !== "running") {
-    return hasInput ? "start" : "blocked";
-  }
-  if (!hasInput) {
-    return "interrupt";
-  }
-  return followUpBehavior === "queue" ? "queue" : canSteer ? "steer" : "blocked";
-}
-
-export function deriveComposerState(
-  input: Readonly<{
-    activeTurnId: string | undefined;
-    connectionState: TaskRuntimeView["connectionState"];
-    isSubmitting?: boolean;
-    mutationFailed?: boolean;
-  }>,
-): ComposerState {
-  if (input.isSubmitting === true) {
-    return "submitting";
-  }
-  if (
-    input.connectionState === "closed" ||
-    input.connectionState === "connecting" ||
-    input.connectionState === "reconnecting"
-  ) {
-    return "reconnecting";
-  }
-  if (input.activeTurnId !== undefined) {
-    return "running";
-  }
-  return input.mutationFailed === true ? "failed" : "idle";
-}
-
-export function deriveComposerInputAvailability(state: ComposerState): Readonly<{
-  attachmentsDisabled: boolean;
-  draftInputDisabled: boolean;
-  turnControlsDisabled: boolean;
-}> {
-  return {
-    // 草稿与附件都是本地输入，实时连接恢复期间不能禁用，否则浏览器会终止原生 IME 上下文。
-    attachmentsDisabled: state === "submitting",
-    draftInputDisabled: state === "submitting",
-    turnControlsDisabled: state === "reconnecting" || state === "submitting",
-  };
-}
-
-export function resolveActiveTurnId(
-  snapshot:
-    (Pick<AgentTaskSnapshot, "turns"> & Partial<Pick<AgentTaskSnapshot, "status">>) | undefined,
-  submittedTurnId: string | undefined,
-): string | undefined {
-  const runningTurn = snapshot?.turns.findLast((turn) => turn.status === "running");
-  if (runningTurn !== undefined) {
-    return runningTurn.id;
-  }
-  const submittedTurn = snapshot?.turns.find((turn) => turn.id === submittedTurnId);
-  return submittedTurn === undefined || submittedTurn.status === "running"
-    ? submittedTurnId
-    : undefined;
-}
-
-type StartPromptTurnOptions = Readonly<{
-  idempotencyKeys: Readonly<{ startTask?: string; startTurn: string }>;
-  input: AgentPromptInput;
-  onTaskCreated?: (task: AgentTask) => void;
-  projectId: string;
-  taskId?: string;
-  turnOptions: AgentTurnOptions;
-}>;
-
-export async function startPromptTurn(
-  client: Pick<CodeAgentMutationClient, "startTask" | "startTurn">,
-  options: StartPromptTurnOptions,
-): Promise<Readonly<{ createdTask?: AgentTask; taskId: string; turn: AgentTurn }>> {
-  let taskId = options.taskId;
-  let createdTask: AgentTask | undefined;
-  if (taskId === undefined) {
-    const startTaskKey = options.idempotencyKeys.startTask;
-    if (startTaskKey === undefined) {
-      throw new Error("Task creation requires an idempotency key");
-    }
-    const response = await client.startTask(options.projectId, {
-      idempotencyKey: startTaskKey,
-    });
-    createdTask = response.task;
-    taskId = response.task.id;
-    options.onTaskCreated?.(response.task);
-  }
-  const response = await client.startTurn(
-    options.projectId,
-    taskId,
-    options.input,
-    options.turnOptions,
-    {
-      idempotencyKey: options.idempotencyKeys.startTurn,
-    },
-  );
-  return {
-    ...(createdTask === undefined ? {} : { createdTask }),
-    taskId,
-    turn: response.turn,
-  };
-}
-
-type StartTaskReviewOptions = Readonly<{
-  idempotencyKey: string;
-  onTaskCreated?: (task: AgentTask) => void;
-  projectId: string;
-  target: AgentReviewTarget;
-  taskId?: string;
-}>;
-
-export async function startTaskReview(
-  client: Pick<CodeAgentMutationClient, "startReview" | "startTask">,
-  options: StartTaskReviewOptions,
-): Promise<Readonly<{ createdTask?: AgentTask; taskId: string; turn: AgentTurn }>> {
-  let taskId = options.taskId;
-  let createdTask: AgentTask | undefined;
-  if (taskId === undefined) {
-    const response = await client.startTask(options.projectId, {
-      idempotencyKey: options.idempotencyKey,
-    });
-    createdTask = response.task;
-    taskId = response.task.id;
-    options.onTaskCreated?.(response.task);
-  }
-  const response = await client.startReview(
-    options.projectId,
-    taskId,
-    { target: options.target },
-    { idempotencyKey: options.idempotencyKey },
-  );
-  return {
-    ...(createdTask === undefined ? {} : { createdTask }),
-    taskId,
-    turn: response.turn,
-  };
-}
-
-export function interruptPromptTurn(
-  client: Pick<CodeAgentMutationClient, "interruptTurn">,
-  projectId: string,
-  taskId: string,
-  turnId: string,
-  idempotencyKey: string,
-) {
-  return client.interruptTurn(projectId, taskId, turnId, { idempotencyKey });
-}
-
-export function steerPromptTurn(
-  client: Pick<CodeAgentMutationClient, "steerTurn">,
-  projectId: string,
-  taskId: string,
-  turnId: string,
-  input: AgentPromptInput,
-  idempotencyKey: string,
-) {
-  return client.steerTurn(projectId, taskId, turnId, input, { idempotencyKey });
-}
-
+export {
+  LARGE_PASTE_CHARACTER_THRESHOLD,
+  PASTED_TEXT_ATTACHMENT_NAME,
+  applyApprovalMode,
+  deriveApprovalMode,
+  deriveComposerActions,
+  deriveComposerInputAvailability,
+  deriveComposerState,
+  interruptPromptTurn,
+  resolveActiveTurnId,
+  resolveComposerPlaceholder,
+  resolveComposerSubmitAction,
+  resolveIdempotencyAttempt,
+  resolveReasoningEffort,
+  startPromptTurn,
+  startTaskReview,
+  steerPromptTurn,
+  type ApprovalMode,
+  type ComposerState,
+  type ComposerSubmitAction,
+  type IdempotencyAttempt,
+} from "../composer-state.js";
+import {
+  deriveComposerActions,
+  deriveComposerInputAvailability,
+  deriveComposerState,
+  interruptPromptTurn,
+  resolveActiveTurnId,
+  resolveComposerSubmitAction,
+  resolveIdempotencyAttempt,
+  resolveReasoningEffort,
+  startPromptTurn,
+  startTaskReview,
+  steerPromptTurn,
+} from "../composer-state.js";
 type WorkbenchComposerProps = Readonly<{
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentMutationClient;
@@ -376,51 +109,6 @@ type WorkbenchComposerProps = Readonly<{
   skills: readonly AgentSkill[];
   taskId?: string;
 }>;
-
-function PromptCommandIcon({ action }: Readonly<{ action: PromptCommandAction }>) {
-  const className = "size-4 shrink-0 text-accent";
-  switch (action) {
-    case "review":
-      return <Bug aria-hidden="true" className={className} />;
-    case "initialize":
-      return <FilePlus2 aria-hidden="true" className={className} />;
-    case "subtask":
-      return <MessageCirclePlus aria-hidden="true" className={className} />;
-    case "compact":
-      return <CircleGauge aria-hidden="true" className={className} />;
-    case "feedback":
-      return <MessageSquareText aria-hidden="true" className={className} />;
-    case "fork":
-      return <GitFork aria-hidden="true" className={className} />;
-  }
-}
-
-function ComposerAttachments() {
-  const { t } = useTranslation("workbench");
-  const attachments = usePromptInputAttachments();
-  if (attachments.files.length === 0) {
-    return null;
-  }
-  return (
-    <PromptInputHeader>
-      <Attachments aria-label={t("composer.addedAttachments")}>
-        {attachments.files.map((attachment) => (
-          <Attachment
-            data={attachment}
-            key={attachment.id}
-            onRemove={() => {
-              attachments.remove(attachment.id);
-            }}
-          >
-            <AttachmentPreview />
-            <AttachmentInfo />
-            <AttachmentRemove disabled={attachments.disabled} />
-          </Attachment>
-        ))}
-      </Attachments>
-    </PromptInputHeader>
-  );
-}
 
 export function WorkbenchComposer({
   capabilities,
@@ -470,43 +158,32 @@ export function WorkbenchComposer({
   const [queuedPrompts, setQueuedPrompts] = useState<readonly QueuedComposerPrompt[]>(
     initialComposerDraft.queuedPrompts,
   );
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [mutationError, setMutationError] = useState<Error | null>(null);
-  const [pendingTaskState, setPendingTaskState] = useState<{
-    scope: string;
-    task: AgentTask;
-  }>();
-  const [submittedTurnState, setSubmittedTurnState] = useState<{
-    scope: string;
-    turnId: string;
-  }>();
+  const {
+    actionLock: composerActionLock,
+    autoStartedQueueIds,
+    commandAttempts,
+    interruptAttempt,
+    isCurrentScope,
+    isSubmitting,
+    mutationError,
+    pendingTaskState,
+    reset: resetController,
+    setIsSubmitting,
+    setMutationError,
+    setPendingTaskState,
+    setSubmittedTurnState,
+    startTaskAttempt,
+    startTurnAttempt,
+    steerTurnAttempt,
+    submittedTurnState,
+    uploadAttempts,
+    uploadedAttachments,
+  } = useWorkbenchComposerController(routeScope, onSubmissionStateChange);
   const commandMenuId = useId();
   const commandSurfaceRef = useRef<HTMLDivElement>(null);
   const skillEditorRef = useRef<PromptSkillEditorHandle>(null);
-  const routeScopeRef = useRef(routeScope);
   const previousRouteScopeRef = useRef(routeScope);
   const previousComposerScopeRef = useRef(composerScope);
-  routeScopeRef.current = routeScope;
-  const startTaskAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
-  const startTurnAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
-  const steerTurnAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
-  const interruptAttempt = useRef<IdempotencyAttempt | undefined>(undefined);
-  const autoStartedQueueIds = useRef(new Set<string>());
-  const uploadedAttachments = useRef(new Map<string, AgentAttachment>());
-  const uploadAttempts = useRef(new Map<string, string>());
-  const commandAttempts = useRef(new Map<PromptCommandAction, IdempotencyAttempt>());
-  const composerActionLock = useMemo(() => createAsyncActionLock(), [routeScope]);
-
-  useEffect(() => {
-    onSubmissionStateChange?.(isSubmitting);
-  }, [isSubmitting, onSubmissionStateChange]);
-
-  useEffect(
-    () => () => {
-      onSubmissionStateChange?.(false);
-    },
-    [onSubmissionStateChange],
-  );
   const submittedTurnId =
     submittedTurnState?.scope === routeScope ? submittedTurnState.turnId : undefined;
   const pendingTask = pendingTaskState?.scope === routeScope ? pendingTaskState.task : undefined;
@@ -624,7 +301,8 @@ export function WorkbenchComposer({
       return;
     }
     previousRouteScopeRef.current = routeScope;
-    if (previousComposerScopeRef.current !== composerScope) {
+    const composerScopeChanged = previousComposerScopeRef.current !== composerScope;
+    if (composerScopeChanged) {
       previousComposerScopeRef.current = composerScope;
       const restoredDraft = composerDraftStore.read(composerScope);
       // 切换聊天时恢复对应草稿，同时保留编辑节点和焦点，避免重建原生 IME 会话。
@@ -640,21 +318,10 @@ export function WorkbenchComposer({
       setCommandNotice(undefined);
       setCommandQuery("");
       setCommandSlashCommand(undefined);
-      setPendingTaskState(undefined);
-      setSubmittedTurnState(undefined);
     }
     // 路由相关请求结果不能写入刚激活的其他聊天。
-    setIsSubmitting(false);
-    setMutationError(null);
-    startTaskAttempt.current = undefined;
-    startTurnAttempt.current = undefined;
-    steerTurnAttempt.current = undefined;
-    interruptAttempt.current = undefined;
-    autoStartedQueueIds.current.clear();
-    uploadedAttachments.current.clear();
-    uploadAttempts.current.clear();
-    commandAttempts.current.clear();
-  }, [composerDraftStore, composerScope, routeScope]);
+    resetController(composerScopeChanged);
+  }, [composerDraftStore, composerScope, resetController, routeScope]);
 
   const updateSettings = (nextSettings: AgentTaskSettings, field: keyof AgentTaskSettings) => {
     const requestScope = routeScope;
@@ -662,7 +329,7 @@ export function WorkbenchComposer({
     setMutationError(null);
     // 设置写回由用户事件直接触发，避免 effect 重放或并发渲染造成重复请求。
     void Promise.resolve(onSettingsChange(nextSettings, field)).catch((error: unknown) => {
-      if (routeScopeRef.current === requestScope) {
+      if (isCurrentScope(requestScope)) {
         setMutationError(error instanceof Error ? error : new Error("Settings update failed"));
       }
     });
@@ -783,7 +450,7 @@ export function WorkbenchComposer({
             },
             { idempotencyKey },
           );
-          if (routeScopeRef.current === requestScope) {
+          if (isCurrentScope(requestScope)) {
             uploadedAttachments.current.set(attachment.id, response.attachment);
           }
           return { id: response.attachment.id };
@@ -796,7 +463,7 @@ export function WorkbenchComposer({
         type: "prompt",
       };
     } catch (error) {
-      if (routeScopeRef.current === requestScope) {
+      if (isCurrentScope(requestScope)) {
         setMutationError(
           error instanceof Error ? error : new Error(t("composer.attachmentUploadFailed")),
         );
@@ -823,7 +490,7 @@ export function WorkbenchComposer({
           input,
           steerAttempt.key,
         );
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           if (options.clearInputOnSuccess !== false) {
             clearComposerInput();
           }
@@ -833,12 +500,12 @@ export function WorkbenchComposer({
         }
         return true;
       } catch (error) {
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           setMutationError(error instanceof Error ? error : new Error("Prompt steering failed"));
         }
         return false;
       } finally {
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           setIsSubmitting(false);
         }
       }
@@ -868,7 +535,7 @@ export function WorkbenchComposer({
         input,
         onTaskCreated(task) {
           // Turn 启动失败时保留已创建 Task，重试不能重复创建。
-          if (routeScopeRef.current === requestScope) {
+          if (isCurrentScope(requestScope)) {
             setPendingTaskState({ scope: requestScope, task });
             startTaskAttempt.current = undefined;
             // 真实 taskId 可用后立即交给工作台缓存并选中，不等待 turn/start。
@@ -879,7 +546,7 @@ export function WorkbenchComposer({
         ...(activeTaskId === undefined ? {} : { taskId: activeTaskId }),
         turnOptions,
       });
-      if (routeScopeRef.current === requestScope) {
+      if (isCurrentScope(requestScope)) {
         if (options.clearInputOnSuccess !== false) {
           clearComposerInput();
         }
@@ -887,7 +554,7 @@ export function WorkbenchComposer({
       }
       // Mutation 返回后立即上报本次提交，Timeline 不等待 Provider Snapshot 落盘。
       onTurnStarted?.(result.turn, input);
-      if (routeScopeRef.current === requestScope) {
+      if (isCurrentScope(requestScope)) {
         startTurnAttempt.current = undefined;
         uploadedAttachments.current.clear();
         uploadAttempts.current.clear();
@@ -900,12 +567,12 @@ export function WorkbenchComposer({
       }
       return true;
     } catch (error) {
-      if (routeScopeRef.current === requestScope) {
+      if (isCurrentScope(requestScope)) {
         setMutationError(error instanceof Error ? error : new Error("Prompt submission failed"));
       }
       return false;
     } finally {
-      if (routeScopeRef.current === requestScope) {
+      if (isCurrentScope(requestScope)) {
         setIsSubmitting(false);
       }
     }
@@ -941,7 +608,7 @@ export function WorkbenchComposer({
       clearInputOnSuccess: false,
       forceAction: "start",
     }).then((sent) => {
-      if (sent && routeScopeRef.current === queuedScope) {
+      if (sent && isCurrentScope(queuedScope)) {
         replaceQueuedPrompts(queuedPrompts.filter((prompt) => prompt.id !== queuedPrompt.id));
       }
     });
@@ -1003,20 +670,20 @@ export function WorkbenchComposer({
         await client.uploadFeedback(projectId, activeTaskId, input, {
           idempotencyKey: attempt.key,
         });
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           commandAttempts.current.delete("feedback");
           replaceCommandDraftMode(null);
           setCommandNotice(t("composer.feedbackSent"));
           replacePromptContent([]);
         }
       } catch (error) {
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           setMutationError(
             error instanceof Error ? error : new Error("Feedback submission failed"),
           );
         }
       } finally {
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           setIsSubmitting(false);
         }
       }
@@ -1072,7 +739,7 @@ export function WorkbenchComposer({
       try {
         if (command.action === "compact") {
           await client.compactTask(projectId, activeTaskId, { idempotencyKey: attempt.key });
-          if (routeScopeRef.current === requestScope) {
+          if (isCurrentScope(requestScope)) {
             setCommandNotice(t("composer.compacting"));
           }
         } else {
@@ -1081,15 +748,15 @@ export function WorkbenchComposer({
           });
           onTaskStarted(response.task);
         }
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           commandAttempts.current.delete(command.action);
         }
       } catch (error) {
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           setMutationError(error instanceof Error ? error : new Error("Task command failed"));
         }
       } finally {
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           setIsSubmitting(false);
         }
       }
@@ -1114,7 +781,7 @@ export function WorkbenchComposer({
           idempotencyKey: attempt.key,
           onTaskCreated(task) {
             // Review 启动失败时保留已创建 Task，重试不能重复创建。
-            if (routeScopeRef.current === requestScope) {
+            if (isCurrentScope(requestScope)) {
               setPendingTaskState({ scope: requestScope, task });
               onTaskCreated?.(task);
             }
@@ -1123,7 +790,7 @@ export function WorkbenchComposer({
           target,
           ...(activeTaskId === undefined ? {} : { taskId: activeTaskId }),
         });
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           commandAttempts.current.delete("review");
           setSubmittedTurnState({ scope: requestScope, turnId: response.turn.id });
           setCommandNotice(t("composer.reviewStarted"));
@@ -1135,11 +802,11 @@ export function WorkbenchComposer({
           }
         }
       } catch (error) {
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           setMutationError(error instanceof Error ? error : new Error("Review command failed"));
         }
       } finally {
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           setIsSubmitting(false);
         }
       }
@@ -1210,130 +877,16 @@ export function WorkbenchComposer({
         // `202` 仅确认请求已接收；后续显式重试继续复用同一幂等键。
         await interruptPromptTurn(client, projectId, activeTaskId, activeTurnId, attempt.key);
       } catch (error) {
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           setMutationError(error instanceof Error ? error : new Error("Turn interruption failed"));
         }
       } finally {
-        if (routeScopeRef.current === requestScope) {
+        if (isCurrentScope(requestScope)) {
           setIsSubmitting(false);
         }
       }
     });
   };
-
-  const commandMenu =
-    !commandMenuOpen || turnControlsDisabled ? null : (
-      <PromptInputCommand
-        aria-label={t("composer.commandInput")}
-        className="absolute inset-x-0 bottom-full z-20 mb-2"
-        id={commandMenuId}
-      >
-        <PromptInputCommandList>
-          {reviewMenuMode === "scopes" ? (
-            <PromptInputCommandGroup label={t("composer.reviewScopeGroup")}>
-              <PromptInputCommandItem
-                active={activeCommandIndex === 0}
-                id={`${commandMenuId}-item-0`}
-                onClick={() => void executeReviewTarget({ type: "uncommitted_changes" })}
-              >
-                <Bug aria-hidden="true" className="size-4 shrink-0 text-accent" />
-                <span className="font-medium">{t("composer.reviewUncommitted")}</span>
-              </PromptInputCommandItem>
-              <PromptInputCommandItem
-                active={activeCommandIndex === 1}
-                aria-description={
-                  baseBranches.length === 0 ? t("composer.noBaseBranch") : baseBranches[0]
-                }
-                disabled={baseBranches.length === 0}
-                id={`${commandMenuId}-item-1`}
-                onClick={() => {
-                  setActiveCommandIndex(0);
-                  setReviewMenuMode("branches");
-                }}
-              >
-                <GitBranch aria-hidden="true" className="size-4 shrink-0 text-accent" />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="font-medium">{t("composer.baseBranchReview")}</span>
-                  <span className="truncate text-caption text-muted-foreground">
-                    {baseBranches[0] ?? t("composer.noBaseBranch")}
-                  </span>
-                </span>
-              </PromptInputCommandItem>
-            </PromptInputCommandGroup>
-          ) : reviewMenuMode === "branches" ? (
-            <PromptInputCommandGroup label={t("composer.reviewBaseBranchGroup")}>
-              {baseBranches.map((branch, index) => (
-                <PromptInputCommandItem
-                  active={activeCommandIndex === index}
-                  id={`${commandMenuId}-item-${String(index)}`}
-                  key={branch}
-                  onClick={() => void executeReviewTarget({ branch, type: "base_branch" })}
-                >
-                  <GitBranch aria-hidden="true" className="size-4 shrink-0 text-accent" />
-                  <span className="truncate font-medium">{branch}</span>
-                </PromptInputCommandItem>
-              ))}
-            </PromptInputCommandGroup>
-          ) : (
-            <>
-              <PromptInputCommandGroup label={t("composer.commandGroup")}>
-                {filteredCommands.map((command, index) => {
-                  const availability = getCommandAvailability(command);
-                  return (
-                    <PromptInputCommandItem
-                      active={index === activeCommandIndex}
-                      aria-description={availability.reason}
-                      disabled={!availability.available}
-                      id={`${commandMenuId}-item-${String(index)}`}
-                      key={command.id}
-                      onClick={() => {
-                        void executePromptCommand(command);
-                      }}
-                    >
-                      <PromptCommandIcon action={command.action} />
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="font-medium">{command.label}</span>
-                        <span className="text-caption text-muted-foreground">
-                          {availability.reason ?? command.description}
-                        </span>
-                      </span>
-                    </PromptInputCommandItem>
-                  );
-                })}
-              </PromptInputCommandGroup>
-              {filteredSkills.length === 0 ? null : (
-                <PromptInputCommandGroup label="Skills">
-                  {filteredSkills.map((skill, index) => {
-                    const menuIndex = filteredCommands.length + index;
-                    return (
-                      <PromptInputCommandItem
-                        active={menuIndex === activeCommandIndex}
-                        id={`${commandMenuId}-item-${String(menuIndex)}`}
-                        key={skill.id}
-                        onClick={() => {
-                          selectSkill(skill);
-                        }}
-                      >
-                        <Sparkles aria-hidden="true" className="size-4 shrink-0 text-accent" />
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="font-medium text-accent">{skill.displayName}</span>
-                          <span className="block max-w-full truncate text-caption text-muted-foreground">
-                            /{skill.name} · {skill.description}
-                          </span>
-                        </span>
-                      </PromptInputCommandItem>
-                    );
-                  })}
-                </PromptInputCommandGroup>
-              )}
-              {menuItemCount === 0 ? (
-                <PromptInputCommandEmpty>{t("composer.commandNoMatch")}</PromptInputCommandEmpty>
-              ) : null}
-            </>
-          )}
-        </PromptInputCommandList>
-      </PromptInputCommand>
-    );
 
   const removeQueuedPrompt = (queuedPromptId: string) => {
     replaceQueuedPrompts(queuedPrompts.filter((prompt) => prompt.id !== queuedPromptId));
@@ -1345,7 +898,7 @@ export function WorkbenchComposer({
       queuedPrompt.skills,
       { clearInputOnSuccess: false, forceAction: "steer" },
     );
-    if (sent && routeScopeRef.current === routeScope) {
+    if (sent && isCurrentScope(routeScope)) {
       removeQueuedPrompt(queuedPrompt.id);
     }
   };
@@ -1359,342 +912,117 @@ export function WorkbenchComposer({
   );
 
   return (
-    <section className="shrink-0 bg-content px-3 pb-2 sm:px-5" aria-label={t("composer.landmark")}>
-      <div className="relative mx-auto w-full max-w-content" ref={commandSurfaceRef}>
-        {commandMenu}
-        {queuedPrompts.length === 0 ? null : (
-          <div aria-label={t("composer.queuedMessages")} className="mb-2 space-y-1.5" role="list">
-            {queuedPrompts.map((queuedPrompt) => {
-              const summary =
-                queuedPrompt.text ||
-                queuedPrompt.skills.map((skill) => `$${skill.name}`).join(" ") ||
-                t("composer.attachmentCount", { count: queuedPrompt.files.length });
-              return (
-                <div
-                  className="flex min-w-0 items-center gap-2 rounded-control border border-separator bg-control px-2 py-1.5"
-                  key={queuedPrompt.id}
-                  role="listitem"
-                >
-                  <span className="min-w-0 flex-1 truncate text-label text-foreground">
-                    {summary}
-                  </span>
-                  <IconButton
-                    className="hover:text-accent"
-                    disabled={!canSteer || activeTurnId === undefined || isSubmitting}
-                    label={t("composer.steerNow", { summary })}
-                    onClick={() => {
-                      void steerQueuedPrompt(queuedPrompt);
-                    }}
-                    size="small"
-                    tooltip={t("composer.steerNowTooltip")}
-                  >
-                    <SendHorizontal aria-hidden="true" className="size-3.5" />
-                  </IconButton>
-                  <IconButton
-                    className="hover:text-danger"
-                    disabled={isSubmitting}
-                    label={t("composer.cancelQueued", { summary })}
-                    onClick={() => {
-                      removeQueuedPrompt(queuedPrompt.id);
-                    }}
-                    size="small"
-                    tooltip={t("composer.cancelQueuedTooltip")}
-                  >
-                    <X aria-hidden="true" className="size-3.5" />
-                  </IconButton>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <PromptInput
-          attachments={attachments}
-          aria-busy={state === "submitting" || state === "reconnecting"}
-          className="w-full"
-          data-state={state}
-          disabled={attachmentsDisabled}
-          fileAccept={AGENT_FILE_ACCEPT}
-          globalDrop
-          imageAccept={AGENT_IMAGE_ACCEPT}
-          largePasteCharacterThreshold={
-            commandDraftMode === "feedback"
-              ? Number.POSITIVE_INFINITY
-              : LARGE_PASTE_CHARACTER_THRESHOLD
-          }
-          maxFileSize={MAX_AGENT_FILE_BYTES}
-          maxFileTotalSize={MAX_AGENT_FILE_TOTAL_BYTES}
-          maxImageSize={MAX_AGENT_IMAGE_BYTES}
-          maxImages={MAX_AGENT_IMAGES}
-          maxImageTotalSize={MAX_AGENT_IMAGE_TOTAL_BYTES}
-          multiple
-          onAttachmentsChange={handleAttachmentsChange}
-          onError={(error) => {
-            setMutationError(new Error(error.message));
-          }}
-          onSubmit={(message) => {
-            if (commandDraftMode === "feedback") {
-              void submitFeedback(message.text);
-              return;
-            }
-            if (commandDraftMode === "subtask") {
-              void submitPrompt({
-                ...message,
-                text: t("composer.subtaskPrompt", { text: message.text }),
-              });
-              return;
-            }
-            void submitPrompt(message);
-          }}
-          pastedTextFileName={PASTED_TEXT_ATTACHMENT_NAME}
-        >
-          {commandDraftMode === null ? null : (
-            <PromptInputHeader className="flex items-center">
-              <PromptInputButton
-                aria-label={
-                  commandDraftMode === "feedback"
-                    ? t("composer.cancelFeedback")
-                    : t("composer.cancelSubtask")
-                }
-                className="max-w-full border border-separator-strong bg-control text-foreground"
-                onClick={() => {
-                  replaceCommandDraftMode(null);
-                  replacePromptContent([]);
-                  focusEditor();
-                }}
-              >
-                {commandDraftMode === "feedback" ? (
-                  <MessageSquareText className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
-                ) : (
-                  <MessageCirclePlus className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
-                )}
-                <span>
-                  {commandDraftMode === "feedback" ? t("composer.feedback") : t("composer.subtask")}
-                </span>
-                <X className="size-3.5 shrink-0" aria-hidden="true" />
-              </PromptInputButton>
-            </PromptInputHeader>
-          )}
-          <ComposerAttachments />
-          <PromptInputBody>
-            <input name="message" type="hidden" value={promptSubmission.text} />
-            <PromptSkillEditor
-              aria-activedescendant={activeCommandItemId}
-              aria-controls={commandMenuOpen ? commandMenuId : undefined}
-              aria-expanded={commandMenuOpen}
-              aria-haspopup="listbox"
-              aria-label={t("composer.taskInput")}
-              content={promptContent}
-              disabled={draftInputDisabled}
-              onChange={(nextContent, serializedText, cursorOffset) => {
-                setPromptContent(nextContent);
-                composerDraftStore.update(composerScope, (current) => ({
-                  ...current,
-                  content: nextContent,
-                }));
-                setCommandNotice(undefined);
-                if (commandDraftMode !== null) {
-                  return;
-                }
-                const slashCommand = resolvePromptSlashCommand(serializedText, cursorOffset);
-                if (slashCommand === null) {
-                  setCommandMenuOpen(false);
-                  setReviewMenuMode(null);
-                  setCommandQuery("");
-                  setCommandSlashCommand(undefined);
-                  return;
-                }
-                // 文本开头或空白后的 `/` 片段驱动过滤，连续正文中的斜杠保持普通字符。
-                setActiveCommandIndex(0);
-                setCommandMenuOpen(true);
-                setReviewMenuMode(null);
-                setCommandQuery(slashCommand.query);
-                setCommandSlashCommand(slashCommand);
-              }}
-              onKeyDown={(event) => {
-                if (!commandMenuOpen || event.nativeEvent.isComposing) {
-                  return;
-                }
-                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                  event.preventDefault();
-                  setActiveCommandIndex((currentIndex) =>
-                    movePromptCommandSelection(
-                      currentIndex,
-                      event.key === "ArrowDown" ? 1 : -1,
-                      menuItemCount,
-                    ),
-                  );
-                  return;
-                }
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  selectActiveCommandItem();
-                }
-              }}
-              placeholder={resolveComposerPlaceholder(commandDraftMode, taskId)}
-              ref={skillEditorRef}
-              scope={composerScope}
-            />
-            {mutationError === null ? null : (
-              <p className="px-1 pb-1 text-label text-danger" role="alert">
-                {t("composer.operationFailed")}
-              </p>
-            )}
-            {commandNotice === undefined ? null : (
-              <p className="px-1 pb-1 text-label text-muted-foreground" role="status">
-                {commandNotice}
-              </p>
-            )}
-          </PromptInputBody>
-          <PromptInputFooter>
-            <PromptInputTools>
-              <PromptInputActionAddAttachments
-                disabled={attachmentsDisabled || commandDraftMode === "feedback"}
-              />
-              <PromptInputSelect
-                aria-label={t("composer.approvalMode")}
-                disabled={turnControlsDisabled}
-                onChange={(event) => {
-                  updateSettings(
-                    applyApprovalMode(activeSettings, event.currentTarget.value as ApprovalMode),
-                    "approvalPolicy",
-                  );
-                }}
-                value={deriveApprovalMode(activeSettings)}
-              >
-                <option value="untrusted">{t("settings:approval.untrusted")}</option>
-                <option value="on-request">{t("settings:approval.onRequest")}</option>
-                <option value="auto-review">{t("settings:approval.autoReview")}</option>
-                <option value="never">{t("settings:approval.never")}</option>
-              </PromptInputSelect>
-              <PromptInputSelect
-                aria-label={t("composer.sandboxMode")}
-                disabled={turnControlsDisabled}
-                onChange={(event) => {
-                  updateSettings(
-                    {
-                      ...activeSettings,
-                      sandboxMode: event.currentTarget.value as AgentSandboxMode,
-                    },
-                    "sandboxMode",
-                  );
-                }}
-                value={activeSettings.sandboxMode}
-              >
-                <option value="read-only">{t("settings:sandbox.readOnly")}</option>
-                <option value="workspace-write">{t("settings:sandbox.workspaceWrite")}</option>
-                <option value="danger-full-access">{t("settings:sandbox.dangerFullAccess")}</option>
-              </PromptInputSelect>
-            </PromptInputTools>
-            <div className="flex min-w-0 items-center gap-1">
-              <PromptInputSelect
-                aria-label={t("composer.modelSelect")}
-                disabled={turnControlsDisabled || modelsPending || selectedModel === undefined}
-                onChange={(event) => {
-                  const nextModel = models.find((model) => model.id === event.currentTarget.value);
-                  const nextReasoningEffort = resolveReasoningEffort(
-                    nextModel,
-                    activeSettings.reasoningEffort,
-                  );
-                  if (nextModel !== undefined && nextReasoningEffort !== undefined) {
-                    updateSettings(
-                      {
-                        ...activeSettings,
-                        model: nextModel.id,
-                        reasoningEffort: nextReasoningEffort,
-                      },
-                      "model",
-                    );
-                  }
-                }}
-                value={selectedModel?.id ?? ""}
-              >
-                {models.length === 0 ? (
-                  <option value="">
-                    {modelsPending ? t("composer.modelLoading") : t("composer.noModels")}
-                  </option>
-                ) : (
-                  models.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.displayName}
-                    </option>
-                  ))
-                )}
-              </PromptInputSelect>
-              <PromptInputSelect
-                aria-label={t("composer.reasonEffortSelect")}
-                disabled={turnControlsDisabled || modelsPending || selectedModel === undefined}
-                onChange={(event) => {
-                  updateSettings(
-                    { ...activeSettings, reasoningEffort: event.currentTarget.value },
-                    "reasoningEffort",
-                  );
-                }}
-                title={
-                  selectedModel?.supportedReasoningEfforts.find(
-                    (option) => option.id === selectedReasoningEffort,
-                  )?.description
-                }
-                value={selectedReasoningEffort ?? ""}
-              >
-                {selectedModel?.supportedReasoningEfforts.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {t(`settings:effort.${option.id}`, { defaultValue: option.id })}
-                  </option>
-                ))}
-              </PromptInputSelect>
-              <PromptInputSubmit
-                aria-label={
-                  submitAction === "queue"
-                    ? t("composer.queueMessage")
-                    : submitAction === "steer"
-                      ? t("composer.sendSteer")
-                      : submitAction === "interrupt"
-                        ? t("composer.stop")
-                        : t("composer.submit")
-                }
-                disabled={
-                  turnControlsDisabled ||
-                  submitAction === "blocked" ||
-                  (submitAction === "start" &&
-                    (!canSubmit ||
-                      selectedModel === undefined ||
-                      selectedReasoningEffort === undefined)) ||
-                  (submitAction === "interrupt" && (!canInterrupt || activeTurnId === undefined))
-                }
-                onClick={submitAction === "interrupt" ? () => void interruptTurn() : undefined}
-                status={state === "running" && hasComposerInput ? "idle" : state}
-                type={submitAction === "interrupt" ? "button" : "submit"}
-              />
-            </div>
-          </PromptInputFooter>
-        </PromptInput>
-      </div>
-      {modelsError === null ? null : (
-        <p className="mx-auto mt-1 w-full max-w-content px-1 text-caption text-danger" role="alert">
-          {t("composer.modelListFailed")}
-        </p>
-      )}
-      <div className="mx-auto mt-1.5 flex w-full max-w-content min-w-0 items-center gap-3 px-1 text-caption text-muted-foreground">
-        <span className="inline-flex shrink-0 items-center gap-1">
-          <GitBranch className="size-3" aria-hidden="true" />{" "}
-          {gitStatus?.branch ?? t("composer.gitBranchMissing")}
-        </span>
-        <span
-          aria-label={t("composer.projectPath")}
-          className="inline-flex min-w-0 flex-1 items-center gap-1"
-          title={projectPath}
-        >
-          <Folder className="size-3 shrink-0" aria-hidden="true" />
-          <span className="truncate">{projectPath}</span>
-        </span>
-        <Context
-          className="ml-auto"
-          maxTokens={contextUsage?.contextWindow}
-          usedTokens={contextUsage?.usedTokens}
-        >
-          <ContextTrigger />
-        </Context>
-      </div>
-    </section>
+    <WorkbenchComposerView
+      activeCommandIndex={activeCommandIndex}
+      activeCommandItemId={activeCommandItemId}
+      activeSettings={activeSettings}
+      activeTurnId={activeTurnId}
+      attachments={attachments}
+      attachmentsDisabled={attachmentsDisabled}
+      baseBranches={baseBranches}
+      canInterrupt={canInterrupt}
+      canSteer={canSteer}
+      canSubmit={canSubmit}
+      commandDraftMode={commandDraftMode}
+      commandMenuId={commandMenuId}
+      commandMenuOpen={commandMenuOpen}
+      commandNotice={commandNotice}
+      commandSurfaceRef={commandSurfaceRef}
+      composerScope={composerScope}
+      contextUsage={contextUsage}
+      draftInputDisabled={draftInputDisabled}
+      filteredCommands={filteredCommands}
+      filteredSkills={filteredSkills}
+      getCommandAvailability={getCommandAvailability}
+      gitStatus={gitStatus}
+      hasComposerInput={hasComposerInput}
+      isSubmitting={isSubmitting}
+      menuItemCount={menuItemCount}
+      models={models}
+      modelsError={modelsError}
+      modelsPending={modelsPending}
+      mutationError={mutationError}
+      onAttachmentsChange={handleAttachmentsChange}
+      onCancelCommandDraft={() => {
+        replaceCommandDraftMode(null);
+        replacePromptContent([]);
+        focusEditor();
+      }}
+      onExecuteCommand={(command) => {
+        void executePromptCommand(command);
+      }}
+      onExecuteReview={(target) => {
+        void executeReviewTarget(target);
+      }}
+      onInterrupt={() => {
+        void interruptTurn();
+      }}
+      onOpenReviewBranches={() => {
+        setActiveCommandIndex(0);
+        setReviewMenuMode("branches");
+      }}
+      onPromptChange={(nextContent, serializedText, cursorOffset) => {
+        setPromptContent(nextContent);
+        composerDraftStore.update(composerScope, (current) => ({
+          ...current,
+          content: nextContent,
+        }));
+        setCommandNotice(undefined);
+        if (commandDraftMode !== null) {
+          return;
+        }
+        const slashCommand = resolvePromptSlashCommand(serializedText, cursorOffset);
+        if (slashCommand === null) {
+          setCommandMenuOpen(false);
+          setReviewMenuMode(null);
+          setCommandQuery("");
+          setCommandSlashCommand(undefined);
+          return;
+        }
+        // 文本开头或空白后的 `/` 片段驱动过滤，连续正文中的斜杠保持普通字符。
+        setActiveCommandIndex(0);
+        setCommandMenuOpen(true);
+        setReviewMenuMode(null);
+        setCommandQuery(slashCommand.query);
+        setCommandSlashCommand(slashCommand);
+      }}
+      onSelectActiveCommand={selectActiveCommandItem}
+      onSelectSkill={selectSkill}
+      onSettingsChange={updateSettings}
+      onSubmit={(message) => {
+        if (commandDraftMode === "feedback") {
+          void submitFeedback(message.text);
+          return;
+        }
+        if (commandDraftMode === "subtask") {
+          void submitPrompt({
+            ...message,
+            text: t("composer.subtaskPrompt", { text: message.text }),
+          });
+          return;
+        }
+        void submitPrompt(message);
+      }}
+      onViewError={(error) => {
+        setMutationError(error);
+      }}
+      projectPath={projectPath}
+      promptContent={promptContent}
+      promptSubmissionText={promptSubmission.text}
+      queuedPrompts={queuedPrompts}
+      removeQueuedPrompt={removeQueuedPrompt}
+      reviewMenuMode={reviewMenuMode}
+      selectedModel={selectedModel}
+      selectedReasoningEffort={selectedReasoningEffort}
+      setActiveCommandIndex={setActiveCommandIndex}
+      skillEditorRef={skillEditorRef}
+      state={state}
+      steerQueuedPrompt={(queuedPrompt) => {
+        void steerQueuedPrompt(queuedPrompt);
+      }}
+      submitAction={submitAction}
+      taskId={taskId}
+      turnControlsDisabled={turnControlsDisabled}
+    />
   );
 }

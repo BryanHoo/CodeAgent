@@ -1,0 +1,111 @@
+import { AgentAttachmentKindSchema } from "@code-agent/protocol";
+
+export const ProjectParamsSchema = {
+  additionalProperties: false,
+  properties: { projectId: { minLength: 1, type: "string" } },
+  required: ["projectId"],
+  type: "object",
+} as const;
+
+export const ProjectAttachmentParamsSchema = {
+  additionalProperties: false,
+  properties: {
+    kind: AgentAttachmentKindSchema,
+    projectId: { minLength: 1, type: "string" },
+  },
+  required: ["kind", "projectId"],
+  type: "object",
+} as const;
+
+export const ProjectTaskParamsSchema = {
+  additionalProperties: false,
+  properties: {
+    projectId: { minLength: 1, type: "string" },
+    taskId: { minLength: 1, type: "string" },
+  },
+  required: ["projectId", "taskId"],
+  type: "object",
+} as const;
+
+export const ProjectTaskTurnParamsSchema = {
+  additionalProperties: false,
+  properties: {
+    projectId: { minLength: 1, type: "string" },
+    taskId: { minLength: 1, type: "string" },
+    turnId: { minLength: 1, type: "string" },
+  },
+  required: ["projectId", "taskId", "turnId"],
+  type: "object",
+} as const;
+
+export const ProjectTaskTerminalParamsSchema = {
+  additionalProperties: false,
+  properties: {
+    projectId: { minLength: 1, type: "string" },
+    taskId: { minLength: 1, type: "string" },
+    terminalId: { minLength: 1, type: "string" },
+  },
+  required: ["projectId", "taskId", "terminalId"],
+  type: "object",
+} as const;
+
+export const ProjectTaskAttachmentParamsSchema = {
+  additionalProperties: false,
+  properties: {
+    attachmentId: { minLength: 1, type: "string" },
+    projectId: { minLength: 1, type: "string" },
+    taskId: { minLength: 1, type: "string" },
+  },
+  required: ["attachmentId", "projectId", "taskId"],
+  type: "object",
+} as const;
+
+export const ProjectTaskPendingRequestParamsSchema = {
+  additionalProperties: false,
+  properties: {
+    projectId: { minLength: 1, type: "string" },
+    requestId: { minLength: 1, type: "string" },
+    taskId: { minLength: 1, type: "string" },
+  },
+  required: ["projectId", "taskId", "requestId"],
+  type: "object",
+} as const;
+
+export const IdempotencyHeadersSchema = {
+  properties: { "idempotency-key": { minLength: 1, type: "string" } },
+  required: ["idempotency-key"],
+  type: "object",
+} as const;
+
+export const TaskPageQuerySchema = {
+  additionalProperties: false,
+  properties: {
+    cursor: { minLength: 1, type: "string" },
+    limit: { maximum: 100, minimum: 1, type: "integer" },
+  },
+  type: "object",
+} as const;
+
+export const SourceFileQuerySchema = {
+  additionalProperties: false,
+  properties: { path: { minLength: 1, type: "string" } },
+  required: ["path"],
+  type: "object",
+} as const;
+
+export const EventQuerySchema = {
+  additionalProperties: false,
+  properties: { afterSequence: { minimum: 0, type: "integer" } },
+  required: ["afterSequence"],
+  type: "object",
+} as const;
+
+export const ErrorResponseSchema = {
+  additionalProperties: false,
+  properties: {
+    code: { minLength: 1, type: "string" },
+    message: { minLength: 1, type: "string" },
+  },
+  required: ["code", "message"],
+  type: "object",
+} as const;

@@ -34,6 +34,7 @@
 - Project 名称只切换对应任务树的展开状态；名称右侧的可访问 `+` 图标进入该 Project 的“新聊天”草稿，顶部“新建任务”始终进入第一个 Project 的草稿，新增文件夹后进入该 Project 草稿，目标草稿已打开时直接复用。新聊天入口只能重置中栏和切换 Project，左栏不得出现临时“新聊天”Task。
 - 新聊天草稿在首次 Prompt 提交或代码审查命令执行前不得创建 Codex Task；空 Timeline 的 Project 名称直接渲染为原生 Project 选择器，首次点击必须打开选项列表，切换 Project 时保存当前 Project 草稿并恢复目标 Project 草稿。首次提交后，`startTask` 返回真实 `taskId` 时立即把 Task 写入对应 Project 列表并选中，`startTurn` 成功后再进入 Task 路由并由 Codex 返回的名称替换“新聊天”。
 - 通过显式 Props 或专用 Hook 获取数据，不从组件内部访问 Server 或 Provider。
+- Composer 公共入口只装配 controller 与视图：纯状态推导放入独立模块，Mutation 单飞、幂等尝试和作用域清理由 controller hook 持有，Prompt Input、队列、附件、命令菜单和状态行由无 Client 访问的视图组件渲染。拆分不得改变编辑器 DOM 身份、IME 组合缓冲、可访问名称或用户事件直接触发 Mutation 的时机。
 - 长列表使用稳定尺寸与虚拟化；流式 Item 独立订阅，避免整个 Task 重渲染。
 - Task Timeline 必须在该 Turn 已产生的消息与结构化结果之后显示归一化错误，使部分回复与最终失败原因保持同一阅读顺序；Command 继续使用 `Tool` 表达调用和状态，输出使用 AI Elements `Terminal` 解析 ANSI、复制、流式跟随和自动滚动，并明确标识截断状态。历史输出保持只读，不提供清空操作；缺少输出时只能展示真实 `cwd`，不得伪造内容。
 - 通用 Tool 必须使用 AI Elements `ToolInput` 与 `ToolOutput` 分区展示参数、JSON 结果和错误文本；`AgentItemStatus` 只在 Timeline 视图边界映射为 AI Elements Tool 执行状态，不向 Web 引入 `ToolUIPart` 或 AI SDK Runtime。Command 与通用 Tool 无论运行或终态都必须默认收起，并在摘要中保留当前状态；参数、输出、错误和 Terminal 只在用户首次展开时挂载，重新折叠后立即卸载。

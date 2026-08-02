@@ -11,6 +11,8 @@
 ## 规则
 
 - Fastify 路由只做 Schema 校验、身份与 Project 校验、用例调用和响应映射。
+- `packages/server/src/app.ts` 只装配 Fastify、共享资源、错误处理和领域路由；HTTP/WebSocket 路由按 Runtime、Project、Task、Turn、Event 领域放入 `routes/*-routes.ts` 插件。插件通过显式 `ServerRouteContext` 获取依赖，不自行关闭共享资源，也不引入字符串 Service Locator。
+- `packages/provider-codex/src/agent-provider.ts` 只编排 RPC 与 Provider 生命周期；无状态的 Codex 协议转换放入纯映射模块，Task 运行状态、Pending Request 终态与定时器、Runtime Owner 分别由单一对象维护，禁止在 Provider 中复制同类 Map。
 - Project Git 状态只通过固定的只读端点暴露，不接受浏览器传入的命令或文件路径；优先读取已配置 Project 根目录并同时返回当前分支和去重的本地/远端基础分支候选，远端默认分支可解析时必须排在首位。根目录不是 Git 仓库时仅聚合其直属子目录中的 Git 仓库，以子目录名作为变更路径前缀，并返回空分支上下文。
 - Git 状态必须携带由分支、仓库模式和 staged/unstaged 变更计算的稳定 `snapshot`；固定 Git Mutation 只接受严格校验的 Project 相对路径、`snapshot`、message 与动作枚举，不接受命令。部分文件提交由 Server Git 服务使用 literal pathspec 和参数数组执行，保留未选 staged/unstaged 变更；push 不使用 force、不自动创建 upstream，并将 commit 成功后的 push 失败作为部分成功结果返回。聚合直属子仓库模式只允许读取，不允许跨仓库提交。
 - Project 文件树只通过固定的只读端点读取已配置根目录；端点可接收经过严格校验的 Project 相对目录，每次只返回该目录的直接子项，不提供绝对路径或文件系统透传。目录解析必须沿根目录逐层应用任意层级的 `.gitignore`，不依赖根目录是否为 Git 仓库或是否存在根级规则，同时跳过符号链接、`.git` 与大型生成目录，并保留固定目录深度限制，不设置条目数量上限。
