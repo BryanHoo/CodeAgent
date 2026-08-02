@@ -1,6 +1,6 @@
 {
   "name": "@bryanhu/code-agent",
-  "version": "0.0.6",
+  "version": "1.0.0",
   "description": "通过 Web 操作本地 Coding Agent 的应用",
   "type": "module",
   "author": "BryanHu",
