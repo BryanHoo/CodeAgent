@@ -148,6 +148,18 @@ WebSocket AgentEvent
 | 单元测试     | Vitest + Testing Library                               | 覆盖状态、组件和交互                     |
 | E2E          | Playwright                                             | 覆盖真实浏览器关键流程                   |
 
+### 6.1 浏览器兼容边界
+
+| 浏览器          | 最低版本 | Vite 构建目标 |
+| --------------- | -------- | ------------- |
+| Chrome/Chromium | 116      | `chrome116`   |
+| Firefox         | 124      | `firefox124`  |
+| Safari          | 17.4     | `safari17.4`  |
+
+该边界覆盖 Client 直接使用的 `AbortSignal.timeout()`、`AbortSignal.any()`，以及 Web 状态逻辑使用的 `toSorted()`、`toSpliced()`。Vite 只按 `build.target` 转译语法，不为这些运行时 API 注入 polyfill，因此更早浏览器不提供兼容分支。
+
+Playwright E2E 当前只运行 Chromium，用于验证关键用户流程和浏览器装配，不作为 Firefox、Safari 的完整兼容性证明。调整最低版本或引入新的浏览器运行时 API 时，必须同步更新 Vite 目标、README 和前端质量规范。
+
 以下依赖不进入 MVP：
 
 ```text

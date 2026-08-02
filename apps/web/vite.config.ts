@@ -4,6 +4,9 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+// 最低版本同时覆盖 AbortSignal.any()、AbortSignal.timeout()、toSorted() 与 toSpliced()。
+export const supportedBrowserTargets = ["chrome116", "firefox124", "safari17.4"] as const;
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -33,6 +36,7 @@ export default defineConfig({
     emptyOutDir: false,
     outDir: "../../dist/web",
     sourcemap: false,
+    target: [...supportedBrowserTargets],
   },
   server: {
     host: "127.0.0.1",
