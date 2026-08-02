@@ -479,6 +479,81 @@ describe("CodexAgentProvider", () => {
     );
   });
 
+  it("releases all project runtime state before the same identity is reused", async () => {
+    vi.useFakeTimers();
+    const imageContent = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const imageUrl = `data:image/png;base64,${imageContent.toString("base64")}`;
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      {
+        thread: nativeThread({
+          turns: [
+            {
+              completedAt: 1_753_232_400,
+              error: null,
+              id: "turn-image",
+              items: [
+                {
+                  content: [
+                    { text: "分析这张图", type: "text" },
+                    { name: "diagram.png", type: "image", url: imageUrl },
+                  ],
+                  id: "message-image",
+                  type: "userMessage",
+                },
+              ],
+              startedAt: 1_753_228_800,
+              status: "completed",
+            },
+          ],
+        }),
+      },
+    ]);
+    const runtime = createCodexRuntimeProvider({ client: rpc });
+    const provider = runtime.forProject(project);
+
+    try {
+      await provider.listTasks();
+      const snapshot = await provider.readTask("task-1");
+      const item = snapshot?.turns[0]?.items[0];
+      const attachmentId = item?.type === "message" ? item.attachments?.[0]?.id : undefined;
+      if (attachmentId === undefined) {
+        throw new Error("Expected historical attachment metadata");
+      }
+      rpc.emitServerRequest("timed-input", "item/tool/requestUserInput", {
+        autoResolutionMs: 30_000,
+        itemId: "timed-input-item",
+        questions: [
+          {
+            header: "确认",
+            id: "confirm",
+            isOther: false,
+            isSecret: false,
+            options: [{ description: "继续", label: "Yes" }],
+            question: "继续执行吗？",
+          },
+        ],
+        threadId: "task-1",
+        turnId: "turn-timed",
+      });
+      expect(vi.getTimerCount()).toBe(1);
+
+      await runtime.releaseProject(project.id);
+
+      expect(vi.getTimerCount()).toBe(0);
+      expect(runtime.isTaskOwner(project, "task-1")).toBe(false);
+      runtime.claimTask(project, "task-1");
+      await expect(provider.readTaskAttachment("task-1", attachmentId)).resolves.toBeUndefined();
+      const replacement = runtime.forProject({
+        ...project,
+        rootPath: "/workspace/RecreatedCodeAgent",
+      });
+      expect(replacement).not.toBe(provider);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("matches Windows project paths without case sensitivity", async () => {
     const windowsProject = { ...project, rootPath: "C:\\Users\\Test\\CodeAgent" };
     const rpc = new FakeRpcClient([

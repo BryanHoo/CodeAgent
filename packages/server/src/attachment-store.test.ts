@@ -150,6 +150,21 @@ describe("AttachmentStore", () => {
     );
   });
 
+  it("releases only attachments owned by the removed project", async () => {
+    let nextId = 1;
+    const store = new AttachmentStore({ createId: () => `attachment-${String(nextId++)}` });
+    const first = await store.add("project-1", uploadInput(pixelDataUrl, "image", "first.png"));
+    const second = await store.add("project-2", uploadInput(pixelDataUrl, "image", "second.png"));
+
+    await store.releaseProject("project-1");
+
+    await expect(store.resolve("project-1", [first.attachment.id])).rejects.toThrow(
+      AttachmentNotFoundError,
+    );
+    await expect(store.resolve("project-2", [second.attachment.id])).resolves.toHaveLength(1);
+    await store.dispose();
+  });
+
   it("enforces decoded byte and total capacity limits", async () => {
     const store = new AttachmentStore({
       createId: () => globalThis.crypto.randomUUID(),

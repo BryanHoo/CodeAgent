@@ -81,4 +81,12 @@ export class RuntimeOwnerRegistry {
       this.#taskOwners.delete(taskId);
     }
   }
+
+  public releaseProject(projectId: string): void {
+    for (const [taskId, owner] of this.#taskOwners) {
+      if (owner.projectId === projectId) {
+        this.#taskOwners.delete(taskId);
+      }
+    }
+  }
 }

@@ -136,7 +136,7 @@ export interface ServerRouteContext {
   readonly readFileTree: (projectRoot: string, directoryPath?: string) => Promise<ProjectFileTree>;
   readonly readProjectGitStatus: (projectRoot: string) => Promise<ProjectGitStatus>;
   readonly readSourceFile: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
-  readonly releaseProjectContext: (projectId: string) => void;
+  readonly releaseProjectContext: (projectId: string) => Promise<void>;
   readonly resolveProviderTurnInput: (
     projectId: string,
     input: AgentPromptInput,

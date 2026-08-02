@@ -341,6 +341,7 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
     forProject: () => provider,
     getCapabilities: () => provider.getCapabilities(),
     listModels: () => provider.listModels(),
+    releaseProject: () => Promise.resolve(),
   };
   return {
     handlerTimeoutMs: 0,
@@ -824,6 +825,73 @@ describe("CodeAgent Server", () => {
     expect(missingRemoveResponse.statusCode).toBe(404);
     expect(removedContextResponse.statusCode).toBe(404);
     expect(read).toHaveBeenCalledTimes(readsAfterContextCreation + 1);
+  });
+
+  it("releases runtime and uploaded attachment state when removing a project", async () => {
+    const providerHarness = createProvider();
+    let storedProject: Project | undefined = project;
+    const releaseProject = vi.fn(() => Promise.resolve());
+    const runtimeProvider: AgentRuntimeProvider = {
+      forProject: () => providerHarness.provider,
+      getCapabilities: () => providerHarness.provider.getCapabilities(),
+      listModels: () => providerHarness.provider.listModels(),
+      releaseProject,
+    };
+    const app = await createCodeAgentServer(
+      createServerOptions(providerHarness.provider, {
+        projectRepository: {
+          list: () => Promise.resolve(storedProject === undefined ? [] : [storedProject]),
+          read: (projectId: string) =>
+            Promise.resolve(storedProject?.id === projectId ? storedProject : undefined),
+          register: () => Promise.resolve(project),
+          remove: (projectId: string) => {
+            if (storedProject?.id !== projectId) {
+              return Promise.resolve(false);
+            }
+            storedProject = undefined;
+            return Promise.resolve(true);
+          },
+          rename: () => Promise.resolve(undefined),
+          reorder: () => Promise.resolve(storedProject === undefined ? [] : [storedProject]),
+        },
+        provider: runtimeProvider,
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+    const upload = await app.inject(
+      await multipartAttachment(
+        "image",
+        "screen.png",
+        "image/png",
+        Buffer.from(pixelDataUrl.split(",")[1] ?? "", "base64"),
+        "release-project-upload",
+      ),
+    );
+    const attachmentId = upload.json<{ attachment: { id: string } }>().attachment.id;
+
+    const removed = await app.inject({
+      headers: { "idempotency-key": "release-project" },
+      method: "POST",
+      payload: {},
+      url: "/v1/projects/code-agent/remove",
+    });
+    storedProject = project;
+    const reuse = await app.inject({
+      headers: { "idempotency-key": "reuse-released-attachment" },
+      method: "POST",
+      payload: {
+        input: { attachments: [{ id: attachmentId }], skills: [], text: "", type: "prompt" },
+        options: turnOptions,
+      },
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
+    });
+
+    expect(removed.statusCode).toBe(200);
+    expect(releaseProject).toHaveBeenCalledOnce();
+    expect(releaseProject).toHaveBeenCalledWith(project.id);
+    expect(reuse.statusCode).toBe(404);
+    expect(reuse.json()).toMatchObject({ code: "ATTACHMENT_NOT_FOUND" });
+    expect(providerHarness.startTurn).not.toHaveBeenCalled();
   });
 
   it("serves the configured project's Git working tree status", async () => {
@@ -2028,6 +2096,7 @@ describe("CodeAgent Server", () => {
         activeProject.id === otherProject.id ? secondary.provider : primary.provider,
       getCapabilities: () => primary.provider.getCapabilities(),
       listModels: () => primary.provider.listModels(),
+      releaseProject: () => Promise.resolve(),
     };
     const app = await createCodeAgentServer({
       projectRepository: {

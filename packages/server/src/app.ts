@@ -694,15 +694,18 @@ export async function createCodeAgentServer(
     projectContexts.set(projectId, context);
     return context;
   };
-  const releaseProjectContext = (projectId: string) => {
+  const releaseProjectContext = async (projectId: string): Promise<void> => {
     const context = projectContexts.get(projectId);
-    if (context === undefined) {
-      return;
+    if (context !== undefined) {
+      // 先断开事件交付，再释放 Provider 与附件，避免销毁期间继续发布 Project 事件。
+      context.unsubscribe();
+      context.eventStream.close();
+      projectContexts.delete(projectId);
     }
-    // Project 移除后立即停止对应事件链路，其他 Project 的 Runtime 保持不变。
-    context.unsubscribe();
-    context.eventStream.close();
-    projectContexts.delete(projectId);
+    await Promise.all([
+      options.provider.releaseProject(projectId),
+      attachmentStore.releaseProject(projectId),
+    ]);
   };
   const listModels = async (): Promise<readonly AgentModel[]> =>
     (await modelCatalogCache.read()).data;
@@ -910,11 +913,7 @@ export async function createCodeAgentServer(
     return reply.send(error);
   });
   app.addHook("onClose", async () => {
-    for (const context of projectContexts.values()) {
-      context.unsubscribe();
-      context.eventStream.close();
-    }
-    projectContexts.clear();
+    await Promise.all([...projectContexts.keys()].map(releaseProjectContext));
     await attachmentStore.dispose();
     activeGitMutations.clear();
     idempotencyEntries.clear();

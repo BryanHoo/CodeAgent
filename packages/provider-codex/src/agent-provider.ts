@@ -234,6 +234,15 @@ export class CodexAgentProvider implements AgentProvider {
     });
   }
 
+  public releaseProject(): void {
+    // Project 销毁后同步切断所有本地状态，避免定时器和监听器继续持有 Provider。
+    this.#eventListeners.clear();
+    this.#historicalAttachments.clear();
+    this.#pendingLifecycle.clear();
+    this.#runtime.clear();
+    this.#skillsById.clear();
+  }
+
   public async readSandboxMode(): Promise<AgentSandboxMode> {
     const response = expectRecord(
       await this.#client.request("config/read", { cwd: this.#project.rootPath }),
@@ -1375,6 +1384,17 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
       logger: this.#logger,
       subscribeRpc: false,
     }).listModels();
+  }
+
+  public releaseProject(projectId: string): Promise<void> {
+    const provider = this.#rawProviders.get(projectId);
+    // 先移除路由和 Owner，再清空 Provider 内部状态，后续 RPC 无法回流到已删除 Project。
+    this.#projects.delete(projectId);
+    this.#projectProviders.delete(projectId);
+    this.#rawProviders.delete(projectId);
+    this.#owners.releaseProject(projectId);
+    provider?.releaseProject();
+    return Promise.resolve();
   }
 
   public beginTaskRead(project: Project, taskId: string): boolean {

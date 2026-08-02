@@ -65,6 +65,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     forProject: vi.fn(() => provider),
     getCapabilities: provider.getCapabilities,
     listModels: provider.listModels,
+    releaseProject: vi.fn(() => Promise.resolve()),
   };
   const project = {
     createdAt: "2026-07-23T00:00:00.000Z",

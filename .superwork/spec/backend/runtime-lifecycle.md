@@ -45,6 +45,7 @@
 - 普通 HTTP 路由使用 Fastify 原生 60 秒 `handlerTimeout` 和 `request.signal` 执行协作取消；Event Stream WebSocket 是显式长连接，不继承 Handler 截止时间，其有界性由队列、背压和连接关闭生命周期保证。
 - Project 列表默认空，通过宿主系统目录选择器注册，并持久化到 `CODEX_HOME/code-agent/state.sqlite3`；重复真实路径幂等返回已有 Project。
 - 已激活的 Project Runtime Context 必须先从进程内缓存解析，只有缓存未命中时才读取 Project Repository。Project 重命名成功后同步刷新缓存中的展示信息；Project 删除成功后必须释放事件订阅和 Context 缓存，后续访问重新读取 Repository 并返回资源不存在，不能复用已删除 Runtime。
+- Project 删除和 Server 关闭必须通过 Runtime 的显式 `releaseProject` 端口统一释放 Project Provider、原始 Provider、Task Owner、Pending Request 定时器、Task 运行状态和历史附件授权；Server 同时清理该 Project 未消费或 Turn 占用中的上传附件，且不得影响其他 Project。
 - Project 与 Codex Thread 的 `cwd` 归属必须按真实路径比较；Windows 路径忽略大小写，Linux 符号链接解析到同一实体，不能仅比较原始路径字符串。
 - Linux 系统目录选择器在某个桌面启动器缺失或无法连接桌面会话时必须继续尝试下一个启动器，全部不可用后再回退终端输入；用户取消选择不得触发回退。
 - 浏览器与外部应用启动必须观察短时退出结果；启动器快速非零退出视为失败，Linux 浏览器按候选顺序继续回退，不能在仅收到子进程 `spawn` 事件后报告成功。Windows `explorer.exe` 是系统请求转交器，成功 `spawn` 后不得用代理进程随后的退出码误报失败；Windows Terminal 固定使用 `-w new -d <projectRoot>` 打开独立新窗口，不受用户 `windowingBehavior` 设置影响。

@@ -38,4 +38,17 @@ export class TaskRuntimeState {
     this.runningTaskIds.delete(taskId);
     this.unmaterializedTasks.delete(taskId);
   }
+
+  public clear(): void {
+    this.activeReviewTargets.clear();
+    this.contextUsage.clear();
+    this.pendingTaskEvents.clear();
+    this.pendingTaskReads.clear();
+    this.pendingTaskServerRequests.clear();
+    this.projectTaskIds.clear();
+    this.resumedTaskIds.clear();
+    this.resumePromises.clear();
+    this.runningTaskIds.clear();
+    this.unmaterializedTasks.clear();
+  }
 }

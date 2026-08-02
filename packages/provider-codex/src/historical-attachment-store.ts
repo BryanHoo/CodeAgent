@@ -269,6 +269,11 @@ export class CodexHistoricalAttachmentStore {
     }
   }
 
+  public clear(): void {
+    this.#entries.clear();
+    this.#totalBytes = 0;
+  }
+
   #refresh(entry: StoredAttachment): AgentMessageAttachment {
     this.#entries.set(entry.attachment.id, {
       ...entry,

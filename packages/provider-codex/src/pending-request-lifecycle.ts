@@ -187,6 +187,16 @@ export class PendingRequestLifecycle {
     }
   }
 
+  public clear(): void {
+    for (const timer of this.#requestExpiryTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.#pendingRequests.clear();
+    this.#requestExpiryTimers.clear();
+    this.#resolvingRequests.clear();
+    this.#terminalRequests.clear();
+  }
+
   #beginResolution(
     entry: PendingCodexRequest,
     result: unknown,

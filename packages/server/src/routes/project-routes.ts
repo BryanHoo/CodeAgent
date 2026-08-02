@@ -390,7 +390,7 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
           if (!(await projectRepository.remove(request.params.projectId))) {
             throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
           }
-          releaseProjectContext(request.params.projectId);
+          await releaseProjectContext(request.params.projectId);
           return { projectId: request.params.projectId, status: "removed" as const };
         },
       ),

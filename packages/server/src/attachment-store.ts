@@ -398,6 +398,13 @@ export class AttachmentStore {
     }
   }
 
+  public async releaseProject(projectId: string): Promise<void> {
+    const attachmentIds = [...this.#entries]
+      .filter(([, entry]) => entry.projectId === projectId)
+      .map(([attachmentId]) => attachmentId);
+    await Promise.all(attachmentIds.map((attachmentId) => this.#delete(attachmentId)));
+  }
+
   public async clear(): Promise<void> {
     await Promise.all([...this.#entries.keys()].map((id) => this.#delete(id)));
   }

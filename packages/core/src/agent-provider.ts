@@ -128,4 +128,5 @@ export interface AgentRuntimeProvider {
   forProject(project: Project): AgentProvider;
   getCapabilities(): Promise<AgentCapabilities>;
   listModels(): Promise<AgentModelPage>;
+  releaseProject(projectId: string): Promise<void>;
 }
