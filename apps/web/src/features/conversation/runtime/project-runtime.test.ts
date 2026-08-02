@@ -487,7 +487,7 @@ describe("project runtime manager", () => {
       );
 
       expect(secondStore.getState().checkpoint?.sequence).toBe(3);
-      expect(secondStore.getState().itemsById["message-task-2"]).toMatchObject({
+      expect(secondStore.getState().getItem("message-task-2")).toMatchObject({
         text: "环绕后继续输出",
       });
       expect(retainedHistory.floorSequence).toBe(1);

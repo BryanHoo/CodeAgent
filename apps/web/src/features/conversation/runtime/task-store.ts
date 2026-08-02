@@ -40,17 +40,18 @@ export interface TaskStoreIdentity {
 export interface TaskStoreState {
   applyEvents: (events: readonly AgentEvent[]) => void;
   checkpoint: EventCheckpoint | null;
-  commandOutputAccessByItemId: Readonly<Record<string, number>>;
+  commandOutputAccessByItemId: Map<string, number>;
   commandOutputAccessSequence: number;
-  commandOutputBytesByItemId: Readonly<Record<string, number>>;
+  commandOutputBytesByItemId: Map<string, number>;
   commandOutputBytes: number;
   connectionState: AgentEventConnectionState;
   error: Error | null;
   hydrate: (response: TaskStoreHydrationResponse) => void;
   itemIdsByTurnId: Readonly<Record<string, readonly string[]>>;
+  itemStoresById: Map<string, TaskItemStore>;
   itemStructureRevision: number;
   itemTurnIdsById: Readonly<Record<string, string>>;
-  itemsById: Readonly<Record<string, AgentItem>>;
+  getItem: (itemId: string) => AgentItem | undefined;
   pendingRequestIds: readonly string[];
   pendingRequestsById: Readonly<Record<string, PendingRequest>>;
   projectId: string;
@@ -65,6 +66,114 @@ export interface TaskStoreState {
 
 export type TaskStore = StoreApi<TaskStoreState>;
 
+export interface TaskItemStoreState {
+  revision: number;
+}
+
+type DeltaEvent = Extract<
+  AgentEvent,
+  { type: "command.output_delta" | "message.delta" | "reasoning.delta" }
+>;
+
+export interface TaskItemStore extends StoreApi<TaskItemStoreState> {
+  appendDelta: (event: DeltaEvent) => boolean;
+  peek: () => AgentItem;
+  publish: () => void;
+  read: () => AgentItem;
+  replace: (item: AgentItem) => void;
+}
+
+type StreamedTextField = "content" | "output" | "summary" | "text";
+
+function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
+  let baseItem = initialItem;
+  // Delta 热路径只追加 Chunk；完整字符串仅在目标 Item 被读取时延迟物化并缓存。
+  const chunksByField = new Map<StreamedTextField, string[]>();
+  let contentGeneration = 0;
+  let materializedGeneration = 0;
+  let materializedItem = initialItem;
+  const store = createStore<TaskItemStoreState>()(() => ({ revision: 0 }));
+
+  function appendChunk(field: StreamedTextField, delta: string): void {
+    const chunks = chunksByField.get(field);
+    if (chunks === undefined) {
+      chunksByField.set(field, [delta]);
+    } else {
+      chunks.push(delta);
+    }
+    contentGeneration += 1;
+  }
+
+  return Object.assign(store, {
+    appendDelta(event: DeltaEvent): boolean {
+      if (event.type === "message.delta") {
+        if (baseItem.type !== "message" || baseItem.role !== "assistant") {
+          return false;
+        }
+        appendChunk("text", event.payload.delta);
+        return true;
+      }
+      if (event.type === "reasoning.delta") {
+        if (baseItem.type !== "reasoning") {
+          return false;
+        }
+        appendChunk(event.payload.field, event.payload.delta);
+        return true;
+      }
+      if (baseItem.type !== "command") {
+        return false;
+      }
+      appendChunk("output", event.payload.delta);
+      return true;
+    },
+    peek: (): AgentItem => baseItem,
+    publish(): void {
+      store.setState((state) => ({ revision: state.revision + 1 }));
+    },
+    read(): AgentItem {
+      if (materializedGeneration === contentGeneration) {
+        return materializedItem;
+      }
+      let nextItem = baseItem;
+      if (baseItem.type === "message") {
+        const chunks = chunksByField.get("text");
+        if (chunks !== undefined) {
+          nextItem = { ...baseItem, text: [baseItem.text, ...chunks].join("") };
+        }
+      } else if (baseItem.type === "reasoning") {
+        const contentChunks = chunksByField.get("content");
+        const summaryChunks = chunksByField.get("summary");
+        if (contentChunks !== undefined || summaryChunks !== undefined) {
+          nextItem = {
+            ...baseItem,
+            content:
+              contentChunks === undefined
+                ? baseItem.content
+                : [baseItem.content, ...contentChunks].join(""),
+            summary:
+              summaryChunks === undefined
+                ? baseItem.summary
+                : [baseItem.summary, ...summaryChunks].join(""),
+          };
+        }
+      } else if (baseItem.type === "command") {
+        const chunks = chunksByField.get("output");
+        if (chunks !== undefined) {
+          nextItem = { ...baseItem, output: [baseItem.output ?? "", ...chunks].join("") };
+        }
+      }
+      materializedItem = nextItem;
+      materializedGeneration = contentGeneration;
+      return materializedItem;
+    },
+    replace(item: AgentItem): void {
+      baseItem = item;
+      chunksByField.clear();
+      contentGeneration += 1;
+    },
+  });
+}
+
 type NormalizedTaskData = Pick<
   TaskStoreState,
   | "checkpoint"
@@ -73,9 +182,9 @@ type NormalizedTaskData = Pick<
   | "commandOutputBytesByItemId"
   | "commandOutputBytes"
   | "itemIdsByTurnId"
+  | "itemStoresById"
   | "itemStructureRevision"
   | "itemTurnIdsById"
-  | "itemsById"
   | "pendingRequestIds"
   | "pendingRequestsById"
   | "snapshotMetadata"
@@ -89,7 +198,7 @@ function normalizeSnapshot(response: TaskStoreHydrationResponse): NormalizedTask
   const turnsById: Record<string, NormalizedAgentTurn> = {};
   const itemIdsByTurnId: Record<string, readonly string[]> = {};
   const itemTurnIdsById: Record<string, string> = {};
-  const itemsById: Record<string, AgentItem> = {};
+  const itemStoresById = new Map<string, TaskItemStore>();
 
   for (const turn of turns) {
     const { items, ...normalizedTurn } = turn;
@@ -102,7 +211,7 @@ function normalizeSnapshot(response: TaskStoreHydrationResponse): NormalizedTask
         throw new Error(`Agent item ${item.id} is shared by multiple turns`);
       }
       itemTurnIdsById[item.id] = turn.id;
-      itemsById[item.id] = item;
+      itemStoresById.set(item.id, createTaskItemStore(item));
     }
   }
 
@@ -113,19 +222,20 @@ function normalizeSnapshot(response: TaskStoreHydrationResponse): NormalizedTask
 
   const boundedCommandOutputs = updateCommandOutputBudget({
     previousBudget: {
-      commandOutputAccessByItemId: {},
+      commandOutputAccessByItemId: new Map<string, number>(),
       commandOutputAccessSequence: 0,
       commandOutputBytes: 0,
-      commandOutputBytesByItemId: {},
+      commandOutputBytesByItemId: new Map<string, number>(),
     },
-    sourceItemsById: itemsById,
-    touchedItemIds: Object.keys(itemsById),
+    sourceItemStoresById: itemStoresById,
+    touchedItemIds: [...itemStoresById.keys()],
   });
 
   return {
     checkpoint: response.checkpoint,
     ...boundedCommandOutputs,
     itemIdsByTurnId,
+    itemStoresById,
     itemStructureRevision: 0,
     itemTurnIdsById,
     pendingRequestIds,
@@ -197,7 +307,6 @@ type CommandOutputBudgetState = Pick<
   | "commandOutputAccessSequence"
   | "commandOutputBytes"
   | "commandOutputBytesByItemId"
-  | "itemsById"
 >;
 
 type CommandOutputBudgetInput = Readonly<{
@@ -208,23 +317,24 @@ type CommandOutputBudgetInput = Readonly<{
     | "commandOutputBytes"
     | "commandOutputBytesByItemId"
   >;
-  sourceItemsById: Readonly<Record<string, AgentItem>>;
+  changedItemStores?: Set<TaskItemStore>;
+  sourceItemStoresById: ReadonlyMap<string, TaskItemStore>;
   touchedItemIds: readonly string[];
 }>;
 
 function updateCommandOutputBudget(input: CommandOutputBudgetInput): CommandOutputBudgetState {
-  const commandOutputAccessByItemId = { ...input.previousBudget.commandOutputAccessByItemId };
-  const commandOutputBytesByItemId = { ...input.previousBudget.commandOutputBytesByItemId };
+  const commandOutputAccessByItemId = input.previousBudget.commandOutputAccessByItemId;
+  const commandOutputBytesByItemId = input.previousBudget.commandOutputBytesByItemId;
   let commandOutputAccessSequence = input.previousBudget.commandOutputAccessSequence;
   let commandOutputBytes = input.previousBudget.commandOutputBytes;
-  let itemsById = input.sourceItemsById;
 
   for (const itemId of new Set(input.touchedItemIds)) {
-    const previousOutputBytes = commandOutputBytesByItemId[itemId] ?? 0;
-    const item = itemsById[itemId];
-    if (item?.type !== "command" || item.output === undefined) {
-      Reflect.deleteProperty(commandOutputAccessByItemId, itemId);
-      Reflect.deleteProperty(commandOutputBytesByItemId, itemId);
+    const previousOutputBytes = commandOutputBytesByItemId.get(itemId) ?? 0;
+    const itemStore = input.sourceItemStoresById.get(itemId);
+    const item = itemStore?.read();
+    if (itemStore === undefined || item?.type !== "command" || item.output === undefined) {
+      commandOutputAccessByItemId.delete(itemId);
+      commandOutputBytesByItemId.delete(itemId);
       commandOutputBytes -= previousOutputBytes;
       continue;
     }
@@ -234,18 +344,16 @@ function updateCommandOutputBudget(input: CommandOutputBudgetInput): CommandOutp
       boundedOutput.output !== item.output ||
       (boundedOutput.outputTruncated && !item.outputTruncated)
     ) {
-      itemsById = {
-        ...itemsById,
-        [itemId]: {
-          ...item,
-          output: boundedOutput.output,
-          outputTruncated: item.outputTruncated || boundedOutput.outputTruncated,
-        },
-      };
+      itemStore.replace({
+        ...item,
+        output: boundedOutput.output,
+        outputTruncated: item.outputTruncated || boundedOutput.outputTruncated,
+      });
+      input.changedItemStores?.add(itemStore);
     }
     commandOutputAccessSequence += 1;
-    commandOutputAccessByItemId[itemId] = commandOutputAccessSequence;
-    commandOutputBytesByItemId[itemId] = boundedOutput.outputBytes;
+    commandOutputAccessByItemId.set(itemId, commandOutputAccessSequence);
+    commandOutputBytesByItemId.set(itemId, boundedOutput.outputBytes);
     commandOutputBytes += boundedOutput.outputBytes - previousOutputBytes;
   }
 
@@ -255,34 +363,32 @@ function updateCommandOutputBudget(input: CommandOutputBudgetInput): CommandOutp
       commandOutputAccessSequence,
       commandOutputBytes,
       commandOutputBytesByItemId,
-      itemsById,
     };
   }
 
   // 仅在任务预算溢出时遍历 LRU 索引，流式热路径无需扫描全部 Timeline Item。
-  const leastRecentlyUsedItemIds = Object.keys(commandOutputAccessByItemId).toSorted(
+  const leastRecentlyUsedItemIds = [...commandOutputAccessByItemId.keys()].toSorted(
     (leftItemId, rightItemId) =>
-      (commandOutputAccessByItemId[leftItemId] ?? 0) -
-      (commandOutputAccessByItemId[rightItemId] ?? 0),
+      (commandOutputAccessByItemId.get(leftItemId) ?? 0) -
+      (commandOutputAccessByItemId.get(rightItemId) ?? 0),
   );
   for (const itemId of leastRecentlyUsedItemIds) {
     if (commandOutputBytes <= MAX_TASK_COMMAND_OUTPUT_BYTES) {
       break;
     }
-    const item = itemsById[itemId];
-    if (item?.type !== "command" || item.output === undefined) {
+    const itemStore = input.sourceItemStoresById.get(itemId);
+    const item = itemStore?.read();
+    if (itemStore === undefined || item?.type !== "command" || item.output === undefined) {
       continue;
     }
-    const previousOutputBytes = commandOutputBytesByItemId[itemId] ?? 0;
-    itemsById = {
-      ...itemsById,
-      [itemId]: {
-        ...item,
-        output: RETAINED_COMMAND_OUTPUT_MARKER,
-        outputTruncated: true,
-      },
-    };
-    commandOutputBytesByItemId[itemId] = retainedCommandOutputMarkerBytes;
+    const previousOutputBytes = commandOutputBytesByItemId.get(itemId) ?? 0;
+    itemStore.replace({
+      ...item,
+      output: RETAINED_COMMAND_OUTPUT_MARKER,
+      outputTruncated: true,
+    });
+    input.changedItemStores?.add(itemStore);
+    commandOutputBytesByItemId.set(itemId, retainedCommandOutputMarkerBytes);
     commandOutputBytes -= previousOutputBytes - retainedCommandOutputMarkerBytes;
   }
 
@@ -291,8 +397,11 @@ function updateCommandOutputBudget(input: CommandOutputBudgetInput): CommandOutp
     commandOutputAccessSequence,
     commandOutputBytes,
     commandOutputBytesByItemId,
-    itemsById,
   };
+}
+
+function readTaskItem(state: TaskStoreState, itemId: string): AgentItem | undefined {
+  return state.itemStoresById.get(itemId)?.read();
 }
 
 function getTouchedCommandOutputItemIds(
@@ -305,23 +414,15 @@ function getTouchedCommandOutputItemIds(
   }
   if (event.type === "item.started" || event.type === "item.completed") {
     return event.payload.item.type === "command" ||
-      previousState.itemsById[event.itemId]?.type === "command"
+      previousState.commandOutputBytesByItemId.has(event.itemId)
       ? [event.itemId]
       : undefined;
   }
   if (event.type === "turn.started" || event.type === "turn.completed") {
-    const candidateItemIds = new Set([
+    return [
       ...(previousState.itemIdsByTurnId[event.turnId] ?? []),
       ...(nextState.itemIdsByTurnId[event.turnId] ?? []),
-    ]);
-    return [...candidateItemIds].filter((itemId) => {
-      const previousItem = previousState.itemsById[itemId];
-      const nextItem = nextState.itemsById[itemId];
-      return (
-        previousItem !== nextItem &&
-        (previousItem?.type === "command" || nextItem?.type === "command")
-      );
-    });
+    ];
   }
   return undefined;
 }
@@ -332,14 +433,14 @@ function createDeltaItem(event: Extract<AgentEvent, { itemId: string }>): AgentI
       return {
         id: event.itemId,
         role: "assistant",
-        text: event.payload.delta,
+        text: "",
         type: "message",
       };
     case "reasoning.delta":
       return {
-        content: event.payload.field === "content" ? event.payload.delta : "",
+        content: "",
         id: event.itemId,
-        summary: event.payload.field === "summary" ? event.payload.delta : "",
+        summary: "",
         type: "reasoning",
       };
     case "command.output_delta": {
@@ -347,7 +448,7 @@ function createDeltaItem(event: Extract<AgentEvent, { itemId: string }>): AgentI
         command: PENDING_COMMAND_LABEL,
         cwd: "",
         id: event.itemId,
-        output: event.payload.delta,
+        output: "",
         outputTruncated: false,
         status: "running",
         type: "command",
@@ -358,41 +459,18 @@ function createDeltaItem(event: Extract<AgentEvent, { itemId: string }>): AgentI
   }
 }
 
-function updateDeltaItem(currentItem: AgentItem, event: AgentEvent): AgentItem {
-  if (event.type === "message.delta") {
-    return currentItem.type === "message" && currentItem.role === "assistant"
-      ? { ...currentItem, text: `${currentItem.text}${event.payload.delta}` }
-      : currentItem;
-  }
-  if (event.type === "reasoning.delta") {
-    return currentItem.type === "reasoning"
-      ? {
-          ...currentItem,
-          [event.payload.field]: `${currentItem[event.payload.field]}${event.payload.delta}`,
-        }
-      : currentItem;
-  }
-  if (event.type === "command.output_delta" && currentItem.type === "command") {
-    return {
-      ...currentItem,
-      output: `${currentItem.output ?? ""}${event.payload.delta}`,
-    };
-  }
-  return currentItem;
-}
-
 function replaceTurnItems(
   state: TaskStoreState,
   turnId: string,
   items: readonly AgentItem[],
-): Pick<TaskStoreState, "itemIdsByTurnId" | "itemTurnIdsById" | "itemsById"> {
+  changedItemStores: Set<TaskItemStore>,
+): Pick<TaskStoreState, "itemIdsByTurnId" | "itemTurnIdsById"> {
   const previousItemIds = state.itemIdsByTurnId[turnId] ?? [];
   const replacedItemIds = new Set(previousItemIds);
-  const itemsById: Record<string, AgentItem> = {};
+  const nextItemIds = new Set(items.map((item) => item.id));
   const itemTurnIdsById: Record<string, string> = {};
-  for (const [itemId, item] of Object.entries(state.itemsById)) {
+  for (const itemId of state.itemStoresById.keys()) {
     if (!replacedItemIds.has(itemId)) {
-      itemsById[itemId] = item;
       const owningTurnId = state.itemTurnIdsById[itemId];
       if (owningTurnId !== undefined) {
         itemTurnIdsById[itemId] = owningTurnId;
@@ -404,8 +482,21 @@ function replaceTurnItems(
     if (existingTurnId !== undefined && existingTurnId !== turnId) {
       throw new Error(`Agent item ${item.id} is shared by multiple turns`);
     }
-    itemsById[item.id] = item;
     itemTurnIdsById[item.id] = turnId;
+  }
+  for (const itemId of previousItemIds) {
+    if (!nextItemIds.has(itemId)) {
+      state.itemStoresById.delete(itemId);
+    }
+  }
+  for (const item of items) {
+    const itemStore = state.itemStoresById.get(item.id);
+    if (itemStore === undefined) {
+      state.itemStoresById.set(item.id, createTaskItemStore(item));
+    } else {
+      itemStore.replace(item);
+      changedItemStores.add(itemStore);
+    }
   }
   return {
     itemIdsByTurnId: {
@@ -413,7 +504,6 @@ function replaceTurnItems(
       [turnId]: items.map((item) => item.id),
     },
     itemTurnIdsById,
-    itemsById,
   };
 }
 
@@ -429,7 +519,7 @@ function mergeInterruptedTurnItems(
       terminalItemsById.delete(itemId);
       return [terminalItem];
     }
-    const streamedItem = state.itemsById[itemId];
+    const streamedItem = readTaskItem(state, itemId);
     return streamedItem === undefined ? [] : [streamedItem];
   });
 
@@ -437,7 +527,11 @@ function mergeInterruptedTurnItems(
   return [...mergedItems, ...terminalItemsById.values()];
 }
 
-function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<TaskStoreState> {
+function applyAcceptedEvent(
+  state: TaskStoreState,
+  event: AgentEvent,
+  changedItemStores: Set<TaskItemStore>,
+): Partial<TaskStoreState> {
   const snapshotMetadata = state.snapshotMetadata;
   if (snapshotMetadata === null) {
     return {};
@@ -449,7 +543,7 @@ function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<T
       const { items, ...normalizedTurn } = event.payload.turn;
       return {
         checkpoint,
-        ...replaceTurnItems(state, event.turnId, items),
+        ...replaceTurnItems(state, event.turnId, items, changedItemStores),
         snapshotMetadata: {
           ...snapshotMetadata,
           status: "running",
@@ -475,18 +569,16 @@ function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<T
         currentTurn.status === "running" && currentTurn.error !== null
           ? { ...state.turnsById, [event.turnId]: { ...currentTurn, error: null } }
           : state.turnsById;
-      const currentItem = state.itemsById[event.itemId];
-      if (currentItem !== undefined && state.itemTurnIdsById[event.itemId] !== event.turnId) {
+      const currentItemStore = state.itemStoresById.get(event.itemId);
+      if (currentItemStore !== undefined && state.itemTurnIdsById[event.itemId] !== event.turnId) {
         throw new Error(`Agent item ${event.itemId} belongs to another turn`);
       }
-      if (currentItem !== undefined) {
-        const updatedItem = updateDeltaItem(currentItem, event);
+      if (currentItemStore !== undefined) {
+        if (currentItemStore.appendDelta(event)) {
+          changedItemStores.add(currentItemStore);
+        }
         return {
           checkpoint,
-          itemsById:
-            updatedItem === currentItem
-              ? state.itemsById
-              : { ...state.itemsById, [event.itemId]: updatedItem },
           snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
           turnsById,
         };
@@ -495,6 +587,10 @@ function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<T
       if (createdItem === undefined) {
         return { checkpoint };
       }
+      const createdItemStore = createTaskItemStore(createdItem);
+      createdItemStore.appendDelta(event);
+      state.itemStoresById.set(event.itemId, createdItemStore);
+      changedItemStores.add(createdItemStore);
       return {
         checkpoint,
         itemIdsByTurnId: {
@@ -503,7 +599,6 @@ function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<T
         },
         itemStructureRevision: state.itemStructureRevision + 1,
         itemTurnIdsById: { ...state.itemTurnIdsById, [event.itemId]: event.turnId },
-        itemsById: { ...state.itemsById, [event.itemId]: createdItem },
         snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
         turnsById,
       };
@@ -516,7 +611,8 @@ function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<T
           snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
         };
       }
-      const itemAlreadyExists = state.itemsById[event.itemId] !== undefined;
+      const currentItemStore = state.itemStoresById.get(event.itemId);
+      const itemAlreadyExists = currentItemStore !== undefined;
       if (itemAlreadyExists && state.itemTurnIdsById[event.itemId] !== event.turnId) {
         throw new Error(`Agent item ${event.itemId} belongs to another turn`);
       }
@@ -534,11 +630,9 @@ function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<T
           ? currentItemIds
           : [...currentItemIds, event.itemId];
       // Provider 用户项到达后原子移除提交占位，避免同一输入重复展示。
-      const retainedItems = replacesSubmittedUserItem
-        ? Object.fromEntries(
-            Object.entries(state.itemsById).filter(([itemId]) => itemId !== submittedUserItemId),
-          )
-        : state.itemsById;
+      if (replacesSubmittedUserItem) {
+        state.itemStoresById.delete(submittedUserItemId);
+      }
       const retainedItemTurnIds = replacesSubmittedUserItem
         ? Object.fromEntries(
             Object.entries(state.itemTurnIdsById).filter(
@@ -546,7 +640,12 @@ function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<T
             ),
           )
         : state.itemTurnIdsById;
-      const itemsById = { ...retainedItems, [event.itemId]: event.payload.item };
+      if (currentItemStore === undefined) {
+        state.itemStoresById.set(event.itemId, createTaskItemStore(event.payload.item));
+      } else {
+        currentItemStore.replace(event.payload.item);
+        changedItemStores.add(currentItemStore);
+      }
       return {
         checkpoint,
         itemIdsByTurnId:
@@ -555,7 +654,6 @@ function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<T
             : { ...state.itemIdsByTurnId, [event.turnId]: nextItemIds },
         itemStructureRevision: state.itemStructureRevision + 1,
         itemTurnIdsById: { ...retainedItemTurnIds, [event.itemId]: event.turnId },
-        itemsById,
         snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
       };
     }
@@ -574,7 +672,9 @@ function applyAcceptedEvent(state: TaskStoreState, event: AgentEvent): Partial<T
           : terminalItems;
       return {
         checkpoint,
-        ...(currentTurn === undefined ? {} : replaceTurnItems(state, event.turnId, items)),
+        ...(currentTurn === undefined
+          ? {}
+          : replaceTurnItems(state, event.turnId, items, changedItemStores)),
         snapshotMetadata: {
           ...snapshotMetadata,
           status: completedTurn.status === "failed" ? "failed" : "idle",
@@ -653,7 +753,7 @@ function reconstructSnapshot(state: TaskStoreState): ReconstructedTaskSnapshot |
         return [];
       }
       const items = (state.itemIdsByTurnId[turnId] ?? []).flatMap((itemId) => {
-        const item = state.itemsById[itemId];
+        const item = readTaskItem(state, itemId);
         return item === undefined ? [] : [item];
       });
       return [{ ...turn, items }];
@@ -669,14 +769,14 @@ export function createTaskStore(
     initialResponse === undefined
       ? {
           checkpoint: null,
-          commandOutputAccessByItemId: {},
+          commandOutputAccessByItemId: new Map<string, number>(),
           commandOutputAccessSequence: 0,
-          commandOutputBytesByItemId: {},
+          commandOutputBytesByItemId: new Map<string, number>(),
           commandOutputBytes: 0,
           itemIdsByTurnId: {},
+          itemStoresById: new Map<string, TaskItemStore>(),
           itemStructureRevision: 0,
           itemTurnIdsById: {},
-          itemsById: {},
           pendingRequestIds: [],
           pendingRequestsById: {},
           snapshotMetadata: null,
@@ -699,6 +799,7 @@ export function createTaskStore(
       if (events.length === 0) {
         return;
       }
+      const changedItemStores = new Set<TaskItemStore>();
       set((currentState) => {
         let nextState = currentState;
         for (const event of events) {
@@ -712,7 +813,10 @@ export function createTaskStore(
             continue;
           }
           const previousState = nextState;
-          nextState = { ...nextState, ...applyAcceptedEvent(nextState, event) };
+          nextState = {
+            ...nextState,
+            ...applyAcceptedEvent(nextState, event, changedItemStores),
+          };
           const touchedCommandOutputItemIds = getTouchedCommandOutputItemIds(
             previousState,
             nextState,
@@ -723,7 +827,8 @@ export function createTaskStore(
               ...nextState,
               ...updateCommandOutputBudget({
                 previousBudget: previousState,
-                sourceItemsById: nextState.itemsById,
+                changedItemStores,
+                sourceItemStoresById: nextState.itemStoresById,
                 touchedItemIds: touchedCommandOutputItemIds,
               }),
             };
@@ -731,6 +836,10 @@ export function createTaskStore(
         }
         return nextState;
       });
+      // 同一动画帧内的多个 Delta 合并为一次目标 Item 通知，避免重复渲染。
+      for (const itemStore of changedItemStores) {
+        itemStore.publish();
+      }
     },
     connectionState: "connecting",
     error: null,
@@ -744,6 +853,7 @@ export function createTaskStore(
       set({ ...normalizeSnapshot(response), connectionState: "connecting", error: null });
     },
     projectId: identity.projectId,
+    getItem: (itemId) => get().itemStoresById.get(itemId)?.read(),
     reconstructSnapshot: () => reconstructSnapshot(get()),
     setConnectionState(connectionState) {
       set({ connectionState });
@@ -865,11 +975,11 @@ export function estimateTaskStoreRetainedBytes(store: TaskStore): number {
   const state = store.getState();
   return estimateRetainedBytes({
     checkpoint: state.checkpoint,
-    commandOutputAccessByItemId: state.commandOutputAccessByItemId,
-    commandOutputBytesByItemId: state.commandOutputBytesByItemId,
+    commandOutputAccessByItemId: [...state.commandOutputAccessByItemId],
+    commandOutputBytesByItemId: [...state.commandOutputBytesByItemId],
     itemIdsByTurnId: state.itemIdsByTurnId,
     itemTurnIdsById: state.itemTurnIdsById,
-    itemsById: state.itemsById,
+    items: [...state.itemStoresById.values()].map((itemStore) => itemStore.read()),
     pendingRequestIds: state.pendingRequestIds,
     pendingRequestsById: state.pendingRequestsById,
     snapshotMetadata: state.snapshotMetadata,

@@ -27,6 +27,7 @@ import {
   PENDING_COMMAND_LABEL,
   RETAINED_COMMAND_OUTPUT_MARKER,
   type NormalizedAgentTurn,
+  type TaskItemStore,
   type TaskStore,
 } from "../../conversation/runtime/task-store.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
@@ -1245,7 +1246,7 @@ type StoredTurnTimelineGroup =
 
 function groupStoredTurnTimelineItems(
   itemIds: readonly string[],
-  itemsById: Readonly<Record<string, AgentItem>>,
+  itemStoresById: ReadonlyMap<string, TaskItemStore>,
 ): StoredTurnTimelineGroup[] {
   const groups: StoredTurnTimelineGroup[] = [];
   let assistantItemIds: string[] = [];
@@ -1260,7 +1261,7 @@ function groupStoredTurnTimelineItems(
   };
 
   for (const itemId of itemIds) {
-    const item = itemsById[itemId];
+    const item = itemStoresById.get(itemId)?.peek();
     if (item?.type === "review" || (item?.type === "message" && item.role === "user")) {
       flushAssistantItems();
       groups.push({ itemId, type: "user" });
@@ -1270,6 +1271,39 @@ function groupStoredTurnTimelineItems(
   }
   flushAssistantItems();
   return groups;
+}
+
+function useTaskItem(itemStore: TaskItemStore): AgentItem {
+  useStore(itemStore, (state) => state.revision);
+  return itemStore.read();
+}
+
+function StoredTimelineItemContentValue({
+  isLastTurnItem,
+  itemStore,
+  onOpenSourceFile,
+  projectId,
+  taskId,
+  turnStatus,
+}: Readonly<{
+  isLastTurnItem: boolean;
+  itemStore: TaskItemStore;
+  onOpenSourceFile: (reference: MessageFileReference) => void;
+  projectId: string;
+  taskId: string;
+  turnStatus: AgentTurn["status"];
+}>) {
+  const item = useTaskItem(itemStore);
+  return (
+    <TimelineItemContent
+      isLastTurnItem={isLastTurnItem}
+      item={item}
+      onOpenSourceFile={onOpenSourceFile}
+      projectId={projectId}
+      taskId={taskId}
+      turnStatus={turnStatus}
+    />
+  );
 }
 
 function StoredTimelineItemContent({
@@ -1289,11 +1323,11 @@ function StoredTimelineItemContent({
   taskId: string;
   turnStatus: AgentTurn["status"];
 }>) {
-  const item = useStore(store, (state) => state.itemsById[itemId]);
-  return item === undefined ? null : (
-    <TimelineItemContent
+  const itemStore = useStore(store, (state) => state.itemStoresById.get(itemId));
+  return itemStore === undefined ? null : (
+    <StoredTimelineItemContentValue
       isLastTurnItem={isLastTurnItem}
-      item={item}
+      itemStore={itemStore}
       onOpenSourceFile={onOpenSourceFile}
       projectId={projectId}
       taskId={taskId}
@@ -1302,28 +1336,23 @@ function StoredTimelineItemContent({
   );
 }
 
-function StoredUserMessage({
-  itemId,
+function StoredUserMessageValue({
+  itemStore,
   latestSnapshotTimestamp,
   onOpenSourceFile,
   projectId,
-  store,
   taskId,
   turn,
 }: Readonly<{
-  itemId: string;
+  itemStore: TaskItemStore;
   latestSnapshotTimestamp: string;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   projectId: string;
-  store: TaskStore;
   taskId: string;
   turn: NormalizedAgentTurn;
 }>) {
-  const item = useStore(store, (state) => state.itemsById[itemId]);
-  if (
-    item === undefined ||
-    (item.type !== "review" && (item.type !== "message" || item.role !== "user"))
-  ) {
+  const item = useTaskItem(itemStore);
+  if (item.type !== "review" && (item.type !== "message" || item.role !== "user")) {
     return null;
   }
   const copiedText =
@@ -1362,13 +1391,43 @@ function StoredUserMessage({
   );
 }
 
+function StoredUserMessage({
+  itemId,
+  latestSnapshotTimestamp,
+  onOpenSourceFile,
+  projectId,
+  store,
+  taskId,
+  turn,
+}: Readonly<{
+  itemId: string;
+  latestSnapshotTimestamp: string;
+  onOpenSourceFile: (reference: MessageFileReference) => void;
+  projectId: string;
+  store: TaskStore;
+  taskId: string;
+  turn: NormalizedAgentTurn;
+}>) {
+  const itemStore = useStore(store, (state) => state.itemStoresById.get(itemId));
+  return itemStore === undefined ? null : (
+    <StoredUserMessageValue
+      itemStore={itemStore}
+      latestSnapshotTimestamp={latestSnapshotTimestamp}
+      onOpenSourceFile={onOpenSourceFile}
+      projectId={projectId}
+      taskId={taskId}
+      turn={turn}
+    />
+  );
+}
+
 function StoredRunningReplyStatus({
   itemIds,
   store,
 }: Readonly<{ itemIds: readonly string[]; store: TaskStore }>) {
   const operationKey = useStore(store, (state) => {
     const indexedItems = itemIds.flatMap((itemId, itemIndex) => {
-      const item = state.itemsById[itemId];
+      const item = state.itemStoresById.get(itemId)?.peek();
       return item === undefined ? [] : [{ item, itemIndex }];
     });
     const operation = resolveRunningOperation(indexedItems);
@@ -1419,12 +1478,12 @@ function StoredAssistantGroup({
   turn: NormalizedAgentTurn;
 }>) {
   // 完成态聚合只在 Turn 终态或 Item 顺序变化时执行，不参与文本 Delta。
-  const itemsById = store.getState().itemsById;
+  const itemStoresById = store.getState().itemStoresById;
   const assistantTextParts: string[] = [];
   const responseFileChanges: AgentFileChange[] = [];
   if (turn.status !== "running") {
     for (const itemId of itemIds) {
-      const item = itemsById[itemId];
+      const item = itemStoresById.get(itemId)?.read();
       if (item?.type === "message" && item.role === "assistant") {
         assistantTextParts.push(item.text);
       } else if (item?.type === "file_change" && item.status === "completed") {
@@ -1505,7 +1564,7 @@ function StoreTurnTimelineSection({
     return null;
   }
   const latestSnapshotTimestamp = store.getState().snapshotMetadata?.updatedAt ?? "";
-  const timelineGroups = groupStoredTurnTimelineItems(itemIds, store.getState().itemsById);
+  const timelineGroups = groupStoredTurnTimelineItems(itemIds, store.getState().itemStoresById);
   const firstAssistantGroupIndex = timelineGroups.findIndex((group) => group.type === "assistant");
   const hasAssistantItems = firstAssistantGroupIndex >= 0;
   const latestAssistantGroupIndex = timelineGroups.findLastIndex(

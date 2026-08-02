@@ -112,7 +112,7 @@ describe("task store", () => {
     expect(state.turnIds).toEqual(["turn-completed", "turn-running"]);
     expect(state.turnsById["turn-running"]).not.toHaveProperty("items");
     expect(state.itemIdsByTurnId["turn-running"]).toEqual(["message-running"]);
-    expect(state.itemsById["message-running"]).toMatchObject({ text: "开始" });
+    expect(state.getItem("message-running")).toMatchObject({ text: "开始" });
     expect(state.pendingRequestIds).toEqual(["request-1"]);
     expect(state.pendingRequestsById["request-1"]).toBe(pendingRequest);
     expect(state.reconstructSnapshot()).toEqual(response.snapshot);
@@ -121,11 +121,21 @@ describe("task store", () => {
   it("updates one existing delta without replacing structural references", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
     const previousState = store.getState();
+    const previousItemStoresById = previousState.itemStoresById;
     const previousCompletedTurn = previousState.turnsById["turn-completed"];
     const previousRunningTurn = previousState.turnsById["turn-running"];
-    const previousCompletedItem = previousState.itemsById["message-completed"];
+    const previousCompletedItemStore = previousState.itemStoresById.get("message-completed");
+    const previousRunningItemStore = previousState.itemStoresById.get("message-running");
     const previousRunningItemIds = previousState.itemIdsByTurnId["turn-running"];
     const previousStructureRevision = previousState.itemStructureRevision;
+    const completedItemListener = vi.fn();
+    const runningItemListener = vi.fn();
+    const unsubscribeCompleted = previousCompletedItemStore?.subscribe(completedItemListener);
+    const unsubscribeRunning = previousRunningItemStore?.subscribe(runningItemListener);
+    const runningItemReadSpy =
+      previousRunningItemStore === undefined
+        ? undefined
+        : vi.spyOn(previousRunningItemStore, "read");
 
     store.getState().applyEvents([
       {
@@ -135,15 +145,29 @@ describe("task store", () => {
         turnId: "turn-running",
         type: "message.delta",
       },
+      {
+        ...eventEnvelope(12),
+        itemId: "message-running",
+        payload: { delta: "输出" },
+        turnId: "turn-running",
+        type: "message.delta",
+      },
     ]);
     const nextState = store.getState();
 
     expect(nextState.turnsById["turn-completed"]).toBe(previousCompletedTurn);
     expect(nextState.turnsById["turn-running"]).toBe(previousRunningTurn);
-    expect(nextState.itemsById["message-completed"]).toBe(previousCompletedItem);
+    expect(nextState.itemStoresById).toBe(previousItemStoresById);
+    expect(nextState.itemStoresById.get("message-completed")).toBe(previousCompletedItemStore);
     expect(nextState.itemIdsByTurnId["turn-running"]).toBe(previousRunningItemIds);
     expect(nextState.itemStructureRevision).toBe(previousStructureRevision);
-    expect(nextState.itemsById["message-running"]).toMatchObject({ text: "开始继续" });
+    expect(runningItemReadSpy).not.toHaveBeenCalled();
+    expect(nextState.getItem("message-running")).toMatchObject({ text: "开始继续输出" });
+    expect(completedItemListener).not.toHaveBeenCalled();
+    expect(runningItemListener).toHaveBeenCalledOnce();
+    unsubscribeCompleted?.();
+    unsubscribeRunning?.();
+    runningItemReadSpy?.mockRestore();
   });
 
   it("rejects item identifiers reused by another turn", () => {
@@ -195,8 +219,8 @@ describe("task store", () => {
     ]);
 
     const state = store.getState();
-    const commandItem = state.itemsById["command-new"];
-    expect(state.itemsById["reasoning-new"]).toMatchObject({ summary: "摘要" });
+    const commandItem = state.getItem("command-new");
+    expect(state.getItem("reasoning-new")).toMatchObject({ summary: "摘要" });
     expect(commandItem).toMatchObject({ outputTruncated: true, type: "command" });
     if (commandItem?.type !== "command") {
       throw new Error("Expected normalized command item");
@@ -236,8 +260,8 @@ describe("task store", () => {
 
     const state = store.getState();
     expect(state.commandOutputBytes).toBeLessThanOrEqual(MAX_TASK_COMMAND_OUTPUT_BYTES);
-    expect(state.itemsById["command-0"]).toMatchObject({ outputTruncated: true });
-    expect(state.itemsById["command-8"]).toMatchObject({ output: commandOutput });
+    expect(state.getItem("command-0")).toMatchObject({ outputTruncated: true });
+    expect(state.getItem("command-8")).toMatchObject({ output: commandOutput });
   });
 
   it("does not rescan untouched command output for an in-budget delta", () => {
@@ -277,6 +301,8 @@ describe("task store", () => {
       }),
     );
     const encodeSpy = vi.spyOn(TextEncoder.prototype, "encode");
+    const previousCommandAccess = store.getState().commandOutputAccessByItemId;
+    const previousCommandBytes = store.getState().commandOutputBytesByItemId;
 
     store.getState().applyEvents([
       {
@@ -290,7 +316,9 @@ describe("task store", () => {
 
     try {
       expect(encodeSpy.mock.calls.map(([value]) => value)).toEqual(["active-delta"]);
-      expect(store.getState().itemsById["command-active"]).toMatchObject({
+      expect(store.getState().commandOutputAccessByItemId).toBe(previousCommandAccess);
+      expect(store.getState().commandOutputBytesByItemId).toBe(previousCommandBytes);
+      expect(store.getState().getItem("command-active")).toMatchObject({
         output: "active-delta",
       });
     } finally {
@@ -383,7 +411,7 @@ describe("task store", () => {
       error: null,
       status: "running",
     });
-    expect(store.getState().itemsById["message-running"]).toMatchObject({
+    expect(store.getState().getItem("message-running")).toMatchObject({
       text: "开始，连接恢复后继续输出",
     });
   });
@@ -465,7 +493,7 @@ describe("task store", () => {
     ]);
 
     expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual(["provider-user-item"]);
-    expect(store.getState().itemsById[submittedUserItemId]).toBeUndefined();
+    expect(store.getState().getItem(submittedUserItemId)).toBeUndefined();
   });
 
   it("tracks usage and pending request lifecycle without reordering requests", () => {
@@ -519,7 +547,7 @@ describe("task store", () => {
 
     store.getState().applyEvents([validEvent, validEvent, wrongTaskEvent, wrongSessionEvent]);
 
-    expect(store.getState().itemsById["message-running"]).toMatchObject({ text: "开始一次" });
+    expect(store.getState().getItem("message-running")).toMatchObject({ text: "开始一次" });
     expect(store.getState().checkpoint?.sequence).toBe(11);
     expect(() => {
       store.getState().hydrate(createResponse({ id: "task-other" }));
