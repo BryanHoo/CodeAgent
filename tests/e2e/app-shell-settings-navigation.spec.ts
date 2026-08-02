@@ -214,6 +214,11 @@ test("restores the project folder expansion preference after reload", async ({ p
 
   await expect(firstProject).toHaveAttribute("aria-expanded", "false");
   await expect(secondProject).toHaveAttribute("aria-expanded", "true");
+
+  await page.goto("/");
+
+  await expect(page).toHaveURL(/\/p\/superwork$/u);
+  await expect(page.getByRole("main", { name: "任务时间线" })).toBeVisible();
 });
 
 test("provides reusable design tokens for light and dark themes", async ({ page }) => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   readExpandedProjectIds,
+  resolveInitialProjectId,
   resolveInitialExpandedProjectIds,
   writeExpandedProjectIds,
 } from "./project-sidebar-preferences.js";
@@ -19,6 +20,16 @@ class MemoryStorage {
 }
 
 describe("project sidebar preferences", () => {
+  it("selects the first expanded project in project order for a new page", () => {
+    expect(
+      resolveInitialProjectId(
+        ["project-1", "project-2", "project-3"],
+        new Set(["project-2", "project-3"]),
+      ),
+    ).toBe("project-2");
+    expect(resolveInitialProjectId(["project-1", "project-2"], new Set())).toBe("project-1");
+  });
+
   it("expands only the first project when no preference exists", () => {
     expect([...resolveInitialExpandedProjectIds(["project-1", "project-2"], null)]).toEqual([
       "project-1",

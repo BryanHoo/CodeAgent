@@ -75,6 +75,15 @@ export function resolveInitialExpandedProjectIds(
   return new Set(projectIds.filter((projectId) => savedExpandedProjectIds.has(projectId)));
 }
 
+export function resolveInitialProjectId(
+  projectIds: readonly string[],
+  savedExpandedProjectIds: ReadonlySet<string> | null,
+): string | undefined {
+  const expandedProjectIds = resolveInitialExpandedProjectIds(projectIds, savedExpandedProjectIds);
+  // 按侧栏顺序选择首个展开项目；全部收起或偏好失效时仍保留首项回退。
+  return projectIds.find((projectId) => expandedProjectIds.has(projectId)) ?? projectIds[0];
+}
+
 function isExpandedProjectsPreference(value: unknown): value is ExpandedProjectsPreference {
   if (typeof value !== "object" || value === null) {
     return false;

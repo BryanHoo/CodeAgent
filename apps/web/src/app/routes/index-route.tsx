@@ -12,6 +12,11 @@ import { GlobalSettingsDialog } from "../../features/settings/components/global-
 import { useTranslation } from "../../i18n/i18n.js";
 import { RuntimeUnavailable } from "../../shared/ui/runtime-unavailable.js";
 import { ProjectSidebar } from "../../features/workbench/components/project-sidebar.js";
+import {
+  getProjectSidebarPreferenceStorage,
+  readExpandedProjectIds,
+  resolveInitialProjectId,
+} from "../../features/workbench/project-sidebar-preferences.js";
 import { rootRoute } from "./root-route.js";
 
 export const indexRoute = createRoute({
@@ -35,13 +40,23 @@ function IndexPage() {
     },
   });
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
-  const firstProjectId = projects[0]?.id;
+  const [initialSavedExpandedProjectIds] = useState(() =>
+    readExpandedProjectIds(getProjectSidebarPreferenceStorage()),
+  );
+  const initialProjectId = resolveInitialProjectId(
+    projects.map((project) => project.id),
+    initialSavedExpandedProjectIds,
+  );
 
   useEffect(() => {
-    if (firstProjectId !== undefined) {
-      void navigate({ params: { projectId: firstProjectId }, replace: true, to: "/p/$projectId" });
+    if (initialProjectId !== undefined) {
+      void navigate({
+        params: { projectId: initialProjectId },
+        replace: true,
+        to: "/p/$projectId",
+      });
     }
-  }, [firstProjectId, navigate]);
+  }, [initialProjectId, navigate]);
 
   if (error !== null) {
     return (
@@ -50,7 +65,7 @@ function IndexPage() {
       </main>
     );
   }
-  if (isPending || firstProjectId !== undefined) {
+  if (isPending || initialProjectId !== undefined) {
     return (
       <main className="grid h-full place-items-center text-sm text-muted-foreground">
         {t("app.loadingProjects")}
