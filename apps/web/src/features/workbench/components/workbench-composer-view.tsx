@@ -52,6 +52,7 @@ import {
   PromptInputSelect,
   PromptInputSubmit,
   PromptInputTools,
+  isPromptInputNewlineShortcut,
   usePromptInputAttachments,
   type PromptInputAttachment,
   type PromptInputMessage,
@@ -451,7 +452,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                   );
                   return;
                 }
-                if (event.key === "Enter" && !event.shiftKey) {
+                if (event.key === "Enter" && !isPromptInputNewlineShortcut(event)) {
                   event.preventDefault();
                   props.onSelectActiveCommand();
                 }

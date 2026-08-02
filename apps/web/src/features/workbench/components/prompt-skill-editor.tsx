@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { i18n } from "../../../i18n/i18n.js";
+import { isPromptInputNewlineShortcut } from "../../../shared/ai-elements/prompt-input.js";
 import type { PromptSlashCommand } from "./prompt-command.js";
 import { skillTokenClassName } from "./skill-token.js";
 
@@ -156,6 +157,7 @@ type PromptSkillEditorProps = Omit<
   }>;
 
 const blockElementNames = new Set(["DIV", "P"]);
+const caretAnchorText = "\u200b";
 
 function createEditorSkillNode(skill: AgentSkill, iconTemplate: SVGSVGElement | null): HTMLElement {
   const token = document.createElement("span");
@@ -227,6 +229,11 @@ function readEditorContent(
       }
       return;
     }
+    if (node.dataset["promptCaretAnchor"] !== undefined) {
+      const text = node.textContent;
+      appendText(text.startsWith(caretAnchorText) ? text.slice(caretAnchorText.length) : text);
+      return;
+    }
     if (node.tagName === "BR") {
       appendText("\n");
       return;
@@ -252,6 +259,10 @@ function serializedNodeLength(node: Node): number {
   if (serializedText !== undefined) {
     return serializedText.length;
   }
+  if (node.dataset["promptCaretAnchor"] !== undefined) {
+    const text = node.textContent;
+    return text.startsWith(caretAnchorText) ? text.length - caretAnchorText.length : text.length;
+  }
   if (node.tagName === "BR") {
     return 1;
   }
@@ -274,7 +285,13 @@ function serializedPointOffset(
     }
     if (node === target) {
       if (node.nodeType === Node.TEXT_NODE) {
-        offset += Math.min(targetOffset, node.textContent?.length ?? 0);
+        const text = node.textContent ?? "";
+        const anchorLength =
+          node.parentElement?.dataset["promptCaretAnchor"] !== undefined &&
+          text.startsWith(caretAnchorText)
+            ? caretAnchorText.length
+            : 0;
+        offset += Math.max(0, Math.min(targetOffset, text.length) - anchorLength);
       } else {
         offset += [...node.childNodes]
           .slice(0, targetOffset)
@@ -342,6 +359,33 @@ function insertPlainTextAtSelection(root: HTMLDivElement, text: string): void {
   const textNode = document.createTextNode(text);
   range.insertNode(textNode);
   range.setStartAfter(textNode);
+  range.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function insertLineBreakAtSelection(root: HTMLDivElement): void {
+  const selection = document.getSelection();
+  const range = selection?.rangeCount === 0 ? undefined : selection?.getRangeAt(0);
+  const lineBreak = document.createElement("br");
+  const caretAnchor = document.createElement("span");
+  const anchorText = document.createTextNode(caretAnchorText);
+  caretAnchor.dataset["promptCaretAnchor"] = "";
+  caretAnchor.append(anchorText);
+  if (range === undefined || !root.contains(range.commonAncestorContainer)) {
+    root.append(lineBreak, caretAnchor);
+    const fallbackRange = document.createRange();
+    fallbackRange.setStart(anchorText, caretAnchorText.length);
+    fallbackRange.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(fallbackRange);
+    return;
+  }
+  // 零宽锚点让各浏览器都能把后续文字插入 BR 之后，并且不会进入序列化内容。
+  range.deleteContents();
+  range.insertNode(lineBreak);
+  lineBreak.after(caretAnchor);
+  range.setStart(anchorText, caretAnchorText.length);
   range.collapse(true);
   selection?.removeAllRanges();
   selection?.addRange(range);
@@ -475,8 +519,8 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       }
       if (event.key === "Enter") {
         event.preventDefault();
-        if (event.shiftKey) {
-          insertPlainTextAtSelection(event.currentTarget, "\n");
+        if (isPromptInputNewlineShortcut(event)) {
+          insertLineBreakAtSelection(event.currentTarget);
           emitChange();
         } else {
           event.currentTarget.closest("form")?.requestSubmit();

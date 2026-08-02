@@ -41,6 +41,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
   createPastedTextFile,
+  isPromptInputNewlineShortcut,
 } from "./prompt-input.js";
 import { Shimmer } from "./shimmer.js";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "./tool.js";
@@ -379,6 +380,44 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain("添加文件");
     expect(markup).toContain('aria-disabled="true"');
     expect(markup).toContain('data-prompt-input=""');
+  });
+
+  it("识别多平台输入框换行快捷键", () => {
+    expect(
+      isPromptInputNewlineShortcut({
+        ctrlKey: false,
+        key: "Enter",
+        metaKey: false,
+        shiftKey: true,
+      }),
+    ).toBe(true);
+    expect(
+      isPromptInputNewlineShortcut({
+        ctrlKey: false,
+        key: "Enter",
+        metaKey: true,
+        shiftKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      isPromptInputNewlineShortcut({
+        ctrlKey: true,
+        key: "Enter",
+        metaKey: false,
+        shiftKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      isPromptInputNewlineShortcut({
+        ctrlKey: false,
+        key: "Enter",
+        metaKey: false,
+        shiftKey: false,
+      }),
+    ).toBe(false);
+    expect(
+      isPromptInputNewlineShortcut({ ctrlKey: true, key: "a", metaKey: false, shiftKey: false }),
+    ).toBe(false);
   });
 
   it("creates a text file only when pasted text exceeds the configured threshold", () => {

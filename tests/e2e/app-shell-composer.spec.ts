@@ -41,6 +41,13 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   expect(Math.abs(historicalInlineOffset)).toBeLessThanOrEqual(1);
 
   const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.fill("第一行");
+  await prompt.press("End");
+  // 浏览器流程验证修饰键换行的真实 DOM 插入，平台键位映射由组件单元测试覆盖。
+  await prompt.press("Control+Enter");
+  await page.keyboard.type("第二行");
+  await expect(prompt).toHaveAttribute("data-serialized-value", "第一行\n第二行");
+
   await prompt.fill("");
   await prompt.fill("/");
   const commandMenu = page.getByRole("listbox", { name: "输入命令" });

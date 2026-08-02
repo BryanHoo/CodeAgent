@@ -29,6 +29,18 @@ export type PromptInputMessage = Readonly<{
   text: string;
 }>;
 
+type PromptInputKeyEvent = Readonly<{
+  ctrlKey: boolean;
+  key: string;
+  metaKey: boolean;
+  shiftKey: boolean;
+}>;
+
+export function isPromptInputNewlineShortcut(event: PromptInputKeyEvent): boolean {
+  // 同时覆盖 macOS 的 Command、Windows/Linux 的 Control 和通用 Shift 换行操作。
+  return event.key === "Enter" && (event.shiftKey || event.metaKey || event.ctrlKey);
+}
+
 type PromptInputError = Readonly<{
   code: "file_too_large" | "invalid_file_type" | "too_many_images" | "total_size_exceeded";
   message: string;
@@ -555,7 +567,7 @@ export const PromptInputTextarea = forwardRef<HTMLTextAreaElement, PromptInputTe
           if (
             !event.defaultPrevented &&
             event.key === "Enter" &&
-            !event.shiftKey &&
+            !isPromptInputNewlineShortcut(event) &&
             !event.nativeEvent.isComposing
           ) {
             event.preventDefault();
