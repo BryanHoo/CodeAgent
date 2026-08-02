@@ -951,12 +951,19 @@ describe("CodeAgent Server", () => {
     const startTurnCall = providerHarness.startTurn.mock.calls[0];
     expect(startTurnCall?.[0]).toBe("task-1");
     expect(startTurnCall?.[1].outputSchema).toMatchObject({ type: "object" });
-    expect(startTurnCall?.[1].text).toBe(
-      "请读取当前项目中以下所选文件的 Git 变更，并生成一条可直接使用的 Git commit message。\n仅将最终 commit message 写入结构化输出的 `message` 字段，不要说明已读取变更，也不要包含分析、变更摘要、文件列表、统计信息、Markdown 包装或其他说明。\n所选文件：\n- src/app.ts\n\n优先说明行为变化，不要罗列文件名。",
+    expect(startTurnCall?.[1].text).toContain(
+      "只根据提示词中给出的精确 Git diff 生成提交信息，不要读取文件或运行命令。",
     );
-    expect(startTurnCall?.[1].text).not.toContain("--- a/src/app.ts");
-    expect(startTurnCall?.[1].text).not.toContain("<selected-diff>");
+    expect(startTurnCall?.[1].text).toContain("当前分支：feat/commit");
+    expect(startTurnCall?.[1].text).toContain(
+      "<selected-diff>\n\n[unstaged] src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n\n</selected-diff>",
+    );
+    expect(startTurnCall?.[1].text).toContain(
+      "<user-preferences>\n优先说明行为变化，不要罗列文件名。\n</user-preferences>",
+    );
     expect(startTurnCall?.[1].text).not.toContain("Conventional Commits");
+    expect(startTurnCall?.[1].text).not.toContain("简体中文");
+    expect(startTurnCall?.[1].text).not.toContain("scope 必填");
     expect(startTurnCall?.[2]).toMatchObject({
       approvalPolicy: "never",
       approvalsReviewer: "user",
@@ -1000,6 +1007,7 @@ describe("CodeAgent Server", () => {
   it("unsubscribes the ephemeral task when commit-message generation fails", async () => {
     const providerHarness = createProvider();
     const snapshot = "f".repeat(64);
+    const oversizedDiff = `+${"x".repeat(70_000)}\n+END_OF_LARGE_DIFF`;
     const readProjectGitStatus = vi.fn(() =>
       Promise.resolve({
         baseBranches: ["main"],
@@ -1007,7 +1015,7 @@ describe("CodeAgent Server", () => {
         repositoryMode: "root" as const,
         snapshot,
         staged: [],
-        unstaged: [{ diff: "+new", kind: "update" as const, path: "src/app.ts" }],
+        unstaged: [{ diff: oversizedDiff, kind: "update" as const, path: "src/app.ts" }],
       }),
     );
     const app = await createCodeAgentServer(
@@ -1024,9 +1032,13 @@ describe("CodeAgent Server", () => {
     await vi.waitFor(() => {
       expect(providerHarness.startTurn).toHaveBeenCalledOnce();
     });
-    expect(providerHarness.startTurn.mock.calls[0]?.[1].text).toBe(
-      "请读取当前项目中以下所选文件的 Git 变更，并生成一条可直接使用的 Git commit message。\n仅将最终 commit message 写入结构化输出的 `message` 字段，不要说明已读取变更，也不要包含分析、变更摘要、文件列表、统计信息、Markdown 包装或其他说明。\n所选文件：\n- src/app.ts",
+    const prompt = providerHarness.startTurn.mock.calls[0]?.[1].text;
+    expect(prompt).toContain(
+      "所选变更超过提示词上下文预算，请读取当前项目中以下所选文件的 Git 变更。",
     );
+    expect(prompt).toContain("- src/app.ts");
+    expect(prompt).not.toContain("<selected-diff>");
+    expect(prompt).not.toContain("END_OF_LARGE_DIFF");
     providerHarness.emitEvent({
       payload: { message: "model failed", willRetry: false },
       taskId: "task-1",
