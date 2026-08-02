@@ -127,6 +127,15 @@ function shouldOpenDesktopPanel(query: string) {
   return typeof window === "undefined" || !window.matchMedia(query).matches;
 }
 
+function useSubmissionStartedAt() {
+  const [startedAt, setStartedAt] = useState<string>();
+  const handleSubmissionStateChange = useCallback((submitting: boolean) => {
+    // 同一次提交保留稳定起点，避免父组件重渲染重置计时。
+    setStartedAt((current) => (submitting ? (current ?? new Date().toISOString()) : undefined));
+  }, []);
+  return { handleSubmissionStateChange, startedAt } as const;
+}
+
 export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const { t } = useTranslation("workbench");
   const { capabilities, client, error, isPending, projects, projectTaskStates, tasks } =
@@ -252,7 +261,10 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const [inspectorWidth, setInspectorWidth] = useState<number>(inspectorWidthLimits.default);
   const workbenchShellRef = useRef<HTMLDivElement>(null);
   const commitChangesLauncherRef = useRef<CommitChangesLauncherHandle>(null);
-  const [newChatSubmissionPending, setNewChatSubmissionPending] = useState(false);
+  const {
+    handleSubmissionStateChange: handleNewChatSubmissionStateChange,
+    startedAt: newChatSubmissionStartedAt,
+  } = useSubmissionStartedAt();
   const [pendingTaskSelection, setPendingTaskSelection] = useState<{
     projectId: string;
     taskId: string;
@@ -655,7 +667,9 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               onProjectChange={handleNewTaskProjectChange}
               projectId={projectId}
               projects={projects}
-              submissionPending={newChatSubmissionPending}
+              {...(newChatSubmissionStartedAt === undefined
+                ? {}
+                : { submissionStartedAt: newChatSubmissionStartedAt })}
             />
             <WorkbenchComposer
               capabilities={capabilities}
@@ -670,7 +684,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               }
               onSettingsChange={updateDraftSettings}
               onRequestNotificationPermission={requestNotificationPermission}
-              onSubmissionStateChange={setNewChatSubmissionPending}
+              onSubmissionStateChange={handleNewChatSubmissionStateChange}
               onTaskCreated={handleTaskCreated}
               onTaskStarted={handleTaskStarted}
               projectId={projectId}
@@ -944,6 +958,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
 }>) {
   const queryClient = useQueryClient();
   const taskScope = `${projectId}:${taskId}`;
+  const { handleSubmissionStateChange, startedAt: submissionStartedAt } = useSubmissionStartedAt();
   const [submittedPromptState, setSubmittedPromptState] = useState<{
     prompt: SubmittedPromptState | undefined;
     taskScope: string;
@@ -1032,6 +1047,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         projectId={projectId}
         key={taskScope}
         runtime={visibleRuntime}
+        {...(submissionStartedAt === undefined ? {} : { submissionStartedAt })}
         taskId={taskId}
         {...(startingSnapshot === undefined ? {} : { startingSnapshot })}
       />
@@ -1046,6 +1062,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         onSettingsChange={(settings) =>
           settingsMutation.mutateAsync(settings).then(() => undefined)
         }
+        onSubmissionStateChange={handleSubmissionStateChange}
         onTaskStarted={onTaskStarted}
         onTurnStarted={(turn, input) => {
           setSubmittedPromptState({ prompt: { input, turn }, taskScope });

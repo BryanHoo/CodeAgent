@@ -61,7 +61,7 @@ describe("TaskTimeline", () => {
               rootPath: "/workspace/项目-alpha",
             },
           ]}
-          submissionPending
+          submissionStartedAt="2026-07-24T00:00:00.000Z"
         />,
       );
 
@@ -153,7 +153,7 @@ describe("TaskTimeline", () => {
             rootPath: "/workspace/CodeAgent",
           },
         ]}
-        submissionPending
+        submissionStartedAt="2026-07-24T00:00:00.000Z"
       />,
     );
 

@@ -11,6 +11,47 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
+test("shows processing state while an existing task turn is still starting", async ({ page }) => {
+  let releaseTurnStart!: () => void;
+  let markTurnStartRequested!: () => void;
+  const turnStartGate = new Promise<void>((resolve) => {
+    releaseTurnStart = resolve;
+  });
+  const turnStartRequested = new Promise<void>((resolve) => {
+    markTurnStartRequested = resolve;
+  });
+  await page.route("**/v1/projects/code-agent/tasks/task-1/turns", async (route) => {
+    markTurnStartRequested();
+    await turnStartGate;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        taskId: "task-1",
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "turn-pending-start",
+          items: [],
+          startedAt: "2026-08-02T00:00:00.000Z",
+          status: "running",
+        },
+      },
+      status: 201,
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  await page.getByRole("textbox", { name: "任务输入" }).fill("继续处理当前任务");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await turnStartRequested;
+
+  await expect(page.locator("[data-turn-processing-time]")).toHaveCount(2);
+  await expect(page.getByLabel("AI 回复正在运行")).toBeVisible();
+
+  releaseTurnStart();
+  await expect(page.getByText("继续处理当前任务", { exact: true })).toBeVisible();
+});
+
 test("runs official task actions from the slash command menu", async ({ page }) => {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   const commandRequests: { body: string | null; path: string }[] = [];

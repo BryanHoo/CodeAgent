@@ -110,6 +110,7 @@ type TaskTimelineCommonProps = Readonly<{
     idempotencyKey: string,
   ) => Promise<void>;
   runtime?: TaskRuntimeView;
+  submissionStartedAt?: string;
   startingSnapshot?: RuntimeTaskSnapshot;
 }>;
 
@@ -119,7 +120,6 @@ type TaskTimelineProps = TaskTimelineCommonProps &
         onProjectChange: (projectId: string) => void;
         projectId: string;
         projects: readonly Project[];
-        submissionPending?: boolean;
         taskId?: undefined;
       }
     | {
@@ -200,7 +200,7 @@ function TimelineState({
 export function TaskTimeline(props: TaskTimelineProps) {
   useTranslation("conversation");
   if (props.taskId === undefined) {
-    if (props.submissionPending === true) {
+    if (props.submissionStartedAt !== undefined) {
       return (
         <Conversation
           aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
@@ -208,6 +208,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
         >
           <ConversationContent className="gap-6">
             <Message from="assistant">
+              <TurnProcessingTime completedAt={null} startedAt={props.submissionStartedAt} />
               <RunningReplyStatus />
             </Message>
           </ConversationContent>
@@ -231,6 +232,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
     onResolvePendingRequest,
     onRollbackTurn,
     runtime,
+    submissionStartedAt,
     startingSnapshot,
   } = props;
   if (runtime === undefined) {
@@ -248,6 +250,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
       canRollbackTurns={canRollbackTurns}
       {...(onForkTask === undefined ? {} : { onForkTask })}
       runtime={runtime}
+      submissionStartedAt={submissionStartedAt}
       startingSnapshot={startingSnapshot}
     />
   );
@@ -262,6 +265,7 @@ function ActiveTaskTimeline({
   onResolvePendingRequest,
   onRollbackTurn,
   runtime,
+  submissionStartedAt,
   startingSnapshot,
 }: Readonly<{
   onResolvePendingRequest: (
@@ -276,6 +280,7 @@ function ActiveTaskTimeline({
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
   canRollbackTurns: boolean;
   runtime: TaskRuntimeView;
+  submissionStartedAt: string | undefined;
   startingSnapshot: RuntimeTaskSnapshot | undefined;
 }>) {
   if (runtime.error !== null) {
@@ -316,6 +321,7 @@ function ActiveTaskTimeline({
         onResolvePendingRequest={onResolvePendingRequest}
         onRollbackTurn={onRollbackTurn}
         store={runtime.store}
+        {...(submissionStartedAt === undefined ? {} : { submissionStartedAt })}
       />
     </>
   );
@@ -1507,6 +1513,7 @@ function TaskStoreTimeline({
   onResolvePendingRequest,
   onRollbackTurn,
   store,
+  submissionStartedAt,
 }: Readonly<{
   canRollbackTurns: boolean;
   connected: boolean;
@@ -1521,6 +1528,7 @@ function TaskStoreTimeline({
   ) => Promise<void>;
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
   store: TaskStore;
+  submissionStartedAt?: string;
 }>) {
   const projectId = store.getState().projectId;
   const taskId = store.getState().taskId;
@@ -1530,7 +1538,12 @@ function TaskStoreTimeline({
   const hasVisiblePendingRequest = pendingRequestIds.some(
     (requestId) => pendingRequestsById[requestId]?.status !== "resolved",
   );
-  if (turnIds.length === 0 && !hasVisiblePendingRequest) {
+  const hasRunningTurn = useStore(store, (state) =>
+    state.turnIds.some((turnId) => state.turnsById[turnId]?.status === "running"),
+  );
+  // HTTP 启动窗口只补一个临时尾部；实时 Turn 一到即由 Store 权威状态接管。
+  const showPendingSubmission = submissionStartedAt !== undefined && !hasRunningTurn;
+  if (turnIds.length === 0 && !hasVisiblePendingRequest && !showPendingSubmission) {
     return (
       <TimelineState message={i18n.t("timeline.noHistory", { ns: "conversation" })} role="status" />
     );
@@ -1543,14 +1556,24 @@ function TaskStoreTimeline({
       conversationId={`${projectId}:${taskId}`}
     >
       <ConversationVirtualList
-        {...(hasVisiblePendingRequest
+        {...(hasVisiblePendingRequest || showPendingSubmission
           ? {
               footer: (
-                <StorePendingRequestList
-                  connected={connected}
-                  onResolvePendingRequest={onResolvePendingRequest}
-                  store={store}
-                />
+                <>
+                  {hasVisiblePendingRequest ? (
+                    <StorePendingRequestList
+                      connected={connected}
+                      onResolvePendingRequest={onResolvePendingRequest}
+                      store={store}
+                    />
+                  ) : null}
+                  {showPendingSubmission ? (
+                    <Message from="assistant">
+                      <TurnProcessingTime completedAt={null} startedAt={submissionStartedAt} />
+                      <RunningReplyStatus />
+                    </Message>
+                  ) : null}
+                </>
               ),
             }
           : {})}
