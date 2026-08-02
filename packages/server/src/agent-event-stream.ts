@@ -70,7 +70,7 @@ export class AgentEventStream {
   readonly #maxEventBytes: number;
   readonly #maxRetainedBytes: number;
   readonly #now: () => Date;
-  readonly #pendingDeltas = new Map<string, DeltaProviderEvent>();
+  readonly #pendingDeltas: DeltaProviderEvent[] = [];
   readonly #pressureCoalescingWindowMs: number;
   readonly #provider: string;
   readonly #sessionId: string;
@@ -136,7 +136,7 @@ export class AgentEventStream {
     return {
       backpressureSignals: this.#backpressureSignals,
       coalescedEvents: this.#coalescedEvents,
-      pendingDeltas: this.#pendingDeltas.size,
+      pendingDeltas: this.#pendingDeltas.length,
       providerEventsReceived: this.#providerEventsReceived,
       publishedEvents: this.#publishedEvents,
       retainedEvents: this.#eventCount,
@@ -156,12 +156,13 @@ export class AgentEventStream {
       return;
     }
 
-    const key = deltaKey(event);
-    const existing = this.#pendingDeltas.get(key);
-    if (existing === undefined) {
-      this.#pendingDeltas.set(key, event);
+    const previousIndex = this.#pendingDeltas.length - 1;
+    const previous = this.#pendingDeltas[previousIndex];
+    if (previous === undefined || deltaKey(previous) !== deltaKey(event)) {
+      this.#pendingDeltas.push(event);
     } else {
-      this.#pendingDeltas.set(key, mergeDelta(existing, event));
+      // 只合并队尾的同 Key Delta，保留 A-B-A 交错事件的原始顺序。
+      this.#pendingDeltas[previousIndex] = mergeDelta(previous, event);
       this.#coalescedEvents += 1;
     }
     this.#scheduleFlush();
@@ -215,11 +216,10 @@ export class AgentEventStream {
       clearTimeout(this.#flushTimer);
       this.#flushTimer = undefined;
     }
-    if (this.#pendingDeltas.size === 0) {
+    if (this.#pendingDeltas.length === 0) {
       return;
     }
-    const pending = [...this.#pendingDeltas.values()];
-    this.#pendingDeltas.clear();
+    const pending = this.#pendingDeltas.splice(0);
     for (const event of pending) {
       this.#publishNow(event);
     }

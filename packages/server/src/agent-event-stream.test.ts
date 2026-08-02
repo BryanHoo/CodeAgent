@@ -73,6 +73,25 @@ describe("AgentEventStream", () => {
     });
   });
 
+  it("merges only adjacent deltas with the same item key", () => {
+    vi.useFakeTimers();
+    const stream = new AgentEventStream({ provider: "codex", sessionId: "runtime-1" });
+    const listener = vi.fn<(event: AgentEvent) => void>();
+    stream.subscribe(listener);
+
+    stream.publish({ ...deltaEvent, itemId: "item-a", payload: { delta: "A1" } });
+    stream.publish({ ...deltaEvent, itemId: "item-b", payload: { delta: "B1" } });
+    stream.publish({ ...deltaEvent, itemId: "item-a", payload: { delta: "A2" } });
+    vi.advanceTimersByTime(16);
+
+    expect(listener.mock.calls.map(([event]) => event)).toMatchObject([
+      { itemId: "item-a", payload: { delta: "A1" }, sequence: 1 },
+      { itemId: "item-b", payload: { delta: "B1" }, sequence: 2 },
+      { itemId: "item-a", payload: { delta: "A2" }, sequence: 3 },
+    ]);
+    expect(stream.metrics).toMatchObject({ coalescedEvents: 0, pendingDeltas: 0 });
+  });
+
   it("uses the pressure window for the next delta batch", () => {
     vi.useFakeTimers();
     const stream = new AgentEventStream({ provider: "codex", sessionId: "runtime-1" });
