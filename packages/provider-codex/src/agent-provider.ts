@@ -15,6 +15,7 @@ import {
   type AgentTaskUnsubscribeStatus,
   type ListAgentTasksInput,
   type ResolvePendingRequestInput,
+  type StartAgentTaskOptions,
 } from "@code-agent/core";
 import type {
   AgentCapabilities,
@@ -1617,9 +1618,12 @@ export class CodexAgentProvider implements AgentProvider {
     };
   }
 
-  public async startTask(): Promise<AgentTask> {
+  public async startTask(options: StartAgentTaskOptions = {}): Promise<AgentTask> {
     const response = expectRecord(
-      await this.#client.request("thread/start", { cwd: this.#project.rootPath }),
+      await this.#client.request("thread/start", {
+        cwd: this.#project.rootPath,
+        ...(options.ephemeral === true ? { ephemeral: true } : {}),
+      }),
       "thread/start response",
     );
     const task = await mapAgentTask(
@@ -1629,7 +1633,10 @@ export class CodexAgentProvider implements AgentProvider {
     // 新建 Task 必须立即接收后续 Turn 通知，不能等待下一次列表刷新。
     this.#projectTaskIds.add(task.id);
     this.#resumedTaskIds.add(task.id);
-    this.#unmaterializedTasks.set(task.id, task);
+    // 临时 Task 只服务 Server 内部操作，不能进入用户可见的列表回退。
+    if (options.ephemeral !== true) {
+      this.#unmaterializedTasks.set(task.id, task);
+    }
     return task;
   }
 
@@ -2693,8 +2700,8 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     return this.#delegate.startReview(taskId, target);
   }
 
-  public async startTask(): Promise<AgentTask> {
-    const task = await this.#delegate.startTask();
+  public async startTask(options: StartAgentTaskOptions = {}): Promise<AgentTask> {
+    const task = await this.#delegate.startTask(options);
     this.#runtime.claimTask(this.#project, task.id);
     return task;
   }

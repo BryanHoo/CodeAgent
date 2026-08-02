@@ -399,6 +399,28 @@ describe("CodexAgentProvider", () => {
     });
   });
 
+  it("keeps an ephemeral task out of the project task list", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread({ ephemeral: true }) },
+      { data: [], nextCursor: null },
+    ]);
+    const provider = createCodexRuntimeProvider({ client: rpc }).forProject(project);
+
+    await expect(provider.startTask({ ephemeral: true })).resolves.toMatchObject({ id: "task-1" });
+    await expect(provider.listTasks()).resolves.toEqual({ data: [], nextCursor: null });
+    expect(rpc.calls).toEqual([
+      { method: "thread/start", params: { cwd: project.rootPath, ephemeral: true } },
+      {
+        method: "thread/list",
+        params: {
+          cwd: project.rootPath,
+          sortDirection: "desc",
+          sortKey: "updated_at",
+        },
+      },
+    ]);
+  });
+
   it("shares one RPC subscription across multiple project providers", async () => {
     const otherProject = {
       ...project,

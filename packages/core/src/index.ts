@@ -12,6 +12,7 @@ export {
   PendingRequestResolutionError,
   type PendingRequestResolutionErrorCode,
   type ResolvePendingRequestInput,
+  type StartAgentTaskOptions,
 } from "./agent-provider.js";
 export {
   type AgentSettingsRepository,

@@ -848,7 +848,7 @@ describe("CodeAgent Server", () => {
     expect(readProjectGitStatus).toHaveBeenCalledTimes(1);
   });
 
-  it("generates a selected-file commit message through a hidden read-only turn", async () => {
+  it("generates a selected-file commit message through an ephemeral read-only turn", async () => {
     const providerHarness = createProvider();
     const settings = createSettingsRepository();
     providerHarness.listModels.mockResolvedValue({
@@ -947,11 +947,16 @@ describe("CodeAgent Server", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ message: "feat(git): 生成提交信息", snapshot });
+    expect(providerHarness.startTask).toHaveBeenCalledWith({ ephemeral: true });
     const startTurnCall = providerHarness.startTurn.mock.calls[0];
     expect(startTurnCall?.[0]).toBe("task-1");
     expect(startTurnCall?.[1].outputSchema).toMatchObject({ type: "object" });
-    expect(startTurnCall?.[1].text).toContain("src/app.ts");
-    expect(startTurnCall?.[1].text).toContain("优先说明行为变化，不要罗列文件名。");
+    expect(startTurnCall?.[1].text).toBe(
+      "请读取当前项目中以下所选文件的 Git 变更，并生成一条可直接使用的 Git commit message。\n仅将最终 commit message 写入结构化输出的 `message` 字段，不要说明已读取变更，也不要包含分析、变更摘要、文件列表、统计信息、Markdown 包装或其他说明。\n所选文件：\n- src/app.ts\n\n优先说明行为变化，不要罗列文件名。",
+    );
+    expect(startTurnCall?.[1].text).not.toContain("--- a/src/app.ts");
+    expect(startTurnCall?.[1].text).not.toContain("<selected-diff>");
+    expect(startTurnCall?.[1].text).not.toContain("Conventional Commits");
     expect(startTurnCall?.[2]).toMatchObject({
       approvalPolicy: "never",
       approvalsReviewer: "user",
@@ -959,7 +964,7 @@ describe("CodeAgent Server", () => {
       reasoningEffort: "low",
       sandboxMode: "read-only",
     });
-    expect(providerHarness.archiveTask).toHaveBeenCalledWith("task-1");
+    expect(providerHarness.archiveTask).not.toHaveBeenCalled();
     expect(providerHarness.unsubscribeTask).toHaveBeenCalledWith("task-1");
   });
 
@@ -992,7 +997,7 @@ describe("CodeAgent Server", () => {
     expect(providerHarness.startTask).not.toHaveBeenCalled();
   });
 
-  it("cleans up the hidden task when commit-message generation fails", async () => {
+  it("unsubscribes the ephemeral task when commit-message generation fails", async () => {
     const providerHarness = createProvider();
     const snapshot = "f".repeat(64);
     const readProjectGitStatus = vi.fn(() =>
@@ -1019,6 +1024,9 @@ describe("CodeAgent Server", () => {
     await vi.waitFor(() => {
       expect(providerHarness.startTurn).toHaveBeenCalledOnce();
     });
+    expect(providerHarness.startTurn.mock.calls[0]?.[1].text).toBe(
+      "请读取当前项目中以下所选文件的 Git 变更，并生成一条可直接使用的 Git commit message。\n仅将最终 commit message 写入结构化输出的 `message` 字段，不要说明已读取变更，也不要包含分析、变更摘要、文件列表、统计信息、Markdown 包装或其他说明。\n所选文件：\n- src/app.ts",
+    );
     providerHarness.emitEvent({
       payload: { message: "model failed", willRetry: false },
       taskId: "task-1",
@@ -1030,7 +1038,7 @@ describe("CodeAgent Server", () => {
     expect(response.statusCode).toBe(502);
     expect(response.json()).toMatchObject({ code: "COMMIT_MESSAGE_GENERATION_FAILED" });
     expect(providerHarness.interruptTurn).toHaveBeenCalledWith("task-1", "turn-1");
-    expect(providerHarness.archiveTask).toHaveBeenCalledWith("task-1");
+    expect(providerHarness.archiveTask).not.toHaveBeenCalled();
     expect(providerHarness.unsubscribeTask).toHaveBeenCalledWith("task-1");
   });
 

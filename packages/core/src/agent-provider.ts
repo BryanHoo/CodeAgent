@@ -25,6 +25,10 @@ export type ListAgentTasksInput = Readonly<{
   limit?: number;
 }>;
 
+export type StartAgentTaskOptions = Readonly<{
+  ephemeral?: boolean;
+}>;
+
 export type AgentProviderTurnInput = Readonly<{
   files: readonly Readonly<{
     mediaType: string;
@@ -105,7 +109,7 @@ export interface AgentProvider {
   resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest>;
   rollbackLatestTurn(taskId: string): Promise<void>;
   startReview(taskId: string, target: AgentReviewTarget): Promise<AgentTurn>;
-  startTask(): Promise<AgentTask>;
+  startTask(options?: StartAgentTaskOptions): Promise<AgentTask>;
   startTurn(
     taskId: string,
     input: AgentProviderTurnInput,

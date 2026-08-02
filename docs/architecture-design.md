@@ -691,6 +691,8 @@ turn id -> runtime state
 | `interruptTurn` | `turn/interrupt`  |
 | `startReview`   | `review/start`    |
 
+Server 内部生成提交消息时调用 `startTask({ ephemeral: true })`，默认要求 Codex 在 Project `cwd` 自行读取已选文件的 Git 变更，并仅在结构化输出的 `message` 字段中返回可直接使用的 commit message，不附带分析、摘要或统计等说明；全局提交提示词非空时追加，空配置时直接使用默认 Prompt。临时 Thread 不持久化、不进入 `listTasks` 回退，结束后只取消订阅。
+
 `startTurn` 将统一 Prompt 映射为 Codex `UserInput[]`：已选择 Skill 使用 `{ type: "skill", name, path }`，非空文本使用 `text`，Server 已验证的图片 Data URL 使用 `image`，受控临时文件使用 `{ type: "mention", name, path }`。Skill 目录由 Project Provider 调用 `skills/list { cwds: [project.rootPath] }` 获取；Web 只接收稳定不透明 ID，Provider 在提交时重新验证 ID 与名称并解析原生绝对路径。统一 `model`、`reasoningEffort`、`approvalPolicy` 和 `approvalsReviewer` 分别映射为 Codex `model`、`effort`、`approvalPolicy` 和 `approvalsReviewer`，不向 Web 暴露其他原生字段。自动审批固定映射为 `approvalPolicy: "on-request"` 与 `approvalsReviewer: "auto_review"`；`never` 只表示从不询问，不能替代自动审核。
 
 `startReview` 在调用 `review/start` 前记录统一 `AgentReviewTarget`，将响应、实时通知和历史 Snapshot 中的 `enteredReviewMode` 归一为稳定的 `AgentReviewItem`，并过滤 Codex 自动生成的内部 `userMessage` Review Prompt。Web 只根据结构化 Target 生成固定审查请求文案，不展示或复制 Provider 原生 Prompt。
