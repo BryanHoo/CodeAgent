@@ -36,6 +36,8 @@ export function FileDiffDialog({ change, onClose }: FileDiffDialogProps) {
   const titleId = "file-diff-dialog-title";
 
   return (
+    // 原生 dialog 已通过 onCancel 提供 Escape 行为，onClick 仅识别不可聚焦的 backdrop。
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <dialog
       aria-labelledby={titleId}
       className="file-diff-dialog m-auto h-[min(82vh,54rem)] w-[min(92vw,72rem)] max-w-none overflow-hidden rounded-surface bg-raised p-0 text-foreground shadow-panel backdrop:bg-scrim"

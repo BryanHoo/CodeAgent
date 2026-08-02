@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/no-autofocus -- 重命名 Dialog 由用户显式打开，按交互规范聚焦唯一输入框。 */
 import { useEffect, useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
@@ -30,6 +31,8 @@ export function TaskRenameDialog({
   }, []);
 
   return (
+    // 原生 dialog 已通过 onCancel 提供 Escape 行为，onClick 仅识别不可聚焦的 backdrop。
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <dialog
       aria-labelledby="task-rename-title"
       className="m-auto w-[min(90vw,24rem)] max-w-none rounded-surface bg-raised p-0 text-foreground shadow-panel backdrop:bg-scrim"

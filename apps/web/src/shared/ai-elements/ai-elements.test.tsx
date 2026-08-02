@@ -378,7 +378,7 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('aria-label="添加图片或文件"');
     expect(markup).toContain("添加图片");
     expect(markup).toContain("添加文件");
-    expect(markup).toContain('aria-disabled="true"');
+    expect(markup).not.toContain("aria-disabled");
     expect(markup).toContain('data-prompt-input=""');
   });
 

@@ -2,6 +2,7 @@ import type { AgentSkill } from "@code-agent/protocol";
 import { Box } from "lucide-react";
 import {
   forwardRef,
+  useCallback,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -413,13 +414,13 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
     const skillsByIdRef = useRef(new Map<string, AgentSkill>());
     const previousScopeRef = useRef<string | undefined>(undefined);
 
-    const rememberSkills = (nextContent: PromptSkillContent) => {
+    const rememberSkills = useCallback((nextContent: PromptSkillContent) => {
       for (const part of nextContent) {
         if (part.type === "skill") {
           skillsByIdRef.current.set(part.skill.id, part.skill);
         }
       }
-    };
+    }, []);
     rememberSkills(content);
 
     const emitChange = () => {
@@ -435,18 +436,21 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       onChange(nextContent, serializedText, selectionOffset(root));
     };
 
-    const replace = (nextContent: PromptSkillContent, cursorOffset?: number) => {
-      const root = rootRef.current;
-      if (root === null) {
-        return;
-      }
-      rememberSkills(nextContent);
-      contentRef.current = nextContent;
-      renderEditorContent(root, nextContent, iconTemplateRef.current);
-      if (cursorOffset !== undefined) {
-        placeCaret(root, cursorOffset);
-      }
-    };
+    const replace = useCallback(
+      (nextContent: PromptSkillContent, cursorOffset?: number) => {
+        const root = rootRef.current;
+        if (root === null) {
+          return;
+        }
+        rememberSkills(nextContent);
+        contentRef.current = nextContent;
+        renderEditorContent(root, nextContent, iconTemplateRef.current);
+        if (cursorOffset !== undefined) {
+          placeCaret(root, cursorOffset);
+        }
+      },
+      [rememberSkills],
+    );
 
     useImperativeHandle(
       forwardedRef,
@@ -466,7 +470,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
         },
         replace,
       }),
-      [],
+      [replace],
     );
 
     useLayoutEffect(() => {
@@ -475,7 +479,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       }
       previousScopeRef.current = scope;
       replace(content);
-    }, [content, scope]);
+    }, [content, replace, scope]);
 
     const removeSkillFromEvent = (event: MouseEvent<HTMLDivElement>) => {
       const target = event.target;
@@ -574,6 +578,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
           role="textbox"
           spellCheck="true"
           suppressContentEditableWarning
+          tabIndex={disabled ? -1 : 0}
         />
       </>
     );

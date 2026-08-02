@@ -54,6 +54,8 @@ catalog:
   sonner: 2.0.7
   "@tanstack/react-virtual": 3.14.9
   i18next: 26.3.6
+  eslint-plugin-jsx-a11y: 6.10.2
+  eslint-plugin-react-hooks: 7.1.1
   react-i18next: 17.0.11
 
 catalogMode: strict
@@ -71,3 +73,7 @@ preferWorkspacePackages: true
 saveExact: true
 sharedWorkspaceLockfile: true
 strictPeerDependencies: true
+peerDependencyRules:
+  allowedVersions:
+    # jsx-a11y 已支持 flat config，但当前 peer 范围尚未声明 ESLint 10。
+    "eslint-plugin-jsx-a11y>eslint": "10"

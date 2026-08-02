@@ -22,6 +22,7 @@
 - 所有改动运行 `pnpm check`。
 - 涉及浏览器装配或用户流程时运行 `pnpm test:e2e`。
 - 涉及发布结构时确认 `pnpm run package:check` 通过。
+- CI 在 Ubuntu 与 Windows 完整门禁之外，必须保留 macOS 轻量 smoke，覆盖系统目录选择、浏览器与宿主应用打开以及 Darwin Codex 二进制解析。
 - 发布必须使用 `pnpm publish`；tarball 的 `package.json` 不得包含未解析的 `catalog:` 或 `workspace:` 协议。
 - 原生运行时依赖不得因包含 `binding.gyp` 且缺少显式安装钩子而触发 npm 隐式 `node-gyp rebuild`；`package:check` 必须拒绝此类依赖。
 - Web 与 Node 发布构建不得生成或打包 `.map` 源码映射，`package:check` 必须拒绝含 `.map` 的发布清单。

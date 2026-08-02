@@ -153,6 +153,8 @@ export function GlobalSettingsDialog({
   };
 
   return (
+    // 原生 dialog 已通过 onCancel 提供 Escape 行为，onClick 仅识别不可聚焦的 backdrop。
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <dialog
       aria-labelledby="global-settings-title"
       className="m-auto h-[min(88vh,38rem)] w-[min(94vw,54rem)] max-w-none overflow-hidden rounded-surface bg-raised p-0 text-foreground shadow-panel backdrop:bg-scrim"
@@ -166,7 +168,6 @@ export function GlobalSettingsDialog({
         }
       }}
       ref={dialogRef}
-      role="dialog"
     >
       <form
         className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]"

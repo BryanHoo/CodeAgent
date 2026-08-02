@@ -48,6 +48,7 @@ type ApprovalRequest = Extract<
   { type: "command_approval" | "file_change_approval" }
 >;
 type CommandApprovalRequest = Extract<PendingRequest, { type: "command_approval" }>;
+type UserInputRequest = Extract<PendingRequest, { type: "user_input" }>;
 
 function approvalState(request: PendingRequest, submitting: boolean): ConfirmationState {
   if (request.status === "expired") return "approval-expired";
@@ -179,8 +180,11 @@ function ApprovalRequestCard({
 
 type Answers = Record<string, string>;
 
-function UserInputRequestCard({ interactive, onResolve, request }: PendingRequestCardProps) {
-  if (request.type !== "user_input") return null;
+function UserInputRequestCard({
+  interactive,
+  onResolve,
+  request,
+}: Omit<PendingRequestCardProps, "request"> & { request: UserInputRequest }) {
   const { t } = useTranslation("workbench");
   const [answers, setAnswers] = useState<Answers>({});
   const [submitting, setSubmitting] = useState(false);
@@ -240,6 +244,7 @@ function UserInputRequestCard({ interactive, onResolve, request }: PendingReques
               <div className="mt-2 space-y-1.5">
                 {question.options.map((option) => (
                   <label
+                    aria-label={option.label}
                     className="flex cursor-pointer items-start gap-2 rounded-control bg-raised px-2.5 py-2 text-label"
                     key={option.label}
                   >
@@ -336,7 +341,13 @@ export function PendingRequestCard(props: PendingRequestCardProps) {
     return null;
   }
   if (props.request.type === "user_input") {
-    return <UserInputRequestCard {...props} />;
+    return (
+      <UserInputRequestCard
+        interactive={props.interactive}
+        onResolve={props.onResolve}
+        request={props.request}
+      />
+    );
   }
   return (
     <ApprovalRequestCard

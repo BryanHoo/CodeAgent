@@ -28,7 +28,12 @@ export function useTaskRuntime(
   projectRuntime: ProjectRuntimeManager,
 ): TaskRuntimeView {
   const client = projectRuntime.client;
-  const taskQuery = useQuery({
+  const {
+    data: taskData,
+    error: taskQueryError,
+    isPending: taskQueryPending,
+    refetch: refetchTask,
+  } = useQuery({
     ...taskSnapshotQueryOptions(projectId, taskId ?? "no-active-task", client),
     enabled: taskId !== undefined,
   });
@@ -63,7 +68,7 @@ export function useTaskRuntime(
   }, [client, projectId, taskId]);
 
   useEffect(() => {
-    if (taskQuery.data === undefined) {
+    if (taskData === undefined) {
       return;
     }
     if (store === undefined) {
@@ -73,37 +78,43 @@ export function useTaskRuntime(
     if (storeIdentity.projectId !== projectId || storeIdentity.taskId !== taskId) {
       return;
     }
-    return projectRuntime.attachTaskStore(taskQuery.data, store, () => {
-      void taskQuery.refetch();
+    return projectRuntime.attachTaskStore(taskData, store, () => {
+      void refetchTask();
     });
-  }, [projectId, projectRuntime, store, taskId, taskQuery.data, taskQuery.refetch]);
+  }, [projectId, projectRuntime, refetchTask, store, taskData, taskId]);
 
   const activeRuntime =
     store === undefined ? undefined : selectActiveTaskStore(store, projectId, taskId);
   const hasHydratedSnapshot = activeRuntime?.getState().snapshotMetadata !== null;
   const error =
     activeRuntime === undefined || !hasHydratedSnapshot
-      ? taskQuery.error
-      : taskQuery.error !== null && connectionState !== "connected"
-        ? taskQuery.error
+      ? taskQueryError
+      : taskQueryError !== null && connectionState !== "connected"
+        ? taskQueryError
         : connectionState === "closed"
-          ? (taskQuery.error ?? runtimeError)
+          ? (taskQueryError ?? runtimeError)
           : null;
   // 轮询等无关父级更新不得重建完整历史；只在结构或可见 Task 元数据变化时读取兼容快照。
-  const snapshot = useMemo(
-    () => activeRuntime?.getState().reconstructSnapshot(),
-    [
-      activeRuntime,
-      itemStructureRevision,
-      taskContextUsage,
-      taskPinned,
-      taskSettings,
-      taskStatus,
-      taskTitle,
-    ],
-  );
+  const snapshot = useMemo(() => {
+    // Store 选择器值是快照重建的失效信号；读取它们可避免无关父级更新触发重建。
+    void itemStructureRevision;
+    void taskContextUsage;
+    void taskPinned;
+    void taskSettings;
+    void taskStatus;
+    void taskTitle;
+    return activeRuntime?.getState().reconstructSnapshot();
+  }, [
+    activeRuntime,
+    itemStructureRevision,
+    taskContextUsage,
+    taskPinned,
+    taskSettings,
+    taskStatus,
+    taskTitle,
+  ]);
   const isRuntimePending =
-    error === null && (taskQuery.isPending || activeRuntime === undefined || !hasHydratedSnapshot);
+    error === null && (taskQueryPending || activeRuntime === undefined || !hasHydratedSnapshot);
 
   return useMemo(
     () => ({

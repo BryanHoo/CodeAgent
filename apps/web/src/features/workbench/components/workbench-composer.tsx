@@ -11,7 +11,15 @@ import type {
   AgentTurnOptions,
   ProjectGitStatus,
 } from "@code-agent/protocol";
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
@@ -590,6 +598,23 @@ export function WorkbenchComposer({
       .run(() => performPromptSubmission(message, promptSkills, options))
       .then((submitted) => submitted ?? false);
 
+  const submitQueuedPrompt = useEffectEvent(
+    (queuedPrompt: QueuedComposerPrompt, queuedScope: string) => {
+      void submitPrompt(
+        { files: queuedPrompt.files, text: queuedPrompt.text },
+        queuedPrompt.skills,
+        {
+          clearInputOnSuccess: false,
+          forceAction: "start",
+        },
+      ).then((sent) => {
+        if (sent && isCurrentScope(queuedScope)) {
+          replaceQueuedPrompts(queuedPrompts.filter((prompt) => prompt.id !== queuedPrompt.id));
+        }
+      });
+    },
+  );
+
   useEffect(() => {
     const queuedScope = routeScope;
     const queuedPrompt = queuedPrompts[0];
@@ -604,23 +629,15 @@ export function WorkbenchComposer({
       return;
     }
     autoStartedQueueIds.current.add(queuedPrompt.id);
-    void submitPrompt({ files: queuedPrompt.files, text: queuedPrompt.text }, queuedPrompt.skills, {
-      clearInputOnSuccess: false,
-      forceAction: "start",
-    }).then((sent) => {
-      if (sent && isCurrentScope(queuedScope)) {
-        replaceQueuedPrompts(queuedPrompts.filter((prompt) => prompt.id !== queuedPrompt.id));
-      }
-    });
+    submitQueuedPrompt(queuedPrompt, queuedScope);
   }, [
     activeTaskId,
     activeTurnId,
+    autoStartedQueueIds,
     connectionState,
     isSubmitting,
     queuedPrompts,
-    replaceQueuedPrompts,
     routeScope,
-    submitPrompt,
   ]);
 
   const getCommandAvailability = (command: PromptCommandItem) => {

@@ -243,6 +243,7 @@ function ProjectFileTreeDirectoryChildren({
   if (state?.error !== null && state?.error !== undefined) {
     return (
       <div
+        aria-selected="false"
         className="flex min-h-7 items-center gap-2 px-1.5 text-caption text-diff-removed"
         role="treeitem"
       >
@@ -265,6 +266,7 @@ function ProjectFileTreeDirectoryChildren({
     return (
       <div
         aria-label={i18n.t("inspector.readFolder", { name, ns: "conversation" })}
+        aria-selected="false"
         className="flex min-h-7 items-center gap-1.5 px-1.5 text-caption text-muted-foreground"
         role="treeitem"
       >
@@ -275,7 +277,11 @@ function ProjectFileTreeDirectoryChildren({
   }
   if (state.data?.entries.length === 0) {
     return (
-      <div className="min-h-7 px-1.5 py-1.5 text-caption text-muted-foreground" role="treeitem">
+      <div
+        aria-selected="false"
+        className="min-h-7 px-1.5 py-1.5 text-caption text-muted-foreground"
+        role="treeitem"
+      >
         {i18n.t("inspector.emptyFolder", { ns: "conversation" })}
       </div>
     );

@@ -37,7 +37,11 @@ export function useWorkbenchComposerController(
   const uploadedAttachments = useRef(new Map<string, AgentAttachment>());
   const uploadAttempts = useRef(new Map<string, string>());
   const commandAttempts = useRef(new Map<PromptCommandAction, IdempotencyAttempt>());
-  const actionLock = useMemo(() => createAsyncActionLock(), [routeScope]);
+  const actionLock = useMemo(() => {
+    // 每个路由作用域使用独立锁，切换 Task 后旧请求不能阻塞新会话。
+    void routeScope;
+    return createAsyncActionLock();
+  }, [routeScope]);
 
   useEffect(() => {
     onSubmissionStateChange?.(isSubmitting);

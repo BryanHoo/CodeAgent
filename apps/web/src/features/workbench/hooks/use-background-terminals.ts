@@ -59,6 +59,8 @@ export function useBackgroundTerminals(
       await client.terminateBackgroundTerminal(projectId, taskId, terminalId, { idempotencyKey });
     },
   });
+  const refetchTerminals = terminalsQuery.refetch;
+  const terminateTerminalMutation = terminateMutation.mutateAsync;
 
   useEffect(() => {
     if (previousTaskRunningRef.current === isTaskRunning || taskId === undefined) {
@@ -66,17 +68,17 @@ export function useBackgroundTerminals(
     }
     previousTaskRunningRef.current = isTaskRunning;
     // Turn 终态到达时立即读取一次，不能把仍存活的后台终端随回复一起清除。
-    void terminalsQuery.refetch();
-  }, [isTaskRunning, taskId, terminalsQuery.refetch]);
+    void refetchTerminals();
+  }, [isTaskRunning, refetchTerminals, taskId]);
 
   const terminateTerminal = useCallback(
     (terminalId: string) =>
       terminateLockRef.current.run(async () => {
         setTerminalError(null);
         try {
-          await terminateMutation.mutateAsync(terminalId);
+          await terminateTerminalMutation(terminalId);
           idempotencyKeysRef.current.delete(terminalId);
-          await terminalsQuery.refetch();
+          await refetchTerminals();
         } catch (error) {
           setTerminalError(
             error instanceof Error
@@ -85,7 +87,7 @@ export function useBackgroundTerminals(
           );
         }
       }),
-    [terminateMutation.mutateAsync, terminalsQuery.refetch],
+    [refetchTerminals, terminateTerminalMutation],
   );
 
   return {

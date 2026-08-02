@@ -860,6 +860,8 @@ function ProjectActions({ isPending, onRemove, onRename, project }: ProjectActio
   }, [menuOpen]);
 
   return (
+    // 键盘事件从内部按钮冒泡到容器，仅用于统一处理 Escape，不让容器成为交互控件。
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
       className="relative shrink-0"
       onKeyDown={(event) => {
@@ -1094,6 +1096,8 @@ function TaskLink({
   }, [menuOpen]);
 
   return (
+    // 键盘事件从内部按钮冒泡到容器，仅用于统一处理 Escape，不让容器成为交互控件。
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
       className="group relative min-w-0"
       onKeyDown={(event) => {

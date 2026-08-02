@@ -271,6 +271,8 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
       : t("openMenu.openIn", { app: selectedApp.name });
 
   return (
+    // 键盘事件从内部按钮冒泡到容器，仅用于统一处理 Escape，不让容器成为交互控件。
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
       className="relative inline-flex shrink-0"
       onBlur={(event) => {

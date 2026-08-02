@@ -244,6 +244,8 @@ function stopPropagation(event: SyntheticEvent) {
 
 export function FileTreeActions({ className = "", ...props }: FileTreeActionsProps) {
   return (
+    // 容器只阻止内部按钮事件触发文件行选择，本身不是新的交互控件。
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       className={`ml-auto flex items-center gap-1 ${className}`}
       onClick={stopPropagation}

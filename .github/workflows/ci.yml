@@ -36,6 +36,26 @@ jobs:
       - name: Run quality gates
         run: pnpm check
 
+  macos-smoke:
+    name: macOS smoke
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # 在真实 Darwin runner 上验证原生 Codex 包解析与宿主命令分支，不重复完整 E2E。
+      - name: Run macOS smoke tests
+        run: pnpm exec vitest run src/system-directory-picker.test.ts src/system-browser.test.ts packages/server/src/project-open.test.ts packages/provider-codex/src/binary.test.ts
+
   e2e:
     name: E2E (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

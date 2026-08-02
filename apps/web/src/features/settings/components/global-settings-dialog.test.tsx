@@ -60,7 +60,7 @@ describe("GlobalSettingsDialog", () => {
       />,
     );
 
-    expect(markup).toContain('role="dialog"');
+    expect(markup).toContain('<dialog aria-labelledby="global-settings-title"');
     expect(markup).toContain('aria-label="设置分类"');
     expect(markup).toContain("外观");
     expect(markup).toContain("Agent 默认值");

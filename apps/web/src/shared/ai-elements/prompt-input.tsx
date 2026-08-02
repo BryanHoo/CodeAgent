@@ -371,7 +371,6 @@ export function PromptInput({
     <PromptInputAttachmentsContext.Provider value={context}>
       <form
         {...props}
-        aria-disabled={disabled || undefined}
         className={`overflow-visible rounded-surface border border-transparent bg-raised shadow-floating transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-focus ${className}`}
         data-prompt-input=""
         onPasteCapture={(event) => {
