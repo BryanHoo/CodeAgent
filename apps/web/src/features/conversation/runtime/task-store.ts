@@ -15,6 +15,7 @@ const MAX_COMMAND_OUTPUT_BYTES = 1_048_576;
 const MAX_COMMAND_OUTPUT_LINES = 10_000;
 export const MAX_TASK_COMMAND_OUTPUT_BYTES = 8 * 1_048_576;
 export const MAX_RETAINED_TASK_RUNTIME_BYTES = 64 * 1_048_576;
+export const MAX_RETAINED_TERMINAL_REQUESTS = 20;
 export const PENDING_COMMAND_LABEL = "__CODE_AGENT_PENDING_COMMAND__";
 export const RETAINED_COMMAND_OUTPUT_MARKER = "__CODE_AGENT_RETAINED_COMMAND_OUTPUT__";
 const textDecoder = new TextDecoder();
@@ -192,6 +193,46 @@ type NormalizedTaskData = Pick<
   | "turnsById"
 >;
 
+type PendingRequestState = Pick<TaskStoreState, "pendingRequestIds" | "pendingRequestsById">;
+
+function retainPendingRequest(
+  state: PendingRequestState,
+  request: PendingRequest,
+): PendingRequestState {
+  const requestAlreadyExists = state.pendingRequestsById[request.requestId] !== undefined;
+  let pendingRequestIds = state.pendingRequestIds;
+  if (request.status !== "pending") {
+    // 终态按事件到达顺序移到末尾，容量淘汰基于实际结束时间而非创建时间。
+    pendingRequestIds = [
+      ...state.pendingRequestIds.filter((requestId) => requestId !== request.requestId),
+      request.requestId,
+    ];
+  } else if (!requestAlreadyExists) {
+    pendingRequestIds = [...state.pendingRequestIds, request.requestId];
+  }
+  const pendingRequestsById = {
+    ...state.pendingRequestsById,
+    [request.requestId]: request,
+  };
+  const terminalRequestIds = pendingRequestIds.filter(
+    (requestId) => pendingRequestsById[requestId]?.status !== "pending",
+  );
+  const evictedRequestIds = new Set(terminalRequestIds.slice(0, -MAX_RETAINED_TERMINAL_REQUESTS));
+  if (evictedRequestIds.size === 0) {
+    return { pendingRequestIds, pendingRequestsById };
+  }
+
+  // 活动请求全部保留；终态只保留最近一段，避免长会话持续扩大 Store 和 Timeline 遍历量。
+  return {
+    pendingRequestIds: pendingRequestIds.filter((requestId) => !evictedRequestIds.has(requestId)),
+    pendingRequestsById: Object.fromEntries(
+      Object.entries(pendingRequestsById).filter(
+        ([requestId]) => !evictedRequestIds.has(requestId),
+      ),
+    ),
+  };
+}
+
 function normalizeSnapshot(response: TaskStoreHydrationResponse): NormalizedTaskData {
   const { pendingRequests, turns, ...snapshotMetadata } = response.snapshot;
   const turnIds: string[] = [];
@@ -215,10 +256,13 @@ function normalizeSnapshot(response: TaskStoreHydrationResponse): NormalizedTask
     }
   }
 
-  const pendingRequestIds = pendingRequests.map((request) => request.requestId);
-  const pendingRequestsById = Object.fromEntries(
-    pendingRequests.map((request) => [request.requestId, request]),
-  );
+  let pendingRequestState: PendingRequestState = {
+    pendingRequestIds: [],
+    pendingRequestsById: {},
+  };
+  for (const request of pendingRequests) {
+    pendingRequestState = retainPendingRequest(pendingRequestState, request);
+  }
 
   const boundedCommandOutputs = updateCommandOutputBudget({
     previousBudget: {
@@ -238,8 +282,7 @@ function normalizeSnapshot(response: TaskStoreHydrationResponse): NormalizedTask
     itemStoresById,
     itemStructureRevision: 0,
     itemTurnIdsById,
-    pendingRequestIds,
-    pendingRequestsById,
+    ...pendingRequestState,
     snapshotMetadata,
     turnIds,
     turnsById,
@@ -721,16 +764,9 @@ function applyAcceptedEvent(
     case "pending_request.resolved":
     case "pending_request.expired": {
       const request = event.payload.request;
-      const requestAlreadyExists = state.pendingRequestsById[request.requestId] !== undefined;
       return {
         checkpoint,
-        pendingRequestIds: requestAlreadyExists
-          ? state.pendingRequestIds
-          : [...state.pendingRequestIds, request.requestId],
-        pendingRequestsById: {
-          ...state.pendingRequestsById,
-          [request.requestId]: request,
-        },
+        ...retainPendingRequest(state, request),
         snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
       };
     }
@@ -745,7 +781,8 @@ function reconstructSnapshot(state: TaskStoreState): ReconstructedTaskSnapshot |
     ...state.snapshotMetadata,
     pendingRequests: state.pendingRequestIds.flatMap((requestId) => {
       const request = state.pendingRequestsById[requestId];
-      return request === undefined ? [] : [request];
+      // 兼容快照遵守 HTTP Schema，只重建仍可操作的 pending 请求。
+      return request?.status === "pending" ? [request] : [];
     }),
     turns: state.turnIds.flatMap((turnId) => {
       const turn = state.turnsById[turnId];

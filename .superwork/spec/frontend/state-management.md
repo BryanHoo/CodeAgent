@@ -22,7 +22,7 @@
 - `provider.error` 标记 `willRetry` 时只作为当前 Turn 的临时提示；后续收到新的 Message、Reasoning 或 Command Delta 即清除。不可重试错误继续保留到权威终态，不能因部分回复或缺少错误文本的终态被覆盖。
 - Approval、Error 和 Terminal State 不得因合并或反压丢失。
 - `interrupted` Turn 的终态 Payload 可能只包含部分 Item；同 ID 终态实体覆盖流式实体，但缺失的已展示 Item 必须保留，停止操作不得清空已生成回复。
-- Pending Request 按 `requestId` 合并 Snapshot 与实时生命周期事件；多个未解决请求按到达顺序展示，仅队首允许提交，重连期间全部暂停提交。
+- Pending Request 按 `requestId` 合并 Snapshot 与实时生命周期事件；多个未解决请求按到达顺序展示，仅队首允许提交，重连期间全部暂停提交。Task Store 保留全部活动请求和最近 20 个终态请求，兼容 HTTP Snapshot 重建只输出 `pending`，避免长会话持续扩大状态与 Timeline 遍历量。
 - Task Runtime 使用 `zustand/vanilla` 按 `projectId + taskId` 创建独立 Store；Turn、Item 与 Pending Request 必须分别保存有序 ID 和实体映射，Item 实体各自使用独立 Store。
 - 文本 Delta 只向目标 Item Store 的 Chunk 列表追加，并在同一事件批次结束后发布一次；不得替换 Task 的稳定 Item Map、既有 Turn、Item 顺序或其他实体引用。Item 组件只订阅对应 Item Store，终态事件再以权威完整字符串替换流式 Chunk。
 - 未选中 Task Store 采用 UTF-8 字节估算 LRU 回收：非活动 Store 合计最多 64 MiB、最多 20 份；仍有消费者的 Store 不得回收且不占非活动预算。最后一个消费者释放时从 Project Runtime 注销 Store 并发起 best-effort `thread/unsubscribe`，重新选中后必须从权威 Snapshot 校准，因此运行中、待审批或尚未 Hydrate 的非活动 Store 也可安全进入 LRU。

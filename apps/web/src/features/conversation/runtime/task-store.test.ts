@@ -5,6 +5,7 @@ import {
   createTaskStore,
   createTaskStoreRegistry,
   estimateTaskStoreRetainedBytes,
+  MAX_RETAINED_TERMINAL_REQUESTS,
   MAX_TASK_COMMAND_OUTPUT_BYTES,
 } from "./task-store.js";
 
@@ -531,6 +532,87 @@ describe("task store", () => {
     });
     expect(state.pendingRequestIds).toEqual(["request-1"]);
     expect(state.pendingRequestsById["request-1"]?.status).toBe("resolved");
+  });
+
+  it("bounds terminal requests and reconstructs only active pending requests", () => {
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
+    const activeRequest = {
+      ...createPendingRequest(),
+      requestId: "request-active",
+    } as PendingRequest & Readonly<{ status: "pending" }>;
+    const lateTerminalRequest = {
+      ...createPendingRequest(),
+      requestId: "request-late-terminal",
+    } as PendingRequest & Readonly<{ status: "pending" }>;
+    const overflowCount = 5;
+    const terminalEvents: AgentEvent[] = Array.from(
+      { length: MAX_RETAINED_TERMINAL_REQUESTS + overflowCount },
+      (_, index) => {
+        const requestId = `request-terminal-${String(index)}`;
+        if (index % 2 === 0) {
+          const request = {
+            ...createPendingRequest("resolved"),
+            requestId,
+          } as PendingRequest & Readonly<{ status: "resolved" }>;
+          return {
+            ...eventEnvelope(index + 13),
+            itemId: request.itemId,
+            payload: { request },
+            turnId: request.turnId,
+            type: "pending_request.resolved",
+          };
+        }
+        const request = {
+          ...createPendingRequest("expired"),
+          requestId,
+        } as PendingRequest & Readonly<{ status: "expired" }>;
+        return {
+          ...eventEnvelope(index + 13),
+          itemId: request.itemId,
+          payload: { request },
+          turnId: request.turnId,
+          type: "pending_request.expired",
+        };
+      },
+    );
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        itemId: activeRequest.itemId,
+        payload: { request: activeRequest },
+        turnId: activeRequest.turnId,
+        type: "pending_request.created",
+      },
+      {
+        ...eventEnvelope(12),
+        itemId: lateTerminalRequest.itemId,
+        payload: { request: lateTerminalRequest },
+        turnId: lateTerminalRequest.turnId,
+        type: "pending_request.created",
+      },
+      ...terminalEvents,
+      {
+        ...eventEnvelope(terminalEvents.length + 13),
+        itemId: lateTerminalRequest.itemId,
+        payload: { request: { ...lateTerminalRequest, status: "resolved" } },
+        turnId: lateTerminalRequest.turnId,
+        type: "pending_request.resolved",
+      },
+    ]);
+
+    const state = store.getState();
+    expect(state.pendingRequestIds).toEqual([
+      "request-active",
+      ...Array.from(
+        { length: MAX_RETAINED_TERMINAL_REQUESTS - 1 },
+        (_, index) => `request-terminal-${String(index + overflowCount + 1)}`,
+      ),
+      "request-late-terminal",
+    ]);
+    expect(state.pendingRequestsById["request-active"]).toBe(activeRequest);
+    expect(state.pendingRequestsById["request-terminal-4"]).toBeUndefined();
+    expect(state.reconstructSnapshot()?.pendingRequests).toEqual([activeRequest]);
   });
 
   it("rejects wrong identities and deduplicates old sequences", () => {
