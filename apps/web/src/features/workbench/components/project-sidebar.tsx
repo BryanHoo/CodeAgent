@@ -32,7 +32,12 @@ import {
   getProjectTaskPreview,
   PROJECT_TASK_PREVIEW_LIMIT,
 } from "../../projects/project-data.js";
-import { useProjects, useProjectTaskSearch } from "../../projects/project-context.js";
+import {
+  useProjectActions,
+  useProjectActivity,
+  useProjectData,
+  useProjectTaskSearch,
+} from "../../projects/project-context.js";
 import {
   removeArchivedProjectTaskAndRefill,
   replaceProjectTaskInQueryCaches,
@@ -200,28 +205,25 @@ export function ProjectSidebar({
   taskId,
 }: ProjectSidebarProps) {
   const { t } = useTranslation("workbench");
+  const { client, error, isPending, projects, projectTaskStates, tasks } = useProjectData();
   const {
     addProject,
-    addProjectError,
-    client,
-    error,
     fetchNextProjectTaskPage,
     forgetTask,
-    isPending,
-    isProjectActionPending,
-    isProjectOrderPending,
-    isProjectPickerOpen,
-    projects,
-    projectOrderError,
-    projectActionError,
-    projectTaskStates,
-    taskActivity,
-    tasks,
     reorderProjects,
     removeProject,
     renameProject,
     setExpandedProjectTaskIds,
-  } = useProjects();
+  } = useProjectActions();
+  const {
+    addProjectError,
+    isProjectActionPending,
+    isProjectOrderPending,
+    isProjectPickerOpen,
+    projectActionError,
+    projectOrderError,
+    taskActivity,
+  } = useProjectActivity();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [preferenceStorage] = useState(getProjectSidebarPreferenceStorage);

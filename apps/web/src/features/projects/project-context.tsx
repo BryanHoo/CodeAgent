@@ -86,24 +86,22 @@ export async function requestNextProjectTaskPage(
   await projectTaskControllers.get(projectId)?.fetchNextPage();
 }
 
-type ProjectContextValue = Readonly<{
-  addProject: () => Promise<Project | undefined>;
-  addProjectError: Error | null;
+type ProjectDataContextValue = Readonly<{
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentWorkbenchClient;
   error: Error | null;
   isPending: boolean;
-  isProjectPickerOpen: boolean;
-  isProjectOrderPending: boolean;
-  isProjectActionPending: boolean;
+  projectTaskStates: ReadonlyMap<string, ProjectTaskListState>;
+  projects: readonly Project[];
+  tasks: readonly AgentTask[];
+}>;
+
+type ProjectActionsContextValue = Readonly<{
+  addProject: () => Promise<Project | undefined>;
   fetchNextProjectTaskPage: (projectId: string) => Promise<void>;
   forgetTask: (projectId: string, taskId: string) => void;
   markTaskRunning: (projectId: string, taskId: string) => void;
   projectRuntime: ProjectRuntimeManager;
-  projectTaskStates: ReadonlyMap<string, ProjectTaskListState>;
-  projects: readonly Project[];
-  projectOrderError: Error | null;
-  projectActionError: Error | null;
   requestNotificationPermission: () => void;
   reorderProjects: (projectIds: readonly string[]) => Promise<boolean>;
   removeProject: (projectId: string) => Promise<readonly Project[] | undefined>;
@@ -111,12 +109,22 @@ type ProjectContextValue = Readonly<{
   refreshProjectGitStatus: (projectId: string) => Promise<void>;
   retry: () => Promise<void>;
   setExpandedProjectTaskIds: (projectIds: ReadonlySet<string>) => void;
-  taskActivity: TaskActivityMap;
-  tasks: readonly AgentTask[];
   viewTask: (projectId: string, taskId?: string) => void;
 }>;
 
-const ProjectContext = createContext<ProjectContextValue | undefined>(undefined);
+type ProjectActivityContextValue = Readonly<{
+  addProjectError: Error | null;
+  isProjectActionPending: boolean;
+  isProjectOrderPending: boolean;
+  isProjectPickerOpen: boolean;
+  projectActionError: Error | null;
+  projectOrderError: Error | null;
+  taskActivity: TaskActivityMap;
+}>;
+
+const ProjectDataContext = createContext<ProjectDataContextValue | undefined>(undefined);
+const ProjectActionsContext = createContext<ProjectActionsContextValue | undefined>(undefined);
+const ProjectActivityContext = createContext<ProjectActivityContextValue | undefined>(undefined);
 
 type ProjectProviderProps = Readonly<{
   children: ReactNode;
@@ -170,6 +178,23 @@ function ProjectTaskQuery({ client, onRemove, onUpdate, projectId }: ProjectTask
   );
 
   return null;
+}
+
+export function buildProjectTaskCollections(
+  queriedProjects: readonly Project[],
+  projectTaskResults: ReadonlyMap<string, ProjectTaskQueryResult>,
+) {
+  const tasks = queriedProjects.flatMap(
+    (project) => projectTaskResults.get(project.id)?.tasks ?? emptyTasks,
+  );
+  const projectTaskStates = new Map(
+    queriedProjects.map((project) => [
+      project.id,
+      projectTaskResults.get(project.id)?.state ?? pendingProjectTaskState,
+    ]),
+  );
+
+  return { projectTaskStates, tasks } as const;
 }
 
 export function ProjectProvider({ children, client = codeAgentClient }: ProjectProviderProps) {
@@ -260,9 +285,15 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   );
   const capabilitiesQuery = useQuery(capabilitiesQueryOptions(client));
   const projectsQuery = useQuery(projectsQueryOptions(client));
-  const projectOrderMutation = useMutation(projectReorderMutationOptions(client));
-  const projectRenameMutation = useMutation(projectRenameMutationOptions(client));
-  const projectRemoveMutation = useMutation(projectRemoveMutationOptions(client));
+  const { isPending: isProjectOrderPending, mutateAsync: mutateProjectOrder } = useMutation(
+    projectReorderMutationOptions(client),
+  );
+  const { isPending: isProjectRenamePending, mutateAsync: mutateProjectRename } = useMutation(
+    projectRenameMutationOptions(client),
+  );
+  const { isPending: isProjectRemovePending, mutateAsync: mutateProjectRemove } = useMutation(
+    projectRemoveMutationOptions(client),
+  );
   const addProjectLockRef = useRef(createAsyncActionLock());
   const projectActionLockRef = useRef(createAsyncActionLock());
   const projectOrderLockRef = useRef(createAsyncActionLock());
@@ -274,7 +305,10 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
     }
     return projectIds;
   }, [activeProjectId, expandedProjectTaskIds]);
-  const queriedProjects = projects.filter((project) => queriedProjectIds.has(project.id));
+  const queriedProjects = useMemo(
+    () => projects.filter((project) => queriedProjectIds.has(project.id)),
+    [projects, queriedProjectIds],
+  );
   const projectTaskResultsRef = useRef(projectTaskResults);
   projectTaskResultsRef.current = projectTaskResults;
   const updateProjectTaskResult = useCallback(
@@ -308,15 +342,10 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
       return nextResults;
     });
   }, []);
-  const tasks = queriedProjects.flatMap(
-    (project) => projectTaskResults.get(project.id)?.tasks ?? emptyTasks,
-  );
-  // Project Task 查询状态按 Project 隔离，单个目录失败不能阻断其他工作台。
-  const projectTaskStates = new Map(
-    queriedProjects.map((project) => [
-      project.id,
-      projectTaskResults.get(project.id)?.state ?? pendingProjectTaskState,
-    ]),
+  // 派生集合只在查询范围或结果变化时重建，保持 Context value 的引用稳定。
+  const { projectTaskStates, tasks } = useMemo(
+    () => buildProjectTaskCollections(queriedProjects, projectTaskResults),
+    [projectTaskResults, queriedProjects],
   );
   const fetchNextProjectTaskPage = useCallback(async (projectId: string) => {
     const controllers = new Map(
@@ -407,7 +436,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
         // 拖动释放后立即更新列表；服务端失败时恢复提交前的完整快照。
         queryClient.setQueryData<ProjectPage>(["projects"], optimisticPage);
         try {
-          const response = await projectOrderMutation.mutateAsync(projectIds);
+          const response = await mutateProjectOrder(projectIds);
           queryClient.setQueryData<ProjectPage>(["projects"], response);
           return true;
         } catch (error) {
@@ -420,14 +449,14 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           return false;
         }
       })) ?? false,
-    [projectOrderMutation, queryClient],
+    [mutateProjectOrder, queryClient],
   );
   const renameProject = useCallback(
     async (projectId: string, name: string) =>
       (await projectActionLockRef.current.run(async () => {
         setProjectActionError(null);
         try {
-          const response = await projectRenameMutation.mutateAsync({ name, projectId });
+          const response = await mutateProjectRename({ name, projectId });
           queryClient.setQueryData<ProjectPage>(["projects"], (currentPage) =>
             currentPage === undefined
               ? undefined
@@ -444,14 +473,14 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           return false;
         }
       })) ?? false,
-    [projectRenameMutation, queryClient],
+    [mutateProjectRename, queryClient],
   );
   const removeProject = useCallback(
     (projectId: string) =>
       projectActionLockRef.current.run(async () => {
         setProjectActionError(null);
         try {
-          await projectRemoveMutation.mutateAsync(projectId);
+          await mutateProjectRemove(projectId);
           // 先停止该 Project 的请求和实时连接，再从列表移除，避免旧响应回填缓存。
           await queryClient.cancelQueries({ queryKey: ["projects", projectId] });
           queryClient.removeQueries({ queryKey: ["projects", projectId] });
@@ -470,7 +499,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           return undefined;
         }
       }),
-    [gitStatusCoordinator, projectRemoveMutation, projectRuntime, queryClient],
+    [gitStatusCoordinator, mutateProjectRemove, projectRuntime, queryClient],
   );
   const refreshProjectGitStatus = useCallback(
     (projectId: string) => gitStatusCoordinator.refreshProject(projectId),
@@ -489,6 +518,81 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
     [gitStatusCoordinator, projectRuntime],
   );
 
+  const dataValue = useMemo<ProjectDataContextValue>(
+    () => ({
+      capabilities: capabilitiesQuery.data,
+      client,
+      error: capabilitiesQuery.error ?? projectsQuery.error,
+      isPending,
+      projectTaskStates,
+      projects,
+      tasks,
+    }),
+    [
+      capabilitiesQuery.data,
+      capabilitiesQuery.error,
+      client,
+      isPending,
+      projectTaskStates,
+      projects,
+      projectsQuery.error,
+      tasks,
+    ],
+  );
+  const actionsValue = useMemo<ProjectActionsContextValue>(
+    () => ({
+      addProject,
+      fetchNextProjectTaskPage,
+      forgetTask,
+      markTaskRunning,
+      projectRuntime,
+      refreshProjectGitStatus,
+      removeProject,
+      renameProject,
+      reorderProjects,
+      requestNotificationPermission,
+      retry,
+      setExpandedProjectTaskIds,
+      viewTask,
+    }),
+    [
+      addProject,
+      fetchNextProjectTaskPage,
+      forgetTask,
+      markTaskRunning,
+      projectRuntime,
+      refreshProjectGitStatus,
+      removeProject,
+      renameProject,
+      reorderProjects,
+      requestNotificationPermission,
+      retry,
+      setExpandedProjectTaskIds,
+      viewTask,
+    ],
+  );
+  const activityValue = useMemo<ProjectActivityContextValue>(
+    () => ({
+      addProjectError,
+      isProjectActionPending: isProjectRenamePending || isProjectRemovePending,
+      isProjectOrderPending,
+      isProjectPickerOpen,
+      projectActionError,
+      projectOrderError,
+      taskActivity,
+    }),
+    [
+      addProjectError,
+      isProjectPickerOpen,
+      projectActionError,
+      projectOrderError,
+      isProjectOrderPending,
+      isProjectRemovePending,
+      isProjectRenamePending,
+      taskActivity,
+    ],
+  );
+
   return (
     <>
       {queriedProjects.map((project) => (
@@ -500,54 +604,43 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           projectId={project.id}
         />
       ))}
-      <ProjectContext.Provider
-        value={{
-          addProject,
-          addProjectError,
-          capabilities: capabilitiesQuery.data,
-          client,
-          error: capabilitiesQuery.error ?? projectsQuery.error,
-          fetchNextProjectTaskPage,
-          forgetTask,
-          isPending,
-          isProjectPickerOpen,
-          isProjectActionPending:
-            projectRenameMutation.isPending || projectRemoveMutation.isPending,
-          isProjectOrderPending: projectOrderMutation.isPending,
-          markTaskRunning,
-          projectRuntime,
-          projectTaskStates,
-          projects,
-          projectOrderError,
-          projectActionError,
-          requestNotificationPermission,
-          reorderProjects,
-          removeProject,
-          renameProject,
-          refreshProjectGitStatus,
-          retry,
-          setExpandedProjectTaskIds,
-          taskActivity,
-          tasks,
-          viewTask,
-        }}
-      >
-        {children}
-      </ProjectContext.Provider>
+      <ProjectDataContext.Provider value={dataValue}>
+        <ProjectActionsContext.Provider value={actionsValue}>
+          <ProjectActivityContext.Provider value={activityValue}>
+            {children}
+          </ProjectActivityContext.Provider>
+        </ProjectActionsContext.Provider>
+      </ProjectDataContext.Provider>
     </>
   );
 }
 
-export function useProjects() {
-  const context = useContext(ProjectContext);
+export function useProjectData() {
+  const context = useContext(ProjectDataContext);
   if (context === undefined) {
-    throw new Error("useProjects must be used inside ProjectProvider");
+    throw new Error("useProjectData must be used inside ProjectProvider");
+  }
+  return context;
+}
+
+export function useProjectActions() {
+  const context = useContext(ProjectActionsContext);
+  if (context === undefined) {
+    throw new Error("useProjectActions must be used inside ProjectProvider");
+  }
+  return context;
+}
+
+export function useProjectActivity() {
+  const context = useContext(ProjectActivityContext);
+  if (context === undefined) {
+    throw new Error("useProjectActivity must be used inside ProjectProvider");
   }
   return context;
 }
 
 export function useProjectTaskSearch(normalizedQuery: string) {
-  const { client, projects } = useProjects();
+  const { client, projects } = useProjectData();
   const isSearchEnabled = normalizedQuery.length > 0;
   const searchQueries = useQueries({
     queries: projects.map((project) =>

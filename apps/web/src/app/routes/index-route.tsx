@@ -2,7 +2,7 @@ import { createRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import { useProjects } from "../../features/projects/project-context.js";
+import { useProjectActions, useProjectData } from "../../features/projects/project-context.js";
 import {
   globalSettingsMutationOptions,
   globalSettingsQueryOptions,
@@ -22,7 +22,8 @@ export const indexRoute = createRoute({
 
 function IndexPage() {
   const { t } = useTranslation("common");
-  const { client, error, isPending, projects, retry } = useProjects();
+  const { client, error, isPending, projects } = useProjectData();
+  const { retry } = useProjectActions();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const globalSettingsQuery = useQuery(globalSettingsQueryOptions(client));

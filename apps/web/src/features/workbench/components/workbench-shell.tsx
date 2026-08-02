@@ -28,7 +28,7 @@ import {
 } from "react";
 import { PanelLeft, PanelRight, Pencil } from "lucide-react";
 
-import { useProjects } from "../../projects/project-context.js";
+import { useProjectActions, useProjectData } from "../../projects/project-context.js";
 import {
   useTaskRuntime,
   type TaskRuntimeView,
@@ -129,21 +129,16 @@ function shouldOpenDesktopPanel(query: string) {
 
 export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const { t } = useTranslation("workbench");
+  const { capabilities, client, error, isPending, projects, projectTaskStates, tasks } =
+    useProjectData();
   const {
-    capabilities,
-    client,
-    error,
-    isPending,
     markTaskRunning,
     projectRuntime,
-    projects,
-    projectTaskStates,
     refreshProjectGitStatus,
     requestNotificationPermission,
     retry,
-    tasks,
     viewTask,
-  } = useProjects();
+  } = useProjectActions();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const modelsQuery = useQuery(modelsQueryOptions(client));
