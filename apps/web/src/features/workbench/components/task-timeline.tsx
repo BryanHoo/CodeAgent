@@ -16,7 +16,7 @@ import {
   RotateCcw,
   SquareTerminal,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 
 import { getCurrentLanguage, i18n, useTranslation } from "../../../i18n/i18n.js";
@@ -26,6 +26,7 @@ import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtim
 import {
   PENDING_COMMAND_LABEL,
   RETAINED_COMMAND_OUTPUT_MARKER,
+  createTaskStore,
   type NormalizedAgentTurn,
   type TaskItemStore,
   type TaskStore,
@@ -132,7 +133,6 @@ const ignoreSourceFile = () => undefined;
 const ignoreFileChanges = () => undefined;
 const ignorePendingRequest = () => Promise.resolve();
 const ignoreRollback = () => Promise.resolve();
-const getTurnId = (turn: AgentTurn) => turn.id;
 const getTurnIdKey = (turnId: string) => turnId;
 
 function EmptyTimeline({
@@ -735,12 +735,6 @@ type IndexedAgentItem = Readonly<{
   itemIndex: number;
 }>;
 
-type UserTimelineItem = Extract<AgentItem, { type: "message" | "review" }>;
-
-type TurnTimelineGroup =
-  | Readonly<{ item: UserTimelineItem; type: "user" }>
-  | Readonly<{ items: readonly IndexedAgentItem[]; key: string; type: "assistant" }>;
-
 type RunningOperation = Readonly<{
   label: string;
   type: "command" | "operation";
@@ -824,33 +818,6 @@ function RunningReplyStatus({ operation }: Readonly<{ operation?: RunningOperati
       </Shimmer>
     </div>
   );
-}
-
-function groupTurnTimelineItems(items: readonly AgentItem[]): TurnTimelineGroup[] {
-  const groups: TurnTimelineGroup[] = [];
-  let assistantItems: IndexedAgentItem[] = [];
-
-  const flushAssistantItems = () => {
-    const firstAssistantItem = assistantItems[0];
-    if (firstAssistantItem === undefined) {
-      return;
-    }
-    groups.push({ items: assistantItems, key: firstAssistantItem.item.id, type: "assistant" });
-    assistantItems = [];
-  };
-
-  items.forEach((item, itemIndex) => {
-    if (item.type === "review" || (item.type === "message" && item.role === "user")) {
-      // 用户消息切断回复分组，其余 Item 都属于当前 Turn 的一次 AI 回复。
-      flushAssistantItems();
-      groups.push({ item, type: "user" });
-      return;
-    }
-    assistantItems.push({ item, itemIndex });
-  });
-  flushAssistantItems();
-
-  return groups;
 }
 
 function getReviewMessageText(item: Extract<AgentItem, { type: "review" }>): string {
@@ -1099,145 +1066,6 @@ function TimelineItemContent({
         </Task>
       );
   }
-}
-
-function TurnTimelineItems({
-  canRollback,
-  latestSnapshotTimestamp,
-  onForkTask,
-  onOpenFileDiff,
-  onOpenSourceFile,
-  onReviewFileChanges,
-  onRollbackTurn,
-  projectId,
-  taskId,
-  turn,
-}: Readonly<{
-  canRollback: boolean;
-  latestSnapshotTimestamp: string;
-  onForkTask?: ForkTaskAction;
-  onOpenFileDiff: (change: AgentFileChange) => void;
-  onOpenSourceFile: (reference: MessageFileReference) => void;
-  onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
-  onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
-  projectId: string;
-  taskId: string;
-  turn: AgentTurn;
-}>) {
-  const timelineGroups = groupTurnTimelineItems(turn.items);
-  const firstAssistantGroupIndex = timelineGroups.findIndex((group) => group.type === "assistant");
-  const hasAssistantItems = firstAssistantGroupIndex >= 0;
-  const latestAssistantGroupIndex = timelineGroups.findLastIndex(
-    (group) => group.type === "assistant",
-  );
-
-  const renderedGroups = timelineGroups.map((group, groupIndex) => {
-    if (group.type === "user") {
-      const copiedText =
-        group.item.type === "review"
-          ? getReviewMessageText(group.item)
-          : [
-              ...(group.item.skills ?? []).map((skill) => `$${skill.name}`),
-              ...(group.item.attachments ?? []).map((attachment) =>
-                i18n.t("timeline.imageCopyLabel", {
-                  name: attachment.name,
-                  ns: "conversation",
-                }),
-              ),
-              group.item.text,
-            ]
-              .filter((part) => part.length > 0)
-              .join("\n");
-      return (
-        <Message from="user" key={group.item.id}>
-          <TimelineItemContent
-            isLastTurnItem={false}
-            item={group.item}
-            onOpenSourceFile={onOpenSourceFile}
-            projectId={projectId}
-            taskId={taskId}
-            turnStatus={turn.status}
-          />
-          <MessageMetadata
-            {...(group.item.type === "review"
-              ? { modeLabel: i18n.t("timeline.reviewMode", { ns: "conversation" }) }
-              : {
-                  timestamp: getMessageTimestamp("user", turn, latestSnapshotTimestamp),
-                })}
-            text={copiedText}
-          />
-        </Message>
-      );
-    }
-
-    const assistantText = group.items
-      .flatMap(({ item }) =>
-        item.type === "message" && item.role === "assistant" ? [item.text] : [],
-      )
-      .join("\n\n");
-    const responseFileChanges = group.items.flatMap(({ item }) =>
-      item.type === "file_change" && item.status === "completed" ? item.changes : [],
-    );
-    const showCompletedFooter = turn.status !== "running" && assistantText.trim().length > 0;
-    const showChangedFilesCard = turn.status !== "running" && responseFileChanges.length > 0;
-    const showRunningShimmer =
-      turn.status === "running" && groupIndex === timelineGroups.length - 1;
-    const runningOperation = showRunningShimmer ? resolveRunningOperation(group.items) : undefined;
-    return (
-      <Message from="assistant" key={group.key}>
-        {groupIndex === firstAssistantGroupIndex ? (
-          <TurnProcessingTime completedAt={turn.completedAt} startedAt={turn.startedAt} />
-        ) : null}
-        <div className="w-full space-y-4">
-          {group.items.map(({ item, itemIndex }) => {
-            return (
-              <TimelineItemContent
-                isLastTurnItem={itemIndex === turn.items.length - 1}
-                item={item}
-                key={item.id}
-                onOpenSourceFile={onOpenSourceFile}
-                projectId={projectId}
-                taskId={taskId}
-                turnStatus={turn.status}
-              />
-            );
-          })}
-          {showRunningShimmer ? <RunningReplyStatus operation={runningOperation} /> : null}
-        </div>
-        {showChangedFilesCard ? (
-          <ChangedFilesCard
-            canRollback={canRollback}
-            changes={responseFileChanges}
-            onOpenFileDiff={onOpenFileDiff}
-            onReviewFileChanges={onReviewFileChanges}
-            onRollback={(idempotencyKey) => onRollbackTurn(turn.id, idempotencyKey)}
-          />
-        ) : null}
-        {showCompletedFooter ? (
-          <MessageMetadata
-            {...(groupIndex === latestAssistantGroupIndex && onForkTask !== undefined
-              ? { onForkTask }
-              : {})}
-            text={assistantText}
-            timestamp={getMessageTimestamp("assistant", turn, latestSnapshotTimestamp)}
-          />
-        ) : null}
-      </Message>
-    );
-  });
-
-  return (
-    <>
-      {renderedGroups}
-      {turn.status === "running" && !hasAssistantItems ? (
-        <Message from="assistant">
-          <TurnProcessingTime completedAt={turn.completedAt} startedAt={turn.startedAt} />
-          {/* 首个 Delta 到达前同样用回复尾行的 Shimmer 表达实时运行状态。 */}
-          <RunningReplyStatus />
-        </Message>
-      ) : null}
-    </>
-  );
 }
 
 type StoredTurnTimelineGroup =
@@ -1777,88 +1605,29 @@ export function TaskSnapshotTimeline({
   snapshot: RuntimeTaskSnapshot;
 }>) {
   useTranslation("conversation");
-  // 审批完成后仍保留实时快照记录，但已解决请求不再占用消息时间线。
-  const visiblePendingRequests = snapshot.pendingRequests.filter(
-    (request) => request.status !== "resolved",
+  const store = useMemo(
+    // 启动快照也进入统一归一化边界，确保分组、容量限制和渲染行为与实时 Store 一致。
+    () =>
+      createTaskStore(
+        { projectId: snapshot.projectId, taskId: snapshot.id },
+        {
+          checkpoint: { sequence: 0, sessionId: "starting-snapshot" },
+          snapshot,
+        },
+      ),
+    [snapshot],
   );
-  if (snapshot.turns.length === 0 && visiblePendingRequests.length === 0) {
-    return (
-      <TimelineState message={i18n.t("timeline.noHistory", { ns: "conversation" })} role="status" />
-    );
-  }
-  const firstPendingIndex = visiblePendingRequests.findIndex(
-    (candidate) => candidate.status === "pending",
-  );
-  const latestTurnId = snapshot.turns.at(-1)?.id;
-
   return (
-    <Conversation
-      aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
-      conversationId={`${snapshot.projectId}:${snapshot.id}`}
-    >
-      <ConversationVirtualList
-        {...(visiblePendingRequests.length === 0
-          ? {}
-          : {
-              footer: visiblePendingRequests.map((request, index) => {
-                // 只开放队首未解决请求，避免并发响应改变 Provider 的请求顺序。
-                return (
-                  <PendingRequestCard
-                    interactive={
-                      connected && request.status === "pending" && index === firstPendingIndex
-                    }
-                    key={request.requestId}
-                    onResolve={onResolvePendingRequest}
-                    request={request}
-                  />
-                );
-              }),
-            })}
-        getItemKey={getTurnId}
-        items={snapshot.turns}
-        renderItem={(turn, turnIndex) => (
-          <section
-            aria-label={`Turn ${String(turnIndex + 1)}`}
-            className="space-y-4"
-            data-status={turn.status}
-          >
-            <TurnTimelineItems
-              canRollback={
-                connected &&
-                canRollbackTurns &&
-                turn.status === "completed" &&
-                turn.id === latestTurnId
-              }
-              latestSnapshotTimestamp={snapshot.updatedAt}
-              {...(connected &&
-              turn.status === "completed" &&
-              turn.id === latestTurnId &&
-              onForkTask !== undefined
-                ? { onForkTask }
-                : {})}
-              onOpenFileDiff={onOpenFileDiff}
-              onOpenSourceFile={onOpenSourceFile}
-              onReviewFileChanges={onReviewFileChanges}
-              onRollbackTurn={onRollbackTurn}
-              projectId={snapshot.projectId}
-              taskId={snapshot.id}
-              turn={turn}
-            />
-            {turn.error === null ? null : (
-              <div
-                className="rounded-surface bg-control px-3 py-2 text-label leading-5 text-danger"
-                role="alert"
-              >
-                <p className="font-medium">
-                  {i18n.t("timeline.turnFailed", { ns: "conversation" })}
-                </p>
-                <p className="mt-1">{turn.error}</p>
-              </div>
-            )}
-          </section>
-        )}
-      />
-      <ConversationScrollButton />
-    </Conversation>
+    <TaskStoreTimeline
+      canRollbackTurns={canRollbackTurns}
+      connected={connected}
+      {...(onForkTask === undefined ? {} : { onForkTask })}
+      onOpenFileDiff={onOpenFileDiff}
+      onOpenSourceFile={onOpenSourceFile}
+      onReviewFileChanges={onReviewFileChanges}
+      onResolvePendingRequest={onResolvePendingRequest}
+      onRollbackTurn={onRollbackTurn}
+      store={store}
+    />
   );
 }

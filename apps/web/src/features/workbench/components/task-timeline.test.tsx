@@ -251,6 +251,44 @@ describe("TaskTimeline", () => {
     expect(markup).toContain("开始并继续");
   });
 
+  it("normalizes the starting snapshot through the bounded task store", () => {
+    const startingSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      pendingRequests: Array.from({ length: 21 }, (_, index) => ({
+        availableDecisions: ["allow", "deny"] as const,
+        createdAt: `2026-07-24T00:01:${String(index).padStart(2, "0")}.000Z`,
+        expiresAt: null,
+        grantRoot: `/workspace/expired-${String(index + 1)}`,
+        itemId: `file-change-${String(index + 1)}`,
+        projectId: snapshot.projectId,
+        reason: null,
+        requestId: `number:expired-${String(index + 1)}`,
+        status: "expired" as const,
+        taskId: snapshot.id,
+        turnId: completedTurn.id,
+        type: "file_change_approval" as const,
+      })),
+    };
+
+    const markup = renderToStaticMarkup(
+      <TaskTimeline
+        projectId={startingSnapshot.projectId}
+        runtime={{
+          connectionState: "connecting",
+          error: null,
+          isPending: true,
+          snapshot: undefined,
+          store: undefined,
+        }}
+        startingSnapshot={startingSnapshot}
+        taskId={startingSnapshot.id}
+      />,
+    );
+
+    expect(markup).not.toContain('data-approval-id="number:expired-1"');
+    expect(markup).toContain('data-approval-id="number:expired-21"');
+  });
+
   it("virtualizes Turn sections from the normalized store", () => {
     const longSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
