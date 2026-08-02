@@ -9,7 +9,7 @@
 - 使用参数数组、`shell: false` 和经过控制的环境变量；Secret 不进入参数或日志。
 - 所有 RPC 设置超时；子进程退出时统一 Reject Pending RPC，并清理 Listener。
 - App Server 初始化必须启用 experimental API；后台终端只通过 `thread/backgroundTerminals/list` 获取，并在 Provider 边界把原生 `processId` 映射为不透明 Terminal ID。停止单个终端固定调用 `thread/backgroundTerminals/terminate`，不能用 `turn/interrupt` 代替。
-- JSONL 字节流必须跨 Buffer 分片保留 UTF-8 解码状态，不得逐块独立转码。
+- JSONL 字节流必须跨 Buffer 分片保留 UTF-8 解码状态，不得逐块独立转码；完整帧和未完成 Buffer 必须按原始 UTF-8 字节分别执行有界限制，超限立即关闭连接，协议错误只能记录帧长度、类型或安全摘要，禁止携带原始帧内容。
 - JSONL 中同时包含 `id` 与 `method` 的合法帧按服务端请求分发，并使用原 `id` 返回结果；未支持的方法返回 `-32601`，非法参数返回 `-32602`，不得让 Codex 无限等待。
 - Provider 丢弃未知 Notification 或隔离单条字段映射失败时必须通过 Pino 告警，固定记录 `diagnosticCode`、method、Codex version、Project ID 和可提取的 Task ID；禁止记录原始 params、Prompt、命令输出或文件正文。
 - JSONL 响应只有在底层写入回调确认后才算成功，所有写入都使用有界超时；异步写入失败必须关闭连接且不能提前发布请求终态。

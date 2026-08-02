@@ -10,7 +10,10 @@ import {
 } from "./jsonl-rpc-client.js";
 import type { RpcResponseError } from "./jsonl-rpc-client.js";
 
-function createHarness(defaultTimeoutMs = 1_000) {
+function createHarness(
+  defaultTimeoutMs = 1_000,
+  limits: Readonly<{ maxBufferBytes?: number; maxFrameBytes?: number }> = {},
+) {
   const serverOutput = new PassThrough();
   const serverInput = new PassThrough();
   const sentMessages: unknown[] = [];
@@ -30,6 +33,7 @@ function createHarness(defaultTimeoutMs = 1_000) {
   const client = new JsonlRpcClient({
     defaultTimeoutMs,
     input: serverOutput,
+    ...limits,
     output: serverInput,
   });
 
@@ -75,7 +79,64 @@ describe("JsonlRpcClient", () => {
     client.close();
   });
 
-  it("removes a consumed JSONL burst prefix only once", () => {
+  it("closes when a complete JSONL frame exceeds the UTF-8 byte limit", () => {
+    const frame = JSON.stringify({ method: "message/delta", params: { text: "你好" } });
+    const frameBytes = Buffer.byteLength(frame, "utf8");
+    const { client, serverOutput } = createHarness(1_000, {
+      maxBufferBytes: frameBytes * 2,
+      maxFrameBytes: frameBytes - 1,
+    });
+    const onError = vi.fn();
+    client.onError(onError);
+
+    serverOutput.write(`${frame}\n`);
+
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: `RPC JSONL frame exceeds ${String(frameBytes - 1)} bytes (${String(frameBytes)} bytes)`,
+      }),
+    );
+    expect(client.closed).toBe(true);
+  });
+
+  it("closes when an unfinished JSONL buffer exceeds the UTF-8 byte limit", () => {
+    const { client, serverOutput } = createHarness(1_000, {
+      maxBufferBytes: 5,
+      maxFrameBytes: 100,
+    });
+    const onError = vi.fn();
+    client.onError(onError);
+
+    // 两个汉字占 6 个 UTF-8 字节，不能按 JavaScript 字符数误判为未超限。
+    serverOutput.write("你好");
+
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "RPC unfinished JSONL buffer exceeds 5 bytes (6 bytes)",
+      }),
+    );
+    expect(client.closed).toBe(true);
+  });
+
+  it("closes an unfinished frame as soon as it exceeds the frame limit", () => {
+    const { client, serverOutput } = createHarness(1_000, {
+      maxBufferBytes: 100,
+      maxFrameBytes: 5,
+    });
+    const onError = vi.fn();
+    client.onError(onError);
+
+    serverOutput.write("123456");
+
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "RPC JSONL frame exceeds 5 bytes (6 bytes)",
+      }),
+    );
+    expect(client.closed).toBe(true);
+  });
+
+  it("does not copy complete frames from a JSONL burst", () => {
     const { client, serverOutput } = createHarness();
     const onNotification = vi.fn();
     client.onNotification(onNotification);
@@ -83,7 +144,7 @@ describe("JsonlRpcClient", () => {
     const burst = Array.from({ length: frameCount }, (_, index) =>
       JSON.stringify({ method: "message/delta", params: { index } }),
     ).join("\n");
-    const sliceSpy = vi.spyOn(String.prototype, "slice");
+    const concatSpy = vi.spyOn(Buffer, "concat");
 
     try {
       serverOutput.write(`${burst}\n`);
@@ -93,10 +154,9 @@ describe("JsonlRpcClient", () => {
         method: "message/delta",
         params: { index: frameCount - 1 },
       });
-      // 每帧只截取当前行，全部扫描结束后再统一移除已消费前缀。
-      expect(sliceSpy).toHaveBeenCalledTimes(frameCount + 1);
+      expect(concatSpy).not.toHaveBeenCalled();
     } finally {
-      sliceSpy.mockRestore();
+      concatSpy.mockRestore();
       client.close();
     }
   });
@@ -134,6 +194,25 @@ describe("JsonlRpcClient", () => {
 
     await expect(request).rejects.toBeInstanceOf(RpcProtocolError);
     expect(onError).toHaveBeenCalledOnce();
+    expect(client.closed).toBe(true);
+  });
+
+  it("does not expose malformed frame content in protocol errors", () => {
+    const { client, serverOutput } = createHarness();
+    const onError = vi.fn();
+    const sensitiveValue = "PRIVATE_PROMPT_AND_FILE_CONTENT";
+    const malformedFrame = `{"method":"message/delta","params":{"text":"${sensitiveValue}"},}`;
+    client.onError(onError);
+
+    serverOutput.write(`${malformedFrame}\n`);
+
+    const error = onError.mock.calls[0]?.[0] as Error | undefined;
+    expect(error).toBeInstanceOf(RpcProtocolError);
+    expect(error?.message).toBe(
+      `Invalid JSONL frame (${String(Buffer.byteLength(malformedFrame, "utf8"))} bytes; JSON parse failed)`,
+    );
+    expect(error?.message).not.toContain(sensitiveValue);
+    expect(error).not.toHaveProperty("cause");
     expect(client.closed).toBe(true);
   });
 

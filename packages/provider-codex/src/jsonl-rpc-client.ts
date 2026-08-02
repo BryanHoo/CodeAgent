@@ -1,11 +1,15 @@
 import type { Readable, Writable } from "node:stream";
-import { StringDecoder } from "node:string_decoder";
+
+const DEFAULT_MAX_JSONL_BYTES = 16 * 1_024 * 1_024;
+const EMPTY_BUFFER = Buffer.alloc(0);
 
 export interface JsonlRpcClientOptions {
   input: Readable;
   output: Writable;
   defaultTimeoutMs?: number;
   closeOnInputEnd?: boolean;
+  maxFrameBytes?: number;
+  maxBufferBytes?: number;
 }
 
 interface PendingRequest {
@@ -96,17 +100,25 @@ function parseRpcError(value: unknown): RpcErrorPayload | null {
   return { code: value["code"], data: value["data"], message: value["message"] };
 }
 
+function validateByteLimit(value: number, optionName: string): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${optionName} must be a positive safe integer`);
+  }
+  return value;
+}
+
 export class JsonlRpcClient {
   readonly #defaultTimeoutMs: number;
   readonly #closeOnInputEnd: boolean;
-  readonly #decoder = new StringDecoder("utf8");
   readonly #errorListeners = new Set<ErrorListener>();
   readonly #input: Readable;
+  readonly #maxBufferBytes: number;
+  readonly #maxFrameBytes: number;
   readonly #notificationListeners = new Set<NotificationListener>();
   readonly #output: Writable;
   readonly #pending = new Map<number, PendingRequest>();
   readonly #serverRequestListeners = new Set<ServerRequestListener>();
-  #buffer = "";
+  #buffer = EMPTY_BUFFER;
   #closed = false;
   #nextRequestId = 1;
 
@@ -115,6 +127,14 @@ export class JsonlRpcClient {
     this.#output = options.output;
     this.#defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
     this.#closeOnInputEnd = options.closeOnInputEnd ?? true;
+    this.#maxFrameBytes = validateByteLimit(
+      options.maxFrameBytes ?? DEFAULT_MAX_JSONL_BYTES,
+      "maxFrameBytes",
+    );
+    this.#maxBufferBytes = validateByteLimit(
+      options.maxBufferBytes ?? DEFAULT_MAX_JSONL_BYTES,
+      "maxBufferBytes",
+    );
 
     this.#input.on("data", this.#handleData);
     this.#input.on("end", this.#handleInputEnd);
@@ -229,45 +249,72 @@ export class JsonlRpcClient {
       pending.reject(reason);
     }
     this.#pending.clear();
+    this.#buffer = EMPTY_BUFFER;
     this.#notificationListeners.clear();
     this.#serverRequestListeners.clear();
     this.#errorListeners.clear();
   }
 
   readonly #handleData = (chunk: Buffer | string): void => {
-    // 保留跨 Buffer 边界的 UTF-8 字节，避免静默损坏多字节字符。
-    this.#buffer += this.#decoder.write(
-      typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk,
-    );
-
-    // 使用游标扫描 burst，避免每处理一帧都复制尚未消费的剩余 Buffer。
-    let lineStart = 0;
-    let newlineIndex = this.#buffer.indexOf("\n", lineStart);
+    const input = typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk;
+    let frameStart = 0;
+    let newlineIndex = input.indexOf(0x0a, frameStart);
     while (newlineIndex >= 0) {
-      const line = this.#buffer.slice(lineStart, newlineIndex).replace(/\r$/, "");
-      lineStart = newlineIndex + 1;
-      if (line.trim()) {
-        try {
-          this.#handleLine(line);
-        } catch (error) {
-          const protocolError =
-            error instanceof RpcProtocolError
-              ? error
-              : new RpcProtocolError(`Invalid JSONL frame: ${line}`, { cause: error });
-          this.#fail(protocolError);
-          return;
-        }
+      const chunkFrame = input.subarray(frameStart, newlineIndex);
+      const endsWithCarriageReturn =
+        chunkFrame.at(-1) === 0x0d || (chunkFrame.length === 0 && this.#buffer.at(-1) === 0x0d);
+      const frameBytes = this.#buffer.length + chunkFrame.length - (endsWithCarriageReturn ? 1 : 0);
+      if (frameBytes > this.#maxFrameBytes) {
+        this.#failOversizedFrame(frameBytes);
+        return;
       }
-      newlineIndex = this.#buffer.indexOf("\n", lineStart);
+
+      // 仅在帧跨 chunk 时拼接，完整 burst 内的帧直接使用原 Buffer 视图。
+      let frame =
+        this.#buffer.length === 0
+          ? chunkFrame
+          : Buffer.concat([this.#buffer, chunkFrame], this.#buffer.length + chunkFrame.length);
+      this.#buffer = EMPTY_BUFFER;
+      if (endsWithCarriageReturn) {
+        frame = frame.subarray(0, -1);
+      }
+      if (!this.#handleFrame(frame)) {
+        return;
+      }
+      frameStart = newlineIndex + 1;
+      newlineIndex = input.indexOf(0x0a, frameStart);
     }
-    // 保留最后一个不完整帧，直到后续 chunk 补齐换行符。
-    this.#buffer = this.#buffer.slice(lineStart);
+
+    const remainder = input.subarray(frameStart);
+    const bufferedBytes = this.#buffer.length + remainder.length;
+    if (bufferedBytes > this.#maxBufferBytes) {
+      this.#fail(
+        new RpcProtocolError(
+          `RPC unfinished JSONL buffer exceeds ${String(this.#maxBufferBytes)} bytes (${String(bufferedBytes)} bytes)`,
+        ),
+      );
+      return;
+    }
+    if (bufferedBytes > this.#maxFrameBytes) {
+      this.#failOversizedFrame(bufferedBytes);
+      return;
+    }
+    if (remainder.length > 0) {
+      // 保留原始字节可精确计数，并自然覆盖跨 chunk 的 UTF-8 多字节字符。
+      this.#buffer =
+        this.#buffer.length === 0
+          ? Buffer.from(remainder)
+          : Buffer.concat([this.#buffer, remainder], bufferedBytes);
+    }
   };
 
   readonly #handleInputEnd = (): void => {
-    this.#buffer += this.#decoder.end();
-    if (this.#buffer.trim()) {
-      this.#fail(new RpcProtocolError("RPC input ended with an incomplete JSONL frame"));
+    if (this.#buffer.toString("utf8").trim()) {
+      this.#fail(
+        new RpcProtocolError(
+          `RPC input ended with an incomplete JSONL frame (${String(this.#buffer.length)} bytes)`,
+        ),
+      );
       return;
     }
     if (this.#closeOnInputEnd) {
@@ -279,12 +326,43 @@ export class JsonlRpcClient {
     this.#fail(new RpcConnectionClosedError(`RPC stream failed: ${error.message}`));
   };
 
-  #handleLine(line: string): void {
+  #failOversizedFrame(frameBytes: number): void {
+    this.#fail(
+      new RpcProtocolError(
+        `RPC JSONL frame exceeds ${String(this.#maxFrameBytes)} bytes (${String(frameBytes)} bytes)`,
+      ),
+    );
+  }
+
+  #handleFrame(frame: Buffer): boolean {
+    const line = frame.toString("utf8");
+    if (!line.trim()) {
+      return true;
+    }
+    try {
+      this.#handleLine(line, frame.length);
+      return true;
+    } catch (error) {
+      const protocolError =
+        error instanceof RpcProtocolError
+          ? error
+          : new RpcProtocolError(
+              `RPC JSONL frame processing failed (${String(frame.length)} bytes)`,
+            );
+      this.#fail(protocolError);
+      return false;
+    }
+  }
+
+  #handleLine(line: string, frameBytes: number): void {
     let message: unknown;
     try {
       message = JSON.parse(line) as unknown;
-    } catch (error) {
-      throw new RpcProtocolError(`Invalid JSONL frame: ${line}`, { cause: error });
+    } catch {
+      // JSON.parse 的原始异常可能带输入片段，因此只记录安全的帧元数据。
+      throw new RpcProtocolError(
+        `Invalid JSONL frame (${String(frameBytes)} bytes; JSON parse failed)`,
+      );
     }
     if (!isRecord(message)) {
       throw new RpcProtocolError("RPC frame must be a JSON object");
