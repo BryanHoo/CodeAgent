@@ -29,7 +29,7 @@ import {
   ForkAgentTaskResponseSchema,
   GenerateCommitMessageRequestSchema,
   GenerateCommitMessageResponseSchema,
-  AgentAttachmentUploadRequestSchema,
+  AgentAttachmentKindSchema,
   AgentAttachmentUploadResponseSchema,
   AgentModelPageSchema,
   AgentProjectDefaultsResponseSchema,
@@ -78,11 +78,13 @@ import {
   UploadAgentFeedbackRequestSchema,
   UploadAgentFeedbackResponseSchema,
   UnsubscribeAgentTaskResponseSchema,
-  MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
+  MAX_AGENT_FILE_BYTES,
   MAX_AGENT_FILE_TOTAL_BYTES,
+  MAX_AGENT_IMAGE_BYTES,
   MAX_AGENT_IMAGES,
   MAX_AGENT_IMAGE_TOTAL_BYTES,
-  type AgentAttachmentUploadRequest,
+  MAX_AGENT_TEXT_BYTES,
+  type AgentAttachmentKind,
   type AgentGlobalSettings,
   type ArchiveAgentTaskRequest,
   type AgentMutationError,
@@ -119,6 +121,7 @@ import {
   type UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
 import fastifyCompress from "@fastify/compress";
+import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, {
@@ -129,7 +132,11 @@ import Fastify, {
 } from "fastify";
 
 import { AgentEventStream } from "./agent-event-stream.js";
-import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js";
+import {
+  AttachmentNotFoundError,
+  AttachmentStore,
+  type StoredAttachmentUpload,
+} from "./attachment-store.js";
 import { commitSelectedProjectChanges, GitCommitError } from "./git-commit.js";
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
 import { readProjectFileTree } from "./project-file-tree.js";
@@ -182,6 +189,25 @@ const ProjectParamsSchema = {
   required: ["projectId"],
   type: "object",
 } as const;
+
+const ProjectAttachmentParamsSchema = {
+  additionalProperties: false,
+  properties: {
+    kind: AgentAttachmentKindSchema,
+    projectId: { minLength: 1, type: "string" },
+  },
+  required: ["kind", "projectId"],
+  type: "object",
+} as const;
+
+const MULTIPART_ENVELOPE_BYTES = 64 * 1024;
+
+function maximumAttachmentBytes(kind: AgentAttachmentKind): number {
+  if (kind === "image") {
+    return MAX_AGENT_IMAGE_BYTES;
+  }
+  return kind === "text" ? MAX_AGENT_TEXT_BYTES : MAX_AGENT_FILE_BYTES;
+}
 
 const ProjectTaskParamsSchema = {
   additionalProperties: false,
@@ -764,17 +790,19 @@ export async function createCodeAgentServer(
   const projectOpenService = options.projectOpenService ?? createProjectOpenService();
   const prepareFileRollback = options.prepareTurnFileRollback ?? prepareTurnFileRollback;
   const attachmentStore = new AttachmentStore();
-  const resolveProviderTurnInput = (
+  const resolveProviderTurnInput = async (
     projectId: string,
     input: AgentPromptInput,
-  ): Readonly<{ attachmentIds: readonly string[]; providerInput: AgentProviderTurnInput }> => {
+  ): Promise<
+    Readonly<{ attachmentIds: readonly string[]; providerInput: AgentProviderTurnInput }>
+  > => {
     const attachmentIds = input.attachments.map((attachment) => attachment.id);
     if (new Set(attachmentIds).size !== attachmentIds.length) {
       throw new MutationHttpError("INVALID_REQUEST", "Duplicate attachments are not allowed", 400);
     }
     let resolvedAttachments;
     try {
-      resolvedAttachments = attachmentStore.resolve(projectId, attachmentIds);
+      resolvedAttachments = await attachmentStore.resolve(projectId, attachmentIds);
     } catch (error) {
       if (error instanceof AttachmentNotFoundError) {
         throw new MutationHttpError(
@@ -791,7 +819,7 @@ export async function createCodeAgentServer(
       0,
     );
     const fileBytes = resolvedAttachments.reduce(
-      (total, attachment) => total + (attachment.kind === "file" ? attachment.size : 0),
+      (total, attachment) => total + (attachment.kind === "image" ? 0 : attachment.size),
       0,
     );
     const imageCount = resolvedAttachments.filter(
@@ -881,7 +909,11 @@ export async function createCodeAgentServer(
       transportMetrics: { activeClients: 0, slowClientDisconnects: 0 },
       unsubscribe: provider.subscribeEvents((event) => {
         if (event.type === "turn.completed") {
-          attachmentStore.releaseTurn(projectId, event.payload.turn.id);
+          void attachmentStore
+            .releaseTurn(projectId, event.payload.turn.id)
+            .catch((error: unknown) => {
+              app.log.warn({ error }, "Failed to release turn attachments");
+            });
         }
         eventStream.publish(event);
       }),
@@ -1080,6 +1112,9 @@ export async function createCodeAgentServer(
   };
 
   await app.register(fastifyWebsocket, { options: { maxPayload: 64 * 1024 } });
+  await app.register(fastifyMultipart, {
+    limits: { fields: 0, files: 1, fileSize: MAX_AGENT_FILE_BYTES, parts: 1 },
+  });
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof MutationHttpError) {
       return reply.code(error.statusCode).send({
@@ -1101,13 +1136,13 @@ export async function createCodeAgentServer(
     }
     return reply.send(error);
   });
-  app.addHook("onClose", () => {
+  app.addHook("onClose", async () => {
     for (const context of projectContexts.values()) {
       context.unsubscribe();
       context.eventStream.close();
     }
     projectContexts.clear();
-    attachmentStore.dispose();
+    await attachmentStore.dispose();
     activeGitMutations.clear();
     idempotencyEntries.clear();
     modelCatalogCache.clear();
@@ -1725,45 +1760,92 @@ export async function createCodeAgentServer(
   );
 
   app.post<{
-    Body: AgentAttachmentUploadRequest;
     Headers: { "idempotency-key": string };
-    Params: { projectId: string };
+    Params: { kind: AgentAttachmentKind; projectId: string };
   }>(
-    "/v1/projects/:projectId/attachments",
+    "/v1/projects/:projectId/attachments/:kind",
     {
-      bodyLimit: MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH + 1_024,
       schema: {
-        body: AgentAttachmentUploadRequestSchema,
         headers: IdempotencyHeadersSchema,
-        params: ProjectParamsSchema,
+        params: ProjectAttachmentParamsSchema,
         response: {
           201: AgentAttachmentUploadResponseSchema,
           400: AgentMutationErrorSchema,
           409: AgentMutationErrorSchema,
+          413: AgentMutationErrorSchema,
           502: AgentMutationErrorSchema,
         },
       },
     },
     async (request, reply) => {
+      const maximumBytes = maximumAttachmentBytes(request.params.kind);
+      const contentLength = Number(request.headers["content-length"]);
+      if (
+        Number.isFinite(contentLength) &&
+        contentLength > maximumBytes + MULTIPART_ENVELOPE_BYTES
+      ) {
+        throw new MutationHttpError("INVALID_REQUEST", "Attachment is too large", 413);
+      }
       if ((await getProjectContext(request.params.projectId)) === undefined) {
         throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
       }
-      const attachment = await runIdempotent(
-        ["upload-attachment", request.params.projectId],
-        request.headers["idempotency-key"],
-        request.body,
-        () => {
-          try {
-            return attachmentStore.add(request.params.projectId, request.body);
-          } catch (error) {
-            if (error instanceof TypeError || error instanceof RangeError) {
-              throw new MutationHttpError("INVALID_REQUEST", "Attachment is invalid", 400);
-            }
-            throw error;
-          }
-        },
-      );
-      return reply.code(201).send({ attachment });
+      if (!request.isMultipart()) {
+        throw new MutationHttpError(
+          "INVALID_REQUEST",
+          "Attachment must use multipart/form-data",
+          400,
+        );
+      }
+
+      let upload: StoredAttachmentUpload | undefined;
+      try {
+        const part = await request.file({
+          limits: { fields: 0, files: 1, fileSize: maximumBytes, parts: 1 },
+        });
+        if (part?.fieldname !== "attachment") {
+          throw new TypeError("Attachment file part is missing");
+        }
+        upload = await attachmentStore.add(request.params.projectId, {
+          content: part.file,
+          kind: request.params.kind,
+          mediaType: part.mimetype,
+          name: part.filename,
+        });
+        if (part.file.truncated) {
+          throw new RangeError("Attachment exceeds the maximum size");
+        }
+        const currentUpload = upload;
+        const attachment = await runIdempotent(
+          ["upload-attachment", request.params.projectId],
+          request.headers["idempotency-key"],
+          {
+            contentDigest: upload.contentDigest,
+            kind: request.params.kind,
+            mediaType: upload.attachment.mediaType,
+            name: upload.attachment.name,
+            size: upload.attachment.size,
+          },
+          () => currentUpload.attachment,
+        );
+        if (attachment.id !== upload.attachment.id) {
+          await attachmentStore.discard(upload.attachment.id);
+        }
+        return await reply.code(201).send({ attachment });
+      } catch (error) {
+        if (upload !== undefined) {
+          await attachmentStore.discard(upload.attachment.id);
+        }
+        if (
+          error instanceof RangeError ||
+          error instanceof app.multipartErrors.RequestFileTooLargeError
+        ) {
+          throw new MutationHttpError("INVALID_REQUEST", "Attachment is too large", 413);
+        }
+        if (error instanceof TypeError) {
+          throw new MutationHttpError("INVALID_REQUEST", "Attachment is invalid", 400);
+        }
+        throw error;
+      }
     },
   );
 
@@ -2505,7 +2587,7 @@ export async function createCodeAgentServer(
           if (task?.projectId !== context.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
-          const { attachmentIds, providerInput } = resolveProviderTurnInput(
+          const { attachmentIds, providerInput } = await resolveProviderTurnInput(
             request.params.projectId,
             request.body.input,
           );
@@ -2522,7 +2604,7 @@ export async function createCodeAgentServer(
             request.body.options,
           );
           // 只有 Provider 确认启动成功后才消费附件，网络失败仍允许原请求重试。
-          attachmentStore.consume(
+          await attachmentStore.consume(
             request.params.projectId,
             attachmentIds,
             turn.status === "running" ? turn.id : undefined,
@@ -2579,7 +2661,7 @@ export async function createCodeAgentServer(
             throw new MutationHttpError("TURN_NOT_RUNNING", "Turn is not running", 409);
           }
 
-          const { attachmentIds, providerInput } = resolveProviderTurnInput(
+          const { attachmentIds, providerInput } = await resolveProviderTurnInput(
             request.params.projectId,
             request.body.input,
           );
@@ -2589,7 +2671,11 @@ export async function createCodeAgentServer(
             providerInput,
           );
           // Provider 接受引导后才消费附件，失败时原请求仍可安全重试。
-          attachmentStore.consume(request.params.projectId, attachmentIds, request.params.turnId);
+          await attachmentStore.consume(
+            request.params.projectId,
+            attachmentIds,
+            request.params.turnId,
+          );
           return {
             status: "accepted" as const,
             taskId: request.params.taskId,

@@ -212,11 +212,13 @@ export type AgentReviewTarget = Readonly<Static<typeof AgentReviewTargetSchema>>
 
 export const MAX_AGENT_FILE_BYTES = 50 * 1024 * 1024;
 export const MAX_AGENT_FILE_TOTAL_BYTES = 50 * 1024 * 1024;
-export const MAX_AGENT_IMAGES = 1_500;
-export const MAX_AGENT_IMAGE_TOTAL_BYTES = 512 * 1024 * 1024;
-export const MAX_AGENT_ATTACHMENT_BYTES = MAX_AGENT_IMAGE_TOTAL_BYTES;
-export const MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH =
-  Math.ceil((MAX_AGENT_ATTACHMENT_BYTES * 4) / 3) + 64;
+export const MAX_AGENT_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_AGENT_IMAGES = 20;
+export const MAX_AGENT_IMAGE_TOTAL_BYTES = 50 * 1024 * 1024;
+export const MAX_AGENT_TEXT_BYTES = 1024 * 1024;
+export const MAX_AGENT_ATTACHMENT_BYTES = Math.max(MAX_AGENT_FILE_BYTES, MAX_AGENT_IMAGE_BYTES);
+export const MAX_AGENT_HISTORY_IMAGES = 1_500;
+export const MAX_AGENT_HISTORY_IMAGE_TOTAL_BYTES = 512 * 1024 * 1024;
 
 export const AGENT_IMAGE_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif";
 export const AGENT_FILE_EXTENSIONS = [
@@ -429,7 +431,7 @@ export const AgentMessageAttachmentSchema = Type.Object(
     id: Type.String({ minLength: 1 }),
     mediaType: AgentImageMediaTypeSchema,
     name: Type.String({ maxLength: 255, minLength: 1 }),
-    size: Type.Integer({ maximum: MAX_AGENT_IMAGE_TOTAL_BYTES, minimum: 1 }),
+    size: Type.Integer({ maximum: MAX_AGENT_HISTORY_IMAGE_TOTAL_BYTES, minimum: 1 }),
   },
   { additionalProperties: false },
 );
@@ -439,7 +441,7 @@ export type AgentMessageAttachment = Readonly<Static<typeof AgentMessageAttachme
 export const AgentMessageItemSchema = Type.Object(
   {
     attachments: Type.Optional(
-      Type.Array(AgentMessageAttachmentSchema, { maxItems: MAX_AGENT_IMAGES }),
+      Type.Array(AgentMessageAttachmentSchema, { maxItems: MAX_AGENT_HISTORY_IMAGES }),
     ),
     id: Type.String({ minLength: 1 }),
     role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
@@ -755,22 +757,6 @@ export const AgentAttachmentSchema = Type.Object(
 );
 
 export type AgentAttachment = Readonly<Static<typeof AgentAttachmentSchema>>;
-
-export const AgentAttachmentUploadRequestSchema = Type.Object(
-  {
-    dataUrl: Type.String({
-      maxLength: MAX_AGENT_ATTACHMENT_DATA_URL_LENGTH,
-      pattern: "^data:[A-Za-z0-9][A-Za-z0-9!#$&^_.+/-]*;base64,[A-Za-z0-9+/]+={0,2}$",
-    }),
-    kind: AgentAttachmentKindSchema,
-    name: Type.String({ maxLength: 255, minLength: 1 }),
-  },
-  { additionalProperties: false },
-);
-
-export type AgentAttachmentUploadRequest = Readonly<
-  Static<typeof AgentAttachmentUploadRequestSchema>
->;
 
 export const AgentAttachmentUploadResponseSchema = Type.Object(
   { attachment: AgentAttachmentSchema },

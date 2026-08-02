@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { Buffer } from "node:buffer";
 import { fileURLToPath } from "node:url";
 
 import { CodeAgentClient } from "@code-agent/client";
@@ -216,7 +217,13 @@ describe("Realtime Path", () => {
     const created = await client.startTask(project.id, { idempotencyKey: "create-complete" });
     const uploaded = await client.uploadAttachment(
       project.id,
-      { dataUrl: pixelDataUrl, kind: "image", name: "screen.png" },
+      {
+        content: new Blob([Buffer.from(pixelDataUrl.split(",")[1] ?? "", "base64")], {
+          type: "image/png",
+        }),
+        kind: "image",
+        name: "screen.png",
+      },
       { idempotencyKey: "upload-complete" },
     );
     const snapshot = await client.readTask(project.id, created.task.id);

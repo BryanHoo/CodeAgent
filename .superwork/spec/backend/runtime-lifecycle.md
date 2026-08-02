@@ -69,7 +69,7 @@
 - Task 创建在 Provider 成功但设置持久化失败时必须保留有界恢复状态；同 `Idempotency-Key` 重试只补齐持久化，不得再次调用 Provider 创建 Task。
 - 成功的幂等结果缓存必须同时设置容量上限和过期时间；进行中的请求不得淘汰，Runtime 关闭时清空全部条目。
 - 任何新增 Task Runtime、Snapshot、历史或终端缓存都必须同时声明按字节容量、Entry 次级上限和明确清理触发点；不得依赖框架默认 TTL 或无界模块级 Map。
-- 浏览器图片、文件与粘贴文本先经幂等上传进入 Server 的有界 TTL Store，并只返回随机 ID；普通文件以随机文件名写入 Runtime 专用临时目录，原始名称只用于 Codex `mention` 展示，不能成为磁盘路径。文本附件必须严格解码 UTF-8，并映射为带完整 UTF-8 字节范围 `text_elements` 的 Codex `text`；图片映射为 Data URL `image`。Provider 失败时保留引用供同一请求重试；Provider 接受后立即消费图片和文本引用，普通文件保留到对应 Turn 终态或 TTL 到期，Runtime 关闭时删除整个临时目录。
+- 浏览器图片、文件与粘贴文本只通过 `multipart/form-data` 二进制流幂等上传，类型由路由参数在 Body 解析前确定；Server 先按声明长度拒绝明显超限请求，再在流式写入中强制执行真实字节限制。所有附件均使用异步文件 API 和随机文件名写入 Runtime 专用临时目录，原始名称只用于 Codex `mention` 展示，不能成为磁盘路径；Store 不长期保留 Base64 或 Data URL。文本附件必须流式严格校验 UTF-8，并映射为带完整 UTF-8 字节范围 `text_elements` 的 Codex `text`；图片只在 Turn 启动前按需生成短生命周期 Data URL `image`。Provider 失败时保留引用供同一请求重试；Provider 接受后立即消费图片和文本引用，普通文件保留到对应 Turn 终态或 TTL 到期，Runtime 关闭时异步删除整个临时目录。
 
 ## 关闭
 

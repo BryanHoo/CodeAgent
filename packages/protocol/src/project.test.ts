@@ -3,7 +3,6 @@ import { Value } from "@sinclair/typebox/value";
 
 import {
   AgentAttachmentSchema,
-  AgentAttachmentUploadRequestSchema,
   AgentAttachmentUploadResponseSchema,
   AgentCapabilitiesSchema,
   AgentGlobalSettingsResponseSchema,
@@ -31,8 +30,10 @@ import {
   InterruptAgentTurnResponseSchema,
   MAX_AGENT_FILE_BYTES,
   MAX_AGENT_FILE_TOTAL_BYTES,
+  MAX_AGENT_IMAGE_BYTES,
   MAX_AGENT_IMAGES,
   MAX_AGENT_IMAGE_TOTAL_BYTES,
+  MAX_AGENT_TEXT_BYTES,
   PendingRequestSchema,
   StartAgentTaskRequestSchema,
   StartAgentTaskResponseSchema,
@@ -979,14 +980,6 @@ describe("project protocol", () => {
       }),
     ).toBe(true);
     expect(Value.Check(AgentAttachmentSchema, attachment)).toBe(true);
-    expect(
-      Value.Check(AgentAttachmentUploadRequestSchema, {
-        dataUrl:
-          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-        kind: "image",
-        name: attachment.name,
-      }),
-    ).toBe(true);
     expect(Value.Check(AgentAttachmentUploadResponseSchema, { attachment })).toBe(true);
     expect(Value.Check(AgentPromptInputSchema, prompt)).toBe(true);
     expect(
@@ -1033,26 +1026,12 @@ describe("project protocol", () => {
       }),
     ).toBe(false);
     expect(
-      Value.Check(AgentAttachmentUploadRequestSchema, {
-        dataUrl: "data:text/plain;base64,SGVsbG8=",
-        kind: "text",
-        name: "Pasted text.txt",
-      }),
-    ).toBe(true);
-    expect(
       Value.Check(AgentAttachmentSchema, {
         id: "attachment-text",
         kind: "text",
         mediaType: "text/plain",
         name: "Pasted text.txt",
         size: 5,
-      }),
-    ).toBe(true);
-    expect(
-      Value.Check(AgentAttachmentUploadRequestSchema, {
-        dataUrl: "data:application/pdf;base64,JVBERi0xLjQ=",
-        kind: "file",
-        name: "specification.pdf",
       }),
     ).toBe(true);
     expect(Value.Check(StartAgentTaskRequestSchema, {})).toBe(true);
@@ -1115,10 +1094,12 @@ describe("project protocol", () => {
     ).toBe(true);
   });
 
-  it("matches the official Codex image and file input limits", () => {
+  it("uses bounded image, file, and pasted text input limits", () => {
     expect(MAX_AGENT_FILE_BYTES).toBe(50 * 1024 * 1024);
     expect(MAX_AGENT_FILE_TOTAL_BYTES).toBe(50 * 1024 * 1024);
-    expect(MAX_AGENT_IMAGES).toBe(1_500);
-    expect(MAX_AGENT_IMAGE_TOTAL_BYTES).toBe(512 * 1024 * 1024);
+    expect(MAX_AGENT_IMAGE_BYTES).toBe(10 * 1024 * 1024);
+    expect(MAX_AGENT_IMAGES).toBe(20);
+    expect(MAX_AGENT_IMAGE_TOTAL_BYTES).toBe(50 * 1024 * 1024);
+    expect(MAX_AGENT_TEXT_BYTES).toBe(1024 * 1024);
   });
 });

@@ -63,8 +63,12 @@ const skillPage = {
 const mcpServerPage = {
   data: [{ name: "fast-context" }, { name: "chrome-devtools" }],
 };
-const pixelDataUrl =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const pixelBytes = Uint8Array.from(
+  globalThis.atob(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  ),
+  (value) => value.charCodeAt(0),
+);
 const attachment = {
   id: "attachment-1",
   kind: "image",
@@ -576,7 +580,11 @@ describe("CodeAgentClient", () => {
     await client.startTask("code-agent", { idempotencyKey: "task-key" });
     await client.uploadAttachment(
       "code-agent",
-      { dataUrl: pixelDataUrl, kind: "image", name: attachment.name },
+      {
+        content: new Blob([pixelBytes], { type: "image/png" }),
+        kind: "image",
+        name: attachment.name,
+      },
       { idempotencyKey: "attachment-key" },
     );
     await client.startTurn(
@@ -616,11 +624,16 @@ describe("CodeAgentClient", () => {
     expect(taskCall?.[0]).toBe("/v1/projects/code-agent/tasks");
     expect(taskCall?.[1]).toMatchObject({ body: "{}", method: "POST" });
     expect(new Headers(taskCall?.[1]?.headers).get("idempotency-key")).toBe("task-key");
-    expect(attachmentCall?.[0]).toBe("/v1/projects/code-agent/attachments");
+    expect(attachmentCall?.[0]).toBe("/v1/projects/code-agent/attachments/image");
     expect(attachmentCall?.[1]).toMatchObject({
-      body: JSON.stringify({ dataUrl: pixelDataUrl, kind: "image", name: "screen.png" }),
       method: "POST",
     });
+    expect(attachmentCall?.[1]?.body).toBeInstanceOf(FormData);
+    const attachmentForm = attachmentCall?.[1]?.body as FormData;
+    const attachmentFile = attachmentForm.get("attachment");
+    expect(attachmentFile).toBeInstanceOf(File);
+    expect(attachmentFile).toMatchObject({ name: "screen.png", size: 68, type: "image/png" });
+    expect(new Headers(attachmentCall?.[1]?.headers).has("content-type")).toBe(false);
     expect(new Headers(attachmentCall?.[1]?.headers).get("idempotency-key")).toBe("attachment-key");
     expect(turnCall?.[0]).toBe("/v1/projects/code-agent/tasks/task-1/turns");
     expect(turnCall?.[1]).toMatchObject({

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 
 import { describe, expect, it } from "vitest";
 
@@ -11,15 +12,24 @@ const pixelDataUrl =
 const pastedTextDataUrl = "data:text/plain;base64,5L2g5aW9IENvZGVBZ2VudA==";
 const pdfDataUrl = "data:application/pdf;base64,JVBERi0xLjQ=";
 
+function uploadInput(dataUrl: string, kind: "file" | "image" | "text", name: string) {
+  const [header, encoded = ""] = dataUrl.split(",");
+  return {
+    content: Readable.from(Buffer.from(encoded, "base64")),
+    kind,
+    mediaType: header?.slice(5, -7) ?? "",
+    name,
+  };
+}
+
 describe("AttachmentStore", () => {
-  it("stores validated image data behind an opaque reference", () => {
+  it("streams validated image data to disk behind an opaque reference", async () => {
     const store = new AttachmentStore({ createId: () => "attachment-1" });
 
-    const attachment = store.add("code-agent", {
-      dataUrl: pixelDataUrl,
-      kind: "image",
-      name: "screen.png",
-    });
+    const { attachment } = await store.add(
+      "code-agent",
+      uploadInput(pixelDataUrl, "image", "screen.png"),
+    );
 
     expect(attachment).toEqual({
       id: "attachment-1",
@@ -28,20 +38,19 @@ describe("AttachmentStore", () => {
       name: "screen.png",
       size: 68,
     });
-    expect(store.resolve("code-agent", [attachment.id])).toEqual([
+    await expect(store.resolve("code-agent", [attachment.id])).resolves.toEqual([
       { kind: "image", mediaType: "image/png", size: 68, url: pixelDataUrl },
     ]);
-    expect(() => store.resolve("other", [attachment.id])).toThrow(AttachmentNotFoundError);
+    await expect(store.resolve("other", [attachment.id])).rejects.toThrow(AttachmentNotFoundError);
   });
 
-  it("stores pasted UTF-8 text as a bounded text attachment", () => {
+  it("stores pasted UTF-8 text as a bounded text attachment", async () => {
     const store = new AttachmentStore({ createId: () => "attachment-text" });
 
-    const attachment = store.add("code-agent", {
-      dataUrl: pastedTextDataUrl,
-      kind: "text",
-      name: "Pasted text.txt",
-    });
+    const { attachment } = await store.add(
+      "code-agent",
+      uploadInput(pastedTextDataUrl, "text", "Pasted text.txt"),
+    );
 
     expect(attachment).toEqual({
       id: "attachment-text",
@@ -50,7 +59,7 @@ describe("AttachmentStore", () => {
       name: "Pasted text.txt",
       size: 16,
     });
-    expect(store.resolve("code-agent", [attachment.id])).toEqual([
+    await expect(store.resolve("code-agent", [attachment.id])).resolves.toEqual([
       {
         mediaType: "text/plain",
         kind: "text",
@@ -61,18 +70,17 @@ describe("AttachmentStore", () => {
     ]);
   });
 
-  it("materializes supported files for Codex mention inputs", () => {
+  it("materializes supported files for Codex mention inputs", async () => {
     const store = new AttachmentStore({
       attachmentDirectory: join(tmpdir(), `code-agent-attachment-test-${crypto.randomUUID()}`),
       createId: () => "attachment-file",
     });
 
-    const attachment = store.add("code-agent", {
-      dataUrl: pdfDataUrl,
-      kind: "file",
-      name: "specification.pdf",
-    });
-    const [resolved] = store.resolve("code-agent", [attachment.id]);
+    const { attachment } = await store.add(
+      "code-agent",
+      uploadInput(pdfDataUrl, "file", "specification.pdf"),
+    );
+    const [resolved] = await store.resolve("code-agent", [attachment.id]);
 
     expect(attachment).toMatchObject({
       kind: "file",
@@ -91,18 +99,20 @@ describe("AttachmentStore", () => {
     expect(existsSync(resolved.path)).toBe(true);
     expect(readFileSync(resolved.path, "utf8")).toBe("%PDF-1.4");
 
-    store.consume("code-agent", [attachment.id], "turn-file");
-    expect(() => store.resolve("code-agent", [attachment.id])).toThrow(AttachmentNotFoundError);
-    store.releaseTurn("other-project", "turn-file");
+    await store.consume("code-agent", [attachment.id], "turn-file");
+    await expect(store.resolve("code-agent", [attachment.id])).rejects.toThrow(
+      AttachmentNotFoundError,
+    );
+    await store.releaseTurn("other-project", "turn-file");
     expect(existsSync(resolved.path)).toBe(true);
-    store.releaseTurn("code-agent", "turn-file");
+    await store.releaseTurn("code-agent", "turn-file");
     expect(existsSync(resolved.path)).toBe(false);
 
-    store.dispose();
+    await store.dispose();
     expect(existsSync(resolved.path)).toBe(false);
   });
 
-  it("expires, consumes, and clears stored attachments", () => {
+  it("expires, consumes, and clears stored attachments", async () => {
     let now = 1_000;
     let nextId = 1;
     const store = new AttachmentStore({
@@ -110,51 +120,66 @@ describe("AttachmentStore", () => {
       createId: () => `attachment-${String(nextId++)}`,
       ttlMs: 100,
     });
-    const expired = store.add("code-agent", {
-      dataUrl: pixelDataUrl,
-      kind: "image",
-      name: "expired.png",
-    });
+    const { attachment: expired } = await store.add(
+      "code-agent",
+      uploadInput(pixelDataUrl, "image", "expired.png"),
+    );
     now = 1_101;
 
-    expect(() => store.resolve("code-agent", [expired.id])).toThrow(AttachmentNotFoundError);
+    await expect(store.resolve("code-agent", [expired.id])).rejects.toThrow(
+      AttachmentNotFoundError,
+    );
 
-    const consumed = store.add("code-agent", {
-      dataUrl: pixelDataUrl,
-      kind: "image",
-      name: "consumed.png",
-    });
-    expect(store.resolve("code-agent", [consumed.id])).toHaveLength(1);
-    store.consume("code-agent", [consumed.id]);
-    expect(() => store.resolve("code-agent", [consumed.id])).toThrow(AttachmentNotFoundError);
+    const { attachment: consumed } = await store.add(
+      "code-agent",
+      uploadInput(pixelDataUrl, "image", "consumed.png"),
+    );
+    await expect(store.resolve("code-agent", [consumed.id])).resolves.toHaveLength(1);
+    await store.consume("code-agent", [consumed.id]);
+    await expect(store.resolve("code-agent", [consumed.id])).rejects.toThrow(
+      AttachmentNotFoundError,
+    );
 
-    const cleared = store.add("code-agent", {
-      dataUrl: pixelDataUrl,
-      kind: "image",
-      name: "cleared.png",
-    });
-    store.clear();
-    expect(() => store.resolve("code-agent", [cleared.id])).toThrow(AttachmentNotFoundError);
+    const { attachment: cleared } = await store.add(
+      "code-agent",
+      uploadInput(pixelDataUrl, "image", "cleared.png"),
+    );
+    await store.clear();
+    await expect(store.resolve("code-agent", [cleared.id])).rejects.toThrow(
+      AttachmentNotFoundError,
+    );
   });
 
-  it("enforces decoded byte and total capacity limits", () => {
+  it("enforces decoded byte and total capacity limits", async () => {
     const store = new AttachmentStore({
       createId: () => globalThis.crypto.randomUUID(),
       maxBytes: 68,
       maxEntries: 1,
       maxTotalBytes: 68,
     });
-    store.add("code-agent", { dataUrl: pixelDataUrl, kind: "image", name: "first.png" });
+    await store.add("code-agent", uploadInput(pixelDataUrl, "image", "first.png"));
 
-    expect(() =>
-      store.add("code-agent", { dataUrl: pixelDataUrl, kind: "image", name: "second.png" }),
-    ).toThrow("Attachment store capacity exceeded");
-    expect(() =>
-      new AttachmentStore({ maxBytes: 67 }).add("code-agent", {
-        dataUrl: pixelDataUrl,
+    await expect(
+      store.add("code-agent", uploadInput(pixelDataUrl, "image", "second.png")),
+    ).rejects.toThrow("Attachment store capacity exceeded");
+    await expect(
+      new AttachmentStore({ maxBytes: 67 }).add(
+        "code-agent",
+        uploadInput(pixelDataUrl, "image", "large.png"),
+      ),
+    ).rejects.toThrow("Attachment exceeds the maximum size");
+  });
+
+  it("stops streaming an attachment as soon as its byte limit is exceeded", async () => {
+    const store = new AttachmentStore({ maxBytes: 2 });
+
+    await expect(
+      store.add("code-agent", {
+        content: Readable.from([Buffer.from([0x89, 0x50, 0x4e])]),
         kind: "image",
+        mediaType: "image/png",
         name: "large.png",
       }),
-    ).toThrow("Attachment exceeds the maximum size");
+    ).rejects.toThrow("Attachment exceeds the maximum size");
   });
 });

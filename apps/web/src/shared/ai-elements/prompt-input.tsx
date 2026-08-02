@@ -64,6 +64,7 @@ type PromptInputProps = Omit<FormHTMLAttributes<HTMLFormElement>, "onError" | "o
   imageAccept?: string;
   maxFileTotalSize?: number;
   maxFileSize?: number;
+  maxImageSize?: number;
   maxImages?: number;
   maxImageTotalSize?: number;
   multiple?: boolean;
@@ -126,6 +127,7 @@ export function PromptInput({
   largePasteCharacterThreshold = Number.POSITIVE_INFINITY,
   maxFileTotalSize = Number.POSITIVE_INFINITY,
   maxFileSize = Number.POSITIVE_INFINITY,
+  maxImageSize = Number.POSITIVE_INFINITY,
   maxImages = Number.POSITIVE_INFINITY,
   maxImageTotalSize = Number.POSITIVE_INFINITY,
   multiple = false,
@@ -201,6 +203,13 @@ export function PromptInput({
             });
             continue;
           }
+          if (kind === "image" && file.size > maxImageSize) {
+            onError?.({
+              code: "file_too_large",
+              message: t("aiElements.fileTooLarge", { name: file.name }),
+            });
+            continue;
+          }
           if (kind === "image" && imageCount >= maxImages) {
             onError?.({
               code: "too_many_images",
@@ -250,6 +259,7 @@ export function PromptInput({
       imageAccept,
       maxFileSize,
       maxFileTotalSize,
+      maxImageSize,
       maxImages,
       maxImageTotalSize,
       multiple,

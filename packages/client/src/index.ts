@@ -12,6 +12,7 @@ export {
   CodeAgentHttpError,
   CodeAgentMutationError,
   CodeAgentResponseError,
+  type AgentAttachmentUploadInput,
   type CodeAgentRequestTimeouts,
   type CodeAgentClientOptions,
   type ListTasksOptions,

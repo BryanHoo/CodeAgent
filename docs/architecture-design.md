@@ -430,7 +430,7 @@ Agent Actions 使用 Provider 无关的模型、附件和写入端点：
 GET  /v1/models
 GET  /v1/projects/:projectId/skills
 GET  /v1/projects/:projectId/tasks/:taskId/attachments/:attachmentId
-POST /v1/projects/:projectId/attachments
+POST /v1/projects/:projectId/attachments/:kind
 POST /v1/projects/:projectId/tasks
 POST /v1/projects/:projectId/tasks/:taskId/turns
 POST /v1/projects/:projectId/tasks/:taskId/turns/:turnId/interrupt
@@ -442,7 +442,7 @@ POST /v1/projects/:projectId/tasks/:taskId/feedback
 
 所有写请求必须携带非空 `Idempotency-Key`。Server 以操作、资源和 Key 共同确定幂等范围：相同 Payload 复用进行中或成功结果，不同 Payload 返回 `IDEMPOTENCY_CONFLICT`，失败结果允许同 Key 重试。
 
-新上传图片、文件与生成文本先进入有容量和过期时间限制的 Server Store，浏览器只获得随机附件 ID。Turn 启动前由 Server 将图片解析为 Provider Data URL、将普通文件解析为 Runtime 隔离临时路径；Provider 分别映射为 Codex `image` 与 `mention`。成功后消费图片和文本引用，普通文件保留到 Turn 终态，失败时保留引用供重试。历史图片采用独立的 Provider 授权记录，Task Snapshot 只返回 `{ id, mediaType, name, size }`；浏览器通过 Project/Task 作用域 GET 端点按需读取二进制，Server 不再次重建 Snapshot，也不暴露 Codex 本地路径。`GET /v1/models` 直接映射 Provider 模型目录及其默认、可用思考量，页面不得把硬编码模型或思考量作为成功态数据。`GET /v1/projects/:projectId/skills` 返回当前 Project 的统一 Skill 目录，只包含不透明 ID 和展示元数据；原生路径不得进入 HTTP 契约。
+新上传图片、文件与生成文本通过 `multipart/form-data` 二进制流进入有容量和过期时间限制的 Server Store，附件类型由 `:kind` 路径参数在解析 Body 前确定。Server 先按 `Content-Length` 拒绝明显超限请求，再按流式字节数强制执行单附件限制；所有类型均使用异步文件 API 写入 Runtime 隔离临时目录，内存不长期保留 Base64。浏览器只获得随机附件 ID。Turn 启动前 Server 才按需将图片临时解析为 Provider Data URL、将普通文件解析为临时路径；Provider 分别映射为 Codex `image` 与 `mention`。成功后消费图片和文本引用，普通文件保留到 Turn 终态，失败时保留引用供重试。历史图片采用独立的 Provider 授权记录，Task Snapshot 只返回 `{ id, mediaType, name, size }`；浏览器通过 Project/Task 作用域 GET 端点按需读取二进制，Server 不再次重建 Snapshot，也不暴露 Codex 本地路径。`GET /v1/models` 直接映射 Provider 模型目录及其默认、可用思考量，页面不得把硬编码模型或思考量作为成功态数据。`GET /v1/projects/:projectId/skills` 返回当前 Project 的统一 Skill 目录，只包含不透明 ID 和展示元数据；原生路径不得进入 HTTP 契约。
 
 `turn/interrupt` 只返回 `{ status: "interrupting", taskId, turnId }`；Turn 是否真正中断由后续 `turn.completed` 事件决定。错误统一映射为 Protocol 定义的 `{ code, message, retryable }`，不得向 Web 暴露原生 RPC 细节。
 
@@ -546,7 +546,7 @@ GET    /v1/providers
 GET    /v1/models
 GET    /v1/projects
 POST   /v1/projects
-POST   /v1/projects/:projectId/attachments
+POST   /v1/projects/:projectId/attachments/:kind
 GET    /v1/projects/:projectId/files/source
 GET    /v1/projects/:projectId/tasks
 POST   /v1/projects/:projectId/tasks

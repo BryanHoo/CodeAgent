@@ -16,6 +16,7 @@ import type {
   PendingRequest,
   Project,
 } from "@code-agent/protocol";
+import { MAX_AGENT_IMAGE_BYTES } from "@code-agent/protocol";
 import { Buffer } from "node:buffer";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -44,6 +45,27 @@ const turnOptions = {
   reasoningEffort: "high",
   sandboxMode: "workspace-write",
 } as const;
+
+async function multipartAttachment(
+  kind: "file" | "image" | "text",
+  name: string,
+  mediaType: string,
+  content: Uint8Array,
+  idempotencyKey: string,
+) {
+  const form = new FormData();
+  form.set("attachment", new File([content], name, { type: mediaType }));
+  const request = new Request("http://code-agent.local", { body: form, method: "POST" });
+  return {
+    headers: {
+      "content-type": request.headers.get("content-type") ?? "",
+      "idempotency-key": idempotencyKey,
+    },
+    method: "POST" as const,
+    payload: Buffer.from(await request.arrayBuffer()),
+    url: `/v1/projects/code-agent/attachments/${kind}`,
+  };
+}
 
 const modelPage: AgentModelPage = {
   data: [
@@ -1230,12 +1252,13 @@ describe("CodeAgent Server", () => {
       url: "/v1/projects/code-agent/mcp-servers",
     });
     const skills = await app.inject({ method: "GET", url: "/v1/projects/code-agent/skills" });
-    const uploadRequest = {
-      headers: { "idempotency-key": "upload-1" },
-      method: "POST" as const,
-      payload: { dataUrl: pixelDataUrl, kind: "image", name: "screen.png" },
-      url: "/v1/projects/code-agent/attachments",
-    };
+    const uploadRequest = await multipartAttachment(
+      "image",
+      "screen.png",
+      "image/png",
+      Buffer.from(pixelDataUrl.split(",")[1] ?? "", "base64"),
+      "upload-1",
+    );
     const uploaded = await app.inject(uploadRequest);
     const repeatedUpload = await app.inject(uploadRequest);
     const attachment = uploaded.json<{ attachment: { id: string } }>().attachment;
@@ -1302,14 +1325,42 @@ describe("CodeAgent Server", () => {
     expect(consumed.json()).toMatchObject({ code: "ATTACHMENT_NOT_FOUND" });
   });
 
+  it("rejects oversized or non-multipart attachments before parsing file data", async () => {
+    const { app } = await createHarness();
+    const oversized = await app.inject({
+      headers: {
+        "content-length": String(MAX_AGENT_IMAGE_BYTES + 64 * 1024 + 1),
+        "content-type": "multipart/form-data; boundary=attachment-boundary",
+        "idempotency-key": "oversized-image",
+      },
+      method: "POST",
+      payload: "body must not be parsed",
+      url: "/v1/projects/code-agent/attachments/image",
+    });
+    const json = await app.inject({
+      headers: { "idempotency-key": "legacy-json" },
+      method: "POST",
+      payload: { dataUrl: pixelDataUrl, kind: "image", name: "screen.png" },
+      url: "/v1/projects/code-agent/attachments/image",
+    });
+
+    expect(oversized.statusCode).toBe(413);
+    expect(oversized.json()).toMatchObject({ code: "INVALID_REQUEST" });
+    expect(json.statusCode).toBe(400);
+    expect(json.json()).toMatchObject({ code: "INVALID_REQUEST" });
+  });
+
   it("resolves pasted text attachments separately from image inputs", async () => {
     const { app, startTurn } = await createHarness();
-    const uploaded = await app.inject({
-      headers: { "idempotency-key": "upload-pasted-text" },
-      method: "POST",
-      payload: { dataUrl: pastedTextDataUrl, kind: "text", name: "Pasted text.txt" },
-      url: "/v1/projects/code-agent/attachments",
-    });
+    const uploaded = await app.inject(
+      await multipartAttachment(
+        "text",
+        "Pasted text.txt",
+        "text/plain",
+        Buffer.from(pastedTextDataUrl.split(",")[1] ?? "", "base64"),
+        "upload-pasted-text",
+      ),
+    );
     const attachment = uploaded.json<{ attachment: { id: string } }>().attachment;
 
     const turn = await app.inject({

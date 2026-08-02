@@ -1966,10 +1966,16 @@ test("keeps pasted images in attachments instead of the text editor", async ({ p
 });
 
 test("converts large pasted text into a submitted file attachment", async ({ page }) => {
-  let uploadBody: unknown;
+  let uploadRequest:
+    { contentType: string | undefined; postData: string | null; url: string } | undefined;
   let turnBody: unknown;
-  await page.route("**/v1/projects/code-agent/attachments", async (route) => {
-    uploadBody = route.request().postDataJSON();
+  await page.route("**/v1/projects/code-agent/attachments/*", async (route) => {
+    const request = route.request();
+    uploadRequest = {
+      contentType: request.headers()["content-type"],
+      postData: request.postData(),
+      url: request.url(),
+    };
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -2028,11 +2034,9 @@ test("converts large pasted text into a submitted file attachment", async ({ pag
   await page.getByRole("button", { exact: true, name: "提交" }).click();
   await expect(page.getByText("Pasted text.txt", { exact: true })).toHaveCount(0);
 
-  expect(uploadBody).toMatchObject({
-    dataUrl: expect.stringMatching(/^data:text\/plain;base64,/u),
-    kind: "text",
-    name: "Pasted text.txt",
-  });
+  expect(uploadRequest?.url).toMatch(/\/attachments\/text$/u);
+  expect(uploadRequest?.contentType).toMatch(/^multipart\/form-data; boundary=/u);
+  expect(uploadRequest?.postData).toContain('name="attachment"; filename="Pasted text.txt"');
   expect(turnBody).toMatchObject({
     input: {
       attachments: [{ id: "attachment-pasted-text" }],
@@ -2045,10 +2049,16 @@ test("converts large pasted text into a submitted file attachment", async ({ pag
 test("submits attachments, approval policy, model, and reasoning effort through the real client contract", async ({
   page,
 }) => {
-  let uploadBody: unknown;
+  let uploadRequest:
+    { contentType: string | undefined; postData: string | null; url: string } | undefined;
   let turnBody: unknown;
-  await page.route("**/v1/projects/code-agent/attachments", async (route) => {
-    uploadBody = route.request().postDataJSON();
+  await page.route("**/v1/projects/code-agent/attachments/*", async (route) => {
+    const request = route.request();
+    uploadRequest = {
+      contentType: request.headers()["content-type"],
+      postData: request.postData(),
+      url: request.url(),
+    };
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -2133,11 +2143,9 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   await expect(prompt.locator("[data-prompt-skill-id]")).toHaveCount(0);
   await expect(page.getByText("screen.png", { exact: true })).toHaveCount(0);
   await expect(page.locator('[data-message-skill="documentation-writer"]')).toBeVisible();
-  expect(uploadBody).toMatchObject({
-    dataUrl: expect.stringMatching(/^data:image\/png;base64,/),
-    kind: "image",
-    name: "screen.png",
-  });
+  expect(uploadRequest?.url).toMatch(/\/attachments\/image$/u);
+  expect(uploadRequest?.contentType).toMatch(/^multipart\/form-data; boundary=/u);
+  expect(uploadRequest?.postData).toContain('name="attachment"; filename="screen.png"');
   expect(turnBody).toEqual({
     input: {
       attachments: [{ id: "attachment-1" }],
@@ -2159,10 +2167,16 @@ test("submits attachments, approval policy, model, and reasoning effort through 
 });
 
 test("selects and submits an official file input as an attachment", async ({ page }) => {
-  let uploadBody: unknown;
+  let uploadRequest:
+    { contentType: string | undefined; postData: string | null; url: string } | undefined;
   let turnBody: unknown;
-  await page.route("**/v1/projects/code-agent/attachments", async (route) => {
-    uploadBody = route.request().postDataJSON();
+  await page.route("**/v1/projects/code-agent/attachments/*", async (route) => {
+    const request = route.request();
+    uploadRequest = {
+      contentType: request.headers()["content-type"],
+      postData: request.postData(),
+      url: request.url(),
+    };
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -2211,11 +2225,9 @@ test("selects and submits an official file input as an attachment", async ({ pag
   await page.getByRole("button", { exact: true, name: "提交" }).click();
   await expect.poll(() => turnBody).not.toBeUndefined();
 
-  expect(uploadBody).toMatchObject({
-    dataUrl: expect.stringMatching(/^data:application\/pdf;base64,/u),
-    kind: "file",
-    name: "specification.pdf",
-  });
+  expect(uploadRequest?.url).toMatch(/\/attachments\/file$/u);
+  expect(uploadRequest?.contentType).toMatch(/^multipart\/form-data; boundary=/u);
+  expect(uploadRequest?.postData).toContain('name="attachment"; filename="specification.pdf"');
   expect(turnBody).toMatchObject({
     input: {
       attachments: [{ id: "attachment-pdf" }],
@@ -3657,7 +3669,7 @@ test("ignores repeated interrupt clicks while the request is in flight", async (
 });
 
 test("preserves the prompt draft when submission fails", async ({ page }) => {
-  await page.route("**/v1/projects/code-agent/attachments", async (route) => {
+  await page.route("**/v1/projects/code-agent/attachments/*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       json: {

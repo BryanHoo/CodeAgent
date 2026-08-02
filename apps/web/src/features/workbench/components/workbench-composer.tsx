@@ -3,6 +3,7 @@ import {
   AGENT_IMAGE_ACCEPT,
   MAX_AGENT_FILE_BYTES,
   MAX_AGENT_FILE_TOTAL_BYTES,
+  MAX_AGENT_IMAGE_BYTES,
   MAX_AGENT_IMAGES,
   MAX_AGENT_IMAGE_TOTAL_BYTES,
   type AgentApprovalPolicy,
@@ -421,26 +422,6 @@ function ComposerAttachments() {
   );
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.addEventListener("error", () => {
-      reject(
-        reader.error ?? new Error(i18n.t("composer.attachmentReadFailed", { ns: "workbench" })),
-      );
-    });
-    reader.addEventListener("load", () => {
-      if (typeof reader.result === "string") {
-        // 浏览器对部分代码文件不给 MIME，使用通用二进制类型保持 Data URL 合法。
-        resolve(reader.result.replace(/^data:;base64,/u, "data:application/octet-stream;base64,"));
-      } else {
-        reject(new Error(i18n.t("composer.attachmentReadFailed", { ns: "workbench" })));
-      }
-    });
-    reader.readAsDataURL(file);
-  });
-}
-
 export function WorkbenchComposer({
   capabilities,
   client,
@@ -796,7 +777,7 @@ export function WorkbenchComposer({
           const response = await client.uploadAttachment(
             projectId,
             {
-              dataUrl: await readFileAsDataUrl(attachment.file),
+              content: attachment.file,
               kind: attachment.kind,
               name: attachment.name,
             },
@@ -1442,6 +1423,7 @@ export function WorkbenchComposer({
           }
           maxFileSize={MAX_AGENT_FILE_BYTES}
           maxFileTotalSize={MAX_AGENT_FILE_TOTAL_BYTES}
+          maxImageSize={MAX_AGENT_IMAGE_BYTES}
           maxImages={MAX_AGENT_IMAGES}
           maxImageTotalSize={MAX_AGENT_IMAGE_TOTAL_BYTES}
           multiple

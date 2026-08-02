@@ -47,8 +47,8 @@ import {
   type CommitProjectChangesRequest,
   type CommitProjectChangesResponse,
   type ForkAgentTaskResponse,
-  type AgentAttachmentUploadRequest,
   type AgentAttachmentUploadResponse,
+  type AgentAttachmentKind,
   type AgentMutationError,
   type AgentGlobalSettings,
   type AgentGlobalSettingsResponse,
@@ -117,6 +117,12 @@ export type CodeAgentRequestTimeouts = Readonly<{
 
 export type ReadOptions = Readonly<{
   signal?: AbortSignal;
+}>;
+
+export type AgentAttachmentUploadInput = Readonly<{
+  content: Blob;
+  kind: AgentAttachmentKind;
+  name: string;
 }>;
 
 export type ListTasksOptions = Readonly<{
@@ -597,14 +603,26 @@ export class CodeAgentClient {
 
   public async uploadAttachment(
     projectId: string,
-    input: AgentAttachmentUploadRequest,
+    input: AgentAttachmentUploadInput,
     options: MutationOptions = {},
   ): Promise<AgentAttachmentUploadResponse> {
-    return this.#mutation(
-      `${projectPath(projectId)}/attachments`,
-      input,
+    const body = new FormData();
+    body.set("attachment", input.content, input.name);
+    return this.#request(
+      `${projectPath(projectId)}/attachments/${input.kind}`,
       AgentAttachmentUploadResponseSchema,
-      options,
+      {
+        body,
+        headers: {
+          "idempotency-key": options.idempotencyKey ?? globalThis.crypto.randomUUID(),
+        },
+        method: "POST",
+      },
+      AgentMutationErrorSchema,
+      {
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+        timeoutMs: this.#requestTimeouts.mutationMs,
+      },
     );
   }
 
