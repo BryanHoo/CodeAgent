@@ -11,6 +11,7 @@ import {
   type MouseEvent,
 } from "react";
 
+import { i18n } from "../../../i18n/i18n.js";
 import type { PromptSlashCommand } from "./prompt-command.js";
 import { skillTokenClassName } from "./skill-token.js";
 
@@ -163,7 +164,14 @@ function createEditorSkillNode(skill: AgentSkill, iconTemplate: SVGSVGElement | 
   token.dataset["promptSkillId"] = skill.id;
   token.dataset["promptSkillName"] = skill.name;
   token.dataset["serializedText"] = skillPlainText(skill);
-  token.setAttribute("aria-label", `Skill ${skill.displayName}，实际文本 ${skillPlainText(skill)}`);
+  token.setAttribute(
+    "aria-label",
+    i18n.t("skillEditor.tokenLabel", {
+      name: skill.displayName,
+      ns: "workbench",
+      text: skillPlainText(skill),
+    }),
+  );
   token.setAttribute("role", "button");
   token.tabIndex = -1;
   if (iconTemplate !== null) {

@@ -1,6 +1,8 @@
 import type { Project } from "@code-agent/protocol";
 import { useEffect, useRef } from "react";
 
+import { useTranslation } from "../../../i18n/i18n.js";
+
 type ProjectRemoveDialogProps = Readonly<{
   error?: string | null;
   isPending: boolean;
@@ -16,6 +18,7 @@ export function ProjectRemoveDialog({
   onRemove,
   project,
 }: ProjectRemoveDialogProps) {
+  const { t } = useTranslation("workbench");
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -44,10 +47,10 @@ export function ProjectRemoveDialog({
     >
       <div className="p-4">
         <h2 className="text-heading font-semibold" id="project-remove-title">
-          删除项目
+          {t("projectDialog.remove")}
         </h2>
         <p className="mt-2 text-body-small text-muted-foreground">
-          将“{project.name}”从 CodeAgent 左栏移除，不会删除磁盘上的文件夹及文件。
+          {t("projectDialog.removeDescription", { name: project.name })}
         </p>
         {error === null ? null : (
           <p className="mt-2 text-meta text-danger" role="alert">
@@ -61,7 +64,7 @@ export function ProjectRemoveDialog({
             onClick={onClose}
             type="button"
           >
-            取消
+            {t("actions.cancel")}
           </button>
           <button
             className="h-8 rounded-control bg-danger px-3 text-body-small font-medium text-white hover:opacity-90 disabled:opacity-50"
@@ -69,7 +72,7 @@ export function ProjectRemoveDialog({
             onClick={onRemove}
             type="button"
           >
-            删除
+            {t("projectDialog.delete")}
           </button>
         </div>
       </div>

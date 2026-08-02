@@ -1,5 +1,7 @@
 import type { AgentCapabilities, AgentSkill } from "@code-agent/protocol";
 
+import { i18n } from "../../../i18n/i18n.js";
+
 export type PromptCommandAction =
   "compact" | "feedback" | "fork" | "initialize" | "review" | "subtask";
 
@@ -11,50 +13,53 @@ export type PromptCommandItem = Readonly<{
   label: string;
 }>;
 
-export const promptCommandItems = [
-  {
-    action: "review",
-    description: "审查未暂存的更改，或与某个分支进行比较",
-    id: "review-code",
-    keywords: ["review", "code review", "审查", "代码审查"],
-    label: "代码审查",
-  },
-  {
-    action: "initialize",
-    description: "创建包含 Codex 说明的 AGENTS.md 文件",
-    id: "initialize",
-    keywords: ["init", "initialize", "初始化", "AGENTS.md"],
-    label: "初始化",
-  },
-  {
-    action: "subtask",
-    description: "发起临时侧边对话",
-    id: "subtask",
-    keywords: ["subtask", "subagent", "副任务", "子代理"],
-    label: "副任务",
-  },
-  {
-    action: "compact",
-    description: "压缩此任务的上下文",
-    id: "compact",
-    keywords: ["compact", "context", "压缩", "上下文"],
-    label: "压缩",
-  },
-  {
-    action: "feedback",
-    description: "发送关于此任务的反馈",
-    id: "feedback",
-    keywords: ["feedback", "反馈"],
-    label: "反馈",
-  },
-  {
-    action: "fork",
-    description: "复制当前任务及其对话历史",
-    id: "copy-task",
-    keywords: ["fork", "copy", "复制", "任务"],
-    label: "复制",
-  },
-] as const satisfies readonly PromptCommandItem[];
+export function getPromptCommandItems(): readonly PromptCommandItem[] {
+  const translate = (key: string) => i18n.t(key, { ns: "workbench" });
+  return [
+    {
+      action: "review",
+      description: translate("promptCommand.review.description"),
+      id: "review-code",
+      keywords: ["review", "code review", "审查", "代码审查"],
+      label: translate("promptCommand.review.label"),
+    },
+    {
+      action: "initialize",
+      description: translate("promptCommand.initialize.description"),
+      id: "initialize",
+      keywords: ["init", "initialize", "初始化", "AGENTS.md"],
+      label: translate("promptCommand.initialize.label"),
+    },
+    {
+      action: "subtask",
+      description: translate("promptCommand.subtask.description"),
+      id: "subtask",
+      keywords: ["subtask", "subagent", "副任务", "子代理"],
+      label: translate("promptCommand.subtask.label"),
+    },
+    {
+      action: "compact",
+      description: translate("promptCommand.compact.description"),
+      id: "compact",
+      keywords: ["compact", "context", "压缩", "上下文"],
+      label: translate("promptCommand.compact.label"),
+    },
+    {
+      action: "feedback",
+      description: translate("promptCommand.feedback.description"),
+      id: "feedback",
+      keywords: ["feedback", "反馈"],
+      label: translate("promptCommand.feedback.label"),
+    },
+    {
+      action: "fork",
+      description: translate("promptCommand.fork.description"),
+      id: "copy-task",
+      keywords: ["fork", "copy", "复制", "任务"],
+      label: translate("promptCommand.fork.label"),
+    },
+  ];
+}
 
 export function getPromptCommandAvailability(
   item: PromptCommandItem,
@@ -62,10 +67,16 @@ export function getPromptCommandAvailability(
   hasTask: boolean,
 ): Readonly<{ available: boolean; reason?: string }> {
   if (capabilities === undefined) {
-    return { available: false, reason: "运行时能力尚未就绪" };
+    return {
+      available: false,
+      reason: i18n.t("promptCommand.availability.notReady", { ns: "workbench" }),
+    };
   }
   if (item.action !== "initialize" && item.action !== "review" && !hasTask) {
-    return { available: false, reason: "需要先打开一个任务" };
+    return {
+      available: false,
+      reason: i18n.t("promptCommand.availability.noTask", { ns: "workbench" }),
+    };
   }
 
   const available =
@@ -80,7 +91,12 @@ export function getPromptCommandAvailability(
             : item.action === "feedback"
               ? capabilities.feedback.upload
               : capabilities.tasks.fork;
-  return available ? { available: true } : { available: false, reason: "当前运行时不支持此命令" };
+  return available
+    ? { available: true }
+    : {
+        available: false,
+        reason: i18n.t("promptCommand.availability.unsupported", { ns: "workbench" }),
+      };
 }
 
 export type PromptSlashCommand = Readonly<{

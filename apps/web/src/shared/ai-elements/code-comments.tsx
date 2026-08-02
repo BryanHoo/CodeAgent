@@ -3,6 +3,8 @@ import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Streamdown } from "streamdown";
 
+import { useTranslation } from "../../i18n/i18n.js";
+
 export type CodeComment = Readonly<{
   body: string;
   end: number | null;
@@ -243,13 +245,14 @@ function CodeCommentItem({
 }
 
 export function CodeComments({ comments }: Readonly<{ comments: CodeComment[] }>) {
+  const { t } = useTranslation("conversation");
   if (comments.length === 0) {
     return null;
   }
 
   return (
     <section
-      aria-label={`${String(comments.length)} 个代码评论`}
+      aria-label={t("aiElements.codeComments", { count: comments.length })}
       className="my-4 overflow-hidden rounded-surface border border-separator-strong bg-raised"
       data-code-comments="true"
     >
@@ -257,7 +260,7 @@ export function CodeComments({ comments }: Readonly<{ comments: CodeComment[] }>
         <span className="grid size-8 place-items-center rounded-control bg-control">
           <MessageSquareText className="size-4 text-muted-foreground" aria-hidden="true" />
         </span>
-        <span>{comments.length} comments</span>
+        <span>{t("aiElements.codeComments", { count: comments.length })}</span>
       </header>
       <ol className="divide-y divide-separator px-4 py-1">
         {comments.map((comment, commentIndex) => (

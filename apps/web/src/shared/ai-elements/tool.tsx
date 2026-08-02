@@ -16,6 +16,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { useTranslation } from "../../i18n/i18n.js";
 import { CodeBlock } from "./code-block.js";
 
 export type ToolState =
@@ -53,34 +54,34 @@ export function Tool({ className = "", defaultOpen = false, onToggle, ...props }
   );
 }
 
-const statusPresentation: Record<ToolState, { icon: ReactNode; label: string }> = {
+const statusPresentation: Record<ToolState, { icon: ReactNode; labelKey: string }> = {
   "approval-requested": {
     icon: <Clock className="size-3.5 text-warning" aria-hidden="true" />,
-    label: "等待批准",
+    labelKey: "aiElements.status.waitingApproval",
   },
   "approval-responded": {
     icon: <CheckCircle className="size-3.5 text-accent" aria-hidden="true" />,
-    label: "已响应",
+    labelKey: "aiElements.status.responded",
   },
   "input-available": {
     icon: <CircleDashed className="size-3.5 animate-spin" aria-hidden="true" />,
-    label: "运行中",
+    labelKey: "aiElements.status.running",
   },
   "input-streaming": {
     icon: <Circle className="size-3.5" aria-hidden="true" />,
-    label: "等待中",
+    labelKey: "aiElements.status.pending",
   },
   "output-available": {
     icon: <CheckCircle className="size-3.5" aria-hidden="true" />,
-    label: "已完成",
+    labelKey: "aiElements.status.completed",
   },
   "output-denied": {
     icon: <CircleX className="size-3.5 text-warning" aria-hidden="true" />,
-    label: "已拒绝",
+    labelKey: "aiElements.status.denied",
   },
   "output-error": {
     icon: <CircleX className="size-3.5 text-danger" aria-hidden="true" />,
-    label: "失败",
+    labelKey: "aiElements.status.error",
   },
 };
 
@@ -91,6 +92,7 @@ type ToolHeaderProps = HTMLAttributes<HTMLElement> & {
 
 export function ToolHeader({ className = "", state, title, ...props }: ToolHeaderProps) {
   const presentation = statusPresentation[state];
+  const { t } = useTranslation("conversation");
 
   return (
     <summary
@@ -105,7 +107,7 @@ export function ToolHeader({ className = "", state, title, ...props }: ToolHeade
         }`}
       >
         {presentation.icon}
-        {presentation.label}
+        {t(presentation.labelKey)}
       </span>
       <ChevronRight
         className="size-3.5 text-muted-foreground transition-transform group-open/tool:rotate-90"
@@ -149,9 +151,12 @@ export type ToolInputProps = HTMLAttributes<HTMLDivElement> & {
 };
 
 export function ToolInput({ className = "", input, ...props }: ToolInputProps) {
+  const { t } = useTranslation("conversation");
   return (
     <div className={`space-y-2 overflow-hidden ${className}`} {...props}>
-      <h4 className="text-meta font-medium uppercase tracking-wide text-muted-foreground">参数</h4>
+      <h4 className="text-meta font-medium uppercase tracking-wide text-muted-foreground">
+        {t("aiElements.toolInput")}
+      </h4>
       <CodeBlock code={formatJsonValue(input)} language="json" />
     </div>
   );
@@ -163,6 +168,7 @@ export type ToolOutputProps = HTMLAttributes<HTMLDivElement> & {
 };
 
 export function ToolOutput({ className = "", errorText, output, ...props }: ToolOutputProps) {
+  const { t } = useTranslation("conversation");
   if (output === undefined && errorText === undefined) {
     return null;
   }
@@ -180,7 +186,7 @@ export function ToolOutput({ className = "", errorText, output, ...props }: Tool
           errorText === undefined ? "text-muted-foreground" : "text-danger"
         }`}
       >
-        {errorText === undefined ? "结果" : "错误"}
+        {errorText === undefined ? t("aiElements.toolResult") : t("aiElements.toolError")}
       </h4>
       <div
         className={`overflow-x-auto rounded-surface text-meta [&_table]:w-full ${

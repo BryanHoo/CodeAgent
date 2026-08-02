@@ -14,6 +14,7 @@ import {
 } from "react";
 import { Streamdown, type Components } from "streamdown";
 
+import { useTranslation } from "../../i18n/i18n.js";
 import { CodeComments, parseCodeComments } from "./code-comments.js";
 
 type MarkdownLinkProps = ComponentProps<"a"> & {
@@ -320,10 +321,11 @@ export function MessageBranchPrevious({
   ...props
 }: MessageBranchPreviousProps) {
   const { goToPrevious, totalBranches } = useMessageBranch();
+  const { t } = useTranslation("conversation");
 
   return (
     <button
-      aria-label="上一个回复分支"
+      aria-label={t("aiElements.previousBranch")}
       className={`grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-40 ${className}`}
       disabled={totalBranches <= 1}
       onClick={goToPrevious}
@@ -339,10 +341,11 @@ export type MessageBranchNextProps = ButtonHTMLAttributes<HTMLButtonElement>;
 
 export function MessageBranchNext({ children, className = "", ...props }: MessageBranchNextProps) {
   const { goToNext, totalBranches } = useMessageBranch();
+  const { t } = useTranslation("conversation");
 
   return (
     <button
-      aria-label="下一个回复分支"
+      aria-label={t("aiElements.nextBranch")}
       className={`grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-40 ${className}`}
       disabled={totalBranches <= 1}
       onClick={goToNext}

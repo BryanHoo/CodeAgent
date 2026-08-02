@@ -1,6 +1,8 @@
 import { Check, ChevronRight, Circle, CircleDashed, CircleX } from "lucide-react";
 import { createContext, useContext, useMemo, type HTMLAttributes, type ReactNode } from "react";
 
+import { useTranslation } from "../../i18n/i18n.js";
+
 export type TaskStatus = "completed" | "error" | "in_progress" | "pending";
 
 type TaskContextValue = Readonly<{
@@ -48,14 +50,23 @@ export function Task({
   );
 }
 
-const statusPresentation: Readonly<Record<TaskStatus, { icon: ReactNode; label: string }>> = {
-  completed: { icon: <Check className="size-3.5" aria-hidden="true" />, label: "已完成" },
-  error: { icon: <CircleX className="size-3.5" aria-hidden="true" />, label: "失败" },
+const statusPresentation: Readonly<Record<TaskStatus, { icon: ReactNode; labelKey: string }>> = {
+  completed: {
+    icon: <Check className="size-3.5" aria-hidden="true" />,
+    labelKey: "aiElements.status.completed",
+  },
+  error: {
+    icon: <CircleX className="size-3.5" aria-hidden="true" />,
+    labelKey: "aiElements.status.error",
+  },
   in_progress: {
     icon: <CircleDashed className="size-3.5 animate-spin" aria-hidden="true" />,
-    label: "进行中",
+    labelKey: "aiElements.status.inProgress",
   },
-  pending: { icon: <Circle className="size-3.5" aria-hidden="true" />, label: "等待中" },
+  pending: {
+    icon: <Circle className="size-3.5" aria-hidden="true" />,
+    labelKey: "aiElements.status.pending",
+  },
 };
 
 type TaskTriggerProps = Omit<HTMLAttributes<HTMLElement>, "title"> & {
@@ -64,6 +75,7 @@ type TaskTriggerProps = Omit<HTMLAttributes<HTMLElement>, "title"> & {
 
 export function TaskTrigger({ className = "", title, ...props }: TaskTriggerProps) {
   const context = useContext(TaskContext);
+  const { t } = useTranslation("conversation");
   if (context === null) {
     throw new Error("TaskTrigger must be used within Task");
   }
@@ -75,10 +87,10 @@ export function TaskTrigger({ className = "", title, ...props }: TaskTriggerProp
     <>
       <span
         className={`shrink-0 ${context.status === "error" ? "text-danger" : "text-muted-foreground"}`}
-        title={presentation.label}
+        title={t(presentation.labelKey)}
       >
         {presentation.icon}
-        <span className="sr-only">{presentation.label}</span>
+        <span className="sr-only">{t(presentation.labelKey)}</span>
       </span>
       <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
       {context.collapsible ? (

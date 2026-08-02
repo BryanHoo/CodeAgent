@@ -14,6 +14,7 @@ import {
 import { MessageResponse, type MessageFileReference } from "../../../shared/ai-elements/message.js";
 import { getCodeLanguage } from "../../../shared/ai-elements/code-languages.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
+import { useTranslation } from "../../../i18n/i18n.js";
 
 export { getCodeLanguage } from "../../../shared/ai-elements/code-languages.js";
 
@@ -45,6 +46,7 @@ function SourceHeader({
   titleId,
   truncated,
 }: SourceHeaderProps) {
+  const { t } = useTranslation("workbench");
   return (
     <CodeBlockHeader className="min-h-toolbar gap-3 bg-raised px-3 shadow-toolbar sm:px-4">
       <CodeBlockTitle className="min-w-0 flex-1">
@@ -61,10 +63,14 @@ function SourceHeader({
           </p>
         </div>
       </CodeBlockTitle>
-      {truncated ? <span className="shrink-0 text-label text-warning">内容已截断</span> : null}
+      {truncated ? (
+        <span className="shrink-0 text-label text-warning">
+          {t("projectDialog.sourceTruncated")}
+        </span>
+      ) : null}
       <CodeBlockActions>
         {actions}
-        <IconButton label="关闭源文件" onClick={onClose} size="small">
+        <IconButton label={t("projectDialog.closeSource")} onClick={onClose} size="small">
           <X className="size-3.5" aria-hidden="true" />
         </IconButton>
       </CodeBlockActions>
@@ -78,6 +84,7 @@ export function ProjectSourceDialog({
   projectId,
   reference,
 }: ProjectSourceDialogProps) {
+  const { t } = useTranslation("workbench");
   const dialogRef = useRef<HTMLDialogElement>(null);
   // 渲染状态绑定源文件路径，切换文件或关闭弹窗后必须回到原始内容。
   const [renderedMarkdownPath, setRenderedMarkdownPath] = useState<string | null>(null);
@@ -162,7 +169,7 @@ export function ProjectSourceDialog({
               className="grid min-h-48 place-items-center text-body-small text-muted-foreground"
               role="status"
             >
-              正在加载源文件
+              {t("projectDialog.loadingSource")}
             </div>
           </div>
         ) : sourceQuery.error !== null ? (
@@ -172,7 +179,7 @@ export function ProjectSourceDialog({
               className="grid min-h-48 place-items-center text-body-small text-danger"
               role="alert"
             >
-              无法加载源文件
+              {t("projectDialog.loadSourceError")}
             </div>
           </div>
         ) : showRenderedMarkdown ? (
@@ -181,7 +188,7 @@ export function ProjectSourceDialog({
               {...headerProps}
               actions={
                 <IconButton
-                  label="显示原始内容"
+                  label={t("projectDialog.showRawContent")}
                   onClick={() => {
                     setRenderedMarkdownPath(null);
                   }}
@@ -211,7 +218,7 @@ export function ProjectSourceDialog({
                 <>
                   {canRenderMarkdown ? (
                     <IconButton
-                      label="预览 Markdown"
+                      label={t("projectDialog.previewMarkdown")}
                       onClick={() => {
                         setRenderedMarkdownPath(sourcePath);
                       }}

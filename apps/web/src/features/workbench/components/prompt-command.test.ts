@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   filterPromptCommandItems,
   filterPromptSkills,
+  getPromptCommandItems,
   getPromptCommandAvailability,
   movePromptCommandSelection,
-  promptCommandItems,
   resolvePromptSlashCommand,
 } from "./prompt-command.js";
+
+const promptCommandItems = getPromptCommandItems();
 
 const commandItems = [
   {

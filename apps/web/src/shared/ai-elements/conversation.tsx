@@ -16,6 +16,7 @@ import {
   type RefObject,
 } from "react";
 
+import { useTranslation } from "../../i18n/i18n.js";
 import { createConversationAutoScrollController } from "./conversation-scroll.js";
 
 type ConversationProps = HTMLAttributes<HTMLDivElement> &
@@ -236,6 +237,7 @@ export function ConversationScrollButton({
   ...props
 }: ConversationScrollButtonProps) {
   const context = useContext(ConversationContext);
+  const { t } = useTranslation("conversation");
 
   if (context?.atBottom !== false) {
     return null;
@@ -244,7 +246,7 @@ export function ConversationScrollButton({
   return (
     <button
       className={`sticky bottom-3 left-1/2 z-10 grid size-8 -translate-x-1/2 place-items-center rounded-pill bg-raised text-muted-foreground shadow-floating transition-colors hover:bg-control-hover hover:text-foreground ${className}`}
-      title="回到底部"
+      title={t("aiElements.scrollToBottom")}
       type={type}
       {...props}
       onClick={(event) => {
@@ -253,7 +255,7 @@ export function ConversationScrollButton({
       }}
     >
       <ArrowDown className="size-4" aria-hidden="true" />
-      <span className="sr-only">回到底部</span>
+      <span className="sr-only">{t("aiElements.scrollToBottom")}</span>
     </button>
   );
 }

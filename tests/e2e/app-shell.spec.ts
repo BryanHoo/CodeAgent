@@ -560,7 +560,7 @@ test("redirects the root route to the default project workbench", async ({ page 
 
   await expect(page.getByTestId("app-root")).toBeAttached();
   await expect(page).toHaveURL(/\/p\/code-agent$/);
-  await expect(page.getByRole("main", { name: "Task Timeline" })).toBeVisible();
+  await expect(page.getByRole("main", { name: "任务时间线" })).toBeVisible();
 });
 
 test("edits global defaults in a dialog without overriding task settings", async ({ page }) => {
@@ -636,6 +636,31 @@ test("edits global defaults in a dialog without overriding task settings", async
   ).toBe(true);
 });
 
+test("switches the interface language and restores it after reload", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  await page.getByRole("button", { name: /设置，终端连接状态/u }).click();
+  const chineseDialog = page.getByRole("dialog", { name: "全局设置" });
+  await chineseDialog.getByRole("combobox", { name: "语言" }).selectOption("en");
+
+  const englishDialog = page.getByRole("dialog", { name: "Global settings" });
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await englishDialog.getByRole("button", { name: "Agent defaults" }).click();
+  await expect(englishDialog.getByRole("combobox", { name: "Reasoning effort" })).toBeVisible();
+  await expect(englishDialog.getByRole("combobox", { name: "Approval policy" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "构建 macOS 工作台", level: 1 })).toBeVisible();
+  await expect(
+    page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。", { exact: false }),
+  ).toBeVisible();
+
+  await englishDialog.getByRole("button", { name: "Close global settings" }).click();
+  await page.reload();
+
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await page.getByRole("button", { name: /Settings, terminal connection status/u }).click();
+  await expect(page.getByRole("dialog", { name: "Global settings" })).toBeVisible();
+});
+
 test("uses global defaults throughout a new task composer", async ({ page }) => {
   await page.route("**/v1/settings", async (route) => {
     await route.fulfill({
@@ -699,9 +724,9 @@ test("project open split control selects, opens, and restores a host app", async
 
   const menuTrigger = page.getByRole("button", { name: "选择打开方式" });
   await menuTrigger.hover();
-  await expect(page.getByRole("menu", { name: "项目打开方式" })).toHaveCount(0);
+  await expect(page.getByRole("menu", { name: "选择打开方式" })).toHaveCount(0);
   await menuTrigger.click();
-  const menu = page.getByRole("menu", { name: "项目打开方式" });
+  const menu = page.getByRole("menu", { name: "选择打开方式" });
   await expect(menu).toBeVisible();
   await menu.getByRole("menuitemradio", { name: "Zed" }).click();
   const openButton = page.getByRole("button", { name: "在 Zed 中打开" });
@@ -832,7 +857,7 @@ test("exposes the documented navigation routes", async ({ page }) => {
 test("keeps the current task open when the product logo is clicked", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   await sidebar.getByText("CodeAgent", { exact: true }).first().click();
 
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
@@ -909,7 +934,7 @@ test("drags project folders to reorder and restores the persisted order", async 
 
 test("项目文件夹操作支持重命名和删除且不修改磁盘目录", async ({ page }) => {
   await page.goto("/p/code-agent");
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   const projectMenuTrigger = sidebar.getByRole("button", {
     name: "打开 CodeAgent 的项目操作菜单",
   });
@@ -959,7 +984,7 @@ test("项目文件夹操作支持重命名和删除且不修改磁盘目录", as
     .getByRole("menu", { name: "本地工作台 的项目操作" })
     .getByRole("menuitem", { name: "删除" })
     .click();
-  const removeDialog = page.getByRole("dialog", { name: "删除项目" });
+  const removeDialog = page.getByRole("dialog", { name: "移除项目" });
   await expect(removeDialog).toContainText("不会删除磁盘上的文件夹及文件");
   const removeRequestPromise = page.waitForRequest((request) =>
     request.url().endsWith("/v1/projects/code-agent/remove"),
@@ -979,7 +1004,7 @@ test("项目文件夹操作支持重命名和删除且不修改磁盘目录", as
     request.url().endsWith("/v1/projects/superwork/remove"),
   );
   await page
-    .getByRole("dialog", { name: "删除项目" })
+    .getByRole("dialog", { name: "移除项目" })
     .getByRole("button", { name: "删除" })
     .click();
   await removeLastProjectRequest;
@@ -1029,7 +1054,7 @@ test("keeps a healthy project usable when another project task query fails", asy
 
   await page.goto("/p/code-agent/t/task-1");
 
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   expect(failedProjectRequestCount).toBe(0);
   await sidebar.getByRole("button", { name: "切换项目 superwork" }).click();
 
@@ -1139,9 +1164,9 @@ test("uses subtle hairline separation across registered routes", async ({ page }
 test("aligns the center toolbar divider with sidebar controls", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const mainHeader = page.getByRole("main", { name: "Task Timeline" }).locator(":scope > header");
+  const mainHeader = page.getByRole("main", { name: "任务时间线" }).locator(":scope > header");
   const leftTitle = page
-    .getByRole("complementary", { name: "Project Sidebar" })
+    .getByRole("complementary", { name: "项目侧栏" })
     .getByText("CodeAgent", { exact: true })
     .first();
   const centerTitle = page.getByRole("heading", { name: "构建 macOS 工作台", level: 1 });
@@ -1189,13 +1214,13 @@ test("aligns the center toolbar divider with sidebar controls", async ({ page })
 test("renders the AI workbench landmarks with an enabled composer", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const main = page.getByRole("main", { name: "Task Timeline" });
-  const inspector = page.getByRole("complementary", { name: "Context Inspector" });
-  await expect(page.getByRole("complementary", { name: "Project Sidebar" })).toBeVisible();
+  const main = page.getByRole("main", { name: "任务时间线" });
+  const inspector = page.getByRole("complementary", { name: "项目检查器" });
+  await expect(page.getByRole("complementary", { name: "项目侧栏" })).toBeVisible();
   await expect(main).toBeVisible();
   await expect(inspector).toBeVisible();
   await expect(page.getByRole("heading", { name: "项目检查器" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Composer" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "消息编辑器" })).toBeVisible();
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
   const compactSelects = [
@@ -1211,7 +1236,7 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
       .poll(() => select.evaluate((element) => getComputedStyle(element).fieldSizing))
       .toBe("content");
   }
-  const composerForm = page.getByRole("region", { name: "Composer" }).locator("form");
+  const composerForm = page.getByRole("region", { name: "消息编辑器" }).locator("form");
   const composerControls = [
     prompt,
     page.getByRole("button", { name: "添加图片或文件" }),
@@ -1245,7 +1270,7 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
 test("renders enabled MCP servers and sources in inspector", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const inspector = page.getByRole("complementary", { name: "Context Inspector" });
+  const inspector = page.getByRole("complementary", { name: "项目检查器" });
   await inspector.getByRole("tab", { name: "上下文" }).click();
   const mcp = inspector.getByRole("region", { name: "MCP" });
   const sources = inspector.getByRole("region", { name: "来源" });
@@ -1327,9 +1352,9 @@ test("renders message images as standalone previews above the text bubble", asyn
 test("keeps Projects fixed and manages task actions from the compact tree", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
-  const projectsHeading = sidebar.getByRole("heading", { name: "Projects" });
-  const pinnedHeading = sidebar.getByRole("heading", { name: "Pinned" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
+  const projectsHeading = sidebar.getByRole("heading", { name: "项目" });
+  const pinnedHeading = sidebar.getByRole("heading", { name: "已固定" });
   const projectTree = page.getByTestId("project-tree-scroll");
   const projectGroup = sidebar
     .getByRole("button", { name: "切换项目 CodeAgent" })
@@ -1414,7 +1439,7 @@ test("keeps Projects fixed and manages task actions from the compact tree", asyn
 test("renames the active task from the center title", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const main = page.getByRole("main", { name: "Task Timeline" });
+  const main = page.getByRole("main", { name: "任务时间线" });
   await main.getByRole("button", { name: "重命名任务 构建 macOS 工作台" }).click();
 
   const dialog = page.getByRole("dialog", { name: "重命名任务" });
@@ -1424,7 +1449,7 @@ test("renames the active task from the center title", async ({ page }) => {
   await expect(main.getByRole("heading", { name: "重命名中栏任务" })).toBeVisible();
   await expect(
     page
-      .getByRole("complementary", { name: "Project Sidebar" })
+      .getByRole("complementary", { name: "项目侧栏" })
       .getByRole("link", { name: /重命名中栏任务/u }),
   ).toHaveCount(2);
 });
@@ -1533,7 +1558,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   await prompt.fill("");
   await prompt.fill("/");
   await expect(commandMenu).toBeVisible();
-  await page.getByRole("main", { name: "Task Timeline" }).click({ position: { x: 10, y: 10 } });
+  await page.getByRole("main", { name: "任务时间线" }).click({ position: { x: 10, y: 10 } });
   await expect(commandMenu).toBeHidden();
 
   await prompt.fill("");
@@ -1847,7 +1872,7 @@ test("project file tree opens diffs for changed files and source previews for un
 }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const inspector = page.getByRole("complementary", { name: "Context Inspector" });
+  const inspector = page.getByRole("complementary", { name: "项目检查器" });
   const fileTree = inspector.getByRole("tree", { name: "项目文件" });
   await expect(fileTree).toBeVisible();
   await expect(fileTree.getByRole("treeitem", { name: "architecture-design.md" })).toHaveCount(0);
@@ -1876,7 +1901,7 @@ test("project file tree context menu opens files and folders with a selected app
 }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const inspector = page.getByRole("complementary", { name: "Context Inspector" });
+  const inspector = page.getByRole("complementary", { name: "项目检查器" });
   const fileTree = inspector.getByRole("tree", { name: "项目文件" });
   const defaultOpenButton = page.getByRole("button", { name: "在 Zed 中打开" });
   await expect(defaultOpenButton).toBeVisible();
@@ -2088,12 +2113,19 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   });
   await expect(page.getByText("screen.png", { exact: true })).toBeVisible();
   const prompt = page.getByRole("textbox", { name: "任务输入" });
+  const commandMenu = page.getByRole("listbox", { name: "输入命令" });
   await prompt.fill("/security");
+  await expect(commandMenu.getByRole("option", { name: /Security review/u })).toBeVisible();
   await prompt.press("Enter");
   await expect(prompt.locator('[data-prompt-skill-id="skill-security"]')).toBeVisible();
+  await prompt.focus();
+  await prompt.press("End");
   await page.keyboard.type(" /documentation");
+  await expect(commandMenu.getByRole("option", { name: /Documentation writer/u })).toBeVisible();
   await prompt.press("Enter");
   await expect(prompt.locator('[data-prompt-skill-id="skill-docs"]')).toBeVisible();
+  await prompt.focus();
+  await prompt.press("End");
   await page.keyboard.type(" 按截图完成改造");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
 
@@ -3087,7 +3119,7 @@ test("updates a running background task title and clears attention after enterin
   });
 
   await page.goto("/p/code-agent/t/task-1");
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   const backgroundTask = sidebar.getByRole("link", { name: /优化输入框交互/ });
   const completedTask = sidebar.locator('a[href="/p/code-agent/t/markdown"]');
   const failedTask = sidebar.getByRole("link", { name: /完善 Runtime 状态/ });
@@ -3679,7 +3711,7 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
 }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   const newAgent = sidebar.getByRole("link", { name: "新建任务" });
   const search = sidebar.getByRole("textbox", { name: "搜索任务" });
   const productBrand = sidebar.getByText("CodeAgent", { exact: true }).first();
@@ -3690,8 +3722,8 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
 
   const newAgentBox = await newAgent.boundingBox();
   const searchBox = await search.boundingBox();
-  const pinnedBox = await sidebar.getByRole("heading", { name: "Pinned" }).boundingBox();
-  const projectsBox = await sidebar.getByRole("heading", { name: "Projects" }).boundingBox();
+  const pinnedBox = await sidebar.getByRole("heading", { name: "已固定" }).boundingBox();
+  const projectsBox = await sidebar.getByRole("heading", { name: "项目" }).boundingBox();
   expect(newAgentBox).not.toBeNull();
   expect(searchBox).not.toBeNull();
   expect(pinnedBox).not.toBeNull();
@@ -3707,7 +3739,7 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
 test("keeps the original sidebar logo and provides it as favicon", async ({ page }) => {
   await page.goto("/p/code-agent");
 
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   const productBrand = sidebar.getByText("CodeAgent", { exact: true }).first().locator("..");
   const brandMark = productBrand.getByText("CA", { exact: true });
 
@@ -3786,9 +3818,7 @@ test("adds a folder through the host project picker", async ({ page }) => {
   expect(addProjectRequestCount).toBe(1);
   await expect(page.getByRole("heading", { name: "AddedProject" })).toBeVisible();
   await expect(
-    page
-      .getByRole("complementary", { name: "Project Sidebar" })
-      .getByRole("link", { name: "新聊天" }),
+    page.getByRole("complementary", { name: "项目侧栏" }).getByRole("link", { name: "新聊天" }),
   ).toHaveCount(0);
 });
 
@@ -3879,7 +3909,7 @@ test("keeps icon button tooltips visible within clipping and viewport boundaries
 test("searches tasks across projects", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   await sidebar.getByRole("textbox", { name: "搜索任务" }).fill("Markdown");
 
   await expect(sidebar.getByRole("link", { name: /完善 Markdown 渲染/ })).toBeVisible();
@@ -3895,7 +3925,7 @@ test("opens and reuses project new chats without creating empty Codex tasks", as
   });
   await page.goto("/p/superwork/t/plan-check");
 
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   await sidebar.getByRole("link", { name: "新建任务" }).click();
   await expect(page).toHaveURL(/\/p\/code-agent$/);
   await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveCount(0);
@@ -3992,8 +4022,8 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
 
   // Codex 返回真实 taskId 后立即写入并选中 Sidebar，中栏仍保留可重试的 Project 草稿。
   await expect(page).toHaveURL(/\/p\/code-agent$/u);
-  const main = page.getByRole("main", { name: "Task Timeline" });
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const main = page.getByRole("main", { name: "任务时间线" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   const runningTaskLink = sidebar.getByRole("link", { name: "新聊天" });
   await expect(runningTaskLink).toHaveAttribute("aria-current", "page");
 
@@ -4046,7 +4076,7 @@ test("stores new-chat text and attachments independently between projects", asyn
   await expect(projectSelect).toHaveValue("superwork");
   await expect(prompt).toHaveAttribute("data-serialized-value", "");
   await expect(page.getByText("draft.png", { exact: true })).toHaveCount(0);
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   // 切换当前 Project 不覆盖用户保存的文件夹展开形态。
   await expect(sidebar.getByRole("button", { name: "切换项目 superwork" })).toHaveAttribute(
     "aria-expanded",
@@ -4064,7 +4094,7 @@ test("stores new-chat text and attachments independently between projects", asyn
 test("toggles project tasks from the project name without navigation", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   const task = sidebar.getByRole("link", { name: /优化输入框交互/ });
   await expect(task).toBeVisible();
 
@@ -4087,7 +4117,7 @@ test("loads tasks only for the current or expanded projects", async ({ page }) =
 
   await page.goto("/p/code-agent/t/task-1");
 
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   await expect(sidebar.getByRole("link", { name: "优化输入框交互" })).toBeVisible();
   expect(superworkTaskRequests).toBe(0);
 
@@ -4109,7 +4139,7 @@ test("loads one project task page only after showing more", async ({ page }) => 
 
   await page.goto("/p/code-agent/t/task-1");
 
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   await expect.poll(() => taskListRequests.length).toBe(1);
   expect(taskListRequests[0]?.searchParams.get("limit")).toBe("5");
   expect(taskListRequests[0]?.searchParams.has("cursor")).toBe(false);
@@ -4136,7 +4166,7 @@ test("keeps project add buttons visible after opening a task", async ({ page }) 
   });
   await page.goto("/p/code-agent/t/task-1");
 
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   await sidebar.getByRole("link", { name: longTask.title }).click();
 
   const layout = await sidebar.evaluate((element) => {
@@ -4199,15 +4229,15 @@ test("uses material hierarchy instead of strong workbench borders", async ({ pag
   await expect(page.locator('[role="log"] > div')).toBeVisible();
 
   const presentation = await page.evaluate(() => {
-    const sidebar = document.querySelector<HTMLElement>('[aria-label="Project Sidebar"]');
-    const inspector = document.querySelector<HTMLElement>('[aria-label="Context Inspector"]');
-    const timeline = document.querySelector<HTMLElement>('[aria-label="Task Timeline"]');
+    const sidebar = document.querySelector<HTMLElement>('[aria-label="项目侧栏"]');
+    const inspector = document.querySelector<HTMLElement>('[aria-label="项目检查器"]');
+    const timeline = document.querySelector<HTMLElement>('[aria-label="任务时间线"]');
     const sidebarToolbar = sidebar?.querySelector<HTMLElement>(":scope > div") ?? null;
     const inspectorToolbar = inspector?.querySelector<HTMLElement>(":scope > div") ?? null;
     const toolbar = timeline?.querySelector<HTMLElement>("header") ?? null;
     const timelineContent = document.querySelector<HTMLElement>('[role="log"] > div');
-    const composerRegion = document.querySelector<HTMLElement>('[aria-label="Composer"]');
-    const composer = document.querySelector<HTMLElement>('[aria-label="Composer"] form');
+    const composerRegion = document.querySelector<HTMLElement>('[aria-label="消息编辑器"]');
+    const composer = document.querySelector<HTMLElement>('[aria-label="消息编辑器"] form');
 
     if (
       sidebar === null ||
@@ -4286,8 +4316,8 @@ test("supports structured activity without Escape changing panel state", async (
   await expect(page.getByText("docs/web-design.md")).toBeVisible();
 
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("complementary", { name: "Project Sidebar" })).toBeVisible();
-  await expect(page.getByRole("complementary", { name: "Context Inspector" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "项目侧栏" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "项目检查器" })).toBeVisible();
 });
 
 test("resizes desktop workbench panels within bounds", async ({ page }) => {
@@ -4296,8 +4326,8 @@ test("resizes desktop workbench panels within bounds", async ({ page }) => {
 
   await expect(page.getByRole("button", { name: "更多操作" })).toHaveCount(0);
 
-  const sidebar = page.getByRole("complementary", { name: "Project Sidebar" });
-  const inspector = page.getByRole("complementary", { name: "Context Inspector" });
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
+  const inspector = page.getByRole("complementary", { name: "项目检查器" });
   const sidebarResizer = page.getByRole("separator", { name: "调整项目侧栏宽度" });
   const inspectorResizer = page.getByRole("separator", { name: "调整上下文面板宽度" });
 
@@ -4347,15 +4377,15 @@ test("keeps the narrow workbench layout stable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/p/code-agent/t/task-1");
 
-  await expect(page.getByRole("complementary", { name: "Project Sidebar" })).not.toBeVisible();
+  await expect(page.getByRole("complementary", { name: "项目侧栏" })).not.toBeVisible();
   await page.getByRole("button", { name: "展开项目侧栏" }).click();
-  await expect(page.getByRole("complementary", { name: "Project Sidebar" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "项目侧栏" })).toBeVisible();
   await page
-    .getByRole("complementary", { name: "Project Sidebar" })
+    .getByRole("complementary", { name: "项目侧栏" })
     .getByRole("button", { name: "关闭项目侧栏" })
     .click();
 
-  const timelineBox = await page.getByRole("main", { name: "Task Timeline" }).boundingBox();
+  const timelineBox = await page.getByRole("main", { name: "任务时间线" }).boundingBox();
 
   expect(timelineBox).not.toBeNull();
   expect(timelineBox?.x).toBe(0);
@@ -4371,13 +4401,13 @@ test("closes open workbench panels when the window becomes narrow", async ({ pag
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/p/code-agent/t/task-1");
 
-  await expect(page.getByRole("complementary", { name: "Project Sidebar" })).toBeVisible();
-  await expect(page.getByRole("complementary", { name: "Context Inspector" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "项目侧栏" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "项目检查器" })).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
 
-  await expect(page.getByRole("complementary", { name: "Project Sidebar" })).not.toBeVisible();
-  await expect(page.getByRole("complementary", { name: "Context Inspector" })).not.toBeVisible();
+  await expect(page.getByRole("complementary", { name: "项目侧栏" })).not.toBeVisible();
+  await expect(page.getByRole("complementary", { name: "项目检查器" })).not.toBeVisible();
 });
 
 test("renders a route-level not-found state", async ({ page }) => {

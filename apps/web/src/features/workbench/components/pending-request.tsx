@@ -15,6 +15,7 @@ import {
   type ConfirmationState,
 } from "../../../shared/ai-elements/confirmation.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { useTranslation } from "../../../i18n/i18n.js";
 
 export type PendingRequestResolution = ResolvePendingRequestRequest["resolution"];
 
@@ -74,6 +75,7 @@ function ApprovalRequestCard({
   onResolve,
   request,
 }: Omit<PendingRequestCardProps, "request"> & { request: ApprovalRequest }) {
+  const { t } = useTranslation("workbench");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState<PendingRequestResolutionAttempt>();
@@ -82,16 +84,16 @@ function ApprovalRequestCard({
   const networkAccess = request.type === "command_approval" ? request.networkAccess : null;
   const title =
     networkAccess !== null
-      ? "网络访问审批"
+      ? t("pending.networkApproval")
       : request.type === "command_approval"
-        ? "命令审批"
-        : "文件变更审批";
+        ? t("pending.commandApproval")
+        : t("pending.fileChangeApproval");
   const detail =
     networkAccess !== null
       ? `${formatNetworkProtocol(networkAccess.protocol)}\n${networkAccess.host}`
       : request.type === "command_approval"
         ? [request.command, request.cwd].filter(Boolean).join("\n")
-        : (request.grantRoot ?? "待确认文件变更");
+        : (request.grantRoot ?? t("pending.fileChangeFallback"));
   const canSubmit = interactive && request.status === "pending" && !submitting;
   const canFocusAllow = canSubmit && request.availableDecisions.includes("allow");
 
@@ -114,7 +116,7 @@ function ApprovalRequestCard({
       try {
         await onResolve(request, resolution, nextAttempt.key);
       } catch {
-        setError("请求处理失败，请重试");
+        setError(t("pending.requestFailed"));
         setSubmitting(false);
       }
     });
@@ -129,11 +131,11 @@ function ApprovalRequestCard({
         )}
       </ConfirmationRequest>
       {request.status === "expired" ? (
-        <ConfirmationRejected>请求已过期</ConfirmationRejected>
+        <ConfirmationRejected>{t("pending.expired")}</ConfirmationRejected>
       ) : (
         <>
           {!interactive ? (
-            <p className="mt-2 text-label text-muted-foreground">等待处理前一项</p>
+            <p className="mt-2 text-label text-muted-foreground">{t("pending.previousPending")}</p>
           ) : null}
           {error === null ? null : (
             <p className="mt-2 text-label text-danger" role="alert">
@@ -147,7 +149,7 @@ function ApprovalRequestCard({
                 onClick={() => void resolve("deny")}
                 tone="danger"
               >
-                拒绝
+                {t("pending.deny")}
               </ConfirmationAction>
             ) : null}
             {request.availableDecisions.includes("allow_for_session") ? (
@@ -155,7 +157,7 @@ function ApprovalRequestCard({
                 disabled={!canSubmit}
                 onClick={() => void resolve("allow_for_session")}
               >
-                本次会话允许
+                {t("pending.allowSession")}
               </ConfirmationAction>
             ) : null}
             {request.availableDecisions.includes("allow") ? (
@@ -165,7 +167,7 @@ function ApprovalRequestCard({
                 ref={allowButtonRef}
                 tone="primary"
               >
-                允许
+                {t("pending.allow")}
               </ConfirmationAction>
             ) : null}
           </ConfirmationActions>
@@ -179,6 +181,7 @@ type Answers = Record<string, string>;
 
 function UserInputRequestCard({ interactive, onResolve, request }: PendingRequestCardProps) {
   if (request.type !== "user_input") return null;
+  const { t } = useTranslation("workbench");
   const [answers, setAnswers] = useState<Answers>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -204,7 +207,7 @@ function UserInputRequestCard({ interactive, onResolve, request }: PendingReques
       try {
         await onResolve(request, resolution, nextAttempt.key);
       } catch {
-        setError("回答提交失败，请重试");
+        setError(t("pending.answerFailed"));
         setSubmitting(false);
       }
     });
@@ -212,7 +215,7 @@ function UserInputRequestCard({ interactive, onResolve, request }: PendingReques
   if (request.status !== "pending") {
     return (
       <section className="w-full rounded-surface bg-control px-3.5 py-3 text-label text-muted-foreground">
-        {request.status === "expired" ? "请求已过期" : "请求已处理"}
+        {request.status === "expired" ? t("pending.expired") : t("pending.processed")}
       </section>
     );
   }
@@ -225,7 +228,7 @@ function UserInputRequestCard({ interactive, onResolve, request }: PendingReques
         void submit();
       }}
     >
-      <h3 className="text-label font-semibold text-foreground">需要你的输入</h3>
+      <h3 className="text-label font-semibold text-foreground">{t("pending.inputRequired")}</h3>
       <div className="mt-3 space-y-4">
         {request.questions.map((question) => (
           <fieldset key={question.id}>
@@ -258,13 +261,13 @@ function UserInputRequestCard({ interactive, onResolve, request }: PendingReques
                 ))}
                 {question.isOther ? (
                   <input
-                    aria-label={`${question.header}其他回答`}
+                    aria-label={t("pending.otherAnswer", { header: question.header })}
                     className="h-8 w-full rounded-control bg-raised px-2.5 text-label text-foreground shadow-sm outline-none"
                     disabled={controlsDisabled}
                     onChange={(event) => {
                       setAnswers((value) => ({ ...value, [question.id]: event.target.value }));
                     }}
-                    placeholder="其他"
+                    placeholder={t("pending.other")}
                     type="text"
                     value={
                       question.options.some((option) => option.label === answers[question.id])
@@ -307,7 +310,7 @@ function UserInputRequestCard({ interactive, onResolve, request }: PendingReques
         ))}
       </div>
       {!interactive ? (
-        <p className="mt-3 text-label text-muted-foreground">等待处理前一项</p>
+        <p className="mt-3 text-label text-muted-foreground">{t("pending.previousPending")}</p>
       ) : null}
       {error === null ? null : (
         <p className="mt-3 text-label text-danger" role="alert">
@@ -320,7 +323,7 @@ function UserInputRequestCard({ interactive, onResolve, request }: PendingReques
           disabled={!canSubmit}
           type="submit"
         >
-          提交回答
+          {t("pending.submitAnswers")}
         </button>
       </div>
     </form>

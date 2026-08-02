@@ -63,6 +63,7 @@ import {
 } from "../../projects/project-queries.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
+import { useTranslation } from "../../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
 import { deriveProjectSidebarConnectionState, ProjectSidebar } from "./project-sidebar.js";
@@ -127,6 +128,7 @@ function shouldOpenDesktopPanel(query: string) {
 }
 
 export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
+  const { t } = useTranslation("workbench");
   const {
     capabilities,
     client,
@@ -291,7 +293,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const title =
     tasks.find((task) => task.projectId === projectId && task.id === taskId)?.title ??
     runtime.snapshot?.title ??
-    "新聊天";
+    t("shell.newChat");
   const renameMutation = useMutation(taskRenameMutationOptions(client));
   const activeTaskRenameLockRef = useRef(createAsyncActionLock());
   const selectedFileChange =
@@ -360,7 +362,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         replaceProjectTaskInQueryCaches(queryClient, response.task);
         closeTaskRenameDialog();
       } catch {
-        setTaskRenameError("无法重命名任务");
+        setTaskRenameError(t("sidebar.errorRenameTask"));
       }
     });
   const cacheProjectTask = useCallback(
@@ -553,7 +555,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
 
       {sidebarOpen ? (
         <button
-          aria-label="关闭项目侧栏"
+          aria-label={t("shell.closeSidebar")}
           className="workbench-sidebar-scrim"
           onClick={closeSidebar}
           type="button"
@@ -563,7 +565,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       {sidebarOpen ? (
         <WorkbenchPanelResizer
           direction={1}
-          label="调整项目侧栏宽度"
+          label={t("shell.resizeSidebar")}
           maximumWidth={sidebarWidthLimits.maximum}
           minimumWidth={sidebarWidthLimits.minimum}
           onResize={(width) => {
@@ -584,12 +586,12 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         />
       ) : null}
 
-      <main aria-label="Task Timeline" className="flex min-h-0 min-w-0 flex-col bg-content">
+      <main aria-label={t("shell.timeline")} className="flex min-h-0 min-w-0 flex-col bg-content">
         <header className="flex h-workbench-header shrink-0 items-center justify-between gap-3 bg-content px-2.5 shadow-toolbar sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
             <IconButton
               id="workbench-sidebar-toggle"
-              label={sidebarOpen ? "收起项目侧栏" : "展开项目侧栏"}
+              label={sidebarOpen ? t("shell.collapseSidebar") : t("shell.expandSidebar")}
               onClick={() => {
                 setSidebarOpen((open) => !open);
               }}
@@ -605,7 +607,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
                 <span className="block truncate">{title}</span>
               ) : (
                 <button
-                  aria-label={`重命名任务 ${title}`}
+                  aria-label={t("shell.renameTask", { title })}
                   className="group flex max-w-full items-center gap-1 rounded-control px-1 py-0.5 text-left hover:bg-control-hover focus-visible:shadow-focus"
                   id="workbench-task-title-rename"
                   onClick={() => {
@@ -634,7 +636,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             />
             <IconButton
               id="workbench-inspector-toggle"
-              label={inspectorOpen ? "收起上下文面板" : "展开上下文面板"}
+              label={inspectorOpen ? t("shell.collapseInspector") : t("shell.expandInspector")}
               onClick={() => {
                 setInspectorOpen((open) => !open);
               }}
@@ -711,7 +713,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
 
       {inspectorOpen ? (
         <button
-          aria-label="关闭上下文面板"
+          aria-label={t("shell.closeInspector")}
           className="workbench-inspector-scrim"
           onClick={closeInspector}
           type="button"
@@ -721,7 +723,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       {inspectorOpen ? (
         <WorkbenchPanelResizer
           direction={-1}
-          label="调整上下文面板宽度"
+          label={t("shell.resizeInspector")}
           maximumWidth={inspectorWidthLimits.maximum}
           minimumWidth={inspectorWidthLimits.minimum}
           onResize={(width) => {

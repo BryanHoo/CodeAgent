@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useTranslation } from "../../../i18n/i18n.js";
+
 type ProjectRenameDialogProps = Readonly<{
   error?: string | null;
   initialName: string;
@@ -15,6 +17,7 @@ export function ProjectRenameDialog({
   onClose,
   onRename,
 }: ProjectRenameDialogProps) {
+  const { t } = useTranslation("workbench");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState(initialName);
 
@@ -55,13 +58,13 @@ export function ProjectRenameDialog({
         }}
       >
         <h2 className="text-heading font-semibold" id="project-rename-title">
-          重命名项目
+          {t("projectDialog.rename")}
         </h2>
         <p className="mt-1 text-body-small text-muted-foreground">
-          只修改左栏显示名称，不会修改磁盘上的文件夹名称。
+          {t("projectDialog.renameDescription")}
         </p>
         <input
-          aria-label="项目名称"
+          aria-label={t("projectDialog.name")}
           autoFocus
           className="mt-3 h-9 w-full rounded-control bg-control px-3 text-body text-foreground outline-none focus:shadow-focus"
           disabled={isPending}
@@ -83,14 +86,14 @@ export function ProjectRenameDialog({
             onClick={onClose}
             type="button"
           >
-            取消
+            {t("actions.cancel")}
           </button>
           <button
             className="h-8 rounded-control bg-accent px-3 text-body-small font-medium text-white hover:bg-accent-strong disabled:opacity-50"
             disabled={isPending || normalizedName.length === 0 || normalizedName === initialName}
             type="submit"
           >
-            保存
+            {t("actions.save")}
           </button>
         </div>
       </form>

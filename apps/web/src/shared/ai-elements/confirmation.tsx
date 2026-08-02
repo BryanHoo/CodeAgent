@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { i18n, useTranslation } from "../../i18n/i18n.js";
+
 export type ConfirmationState =
   | "approval-requested"
   | "approval-submitting"
@@ -28,10 +30,12 @@ type ConfirmationProps = HTMLAttributes<HTMLElement> & {
 function findTitle(children: ReactNode): string {
   for (const child of Children.toArray(children)) {
     if (isValidElement<{ children?: ReactNode }>(child) && child.type === ConfirmationTitle) {
-      return typeof child.props.children === "string" ? child.props.children : "审批";
+      return typeof child.props.children === "string"
+        ? child.props.children
+        : i18n.t("aiElements.approval", { ns: "conversation" });
     }
   }
-  return "审批";
+  return i18n.t("aiElements.approval", { ns: "conversation" });
 }
 
 export function Confirmation({
@@ -41,11 +45,12 @@ export function Confirmation({
   state,
   ...props
 }: ConfirmationProps) {
+  const { t } = useTranslation("conversation");
   const title = findTitle(children);
   return (
     <ConfirmationContext.Provider value={state}>
       <section
-        aria-label={`${title}请求`}
+        aria-label={t("aiElements.approvalRequest", { title })}
         className={`w-full rounded-surface bg-control px-3.5 py-3 shadow-sm ${className}`}
         data-approval-id={approval.id}
         data-state={state}
@@ -83,11 +88,12 @@ export function ConfirmationRequest({ className = "", ...props }: HTMLAttributes
 }
 
 export function ConfirmationAccepted({
-  children = "请求已允许",
+  children,
   className = "",
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   const state = useContext(ConfirmationContext);
+  const { t } = useTranslation("conversation");
   if (state !== "approval-accepted") return null;
   return (
     <div
@@ -95,17 +101,18 @@ export function ConfirmationAccepted({
       {...props}
     >
       <Check className="size-3.5" aria-hidden="true" />
-      {children}
+      {children ?? t("aiElements.approvalAccepted")}
     </div>
   );
 }
 
 export function ConfirmationRejected({
-  children = "请求已拒绝",
+  children,
   className = "",
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   const state = useContext(ConfirmationContext);
+  const { t } = useTranslation("conversation");
   if (state !== "approval-rejected" && state !== "approval-expired") return null;
   return (
     <div
@@ -113,7 +120,7 @@ export function ConfirmationRejected({
       {...props}
     >
       <CircleX className="size-3.5" aria-hidden="true" />
-      {children}
+      {children ?? t("aiElements.approvalRejected")}
     </div>
   );
 }

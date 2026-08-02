@@ -12,6 +12,8 @@ import {
   type HTMLAttributes,
 } from "react";
 
+import { useTranslation } from "../../i18n/i18n.js";
+
 type AnsiComponent = ComponentType<Readonly<{ children?: string; className?: string }>>;
 
 const ansiDefault = AnsiModule.default as AnsiComponent | { default: AnsiComponent };
@@ -104,6 +106,7 @@ export function TerminalCopyButton({
   ...props
 }: TerminalCopyButtonProps) {
   const { output } = useTerminalContext();
+  const { t } = useTranslation("conversation");
   const [copied, setCopied] = useState(false);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -135,7 +138,7 @@ export function TerminalCopyButton({
 
   return (
     <button
-      aria-label={copied ? "命令输出已复制" : "复制命令输出"}
+      aria-label={copied ? t("aiElements.copiedOutput") : t("aiElements.copyOutput")}
       className={`grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground ${className}`}
       onClick={(event) => {
         onClick?.(event);
@@ -143,7 +146,7 @@ export function TerminalCopyButton({
           void copyOutput();
         }
       }}
-      title={copied ? "已复制" : "复制命令输出"}
+      title={copied ? t("aiElements.copied") : t("aiElements.copyOutput")}
       type="button"
       {...props}
     >
@@ -160,6 +163,7 @@ export type TerminalContentProps = HTMLAttributes<HTMLDivElement>;
 
 export function TerminalContent({ children, className = "", ...props }: TerminalContentProps) {
   const { autoScroll, isStreaming, output } = useTerminalContext();
+  const { t } = useTranslation("conversation");
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -184,7 +188,7 @@ export function TerminalContent({ children, className = "", ...props }: Terminal
       <Ansi className="block whitespace-pre-wrap break-words">{output}</Ansi>
       {isStreaming ? (
         <span
-          aria-label="正在接收命令输出"
+          aria-label={t("aiElements.streamingOutput")}
           className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-muted-foreground align-middle"
           role="status"
         />

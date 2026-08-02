@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp, FileCode2, Files, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import { IconButton } from "../../shared/ui/icon-button.js";
+import { useTranslation } from "../../i18n/i18n.js";
 import type { AgentFileChange } from "./file-change.js";
 import { countFileChangeLines, getFileName } from "./file-change.js";
 
@@ -58,6 +59,7 @@ type FileReviewDialogProps = Readonly<{
 }>;
 
 export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
+  const { t } = useTranslation("workbench");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const fileItems = useMemo(() => buildReviewFileList(changes ?? []), [changes]);
@@ -138,7 +140,7 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
           <div className="flex shrink-0 items-center gap-1">
             <IconButton
               disabled={currentIndex === 0}
-              label="审核上一个文件"
+              label={t("diff.previousFile")}
               onClick={() => {
                 navigate("previous");
               }}
@@ -148,7 +150,7 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
             </IconButton>
             <IconButton
               disabled={currentIndex === changes.length - 1}
-              label="审核下一个文件"
+              label={t("diff.nextFile")}
               onClick={() => {
                 navigate("next");
               }}
@@ -156,20 +158,20 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
             >
               <ChevronDown className="size-3.5" aria-hidden="true" />
             </IconButton>
-            <IconButton label="关闭文件审核" onClick={onClose} size="small">
+            <IconButton label={t("diff.closeReview")} onClick={onClose} size="small">
               <X className="size-3.5" aria-hidden="true" />
             </IconButton>
           </div>
         </header>
         <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(12rem,26%)] bg-content">
-          <section aria-label="审核文件内容" className="min-h-0 overflow-auto">
+          <section aria-label={t("diff.reviewContent")} className="min-h-0 overflow-auto">
             <Suspense
               fallback={
                 <div
                   className="grid min-h-48 place-items-center text-body-small text-muted-foreground"
                   role="status"
                 >
-                  正在加载 Diff
+                  {t("diff.loading")}
                 </div>
               }
             >
@@ -177,23 +179,29 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
             </Suspense>
           </section>
           <aside
-            aria-label="变更文件导航"
+            aria-label={t("diff.changedFilesNavigation")}
             className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] border-l border-separator bg-panel"
           >
             <div className="flex min-h-toolbar items-center gap-2 border-b border-separator px-3">
               <Files aria-hidden="true" className="size-3.5 text-muted-foreground" />
-              <h3 className="min-w-0 flex-1 truncate text-label font-semibold">变更文件</h3>
+              <h3 className="min-w-0 flex-1 truncate text-label font-semibold">
+                {t("diff.changedFiles")}
+              </h3>
               <span className="text-meta text-muted-foreground">{changes.length}</span>
             </div>
             <div className="min-h-0 overflow-y-auto px-2 py-2">
-              <ul aria-label="变更文件列表" className="space-y-1">
+              <ul aria-label={t("diff.changedFilesList")} className="space-y-1">
                 {fileItems.map((item) => {
                   const isSelected = item.changeIndex === currentIndex;
                   return (
                     <li key={`${item.path}:${String(item.changeIndex)}`}>
                       <button
                         aria-current={isSelected ? "true" : undefined}
-                        aria-label={`${item.path}，新增 ${String(item.additions)} 行，删除 ${String(item.removals)} 行`}
+                        aria-label={t("diff.fileStats", {
+                          additions: item.additions,
+                          path: item.path,
+                          removals: item.removals,
+                        })}
                         className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-control px-2 py-2 text-left transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none ${isSelected ? "bg-control" : ""}`}
                         onClick={() => {
                           setCurrentIndex(item.changeIndex);

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { useTranslation } from "../../../i18n/i18n.js";
 import type { CodeAgentProjectOpenClient } from "../../projects/project-queries.js";
 import { projectOpenCapabilitiesQueryOptions } from "../../projects/project-queries.js";
 import {
@@ -35,7 +36,7 @@ type ProjectOpenMenuItemsProps = Readonly<{
 
 export function ProjectOpenMenuItems({
   apps,
-  ariaLabel = "项目打开方式",
+  ariaLabel,
   detail,
   isPending,
   mode = "selection",
@@ -43,9 +44,10 @@ export function ProjectOpenMenuItems({
   selectedAppId,
   title,
 }: ProjectOpenMenuItemsProps) {
+  const { t } = useTranslation("workbench");
   return (
     <div
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? t("openMenu.choose")}
       className="w-60 rounded-surface border border-separator-strong bg-raised p-1.5 shadow-floating"
       role="menu"
     >
@@ -144,6 +146,7 @@ export function ProjectOpenContextMenu({
   onSelect,
   target,
 }: ProjectOpenContextMenuProps) {
+  const { t } = useTranslation("workbench");
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -189,7 +192,7 @@ export function ProjectOpenContextMenu({
     >
       <ProjectOpenMenuItems
         apps={apps}
-        ariaLabel={`打开 ${target.path} 的方式`}
+        ariaLabel={t("openMenu.targetLabel", { path: target.path })}
         detail={target.path}
         isPending={isPending}
         mode="command"
@@ -197,7 +200,7 @@ export function ProjectOpenContextMenu({
           onClose();
           onSelect(appId, target.path);
         }}
-        title="打开方式"
+        title={t("openMenu.title")}
       />
     </div>,
     document.body,
@@ -211,6 +214,7 @@ type ProjectOpenMenuProps = Readonly<{
 }>;
 
 export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: ProjectOpenMenuProps) {
+  const { t } = useTranslation("workbench");
   const containerRef = useRef<HTMLDivElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -261,10 +265,10 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
     menuTriggerRef.current?.focus();
   };
   const openButtonLabel = capabilitiesQuery.isPending
-    ? "正在检测打开方式"
+    ? t("openMenu.detect")
     : selectedApp === undefined
-      ? "没有可用的打开方式"
-      : `在 ${selectedApp.name} 中打开`;
+      ? t("openMenu.none")
+      : t("openMenu.openIn", { app: selectedApp.name });
 
   return (
     <div
@@ -302,7 +306,7 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
         <button
           aria-expanded={menuOpen}
           aria-haspopup="menu"
-          aria-label="选择打开方式"
+          aria-label={t("openMenu.choose")}
           className="inline-grid size-7 shrink-0 place-items-center border-l border-separator text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus disabled:cursor-not-allowed disabled:opacity-45"
           disabled={apps.length === 0 || openMutation.isPending}
           onClick={() => {
@@ -345,7 +349,7 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
           className="absolute right-0 top-full z-50 mt-1.5 w-60 rounded-control bg-danger-soft px-2 py-1.5 text-meta text-danger shadow-floating"
           role="alert"
         >
-          无法打开项目，请确认应用仍可用
+          {t("openMenu.error")}
         </p>
       ) : null}
     </div>

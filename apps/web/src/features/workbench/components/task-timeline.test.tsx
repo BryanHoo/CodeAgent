@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+import { changeAppLanguage } from "../../../i18n/i18n.js";
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import { createTaskStore } from "../../conversation/runtime/task-store.js";
 import {
@@ -45,6 +46,69 @@ const snapshot: RuntimeTaskSnapshot = {
 };
 
 describe("TaskTimeline", () => {
+  it("localizes the running state in English", async () => {
+    await changeAppLanguage("en");
+    try {
+      const markup = renderToStaticMarkup(
+        <TaskTimeline
+          onProjectChange={() => undefined}
+          projectId="项目-alpha"
+          projects={[
+            {
+              createdAt: "2026-07-22T06:00:00.000Z",
+              id: "项目-alpha",
+              name: "项目-alpha",
+              rootPath: "/workspace/项目-alpha",
+            },
+          ]}
+          submissionPending
+        />,
+      );
+
+      expect(markup).toContain("Running");
+      expect(markup).toContain('aria-label="AI response is running"');
+    } finally {
+      await changeAppLanguage("zh-CN");
+    }
+  });
+
+  it("keeps user and AI content unchanged when the interface is English", async () => {
+    await changeAppLanguage("en");
+    try {
+      const contentSnapshot: RuntimeTaskSnapshot = {
+        ...snapshot,
+        settings: { ...snapshot.settings, model: "gpt-5.6-codex" },
+        turns: [
+          {
+            ...completedTurn,
+            items: [
+              {
+                id: "message-user-raw",
+                role: "user",
+                text: "请保留中文输入与 Codex 专有名词",
+                type: "message",
+              },
+              {
+                id: "message-assistant-raw",
+                role: "assistant",
+                text: "已保留原始 AI 输出：Reasoning effort",
+                type: "message",
+              },
+            ],
+          },
+        ],
+      };
+
+      const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={contentSnapshot} />);
+
+      expect(markup).toContain("请保留中文输入与 Codex 专有名词");
+      expect(markup).toContain("已保留原始 AI 输出：Reasoning effort");
+      expect(markup).toContain("Copy message");
+    } finally {
+      await changeAppLanguage("zh-CN");
+    }
+  });
+
   it("uses streaming Markdown only for the active assistant tail item", () => {
     expect(
       resolveMessageResponseRendering({

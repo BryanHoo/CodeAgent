@@ -73,6 +73,7 @@ import {
 } from "../../../shared/ai-elements/prompt-input.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import {
   insertPromptSkill,
   isPromptSkillContentEmpty,
@@ -84,9 +85,9 @@ import {
 import {
   filterPromptCommandItems,
   filterPromptSkills,
+  getPromptCommandItems,
   getPromptCommandAvailability,
   movePromptCommandSelection,
-  promptCommandItems,
   resolvePromptSlashCommand,
   type PromptCommandAction,
   type PromptCommandItem,
@@ -105,12 +106,14 @@ export function resolveComposerPlaceholder(
 ): string {
   // 命令草稿需要优先说明当前输入目标，普通草稿再按任务上下文提示。
   if (commandDraftMode === "feedback") {
-    return "输入关于此任务的反馈";
+    return i18n.t("composer.feedbackPlaceholder", { ns: "workbench" });
   }
   if (commandDraftMode === "subtask") {
-    return "描述需要交给子代理的任务";
+    return i18n.t("composer.subtaskPlaceholder", { ns: "workbench" });
   }
-  return taskId === undefined ? "告诉 CodeAgent 你想完成什么" : "输入后续要求";
+  return taskId === undefined
+    ? i18n.t("composer.placeholder", { ns: "workbench" })
+    : i18n.t("composer.followUpPlaceholder", { ns: "workbench" });
 }
 
 export type IdempotencyAttempt = Readonly<{
@@ -160,16 +163,6 @@ export function applyApprovalMode(
     ? { ...settings, approvalPolicy: "on-request", approvalsReviewer: "auto_review" }
     : { ...settings, approvalPolicy: mode, approvalsReviewer: "user" };
 }
-
-const reasoningEffortLabels: Readonly<Record<string, string>> = {
-  high: "高",
-  low: "低",
-  max: "最大",
-  medium: "中",
-  minimal: "最低",
-  ultra: "超高",
-  xhigh: "极高",
-};
 
 export function deriveComposerActions(
   capabilities: AgentCapabilities | undefined,
@@ -402,13 +395,14 @@ function PromptCommandIcon({ action }: Readonly<{ action: PromptCommandAction }>
 }
 
 function ComposerAttachments() {
+  const { t } = useTranslation("workbench");
   const attachments = usePromptInputAttachments();
   if (attachments.files.length === 0) {
     return null;
   }
   return (
     <PromptInputHeader>
-      <Attachments aria-label="已添加附件">
+      <Attachments aria-label={t("composer.addedAttachments")}>
         {attachments.files.map((attachment) => (
           <Attachment
             data={attachment}
@@ -431,14 +425,16 @@ function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.addEventListener("error", () => {
-      reject(reader.error ?? new Error("附件读取失败"));
+      reject(
+        reader.error ?? new Error(i18n.t("composer.attachmentReadFailed", { ns: "workbench" })),
+      );
     });
     reader.addEventListener("load", () => {
       if (typeof reader.result === "string") {
         // 浏览器对部分代码文件不给 MIME，使用通用二进制类型保持 Data URL 合法。
         resolve(reader.result.replace(/^data:;base64,/u, "data:application/octet-stream;base64,"));
       } else {
-        reject(new Error("附件读取失败"));
+        reject(new Error(i18n.t("composer.attachmentReadFailed", { ns: "workbench" })));
       }
     });
     reader.readAsDataURL(file);
@@ -466,6 +462,7 @@ export function WorkbenchComposer({
   skills,
   taskId,
 }: WorkbenchComposerProps) {
+  const { t } = useTranslation(["workbench", "settings"]);
   const routeScope = `${projectId}:${taskId ?? "draft"}`;
   const composerScope = createComposerDraftScope(projectId, taskId);
   const composerDraftStore = useComposerDraftStore();
@@ -565,7 +562,7 @@ export function WorkbenchComposer({
     capabilities?.skills.use === true ? skills : [],
     commandQuery,
   );
-  const filteredCommands = filterPromptCommandItems(promptCommandItems, commandQuery);
+  const filteredCommands = filterPromptCommandItems(getPromptCommandItems(), commandQuery);
   const baseBranches = gitStatus?.baseBranches ?? [];
   const menuItemCount =
     reviewMenuMode === "scopes"
@@ -819,7 +816,9 @@ export function WorkbenchComposer({
       };
     } catch (error) {
       if (routeScopeRef.current === requestScope) {
-        setMutationError(error instanceof Error ? error : new Error("附件上传失败"));
+        setMutationError(
+          error instanceof Error ? error : new Error(t("composer.attachmentUploadFailed")),
+        );
         setIsSubmitting(false);
       }
       return false;
@@ -983,7 +982,7 @@ export function WorkbenchComposer({
       activeTaskId !== undefined,
     );
     if (availability.available && state === "running") {
-      return { available: false, reason: "任务运行中" } as const;
+      return { available: false, reason: t("composer.taskRunning") } as const;
     }
     return availability;
   };
@@ -1026,7 +1025,7 @@ export function WorkbenchComposer({
         if (routeScopeRef.current === requestScope) {
           commandAttempts.current.delete("feedback");
           replaceCommandDraftMode(null);
-          setCommandNotice("反馈已发送");
+          setCommandNotice(t("composer.feedbackSent"));
           replacePromptContent([]);
         }
       } catch (error) {
@@ -1068,7 +1067,7 @@ export function WorkbenchComposer({
       await submitPrompt(
         {
           files: [],
-          text: "请检查当前项目，并在项目根目录创建或完善 AGENTS.md，写入适用于 Codex 的项目说明、常用命令和验证要求。",
+          text: t("composer.initializingAgentsPrompt"),
         },
         [],
       );
@@ -1093,7 +1092,7 @@ export function WorkbenchComposer({
         if (command.action === "compact") {
           await client.compactTask(projectId, activeTaskId, { idempotencyKey: attempt.key });
           if (routeScopeRef.current === requestScope) {
-            setCommandNotice("正在压缩上下文");
+            setCommandNotice(t("composer.compacting"));
           }
         } else {
           const response = await client.forkTask(projectId, activeTaskId, {
@@ -1146,7 +1145,7 @@ export function WorkbenchComposer({
         if (routeScopeRef.current === requestScope) {
           commandAttempts.current.delete("review");
           setSubmittedTurnState({ scope: requestScope, turnId: response.turn.id });
-          setCommandNotice("代码审查已开始");
+          setCommandNotice(t("composer.reviewStarted"));
           if (taskId === undefined) {
             const startedTask = response.createdTask ?? pendingTask;
             if (startedTask !== undefined) {
@@ -1244,25 +1243,25 @@ export function WorkbenchComposer({
   const commandMenu =
     !commandMenuOpen || turnControlsDisabled ? null : (
       <PromptInputCommand
-        aria-label="输入命令"
+        aria-label={t("composer.commandInput")}
         className="absolute inset-x-0 bottom-full z-20 mb-2"
         id={commandMenuId}
       >
         <PromptInputCommandList>
           {reviewMenuMode === "scopes" ? (
-            <PromptInputCommandGroup label="选择审查范围">
+            <PromptInputCommandGroup label={t("composer.reviewScopeGroup")}>
               <PromptInputCommandItem
                 active={activeCommandIndex === 0}
                 id={`${commandMenuId}-item-0`}
                 onClick={() => void executeReviewTarget({ type: "uncommitted_changes" })}
               >
                 <Bug aria-hidden="true" className="size-4 shrink-0 text-accent" />
-                <span className="font-medium">审查未提交的更改</span>
+                <span className="font-medium">{t("composer.reviewUncommitted")}</span>
               </PromptInputCommandItem>
               <PromptInputCommandItem
                 active={activeCommandIndex === 1}
                 aria-description={
-                  baseBranches.length === 0 ? "未发现可用的基础分支" : baseBranches[0]
+                  baseBranches.length === 0 ? t("composer.noBaseBranch") : baseBranches[0]
                 }
                 disabled={baseBranches.length === 0}
                 id={`${commandMenuId}-item-1`}
@@ -1273,15 +1272,15 @@ export function WorkbenchComposer({
               >
                 <GitBranch aria-hidden="true" className="size-4 shrink-0 text-accent" />
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="font-medium">基于基础分支进行审查</span>
+                  <span className="font-medium">{t("composer.baseBranchReview")}</span>
                   <span className="truncate text-caption text-muted-foreground">
-                    {baseBranches[0] ?? "未发现可用分支"}
+                    {baseBranches[0] ?? t("composer.noBaseBranch")}
                   </span>
                 </span>
               </PromptInputCommandItem>
             </PromptInputCommandGroup>
           ) : reviewMenuMode === "branches" ? (
-            <PromptInputCommandGroup label="选择基础分支">
+            <PromptInputCommandGroup label={t("composer.reviewBaseBranchGroup")}>
               {baseBranches.map((branch, index) => (
                 <PromptInputCommandItem
                   active={activeCommandIndex === index}
@@ -1296,7 +1295,7 @@ export function WorkbenchComposer({
             </PromptInputCommandGroup>
           ) : (
             <>
-              <PromptInputCommandGroup label="命令">
+              <PromptInputCommandGroup label={t("composer.commandGroup")}>
                 {filteredCommands.map((command, index) => {
                   const availability = getCommandAvailability(command);
                   return (
@@ -1347,7 +1346,7 @@ export function WorkbenchComposer({
                 </PromptInputCommandGroup>
               )}
               {menuItemCount === 0 ? (
-                <PromptInputCommandEmpty>没有匹配的 Skill 或命令</PromptInputCommandEmpty>
+                <PromptInputCommandEmpty>{t("composer.commandNoMatch")}</PromptInputCommandEmpty>
               ) : null}
             </>
           )}
@@ -1379,16 +1378,16 @@ export function WorkbenchComposer({
   );
 
   return (
-    <section className="shrink-0 bg-content px-3 pb-2 sm:px-5" aria-label="Composer">
+    <section className="shrink-0 bg-content px-3 pb-2 sm:px-5" aria-label={t("composer.landmark")}>
       <div className="relative mx-auto w-full max-w-content" ref={commandSurfaceRef}>
         {commandMenu}
         {queuedPrompts.length === 0 ? null : (
-          <div aria-label="已排队消息" className="mb-2 space-y-1.5" role="list">
+          <div aria-label={t("composer.queuedMessages")} className="mb-2 space-y-1.5" role="list">
             {queuedPrompts.map((queuedPrompt) => {
               const summary =
                 queuedPrompt.text ||
                 queuedPrompt.skills.map((skill) => `$${skill.name}`).join(" ") ||
-                `${String(queuedPrompt.files.length)} 个附件`;
+                t("composer.attachmentCount", { count: queuedPrompt.files.length });
               return (
                 <div
                   className="flex min-w-0 items-center gap-2 rounded-control border border-separator bg-control px-2 py-1.5"
@@ -1401,24 +1400,24 @@ export function WorkbenchComposer({
                   <IconButton
                     className="hover:text-accent"
                     disabled={!canSteer || activeTurnId === undefined || isSubmitting}
-                    label={`立即引导：${summary}`}
+                    label={t("composer.steerNow", { summary })}
                     onClick={() => {
                       void steerQueuedPrompt(queuedPrompt);
                     }}
                     size="small"
-                    tooltip="立即作为引导发送"
+                    tooltip={t("composer.steerNowTooltip")}
                   >
                     <SendHorizontal aria-hidden="true" className="size-3.5" />
                   </IconButton>
                   <IconButton
                     className="hover:text-danger"
                     disabled={isSubmitting}
-                    label={`取消排队：${summary}`}
+                    label={t("composer.cancelQueued", { summary })}
                     onClick={() => {
                       removeQueuedPrompt(queuedPrompt.id);
                     }}
                     size="small"
-                    tooltip="取消排队"
+                    tooltip={t("composer.cancelQueuedTooltip")}
                   >
                     <X aria-hidden="true" className="size-3.5" />
                   </IconButton>
@@ -1458,7 +1457,7 @@ export function WorkbenchComposer({
             if (commandDraftMode === "subtask") {
               void submitPrompt({
                 ...message,
-                text: `请使用子代理独立处理以下副任务，并在完成后汇总结果：\n\n${message.text}`,
+                text: t("composer.subtaskPrompt", { text: message.text }),
               });
               return;
             }
@@ -1469,7 +1468,11 @@ export function WorkbenchComposer({
           {commandDraftMode === null ? null : (
             <PromptInputHeader className="flex items-center">
               <PromptInputButton
-                aria-label={`取消${commandDraftMode === "feedback" ? "反馈" : "副任务"}`}
+                aria-label={
+                  commandDraftMode === "feedback"
+                    ? t("composer.cancelFeedback")
+                    : t("composer.cancelSubtask")
+                }
                 className="max-w-full border border-separator-strong bg-control text-foreground"
                 onClick={() => {
                   replaceCommandDraftMode(null);
@@ -1482,7 +1485,9 @@ export function WorkbenchComposer({
                 ) : (
                   <MessageCirclePlus className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
                 )}
-                <span>{commandDraftMode === "feedback" ? "任务反馈" : "副任务"}</span>
+                <span>
+                  {commandDraftMode === "feedback" ? t("composer.feedback") : t("composer.subtask")}
+                </span>
                 <X className="size-3.5 shrink-0" aria-hidden="true" />
               </PromptInputButton>
             </PromptInputHeader>
@@ -1495,7 +1500,7 @@ export function WorkbenchComposer({
               aria-controls={commandMenuOpen ? commandMenuId : undefined}
               aria-expanded={commandMenuOpen}
               aria-haspopup="listbox"
-              aria-label="任务输入"
+              aria-label={t("composer.taskInput")}
               content={promptContent}
               disabled={draftInputDisabled}
               onChange={(nextContent, serializedText, cursorOffset) => {
@@ -1549,7 +1554,7 @@ export function WorkbenchComposer({
             />
             {mutationError === null ? null : (
               <p className="px-1 pb-1 text-label text-danger" role="alert">
-                操作失败，请重试
+                {t("composer.operationFailed")}
               </p>
             )}
             {commandNotice === undefined ? null : (
@@ -1564,7 +1569,7 @@ export function WorkbenchComposer({
                 disabled={attachmentsDisabled || commandDraftMode === "feedback"}
               />
               <PromptInputSelect
-                aria-label="批准模式"
+                aria-label={t("composer.approvalMode")}
                 disabled={turnControlsDisabled}
                 onChange={(event) => {
                   updateSettings(
@@ -1574,13 +1579,13 @@ export function WorkbenchComposer({
                 }}
                 value={deriveApprovalMode(activeSettings)}
               >
-                <option value="untrusted">仅不受信任操作</option>
-                <option value="on-request">按需审批</option>
-                <option value="auto-review">自动审批</option>
-                <option value="never">从不询问</option>
+                <option value="untrusted">{t("settings:approval.untrusted")}</option>
+                <option value="on-request">{t("settings:approval.onRequest")}</option>
+                <option value="auto-review">{t("settings:approval.autoReview")}</option>
+                <option value="never">{t("settings:approval.never")}</option>
               </PromptInputSelect>
               <PromptInputSelect
-                aria-label="沙盒模式"
+                aria-label={t("composer.sandboxMode")}
                 disabled={turnControlsDisabled}
                 onChange={(event) => {
                   updateSettings(
@@ -1593,14 +1598,14 @@ export function WorkbenchComposer({
                 }}
                 value={activeSettings.sandboxMode}
               >
-                <option value="read-only">只读</option>
-                <option value="workspace-write">工作区可写</option>
-                <option value="danger-full-access">完全访问</option>
+                <option value="read-only">{t("settings:sandbox.readOnly")}</option>
+                <option value="workspace-write">{t("settings:sandbox.workspaceWrite")}</option>
+                <option value="danger-full-access">{t("settings:sandbox.dangerFullAccess")}</option>
               </PromptInputSelect>
             </PromptInputTools>
             <div className="flex min-w-0 items-center gap-1">
               <PromptInputSelect
-                aria-label="选择模型"
+                aria-label={t("composer.modelSelect")}
                 disabled={turnControlsDisabled || modelsPending || selectedModel === undefined}
                 onChange={(event) => {
                   const nextModel = models.find((model) => model.id === event.currentTarget.value);
@@ -1622,7 +1627,9 @@ export function WorkbenchComposer({
                 value={selectedModel?.id ?? ""}
               >
                 {models.length === 0 ? (
-                  <option value="">{modelsPending ? "模型加载中" : "暂无可用模型"}</option>
+                  <option value="">
+                    {modelsPending ? t("composer.modelLoading") : t("composer.noModels")}
+                  </option>
                 ) : (
                   models.map((model) => (
                     <option key={model.id} value={model.id}>
@@ -1632,7 +1639,7 @@ export function WorkbenchComposer({
                 )}
               </PromptInputSelect>
               <PromptInputSelect
-                aria-label="选择思考量"
+                aria-label={t("composer.reasonEffortSelect")}
                 disabled={turnControlsDisabled || modelsPending || selectedModel === undefined}
                 onChange={(event) => {
                   updateSettings(
@@ -1649,19 +1656,19 @@ export function WorkbenchComposer({
               >
                 {selectedModel?.supportedReasoningEfforts.map((option) => (
                   <option key={option.id} value={option.id}>
-                    {reasoningEffortLabels[option.id] ?? option.id}
+                    {t(`settings:effort.${option.id}`, { defaultValue: option.id })}
                   </option>
                 ))}
               </PromptInputSelect>
               <PromptInputSubmit
                 aria-label={
                   submitAction === "queue"
-                    ? "排队消息"
+                    ? t("composer.queueMessage")
                     : submitAction === "steer"
-                      ? "发送引导"
+                      ? t("composer.sendSteer")
                       : submitAction === "interrupt"
-                        ? "停止"
-                        : "提交"
+                        ? t("composer.stop")
+                        : t("composer.submit")
                 }
                 disabled={
                   turnControlsDisabled ||
@@ -1682,15 +1689,16 @@ export function WorkbenchComposer({
       </div>
       {modelsError === null ? null : (
         <p className="mx-auto mt-1 w-full max-w-content px-1 text-caption text-danger" role="alert">
-          模型列表加载失败
+          {t("composer.modelListFailed")}
         </p>
       )}
       <div className="mx-auto mt-1.5 flex w-full max-w-content min-w-0 items-center gap-3 px-1 text-caption text-muted-foreground">
         <span className="inline-flex shrink-0 items-center gap-1">
-          <GitBranch className="size-3" aria-hidden="true" /> {gitStatus?.branch ?? "未检出分支"}
+          <GitBranch className="size-3" aria-hidden="true" />{" "}
+          {gitStatus?.branch ?? t("composer.gitBranchMissing")}
         </span>
         <span
-          aria-label="项目路径"
+          aria-label={t("composer.projectPath")}
           className="inline-flex min-w-0 flex-1 items-center gap-1"
           title={projectPath}
         >

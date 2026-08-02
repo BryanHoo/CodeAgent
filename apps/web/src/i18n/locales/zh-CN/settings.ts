@@ -1,0 +1,71 @@
+export const settings = {
+  actions: {
+    cancel: "取消",
+    close: "关闭",
+    closeDialog: "关闭全局设置",
+    save: "保存全局默认",
+    saving: "正在保存",
+  },
+  appearance: {
+    colorMode: "颜色模式",
+    dark: "深色",
+    darkMode: "深色模式",
+    language: "语言",
+    light: "浅色",
+    lightMode: "浅色模式",
+  },
+  approval: {
+    autoReview: "自动审批",
+    never: "从不询问",
+    onRequest: "按需审批",
+    untrusted: "仅不受信任操作",
+  },
+  effort: {
+    high: "高",
+    low: "低",
+    medium: "中",
+    minimal: "最低",
+    xhigh: "极高",
+  },
+  errors: {
+    load: "无法加载全局设置",
+    save: "无法保存全局设置",
+  },
+  fields: {
+    approvalPolicy: "审批",
+    commitMessagePrompt: "提交提示词",
+    commitModel: "提交模型",
+    commitReasoningEffort: "提交思考量",
+    defaultOpenWith: "默认打开方式",
+    followUpMessages: "跟进消息",
+    model: "模型",
+    prompt: "提示词",
+    reasoningEffort: "思考量",
+    sandbox: "工作区",
+  },
+  followUp: {
+    queue: "排队",
+    steer: "引导",
+  },
+  integration: {
+    automatic: "自动选择",
+  },
+  languages: {
+    en: "English",
+    zhCN: "简体中文",
+  },
+  loading: "正在加载全局设置",
+  navigationLabel: "设置分类",
+  sandbox: {
+    dangerFullAccess: "完全访问",
+    readOnly: "只读",
+    workspaceWrite: "工作区可写",
+  },
+  sections: {
+    agent: "Agent 默认值",
+    appearance: "外观",
+    commit: "提交消息",
+    integration: "应用集成",
+  },
+  title: "全局设置",
+} as const;

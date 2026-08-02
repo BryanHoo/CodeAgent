@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo } from "react";
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
 
+import { i18n, useTranslation } from "../../i18n/i18n.js";
 import { IconButton } from "../ui/icon-button.js";
 
 type ContextValue = Readonly<{
@@ -54,9 +55,9 @@ export function formatContextUsage(usage: ContextValue): FormattedContextUsage {
   const { maxTokens, usedTokens } = usage;
   if (maxTokens === null || maxTokens === undefined || maxTokens <= 0 || usedTokens === undefined) {
     return {
-      accessibleLabel: "上下文用量未知",
+      accessibleLabel: i18n.t("aiElements.contextUnknown", { ns: "conversation" }),
       percentage: null,
-      summary: "等待模型返回上下文用量",
+      summary: i18n.t("aiElements.contextWaiting", { ns: "conversation" }),
       tokenCount: usedTokens === undefined ? null : `${formatCompactTokenCount(usedTokens)} tokens`,
     };
   }
@@ -64,9 +65,12 @@ export function formatContextUsage(usage: ContextValue): FormattedContextUsage {
   // Provider 可能短暂上报越界值，展示层将进度限制在有效百分比范围内。
   const percentage = Math.min(100, Math.max(0, Math.round((usedTokens / maxTokens) * 100)));
   return {
-    accessibleLabel: `上下文已使用 ${String(percentage)}%`,
+    accessibleLabel: i18n.t("aiElements.contextPercent", {
+      ns: "conversation",
+      percentage,
+    }),
     percentage,
-    summary: `${String(percentage)}% 上下文已使用`,
+    summary: i18n.t("aiElements.contextSummary", { ns: "conversation", percentage }),
     tokenCount: `${formatCompactTokenCount(usedTokens)} / ${formatCompactTokenCount(maxTokens)} tokens`,
   };
 }
@@ -82,6 +86,7 @@ const contextRingRadius = 7;
 const contextRingCircumference = 2 * Math.PI * contextRingRadius;
 
 function ContextIcon() {
+  useTranslation("conversation");
   const usage = formatContextUsage(useContextValue());
   const completedPercentage = usage.percentage ?? 0;
   const ringOffset = contextRingCircumference * (1 - completedPercentage / 100);
@@ -129,6 +134,7 @@ export function ContextContentHeader({
   className = "",
   ...props
 }: ContextContentHeaderProps) {
+  useTranslation("conversation");
   const usage = formatContextUsage(useContextValue());
 
   return (
@@ -152,6 +158,7 @@ export type ContextTriggerProps = Readonly<
 >;
 
 export function ContextTrigger({ children, className = "", ...props }: ContextTriggerProps) {
+  useTranslation("conversation");
   const usage = formatContextUsage(useContextValue());
 
   return (

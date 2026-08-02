@@ -18,6 +18,8 @@ import {
   queryOptions,
 } from "@tanstack/react-query";
 
+import { i18n } from "../../i18n/i18n.js";
+
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
 export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
 export type CodeAgentGitMutationClient = Pick<
@@ -220,7 +222,7 @@ function deriveStartedTaskTitle(
       }
     }
   }
-  return "正在回复";
+  return i18n.t("taskTitle.replying", { ns: "conversation" });
 }
 
 export function updateNewTaskTitleFromSnapshotInInfiniteData(

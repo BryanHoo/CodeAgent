@@ -20,6 +20,7 @@ import { useEffect, useRef, useState, type SelectHTMLAttributes } from "react";
 
 import { PromptInputSelect } from "../../../shared/ai-elements/prompt-input.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { changeAppLanguage, getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
 import {
   applyThemePreference,
   readThemePreference,
@@ -30,25 +31,14 @@ import {
 type ApprovalMode = AgentGlobalSettings["approvalPolicy"] | "auto-review";
 type SettingsSectionId = "agent" | "appearance" | "commit" | "integration";
 
-const reasoningEffortLabels: Readonly<Record<string, string>> = {
-  high: "高",
-  low: "低",
-  max: "最大",
-  medium: "中",
-  minimal: "最低",
-  ultra: "超高",
-  xhigh: "极高",
-};
-
 const settingsSections: readonly Readonly<{
   icon: LucideIcon;
   id: SettingsSectionId;
-  label: string;
 }>[] = [
-  { icon: Palette, id: "appearance", label: "外观" },
-  { icon: Bot, id: "agent", label: "Agent 默认值" },
-  { icon: GitCommitHorizontal, id: "commit", label: "提交消息" },
-  { icon: MonitorCog, id: "integration", label: "应用集成" },
+  { icon: Palette, id: "appearance" },
+  { icon: Bot, id: "agent" },
+  { icon: GitCommitHorizontal, id: "commit" },
+  { icon: MonitorCog, id: "integration" },
 ];
 
 export function resolveGlobalSettingsModel(
@@ -120,6 +110,7 @@ export function GlobalSettingsDialog({
   onSave,
   settings,
 }: GlobalSettingsDialogProps) {
+  const { t } = useTranslation("settings");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const saveLockRef = useRef(createAsyncActionLock());
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("appearance");
@@ -204,14 +195,14 @@ export function GlobalSettingsDialog({
             className="min-w-0 flex-1 truncate text-heading font-semibold"
             id="global-settings-title"
           >
-            全局设置
+            {t("title")}
           </h2>
           <button
-            aria-label="关闭全局设置"
+            aria-label={t("actions.closeDialog")}
             className="inline-grid size-8 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus disabled:opacity-50"
             disabled={isSaving}
             onClick={close}
-            title="关闭"
+            title={t("actions.close")}
             type="button"
           >
             <X className="size-4" aria-hidden="true" />
@@ -221,7 +212,7 @@ export function GlobalSettingsDialog({
         <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] sm:grid-cols-[var(--ui-layout-settings-sidebar-width)_minmax(0,1fr)] sm:grid-rows-1">
           <aside className="min-w-0 bg-control px-2 py-2 sm:px-3 sm:py-4 sm:shadow-divider">
             <nav
-              aria-label="设置分类"
+              aria-label={t("navigationLabel")}
               className="flex min-w-0 gap-1 overflow-x-auto sm:flex-col sm:overflow-visible"
             >
               {settingsSections.map((section) => {
@@ -239,7 +230,7 @@ export function GlobalSettingsDialog({
                     type="button"
                   >
                     <Icon aria-hidden="true" className="size-4 shrink-0" />
-                    <span>{section.label}</span>
+                    <span>{t(`sections.${section.id}`)}</span>
                   </button>
                 );
               })}
@@ -252,13 +243,13 @@ export function GlobalSettingsDialog({
                 className="flex min-h-40 flex-col items-center justify-center gap-3"
                 role="alert"
               >
-                <p className="text-body-small text-danger">无法加载全局设置</p>
+                <p className="text-body-small text-danger">{t("errors.load")}</p>
                 <button
                   className="h-8 rounded-control bg-control px-3 text-body-small font-medium hover:bg-control-hover"
                   onClick={() => void onRetry()}
                   type="button"
                 >
-                  重试
+                  {t("common:actions.retry")}
                 </button>
               </div>
             ) : isPending || settings === undefined ? (
@@ -266,39 +257,55 @@ export function GlobalSettingsDialog({
                 className="grid min-h-40 place-items-center text-body-small text-muted-foreground"
                 role="status"
               >
-                正在加载全局设置
+                {t("loading")}
               </div>
             ) : (
               <>
-                <SettingsPanel activeSection={activeSection} id="appearance" title="外观">
-                  <SettingsField label="颜色模式">
+                <SettingsPanel
+                  activeSection={activeSection}
+                  id="appearance"
+                  title={t("sections.appearance")}
+                >
+                  <SettingsField label={t("appearance.colorMode")}>
                     <div className="grid grid-cols-2 rounded-control bg-control p-0.5">
                       <ThemeButton
+                        ariaLabel={t("appearance.lightMode")}
                         icon={Sun}
-                        label="浅色"
+                        label={t("appearance.light")}
                         onClick={() => {
                           selectTheme("light");
                         }}
                         selected={theme === "light"}
-                        theme="light"
                       />
                       <ThemeButton
+                        ariaLabel={t("appearance.darkMode")}
                         icon={Moon}
-                        label="深色"
+                        label={t("appearance.dark")}
                         onClick={() => {
                           selectTheme("dark");
                         }}
                         selected={theme === "dark"}
-                        theme="dark"
                       />
                     </div>
                   </SettingsField>
+                  <SettingsField label={t("appearance.language")}>
+                    <SettingsSelect
+                      aria-label={t("appearance.language")}
+                      onChange={(event) => {
+                        void changeAppLanguage(event.currentTarget.value as "en" | "zh-CN");
+                      }}
+                      value={getCurrentLanguage()}
+                    >
+                      <option value="zh-CN">{t("languages.zhCN")}</option>
+                      <option value="en">{t("languages.en")}</option>
+                    </SettingsSelect>
+                  </SettingsField>
                 </SettingsPanel>
 
-                <SettingsPanel activeSection={activeSection} id="agent" title="Agent 默认值">
-                  <SettingsField label="审批">
+                <SettingsPanel activeSection={activeSection} id="agent" title={t("sections.agent")}>
+                  <SettingsField label={t("fields.approvalPolicy")}>
                     <SettingsSelect
-                      aria-label="审批"
+                      aria-label={t("fields.approvalPolicy")}
                       disabled={isSaving}
                       onChange={(event) => {
                         const mode = event.currentTarget.value as ApprovalMode;
@@ -306,15 +313,15 @@ export function GlobalSettingsDialog({
                       }}
                       value={deriveApprovalMode(draft)}
                     >
-                      <option value="untrusted">仅不受信任操作</option>
-                      <option value="on-request">按需审批</option>
-                      <option value="auto-review">自动审批</option>
-                      <option value="never">从不询问</option>
+                      <option value="untrusted">{t("approval.untrusted")}</option>
+                      <option value="on-request">{t("approval.onRequest")}</option>
+                      <option value="auto-review">{t("approval.autoReview")}</option>
+                      <option value="never">{t("approval.never")}</option>
                     </SettingsSelect>
                   </SettingsField>
-                  <SettingsField label="工作区">
+                  <SettingsField label={t("fields.sandbox")}>
                     <SettingsSelect
-                      aria-label="工作区"
+                      aria-label={t("fields.sandbox")}
                       disabled={isSaving}
                       onChange={(event) => {
                         const sandboxMode = event.currentTarget
@@ -323,14 +330,14 @@ export function GlobalSettingsDialog({
                       }}
                       value={draft.sandboxMode}
                     >
-                      <option value="read-only">只读</option>
-                      <option value="workspace-write">工作区可写</option>
-                      <option value="danger-full-access">完全访问</option>
+                      <option value="read-only">{t("sandbox.readOnly")}</option>
+                      <option value="workspace-write">{t("sandbox.workspaceWrite")}</option>
+                      <option value="danger-full-access">{t("sandbox.dangerFullAccess")}</option>
                     </SettingsSelect>
                   </SettingsField>
-                  <SettingsField label="跟进消息">
+                  <SettingsField label={t("fields.followUpMessages")}>
                     <SettingsSelect
-                      aria-label="跟进消息"
+                      aria-label={t("fields.followUpMessages")}
                       disabled={isSaving}
                       onChange={(event) => {
                         const followUpBehavior = event.currentTarget
@@ -339,13 +346,13 @@ export function GlobalSettingsDialog({
                       }}
                       value={draft.followUpBehavior}
                     >
-                      <option value="queue">排队</option>
-                      <option value="steer">引导</option>
+                      <option value="queue">{t("followUp.queue")}</option>
+                      <option value="steer">{t("followUp.steer")}</option>
                     </SettingsSelect>
                   </SettingsField>
-                  <SettingsField label="模型">
+                  <SettingsField label={t("fields.model")}>
                     <ModelSelect
-                      ariaLabel="模型"
+                      ariaLabel={t("fields.model")}
                       disabled={isSaving}
                       models={models}
                       onChange={(modelId) => {
@@ -357,9 +364,9 @@ export function GlobalSettingsDialog({
                       value={draft.model}
                     />
                   </SettingsField>
-                  <SettingsField label="思考量">
+                  <SettingsField label={t("fields.reasoningEffort")}>
                     <ReasoningSelect
-                      ariaLabel="思考"
+                      ariaLabel={t("fields.reasoningEffort")}
                       disabled={isSaving || selectedModel === undefined}
                       model={selectedModel}
                       onChange={(reasoningEffort) => {
@@ -370,10 +377,14 @@ export function GlobalSettingsDialog({
                   </SettingsField>
                 </SettingsPanel>
 
-                <SettingsPanel activeSection={activeSection} id="commit" title="提交消息">
-                  <SettingsField label="模型">
+                <SettingsPanel
+                  activeSection={activeSection}
+                  id="commit"
+                  title={t("sections.commit")}
+                >
+                  <SettingsField label={t("fields.model")}>
                     <ModelSelect
-                      ariaLabel="提交模型"
+                      ariaLabel={t("fields.commitModel")}
                       disabled={isSaving}
                       models={models}
                       onChange={(modelId) => {
@@ -393,9 +404,9 @@ export function GlobalSettingsDialog({
                       value={draft.commitMessageModel}
                     />
                   </SettingsField>
-                  <SettingsField label="思考量">
+                  <SettingsField label={t("fields.reasoningEffort")}>
                     <ReasoningSelect
-                      ariaLabel="提交思考量"
+                      ariaLabel={t("fields.commitReasoningEffort")}
                       disabled={isSaving || selectedCommitModel === undefined}
                       model={selectedCommitModel}
                       onChange={(commitMessageReasoningEffort) => {
@@ -404,9 +415,9 @@ export function GlobalSettingsDialog({
                       value={draft.commitMessageReasoningEffort}
                     />
                   </SettingsField>
-                  <SettingsField alignStart label="提示词">
+                  <SettingsField alignStart label={t("fields.prompt")}>
                     <textarea
-                      aria-label="提交提示词"
+                      aria-label={t("fields.commitMessagePrompt")}
                       className="h-28 w-full resize-none rounded-control border border-separator-strong bg-panel px-3 py-2 text-body-small text-foreground outline-none focus:border-accent focus:shadow-focus disabled:opacity-50"
                       disabled={isSaving}
                       maxLength={4_000}
@@ -419,10 +430,14 @@ export function GlobalSettingsDialog({
                   </SettingsField>
                 </SettingsPanel>
 
-                <SettingsPanel activeSection={activeSection} id="integration" title="应用集成">
-                  <SettingsField label="默认打开方式">
+                <SettingsPanel
+                  activeSection={activeSection}
+                  id="integration"
+                  title={t("sections.integration")}
+                >
+                  <SettingsField label={t("fields.defaultOpenWith")}>
                     <SettingsSelect
-                      aria-label="默认打开方式"
+                      aria-label={t("fields.defaultOpenWith")}
                       disabled={isSaving}
                       onChange={(event) => {
                         const appId = event.currentTarget.value;
@@ -436,7 +451,7 @@ export function GlobalSettingsDialog({
                       }}
                       value={draft.defaultOpenAppId ?? ""}
                     >
-                      <option value="">自动选择</option>
+                      <option value="">{t("integration.automatic")}</option>
                       {apps.map((app) => (
                         <option key={app.id} value={app.id}>
                           {app.name}
@@ -453,7 +468,7 @@ export function GlobalSettingsDialog({
         <footer className="flex min-h-14 items-center justify-end gap-2 px-4 shadow-[0_-1px_0_var(--ui-color-separator)] sm:px-5">
           {saveError ? (
             <p className="mr-auto text-meta text-danger" role="alert">
-              无法保存全局设置
+              {t("errors.save")}
             </p>
           ) : null}
           <button
@@ -462,14 +477,14 @@ export function GlobalSettingsDialog({
             onClick={close}
             type="button"
           >
-            取消
+            {t("actions.cancel")}
           </button>
           <button
             className="h-8 rounded-control bg-accent px-3 text-body-small font-medium text-white hover:bg-accent-strong disabled:opacity-50"
             disabled={isPending || isSaving || settings === undefined}
             type="submit"
           >
-            {isSaving ? "正在保存" : "保存全局默认"}
+            {isSaving ? t("actions.saving") : t("actions.save")}
           </button>
         </footer>
       </form>
@@ -518,28 +533,28 @@ function SettingsField({
 }
 
 function ThemeButton({
+  ariaLabel,
   icon: Icon,
   label,
   onClick,
   selected,
-  theme,
 }: Readonly<{
+  ariaLabel: string;
   icon: LucideIcon;
   label: string;
   onClick: () => void;
   selected: boolean;
-  theme: ThemePreference;
 }>) {
   return (
     <button
-      aria-label={`${label}模式`}
+      aria-label={ariaLabel}
       aria-pressed={selected}
       className={`inline-flex h-8 items-center justify-center gap-2 rounded-[5px] text-body-small font-medium transition-colors ${selected ? "bg-raised text-foreground shadow-control" : "text-muted-foreground hover:text-foreground"}`}
       onClick={onClick}
       type="button"
     >
       <Icon aria-hidden="true" className="size-4" />
-      <span>{theme === "light" ? "浅色" : "深色"}</span>
+      <span>{label}</span>
     </button>
   );
 }
@@ -588,6 +603,7 @@ function ReasoningSelect({
   onChange: (effort: string) => void;
   value: string;
 }>) {
+  const { t } = useTranslation("settings");
   return (
     <SettingsSelect
       aria-label={ariaLabel}
@@ -599,7 +615,7 @@ function ReasoningSelect({
     >
       {model?.supportedReasoningEfforts.map((effort) => (
         <option key={effort.id} value={effort.id}>
-          {reasoningEffortLabels[effort.id] ?? effort.id}
+          {t(`effort.${effort.id}`, { defaultValue: effort.id })}
         </option>
       ))}
     </SettingsSelect>

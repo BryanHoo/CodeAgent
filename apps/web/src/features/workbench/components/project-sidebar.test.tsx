@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { changeAppLanguage } from "../../../i18n/i18n.js";
 import { requestNextProjectTaskPage } from "../../projects/project-context.js";
 import {
   deriveProjectSidebarConnectionState,
@@ -139,33 +140,64 @@ describe("ProjectSidebar connection status", () => {
 
   it("maps every transport state to a visible status", () => {
     expect(getProjectSidebarConnectionStatus("connected")).toEqual({
-      label: "Online",
+      labelKey: "sidebar.connection.online",
       toneClassName: "text-diff-added",
     });
     expect(getProjectSidebarConnectionStatus("connecting")).toEqual({
-      label: "Connecting",
+      labelKey: "sidebar.connection.connecting",
       toneClassName: "text-warning",
     });
     expect(getProjectSidebarConnectionStatus("reconnecting")).toEqual({
-      label: "Reconnecting",
+      labelKey: "sidebar.connection.reconnecting",
       toneClassName: "text-warning",
     });
     expect(getProjectSidebarConnectionStatus("closed")).toEqual({
-      label: "Offline",
+      labelKey: "sidebar.connection.offline",
       toneClassName: "text-danger",
     });
   });
 });
 
 describe("SidebarSettingsButton", () => {
-  it("opens settings in place without rendering a navigation link", () => {
-    const markup = renderToStaticMarkup(
-      <SidebarSettingsButton connectionState="connected" onOpen={vi.fn()} />,
-    );
+  it("renders every connection status in Chinese", async () => {
+    await changeAppLanguage("zh-CN");
+    const cases = [
+      ["connected", "在线"],
+      ["connecting", "正在连接"],
+      ["reconnecting", "正在重新连接"],
+      ["closed", "离线"],
+    ] as const;
 
-    expect(markup).toContain("<button");
-    expect(markup).toContain("Settings");
-    expect(markup).not.toContain("href=");
+    for (const [connectionState, label] of cases) {
+      const markup = renderToStaticMarkup(
+        <SidebarSettingsButton connectionState={connectionState} onOpen={vi.fn()} />,
+      );
+      expect(markup).toContain(`终端连接状态：${label}`);
+      expect(markup).toContain(`>${label}</span>`);
+      expect(markup).not.toContain("href=");
+    }
+  });
+
+  it("renders every connection status in English", async () => {
+    await changeAppLanguage("en");
+    try {
+      const cases = [
+        ["connected", "Online"],
+        ["connecting", "Connecting"],
+        ["reconnecting", "Reconnecting"],
+        ["closed", "Offline"],
+      ] as const;
+
+      for (const [connectionState, label] of cases) {
+        const markup = renderToStaticMarkup(
+          <SidebarSettingsButton connectionState={connectionState} onOpen={vi.fn()} />,
+        );
+        expect(markup).toContain(`terminal connection status: ${label}`);
+        expect(markup).toContain(`>${label}</span>`);
+      }
+    } finally {
+      await changeAppLanguage("zh-CN");
+    }
   });
 });
 

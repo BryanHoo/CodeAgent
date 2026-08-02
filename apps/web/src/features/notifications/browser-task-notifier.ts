@@ -1,5 +1,7 @@
 import type { AgentEvent } from "@code-agent/protocol";
 
+import { i18n } from "../../i18n/i18n.js";
+
 const MAX_FAILED_TURN_KEYS = 256;
 
 export type BrowserNotificationHandle = Readonly<{
@@ -65,11 +67,11 @@ function mapTaskNotification(projectId: string, event: AgentEvent): TaskNotifica
     case "turn.completed": {
       const body =
         event.payload.turn.status === "completed"
-          ? "Task 已完成"
+          ? i18n.t("notification.completed", { ns: "conversation" })
           : event.payload.turn.status === "interrupted"
-            ? "Task 已中断，无法继续"
+            ? i18n.t("notification.interrupted", { ns: "conversation" })
             : event.payload.turn.status === "failed"
-              ? "Task 运行失败"
+              ? i18n.t("notification.failed", { ns: "conversation" })
               : undefined;
       return body === undefined
         ? undefined
@@ -82,12 +84,18 @@ function mapTaskNotification(projectId: string, event: AgentEvent): TaskNotifica
       return event.payload.willRetry
         ? undefined
         : {
-            body: `Task 运行失败：${event.payload.message}`,
+            body: i18n.t("notification.failedWithMessage", {
+              message: event.payload.message,
+              ns: "conversation",
+            }),
             tag: `${projectId}:${event.taskId}:${event.turnId}:terminal`,
           };
     case "pending_request.created":
       return {
-        body: event.payload.request.type === "user_input" ? "Task 等待输入" : "Task 等待审批",
+        body:
+          event.payload.request.type === "user_input"
+            ? i18n.t("notification.waitingInput", { ns: "conversation" })
+            : i18n.t("notification.waitingApproval", { ns: "conversation" }),
         tag: `${projectId}:${event.taskId}:${event.payload.request.requestId}:request`,
       };
     default:

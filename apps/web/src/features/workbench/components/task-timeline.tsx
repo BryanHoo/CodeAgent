@@ -19,10 +19,16 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 
+import { getCurrentLanguage, i18n, useTranslation } from "../../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
-import type { NormalizedAgentTurn, TaskStore } from "../../conversation/runtime/task-store.js";
+import {
+  PENDING_COMMAND_LABEL,
+  RETAINED_COMMAND_OUTPUT_MARKER,
+  type NormalizedAgentTurn,
+  type TaskStore,
+} from "../../conversation/runtime/task-store.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import {
   countFileChangeLines,
@@ -81,9 +87,9 @@ import { PendingRequestCard, type PendingRequestResolution } from "./pending-req
 import { SkillToken } from "./skill-token.js";
 import {
   formatSubagentOperationSummary,
+  getSubagentOperationTitle,
   parseSubagentOperation,
   resolveSubagentOperationStatus,
-  subagentOperationTitles,
   type SubagentOperation,
 } from "./subagent.js";
 
@@ -138,7 +144,10 @@ function EmptyTimeline({
   projects: readonly Project[];
 }>) {
   return (
-    <section className="grid min-h-0 flex-1 place-items-center px-6" aria-label="会话内容">
+    <section
+      className="grid min-h-0 flex-1 place-items-center px-6"
+      aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
+    >
       <div className="w-full max-w-xl text-center">
         <MessageSquareCode
           aria-hidden="true"
@@ -146,10 +155,10 @@ function EmptyTimeline({
           strokeWidth={1.35}
         />
         <h2 className="mt-5 text-balance text-xl font-normal leading-tight text-foreground">
-          我们应该在
+          {i18n.t("timeline.emptyBefore", { ns: "conversation" })}
           {/* 直接挂载原生选择器，确保首次点击就能打开项目列表。 */}
           <select
-            aria-label="选择新聊天项目"
+            aria-label={i18n.t("timeline.selectProject", { ns: "conversation" })}
             className="mx-1 max-w-full cursor-pointer appearance-none bg-transparent px-0 py-0 text-center font-sans font-normal text-foreground underline decoration-current/35 underline-offset-4 outline-none transition-colors hover:decoration-current focus-visible:rounded-control focus-visible:shadow-focus"
             onChange={(event) => {
               const nextProjectId = event.currentTarget.value;
@@ -165,7 +174,7 @@ function EmptyTimeline({
               </option>
             ))}
           </select>
-          中做些什么？
+          {i18n.t("timeline.emptyAfter", { ns: "conversation" })}
         </h2>
       </div>
     </section>
@@ -178,7 +187,7 @@ function TimelineState({
 }: Readonly<{ message: string; role?: "alert" | "status" }>) {
   return (
     <section
-      aria-label="会话内容"
+      aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
       className="grid min-h-0 flex-1 place-items-center px-6 text-sm text-muted-foreground"
       role={role}
     >
@@ -188,10 +197,14 @@ function TimelineState({
 }
 
 export function TaskTimeline(props: TaskTimelineProps) {
+  useTranslation("conversation");
   if (props.taskId === undefined) {
     if (props.submissionPending === true) {
       return (
-        <Conversation aria-label="会话内容" conversationId={`${props.projectId}:new-chat`}>
+        <Conversation
+          aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
+          conversationId={`${props.projectId}:new-chat`}
+        >
           <ConversationContent className="gap-6">
             <Message from="assistant">
               <RunningReplyStatus />
@@ -220,7 +233,9 @@ export function TaskTimeline(props: TaskTimelineProps) {
     startingSnapshot,
   } = props;
   if (runtime === undefined) {
-    return <TimelineState message="正在加载任务历史" role="status" />;
+    return (
+      <TimelineState message={i18n.t("timeline.loading", { ns: "conversation" })} role="status" />
+    );
   }
   return (
     <ActiveTaskTimeline
@@ -263,16 +278,22 @@ function ActiveTaskTimeline({
   startingSnapshot: RuntimeTaskSnapshot | undefined;
 }>) {
   if (runtime.error !== null) {
-    return <TimelineState message="无法加载任务历史" role="alert" />;
+    return (
+      <TimelineState message={i18n.t("timeline.loadError", { ns: "conversation" })} role="alert" />
+    );
   }
   if (runtime.isPending || runtime.snapshot === undefined) {
     if (startingSnapshot !== undefined) {
       return <TaskSnapshotTimeline connected={false} snapshot={startingSnapshot} />;
     }
-    return <TimelineState message="正在加载任务历史" role="status" />;
+    return (
+      <TimelineState message={i18n.t("timeline.loading", { ns: "conversation" })} role="status" />
+    );
   }
   if (runtime.store === undefined) {
-    return <TimelineState message="正在加载任务历史" role="status" />;
+    return (
+      <TimelineState message={i18n.t("timeline.loading", { ns: "conversation" })} role="status" />
+    );
   }
   return (
     <>
@@ -281,7 +302,7 @@ function ActiveTaskTimeline({
           className="bg-control px-3 py-1.5 text-center text-label text-muted-foreground"
           role="status"
         >
-          实时连接恢复中
+          {i18n.t("timeline.reconnecting", { ns: "conversation" })}
         </div>
       ) : null}
       <TaskStoreTimeline
@@ -349,21 +370,10 @@ function SubagentToolItem({
 
   return (
     <Task collapsible={false} status={operationStatus}>
-      <TaskTrigger title={`${subagentOperationTitles[operation.name]} · ${summary}`} />
+      <TaskTrigger title={`${getSubagentOperationTitle(operation.name)} · ${summary}`} />
     </Task>
   );
 }
-
-const messageTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
-  hour: "2-digit",
-  hour12: false,
-  minute: "2-digit",
-});
-
-const messageDateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
-  dateStyle: "medium",
-  timeStyle: "medium",
-});
 
 const TURN_PROCESSING_TIMER_INTERVAL_MS = 1_000;
 
@@ -421,7 +431,7 @@ function TurnProcessingTime({
       className="mb-4 flex w-full items-center border-b border-separator pb-2.5 text-label font-medium text-muted-foreground"
       data-turn-processing-time=""
     >
-      <span>已处理&nbsp;</span>
+      <span>{i18n.t("timeline.processing", { ns: "conversation" })}&nbsp;</span>
       <time dateTime={duration.dateTime}>{duration.label}</time>
     </div>
   );
@@ -457,6 +467,7 @@ function MessageMetadata({
   const messageActionLockRef = useRef(createAsyncActionLock());
   const copied = copiedText === text;
   const messageDate = timestamp === undefined ? undefined : new Date(timestamp);
+  const locale = getCurrentLanguage();
 
   const copyMessage = () =>
     messageActionLockRef.current.run(async () => {
@@ -490,11 +501,19 @@ function MessageMetadata({
   return (
     <MessageActions className="mt-2 text-label text-muted-foreground">
       <MessageAction
-        label={copied ? "已复制" : "复制消息"}
+        label={
+          copied
+            ? i18n.t("timeline.copied", { ns: "conversation" })
+            : i18n.t("timeline.copyMessage", { ns: "conversation" })
+        }
         onClick={() => {
           void copyMessage();
         }}
-        tooltip={copied ? "已复制" : "复制消息"}
+        tooltip={
+          copied
+            ? i18n.t("timeline.copied", { ns: "conversation" })
+            : i18n.t("timeline.copyMessage", { ns: "conversation" })
+        }
       >
         {copied ? (
           <Check className="size-3.5" aria-hidden="true" />
@@ -505,43 +524,65 @@ function MessageMetadata({
       {onForkTask === undefined ? null : (
         <MessageAction
           disabled={forkPending}
-          label={forkError ? "复制任务失败，请重试" : forkPending ? "正在复制任务" : "复制任务"}
+          label={
+            forkError
+              ? i18n.t("timeline.forkFailed", { ns: "conversation" })
+              : forkPending
+                ? i18n.t("timeline.forking", { ns: "conversation" })
+                : i18n.t("timeline.fork", { ns: "conversation" })
+          }
           onClick={() => {
             void forkTask();
           }}
-          tooltip={forkError ? "复制任务失败，请重试" : "复制任务"}
+          tooltip={
+            forkError
+              ? i18n.t("timeline.forkFailed", { ns: "conversation" })
+              : i18n.t("timeline.fork", { ns: "conversation" })
+          }
         >
           <GitFork className="size-3.5" aria-hidden="true" />
         </MessageAction>
       )}
       {modeLabel === undefined ? null : <span>{modeLabel}</span>}
       {timestamp === undefined || messageDate === undefined ? null : (
-        <time dateTime={timestamp} title={messageDateTimeFormatter.format(messageDate)}>
-          {messageTimeFormatter.format(messageDate)}
+        <time
+          dateTime={timestamp}
+          title={new Intl.DateTimeFormat(locale, {
+            dateStyle: "medium",
+            timeStyle: "medium",
+          }).format(messageDate)}
+        >
+          {new Intl.DateTimeFormat(locale, {
+            hour: "2-digit",
+            hour12: false,
+            minute: "2-digit",
+          }).format(messageDate)}
         </time>
       )}
     </MessageActions>
   );
 }
 
-const fileChangeOperationLabels: Readonly<Record<AgentFileChange["kind"], string>> = {
-  create: "已创建",
-  delete: "已删除",
-  update: "已编辑",
-};
-
 function FileChangeButton({
   change,
   onOpen,
 }: Readonly<{ change: AgentFileChange; onOpen: (change: AgentFileChange) => void }>) {
   const fileName = getFileName(change.path);
-  const operationLabel = fileChangeOperationLabels[change.kind];
+  const operationLabel = i18n.t(`timeline.fileOperation.${change.kind}`, {
+    ns: "conversation",
+  });
   const { additions, removals } = countFileChangeLines(change);
 
   return (
     <button
       aria-haspopup="dialog"
-      aria-label={`${operationLabel} ${fileName}，新增 ${String(additions)} 行，删除 ${String(removals)} 行，打开 Diff`}
+      aria-label={i18n.t("timeline.fileChange", {
+        additions,
+        name: fileName,
+        ns: "conversation",
+        operation: operationLabel,
+        removals,
+      })}
       className="flex min-h-9 w-full items-center gap-2 rounded-control bg-control px-2.5 text-left text-label text-foreground transition-colors hover:bg-control-hover"
       data-file-change={change.kind}
       onClick={() => {
@@ -589,7 +630,11 @@ function ChangedFilesCard({
       try {
         await onRollback(rollbackIdempotencyKey);
       } catch (error) {
-        setRollbackError(error instanceof Error ? error.message : "无法撤销本次更改");
+        setRollbackError(
+          error instanceof Error
+            ? error.message
+            : i18n.t("timeline.rollbackError", { ns: "conversation" }),
+        );
       } finally {
         setRollbackPending(false);
       }
@@ -597,7 +642,10 @@ function ChangedFilesCard({
 
   return (
     <section
-      aria-label={`本次修改了 ${String(summary.changes.length)} 个文件`}
+      aria-label={i18n.t("timeline.changedFiles", {
+        count: summary.changes.length,
+        ns: "conversation",
+      })}
       className="mt-4 w-full overflow-hidden rounded-surface border border-separator-strong bg-raised shadow-control"
     >
       <header className="flex min-h-16 items-center gap-3 px-3 py-2.5 shadow-toolbar">
@@ -605,7 +653,12 @@ function ChangedFilesCard({
           <Files className="size-4" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="text-body-small font-semibold">已编辑 {summary.changes.length} 个文件</h3>
+          <h3 className="text-body-small font-semibold">
+            {i18n.t("timeline.editedFiles", {
+              count: summary.changes.length,
+              ns: "conversation",
+            })}
+          </h3>
           <p className="mt-0.5 text-label text-muted-foreground">
             <span className="text-diff-added">+{summary.additions}</span>{" "}
             <span className="text-diff-removed">-{summary.removals}</span>
@@ -621,7 +674,9 @@ function ChangedFilesCard({
             type="button"
           >
             <RotateCcw className="size-3.5" aria-hidden="true" />
-            {rollbackPending ? "撤销中" : "撤销"}
+            {rollbackPending
+              ? i18n.t("timeline.rollingBack", { ns: "conversation" })
+              : i18n.t("timeline.rollback", { ns: "conversation" })}
           </button>
         ) : null}
         <button
@@ -632,7 +687,7 @@ function ChangedFilesCard({
           }}
           type="button"
         >
-          审核
+          {i18n.t("timeline.review", { ns: "conversation" })}
         </button>
       </header>
       <div className="space-y-1 p-2">
@@ -647,7 +702,10 @@ function ChangedFilesCard({
             }}
             type="button"
           >
-            再显示 {hiddenChangeCount} 个文件
+            {i18n.t("timeline.moreFiles", {
+              count: hiddenChangeCount,
+              ns: "conversation",
+            })}
           </button>
         ) : null}
         {expanded && summary.changes.length > 3 ? (
@@ -658,7 +716,7 @@ function ChangedFilesCard({
             }}
             type="button"
           >
-            收起文件列表
+            {i18n.t("timeline.collapseFiles", { ns: "conversation" })}
           </button>
         ) : null}
       </div>
@@ -687,6 +745,12 @@ type RunningOperation = Readonly<{
   type: "command" | "operation";
 }>;
 
+function getCommandLabel(command: string): string {
+  return command === PENDING_COMMAND_LABEL
+    ? i18n.t("timeline.commandPending", { ns: "conversation" })
+    : command;
+}
+
 function resolveRunningOperation(items: readonly IndexedAgentItem[]): RunningOperation | undefined {
   // 优先展示仍在运行的操作，避免并发 Item 的完成事件覆盖真实当前状态。
   const runningItem = items.findLast(({ item }) => {
@@ -700,7 +764,7 @@ function resolveRunningOperation(items: readonly IndexedAgentItem[]): RunningOpe
   })?.item;
 
   if (runningItem?.type === "command") {
-    return { label: runningItem.command, type: "command" };
+    return { label: getCommandLabel(runningItem.command), type: "command" };
   }
   if (runningItem?.type === "tool") {
     return { label: runningItem.name, type: "operation" };
@@ -711,7 +775,10 @@ function resolveRunningOperation(items: readonly IndexedAgentItem[]): RunningOpe
 
   const latestItem = items.at(-1)?.item;
   if (latestItem?.type === "plan") {
-    return { label: "生成计划", type: "operation" };
+    return {
+      label: i18n.t("timeline.planGenerating", { ns: "conversation" }),
+      type: "operation",
+    };
   }
 
   // 快速操作可能在一次浏览器绘制前完成，Turn 运行期间继续附加最近原始操作。
@@ -719,7 +786,7 @@ function resolveRunningOperation(items: readonly IndexedAgentItem[]): RunningOpe
     ({ item }) => item.type === "command" || item.type === "tool" || item.type === "activity",
   )?.item;
   if (recentItem?.type === "command") {
-    return { label: recentItem.command, type: "command" };
+    return { label: getCommandLabel(recentItem.command), type: "command" };
   }
   if (recentItem?.type === "tool") {
     return { label: recentItem.name, type: "operation" };
@@ -731,9 +798,20 @@ function resolveRunningOperation(items: readonly IndexedAgentItem[]): RunningOpe
 }
 
 function RunningReplyStatus({ operation }: Readonly<{ operation?: RunningOperation | undefined }>) {
-  const statusText = operation === undefined ? "正在运行" : `正在运行 ${operation.label}`;
+  const statusText =
+    operation === undefined
+      ? i18n.t("timeline.running", { ns: "conversation" })
+      : i18n.t("timeline.runningOperation", {
+          ns: "conversation",
+          operation: operation.label,
+        });
   const accessibleLabel =
-    operation === undefined ? "AI 回复正在运行" : `AI 回复正在运行：${operation.label}`;
+    operation === undefined
+      ? i18n.t("timeline.aiRunning", { ns: "conversation" })
+      : i18n.t("timeline.aiRunningOperation", {
+          ns: "conversation",
+          operation: operation.label,
+        });
 
   return (
     <div className="flex min-w-0 items-center gap-2 text-muted-foreground" role="status">
@@ -777,17 +855,27 @@ function groupTurnTimelineItems(items: readonly AgentItem[]): TurnTimelineGroup[
 function getReviewMessageText(item: Extract<AgentItem, { type: "review" }>): string {
   const target = item.target;
   if (target.type === "uncommitted_changes") {
-    return "请检查我未提交的更改";
+    return i18n.t("timeline.reviewPrompt.uncommitted", { ns: "conversation" });
   }
   if (target.type === "base_branch") {
-    return `请检查我相对于 ${target.branch} 的更改`;
+    return i18n.t("timeline.reviewPrompt.baseBranch", {
+      branch: target.branch,
+      ns: "conversation",
+    });
   }
   if (target.type === "commit") {
     return target.title === undefined
-      ? `请检查提交 ${target.sha}`
-      : `请检查提交 ${target.sha}：${target.title}`;
+      ? i18n.t("timeline.reviewPrompt.commit", { ns: "conversation", sha: target.sha })
+      : i18n.t("timeline.reviewPrompt.commitWithTitle", {
+          ns: "conversation",
+          sha: target.sha,
+          title: target.title,
+        });
   }
-  return `请按以下要求检查代码：${target.instructions}`;
+  return i18n.t("timeline.reviewPrompt.custom", {
+    instructions: target.instructions,
+    ns: "conversation",
+  });
 }
 
 export function resolveMessageResponseRendering({
@@ -834,7 +922,10 @@ function TimelineItemContent({
       const messageBody = hasTextContent ? (
         <div>
           {skills.length === 0 ? null : (
-            <span className="inline" aria-label="使用的 Skills">
+            <span
+              className="inline"
+              aria-label={i18n.t("timeline.skillsUsed", { ns: "conversation" })}
+            >
               {skills.map((skill) => (
                 <SkillToken
                   className="relative top-1 me-1.5 bg-raised px-2 text-body leading-6"
@@ -866,12 +957,18 @@ function TimelineItemContent({
         // 确定横向可用空间，避免用户气泡在嵌套收缩容器中提前换行或截断。
         <div className="flex w-full flex-col items-end gap-2">
           {attachments.length === 0 ? null : (
-            <div className="flex max-w-full flex-wrap justify-end gap-2" aria-label="消息附件">
+            <div
+              className="flex max-w-full flex-wrap justify-end gap-2"
+              aria-label={i18n.t("timeline.attachments", { ns: "conversation" })}
+            >
               {attachments.map((attachment) => {
                 const attachmentUrl = buildTaskAttachmentUrl("", projectId, taskId, attachment.id);
                 return (
                   <a
-                    aria-label={`查看图片 ${attachment.name}`}
+                    aria-label={i18n.t("timeline.showImage", {
+                      name: attachment.name,
+                      ns: "conversation",
+                    })}
                     className="block size-40 max-w-full overflow-hidden rounded-surface bg-control shadow-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
                     data-message-attachment="image"
                     href={attachmentUrl}
@@ -910,22 +1007,28 @@ function TimelineItemContent({
       // 原生 Reasoning 仅用于运行时状态同步，避免在界面暴露模型思维链。
       return null;
     case "command": {
-      const commandOutput = item.output ?? item.cwd;
+      const commandLabel = getCommandLabel(item.command);
+      const commandOutput =
+        item.output === RETAINED_COMMAND_OUTPUT_MARKER
+          ? i18n.t("timeline.outputRetained", { ns: "conversation" })
+          : (item.output ?? item.cwd);
       const isStreamingCommand = turnStatus === "running" && item.status === "running";
       return (
         <Tool>
-          <ToolHeader state={toToolState(item.status)} title={item.command} />
+          <ToolHeader state={toToolState(item.status)} title={commandLabel} />
           <ToolBody>
             <Terminal isStreaming={isStreamingCommand} output={commandOutput}>
               <TerminalHeader>
-                <TerminalTitle>输出</TerminalTitle>
+                <TerminalTitle>{i18n.t("timeline.output", { ns: "conversation" })}</TerminalTitle>
                 <TerminalActions>
                   <TerminalCopyButton />
                 </TerminalActions>
               </TerminalHeader>
               <TerminalContent>
                 {item.outputTruncated ? (
-                  <p className="mt-2 text-warning">输出已截断，仅显示最新内容。</p>
+                  <p className="mt-2 text-warning">
+                    {i18n.t("timeline.outputTruncated", { ns: "conversation" })}
+                  </p>
                 ) : null}
               </TerminalContent>
             </Terminal>
@@ -965,8 +1068,12 @@ function TimelineItemContent({
         <Plan defaultOpen isStreaming={isStreamingPlan}>
           <PlanHeader>
             <div className="min-w-0 flex-1">
-              <PlanTitle>计划</PlanTitle>
-              <PlanDescription>{isStreamingPlan ? "正在生成计划" : "执行计划"}</PlanDescription>
+              <PlanTitle>{i18n.t("timeline.plan", { ns: "conversation" })}</PlanTitle>
+              <PlanDescription>
+                {isStreamingPlan
+                  ? i18n.t("timeline.planGenerating", { ns: "conversation" })
+                  : i18n.t("timeline.planExecuting", { ns: "conversation" })}
+              </PlanDescription>
             </div>
             <PlanTrigger />
           </PlanHeader>
@@ -1030,7 +1137,12 @@ function TurnTimelineItems({
           ? getReviewMessageText(group.item)
           : [
               ...(group.item.skills ?? []).map((skill) => `$${skill.name}`),
-              ...(group.item.attachments ?? []).map((attachment) => `[图片] ${attachment.name}`),
+              ...(group.item.attachments ?? []).map((attachment) =>
+                i18n.t("timeline.imageCopyLabel", {
+                  name: attachment.name,
+                  ns: "conversation",
+                }),
+              ),
               group.item.text,
             ]
               .filter((part) => part.length > 0)
@@ -1047,7 +1159,7 @@ function TurnTimelineItems({
           />
           <MessageMetadata
             {...(group.item.type === "review"
-              ? { modeLabel: "审查模式" }
+              ? { modeLabel: i18n.t("timeline.reviewMode", { ns: "conversation" }) }
               : {
                   timestamp: getMessageTimestamp("user", turn, latestSnapshotTimestamp),
                 })}
@@ -1219,7 +1331,12 @@ function StoredUserMessage({
       ? getReviewMessageText(item)
       : [
           ...(item.skills ?? []).map((skill) => `$${skill.name}`),
-          ...(item.attachments ?? []).map((attachment) => `[图片] ${attachment.name}`),
+          ...(item.attachments ?? []).map((attachment) =>
+            i18n.t("timeline.imageCopyLabel", {
+              name: attachment.name,
+              ns: "conversation",
+            }),
+          ),
           item.text,
         ]
           .filter((part) => part.length > 0)
@@ -1237,7 +1354,7 @@ function StoredUserMessage({
       />
       <MessageMetadata
         {...(item.type === "review"
-          ? { modeLabel: "审查模式" }
+          ? { modeLabel: i18n.t("timeline.reviewMode", { ns: "conversation" }) }
           : { timestamp: getMessageTimestamp("user", turn, latestSnapshotTimestamp) })}
         text={copiedText}
       />
@@ -1452,7 +1569,7 @@ function StoreTurnTimelineSection({
           className="rounded-surface bg-control px-3 py-2 text-label leading-5 text-danger"
           role="alert"
         >
-          <p className="font-medium">Turn 执行失败</p>
+          <p className="font-medium">{i18n.t("timeline.turnFailed", { ns: "conversation" })}</p>
           <p className="mt-1">{turn.error}</p>
         </div>
       )}
@@ -1527,12 +1644,17 @@ function TaskStoreTimeline({
     (requestId) => pendingRequestsById[requestId]?.status !== "resolved",
   );
   if (turnIds.length === 0 && !hasVisiblePendingRequest) {
-    return <TimelineState message="此任务暂无历史" role="status" />;
+    return (
+      <TimelineState message={i18n.t("timeline.noHistory", { ns: "conversation" })} role="status" />
+    );
   }
   const latestTurnId = turnIds.at(-1);
 
   return (
-    <Conversation aria-label="会话内容" conversationId={`${projectId}:${taskId}`}>
+    <Conversation
+      aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
+      conversationId={`${projectId}:${taskId}`}
+    >
       <ConversationVirtualList
         {...(hasVisiblePendingRequest
           ? {
@@ -1595,12 +1717,15 @@ export function TaskSnapshotTimeline({
   onRollbackTurn?: (turnId: string, idempotencyKey: string) => Promise<void>;
   snapshot: RuntimeTaskSnapshot;
 }>) {
+  useTranslation("conversation");
   // 审批完成后仍保留实时快照记录，但已解决请求不再占用消息时间线。
   const visiblePendingRequests = snapshot.pendingRequests.filter(
     (request) => request.status !== "resolved",
   );
   if (snapshot.turns.length === 0 && visiblePendingRequests.length === 0) {
-    return <TimelineState message="此任务暂无历史" role="status" />;
+    return (
+      <TimelineState message={i18n.t("timeline.noHistory", { ns: "conversation" })} role="status" />
+    );
   }
   const firstPendingIndex = visiblePendingRequests.findIndex(
     (candidate) => candidate.status === "pending",
@@ -1608,7 +1733,10 @@ export function TaskSnapshotTimeline({
   const latestTurnId = snapshot.turns.at(-1)?.id;
 
   return (
-    <Conversation aria-label="会话内容" conversationId={`${snapshot.projectId}:${snapshot.id}`}>
+    <Conversation
+      aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
+      conversationId={`${snapshot.projectId}:${snapshot.id}`}
+    >
       <ConversationVirtualList
         {...(visiblePendingRequests.length === 0
           ? {}
@@ -1662,7 +1790,9 @@ export function TaskSnapshotTimeline({
                 className="rounded-surface bg-control px-3 py-2 text-label leading-5 text-danger"
                 role="alert"
               >
-                <p className="font-medium">Turn 执行失败</p>
+                <p className="font-medium">
+                  {i18n.t("timeline.turnFailed", { ns: "conversation" })}
+                </p>
                 <p className="mt-1">{turn.error}</p>
               </div>
             )}

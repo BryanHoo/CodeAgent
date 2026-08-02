@@ -2,6 +2,8 @@ import type { Project } from "@code-agent/protocol";
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent } from "react";
 
+import { useTranslation } from "../../../i18n/i18n.js";
+
 const PROJECT_REORDER_MOVEMENT_TOLERANCE_PX = 8;
 
 type ProjectPlacement = "after" | "before";
@@ -74,6 +76,7 @@ export function useProjectReordering({
   onReorder,
   projects,
 }: UseProjectReorderingOptions) {
+  const { t } = useTranslation("conversation");
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [transientProjectIds, setTransientProjectIds] = useState<readonly string[] | null>(null);
@@ -109,7 +112,12 @@ export function useProjectReordering({
     if (succeeded) {
       const movedProject = projects.find((project) => project.id === movedProjectId);
       const position = projectIds.indexOf(movedProjectId) + 1;
-      setAnnouncement(`${movedProject?.name ?? "项目"} 已移动到第 ${String(position)} 位`);
+      setAnnouncement(
+        t("reorder.moved", {
+          name: movedProject?.name ?? t("reorder.projectFallback"),
+          position,
+        }),
+      );
     }
   };
 
@@ -165,7 +173,7 @@ export function useProjectReordering({
       }
       setTransientProjectIds(orderedProjectsRef.current.map((project) => project.id));
       setActiveProjectId(session.projectId);
-      setAnnouncement("已进入项目排序，拖动后释放以保存位置");
+      setAnnouncement(t("reorder.started"));
     }
 
     event.preventDefault();
@@ -214,7 +222,7 @@ export function useProjectReordering({
     clearPressSession(false);
     setActiveProjectId(null);
     setTransientProjectIds(null);
-    setAnnouncement("已取消项目排序");
+    setAnnouncement(t("reorder.cancelled"));
   };
 
   const handlePointerUp = (event: PointerEvent<HTMLElement>) => {
@@ -271,7 +279,7 @@ export function useProjectReordering({
         },
         onPointerMove: handlePointerMove,
         onPointerUp: handlePointerUp,
-        title: "拖动排序；也可按 Alt + 上下方向键移动",
+        title: t("reorder.title"),
       };
     },
     orderedProjects,

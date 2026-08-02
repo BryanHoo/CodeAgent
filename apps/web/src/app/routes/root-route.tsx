@@ -1,18 +1,27 @@
 import { Link, Outlet, createRootRoute } from "@tanstack/react-router";
 
+import { useTranslation } from "../../i18n/i18n.js";
 import { NotFound } from "./not-found.js";
 
 export const rootRoute = createRootRoute({
   component: RootLayout,
-  errorComponent: ({ error, reset }) => (
+  errorComponent: RouteError,
+  notFoundComponent: NotFound,
+});
+
+function RouteError({ error, reset }: Readonly<{ error: Error; reset: () => void }>) {
+  const { t } = useTranslation("common");
+  return (
     <main
       className="grid h-full place-items-center bg-window px-6"
       aria-labelledby="route-error-title"
     >
       <section className="w-full max-w-lg rounded-surface bg-raised p-6 shadow-panel">
-        <p className="mb-2 text-xs font-semibold text-danger uppercase">Route error</p>
+        <p className="mb-2 text-xs font-semibold text-danger uppercase">
+          {t("errors.routeErrorLabel")}
+        </p>
         <h1 id="route-error-title" className="text-xl font-semibold text-foreground">
-          页面加载失败
+          {t("errors.routeErrorTitle")}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
         <button
@@ -20,13 +29,12 @@ export const rootRoute = createRootRoute({
           onClick={reset}
           type="button"
         >
-          重试
+          {t("actions.retry")}
         </button>
       </section>
     </main>
-  ),
-  notFoundComponent: NotFound,
-});
+  );
+}
 
 function RootLayout() {
   return (

@@ -1,0 +1,71 @@
+export const settings = {
+  actions: {
+    cancel: "Cancel",
+    close: "Close",
+    closeDialog: "Close global settings",
+    save: "Save global defaults",
+    saving: "Saving",
+  },
+  appearance: {
+    colorMode: "Color mode",
+    dark: "Dark",
+    darkMode: "Dark mode",
+    language: "Language",
+    light: "Light",
+    lightMode: "Light mode",
+  },
+  approval: {
+    autoReview: "Automatic approval",
+    never: "Never ask",
+    onRequest: "On request",
+    untrusted: "Untrusted operations only",
+  },
+  effort: {
+    high: "High",
+    low: "Low",
+    medium: "Medium",
+    minimal: "Minimal",
+    xhigh: "Extra high",
+  },
+  errors: {
+    load: "Unable to load global settings",
+    save: "Unable to save global settings",
+  },
+  fields: {
+    approvalPolicy: "Approval policy",
+    commitMessagePrompt: "Commit message prompt",
+    commitModel: "Commit model",
+    commitReasoningEffort: "Commit reasoning effort",
+    defaultOpenWith: "Default open with",
+    followUpMessages: "Follow-up messages",
+    model: "Model",
+    prompt: "Prompt",
+    reasoningEffort: "Reasoning effort",
+    sandbox: "Sandbox",
+  },
+  followUp: {
+    queue: "Queue",
+    steer: "Steer",
+  },
+  integration: {
+    automatic: "Select automatically",
+  },
+  languages: {
+    en: "English",
+    zhCN: "简体中文",
+  },
+  loading: "Loading global settings",
+  navigationLabel: "Settings categories",
+  sandbox: {
+    dangerFullAccess: "Full access",
+    readOnly: "Read only",
+    workspaceWrite: "Workspace write",
+  },
+  sections: {
+    agent: "Agent defaults",
+    appearance: "Appearance",
+    commit: "Commit messages",
+    integration: "App integrations",
+  },
+  title: "Global settings",
+} as const;

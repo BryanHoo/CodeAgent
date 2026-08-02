@@ -22,6 +22,8 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+
+import { i18n } from "../../i18n/i18n.js";
 import type { ReactNode } from "react";
 
 import {
@@ -376,7 +378,10 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           }
           return undefined;
         } catch (error) {
-          const normalizedError = error instanceof Error ? error : new Error("添加项目失败");
+          const normalizedError =
+            error instanceof Error
+              ? error
+              : new Error(i18n.t("errors.addProject", { ns: "conversation" }));
           setAddProjectError(normalizedError);
           // 错误已进入可见状态，避免按钮事件产生未处理的 Promise rejection。
           return undefined;
@@ -392,7 +397,9 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
         const currentPage = queryClient.getQueryData<ProjectPage>(["projects"]);
         const optimisticPage = reorderProjectPage(currentPage, projectIds);
         if (optimisticPage === undefined) {
-          setProjectOrderError(new Error("项目列表已变化，请重试排序"));
+          setProjectOrderError(
+            new Error(i18n.t("errors.reorderProjectChanged", { ns: "conversation" })),
+          );
           return false;
         }
 
@@ -405,7 +412,11 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           return true;
         } catch (error) {
           queryClient.setQueryData<ProjectPage>(["projects"], currentPage);
-          setProjectOrderError(error instanceof Error ? error : new Error("保存项目排序失败"));
+          setProjectOrderError(
+            error instanceof Error
+              ? error
+              : new Error(i18n.t("errors.reorderProject", { ns: "conversation" })),
+          );
           return false;
         }
       })) ?? false,
@@ -429,7 +440,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           );
           return true;
         } catch {
-          setProjectActionError(new Error("无法重命名项目"));
+          setProjectActionError(new Error(i18n.t("errors.renameProject", { ns: "conversation" })));
           return false;
         }
       })) ?? false,
@@ -455,7 +466,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
           );
           return remainingProjects;
         } catch {
-          setProjectActionError(new Error("无法删除项目"));
+          setProjectActionError(new Error(i18n.t("errors.deleteProject", { ns: "conversation" })));
           return undefined;
         }
       }),

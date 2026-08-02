@@ -7,6 +7,7 @@ import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
 import type { SubagentSelection } from "./subagent.js";
 import { toSubagentTaskStatus } from "./subagent.js";
 import { TaskTimeline } from "./task-timeline.js";
+import { useTranslation } from "../../../i18n/i18n.js";
 
 type SubagentOutputDialogProps = Readonly<{
   onClose: () => void;
@@ -54,6 +55,7 @@ function OpenSubagentOutputDialog({
   projectRuntime,
   selection,
 }: Readonly<Omit<SubagentOutputDialogProps, "selection"> & { selection: SubagentSelection }>) {
+  const { t } = useTranslation("workbench");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const runtime = useTaskRuntime(projectId, selection.taskId, projectRuntime);
 
@@ -67,9 +69,9 @@ function OpenSubagentOutputDialog({
   const titleId = "subagent-output-dialog-title";
   let content;
   if (runtime.error !== null) {
-    content = <SubagentOutputState message="无法加载子代理输出" role="alert" />;
+    content = <SubagentOutputState message={t("subagentOutput.error")} role="alert" />;
   } else if (runtime.isPending || runtime.snapshot === undefined) {
-    content = <SubagentOutputState message="正在加载子代理输出" role="status" />;
+    content = <SubagentOutputState message={t("subagentOutput.loading")} role="status" />;
   } else {
     content = (
       <>
@@ -78,7 +80,7 @@ function OpenSubagentOutputDialog({
             className="bg-control px-3 py-1.5 text-center text-label text-muted-foreground"
             role="status"
           >
-            子代理实时连接恢复中
+            {t("subagentOutput.reconnecting")}
           </div>
         ) : null}
         <TaskTimeline projectId={projectId} runtime={runtime} taskId={selection.taskId} />
@@ -106,17 +108,17 @@ function OpenSubagentOutputDialog({
         <header className="flex min-h-toolbar items-center gap-3 px-3 shadow-toolbar sm:px-4">
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-body-small font-semibold" id={titleId}>
-              子代理输出
+              {t("subagentOutput.title")}
             </h2>
             <p className="truncate text-caption text-muted-foreground" title={selection.taskId}>
               {selection.taskId}
             </p>
           </div>
           <Task collapsible={false} status={toSubagentTaskStatus(selection.status)}>
-            <TaskTrigger title={`子代理 ${selection.taskId}`} />
+            <TaskTrigger title={t("subagentOutput.task", { taskId: selection.taskId })} />
           </Task>
           <button
-            aria-label="关闭子代理输出"
+            aria-label={t("subagentOutput.close")}
             className="grid size-8 shrink-0 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus focus-visible:outline-none"
             onClick={onClose}
             type="button"

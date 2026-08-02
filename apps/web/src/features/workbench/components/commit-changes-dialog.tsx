@@ -8,6 +8,7 @@ import { ChevronDown, LoaderCircle, Sparkles, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { useTranslation } from "../../../i18n/i18n.js";
 
 type CommitFileEntry = Readonly<{
   path: string;
@@ -42,14 +43,14 @@ export function collectCommitFileEntries(status: ProjectGitStatus): readonly Com
   return [...entries.values()].sort((left, right) => left.path.localeCompare(right.path, "en"));
 }
 
-function commitResultMessage(result: CommitProjectChangesResponse): string {
+function commitResultMessageKey(result: CommitProjectChangesResponse): string {
   if (result.pushStatus === "failed") {
-    return "提交已完成，但推送失败";
+    return "commit.commitCompletePushFailed";
   }
   if (result.pushStatus === "not_configured") {
-    return "提交已完成，当前分支未配置上游";
+    return "commit.commitCompleteUpstreamMissing";
   }
-  return result.pushStatus === "pushed" ? "提交并推送已完成" : "提交已完成";
+  return result.pushStatus === "pushed" ? "commit.commitAndPushComplete" : "commit.commitComplete";
 }
 
 export function CommitChangesDialog({
@@ -62,6 +63,7 @@ export function CommitChangesDialog({
   onGenerateMessage,
   result = null,
 }: CommitChangesDialogProps) {
+  const { t } = useTranslation("workbench");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const entries = useMemo(() => collectCommitFileEntries(gitStatus), [gitStatus]);
   const [selectedPaths, setSelectedPaths] = useState(
@@ -124,18 +126,18 @@ export function CommitChangesDialog({
         <header className="flex h-12 items-center justify-between border-b border-separator px-4">
           <div className="min-w-0">
             <h2 className="text-body-small font-semibold" id="commit-changes-title">
-              提交变更
+              {t("commit.title")}
             </h2>
             <p className="truncate text-caption text-muted-foreground">
               {gitStatus.branch ?? "detached HEAD"}
             </p>
           </div>
           <button
-            aria-label="关闭提交弹窗"
+            aria-label={t("commit.closeDialog")}
             className="grid size-7 place-items-center rounded-control text-muted-foreground hover:bg-control-hover hover:text-foreground disabled:opacity-50"
             disabled={isPending}
             onClick={onClose}
-            title="关闭"
+            title={t("actions.close")}
             type="button"
           >
             <X aria-hidden="true" className="size-4" />
@@ -148,26 +150,29 @@ export function CommitChangesDialog({
               className="mb-3 rounded-control bg-control px-3 py-2 text-label text-danger"
               role="alert"
             >
-              当前项目包含多个子仓库，暂不支持跨仓库提交
+              {t("commit.multipleRepositories")}
             </p>
           )}
 
           <button
             aria-controls="commit-file-list"
             aria-expanded={filesExpanded}
-            aria-label={`选择文件，已选择 ${String(selectedPaths.size)}/${String(entries.length)} 个文件`}
+            aria-label={t("commit.selectionLabel", {
+              selected: selectedPaths.size,
+              total: entries.length,
+            })}
             className={`flex h-9 w-full items-center gap-2 border border-separator bg-panel px-3 text-left text-label hover:bg-control-hover ${filesExpanded ? "rounded-t-control" : "rounded-control"}`}
             onClick={() => {
               setFilesExpanded((current) => !current);
             }}
             type="button"
           >
-            <span className="font-medium">选择文件</span>
+            <span className="font-medium">{t("commit.selectFiles")}</span>
             <span className="ml-auto whitespace-nowrap text-muted-foreground">
-              已选择 {selectedPaths.size} 个文件
+              {t("commit.selectedFiles", { count: selectedPaths.size })}
             </span>
             <span className="whitespace-nowrap text-caption text-muted-foreground">
-              共 {entries.length} 个
+              {t("commit.totalFiles", { count: entries.length })}
             </span>
             <ChevronDown
               aria-hidden="true"
@@ -184,7 +189,7 @@ export function CommitChangesDialog({
               {/* 全选控制跟随文件列表滚动，避免占用 message 区域。 */}
               <label className="flex min-h-9 items-center gap-2 bg-control px-3 py-2 text-label font-medium">
                 <input
-                  aria-label="全选文件"
+                  aria-label={t("commit.selectAllFiles")}
                   checked={allSelected}
                   disabled={!repositoryAvailable || isPending || result !== null}
                   onChange={(event) => {
@@ -196,7 +201,7 @@ export function CommitChangesDialog({
                   }}
                   type="checkbox"
                 />
-                <span>全选</span>
+                <span>{t("commit.allFiles")}</span>
               </label>
               {entries.map((entry) => (
                 <label
@@ -222,8 +227,8 @@ export function CommitChangesDialog({
                   />
                   <span className="min-w-0 flex-1 break-all">{entry.path}</span>
                   <span className="flex shrink-0 gap-1 text-meta text-muted-foreground">
-                    {entry.staged ? <span>已暂存</span> : null}
-                    {entry.unstaged ? <span>未暂存</span> : null}
+                    {entry.staged ? <span>{t("commit.staged")}</span> : null}
+                    {entry.unstaged ? <span>{t("commit.unstaged")}</span> : null}
                   </span>
                 </label>
               ))}
@@ -233,7 +238,7 @@ export function CommitChangesDialog({
           <div className="mt-4">
             <div className="flex items-center justify-between gap-3">
               <label className="text-label font-medium" htmlFor="commit-message">
-                提交信息
+                {t("commit.commitMessage")}
               </label>
               <button
                 className="inline-flex h-7 items-center gap-1.5 rounded-control bg-control px-2.5 text-label font-medium hover:bg-control-hover disabled:cursor-not-allowed disabled:opacity-50"
@@ -248,7 +253,7 @@ export function CommitChangesDialog({
                 ) : (
                   <Sparkles aria-hidden="true" className="size-3.5" />
                 )}
-                生成 message
+                {t("commit.generateMessage")}
               </button>
             </div>
             <textarea
@@ -269,7 +274,7 @@ export function CommitChangesDialog({
           )}
           {result === null ? null : (
             <div className="mt-3" role="status">
-              <p className="text-label font-medium">{commitResultMessage(result)}</p>
+              <p className="text-label font-medium">{t(commitResultMessageKey(result))}</p>
               <p className="mt-1 font-mono text-caption text-muted-foreground">
                 {result.commitSha.slice(0, 7)}
               </p>
@@ -284,7 +289,7 @@ export function CommitChangesDialog({
             onClick={onClose}
             type="button"
           >
-            {result === null ? "取消" : "关闭"}
+            {result === null ? t("actions.cancel") : t("actions.close")}
           </button>
           {result === null ? (
             <>
@@ -296,7 +301,7 @@ export function CommitChangesDialog({
                 }}
                 type="button"
               >
-                提交
+                {t("commit.commit")}
               </button>
               <button
                 className="inline-flex h-8 items-center gap-1.5 rounded-control bg-accent px-3 text-label font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
@@ -311,7 +316,7 @@ export function CommitChangesDialog({
                 ) : (
                   <Upload aria-hidden="true" className="size-3.5" />
                 )}
-                提交并推送
+                {t("commit.commitAndPush")}
               </button>
             </>
           ) : null}

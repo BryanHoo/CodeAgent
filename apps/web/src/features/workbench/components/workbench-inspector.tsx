@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import { countFileChangeLines, type AgentFileChange } from "../../diff/file-change.js";
 import { FileTree, FileTreeFile, FileTreeFolder } from "../../../shared/ai-elements/file-tree.js";
 import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
@@ -207,7 +208,13 @@ function FileTreeChangeIndicator({
 }>) {
   return (
     <span
-      aria-label={`${path}，${isDirectory ? "后代" : ""}新增 ${String(stats.additions)} 行，删除 ${String(stats.removals)} 行`}
+      aria-label={i18n.t("inspector.changeIndicator", {
+        additions: stats.additions,
+        descendant: isDirectory ? i18n.t("inspector.descendant", { ns: "conversation" }) : "",
+        ns: "conversation",
+        path,
+        removals: stats.removals,
+      })}
       className="ml-auto flex shrink-0 items-center gap-1 pl-2 text-meta"
     >
       <span className="font-medium text-diff-added">+{stats.additions}</span>
@@ -239,9 +246,11 @@ function ProjectFileTreeDirectoryChildren({
         className="flex min-h-7 items-center gap-2 px-1.5 text-caption text-diff-removed"
         role="treeitem"
       >
-        <span className="min-w-0 flex-1 truncate">无法读取文件夹 {name}</span>
+        <span className="min-w-0 flex-1 truncate">
+          {i18n.t("inspector.readFolderError", { name, ns: "conversation" })}
+        </span>
         <IconButton
-          label={`重新读取文件夹 ${name}`}
+          label={i18n.t("inspector.refreshFolder", { name, ns: "conversation" })}
           onClick={() => {
             onRefreshDirectory(directoryPath);
           }}
@@ -255,19 +264,19 @@ function ProjectFileTreeDirectoryChildren({
   if (state === undefined || (state.isPending && state.data === undefined)) {
     return (
       <div
-        aria-label={`正在读取文件夹 ${name}`}
+        aria-label={i18n.t("inspector.readFolder", { name, ns: "conversation" })}
         className="flex min-h-7 items-center gap-1.5 px-1.5 text-caption text-muted-foreground"
         role="treeitem"
       >
         <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-        <span>正在读取...</span>
+        <span>{i18n.t("inspector.loading", { ns: "conversation" })}</span>
       </div>
     );
   }
   if (state.data?.entries.length === 0) {
     return (
       <div className="min-h-7 px-1.5 py-1.5 text-caption text-muted-foreground" role="treeitem">
-        空文件夹
+        {i18n.t("inspector.emptyFolder", { ns: "conversation" })}
       </div>
     );
   }
@@ -388,7 +397,7 @@ function collectInspectorSources(
         }
         seenAttachments.add(attachment.id);
         sources.push({
-          detail: "图片附件",
+          detail: i18n.t("inspector.attachmentDetail", { ns: "conversation" }),
           id: `attachment:${attachment.id}`,
           kind: "attachment",
           name: attachment.name,
@@ -401,10 +410,10 @@ function collectInspectorSources(
 
 function formatSkillScope(scope: AgentSkill["scope"]) {
   const labels: Readonly<Record<AgentSkill["scope"], string>> = {
-    admin: "管理员",
-    repo: "项目",
-    system: "系统",
-    user: "用户",
+    admin: i18n.t("inspector.sourceRole.admin", { ns: "conversation" }),
+    repo: i18n.t("inspector.sourceRole.repo", { ns: "conversation" }),
+    system: i18n.t("inspector.sourceRole.system", { ns: "conversation" }),
+    user: i18n.t("inspector.sourceRole.user", { ns: "conversation" }),
   };
   return labels[scope];
 }
@@ -443,6 +452,7 @@ export function WorkbenchInspector({
   terminalMutationError = null,
   terminatingTerminalId = null,
 }: WorkbenchInspectorProps) {
+  useTranslation("conversation");
   const [tab, setTab] = useState<"changes" | "context">(() =>
     subagents.length > 0 || backgroundTerminals.length > 0 ? "context" : "changes",
   );
@@ -481,11 +491,13 @@ export function WorkbenchInspector({
   );
   return (
     <aside
-      aria-label="Context Inspector"
+      aria-label={i18n.t("inspector.title", { ns: "conversation" })}
       className="workbench-inspector relative z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse"
     >
       <div className="flex h-workbench-header items-center px-3">
-        <h2 className="text-body-small font-semibold text-foreground">项目检查器</h2>
+        <h2 className="text-body-small font-semibold text-foreground">
+          {i18n.t("inspector.title", { ns: "conversation" })}
+        </h2>
       </div>
 
       <div className="px-2.5 pb-1.5">
@@ -505,7 +517,9 @@ export function WorkbenchInspector({
               role="tab"
               type="button"
             >
-              {value === "changes" ? "变更" : "上下文"}
+              {value === "changes"
+                ? i18n.t("inspector.changes", { ns: "conversation" })
+                : i18n.t("inspector.context", { ns: "conversation" })}
             </button>
           ))}
         </div>
@@ -517,47 +531,60 @@ export function WorkbenchInspector({
             {/* 工作区干净时省略整个摘要模块，把空间完整留给项目文件。 */}
             {allChanges.length > 0 ? (
               <div
-                aria-label="未提交变更摘要"
+                aria-label={i18n.t("inspector.gitChangesAria", { ns: "conversation" })}
                 className="flex w-full items-center justify-between gap-2 px-2.5 pb-3 pt-2.5"
                 role="group"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-foreground">未提交变更</p>
+                  <p className="text-xs font-medium text-foreground">
+                    {i18n.t("inspector.gitChanges", { ns: "conversation" })}
+                  </p>
                   <p
-                    aria-label="变更统计"
+                    aria-label={i18n.t("inspector.changeStats", { ns: "conversation" })}
                     className="mt-0.5 flex items-center gap-1.5 text-caption text-muted-foreground"
                   >
-                    <span>{allChanges.length} 个变更</span>
+                    <span>
+                      {i18n.t("inspector.gitChangesCount", {
+                        count: allChanges.length,
+                        ns: "conversation",
+                      })}
+                    </span>
                     <span className="font-medium text-diff-added">+{additions}</span>
                     <span className="font-medium text-diff-removed">-{removals}</span>
                   </p>
                 </div>
                 <div
-                  aria-label="变更操作"
+                  aria-label={i18n.t("inspector.changeActions", { ns: "conversation" })}
                   className="flex shrink-0 items-center justify-end gap-1.5"
                   role="group"
                 >
                   <button
                     aria-haspopup="dialog"
-                    aria-label={`审核 ${String(allChanges.length)} 个未提交变更`}
+                    aria-label={i18n.t("inspector.reviewChanges", {
+                      count: allChanges.length,
+                      ns: "conversation",
+                    })}
                     className="h-7 shrink-0 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none"
                     onClick={() => {
                       onReviewChanges(allChanges);
                     }}
                     type="button"
                   >
-                    审核
+                    {i18n.t("inspector.review", { ns: "conversation" })}
                   </button>
                   <button
                     aria-haspopup="dialog"
-                    aria-label={`提交 ${String(allChanges.length)} 个未提交变更`}
+                    aria-label={i18n.t("inspector.commitChanges", {
+                      count: allChanges.length,
+                      ns: "conversation",
+                    })}
                     className="h-7 shrink-0 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-control"
                     disabled={gitStatus?.repositoryMode === "children"}
                     id="workbench-commit-changes"
                     onClick={onCommitChanges}
                     type="button"
                   >
-                    提交
+                    {i18n.t("inspector.commit", { ns: "conversation" })}
                   </button>
                 </div>
               </div>
@@ -566,11 +593,13 @@ export function WorkbenchInspector({
               {gitStatusError !== null ? (
                 <div className="mx-2.5 mb-2 flex items-center gap-2 rounded-control bg-control px-2 py-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-label text-diff-removed">Git 变更自动检测已停止</p>
+                    <p className="text-label text-diff-removed">
+                      {i18n.t("inspector.gitChangesStopped", { ns: "conversation" })}
+                    </p>
                   </div>
                   <IconButton
                     disabled={gitStatusRefreshing}
-                    label="手动刷新 Git 变更"
+                    label={i18n.t("inspector.refreshGit", { ns: "conversation" })}
                     onClick={onRefreshGitStatus}
                     size="small"
                   >
@@ -581,18 +610,24 @@ export function WorkbenchInspector({
                   </IconButton>
                 </div>
               ) : gitStatusPending && gitStatus === undefined ? (
-                <p className="mb-2 px-4 text-caption text-muted-foreground">正在读取 Git 变更...</p>
+                <p className="mb-2 px-4 text-caption text-muted-foreground">
+                  {i18n.t("inspector.gitLoading", { ns: "conversation" })}
+                </p>
               ) : null}
               {/* 标题固定在文件树滚动容器外，滚动长目录时始终保持可见。 */}
               <div className="mb-1 flex shrink-0 items-center justify-between px-4 text-meta font-medium text-muted-foreground">
-                <span>项目文件</span>
+                <span>{i18n.t("inspector.fileTree", { ns: "conversation" })}</span>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2.5">
                 {rootFileTreeState?.error !== null && rootFileTreeState?.error !== undefined ? (
                   <div className="flex flex-col items-center px-2 py-5 text-center">
-                    <p className="text-label text-diff-removed">无法读取项目文件</p>
+                    <p className="text-label text-diff-removed">
+                      {i18n.t("inspector.projectFilesError", { ns: "conversation" })}
+                    </p>
                     <button
-                      aria-label="重新读取项目文件"
+                      aria-label={i18n.t("inspector.refreshProjectFiles", {
+                        ns: "conversation",
+                      })}
                       className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-control bg-control px-3 text-label font-medium text-foreground transition-colors hover:bg-raised disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={rootFileTreeState.isFetching}
                       onClick={() => {
@@ -604,21 +639,23 @@ export function WorkbenchInspector({
                         aria-hidden="true"
                         className={`size-3.5 ${rootFileTreeState.isFetching ? "animate-spin" : ""}`}
                       />
-                      {rootFileTreeState.isFetching ? "正在读取" : "重新读取"}
+                      {rootFileTreeState.isFetching
+                        ? i18n.t("inspector.reading", { ns: "conversation" })
+                        : i18n.t("inspector.refreshProjectFiles", { ns: "conversation" })}
                     </button>
                   </div>
                 ) : rootFileTreeState?.isPending === true &&
                   rootFileTreeState.data === undefined ? (
                   <p className="px-2 py-5 text-center text-label text-muted-foreground">
-                    正在读取项目文件...
+                    {i18n.t("inspector.projectFilesLoading", { ns: "conversation" })}
                   </p>
                 ) : (rootFileTreeState?.data?.entries.length ?? 0) === 0 ? (
                   <p className="px-2 py-5 text-center text-label text-muted-foreground">
-                    当前项目没有可显示的文件
+                    {i18n.t("inspector.projectFilesEmpty", { ns: "conversation" })}
                   </p>
                 ) : (
                   <FileTree
-                    aria-label="项目文件"
+                    aria-label={i18n.t("inspector.fileTree", { ns: "conversation" })}
                     expanded={expandedFileTreePaths}
                     onExpandedChange={onFileTreeExpandedChange}
                     onSelect={(path) => {
@@ -676,8 +713,14 @@ export function WorkbenchInspector({
               isPending={mcpServersPending}
               servers={mcpServers}
             />
-            <InspectorSection icon={<FolderRoot className="size-3.5" />} title="来源">
-              <div aria-label="上下文来源" className="space-y-0.5">
+            <InspectorSection
+              icon={<FolderRoot className="size-3.5" />}
+              title={i18n.t("inspector.source", { ns: "conversation" })}
+            >
+              <div
+                aria-label={i18n.t("inspector.contextSources", { ns: "conversation" })}
+                className="space-y-0.5"
+              >
                 {sources.map((source) => (
                   <InspectorSourceRow key={source.id} source={source} />
                 ))}
@@ -702,7 +745,7 @@ export function WorkbenchInspector({
           className="absolute bottom-3 right-3 z-40 w-60 rounded-control bg-danger-soft px-2 py-1.5 text-meta text-danger shadow-floating"
           role="alert"
         >
-          无法使用所选应用打开目标
+          {i18n.t("inspector.openFailed", { ns: "conversation" })}
         </p>
       )}
     </aside>
@@ -725,12 +768,19 @@ function BackgroundTerminalSection({
   terminatingTerminalId: string | null;
 }>) {
   return (
-    <InspectorSection icon={<SquareTerminal className="size-3.5" />} title="运行中的终端">
-      <section aria-label="运行中的终端">
+    <InspectorSection
+      icon={<SquareTerminal className="size-3.5" />}
+      title={i18n.t("inspector.terminals", { ns: "conversation" })}
+    >
+      <section aria-label={i18n.t("inspector.terminals", { ns: "conversation" })}>
         {isPending && terminals.length === 0 ? (
-          <p className="px-2 py-2 text-caption text-muted-foreground">正在读取终端...</p>
+          <p className="px-2 py-2 text-caption text-muted-foreground">
+            {i18n.t("inspector.terminalLoading", { ns: "conversation" })}
+          </p>
         ) : error !== null && terminals.length === 0 ? (
-          <p className="px-2 py-2 text-caption text-diff-removed">无法读取运行中的终端</p>
+          <p className="px-2 py-2 text-caption text-diff-removed">
+            {i18n.t("inspector.terminalError", { ns: "conversation" })}
+          </p>
         ) : (
           <div className="space-y-1">
             {terminals.map((terminal) => {
@@ -741,7 +791,7 @@ function BackgroundTerminalSection({
                   key={terminal.id}
                 >
                   <LoaderCircle
-                    aria-label="终端运行中"
+                    aria-label={i18n.t("inspector.terminalRunning", { ns: "conversation" })}
                     className="size-3.5 shrink-0 animate-spin text-muted-foreground"
                   />
                   <div className="min-w-0 flex-1">
@@ -759,8 +809,14 @@ function BackgroundTerminalSection({
                     disabled={terminatingTerminalId !== null}
                     label={
                       isTerminating
-                        ? `正在停止 ${terminal.command}`
-                        : `停止终端 ${terminal.command}`
+                        ? i18n.t("inspector.terminalStopping", {
+                            command: terminal.command,
+                            ns: "conversation",
+                          })
+                        : i18n.t("inspector.terminalStop", {
+                            command: terminal.command,
+                            ns: "conversation",
+                          })
                     }
                     onClick={() => void onTerminate(terminal.id)}
                     size="small"
@@ -774,7 +830,7 @@ function BackgroundTerminalSection({
         )}
         {mutationError === null ? null : (
           <p className="px-2 pt-1 text-caption text-diff-removed" role="alert">
-            停止终端失败，请重试
+            {i18n.t("inspector.terminalStopRetry", { ns: "conversation" })}
           </p>
         )}
       </section>
@@ -790,9 +846,17 @@ function SubagentSection({
   subagents: readonly SubagentContextEntry[];
 }>) {
   return (
-    <InspectorSection icon={<Bot className="size-3.5" />} title="子代理">
-      <section aria-label="子代理">
-        <p className="mb-1 px-2 text-caption text-muted-foreground">{subagents.length} 个子代理</p>
+    <InspectorSection
+      icon={<Bot className="size-3.5" />}
+      title={i18n.t("inspector.subagents", { ns: "conversation" })}
+    >
+      <section aria-label={i18n.t("inspector.subagents", { ns: "conversation" })}>
+        <p className="mb-1 px-2 text-caption text-muted-foreground">
+          {i18n.t("inspector.subagentCount", {
+            count: subagents.length,
+            ns: "conversation",
+          })}
+        </p>
         <div className="space-y-1">
           {subagents.map((subagent) => {
             const metadata = [
@@ -802,7 +866,10 @@ function SubagentSection({
             return (
               <button
                 aria-haspopup="dialog"
-                aria-label={`查看子代理 ${subagent.nickname} 的输出`}
+                aria-label={i18n.t("inspector.subagentOutput", {
+                  nickname: subagent.nickname,
+                  ns: "conversation",
+                })}
                 className="w-full rounded-control px-2 text-left transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none"
                 key={subagent.taskId}
                 onClick={() => {
@@ -837,13 +904,22 @@ function McpServerSection({
   return (
     <InspectorSection icon={<Plug className="size-3.5" />} title="MCP">
       {isPending && servers.length === 0 ? (
-        <p className="px-2 py-2 text-caption text-muted-foreground">正在读取 MCP...</p>
+        <p className="px-2 py-2 text-caption text-muted-foreground">
+          {i18n.t("inspector.mcpLoading", { ns: "conversation" })}
+        </p>
       ) : error !== null && servers.length === 0 ? (
-        <p className="px-2 py-2 text-caption text-diff-removed">无法读取 MCP</p>
+        <p className="px-2 py-2 text-caption text-diff-removed">
+          {i18n.t("inspector.mcpError", { ns: "conversation" })}
+        </p>
       ) : servers.length === 0 ? (
-        <p className="px-2 py-2 text-caption text-muted-foreground">当前项目未启用 MCP</p>
+        <p className="px-2 py-2 text-caption text-muted-foreground">
+          {i18n.t("inspector.mcpEmpty", { ns: "conversation" })}
+        </p>
       ) : (
-        <div aria-label="已启用的 MCP" className="space-y-0.5">
+        <div
+          aria-label={i18n.t("inspector.mcpEnabled", { ns: "conversation" })}
+          className="space-y-0.5"
+        >
           {servers.map((server) => (
             <div
               className="flex min-h-7 items-center rounded-control px-2 text-label font-medium text-foreground"
@@ -895,7 +971,7 @@ function InspectorSourceRow({ source }: Readonly<{ source: InspectorSource }>) {
         </p>
         {source.kind === "project" ? (
           <p className="truncate text-caption text-muted-foreground" title={source.detail}>
-            <span>项目目录</span>
+            <span>{i18n.t("inspector.projectDirectory", { ns: "conversation" })}</span>
             <span aria-hidden="true"> · </span>
             <span>{source.detail}</span>
           </p>

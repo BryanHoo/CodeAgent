@@ -12,6 +12,7 @@ export default defineConfig({
   use: {
     baseURL: e2eBaseUrl,
     // CI 中的无头 Chromium 默认禁止读取剪贴板，复制相关用例需要显式授权。
+    locale: "zh-CN",
     permissions: ["clipboard-read", "clipboard-write"],
     trace: "on-first-retry",
   },

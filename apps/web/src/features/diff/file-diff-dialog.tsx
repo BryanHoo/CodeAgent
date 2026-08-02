@@ -2,6 +2,7 @@ import { FileCode2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef } from "react";
 
 import { IconButton } from "../../shared/ui/icon-button.js";
+import { useTranslation } from "../../i18n/i18n.js";
 import type { AgentFileChange } from "./file-change.js";
 import { countFileChangeLines, getFileName } from "./file-change.js";
 
@@ -13,6 +14,7 @@ type FileDiffDialogProps = Readonly<{
 }>;
 
 export function FileDiffDialog({ change, onClose }: FileDiffDialogProps) {
+  const { t } = useTranslation("workbench");
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function FileDiffDialog({ change, onClose }: FileDiffDialogProps) {
           <div className="flex shrink-0 items-center gap-2 text-label font-medium">
             <span className="text-diff-added">+{additions}</span>
             <span className="text-diff-removed">-{removals}</span>
-            <IconButton label="关闭文件 Diff" onClick={onClose} size="small">
+            <IconButton label={t("diff.close")} onClick={onClose} size="small">
               <X className="size-3.5" aria-hidden="true" />
             </IconButton>
           </div>
@@ -75,7 +77,7 @@ export function FileDiffDialog({ change, onClose }: FileDiffDialogProps) {
                 className="grid min-h-48 place-items-center text-body-small text-muted-foreground"
                 role="status"
               >
-                正在加载 Diff
+                {t("diff.loading")}
               </div>
             }
           >

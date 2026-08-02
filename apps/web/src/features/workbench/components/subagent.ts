@@ -2,6 +2,7 @@ import type { AgentItem, AgentItemStatus } from "@code-agent/protocol";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import type { TaskStatus } from "../../../shared/ai-elements/task.js";
+import { i18n } from "../../../i18n/i18n.js";
 
 export type SubagentOperationName =
   "agent/close" | "agent/resume" | "agent/send_input" | "agent/spawn" | "agent/wait";
@@ -34,13 +35,24 @@ export type SubagentSelection = Readonly<{
   taskId: string;
 }>;
 
-export const subagentOperationTitles: Readonly<Record<SubagentOperationName, string>> = {
-  "agent/close": "关闭子代理",
-  "agent/resume": "恢复子代理",
-  "agent/send_input": "向子代理发送消息",
-  "agent/spawn": "启动子代理",
-  "agent/wait": "等待子代理",
-};
+const subagentOperationNames = new Set<SubagentOperationName>([
+  "agent/close",
+  "agent/resume",
+  "agent/send_input",
+  "agent/spawn",
+  "agent/wait",
+]);
+
+export function getSubagentOperationTitle(name: SubagentOperationName): string {
+  const titleKeys: Readonly<Record<SubagentOperationName, string>> = {
+    "agent/close": "subagent.operationTitles.close",
+    "agent/resume": "subagent.operationTitles.resume",
+    "agent/send_input": "subagent.operationTitles.sendInput",
+    "agent/spawn": "subagent.operationTitles.spawn",
+    "agent/wait": "subagent.operationTitles.wait",
+  };
+  return i18n.t(titleKeys[name], { ns: "conversation" });
+}
 
 function isStructuredRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -60,7 +72,7 @@ function isAgentItemStatus(value: unknown): value is AgentItemStatus {
 export function parseSubagentOperation(
   item: Extract<AgentItem, { type: "tool" }>,
 ): SubagentOperation | null {
-  if (!(item.name in subagentOperationTitles)) {
+  if (!subagentOperationNames.has(item.name as SubagentOperationName)) {
     return null;
   }
   const input = isStructuredRecord(item.input) ? item.input : {};
@@ -135,7 +147,10 @@ export function collectSubagents(
           nickname:
             agent.nickname ??
             existingEntry?.nickname ??
-            `子代理 ${String(entriesByTaskId.size + 1)}`,
+            i18n.t("subagent.defaultName", {
+              index: entriesByTaskId.size + 1,
+              ns: "conversation",
+            }),
           status: agent.status,
           taskId: agent.taskId,
         });
@@ -191,16 +206,15 @@ export function formatSubagentOperationSummary(
 ): string {
   if (agents.length === 0) {
     return operationStatus === "pending" || operationStatus === "running"
-      ? "正在协调子代理"
-      : "子代理操作已完成";
+      ? i18n.t("subagent.orchestrating", { ns: "conversation" })
+      : i18n.t("subagent.operationCompleted", { ns: "conversation" });
   }
-  const countLabel = `${String(agents.length)} 个子代理`;
   const taskStatus = resolveSubagentOperationStatus(operationStatus, agents);
   if (taskStatus === "in_progress" || taskStatus === "pending") {
-    return `${countLabel}正在执行`;
+    return i18n.t("subagent.operationRunning", { count: agents.length, ns: "conversation" });
   }
   if (taskStatus === "error") {
-    return `${countLabel}执行失败`;
+    return i18n.t("subagent.operationFailed", { count: agents.length, ns: "conversation" });
   }
-  return `${countLabel}已完成`;
+  return i18n.t("subagent.operationSucceeded", { count: agents.length, ns: "conversation" });
 }

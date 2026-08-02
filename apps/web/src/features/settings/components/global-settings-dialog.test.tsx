@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentModel } from "@code-agent/protocol";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { changeAppLanguage } from "../../../i18n/i18n.js";
 import { GlobalSettingsDialog, resolveGlobalSettingsModel } from "./global-settings-dialog.js";
 
 const models: AgentModel[] = [
@@ -27,6 +28,10 @@ const models: AgentModel[] = [
 ];
 
 describe("GlobalSettingsDialog", () => {
+  beforeEach(async () => {
+    await changeAppLanguage("zh-CN");
+  });
+
   it("renders all global defaults with accessible AI Elements selects", () => {
     const markup = renderToStaticMarkup(
       <GlobalSettingsDialog
@@ -69,12 +74,13 @@ describe("GlobalSettingsDialog", () => {
     expect(markup).toContain("排队");
     expect(markup).toContain("引导");
     expect(markup).toContain('aria-label="模型"');
-    expect(markup).toContain('aria-label="思考"');
+    expect(markup).toContain('aria-label="思考量"');
+    expect(markup).toContain('aria-label="语言"');
     expect(markup).toContain('aria-label="默认打开方式"');
     expect(markup).toContain('aria-label="提交模型"');
     expect(markup).toContain('aria-label="提交思考量"');
     expect(markup).toContain('aria-label="提交提示词"');
-    expect(markup.match(/<select/gu)).toHaveLength(8);
+    expect(markup.match(/<select/gu)).toHaveLength(9);
     expect(markup).toContain("突出用户可见影响。");
     expect(markup).toContain("保存全局默认");
   });
@@ -84,5 +90,43 @@ describe("GlobalSettingsDialog", () => {
       model: "gpt-5.6-terra",
       reasoningEffort: "medium",
     });
+  });
+
+  it("renders official Codex terminology in English without rewriting model data", async () => {
+    await changeAppLanguage("en");
+    try {
+      const markup = renderToStaticMarkup(
+        <GlobalSettingsDialog
+          apps={[]}
+          error={null}
+          isPending={false}
+          models={models}
+          onClose={vi.fn()}
+          onRetry={vi.fn()}
+          onSave={vi.fn()}
+          settings={{
+            approvalPolicy: "on-request",
+            approvalsReviewer: "user",
+            commitMessageModel: "gpt-5.6-sol",
+            commitMessagePrompt: "",
+            commitMessageReasoningEffort: "high",
+            defaultOpenAppId: null,
+            followUpBehavior: "queue",
+            model: "gpt-5.6-sol",
+            reasoningEffort: "high",
+            sandboxMode: "workspace-write",
+          }}
+        />,
+      );
+
+      expect(markup).toContain("Global settings");
+      expect(markup).toContain("Approval policy");
+      expect(markup).toContain("Reasoning effort");
+      expect(markup).toContain('aria-label="Language"');
+      expect(markup).toContain("GPT-5.6 Sol");
+      expect(markup).toContain(">High</option>");
+    } finally {
+      await changeAppLanguage("zh-CN");
+    }
   });
 });

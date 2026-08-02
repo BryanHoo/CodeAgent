@@ -19,6 +19,7 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 
+import { useTranslation } from "../../i18n/i18n.js";
 import type { AttachmentData } from "./attachments.js";
 
 export type PromptInputAttachment = AttachmentData & Readonly<{ file: File }>;
@@ -137,6 +138,7 @@ export function PromptInput({
   resetKey,
   ...props
 }: PromptInputProps) {
+  const { t } = useTranslation("conversation");
   const [internalFiles, setInternalFiles] = useState<PromptInputAttachment[]>([]);
   const files = attachments ?? internalFiles;
   const filesRef = useRef(files);
@@ -186,23 +188,38 @@ export function PromptInput({
             kind === "text" ||
             (kind === "image" ? acceptsFile(file, imageAccept) : acceptsFile(file, fileAccept));
           if (!acceptedByType) {
-            onError?.({ code: "invalid_file_type", message: `${file.name} 的文件类型不受支持` });
+            onError?.({
+              code: "invalid_file_type",
+              message: t("aiElements.invalidFileType", { name: file.name }),
+            });
             continue;
           }
           if (kind !== "image" && file.size > maxFileSize) {
-            onError?.({ code: "file_too_large", message: `${file.name} 超过大小限制` });
+            onError?.({
+              code: "file_too_large",
+              message: t("aiElements.fileTooLarge", { name: file.name }),
+            });
             continue;
           }
           if (kind === "image" && imageCount >= maxImages) {
-            onError?.({ code: "too_many_images", message: `最多添加 ${String(maxImages)} 张图片` });
+            onError?.({
+              code: "too_many_images",
+              message: t("aiElements.tooManyImages", { count: maxImages }),
+            });
             continue;
           }
           if (kind === "image" && imageBytes + file.size > maxImageTotalSize) {
-            onError?.({ code: "total_size_exceeded", message: "图片总大小超过限制" });
+            onError?.({
+              code: "total_size_exceeded",
+              message: t("aiElements.totalImageSizeExceeded"),
+            });
             continue;
           }
           if (kind !== "image" && fileBytes + file.size > maxFileTotalSize) {
-            onError?.({ code: "total_size_exceeded", message: "附件总大小超过限制" });
+            onError?.({
+              code: "total_size_exceeded",
+              message: t("aiElements.totalAttachmentSizeExceeded"),
+            });
             continue;
           }
           accepted.push({
@@ -237,6 +254,7 @@ export function PromptInput({
       maxImageTotalSize,
       multiple,
       onError,
+      t,
       updateFiles,
     ],
   );
@@ -546,14 +564,16 @@ type PromptInputActionAddAttachmentsProps = PromptInputButtonProps & { label?: s
 
 export function PromptInputActionAddAttachments({
   children,
-  label = "添加图片或文件",
+  label,
   onClick,
   ...props
 }: PromptInputActionAddAttachmentsProps) {
   const attachments = usePromptInputAttachments();
+  const { t } = useTranslation("conversation");
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const disabled = props.disabled === true || attachments.disabled;
+  const accessibleLabel = label ?? t("aiElements.addImageOrFile");
 
   useEffect(() => {
     if (!open) return undefined;
@@ -577,13 +597,13 @@ export function PromptInputActionAddAttachments({
         {...props}
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label={label}
+        aria-label={accessibleLabel}
         disabled={disabled}
         onClick={(event) => {
           onClick?.(event);
           if (!event.defaultPrevented) setOpen((current) => !current);
         }}
-        title={label}
+        title={accessibleLabel}
       >
         {children ?? <Paperclip className="size-3.5" aria-hidden="true" />}
       </PromptInputButton>
@@ -602,7 +622,7 @@ export function PromptInputActionAddAttachments({
           type="button"
         >
           <ImagePlus aria-hidden="true" className="size-4 text-muted-foreground" />
-          添加图片
+          {t("aiElements.addImage")}
         </button>
         <button
           className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-left text-label text-foreground hover:bg-control-hover"
@@ -614,7 +634,7 @@ export function PromptInputActionAddAttachments({
           type="button"
         >
           <FilePlus2 aria-hidden="true" className="size-4 text-muted-foreground" />
-          添加文件
+          {t("aiElements.addFile")}
         </button>
       </div>
     </div>

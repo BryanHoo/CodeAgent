@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App.js";
 import { AppProviders } from "./app/providers.js";
 import { initializeThemePreference } from "./features/settings/theme-preference.js";
+import "./i18n/i18n.js";
 import "./shared/styles/globals.css";
 
 const rootElement = document.querySelector("#root");

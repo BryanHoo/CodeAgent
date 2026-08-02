@@ -8,6 +8,7 @@ import {
   projectCommitMessageMutationOptions,
 } from "../../projects/project-queries.js";
 import { CommitChangesDialog } from "./commit-changes-dialog.js";
+import { useTranslation } from "../../../i18n/i18n.js";
 
 type CommitChangesControllerProps = Readonly<{
   client: CodeAgentWorkbenchClient;
@@ -17,11 +18,11 @@ type CommitChangesControllerProps = Readonly<{
   projectId: string;
 }>;
 
-function getCommitSuccessMessage(result: CommitProjectChangesResponse): string | null {
+function getCommitSuccessMessageKey(result: CommitProjectChangesResponse): string | null {
   if (result.pushStatus === "pushed") {
-    return "提交并推送成功";
+    return "commit.commitAndPushSucceeded";
   }
-  return result.pushStatus === "not_requested" ? "提交成功" : null;
+  return result.pushStatus === "not_requested" ? "commit.commitSucceeded" : null;
 }
 
 export function CommitChangesController({
@@ -31,6 +32,7 @@ export function CommitChangesController({
   onSuccess,
   projectId,
 }: CommitChangesControllerProps) {
+  const { t } = useTranslation("workbench");
   const queryClient = useQueryClient();
   const messageMutation = useMutation(projectCommitMessageMutationOptions(projectId, client));
   const commitMutation = useMutation(projectCommitChangesMutationOptions(projectId, client));
@@ -57,10 +59,10 @@ export function CommitChangesController({
           exact: true,
           queryKey: ["projects", projectId, "git-status"],
         });
-        const successMessage = getCommitSuccessMessage(response);
-        if (successMessage !== null) {
+        const successMessageKey = getCommitSuccessMessageKey(response);
+        if (successMessageKey !== null) {
           // 完整成功立即结束提交流程；toast 由常驻 Launcher 持有，关闭弹窗后仍可见。
-          onSuccess(successMessage);
+          onSuccess(t(successMessageKey));
           close();
           return;
         }

@@ -12,6 +12,7 @@ import {
 } from "react";
 import type { ThemedToken } from "shiki/core";
 
+import { useTranslation } from "../../i18n/i18n.js";
 import type { CodeBlockLanguage } from "./code-languages.js";
 import { CodeTokenCache, type TokenizedCode } from "./code-token-cache.js";
 
@@ -252,6 +253,7 @@ export function CodeBlockCopyButton({
 }: CodeBlockCopyButtonProps) {
   const { code } = useCodeBlockContext();
   const [copied, setCopied] = useState(false);
+  const { t } = useTranslation("conversation");
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -281,7 +283,7 @@ export function CodeBlockCopyButton({
 
   return (
     <button
-      aria-label={copied ? "代码已复制" : "复制代码"}
+      aria-label={copied ? t("aiElements.copiedCode") : t("aiElements.copyCode")}
       className={`grid size-7 shrink-0 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground ${className}`}
       onClick={(event) => {
         onClick?.(event);

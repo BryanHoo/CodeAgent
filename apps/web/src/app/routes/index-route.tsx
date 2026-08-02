@@ -9,6 +9,7 @@ import {
   modelsQueryOptions,
 } from "../../features/projects/project-queries.js";
 import { GlobalSettingsDialog } from "../../features/settings/components/global-settings-dialog.js";
+import { useTranslation } from "../../i18n/i18n.js";
 import { RuntimeUnavailable } from "../../shared/ui/runtime-unavailable.js";
 import { ProjectSidebar } from "../../features/workbench/components/project-sidebar.js";
 import { rootRoute } from "./root-route.js";
@@ -20,6 +21,7 @@ export const indexRoute = createRoute({
 });
 
 function IndexPage() {
+  const { t } = useTranslation("common");
   const { client, error, isPending, projects, retry } = useProjects();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -50,7 +52,7 @@ function IndexPage() {
   if (isPending || firstProjectId !== undefined) {
     return (
       <main className="grid h-full place-items-center text-sm text-muted-foreground">
-        正在加载项目
+        {t("app.loadingProjects")}
       </main>
     );
   }
@@ -68,7 +70,7 @@ function IndexPage() {
         }}
       />
       <main className="grid min-h-0 min-w-0 place-items-center bg-content text-sm text-muted-foreground">
-        尚未添加项目
+        {t("app.noProjects")}
       </main>
       {globalSettingsOpen ? (
         <GlobalSettingsDialog

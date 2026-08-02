@@ -12,5 +12,6 @@
 - 流式输出和长历史变更检查渲染次数、DOM 规模及布局稳定性。
 - Web 语法高亮必须使用 `shiki/core`、JavaScript Regex Engine、项目语言白名单和 `github-light`/`github-dark` 两个主题；高亮器、源码查看器与 Diff Viewer 只在对应内容或交互出现后动态加载，生产构建不得重新引入完整 `shiki`、全量主题或 Oniguruma WASM。
 - 测试断言用户可观察行为，不复制实现细节。
+- i18n 单元测试必须覆盖语言匹配、损坏存储回退、资源 key 对齐和 `<html lang>` 同步；关键 E2E 必须覆盖设置内切换英文、刷新后持久化、Codex 官方英文术语，以及用户/Assistant/服务端动态内容保持原样。
 - Agent 消息中的本地文件引用必须覆盖 POSIX、Windows 盘符和 UNC 路径；这些路径只能进入受控源码预览，外部 URL 仍使用 Markdown 渲染器的默认安全策略。
 - 持有事件序号、Session 或场景状态的 E2E Server 每次测试运行使用全新进程，不复用上一次运行的内存状态或静态资源缓存。

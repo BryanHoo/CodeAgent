@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useTranslation } from "../../../i18n/i18n.js";
+
 type TaskRenameDialogProps = Readonly<{
   error?: string | null;
   initialTitle: string;
@@ -15,6 +17,7 @@ export function TaskRenameDialog({
   onClose,
   onRename,
 }: TaskRenameDialogProps) {
+  const { t } = useTranslation("workbench");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [title, setTitle] = useState(initialTitle);
 
@@ -54,10 +57,10 @@ export function TaskRenameDialog({
         }}
       >
         <h2 className="text-heading font-semibold" id="task-rename-title">
-          重命名任务
+          {t("taskDialog.rename")}
         </h2>
         <input
-          aria-label="任务名称"
+          aria-label={t("taskDialog.name")}
           autoFocus
           className="mt-3 h-9 w-full rounded-control bg-control px-3 text-body text-foreground outline-none focus:shadow-focus"
           disabled={isPending}
@@ -79,14 +82,14 @@ export function TaskRenameDialog({
             onClick={onClose}
             type="button"
           >
-            取消
+            {t("actions.cancel")}
           </button>
           <button
             className="h-8 rounded-control bg-accent px-3 text-body-small font-medium text-white hover:bg-accent-strong disabled:opacity-50"
             disabled={isPending || title.trim().length === 0}
             type="submit"
           >
-            保存
+            {t("actions.save")}
           </button>
         </div>
       </form>

@@ -2,6 +2,7 @@ import type { AgentBackgroundTerminal } from "@code-agent/protocol";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { i18n } from "../../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import type { CodeAgentBackgroundTerminalClient } from "../../projects/project-queries.js";
 
@@ -77,7 +78,11 @@ export function useBackgroundTerminals(
           idempotencyKeysRef.current.delete(terminalId);
           await terminalsQuery.refetch();
         } catch (error) {
-          setTerminalError(error instanceof Error ? error : new Error("停止终端失败"));
+          setTerminalError(
+            error instanceof Error
+              ? error
+              : new Error(i18n.t("errors.stopTerminal", { ns: "conversation" })),
+          );
         }
       }),
     [terminateMutation.mutateAsync, terminalsQuery.refetch],

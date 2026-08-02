@@ -7,6 +7,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { useTranslation } from "../../i18n/i18n.js";
+
 export type AttachmentData = Readonly<{
   id: string;
   kind: "file" | "image" | "text";
@@ -102,9 +104,10 @@ export function AttachmentRemove({
   ...props
 }: AttachmentRemoveProps) {
   const { data, onRemove } = useAttachment();
+  const { t } = useTranslation("conversation");
   return (
     <button
-      aria-label={`移除 ${data.name}`}
+      aria-label={t("aiElements.removeAttachment", { name: data.name })}
       className={`grid size-6 shrink-0 place-items-center rounded-control text-muted-foreground hover:bg-control-hover hover:text-foreground ${className}`}
       onClick={(event) => {
         onClick?.(event);

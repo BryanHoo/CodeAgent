@@ -336,7 +336,7 @@ describe("AI Elements primitives", () => {
 
     expect(markup).toContain('data-code-comments="true"');
     expect(markup).toContain('class="my-4 overflow-hidden');
-    expect(markup).toContain("3 comments");
+    expect(markup).toContain("3 个代码评论");
     expect(markup).toContain("不要复用冲突的审批决策");
     expect(markup).toContain("packages/provider-codex/src/agent-provider.ts:939-941");
     expect(markup).toContain(">P1</span>");

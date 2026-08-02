@@ -15,7 +15,8 @@ const MAX_COMMAND_OUTPUT_BYTES = 1_048_576;
 const MAX_COMMAND_OUTPUT_LINES = 10_000;
 export const MAX_TASK_COMMAND_OUTPUT_BYTES = 8 * 1_048_576;
 export const MAX_RETAINED_TASK_RUNTIME_BYTES = 64 * 1_048_576;
-const RETAINED_COMMAND_OUTPUT_MARKER = "[较早的命令输出已按内存预算清理]";
+export const PENDING_COMMAND_LABEL = "__CODE_AGENT_PENDING_COMMAND__";
+export const RETAINED_COMMAND_OUTPUT_MARKER = "__CODE_AGENT_RETAINED_COMMAND_OUTPUT__";
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
 const retainedCommandOutputMarkerBytes = textEncoder.encode(
@@ -343,7 +344,7 @@ function createDeltaItem(event: Extract<AgentEvent, { itemId: string }>): AgentI
       };
     case "command.output_delta": {
       return {
-        command: "正在执行命令",
+        command: PENDING_COMMAND_LABEL,
         cwd: "",
         id: event.itemId,
         output: event.payload.delta,

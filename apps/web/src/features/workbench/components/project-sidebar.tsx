@@ -25,6 +25,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import {
   formatTaskAge,
   getPinnedTasks,
@@ -110,10 +111,18 @@ export function getProjectTaskPaginationControl({
 }: ProjectTaskPaginationControlInput) {
   if (!isExpanded) {
     if (hasHiddenLoadedTasks) {
-      return { action: "expand", disabled: false, label: "显示更多" } as const;
+      return {
+        action: "expand",
+        disabled: false,
+        label: i18n.t("sidebar.expand", { ns: "workbench" }),
+      } as const;
     }
     return hasNextPage
-      ? ({ action: "expand-and-load", disabled: false, label: "显示更多" } as const)
+      ? ({
+          action: "expand-and-load",
+          disabled: false,
+          label: i18n.t("sidebar.expand", { ns: "workbench" }),
+        } as const)
       : null;
   }
 
@@ -121,12 +130,20 @@ export function getProjectTaskPaginationControl({
     return {
       action: "load",
       disabled: isFetchingNextPage,
-      label: isFetchingNextPage ? "正在加载更多" : error === null ? "显示更多" : "重试加载更多",
+      label: isFetchingNextPage
+        ? i18n.t("sidebar.expandLoading", { ns: "workbench" })
+        : error === null
+          ? i18n.t("sidebar.expand", { ns: "workbench" })
+          : i18n.t("sidebar.expandRetry", { ns: "workbench" }),
     } as const;
   }
 
   return hasHiddenLoadedTasks
-    ? ({ action: "collapse", disabled: false, label: "收起" } as const)
+    ? ({
+        action: "collapse",
+        disabled: false,
+        label: i18n.t("sidebar.collapse", { ns: "workbench" }),
+      } as const)
     : null;
 }
 
@@ -150,15 +167,28 @@ export function deriveProjectSidebarConnectionState({
 }
 
 export function getProjectSidebarConnectionStatus(connectionState: AgentEventConnectionState) {
+  // 连接状态只映射稳定翻译 key，当前语言由渲染组件统一解析。
   switch (connectionState) {
     case "connected":
-      return { label: "Online", toneClassName: "text-diff-added" } as const;
+      return {
+        labelKey: "sidebar.connection.online",
+        toneClassName: "text-diff-added",
+      } as const;
     case "connecting":
-      return { label: "Connecting", toneClassName: "text-warning" } as const;
+      return {
+        labelKey: "sidebar.connection.connecting",
+        toneClassName: "text-warning",
+      } as const;
     case "reconnecting":
-      return { label: "Reconnecting", toneClassName: "text-warning" } as const;
+      return {
+        labelKey: "sidebar.connection.reconnecting",
+        toneClassName: "text-warning",
+      } as const;
     case "closed":
-      return { label: "Offline", toneClassName: "text-danger" } as const;
+      return {
+        labelKey: "sidebar.connection.offline",
+        toneClassName: "text-danger",
+      } as const;
   }
 }
 
@@ -169,6 +199,7 @@ export function ProjectSidebar({
   projectId,
   taskId,
 }: ProjectSidebarProps) {
+  const { t } = useTranslation("workbench");
   const {
     addProject,
     addProjectError,
@@ -349,7 +380,7 @@ export function ProjectSidebar({
         });
         replaceTaskCache(response.task);
       } catch {
-        setTaskActionError("无法更新固定状态");
+        setTaskActionError(t("sidebar.errorPinTask"));
       }
     });
 
@@ -365,7 +396,7 @@ export function ProjectSidebar({
         replaceTaskCache(response.task);
         setRenamingTask(null);
       } catch {
-        setTaskActionError("无法重命名任务");
+        setTaskActionError(t("sidebar.errorRenameTask"));
       }
     });
 
@@ -387,7 +418,7 @@ export function ProjectSidebar({
         // 归档后的 Runtime 清理由 Provider 判定安全性，失败不回滚已成功的归档。
         void client.unsubscribeTask(task.projectId, task.id).catch(() => undefined);
       } catch {
-        setTaskActionError("无法归档任务");
+        setTaskActionError(t("sidebar.errorArchiveTask"));
       }
     });
 
@@ -418,7 +449,7 @@ export function ProjectSidebar({
 
   return (
     <aside
-      aria-label="Project Sidebar"
+      aria-label={t("sidebar.landmark")}
       className="workbench-sidebar z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] bg-sidebar shadow-divider"
     >
       <div className="flex h-workbench-header items-center gap-2 px-3">
@@ -434,7 +465,7 @@ export function ProjectSidebar({
         </div>
         <IconButton
           className="min-workbench:hidden"
-          label="关闭项目侧栏"
+          label={t("sidebar.close")}
           onClick={onClose}
           size="small"
         >
@@ -442,19 +473,19 @@ export function ProjectSidebar({
         </IconButton>
       </div>
 
-      <nav className="space-y-0.5 px-2" aria-label="Agent 导航">
+      <nav className="space-y-0.5 px-2" aria-label={t("sidebar.agentNavigation")}>
         <div className="relative px-1 pb-1">
           <Search
             aria-hidden="true"
             className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground"
           />
           <input
-            aria-label="搜索任务"
+            aria-label={t("sidebar.search")}
             className="h-9 w-full rounded-control bg-control pl-8 pr-2.5 text-body-small text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus:shadow-focus"
             onChange={(event) => {
               setQuery(event.currentTarget.value);
             }}
-            placeholder="搜索任务"
+            placeholder={t("sidebar.search")}
             value={query}
           />
         </div>
@@ -468,7 +499,7 @@ export function ProjectSidebar({
             to="/p/$projectId"
           >
             <Send className={primaryActionIconClassName} aria-hidden="true" />
-            新建任务
+            {t("sidebar.newTask")}
           </Link>
         )}
       </nav>
@@ -484,7 +515,7 @@ export function ProjectSidebar({
               className="px-2 pb-2 text-meta font-semibold text-muted-foreground"
               id="pinned-title"
             >
-              Pinned
+              {t("sidebar.pinned")}
             </h2>
             <div className="space-y-0.5">
               {pinnedTasks.map((task) => {
@@ -511,11 +542,11 @@ export function ProjectSidebar({
         <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-labelledby="projects-title">
           <div className="flex h-8 min-w-0 w-full shrink-0 items-center justify-between pl-2">
             <h2 className="text-body-small font-semibold text-foreground" id="projects-title">
-              Projects
+              {t("sidebar.projects")}
             </h2>
             <IconButton
               disabled={isProjectPickerOpen}
-              label="添加项目"
+              label={t("sidebar.addProject")}
               onClick={() => void openProjectPicker()}
               size="small"
             >
@@ -528,19 +559,21 @@ export function ProjectSidebar({
           </div>
 
           {isPending || hasPendingTasks ? (
-            <p className="px-2 py-1.5 text-meta text-subtle-foreground">正在加载任务</p>
+            <p className="px-2 py-1.5 text-meta text-subtle-foreground">
+              {t("sidebar.taskLoading")}
+            </p>
           ) : null}
           {taskSearch.isPending ? (
-            <p className="px-2 py-1.5 text-meta text-subtle-foreground">正在搜索全部任务</p>
+            <p className="px-2 py-1.5 text-meta text-subtle-foreground">{t("sidebar.searchAll")}</p>
           ) : null}
           {error === null && !hasTaskError ? null : (
             <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              无法加载任务
+              {t("sidebar.errorLoadTasks")}
             </p>
           )}
           {addProjectError === null ? null : (
             <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              无法添加项目
+              {t("sidebar.errorAddProject")}
             </p>
           )}
           {taskActionError === null ? null : (
@@ -550,12 +583,12 @@ export function ProjectSidebar({
           )}
           {taskSearch.error === null ? null : (
             <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              无法搜索任务
+              {t("sidebar.errorSearchTasks")}
             </p>
           )}
           {projectOrderError === null ? null : (
             <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              无法保存项目排序
+              {t("sidebar.errorProjectOrder")}
             </p>
           )}
           <p aria-live="polite" className="sr-only">
@@ -592,7 +625,7 @@ export function ProjectSidebar({
                   <div className="flex min-w-0 items-center gap-0.5">
                     <button
                       aria-expanded={expanded}
-                      aria-label={`切换项目 ${project.name}`}
+                      aria-label={t("sidebar.toggleProject", { project: project.name })}
                       className={`flex h-8 min-w-0 flex-1 touch-pan-y select-none items-center gap-2 rounded-control px-2 text-body-small font-medium transition-colors hover:bg-control-hover hover:text-foreground ${
                         reorderingProjectId === project.id
                           ? "cursor-grabbing bg-control-active text-foreground shadow-sm"
@@ -620,7 +653,7 @@ export function ProjectSidebar({
                       project={project}
                     />
                     <IconButton
-                      label={`在 ${project.name} 中新建任务`}
+                      label={t("sidebar.createInProject", { project: project.name })}
                       onClick={() => {
                         void openProjectDraft(project.id);
                       }}
@@ -683,14 +716,16 @@ export function ProjectSidebar({
                         </button>
                       )}
                       {projectTasks.length === 0 && normalizedQuery.length === 0 ? (
-                        <p className="px-2 py-1.5 text-meta text-subtle-foreground">暂无任务</p>
+                        <p className="px-2 py-1.5 text-meta text-subtle-foreground">
+                          {t("sidebar.noTasks")}
+                        </p>
                       ) : null}
                       {projectTasks.length === 0 &&
                       normalizedQuery.length > 0 &&
                       !taskSearch.isPending &&
                       taskSearch.error === null ? (
                         <p className="px-2 py-1.5 text-meta text-subtle-foreground">
-                          未找到匹配任务
+                          {t("sidebar.noMatchingTasks")}
                         </p>
                       ) : null}
                     </div>
@@ -759,6 +794,7 @@ type ProjectActionsProps = Readonly<{
 }>;
 
 function ProjectActions({ isPending, onRemove, onRename, project }: ProjectActionsProps) {
+  const { t } = useTranslation("workbench");
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<Readonly<{ left: number; top: number }>>();
   const menuContainerRef = useRef<HTMLDivElement>(null);
@@ -836,7 +872,7 @@ function ProjectActions({ isPending, onRemove, onRename, project }: ProjectActio
       <button
         aria-expanded={menuOpen}
         aria-haspopup="menu"
-        aria-label={`打开 ${project.name} 的项目操作菜单`}
+        aria-label={t("sidebar.openProjectActions", { project: project.name })}
         className="grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus"
         disabled={isPending}
         id={`project-actions-${project.id}`}
@@ -891,9 +927,10 @@ export function ProjectActionMenu({
   onRename,
   project,
 }: ProjectActionMenuProps) {
+  const { t } = useTranslation("workbench");
   return (
     <div
-      aria-label={`${project.name} 的项目操作`}
+      aria-label={t("sidebar.projectActions", { project: project.name })}
       className="w-32 rounded-surface bg-raised p-1 shadow-floating"
       role="menu"
     >
@@ -905,7 +942,7 @@ export function ProjectActionMenu({
         type="button"
       >
         <Pencil className="size-3.5" aria-hidden="true" />
-        重命名
+        {t("sidebar.rename")}
       </button>
       <button
         className={`${projectActionClassName} text-danger`}
@@ -915,7 +952,7 @@ export function ProjectActionMenu({
         type="button"
       >
         <Trash2 className="size-3.5" aria-hidden="true" />
-        删除
+        {t("sidebar.remove")}
       </button>
     </div>
   );
@@ -925,23 +962,25 @@ export function SidebarSettingsButton({
   connectionState,
   onOpen,
 }: Readonly<{ connectionState: AgentEventConnectionState; onOpen: () => void }>) {
+  const { t } = useTranslation("workbench");
   const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
+  const connectionStatusLabel = t(connectionStatus.labelKey);
   return (
     <button
-      aria-label={`设置，终端连接状态：${connectionStatus.label}`}
+      aria-label={t("sidebar.connectionSettings", { status: connectionStatusLabel })}
       className="flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
       id="global-settings-trigger"
       onClick={onOpen}
       type="button"
     >
       <Settings className="size-4" aria-hidden="true" />
-      Settings
+      {t("sidebar.settings")}
       <span
         aria-live="polite"
         className={`ml-auto inline-flex items-center gap-1 text-caption ${connectionStatus.toneClassName}`}
       >
         <ProjectSidebarConnectionIcon connectionState={connectionState} />
-        {connectionStatus.label}
+        {connectionStatusLabel}
       </span>
     </button>
   );
@@ -986,6 +1025,7 @@ function TaskLink({
   onRename,
   task,
 }: TaskLinkProps) {
+  const { t } = useTranslation("workbench");
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<Readonly<{ left: number; top: number }>>();
   const menuContainerRef = useRef<HTMLDivElement>(null);
@@ -1086,7 +1126,7 @@ function TaskLink({
       <button
         aria-expanded={menuOpen}
         aria-haspopup="menu"
-        aria-label={`打开 ${task.title} 的操作菜单`}
+        aria-label={t("sidebar.openTaskActions", { task: task.title })}
         className="task-actions absolute right-1 top-1 grid size-6 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:opacity-100 focus-visible:shadow-focus"
         disabled={isActionPending}
         onClick={() => {
@@ -1135,10 +1175,11 @@ type TaskStatusIndicatorProps = Readonly<{
 }>;
 
 export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskStatusIndicatorProps) {
+  const { t } = useTranslation("workbench");
   if (attention === "approval") {
     return (
       <span
-        aria-label="任务等待审批"
+        aria-label={t("sidebar.taskApproval")}
         className="task-status ml-auto inline-flex shrink-0 text-accent"
         role="status"
       >
@@ -1150,7 +1191,7 @@ export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskSta
   if (isRunning) {
     return (
       <span
-        aria-label="任务运行中"
+        aria-label={t("sidebar.taskRunning")}
         className="task-status ml-auto inline-flex shrink-0 text-subtle-foreground"
         role="status"
       >
@@ -1165,7 +1206,7 @@ export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskSta
   if (attention === "completed") {
     return (
       <span
-        aria-label="AI 回复已完成"
+        aria-label={t("sidebar.taskComplete")}
         className="task-status ml-auto inline-flex shrink-0 text-diff-added"
         role="status"
       >
@@ -1177,7 +1218,7 @@ export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskSta
   if (attention === "failed") {
     return (
       <span
-        aria-label="AI 回复未完成"
+        aria-label={t("sidebar.taskIncomplete")}
         className="task-status ml-auto inline-flex shrink-0 text-danger"
         role="status"
       >
@@ -1211,9 +1252,10 @@ export function TaskActionMenu({
   onRename,
   task,
 }: TaskActionMenuProps) {
+  const { t } = useTranslation("workbench");
   return (
     <div
-      aria-label={`${task.title} 的任务操作`}
+      aria-label={t("sidebar.taskActions", { task: task.title })}
       className="w-32 rounded-surface bg-raised p-1 shadow-floating"
       role="menu"
     >
@@ -1225,7 +1267,7 @@ export function TaskActionMenu({
         type="button"
       >
         <Pin className="size-3.5" aria-hidden="true" />
-        {task.pinned ? "取消固定" : "固定"}
+        {task.pinned ? t("sidebar.unpin") : t("sidebar.pin")}
       </button>
       <button
         className={taskActionClassName}
@@ -1235,7 +1277,7 @@ export function TaskActionMenu({
         type="button"
       >
         <Pencil className="size-3.5" aria-hidden="true" />
-        重命名
+        {t("sidebar.rename")}
       </button>
       <button
         className={`${taskActionClassName} text-danger`}
@@ -1245,7 +1287,7 @@ export function TaskActionMenu({
         type="button"
       >
         <Archive className="size-3.5" aria-hidden="true" />
-        归档
+        {t("sidebar.archive")}
       </button>
     </div>
   );

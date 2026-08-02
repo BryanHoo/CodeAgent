@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { changeAppLanguage } from "../../../i18n/i18n.js";
 import {
   applyApprovalMode,
   deriveComposerActions,
@@ -63,6 +64,18 @@ describe("WorkbenchComposer", () => {
     expect(resolveComposerPlaceholder(null, "task-1")).toBe("输入后续要求");
     expect(resolveComposerPlaceholder("feedback", "task-1")).toBe("输入关于此任务的反馈");
     expect(resolveComposerPlaceholder("subtask", "task-1")).toBe("描述需要交给子代理的任务");
+  });
+
+  it("resolves Composer placeholders in English", async () => {
+    await changeAppLanguage("en");
+    try {
+      expect(resolveComposerPlaceholder(null, undefined)).toBe(
+        "Tell CodeAgent what you want to accomplish",
+      );
+      expect(resolveComposerPlaceholder(null, "task-1")).toBe("Enter follow-up instructions");
+    } finally {
+      await changeAppLanguage("zh-CN");
+    }
   });
 
   it("uses the official large-paste threshold and attachment name", () => {

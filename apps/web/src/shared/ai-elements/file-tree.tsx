@@ -11,6 +11,8 @@ import {
   type SyntheticEvent,
 } from "react";
 
+import { useTranslation } from "../../i18n/i18n.js";
+
 type FileTreeContextValue = Readonly<{
   expandedPaths: Set<string>;
   onSelect: ((path: string) => void) | undefined;
@@ -109,6 +111,7 @@ export function FileTreeFolder({
   ...props
 }: FileTreeFolderProps) {
   const { expandedPaths, onSelect, selectedPath, togglePath } = useContext(FileTreeContext);
+  const { t } = useTranslation("conversation");
   const isExpanded = expandedPaths.has(path);
   const isSelected = selectedPath === path;
   const selectFolder = () => {
@@ -142,7 +145,9 @@ export function FileTreeFolder({
         className={`flex min-h-7 w-full items-center gap-1 rounded-control px-1.5 text-left transition-colors hover:bg-control-hover ${isSelected ? "bg-control" : ""}`}
       >
         <button
-          aria-label={`${isExpanded ? "收起" : "展开"}文件夹 ${name}`}
+          aria-label={t(isExpanded ? "aiElements.folderCollapse" : "aiElements.folderExpand", {
+            name,
+          })}
           className="inline-grid size-5 shrink-0 place-items-center rounded-control text-muted-foreground hover:text-foreground focus-visible:shadow-focus focus-visible:outline-none"
           onClick={() => {
             togglePath(path);
