@@ -65,7 +65,7 @@
 - Fastify 关闭时取消 Provider Event 订阅并关闭 WebSocket 资源。
 - 所有 Agent Mutation 必须校验非空 `Idempotency-Key`；同操作、同 Key、同 Payload 复用进行中或成功结果，不同 Payload 返回冲突，失败结果不缓存。
 - Git message 生成与 commit/commit+push 同样必须使用 `Idempotency-Key` 并复验 `expectedSnapshot`；每个 Project 同时只允许一个 Git Mutation，冲突请求返回稳定错误。用户 message 原样交给 Git，Codex 生成只提供可编辑候选。
-- Git Working Tree 状态、分支和 diff 等后台只读子进程必须继承受控环境并设置 `GIT_OPTIONAL_LOCKS=0`，避免周期读取刷新索引或争用可选锁；每个仓库的 staged 与 unstaged Diff 必须分别批量读取并按文件拆分，禁止按变更文件启动子进程；Git Mutation 不得复用该环境约束。
+- Git Working Tree 状态、分支和 diff 等后台只读子进程必须继承受控环境并设置 `GIT_OPTIONAL_LOCKS=0`，避免周期读取刷新索引或争用可选锁；每次读取最多并发 4 个 Git 命令、处理 1,000 个变更文件并返回合计 10 MiB Diff，未跟踪文件读取最多并发 8 个；每个仓库的 staged 与 unstaged Diff 必须分别批量读取并按文件拆分，禁止按变更文件启动子进程；Git Mutation 不得复用该环境约束。
 - 后台终端读取必须先验证 Project/Task 归属；已持久化但未加载到当前 App Server 的历史 Task 将原生 `-32600 thread not found` 归一化为空终端列表，其他 Provider 错误继续上抛；单终端停止是幂等 Mutation，即使进程在请求到达前自然退出也返回已终止语义。
 - Task 创建在 Provider 成功但设置持久化失败时必须保留有界恢复状态；同 `Idempotency-Key` 重试只补齐持久化，不得再次调用 Provider 创建 Task。
 - 成功的幂等结果缓存必须同时设置容量上限和过期时间；进行中的请求不得淘汰，Runtime 关闭时清空全部条目。

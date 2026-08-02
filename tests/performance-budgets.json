@@ -11,9 +11,16 @@
     "serverEvents": 100000
   },
   "git": {
+    "childRepositories": 16,
     "changes": 500,
+    "maxConcurrentGitCommands": 4,
     "maxDiffCommands": 2,
-    "maxDurationMs": 1000
+    "maxDiffBytes": 10485760,
+    "maxDurationMs": 1000,
+    "maxFiles": 1000,
+    "maxStressDurationMs": 2000,
+    "untrackedFileBytes": 12288,
+    "untrackedFiles": 1200
   },
   "heap": {
     "deltasPerIteration": 1000,

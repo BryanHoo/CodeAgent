@@ -1,4 +1,4 @@
-import { stat, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { stat, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -213,6 +213,69 @@ describe("server performance acceptance", () => {
     expect(status.unstaged).toHaveLength(unstagedPaths.length);
     expect(diffCommands).toHaveLength(performanceBudgets.git.maxDiffCommands);
     expect(durationMs).toBeLessThan(performanceBudgets.git.maxDurationMs);
+  });
+
+  it("bounds real untracked files, Diff bytes, and child repository Git concurrency", async () => {
+    const untrackedRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "code-agent-git-untracked-performance-")),
+    );
+    temporaryRoots.push(untrackedRoot);
+    await mkdir(join(untrackedRoot, ".git"));
+    const untrackedPaths = Array.from(
+      { length: performanceBudgets.git.untrackedFiles },
+      (_, index) => `file-${String(index).padStart(4, "0")}.txt`,
+    );
+    const fileContent = "x".repeat(performanceBudgets.git.untrackedFileBytes);
+    // 分批创建真实文件，避免测试夹具本身引入无界文件描述符并发。
+    for (let offset = 0; offset < untrackedPaths.length; offset += 32) {
+      await Promise.all(
+        untrackedPaths
+          .slice(offset, offset + 32)
+          .map((path) => writeFile(join(untrackedRoot, path), fileContent)),
+      );
+    }
+    const executeUntrackedGit = (_root: string, arguments_: readonly string[]) =>
+      Promise.resolve(
+        arguments_[0] === "status" ? untrackedPaths.map((path) => `?? ${path}\0`).join("") : "",
+      );
+
+    const untrackedStartedAt = performance.now();
+    const untrackedStatus = await readGitWorkingTreeStatus(untrackedRoot, executeUntrackedGit);
+    const untrackedDurationMs = performance.now() - untrackedStartedAt;
+    const diffBytes = untrackedStatus.unstaged.reduce(
+      (total, change) => total + Buffer.byteLength(change.diff),
+      0,
+    );
+
+    expect(untrackedStatus.unstaged.length).toBeLessThanOrEqual(performanceBudgets.git.maxFiles);
+    expect(diffBytes).toBeLessThanOrEqual(performanceBudgets.git.maxDiffBytes);
+    expect(untrackedDurationMs).toBeLessThan(performanceBudgets.git.maxStressDurationMs);
+
+    const childrenRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "code-agent-git-children-performance-")),
+    );
+    temporaryRoots.push(childrenRoot);
+    for (let index = 0; index < performanceBudgets.git.childRepositories; index += 1) {
+      await mkdir(join(childrenRoot, `repository-${String(index).padStart(2, "0")}`, ".git"), {
+        recursive: true,
+      });
+    }
+    let activeGitCommands = 0;
+    let peakGitCommands = 0;
+    const executeChildGit = async (_root: string, arguments_: readonly string[]) => {
+      if (arguments_[0] !== "status") {
+        return "";
+      }
+      activeGitCommands += 1;
+      peakGitCommands = Math.max(peakGitCommands, activeGitCommands);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      activeGitCommands -= 1;
+      return "";
+    };
+
+    await readGitWorkingTreeStatus(childrenRoot, executeChildGit);
+
+    expect(peakGitCommands).toBeLessThanOrEqual(performanceBudgets.git.maxConcurrentGitCommands);
   });
 
   it("releases repeated Event Stream lifecycles without sustained Heap growth", () => {
