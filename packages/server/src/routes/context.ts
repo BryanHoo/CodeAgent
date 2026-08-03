@@ -3,7 +3,6 @@ import type {
   AgentProviderTurnInput,
   AgentRuntimeProvider,
   AgentSettingsRepository,
-  AgentTaskMetadataRepository,
   PendingRequestResolutionError,
   ProjectRepository,
 } from "@code-agent/core";
@@ -106,7 +105,6 @@ export interface ServerRouteContext {
   readonly idempotencyCacheSize: number;
   readonly listModels: () => Promise<readonly AgentModel[]>;
   readonly maximumAttachmentBytes: (kind: AgentAttachmentKind) => number;
-  readonly mergeTaskPinned: (task: AgentTask, pinnedTaskIds: ReadonlySet<string>) => AgentTask;
   readonly modelCatalogCache: Readonly<{ read: () => Promise<AgentModelPage> }>;
   readonly multipartEnvelopeBytes: number;
   readonly prepareFileRollback: (
@@ -150,9 +148,8 @@ export interface ServerRouteContext {
   readonly settingsRepository: AgentSettingsRepository;
   readonly taskFromSnapshot: (
     snapshot: Awaited<ReturnType<AgentProvider["readTask"]>> & object,
-    overrides?: Partial<Pick<AgentTask, "pinned" | "title">>,
+    overrides?: Partial<Pick<AgentTask, "title">>,
   ) => AgentTask;
-  readonly taskMetadataRepository: AgentTaskMetadataRepository;
   readonly taskStartRecoveries: Map<string, TaskStartRecovery>;
   readonly toGitCommitHttpError: (error: GitCommitError) => MutationHttpError;
   readonly toPendingRequestHttpError: (error: PendingRequestResolutionError) => MutationHttpError;

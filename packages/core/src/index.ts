@@ -16,7 +16,6 @@ export {
 } from "./agent-provider.js";
 export {
   type AgentSettingsRepository,
-  type AgentTaskMetadataRepository,
   type ProjectRepository,
   type RegisterProjectInput,
   type TaskRepository,

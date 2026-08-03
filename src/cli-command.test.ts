@@ -46,6 +46,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     listModels: vi.fn(),
     listSkills: vi.fn(),
     listTasks: vi.fn(),
+    pinTask: vi.fn(),
     readSandboxMode: vi.fn(() => Promise.resolve("workspace-write" as const)),
     readTask: vi.fn(),
     readTaskAttachment: vi.fn(() => Promise.resolve(undefined)),
@@ -87,7 +88,6 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
       }),
     ),
     list: vi.fn(() => Promise.resolve([])),
-    listPinnedTaskIds: vi.fn(() => Promise.resolve([])),
     readGlobalSettings: vi.fn(() => Promise.resolve(undefined)),
     readProjectDefaults: vi.fn(() => Promise.resolve(undefined)),
     readTaskSettings: vi.fn(() => Promise.resolve(undefined)),
@@ -98,13 +98,12 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     reorder: vi.fn(() => Promise.resolve([])),
     writeGlobalSettings: vi.fn((settings) => Promise.resolve(settings)),
     writeProjectDefaults: vi.fn((_projectId, settings) => Promise.resolve(settings)),
-    writeTaskPinned: vi.fn((_projectId, _taskId, pinned) => Promise.resolve(pinned)),
     writeTaskSettings: vi.fn((_projectId, _taskId, settings) => Promise.resolve(settings)),
   };
   const dependencies: CliDependencies = {
     appVersion: "1.2.3",
     checkCodexVersion: vi.fn(() =>
-      Promise.resolve({ raw: "codex-cli 0.145.0", version: "0.145.0" }),
+      Promise.resolve({ raw: "codex-cli 0.146.0", version: "0.146.0" }),
     ),
     createStateRepository: vi.fn(() => Promise.resolve(stateRepository)),
     createRuntimeProvider: vi.fn(() => {
@@ -179,7 +178,7 @@ describe("runCli", () => {
     });
     expect(harness.dependencies.checkCodexVersion).toHaveBeenCalledWith("/fake/codex");
     expect(harness.stdout.join("")).toContain("[ok] Node.js 24.1.0");
-    expect(harness.stdout.join("")).toContain("[ok] Codex 0.145.0 (/fake/codex)");
+    expect(harness.stdout.join("")).toContain("[ok] Codex 0.146.0 (/fake/codex)");
     expect(harness.dependencies.createStateRepository).toHaveBeenCalledWith(
       join("/custom/home", "code-agent", "state.sqlite3"),
     );
@@ -235,7 +234,6 @@ describe("runCli", () => {
       selectProjectDirectory: harness.dependencies.selectProjectDirectory,
       settingsRepository: harness.stateRepository,
       staticRoot: "/package/dist/web",
-      taskMetadataRepository: harness.stateRepository,
     });
     expect(harness.dependencies.createStateRepository).toHaveBeenCalledWith(
       join("/custom/home", "code-agent", "state.sqlite3"),

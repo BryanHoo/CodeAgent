@@ -126,11 +126,12 @@ function createCodexAgentProvider(options: {
 
 function nativeThread(overrides: Record<string, unknown> = {}) {
   return {
-    cliVersion: "0.145.0",
+    cliVersion: "0.146.0",
     createdAt: 1_753_228_800,
     cwd: "/workspace/CodeAgent",
     ephemeral: false,
     id: "task-1",
+    isPinned: false,
     modelProvider: "openai",
     name: null,
     preview: "实现真实 Task 历史\n更多内容",
@@ -172,7 +173,7 @@ describe("CodexAgentProvider", () => {
     expect(warn.mock.calls).toEqual([
       [
         {
-          codexVersion: "0.145.0",
+          codexVersion: "0.146.0",
           diagnosticCode: "unknown_notification",
           method: "future/notification",
           projectId: "code-agent",
@@ -182,7 +183,7 @@ describe("CodexAgentProvider", () => {
       ],
       [
         {
-          codexVersion: "0.145.0",
+          codexVersion: "0.146.0",
           diagnosticCode: "invalid_notification",
           method: "item/agentMessage/delta",
           projectId: "code-agent",
@@ -1711,6 +1712,48 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
+  it("keeps MCP configuration isolated by project cwd", async () => {
+    const otherProject: Project = {
+      ...project,
+      id: "other-project",
+      name: "Other Project",
+      rootPath: "/workspace/Other",
+    };
+    const rpc = new FakeRpcClient([
+      { config: { mcp_servers: { projectA: { command: "a" } } }, layers: null, origins: {} },
+      { config: { mcp_servers: { projectB: { command: "b" } } }, layers: null, origins: {} },
+    ]);
+
+    await expect(
+      createCodexAgentProvider({ client: rpc, project }).listMcpServers(),
+    ).resolves.toEqual({ data: [{ name: "projectA" }] });
+    await expect(
+      createCodexAgentProvider({ client: rpc, project: otherProject }).listMcpServers(),
+    ).resolves.toEqual({ data: [{ name: "projectB" }] });
+    expect(rpc.calls).toEqual([
+      { method: "config/read", params: { cwd: project.rootPath } },
+      { method: "config/read", params: { cwd: otherProject.rootPath } },
+    ]);
+  });
+
+  it.each([
+    ["empty name", { "": { command: "invalid" } }, "MCP server name is invalid"],
+    ["invalid entry", { invalid: "command" }, "MCP server invalid must be an object"],
+    [
+      "invalid enabled flag",
+      { invalid: { command: "invalid", enabled: "yes" } },
+      "MCP server enabled is invalid",
+    ],
+  ])("rejects %s in project MCP configuration", async (_label, mcpServers, error) => {
+    const rpc = new FakeRpcClient([
+      { config: { mcp_servers: mcpServers }, layers: null, origins: {} },
+    ]);
+
+    await expect(
+      createCodexAgentProvider({ client: rpc, project }).listMcpServers(),
+    ).rejects.toThrow(error);
+  });
+
   it("maps task and turn mutations to Codex App Server RPC", async () => {
     const runningTurn = {
       completedAt: null,
@@ -2701,7 +2744,9 @@ describe("CodexAgentProvider", () => {
   });
 
   it("maps thread/list without repeating the runtime handshake", async () => {
-    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: "next-cursor" }]);
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread({ isPinned: true })], nextCursor: "next-cursor" },
+    ]);
     const provider = createCodexAgentProvider({ client: rpc, project });
 
     await expect(provider.getCapabilities()).resolves.toEqual({
@@ -2722,7 +2767,7 @@ describe("CodexAgentProvider", () => {
       data: [
         {
           id: "task-1",
-          pinned: false,
+          pinned: true,
           projectId: "code-agent",
           title: "实现真实 Task 历史",
           updatedAt: "2025-07-23T01:00:00.000Z",
@@ -2743,6 +2788,37 @@ describe("CodexAgentProvider", () => {
       },
     ]);
     expect(rpc.notifications).toEqual([]);
+  });
+
+  it("updates and returns the native Codex pinned state", async () => {
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      { thread: nativeThread({ isPinned: true }) },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.listTasks();
+
+    await expect(provider.pinTask("task-1", true)).resolves.toMatchObject({
+      id: "task-1",
+      pinned: true,
+      projectId: "code-agent",
+    });
+    expect(rpc.calls.at(-1)).toEqual({
+      method: "thread/metadata/update",
+      params: { isPinned: true, threadId: "task-1" },
+    });
+  });
+
+  it.each([
+    ["another task", nativeThread({ id: "task-2", isPinned: true })],
+    ["another project", nativeThread({ cwd: "/workspace/Other", isPinned: true })],
+    ["another pinned state", nativeThread({ isPinned: false })],
+  ])("rejects pinned metadata returned for %s", async (_case, thread) => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }, { thread }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.listTasks();
+
+    await expect(provider.pinTask("task-1", true)).rejects.toThrow(CodexProtocolMappingError);
   });
 
   it("maps thread/read turns and items without exposing native thread fields", async () => {

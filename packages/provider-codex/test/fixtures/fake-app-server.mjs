@@ -5,7 +5,7 @@ import { createInterface } from "node:readline";
 const args = process.argv.slice(2);
 
 if (args.includes("--version")) {
-  process.stdout.write("codex-cli 0.145.0\n");
+  process.stdout.write("codex-cli 0.146.0\n");
   process.exit(0);
 }
 
@@ -115,6 +115,7 @@ function realtimeThread(turns = []) {
     createdAt: 1_753_228_800,
     cwd: "/workspace/CodeAgent",
     id: "task-realtime",
+    isPinned: false,
     name: "Realtime Path",
     preview: "Realtime Path",
     status: { type: turns.some((turn) => turn.status === "inProgress") ? "active" : "notLoaded" },
@@ -130,6 +131,7 @@ function actionThread(id, turns = []) {
     createdAt: 1_753_228_800,
     cwd: "/workspace/CodeAgent",
     id,
+    isPinned: false,
     name: "Agent Action",
     preview: "Agent Action",
     status: { type: turns.some((turn) => turn.status === "inProgress") ? "active" : "notLoaded" },
@@ -707,6 +709,7 @@ input.on("line", (line) => {
             createdAt: 1_753_228_800,
             cwd: "/workspace/CodeAgent",
             id: "task-realtime",
+            isPinned: false,
             name: "Realtime Path",
             preview: "Realtime Path",
             status: { type: "active" },

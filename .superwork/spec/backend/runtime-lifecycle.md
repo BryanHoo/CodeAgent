@@ -24,11 +24,11 @@
 - `thread/start` 返回的新 Task 在首条用户消息前可能尚未 materialize；此时 `thread/read(includeTurns: true)` 的明确未 materialize 错误必须映射为该已知 Task 的空闲空快照，未知 Task 和其他 RPC 错误不得被吞掉。
 - Provider 对已成功 `thread/start` 的持久化 Task 必须提供进程内 read-your-writes：在 Codex 原生 `thread/list` 首次返回该 Task 前，将本地未 materialize Task 合并到首个列表页；只有原生列表接管后才能移除该列表回退，`turn/start` 或 `thread/read` 成功不能提前造成列表不可见窗口。`ephemeral` Task 必须排除在该列表回退之外。
 - Task 命令通过受控 Provider 方法映射：代码审查使用 `review/start`，上下文压缩使用 `thread/compact/start`，新任务续接使用 `thread/fork`，任务反馈使用 `feedback/upload`；每个动作都必须先验证 Task 属于当前 Project，并校验响应中的 Thread ID。Review Turn 中 Codex 自动生成的 `userMessage` 只作为内部执行 Prompt，Provider 必须在响应、实时事件和历史 Snapshot 中将重复 Prompt 折叠为单个统一 `review` Item。
-- Task 重命名固定映射 `thread/name/set`，归档固定映射 `thread/archive`，两者都必须先验证 Task 属于当前 Project；固定状态不是 Codex 原生能力，由 CodeAgent 本地 Task 元数据持久化。
+- Task 固定状态直接映射 Codex `Thread.isPinned`，固定 Mutation 调用 `thread/metadata/update { threadId, isPinned }` 并校验返回 Thread 的 ID、`cwd` 和目标状态；重命名固定映射 `thread/name/set`，归档固定映射 `thread/archive`，所有动作都必须先验证 Task 属于当前 Project。
 - 模型列表只通过分页 `model/list` 获取，过滤隐藏模型并保留默认模型、默认思考量和可用思考量；Server Runtime 使用带 TTL、字节容量与 in-flight 去重的模型目录缓存统一服务设置校验和 `/v1/models`，Runtime 关闭时清空且旧请求不得回填；Project 沙盒默认值通过携带 `cwd` 的 `config/read` 读取；`turn/start` 明确将文本、受控图片 Data URL 和受控临时文件分别映射为 Codex `text`、`image` 与 `mention`，同时映射 `model`、`effort`、`approvalPolicy`、`approvalsReviewer` 和结构化 `sandboxPolicy`。自动审批使用 `on-request + auto_review`，不扩展沙盒边界。
 - Codex 用户历史中的 `image`、`localImage` 与带 `text_elements` 的粘贴文本必须映射为只含随机 ID、类型、媒体类型、名称和字节数的统一消息附件；文本元素按 UTF-8 `byteRange` 从可见正文剔除并写入受控历史附件 Store，不能把完整粘贴内容回显为消息气泡。Provider 只接受 GIF、JPEG、PNG、WebP 的有效内容签名，历史附件 Store 最多保留 `1,500` 项、合计 `512 MiB`。同一 Task 中来源、名称和内容状态未变化的附件必须在重复 `thread/read` 间复用当前随机授权 ID 并刷新 TTL，后续 Snapshot 读取不得让已交付页面的附件 URL 立即失效；TTL 到期、来源变化或 Task 释放时才清理对应授权。Snapshot 不得包含 Base64、本地路径或文本正文；本地文件正文只在受权读取时加载并复验大小、修改时间和内容签名。附件缺失、超限、格式不受支持或 Store 达到预算时降级为文本占位，不能使整个 Task Snapshot 失败。
 - Project Skill 目录只通过 `skills/list { cwds: [project.rootPath] }` 获取并过滤禁用项；对外 ID 必须是稳定不透明摘要。`turn/start` 只有在 ID 与名称仍匹配当前目录时，才能加入 Codex 原生 `{ type: "skill", name, path }`，原生绝对路径不得越过 Provider 边界。
-- 当前 Project 启用的 MCP 服务只通过携带 `cwd` 的 `config/read` 读取 `mcp_servers`；Provider 必须过滤 `enabled: false` 并只向 Core、Protocol 和 Web 暴露服务名称，禁止让 command、args、env、URL 或 Secret 越过 Provider 边界。
+- 当前 Project 启用的 MCP 服务只通过携带 `cwd` 的 `config/read` 读取 `mcp_servers`；Provider 必须过滤 `enabled: false` 并只向 Core、Protocol 和 Web 暴露服务名称，禁止让 command、args、env、URL 或 Secret 越过 Provider 边界。`mcpServerStatus/list` 无 `threadId` 时是 App Server 进程级状态，携带未加载 Thread 时会失败，在单进程多 Project 架构中不得用它替代 `cwd` 作用域查询，也不得为读取清单创建或恢复用户 Thread。
 - `thread/tokenUsage/updated` 只使用最近一轮 `last.totalTokens` 计算当前上下文占用，并连同 `modelContextWindow` 写入实时事件和后续 Snapshot；不得使用累计 `total.totalTokens` 冒充当前上下文。
 - Web 最后一个 Task Runtime 消费者释放或不可见 Task 完成后，通过 Provider 无关 `unsubscribeTask` 端口调用实验 `thread/unsubscribe`。只有无运行 Turn、无 Pending Request、无后台终端、无读取或恢复 Promise 时才允许原生释放；`busy`、`notLoaded`、`notSubscribed` 与 `unsubscribed` 都是可恢复的 best-effort 生命周期结果，不能阻断导航。
 - `thread/unsubscribe` 成功或确认未加载后，Codex Provider 必须同步删除该 Task 的 Owner、Context Usage、运行标记、恢复状态、历史附件授权、暂存事件、暂存 Server Request、终态 Request 和未 materialize 回退；重新打开时通过 `thread/read` 重新验证 Project 归属并建立状态。Task 级 Map 禁止只增不减。
@@ -52,7 +52,7 @@
 - 数据库使用版本化 Migration、`STRICT` 表、显式 SQL、Prepared Statement 和事务，并固定启用 WAL、外键、NORMAL synchronous 与 5000ms busy timeout。
 - 所有同步 SQLite 操作都放入专用 `worker_threads` Worker，Fastify 主事件循环只通过 Core Repository 端口异步调用。
 - Global settings 以单例记录保存完整审批策略、审批审核方、模型、思考量、沙盒模式、默认跟进行为与默认打开应用；默认跟进行为只允许 `queue` 或 `steer`，新记录与迁移记录固定使用 `queue`。Project defaults 保存模型、思考量与沙盒模式；Task settings 保存完整运行设置。有效值固定按 `Task > Project > Global` 解析并按实时模型目录校验；读取推导值不得隐式写入局部记录，新 Task 创建和 Turn 启动时才固化完整 Task settings。
-- `task_metadata` 只保存 Project 作用域的 Task 固定状态；Task 列表与 Snapshot 在 Server 交付边界合并该状态，不修改 Codex Thread 内容。
+- Task 固定状态不得写入本地数据库；SQLite migration 必须删除旧 `task_metadata`，Task 列表、Snapshot 和固定 Mutation 都以 Provider 返回的 Codex 原生状态为唯一事实来源。
 - Provider 模型目录、`allow_for_session` 和可操作 Pending Approval 不得持久化；进程重启后不得恢复可操作 `pending`。
 - WebSocket 客户端使用独立有界队列，慢客户端不能阻塞 Provider；`bufferedAmount` 超过 `256 KiB` 时向 Event Stream 发出软背压信号，超过 `1 MiB` 时以 `1013` 关闭连接并要求刷新 Snapshot。
 - 每个 Project 创建独立 Event Stream Session，Provider 不分配传输序号。Server 在分配单调 `sequence` 前，按 `taskId + turnId + itemId + type + field` 合并 `message.delta`、`reasoning.delta` 和 `command.output_delta`：缓冲队列只能合并相邻同 Key 事件，不得跨其他 Item 重排 A-B-A 交错输入；普通窗口固定为 `16ms`，收到软背压信号后的下一窗口固定为 `32ms`。
@@ -60,7 +60,7 @@
 - Event Stream 使用固定数组环形缓冲区，每个 Project 最多保留 `1,000` 条、合计 `4 MiB` 的已发布事件，单事件最多保留 `1 MiB`；容量按序列化 UTF-8 字节计量并从最旧事件开始淘汰。回放必须按 `sequence` 升序返回，跨越已淘汰或因单事件超限而未保留的序列时发送 `resync.required`。
 - `/v1/projects/:projectId/events` 首帧发送 `connection.ready`，只补发 `afterSequence` 之后仍在缓存窗口内的事件；过期或超前序号发送 `resync.required`。
 - `/v1/metrics/events` 只读暴露每个 Project 的 Provider 输入、发布、合并、pending Delta、保留淘汰、软背压、活动客户端和慢客户端断开计数，不得包含 Prompt、命令输出或文件内容。
-- Provider `readTask` Promise 完成前必须让返回 Snapshot 包含此前状态并同步交付对应通知；Task Snapshot 读取完成后再从当前 Event Stream 固定 checkpoint，避免丢失事件或重复补发已有内容；Task 归属确认后并行读取有效设置与固定元数据，避免无依赖的持久层读取串行等待。
+- Provider `readTask` Promise 完成前必须让返回 Snapshot 包含此前状态并同步交付对应通知；Task Snapshot 读取完成后再从当前 Event Stream 固定 checkpoint，避免丢失事件或重复补发已有内容；Task 归属确认后读取有效设置，固定状态直接保留 Provider Snapshot 的原生值。
 - `resync.required` 发送后由 Server 主动关闭当前 WebSocket；客户端必须使用新 Snapshot checkpoint 建立新连接。
 - Fastify 关闭时取消 Provider Event 订阅并关闭 WebSocket 资源。
 - 所有 Agent Mutation 必须校验非空 `Idempotency-Key`；同操作、同 Key、同 Payload 复用进行中或成功结果，不同 Payload 返回冲突，失败结果不缓存。

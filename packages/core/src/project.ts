@@ -37,12 +37,6 @@ export interface AgentSettingsRepository {
   ): Promise<AgentTaskSettings>;
 }
 
-// Task 固定状态属于 CodeAgent 本地导航元数据，不进入 Provider 会话设置。
-export interface AgentTaskMetadataRepository {
-  listPinnedTaskIds(projectId: string): Promise<readonly string[]>;
-  writeTaskPinned(projectId: string, taskId: string, pinned: boolean): Promise<boolean>;
-}
-
 export interface TaskRepository {
   listByProject(projectId: string): Promise<readonly AgentTask[]>;
   read(taskId: string): Promise<AgentTask | undefined>;

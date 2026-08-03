@@ -98,6 +98,7 @@ export interface AgentProvider {
   listBackgroundTerminals(taskId: string): Promise<AgentBackgroundTerminalPage>;
   listSkills(): Promise<AgentSkillPage>;
   listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage>;
+  pinTask(taskId: string, pinned: boolean): Promise<AgentTask>;
   readSandboxMode(): Promise<AgentSandboxMode>;
   // Promise 完成前须让 Snapshot 包含此前状态并同步交付对应通知，使 checkpoint 保持一致。
   readTask(taskId: string): Promise<AgentProviderTaskSnapshot | undefined>;

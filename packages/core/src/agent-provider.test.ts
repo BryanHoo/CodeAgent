@@ -76,6 +76,15 @@ describe("AgentProvider", () => {
           nextCursor: null,
         });
       },
+      pinTask(taskId, pinned) {
+        return Promise.resolve({
+          id: taskId,
+          pinned,
+          projectId: "project-1",
+          title: "续接任务",
+          updatedAt: "2026-07-25T00:00:00.000Z",
+        });
+      },
       readSandboxMode() {
         return Promise.resolve("workspace-write");
       },
@@ -241,6 +250,10 @@ describe("AgentProvider", () => {
       }),
     ).resolves.toMatchObject({ requestId: "number:7", status: "resolved" });
     await expect(provider.startTask()).resolves.toMatchObject({ id: "task-1" });
+    await expect(provider.pinTask("task-1", true)).resolves.toMatchObject({
+      id: "task-1",
+      pinned: true,
+    });
     await expect(
       provider.startTurn(
         "task-1",

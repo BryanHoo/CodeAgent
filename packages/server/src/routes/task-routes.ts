@@ -53,12 +53,10 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
     assertValidProjectDefaults,
     getProjectContext,
     listModels,
-    mergeTaskPinned,
     readEffectiveTaskSettings,
     runIdempotent,
     settingsRepository,
     taskFromSnapshot,
-    taskMetadataRepository,
   } = context;
 
   app.get<{
@@ -82,12 +80,7 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
         ...(request.query.cursor === undefined ? {} : { cursor: request.query.cursor }),
         ...(request.query.limit === undefined ? {} : { limit: request.query.limit }),
       };
-      const [page, pinnedTaskIds] = await Promise.all([
-        context.provider.listTasks(input),
-        taskMetadataRepository.listPinnedTaskIds(request.params.projectId),
-      ]);
-      const pinned = new Set(pinnedTaskIds);
-      return { ...page, data: page.data.map((task) => mergeTaskPinned(task, pinned)) };
+      return context.provider.listTasks(input);
     },
   );
 
@@ -129,12 +122,11 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
       }
       // Provider Promise 完成时已交付此前通知，此处 checkpoint 与返回 Snapshot 对齐。
       const checkpoint = context.eventStream.checkpoint;
-      const [settings, pinnedTaskIdList] = await Promise.all([
-        readEffectiveTaskSettings(request.params.projectId, request.params.taskId),
-        taskMetadataRepository.listPinnedTaskIds(request.params.projectId),
-      ]);
-      const pinnedTaskIds = new Set(pinnedTaskIdList);
-      return { checkpoint, snapshot: { ...task, pinned: pinnedTaskIds.has(task.id), settings } };
+      const settings = await readEffectiveTaskSettings(
+        request.params.projectId,
+        request.params.taskId,
+      );
+      return { checkpoint, snapshot: { ...task, settings } };
     },
   );
 
@@ -273,12 +265,9 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
           if (task?.projectId !== context.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
-          const pinned = await taskMetadataRepository.writeTaskPinned(
-            request.params.projectId,
-            request.params.taskId,
-            request.body.pinned,
-          );
-          return { task: taskFromSnapshot(task, { pinned }) };
+          return {
+            task: await context.provider.pinTask(request.params.taskId, request.body.pinned),
+          };
         },
       ),
   );

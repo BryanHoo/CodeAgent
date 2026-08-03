@@ -152,9 +152,6 @@ function createOperations(database) {
         readTaskSettings: database.prepare(
           "SELECT approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode FROM task_settings WHERE project_id = ? AND task_id = ?",
         ),
-        listPinnedTaskIds: database.prepare(
-          "SELECT task_id FROM task_metadata WHERE project_id = ? AND pinned = 1 ORDER BY task_id",
-        ),
         writeProjectDefaults: database.prepare(`
       INSERT INTO project_defaults (project_id, model, reasoning_effort, sandbox_mode, updated_at)
       VALUES (?, ?, ?, ?, ?)
@@ -193,13 +190,6 @@ function createOperations(database) {
         model = excluded.model,
         reasoning_effort = excluded.reasoning_effort,
         sandbox_mode = excluded.sandbox_mode,
-        updated_at = excluded.updated_at
-        `),
-        writeTaskPinned: database.prepare(`
-      INSERT INTO task_metadata (project_id, task_id, pinned, updated_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(project_id, task_id) DO UPDATE SET
-        pinned = excluded.pinned,
         updated_at = excluded.updated_at
         `),
       }
@@ -258,11 +248,6 @@ function createOperations(database) {
     },
     listProjects() {
       return requireStatements().listProjects.all().map(projectFromRow);
-    },
-    listPinnedTaskIds(payload) {
-      return requireStatements()
-        .listPinnedTaskIds.all(payload.projectId)
-        .map((row) => row.task_id);
     },
     readProject(payload) {
       return projectFromRow(requireStatements().readProject.get(payload.projectId));
@@ -334,15 +319,6 @@ function createOperations(database) {
         payload.updatedAt,
       );
       return settings;
-    },
-    writeTaskPinned(payload) {
-      requireStatements().writeTaskPinned.run(
-        payload.projectId,
-        payload.taskId,
-        payload.pinned ? 1 : 0,
-        payload.updatedAt,
-      );
-      return payload.pinned;
     },
     writeTaskSettings(payload) {
       const settings = payload.settings;

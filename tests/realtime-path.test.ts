@@ -73,7 +73,6 @@ async function startFakeAppServer(scenario: string): Promise<CodexAppServerProce
 function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvider>) {
   let globalSettings: AgentGlobalSettings | undefined;
   const projectDefaults = new Map<string, AgentProjectDefaults>();
-  const pinnedTaskIds = new Map<string, Set<string>>();
   const taskSettings = new Map<string, AgentTaskSettings>();
 
   return {
@@ -108,20 +107,6 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
       writeTaskSettings: (projectId: string, taskId: string, settings: AgentTaskSettings) => {
         taskSettings.set(`${projectId}:${taskId}`, settings);
         return Promise.resolve(settings);
-      },
-    },
-    taskMetadataRepository: {
-      listPinnedTaskIds: (projectId: string) =>
-        Promise.resolve([...(pinnedTaskIds.get(projectId) ?? [])]),
-      writeTaskPinned: (projectId: string, taskId: string, pinned: boolean) => {
-        const current = pinnedTaskIds.get(projectId) ?? new Set<string>();
-        if (pinned) {
-          current.add(taskId);
-        } else {
-          current.delete(taskId);
-        }
-        pinnedTaskIds.set(projectId, current);
-        return Promise.resolve(pinned);
       },
     },
   };

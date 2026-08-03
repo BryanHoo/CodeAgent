@@ -27,7 +27,7 @@ const fakeAppServer = spawn(
 const runtime = new CodexAppServerProcess(
   fakeAppServer,
   { path: process.execPath, source: "explicit" },
-  { raw: "codex-cli 0.145.0", version: "0.145.0" },
+  { raw: "codex-cli 0.146.0", version: "0.146.0" },
   { rpcTimeoutMs: 1_000, shutdownTimeoutMs: 500 },
 );
 await runtime.waitForSpawn();
@@ -45,7 +45,6 @@ const project = {
 const provider = createCodexRuntimeProvider({ client: runtime.client });
 let globalSettings;
 const projectDefaults = new Map();
-const pinnedTaskIds = new Map();
 const taskSettings = new Map();
 const server = await createCodeAgentServer({
   eventSessionId: "e2e-session",
@@ -76,19 +75,6 @@ const server = await createCodeAgentServer({
     writeTaskSettings: (projectId, taskId, settings) => {
       taskSettings.set(`${projectId}:${taskId}`, settings);
       return Promise.resolve(settings);
-    },
-  },
-  taskMetadataRepository: {
-    listPinnedTaskIds: (projectId) => Promise.resolve([...(pinnedTaskIds.get(projectId) ?? [])]),
-    writeTaskPinned: (projectId, taskId, pinned) => {
-      const current = pinnedTaskIds.get(projectId) ?? new Set();
-      if (pinned) {
-        current.add(taskId);
-      } else {
-        current.delete(taskId);
-      }
-      pinnedTaskIds.set(projectId, current);
-      return Promise.resolve(pinned);
     },
   },
   staticRoot,

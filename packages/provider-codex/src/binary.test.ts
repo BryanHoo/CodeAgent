@@ -136,6 +136,10 @@ describe("locateCodexBinary", () => {
 });
 
 describe("checkCodexVersion", () => {
+  it("pins the current Codex release", () => {
+    expect(SUPPORTED_CODEX_VERSION).toBe("0.146.0");
+  });
+
   it("accepts the pinned supported Codex version", async () => {
     const execute = vi.fn(() => Promise.resolve(`codex-cli ${SUPPORTED_CODEX_VERSION}\n`));
 

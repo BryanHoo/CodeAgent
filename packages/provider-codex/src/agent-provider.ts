@@ -174,7 +174,7 @@ async function mapAgentTask(thread: Record<string, unknown>, project: Project): 
   await assertProjectThread(thread, project);
   return {
     id: expectString(thread["id"], "Codex thread id"),
-    pinned: false,
+    pinned: expectBoolean(thread["isPinned"], "Codex thread isPinned"),
     projectId: project.id,
     title: normalizedTitle(thread),
     updatedAt: toDateTime(thread["updatedAt"], "Codex thread updatedAt"),
@@ -292,7 +292,26 @@ export class CodexAgentProvider implements AgentProvider {
     );
   }
 
+  public async pinTask(taskId: string, pinned: boolean): Promise<AgentTask> {
+    this.#assertKnownProjectTask(taskId);
+    const response = expectRecord(
+      await this.#client.request("thread/metadata/update", { isPinned: pinned, threadId: taskId }),
+      "thread/metadata/update response",
+    );
+    const thread = expectRecord(response["thread"], "thread/metadata/update thread");
+    if (expectString(thread["id"], "thread/metadata/update thread id") !== taskId) {
+      throw new CodexProtocolMappingError("thread/metadata/update returned a different thread");
+    }
+    if (expectBoolean(thread["isPinned"], "thread/metadata/update isPinned") !== pinned) {
+      throw new CodexProtocolMappingError(
+        "thread/metadata/update returned a different pinned state",
+      );
+    }
+    return mapAgentTask(thread, this.#project);
+  }
+
   public async listMcpServers(): Promise<AgentMcpServerPage> {
+    // 运行时状态接口没有 cwd 作用域；单进程多 Project 必须读取目标目录的生效配置。
     const response = expectRecord(
       await this.#client.request("config/read", { cwd: this.#project.rootPath }),
       "config/read response",
@@ -1246,6 +1265,11 @@ class CodexRuntimeProjectProvider implements AgentProvider {
   public async renameTask(taskId: string, title: string): Promise<void> {
     await this.#ensureTaskOwner(taskId);
     return this.#delegate.renameTask(taskId, title);
+  }
+
+  public async pinTask(taskId: string, pinned: boolean): Promise<AgentTask> {
+    await this.#ensureTaskOwner(taskId);
+    return this.#delegate.pinTask(taskId, pinned);
   }
 
   public resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest> {

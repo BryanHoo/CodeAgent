@@ -9,7 +9,6 @@ import type {
   AgentProviderTurnInput,
   AgentRuntimeProvider,
   AgentSettingsRepository,
-  AgentTaskMetadataRepository,
   ProjectRepository,
 } from "@code-agent/core";
 import {
@@ -85,7 +84,6 @@ export interface CreateCodeAgentServerOptions {
   projectOpenService?: ProjectOpenService;
   provider: AgentRuntimeProvider;
   settingsRepository: AgentSettingsRepository;
-  taskMetadataRepository: AgentTaskMetadataRepository;
   commitProjectChanges?: (
     projectRoot: string,
     request: CommitProjectChangesRequest,
@@ -165,17 +163,13 @@ function assertValidProjectDefaults(
   }
 }
 
-function mergeTaskPinned(task: AgentTask, pinnedTaskIds: ReadonlySet<string>): AgentTask {
-  return { ...task, pinned: pinnedTaskIds.has(task.id) };
-}
-
 function taskFromSnapshot(
   snapshot: Awaited<ReturnType<AgentProvider["readTask"]>> & object,
-  overrides: Partial<Pick<AgentTask, "pinned" | "title">> = {},
+  overrides: Partial<Pick<AgentTask, "title">> = {},
 ): AgentTask {
   return {
     id: snapshot.id,
-    pinned: overrides.pinned ?? snapshot.pinned,
+    pinned: snapshot.pinned,
     projectId: snapshot.projectId,
     title: overrides.title ?? snapshot.title,
     updatedAt: snapshot.updatedAt,
@@ -921,7 +915,6 @@ export async function createCodeAgentServer(
     idempotencyCacheSize,
     listModels,
     maximumAttachmentBytes,
-    mergeTaskPinned,
     modelCatalogCache,
     multipartEnvelopeBytes: MULTIPART_ENVELOPE_BYTES,
     prepareFileRollback,
@@ -943,7 +936,6 @@ export async function createCodeAgentServer(
     selectProjectDirectory: options.selectProjectDirectory,
     settingsRepository: options.settingsRepository,
     taskFromSnapshot,
-    taskMetadataRepository: options.taskMetadataRepository,
     taskStartRecoveries,
     toGitCommitHttpError,
     toPendingRequestHttpError,

@@ -334,7 +334,7 @@ CLI 启动一个不绑定 Project 的全局 `codex app-server --listen stdio://`
 
 ## 7. Codex CLI 分发策略
 
-为了保证一条命令可启动，并降低协议漂移风险，默认通过 pnpm 将兼容版本的 `@openai/codex` 固定为生产依赖。
+为了保证一条命令可启动，并降低协议漂移风险，默认通过 pnpm 将 `@openai/codex@0.146.0` 固定为生产依赖。
 
 Codex Binary 查找顺序：
 
@@ -688,6 +688,7 @@ turn id -> runtime state
 | `readTask`      | `thread/read`     |
 | `archiveTask`   | `thread/archive`  |
 | `renameTask`    | `thread/name/set` |
+| `pinTask`       | `thread/metadata/update` |
 | `startTurn`     | `turn/start`      |
 | `steerTurn`     | `turn/steer`      |
 | `interruptTurn` | `turn/interrupt`  |
@@ -700,6 +701,10 @@ Server 内部生成提交消息时调用 `startTask({ ephemeral: true })`。Serv
 `startReview` 在调用 `review/start` 前记录统一 `AgentReviewTarget`，将响应、实时通知和历史 Snapshot 中的 `enteredReviewMode` 归一为稳定的 `AgentReviewItem`，并过滤 Codex 自动生成的内部 `userMessage` Review Prompt。Web 只根据结构化 Target 生成固定审查请求文案，不展示或复制 Provider 原生 Prompt。
 
 `readTask` 映射 Codex 历史 `image` 与 `localImage` 时只写入随机附件 ID、媒体类型、名称和字节数。Provider 历史附件 Store 默认最多保留 `1,500` 个条目、合计 `512 MiB`、TTL `30` 分钟；本地图片只读取固定长度签名头，完整正文延迟到 `readTaskAttachment`，并在交付前复验文件身份和内容签名。Snapshot 重建与 `unsubscribeTask` 都清理对应 Task 的旧授权记录。
+
+Task 列表和 Snapshot 直接将 Codex `Thread.isPinned` 映射为统一 `pinned`。固定或取消固定调用 `thread/metadata/update`，Provider 校验响应 Thread ID、Project `cwd` 与目标状态后返回权威 Task；Server 不覆盖该值，也不保存本地副本。
+
+MCP Inspector 使用 `config/read { cwd: project.rootPath }` 获取当前 Project 的生效 `mcp_servers`，过滤禁用项后只交付名称。`mcpServerStatus/list` 在无 `threadId` 时只有进程级作用域，携带未加载 Thread 时不可用，因此单 App Server 多 Project 架构不使用它替代项目配置查询，也不为检查器创建或恢复 Thread。
 
 ### 11.5 事件映射
 
@@ -763,7 +768,7 @@ Runtime 因凭证或其他 Provider 原因不可用时，Server 返回统一 Pro
 
 ### 12.1 数据来源
 
-Codex 已经持久化原生 Thread 和 Session 历史。CodeAgent 不重复保存完整历史，只保存 Project 及其用户排序、全局 Agent 与提交消息设置、Project 新 Task 默认模型设置、Task 完整设置和本地导航使用的固定状态。浅色/深色模式仅由浏览器本地保存，不进入 Server 数据库。
+Codex 已经持久化原生 Thread、Session 历史和 Task 固定状态。CodeAgent 不重复保存这些数据，只保存 Project 及其用户排序、全局 Agent 与提交消息设置、Project 新 Task 默认模型设置和 Task 完整设置。浅色/深色模式仅由浏览器本地保存，不进入 Server 数据库。
 
 ### 12.2 表结构
 
@@ -772,12 +777,12 @@ Codex 已经持久化原生 Thread 和 Session 历史。CodeAgent 不重复保�
 ```text
 schema_migrations
 projects
+global_settings
 project_defaults
 task_settings
-task_metadata
 ```
 
-所有业务表使用 `STRICT`。`projects.sort_order` 保存 Sidebar 用户顺序；`global_settings` 保存全局审批、Agent 模型组合、提交消息模型组合、提交提示词、沙盒模式和默认打开应用；`project_defaults` 保存 `model`、`reasoning_effort` 和 `sandbox_mode`；`task_settings` 保存 `approval_policy`、`approvals_reviewer`、`model`、`reasoning_effort` 和 `sandbox_mode`；`task_metadata` 保存 CodeAgent 本地导航使用的 `pinned` 状态。设置和 Task 元数据以 Project 外键隔离，本地导航状态不写入 Codex Thread。
+所有业务表使用 `STRICT`。`projects.sort_order` 保存 Sidebar 用户顺序；`global_settings` 保存全局审批、Agent 模型组合、提交消息模型组合、提交提示词、沙盒模式和默认打开应用；`project_defaults` 保存 `model`、`reasoning_effort` 和 `sandbox_mode`；`task_settings` 保存 `approval_policy`、`approvals_reviewer`、`model`、`reasoning_effort` 和 `sandbox_mode`。Project 与 Task 设置以 Project 外键隔离，Task 固定状态由 Codex Thread 持久化。
 
 ### 12.3 写入规则
 
@@ -785,7 +790,7 @@ task_metadata
 - Project 重排通过 `PUT /v1/projects/order` 提交无重复的完整 ID 集合；Server 校验没有遗漏或未知 Project 后，在 Database Worker 的单个事务中替换 `sort_order`。新注册 Project 使用当前最大顺序追加到末尾。
 - Provider `/v1/models` 是模型目录真相源；数据库只保存 Agent 及提交消息使用的模型与思考量 ID。读取 Snapshot、设置 API、启动 Turn 和生成提交消息前均重新校验，无效组合按模型 ID 和 Provider 默认值确定性回退。
 - 新 Task 从 Project 默认值继承 `model`、`reasoningEffort` 和 `sandboxMode`，`approvalPolicy` 固定从 `on-request` 开始，`approvalsReviewer` 固定从 `user` 开始。
-- Task 固定通过本地 `task_metadata` 原子 upsert；重命名和归档不在本地复制 Codex 标题或归档状态，分别调用 `thread/name/set` 与 `thread/archive`。
+- Task 固定、重命名和归档都不在本地复制 Codex 状态，分别调用 `thread/metadata/update`、`thread/name/set` 与 `thread/archive`。
 - `allow_for_session`、可操作 Pending Approval 和模型目录不持久化；进程重启后不能恢复为可操作 `pending`。
 
 ### 12.4 SQLite 模式

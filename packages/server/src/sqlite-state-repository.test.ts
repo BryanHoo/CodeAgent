@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 
 import { SqliteStateRepository, type SqliteMigration } from "./sqlite-state-repository.js";
 
@@ -41,7 +42,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 8,
+      migrationVersion: 9,
       synchronous: "normal",
       writable: true,
     });
@@ -129,7 +130,6 @@ describe("SqliteStateRepository", () => {
       reasoningEffort: "high",
       sandboxMode: "workspace-write",
     });
-    await repository.writeTaskPinned(project.id, "task-1", true);
 
     const renamed = await repository.rename(project.id, "  工作区别名  ");
 
@@ -140,7 +140,6 @@ describe("SqliteStateRepository", () => {
     await expect(repository.remove(project.id)).resolves.toBe(true);
     await expect(repository.read(project.id)).resolves.toBeUndefined();
     await expect(repository.readProjectDefaults(project.id)).resolves.toBeUndefined();
-    await expect(repository.listPinnedTaskIds(project.id)).resolves.toEqual([]);
     await expect(stat(projectRoot)).resolves.toMatchObject({});
 
     await repository.close();
@@ -264,23 +263,20 @@ describe("SqliteStateRepository", () => {
     await expect(reopened.readGlobalSettings()).resolves.toEqual(settings);
   });
 
-  it("persists pinned task metadata across repository restarts", async () => {
+  it("removes obsolete task metadata after migration", async () => {
     const root = await createWorkspace();
-    const projectRoot = join(root, "workspace");
-    await mkdir(projectRoot);
-    const repository = await openRepository(root);
-    const project = await repository.register({ name: "Workspace", rootPath: projectRoot });
-
-    await expect(repository.listPinnedTaskIds(project.id)).resolves.toEqual([]);
-    await expect(repository.writeTaskPinned(project.id, "task-1", true)).resolves.toBe(true);
-    await expect(repository.writeTaskPinned(project.id, "task-2", false)).resolves.toBe(false);
+    const databasePath = join(root, "state.sqlite3");
+    const repository = await SqliteStateRepository.open(databasePath);
     await repository.close();
-    repositories.splice(repositories.indexOf(repository), 1);
 
-    const reopened = await openRepository(root);
-    await expect(reopened.listPinnedTaskIds(project.id)).resolves.toEqual(["task-1"]);
-    await expect(reopened.writeTaskPinned(project.id, "task-1", false)).resolves.toBe(false);
-    await expect(reopened.listPinnedTaskIds(project.id)).resolves.toEqual([]);
+    const database = new Database(databasePath, { readonly: true });
+    try {
+      expect(
+        database.prepare("SELECT name FROM sqlite_master WHERE name = 'task_metadata'").get(),
+      ).toBeUndefined();
+    } finally {
+      database.close();
+    }
   });
 
   it("terminates an unresponsive worker after the request deadline", async () => {

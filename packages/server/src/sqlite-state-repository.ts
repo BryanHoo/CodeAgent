@@ -164,6 +164,11 @@ const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     `,
     version: 8,
   },
+  {
+    name: "drop_task_metadata",
+    sql: "DROP TABLE task_metadata;",
+    version: 9,
+  },
 ];
 
 type WorkerResponse =
@@ -375,10 +380,6 @@ export class SqliteStateRepository implements ProjectRepository, AgentSettingsRe
     return this.#call("readTaskSettings", { projectId, taskId });
   }
 
-  public listPinnedTaskIds(projectId: string): Promise<readonly string[]> {
-    return this.#call("listPinnedTaskIds", { projectId });
-  }
-
   public writeProjectDefaults(
     projectId: string,
     settings: AgentProjectDefaults,
@@ -405,15 +406,6 @@ export class SqliteStateRepository implements ProjectRepository, AgentSettingsRe
     return this.#call("writeTaskSettings", {
       projectId,
       settings,
-      taskId,
-      updatedAt: this.#now().toISOString(),
-    });
-  }
-
-  public writeTaskPinned(projectId: string, taskId: string, pinned: boolean): Promise<boolean> {
-    return this.#call("writeTaskPinned", {
-      pinned,
-      projectId,
       taskId,
       updatedAt: this.#now().toISOString(),
     });

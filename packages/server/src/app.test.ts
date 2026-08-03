@@ -187,6 +187,9 @@ function createProvider() {
   );
   const rollbackLatestTurn = vi.fn(() => Promise.resolve());
   const renameTask = vi.fn(() => Promise.resolve());
+  const pinTask = vi.fn((taskId: string, pinned: boolean) =>
+    Promise.resolve({ ...task, id: taskId, pinned }),
+  );
   const startTask = vi.fn(() => Promise.resolve(task));
   const startTurn = vi.fn<AgentProvider["startTurn"]>(
     (taskId: string, input: AgentProviderTurnInput) =>
@@ -231,6 +234,7 @@ function createProvider() {
     listModels,
     listSkills,
     listTasks,
+    pinTask,
     readSandboxMode,
     readTask,
     readTaskAttachment,
@@ -267,6 +271,7 @@ function createProvider() {
     listSkills,
     interruptTurn,
     listBackgroundTerminals,
+    pinTask,
     provider,
     readSandboxMode,
     readTask,
@@ -282,24 +287,6 @@ function createProvider() {
     unsubscribeTask,
     uploadFeedback,
   };
-}
-
-function createTaskMetadataRepository() {
-  const pinnedTaskIds = new Map<string, Set<string>>();
-  const listPinnedTaskIds = vi.fn((projectId: string) =>
-    Promise.resolve([...(pinnedTaskIds.get(projectId) ?? [])]),
-  );
-  const writeTaskPinned = vi.fn((projectId: string, taskId: string, pinned: boolean) => {
-    const current = pinnedTaskIds.get(projectId) ?? new Set<string>();
-    if (pinned) {
-      current.add(taskId);
-    } else {
-      current.delete(taskId);
-    }
-    pinnedTaskIds.set(projectId, current);
-    return Promise.resolve(pinned);
-  });
-  return { listPinnedTaskIds, repository: { listPinnedTaskIds, writeTaskPinned }, writeTaskPinned };
 }
 
 function createSettingsRepository() {
@@ -380,7 +367,6 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
     provider: runtimeProvider,
     selectProjectDirectory: vi.fn(() => Promise.resolve(undefined)),
     settingsRepository: createSettingsRepository().repository,
-    taskMetadataRepository: createTaskMetadataRepository().repository,
     ...overrides,
   };
 }
@@ -404,6 +390,7 @@ async function createHarness(
     listMcpServers,
     listModels,
     listSkills,
+    pinTask,
     provider,
     readTask,
     readTaskAttachment,
@@ -419,12 +406,10 @@ async function createHarness(
     uploadFeedback,
   } = createProvider();
   const settings = createSettingsRepository();
-  const taskMetadata = createTaskMetadataRepository();
   const app = await createCodeAgentServer(
     createServerOptions(provider, {
       ...options,
       settingsRepository: settings.repository,
-      taskMetadataRepository: taskMetadata.repository,
     }),
   );
   closeCallbacks.push(() => app.close());
@@ -441,6 +426,7 @@ async function createHarness(
     listMcpServers,
     listModels,
     listSkills,
+    pinTask,
     readTask,
     readTaskAttachment,
     renameTask,
@@ -453,7 +439,6 @@ async function createHarness(
     terminateBackgroundTerminal,
     unsubscribeTask,
     ...settings,
-    ...taskMetadata,
     uploadFeedback,
   };
 }
@@ -1643,11 +1628,10 @@ describe("CodeAgent Server", () => {
     now.mockRestore();
   });
 
-  it("reads task settings and pinned metadata in parallel after ownership is confirmed", async () => {
-    const { app, listPinnedTaskIds, readTask, readTaskSettings } = await createHarness();
+  it("reads task settings after ownership is confirmed without overriding provider metadata", async () => {
+    const { app, readTask, readTaskSettings } = await createHarness();
     let resolveTask!: (value: AgentProviderTaskSnapshot) => void;
     let resolveSettings!: (value: AgentTaskSettings | undefined) => void;
-    let resolvePinned!: (value: string[]) => void;
     readTask.mockImplementationOnce(
       () =>
         new Promise<AgentProviderTaskSnapshot>((resolve) => {
@@ -1660,12 +1644,6 @@ describe("CodeAgent Server", () => {
           resolveSettings = resolve;
         }),
     );
-    listPinnedTaskIds.mockImplementationOnce(
-      () =>
-        new Promise<string[]>((resolve) => {
-          resolvePinned = resolve;
-        }),
-    );
 
     const response = app.inject({
       method: "GET",
@@ -1675,15 +1653,12 @@ describe("CodeAgent Server", () => {
       expect(readTask).toHaveBeenCalledOnce();
     });
     expect(readTaskSettings).not.toHaveBeenCalled();
-    expect(listPinnedTaskIds).not.toHaveBeenCalled();
 
-    resolveTask(snapshot);
+    resolveTask({ ...snapshot, pinned: true });
     await vi.waitFor(() => {
       expect(readTaskSettings).toHaveBeenCalledOnce();
-      expect(listPinnedTaskIds).toHaveBeenCalledOnce();
     });
     resolveSettings(undefined);
-    resolvePinned([task.id]);
 
     expect((await response).json()).toMatchObject({ snapshot: { pinned: true } });
   });
@@ -2094,8 +2069,8 @@ describe("CodeAgent Server", () => {
     });
   });
 
-  it("pins locally and delegates rename and archive to the Provider", async () => {
-    const { app, archiveTask, renameTask, writeTaskPinned } = await createHarness();
+  it("delegates pin, rename and archive to the Provider", async () => {
+    const { app, archiveTask, pinTask, renameTask } = await createHarness();
 
     const pinned = await app.inject({
       headers: { "idempotency-key": "pin-key" },
@@ -2109,7 +2084,6 @@ describe("CodeAgent Server", () => {
       payload: { title: "新的任务名称" },
       url: "/v1/projects/code-agent/tasks/task-1/rename",
     });
-    const listed = await app.inject({ method: "GET", url: "/v1/projects/code-agent/tasks" });
     const archived = await app.inject({
       headers: { "idempotency-key": "archive-key" },
       method: "POST",
@@ -2119,11 +2093,10 @@ describe("CodeAgent Server", () => {
 
     expect(pinned.statusCode, pinned.body).toBe(200);
     expect(pinned.json()).toMatchObject({ task: { id: "task-1", pinned: true } });
-    expect(writeTaskPinned).toHaveBeenCalledWith("code-agent", "task-1", true);
+    expect(pinTask).toHaveBeenCalledWith("task-1", true);
     expect(renamed.statusCode, renamed.body).toBe(200);
     expect(renamed.json()).toMatchObject({ task: { id: "task-1", title: "新的任务名称" } });
     expect(renameTask).toHaveBeenCalledWith("task-1", "新的任务名称");
-    expect(listed.json()).toMatchObject({ data: [{ id: "task-1", pinned: true }] });
     expect(archived.statusCode, archived.body).toBe(200);
     expect(archived.json()).toEqual({ status: "archived", taskId: "task-1" });
     expect(archiveTask).toHaveBeenCalledWith("task-1");
@@ -2167,7 +2140,6 @@ describe("CodeAgent Server", () => {
       provider: runtimeProvider,
       selectProjectDirectory: () => Promise.resolve(undefined),
       settingsRepository: createSettingsRepository().repository,
-      taskMetadataRepository: createTaskMetadataRepository().repository,
     });
     closeCallbacks.push(() => app.close());
     const request = {
