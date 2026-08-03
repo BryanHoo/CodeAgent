@@ -828,52 +828,76 @@ function reconstructSnapshot(state: TaskStoreState): ReconstructedTaskSnapshot |
   };
 }
 
+type AgentMessage = Extract<AgentItem, { type: "message" }>;
+
 function retainSnapshotTurnItems(currentTurn: AgentTurn, snapshotTurn: AgentTurn): AgentItem[] {
   const snapshotItemsById = new Map(snapshotTurn.items.map((item) => [item.id, item]));
-  const snapshotMessagesByCurrentId = new Map<string, Extract<AgentItem, { type: "message" }>>();
-  const shadowedSnapshotMessageIds = new Set<string>();
-  const currentMessagesByRole: Record<
-    Extract<AgentItem, { type: "message" }>["role"],
-    Extract<AgentItem, { type: "message" }>[]
-  > = { assistant: [], user: [] };
-  const nextCurrentMessageIndexByRole = { assistant: 0, user: 0 };
-  for (const currentItem of currentTurn.items) {
-    if (currentItem.type === "message") {
-      currentMessagesByRole[currentItem.role].push(currentItem);
+  const snapshotMessagesByCurrentId = new Map<string, AgentMessage>();
+  const currentMessages = currentTurn.items.filter(
+    (item): item is AgentMessage => item.type === "message",
+  );
+  const snapshotMessages = snapshotTurn.items.filter(
+    (item): item is AgentMessage => item.type === "message",
+  );
+  const currentMessagesById = new Map(currentMessages.map((item) => [item.id, item]));
+  const matchedCurrentMessageIds = new Set<string>();
+  const matchedSnapshotMessageIds = new Set<string>();
+
+  const retainSnapshotMessage = (currentMessage: AgentMessage, snapshotMessage: AgentMessage) => {
+    matchedCurrentMessageIds.add(currentMessage.id);
+    matchedSnapshotMessageIds.add(snapshotMessage.id);
+    snapshotItemsById.delete(snapshotMessage.id);
+    snapshotMessagesByCurrentId.set(currentMessage.id, {
+      ...snapshotMessage,
+      // 实时 ID 是后续 Delta 的稳定锚点，Snapshot 只补充权威内容与元数据。
+      id: currentMessage.id,
+    });
+  };
+
+  // ID 是实体身份的首要依据，先排除所有可确定的同一消息。
+  for (const snapshotMessage of snapshotMessages) {
+    const currentMessage = currentMessagesById.get(snapshotMessage.id);
+    if (currentMessage !== undefined) {
+      retainSnapshotMessage(currentMessage, snapshotMessage);
     }
   }
 
-  for (const snapshotItem of snapshotTurn.items) {
-    if (snapshotItem.type !== "message") {
-      continue;
+  const unmatchedCurrentMessages = currentMessages.filter(
+    (message) => !matchedCurrentMessageIds.has(message.id),
+  );
+  const unmatchedSnapshotMessages = snapshotMessages.filter(
+    (message) => !matchedSnapshotMessageIds.has(message.id),
+  );
+  const currentCandidatesBySnapshotId = new Map<string, AgentMessage[]>();
+  const snapshotCandidateCountByCurrentId = new Map<string, number>();
+
+  for (const snapshotMessage of unmatchedSnapshotMessages) {
+    const candidates = unmatchedCurrentMessages.filter(
+      (currentMessage) =>
+        currentMessage.role === snapshotMessage.role &&
+        currentMessage.text.length > 0 &&
+        snapshotMessage.text.length > 0 &&
+        (currentMessage.text.startsWith(snapshotMessage.text) ||
+          snapshotMessage.text.startsWith(currentMessage.text)),
+    );
+    currentCandidatesBySnapshotId.set(snapshotMessage.id, candidates);
+    for (const candidate of candidates) {
+      snapshotCandidateCountByCurrentId.set(
+        candidate.id,
+        (snapshotCandidateCountByCurrentId.get(candidate.id) ?? 0) + 1,
+      );
     }
-    const currentMessages = currentMessagesByRole[snapshotItem.role];
-    let currentMessage: Extract<AgentItem, { type: "message" }> | undefined;
-    while (nextCurrentMessageIndexByRole[snapshotItem.role] < currentMessages.length) {
-      const currentIndex = nextCurrentMessageIndexByRole[snapshotItem.role];
-      nextCurrentMessageIndexByRole[snapshotItem.role] = currentIndex + 1;
-      const candidate = currentMessages[currentIndex];
-      if (
-        candidate !== undefined &&
-        (candidate.id === snapshotItem.id ||
-          candidate.text.startsWith(snapshotItem.text) ||
-          snapshotItem.text.startsWith(candidate.text))
-      ) {
-        currentMessage = candidate;
-        break;
-      }
-    }
-    if (currentMessage === undefined) {
-      continue;
-    }
-    snapshotItemsById.delete(snapshotItem.id);
-    snapshotMessagesByCurrentId.set(currentMessage.id, {
-      ...snapshotItem,
-      // 实时 ID 是后续 Delta 的稳定锚点，Snapshot 的 item-* ID 只在本次读取内有效。
-      id: currentMessage.id,
-    });
-    if (snapshotItem.id !== currentMessage.id) {
-      shadowedSnapshotMessageIds.add(snapshotItem.id);
+  }
+
+  // 文本只能在候选关系两侧都唯一时兜底，歧义消息保留各自 ID。
+  for (const snapshotMessage of unmatchedSnapshotMessages) {
+    const candidates = currentCandidatesBySnapshotId.get(snapshotMessage.id) ?? [];
+    const currentMessage = candidates.length === 1 ? candidates[0] : undefined;
+    if (
+      currentMessage !== undefined &&
+      snapshotCandidateCountByCurrentId.get(currentMessage.id) === 1
+    ) {
+      retainSnapshotMessage(currentMessage, snapshotMessage);
     }
   }
 
@@ -881,10 +905,6 @@ function retainSnapshotTurnItems(currentTurn: AgentTurn, snapshotTurn: AgentTurn
     const snapshotMessage = snapshotMessagesByCurrentId.get(currentItem.id);
     if (snapshotMessage !== undefined) {
       return [snapshotMessage];
-    }
-    // 旧合并可能已追加同一 Snapshot Message；语义匹配成功后移除该合成 ID 副本。
-    if (shadowedSnapshotMessageIds.has(currentItem.id)) {
-      return [];
     }
     const snapshotItem = snapshotItemsById.get(currentItem.id);
     if (snapshotItem === undefined) {

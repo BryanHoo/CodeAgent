@@ -216,6 +216,275 @@ describe("task store", () => {
     });
   });
 
+  it("matches later commentary after unmatched and omitted snapshot messages", () => {
+    const liveTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-running",
+      items: [
+        {
+          id: "realtime-commentary-first",
+          role: "assistant" as const,
+          text: "先读取配置",
+          type: "message" as const,
+        },
+        {
+          id: "realtime-commentary-omitted",
+          role: "assistant" as const,
+          text: "仅实时可见",
+          type: "message" as const,
+        },
+        {
+          id: "realtime-commentary-last",
+          role: "assistant" as const,
+          text: "再运行检查",
+          type: "message" as const,
+        },
+      ],
+      startedAt: timestamp,
+      status: "running" as const,
+    };
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ turns: [liveTurn] }),
+    );
+
+    store.getState().reconcile(
+      createResponse({
+        turns: [
+          {
+            ...liveTurn,
+            items: [
+              {
+                id: "snapshot-commentary-first",
+                role: "assistant",
+                text: "先读取配置完成",
+                type: "message",
+              },
+              {
+                id: "snapshot-only-commentary",
+                role: "assistant",
+                text: "仅 Snapshot 可见",
+                type: "message",
+              },
+              {
+                id: "snapshot-commentary-last",
+                role: "assistant",
+                text: "再运行检查完成",
+                type: "message",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual([
+      "realtime-commentary-first",
+      "realtime-commentary-omitted",
+      "realtime-commentary-last",
+      "snapshot-only-commentary",
+    ]);
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        itemId: "realtime-commentary-last",
+        payload: { delta: "，全部通过" },
+        turnId: "turn-running",
+        type: "message.delta",
+      },
+    ]);
+
+    expect(store.getState().getItem("realtime-commentary-last")).toMatchObject({
+      text: "再运行检查完成，全部通过",
+    });
+  });
+
+  it("does not reconcile empty, duplicate, or ambiguous prefix message text", () => {
+    const liveTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-running",
+      items: [
+        {
+          id: "realtime-empty",
+          role: "assistant" as const,
+          text: "",
+          type: "message" as const,
+        },
+        {
+          id: "realtime-duplicate-first",
+          role: "assistant" as const,
+          text: "重复内容",
+          type: "message" as const,
+        },
+        {
+          id: "realtime-duplicate-last",
+          role: "assistant" as const,
+          text: "重复内容",
+          type: "message" as const,
+        },
+        {
+          id: "realtime-prefix-short",
+          role: "assistant" as const,
+          text: "前缀",
+          type: "message" as const,
+        },
+        {
+          id: "realtime-prefix-long",
+          role: "assistant" as const,
+          text: "前缀扩展",
+          type: "message" as const,
+        },
+      ],
+      startedAt: timestamp,
+      status: "running" as const,
+    };
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ turns: [liveTurn] }),
+    );
+
+    store.getState().reconcile(
+      createResponse({
+        turns: [
+          {
+            ...liveTurn,
+            items: [
+              {
+                id: "snapshot-empty",
+                role: "assistant",
+                text: "",
+                type: "message",
+              },
+              {
+                id: "snapshot-duplicate",
+                role: "assistant",
+                text: "重复内容已完成",
+                type: "message",
+              },
+              {
+                id: "snapshot-prefix",
+                role: "assistant",
+                text: "前缀扩展完成",
+                type: "message",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual([
+      "realtime-empty",
+      "realtime-duplicate-first",
+      "realtime-duplicate-last",
+      "realtime-prefix-short",
+      "realtime-prefix-long",
+      "snapshot-empty",
+      "snapshot-duplicate",
+      "snapshot-prefix",
+    ]);
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        itemId: "realtime-duplicate-last",
+        payload: { delta: "，实时继续" },
+        turnId: "turn-running",
+        type: "message.delta",
+      },
+    ]);
+
+    expect(store.getState().getItem("realtime-duplicate-last")).toMatchObject({
+      text: "重复内容，实时继续",
+    });
+    expect(store.getState().getItem("snapshot-duplicate")).toMatchObject({
+      text: "重复内容已完成",
+    });
+  });
+
+  it("reconciles multiple steer user messages by unique text", () => {
+    const liveTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-running",
+      items: [
+        {
+          id: "realtime-user-initial",
+          role: "user" as const,
+          text: "检查项目",
+          type: "message" as const,
+        },
+        {
+          id: "realtime-user-steer-first",
+          role: "user" as const,
+          text: "继续检查配置",
+          type: "message" as const,
+        },
+        {
+          id: "realtime-user-steer-last",
+          role: "user" as const,
+          text: "补充测试",
+          type: "message" as const,
+        },
+      ],
+      startedAt: timestamp,
+      status: "running" as const,
+    };
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ turns: [liveTurn] }),
+    );
+
+    store.getState().reconcile(
+      createResponse({
+        turns: [
+          {
+            ...liveTurn,
+            items: [
+              {
+                id: "snapshot-user-initial",
+                role: "user",
+                skills: [{ name: "initial-skill" }],
+                text: "检查项目",
+                type: "message",
+              },
+              {
+                id: "snapshot-user-steer-first",
+                role: "user",
+                skills: [{ name: "steer-first-skill" }],
+                text: "继续检查配置",
+                type: "message",
+              },
+              {
+                id: "snapshot-user-steer-last",
+                role: "user",
+                skills: [{ name: "steer-last-skill" }],
+                text: "补充测试覆盖",
+                type: "message",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual([
+      "realtime-user-initial",
+      "realtime-user-steer-first",
+      "realtime-user-steer-last",
+    ]);
+    expect(store.getState().getItem("realtime-user-steer-first")).toMatchObject({
+      skills: [{ name: "steer-first-skill" }],
+    });
+    expect(store.getState().getItem("realtime-user-steer-last")).toMatchObject({
+      skills: [{ name: "steer-last-skill" }],
+      text: "补充测试覆盖",
+    });
+  });
+
   it("updates one existing delta without replacing structural references", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
     const previousState = store.getState();
