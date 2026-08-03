@@ -926,6 +926,54 @@ test("shows the latest raw Codex operation throughout a running turn", async ({ 
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
 });
 
+test("shows the complete truncated command title on hover and focus", async ({ page }) => {
+  const command =
+    "pnpm exec vitest run apps/web/src/features/workbench/components/task-timeline.test.tsx --testNamePattern tool-command-title-tooltip";
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: {
+          ...taskSnapshot,
+          turns: taskSnapshot.turns.map((turn) => ({
+            ...turn,
+            items: [
+              ...turn.items,
+              {
+                command,
+                cwd: "/workspace/CodeAgent",
+                id: "command-with-truncated-title",
+                outputTruncated: false,
+                status: "completed",
+                type: "command",
+              },
+            ],
+          })),
+        },
+      },
+    });
+  });
+  await page.setViewportSize({ height: 720, width: 640 });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const commandTitle = page.getByText(command, { exact: true });
+  await expect(commandTitle).toBeVisible();
+  expect(await commandTitle.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(
+    true,
+  );
+
+  await commandTitle.hover();
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toHaveText(command);
+  expect(await tooltip.evaluate((element) => element.parentElement === document.body)).toBe(true);
+
+  await page.mouse.move(0, 0);
+  await expect(tooltip).toHaveCount(0);
+  await commandTitle.locator("..").focus();
+  await expect(page.getByRole("tooltip")).toHaveText(command);
+});
+
 test("allows a command approval and completes the turn", async ({ page }) => {
   await page.unroute("**/v1/**");
   await page.goto("/p/code-agent");
