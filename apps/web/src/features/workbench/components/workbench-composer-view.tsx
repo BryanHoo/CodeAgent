@@ -52,6 +52,7 @@ import {
   PromptInputSelect,
   PromptInputSubmit,
   PromptInputTools,
+  isPromptInputComposing,
   isPromptInputNewlineShortcut,
   usePromptInputAttachments,
   type PromptInputAttachment,
@@ -438,7 +439,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
               disabled={props.draftInputDisabled}
               onChange={props.onPromptChange}
               onKeyDown={(event) => {
-                if (!props.commandMenuOpen || event.nativeEvent.isComposing) {
+                if (!props.commandMenuOpen || isPromptInputComposing(event.nativeEvent)) {
                   return;
                 }
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {

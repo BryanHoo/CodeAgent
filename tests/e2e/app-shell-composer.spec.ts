@@ -11,6 +11,52 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
+test("does not submit or select a command when Safari confirms an IME candidate", async ({
+  page,
+}) => {
+  const turnRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (
+      request.method() === "POST" &&
+      url.pathname === "/v1/projects/code-agent/tasks/task-1/turns"
+    ) {
+      turnRequests.push(url.pathname);
+    }
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  const dispatchSafariImeEnter = () =>
+    prompt.evaluate((editor) => {
+      editor.dispatchEvent(
+        new CompositionEvent("compositionend", { bubbles: true, data: editor.textContent }),
+      );
+      // Safari 在候选确认后会产生 isComposing=false、keyCode=229 的 Enter keydown。
+      editor.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          key: "Enter",
+          keyCode: 229,
+        }),
+      );
+    });
+
+  await prompt.fill("中文候选");
+  await dispatchSafariImeEnter();
+  await expect(prompt).toHaveAttribute("data-serialized-value", "中文候选");
+  expect(turnRequests).toHaveLength(0);
+
+  await prompt.fill("/");
+  const commandMenu = page.getByRole("listbox", { name: "输入命令" });
+  await expect(commandMenu).toBeVisible();
+  await dispatchSafariImeEnter();
+  await expect(commandMenu).toBeVisible();
+  await expect(prompt).toHaveAttribute("data-serialized-value", "/");
+  expect(turnRequests).toHaveLength(0);
+});
+
 test("shows processing state while an existing task turn is still starting", async ({ page }) => {
   let releaseTurnStart!: () => void;
   let markTurnStartRequested!: () => void;

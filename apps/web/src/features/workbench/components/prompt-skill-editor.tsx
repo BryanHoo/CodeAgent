@@ -13,7 +13,10 @@ import {
 } from "react";
 
 import { i18n } from "../../../i18n/i18n.js";
-import { isPromptInputNewlineShortcut } from "../../../shared/ai-elements/prompt-input.js";
+import {
+  isPromptInputComposing,
+  isPromptInputNewlineShortcut,
+} from "../../../shared/ai-elements/prompt-input.js";
 import type { PromptSlashCommand } from "./prompt-command.js";
 import { skillTokenClassName } from "./skill-token.js";
 
@@ -539,7 +542,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
 
     const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
       onKeyDown?.(event);
-      if (event.defaultPrevented || event.nativeEvent.isComposing || disabled) {
+      if (event.defaultPrevented || isPromptInputComposing(event.nativeEvent) || disabled) {
         return;
       }
       if (event.key === "Backspace") {

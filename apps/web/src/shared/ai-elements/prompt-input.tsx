@@ -36,6 +36,16 @@ type PromptInputKeyEvent = Readonly<{
   shiftKey: boolean;
 }>;
 
+type PromptInputNativeKeyEvent = Readonly<{
+  isComposing: boolean;
+  keyCode: number;
+}>;
+
+export function isPromptInputComposing(event: PromptInputNativeKeyEvent): boolean {
+  // WebKit 会在候选确认的 Enter 前提前结束 composition，但仍用 229 标记该 IME 按键。
+  return event.isComposing || event.keyCode === 229;
+}
+
 export function isPromptInputNewlineShortcut(event: PromptInputKeyEvent): boolean {
   // 同时覆盖 macOS 的 Command、Windows/Linux 的 Control 和通用 Shift 换行操作。
   return event.key === "Enter" && (event.shiftKey || event.metaKey || event.ctrlKey);
@@ -567,7 +577,7 @@ export const PromptInputTextarea = forwardRef<HTMLTextAreaElement, PromptInputTe
             !event.defaultPrevented &&
             event.key === "Enter" &&
             !isPromptInputNewlineShortcut(event) &&
-            !event.nativeEvent.isComposing
+            !isPromptInputComposing(event.nativeEvent)
           ) {
             event.preventDefault();
             event.currentTarget.form?.requestSubmit();
