@@ -22,6 +22,7 @@ import { createConversationAutoScrollController } from "./conversation-scroll.js
 type ConversationProps = HTMLAttributes<HTMLDivElement> &
   Readonly<{
     conversationId: string;
+    scrollToBottomSignal?: number;
   }>;
 
 type ConversationContentProps = HTMLAttributes<HTMLDivElement>;
@@ -51,10 +52,12 @@ export function Conversation({
   className = "",
   conversationId,
   onScroll,
+  scrollToBottomSignal,
   style,
   ...props
 }: ConversationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const previousScrollToBottomSignalRef = useRef(scrollToBottomSignal);
   const [atBottom, setAtBottom] = useState(true);
   const autoScrollControllerRef = useRef<
     ReturnType<typeof createConversationAutoScrollController> | undefined
@@ -107,6 +110,21 @@ export function Conversation({
       cancelAnimationFrame(animationFrameId);
     };
   }, [autoScrollController, conversationId]);
+
+  useLayoutEffect(() => {
+    if (
+      scrollToBottomSignal === undefined ||
+      scrollToBottomSignal === previousScrollToBottomSignalRef.current
+    ) {
+      return;
+    }
+    previousScrollToBottomSignalRef.current = scrollToBottomSignal;
+    const container = containerRef.current;
+    if (container !== null) {
+      // 用户直接提交时恢复自动跟随，后续用户消息和流式回复继续保持在底部。
+      autoScrollController.scrollToBottom(container);
+    }
+  }, [autoScrollController, scrollToBottomSignal]);
 
   useEffect(() => {
     const container = containerRef.current;

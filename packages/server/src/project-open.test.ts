@@ -31,6 +31,7 @@ describe("createProjectOpenService", () => {
         { id: "zed", kind: "editor", name: "Zed" },
         { id: "windsurf", kind: "editor", name: "Windsurf" },
         { id: "visual-studio-code", kind: "editor", name: "Visual Studio Code" },
+        { id: "system-default", kind: "system-default", name: "系统默认应用" },
         { id: "finder", kind: "file-manager", name: "Finder" },
         { id: "terminal", kind: "terminal", name: "Terminal" },
         { id: "ghostty", kind: "terminal", name: "Ghostty" },
@@ -73,6 +74,7 @@ describe("createProjectOpenService", () => {
         { id: "zed", kind: "editor", name: "Zed" },
         { id: "windsurf", kind: "editor", name: "Windsurf" },
         { id: "visual-studio-code", kind: "editor", name: "Visual Studio Code" },
+        { id: "system-default", kind: "system-default", name: "系统默认应用" },
         { id: "file-manager", kind: "file-manager", name: "文件管理器" },
         { id: "ghostty", kind: "terminal", name: "Ghostty" },
         { id: "gnome-terminal", kind: "terminal", name: "GNOME Terminal" },
@@ -119,6 +121,7 @@ describe("createProjectOpenService", () => {
         { id: "zed", kind: "editor", name: "Zed" },
         { id: "windsurf", kind: "editor", name: "Windsurf" },
         { id: "visual-studio-code", kind: "editor", name: "Visual Studio Code" },
+        { id: "system-default", kind: "system-default", name: "系统默认应用" },
         { id: "explorer", kind: "file-manager", name: "文件资源管理器" },
         { id: "windows-terminal", kind: "terminal", name: "Windows Terminal" },
         { id: "command-prompt", kind: "terminal", name: "命令提示符" },
@@ -195,6 +198,7 @@ describe("createProjectOpenService", () => {
         spawnDetached: macSpawn,
       });
       await macService.open(projectRoot, "zed", "src/app.ts");
+      await macService.open(projectRoot, "system-default", "src/app.ts");
       await macService.open(projectRoot, "finder", "src/app.ts");
       await macService.open(projectRoot, "terminal", "src/app.ts");
 
@@ -207,11 +211,17 @@ describe("createProjectOpenService", () => {
       expect(macSpawn).toHaveBeenNthCalledWith(
         2,
         "/usr/bin/open",
-        ["-R", resolvedSourceFile],
+        [resolvedSourceFile],
         expect.objectContaining({ cwd: resolvedProjectRoot }),
       );
       expect(macSpawn).toHaveBeenNthCalledWith(
         3,
+        "/usr/bin/open",
+        ["-R", resolvedSourceFile],
+        expect.objectContaining({ cwd: resolvedProjectRoot }),
+      );
+      expect(macSpawn).toHaveBeenNthCalledWith(
+        4,
         "/usr/bin/open",
         ["-a", "Terminal", resolvedSourceDirectory],
         expect.objectContaining({ cwd: resolvedSourceDirectory }),
@@ -225,17 +235,24 @@ describe("createProjectOpenService", () => {
         platform: "linux",
         spawnDetached: linuxSpawn,
       });
+      await linuxService.open(projectRoot, "system-default", "src/app.ts");
       await linuxService.open(projectRoot, "file-manager", "src/app.ts");
       await linuxService.open(projectRoot, "konsole", "src/app.ts");
 
       expect(linuxSpawn).toHaveBeenNthCalledWith(
         1,
         "/usr/bin/xdg-open",
-        [resolvedSourceDirectory],
+        [resolvedSourceFile],
         expect.objectContaining({ cwd: resolvedProjectRoot }),
       );
       expect(linuxSpawn).toHaveBeenNthCalledWith(
         2,
+        "/usr/bin/xdg-open",
+        [resolvedSourceDirectory],
+        expect.objectContaining({ cwd: resolvedProjectRoot }),
+      );
+      expect(linuxSpawn).toHaveBeenNthCalledWith(
+        3,
         "/usr/bin/konsole",
         ["--workdir", resolvedSourceDirectory],
         expect.objectContaining({ cwd: resolvedSourceDirectory }),
@@ -257,21 +274,32 @@ describe("createProjectOpenService", () => {
         platform: "win32",
         spawnDetached: windowsSpawn,
       });
+      await windowsService.open(projectRoot, "system-default", "src/app.ts");
       await windowsService.open(projectRoot, "explorer", "src/app.ts");
       await windowsService.open(projectRoot, "windows-terminal", "src/app.ts");
 
       expect(windowsSpawn).toHaveBeenNthCalledWith(
         1,
         "C:\\Windows\\explorer.exe",
+        [resolvedSourceFile],
+        expect.objectContaining({ cwd: resolvedProjectRoot, observeEarlyExit: false }),
+      );
+      expect(windowsSpawn).toHaveBeenNthCalledWith(
+        2,
+        "C:\\Windows\\explorer.exe",
         ["/select,", resolvedSourceFile],
         expect.objectContaining({ cwd: resolvedProjectRoot }),
       );
       expect(windowsSpawn).toHaveBeenNthCalledWith(
-        2,
+        3,
         "C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\wt.exe",
         ["-w", "new", "-d", resolvedSourceDirectory],
         expect.objectContaining({ cwd: resolvedSourceDirectory }),
       );
+
+      await expect(macService.open(projectRoot, "system-default", "src")).rejects.toMatchObject({
+        name: "ProjectOpenTargetInvalidError",
+      });
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }

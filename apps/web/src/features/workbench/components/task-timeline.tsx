@@ -110,6 +110,7 @@ type TaskTimelineCommonProps = Readonly<{
     idempotencyKey: string,
   ) => Promise<void>;
   runtime?: TaskRuntimeView;
+  scrollToBottomSignal?: number;
   submissionStartedAt?: string;
   startingSnapshot?: RuntimeTaskSnapshot;
 }>;
@@ -242,6 +243,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
     onResolvePendingRequest,
     onRollbackTurn,
     runtime,
+    scrollToBottomSignal,
     submissionStartedAt,
     startingSnapshot,
   } = props;
@@ -260,6 +262,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
       canRollbackTurns={canRollbackTurns}
       {...(onForkTask === undefined ? {} : { onForkTask })}
       runtime={runtime}
+      scrollToBottomSignal={scrollToBottomSignal}
       submissionStartedAt={submissionStartedAt}
       startingSnapshot={startingSnapshot}
     />
@@ -275,6 +278,7 @@ function ActiveTaskTimeline({
   onResolvePendingRequest,
   onRollbackTurn,
   runtime,
+  scrollToBottomSignal,
   submissionStartedAt,
   startingSnapshot,
 }: Readonly<{
@@ -290,6 +294,7 @@ function ActiveTaskTimeline({
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
   canRollbackTurns: boolean;
   runtime: TaskRuntimeView;
+  scrollToBottomSignal: number | undefined;
   submissionStartedAt: string | undefined;
   startingSnapshot: RuntimeTaskSnapshot | undefined;
 }>) {
@@ -330,6 +335,7 @@ function ActiveTaskTimeline({
         onReviewFileChanges={onReviewFileChanges}
         onResolvePendingRequest={onResolvePendingRequest}
         onRollbackTurn={onRollbackTurn}
+        {...(scrollToBottomSignal === undefined ? {} : { scrollToBottomSignal })}
         store={runtime.store}
         {...(submissionStartedAt === undefined ? {} : { submissionStartedAt })}
       />
@@ -1522,6 +1528,7 @@ function TaskStoreTimeline({
   onReviewFileChanges,
   onResolvePendingRequest,
   onRollbackTurn,
+  scrollToBottomSignal,
   store,
   submissionStartedAt,
 }: Readonly<{
@@ -1537,6 +1544,7 @@ function TaskStoreTimeline({
     idempotencyKey: string,
   ) => Promise<void>;
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
+  scrollToBottomSignal?: number;
   store: TaskStore;
   submissionStartedAt?: string;
 }>) {
@@ -1564,6 +1572,7 @@ function TaskStoreTimeline({
     <Conversation
       aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
       conversationId={`${projectId}:${taskId}`}
+      {...(scrollToBottomSignal === undefined ? {} : { scrollToBottomSignal })}
     >
       <ConversationVirtualList
         {...(hasVisiblePendingRequest || showPendingSubmission

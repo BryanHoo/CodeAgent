@@ -469,6 +469,8 @@ test("project file tree context menu opens files and folders with a selected app
   await expect(folderMenu).toBeVisible();
   await expect(folderMenu.getByText("打开方式", { exact: true })).toBeVisible();
   await expect(folderMenu.getByText("docs", { exact: true })).toBeVisible();
+  await expect(folderMenu.getByRole("menuitem", { name: "系统默认应用" })).toHaveCount(0);
+  await expect(folderMenu.getByText("__SYSTEM_DEFAULT__", { exact: true })).toHaveCount(0);
   await expect(docsTreeItem).toHaveAttribute("aria-selected", "true");
   await folderMenu.getByRole("menuitem", { name: "Finder" }).click();
   await folderRequest;
@@ -480,14 +482,14 @@ test("project file tree context menu opens files and folders with a selected app
       return false;
     }
     const body = parseRequestRecord(request.postData());
-    return body["appId"] === "zed" && body["path"] === "package.json";
+    return body["appId"] === "system-default" && body["path"] === "package.json";
   });
   const packageTreeItem = fileTree.getByRole("treeitem", { name: /package\.json/u });
   await packageTreeItem.click({ button: "right" });
   const fileMenu = page.getByRole("menu", { name: "打开 package.json 的方式" });
   await expect(packageTreeItem).toHaveAttribute("aria-selected", "true");
   await expect(packageTreeItem).toHaveClass(/bg-control/u);
-  await fileMenu.getByRole("menuitem", { name: "Zed" }).click();
+  await fileMenu.getByRole("menuitem", { name: "系统默认应用" }).click();
   await fileRequest;
   await expect(fileMenu).not.toBeAttached();
 });
@@ -1269,4 +1271,93 @@ test("scrolls the conversation area to the bottom whenever the active task chang
       ),
     )
     .toBeLessThanOrEqual(1);
+});
+
+test("scrolls direct user submissions to the bottom without scrolling queued messages", async ({
+  page,
+}) => {
+  const longTurns = Array.from({ length: 24 }, (_, turnIndex) => ({
+    completedAt: `2026-07-22T08:${String(turnIndex).padStart(2, "0")}:30.000Z`,
+    error: null,
+    id: `submission-scroll-turn-${String(turnIndex)}`,
+    items: [
+      {
+        id: `submission-scroll-user-${String(turnIndex)}`,
+        role: "user",
+        text: `滚动测试问题 ${String(turnIndex + 1)}`,
+        type: "message",
+      },
+      {
+        id: `submission-scroll-assistant-${String(turnIndex)}`,
+        role: "assistant",
+        text: `滚动测试回复 ${String(turnIndex + 1)}：${"保持足够内容以验证中栏滚动行为。".repeat(8)}`,
+        type: "message",
+      },
+    ],
+    startedAt: `2026-07-22T08:${String(turnIndex).padStart(2, "0")}:00.000Z`,
+    status: "completed",
+  }));
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: { ...taskSnapshot, turns: longTurns },
+      },
+    });
+  });
+  await page.route("**/v1/projects/code-agent/tasks/task-1/turns", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        taskId: "task-1",
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "direct-submission-turn",
+          items: [],
+          startedAt: "2026-08-03T00:00:00.000Z",
+          status: "running",
+        },
+      },
+      status: 201,
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const conversation = page.getByRole("log", { name: "会话内容" });
+  await expect
+    .poll(() => conversation.evaluate((element) => element.scrollHeight))
+    .toBeGreaterThan(800);
+  await conversation.evaluate((element) => {
+    element.scrollTop = 120;
+    element.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.fill("直接发送的新消息");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await expect(page.getByRole("button", { exact: true, name: "停止" })).toBeVisible();
+  await expect
+    .poll(() =>
+      conversation.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThanOrEqual(1);
+
+  await conversation.evaluate((element) => {
+    element.scrollTop = 120;
+    element.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+  await prompt.fill("运行中排队的消息");
+  await page.getByRole("button", { exact: true, name: "排队消息" }).click();
+  await expect(page.getByRole("list", { name: "排队消息" })).toContainText("运行中排队的消息");
+  await expect
+    .poll(() =>
+      conversation.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeGreaterThan(100);
 });

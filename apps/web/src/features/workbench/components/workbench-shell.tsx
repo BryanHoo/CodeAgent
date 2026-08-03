@@ -958,6 +958,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
 }>) {
   const queryClient = useQueryClient();
   const taskScope = `${projectId}:${taskId}`;
+  const [timelineScrollToBottomSignal, setTimelineScrollToBottomSignal] = useState(0);
   const { handleSubmissionStateChange, startedAt: submissionStartedAt } = useSubmissionStartedAt();
   const [submittedPromptState, setSubmittedPromptState] = useState<{
     prompt: SubmittedPromptState | undefined;
@@ -1047,6 +1048,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         projectId={projectId}
         key={taskScope}
         runtime={visibleRuntime}
+        scrollToBottomSignal={timelineScrollToBottomSignal}
         {...(submissionStartedAt === undefined ? {} : { submissionStartedAt })}
         taskId={taskId}
         {...(startingSnapshot === undefined ? {} : { startingSnapshot })}
@@ -1058,6 +1060,9 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         models={models}
         modelsError={modelsError}
         modelsPending={modelsPending || runtime.isPending}
+        onDirectSubmission={() => {
+          setTimelineScrollToBottomSignal((current) => current + 1);
+        }}
         onRequestNotificationPermission={onRequestNotificationPermission}
         onSettingsChange={(settings) =>
           settingsMutation.mutateAsync(settings).then(() => undefined)

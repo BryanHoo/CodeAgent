@@ -100,6 +100,7 @@ type WorkbenchComposerProps = Readonly<{
     field: keyof AgentTaskSettings,
   ) => Promise<void> | void;
   onRequestNotificationPermission: () => void;
+  onDirectSubmission?: () => void;
   onSubmissionStateChange?: (submitting: boolean) => void;
   onTaskCreated?: (task: AgentTask) => void;
   onTurnStarted?: (turn: AgentTurn, input: AgentPromptInput) => void;
@@ -125,6 +126,7 @@ export function WorkbenchComposer({
   models,
   modelsError,
   modelsPending,
+  onDirectSubmission,
   onRequestNotificationPermission,
   onSettingsChange,
   onSubmissionStateChange,
@@ -386,6 +388,7 @@ export function WorkbenchComposer({
     options: Readonly<{
       clearInputOnSuccess?: boolean;
       forceAction?: "start" | "steer";
+      requestTimelineScroll?: boolean;
     }> = {},
   ): Promise<boolean> => {
     const requestScope = routeScope;
@@ -434,6 +437,10 @@ export function WorkbenchComposer({
       return true;
     }
 
+    // 排队项由调用方关闭置底请求，只有用户当前发出的即时消息改变阅读位置。
+    if (options.requestTimelineScroll !== false) {
+      onDirectSubmission?.();
+    }
     // Notification 权限必须在提交手势内申请，不能等网络 Mutation 完成后再触发。
     onRequestNotificationPermission();
     setIsSubmitting(true);
@@ -592,6 +599,7 @@ export function WorkbenchComposer({
     options: Readonly<{
       clearInputOnSuccess?: boolean;
       forceAction?: "start" | "steer";
+      requestTimelineScroll?: boolean;
     }> = {},
   ): Promise<boolean> =>
     composerActionLock
@@ -606,6 +614,7 @@ export function WorkbenchComposer({
         {
           clearInputOnSuccess: false,
           forceAction: "start",
+          requestTimelineScroll: false,
         },
       ).then((sent) => {
         if (sent && isCurrentScope(queuedScope)) {
@@ -913,7 +922,7 @@ export function WorkbenchComposer({
     const sent = await submitPrompt(
       { files: queuedPrompt.files, text: queuedPrompt.text },
       queuedPrompt.skills,
-      { clearInputOnSuccess: false, forceAction: "steer" },
+      { clearInputOnSuccess: false, forceAction: "steer", requestTimelineScroll: false },
     );
     if (sent && isCurrentScope(routeScope)) {
       removeQueuedPrompt(queuedPrompt.id);

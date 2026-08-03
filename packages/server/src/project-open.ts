@@ -37,6 +37,7 @@ type ProjectOpenCommand = Readonly<{
   args: (target: ProjectOpenTarget) => readonly string[];
   file: string;
   observeEarlyExit: boolean;
+  targetTypes: readonly ProjectOpenTarget["type"][];
 }>;
 
 type ProjectOpenTarget = Readonly<{
@@ -47,6 +48,11 @@ type ProjectOpenTarget = Readonly<{
 }>;
 
 type ProjectOpenCommandMap = Map<ProjectOpenAppId, ProjectOpenCommand>;
+
+type ProjectOpenCommandOptions = Readonly<{
+  observeEarlyExit?: boolean;
+  targetTypes?: readonly ProjectOpenTarget["type"][];
+}>;
 
 const DEFAULT_LAUNCH_CONFIRMATION_MS = 500;
 
@@ -271,10 +277,16 @@ function addCommand(
   app: Readonly<{ id: ProjectOpenAppId; kind: ProjectOpenAppKind; name: string }>,
   file: string | undefined,
   args: (target: ProjectOpenTarget) => readonly string[],
-  observeEarlyExit = true,
+  options: ProjectOpenCommandOptions = {},
 ): void {
   if (file !== undefined) {
-    commands.set(app.id, { app, args, file, observeEarlyExit });
+    commands.set(app.id, {
+      app,
+      args,
+      file,
+      observeEarlyExit: options.observeEarlyExit ?? true,
+      targetTypes: options.targetTypes ?? ["directory", "file"],
+    });
   }
 }
 
@@ -309,6 +321,13 @@ async function resolveMacCommands(
   await addMacApp("zed", "Zed", "editor");
   await addMacApp("windsurf", "Windsurf", "editor");
   await addMacApp("visual-studio-code", "Visual Studio Code", "editor");
+  addCommand(
+    commands,
+    { id: "system-default", kind: "system-default", name: "系统默认应用" },
+    open,
+    (target) => [target.absolutePath],
+    { targetTypes: ["file"] },
+  );
   addCommand(commands, { id: "finder", kind: "file-manager", name: "Finder" }, open, (target) =>
     target.type === "file" ? ["-R", target.absolutePath] : [target.absolutePath],
   );
@@ -350,10 +369,18 @@ async function resolveLinuxCommands(
     await find("code"),
     (target) => [target.absolutePath],
   );
+  const desktopOpen = await find("xdg-open");
+  addCommand(
+    commands,
+    { id: "system-default", kind: "system-default", name: "系统默认应用" },
+    desktopOpen,
+    (target) => [target.absolutePath],
+    { targetTypes: ["file"] },
+  );
   addCommand(
     commands,
     { id: "file-manager", kind: "file-manager", name: "文件管理器" },
-    await find("xdg-open"),
+    desktopOpen,
     (target) => [target.directoryPath],
   );
   addCommand(
@@ -458,11 +485,18 @@ async function resolveWindowsCommands(
   );
   addCommand(
     commands,
+    { id: "system-default", kind: "system-default", name: "系统默认应用" },
+    explorer,
+    (target) => [target.absolutePath],
+    { observeEarlyExit: false, targetTypes: ["file"] },
+  );
+  addCommand(
+    commands,
     { id: "explorer", kind: "file-manager", name: "文件资源管理器" },
     explorer,
     (target) =>
       target.type === "file" ? ["/select,", target.absolutePath] : [target.absolutePath],
-    false,
+    { observeEarlyExit: false },
   );
   const windowsTerminal = await firstExisting(
     [
@@ -548,6 +582,10 @@ export function createProjectOpenService(
         throw new ProjectOpenAppUnavailableError(appId);
       }
       const target = await resolveProjectOpenTarget(projectRoot, projectRelativePath);
+      // 系统默认关联只对文件有明确语义，目录仍交给文件管理器等专用能力。
+      if (!command.targetTypes.includes(target.type)) {
+        throw new ProjectOpenTargetInvalidError();
+      }
       await spawnDetached(command.file, command.args(target), {
         cwd: command.app.kind === "terminal" ? target.directoryPath : target.projectRoot,
         observeEarlyExit: command.observeEarlyExit,

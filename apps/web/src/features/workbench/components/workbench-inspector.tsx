@@ -27,7 +27,11 @@ import { countFileChangeLines, type AgentFileChange } from "../../diff/file-chan
 import { FileTree, FileTreeFile, FileTreeFolder } from "../../../shared/ai-elements/file-tree.js";
 import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
 import { IconButton } from "../../../shared/ui/icon-button.js";
-import { ProjectOpenContextMenu, type ProjectOpenContextMenuTarget } from "./project-open-menu.js";
+import {
+  getProjectOpenAppsForTarget,
+  ProjectOpenContextMenu,
+  type ProjectOpenContextMenuTarget,
+} from "./project-open-menu.js";
 import {
   formatSubagentModel,
   toSubagentTaskStatus,
@@ -332,6 +336,7 @@ function ProjectFileTreeNodes({
             path: entry.path,
             pointerX: event.clientX,
             pointerY: event.clientY,
+            type: entry.type,
           });
         }}
         path={entry.path}
@@ -356,6 +361,7 @@ function ProjectFileTreeNodes({
             path: entry.path,
             pointerX: event.clientX,
             pointerY: event.clientY,
+            type: entry.type,
           });
         }}
         path={entry.path}
@@ -686,7 +692,7 @@ export function WorkbenchInspector({
                       onOpenContextMenu={(target) => {
                         // 右键目标先进入文件树选中态，让菜单与当前操作对象保持一致。
                         setSelectedTreePath(target.path);
-                        if (projectOpenApps.length > 0) {
+                        if (getProjectOpenAppsForTarget(projectOpenApps, target.type).length > 0) {
                           setProjectOpenTarget(target);
                         }
                       }}

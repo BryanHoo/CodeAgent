@@ -36,6 +36,7 @@ export type AddProjectResponse = Readonly<Static<typeof AddProjectResponseSchema
 
 export const ProjectOpenAppIdSchema = Type.Union([
   Type.Literal("visual-studio-code"),
+  Type.Literal("system-default"),
   Type.Literal("zed"),
   Type.Literal("windsurf"),
   Type.Literal("finder"),
@@ -57,6 +58,7 @@ export type ProjectOpenAppId = Static<typeof ProjectOpenAppIdSchema>;
 export const ProjectOpenAppKindSchema = Type.Union([
   Type.Literal("editor"),
   Type.Literal("file-manager"),
+  Type.Literal("system-default"),
   Type.Literal("terminal"),
   Type.Literal("tool"),
 ]);
@@ -903,7 +905,11 @@ const AgentGlobalSettingProperties = {
   commitMessageModel: Type.String({ minLength: 1 }),
   commitMessagePrompt: Type.String({ maxLength: 4_000 }),
   commitMessageReasoningEffort: Type.String({ minLength: 1 }),
-  defaultOpenAppId: Type.Union([ProjectOpenAppIdSchema, Type.Null()]),
+  // 文件专用系统关联不能成为 Project 根目录的默认打开方式。
+  defaultOpenAppId: Type.Union([
+    Type.Exclude(ProjectOpenAppIdSchema, Type.Literal("system-default")),
+    Type.Null(),
+  ]),
   followUpBehavior: Type.Union([Type.Literal("queue"), Type.Literal("steer")]),
   ...AgentTaskSettingProperties,
 };

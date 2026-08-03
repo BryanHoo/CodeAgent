@@ -453,11 +453,13 @@ export function GlobalSettingsDialog({
                       value={draft.defaultOpenAppId ?? ""}
                     >
                       <option value="">{t("integration.automatic")}</option>
-                      {apps.map((app) => (
-                        <option key={app.id} value={app.id}>
-                          {app.name}
-                        </option>
-                      ))}
+                      {apps
+                        .filter((app) => app.kind !== "system-default")
+                        .map((app) => (
+                          <option key={app.id} value={app.id}>
+                            {app.name}
+                          </option>
+                        ))}
                     </SettingsSelect>
                   </SettingsField>
                 </SettingsPanel>

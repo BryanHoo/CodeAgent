@@ -1,6 +1,14 @@
 import type { ProjectOpenApp, ProjectOpenAppId, ProjectOpenAppKind } from "@code-agent/protocol";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, Code2, FolderOpen, Terminal, Wrench } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Code2,
+  ExternalLink,
+  FolderOpen,
+  Terminal,
+  Wrench,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -19,6 +27,7 @@ const emptyApps: readonly ProjectOpenApp[] = [];
 const appKindIcons = {
   editor: Code2,
   "file-manager": FolderOpen,
+  "system-default": ExternalLink,
   terminal: Terminal,
   tool: Wrench,
 } as const satisfies Record<ProjectOpenAppKind, typeof Code2>;
@@ -33,6 +42,15 @@ type ProjectOpenMenuItemsProps = Readonly<{
   selectedAppId?: ProjectOpenAppId;
   title?: string;
 }>;
+
+type ProjectOpenTargetType = "directory" | "file";
+
+export function getProjectOpenAppsForTarget(
+  apps: readonly ProjectOpenApp[],
+  targetType: ProjectOpenTargetType,
+): readonly ProjectOpenApp[] {
+  return targetType === "file" ? apps : apps.filter((app) => app.kind !== "system-default");
+}
 
 export function ProjectOpenMenuItems({
   apps,
@@ -64,9 +82,10 @@ export function ProjectOpenMenuItems({
       {apps.map((app) => {
         const Icon = appKindIcons[app.kind];
         const selected = app.id === selectedAppId;
+        const appName = app.kind === "system-default" ? t("openMenu.systemDefault") : app.name;
         return (
           <button
-            aria-label={app.name}
+            aria-label={appName}
             className="flex h-9 w-full items-center gap-2.5 rounded-control px-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover focus-visible:bg-control-hover focus-visible:shadow-focus disabled:opacity-50"
             disabled={isPending}
             key={app.id}
@@ -78,7 +97,7 @@ export function ProjectOpenMenuItems({
             {...(mode === "selection" ? { "aria-checked": selected } : {})}
           >
             <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate">{app.name}</span>
+            <span className="min-w-0 flex-1 truncate">{appName}</span>
             {mode === "selection" && selected ? (
               <Check className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
             ) : null}
@@ -129,6 +148,7 @@ export type ProjectOpenContextMenuTarget = Readonly<{
   path: string;
   pointerX: number;
   pointerY: number;
+  type: ProjectOpenTargetType;
 }>;
 
 type ProjectOpenContextMenuProps = Readonly<{
@@ -148,6 +168,7 @@ export function ProjectOpenContextMenu({
 }: ProjectOpenContextMenuProps) {
   const { t } = useTranslation("workbench");
   const containerRef = useRef<HTMLDivElement>(null);
+  const targetApps = getProjectOpenAppsForTarget(apps, target.type);
 
   useEffect(() => {
     const focusFrame = requestAnimationFrame(() => {
@@ -174,7 +195,7 @@ export function ProjectOpenContextMenu({
   }, [onClose]);
 
   const position = getProjectOpenContextMenuPosition({
-    appCount: apps.length,
+    appCount: targetApps.length,
     pointerX: target.pointerX,
     pointerY: target.pointerY,
     viewportHeight: window.innerHeight,
@@ -191,7 +212,7 @@ export function ProjectOpenContextMenu({
       style={position}
     >
       <ProjectOpenMenuItems
-        apps={apps}
+        apps={targetApps}
         ariaLabel={t("openMenu.targetLabel", { path: target.path })}
         detail={target.path}
         isPending={isPending}
@@ -223,7 +244,7 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
   const [preferenceStorage] = useState(getProjectOpenPreferenceStorage);
   const openActionLockRef = useRef(createAsyncActionLock());
   const capabilitiesQuery = useQuery(projectOpenCapabilitiesQueryOptions(projectId, client));
-  const apps = capabilitiesQuery.data?.apps ?? emptyApps;
+  const apps = getProjectOpenAppsForTarget(capabilitiesQuery.data?.apps ?? emptyApps, "directory");
   const inheritedAppId = useMemo(
     () => resolveProjectOpenAppId(preferenceStorage, projectId, apps, defaultOpenAppId),
     [apps, defaultOpenAppId, preferenceStorage, projectId],

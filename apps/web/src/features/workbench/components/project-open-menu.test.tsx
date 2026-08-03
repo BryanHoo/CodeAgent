@@ -1,7 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { getProjectOpenContextMenuPosition, ProjectOpenMenuItems } from "./project-open-menu.js";
+import {
+  getProjectOpenAppsForTarget,
+  getProjectOpenContextMenuPosition,
+  ProjectOpenMenuItems,
+} from "./project-open-menu.js";
 
 describe("ProjectOpenMenuItems", () => {
   it("renders detected apps by name and marks the current selection", () => {
@@ -77,5 +81,29 @@ describe("ProjectOpenMenuItems", () => {
         viewportWidth: 1_000,
       }),
     ).toEqual({ left: 752, top: 594 });
+  });
+
+  it("offers the system default application only for file targets", () => {
+    const apps = [
+      { id: "zed", kind: "editor", name: "Zed" },
+      { id: "system-default", kind: "system-default", name: "__SYSTEM_DEFAULT__" },
+      { id: "finder", kind: "file-manager", name: "Finder" },
+    ] as const;
+
+    expect(getProjectOpenAppsForTarget(apps, "directory").map((app) => app.id)).toEqual([
+      "zed",
+      "finder",
+    ]);
+    expect(getProjectOpenAppsForTarget(apps, "file").map((app) => app.id)).toEqual([
+      "zed",
+      "system-default",
+      "finder",
+    ]);
+
+    const markup = renderToStaticMarkup(
+      <ProjectOpenMenuItems apps={apps} isPending={false} onSelect={vi.fn()} />,
+    );
+    expect(markup).toContain("系统默认应用");
+    expect(markup).not.toContain("__SYSTEM_DEFAULT__");
   });
 });

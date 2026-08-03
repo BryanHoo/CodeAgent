@@ -387,6 +387,7 @@ test.beforeEach(async ({ page }) => {
       body = {
         apps: [
           { id: "zed", kind: "editor", name: "Zed" },
+          { id: "system-default", kind: "system-default", name: "__SYSTEM_DEFAULT__" },
           { id: "finder", kind: "file-manager", name: "Finder" },
           { id: "terminal", kind: "terminal", name: "Terminal" },
         ],

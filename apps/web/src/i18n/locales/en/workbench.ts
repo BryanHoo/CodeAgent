@@ -102,6 +102,7 @@ export const workbench = {
     error: "Unable to open the project. Confirm that the app is still available.",
     none: "No apps available",
     openIn: "Open in {{app}}",
+    systemDefault: "System default app",
     targetLabel: "Ways to open {{path}}",
     title: "Open with",
   },

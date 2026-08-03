@@ -37,6 +37,7 @@ describe("GlobalSettingsDialog", () => {
       <GlobalSettingsDialog
         apps={[
           { id: "visual-studio-code", kind: "editor", name: "Visual Studio Code" },
+          { id: "system-default", kind: "system-default", name: "__SYSTEM_DEFAULT__" },
           { id: "finder", kind: "file-manager", name: "Finder" },
         ]}
         error={null}
@@ -83,6 +84,7 @@ describe("GlobalSettingsDialog", () => {
     expect(markup.match(/<select/gu)).toHaveLength(9);
     expect(markup).toContain("突出用户可见影响。");
     expect(markup).toContain("保存全局默认");
+    expect(markup).not.toContain("__SYSTEM_DEFAULT__");
   });
 
   it("uses the selected model default when the previous effort is unavailable", () => {

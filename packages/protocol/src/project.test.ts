@@ -169,6 +169,7 @@ describe("project protocol", () => {
       Value.Check(ProjectOpenCapabilitiesResponseSchema, {
         apps: [
           { id: "zed", kind: "editor", name: "Zed" },
+          { id: "system-default", kind: "system-default", name: "系统默认应用" },
           { id: "finder", kind: "file-manager", name: "Finder" },
           { id: "ghostty", kind: "terminal", name: "Ghostty" },
         ],
@@ -177,6 +178,9 @@ describe("project protocol", () => {
     ).toBe(true);
     expect(Value.Check(ProjectOpenAppSchema, { id: "zed", kind: "editor" })).toBe(false);
     expect(Value.Check(OpenProjectRequestSchema, { appId: "zed" })).toBe(true);
+    expect(
+      Value.Check(OpenProjectRequestSchema, { appId: "system-default", path: "README.md" }),
+    ).toBe(true);
     expect(
       Value.Check(OpenProjectRequestSchema, { appId: "zed", path: "src/components/app.tsx" }),
     ).toBe(true);
@@ -648,6 +652,9 @@ describe("project protocol", () => {
     expect(Value.Check(AgentGlobalSettingsSchema, { ...settings, defaultOpenAppId: null })).toBe(
       true,
     );
+    expect(
+      Value.Check(AgentGlobalSettingsSchema, { ...settings, defaultOpenAppId: "system-default" }),
+    ).toBe(false);
     expect(
       Value.Check(AgentGlobalSettingsSchema, { ...settings, defaultOpenAppId: "unknown-app" }),
     ).toBe(false);
