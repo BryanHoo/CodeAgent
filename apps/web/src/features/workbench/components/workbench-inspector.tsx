@@ -55,7 +55,7 @@ type WorkbenchInspectorProps = Readonly<{
   onFileTreeExpandedChange?: (expandedPaths: Set<string>) => void;
   onOpenFileDiff?: (change: AgentFileChange) => void;
   onOpenProjectPath?: (appId: ProjectOpenAppId, path: string) => void;
-  onOpenSourceFile?: (path: string) => void;
+  onOpenProjectFile?: (path: string) => void;
   onOpenSubagent?: (selection: SubagentSelection) => void;
   onRefreshFileTreeDirectory?: (directoryPath: string | null) => void;
   onRefreshGitStatus?: () => void;
@@ -446,7 +446,7 @@ export function WorkbenchInspector({
   onFileTreeExpandedChange = () => undefined,
   onOpenFileDiff = () => undefined,
   onOpenProjectPath = () => undefined,
-  onOpenSourceFile = () => undefined,
+  onOpenProjectFile = () => undefined,
   onOpenSubagent = () => undefined,
   onRefreshFileTreeDirectory = () => undefined,
   onRefreshGitStatus = () => undefined,
@@ -677,7 +677,7 @@ export function WorkbenchInspector({
                       setSelectedTreePath(path);
                       const fileChange = fileChangesByPath.get(path);
                       if (fileChange === undefined) {
-                        onOpenSourceFile(path);
+                        onOpenProjectFile(path);
                       } else {
                         onOpenFileDiff(fileChange);
                       }

@@ -232,10 +232,19 @@ export const projectFileTreeByDirectory = new Map<string | null, object>([
     null,
     {
       entries: [
+        { path: "design", type: "directory" },
         { path: "docs", type: "directory" },
         { path: "package.json", type: "file" },
+        { path: "report.docx", type: "file" },
       ],
       path: null,
+    },
+  ],
+  [
+    "design",
+    {
+      entries: [{ path: "design/result.png", type: "file" }],
+      path: "design",
     },
   ],
   [

@@ -100,7 +100,7 @@ describe("WorkbenchInspector", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
-        onOpenSourceFile={() => undefined}
+        onOpenProjectFile={() => undefined}
         onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
@@ -225,7 +225,7 @@ describe("WorkbenchInspector", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
-        onOpenSourceFile={() => undefined}
+        onOpenProjectFile={() => undefined}
         onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
@@ -246,7 +246,7 @@ describe("WorkbenchInspector", () => {
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
         gitStatusError={new Error("not a git repository")}
-        onOpenSourceFile={() => undefined}
+        onOpenProjectFile={() => undefined}
         onReviewChanges={() => undefined}
         onRefreshGitStatus={() => undefined}
         projectName="CodeAgent"
@@ -263,7 +263,7 @@ describe("WorkbenchInspector", () => {
     const loadingMarkup = renderToStaticMarkup(
       <WorkbenchInspector
         fileTreeDirectories={[{ error: null, isFetching: true, isPending: true, path: null }]}
-        onOpenSourceFile={() => undefined}
+        onOpenProjectFile={() => undefined}
         onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
@@ -279,7 +279,7 @@ describe("WorkbenchInspector", () => {
             path: null,
           },
         ]}
-        onOpenSourceFile={() => undefined}
+        onOpenProjectFile={() => undefined}
         onRefreshFileTreeDirectory={() => undefined}
         onReviewChanges={() => undefined}
         projectName="CodeAgent"

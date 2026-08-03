@@ -344,13 +344,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     },
     [projectId],
   );
-  const openSourceFile = useCallback(
-    (reference: MessageFileReference) => {
-      void loadProjectSourceDialog();
-      setSourceFileSelection({ kind: "source", projectId, reference });
-    },
-    [projectId],
-  );
   const openMessageFileReference = useCallback(
     (reference: MessageFileReference) => {
       const kind = classifyProjectFileReference(reference.path);
@@ -820,8 +813,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             projectPathOpenMutation.mutateAsync({ appId, path }),
           );
         }}
-        onOpenSourceFile={(path) => {
-          openSourceFile({ lineNumber: null, path });
+        onOpenProjectFile={(path) => {
+          openMessageFileReference({ lineNumber: null, path });
         }}
         onRefreshGitStatus={() => {
           void refreshProjectGitStatus(projectId);

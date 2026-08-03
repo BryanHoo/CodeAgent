@@ -510,7 +510,7 @@ test("routes assistant links, images, and system files by Markdown file rules", 
   await expect(page.getByRole("dialog", { name: "report.docx" })).toHaveCount(0);
 });
 
-test("project file tree opens diffs for changed files and source previews for unchanged files", async ({
+test("project file tree opens changed, source, image, and system files by shared rules", async ({
   page,
 }) => {
   await page.goto("/p/code-agent/t/task-1");
@@ -536,7 +536,36 @@ test("project file tree opens diffs for changed files and source previews for un
   await fileTree.getByRole("treeitem", { name: "docs" }).click();
   await docsRequest;
   await fileTree.getByRole("treeitem", { name: "architecture-design.md" }).click();
-  await expect(page.getByRole("dialog", { name: "architecture-design.md" })).toBeVisible();
+  const sourceDialog = page.getByRole("dialog", { name: "architecture-design.md" });
+  await expect(sourceDialog).toBeVisible();
+  await sourceDialog.getByRole("button", { name: "关闭源文件" }).click();
+  await expect(sourceDialog).not.toBeAttached();
+
+  const imageRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/v1/projects/code-agent/files/image" &&
+      url.searchParams.get("path") === "design/result.png"
+    );
+  });
+  await fileTree.getByRole("button", { name: "展开文件夹 design" }).click();
+  await fileTree.getByRole("treeitem", { name: "result.png" }).click();
+  await imageRequest;
+  const imageDialog = page.getByRole("dialog", { name: "result.png" });
+  await expect(imageDialog.getByRole("img", { name: "result.png" })).toBeVisible();
+  await imageDialog.getByRole("button", { name: "关闭图片预览" }).click();
+  await expect(imageDialog).not.toBeAttached();
+
+  const systemOpenRequest = page.waitForRequest((request) => {
+    if (new URL(request.url()).pathname !== "/v1/projects/code-agent/open") {
+      return false;
+    }
+    const body = parseRequestRecord(request.postData());
+    return body["appId"] === "system-default" && body["path"] === "report.docx";
+  });
+  await fileTree.getByRole("treeitem", { name: "report.docx" }).click();
+  await systemOpenRequest;
+  await expect(page.getByRole("dialog", { name: "report.docx" })).toHaveCount(0);
 });
 
 test("project file tree context menu opens files and folders with a selected app", async ({
