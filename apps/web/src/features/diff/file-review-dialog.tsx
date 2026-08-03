@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp, FileCode2, Files, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { FileTree, FileTreeFile, FileTreeFolder } from "../../shared/ai-elements/file-tree.js";
 import { IconButton } from "../../shared/ui/icon-button.js";
 import { useTranslation } from "../../i18n/i18n.js";
 import type { AgentFileChange } from "./file-change.js";
@@ -8,27 +9,182 @@ import { countFileChangeLines, getFileName } from "./file-change.js";
 
 const PatchDiffViewer = lazy(() => import("./patch-diff-viewer.js"));
 
-export type ReviewFileListItem = Readonly<{
+export type ReviewFileTreeFile = Readonly<{
   additions: number;
   changeIndex: number;
   name: string;
   path: string;
   removals: number;
+  type: "file";
 }>;
 
-export function buildReviewFileList(
+export type ReviewFileTreeFolder = Readonly<{
+  children: readonly ReviewFileTreeNode[];
+  name: string;
+  path: string;
+  type: "folder";
+}>;
+
+export type ReviewFileTreeNode = ReviewFileTreeFile | ReviewFileTreeFolder;
+
+interface MutableReviewDirectory {
+  directories: Map<string, MutableReviewDirectory>;
+  files: ReviewFileTreeFile[];
+  name: string;
+  path: string;
+}
+
+function compareReviewTreeNames(
+  left: Pick<ReviewFileTreeNode, "name">,
+  right: Pick<ReviewFileTreeNode, "name">,
+): number {
+  return left.name.localeCompare(right.name, "en");
+}
+
+function buildReviewFileTreeFolder(directory: MutableReviewDirectory): ReviewFileTreeFolder {
+  const compactNames = [directory.name];
+  let compactDirectory = directory;
+
+  // 没有直接文件和同级分支的目录不单独占一行，直到真正的内容层级才展开。
+  while (compactDirectory.files.length === 0 && compactDirectory.directories.size === 1) {
+    const child = compactDirectory.directories.values().next().value;
+    if (child === undefined) {
+      break;
+    }
+    compactNames.push(child.name);
+    compactDirectory = child;
+  }
+
+  const directories = [...compactDirectory.directories.values()]
+    .sort(compareReviewTreeNames)
+    .map(buildReviewFileTreeFolder);
+  const files = compactDirectory.files.toSorted(compareReviewTreeNames);
+  return {
+    children: [...directories, ...files],
+    name: compactNames.join("/"),
+    path: compactDirectory.path,
+    type: "folder",
+  };
+}
+
+export function buildReviewFileTree(
   changes: readonly AgentFileChange[],
-): readonly ReviewFileListItem[] {
-  return changes.map((change, changeIndex) => {
+): readonly ReviewFileTreeNode[] {
+  const root: MutableReviewDirectory = {
+    directories: new Map(),
+    files: [],
+    name: "",
+    path: "",
+  };
+
+  changes.forEach((change, changeIndex) => {
+    const segments = change.path.split(/[\\/]/);
+    const name = segments.at(-1) ?? change.path;
+    let directory = root;
+    let directoryPath = "";
+
+    for (const segment of segments.slice(0, -1)) {
+      directoryPath = directoryPath.length === 0 ? segment : `${directoryPath}/${segment}`;
+      let child = directory.directories.get(segment);
+      if (child === undefined) {
+        child = { directories: new Map(), files: [], name: segment, path: directoryPath };
+        directory.directories.set(segment, child);
+      }
+      directory = child;
+    }
+
     const { additions, removals } = countFileChangeLines(change);
-    return {
+    directory.files.push({
       additions,
       changeIndex,
-      name: getFileName(change.path),
-      path: change.path,
+      name,
+      path: segments.join("/"),
       removals,
-    };
+      type: "file",
+    });
   });
+
+  return [
+    ...[...root.directories.values()].sort(compareReviewTreeNames).map(buildReviewFileTreeFolder),
+    ...root.files.toSorted(compareReviewTreeNames),
+  ];
+}
+
+function collectReviewFileTreeFolderPaths(
+  nodes: readonly ReviewFileTreeNode[],
+  paths = new Set<string>(),
+): Set<string> {
+  for (const node of nodes) {
+    if (node.type === "folder") {
+      paths.add(node.path);
+      collectReviewFileTreeFolderPaths(node.children, paths);
+    }
+  }
+  return paths;
+}
+
+type ReviewFileTreeNodesProps = Readonly<{
+  fileLabel: (node: ReviewFileTreeFile) => string;
+  nodes: readonly ReviewFileTreeNode[];
+}>;
+
+function ReviewFileTreeNodes({ fileLabel, nodes }: ReviewFileTreeNodesProps) {
+  return nodes.map((node) =>
+    node.type === "folder" ? (
+      <FileTreeFolder key={node.path} name={node.name} path={node.path}>
+        <ReviewFileTreeNodes fileLabel={fileLabel} nodes={node.children} />
+      </FileTreeFolder>
+    ) : (
+      <FileTreeFile
+        aria-label={fileLabel(node)}
+        icon={<FileCode2 aria-hidden="true" className="size-3.5 text-muted-foreground" />}
+        key={`${node.path}:${String(node.changeIndex)}`}
+        name={node.name}
+        path={node.path}
+        trailing={
+          <span aria-hidden="true" className="ml-auto flex shrink-0 items-center gap-1 text-meta">
+            <span className="font-medium text-diff-added">+{node.additions}</span>
+            <span className="font-medium text-diff-removed">-{node.removals}</span>
+          </span>
+        }
+      />
+    ),
+  );
+}
+
+type ReviewFileTreeNavigationProps = Readonly<{
+  nodes: readonly ReviewFileTreeNode[];
+  onSelect: (path: string) => void;
+  selectedPath: string;
+}>;
+
+export function ReviewFileTreeNavigation({
+  nodes,
+  onSelect,
+  selectedPath,
+}: ReviewFileTreeNavigationProps) {
+  const { t } = useTranslation("workbench");
+  const defaultExpanded = useMemo(() => collectReviewFileTreeFolderPaths(nodes), [nodes]);
+
+  return (
+    <FileTree
+      aria-label={t("diff.changedFilesNavigation")}
+      defaultExpanded={defaultExpanded}
+      onSelect={onSelect}
+      selectedPath={selectedPath}
+    >
+      <ReviewFileTreeNodes
+        fileLabel={(node) =>
+          t("diff.fileStats", {
+            additions: node.additions,
+            path: node.path,
+            removals: node.removals,
+          })
+        }
+        nodes={nodes}
+      />
+    </FileTree>
+  );
 }
 
 export function getReviewNavigationDirection(key: string): "next" | "previous" | null {
@@ -63,7 +219,17 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const reviewContentRef = useRef<HTMLElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const fileItems = useMemo(() => buildReviewFileList(changes ?? []), [changes]);
+  const fileTree = useMemo(() => buildReviewFileTree(changes ?? []), [changes]);
+  const fileIndexByPath = useMemo(
+    () =>
+      new Map(
+        (changes ?? []).map((change, changeIndex) => [
+          change.path.replaceAll("\\", "/"),
+          changeIndex,
+        ]),
+      ),
+    [changes],
+  );
 
   useEffect(() => {
     if (changes === null) {
@@ -82,6 +248,9 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
     }
     // 切换后原焦点按钮可能变为 disabled；窗口级监听保证四个方向键不因焦点丢失而中断。
     const handleReviewKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
       const direction = getReviewNavigationDirection(event.key);
       if (direction !== null) {
         event.preventDefault();
@@ -110,6 +279,7 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
     return null;
   }
   const change = changes[currentIndex] ?? firstChange;
+  const selectedPath = change.path.replaceAll("\\", "/");
   const fileName = getFileName(change.path);
   const titleId = "file-review-dialog-title";
   const navigate = (direction: "next" | "previous") => {
@@ -204,50 +374,16 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
               <span className="text-meta text-muted-foreground">{changes.length}</span>
             </div>
             <div className="min-h-0 overflow-y-auto px-2 py-2">
-              <ul aria-label={t("diff.changedFilesList")} className="space-y-1">
-                {fileItems.map((item) => {
-                  const isSelected = item.changeIndex === currentIndex;
-                  return (
-                    <li key={`${item.path}:${String(item.changeIndex)}`}>
-                      <button
-                        aria-current={isSelected ? "true" : undefined}
-                        aria-label={t("diff.fileStats", {
-                          additions: item.additions,
-                          path: item.path,
-                          removals: item.removals,
-                        })}
-                        className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-control px-2 py-2 text-left transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none ${isSelected ? "bg-control" : ""}`}
-                        onClick={() => {
-                          setCurrentIndex(item.changeIndex);
-                        }}
-                        type="button"
-                      >
-                        <FileCode2 aria-hidden="true" className="size-3.5 text-muted-foreground" />
-                        <span className="min-w-0">
-                          <span className="block truncate text-label font-medium" title={item.name}>
-                            {item.name}
-                          </span>
-                          {item.path === item.name ? null : (
-                            <span
-                              className="block truncate text-meta text-muted-foreground"
-                              title={item.path}
-                            >
-                              {item.path}
-                            </span>
-                          )}
-                        </span>
-                        <span
-                          className="flex shrink-0 items-center gap-1 text-meta"
-                          aria-hidden="true"
-                        >
-                          <span className="font-medium text-diff-added">+{item.additions}</span>
-                          <span className="font-medium text-diff-removed">-{item.removals}</span>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+              <ReviewFileTreeNavigation
+                nodes={fileTree}
+                onSelect={(path) => {
+                  const nextIndex = fileIndexByPath.get(path);
+                  if (nextIndex !== undefined) {
+                    setCurrentIndex(nextIndex);
+                  }
+                }}
+                selectedPath={selectedPath}
+              />
             </div>
           </aside>
         </div>

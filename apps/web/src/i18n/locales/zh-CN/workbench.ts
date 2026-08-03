@@ -32,7 +32,6 @@ export const workbench = {
   },
   diff: {
     changedFiles: "变更文件",
-    changedFilesList: "变更文件列表",
     changedFilesNavigation: "变更文件导航",
     close: "关闭文件 Diff",
     closeReview: "关闭文件审核",

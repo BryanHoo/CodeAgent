@@ -793,7 +793,7 @@ test("opens file diffs from the timeline and uncommitted review button", async (
   const consoleErrors: string[] = [];
   const failedResources: string[] = [];
   await page.route("**/v1/projects/code-agent/git/status", async (route) => {
-    // 此用例使用两个不同目录的文件，覆盖平铺列表与四方向导航，避免改变全局 Fixture。
+    // 此用例使用两个不同目录的文件，覆盖紧凑树路径与四方向导航，避免改变全局 Fixture。
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -852,18 +852,20 @@ test("opens file diffs from the timeline and uncommitted review button", async (
   await reviewButton.click();
   const reviewDialog = page.getByRole("dialog");
   const reviewContent = reviewDialog.getByRole("region", { name: "审核文件内容" });
-  const reviewNavigation = reviewDialog.getByLabel("变更文件导航");
-  const changedFileList = reviewDialog.getByRole("list", { name: "变更文件列表" });
-  const packageFileListItem = changedFileList.getByRole("button", {
+  const reviewNavigation = reviewDialog.getByRole("complementary", { name: "变更文件导航" });
+  const changedFileTree = reviewDialog.getByRole("tree", { name: "变更文件导航" });
+  const packageFileTreeItem = changedFileTree.getByRole("treeitem", {
     name: "package.json，新增 1 行，删除 1 行",
   });
-  const reviewFileListItem = changedFileList.getByRole("button", {
+  const reviewFileTreeItem = changedFileTree.getByRole("treeitem", {
     name: "apps/web/src/review-list.tsx，新增 1 行，删除 0 行",
   });
   await expect(reviewDialog).toHaveAccessibleName("package.json");
-  await expect(reviewDialog.getByRole("tree")).toHaveCount(0);
-  await expect(packageFileListItem).toHaveAttribute("aria-current", "true");
-  await expect(reviewFileListItem).toBeVisible();
+  await expect(
+    changedFileTree.getByRole("button", { name: "收起文件夹 apps/web/src", exact: true }),
+  ).toBeVisible();
+  await expect(packageFileTreeItem).toHaveAttribute("aria-selected", "true");
+  await expect(reviewFileTreeItem).toBeVisible();
   const [reviewContentBox, reviewNavigationBox] = await Promise.all([
     reviewContent.boundingBox(),
     reviewNavigation.boundingBox(),
@@ -879,10 +881,10 @@ test("opens file diffs from the timeline and uncommitted review button", async (
   await expect
     .poll(() => reviewContent.evaluate((element) => element.scrollTop))
     .toBeGreaterThan(0);
-  await reviewFileListItem.click();
+  await reviewFileTreeItem.click();
   await expect(reviewDialog).toHaveAccessibleName("review-list.tsx");
   await expect.poll(() => reviewContent.evaluate((element) => element.scrollTop)).toBe(0);
-  await packageFileListItem.click();
+  await packageFileTreeItem.click();
   await expect(reviewDialog).toHaveAccessibleName("package.json");
   await page.keyboard.press("ArrowRight");
   await expect(reviewDialog).toHaveAccessibleName("review-list.tsx");
@@ -893,7 +895,7 @@ test("opens file diffs from the timeline and uncommitted review button", async (
   await expect(reviewContent.locator(".file-diff-renderer")).toContainText(
     "export const reviewList = true;",
   );
-  await expect(reviewFileListItem).toHaveAttribute("aria-current", "true");
+  await expect(reviewFileTreeItem).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("ArrowUp");
   await expect(reviewDialog).toHaveAccessibleName("package.json");
   await page.keyboard.press("Escape");
