@@ -903,6 +903,15 @@ test("shows the latest raw Codex operation throughout a running turn", async ({ 
   if (initialShimmer === null) {
     throw new Error("未找到运行态 Shimmer");
   }
+  // 节点可见后 CSS 动画仍可能尚未启动，先等待时间轴完成初始化。
+  await expect
+    .poll(() =>
+      runningShimmer.evaluate((node) => {
+        const animation = node.getAnimations()[0];
+        return animation?.playState === "running" && animation.startTime !== null;
+      }),
+    )
+    .toBe(true);
   const initialAnimation = await runningShimmer.evaluate((node) => ({
     currentTime: Number(node.getAnimations()[0]?.currentTime ?? 0),
     spread: node.style.getPropertyValue("--ui-shimmer-spread"),
