@@ -651,13 +651,11 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain('aria-label="消息附件"');
     expect(markup).toContain('aria-label="查看图片 diagram.png"');
     expect(markup).toContain(
-      'href="/v1/projects/code-agent/tasks/task-1/attachments/history%2Fimage-1"',
-    );
-    expect(markup).toContain(
       'src="/v1/projects/code-agent/tasks/task-1/attachments/history%2Fimage-1"',
     );
     expect(markup).toContain('loading="lazy"');
     expect(markup).toContain('decoding="async"');
+    expect(markup).toContain('aria-haspopup="dialog"');
     expect(markup).toContain('data-message-attachment="image"');
     expect(markup).toContain('data-message-text="true"');
     expect(markup).toContain('width="160"');
@@ -667,6 +665,7 @@ describe("TaskSnapshotTimeline", () => {
     );
     expect(markup.match(/diagram\.png/g)).toHaveLength(2);
     expect(markup).not.toContain("data:image");
+    expect(markup).not.toContain('target="_blank"');
   });
 
   it("renders pasted text as a file attachment instead of a text bubble", () => {

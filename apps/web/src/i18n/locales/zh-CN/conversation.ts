@@ -146,6 +146,7 @@ export const conversation = {
     attachments: "消息附件",
     changedFiles: "本次修改了 {{count}} 个文件",
     collapseFiles: "收起文件列表",
+    closeImagePreview: "关闭图片预览",
     commandPending: "正在执行命令",
     conversation: "会话内容",
     copied: "已复制",

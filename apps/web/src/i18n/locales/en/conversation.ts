@@ -146,6 +146,7 @@ export const conversation = {
     attachments: "Message attachments",
     changedFiles: "This response changed {{count}} files",
     collapseFiles: "Collapse file list",
+    closeImagePreview: "Close image preview",
     commandPending: "Running command",
     conversation: "Conversation",
     copied: "Copied",

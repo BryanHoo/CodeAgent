@@ -91,6 +91,7 @@ import {
   ToolOutput,
   type ToolState,
 } from "../../../shared/ai-elements/tool.js";
+import { MessageImageAttachment } from "./message-image-attachment.js";
 import { PendingRequestCard, type PendingRequestResolution } from "./pending-request.js";
 import { SkillToken } from "./skill-token.js";
 import {
@@ -961,29 +962,11 @@ function TimelineItemContent({
                 const attachmentUrl = buildTaskAttachmentUrl("", projectId, taskId, attachment.id);
                 if (attachment.kind === "image") {
                   return (
-                    <a
-                      aria-label={i18n.t("timeline.showImage", {
-                        name: attachment.name,
-                        ns: "conversation",
-                      })}
-                      className="block size-40 max-w-full overflow-hidden rounded-surface bg-control shadow-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
-                      data-message-attachment="image"
-                      href={attachmentUrl}
+                    <MessageImageAttachment
                       key={attachment.id}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      {/* 附件与文本气泡分层；历史图片只在进入可视区时读取和解码。 */}
-                      <img
-                        alt={attachment.name}
-                        className="size-full object-cover"
-                        decoding="async"
-                        height={160}
-                        loading="lazy"
-                        src={attachmentUrl}
-                        width={160}
-                      />
-                    </a>
+                      name={attachment.name}
+                      url={attachmentUrl}
+                    />
                   );
                 }
                 return (

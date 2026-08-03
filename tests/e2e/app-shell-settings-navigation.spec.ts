@@ -747,7 +747,7 @@ test("renders enabled MCP servers and sources in inspector", async ({ page }) =>
   await expect(inspector.getByRole("button", { name: "添加来源" })).toHaveCount(0);
 });
 
-test("renders message images as standalone previews above the text bubble", async ({ page }) => {
+test("opens message images in a preview dialog", async ({ context, page }) => {
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -807,6 +807,13 @@ test("renders message images as standalone previews above the text bubble", asyn
   expect(textBounds).not.toBeNull();
   expect(attachmentBounds?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(textBounds?.y ?? 0);
   expect((attachmentBounds?.x ?? 0) + (attachmentBounds?.width ?? 0)).toBeLessThanOrEqual(390);
+
+  await attachment.click();
+  const imagePreview = page.getByRole("dialog", { name: "diagram.png" });
+  await expect(imagePreview).toBeVisible();
+  expect(context.pages()).toHaveLength(1);
+  await imagePreview.getByRole("button", { name: "关闭图片预览" }).click();
+  await expect(imagePreview).toHaveCount(0);
 });
 
 test("keeps Projects fixed and manages task actions from the compact tree", async ({ page }) => {
