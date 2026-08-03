@@ -630,6 +630,7 @@ describe("TaskSnapshotTimeline", () => {
               attachments: [
                 {
                   id: "history/image-1",
+                  kind: "image",
                   mediaType: "image/png",
                   name: "diagram.png",
                   size: 68,
@@ -666,6 +667,43 @@ describe("TaskSnapshotTimeline", () => {
     );
     expect(markup.match(/diagram\.png/g)).toHaveLength(2);
     expect(markup).not.toContain("data:image");
+  });
+
+  it("renders pasted text as a file attachment instead of a text bubble", () => {
+    const pastedTextSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              attachments: [
+                {
+                  id: "history/pasted-text-1",
+                  kind: "text",
+                  mediaType: "text/plain",
+                  name: "Pasted text.txt",
+                  size: 1_001,
+                },
+              ],
+              id: "message-user-pasted-text",
+              role: "user",
+              text: "",
+              type: "message",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={pastedTextSnapshot} />);
+
+    expect(markup).toContain('data-message-attachment="text"');
+    expect(markup).toContain('data-attachment-preview="file"');
+    expect(markup).toContain("Pasted text.txt");
+    expect(markup).toContain("1001 B");
+    expect(markup).not.toContain("<img");
+    expect(markup).not.toContain('data-message-text="true"');
   });
 
   it("removes the old content-visibility fallback after Turn virtualization", () => {

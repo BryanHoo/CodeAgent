@@ -15,6 +15,7 @@ describe("CodexHistoricalAttachmentStore", () => {
 
     expect(attachment).toEqual({
       id: "history-random-1",
+      kind: "image",
       mediaType: "image/png",
       name: "diagram.png",
       size: pngContent.byteLength,
@@ -42,6 +43,7 @@ describe("CodexHistoricalAttachmentStore", () => {
 
     expect(attachment).toEqual({
       id: "history-local-1",
+      kind: "image",
       mediaType: "image/png",
       name: "diagram.png",
       size: pngContent.byteLength,

@@ -81,6 +81,7 @@ describe("submitted prompt merge", () => {
           attachments: [
             {
               id: "history-image-1",
+              kind: "image" as const,
               mediaType: "image/png" as const,
               name: "diagram.png",
               size: 68,
@@ -102,6 +103,103 @@ describe("submitted prompt merge", () => {
     );
 
     expect(mergedSnapshot.turns[0]?.items).toEqual(submittedTurn.items);
+  });
+
+  it("keeps submitted attachment metadata visible before the provider user item arrives", () => {
+    const submittedTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-pasted-text",
+      items: [],
+      startedAt: snapshot.updatedAt,
+      status: "running" as const,
+    };
+    const mergedSnapshot = mergeSubmittedPromptIntoSnapshot(
+      { ...snapshot, turns: [submittedTurn] },
+      submittedTurn,
+      {
+        attachments: [{ id: "attachment-pasted-text" }],
+        messageAttachments: [
+          {
+            id: "attachment-pasted-text",
+            kind: "text",
+            mediaType: "text/plain",
+            name: "Pasted text.txt",
+            size: 1_001,
+          },
+        ],
+        skills: [],
+        text: "",
+      },
+    );
+
+    expect(mergedSnapshot.turns[0]?.items).toEqual([
+      {
+        attachments: [
+          {
+            id: "attachment-pasted-text",
+            kind: "text",
+            mediaType: "text/plain",
+            name: "Pasted text.txt",
+            size: 1_001,
+          },
+        ],
+        id: "submitted-user-turn-pasted-text",
+        role: "user",
+        text: "",
+        type: "message",
+      },
+    ]);
+  });
+
+  it("enriches an empty runtime user item with submitted attachment metadata", () => {
+    const submittedTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-runtime-placeholder",
+      items: [],
+      startedAt: snapshot.updatedAt,
+      status: "running" as const,
+    };
+    const runtimeTurn = {
+      ...submittedTurn,
+      items: [
+        {
+          id: "runtime-user-placeholder",
+          role: "user" as const,
+          text: "x".repeat(1_001),
+          type: "message" as const,
+        },
+      ],
+    };
+    const messageAttachments = [
+      {
+        id: "attachment-pasted-text",
+        kind: "text" as const,
+        mediaType: "text/plain",
+        name: "Pasted text.txt",
+        size: 1_001,
+      },
+    ];
+
+    const mergedSnapshot = mergeSubmittedPromptIntoSnapshot(
+      { ...snapshot, turns: [runtimeTurn] },
+      submittedTurn,
+      {
+        attachments: [{ id: "attachment-pasted-text" }],
+        messageAttachments,
+        skills: [],
+        text: "",
+      },
+    );
+
+    expect(mergedSnapshot.turns[0]?.items[0]).toEqual({
+      attachments: messageAttachments,
+      id: "runtime-user-placeholder",
+      role: "user",
+      text: "",
+      type: "message",
+    });
   });
 });
 

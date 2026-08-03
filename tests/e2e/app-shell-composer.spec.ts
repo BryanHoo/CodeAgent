@@ -584,7 +584,11 @@ test("converts large pasted text into a submitted file attachment", async ({ pag
   await expect(page.getByText("Pasted text.txt", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { exact: true, name: "提交" }).click();
-  await expect(page.getByText("Pasted text.txt", { exact: true })).toHaveCount(0);
+  const submittedAttachment = page.locator('[data-message-attachment="text"]');
+  await expect(submittedAttachment).toBeVisible();
+  await expect(submittedAttachment).toContainText("Pasted text.txt");
+  await expect(submittedAttachment).toContainText("1001 B");
+  await expect(submittedAttachment.locator("img")).toHaveCount(0);
 
   expect(uploadRequest?.url).toMatch(/\/attachments\/text$/u);
   expect(uploadRequest?.contentType).toMatch(/^multipart\/form-data; boundary=/u);

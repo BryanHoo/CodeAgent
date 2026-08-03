@@ -1,6 +1,7 @@
 import type {
   AgentCapabilities,
   AgentGlobalSettings,
+  AgentMessageAttachment,
   AgentModel,
   AgentPromptInput,
   AgentReviewTarget,
@@ -103,12 +104,17 @@ type WorkbenchComposerProps = Readonly<{
   onDirectSubmission?: () => void;
   onSubmissionStateChange?: (submitting: boolean) => void;
   onTaskCreated?: (task: AgentTask) => void;
-  onTurnStarted?: (turn: AgentTurn, input: AgentPromptInput) => void;
+  onTurnStarted?: (
+    turn: AgentTurn,
+    input: AgentPromptInput,
+    messageAttachments: readonly AgentMessageAttachment[],
+  ) => void;
   onTaskStarted: (
     task: AgentTask,
     turn?: AgentTurn,
     input?: AgentPromptInput,
     settings?: AgentTaskSettings,
+    messageAttachments?: readonly AgentMessageAttachment[],
   ) => void;
   projectId: string;
   projectPath: string;
@@ -446,12 +452,13 @@ export function WorkbenchComposer({
     setIsSubmitting(true);
     setMutationError(null);
     let input: AgentPromptInput;
+    let messageAttachments: readonly AgentMessageAttachment[];
     try {
-      const attachments = await Promise.all(
+      messageAttachments = await Promise.all(
         message.files.map(async (attachment) => {
           const uploaded = uploadedAttachments.current.get(attachment.id);
           if (uploaded !== undefined) {
-            return { id: uploaded.id };
+            return uploaded;
           }
           const idempotencyKey =
             uploadAttempts.current.get(attachment.id) ?? globalThis.crypto.randomUUID();
@@ -468,11 +475,11 @@ export function WorkbenchComposer({
           if (isCurrentScope(requestScope)) {
             uploadedAttachments.current.set(attachment.id, response.attachment);
           }
-          return { id: response.attachment.id };
+          return response.attachment;
         }),
       );
       input = {
-        attachments,
+        attachments: messageAttachments.map((attachment) => ({ id: attachment.id })),
         skills: skills.map((skill) => ({ id: skill.id, name: skill.name })),
         text,
         type: "prompt",
@@ -568,7 +575,7 @@ export function WorkbenchComposer({
         setSubmittedTurnState({ scope: requestScope, turnId: result.turn.id });
       }
       // Mutation 返回后立即上报本次提交，Timeline 不等待 Provider Snapshot 落盘。
-      onTurnStarted?.(result.turn, input);
+      onTurnStarted?.(result.turn, input, messageAttachments);
       if (isCurrentScope(requestScope)) {
         startTurnAttempt.current = undefined;
         uploadedAttachments.current.clear();
@@ -577,7 +584,7 @@ export function WorkbenchComposer({
       if (taskId === undefined) {
         const startedTask = result.createdTask ?? pendingTask;
         if (startedTask !== undefined) {
-          onTaskStarted(startedTask, result.turn, input, turnOptions);
+          onTaskStarted(startedTask, result.turn, input, turnOptions, messageAttachments);
         }
       }
       return true;

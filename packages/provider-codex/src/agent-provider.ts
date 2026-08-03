@@ -452,8 +452,10 @@ export class CodexAgentProvider implements AgentProvider {
       }),
       "turn/start response",
     );
-    const turn = mapAgentTurn(response["turn"], (part, imageIndex) =>
-      this.#mapMessageImage(taskId, part, imageIndex),
+    const turn = mapAgentTurn(
+      response["turn"],
+      (part, imageIndex) => this.#mapMessageImage(taskId, part, imageIndex),
+      (input, textIndex) => this.#mapMessageText(taskId, input, textIndex),
     );
     if (turn.status === "running") {
       this.#runtime.runningTaskIds.add(taskId);
@@ -561,6 +563,7 @@ export class CodexAgentProvider implements AgentProvider {
     const turn = mapAgentTurn(
       response["turn"],
       (part, imageIndex) => this.#mapMessageImage(taskId, part, imageIndex),
+      (input, textIndex) => this.#mapMessageText(taskId, input, textIndex),
       target,
     );
     if (turn.status !== "running") {
@@ -738,7 +741,11 @@ export class CodexAgentProvider implements AgentProvider {
       // Store 为未变化的来源复用随机授权 ID，重复读取不能使已交付的 Snapshot 图片失效。
       const turns = thread["turns"]
         .map((turn) =>
-          mapAgentTurn(turn, (part, imageIndex) => this.#mapMessageImage(taskId, part, imageIndex)),
+          mapAgentTurn(
+            turn,
+            (part, imageIndex) => this.#mapMessageImage(taskId, part, imageIndex),
+            (input, textIndex) => this.#mapMessageText(taskId, input, textIndex),
+          ),
         )
         .map((turn) => attachTranscriptSkills(turn, transcriptSkillsByTurnId.get(turn.id) ?? []));
       const status = mapThreadStatus(thread["status"]);
@@ -824,6 +831,7 @@ export class CodexAgentProvider implements AgentProvider {
         method,
         params,
         (taskId, part, imageIndex) => this.#mapMessageImage(taskId, part, imageIndex),
+        (taskId, input, textIndex) => this.#mapMessageText(taskId, input, textIndex),
         this.#runtime.activeReviewTargets.get(readTaskId(params) ?? ""),
       );
     } catch {
@@ -1061,6 +1069,14 @@ export class CodexAgentProvider implements AgentProvider {
     return path === undefined
       ? undefined
       : this.#historicalAttachments.addLocalImage(taskId, path, imageIndex);
+  }
+
+  #mapMessageText(
+    taskId: string,
+    input: Readonly<{ name: string; text: string }>,
+    textIndex: number,
+  ): AgentMessageAttachment | undefined {
+    return this.#historicalAttachments.addText(taskId, input, textIndex);
   }
 
   #assertKnownProjectTask(taskId: string): void {

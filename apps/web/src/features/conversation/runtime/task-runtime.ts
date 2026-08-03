@@ -1,5 +1,6 @@
 import type {
   AgentEvent,
+  AgentMessageAttachment,
   AgentPromptInput,
   AgentTaskSnapshot,
   AgentTurn,
@@ -17,7 +18,8 @@ export type RuntimeTaskSnapshot = Omit<AgentTaskSnapshot, "pendingRequests"> &
 export function mergeSubmittedPromptIntoSnapshot(
   snapshot: RuntimeTaskSnapshot,
   submittedTurn: AgentTurn,
-  input: Pick<AgentPromptInput, "attachments" | "skills" | "text">,
+  input: Pick<AgentPromptInput, "attachments" | "skills" | "text"> &
+    Readonly<{ messageAttachments?: readonly AgentMessageAttachment[] }>,
 ): RuntimeTaskSnapshot {
   const submittedUserMessage = submittedTurn.items.find(
     (item) => item.type === "message" && item.role === "user",
@@ -32,11 +34,28 @@ export function mergeSubmittedPromptIntoSnapshot(
   }
   const turnIndex = snapshot.turns.findIndex((turn) => turn.id === submittedTurn.id);
   const currentTurn = snapshot.turns[turnIndex] ?? submittedTurn;
-  const alreadyContainsUserMessage = currentTurn.items.some(
+  const currentUserMessageIndex = currentTurn.items.findIndex(
     (item) => item.type === "message" && item.role === "user",
   );
-  if (turnIndex >= 0 && alreadyContainsUserMessage) {
-    return snapshot;
+  const currentUserMessage = currentTurn.items[currentUserMessageIndex];
+  const alreadyContainsUserMessage = currentUserMessageIndex >= 0;
+  if (turnIndex >= 0 && currentUserMessage?.type === "message") {
+    if (
+      (currentUserMessage.attachments?.length ?? 0) > 0 ||
+      (input.messageAttachments?.length ?? 0) === 0
+    ) {
+      return snapshot;
+    }
+    // Runtime 可能先创建空用户 Item；在权威附件到达前补齐本地上传元数据。
+    const turns = [...snapshot.turns];
+    const items = [...currentTurn.items];
+    items[currentUserMessageIndex] = {
+      ...currentUserMessage,
+      attachments: [...(input.messageAttachments ?? [])],
+      ...(input.text.length === 0 ? { text: "" } : {}),
+    };
+    turns[turnIndex] = { ...currentTurn, items };
+    return { ...snapshot, turns };
   }
 
   // Provider 的运行中 Snapshot 可能暂时缺少用户项；保留本次提交直到权威消息到达。
@@ -51,6 +70,9 @@ export function mergeSubmittedPromptIntoSnapshot(
             ...(input.skills.length === 0
               ? {}
               : { skills: input.skills.map((skill) => ({ name: skill.name })) }),
+            ...((input.messageAttachments?.length ?? 0) === 0
+              ? {}
+              : { attachments: [...(input.messageAttachments ?? [])] }),
             text: input.text,
             type: "message",
           },

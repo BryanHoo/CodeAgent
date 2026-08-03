@@ -527,9 +527,91 @@ type MapCodexMessageImage = (
   imageIndex: number,
 ) => AgentMessageAttachment | undefined;
 
+type MapCodexMessageText = (
+  input: Readonly<{ name: string; text: string }>,
+  textIndex: number,
+) => AgentMessageAttachment | undefined;
+
+const codexTextEncoder = new TextEncoder();
+const codexTextDecoder = new TextDecoder("utf-8", { fatal: true });
+
+function mapCodexTextPart(
+  part: Record<string, unknown>,
+  textIndex: number,
+  mapText: MapCodexMessageText,
+): Readonly<{ attachments: AgentMessageAttachment[]; text: string }> {
+  const text = expectString(part["text"], "Codex user message text");
+  const nativeElements = part["text_elements"];
+  if (!Array.isArray(nativeElements) || nativeElements.length === 0) {
+    return { attachments: [], text };
+  }
+
+  const encodedText = codexTextEncoder.encode(text);
+  const ranges: { end: number; name: string; start: number }[] = [];
+  for (const value of nativeElements) {
+    if (!isRecord(value) || !isRecord(value["byteRange"])) {
+      return { attachments: [], text };
+    }
+    const range = value["byteRange"];
+    const start = range["start"];
+    const end = range["end"];
+    const placeholder = value["placeholder"];
+    if (
+      !Number.isInteger(start) ||
+      !Number.isInteger(end) ||
+      typeof start !== "number" ||
+      typeof end !== "number" ||
+      start < 0 ||
+      end <= start ||
+      end > encodedText.byteLength ||
+      typeof placeholder !== "string" ||
+      placeholder.trim().length === 0
+    ) {
+      return { attachments: [], text };
+    }
+    ranges.push({ end, name: placeholder.trim().slice(0, 255), start });
+  }
+  ranges.sort((left, right) => left.start - right.start);
+
+  const attachments: AgentMessageAttachment[] = [];
+  const visibleText: string[] = [];
+  let cursor = 0;
+  try {
+    for (const range of ranges) {
+      if (range.start < cursor) {
+        return { attachments: [], text };
+      }
+      const prefix = codexTextDecoder.decode(encodedText.subarray(cursor, range.start));
+      if (prefix.length > 0) {
+        visibleText.push(prefix);
+      }
+      const attachmentText = codexTextDecoder.decode(encodedText.subarray(range.start, range.end));
+      const attachment = mapText(
+        { name: range.name, text: attachmentText },
+        textIndex + attachments.length,
+      );
+      if (attachment === undefined) {
+        visibleText.push(`@${range.name}`);
+      } else {
+        attachments.push(attachment);
+      }
+      cursor = range.end;
+    }
+    const suffix = codexTextDecoder.decode(encodedText.subarray(cursor));
+    if (suffix.length > 0) {
+      visibleText.push(suffix);
+    }
+  } catch {
+    // 非法 UTF-8 字节边界不能吞掉用户内容，退回原始文本显示。
+    return { attachments: [], text };
+  }
+  return { attachments, text: visibleText.join("") };
+}
+
 function mapUserMessageContent(
   value: unknown,
   mapImage: MapCodexMessageImage,
+  mapText: MapCodexMessageText,
 ): Readonly<{
   attachments: AgentMessageAttachment[];
   skills: { name: string }[];
@@ -541,13 +623,18 @@ function mapUserMessageContent(
   const attachments: AgentMessageAttachment[] = [];
   const skills: { name: string }[] = [];
   const textParts: string[] = [];
+  let imageIndex = 0;
+  let textIndex = 0;
 
   for (const part of value) {
     if (!isRecord(part)) {
       continue;
     }
     if (part["type"] === "text" && typeof part["text"] === "string") {
-      const textContent = extractCodexTextSkills(part["text"]);
+      const mappedText = mapCodexTextPart(part, textIndex, mapText);
+      attachments.push(...mappedText.attachments);
+      textIndex += mappedText.attachments.length;
+      const textContent = extractCodexTextSkills(mappedText.text);
       skills.push(...textContent.skills);
       if (textContent.text.length > 0) {
         textParts.push(textContent.text);
@@ -566,7 +653,8 @@ function mapUserMessageContent(
       continue;
     }
     if (part["type"] === "image" || part["type"] === "localImage") {
-      const attachment = mapImage(part, attachments.length);
+      const attachment = mapImage(part, imageIndex);
+      imageIndex += 1;
       if (attachment === undefined) {
         textParts.push("[图片]");
       } else {
@@ -880,6 +968,7 @@ function mapAgentItem(
   value: unknown,
   subagentNicknames: ReadonlyMap<string, string> = new Map(),
   mapImage: MapCodexMessageImage = () => undefined,
+  mapText: MapCodexMessageText = () => undefined,
 ): AgentItem {
   const item = expectRecord(value, "Codex item");
   const id = expectString(item["id"], "Codex item id");
@@ -887,7 +976,7 @@ function mapAgentItem(
 
   switch (type) {
     case "userMessage": {
-      const content = mapUserMessageContent(item["content"], mapImage);
+      const content = mapUserMessageContent(item["content"], mapImage, mapText);
       return {
         ...(content.attachments.length === 0 ? {} : { attachments: content.attachments }),
         id,
@@ -1023,6 +1112,7 @@ function mapAgentItem(
 export function mapAgentTurn(
   value: unknown,
   mapImage: MapCodexMessageImage = () => undefined,
+  mapText: MapCodexMessageText = () => undefined,
   explicitReviewTarget?: AgentReviewTarget,
 ): AgentTurn {
   const turn = expectRecord(value, "Codex turn");
@@ -1073,7 +1163,7 @@ export function mapAgentTurn(
         ) {
           return [];
         }
-        return [mapAgentItem(item, subagentNicknames, mapImage)];
+        return [mapAgentItem(item, subagentNicknames, mapImage, mapText)];
       }),
     ]),
     startedAt: toNullableDateTime(turn["startedAt"], "Codex turn startedAt"),
@@ -1116,6 +1206,11 @@ export function mapCodexNotification(
     part: Record<string, unknown>,
     imageIndex: number,
   ) => AgentMessageAttachment | undefined,
+  mapText: (
+    taskId: string,
+    input: Readonly<{ name: string; text: string }>,
+    textIndex: number,
+  ) => AgentMessageAttachment | undefined,
   reviewTarget?: AgentReviewTarget,
 ): AgentProviderEvent | undefined {
   if (!CODEX_NOTIFICATION_METHODS.has(method)) {
@@ -1138,6 +1233,7 @@ export function mapCodexNotification(
     const turn = mapAgentTurn(
       params["turn"],
       (part, imageIndex) => mapImage(taskId, part, imageIndex),
+      (input, textIndex) => mapText(taskId, input, textIndex),
       reviewTarget,
     );
     return {
@@ -1210,8 +1306,11 @@ export function mapCodexNotification(
       const item = createReviewItem(turnId, target);
       return { itemId: item.id, payload: { item }, taskId, turnId, type: "item.completed" };
     }
-    const item = mapAgentItem(nativeItem, new Map(), (part, imageIndex) =>
-      mapImage(taskId, part, imageIndex),
+    const item = mapAgentItem(
+      nativeItem,
+      new Map(),
+      (part, imageIndex) => mapImage(taskId, part, imageIndex),
+      (input, textIndex) => mapText(taskId, input, textIndex),
     );
     return {
       itemId: item.id,

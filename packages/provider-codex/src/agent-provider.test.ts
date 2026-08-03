@@ -2953,6 +2953,7 @@ describe("CodexAgentProvider", () => {
         attachments: [
           {
             id: attachmentId,
+            kind: "image",
             mediaType: "image/png",
             name: "diagram.png",
             size: imageContent.byteLength,
@@ -2977,6 +2978,75 @@ describe("CodexAgentProvider", () => {
     } finally {
       rmSync(temporaryDirectory, { force: true, recursive: true });
     }
+  });
+
+  it("maps Codex text elements to attachments instead of exposing pasted content", async () => {
+    const attachmentText = "第一行\n你好";
+    const attachmentBytes = Buffer.from(attachmentText);
+    const rpc = new FakeRpcClient([
+      {
+        thread: nativeThread({
+          turns: [
+            {
+              completedAt: 1_753_232_400,
+              error: null,
+              id: "turn-pasted-text",
+              items: [
+                {
+                  content: [
+                    { text: "分析附件", type: "text" },
+                    {
+                      text: attachmentText,
+                      text_elements: [
+                        {
+                          byteRange: { end: attachmentBytes.byteLength, start: 0 },
+                          placeholder: "Pasted text.txt",
+                        },
+                      ],
+                      type: "text",
+                    },
+                  ],
+                  id: "message-pasted-text",
+                  type: "userMessage",
+                },
+              ],
+              startedAt: 1_753_228_800,
+              status: "completed",
+            },
+          ],
+        }),
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    const snapshot = await provider.readTask("task-1");
+    const item = snapshot?.turns[0]?.items[0];
+    const attachmentId = item?.type === "message" ? item.attachments?.[0]?.id : undefined;
+    if (attachmentId === undefined) {
+      throw new Error("Expected pasted text attachment metadata");
+    }
+
+    expect(item).toEqual({
+      attachments: [
+        {
+          id: attachmentId,
+          kind: "text",
+          mediaType: "text/plain",
+          name: "Pasted text.txt",
+          size: attachmentBytes.byteLength,
+        },
+      ],
+      id: "message-pasted-text",
+      role: "user",
+      text: "分析附件",
+      type: "message",
+    });
+    await expect(provider.readTaskAttachment("task-1", attachmentId)).resolves.toMatchObject({
+      content: attachmentBytes,
+      mediaType: "text/plain",
+      name: "Pasted text.txt",
+      size: attachmentBytes.byteLength,
+    });
   });
 
   it("keeps attachment authorization stable across repeated snapshot reads", async () => {

@@ -150,6 +150,7 @@ export const conversation = {
     conversation: "Conversation",
     copied: "Copied",
     copyMessage: "Copy message",
+    downloadAttachment: "Download attachment {{name}}",
     emptyAfter: "?",
     emptyBefore: "What should we do in",
     fileChange:

@@ -764,6 +764,7 @@ test("renders message images as standalone previews above the text bubble", asyn
                     attachments: [
                       {
                         id: "history/image-1",
+                        kind: "image",
                         mediaType: "image/png",
                         name: "diagram.png",
                         size: 68,

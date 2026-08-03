@@ -20,6 +20,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 
 import { getCurrentLanguage, i18n, useTranslation } from "../../../i18n/i18n.js";
+import {
+  Attachment,
+  AttachmentInfo,
+  AttachmentPreview,
+  Attachments,
+} from "../../../shared/ai-elements/attachments.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
@@ -947,39 +953,62 @@ function TimelineItemContent({
         // 确定横向可用空间，避免用户气泡在嵌套收缩容器中提前换行或截断。
         <div className="flex w-full flex-col items-end gap-2">
           {attachments.length === 0 ? null : (
-            <div
-              className="flex max-w-full flex-wrap justify-end gap-2"
+            <Attachments
+              className="justify-end gap-2 px-0 pb-0"
               aria-label={i18n.t("timeline.attachments", { ns: "conversation" })}
             >
               {attachments.map((attachment) => {
                 const attachmentUrl = buildTaskAttachmentUrl("", projectId, taskId, attachment.id);
+                if (attachment.kind === "image") {
+                  return (
+                    <a
+                      aria-label={i18n.t("timeline.showImage", {
+                        name: attachment.name,
+                        ns: "conversation",
+                      })}
+                      className="block size-40 max-w-full overflow-hidden rounded-surface bg-control shadow-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
+                      data-message-attachment="image"
+                      href={attachmentUrl}
+                      key={attachment.id}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {/* 附件与文本气泡分层；历史图片只在进入可视区时读取和解码。 */}
+                      <img
+                        alt={attachment.name}
+                        className="size-full object-cover"
+                        decoding="async"
+                        height={160}
+                        loading="lazy"
+                        src={attachmentUrl}
+                        width={160}
+                      />
+                    </a>
+                  );
+                }
                 return (
                   <a
-                    aria-label={i18n.t("timeline.showImage", {
+                    aria-label={i18n.t("timeline.downloadAttachment", {
                       name: attachment.name,
                       ns: "conversation",
                     })}
-                    className="block size-40 max-w-full overflow-hidden rounded-surface bg-control shadow-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
-                    data-message-attachment="image"
+                    className="block max-w-full rounded-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
+                    data-message-attachment={attachment.kind}
+                    download={attachment.name}
                     href={attachmentUrl}
                     key={attachment.id}
-                    rel="noreferrer"
-                    target="_blank"
                   >
-                    {/* 附件与文本气泡分层；历史图片只在进入可视区时读取和解码。 */}
-                    <img
-                      alt={attachment.name}
-                      className="size-full object-cover"
-                      decoding="async"
-                      height={160}
-                      loading="lazy"
-                      src={attachmentUrl}
-                      width={160}
-                    />
+                    <Attachment
+                      className="h-12 max-w-64 pe-3 shadow-control"
+                      data={{ ...attachment, previewUrl: attachmentUrl }}
+                    >
+                      <AttachmentPreview />
+                      <AttachmentInfo />
+                    </Attachment>
                   </a>
                 );
               })}
-            </div>
+            </Attachments>
           )}
           {messageBody === null ? null : (
             <MessageContent data-message-text="true">{messageBody}</MessageContent>

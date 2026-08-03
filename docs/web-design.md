@@ -584,7 +584,7 @@ TaskTimeline
 | Approval      | AI Elements `Confirmation`                 |
 | Error         | 项目 Error Item                            |
 
-用户历史图片只消费 `AgentMessageAttachment` 的随机 ID、媒体类型、名称和字节数。Timeline 使用 Client 构造 `/v1/projects/:projectId/tasks/:taskId/attachments/:attachmentId`，缩略图固定 `144 × 144` 布局尺寸，并设置 `loading="lazy"` 与 `decoding="async"`；Snapshot、Query Cache 和归一化 Store 都不得保存历史图片 Base64。
+用户历史附件只消费 `AgentMessageAttachment` 的随机 ID、`kind`、媒体类型、名称和字节数。Timeline 使用 Client 构造 `/v1/projects/:projectId/tasks/:taskId/attachments/:attachmentId`；图片缩略图使用稳定布局尺寸、`loading="lazy"` 与 `decoding="async"`，粘贴文本使用 AI Elements 文件卡片，完整正文不进入消息气泡。Snapshot、Query Cache 和归一化 Store 都不得保存附件 Base64、文本正文或本地路径。
 
 ### 15.2 滚动行为
 
@@ -850,7 +850,7 @@ Server 必须执行最终权限判断。Web 只负责减少误操作和展示已
 - 不在 Render 中解析协议、聚合大型数组或转换完整历史。
 - Stable Callback 和 Selector 只在有实际重渲染价值时引入。
 - Diff、高亮器和非首屏 Inspector 动态加载。
-- 长历史按 Turn 虚拟化并动态测高；历史图片使用显式尺寸、延迟加载和异步解码。
+- 长历史按 Turn 虚拟化并动态测高；历史图片使用显式尺寸、延迟加载和异步解码，文本附件只渲染有界元数据卡片。
 - 使用 React Profiler 和浏览器 Performance 数据决定优化，不以组件数量猜测瓶颈。
 
 ### 23.3 内存规则
@@ -858,7 +858,7 @@ Server 必须执行最终权限判断。Web 只负责减少误操作和展示已
 - 未选中且无活动 Turn 的 Task Runtime Store 允许回收。
 - Command Output、Event Buffer 和诊断数据必须有界。
 - Blob URL 在附件删除、提交成功或组件卸载时释放。
-- 历史图片 Base64 不进入 Snapshot、Query Cache 或 Runtime Store，只保留受控附件元数据。
+- 历史附件 Base64、文本正文和本地路径不进入 Snapshot、Query Cache 或 Runtime Store，只保留受控附件元数据。
 - Query Cache 为 Task Page 和 Snapshot 设置合理 GC 时间。
 - 浏览器不保存完整 Provider 原始事件日志。
 

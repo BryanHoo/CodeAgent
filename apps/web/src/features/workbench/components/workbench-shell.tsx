@@ -1,6 +1,7 @@
 import type {
   AgentCapabilities,
   AgentGlobalSettings,
+  AgentMessageAttachment,
   AgentModel,
   AgentPromptInput,
   AgentSkill,
@@ -108,6 +109,7 @@ function taskLaunchQueryKey(projectId: string, taskId: string) {
 
 type TaskLaunchState = Readonly<{
   input: AgentPromptInput;
+  messageAttachments: readonly AgentMessageAttachment[];
   settings: AgentTaskSettings;
   task: AgentTask;
   turn: AgentTurn;
@@ -115,6 +117,7 @@ type TaskLaunchState = Readonly<{
 
 type SubmittedPromptState = Readonly<{
   input: AgentPromptInput;
+  messageAttachments: readonly AgentMessageAttachment[];
   turn: AgentTurn;
 }>;
 
@@ -208,7 +211,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               turns: [taskLaunchState.turn],
             },
             taskLaunchState.turn,
-            taskLaunchState.input,
+            { ...taskLaunchState.input, messageAttachments: taskLaunchState.messageAttachments },
           ),
     [taskLaunchState],
   );
@@ -402,12 +405,14 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       startedTurn?: AgentTurn,
       startedInput?: AgentPromptInput,
       settings?: AgentTaskSettings,
+      messageAttachments: readonly AgentMessageAttachment[] = [],
     ) => {
       cacheProjectTask(startedTask);
       if (startedTurn !== undefined && startedInput !== undefined && settings !== undefined) {
         // 跨路由保存首轮启动结果，让 Snapshot 返回前即可渲染用户消息和 AI 运行态。
         queryClient.setQueryData<TaskLaunchState>(taskLaunchQueryKey(projectId, startedTask.id), {
           input: startedInput,
+          messageAttachments,
           settings,
           task: startedTask,
           turn: startedTurn,
@@ -943,6 +948,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
     turn?: AgentTurn,
     input?: AgentPromptInput,
     settings?: AgentTaskSettings,
+    messageAttachments?: readonly AgentMessageAttachment[],
   ) => void;
   projectId: string;
   projectPath: string;
@@ -969,11 +975,10 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   const visibleSnapshot =
     runtime.snapshot === undefined || submittedPrompt === undefined
       ? runtime.snapshot
-      : mergeSubmittedPromptIntoSnapshot(
-          runtime.snapshot,
-          submittedPrompt.turn,
-          submittedPrompt.input,
-        );
+      : mergeSubmittedPromptIntoSnapshot(runtime.snapshot, submittedPrompt.turn, {
+          ...submittedPrompt.input,
+          messageAttachments: submittedPrompt.messageAttachments,
+        });
   const visibleRuntime: TaskRuntimeView =
     visibleSnapshot === runtime.snapshot ? runtime : { ...runtime, snapshot: visibleSnapshot };
   useEffect(() => {
@@ -986,11 +991,10 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
     if (currentSnapshot === undefined || state.checkpoint === null) {
       return;
     }
-    const mergedSnapshot = mergeSubmittedPromptIntoSnapshot(
-      currentSnapshot,
-      submittedPrompt.turn,
-      submittedPrompt.input,
-    );
+    const mergedSnapshot = mergeSubmittedPromptIntoSnapshot(currentSnapshot, submittedPrompt.turn, {
+      ...submittedPrompt.input,
+      messageAttachments: submittedPrompt.messageAttachments,
+    });
     if (mergedSnapshot === currentSnapshot) {
       return;
     }
@@ -1069,8 +1073,8 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         }
         onSubmissionStateChange={handleSubmissionStateChange}
         onTaskStarted={onTaskStarted}
-        onTurnStarted={(turn, input) => {
-          setSubmittedPromptState({ prompt: { input, turn }, taskScope });
+        onTurnStarted={(turn, input, messageAttachments) => {
+          setSubmittedPromptState({ prompt: { input, messageAttachments, turn }, taskScope });
         }}
         projectId={projectId}
         projectPath={projectPath}

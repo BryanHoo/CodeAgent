@@ -285,18 +285,36 @@ describe("project protocol", () => {
     expect(AgentTaskSchema.required).toEqual(["id", "pinned", "projectId", "title", "updatedAt"]);
   });
 
-  it("carries bounded image metadata without snapshot data URLs", () => {
+  it("carries bounded attachment metadata without snapshot content", () => {
     expect(
       Value.Check(AgentMessageItemSchema, {
         attachments: [
           {
             id: "attachment-history-1",
+            kind: "image",
             mediaType: "image/png",
             name: "diagram.png",
             size: 68,
           },
         ],
         id: "message-image",
+        role: "user",
+        text: "",
+        type: "message",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentMessageItemSchema, {
+        attachments: [
+          {
+            id: "attachment-history-text",
+            kind: "text",
+            mediaType: "text/plain",
+            name: "Pasted text.txt",
+            size: 1_001,
+          },
+        ],
+        id: "message-text-attachment",
         role: "user",
         text: "",
         type: "message",

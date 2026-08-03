@@ -150,6 +150,7 @@ export const conversation = {
     conversation: "会话内容",
     copied: "已复制",
     copyMessage: "复制消息",
+    downloadAttachment: "下载附件 {{name}}",
     emptyAfter: "中做些什么？",
     emptyBefore: "我们应该在",
     fileChange: "{{operation}} {{name}}，新增 {{additions}} 行，删除 {{removals}} 行，打开 Diff",

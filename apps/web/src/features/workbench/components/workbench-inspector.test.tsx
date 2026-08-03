@@ -366,6 +366,7 @@ describe("WorkbenchInspector", () => {
                   attachments: [
                     {
                       id: "attachment-1",
+                      kind: "image",
                       mediaType: "image/png",
                       name: "layout.png",
                       size: 1024,

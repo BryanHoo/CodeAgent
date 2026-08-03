@@ -431,7 +431,8 @@ export type AgentMessageSkill = Readonly<Static<typeof AgentMessageSkillSchema>>
 export const AgentMessageAttachmentSchema = Type.Object(
   {
     id: Type.String({ minLength: 1 }),
-    mediaType: AgentImageMediaTypeSchema,
+    kind: AgentAttachmentKindSchema,
+    mediaType: AgentAttachmentMediaTypeSchema,
     name: Type.String({ maxLength: 255, minLength: 1 }),
     size: Type.Integer({ maximum: MAX_AGENT_HISTORY_IMAGE_TOTAL_BYTES, minimum: 1 }),
   },

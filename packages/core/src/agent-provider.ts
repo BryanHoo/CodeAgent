@@ -1,5 +1,6 @@
 import type {
   AgentCapabilities,
+  AgentAttachmentMediaType,
   AgentBackgroundTerminalPage,
   AgentEvent,
   AgentImageMediaType,
@@ -51,7 +52,7 @@ export type AgentProviderTurnInput = Readonly<{
 
 export type AgentProviderAttachment = Readonly<{
   content: Uint8Array;
-  mediaType: AgentImageMediaType;
+  mediaType: AgentAttachmentMediaType;
   name: string;
   size: number;
 }>;

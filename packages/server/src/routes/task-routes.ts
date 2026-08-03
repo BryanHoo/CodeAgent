@@ -160,7 +160,7 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
           .code(404)
           .send({ code: "ATTACHMENT_NOT_FOUND", message: "Attachment not found" });
       }
-      // 随机 ID 已绑定 Project/Task；响应只交付已复验的图片正文，不暴露本地路径。
+      // 随机 ID 已绑定 Project/Task；响应只交付已复验的附件正文，不暴露本地路径。
       return reply
         .header("cache-control", "private, max-age=300")
         .header("x-content-type-options", "nosniff")

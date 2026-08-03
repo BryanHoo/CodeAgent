@@ -7,6 +7,9 @@ import type { AgentProviderAttachment } from "@code-agent/core";
 import {
   MAX_AGENT_HISTORY_IMAGES,
   MAX_AGENT_HISTORY_IMAGE_TOTAL_BYTES,
+  MAX_AGENT_TEXT_BYTES,
+  type AgentAttachmentKind,
+  type AgentAttachmentMediaType,
   type AgentImageMediaType,
   type AgentMessageAttachment,
 } from "@code-agent/protocol";
@@ -69,7 +72,7 @@ function detectImageMediaType(content: Uint8Array): AgentImageMediaType | undefi
   return undefined;
 }
 
-function normalizeImageName(value: string | undefined, fallback: string): string {
+function normalizeAttachmentName(value: string | undefined, fallback: string): string {
   const trimmedName = value?.trim();
   return trimmedName === undefined || trimmedName.length === 0
     ? fallback
@@ -142,7 +145,7 @@ export class CodexHistoricalAttachmentStore {
     ) {
       return undefined;
     }
-    const name = normalizeImageName(input.name, `图片-${String(imageIndex + 1)}`);
+    const name = normalizeAttachmentName(input.name, `图片-${String(imageIndex + 1)}`);
     for (const entry of this.#entries.values()) {
       if (
         entry.source === "inline" &&
@@ -155,7 +158,7 @@ export class CodexHistoricalAttachmentStore {
         return this.#refresh(entry);
       }
     }
-    const attachment = this.#createAttachment(declaredMediaType, name, content.byteLength);
+    const attachment = this.#createAttachment("image", declaredMediaType, name, content.byteLength);
     if (attachment === undefined) {
       return undefined;
     }
@@ -190,7 +193,7 @@ export class CodexHistoricalAttachmentStore {
       }
       const nativeName = basename(path);
       const expectedMediaType = imageMediaTypesByExtension[extname(nativeName).toLowerCase()];
-      const name = normalizeImageName(
+      const name = normalizeAttachmentName(
         expectedMediaType === mediaType ? nativeName : undefined,
         `图片-${String(imageIndex + 1)}`,
       );
@@ -207,7 +210,7 @@ export class CodexHistoricalAttachmentStore {
           return this.#refresh(entry);
         }
       }
-      const attachment = this.#createAttachment(mediaType, name, stats.size);
+      const attachment = this.#createAttachment("image", mediaType, name, stats.size);
       if (attachment === undefined) {
         return undefined;
       }
@@ -225,6 +228,43 @@ export class CodexHistoricalAttachmentStore {
       // Codex 临时文件可能已被清理，单张图片不可用不应中断历史读取。
       return undefined;
     }
+  }
+
+  public addText(
+    taskId: string,
+    input: Readonly<{ name: string; text: string }>,
+    textIndex: number,
+  ): AgentMessageAttachment | undefined {
+    this.#pruneExpired();
+    const content = Buffer.from(input.text, "utf8");
+    if (content.byteLength === 0 || content.byteLength > MAX_AGENT_TEXT_BYTES) {
+      return undefined;
+    }
+    const name = normalizeAttachmentName(input.name, `Pasted text-${String(textIndex + 1)}.txt`);
+    for (const entry of this.#entries.values()) {
+      if (
+        entry.source === "inline" &&
+        entry.projectTaskId === taskId &&
+        entry.attachment.kind === "text" &&
+        entry.attachment.name === name &&
+        entry.content.equals(content)
+      ) {
+        return this.#refresh(entry);
+      }
+    }
+    const attachment = this.#createAttachment("text", "text/plain", name, content.byteLength);
+    if (attachment === undefined) {
+      return undefined;
+    }
+    this.#entries.set(attachment.id, {
+      attachment,
+      content,
+      expiresAt: this.#clock() + this.#ttlMs,
+      projectTaskId: taskId,
+      source: "inline",
+    });
+    this.#totalBytes += attachment.size;
+    return attachment;
   }
 
   public read(taskId: string, attachmentId: string): AgentProviderAttachment | undefined {
@@ -283,7 +323,8 @@ export class CodexHistoricalAttachmentStore {
   }
 
   #createAttachment(
-    mediaType: AgentImageMediaType,
+    kind: AgentAttachmentKind,
+    mediaType: AgentAttachmentMediaType,
     name: string,
     size: number,
   ): AgentMessageAttachment | undefined {
@@ -294,7 +335,7 @@ export class CodexHistoricalAttachmentStore {
     if (id.length === 0 || this.#entries.has(id)) {
       return undefined;
     }
-    return { id, mediaType, name, size };
+    return { id, kind, mediaType, name, size };
   }
 
   #delete(attachmentId: string): void {
