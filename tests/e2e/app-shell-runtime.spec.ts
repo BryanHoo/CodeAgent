@@ -884,8 +884,8 @@ test("submits a prompt and streams the completed reply", async ({ page }) => {
   await page.getByRole("button", { exact: true, name: "提交" }).click();
 
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-action-\d+$/);
-  await expect(page.getByText("完成流式回复", { exact: true })).toBeVisible();
-  await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
+  await expect(page.getByText("完成流式回复", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("流式回复完成", { exact: true })).toHaveCount(1);
   await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeVisible();
 });

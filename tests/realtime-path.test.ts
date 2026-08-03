@@ -256,10 +256,15 @@ describe("Realtime Path", () => {
 
     expect(events.map((event) => event.type)).toEqual([
       "turn.started",
+      "item.completed",
       "message.delta",
       "item.completed",
       "usage.updated",
       "turn.completed",
+    ]);
+    expect(events.filter((event) => event.type === "item.completed")).toMatchObject([
+      { payload: { item: { role: "user", text: "完成流式回复", type: "message" } } },
+      { payload: { item: { role: "assistant", text: "流式回复完成", type: "message" } } },
     ]);
     expect(events.find((event) => event.type === "message.delta")).toMatchObject({
       payload: { delta: "流式回复完成" },

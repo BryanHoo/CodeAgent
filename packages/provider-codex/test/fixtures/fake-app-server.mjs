@@ -216,14 +216,20 @@ function completeActionTurn(threadId, turnId) {
   if (thread === undefined || runningTurn === undefined || runningTurn.status !== "inProgress") {
     return;
   }
+  const usesSyntheticSnapshotIds = runningTurn.items.some(
+    (item) => item.id === `${turnId}-snapshot-user`,
+  );
   const message = {
-    id: `${turnId}-assistant`,
+    id: usesSyntheticSnapshotIds ? `${turnId}-realtime-assistant` : `${turnId}-assistant`,
     memoryCitation: null,
     phase: null,
     text: "流式回复完成",
     type: "agentMessage",
   };
-  const completedTurn = actionTurn(turnId, "completed", [...runningTurn.items, message]);
+  const snapshotMessage = usesSyntheticSnapshotIds
+    ? { ...message, id: `${turnId}-snapshot-assistant` }
+    : message;
+  const completedTurn = actionTurn(turnId, "completed", [...runningTurn.items, snapshotMessage]);
   actionThreads.set(
     threadId,
     actionThread(
@@ -253,7 +259,14 @@ function completeActionTurn(threadId, turnId) {
       turnId,
     },
   });
-  send({ method: "turn/completed", params: { threadId, turn: completedTurn } });
+  send({
+    method: "turn/completed",
+    params: {
+      threadId,
+      // Codex 0.146 的终态可能只携带实时 Assistant，完整历史由 thread/read 补齐。
+      turn: usesSyntheticSnapshotIds ? actionTurn(turnId, "completed", [message]) : completedTurn,
+    },
+  });
 }
 
 function scheduleOperationStatusTurn(threadId, turnId) {
@@ -789,15 +802,26 @@ input.on("line", (line) => {
     const turnId = `turn-action-${String(nextActionTurn)}`;
     nextActionTurn += 1;
     const prompt = message.params?.input?.[0]?.text ?? "";
+    const usesSyntheticSnapshotIds = prompt.includes("完成流式回复");
     const userMessage = {
       content: [{ text: prompt, type: "text" }],
-      id: `${turnId}-user`,
+      id: usesSyntheticSnapshotIds ? `${turnId}-realtime-user` : `${turnId}-user`,
       type: "userMessage",
     };
-    const turn = actionTurn(turnId, "inProgress", [userMessage]);
-    actionThreads.set(threadId, actionThread(threadId, [...thread.turns, turn]));
-    send({ id: message.id, result: { turn } });
-    send({ method: "turn/started", params: { threadId, turn } });
+    const snapshotUserMessage = usesSyntheticSnapshotIds
+      ? { ...userMessage, id: `${turnId}-snapshot-user` }
+      : userMessage;
+    const storedTurn = actionTurn(turnId, "inProgress", [snapshotUserMessage]);
+    const startedTurn = usesSyntheticSnapshotIds
+      ? actionTurn(turnId, "inProgress", [])
+      : storedTurn;
+    actionThreads.set(threadId, actionThread(threadId, [...thread.turns, storedTurn]));
+    send({ id: message.id, result: { turn: startedTurn } });
+    send({ method: "turn/started", params: { threadId, turn: startedTurn } });
+    if (usesSyntheticSnapshotIds) {
+      send({ method: "item/started", params: { item: userMessage, threadId, turnId } });
+      send({ method: "item/completed", params: { item: userMessage, threadId, turnId } });
+    }
     const pendingKind = prompt.includes("审批命令")
       ? "command"
       : prompt.includes("审批文件")

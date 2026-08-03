@@ -139,6 +139,83 @@ describe("task store", () => {
     expect(store.getState().getItem("message-running")).toBeUndefined();
   });
 
+  it("reconciles synthetic snapshot message ids with their realtime items", () => {
+    const liveTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-running",
+      items: [
+        {
+          id: "realtime-user-id",
+          role: "user" as const,
+          text: "执行检查",
+          type: "message" as const,
+        },
+        {
+          id: "realtime-assistant-id",
+          role: "assistant" as const,
+          text: "正在",
+          type: "message" as const,
+        },
+      ],
+      startedAt: timestamp,
+      status: "running" as const,
+    };
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ turns: [liveTurn] }),
+    );
+
+    store.getState().reconcile(
+      createResponse({
+        turns: [
+          {
+            ...liveTurn,
+            items: [
+              {
+                id: "item-1",
+                role: "user",
+                skills: [{ name: "superwork:superwork-start" }],
+                text: "执行检查",
+                type: "message",
+              },
+              {
+                id: "item-2",
+                role: "assistant",
+                text: "正在处理",
+                type: "message",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual([
+      "realtime-user-id",
+      "realtime-assistant-id",
+    ]);
+    expect(store.getState().getItem("realtime-user-id")).toMatchObject({
+      skills: [{ name: "superwork:superwork-start" }],
+    });
+    expect(store.getState().getItem("item-1")).toBeUndefined();
+    expect(store.getState().getItem("item-2")).toBeUndefined();
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        itemId: "realtime-assistant-id",
+        payload: { delta: "完成" },
+        turnId: "turn-running",
+        type: "message.delta",
+      },
+    ]);
+
+    expect(store.getState().getItem("realtime-assistant-id")).toMatchObject({
+      text: "正在处理完成",
+    });
+  });
+
   it("updates one existing delta without replacing structural references", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
     const previousState = store.getState();

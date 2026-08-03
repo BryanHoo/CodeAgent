@@ -830,21 +830,68 @@ function reconstructSnapshot(state: TaskStoreState): ReconstructedTaskSnapshot |
 
 function retainSnapshotTurnItems(currentTurn: AgentTurn, snapshotTurn: AgentTurn): AgentItem[] {
   const snapshotItemsById = new Map(snapshotTurn.items.map((item) => [item.id, item]));
-  const submittedUserItemId = `submitted-user-${snapshotTurn.id}`;
-  const snapshotUserItem = snapshotTurn.items.find(
-    (item) => item.type === "message" && item.role === "user",
-  );
-  const retainedItems = currentTurn.items.map((currentItem) => {
-    if (currentItem.id === submittedUserItemId && snapshotUserItem !== undefined) {
-      snapshotItemsById.delete(snapshotUserItem.id);
-      return snapshotUserItem;
+  const snapshotMessagesByCurrentId = new Map<string, Extract<AgentItem, { type: "message" }>>();
+  const shadowedSnapshotMessageIds = new Set<string>();
+  const currentMessagesByRole: Record<
+    Extract<AgentItem, { type: "message" }>["role"],
+    Extract<AgentItem, { type: "message" }>[]
+  > = { assistant: [], user: [] };
+  const nextCurrentMessageIndexByRole = { assistant: 0, user: 0 };
+  for (const currentItem of currentTurn.items) {
+    if (currentItem.type === "message") {
+      currentMessagesByRole[currentItem.role].push(currentItem);
+    }
+  }
+
+  for (const snapshotItem of snapshotTurn.items) {
+    if (snapshotItem.type !== "message") {
+      continue;
+    }
+    const currentMessages = currentMessagesByRole[snapshotItem.role];
+    let currentMessage: Extract<AgentItem, { type: "message" }> | undefined;
+    while (nextCurrentMessageIndexByRole[snapshotItem.role] < currentMessages.length) {
+      const currentIndex = nextCurrentMessageIndexByRole[snapshotItem.role];
+      nextCurrentMessageIndexByRole[snapshotItem.role] = currentIndex + 1;
+      const candidate = currentMessages[currentIndex];
+      if (
+        candidate !== undefined &&
+        (candidate.id === snapshotItem.id ||
+          candidate.text.startsWith(snapshotItem.text) ||
+          snapshotItem.text.startsWith(candidate.text))
+      ) {
+        currentMessage = candidate;
+        break;
+      }
+    }
+    if (currentMessage === undefined) {
+      continue;
+    }
+    snapshotItemsById.delete(snapshotItem.id);
+    snapshotMessagesByCurrentId.set(currentMessage.id, {
+      ...snapshotItem,
+      // 实时 ID 是后续 Delta 的稳定锚点，Snapshot 的 item-* ID 只在本次读取内有效。
+      id: currentMessage.id,
+    });
+    if (snapshotItem.id !== currentMessage.id) {
+      shadowedSnapshotMessageIds.add(snapshotItem.id);
+    }
+  }
+
+  const retainedItems = currentTurn.items.flatMap((currentItem) => {
+    const snapshotMessage = snapshotMessagesByCurrentId.get(currentItem.id);
+    if (snapshotMessage !== undefined) {
+      return [snapshotMessage];
+    }
+    // 旧合并可能已追加同一 Snapshot Message；语义匹配成功后移除该合成 ID 副本。
+    if (shadowedSnapshotMessageIds.has(currentItem.id)) {
+      return [];
     }
     const snapshotItem = snapshotItemsById.get(currentItem.id);
     if (snapshotItem === undefined) {
-      return currentItem;
+      return [currentItem];
     }
     snapshotItemsById.delete(currentItem.id);
-    return snapshotItem;
+    return [snapshotItem];
   });
 
   // Snapshot 可能只包含持久化摘要；保留同一 Turn 已接收的操作，并追加 Snapshot 新增实体。
