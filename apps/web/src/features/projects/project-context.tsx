@@ -30,6 +30,7 @@ import {
   createProjectRuntimeManager,
   type ProjectRuntimeManager,
 } from "../conversation/runtime/project-runtime.js";
+import type { TaskNotifier } from "../notifications/browser-task-notifier.js";
 import type { TaskActivityMap } from "../conversation/runtime/task-activity.js";
 import { createAsyncActionLock } from "../../shared/utils/async-action-lock.js";
 import { ProjectGitStatusCoordinator } from "./project-git-status-coordinator.js";
@@ -129,6 +130,7 @@ const ProjectActivityContext = createContext<ProjectActivityContextValue | undef
 type ProjectProviderProps = Readonly<{
   children: ReactNode;
   client?: CodeAgentWorkbenchClient;
+  taskNotifier?: TaskNotifier;
 }>;
 
 type ProjectTaskQueryProps = Readonly<{
@@ -197,7 +199,11 @@ export function buildProjectTaskCollections(
   return { projectTaskStates, tasks } as const;
 }
 
-export function ProjectProvider({ children, client = codeAgentClient }: ProjectProviderProps) {
+export function ProjectProvider({
+  children,
+  client = codeAgentClient,
+  taskNotifier,
+}: ProjectProviderProps) {
   const queryClient = useQueryClient();
   const gitStatusCoordinator = useMemo(
     () => new ProjectGitStatusCoordinator(queryClient, client),
@@ -206,6 +212,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
   const projectRuntime = useMemo(() => {
     const taskMetadataSyncs = new Map<string, Promise<void>>();
     return createProjectRuntimeManager(client, {
+      ...(taskNotifier === undefined ? {} : { taskNotifier }),
       onProjectGitActivity(projectId, taskId, reason) {
         gitStatusCoordinator.handleActivity(projectId, taskId, reason);
       },
@@ -263,7 +270,7 @@ export function ProjectProvider({ children, client = codeAgentClient }: ProjectP
         void sync.then(clearCompletedSync, clearCompletedSync);
       },
     });
-  }, [client, gitStatusCoordinator, queryClient]);
+  }, [client, gitStatusCoordinator, queryClient, taskNotifier]);
   const [addProjectError, setAddProjectError] = useState<Error | null>(null);
   const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false);
   const [projectOrderError, setProjectOrderError] = useState<Error | null>(null);

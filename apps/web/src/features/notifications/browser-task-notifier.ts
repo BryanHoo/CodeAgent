@@ -24,7 +24,7 @@ type BrowserTaskNotifierOptions = Readonly<{
   api?: BrowserNotificationApi | undefined;
   focusPage?: (() => void) | undefined;
   isPageForeground?: (() => boolean) | undefined;
-  navigate?: ((path: string) => void) | undefined;
+  navigateToTask?: ((projectId: string, taskId: string) => void) | undefined;
 }>;
 
 type TaskNotification = Readonly<{
@@ -52,10 +52,6 @@ function createDefaultNotificationApi(): BrowserNotificationApi | undefined {
       };
     },
   };
-}
-
-function createTaskPath(projectId: string, taskId: string): string {
-  return `/p/${encodeURIComponent(projectId)}/t/${encodeURIComponent(taskId)}`;
 }
 
 function createTurnKey(event: AgentEvent): string {
@@ -108,7 +104,7 @@ class BrowserTaskNotifier implements TaskNotifier {
   readonly #failedTurnKeys = new Set<string>();
   readonly #focusPage: () => void;
   readonly #isPageForeground: () => boolean;
-  readonly #navigate: (path: string) => void;
+  readonly #navigateToTask: (projectId: string, taskId: string) => void;
   #permissionRequest: Promise<void> | undefined;
 
   public constructor(options: BrowserTaskNotifierOptions) {
@@ -121,11 +117,7 @@ class BrowserTaskNotifier implements TaskNotifier {
     this.#isPageForeground =
       options.isPageForeground ??
       (() => globalThis.document.visibilityState === "visible" && globalThis.document.hasFocus());
-    this.#navigate =
-      options.navigate ??
-      ((path) => {
-        globalThis.window.location.assign(path);
-      });
+    this.#navigateToTask = options.navigateToTask ?? (() => undefined);
   }
 
   public notify(projectId: string, event: AgentEvent, taskTitle: string): void {
@@ -165,7 +157,7 @@ class BrowserTaskNotifier implements TaskNotifier {
       notification.addClickListener(() => {
         notification.close();
         this.#focusPage();
-        this.#navigate(createTaskPath(projectId, event.taskId));
+        this.#navigateToTask(projectId, event.taskId);
       });
     } catch {
       // 系统通知属于增强能力，浏览器拒绝构造时不能中断实时事件处理。

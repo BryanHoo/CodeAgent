@@ -136,7 +136,7 @@ function createHarness(
     show: vi.fn(() => handle),
   };
   const focusPage = vi.fn();
-  const navigate = vi.fn();
+  const navigateToTask = vi.fn();
   return {
     api,
     click() {
@@ -146,12 +146,12 @@ function createHarness(
     },
     focusPage,
     handle,
-    navigate,
+    navigateToTask,
     notifier: createBrowserTaskNotifier({
       api,
       focusPage,
       isPageForeground: () => isPageForeground,
-      navigate,
+      navigateToTask,
     }),
   };
 }
@@ -187,7 +187,7 @@ describe("browser task notifier", () => {
     );
     harness.click();
     expect(harness.focusPage).toHaveBeenCalledOnce();
-    expect(harness.navigate).toHaveBeenCalledWith("/p/project%20%2F%201/t/task%20%2F%201");
+    expect(harness.navigateToTask).toHaveBeenCalledWith("project / 1", "task / 1");
     expect(harness.handle.close).toHaveBeenCalledOnce();
   });
 
@@ -224,7 +224,7 @@ describe("browser task notifier", () => {
     const notifier = createBrowserTaskNotifier({
       api: undefined,
       focusPage: vi.fn(),
-      navigate: vi.fn(),
+      navigateToTask: vi.fn(),
     });
 
     await expect(notifier.requestPermission()).resolves.toBeUndefined();
