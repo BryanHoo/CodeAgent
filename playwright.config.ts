@@ -1,8 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const e2ePort = process.env["CODE_AGENT_E2E_PORT"] ?? "4173";
-const e2eBaseUrl = `http://127.0.0.1:${e2ePort}`;
-
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
@@ -10,7 +7,7 @@ export default defineConfig({
   retries: process.env["CI"] ? 2 : 0,
   reporter: process.env["CI"] ? "github" : "list",
   use: {
-    baseURL: e2eBaseUrl,
+    // baseURL 由 worker fixture 注入，确保每个 worker 使用独立 Fake Server。
     // CI 中的无头 Chromium 默认禁止读取剪贴板，复制相关用例需要显式授权。
     locale: "zh-CN",
     permissions: ["clipboard-read", "clipboard-write"],
@@ -22,11 +19,4 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: {
-    command: "node tests/fixtures/fake-realtime-server.mjs",
-    url: e2eBaseUrl,
-    // Fake Server 持有事件序号和场景状态，每次测试运行必须使用全新进程。
-    reuseExistingServer: false,
-    timeout: 30_000,
-  },
 });

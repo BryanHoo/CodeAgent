@@ -101,6 +101,7 @@ const close = async () => {
 process.once("SIGINT", () => void close().finally(() => process.exit(0)));
 process.once("SIGTERM", () => void close().finally(() => process.exit(0)));
 
-const e2ePort = Number.parseInt(process.env["CODE_AGENT_E2E_PORT"] ?? "4173", 10);
-await server.listen({ host: "127.0.0.1", port: e2ePort });
-process.stdout.write(`Fake realtime server listening on http://127.0.0.1:${String(e2ePort)}\n`);
+const e2ePort = Number.parseInt(process.env["CODE_AGENT_E2E_PORT"] ?? "0", 10);
+const serverUrl = await server.listen({ host: "127.0.0.1", port: e2ePort });
+// port: 0 由操作系统原子分配空闲端口，避免并行 worker 之间的端口竞争。
+process.stdout.write(`Fake realtime server listening on ${serverUrl}\n`);
