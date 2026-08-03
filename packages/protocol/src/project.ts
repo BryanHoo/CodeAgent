@@ -15,6 +15,14 @@ export const ProjectRelativePathSchema = Type.String({
 
 export type ProjectRelativePath = Static<typeof ProjectRelativePathSchema>;
 
+export const ProjectFileReferencePathSchema = Type.String({
+  maxLength: 32_768,
+  minLength: 1,
+  pattern: "^[^\\u0000\\r\\n]+$",
+});
+
+export type ProjectFileReferencePath = Static<typeof ProjectFileReferencePathSchema>;
+
 export const ProjectSchema = Type.Object(
   {
     createdAt: DateTimeSchema,
@@ -99,7 +107,7 @@ export type ProjectOpenCapabilitiesResponse = Readonly<
 export const OpenProjectRequestSchema = Type.Object(
   {
     appId: ProjectOpenAppIdSchema,
-    path: Type.Optional(ProjectRelativePathSchema),
+    path: Type.Optional(ProjectFileReferencePathSchema),
   },
   { additionalProperties: false },
 );
@@ -109,7 +117,7 @@ export type OpenProjectRequest = Readonly<Static<typeof OpenProjectRequestSchema
 export const OpenProjectResponseSchema = Type.Object(
   {
     appId: ProjectOpenAppIdSchema,
-    path: Type.Optional(ProjectRelativePathSchema),
+    path: Type.Optional(ProjectFileReferencePathSchema),
   },
   { additionalProperties: false },
 );

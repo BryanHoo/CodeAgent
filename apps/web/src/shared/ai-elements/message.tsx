@@ -41,6 +41,9 @@ const LOCAL_FILE_REFERENCE_PATTERN =
 const WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN =
   /(?<=\]\()(?:[a-z]:[\\/]|\\\\)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
 const UNC_FILE_REFERENCE_PREFIX = "/__code_agent_unc__/";
+const RELATIVE_FILE_REFERENCE_PREFIX = "/__code_agent_relative__/";
+const RELATIVE_MARKDOWN_FILE_REFERENCE_PATTERN =
+  /(?<=\]\()(?![a-z][a-z0-9+.-]*:|\/|#)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
 
 function getFileReferenceMetadata(href: string | undefined): FileReferenceMetadata | null {
   if (href === undefined) {
@@ -56,9 +59,11 @@ function getFileReferenceMetadata(href: string | undefined): FileReferenceMetada
   const matchedPath = matchedGroups["path"];
   const filePath = matchedPath?.startsWith(UNC_FILE_REFERENCE_PREFIX)
     ? `//${matchedPath.slice(UNC_FILE_REFERENCE_PREFIX.length)}`
-    : matchedPath?.match(/^\/[a-z]:[\\/]/i)
-      ? matchedPath.slice(1)
-      : matchedPath;
+    : matchedPath?.startsWith(RELATIVE_FILE_REFERENCE_PREFIX)
+      ? matchedPath.slice(RELATIVE_FILE_REFERENCE_PREFIX.length)
+      : matchedPath?.match(/^\/[a-z]:[\\/]/i)
+        ? matchedPath.slice(1)
+        : matchedPath;
   if (filePath === undefined) {
     return null;
   }
@@ -71,13 +76,18 @@ function getFileReferenceMetadata(href: string | undefined): FileReferenceMetada
 
 function normalizeWindowsMarkdownFileReferences(markdown: string): string {
   // 将 Windows 路径转成 Markdown 可安全解析的斜杠形式，盘符路径点击时再移除前导斜杠。
-  return markdown.replace(WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN, (reference) => {
-    const normalizedReference = reference.replaceAll("\\", "/");
-    if (/^[a-z]:/i.test(normalizedReference)) {
-      return `/${normalizedReference}`;
-    }
-    return `${UNC_FILE_REFERENCE_PREFIX}${normalizedReference.slice(2)}`;
-  });
+  return markdown
+    .replace(WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN, (reference) => {
+      const normalizedReference = reference.replaceAll("\\", "/");
+      if (/^[a-z]:/i.test(normalizedReference)) {
+        return `/${normalizedReference}`;
+      }
+      return `${UNC_FILE_REFERENCE_PREFIX}${normalizedReference.slice(2)}`;
+    })
+    .replace(
+      RELATIVE_MARKDOWN_FILE_REFERENCE_PATTERN,
+      (reference) => `${RELATIVE_FILE_REFERENCE_PREFIX}${reference}`,
+    );
 }
 
 function MarkdownLink({ children, className = "", href, node, ...props }: MarkdownLinkProps) {
@@ -133,7 +143,7 @@ function MarkdownLink({ children, className = "", href, node, ...props }: Markdo
     <a
       className={`font-medium text-accent underline decoration-current/35 underline-offset-2 transition-colors hover:text-accent-strong ${className}`}
       href={href}
-      rel="noreferrer"
+      rel="noopener noreferrer"
       target="_blank"
       {...props}
     >

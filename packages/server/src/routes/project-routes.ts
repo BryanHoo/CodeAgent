@@ -74,6 +74,7 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     readEffectiveGlobalSettings,
     readEffectiveProjectDefaults,
     readFileTree,
+    readImageFile,
     readProjectGitStatus,
     readSourceFile,
     releaseProjectContext,
@@ -562,6 +563,37 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         return reply.code(500).send({
           code: "PROJECT_FILE_TREE_UNAVAILABLE",
           message: "Project file tree is unavailable",
+        });
+      }
+    },
+  );
+
+  app.get<{ Params: { projectId: string }; Querystring: { path: string } }>(
+    "/v1/projects/:projectId/files/image",
+    {
+      schema: {
+        params: ProjectParamsSchema,
+        querystring: SourceFileQuerySchema,
+        response: { 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      try {
+        const image = await readImageFile(context.project.rootPath, request.query.path);
+        return await reply
+          .header("cache-control", "private, max-age=60")
+          .header("x-content-type-options", "nosniff")
+          .type(image.mediaType)
+          .send(image.content);
+      } catch {
+        // 路径和签名错误统一隐藏，避免模型输出探测宿主文件系统。
+        return reply.code(404).send({
+          code: "PROJECT_IMAGE_NOT_FOUND",
+          message: "Project image is unavailable",
         });
       }
     },

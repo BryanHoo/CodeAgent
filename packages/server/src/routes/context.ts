@@ -31,6 +31,7 @@ import type { AgentEventStream } from "../agent-event-stream.js";
 import type { AttachmentStore } from "../attachment-store.js";
 import type { GitCommitError } from "../git-commit.js";
 import type { ProjectOpenService } from "../project-open.js";
+import type { ProjectImageFile } from "../project-image-file.js";
 import type { PreparedTurnFileRollback } from "../turn-file-rollback.js";
 import type { prepareTurnFileRollback } from "../turn-file-rollback.js";
 
@@ -134,6 +135,7 @@ export interface ServerRouteContext {
     models?: readonly AgentModel[],
   ) => Promise<AgentTaskSettings>;
   readonly readFileTree: (projectRoot: string, directoryPath?: string) => Promise<ProjectFileTree>;
+  readonly readImageFile: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
   readonly readProjectGitStatus: (projectRoot: string) => Promise<ProjectGitStatus>;
   readonly readSourceFile: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
   readonly releaseProjectContext: (projectId: string) => Promise<void>;

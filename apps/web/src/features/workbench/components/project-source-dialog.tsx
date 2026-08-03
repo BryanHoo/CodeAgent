@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { Code2, Eye, FileCode2, X } from "lucide-react";
+import { buildProjectImageFileUrl } from "@code-agent/client";
+import { Code2, Eye, FileCode2, Image, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
@@ -21,6 +22,7 @@ export { getCodeLanguage } from "../../../shared/ai-elements/code-languages.js";
 type ProjectSourceDialogProps = Readonly<{
   client: CodeAgentWorkbenchClient;
   onClose: () => void;
+  previewKind: "image" | "source";
   projectId: string;
   reference: MessageFileReference | null;
 }>;
@@ -33,6 +35,7 @@ type SourceHeaderProps = Readonly<{
   actions?: ReactNode;
   lineNumber: number | null;
   onClose: () => void;
+  previewKind: "image" | "source";
   sourcePath: string;
   titleId: string;
   truncated: boolean;
@@ -42,6 +45,7 @@ function SourceHeader({
   actions,
   lineNumber,
   onClose,
+  previewKind,
   sourcePath,
   titleId,
   truncated,
@@ -50,7 +54,11 @@ function SourceHeader({
   return (
     <CodeBlockHeader className="min-h-toolbar gap-3 bg-raised px-3 shadow-toolbar sm:px-4">
       <CodeBlockTitle className="min-w-0 flex-1">
-        <FileCode2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        {previewKind === "image" ? (
+          <Image className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        ) : (
+          <FileCode2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        )}
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-body-small font-semibold" id={titleId} title={sourcePath}>
             <CodeBlockFilename>
@@ -70,7 +78,15 @@ function SourceHeader({
       ) : null}
       <CodeBlockActions>
         {actions}
-        <IconButton label={t("projectDialog.closeSource")} onClick={onClose} size="small">
+        <IconButton
+          label={t(
+            previewKind === "image"
+              ? "projectDialog.closeImagePreview"
+              : "projectDialog.closeSource",
+          )}
+          onClick={onClose}
+          size="small"
+        >
           <X className="size-3.5" aria-hidden="true" />
         </IconButton>
       </CodeBlockActions>
@@ -81,6 +97,7 @@ function SourceHeader({
 export function ProjectSourceDialog({
   client,
   onClose,
+  previewKind,
   projectId,
   reference,
 }: ProjectSourceDialogProps) {
@@ -88,8 +105,9 @@ export function ProjectSourceDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   // 渲染状态绑定源文件路径，切换文件或关闭弹窗后必须回到原始内容。
   const [renderedMarkdownPath, setRenderedMarkdownPath] = useState<string | null>(null);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const sourceQuery = useQuery({
-    enabled: reference !== null,
+    enabled: reference !== null && previewKind === "source",
     queryFn: ({ signal }) => {
       if (reference === null) {
         throw new Error("Source file reference is required");
@@ -107,6 +125,10 @@ export function ProjectSourceDialog({
     }
     dialog.showModal();
   }, [reference]);
+
+  useEffect(() => {
+    setImageLoadFailed(false);
+  }, [previewKind, reference?.path]);
 
   useEffect(() => {
     const lineNumber = reference?.lineNumber;
@@ -130,6 +152,8 @@ export function ProjectSourceDialog({
   }
 
   const sourcePath = sourceQuery.data?.path ?? reference.path;
+  const fileName = getFileName(sourcePath);
+  const imageUrl = buildProjectImageFileUrl("", projectId, reference.path);
   const sourceLanguage = getCodeLanguage(sourcePath);
   const canRenderMarkdown = sourceLanguage === "markdown" || sourceLanguage === "mdx";
   const showRenderedMarkdown = canRenderMarkdown && renderedMarkdownPath === sourcePath;
@@ -141,6 +165,7 @@ export function ProjectSourceDialog({
   const headerProps = {
     lineNumber: reference.lineNumber,
     onClose: handleClose,
+    previewKind,
     sourcePath,
     titleId,
     truncated: sourceQuery.data?.truncated === true,
@@ -164,7 +189,28 @@ export function ProjectSourceDialog({
       ref={dialogRef}
     >
       <section className="h-full min-h-0 bg-raised">
-        {sourceQuery.isPending ? (
+        {previewKind === "image" ? (
+          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">
+            <SourceHeader {...headerProps} />
+            <div className="grid min-h-0 place-items-center overflow-auto p-4 sm:p-6">
+              {imageLoadFailed ? (
+                <div className="text-body-small text-danger" role="alert">
+                  {t("projectDialog.loadImageError")}
+                </div>
+              ) : (
+                <img
+                  alt={fileName}
+                  className="max-h-full max-w-full object-contain"
+                  decoding="async"
+                  onError={() => {
+                    setImageLoadFailed(true);
+                  }}
+                  src={imageUrl}
+                />
+              )}
+            </div>
+          </div>
+        ) : sourceQuery.isPending ? (
           <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
             <SourceHeader {...headerProps} />
             <div

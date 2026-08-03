@@ -153,8 +153,10 @@ export const workbench = {
     submitAnswers: "提交回答",
   },
   projectDialog: {
+    closeImagePreview: "关闭图片预览",
     closeSource: "关闭源文件",
     delete: "删除",
+    loadImageError: "无法加载图片",
     loadSourceError: "无法加载源文件",
     loadingSource: "正在加载源文件",
     name: "项目名称",

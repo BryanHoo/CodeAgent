@@ -93,9 +93,9 @@ function isOutsideProject(relativePath: string): boolean {
 
 async function resolveProjectOpenTarget(
   projectRoot: string,
-  projectRelativePath: string | undefined,
+  projectPath: string | undefined,
 ): Promise<ProjectOpenTarget> {
-  if (projectRelativePath === undefined) {
+  if (projectPath === undefined) {
     return {
       absolutePath: projectRoot,
       directoryPath: projectRoot,
@@ -105,22 +105,27 @@ async function resolveProjectOpenTarget(
   }
 
   try {
+    if (!isAbsolute(projectRoot)) {
+      throw new ProjectOpenTargetInvalidError();
+    }
+    const resolvedProjectRoot = await realpath(projectRoot);
+    const relativeTargetPath = isAbsolute(projectPath)
+      ? relative(resolvePath(projectRoot), projectPath)
+      : projectPath;
     if (
-      !isAbsolute(projectRoot) ||
-      projectRelativePath.startsWith("/") ||
-      projectRelativePath.endsWith("/") ||
-      projectRelativePath.includes("\\") ||
-      projectRelativePath.includes("//") ||
-      /^[A-Za-z]:/u.test(projectRelativePath)
+      isOutsideProject(relativeTargetPath) ||
+      relativeTargetPath.endsWith("/") ||
+      relativeTargetPath.includes("\\") ||
+      relativeTargetPath.includes("//") ||
+      /^[A-Za-z]:/u.test(relativeTargetPath)
     ) {
       throw new ProjectOpenTargetInvalidError();
     }
-    const segments = projectRelativePath.split("/");
+    const segments = relativeTargetPath.split("/");
     if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
       throw new ProjectOpenTargetInvalidError();
     }
 
-    const resolvedProjectRoot = await realpath(projectRoot);
     let candidatePath = resolvedProjectRoot;
     let targetStats;
     // 逐段拒绝符号链接，避免即使最终 realpath 位于 Project 内也打开树中不可见的别名目标。

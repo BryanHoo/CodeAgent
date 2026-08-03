@@ -155,8 +155,10 @@ export const workbench = {
     submitAnswers: "Submit answers",
   },
   projectDialog: {
+    closeImagePreview: "Close image preview",
     closeSource: "Close source file",
     delete: "Remove",
+    loadImageError: "Unable to load image",
     loadSourceError: "Unable to load source file",
     loadingSource: "Loading source file",
     name: "Project name",

@@ -634,9 +634,10 @@ MVP 移除：
 ### 16.3 链接安全
 
 - 默认只允许 `http` 和 `https` 外部链接。
-- 外部链接使用明确的安全属性，并由用户主动打开。
+- 外部链接固定使用新标签页、`noopener noreferrer`，并由用户主动打开。
 - `file://`、`javascript:` 和未知协议必须拒绝。
-- Project 文件引用转换为项目内部动作，交给 Server 重新执行权限和路径校验。
+- Project 文件引用转换为项目内部动作，交给 Server 重新执行权限和路径校验；代码与文本继续使用源文件 Dialog，GIF、JPEG、PNG、WebP 使用图片 Dialog，Office、演示、表格、归档等不可预览格式交给宿主系统默认应用。
+- AI 输出的 Project 相对路径和绝对磁盘路径遵循同一分流规则；绝对路径只能用于固定的只读预览或 `system-default` 文件打开接口，不能扩展为任意文件系统能力。
 
 ## 17. Command、Terminal 与 Diff
 

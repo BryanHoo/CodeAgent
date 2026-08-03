@@ -197,6 +197,11 @@ export function buildTaskAttachmentUrl(
   return `${baseUrl.replace(/\/$/u, "")}${taskPath(projectId, taskId)}/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
+export function buildProjectImageFileUrl(baseUrl: string, projectId: string, path: string): string {
+  const requestPath = appendQuery(`${projectPath(projectId)}/files/image`, { path });
+  return `${baseUrl.replace(/\/$/u, "")}${requestPath}`;
+}
+
 export class CodeAgentClient {
   readonly #baseUrl: string;
   readonly #fetch: typeof globalThis.fetch;

@@ -1307,6 +1307,36 @@ describe("CodeAgent Server", () => {
     expect(readProjectSourceFile).toHaveBeenCalledTimes(1);
   });
 
+  it("serves verified Project image previews without MIME sniffing", async () => {
+    const { provider } = createProvider();
+    const imageContent = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const readProjectImageFile = vi.fn(() =>
+      Promise.resolve({
+        content: imageContent,
+        mediaType: "image/png" as const,
+        path: "design/result.png",
+      }),
+    );
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, { readProjectImageFile }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/files/image?path=%2Fworkspace%2FCodeAgent%2Fdesign%2Fresult.png",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toBe("image/png");
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.rawPayload).toEqual(imageContent);
+    expect(readProjectImageFile).toHaveBeenCalledWith(
+      project.rootPath,
+      "/workspace/CodeAgent/design/result.png",
+    );
+  });
+
   it("serves one file tree directory only for the configured project", async () => {
     const { provider } = createProvider();
     const readProjectFileTree = vi.fn(() =>

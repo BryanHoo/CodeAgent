@@ -7,6 +7,32 @@ import { describe, expect, it, vi } from "vitest";
 import { createProjectOpenService } from "./project-open.js";
 
 describe("createProjectOpenService", () => {
+  it("opens an absolute file reference inside the Project with the system application", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "code-agent-open-absolute-"));
+    const documentPath = join(projectRoot, "report.docx");
+    await writeFile(documentPath, "document");
+    const spawnDetached = vi.fn(() => Promise.resolve());
+    const service = createProjectOpenService({
+      environment: { HOME: "/Users/test" },
+      pathExists: (path) => Promise.resolve(path === "/usr/bin/open"),
+      platform: "darwin",
+      spawnDetached,
+    });
+
+    try {
+      await service.open(projectRoot, "system-default", documentPath);
+      const resolvedDocumentPath = await realpath(documentPath);
+
+      expect(spawnDetached).toHaveBeenCalledWith(
+        "/usr/bin/open",
+        [resolvedDocumentPath],
+        expect.objectContaining({ shell: false }),
+      );
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
   it("detects installed macOS apps in the official app menu order", async () => {
     const existingPaths = new Set([
       "/usr/bin/open",

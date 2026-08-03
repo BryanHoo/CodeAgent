@@ -53,6 +53,7 @@ import { commitSelectedProjectChanges, type GitCommitError } from "./git-commit.
 import { buildCommitMessagePrompt } from "./git-commit-message.js";
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
 import { readProjectFileTree } from "./project-file-tree.js";
+import { readProjectImageFile, type ProjectImageFile } from "./project-image-file.js";
 import { readProjectSourceFile } from "./project-source-file.js";
 import { createProjectOpenService, type ProjectOpenService } from "./project-open.js";
 import { prepareTurnFileRollback, type PreparedTurnFileRollback } from "./turn-file-rollback.js";
@@ -91,6 +92,7 @@ export interface CreateCodeAgentServerOptions {
   ) => Promise<CommitProjectChangesResponse>;
   readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
   readProjectFileTree?: (projectRoot: string, directoryPath?: string) => Promise<ProjectFileTree>;
+  readProjectImageFile?: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
   readProjectSourceFile?: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
   prepareTurnFileRollback?: (
     projectRoot: string,
@@ -523,6 +525,7 @@ export async function createCodeAgentServer(
   const readProjectGitStatus = options.readProjectGitStatus ?? readGitWorkingTreeStatus;
   const commitProjectChanges = options.commitProjectChanges ?? commitSelectedProjectChanges;
   const readFileTree = options.readProjectFileTree ?? readProjectFileTree;
+  const readImageFile = options.readProjectImageFile ?? readProjectImageFile;
   const readSourceFile = options.readProjectSourceFile ?? readProjectSourceFile;
   const projectOpenService = options.projectOpenService ?? createProjectOpenService();
   const prepareFileRollback = options.prepareTurnFileRollback ?? prepareTurnFileRollback;
@@ -930,6 +933,7 @@ export async function createCodeAgentServer(
     readEffectiveProjectDefaults,
     readEffectiveTaskSettings,
     readFileTree,
+    readImageFile,
     readInheritedTaskSettings,
     readProjectGitStatus,
     readSourceFile,

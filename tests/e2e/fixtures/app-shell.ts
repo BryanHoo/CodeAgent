@@ -300,7 +300,7 @@ export const taskSnapshot = {
         {
           id: "message-2",
           role: "assistant",
-          text: "工作台界面已按统一的 AI Elements 结构重新组织。\n\n[architecture-design.md](/workspace/CodeAgent/docs/architecture-design.md:716)",
+          text: "工作台界面已按统一的 AI Elements 结构重新组织。\n\n[architecture-design.md](/workspace/CodeAgent/docs/architecture-design.md:716)\n\n[result.png](/workspace/CodeAgent/design/result.png)\n\n[report.docx](/workspace/CodeAgent/report.docx)\n\n[OpenAI](https://openai.com)",
           type: "message",
         },
       ],
@@ -353,6 +353,17 @@ test.beforeEach(async ({ page }) => {
     const archiveMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/archive$/u.exec(url.pathname);
     const projectRenameMatch = /^\/v1\/projects\/([^/]+)\/rename$/u.exec(url.pathname);
     const projectRemoveMatch = /^\/v1\/projects\/([^/]+)\/remove$/u.exec(url.pathname);
+    if (url.pathname === "/v1/projects/code-agent/files/image") {
+      await route.fulfill({
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64",
+        ),
+        contentType: "image/png",
+      });
+      return;
+    }
+
     let body: unknown;
 
     if (url.pathname === "/v1/health") {

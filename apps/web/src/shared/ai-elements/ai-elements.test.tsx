@@ -247,6 +247,23 @@ describe("AI Elements primitives", () => {
     expect(markup).not.toContain("## 结果");
   });
 
+  it("opens safe external links in a new tab and rejects dangerous protocols", () => {
+    const markup = renderToStaticMarkup(
+      <Message from="assistant">
+        <MessageContent>
+          <MessageResponse>
+            {"[OpenAI](https://openai.com)\n\n[unsafe](javascript:alert('x'))"}
+          </MessageResponse>
+        </MessageContent>
+      </Message>,
+    );
+
+    expect(markup).toContain('href="https://openai.com/"');
+    expect(markup).toContain('target="_blank"');
+    expect(markup).toContain('rel="noopener noreferrer"');
+    expect(markup).not.toContain('href="javascript:');
+  });
+
   it("renders Markdown file references with the official accent treatment", () => {
     const markup = renderToStaticMarkup(
       <Message from="assistant">
@@ -310,6 +327,22 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('title="C:/workspace/CodeAgent/src/server.ts"');
     expect(markup).toContain('title="//server/share/share.ts"');
     expect(markup).not.toContain('href="C:/workspace/CodeAgent/src/app.ts:12"');
+  });
+
+  it("renders relative Markdown file references as preview buttons", () => {
+    const markup = renderToStaticMarkup(
+      <Message from="assistant">
+        <MessageContent>
+          <MessageResponse onOpenFileReference={() => undefined}>
+            {"[guide.md](docs/guide.md:8)"}
+          </MessageResponse>
+        </MessageContent>
+      </Message>,
+    );
+
+    expect(markup).toContain('<button class="markdown-file-reference');
+    expect(markup).toContain("(line 8)");
+    expect(markup).toContain('title="docs/guide.md"');
   });
 
   it("extracts code review directives into a dedicated comments summary", () => {

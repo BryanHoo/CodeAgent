@@ -13,6 +13,7 @@ import type {
   ProjectGitStatus,
   ProjectOpenAppId,
 } from "@code-agent/protocol";
+import { classifyProjectFileReference } from "../project-file-reference.js";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -163,6 +164,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     mutationFn: ({ appId, path }: Readonly<{ appId: ProjectOpenAppId; path: string }>) =>
       client.openProject(projectId, { appId, path }),
   });
+  const projectPathOpenMutationRef = useRef(projectPathOpenMutation);
+  projectPathOpenMutationRef.current = projectPathOpenMutation;
   const projectPathOpenLockRef = useRef(createAsyncActionLock());
   const skillsQuery = useQuery({
     ...skillsQueryOptions(projectId, client),
@@ -284,6 +287,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     projectId: string;
   } | null>(null);
   const [sourceFileSelection, setSourceFileSelection] = useState<{
+    kind: "image" | "source";
     projectId: string;
     reference: MessageFileReference;
   } | null>(null);
@@ -312,7 +316,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       : null;
   const selectedSourceFile =
     sourceFileSelection !== null && sourceFileSelection.projectId === projectId
-      ? sourceFileSelection.reference
+      ? sourceFileSelection
       : null;
   const selectedFileReview =
     fileReviewSelection !== null && fileReviewSelection.projectId === projectId
@@ -343,7 +347,27 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const openSourceFile = useCallback(
     (reference: MessageFileReference) => {
       void loadProjectSourceDialog();
-      setSourceFileSelection({ projectId, reference });
+      setSourceFileSelection({ kind: "source", projectId, reference });
+    },
+    [projectId],
+  );
+  const openMessageFileReference = useCallback(
+    (reference: MessageFileReference) => {
+      const kind = classifyProjectFileReference(reference.path);
+      if (kind === "system") {
+        const mutation = projectPathOpenMutationRef.current;
+        mutation.reset();
+        void projectPathOpenLockRef.current.run(() =>
+          mutation.mutateAsync({
+            appId: "system-default",
+            path: reference.path,
+          }),
+        );
+        return;
+      }
+
+      void loadProjectSourceDialog();
+      setSourceFileSelection({ kind, projectId, reference });
     },
     [projectId],
   );
@@ -719,7 +743,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
             startingPrompt={taskLaunchState}
             taskId={taskId}
             onOpenFileDiff={openFileDiff}
-            onOpenSourceFile={openSourceFile}
+            onOpenSourceFile={openMessageFileReference}
             onReviewFileChanges={openFileReview}
           />
         )}
@@ -856,7 +880,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               setSourceFileSelection(null);
             }}
             projectId={projectId}
-            reference={selectedSourceFile}
+            previewKind={selectedSourceFile.kind}
+            reference={selectedSourceFile.reference}
           />
         </Suspense>
       )}

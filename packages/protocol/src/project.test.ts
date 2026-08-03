@@ -182,18 +182,22 @@ describe("project protocol", () => {
       Value.Check(OpenProjectRequestSchema, { appId: "system-default", path: "README.md" }),
     ).toBe(true);
     expect(
+      Value.Check(OpenProjectRequestSchema, {
+        appId: "system-default",
+        path: "/workspace/CodeAgent/report.docx",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(OpenProjectRequestSchema, {
+        appId: "system-default",
+        path: "C:\\workspace\\CodeAgent\\slides.pptx",
+      }),
+    ).toBe(true);
+    expect(
       Value.Check(OpenProjectRequestSchema, { appId: "zed", path: "src/components/app.tsx" }),
     ).toBe(true);
     expect(Value.Check(OpenProjectRequestSchema, { appId: "custom-command" })).toBe(false);
-    for (const path of [
-      "/tmp/project",
-      "C:\\workspace\\project",
-      "src\\app.ts",
-      "src//app.ts",
-      "src/./app.ts",
-      "src/../app.ts",
-      "src/",
-    ]) {
+    for (const path of ["", "bad\npath.doc", "bad\0path.doc"]) {
       expect(Value.Check(OpenProjectRequestSchema, { appId: "finder", path })).toBe(false);
     }
     expect(Value.Check(OpenProjectResponseSchema, { appId: "ghostty" })).toBe(true);

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { PendingRequest } from "@code-agent/protocol";
 
 import {
+  buildProjectImageFileUrl,
   CodeAgentClient,
   CodeAgentHttpError,
   CodeAgentMutationError,
@@ -102,6 +103,18 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
 }
 
 describe("CodeAgentClient", () => {
+  it("builds encoded Project image preview URLs", () => {
+    expect(
+      buildProjectImageFileUrl(
+        "http://127.0.0.1:3210/",
+        "code agent",
+        "/workspace/CodeAgent/design/result image.png",
+      ),
+    ).toBe(
+      "http://127.0.0.1:3210/v1/projects/code%20agent/files/image?path=%2Fworkspace%2FCodeAgent%2Fdesign%2Fresult+image.png",
+    );
+  });
+
   it("builds encoded historical attachment URLs from the configured base URL", () => {
     const client = new CodeAgentClient({ baseUrl: "http://127.0.0.1:3210/" });
 

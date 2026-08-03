@@ -431,6 +431,39 @@ test("opens bounded source previews from assistant file references", async ({ co
   await expect(dialog).toBeHidden();
 });
 
+test("routes assistant links, images, and system files by Markdown file rules", async ({
+  page,
+}) => {
+  const systemOpenRequest = page.waitForRequest((request) => {
+    if (new URL(request.url()).pathname !== "/v1/projects/code-agent/open") {
+      return false;
+    }
+    const body = parseRequestRecord(request.postData());
+    return (
+      body["appId"] === "system-default" && body["path"] === "/workspace/CodeAgent/report.docx"
+    );
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const externalLink = page.getByRole("link", { name: "OpenAI" });
+  await expect(externalLink).toHaveAttribute("target", "_blank");
+  await expect(externalLink).toHaveAttribute("rel", "noopener noreferrer");
+
+  await page.getByRole("button", { name: "result.png" }).click();
+  const imageDialog = page.getByRole("dialog", { name: "result.png" });
+  await expect(imageDialog).toBeVisible();
+  await expect(imageDialog.getByRole("img", { name: "result.png" })).toHaveAttribute(
+    "src",
+    "/v1/projects/code-agent/files/image?path=%2Fworkspace%2FCodeAgent%2Fdesign%2Fresult.png",
+  );
+  await page.keyboard.press("Escape");
+  await expect(imageDialog).toBeHidden();
+
+  await page.getByRole("button", { name: "report.docx" }).click();
+  await systemOpenRequest;
+  await expect(page.getByRole("dialog", { name: "report.docx" })).toHaveCount(0);
+});
+
 test("project file tree opens diffs for changed files and source previews for unchanged files", async ({
   page,
 }) => {
