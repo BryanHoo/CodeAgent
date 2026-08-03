@@ -24,6 +24,7 @@
 - `provider.error` 标记 `willRetry` 时只作为当前 Turn 的临时提示；后续收到新的 Message、Reasoning 或 Command Delta 即清除。不可重试错误继续保留到权威终态，不能因部分回复或缺少错误文本的终态被覆盖。
 - Approval、Error 和 Terminal State 不得因合并或反压丢失。
 - `interrupted` Turn 的终态 Payload 可能只包含部分 Item；同 ID 终态实体覆盖流式实体，但缺失的已展示 Item 必须保留，停止操作不得清空已生成回复。
+- `turn.completed` 与重复 Snapshot 都可能只携带持久化摘要；同一 Turn 按 Item ID 由新实体覆盖旧实体，未重复携带的已接收 Item 必须保留。Snapshot 明确移除整个 Turn 时才删除该 Turn，保证回滚仍以权威历史为准。
 - Pending Request 按 `requestId` 合并 Snapshot 与实时生命周期事件；多个未解决请求按到达顺序展示，仅队首允许提交，重连期间全部暂停提交。Task Store 保留全部活动请求和最近 20 个终态请求，兼容 HTTP Snapshot 重建只输出 `pending`，避免长会话持续扩大状态与 Timeline 遍历量。
 - Task Runtime 使用 `zustand/vanilla` 按 `projectId + taskId` 创建独立 Store；Turn、Item 与 Pending Request 必须分别保存有序 ID 和实体映射，Item 实体各自使用独立 Store。
 - 文本 Delta 只向目标 Item Store 的 Chunk 列表追加，并在同一事件批次结束后发布一次；不得替换 Task 的稳定 Item Map、既有 Turn、Item 顺序或其他实体引用。Item 组件只订阅对应 Item Store，终态事件再以权威完整字符串替换流式 Chunk。

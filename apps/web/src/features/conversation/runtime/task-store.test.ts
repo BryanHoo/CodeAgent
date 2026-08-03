@@ -119,6 +119,26 @@ describe("task store", () => {
     expect(state.reconstructSnapshot()).toEqual(response.snapshot);
   });
 
+  it("removes turns that are absent from a reconciled authoritative snapshot", () => {
+    const initialResponse = createResponse();
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, initialResponse);
+    const completedTurn = initialResponse.snapshot.turns[0];
+    if (completedTurn === undefined) {
+      throw new Error("Expected a completed turn fixture");
+    }
+
+    store.getState().reconcile(
+      createResponse({
+        status: "idle",
+        turns: [completedTurn],
+      }),
+    );
+
+    expect(store.getState().turnIds).toEqual(["turn-completed"]);
+    expect(store.getState().turnsById["turn-running"]).toBeUndefined();
+    expect(store.getState().getItem("message-running")).toBeUndefined();
+  });
+
   it("updates one existing delta without replacing structural references", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
     const previousState = store.getState();
@@ -448,6 +468,59 @@ describe("task store", () => {
     expect(store.getState().reconstructSnapshot()?.turns[1]).toMatchObject({
       items: [{ id: "message-running", text: "开始，但保留这段回复" }],
       status: "interrupted",
+    });
+  });
+
+  it("preserves completed tools when the terminal turn payload omits them", () => {
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        itemId: "tool-read-file",
+        payload: {
+          item: {
+            id: "tool-read-file",
+            input: { path: "package.json" },
+            name: "read_file",
+            output: { content: "CodeAgent" },
+            status: "completed",
+            type: "tool",
+          },
+        },
+        turnId: "turn-running",
+        type: "item.completed",
+      },
+      {
+        ...eventEnvelope(12),
+        payload: {
+          turn: {
+            completedAt: "2026-07-28T00:00:02.000Z",
+            error: null,
+            id: "turn-running",
+            items: [
+              {
+                id: "message-running",
+                role: "assistant",
+                text: "执行完成",
+                type: "message",
+              },
+            ],
+            startedAt: timestamp,
+            status: "completed",
+          },
+        },
+        turnId: "turn-running",
+        type: "turn.completed",
+      },
+    ]);
+
+    expect(store.getState().reconstructSnapshot()?.turns[1]).toMatchObject({
+      items: [
+        { id: "message-running", text: "执行完成" },
+        { id: "tool-read-file", name: "read_file", status: "completed" },
+      ],
+      status: "completed",
     });
   });
 

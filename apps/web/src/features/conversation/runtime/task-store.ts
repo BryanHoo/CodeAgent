@@ -56,6 +56,7 @@ export interface TaskStoreState {
   pendingRequestIds: readonly string[];
   pendingRequestsById: Readonly<Record<string, PendingRequest>>;
   projectId: string;
+  reconcile: (response: TaskStoreHydrationResponse) => void;
   reconstructSnapshot: () => ReconstructedTaskSnapshot | undefined;
   setConnectionState: (connectionState: AgentEventConnectionState) => void;
   setError: (error: Error | null) => void;
@@ -550,7 +551,7 @@ function replaceTurnItems(
   };
 }
 
-function mergeInterruptedTurnItems(
+function mergeTerminalTurnItems(
   state: TaskStoreState,
   turnId: string,
   terminalItems: readonly AgentItem[],
@@ -566,7 +567,7 @@ function mergeInterruptedTurnItems(
     return streamedItem === undefined ? [] : [streamedItem];
   });
 
-  // 中断终态可能只携带部分 Item；终态覆盖同 ID 实体，同时保留已展示的流式内容。
+  // Turn 终态只保证状态已结束，Item 可能是摘要；同 ID 终态覆盖实体，缺失项继续保留。
   return [...mergedItems, ...terminalItemsById.values()];
 }
 
@@ -709,10 +710,7 @@ function applyAcceptedEvent(
           ? { ...event.payload.turn, error: nonRetryingProviderError }
           : event.payload.turn;
       const { items: terminalItems, ...normalizedTurn } = completedTurn;
-      const items =
-        completedTurn.status === "interrupted"
-          ? mergeInterruptedTurnItems(state, event.turnId, terminalItems)
-          : terminalItems;
+      const items = mergeTerminalTurnItems(state, event.turnId, terminalItems);
       return {
         checkpoint,
         ...(currentTurn === undefined
@@ -795,6 +793,56 @@ function reconstructSnapshot(state: TaskStoreState): ReconstructedTaskSnapshot |
       });
       return [{ ...turn, items }];
     }),
+  };
+}
+
+function retainSnapshotTurnItems(currentTurn: AgentTurn, snapshotTurn: AgentTurn): AgentItem[] {
+  const snapshotItemsById = new Map(snapshotTurn.items.map((item) => [item.id, item]));
+  const submittedUserItemId = `submitted-user-${snapshotTurn.id}`;
+  const snapshotUserItem = snapshotTurn.items.find(
+    (item) => item.type === "message" && item.role === "user",
+  );
+  const retainedItems = currentTurn.items.map((currentItem) => {
+    if (currentItem.id === submittedUserItemId && snapshotUserItem !== undefined) {
+      snapshotItemsById.delete(snapshotUserItem.id);
+      return snapshotUserItem;
+    }
+    const snapshotItem = snapshotItemsById.get(currentItem.id);
+    if (snapshotItem === undefined) {
+      return currentItem;
+    }
+    snapshotItemsById.delete(currentItem.id);
+    return snapshotItem;
+  });
+
+  // Snapshot 可能只包含持久化摘要；保留同一 Turn 已接收的操作，并追加 Snapshot 新增实体。
+  return [...retainedItems, ...snapshotItemsById.values()];
+}
+
+function reconcileSnapshot(
+  state: TaskStoreState,
+  response: TaskStoreHydrationResponse,
+): TaskStoreHydrationResponse {
+  const currentSnapshot = reconstructSnapshot(state);
+  if (currentSnapshot === undefined) {
+    return response;
+  }
+  const currentTurnsById = new Map(currentSnapshot.turns.map((turn) => [turn.id, turn]));
+  return {
+    ...response,
+    snapshot: {
+      ...response.snapshot,
+      // Snapshot 缺失整个 Turn 表示权威历史已移除；只在仍存在的 Turn 内做非破坏性 Item 合并。
+      turns: response.snapshot.turns.map((snapshotTurn) => {
+        const currentTurn = currentTurnsById.get(snapshotTurn.id);
+        return currentTurn === undefined
+          ? snapshotTurn
+          : {
+              ...snapshotTurn,
+              items: retainSnapshotTurnItems(currentTurn, snapshotTurn),
+            };
+      }),
+    },
   };
 }
 
@@ -890,6 +938,19 @@ export function createTaskStore(
       set({ ...normalizeSnapshot(response), connectionState: "connecting", error: null });
     },
     projectId: identity.projectId,
+    reconcile(response) {
+      if (
+        response.snapshot.projectId !== identity.projectId ||
+        response.snapshot.id !== identity.taskId
+      ) {
+        throw new Error("Task store identity does not match the snapshot");
+      }
+      set((state) => ({
+        ...normalizeSnapshot(reconcileSnapshot(state, response)),
+        connectionState: "connecting",
+        error: null,
+      }));
+    },
     getItem: (itemId) => get().itemStoresById.get(itemId)?.read(),
     reconstructSnapshot: () => reconstructSnapshot(get()),
     setConnectionState(connectionState) {

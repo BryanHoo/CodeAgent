@@ -473,6 +473,46 @@ describe("project runtime manager", () => {
     manager.dispose();
   });
 
+  it("preserves retained turn items when a refreshed snapshot omits them", () => {
+    const harness = createClientHarness();
+    const manager = createProjectRuntimeManager(harness.client);
+    const response = createSnapshotResponse("task-1", { sequence: 2, title: "刷新后的标题" });
+    const currentResponse: AgentTaskSnapshotResponse = {
+      ...response,
+      snapshot: {
+        ...response.snapshot,
+        title: "旧标题",
+        turns: [
+          {
+            ...createTurn("task-1"),
+            items: [
+              {
+                id: "tool-read-file",
+                input: { path: "package.json" },
+                name: "read_file",
+                output: { content: "CodeAgent" },
+                status: "completed",
+                type: "tool",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, currentResponse);
+
+    const detach = manager.attachTaskStore(response, store, vi.fn());
+
+    expect(store.getState().getItem("tool-read-file")).toMatchObject({
+      name: "read_file",
+      status: "completed",
+    });
+    expect(store.getState().checkpoint).toEqual(response.checkpoint);
+    expect(store.getState().snapshotMetadata?.title).toBe("刷新后的标题");
+    detach();
+    manager.dispose();
+  });
+
   it("replays wrapped Project history without shifting the backing array", () => {
     const harness = createClientHarness();
     const manager = createProjectRuntimeManager(harness.client, {

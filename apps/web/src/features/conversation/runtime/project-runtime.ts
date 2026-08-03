@@ -392,7 +392,7 @@ class ProjectEventRuntime {
     }
 
     this.#touch();
-    storeState.hydrate(response);
+    storeState.reconcile(response);
     let target = this.#targets.get(store);
     if (target === undefined) {
       target = new TaskEventTarget(store, recoverSnapshot, (recoveredResponse, recoveredTarget) => {
@@ -577,7 +577,7 @@ class ProjectEventRuntime {
       throw new Error("Task store identity does not match the recovered snapshot");
     }
 
-    storeState.hydrate(response);
+    storeState.reconcile(response);
     target.resetForSnapshot();
     this.#callbacks.onSnapshot(response);
     this.#replayEvents(response.checkpoint, target);
