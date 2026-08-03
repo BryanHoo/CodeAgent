@@ -556,19 +556,51 @@ function mergeTerminalTurnItems(
   turnId: string,
   terminalItems: readonly AgentItem[],
 ): readonly AgentItem[] {
-  const terminalItemsById = new Map(terminalItems.map((item) => [item.id, item]));
-  const mergedItems = (state.itemIdsByTurnId[turnId] ?? []).flatMap((itemId) => {
-    const terminalItem = terminalItemsById.get(itemId);
-    if (terminalItem !== undefined) {
-      terminalItemsById.delete(itemId);
-      return [terminalItem];
+  const submittedUserItemId = `submitted-user-${turnId}`;
+  const terminalUserItem = terminalItems.find(
+    (item) => item.type === "message" && item.role === "user",
+  );
+  const currentItems: AgentItem[] = [];
+  const seenCurrentItemIds = new Set<string>();
+  for (const itemId of state.itemIdsByTurnId[turnId] ?? []) {
+    const currentItem = readTaskItem(state, itemId);
+    if (currentItem === undefined) {
+      continue;
     }
-    const streamedItem = readTaskItem(state, itemId);
-    return streamedItem === undefined ? [] : [streamedItem];
-  });
+    // 启动响应可能缺少用户 Item；终态到达后由真实实体接管本地提交占位符。
+    const resolvedItem =
+      currentItem.id === submittedUserItemId && terminalUserItem !== undefined
+        ? terminalUserItem
+        : currentItem;
+    if (!seenCurrentItemIds.has(resolvedItem.id)) {
+      seenCurrentItemIds.add(resolvedItem.id);
+      currentItems.push(resolvedItem);
+    }
+  }
 
-  // Turn 终态只保证状态已结束，Item 可能是摘要；同 ID 终态覆盖实体，缺失项继续保留。
-  return [...mergedItems, ...terminalItemsById.values()];
+  const currentItemIds = new Set(currentItems.map((item) => item.id));
+  const terminalItemsById = new Map(terminalItems.map((item) => [item.id, item]));
+  const terminalItemsBeforeCurrentId = new Map<string, AgentItem[]>();
+  let pendingTerminalItems: AgentItem[] = [];
+  for (const terminalItem of terminalItems) {
+    if (!currentItemIds.has(terminalItem.id)) {
+      pendingTerminalItems.push(terminalItem);
+      continue;
+    }
+    if (pendingTerminalItems.length > 0) {
+      terminalItemsBeforeCurrentId.set(terminalItem.id, pendingTerminalItems);
+      pendingTerminalItems = [];
+    }
+  }
+
+  // 已展示 Item 不移动；终态新增 Item 依照下一个共同实体插入，兼顾两条有序序列。
+  return [
+    ...currentItems.flatMap((item) => [
+      ...(terminalItemsBeforeCurrentId.get(item.id) ?? []),
+      terminalItemsById.get(item.id) ?? item,
+    ]),
+    ...pendingTerminalItems,
+  ];
 }
 
 function applyAcceptedEvent(

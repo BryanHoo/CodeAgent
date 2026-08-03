@@ -524,6 +524,107 @@ describe("task store", () => {
     });
   });
 
+  it("uses terminal item order while replacing the submitted user placeholder", () => {
+    const submittedUserItemId = "submitted-user-turn-running";
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({
+        turns: [
+          {
+            completedAt: null,
+            error: null,
+            id: "turn-running",
+            items: [
+              {
+                id: submittedUserItemId,
+                role: "user",
+                text: "执行检查",
+                type: "message",
+              },
+              {
+                id: "message-running",
+                role: "assistant",
+                text: "正在处理",
+                type: "message",
+              },
+              {
+                detail: "读取配置",
+                id: "activity-running",
+                label: "分析项目",
+                status: "completed",
+                type: "activity",
+              },
+              {
+                id: "tool-read-file",
+                input: { path: "package.json" },
+                name: "read_file",
+                output: { content: "CodeAgent" },
+                status: "completed",
+                type: "tool",
+              },
+            ],
+            startedAt: timestamp,
+            status: "running",
+          },
+        ],
+      }),
+    );
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        payload: {
+          turn: {
+            completedAt: "2026-07-28T00:00:02.000Z",
+            error: null,
+            id: "turn-running",
+            items: [
+              {
+                id: "provider-user-item",
+                role: "user",
+                text: "执行检查",
+                type: "message",
+              },
+              {
+                id: "message-running",
+                role: "assistant",
+                text: "正在处理",
+                type: "message",
+              },
+              {
+                id: "message-completed",
+                role: "assistant",
+                text: "执行完成",
+                type: "message",
+              },
+              {
+                id: "tool-read-file",
+                input: { path: "package.json" },
+                name: "read_file",
+                output: { content: "CodeAgent" },
+                status: "completed",
+                type: "tool",
+              },
+            ],
+            startedAt: timestamp,
+            status: "completed",
+          },
+        },
+        turnId: "turn-running",
+        type: "turn.completed",
+      },
+    ]);
+
+    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual([
+      "provider-user-item",
+      "message-running",
+      "activity-running",
+      "message-completed",
+      "tool-read-file",
+    ]);
+    expect(store.getState().getItem(submittedUserItemId)).toBeUndefined();
+  });
+
   it("replaces a submitted user placeholder when the provider item starts", () => {
     const submittedUserItemId = "submitted-user-turn-running";
     const store = createTaskStore(
