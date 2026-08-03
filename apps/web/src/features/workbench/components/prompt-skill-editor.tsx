@@ -189,16 +189,26 @@ function createEditorSkillNode(skill: AgentSkill, iconTemplate: SVGSVGElement | 
   return token;
 }
 
+function createCaretAnchorNode(): HTMLSpanElement {
+  const caretAnchor = document.createElement("span");
+  caretAnchor.dataset["promptCaretAnchor"] = "";
+  caretAnchor.textContent = caretAnchorText;
+  return caretAnchor;
+}
+
 function renderEditorContent(
   root: HTMLDivElement,
   content: PromptSkillContent,
   iconTemplate: SVGSVGElement | null,
 ): void {
-  const nodes = content.map((part) =>
-    part.type === "text"
-      ? document.createTextNode(part.text)
-      : createEditorSkillNode(part.skill, iconTemplate),
-  );
+  const nodes: Node[] = [];
+  for (const part of content) {
+    if (part.type === "text") {
+      nodes.push(document.createTextNode(part.text));
+    } else {
+      nodes.push(createEditorSkillNode(part.skill, iconTemplate), createCaretAnchorNode());
+    }
+  }
   root.replaceChildren(...nodes);
   root.dataset["empty"] = String(content.length === 0);
   root.dataset["serializedValue"] = serializePromptSkillContent(content);
@@ -325,6 +335,13 @@ function findDomPoint(root: HTMLDivElement, requestedOffset: number): readonly [
   for (const [index, node] of [...root.childNodes].entries()) {
     const length = serializedNodeLength(node);
     if (remaining === 0) {
+      if (node instanceof HTMLElement && node.dataset["promptCaretAnchor"] !== undefined) {
+        const anchorText = node.firstChild;
+        if (anchorText !== null) {
+          // WebKit 需要真实可编辑文本节点，才能把末尾 Token 后的光标绘制在正确位置。
+          return [anchorText, caretAnchorText.length];
+        }
+      }
       return [root, index];
     }
     if (node.nodeType === Node.TEXT_NODE && remaining <= length) {
@@ -481,6 +498,14 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       replace(content);
     }, [content, replace, scope]);
 
+    const removeSkillNode = (root: HTMLDivElement, token: HTMLElement, skillId: string) => {
+      const tokenOffset = [...root.childNodes]
+        .slice(0, [...root.childNodes].indexOf(token))
+        .reduce((total, node) => total + serializedNodeLength(node), 0);
+      replace(removePromptSkill(contentRef.current, skillId), tokenOffset);
+      emitChange();
+    };
+
     const removeSkillFromEvent = (event: MouseEvent<HTMLDivElement>) => {
       const target = event.target;
       const token =
@@ -494,11 +519,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       if (root === null || token === null) {
         return true;
       }
-      const tokenOffset = [...root.childNodes]
-        .slice(0, [...root.childNodes].indexOf(token))
-        .reduce((total, node) => total + serializedNodeLength(node), 0);
-      replace(removePromptSkill(contentRef.current, skillId), tokenOffset);
-      emitChange();
+      removeSkillNode(root, token, skillId);
       return true;
     };
 
@@ -520,6 +541,26 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       onKeyDown?.(event);
       if (event.defaultPrevented || event.nativeEvent.isComposing || disabled) {
         return;
+      }
+      if (event.key === "Backspace") {
+        const selection = document.getSelection();
+        const anchorNode = selection?.anchorNode;
+        const caretAnchor = anchorNode?.parentElement;
+        const token = caretAnchor?.previousElementSibling;
+        const skillId = token instanceof HTMLElement ? token.dataset["promptSkillId"] : undefined;
+        if (
+          selection?.isCollapsed === true &&
+          selection.anchorOffset === caretAnchorText.length &&
+          caretAnchor?.dataset["promptCaretAnchor"] !== undefined &&
+          anchorNode?.textContent?.startsWith(caretAnchorText) === true &&
+          token instanceof HTMLElement &&
+          skillId !== undefined
+        ) {
+          // 保留 Token 邻接删除语义，避免先删掉用于 Safari 绘制光标的零宽字符。
+          event.preventDefault();
+          removeSkillNode(event.currentTarget, token, skillId);
+          return;
+        }
       }
       if (event.key === "Enter") {
         event.preventDefault();

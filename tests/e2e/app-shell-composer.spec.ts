@@ -146,6 +146,20 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   await expect(selectedSkill).toContainText("Security review");
   await expect(selectedSkill).toHaveAttribute("data-serialized-text", "$review-security");
   await expect(prompt).toHaveAttribute("data-serialized-value", "说明 $review-security");
+  const caretAnchor = await prompt.evaluate((editor) => {
+    const selection = document.getSelection();
+    const anchorNode = selection?.anchorNode;
+    return {
+      anchorOffset: selection?.anchorOffset,
+      anchoredAfterSkill:
+        anchorNode instanceof Node &&
+        editor.contains(anchorNode) &&
+        anchorNode.parentElement?.dataset["promptCaretAnchor"] !== undefined &&
+        anchorNode.parentElement.previousElementSibling?.matches("[data-prompt-skill-id]") === true,
+    };
+  });
+  // Safari 会把根节点边界选区绘制到行首，末尾 Token 必须使用可编辑文本锚点承载光标。
+  expect(caretAnchor).toEqual({ anchorOffset: 1, anchoredAfterSkill: true });
   const editorBaselineOffset = await selectedSkill.evaluate((token) => {
     const labelText = token.lastElementChild?.firstChild;
     const adjacentText = token.previousSibling;
