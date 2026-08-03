@@ -1,4 +1,4 @@
-import { expect, taskSnapshot, tasks, test } from "./fixtures/app-shell.js";
+import { expect, projects, taskSnapshot, tasks, test } from "./fixtures/app-shell.js";
 
 test.describe.configure({ mode: "serial" });
 
@@ -361,10 +361,11 @@ test("stores new-chat text and attachments independently between projects", asyn
 
   const projectSelect = page.getByRole("combobox", { name: "选择新聊天项目" });
   await expect(projectSelect).toBeVisible();
-  // 文件夹名称自身表达可切换状态，不再用远离文字的下拉图标提示。
+  const projectSelectLabel = projectSelect.locator("xpath=preceding-sibling::*[1]");
+  // 可见名称表达可切换状态，透明原生选择器只负责交互。
   await expect(projectSelect).toHaveCSS("appearance", "none");
-  await expect(projectSelect).toHaveCSS("text-align", "center");
-  await expect(projectSelect).toHaveCSS("text-decoration-line", "underline");
+  await expect(projectSelect).toHaveCSS("opacity", "0");
+  await expect(projectSelectLabel).toHaveCSS("text-decoration-line", "underline");
   await expect(projectSelect.locator("xpath=following-sibling::*")).toHaveCount(0);
   await projectSelect.selectOption("superwork");
 
@@ -385,6 +386,60 @@ test("stores new-chat text and attachments independently between projects", asyn
   await expect(page).toHaveURL(/\/p\/code-agent$/);
   await expect(prompt).toHaveAttribute("data-serialized-value", "保留这段新聊天草稿");
   await expect(page.getByText("draft.png", { exact: true })).toBeVisible();
+});
+
+test("sizes and vertically aligns the empty-chat project selector", async ({ page }) => {
+  await page.route("**/v1/projects", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        data: projects.map((project) =>
+          project.id === "superwork"
+            ? { ...project, name: "a-project-name-that-is-much-longer-than-CodeAgent" }
+            : project,
+        ),
+        nextCursor: null,
+      },
+    });
+  });
+  await page.goto("/p/code-agent");
+
+  const projectSelect = page.getByRole("combobox", { name: "选择新聊天项目" });
+  await expect(projectSelect).toBeVisible();
+  const geometry = await projectSelect.evaluate((select) => {
+    const label = select.previousElementSibling;
+    const wrapper = select.parentElement;
+    const heading = wrapper?.parentElement;
+    if (
+      !(label instanceof HTMLElement) ||
+      !(wrapper instanceof HTMLElement) ||
+      !(heading instanceof HTMLHeadingElement)
+    ) {
+      throw new Error("项目选择器缺少用于基线对齐的可见标签");
+    }
+    const headingStyle = getComputedStyle(heading);
+    const labelStyle = getComputedStyle(label);
+    const labelBounds = label.getBoundingClientRect();
+    return {
+      headingLineHeight: headingStyle.lineHeight,
+      labelLineHeight: labelStyle.lineHeight,
+      labelVisibility: labelStyle.visibility,
+      labelWidth: labelBounds.width,
+      selectOpacity: getComputedStyle(select).opacity,
+      selectWidth: select.getBoundingClientRect().width,
+      wrapperVerticalAlign: getComputedStyle(wrapper).verticalAlign,
+    };
+  });
+
+  expect(Math.abs(geometry.selectWidth - geometry.labelWidth)).toBeLessThanOrEqual(1);
+  expect(geometry.labelVisibility).toBe("visible");
+  expect(geometry.selectOpacity).toBe("0");
+  expect(geometry.labelLineHeight).toBe(geometry.headingLineHeight);
+  expect(geometry.wrapperVerticalAlign).toBe("baseline");
 });
 
 test("toggles project tasks from the project name without navigation", async ({ page }) => {

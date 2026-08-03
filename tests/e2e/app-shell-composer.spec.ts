@@ -197,7 +197,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
 
   await prompt.fill("/压缩");
   await prompt.press("Enter");
-  await expect(page.getByRole("status")).toContainText("正在压缩上下文");
+  await expect(page.getByRole("status").filter({ hasText: "正在压缩上下文" })).toBeVisible();
   await expect
     .poll(() => commandRequests.map((request) => request.path))
     .toContain("/v1/projects/code-agent/tasks/task-1/compact");
@@ -207,7 +207,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   await expect(page.getByRole("button", { name: "取消反馈" })).toBeVisible();
   await prompt.fill("Slash 命令操作顺畅");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
-  await expect(page.getByRole("status")).toContainText("反馈已发送");
+  await expect(page.getByRole("status").filter({ hasText: "反馈已发送" })).toBeVisible();
   await expect
     .poll(() => commandRequests.find((request) => request.path.endsWith("/feedback"))?.body)
     .toContain("Slash 命令操作顺畅");

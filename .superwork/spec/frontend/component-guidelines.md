@@ -33,7 +33,7 @@
 - 左栏 Settings 旁的连接状态必须反映真实 Runtime：活动 Task 使用其实时事件连接状态，新建 Task 页面使用 HTTP Runtime 的加载、可用和失败状态；不得硬编码在线或离线文案。
 - 左栏 Settings 必须使用按钮在当前工作台打开可访问的原生 Dialog，不注册独立设置路由。弹窗使用 macOS 设置式双栏，将字段归入“外观”“Agent 默认值”“提交消息”“应用集成”，窄屏改为顶部横向分类；模型与思考量使用带边界和 Chevron 的 AI Elements `PromptInputSelect`。Dialog 必须支持加载、失败重试、全局设置完整对象原子保存、Escape、backdrop 与关闭后焦点恢复。
 - Project 名称只切换对应任务树的展开状态；名称右侧的可访问 `+` 图标进入该 Project 的“新聊天”草稿，顶部“新建任务”始终进入第一个 Project 的草稿，新增文件夹后进入该 Project 草稿，目标草稿已打开时直接复用。新聊天入口只能重置中栏和切换 Project，左栏不得出现临时“新聊天”Task。
-- 新聊天草稿在首次 Prompt 提交或代码审查命令执行前不得创建 Codex Task；空 Timeline 的 Project 名称直接渲染为原生 Project 选择器，首次点击必须打开选项列表，切换 Project 时保存当前 Project 草稿并恢复目标 Project 草稿。首次提交后，`startTask` 返回真实 `taskId` 时立即把 Task 写入对应 Project 列表并选中，`startTurn` 成功后再进入 Task 路由并由 Codex 返回的名称替换“新聊天”。
+- 新聊天草稿在首次 Prompt 提交或代码审查命令执行前不得创建 Codex Task；空 Timeline 的 Project 名称必须保留原生 Project 选择器交互，首次点击必须打开选项列表，切换 Project 时保存当前 Project 草稿并恢复目标 Project 草稿。可见名称必须使用与两侧标题相同的普通文本基线和行高，透明原生选择器只覆盖其上负责交互；可视宽度必须跟随当前 Project 名称，不能由最长备选项撑宽后依赖原生 `text-align` 居中。几何回归必须覆盖当前名称较短且存在更长备选项的场景，避免 Safari 把选中项绘制到控件一侧或与两侧文字上下错位。首次提交后，`startTask` 返回真实 `taskId` 时立即把 Task 写入对应 Project 列表并选中，`startTurn` 成功后再进入 Task 路由并由 Codex 返回的名称替换“新聊天”。
 - 通过显式 Props 或专用 Hook 获取数据，不从组件内部访问 Server 或 Provider。
 - Composer 公共入口只装配 controller 与视图：纯状态推导放入独立模块，Mutation 单飞、幂等尝试和作用域清理由 controller hook 持有，Prompt Input、队列、附件、命令菜单和状态行由无 Client 访问的视图组件渲染。拆分不得改变编辑器 DOM 身份、IME 组合缓冲、可访问名称或用户事件直接触发 Mutation 的时机。
 - 长列表使用稳定尺寸与虚拟化；流式 Item 独立订阅，避免整个 Task 重渲染。

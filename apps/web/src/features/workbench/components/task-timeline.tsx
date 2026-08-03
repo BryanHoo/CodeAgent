@@ -144,6 +144,8 @@ function EmptyTimeline({
   projectId: string;
   projects: readonly Project[];
 }>) {
+  const selectedProjectName = projects.find((project) => project.id === projectId)?.name ?? "";
+
   return (
     <section
       className="grid min-h-0 flex-1 place-items-center px-6"
@@ -157,24 +159,32 @@ function EmptyTimeline({
         />
         <h2 className="mt-5 text-balance text-xl font-normal leading-tight text-foreground">
           {i18n.t("timeline.emptyBefore", { ns: "conversation" })}
-          {/* 直接挂载原生选择器，确保首次点击就能打开项目列表。 */}
-          <select
-            aria-label={i18n.t("timeline.selectProject", { ns: "conversation" })}
-            className="mx-1 max-w-full cursor-pointer appearance-none bg-transparent px-0 py-0 text-center font-sans font-normal text-foreground underline decoration-current/35 underline-offset-4 outline-none transition-colors hover:decoration-current focus-visible:rounded-control focus-visible:shadow-focus"
-            onChange={(event) => {
-              const nextProjectId = event.currentTarget.value;
-              if (nextProjectId !== projectId) {
-                onProjectChange(nextProjectId);
-              }
-            }}
-            value={projectId}
-          >
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
+          <span className="group relative mx-1 inline-block max-w-full rounded-control align-baseline focus-within:shadow-focus">
+            {/* 普通文本保持标题基线；透明原生选择器覆盖其上，保留完整点击与键盘交互。 */}
+            <span
+              aria-hidden="true"
+              className="block max-w-full truncate whitespace-pre font-sans font-normal text-foreground underline decoration-current/35 underline-offset-4 transition-colors group-hover:decoration-current"
+            >
+              {selectedProjectName}
+            </span>
+            <select
+              aria-label={i18n.t("timeline.selectProject", { ns: "conversation" })}
+              className="absolute inset-0 size-full min-w-0 cursor-pointer appearance-none opacity-0 outline-none"
+              onChange={(event) => {
+                const nextProjectId = event.currentTarget.value;
+                if (nextProjectId !== projectId) {
+                  onProjectChange(nextProjectId);
+                }
+              }}
+              value={projectId}
+            >
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </span>
           {i18n.t("timeline.emptyAfter", { ns: "conversation" })}
         </h2>
       </div>
