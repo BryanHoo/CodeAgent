@@ -26,7 +26,7 @@
 - `interrupted` Turn 的终态 Payload 可能只包含部分 Item；同 ID 终态实体覆盖流式实体，但缺失的已展示 Item 必须保留，停止操作不得清空已生成回复。
 - `turn.completed` 与重复 Snapshot 都可能只携带持久化摘要；同一 Turn 按 Item ID 由新实体覆盖旧实体，未重复携带的已接收 Item 必须保留。Provider 对同一 Message 的实时 ID 与 Snapshot ID 不稳定时，优先按 Item ID 确认实体；文本前缀只允许作为同角色、两侧非空且候选关系双方唯一时的兜底匹配。匹配后保留实时 ID 继续接收 Delta，并吸收 Snapshot 的完整内容和元数据；重复、空文本或前缀歧义必须保留各自 ID，不能错误折叠。完成态合并不得移动已展示 Item；终态新增 Item 按下一个共同 Item 插入，无后续共同 Item 时追加。终态真实 User Item 必须原子替换 `submitted-user-<turnId>` 占位符，不能重复展示或落到 Assistant Item 之后。Snapshot 明确移除整个 Turn 时才删除该 Turn，保证回滚仍以权威历史为准。
 - Pending Request 按 `requestId` 合并 Snapshot 与实时生命周期事件；多个未解决请求按到达顺序展示，仅队首允许提交，重连期间全部暂停提交。Task Store 保留全部活动请求和最近 20 个终态请求，兼容 HTTP Snapshot 重建只输出 `pending`，避免长会话持续扩大状态与 Timeline 遍历量。
-- Task Runtime 使用 `zustand/vanilla` 按 `projectId + taskId` 创建独立 Store；Turn、Item 与 Pending Request 必须分别保存有序 ID 和实体映射，Item 实体各自使用独立 Store。
+- Task Runtime 使用 `zustand/vanilla` 按 `projectId + taskId` 创建独立 Store；Turn、Item 与 Pending Request 必须分别保存有序 ID 和实体映射，Item 实体各自使用独立 Store。每次 Snapshot Hydrate 或 Reconcile 重建 Turn/Item 容器时必须基于当前值单调推进结构修订号，不能重置修订号或只依赖 Task 元数据变化触发兼容快照重建；否则 Task 仍为 `running` 但中间 Snapshot 暂缺乐观 Turn 时，会让已提交消息和运行状态持续空白。
 - 文本 Delta 只向目标 Item Store 的 Chunk 列表追加，并在同一事件批次结束后发布一次；不得替换 Task 的稳定 Item Map、既有 Turn、Item 顺序或其他实体引用。Item 组件只订阅对应 Item Store，终态事件再以权威完整字符串替换流式 Chunk。
 - 未选中 Task Store 采用 UTF-8 字节估算 LRU 回收：非活动 Store 合计最多 64 MiB、最多 20 份；仍有消费者的 Store 不得回收且不占非活动预算。最后一个消费者释放时从 Project Runtime 注销 Store 并发起 best-effort `thread/unsubscribe`，重新选中后必须从权威 Snapshot 校准，因此运行中、待审批或尚未 Hydrate 的非活动 Store 也可安全进入 LRU。
 - Command Output 同时受单 Item 1 MiB / 10,000 行和单 Task 8 MiB 总预算约束；流式 Delta 只重新裁剪和计量目标 Command，总字节数与访问序号使用稳定 Map 按 Item 增量维护，只有超出 Task 预算时才遍历 LRU 索引并回收最久未更新的 Command Output。回收结果使用明确截断标记，界面高度限制不能代替 Payload 字节限制。

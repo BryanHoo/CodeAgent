@@ -139,6 +139,22 @@ describe("task store", () => {
     expect(store.getState().getItem("message-running")).toBeUndefined();
   });
 
+  it("invalidates reconstructed snapshots when reconcile removes an optimistic running turn", () => {
+    const initialResponse = createResponse();
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, initialResponse);
+    const completedTurn = initialResponse.snapshot.turns[0];
+    if (completedTurn === undefined) {
+      throw new Error("Expected a completed turn fixture");
+    }
+    const previousStructureRevision = store.getState().itemStructureRevision;
+
+    // Task 元数据仍为 running 时，结构修订号是父级发现临时 Snapshot 缺失 Turn 的唯一信号。
+    store.getState().reconcile(createResponse({ turns: [completedTurn] }));
+
+    expect(store.getState().turnIds).toEqual(["turn-completed"]);
+    expect(store.getState().itemStructureRevision).toBeGreaterThan(previousStructureRevision);
+  });
+
   it("reconciles synthetic snapshot message ids with their realtime items", () => {
     const liveTurn = {
       completedAt: null,

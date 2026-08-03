@@ -1034,7 +1034,13 @@ export function createTaskStore(
       ) {
         throw new Error("Task store identity does not match the snapshot");
       }
-      set({ ...normalizeSnapshot(response), connectionState: "connecting", error: null });
+      set((state) => ({
+        ...normalizeSnapshot(response),
+        // Snapshot 替换会重建 Turn 与 Item 容器，必须推进修订号以失效兼容快照 memo。
+        itemStructureRevision: state.itemStructureRevision + 1,
+        connectionState: "connecting",
+        error: null,
+      }));
     },
     projectId: identity.projectId,
     reconcile(response) {
@@ -1046,6 +1052,8 @@ export function createTaskStore(
       }
       set((state) => ({
         ...normalizeSnapshot(reconcileSnapshot(state, response)),
+        // 即使 Task 元数据未变，缺失或新增 Turn 也必须通知快照消费者重新读取 Store。
+        itemStructureRevision: state.itemStructureRevision + 1,
         connectionState: "connecting",
         error: null,
       }));
