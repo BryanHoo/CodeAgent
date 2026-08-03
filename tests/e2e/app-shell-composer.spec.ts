@@ -1489,3 +1489,49 @@ test("scrolls direct user submissions to the bottom without scrolling queued mes
     )
     .toBeGreaterThan(100);
 });
+
+test("copies the current code from a streaming assistant reply", async ({ context, page }) => {
+  const streamedCode = "const streamed = true;";
+  const historicalTurn = taskSnapshot.turns[0];
+  if (historicalTurn === undefined) {
+    throw new Error("Expected the task fixture to contain a turn");
+  }
+
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: {
+          ...taskSnapshot,
+          status: "running",
+          turns: [
+            {
+              ...historicalTurn,
+              completedAt: null,
+              items: [
+                {
+                  id: "message-streaming-code",
+                  role: "assistant",
+                  text: `\`\`\`typescript\n${streamedCode}\n\`\`\``,
+                  type: "message",
+                },
+              ],
+              status: "running",
+            },
+          ],
+        },
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const copyButton = page.locator('[data-streamdown="code-block-copy-button"]');
+  await expect(copyButton).toBeVisible();
+  await expect(copyButton).toBeEnabled();
+  await copyButton.click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe(`${streamedCode}\n`);
+});

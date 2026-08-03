@@ -12,7 +12,7 @@ import {
   type HTMLAttributes,
   type ReactElement,
 } from "react";
-import { Streamdown, type Components } from "streamdown";
+import { Block, Streamdown, StreamdownContext, type BlockProps, type Components } from "streamdown";
 
 import { useTranslation } from "../../i18n/i18n.js";
 import { CodeComments, parseCodeComments } from "./code-comments.js";
@@ -383,6 +383,21 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown> & {
   onOpenFileReference?: (reference: MessageFileReference) => void;
 };
 
+function InteractiveMessageBlock(props: BlockProps) {
+  const streamdownContext = useContext(StreamdownContext);
+  const interactiveContext = useMemo(
+    () => ({ ...streamdownContext, isAnimating: false }),
+    [streamdownContext],
+  );
+
+  // 文本仍由外层 Streamdown 执行动画，块内控件不能因此失去点击能力。
+  return (
+    <StreamdownContext.Provider value={interactiveContext}>
+      <Block {...props} />
+    </StreamdownContext.Provider>
+  );
+}
+
 function MessageResponseContent({
   children,
   className = "",
@@ -403,6 +418,7 @@ function MessageResponseContent({
         className={`size-full break-words [&_blockquote]:border-l-2 [&_blockquote]:border-separator [&_blockquote]:pl-3 [&_code]:font-mono [&_code]:text-body-small [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_pre]:overflow-x-auto [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 ${className}`}
         controls={{ code: { copy: true, download: false }, mermaid: false, table: false }}
         {...props}
+        BlockComponent={InteractiveMessageBlock}
         components={markdownComponents}
       >
         {normalizedMarkdown}

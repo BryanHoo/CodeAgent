@@ -336,6 +336,8 @@ a {
 }
 
 [data-streamdown="code-block-actions"] {
+  /* Tailwind 不扫描依赖源码，显式恢复 Streamdown 操作区的点击能力。 */
+  pointer-events: auto;
   gap: calc(var(--ui-space-unit) * 1.5) !important;
   border: 0 !important;
   border-radius: var(--ui-radius-control) !important;
