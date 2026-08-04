@@ -4,6 +4,30 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-04
+
+### 新增
+
+- 升级内置 Codex 至 `0.146.0`，接入原生任务固定状态，并保持固定、重命名和归档操作与 Codex 数据一致。
+- 添加 Markdown 文件引用的分类预览与安全打开、消息图片页内预览和会话文本附件展示。
+- 添加系统默认应用打开方式，统一 Inspector、文件审核和消息引用中的项目文件打开流程。
+- 将文件审核导航改为紧凑文件树，并为截断的命令标题添加完整内容提示。
+
+### 优化
+
+- 重构任务 Snapshot 与实时事件的消息匹配、修订推进和终态合并，保持恢复后的会话内容与运行状态一致。
+- 保持提交操作计时直至助手回复可见，准确反馈提交信息生成和 Git 操作的完整耗时。
+
+### 修复
+
+- 修复 Safari 输入法候选确认误提交、Skill Token 邻接删除及光标定位问题。
+- 修复流式回复代码复制、新聊天项目选择器尺寸与直接提交后的文件审核滚动。
+- 修复系统通知打开错误页面，以及摘要 Snapshot 丢失未重复携带的 Turn Item。
+
+### 工程
+
+- 隔离各 Playwright Worker 的 Fake Server，并等待 Shimmer 动画时间轴初始化，降低端到端测试相互干扰。
+
 ## [1.0.0] - 2026-08-02
 
 CodeAgent 首个稳定版本，集中发布本地 Coding Agent 工作台的完整交互、运行时治理与跨平台能力。
@@ -88,7 +112,8 @@ CodeAgent 首个稳定版本，集中发布本地 Coding Agent 工作台的完�
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.6...v1.0.0
 [0.0.6]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.4...v0.0.5

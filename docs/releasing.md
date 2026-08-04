@@ -45,14 +45,14 @@ pnpm test:e2e
 4. 提交发布准备并创建与包版本一致的标签：
 
 ```bash
-git tag -a v1.0.0 -m "发布 v1.0.0"
+git tag -a v1.1.0 -m "发布 v1.1.0"
 git push origin main
-git push origin v1.0.0
+git push origin v1.1.0
 ```
 
 `.github/workflows/release.yml` 会依次执行以下操作：
 
-1. 校验标签 `v1.0.0` 与 `package.json` 的 `1.0.0` 一致。
+1. 校验标签 `v1.1.0` 与 `package.json` 的 `1.1.0` 一致。
 2. 安装锁定依赖并运行 `pnpm check`。
 3. 发布带 provenance 的公开 npm 包。
 4. 根据提交记录创建 GitHub Release。
