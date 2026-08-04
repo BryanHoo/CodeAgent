@@ -162,6 +162,125 @@ describe("TaskTimeline", () => {
     expect(markup).toContain("正在运行");
   });
 
+  it("keeps the local submission timer until the confirmed Turn produces assistant output", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-24T00:01:05.000Z"));
+    try {
+      const runningSnapshot: RuntimeTaskSnapshot = {
+        ...snapshot,
+        status: "running",
+        turns: [
+          ...snapshot.turns,
+          {
+            completedAt: null,
+            error: null,
+            id: "turn-confirmed-without-output",
+            items: [
+              {
+                id: "submitted-user-turn-confirmed-without-output",
+                role: "user",
+                text: "继续排查白屏",
+                type: "message",
+              },
+            ],
+            startedAt: "2026-07-24T00:00:00.000Z",
+            status: "running",
+          },
+        ],
+      };
+      const store = createTaskStore(
+        { projectId: snapshot.projectId, taskId: snapshot.id },
+        {
+          checkpoint: { sequence: 1, sessionId: "runtime-1" },
+          snapshot: runningSnapshot,
+        },
+      );
+      const markup = renderToStaticMarkup(
+        <TaskTimeline
+          projectId={snapshot.projectId}
+          runtime={{
+            connectionState: "connected",
+            error: null,
+            isPending: false,
+            snapshot: runningSnapshot,
+            store,
+          }}
+          submissionStartedAt="2026-07-24T00:01:00.000Z"
+          submissionTurnId="turn-confirmed-without-output"
+          taskId={snapshot.id}
+        />,
+      );
+
+      expect(markup).toContain("5s");
+      expect(markup).not.toContain("1m 5s");
+      expect(markup.match(/aria-label="AI 回复正在运行"/gu)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("hands the timer to the Turn after its first assistant item arrives", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-24T00:01:05.000Z"));
+    try {
+      const runningSnapshot: RuntimeTaskSnapshot = {
+        ...snapshot,
+        status: "running",
+        turns: [
+          {
+            completedAt: null,
+            error: null,
+            id: "turn-with-output",
+            items: [
+              {
+                id: "submitted-user-turn-with-output",
+                role: "user",
+                text: "继续排查白屏",
+                type: "message",
+              },
+              {
+                id: "assistant-turn-with-output",
+                role: "assistant",
+                text: "正在检查",
+                type: "message",
+              },
+            ],
+            startedAt: "2026-07-24T00:00:00.000Z",
+            status: "running",
+          },
+        ],
+      };
+      const store = createTaskStore(
+        { projectId: snapshot.projectId, taskId: snapshot.id },
+        {
+          checkpoint: { sequence: 2, sessionId: "runtime-1" },
+          snapshot: runningSnapshot,
+        },
+      );
+      const markup = renderToStaticMarkup(
+        <TaskTimeline
+          projectId={snapshot.projectId}
+          runtime={{
+            connectionState: "connected",
+            error: null,
+            isPending: false,
+            snapshot: runningSnapshot,
+            store,
+          }}
+          submissionStartedAt="2026-07-24T00:01:00.000Z"
+          submissionTurnId="turn-with-output"
+          taskId={snapshot.id}
+        />,
+      );
+
+      expect(markup).toContain("1m 5s");
+      expect(markup).not.toContain('dateTime="PT5S"');
+      expect(markup.match(/aria-label="AI 回复正在运行"/gu)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("renders the official-style empty chat prompt around the project selector", () => {
     const markup = renderToStaticMarkup(
       <TaskTimeline

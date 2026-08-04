@@ -119,6 +119,7 @@ type TaskTimelineCommonProps = Readonly<{
   runtime?: TaskRuntimeView;
   scrollToBottomSignal?: number;
   submissionStartedAt?: string;
+  submissionTurnId?: string;
   startingSnapshot?: RuntimeTaskSnapshot;
 }>;
 
@@ -252,6 +253,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
     runtime,
     scrollToBottomSignal,
     submissionStartedAt,
+    submissionTurnId,
     startingSnapshot,
   } = props;
   if (runtime === undefined) {
@@ -271,6 +273,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
       runtime={runtime}
       scrollToBottomSignal={scrollToBottomSignal}
       submissionStartedAt={submissionStartedAt}
+      submissionTurnId={submissionTurnId}
       startingSnapshot={startingSnapshot}
     />
   );
@@ -287,6 +290,7 @@ function ActiveTaskTimeline({
   runtime,
   scrollToBottomSignal,
   submissionStartedAt,
+  submissionTurnId,
   startingSnapshot,
 }: Readonly<{
   onResolvePendingRequest: (
@@ -303,6 +307,7 @@ function ActiveTaskTimeline({
   runtime: TaskRuntimeView;
   scrollToBottomSignal: number | undefined;
   submissionStartedAt: string | undefined;
+  submissionTurnId: string | undefined;
   startingSnapshot: RuntimeTaskSnapshot | undefined;
 }>) {
   if (runtime.error !== null) {
@@ -345,6 +350,7 @@ function ActiveTaskTimeline({
         {...(scrollToBottomSignal === undefined ? {} : { scrollToBottomSignal })}
         store={runtime.store}
         {...(submissionStartedAt === undefined ? {} : { submissionStartedAt })}
+        {...(submissionTurnId === undefined ? {} : { submissionTurnId })}
       />
     </>
   );
@@ -1407,6 +1413,7 @@ function StoreTurnTimelineSection({
   taskId,
   turnId,
   turnIndex,
+  suppressEmptyRunningStatus,
 }: Readonly<{
   canRollback: boolean;
   onForkTask?: ForkTaskAction;
@@ -1419,6 +1426,7 @@ function StoreTurnTimelineSection({
   taskId: string;
   turnId: string;
   turnIndex: number;
+  suppressEmptyRunningStatus: boolean;
 }>) {
   const turn = useStore(store, (state) => state.turnsById[turnId]);
   const itemIds = useStore(store, (state) => state.itemIdsByTurnId[turnId] ?? []);
@@ -1479,7 +1487,7 @@ function StoreTurnTimelineSection({
           />
         ),
       )}
-      {turn.status === "running" && !hasAssistantItems ? (
+      {turn.status === "running" && !hasAssistantItems && !suppressEmptyRunningStatus ? (
         <Message from="assistant">
           <TurnProcessingTime completedAt={turn.completedAt} startedAt={turn.startedAt} />
           <RunningReplyStatus />
@@ -1543,6 +1551,7 @@ function TaskStoreTimeline({
   scrollToBottomSignal,
   store,
   submissionStartedAt,
+  submissionTurnId,
 }: Readonly<{
   canRollbackTurns: boolean;
   connected: boolean;
@@ -1559,6 +1568,7 @@ function TaskStoreTimeline({
   scrollToBottomSignal?: number;
   store: TaskStore;
   submissionStartedAt?: string;
+  submissionTurnId?: string;
 }>) {
   const projectId = store.getState().projectId;
   const taskId = store.getState().taskId;
@@ -1568,11 +1578,29 @@ function TaskStoreTimeline({
   const hasVisiblePendingRequest = pendingRequestIds.some(
     (requestId) => pendingRequestsById[requestId]?.status !== "resolved",
   );
-  const hasRunningTurn = useStore(store, (state) =>
-    state.turnIds.some((turnId) => state.turnsById[turnId]?.status === "running"),
-  );
-  // HTTP 启动窗口只补一个临时尾部；实时 Turn 一到即由 Store 权威状态接管。
-  const showPendingSubmission = submissionStartedAt !== undefined && !hasRunningTurn;
+  const submissionHandoffState = useStore(store, (state) => {
+    if (submissionTurnId === undefined) {
+      return "awaiting-turn";
+    }
+    const turn = state.turnsById[submissionTurnId];
+    if (turn === undefined) {
+      return "awaiting-turn";
+    }
+    if (turn.status !== "running") {
+      return "finished";
+    }
+    const groups = groupStoredTurnTimelineItems(
+      state.itemIdsByTurnId[submissionTurnId] ?? [],
+      state.itemStoresById,
+    );
+    return groups.some((group) => group.type === "assistant")
+      ? "assistant-started"
+      : "awaiting-assistant";
+  });
+  // HTTP 返回不代表回复已经可见；首个 Assistant Item 到达前由稳定尾部持续承载运行态。
+  const showPendingSubmission =
+    submissionStartedAt !== undefined &&
+    (submissionHandoffState === "awaiting-turn" || submissionHandoffState === "awaiting-assistant");
   if (turnIds.length === 0 && !hasVisiblePendingRequest && !showPendingSubmission) {
     return (
       <TimelineState message={i18n.t("timeline.noHistory", { ns: "conversation" })} role="status" />
@@ -1625,6 +1653,7 @@ function TaskStoreTimeline({
             taskId={taskId}
             turnId={turnId}
             turnIndex={turnIndex}
+            suppressEmptyRunningStatus={showPendingSubmission && turnId === submissionTurnId}
           />
         )}
       />

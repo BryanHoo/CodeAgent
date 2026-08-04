@@ -112,6 +112,7 @@ type TaskLaunchState = Readonly<{
   input: AgentPromptInput;
   messageAttachments: readonly AgentMessageAttachment[];
   settings: AgentTaskSettings;
+  submissionStartedAt?: string;
   task: AgentTask;
   turn: AgentTurn;
 }>;
@@ -119,6 +120,7 @@ type TaskLaunchState = Readonly<{
 type SubmittedPromptState = Readonly<{
   input: AgentPromptInput;
   messageAttachments: readonly AgentMessageAttachment[];
+  submissionStartedAt?: string;
   turn: AgentTurn;
 }>;
 
@@ -133,11 +135,26 @@ function shouldOpenDesktopPanel(query: string) {
 
 function useSubmissionStartedAt() {
   const [startedAt, setStartedAt] = useState<string>();
-  const handleSubmissionStateChange = useCallback((submitting: boolean) => {
-    // 同一次提交保留稳定起点，避免父组件重渲染重置计时。
-    setStartedAt((current) => (submitting ? (current ?? new Date().toISOString()) : undefined));
+  const startedAtRef = useRef<string | undefined>(undefined);
+  const beginSubmission = useCallback(() => {
+    const nextStartedAt = new Date().toISOString();
+    startedAtRef.current = nextStartedAt;
+    setStartedAt(nextStartedAt);
   }, []);
-  return { handleSubmissionStateChange, startedAt } as const;
+  const handleSubmissionStateChange = useCallback((submitting: boolean) => {
+    if (submitting) {
+      if (startedAtRef.current === undefined) {
+        const nextStartedAt = new Date().toISOString();
+        startedAtRef.current = nextStartedAt;
+        setStartedAt(nextStartedAt);
+      }
+      return;
+    }
+    startedAtRef.current = undefined;
+    setStartedAt(undefined);
+  }, []);
+  const getStartedAt = useCallback(() => startedAtRef.current, []);
+  return { beginSubmission, getStartedAt, handleSubmissionStateChange, startedAt } as const;
 }
 
 export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
@@ -268,6 +285,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const workbenchShellRef = useRef<HTMLDivElement>(null);
   const commitChangesLauncherRef = useRef<CommitChangesLauncherHandle>(null);
   const {
+    beginSubmission: beginNewChatSubmission,
+    getStartedAt: getNewChatSubmissionStartedAt,
     handleSubmissionStateChange: handleNewChatSubmissionStateChange,
     startedAt: newChatSubmissionStartedAt,
   } = useSubmissionStartedAt();
@@ -426,11 +445,13 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     ) => {
       cacheProjectTask(startedTask);
       if (startedTurn !== undefined && startedInput !== undefined && settings !== undefined) {
+        const confirmedStartedAt = getNewChatSubmissionStartedAt() ?? startedTurn.startedAt;
         // 跨路由保存首轮启动结果，让 Snapshot 返回前即可渲染用户消息和 AI 运行态。
         queryClient.setQueryData<TaskLaunchState>(taskLaunchQueryKey(projectId, startedTask.id), {
           input: startedInput,
           messageAttachments,
           settings,
+          ...(confirmedStartedAt === null ? {} : { submissionStartedAt: confirmedStartedAt }),
           task: startedTask,
           turn: startedTurn,
         });
@@ -445,7 +466,14 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         to: "/p/$projectId/t/$taskId",
       });
     },
-    [cacheProjectTask, markTaskRunning, navigate, projectId, queryClient],
+    [
+      cacheProjectTask,
+      getNewChatSubmissionStartedAt,
+      markTaskRunning,
+      navigate,
+      projectId,
+      queryClient,
+    ],
   );
   const models = modelsQuery.data?.data ?? [];
   const defaultModel =
@@ -706,6 +734,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               }
               onSettingsChange={updateDraftSettings}
               onRequestNotificationPermission={requestNotificationPermission}
+              onDirectSubmission={beginNewChatSubmission}
               onSubmissionStateChange={handleNewChatSubmissionStateChange}
               onTaskCreated={handleTaskCreated}
               onTaskStarted={handleTaskStarted}
@@ -983,13 +1012,21 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   const queryClient = useQueryClient();
   const taskScope = `${projectId}:${taskId}`;
   const [timelineScrollToBottomSignal, setTimelineScrollToBottomSignal] = useState(0);
-  const { handleSubmissionStateChange, startedAt: submissionStartedAt } = useSubmissionStartedAt();
+  const {
+    beginSubmission,
+    getStartedAt: getSubmissionStartedAt,
+    handleSubmissionStateChange,
+    startedAt: submissionStartedAt,
+  } = useSubmissionStartedAt();
   const [submittedPromptState, setSubmittedPromptState] = useState<{
     prompt: SubmittedPromptState | undefined;
     taskScope: string;
   }>(() => ({ prompt: startingPrompt, taskScope }));
   const submittedPrompt =
     submittedPromptState.taskScope === taskScope ? submittedPromptState.prompt : startingPrompt;
+  const retainedSubmissionStartedAt = submissionStartedAt ?? submittedPrompt?.submissionStartedAt;
+  const retainedSubmissionTurnId =
+    submissionStartedAt === undefined ? submittedPrompt?.turn.id : undefined;
   const visibleSnapshot =
     runtime.snapshot === undefined || submittedPrompt === undefined
       ? runtime.snapshot
@@ -1071,7 +1108,12 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         key={taskScope}
         runtime={visibleRuntime}
         scrollToBottomSignal={timelineScrollToBottomSignal}
-        {...(submissionStartedAt === undefined ? {} : { submissionStartedAt })}
+        {...(retainedSubmissionStartedAt === undefined
+          ? {}
+          : { submissionStartedAt: retainedSubmissionStartedAt })}
+        {...(retainedSubmissionTurnId === undefined
+          ? {}
+          : { submissionTurnId: retainedSubmissionTurnId })}
         taskId={taskId}
         {...(startingSnapshot === undefined ? {} : { startingSnapshot })}
       />
@@ -1083,6 +1125,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         modelsError={modelsError}
         modelsPending={modelsPending || runtime.isPending}
         onDirectSubmission={() => {
+          beginSubmission();
           setTimelineScrollToBottomSignal((current) => current + 1);
         }}
         onRequestNotificationPermission={onRequestNotificationPermission}
@@ -1092,7 +1135,16 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         onSubmissionStateChange={handleSubmissionStateChange}
         onTaskStarted={onTaskStarted}
         onTurnStarted={(turn, input, messageAttachments) => {
-          setSubmittedPromptState({ prompt: { input, messageAttachments, turn }, taskScope });
+          const confirmedStartedAt = getSubmissionStartedAt() ?? turn.startedAt;
+          setSubmittedPromptState({
+            prompt: {
+              input,
+              messageAttachments,
+              ...(confirmedStartedAt === null ? {} : { submissionStartedAt: confirmedStartedAt }),
+              turn,
+            },
+            taskScope,
+          });
         }}
         projectId={projectId}
         projectPath={projectPath}

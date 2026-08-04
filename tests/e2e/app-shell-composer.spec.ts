@@ -1466,6 +1466,9 @@ test("scrolls direct user submissions to the bottom without scrolling queued mes
   await prompt.fill("直接发送的新消息");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
   await expect(page.getByRole("button", { exact: true, name: "停止" })).toBeVisible();
+  await expect(page.getByText("直接发送的新消息", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("AI 回复正在运行")).toBeVisible();
+  await expect(conversation.locator("[data-turn-processing-time]").last()).toBeVisible();
   await expect
     .poll(() =>
       conversation.evaluate(

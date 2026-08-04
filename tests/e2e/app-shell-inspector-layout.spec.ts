@@ -330,6 +330,7 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
   const timelineMessages = main.locator('[role="log"] article');
   await expect(timelineMessages.nth(0)).toContainText("你好");
   await expect(timelineMessages.nth(1)).toContainText("正在运行");
+  await expect(main.locator("[data-turn-processing-time]").last()).toBeVisible();
   await expect(runningTaskLink.getByRole("status", { name: "任务运行中" })).toBeVisible();
   await expect(runningTaskLink.locator(".task-age")).toHaveCount(0);
   await expect(main.getByText(createdTask.id, { exact: true })).toHaveCount(0);
@@ -339,6 +340,7 @@ test("shows a newly submitted task and AI reply state before the task snapshot l
   // 运行中 Snapshot 尚未落入用户 Item 时，已提交消息也不能从 Timeline 消失。
   await expect(timelineMessages.nth(0)).toContainText("你好");
   await expect(timelineMessages.nth(1)).toContainText("正在运行");
+  await expect(main.locator("[data-turn-processing-time]").last()).toBeVisible();
 });
 
 test("stores new-chat text and attachments independently between projects", async ({ page }) => {
