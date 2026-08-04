@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-04
+
+### 修复
+
+- 修复包含 URL 编码 UTF-8、未编码空白或字面百分号的本地文件引用无法正确打开预览的问题。
+
 ## [1.2.0] - 2026-08-04
 
 ### 新增
@@ -129,7 +135,8 @@ CodeAgent 首个稳定版本，集中发布本地 Coding Agent 工作台的完�
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/BryanHoo/CodeAgent/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.6...v1.0.0
