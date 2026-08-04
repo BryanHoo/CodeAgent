@@ -335,11 +335,13 @@ async function runStart(
       stdout("Restarting CodeAgent invalidates this code and all LAN sessions.\n");
     }
 
-    try {
-      await dependencies.openBrowser("http://127.0.0.1:3210");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      stderr(`[warn] Failed to open browser: ${message}\n`);
+    if (options.lan !== true) {
+      try {
+        await dependencies.openBrowser("http://127.0.0.1:3210");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        stderr(`[warn] Failed to open browser: ${message}\n`);
+      }
     }
 
     // 同时观察退出信号和子进程，避免 App Server 崩溃后 CLI 继续空等。

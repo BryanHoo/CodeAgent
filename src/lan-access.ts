@@ -5,6 +5,8 @@ import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 const MIN_SESSION_TTL_MS = 60_000;
 const MAX_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 const UNIT_MS = { d: 24 * 60 * 60 * 1_000, h: 60 * 60 * 1_000, m: 60_000 } as const;
+const VIRTUAL_INTERFACE_PATTERN =
+  /^(?:awdl|br|bridge|docker|ham|llw|lo|tap|tun|utun|vboxnet|veth|virbr|wg|zt)(?:\d|[-_.]|$)|(?:openvpn|tailscale|vethernet|virtualbox|vmnet|zerotier)/iu;
 
 export const DEFAULT_LAN_SESSION_TTL = "24h";
 
@@ -27,13 +29,31 @@ export function generateLanPairingCode(): string {
   return randomBytes(16).toString("base64url");
 }
 
+function isPrivateIpv4(address: string): boolean {
+  if (isIP(address) !== 4) {
+    return false;
+  }
+  const [first = -1, second = -1] = address.split(".").map(Number);
+  return (
+    first === 10 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+}
+
+function isVirtualNetworkInterface(name: string): boolean {
+  // Node.js 不暴露接口硬件类型，因此按各平台稳定命名排除隧道、虚拟网桥与容器接口。
+  return VIRTUAL_INTERFACE_PATTERN.test(name);
+}
+
 export function listLanAccessUrls(
   port: number,
   interfaces: NodeJS.Dict<NetworkInterfaceInfo[]> = networkInterfaces(),
 ): readonly string[] {
-  const addresses = Object.values(interfaces)
-    .flatMap((entries) => entries ?? [])
-    .filter((entry) => entry.family === "IPv4" && !entry.internal && isIP(entry.address) === 4)
+  const addresses = Object.entries(interfaces)
+    .filter(([name]) => !isVirtualNetworkInterface(name))
+    .flatMap(([, entries]) => entries ?? [])
+    .filter((entry) => entry.family === "IPv4" && !entry.internal && isPrivateIpv4(entry.address))
     .map((entry) => entry.address);
   return [...new Set(addresses)]
     .sort((left, right) => left.localeCompare(right, "en", { numeric: true }))

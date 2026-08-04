@@ -21,7 +21,7 @@ describe("LAN access helpers", () => {
     expect(second).not.toBe(first);
   });
 
-  it("lists only valid external IPv4 LAN URLs in stable order", () => {
+  it("lists only physical-interface private IPv4 LAN URLs in stable order", () => {
     const ipv4 = (address: string, internal = false): NetworkInterfaceInfo => ({
       address,
       cidr: `${address}/24`,
@@ -33,8 +33,11 @@ describe("LAN access helpers", () => {
     });
     const urls = listLanAccessUrls(3210, {
       en0: [ipv4("192.168.1.20"), ipv4("127.0.0.1", true)],
+      "Wi-Fi": [ipv4("10.0.0.8"), ipv4("192.168.1.20")],
+      "Broadcom Ethernet": [ipv4("172.16.0.2")],
       en1: [
-        ipv4("10.0.0.8"),
+        ipv4("8.8.8.8"),
+        ipv4("198.18.0.1"),
         {
           address: "fe80::1",
           cidr: "fe80::1/64",
@@ -45,9 +48,16 @@ describe("LAN access helpers", () => {
           scopeid: 1,
         },
       ],
+      utun5: [ipv4("41.10.1.29")],
+      bridge100: [ipv4("192.168.139.3")],
+      docker0: [ipv4("172.17.0.1")],
       invalid: [ipv4("not-an-ip")],
     });
 
-    expect(urls).toEqual(["http://10.0.0.8:3210", "http://192.168.1.20:3210"]);
+    expect(urls).toEqual([
+      "http://10.0.0.8:3210",
+      "http://172.16.0.2:3210",
+      "http://192.168.1.20:3210",
+    ]);
   });
 });

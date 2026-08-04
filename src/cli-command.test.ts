@@ -290,7 +290,7 @@ describe("runCli", () => {
     );
   });
 
-  it("starts explicit LAN access while opening the loopback browser URL", async () => {
+  it("starts explicit LAN access without opening a browser", async () => {
     const harness = createHarness();
     const controller = new AbortController();
     const run = runCli(["start", "--", "--lan", "--session-ttl", "12h"], {
@@ -307,7 +307,7 @@ describe("runCli", () => {
       }),
     );
     expect(harness.serverListen).toHaveBeenCalledWith({ host: "0.0.0.0", port: 3210 });
-    expect(harness.dependencies.openBrowser).toHaveBeenCalledWith("http://127.0.0.1:3210");
+    expect(harness.dependencies.openBrowser).not.toHaveBeenCalled();
     expect(harness.stdout.join("\n")).toContain("http://192.168.1.20:3210");
     expect(harness.stdout.join("\n")).toContain("fixed-test-pairing-code");
     expect(harness.stdout.join("\n")).not.toContain("http://0.0.0.0:3210");
