@@ -13,6 +13,7 @@ import {
 import type { ThemedToken } from "shiki/core";
 
 import { useTranslation } from "../../i18n/i18n.js";
+import { Button } from "../ui/button.js";
 import type { CodeBlockLanguage } from "./code-languages.js";
 import { CodeTokenCache, type TokenizedCode } from "./code-token-cache.js";
 
@@ -139,7 +140,7 @@ export function CodeBlockContent({
                   <span
                     aria-hidden="true"
                     className={`select-none pr-4 text-right ${
-                      highlighted ? "text-accent" : "text-muted-foreground"
+                      highlighted ? "text-primary" : "text-muted-foreground"
                     }`}
                   >
                     {lineNumber}
@@ -282,7 +283,8 @@ export function CodeBlockCopyButton({
   };
 
   return (
-    <button
+    <Button
+      variant="ghost"
       aria-label={copied ? t("aiElements.copiedCode") : t("aiElements.copyCode")}
       className={`grid size-7 shrink-0 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground ${className}`}
       onClick={(event) => {
@@ -300,6 +302,6 @@ export function CodeBlockCopyButton({
         ) : (
           <Copy className="size-3.5" aria-hidden="true" />
         ))}
-    </button>
+    </Button>
   );
 }

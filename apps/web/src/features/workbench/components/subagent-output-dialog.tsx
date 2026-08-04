@@ -1,5 +1,4 @@
 import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
 
 import type { ProjectRuntimeManager } from "../../conversation/runtime/project-runtime.js";
 import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
@@ -8,6 +7,8 @@ import type { SubagentSelection } from "./subagent.js";
 import { toSubagentTaskStatus } from "./subagent.js";
 import { TaskTimeline } from "./task-timeline.js";
 import { useTranslation } from "../../../i18n/i18n.js";
+import { Button } from "../../../shared/ui/button.js";
+import { Dialog, DialogContent, DialogTitle } from "../../../shared/ui/dialog.js";
 
 type SubagentOutputDialogProps = Readonly<{
   onClose: () => void;
@@ -56,15 +57,7 @@ function OpenSubagentOutputDialog({
   selection,
 }: Readonly<Omit<SubagentOutputDialogProps, "selection"> & { selection: SubagentSelection }>) {
   const { t } = useTranslation("workbench");
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const runtime = useTaskRuntime(projectId, selection.taskId, projectRuntime);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog !== null && !dialog.open) {
-      dialog.showModal();
-    }
-  }, []);
 
   const titleId = "subagent-output-dialog-title";
   let content;
@@ -89,47 +82,43 @@ function OpenSubagentOutputDialog({
   }
 
   return (
-    // 原生 dialog 已通过 onCancel 提供 Escape 行为，onClick 仅识别不可聚焦的 backdrop。
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-    <dialog
-      aria-labelledby={titleId}
-      className="m-auto h-[min(86vh,58rem)] w-[min(94vw,76rem)] max-w-none overflow-hidden rounded-surface bg-raised p-0 text-foreground shadow-panel backdrop:bg-scrim"
-      data-subagent-output-dialog=""
-      onCancel={(event) => {
-        event.preventDefault();
-        onClose();
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) onClose();
       }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-      ref={dialogRef}
+      open
     >
-      <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-raised">
-        <header className="flex min-h-toolbar items-center gap-3 px-3 shadow-toolbar sm:px-4">
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-body-small font-semibold" id={titleId}>
-              {t("subagentOutput.title")}
-            </h2>
-            <p className="truncate text-caption text-muted-foreground" title={selection.taskId}>
-              {selection.taskId}
-            </p>
-          </div>
-          <Task collapsible={false} status={toSubagentTaskStatus(selection.status)}>
-            <TaskTrigger title={t("subagentOutput.task", { taskId: selection.taskId })} />
-          </Task>
-          <button
-            aria-label={t("subagentOutput.close")}
-            className="grid size-8 shrink-0 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus focus-visible:outline-none"
-            onClick={onClose}
-            type="button"
-          >
-            <X className="size-3.5" aria-hidden="true" />
-          </button>
-        </header>
-        <div className="flex min-h-0 flex-col overflow-hidden bg-content">{content}</div>
-      </section>
-    </dialog>
+      <DialogContent
+        aria-labelledby={titleId}
+        className="h-[min(86dvh,58rem)] max-w-[76rem] overflow-hidden p-0"
+        data-subagent-output-dialog=""
+      >
+        <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-raised">
+          <header className="flex min-h-toolbar items-center gap-3 px-3 shadow-toolbar sm:px-4">
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="truncate text-body-small" id={titleId}>
+                {t("subagentOutput.title")}
+              </DialogTitle>
+              <p className="truncate text-caption text-muted-foreground" title={selection.taskId}>
+                {selection.taskId}
+              </p>
+            </div>
+            <Task collapsible={false} status={toSubagentTaskStatus(selection.status)}>
+              <TaskTrigger title={t("subagentOutput.task", { taskId: selection.taskId })} />
+            </Task>
+            <Button
+              aria-label={t("subagentOutput.close")}
+              onClick={onClose}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <X className="size-3.5" aria-hidden="true" />
+            </Button>
+          </header>
+          <div className="flex min-h-0 flex-col overflow-hidden bg-content">{content}</div>
+        </section>
+      </DialogContent>
+    </Dialog>
   );
 }

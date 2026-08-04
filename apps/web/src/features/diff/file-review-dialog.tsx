@@ -10,7 +10,9 @@ import {
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { FileTree, FileTreeFile, FileTreeFolder } from "../../shared/ai-elements/file-tree.js";
-import { IconButton } from "../../shared/ui/icon-button.js";
+import { Button } from "../../shared/ui/button.js";
+import { Dialog, DialogContent, DialogTitle } from "../../shared/ui/dialog.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../shared/ui/tooltip.js";
 import { useTranslation } from "../../i18n/i18n.js";
 import type { AgentFileChange } from "./file-change.js";
 import { countFileChangeLines, getFileName } from "./file-change.js";
@@ -229,7 +231,6 @@ type FileReviewDialogProps = Readonly<{
 
 export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
   const { t } = useTranslation("workbench");
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const reviewContentRef = useRef<HTMLElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [navigationOpen, setNavigationOpen] = useState(shouldOpenReviewNavigation);
@@ -252,10 +253,6 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
     setCurrentIndex(0);
     // 初始状态与工作台移动断点一致：桌面直接展示导航，移动端优先保留 Diff 宽度。
     setNavigationOpen(shouldOpenReviewNavigation());
-    const dialog = dialogRef.current;
-    if (dialog !== null && !dialog.open) {
-      dialog.showModal();
-    }
   }, [changes]);
 
   useEffect(() => {
@@ -298,135 +295,168 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
   const selectedPath = change.path.replaceAll("\\", "/");
   const fileName = getFileName(change.path);
   const titleId = "file-review-dialog-title";
+  const navigationLabel = t(
+    navigationOpen ? "diff.collapseChangedFilesNavigation" : "diff.expandChangedFilesNavigation",
+  );
   const navigate = (direction: "next" | "previous") => {
     setCurrentIndex((index) => resolveReviewIndex(index, direction, changes.length));
   };
 
   return (
-    // 原生 dialog 已通过 onCancel 提供 Escape 行为，onClick 仅识别不可聚焦的 backdrop。
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-    <dialog
-      aria-labelledby={titleId}
-      className="file-diff-dialog m-auto h-[min(86vh,58rem)] w-[min(94vw,78rem)] max-w-none overflow-hidden rounded-surface bg-raised p-0 text-foreground shadow-panel backdrop:bg-scrim"
-      onCancel={(event) => {
-        event.preventDefault();
-        onClose();
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) onClose();
       }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-      ref={dialogRef}
+      open
     >
-      <section className="grid h-full min-h-0 w-full min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-raised">
-        <header className="flex min-h-toolbar min-w-0 items-center gap-2 px-3 shadow-toolbar sm:px-4">
-          <FileCode2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-body-small font-semibold" id={titleId} title={change.path}>
-              {fileName}
-            </h2>
-            <p className="truncate text-caption text-muted-foreground" title={change.path}>
-              {change.path}
-            </p>
-          </div>
-          <span className="shrink-0 text-label text-muted-foreground">
-            {currentIndex + 1} / {changes.length}
-          </span>
-          <div className="flex shrink-0 items-center gap-1">
-            <IconButton
-              disabled={currentIndex === 0}
-              label={t("diff.previousFile")}
-              onClick={() => {
-                navigate("previous");
-              }}
-              size="small"
-            >
-              <ChevronUp className="size-3.5" aria-hidden="true" />
-            </IconButton>
-            <IconButton
-              disabled={currentIndex === changes.length - 1}
-              label={t("diff.nextFile")}
-              onClick={() => {
-                navigate("next");
-              }}
-              size="small"
-            >
-              <ChevronDown className="size-3.5" aria-hidden="true" />
-            </IconButton>
-            <IconButton
-              aria-controls="file-review-navigation"
-              aria-expanded={navigationOpen}
-              label={t(
-                navigationOpen
-                  ? "diff.collapseChangedFilesNavigation"
-                  : "diff.expandChangedFilesNavigation",
-              )}
-              onClick={() => {
-                setNavigationOpen((open) => !open);
-              }}
-              size="small"
-            >
-              {navigationOpen ? (
-                <PanelRightClose className="size-3.5" aria-hidden="true" />
-              ) : (
-                <PanelRightOpen className="size-3.5" aria-hidden="true" />
-              )}
-            </IconButton>
-            <IconButton label={t("diff.closeReview")} onClick={onClose} size="small">
-              <X className="size-3.5" aria-hidden="true" />
-            </IconButton>
-          </div>
-        </header>
-        <div
-          className={`relative grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] bg-content ${navigationOpen ? "workbench:grid-cols-[minmax(0,1fr)_minmax(12rem,26%)]" : ""}`}
-        >
-          <section
-            aria-label={t("diff.reviewContent")}
-            className="min-h-0 min-w-0 overflow-auto"
-            ref={reviewContentRef}
-          >
-            <Suspense
-              fallback={
-                <div
-                  className="grid min-h-48 place-items-center text-body-small text-muted-foreground"
-                  role="status"
-                >
-                  {t("diff.loading")}
-                </div>
-              }
-            >
-              <PatchDiffViewer change={change} />
-            </Suspense>
-          </section>
-          <aside
-            aria-label={t("diff.changedFilesNavigation")}
-            className="absolute inset-y-0 right-0 z-10 grid min-h-0 w-[min(16rem,82%)] grid-rows-[auto_minmax(0,1fr)] border-l border-separator bg-panel shadow-panel workbench:static workbench:z-auto workbench:w-auto workbench:shadow-none"
-            hidden={!navigationOpen}
-            id="file-review-navigation"
-          >
-            <div className="flex min-h-toolbar items-center gap-2 border-b border-separator px-3">
-              <Files aria-hidden="true" className="size-3.5 text-muted-foreground" />
-              <h3 className="min-w-0 flex-1 truncate text-label font-semibold">
-                {t("diff.changedFiles")}
-              </h3>
-              <span className="text-meta text-muted-foreground">{changes.length}</span>
+      <DialogContent
+        aria-labelledby={titleId}
+        className="h-[min(86dvh,58rem)] max-w-[78rem] overflow-hidden p-0"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            onClose();
+          }
+        }}
+      >
+        <section className="grid h-full min-h-0 w-full min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-raised">
+          <header className="flex min-h-toolbar min-w-0 items-center gap-2 px-3 shadow-toolbar sm:px-4">
+            <FileCode2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="truncate text-body-small" id={titleId} title={change.path}>
+                {fileName}
+              </DialogTitle>
+              <p className="truncate text-caption text-muted-foreground" title={change.path}>
+                {change.path}
+              </p>
             </div>
-            <div className="min-h-0 overflow-y-auto px-2 py-2">
-              <ReviewFileTreeNavigation
-                nodes={fileTree}
-                onSelect={(path) => {
-                  const nextIndex = fileIndexByPath.get(path);
-                  if (nextIndex !== undefined) {
-                    setCurrentIndex(nextIndex);
-                  }
-                }}
-                selectedPath={selectedPath}
-              />
+            <span className="shrink-0 text-label text-muted-foreground">
+              {currentIndex + 1} / {changes.length}
+            </span>
+            <div className="flex shrink-0 items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-label={t("diff.previousFile")}
+                    disabled={currentIndex === 0}
+                    onClick={() => {
+                      navigate("previous");
+                    }}
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <ChevronUp className="size-3.5" aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t("diff.previousFile")}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-label={t("diff.nextFile")}
+                    disabled={currentIndex === changes.length - 1}
+                    onClick={() => {
+                      navigate("next");
+                    }}
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <ChevronDown className="size-3.5" aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t("diff.nextFile")}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-controls="file-review-navigation"
+                    aria-expanded={navigationOpen}
+                    aria-label={navigationLabel}
+                    onClick={() => {
+                      setNavigationOpen((open) => !open);
+                    }}
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    {navigationOpen ? (
+                      <PanelRightClose className="size-3.5" aria-hidden="true" />
+                    ) : (
+                      <PanelRightOpen className="size-3.5" aria-hidden="true" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{navigationLabel}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-label={t("diff.closeReview")}
+                    onClick={onClose}
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <X className="size-3.5" aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t("diff.closeReview")}</TooltipContent>
+              </Tooltip>
             </div>
-          </aside>
-        </div>
-      </section>
-    </dialog>
+          </header>
+          <div
+            className={`relative grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] bg-content ${navigationOpen ? "workbench:grid-cols-[minmax(0,1fr)_minmax(12rem,26%)]" : ""}`}
+          >
+            <section
+              aria-label={t("diff.reviewContent")}
+              className="min-h-0 min-w-0 overflow-auto"
+              ref={reviewContentRef}
+            >
+              <Suspense
+                fallback={
+                  <div
+                    className="grid min-h-48 place-items-center text-body-small text-muted-foreground"
+                    role="status"
+                  >
+                    {t("diff.loading")}
+                  </div>
+                }
+              >
+                <PatchDiffViewer change={change} />
+              </Suspense>
+            </section>
+            <aside
+              aria-label={t("diff.changedFilesNavigation")}
+              className="absolute inset-y-0 right-0 z-10 grid min-h-0 w-[min(16rem,82%)] grid-rows-[auto_minmax(0,1fr)] border-l border-separator bg-panel shadow-panel workbench:static workbench:z-auto workbench:w-auto workbench:shadow-none"
+              hidden={!navigationOpen}
+              id="file-review-navigation"
+            >
+              <div className="flex min-h-toolbar items-center gap-2 border-b border-separator px-3">
+                <Files aria-hidden="true" className="size-3.5 text-muted-foreground" />
+                <h3 className="min-w-0 flex-1 truncate text-label font-semibold">
+                  {t("diff.changedFiles")}
+                </h3>
+                <span className="text-meta text-muted-foreground">{changes.length}</span>
+              </div>
+              <div className="min-h-0 overflow-y-auto px-2 py-2">
+                <ReviewFileTreeNavigation
+                  nodes={fileTree}
+                  onSelect={(path) => {
+                    const nextIndex = fileIndexByPath.get(path);
+                    if (nextIndex !== undefined) {
+                      setCurrentIndex(nextIndex);
+                    }
+                  }}
+                  selectedPath={selectedPath}
+                />
+              </div>
+            </aside>
+          </div>
+        </section>
+      </DialogContent>
+    </Dialog>
   );
 }

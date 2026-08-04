@@ -65,7 +65,7 @@ const statusPresentation: Record<ToolState, { icon: ReactNode; labelKey: string 
     labelKey: "aiElements.status.waitingApproval",
   },
   "approval-responded": {
-    icon: <CheckCircle className="size-3.5 text-accent" aria-hidden="true" />,
+    icon: <CheckCircle className="size-3.5 text-primary" aria-hidden="true" />,
     labelKey: "aiElements.status.responded",
   },
   "input-available": {

@@ -45,6 +45,7 @@ import {
 } from "./prompt-input.js";
 import { Shimmer } from "./shimmer.js";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "./tool.js";
+import { TooltipProvider } from "../ui/tooltip.js";
 
 describe("AI Elements primitives", () => {
   it("renders an accessible file tree with folders collapsed by default", () => {
@@ -94,9 +95,11 @@ describe("AI Elements primitives", () => {
 
   it("renders an accessible context usage trigger", () => {
     const markup = renderToStaticMarkup(
-      <Context maxTokens={200_000} usedTokens={25_000}>
-        <ContextTrigger />
-      </Context>,
+      <TooltipProvider>
+        <Context maxTokens={200_000} usedTokens={25_000}>
+          <ContextTrigger />
+        </Context>
+      </TooltipProvider>,
     );
 
     expect(markup).toContain('aria-label="上下文已使用 13%"');
@@ -279,7 +282,7 @@ describe("AI Elements primitives", () => {
 
     expect(markup).toContain('data-file-reference="true"');
     expect(markup).not.toContain("data-file-extension");
-    expect(markup).toContain("text-accent");
+    expect(markup).toContain("text-primary");
     expect(markup).toContain("agent-provider.ts");
     expect(markup).toContain("(line 948)");
   });
@@ -295,7 +298,7 @@ describe("AI Elements primitives", () => {
       </Message>,
     );
 
-    expect(markup).toContain('<button class="markdown-file-reference');
+    expect(markup).toContain('data-slot="button"');
     expect(markup).toContain("cursor-pointer");
     expect(markup).toContain("hover:decoration-current");
     expect(markup).toContain('data-file-reference="true"');
@@ -366,7 +369,7 @@ describe("AI Elements primitives", () => {
       </Message>,
     );
 
-    expect(markup).toContain('<button class="markdown-file-reference');
+    expect(markup).toContain('data-slot="button"');
     expect(markup).toContain('data-file-reference="true"');
     expect(markup).toContain("(line 12)");
     expect(markup).toContain("(line 24)");
@@ -389,7 +392,7 @@ describe("AI Elements primitives", () => {
       </Message>,
     );
 
-    expect(markup).toContain('<button class="markdown-file-reference');
+    expect(markup).toContain('data-slot="button"');
     expect(markup).toContain("(line 8)");
     expect(markup).toContain('title="docs/guide.md"');
   });
@@ -583,6 +586,7 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('aria-selected="true"');
     expect(markup).toContain("选择项目");
     expect(markup).toContain('data-prompt-input-command=""');
+    expect(markup).toContain("h-auto min-h-8");
   });
 
   it("renders an accessible confirmation composition", () => {

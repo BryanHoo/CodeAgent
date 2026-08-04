@@ -17,6 +17,7 @@ import {
 } from "react";
 
 import { useTranslation } from "../../i18n/i18n.js";
+import { Button } from "../ui/button.js";
 import { createConversationAutoScrollController } from "./conversation-scroll.js";
 
 type ConversationProps = HTMLAttributes<HTMLDivElement> &
@@ -262,7 +263,8 @@ export function ConversationScrollButton({
   }
 
   return (
-    <button
+    <Button
+      variant="ghost"
       className={`sticky bottom-3 left-1/2 z-10 grid size-8 -translate-x-1/2 place-items-center rounded-pill bg-raised text-muted-foreground shadow-floating transition-colors hover:bg-control-hover hover:text-foreground ${className}`}
       title={t("aiElements.scrollToBottom")}
       type={type}
@@ -274,6 +276,6 @@ export function ConversationScrollButton({
     >
       <ArrowDown className="size-4" aria-hidden="true" />
       <span className="sr-only">{t("aiElements.scrollToBottom")}</span>
-    </button>
+    </Button>
   );
 }

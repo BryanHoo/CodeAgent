@@ -22,6 +22,9 @@ import {
 import { useEffect, useRef, useState, type SelectHTMLAttributes } from "react";
 
 import { PromptInputSelect } from "../../../shared/ai-elements/prompt-input.js";
+import { Button } from "../../../shared/ui/button.js";
+import { Dialog, DialogContent, DialogTitle } from "../../../shared/ui/dialog.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { changeAppLanguage, getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
 import {
@@ -119,7 +122,6 @@ export function GlobalSettingsDialog({
   settings,
 }: GlobalSettingsDialogProps) {
   const { t } = useTranslation("settings");
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const saveLockRef = useRef(createAsyncActionLock());
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("appearance");
   const [draft, setDraft] = useState<AgentGlobalSettings>(
@@ -139,14 +141,6 @@ export function GlobalSettingsDialog({
     }
   }, [settings]);
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog !== null && !dialog.open) {
-      // 原生 dialog 统一负责焦点圈定和 Escape 行为。
-      dialog.showModal();
-    }
-  }, []);
-
   const close = () => {
     if (!isSaving) {
       onClose();
@@ -163,388 +157,402 @@ export function GlobalSettingsDialog({
   };
 
   return (
-    // 原生 dialog 已通过 onCancel 提供 Escape 行为，onClick 仅识别不可聚焦的 backdrop。
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-    <dialog
-      aria-labelledby="global-settings-title"
-      className="m-auto h-[min(88vh,38rem)] w-[min(94vw,54rem)] max-w-none overflow-hidden rounded-surface bg-raised p-0 text-foreground shadow-panel backdrop:bg-scrim"
-      onCancel={(event) => {
-        event.preventDefault();
-        close();
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) close();
       }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          close();
-        }
-      }}
-      ref={dialogRef}
+      open
     >
-      <form
-        className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (settings === undefined || isPending || isSaving) {
-            return;
-          }
-          void saveLockRef.current.run(async () => {
-            setSaveError(false);
-            setIsSaving(true);
-            try {
-              await onSave(draft);
-              onClose();
-            } catch {
-              setSaveError(true);
-            } finally {
-              setIsSaving(false);
-            }
-          });
+      <DialogContent
+        aria-labelledby="global-settings-title"
+        className="h-[min(88dvh,38rem)] max-w-[54rem] overflow-hidden p-0"
+        onEscapeKeyDown={(event) => {
+          if (isSaving) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (isSaving) event.preventDefault();
         }}
       >
-        <header className="flex h-12 items-center gap-2.5 px-4 shadow-toolbar">
-          <Settings className="size-4 text-accent" aria-hidden="true" />
-          <h2
-            className="min-w-0 flex-1 truncate text-heading font-semibold"
-            id="global-settings-title"
-          >
-            {t("title")}
-          </h2>
-          <button
-            aria-label={t("actions.closeDialog")}
-            className="inline-grid size-8 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus disabled:opacity-50"
-            disabled={isSaving}
-            onClick={close}
-            title={t("actions.close")}
-            type="button"
-          >
-            <X className="size-4" aria-hidden="true" />
-          </button>
-        </header>
-
-        <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] sm:grid-cols-[var(--ui-layout-settings-sidebar-width)_minmax(0,1fr)] sm:grid-rows-1">
-          <aside className="min-w-0 bg-control px-2 py-2 sm:px-3 sm:py-4 sm:shadow-divider">
-            <nav
-              aria-label={t("navigationLabel")}
-              className="flex min-w-0 gap-1 overflow-x-auto sm:flex-col sm:overflow-visible"
+        <form
+          className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (settings === undefined || isPending || isSaving) {
+              return;
+            }
+            void saveLockRef.current.run(async () => {
+              setSaveError(false);
+              setIsSaving(true);
+              try {
+                await onSave(draft);
+                onClose();
+              } catch {
+                setSaveError(true);
+              } finally {
+                setIsSaving(false);
+              }
+            });
+          }}
+        >
+          <header className="flex h-12 items-center gap-2.5 px-4 shadow-toolbar">
+            <Settings className="size-4 text-primary" aria-hidden="true" />
+            <DialogTitle
+              className="min-w-0 flex-1 truncate text-heading font-semibold"
+              id="global-settings-title"
             >
-              {settingsSections
-                .filter((section) => section.id !== "access" || accessMode === "lan")
-                .map((section) => {
-                  const Icon = section.icon;
-                  const selected = activeSection === section.id;
-                  return (
-                    <button
-                      aria-controls={`settings-panel-${section.id}`}
-                      aria-current={selected ? "page" : undefined}
-                      className={`flex h-9 shrink-0 items-center gap-2 rounded-control px-2.5 text-left text-body-small font-medium transition-colors focus-visible:shadow-focus sm:w-full ${selected ? "bg-accent text-white shadow-control" : "text-muted-foreground hover:bg-control-hover hover:text-foreground"}`}
-                      key={section.id}
-                      onClick={() => {
-                        setActiveSection(section.id);
-                      }}
-                      type="button"
-                    >
-                      <Icon aria-hidden="true" className="size-4 shrink-0" />
-                      <span>{t(`sections.${section.id}`)}</span>
-                    </button>
-                  );
-                })}
-            </nav>
-          </aside>
-
-          <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
-            {error !== null ? (
-              <div
-                className="flex min-h-40 flex-col items-center justify-center gap-3"
-                role="alert"
-              >
-                <p className="text-body-small text-danger">{t("errors.load")}</p>
-                <button
-                  className="h-8 rounded-control bg-control px-3 text-body-small font-medium hover:bg-control-hover"
-                  onClick={() => void onRetry()}
+              {t("title")}
+            </DialogTitle>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label={t("actions.closeDialog")}
+                  disabled={isSaving}
+                  onClick={close}
+                  size="icon-sm"
                   type="button"
+                  variant="ghost"
                 >
-                  {t("common:actions.retry")}
-                </button>
-              </div>
-            ) : isPending || settings === undefined ? (
-              <div
-                className="grid min-h-40 place-items-center text-body-small text-muted-foreground"
-                role="status"
-              >
-                {t("loading")}
-              </div>
-            ) : (
-              <>
-                <SettingsPanel
-                  activeSection={activeSection}
-                  id="appearance"
-                  title={t("sections.appearance")}
-                >
-                  <SettingsField label={t("appearance.colorMode")}>
-                    <div className="grid grid-cols-2 rounded-control bg-control p-0.5">
-                      <ThemeButton
-                        ariaLabel={t("appearance.lightMode")}
-                        icon={Sun}
-                        label={t("appearance.light")}
-                        onClick={() => {
-                          selectTheme("light");
-                        }}
-                        selected={theme === "light"}
-                      />
-                      <ThemeButton
-                        ariaLabel={t("appearance.darkMode")}
-                        icon={Moon}
-                        label={t("appearance.dark")}
-                        onClick={() => {
-                          selectTheme("dark");
-                        }}
-                        selected={theme === "dark"}
-                      />
-                    </div>
-                  </SettingsField>
-                  <SettingsField label={t("appearance.language")}>
-                    <SettingsSelect
-                      aria-label={t("appearance.language")}
-                      onChange={(event) => {
-                        void changeAppLanguage(event.currentTarget.value as "en" | "zh-CN");
-                      }}
-                      value={getCurrentLanguage()}
-                    >
-                      <option value="zh-CN">{t("languages.zhCN")}</option>
-                      <option value="en">{t("languages.en")}</option>
-                    </SettingsSelect>
-                  </SettingsField>
-                </SettingsPanel>
+                  <X className="size-4" aria-hidden="true" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t("actions.close")}</TooltipContent>
+            </Tooltip>
+          </header>
 
-                {accessMode === "lan" ? (
+          <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] sm:grid-cols-[var(--ui-layout-settings-sidebar-width)_minmax(0,1fr)] sm:grid-rows-1">
+            <aside className="min-w-0 bg-control px-2 py-2 sm:px-3 sm:py-4 sm:shadow-divider">
+              <nav
+                aria-label={t("navigationLabel")}
+                className="flex min-w-0 gap-1 overflow-x-auto sm:flex-col sm:overflow-visible"
+              >
+                {settingsSections
+                  .filter((section) => section.id !== "access" || accessMode === "lan")
+                  .map((section) => {
+                    const Icon = section.icon;
+                    const selected = activeSection === section.id;
+                    return (
+                      <Button
+                        variant="ghost"
+                        aria-controls={`settings-panel-${section.id}`}
+                        aria-current={selected ? "page" : undefined}
+                        className={`flex h-9 shrink-0 items-center gap-2 rounded-control px-2.5 text-left text-body-small font-medium transition-colors focus-visible:shadow-focus sm:w-full ${selected ? "bg-primary text-primary-foreground shadow-control" : "text-muted-foreground hover:bg-control-hover hover:text-foreground"}`}
+                        key={section.id}
+                        onClick={() => {
+                          setActiveSection(section.id);
+                        }}
+                        type="button"
+                      >
+                        <Icon aria-hidden="true" className="size-4 shrink-0" />
+                        <span>{t(`sections.${section.id}`)}</span>
+                      </Button>
+                    );
+                  })}
+              </nav>
+            </aside>
+
+            <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
+              {error !== null ? (
+                <div
+                  className="flex min-h-40 flex-col items-center justify-center gap-3"
+                  role="alert"
+                >
+                  <p className="text-body-small text-danger">{t("errors.load")}</p>
+                  <Button
+                    variant="ghost"
+                    className="h-8 rounded-control bg-control px-3 text-body-small font-medium hover:bg-control-hover"
+                    onClick={() => void onRetry()}
+                    type="button"
+                  >
+                    {t("common:actions.retry")}
+                  </Button>
+                </div>
+              ) : isPending || settings === undefined ? (
+                <div
+                  className="grid min-h-40 place-items-center text-body-small text-muted-foreground"
+                  role="status"
+                >
+                  {t("loading")}
+                </div>
+              ) : (
+                <>
                   <SettingsPanel
                     activeSection={activeSection}
-                    id="access"
-                    title={t("sections.access")}
+                    id="appearance"
+                    title={t("sections.appearance")}
                   >
-                    <SettingsField label={t("access.currentSession")}>
-                      <div className="flex min-w-0 flex-col items-start gap-2 py-1">
-                        <p className="text-body-small text-muted-foreground">
-                          {t("access.sessionDescription")}
-                        </p>
-                        <button
-                          className="inline-flex h-8 items-center gap-2 rounded-control bg-control px-3 text-body-small font-medium text-danger hover:bg-control-hover focus-visible:shadow-focus disabled:opacity-50"
-                          disabled={isLoggingOut || onLogoutAccess === undefined}
+                    <SettingsField label={t("appearance.colorMode")}>
+                      <div className="grid grid-cols-2 rounded-control bg-control p-0.5">
+                        <ThemeButton
+                          ariaLabel={t("appearance.lightMode")}
+                          icon={Sun}
+                          label={t("appearance.light")}
                           onClick={() => {
-                            if (onLogoutAccess === undefined) return;
-                            setLogoutError(false);
-                            setIsLoggingOut(true);
-                            void onLogoutAccess()
-                              .catch(() => {
-                                setLogoutError(true);
-                              })
-                              .finally(() => {
-                                setIsLoggingOut(false);
-                              });
+                            selectTheme("light");
                           }}
-                          type="button"
-                        >
-                          <LogOut aria-hidden="true" className="size-4" />
-                          {isLoggingOut ? t("access.loggingOut") : t("access.logout")}
-                        </button>
-                        {logoutError ? (
-                          <p className="text-meta text-danger" role="alert">
-                            {t("errors.logout")}
-                          </p>
-                        ) : null}
+                          selected={theme === "light"}
+                        />
+                        <ThemeButton
+                          ariaLabel={t("appearance.darkMode")}
+                          icon={Moon}
+                          label={t("appearance.dark")}
+                          onClick={() => {
+                            selectTheme("dark");
+                          }}
+                          selected={theme === "dark"}
+                        />
                       </div>
                     </SettingsField>
+                    <SettingsField label={t("appearance.language")}>
+                      <SettingsSelect
+                        aria-label={t("appearance.language")}
+                        onChange={(event) => {
+                          void changeAppLanguage(event.currentTarget.value as "en" | "zh-CN");
+                        }}
+                        value={getCurrentLanguage()}
+                      >
+                        <option value="zh-CN">{t("languages.zhCN")}</option>
+                        <option value="en">{t("languages.en")}</option>
+                      </SettingsSelect>
+                    </SettingsField>
                   </SettingsPanel>
-                ) : null}
 
-                <SettingsPanel activeSection={activeSection} id="agent" title={t("sections.agent")}>
-                  <SettingsField label={t("fields.approvalPolicy")}>
-                    <SettingsSelect
-                      aria-label={t("fields.approvalPolicy")}
-                      disabled={isSaving}
-                      onChange={(event) => {
-                        const mode = event.currentTarget.value as ApprovalMode;
-                        setDraft((current) => applyApprovalMode(current, mode));
-                      }}
-                      value={deriveApprovalMode(draft)}
+                  {accessMode === "lan" ? (
+                    <SettingsPanel
+                      activeSection={activeSection}
+                      id="access"
+                      title={t("sections.access")}
                     >
-                      <option value="untrusted">{t("approval.untrusted")}</option>
-                      <option value="on-request">{t("approval.onRequest")}</option>
-                      <option value="auto-review">{t("approval.autoReview")}</option>
-                      <option value="never">{t("approval.never")}</option>
-                    </SettingsSelect>
-                  </SettingsField>
-                  <SettingsField label={t("fields.sandbox")}>
-                    <SettingsSelect
-                      aria-label={t("fields.sandbox")}
-                      disabled={isSaving}
-                      onChange={(event) => {
-                        const sandboxMode = event.currentTarget
-                          .value as AgentGlobalSettings["sandboxMode"];
-                        setDraft((current) => ({ ...current, sandboxMode }));
-                      }}
-                      value={draft.sandboxMode}
-                    >
-                      <option value="read-only">{t("sandbox.readOnly")}</option>
-                      <option value="workspace-write">{t("sandbox.workspaceWrite")}</option>
-                      <option value="danger-full-access">{t("sandbox.dangerFullAccess")}</option>
-                    </SettingsSelect>
-                  </SettingsField>
-                  <SettingsField label={t("fields.followUpMessages")}>
-                    <SettingsSelect
-                      aria-label={t("fields.followUpMessages")}
-                      disabled={isSaving}
-                      onChange={(event) => {
-                        const followUpBehavior = event.currentTarget
-                          .value as AgentGlobalSettings["followUpBehavior"];
-                        setDraft((current) => ({ ...current, followUpBehavior }));
-                      }}
-                      value={draft.followUpBehavior}
-                    >
-                      <option value="queue">{t("followUp.queue")}</option>
-                      <option value="steer">{t("followUp.steer")}</option>
-                    </SettingsSelect>
-                  </SettingsField>
-                  <SettingsField label={t("fields.model")}>
-                    <ModelSelect
-                      ariaLabel={t("fields.model")}
-                      disabled={isSaving}
-                      models={models}
-                      onChange={(modelId) => {
-                        setDraft((current) => ({
-                          ...current,
-                          ...resolveGlobalSettingsModel(models, modelId, current.reasoningEffort),
-                        }));
-                      }}
-                      value={draft.model}
-                    />
-                  </SettingsField>
-                  <SettingsField label={t("fields.reasoningEffort")}>
-                    <ReasoningSelect
-                      ariaLabel={t("fields.reasoningEffort")}
-                      disabled={isSaving || selectedModel === undefined}
-                      model={selectedModel}
-                      onChange={(reasoningEffort) => {
-                        setDraft((current) => ({ ...current, reasoningEffort }));
-                      }}
-                      value={draft.reasoningEffort}
-                    />
-                  </SettingsField>
-                </SettingsPanel>
+                      <SettingsField label={t("access.currentSession")}>
+                        <div className="flex min-w-0 flex-col items-start gap-2 py-1">
+                          <p className="text-body-small text-muted-foreground">
+                            {t("access.sessionDescription")}
+                          </p>
+                          <Button
+                            variant="ghost"
+                            className="inline-flex h-8 items-center gap-2 rounded-control bg-control px-3 text-body-small font-medium text-danger hover:bg-control-hover focus-visible:shadow-focus disabled:opacity-50"
+                            disabled={isLoggingOut || onLogoutAccess === undefined}
+                            onClick={() => {
+                              if (onLogoutAccess === undefined) return;
+                              setLogoutError(false);
+                              setIsLoggingOut(true);
+                              void onLogoutAccess()
+                                .catch(() => {
+                                  setLogoutError(true);
+                                })
+                                .finally(() => {
+                                  setIsLoggingOut(false);
+                                });
+                            }}
+                            type="button"
+                          >
+                            <LogOut aria-hidden="true" className="size-4" />
+                            {isLoggingOut ? t("access.loggingOut") : t("access.logout")}
+                          </Button>
+                          {logoutError ? (
+                            <p className="text-meta text-danger" role="alert">
+                              {t("errors.logout")}
+                            </p>
+                          ) : null}
+                        </div>
+                      </SettingsField>
+                    </SettingsPanel>
+                  ) : null}
 
-                <SettingsPanel
-                  activeSection={activeSection}
-                  id="commit"
-                  title={t("sections.commit")}
-                >
-                  <SettingsField label={t("fields.model")}>
-                    <ModelSelect
-                      ariaLabel={t("fields.commitModel")}
-                      disabled={isSaving}
-                      models={models}
-                      onChange={(modelId) => {
-                        setDraft((current) => {
-                          const next = resolveGlobalSettingsModel(
-                            models,
-                            modelId,
-                            current.commitMessageReasoningEffort,
-                          );
-                          return {
+                  <SettingsPanel
+                    activeSection={activeSection}
+                    id="agent"
+                    title={t("sections.agent")}
+                  >
+                    <SettingsField label={t("fields.approvalPolicy")}>
+                      <SettingsSelect
+                        aria-label={t("fields.approvalPolicy")}
+                        disabled={isSaving}
+                        onChange={(event) => {
+                          const mode = event.currentTarget.value as ApprovalMode;
+                          setDraft((current) => applyApprovalMode(current, mode));
+                        }}
+                        value={deriveApprovalMode(draft)}
+                      >
+                        <option value="untrusted">{t("approval.untrusted")}</option>
+                        <option value="on-request">{t("approval.onRequest")}</option>
+                        <option value="auto-review">{t("approval.autoReview")}</option>
+                        <option value="never">{t("approval.never")}</option>
+                      </SettingsSelect>
+                    </SettingsField>
+                    <SettingsField label={t("fields.sandbox")}>
+                      <SettingsSelect
+                        aria-label={t("fields.sandbox")}
+                        disabled={isSaving}
+                        onChange={(event) => {
+                          const sandboxMode = event.currentTarget
+                            .value as AgentGlobalSettings["sandboxMode"];
+                          setDraft((current) => ({ ...current, sandboxMode }));
+                        }}
+                        value={draft.sandboxMode}
+                      >
+                        <option value="read-only">{t("sandbox.readOnly")}</option>
+                        <option value="workspace-write">{t("sandbox.workspaceWrite")}</option>
+                        <option value="danger-full-access">{t("sandbox.dangerFullAccess")}</option>
+                      </SettingsSelect>
+                    </SettingsField>
+                    <SettingsField label={t("fields.followUpMessages")}>
+                      <SettingsSelect
+                        aria-label={t("fields.followUpMessages")}
+                        disabled={isSaving}
+                        onChange={(event) => {
+                          const followUpBehavior = event.currentTarget
+                            .value as AgentGlobalSettings["followUpBehavior"];
+                          setDraft((current) => ({ ...current, followUpBehavior }));
+                        }}
+                        value={draft.followUpBehavior}
+                      >
+                        <option value="queue">{t("followUp.queue")}</option>
+                        <option value="steer">{t("followUp.steer")}</option>
+                      </SettingsSelect>
+                    </SettingsField>
+                    <SettingsField label={t("fields.model")}>
+                      <ModelSelect
+                        ariaLabel={t("fields.model")}
+                        disabled={isSaving}
+                        models={models}
+                        onChange={(modelId) => {
+                          setDraft((current) => ({
                             ...current,
-                            commitMessageModel: next.model,
-                            commitMessageReasoningEffort: next.reasoningEffort,
-                          };
-                        });
-                      }}
-                      value={draft.commitMessageModel}
-                    />
-                  </SettingsField>
-                  <SettingsField label={t("fields.reasoningEffort")}>
-                    <ReasoningSelect
-                      ariaLabel={t("fields.commitReasoningEffort")}
-                      disabled={isSaving || selectedCommitModel === undefined}
-                      model={selectedCommitModel}
-                      onChange={(commitMessageReasoningEffort) => {
-                        setDraft((current) => ({ ...current, commitMessageReasoningEffort }));
-                      }}
-                      value={draft.commitMessageReasoningEffort}
-                    />
-                  </SettingsField>
-                  <SettingsField alignStart label={t("fields.prompt")}>
-                    <textarea
-                      aria-label={t("fields.commitMessagePrompt")}
-                      className="h-28 w-full resize-none rounded-control border border-separator-strong bg-panel px-3 py-2 text-body-small text-foreground outline-none focus:border-accent focus:shadow-focus disabled:opacity-50"
-                      disabled={isSaving}
-                      maxLength={4_000}
-                      onChange={(event) => {
-                        const commitMessagePrompt = event.currentTarget.value;
-                        setDraft((current) => ({ ...current, commitMessagePrompt }));
-                      }}
-                      value={draft.commitMessagePrompt}
-                    />
-                  </SettingsField>
-                </SettingsPanel>
+                            ...resolveGlobalSettingsModel(models, modelId, current.reasoningEffort),
+                          }));
+                        }}
+                        value={draft.model}
+                      />
+                    </SettingsField>
+                    <SettingsField label={t("fields.reasoningEffort")}>
+                      <ReasoningSelect
+                        ariaLabel={t("fields.reasoningEffort")}
+                        disabled={isSaving || selectedModel === undefined}
+                        model={selectedModel}
+                        onChange={(reasoningEffort) => {
+                          setDraft((current) => ({ ...current, reasoningEffort }));
+                        }}
+                        value={draft.reasoningEffort}
+                      />
+                    </SettingsField>
+                  </SettingsPanel>
 
-                <SettingsPanel
-                  activeSection={activeSection}
-                  id="integration"
-                  title={t("sections.integration")}
-                >
-                  <SettingsField label={t("fields.defaultOpenWith")}>
-                    <SettingsSelect
-                      aria-label={t("fields.defaultOpenWith")}
-                      disabled={isSaving}
-                      onChange={(event) => {
-                        const appId = event.currentTarget.value;
-                        setDraft((current) => ({
-                          ...current,
-                          defaultOpenAppId:
-                            appId === ""
-                              ? null
-                              : (appId as AgentGlobalSettings["defaultOpenAppId"]),
-                        }));
-                      }}
-                      value={draft.defaultOpenAppId ?? ""}
-                    >
-                      <option value="">{t("integration.automatic")}</option>
-                      {apps
-                        .filter((app) => app.kind !== "system-default")
-                        .map((app) => (
-                          <option key={app.id} value={app.id}>
-                            {app.name}
-                          </option>
-                        ))}
-                    </SettingsSelect>
-                  </SettingsField>
-                </SettingsPanel>
-              </>
-            )}
+                  <SettingsPanel
+                    activeSection={activeSection}
+                    id="commit"
+                    title={t("sections.commit")}
+                  >
+                    <SettingsField label={t("fields.model")}>
+                      <ModelSelect
+                        ariaLabel={t("fields.commitModel")}
+                        disabled={isSaving}
+                        models={models}
+                        onChange={(modelId) => {
+                          setDraft((current) => {
+                            const next = resolveGlobalSettingsModel(
+                              models,
+                              modelId,
+                              current.commitMessageReasoningEffort,
+                            );
+                            return {
+                              ...current,
+                              commitMessageModel: next.model,
+                              commitMessageReasoningEffort: next.reasoningEffort,
+                            };
+                          });
+                        }}
+                        value={draft.commitMessageModel}
+                      />
+                    </SettingsField>
+                    <SettingsField label={t("fields.reasoningEffort")}>
+                      <ReasoningSelect
+                        ariaLabel={t("fields.commitReasoningEffort")}
+                        disabled={isSaving || selectedCommitModel === undefined}
+                        model={selectedCommitModel}
+                        onChange={(commitMessageReasoningEffort) => {
+                          setDraft((current) => ({ ...current, commitMessageReasoningEffort }));
+                        }}
+                        value={draft.commitMessageReasoningEffort}
+                      />
+                    </SettingsField>
+                    <SettingsField alignStart label={t("fields.prompt")}>
+                      <textarea
+                        aria-label={t("fields.commitMessagePrompt")}
+                        className="h-28 w-full resize-none rounded-control border border-separator-strong bg-panel px-3 py-2 text-body-small text-foreground outline-none focus:border-primary focus:shadow-focus disabled:opacity-50"
+                        disabled={isSaving}
+                        maxLength={4_000}
+                        onChange={(event) => {
+                          const commitMessagePrompt = event.currentTarget.value;
+                          setDraft((current) => ({ ...current, commitMessagePrompt }));
+                        }}
+                        value={draft.commitMessagePrompt}
+                      />
+                    </SettingsField>
+                  </SettingsPanel>
+
+                  <SettingsPanel
+                    activeSection={activeSection}
+                    id="integration"
+                    title={t("sections.integration")}
+                  >
+                    <SettingsField label={t("fields.defaultOpenWith")}>
+                      <SettingsSelect
+                        aria-label={t("fields.defaultOpenWith")}
+                        disabled={isSaving}
+                        onChange={(event) => {
+                          const appId = event.currentTarget.value;
+                          setDraft((current) => ({
+                            ...current,
+                            defaultOpenAppId:
+                              appId === ""
+                                ? null
+                                : (appId as AgentGlobalSettings["defaultOpenAppId"]),
+                          }));
+                        }}
+                        value={draft.defaultOpenAppId ?? ""}
+                      >
+                        <option value="">{t("integration.automatic")}</option>
+                        {apps
+                          .filter((app) => app.kind !== "system-default")
+                          .map((app) => (
+                            <option key={app.id} value={app.id}>
+                              {app.name}
+                            </option>
+                          ))}
+                      </SettingsSelect>
+                    </SettingsField>
+                  </SettingsPanel>
+                </>
+              )}
+            </div>
           </div>
-        </div>
 
-        <footer className="flex min-h-14 items-center justify-end gap-2 px-4 shadow-[0_-1px_0_var(--ui-color-separator)] sm:px-5">
-          {saveError ? (
-            <p className="mr-auto text-meta text-danger" role="alert">
-              {t("errors.save")}
-            </p>
-          ) : null}
-          <button
-            className="h-8 rounded-control px-3 text-body-small text-muted-foreground hover:bg-control-hover hover:text-foreground disabled:opacity-50"
-            disabled={isSaving}
-            onClick={close}
-            type="button"
-          >
-            {t("actions.cancel")}
-          </button>
-          <button
-            className="h-8 rounded-control bg-accent px-3 text-body-small font-medium text-white hover:bg-accent-strong disabled:opacity-50"
-            disabled={isPending || isSaving || settings === undefined}
-            type="submit"
-          >
-            {isSaving ? t("actions.saving") : t("actions.save")}
-          </button>
-        </footer>
-      </form>
-    </dialog>
+          <footer className="flex min-h-14 items-center justify-end gap-2 px-4 shadow-[0_-1px_0_var(--ui-color-separator)] sm:px-5">
+            {saveError ? (
+              <p className="mr-auto text-meta text-danger" role="alert">
+                {t("errors.save")}
+              </p>
+            ) : null}
+            <Button
+              variant="ghost"
+              className="h-8 rounded-control px-3 text-body-small text-muted-foreground hover:bg-control-hover hover:text-foreground disabled:opacity-50"
+              disabled={isSaving}
+              onClick={close}
+              type="button"
+            >
+              {t("actions.cancel")}
+            </Button>
+            <Button
+              disabled={isPending || isSaving || settings === undefined}
+              type="submit"
+              variant="default"
+            >
+              {isSaving ? t("actions.saving") : t("actions.save")}
+            </Button>
+          </footer>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -602,16 +610,17 @@ function ThemeButton({
   selected: boolean;
 }>) {
   return (
-    <button
+    <Button
       aria-label={ariaLabel}
       aria-pressed={selected}
       className={`inline-flex h-8 items-center justify-center gap-2 rounded-[5px] text-body-small font-medium transition-colors ${selected ? "bg-raised text-foreground shadow-control" : "text-muted-foreground hover:text-foreground"}`}
       onClick={onClick}
       type="button"
+      variant="ghost"
     >
       <Icon aria-hidden="true" className="size-4" />
       <span>{label}</span>
-    </button>
+    </Button>
   );
 }
 

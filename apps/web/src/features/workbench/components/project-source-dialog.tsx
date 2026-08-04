@@ -14,7 +14,9 @@ import {
 } from "../../../shared/ai-elements/code-block.js";
 import { MessageResponse, type MessageFileReference } from "../../../shared/ai-elements/message.js";
 import { getCodeLanguage } from "../../../shared/ai-elements/code-languages.js";
-import { IconButton } from "../../../shared/ui/icon-button.js";
+import { Button } from "../../../shared/ui/button.js";
+import { Dialog, DialogContent, DialogTitle } from "../../../shared/ui/dialog.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 
 export { getCodeLanguage } from "../../../shared/ai-elements/code-languages.js";
@@ -60,12 +62,14 @@ function SourceHeader({
           <FileCode2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         )}
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-body-small font-semibold" id={titleId} title={sourcePath}>
-            <CodeBlockFilename>
-              {getFileName(sourcePath)}
-              {lineNumber === null ? null : ` (line ${String(lineNumber)})`}
-            </CodeBlockFilename>
-          </h2>
+          <DialogTitle asChild>
+            <h2 className="truncate text-body-small font-semibold" id={titleId} title={sourcePath}>
+              <CodeBlockFilename>
+                {getFileName(sourcePath)}
+                {lineNumber === null ? null : ` (line ${String(lineNumber)})`}
+              </CodeBlockFilename>
+            </h2>
+          </DialogTitle>
           <p className="truncate text-caption text-muted-foreground" title={sourcePath}>
             {sourcePath}
           </p>
@@ -78,17 +82,30 @@ function SourceHeader({
       ) : null}
       <CodeBlockActions>
         {actions}
-        <IconButton
-          label={t(
-            previewKind === "image"
-              ? "projectDialog.closeImagePreview"
-              : "projectDialog.closeSource",
-          )}
-          onClick={onClose}
-          size="small"
-        >
-          <X className="size-3.5" aria-hidden="true" />
-        </IconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label={t(
+                previewKind === "image"
+                  ? "projectDialog.closeImagePreview"
+                  : "projectDialog.closeSource",
+              )}
+              onClick={onClose}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <X className="size-3.5" aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {t(
+              previewKind === "image"
+                ? "projectDialog.closeImagePreview"
+                : "projectDialog.closeSource",
+            )}
+          </TooltipContent>
+        </Tooltip>
       </CodeBlockActions>
     </CodeBlockHeader>
   );
@@ -102,7 +119,7 @@ export function ProjectSourceDialog({
   reference,
 }: ProjectSourceDialogProps) {
   const { t } = useTranslation("workbench");
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   // 渲染状态绑定源文件路径，切换文件或关闭弹窗后必须回到原始内容。
   const [renderedMarkdownPath, setRenderedMarkdownPath] = useState<string | null>(null);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
@@ -117,14 +134,6 @@ export function ProjectSourceDialog({
     queryKey: ["projects", projectId, "source-file", reference?.path ?? null] as const,
     staleTime: 30_000,
   });
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (reference === null || dialog === null || dialog.open) {
-      return;
-    }
-    dialog.showModal();
-  }, [reference]);
 
   useEffect(() => {
     setImageLoadFailed(false);
@@ -142,7 +151,7 @@ export function ProjectSourceDialog({
     }
 
     // 行节点由共享 CodeBlock 提供，查询完成后让所有可滚动祖先共同定位目标行。
-    dialogRef.current
+    contentRef.current
       ?.querySelector(`[data-code-line="${String(lineNumber)}"]`)
       ?.scrollIntoView({ block: "center" });
   }, [reference?.lineNumber, renderedMarkdownPath, sourceQuery.data]);
@@ -172,116 +181,138 @@ export function ProjectSourceDialog({
   };
 
   return (
-    // 原生 dialog 已通过 onCancel 提供 Escape 行为，onClick 仅识别不可聚焦的 backdrop。
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-    <dialog
-      aria-labelledby={titleId}
-      className="file-diff-dialog m-auto h-[min(82vh,54rem)] w-[min(92vw,72rem)] max-w-none overflow-hidden rounded-surface bg-raised p-0 text-foreground shadow-panel backdrop:bg-scrim"
-      onCancel={(event) => {
-        event.preventDefault();
-        handleClose();
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) handleClose();
       }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          handleClose();
-        }
-      }}
-      ref={dialogRef}
+      open
     >
-      <section className="h-full min-h-0 bg-raised">
-        {previewKind === "image" ? (
-          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">
-            <SourceHeader {...headerProps} />
-            <div className="grid min-h-0 place-items-center overflow-auto p-4 sm:p-6">
-              {imageLoadFailed ? (
-                <div className="text-body-small text-danger" role="alert">
-                  {t("projectDialog.loadImageError")}
-                </div>
-              ) : (
-                <img
-                  alt={fileName}
-                  className="max-h-full max-w-full object-contain"
-                  decoding="async"
-                  onError={() => {
-                    setImageLoadFailed(true);
-                  }}
-                  src={imageUrl}
-                />
-              )}
+      <DialogContent
+        aria-labelledby={titleId}
+        className="h-[min(82dvh,54rem)] max-w-[72rem] overflow-hidden p-0"
+        onEscapeKeyDown={(event) => {
+          // 预览内可能存在 Tooltip 等可关闭层；当前 Dialog 始终优先响应 Escape。
+          event.preventDefault();
+          handleClose();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            handleClose();
+          }
+        }}
+        ref={contentRef}
+      >
+        <section className="h-full min-h-0 bg-raised">
+          {previewKind === "image" ? (
+            <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">
+              <SourceHeader {...headerProps} />
+              <div className="grid min-h-0 place-items-center overflow-auto p-4 sm:p-6">
+                {imageLoadFailed ? (
+                  <div className="text-body-small text-danger" role="alert">
+                    {t("projectDialog.loadImageError")}
+                  </div>
+                ) : (
+                  <img
+                    alt={fileName}
+                    className="max-h-full max-w-full object-contain"
+                    decoding="async"
+                    onError={() => {
+                      setImageLoadFailed(true);
+                    }}
+                    src={imageUrl}
+                  />
+                )}
+              </div>
             </div>
-          </div>
-        ) : sourceQuery.isPending ? (
-          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-            <SourceHeader {...headerProps} />
-            <div
-              className="grid min-h-48 place-items-center text-body-small text-muted-foreground"
-              role="status"
+          ) : sourceQuery.isPending ? (
+            <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+              <SourceHeader {...headerProps} />
+              <div
+                className="grid min-h-48 place-items-center text-body-small text-muted-foreground"
+                role="status"
+              >
+                {t("projectDialog.loadingSource")}
+              </div>
+            </div>
+          ) : sourceQuery.error !== null ? (
+            <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+              <SourceHeader {...headerProps} />
+              <div
+                className="grid min-h-48 place-items-center text-body-small text-danger"
+                role="alert"
+              >
+                {t("projectDialog.loadSourceError")}
+              </div>
+            </div>
+          ) : showRenderedMarkdown ? (
+            <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">
+              <SourceHeader
+                {...headerProps}
+                actions={
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        aria-label={t("projectDialog.showRawContent")}
+                        onClick={() => {
+                          setRenderedMarkdownPath(null);
+                        }}
+                        size="icon-sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Code2 className="size-3.5" aria-hidden="true" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("projectDialog.showRawContent")}</TooltipContent>
+                  </Tooltip>
+                }
+              />
+              <div className="min-h-0 overflow-auto px-5 py-4 sm:px-8 sm:py-6">
+                <MessageResponse className="mx-auto max-w-4xl">
+                  {sourceQuery.data.content}
+                </MessageResponse>
+              </div>
+            </div>
+          ) : (
+            <CodeBlock
+              className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] rounded-none bg-content shadow-none"
+              code={sourceQuery.data.content}
+              highlightedLine={reference.lineNumber}
+              language={sourceLanguage}
+              showLineNumbers
             >
-              {t("projectDialog.loadingSource")}
-            </div>
-          </div>
-        ) : sourceQuery.error !== null ? (
-          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-            <SourceHeader {...headerProps} />
-            <div
-              className="grid min-h-48 place-items-center text-body-small text-danger"
-              role="alert"
-            >
-              {t("projectDialog.loadSourceError")}
-            </div>
-          </div>
-        ) : showRenderedMarkdown ? (
-          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">
-            <SourceHeader
-              {...headerProps}
-              actions={
-                <IconButton
-                  label={t("projectDialog.showRawContent")}
-                  onClick={() => {
-                    setRenderedMarkdownPath(null);
-                  }}
-                  size="small"
-                >
-                  <Code2 className="size-3.5" aria-hidden="true" />
-                </IconButton>
-              }
-            />
-            <div className="min-h-0 overflow-auto px-5 py-4 sm:px-8 sm:py-6">
-              <MessageResponse className="mx-auto max-w-4xl">
-                {sourceQuery.data.content}
-              </MessageResponse>
-            </div>
-          </div>
-        ) : (
-          <CodeBlock
-            className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] rounded-none bg-content shadow-none"
-            code={sourceQuery.data.content}
-            highlightedLine={reference.lineNumber}
-            language={sourceLanguage}
-            showLineNumbers
-          >
-            <SourceHeader
-              {...headerProps}
-              actions={
-                <>
-                  {canRenderMarkdown ? (
-                    <IconButton
-                      label={t("projectDialog.previewMarkdown")}
-                      onClick={() => {
-                        setRenderedMarkdownPath(sourcePath);
-                      }}
-                      size="small"
-                    >
-                      <Eye className="size-3.5" aria-hidden="true" />
-                    </IconButton>
-                  ) : null}
-                  <CodeBlockCopyButton />
-                </>
-              }
-            />
-          </CodeBlock>
-        )}
-      </section>
-    </dialog>
+              <SourceHeader
+                {...headerProps}
+                actions={
+                  <>
+                    {canRenderMarkdown ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            aria-label={t("projectDialog.previewMarkdown")}
+                            onClick={() => {
+                              setRenderedMarkdownPath(sourcePath);
+                            }}
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Eye className="size-3.5" aria-hidden="true" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t("projectDialog.previewMarkdown")}</TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                    <CodeBlockCopyButton />
+                  </>
+                }
+              />
+            </CodeBlock>
+          )}
+        </section>
+      </DialogContent>
+    </Dialog>
   );
 }

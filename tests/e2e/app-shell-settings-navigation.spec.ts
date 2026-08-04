@@ -102,7 +102,8 @@ test("switches the interface language and restores it after reload", async ({ pa
   await englishDialog.getByRole("button", { name: "Agent defaults" }).click();
   await expect(englishDialog.getByRole("combobox", { name: "Reasoning effort" })).toBeVisible();
   await expect(englishDialog.getByRole("combobox", { name: "Approval policy" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "构建 macOS 工作台", level: 1 })).toBeVisible();
+  // Modal 会把背景移出可访问性树；这里仅验证服务端动态内容保持原文。
+  await expect(page.locator("h1").filter({ hasText: "构建 macOS 工作台" })).toBeVisible();
   await expect(
     page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。", { exact: false }),
   ).toBeVisible();

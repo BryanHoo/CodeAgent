@@ -2,6 +2,8 @@ import { ArrowRight, KeyRound, RotateCw } from "lucide-react";
 import { useState, type SubmitEvent } from "react";
 
 import { useTranslation } from "../../i18n/i18n.js";
+import { Button } from "../../shared/ui/button.js";
+import { Input } from "../../shared/ui/input.js";
 import type { AccessError } from "./access-context.js";
 
 export function PairingGate({
@@ -45,14 +47,15 @@ export function PairingGate({
         ) : error === "load" ? (
           <div className="space-y-4" role="alert">
             <p className="text-body-small text-danger">{t("access.loadError")}</p>
-            <button
+            <Button
+              variant="ghost"
               className="inline-flex h-9 items-center gap-2 rounded-control bg-control px-3 text-body-small font-medium hover:bg-control-hover focus-visible:shadow-focus"
               onClick={onRetry}
               type="button"
             >
               <RotateCw aria-hidden="true" className="size-4" />
               {t("actions.retry")}
-            </button>
+            </Button>
           </div>
         ) : (
           <form className="space-y-5" onSubmit={submit}>
@@ -65,9 +68,9 @@ export function PairingGate({
             <label className="block text-body-small font-medium" htmlFor="access-pairing-code">
               {t("access.codeLabel")}
             </label>
-            <div className="flex h-10 items-center rounded-control border border-separator-strong bg-panel focus-within:border-accent focus-within:shadow-focus">
+            <div className="flex h-10 items-center rounded-control border border-separator-strong bg-panel focus-within:border-primary focus-within:shadow-focus">
               <KeyRound aria-hidden="true" className="ml-3 size-4 shrink-0 text-muted-foreground" />
-              <input
+              <Input
                 aria-label={t("access.codeLabel")}
                 autoComplete="one-time-code"
                 className="access-code-input min-w-0 flex-1 bg-transparent px-3 font-mono text-body"
@@ -79,15 +82,16 @@ export function PairingGate({
                 type="password"
                 value={code}
               />
-              <button
+              <Button
                 aria-label={t("access.pair")}
                 className="mr-1 inline-grid size-8 place-items-center rounded-control bg-accent text-white hover:bg-accent-strong focus-visible:shadow-focus disabled:opacity-50"
                 disabled={pairing || code.trim().length === 0}
                 title={t("access.pair")}
                 type="submit"
+                variant="ghost"
               >
                 <ArrowRight aria-hidden="true" className="size-4" />
-              </button>
+              </Button>
             </div>
             {pairing ? (
               <p className="text-meta text-muted-foreground" role="status">

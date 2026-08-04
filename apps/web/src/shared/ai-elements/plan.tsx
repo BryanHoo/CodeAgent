@@ -26,7 +26,7 @@ export function Plan({
   return (
     <PlanContext.Provider value={contextValue}>
       <details
-        className={`group/plan w-full border-l-2 border-accent pl-3 ${className}`}
+        className={`group/plan w-full border-l-2 border-primary pl-3 ${className}`}
         data-ai-plan=""
         data-streaming={isStreaming}
         open={open ?? defaultOpen}
@@ -43,7 +43,7 @@ export type PlanHeaderProps = HTMLAttributes<HTMLElement>;
 export function PlanHeader({ className = "", ...props }: PlanHeaderProps) {
   return (
     <summary
-      className={`flex min-h-10 cursor-pointer list-none items-center gap-3 py-1 text-foreground transition-colors hover:text-accent [&::-webkit-details-marker]:hidden ${className}`}
+      className={`flex min-h-10 cursor-pointer list-none items-center gap-3 py-1 text-foreground transition-colors hover:text-primary [&::-webkit-details-marker]:hidden ${className}`}
       {...props}
     />
   );

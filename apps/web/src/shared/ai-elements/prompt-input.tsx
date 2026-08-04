@@ -21,6 +21,8 @@ import {
 import { v4 as createUuid } from "uuid";
 
 import { useTranslation } from "../../i18n/i18n.js";
+import { Button } from "../ui/button.js";
+import { Input } from "../ui/input.js";
 import type { AttachmentData } from "./attachments.js";
 
 export type PromptInputAttachment = AttachmentData & Readonly<{ file: File }>;
@@ -382,7 +384,7 @@ export function PromptInput({
     <PromptInputAttachmentsContext.Provider value={context}>
       <form
         {...props}
-        className={`overflow-visible rounded-surface border border-transparent bg-raised shadow-floating transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-focus ${className}`}
+        className={`overflow-visible rounded-surface border border-transparent bg-raised shadow-floating transition-[border-color,box-shadow] focus-within:border-primary focus-within:shadow-focus ${className}`}
         data-prompt-input=""
         onPasteCapture={(event) => {
           onPasteCapture?.(event);
@@ -419,7 +421,7 @@ export function PromptInput({
           onSubmit?.({ files, text: typeof value === "string" ? value : "" }, event);
         }}
       >
-        <input
+        <Input
           accept={imageAccept}
           className="sr-only"
           disabled={disabled}
@@ -432,7 +434,7 @@ export function PromptInput({
           tabIndex={-1}
           type="file"
         />
-        <input
+        <Input
           accept={fileAccept}
           className="sr-only"
           disabled={disabled}
@@ -513,9 +515,10 @@ export function PromptInputCommandItem({
   }, [active]);
 
   return (
-    <button
+    <Button
+      variant="ghost"
       aria-selected={selected}
-      className={`flex w-full items-center gap-2 rounded-control px-2 py-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent ${active ? "bg-control-active" : ""} ${className}`}
+      className={`flex h-auto min-h-8 w-full items-center gap-2 whitespace-normal rounded-control px-2 py-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent ${active ? "bg-control-active" : ""} ${className}`}
       data-active={active || undefined}
       onMouseDown={(event) => {
         // 保留输入框焦点，避免鼠标选择命令时丢失光标上下文。
@@ -644,7 +647,8 @@ export function PromptInputActionAddAttachments({
         hidden={!open}
         role="menu"
       >
-        <button
+        <Button
+          variant="ghost"
           className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-left text-label text-foreground hover:bg-control-hover"
           onClick={() => {
             setOpen(false);
@@ -655,8 +659,9 @@ export function PromptInputActionAddAttachments({
         >
           <ImagePlus aria-hidden="true" className="size-4 text-muted-foreground" />
           {t("aiElements.addImage")}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-left text-label text-foreground hover:bg-control-hover"
           onClick={() => {
             setOpen(false);
@@ -667,7 +672,7 @@ export function PromptInputActionAddAttachments({
         >
           <FilePlus2 aria-hidden="true" className="size-4 text-muted-foreground" />
           {t("aiElements.addFile")}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -682,13 +687,14 @@ export function PromptInputButton({
   ...props
 }: PromptInputButtonProps) {
   return (
-    <button
+    <Button
+      variant="ghost"
       className={`inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-label text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 max-workbench:h-11 max-workbench:min-w-11 ${className}`}
       type={type}
       {...props}
     >
       {children ?? <Plus className="size-3.5" aria-hidden="true" />}
-    </button>
+    </Button>
   );
 }
 
@@ -717,7 +723,8 @@ export function PromptInputSubmit({
   const pending = status === "reconnecting" || status === "submitting";
 
   return (
-    <button
+    <Button
+      variant="ghost"
       className={`grid size-8 shrink-0 place-items-center rounded-pill bg-foreground text-raised transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:bg-control-active disabled:text-muted-foreground max-workbench:size-11 ${className}`}
       type={type}
       {...props}
@@ -730,6 +737,6 @@ export function PromptInputSubmit({
         ) : (
           <ArrowUp className="size-4" aria-hidden="true" />
         ))}
-    </button>
+    </Button>
   );
 }

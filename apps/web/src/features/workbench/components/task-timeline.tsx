@@ -28,6 +28,7 @@ import {
   Attachments,
 } from "../../../shared/ai-elements/attachments.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { Button } from "../../../shared/ui/button.js";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import {
@@ -611,7 +612,8 @@ function FileChangeButton({
   const { additions, removals } = countFileChangeLines(change);
 
   return (
-    <button
+    <Button
+      variant="ghost"
       aria-haspopup="dialog"
       aria-label={i18n.t("timeline.fileChange", {
         additions,
@@ -634,7 +636,7 @@ function FileChangeButton({
       </span>
       <span className="ml-auto shrink-0 text-diff-added">+{additions}</span>
       <span className="shrink-0 text-diff-removed">-{removals}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -702,7 +704,8 @@ function ChangedFilesCard({
           </p>
         </div>
         {canRollback ? (
-          <button
+          <Button
+            variant="ghost"
             className="inline-flex h-8 items-center gap-1.5 rounded-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover disabled:cursor-wait disabled:opacity-55"
             disabled={rollbackPending}
             onClick={() => {
@@ -714,9 +717,10 @@ function ChangedFilesCard({
             {rollbackPending
               ? i18n.t("timeline.rollingBack", { ns: "conversation" })
               : i18n.t("timeline.rollback", { ns: "conversation" })}
-          </button>
+          </Button>
         ) : null}
-        <button
+        <Button
+          variant="ghost"
           aria-haspopup="dialog"
           className="h-8 rounded-control bg-control px-3 text-label font-semibold text-foreground transition-colors hover:bg-control-hover"
           onClick={() => {
@@ -725,14 +729,15 @@ function ChangedFilesCard({
           type="button"
         >
           {i18n.t("timeline.review", { ns: "conversation" })}
-        </button>
+        </Button>
       </header>
       <div className="space-y-1 p-2">
         {visibleChanges.map((change) => (
           <FileChangeButton change={change} key={change.path} onOpen={onOpenFileDiff} />
         ))}
         {hiddenChangeCount > 0 ? (
-          <button
+          <Button
+            variant="ghost"
             className="h-8 w-full rounded-control px-2.5 text-left text-label font-medium text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
             onClick={() => {
               setExpanded(true);
@@ -743,10 +748,11 @@ function ChangedFilesCard({
               count: hiddenChangeCount,
               ns: "conversation",
             })}
-          </button>
+          </Button>
         ) : null}
         {expanded && summary.changes.length > 3 ? (
-          <button
+          <Button
+            variant="ghost"
             className="h-8 w-full rounded-control px-2.5 text-left text-label font-medium text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
             onClick={() => {
               setExpanded(false);
@@ -754,7 +760,7 @@ function ChangedFilesCard({
             type="button"
           >
             {i18n.t("timeline.collapseFiles", { ns: "conversation" })}
-          </button>
+          </Button>
         ) : null}
       </div>
       {rollbackError === null ? null : (

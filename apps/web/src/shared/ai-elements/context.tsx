@@ -2,7 +2,8 @@ import { createContext, useContext, useMemo } from "react";
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
 
 import { i18n, useTranslation } from "../../i18n/i18n.js";
-import { IconButton } from "../ui/icon-button.js";
+import { Button } from "../ui/button.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.js";
 
 type ContextValue = Readonly<{
   maxTokens: number | null | undefined;
@@ -162,19 +163,24 @@ export function ContextTrigger({ children, className = "", ...props }: ContextTr
   const usage = formatContextUsage(useContextValue());
 
   return (
-    <IconButton
-      {...props}
-      className={className}
-      label={usage.accessibleLabel}
-      size="small"
-      tooltip={
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          {...props}
+          aria-label={usage.accessibleLabel}
+          className={className}
+          size="icon-sm"
+          type={props.type ?? "button"}
+          variant="ghost"
+        >
+          {children ?? <ContextIcon />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent className="bg-raised text-foreground">
         <ContextContent>
           <ContextContentHeader />
         </ContextContent>
-      }
-      tooltipTone="surface"
-    >
-      {children ?? <ContextIcon />}
-    </IconButton>
+      </TooltipContent>
+    </Tooltip>
   );
 }

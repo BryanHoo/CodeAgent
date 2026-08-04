@@ -1,9 +1,15 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentModel } from "@code-agent/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 
 import { changeAppLanguage } from "../../../i18n/i18n.js";
+import { TooltipProvider } from "../../../shared/ui/tooltip.js";
 import { GlobalSettingsDialog, resolveGlobalSettingsModel } from "./global-settings-dialog.js";
+
+function renderSettingsDialog(children: ReactNode): string {
+  return renderToStaticMarkup(<TooltipProvider>{children}</TooltipProvider>);
+}
 
 const models: AgentModel[] = [
   {
@@ -33,7 +39,7 @@ describe("GlobalSettingsDialog", () => {
   });
 
   it("renders all global defaults with accessible AI Elements selects", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderSettingsDialog(
       <GlobalSettingsDialog
         apps={[
           { id: "visual-studio-code", kind: "editor", name: "Visual Studio Code" },
@@ -61,7 +67,8 @@ describe("GlobalSettingsDialog", () => {
       />,
     );
 
-    expect(markup).toContain('<dialog aria-labelledby="global-settings-title"');
+    expect(markup).toContain('role="dialog"');
+    expect(markup).toContain('aria-labelledby="global-settings-title"');
     expect(markup).toContain('aria-label="设置分类"');
     expect(markup).toContain("外观");
     expect(markup).toContain("Agent 默认值");
@@ -88,7 +95,7 @@ describe("GlobalSettingsDialog", () => {
   });
 
   it("offers explicit logout only for LAN access", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderSettingsDialog(
       <GlobalSettingsDialog
         accessMode="lan"
         apps={[]}
@@ -128,7 +135,7 @@ describe("GlobalSettingsDialog", () => {
   it("renders official Codex terminology in English without rewriting model data", async () => {
     await changeAppLanguage("en");
     try {
-      const markup = renderToStaticMarkup(
+      const markup = renderSettingsDialog(
         <GlobalSettingsDialog
           apps={[]}
           error={null}

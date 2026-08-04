@@ -290,7 +290,7 @@ describe("TaskStatusIndicator", () => {
     );
 
     expect(markup).toContain('aria-label="任务等待审批"');
-    expect(markup).toContain("text-accent");
+    expect(markup).toContain("text-primary");
     expect(markup).toContain("lucide-shield-question-mark");
     expect(markup).not.toContain("animate-spin");
     expect(markup).not.toContain("task-age");

@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import { useTranslation } from "../../i18n/i18n.js";
+import { Button } from "../ui/button.js";
 
 type AnsiComponent = ComponentType<Readonly<{ children?: string; className?: string }>>;
 
@@ -137,7 +138,8 @@ export function TerminalCopyButton({
   };
 
   return (
-    <button
+    <Button
+      variant="ghost"
       aria-label={copied ? t("aiElements.copiedOutput") : t("aiElements.copyOutput")}
       className={`grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground ${className}`}
       onClick={(event) => {
@@ -155,7 +157,7 @@ export function TerminalCopyButton({
       ) : (
         <Copy className="size-3.5" aria-hidden="true" />
       )}
-    </button>
+    </Button>
   );
 }
 

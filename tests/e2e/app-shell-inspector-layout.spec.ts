@@ -32,6 +32,34 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
   expect(pinnedBox.y).toBeLessThan(projectsBox.y);
 });
 
+test("preserves the original sidebar control typography and dimensions", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
+  const readControlStyle = (selector: ReturnType<typeof sidebar.getByRole>) =>
+    selector.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        display: style.display,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        height: style.height,
+        width: style.width,
+      };
+    });
+
+  await expect
+    .poll(() => readControlStyle(sidebar.getByRole("button", { name: "切换项目 CodeAgent" })))
+    .toMatchObject({ display: "flex", fontSize: "13px", fontWeight: "550", height: "32px" });
+  await expect
+    .poll(() => readControlStyle(page.locator("#global-settings-trigger")))
+    .toMatchObject({ display: "flex", fontSize: "13px", fontWeight: "450", height: "36px" });
+  await expect
+    .poll(() => readControlStyle(sidebar.getByRole("button", { name: "添加项目" })))
+    .toMatchObject({ display: "grid", height: "28px", width: "28px" });
+  await expect(sidebar.getByRole("textbox", { name: "搜索任务" })).toHaveCSS("height", "36px");
+});
+
 test("keeps the original sidebar logo and provides it as favicon", async ({ page }) => {
   await page.goto("/p/code-agent");
 

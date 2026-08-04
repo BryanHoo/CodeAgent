@@ -16,6 +16,8 @@ import {
   type ConfirmationState,
 } from "../../../shared/ai-elements/confirmation.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { Button } from "../../../shared/ui/button.js";
+import { Input } from "../../../shared/ui/input.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 
 export type PendingRequestResolution = ResolvePendingRequestRequest["resolution"];
@@ -243,15 +245,17 @@ function UserInputRequestCard({
             <p className="mt-0.5 text-meta text-muted-foreground">{question.header}</p>
             {question.type === "choice" ? (
               <div className="mt-2 space-y-1.5">
-                {question.options.map((option) => (
+                {question.options.map((option, optionIndex) => (
                   <label
                     aria-label={option.label}
                     className="flex cursor-pointer items-start gap-2 rounded-control bg-raised px-2.5 py-2 text-label"
+                    htmlFor={`${question.id}-option-${String(optionIndex)}`}
                     key={option.label}
                   >
-                    <input
+                    <Input
                       checked={answers[question.id] === option.label}
                       disabled={controlsDisabled}
+                      id={`${question.id}-option-${String(optionIndex)}`}
                       name={question.id}
                       onChange={() => {
                         setAnswers((value) => ({ ...value, [question.id]: option.label }));
@@ -266,7 +270,7 @@ function UserInputRequestCard({
                   </label>
                 ))}
                 {question.isOther ? (
-                  <input
+                  <Input
                     aria-label={t("pending.otherAnswer", { header: question.header })}
                     className="h-8 w-full rounded-control bg-raised px-2.5 text-label text-foreground shadow-sm outline-none"
                     disabled={controlsDisabled}
@@ -286,7 +290,8 @@ function UserInputRequestCard({
             ) : question.type === "confirmation" ? (
               <div className="mt-2 grid grid-cols-2 rounded-control bg-raised p-0.5">
                 {question.options.map((option) => (
-                  <button
+                  <Button
+                    variant="ghost"
                     aria-pressed={answers[question.id] === option.label}
                     className="h-8 rounded-control text-label font-medium text-foreground aria-pressed:bg-foreground aria-pressed:text-raised"
                     disabled={controlsDisabled}
@@ -297,11 +302,11 @@ function UserInputRequestCard({
                     type="button"
                   >
                     {option.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             ) : (
-              <input
+              <Input
                 aria-label={question.prompt}
                 className="mt-2 h-8 w-full rounded-control bg-raised px-2.5 text-label text-foreground shadow-sm outline-none"
                 disabled={controlsDisabled}
@@ -324,13 +329,14 @@ function UserInputRequestCard({
         </p>
       )}
       <div className="mt-3 flex justify-end">
-        <button
+        <Button
+          variant="ghost"
           className="h-8 rounded-control bg-foreground px-3 text-label font-medium text-raised disabled:cursor-not-allowed disabled:opacity-45"
           disabled={!canSubmit}
           type="submit"
         >
           {t("pending.submitAnswers")}
-        </button>
+        </Button>
       </div>
     </form>
   );

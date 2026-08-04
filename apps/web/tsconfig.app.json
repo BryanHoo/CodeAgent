@@ -7,6 +7,9 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "types": ["vite/client"],
     "rootDir": "src",
     "tsBuildInfoFile": "../../.cache/types/web-app.tsbuildinfo"

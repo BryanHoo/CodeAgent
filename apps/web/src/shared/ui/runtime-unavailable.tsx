@@ -1,6 +1,7 @@
 import { CircleAlert, RefreshCw } from "lucide-react";
 
 import { Trans, useTranslation } from "../../i18n/i18n.js";
+import { Button } from "./button.js";
 
 type RuntimeUnavailableProps = Readonly<{
   onRetry: () => void;
@@ -25,14 +26,15 @@ export function RuntimeUnavailable({ onRetry }: RuntimeUnavailableProps) {
             ns="common"
           />
         </p>
-        <button
+        <Button
           className="mx-auto mt-5 inline-flex h-9 items-center gap-2 rounded-control bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
           onClick={onRetry}
           type="button"
+          variant="ghost"
         >
           <RefreshCw className="size-4" aria-hidden="true" />
           {t("actions.retry")}
-        </button>
+        </Button>
       </div>
     </section>
   );

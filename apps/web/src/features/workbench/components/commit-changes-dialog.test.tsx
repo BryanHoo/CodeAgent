@@ -1,7 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
+import { TooltipProvider } from "../../../shared/ui/tooltip.js";
 import { CommitChangesDialog, collectCommitFileEntries } from "./commit-changes-dialog.js";
+
+function renderCommitDialog(children: ReactNode): string {
+  return renderToStaticMarkup(<TooltipProvider>{children}</TooltipProvider>);
+}
 
 const gitStatus = {
   baseBranches: ["origin/main"],
@@ -22,7 +28,7 @@ describe("CommitChangesDialog", () => {
       { path: "src/new.ts", staged: false, unstaged: true },
     ]);
 
-    const markup = renderToStaticMarkup(
+    const markup = renderCommitDialog(
       <CommitChangesDialog
         gitStatus={gitStatus}
         onClose={() => undefined}
@@ -44,12 +50,11 @@ describe("CommitChangesDialog", () => {
     expect(markup).toContain('id="commit-message"');
     expect(markup).toContain(">提交</button>");
     expect(markup).toContain("提交并推送");
-    expect(markup).toMatch(/class="[^"]*bg-accent[^"]*text-white[^"]*"/u);
-    expect(markup).not.toContain("text-accent-foreground");
+    expect(markup).toMatch(/data-variant="default"[^>]*disabled=""[^>]*type="button"/u);
   });
 
   it("disables commit actions for aggregated child repositories", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderCommitDialog(
       <CommitChangesDialog
         gitStatus={{ ...gitStatus, repositoryMode: "children" }}
         onClose={() => undefined}
@@ -64,7 +69,7 @@ describe("CommitChangesDialog", () => {
   });
 
   it("shows commit success even when push fails", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderCommitDialog(
       <CommitChangesDialog
         gitStatus={gitStatus}
         onClose={() => undefined}

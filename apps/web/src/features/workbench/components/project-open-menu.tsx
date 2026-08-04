@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { Button } from "../../../shared/ui/button.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 import type { CodeAgentProjectOpenClient } from "../../projects/project-queries.js";
 import { projectOpenCapabilitiesQueryOptions } from "../../projects/project-queries.js";
@@ -84,7 +85,8 @@ export function ProjectOpenMenuItems({
         const selected = app.id === selectedAppId;
         const appName = app.kind === "system-default" ? t("openMenu.systemDefault") : app.name;
         return (
-          <button
+          <Button
+            variant="ghost"
             aria-label={appName}
             className="flex h-9 w-full items-center gap-2.5 rounded-control px-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover focus-visible:bg-control-hover focus-visible:shadow-focus disabled:opacity-50"
             disabled={isPending}
@@ -99,9 +101,9 @@ export function ProjectOpenMenuItems({
             <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate">{appName}</span>
             {mode === "selection" && selected ? (
-              <Check className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
+              <Check className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
             ) : null}
-          </button>
+          </Button>
         );
       })}
     </div>
@@ -312,7 +314,8 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
       ref={containerRef}
     >
       <div className="flex h-7 overflow-hidden rounded-control border border-separator-strong bg-control shadow-control max-workbench:h-11">
-        <button
+        <Button
+          variant="ghost"
           aria-label={openButtonLabel}
           className="min-w-0 max-w-36 truncate px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus disabled:cursor-not-allowed disabled:text-muted-foreground sm:max-w-48"
           disabled={selectedApp === undefined || openMutation.isPending}
@@ -327,8 +330,9 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
         >
           <span className="hidden sm:inline">{openButtonLabel}</span>
           <span className="sm:hidden">{compactOpenButtonLabel}</span>
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           aria-expanded={menuOpen}
           aria-haspopup="menu"
           aria-label={t("openMenu.choose")}
@@ -356,7 +360,7 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
             className={`size-3.5 transition-transform ${menuOpen ? "rotate-180" : ""}`}
             aria-hidden="true"
           />
-        </button>
+        </Button>
       </div>
 
       {menuOpen ? (

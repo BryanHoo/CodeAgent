@@ -13,6 +13,7 @@ import { codeAgentClient } from "../features/projects/project-queries.js";
 import { createBrowserTaskNotifier } from "../features/notifications/browser-task-notifier.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
+import { TooltipProvider } from "../shared/ui/tooltip.js";
 import { useTranslation } from "../i18n/i18n.js";
 import { installInactiveSnapshotMemoryLimit } from "./snapshot-memory.js";
 import { router } from "./router.js";
@@ -95,11 +96,13 @@ export function AppProviders({ children }: AppProvidersProps) {
   // SPA 生命周期内复用同一个 QueryClient，避免导航时丢失服务端状态缓存。
   return (
     <I18nextProvider i18n={i18n}>
-      <QueryClientProvider client={queryClient}>
-        <AccessProvider client={codeAgentClient} queryClient={queryClient}>
-          <AppProviderContent>{children}</AppProviderContent>
-        </AccessProvider>
-      </QueryClientProvider>
+      <TooltipProvider>
+        <QueryClientProvider client={queryClient}>
+          <AccessProvider client={codeAgentClient} queryClient={queryClient}>
+            <AppProviderContent>{children}</AppProviderContent>
+          </AccessProvider>
+        </QueryClientProvider>
+      </TooltipProvider>
     </I18nextProvider>
   );
 }

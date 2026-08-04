@@ -37,6 +37,9 @@ import {
   Attachments,
 } from "../../../shared/ai-elements/attachments.js";
 import { Context, ContextTrigger } from "../../../shared/ai-elements/context.js";
+import { Button } from "../../../shared/ui/button.js";
+import { Input } from "../../../shared/ui/input.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -58,7 +61,6 @@ import {
   type PromptInputAttachment,
   type PromptInputMessage,
 } from "../../../shared/ai-elements/prompt-input.js";
-import { IconButton } from "../../../shared/ui/icon-button.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 import type { ComposerCommandDraftMode, QueuedComposerPrompt } from "../composer-draft-context.js";
 import {
@@ -84,7 +86,7 @@ import {
 } from "./prompt-skill-editor.js";
 
 function PromptCommandIcon({ action }: Readonly<{ action: PromptCommandAction }>) {
-  const className = "size-4 shrink-0 text-accent";
+  const className = "size-4 shrink-0 text-primary";
   switch (action) {
     case "review":
       return <Bug aria-hidden="true" className={className} />;
@@ -223,7 +225,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                   props.onExecuteReview({ type: "uncommitted_changes" });
                 }}
               >
-                <Bug aria-hidden="true" className="size-4 shrink-0 text-accent" />
+                <Bug aria-hidden="true" className="size-4 shrink-0 text-primary" />
                 <span className="font-medium">{t("composer.reviewUncommitted")}</span>
               </PromptInputCommandItem>
               <PromptInputCommandItem
@@ -237,7 +239,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                 id={`${props.commandMenuId}-item-1`}
                 onClick={props.onOpenReviewBranches}
               >
-                <GitBranch aria-hidden="true" className="size-4 shrink-0 text-accent" />
+                <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="font-medium">{t("composer.baseBranchReview")}</span>
                   <span className="truncate text-caption text-muted-foreground">
@@ -257,7 +259,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                     props.onExecuteReview({ branch, type: "base_branch" });
                   }}
                 >
-                  <GitBranch aria-hidden="true" className="size-4 shrink-0 text-accent" />
+                  <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
                   <span className="truncate font-medium">{branch}</span>
                 </PromptInputCommandItem>
               ))}
@@ -302,9 +304,9 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                           props.onSelectSkill(skill);
                         }}
                       >
-                        <Sparkles aria-hidden="true" className="size-4 shrink-0 text-accent" />
+                        <Sparkles aria-hidden="true" className="size-4 shrink-0 text-primary" />
                         <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="font-medium text-accent">{skill.displayName}</span>
+                          <span className="font-medium text-primary">{skill.displayName}</span>
                           <span className="block max-w-full truncate text-caption text-muted-foreground">
                             /{skill.name} · {skill.description}
                           </span>
@@ -343,32 +345,44 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                   <span className="min-w-0 flex-1 truncate text-label text-foreground">
                     {summary}
                   </span>
-                  <IconButton
-                    className="hover:text-accent"
-                    disabled={
-                      !props.canSteer || props.activeTurnId === undefined || props.isSubmitting
-                    }
-                    label={t("composer.steerNow", { summary })}
-                    onClick={() => {
-                      props.steerQueuedPrompt(queuedPrompt);
-                    }}
-                    size="small"
-                    tooltip={t("composer.steerNowTooltip")}
-                  >
-                    <SendHorizontal aria-hidden="true" className="size-3.5" />
-                  </IconButton>
-                  <IconButton
-                    className="hover:text-danger"
-                    disabled={props.isSubmitting}
-                    label={t("composer.cancelQueued", { summary })}
-                    onClick={() => {
-                      props.removeQueuedPrompt(queuedPrompt.id);
-                    }}
-                    size="small"
-                    tooltip={t("composer.cancelQueuedTooltip")}
-                  >
-                    <X aria-hidden="true" className="size-3.5" />
-                  </IconButton>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        aria-label={t("composer.steerNow", { summary })}
+                        className="hover:text-primary"
+                        disabled={
+                          !props.canSteer || props.activeTurnId === undefined || props.isSubmitting
+                        }
+                        onClick={() => {
+                          props.steerQueuedPrompt(queuedPrompt);
+                        }}
+                        size="icon-sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <SendHorizontal aria-hidden="true" className="size-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("composer.steerNowTooltip")}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        aria-label={t("composer.cancelQueued", { summary })}
+                        className="hover:text-danger"
+                        disabled={props.isSubmitting}
+                        onClick={() => {
+                          props.removeQueuedPrompt(queuedPrompt.id);
+                        }}
+                        size="icon-sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <X aria-hidden="true" className="size-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("composer.cancelQueuedTooltip")}</TooltipContent>
+                  </Tooltip>
                 </div>
               );
             })}
@@ -413,9 +427,15 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                 onClick={props.onCancelCommandDraft}
               >
                 {props.commandDraftMode === "feedback" ? (
-                  <MessageSquareText className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
+                  <MessageSquareText
+                    className="size-3.5 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
                 ) : (
-                  <MessageCirclePlus className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
+                  <MessageCirclePlus
+                    className="size-3.5 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
                 )}
                 <span>
                   {props.commandDraftMode === "feedback"
@@ -428,7 +448,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
           )}
           <ComposerAttachments />
           <PromptInputBody>
-            <input name="message" type="hidden" value={props.promptSubmissionText} />
+            <Input name="message" type="hidden" value={props.promptSubmissionText} />
             <PromptSkillEditor
               aria-activedescendant={props.activeCommandItemId}
               aria-controls={props.commandMenuOpen ? props.commandMenuId : undefined}

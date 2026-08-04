@@ -1,7 +1,16 @@
 /* eslint-disable jsx-a11y/no-autofocus -- 重命名 Dialog 由用户显式打开，按交互规范聚焦唯一输入框。 */
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
+import { Button } from "../../../shared/ui/button.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../shared/ui/dialog.js";
+import { Input } from "../../../shared/ui/input.js";
 
 type TaskRenameDialogProps = Readonly<{
   error?: string | null;
@@ -19,83 +28,72 @@ export function TaskRenameDialog({
   onRename,
 }: TaskRenameDialogProps) {
   const { t } = useTranslation("workbench");
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const [title, setTitle] = useState(initialTitle);
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog !== null && !dialog.open) {
-      // 原生 dialog 负责焦点圈定和 Escape，避免背景工作台继续接收键盘操作。
-      dialog.showModal();
-    }
-  }, []);
-
   return (
-    // 原生 dialog 已通过 onCancel 提供 Escape 行为，onClick 仅识别不可聚焦的 backdrop。
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-    <dialog
-      aria-labelledby="task-rename-title"
-      className="m-auto w-[min(90vw,24rem)] max-w-none rounded-surface bg-raised p-0 text-foreground shadow-panel backdrop:bg-scrim"
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!isPending) {
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open && !isPending) {
           onClose();
         }
       }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !isPending) {
-          onClose();
-        }
-      }}
-      ref={dialogRef}
+      open
     >
-      <form
-        className="p-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const normalizedTitle = title.trim();
-          if (normalizedTitle.length > 0) {
-            onRename(normalizedTitle);
-          }
+      <DialogContent
+        aria-labelledby="task-rename-title"
+        className="max-w-96 p-4"
+        onEscapeKeyDown={(event) => {
+          if (isPending) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (isPending) event.preventDefault();
         }}
       >
-        <h2 className="text-heading font-semibold" id="task-rename-title">
-          {t("taskDialog.rename")}
-        </h2>
-        <input
-          aria-label={t("taskDialog.name")}
-          autoFocus
-          className="mt-3 h-9 w-full rounded-control bg-control px-3 text-body text-foreground outline-none focus:shadow-focus"
-          disabled={isPending}
-          maxLength={200}
-          onChange={(event) => {
-            setTitle(event.currentTarget.value);
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const normalizedTitle = title.trim();
+            if (normalizedTitle.length > 0) {
+              onRename(normalizedTitle);
+            }
           }}
-          value={title}
-        />
-        {error === null ? null : (
-          <p className="mt-2 text-meta text-danger" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            className="h-8 rounded-control px-3 text-body-small text-muted-foreground hover:bg-control-hover hover:text-foreground"
+        >
+          <DialogHeader>
+            <DialogTitle id="task-rename-title">{t("taskDialog.rename")}</DialogTitle>
+          </DialogHeader>
+          <Input
+            aria-label={t("taskDialog.name")}
+            autoFocus
+            className="h-9 w-full rounded-control bg-control px-3 text-body text-foreground outline-none focus:shadow-focus"
             disabled={isPending}
-            onClick={onClose}
-            type="button"
-          >
-            {t("actions.cancel")}
-          </button>
-          <button
-            className="h-8 rounded-control bg-accent px-3 text-body-small font-medium text-white hover:bg-accent-strong disabled:opacity-50"
-            disabled={isPending || title.trim().length === 0}
-            type="submit"
-          >
-            {t("actions.save")}
-          </button>
-        </div>
-      </form>
-    </dialog>
+            maxLength={200}
+            onChange={(event) => {
+              setTitle(event.currentTarget.value);
+            }}
+            value={title}
+          />
+          {error === null ? null : (
+            <p className="mt-2 text-meta text-danger" role="alert">
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              className="h-8 rounded-control px-3 text-body-small text-muted-foreground hover:bg-control-hover hover:text-foreground"
+              disabled={isPending}
+              onClick={onClose}
+              type="button"
+              variant="ghost"
+            >
+              {t("actions.cancel")}
+            </Button>
+            <Button disabled={isPending || title.trim().length === 0} type="submit">
+              {t("actions.save")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

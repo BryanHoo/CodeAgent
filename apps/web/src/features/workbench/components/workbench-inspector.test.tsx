@@ -1,7 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
+import { TooltipProvider } from "../../../shared/ui/tooltip.js";
 import { WorkbenchInspector, type ProjectFileTreeDirectoryState } from "./workbench-inspector.js";
+
+function renderInspectorMarkup(children: ReactNode): string {
+  return renderToStaticMarkup(<TooltipProvider>{children}</TooltipProvider>);
+}
 
 const gitStatus = {
   baseBranches: ["origin/main"],
@@ -73,7 +79,7 @@ const fileTreeDirectories: readonly ProjectFileTreeDirectoryState[] = [
 
 describe("WorkbenchInspector", () => {
   it("keeps running terminals in context with an accessible stop action", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderInspectorMarkup(
       <WorkbenchInspector
         backgroundTerminals={[
           {
@@ -97,7 +103,7 @@ describe("WorkbenchInspector", () => {
   });
 
   it("integrates inline change stats with neutral review and commit actions", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
         onOpenProjectFile={() => undefined}
@@ -120,9 +126,9 @@ describe("WorkbenchInspector", () => {
     expect(markup).toMatch(
       /aria-label="变更统计"[^>]*><span>2 个变更<\/span><span[^>]*>\+3<\/span><span[^>]*>-1<\/span>/u,
     );
-    expect(markup).toMatch(/aria-label="审核 2 个未提交变更"[^>]*class="[^"]*bg-control/u);
-    expect(markup).toMatch(/aria-label="提交 2 个未提交变更"[^>]*class="[^"]*bg-control/u);
-    expect(markup).not.toContain("bg-accent");
+    expect(markup).toMatch(/<button[^>]*bg-control[^>]*aria-label="审核 2 个未提交变更"/u);
+    expect(markup).toMatch(/<button[^>]*bg-control[^>]*aria-label="提交 2 个未提交变更"/u);
+    expect(markup).not.toContain("bg-primary");
     expect(markup).toContain('aria-label="项目文件"');
     expect(markup).toContain('role="tree"');
     expect(markup).toContain("src");
@@ -141,7 +147,7 @@ describe("WorkbenchInspector", () => {
   });
 
   it("renders loaded directory children only while their folders are expanded", () => {
-    const srcExpandedMarkup = renderToStaticMarkup(
+    const srcExpandedMarkup = renderInspectorMarkup(
       <WorkbenchInspector
         expandedFileTreePaths={new Set(["src"])}
         fileTreeDirectories={fileTreeDirectories}
@@ -150,7 +156,7 @@ describe("WorkbenchInspector", () => {
         projectPath="/workspace/CodeAgent"
       />,
     );
-    const componentsExpandedMarkup = renderToStaticMarkup(
+    const componentsExpandedMarkup = renderInspectorMarkup(
       <WorkbenchInspector
         expandedFileTreePaths={new Set(["src", "src/components"])}
         fileTreeDirectories={fileTreeDirectories}
@@ -167,7 +173,7 @@ describe("WorkbenchInspector", () => {
 
   it("moves Git change stats from the nearest collapsed ancestor to the visible file", () => {
     const renderInspector = (expandedFileTreePaths: Set<string>) =>
-      renderToStaticMarkup(
+      renderInspectorMarkup(
         <WorkbenchInspector
           expandedFileTreePaths={expandedFileTreePaths}
           fileTreeDirectories={fileTreeDirectories}
@@ -196,7 +202,7 @@ describe("WorkbenchInspector", () => {
   });
 
   it("keeps stats on the deepest visible ancestor when the changed file is absent", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderInspectorMarkup(
       <WorkbenchInspector
         expandedFileTreePaths={new Set(["src", "src/components"])}
         fileTreeDirectories={fileTreeDirectories}
@@ -222,7 +228,7 @@ describe("WorkbenchInspector", () => {
   });
 
   it("omits the uncommitted changes module when the working tree is clean", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
         onOpenProjectFile={() => undefined}
@@ -242,7 +248,7 @@ describe("WorkbenchInspector", () => {
   });
 
   it("offers a manual refresh after Git detection stops", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
         gitStatusError={new Error("not a git repository")}
@@ -260,7 +266,7 @@ describe("WorkbenchInspector", () => {
   });
 
   it("renders project file tree root loading and error states", () => {
-    const loadingMarkup = renderToStaticMarkup(
+    const loadingMarkup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={[{ error: null, isFetching: true, isPending: true, path: null }]}
         onOpenProjectFile={() => undefined}
@@ -269,7 +275,7 @@ describe("WorkbenchInspector", () => {
         projectPath="/workspace/CodeAgent"
       />,
     );
-    const errorMarkup = renderToStaticMarkup(
+    const errorMarkup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={[
           {
@@ -293,7 +299,7 @@ describe("WorkbenchInspector", () => {
   });
 
   it("lists every subagent in context and exposes output dialog triggers", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderInspectorMarkup(
       <WorkbenchInspector
         onReviewChanges={() => undefined}
         onOpenSubagent={() => undefined}
@@ -331,7 +337,7 @@ describe("WorkbenchInspector", () => {
   });
 
   it("renders enabled MCP servers without the removed environment module", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderInspectorMarkup(
       <WorkbenchInspector
         backgroundTerminals={[
           {
@@ -415,7 +421,7 @@ describe("WorkbenchInspector", () => {
         mcpServersPending?: boolean;
       }>,
     ) =>
-      renderToStaticMarkup(
+      renderInspectorMarkup(
         <WorkbenchInspector
           backgroundTerminals={[
             {

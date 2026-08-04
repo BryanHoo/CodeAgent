@@ -15,6 +15,7 @@ import {
 import { Block, Streamdown, StreamdownContext, type BlockProps, type Components } from "streamdown";
 
 import { useTranslation } from "../../i18n/i18n.js";
+import { Button } from "../ui/button.js";
 import { CodeComments, parseCodeComments } from "./code-comments.js";
 
 type MarkdownLinkProps = ComponentProps<"a"> & {
@@ -124,8 +125,9 @@ function MarkdownLink({ children, className = "", href, node, ...props }: Markdo
 
     if (onOpenFileReference !== null) {
       return (
-        <button
-          className={`markdown-file-reference cursor-pointer text-accent underline decoration-transparent underline-offset-2 transition-colors hover:text-accent-strong hover:decoration-current ${className}`}
+        <Button
+          variant="ghost"
+          className={`markdown-file-reference cursor-pointer text-primary underline decoration-transparent underline-offset-2 transition-colors hover:text-accent-strong hover:decoration-current ${className}`}
           data-file-reference="true"
           onClick={() => {
             onOpenFileReference({
@@ -138,13 +140,13 @@ function MarkdownLink({ children, className = "", href, node, ...props }: Markdo
           type="button"
         >
           {content}
-        </button>
+        </Button>
       );
     }
 
     return (
       <span
-        className={`markdown-file-reference text-accent ${className}`}
+        className={`markdown-file-reference text-primary ${className}`}
         data-file-reference="true"
         title={fileReference.path}
       >
@@ -155,7 +157,7 @@ function MarkdownLink({ children, className = "", href, node, ...props }: Markdo
 
   return (
     <a
-      className={`font-medium text-accent underline decoration-current/35 underline-offset-2 transition-colors hover:text-accent-strong ${className}`}
+      className={`font-medium text-primary underline decoration-current/35 underline-offset-2 transition-colors hover:text-accent-strong ${className}`}
       href={href}
       rel="noopener noreferrer"
       target="_blank"
@@ -214,7 +216,8 @@ export function MessageAction({
   const accessibleLabel = label ?? tooltip;
 
   return (
-    <button
+    <Button
+      variant="ghost"
       aria-label={accessibleLabel}
       className={`grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground ${className}`}
       title={tooltip}
@@ -348,7 +351,8 @@ export function MessageBranchPrevious({
   const { t } = useTranslation("conversation");
 
   return (
-    <button
+    <Button
+      variant="ghost"
       aria-label={t("aiElements.previousBranch")}
       className={`grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-40 ${className}`}
       disabled={totalBranches <= 1}
@@ -357,7 +361,7 @@ export function MessageBranchPrevious({
       {...props}
     >
       {children ?? <ChevronLeft className="size-3.5" aria-hidden="true" />}
-    </button>
+    </Button>
   );
 }
 
@@ -368,7 +372,8 @@ export function MessageBranchNext({ children, className = "", ...props }: Messag
   const { t } = useTranslation("conversation");
 
   return (
-    <button
+    <Button
+      variant="ghost"
       aria-label={t("aiElements.nextBranch")}
       className={`grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-40 ${className}`}
       disabled={totalBranches <= 1}
@@ -377,7 +382,7 @@ export function MessageBranchNext({ children, className = "", ...props }: Messag
       {...props}
     >
       {children ?? <ChevronRight className="size-3.5" aria-hidden="true" />}
-    </button>
+    </Button>
   );
 }
 

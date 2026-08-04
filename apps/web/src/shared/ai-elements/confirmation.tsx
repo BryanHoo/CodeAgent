@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { i18n, useTranslation } from "../../i18n/i18n.js";
+import { Button } from "../ui/button.js";
 
 export type ConfirmationState =
   | "approval-requested"
@@ -141,7 +142,7 @@ export function ConfirmationAction({
   type = "button",
   ...props
 }: ConfirmationActionProps) {
-  // 语义色在基础样式中只选择一组背景和文字色，避免 Tailwind 冲突工具类导致文字不可见。
+  // 保留既有 Confirmation 视觉，仅由 shadcn Button 承担原生属性和 ref 透传。
   const toneClass =
     tone === "danger"
       ? "bg-danger text-white hover:opacity-90"
@@ -150,10 +151,11 @@ export function ConfirmationAction({
         : "bg-raised text-foreground hover:bg-control-hover";
 
   return (
-    <button
+    <Button
       className={`inline-flex h-8 items-center justify-center rounded-control px-3 text-label font-medium shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${toneClass} ${className}`}
       ref={ref}
       type={type}
+      variant="ghost"
       {...props}
     />
   );

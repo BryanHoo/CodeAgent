@@ -25,6 +25,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { Button } from "../../../shared/ui/button.js";
+import { Input } from "../../../shared/ui/input.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import {
   formatTaskAge,
@@ -46,7 +49,6 @@ import {
   taskRenameMutationOptions,
 } from "../../projects/project-queries.js";
 import { removeRetainedTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
-import { IconButton } from "../../../shared/ui/icon-button.js";
 import { getTaskActivity, type TaskAttention } from "../../conversation/runtime/task-activity.js";
 import { useProjectReordering } from "../hooks/use-project-reordering.js";
 import {
@@ -465,14 +467,21 @@ export function ProjectSidebar({
           </span>
           <span className="truncate">CodeAgent</span>
         </div>
-        <IconButton
-          className="min-workbench:hidden"
-          label={t("sidebar.close")}
-          onClick={onClose}
-          size="small"
-        >
-          <PanelLeftClose className="size-3.5" aria-hidden="true" />
-        </IconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label={t("sidebar.close")}
+              className="min-workbench:hidden"
+              onClick={onClose}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <PanelLeftClose className="size-3.5" aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("sidebar.close")}</TooltipContent>
+        </Tooltip>
       </div>
 
       <nav className="space-y-0.5 px-2" aria-label={t("sidebar.agentNavigation")}>
@@ -481,7 +490,7 @@ export function ProjectSidebar({
             aria-hidden="true"
             className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground"
           />
-          <input
+          <Input
             aria-label={t("sidebar.search")}
             className="h-9 w-full rounded-control bg-control pl-8 pr-2.5 text-body-small text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus:shadow-focus"
             onChange={(event) => {
@@ -546,18 +555,25 @@ export function ProjectSidebar({
             <h2 className="text-body-small font-semibold text-foreground" id="projects-title">
               {t("sidebar.projects")}
             </h2>
-            <IconButton
-              disabled={isProjectPickerOpen}
-              label={t("sidebar.addProject")}
-              onClick={() => void openProjectPicker()}
-              size="small"
-            >
-              {isProjectPickerOpen ? (
-                <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-              ) : (
-                <Plus className="size-3.5" aria-hidden="true" />
-              )}
-            </IconButton>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label={t("sidebar.addProject")}
+                  disabled={isProjectPickerOpen}
+                  onClick={() => void openProjectPicker()}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  {isProjectPickerOpen ? (
+                    <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Plus className="size-3.5" aria-hidden="true" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t("sidebar.addProject")}</TooltipContent>
+            </Tooltip>
           </div>
 
           {isPending || hasPendingTasks ? (
@@ -625,7 +641,8 @@ export function ProjectSidebar({
                   key={project.id}
                 >
                   <div className="flex min-w-0 items-center gap-0.5">
-                    <button
+                    <Button
+                      variant="ghost"
                       aria-expanded={expanded}
                       aria-label={t("sidebar.toggleProject", { project: project.name })}
                       className={`flex h-8 min-w-0 flex-1 touch-pan-y select-none items-center gap-2 rounded-control px-2 text-body-small font-medium transition-colors hover:bg-control-hover hover:text-foreground ${
@@ -641,7 +658,7 @@ export function ProjectSidebar({
                     >
                       <Folder className="size-4 shrink-0" aria-hidden="true" />
                       <span className="truncate">{project.name}</span>
-                    </button>
+                    </Button>
                     <ProjectActions
                       isPending={isProjectActionPending}
                       onRemove={(targetProject) => {
@@ -654,15 +671,24 @@ export function ProjectSidebar({
                       }}
                       project={project}
                     />
-                    <IconButton
-                      label={t("sidebar.createInProject", { project: project.name })}
-                      onClick={() => {
-                        void openProjectDraft(project.id);
-                      }}
-                      size="small"
-                    >
-                      <Plus className="size-3.5" aria-hidden="true" />
-                    </IconButton>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          aria-label={t("sidebar.createInProject", { project: project.name })}
+                          onClick={() => {
+                            void openProjectDraft(project.id);
+                          }}
+                          size="icon-sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Plus className="size-3.5" aria-hidden="true" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t("sidebar.createInProject", { project: project.name })}
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
 
                   {expanded ? (
@@ -684,7 +710,8 @@ export function ProjectSidebar({
                         );
                       })}
                       {taskPaginationControl === null ? null : (
-                        <button
+                        <Button
+                          variant="ghost"
                           aria-expanded={showAllTasks}
                           className="flex h-7 w-full items-center rounded-control px-2 text-left text-meta font-medium text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
                           disabled={taskPaginationControl.disabled}
@@ -715,7 +742,7 @@ export function ProjectSidebar({
                           type="button"
                         >
                           {taskPaginationControl.label}
-                        </button>
+                        </Button>
                       )}
                       {projectTasks.length === 0 && normalizedQuery.length === 0 ? (
                         <p className="px-2 py-1.5 text-meta text-subtle-foreground">
@@ -873,7 +900,8 @@ function ProjectActions({ isPending, onRemove, onRename, project }: ProjectActio
       }}
       ref={menuContainerRef}
     >
-      <button
+      <Button
+        variant="ghost"
         aria-expanded={menuOpen}
         aria-haspopup="menu"
         aria-label={t("sidebar.openProjectActions", { project: project.name })}
@@ -887,7 +915,7 @@ function ProjectActions({ isPending, onRemove, onRename, project }: ProjectActio
         type="button"
       >
         <Ellipsis className="size-3.5" aria-hidden="true" />
-      </button>
+      </Button>
       {menuOpen && menuPosition !== undefined && typeof document !== "undefined"
         ? createPortal(
             <div
@@ -938,7 +966,8 @@ export function ProjectActionMenu({
       className="w-32 rounded-surface bg-raised p-1 shadow-floating"
       role="menu"
     >
-      <button
+      <Button
+        variant="ghost"
         className={projectActionClassName}
         disabled={isPending}
         onClick={onRename}
@@ -947,8 +976,9 @@ export function ProjectActionMenu({
       >
         <Pencil className="size-3.5" aria-hidden="true" />
         {t("sidebar.rename")}
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
         className={`${projectActionClassName} text-danger`}
         disabled={isPending}
         onClick={onRemove}
@@ -957,7 +987,7 @@ export function ProjectActionMenu({
       >
         <Trash2 className="size-3.5" aria-hidden="true" />
         {t("sidebar.remove")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -970,7 +1000,8 @@ export function SidebarSettingsButton({
   const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
   const connectionStatusLabel = t(connectionStatus.labelKey);
   return (
-    <button
+    <Button
+      variant="ghost"
       aria-label={t("sidebar.connectionSettings", { status: connectionStatusLabel })}
       className="flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
       id="global-settings-trigger"
@@ -986,7 +1017,7 @@ export function SidebarSettingsButton({
         <ProjectSidebarConnectionIcon connectionState={connectionState} />
         {connectionStatusLabel}
       </span>
-    </button>
+    </Button>
   );
 }
 
@@ -1129,7 +1160,8 @@ function TaskLink({
           updatedAt={task.updatedAt}
         />
       </Link>
-      <button
+      <Button
+        variant="ghost"
         aria-expanded={menuOpen}
         aria-haspopup="menu"
         aria-label={t("sidebar.openTaskActions", { task: task.title })}
@@ -1142,7 +1174,7 @@ function TaskLink({
         type="button"
       >
         <Ellipsis className="size-4" aria-hidden="true" />
-      </button>
+      </Button>
       {menuOpen && menuPosition !== undefined && typeof document !== "undefined"
         ? createPortal(
             <div
@@ -1186,7 +1218,7 @@ export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskSta
     return (
       <span
         aria-label={t("sidebar.taskApproval")}
-        className="task-status ml-auto inline-flex shrink-0 text-accent"
+        className="task-status ml-auto inline-flex shrink-0 text-primary"
         role="status"
       >
         <ShieldQuestion className="size-3.5" aria-hidden="true" />
@@ -1265,7 +1297,8 @@ export function TaskActionMenu({
       className="w-32 rounded-surface bg-raised p-1 shadow-floating"
       role="menu"
     >
-      <button
+      <Button
+        variant="ghost"
         className={taskActionClassName}
         disabled={isPending}
         onClick={onPin}
@@ -1274,8 +1307,9 @@ export function TaskActionMenu({
       >
         <Pin className="size-3.5" aria-hidden="true" />
         {task.pinned ? t("sidebar.unpin") : t("sidebar.pin")}
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
         className={taskActionClassName}
         disabled={isPending}
         onClick={onRename}
@@ -1284,8 +1318,9 @@ export function TaskActionMenu({
       >
         <Pencil className="size-3.5" aria-hidden="true" />
         {t("sidebar.rename")}
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
         className={`${taskActionClassName} text-danger`}
         disabled={isPending}
         onClick={onArchive}
@@ -1294,7 +1329,7 @@ export function TaskActionMenu({
       >
         <Archive className="size-3.5" aria-hidden="true" />
         {t("sidebar.archive")}
-      </button>
+      </Button>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { useTranslation } from "../../i18n/i18n.js";
+import { Button } from "../ui/button.js";
 
 type FileTreeContextValue = Readonly<{
   expandedPaths: Set<string>;
@@ -144,7 +145,8 @@ export function FileTreeFolder({
       <div
         className={`flex min-h-7 w-full items-center gap-1 rounded-control px-1.5 text-left transition-colors hover:bg-control-hover ${isSelected ? "bg-control" : ""}`}
       >
-        <button
+        <Button
+          variant="ghost"
           aria-label={t(isExpanded ? "aiElements.folderCollapse" : "aiElements.folderExpand", {
             name,
           })}
@@ -158,21 +160,22 @@ export function FileTreeFolder({
             aria-hidden="true"
             className={`size-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`}
           />
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           className="flex min-w-0 flex-1 items-center gap-1.5 text-left focus-visible:outline-none"
           onClick={selectFolder}
           type="button"
         >
           <FileTreeIcon>
             {isExpanded ? (
-              <FolderOpen aria-hidden="true" className="size-3.5 text-accent" />
+              <FolderOpen aria-hidden="true" className="size-3.5 text-primary" />
             ) : (
-              <Folder aria-hidden="true" className="size-3.5 text-accent" />
+              <Folder aria-hidden="true" className="size-3.5 text-primary" />
             )}
           </FileTreeIcon>
           <FileTreeName title={name}>{name}</FileTreeName>
-        </button>
+        </Button>
         {trailing}
       </div>
       {isExpanded ? (

@@ -1,6 +1,7 @@
 import { Link, Outlet, createRootRoute } from "@tanstack/react-router";
 
 import { useTranslation } from "../../i18n/i18n.js";
+import { Button } from "../../shared/ui/button.js";
 import { NotFound } from "./not-found.js";
 
 export const rootRoute = createRootRoute({
@@ -24,13 +25,14 @@ function RouteError({ error, reset }: Readonly<{ error: Error; reset: () => void
           {t("errors.routeErrorTitle")}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
-        <button
+        <Button
+          variant="ghost"
           className="mt-5 rounded-control bg-control px-3 py-2 text-body font-medium text-foreground shadow-sm transition-colors hover:bg-control-hover"
           onClick={reset}
           type="button"
         >
           {t("actions.retry")}
-        </button>
+        </Button>
       </section>
     </main>
   );

@@ -232,7 +232,7 @@ function CodeCommentItem({
                 {commentLocation}
               </p>
               <Streamdown
-                className="mt-2 text-body-small leading-5 text-foreground [&_a]:text-accent [&_a]:underline [&_a]:underline-offset-2 [&_code]:font-mono [&_code]:text-body-small [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                className="mt-2 text-body-small leading-5 text-foreground [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_code]:font-mono [&_code]:text-body-small [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
                 controls={false}
               >
                 {comment.body}

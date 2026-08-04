@@ -64,7 +64,8 @@ import {
   upsertProjectTaskInInfiniteData,
   type ProjectTaskInfiniteData,
 } from "../../projects/project-queries.js";
-import { IconButton } from "../../../shared/ui/icon-button.js";
+import { Button } from "../../../shared/ui/button.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
@@ -613,7 +614,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       />
 
       {sidebarOpen ? (
-        <button
+        <Button
+          variant="ghost"
           aria-label={t("shell.closeSidebar")}
           className="workbench-sidebar-scrim"
           onClick={closeSidebar}
@@ -648,16 +650,25 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       <main aria-label={t("shell.timeline")} className="flex min-h-0 min-w-0 flex-col bg-content">
         <header className="flex h-workbench-header shrink-0 items-center justify-between gap-3 bg-content px-2.5 shadow-toolbar sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
-            <IconButton
-              id="workbench-sidebar-toggle"
-              label={sidebarOpen ? t("shell.collapseSidebar") : t("shell.expandSidebar")}
-              onClick={() => {
-                setSidebarOpen((open) => !open);
-              }}
-              size="small"
-            >
-              <PanelLeft className="size-3.5" aria-hidden="true" />
-            </IconButton>
+            <Tooltip key={sidebarOpen ? "sidebar-open" : "sidebar-closed"}>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label={sidebarOpen ? t("shell.collapseSidebar") : t("shell.expandSidebar")}
+                  id="workbench-sidebar-toggle"
+                  onClick={() => {
+                    setSidebarOpen((open) => !open);
+                  }}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <PanelLeft className="size-3.5" aria-hidden="true" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {sidebarOpen ? t("shell.collapseSidebar") : t("shell.expandSidebar")}
+              </TooltipContent>
+            </Tooltip>
             <h1
               aria-label={title}
               className="min-w-0 text-body-small font-semibold text-foreground"
@@ -665,7 +676,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               {taskId === undefined ? (
                 <span className="block truncate">{title}</span>
               ) : (
-                <button
+                <Button
+                  variant="ghost"
                   aria-label={t("shell.renameTask", { title })}
                   className="group flex max-w-full items-center gap-1 rounded-control px-1 py-0.5 text-left hover:bg-control-hover focus-visible:shadow-focus"
                   id="workbench-task-title-rename"
@@ -680,7 +692,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
                     aria-hidden="true"
                     className="size-3 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
                   />
-                </button>
+                </Button>
               )}
             </h1>
           </div>
@@ -693,16 +705,27 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
                 ? {}
                 : { defaultOpenAppId: globalSettingsQuery.data.settings.defaultOpenAppId })}
             />
-            <IconButton
-              id="workbench-inspector-toggle"
-              label={inspectorOpen ? t("shell.collapseInspector") : t("shell.expandInspector")}
-              onClick={() => {
-                setInspectorOpen((open) => !open);
-              }}
-              size="small"
-            >
-              <PanelRight className="size-3.5" aria-hidden="true" />
-            </IconButton>
+            <Tooltip key={inspectorOpen ? "inspector-open" : "inspector-closed"}>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label={
+                    inspectorOpen ? t("shell.collapseInspector") : t("shell.expandInspector")
+                  }
+                  id="workbench-inspector-toggle"
+                  onClick={() => {
+                    setInspectorOpen((open) => !open);
+                  }}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <PanelRight className="size-3.5" aria-hidden="true" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {inspectorOpen ? t("shell.collapseInspector") : t("shell.expandInspector")}
+              </TooltipContent>
+            </Tooltip>
           </div>
         </header>
 
@@ -774,7 +797,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       </main>
 
       {inspectorOpen ? (
-        <button
+        <Button
+          variant="ghost"
           aria-label={t("shell.closeInspector")}
           className="workbench-inspector-scrim"
           onClick={closeInspector}

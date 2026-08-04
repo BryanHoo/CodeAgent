@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import { useTranslation } from "../../i18n/i18n.js";
+import { Button } from "../ui/button.js";
 
 export type AttachmentData = Readonly<{
   id: string;
@@ -106,7 +107,8 @@ export function AttachmentRemove({
   const { data, onRemove } = useAttachment();
   const { t } = useTranslation("conversation");
   return (
-    <button
+    <Button
+      variant="ghost"
       aria-label={t("aiElements.removeAttachment", { name: data.name })}
       className={`grid size-6 shrink-0 place-items-center rounded-control text-muted-foreground hover:bg-control-hover hover:text-foreground ${className}`}
       onClick={(event) => {
@@ -119,6 +121,6 @@ export function AttachmentRemove({
       {...props}
     >
       {children ?? <X className="size-3.5" aria-hidden="true" />}
-    </button>
+    </Button>
   );
 }

@@ -27,7 +27,8 @@ import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import { countFileChangeLines, type AgentFileChange } from "../../diff/file-change.js";
 import { FileTree, FileTreeFile, FileTreeFolder } from "../../../shared/ai-elements/file-tree.js";
 import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
-import { IconButton } from "../../../shared/ui/icon-button.js";
+import { Button } from "../../../shared/ui/button.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import {
   getProjectOpenAppsForTarget,
   ProjectOpenContextMenu,
@@ -256,15 +257,24 @@ function ProjectFileTreeDirectoryChildren({
         <span className="min-w-0 flex-1 truncate">
           {i18n.t("inspector.readFolderError", { name, ns: "conversation" })}
         </span>
-        <IconButton
-          label={i18n.t("inspector.refreshFolder", { name, ns: "conversation" })}
-          onClick={() => {
-            onRefreshDirectory(directoryPath);
-          }}
-          size="small"
-        >
-          <RefreshCw aria-hidden="true" className="size-3.5" />
-        </IconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label={i18n.t("inspector.refreshFolder", { name, ns: "conversation" })}
+              onClick={() => {
+                onRefreshDirectory(directoryPath);
+              }}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <RefreshCw aria-hidden="true" className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {i18n.t("inspector.refreshFolder", { name, ns: "conversation" })}
+          </TooltipContent>
+        </Tooltip>
       </div>
     );
   }
@@ -514,21 +524,29 @@ export function WorkbenchInspector({
           {i18n.t("inspector.title", { ns: "conversation" })}
         </h2>
         {onClose === undefined ? null : (
-          <IconButton
-            className="min-[1101px]:hidden"
-            label={i18n.t("shell.closeInspector", { ns: "workbench" })}
-            onClick={onClose}
-            size="small"
-          >
-            <PanelRightClose aria-hidden="true" className="size-3.5" />
-          </IconButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={i18n.t("shell.closeInspector", { ns: "workbench" })}
+                className="min-[1101px]:hidden"
+                onClick={onClose}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <PanelRightClose aria-hidden="true" className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{i18n.t("shell.closeInspector", { ns: "workbench" })}</TooltipContent>
+          </Tooltip>
         )}
       </div>
 
       <div className="px-2.5 pb-1.5">
         <div className="grid grid-cols-2 rounded-control bg-control p-0.5" role="tablist">
           {(["changes", "context"] as const).map((value) => (
-            <button
+            <Button
+              variant="ghost"
               aria-selected={tab === value}
               className={`h-7 rounded-control text-label font-medium transition-colors ${
                 tab === value
@@ -545,7 +563,7 @@ export function WorkbenchInspector({
               {value === "changes"
                 ? i18n.t("inspector.changes", { ns: "conversation" })
                 : i18n.t("inspector.context", { ns: "conversation" })}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -583,7 +601,8 @@ export function WorkbenchInspector({
                   className="flex shrink-0 items-center justify-end gap-1.5"
                   role="group"
                 >
-                  <button
+                  <Button
+                    variant="ghost"
                     aria-haspopup="dialog"
                     aria-label={i18n.t("inspector.reviewChanges", {
                       count: allChanges.length,
@@ -596,8 +615,9 @@ export function WorkbenchInspector({
                     type="button"
                   >
                     {i18n.t("inspector.review", { ns: "conversation" })}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
                     aria-haspopup="dialog"
                     aria-label={i18n.t("inspector.commitChanges", {
                       count: allChanges.length,
@@ -610,7 +630,7 @@ export function WorkbenchInspector({
                     type="button"
                   >
                     {i18n.t("inspector.commit", { ns: "conversation" })}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : null}
@@ -622,17 +642,26 @@ export function WorkbenchInspector({
                       {i18n.t("inspector.gitChangesStopped", { ns: "conversation" })}
                     </p>
                   </div>
-                  <IconButton
-                    disabled={gitStatusRefreshing}
-                    label={i18n.t("inspector.refreshGit", { ns: "conversation" })}
-                    onClick={onRefreshGitStatus}
-                    size="small"
-                  >
-                    <RefreshCw
-                      aria-hidden="true"
-                      className={`size-3.5 ${gitStatusRefreshing ? "animate-spin" : ""}`}
-                    />
-                  </IconButton>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        aria-label={i18n.t("inspector.refreshGit", { ns: "conversation" })}
+                        disabled={gitStatusRefreshing}
+                        onClick={onRefreshGitStatus}
+                        size="icon-sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <RefreshCw
+                          aria-hidden="true"
+                          className={`size-3.5 ${gitStatusRefreshing ? "animate-spin" : ""}`}
+                        />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {i18n.t("inspector.refreshGit", { ns: "conversation" })}
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               ) : gitStatusPending && gitStatus === undefined ? (
                 <p className="mb-2 px-4 text-caption text-muted-foreground">
@@ -649,7 +678,8 @@ export function WorkbenchInspector({
                     <p className="text-label text-diff-removed">
                       {i18n.t("inspector.projectFilesError", { ns: "conversation" })}
                     </p>
-                    <button
+                    <Button
+                      variant="ghost"
                       aria-label={i18n.t("inspector.refreshProjectFiles", {
                         ns: "conversation",
                       })}
@@ -667,7 +697,7 @@ export function WorkbenchInspector({
                       {rootFileTreeState.isFetching
                         ? i18n.t("inspector.reading", { ns: "conversation" })
                         : i18n.t("inspector.refreshProjectFiles", { ns: "conversation" })}
-                    </button>
+                    </Button>
                   </div>
                 ) : rootFileTreeState?.isPending === true &&
                   rootFileTreeState.data === undefined ? (
@@ -810,6 +840,15 @@ function BackgroundTerminalSection({
           <div className="space-y-1">
             {terminals.map((terminal) => {
               const isTerminating = terminatingTerminalId === terminal.id;
+              const terminateLabel = isTerminating
+                ? i18n.t("inspector.terminalStopping", {
+                    command: terminal.command,
+                    ns: "conversation",
+                  })
+                : i18n.t("inspector.terminalStop", {
+                    command: terminal.command,
+                    ns: "conversation",
+                  });
               return (
                 <div
                   className="flex items-center gap-1 rounded-control px-2 py-1.5 hover:bg-control-hover"
@@ -830,24 +869,21 @@ function BackgroundTerminalSection({
                       {terminal.cwd}
                     </p>
                   </div>
-                  <IconButton
-                    disabled={terminatingTerminalId !== null}
-                    label={
-                      isTerminating
-                        ? i18n.t("inspector.terminalStopping", {
-                            command: terminal.command,
-                            ns: "conversation",
-                          })
-                        : i18n.t("inspector.terminalStop", {
-                            command: terminal.command,
-                            ns: "conversation",
-                          })
-                    }
-                    onClick={() => void onTerminate(terminal.id)}
-                    size="small"
-                  >
-                    <Square aria-hidden="true" className="size-3" />
-                  </IconButton>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        aria-label={terminateLabel}
+                        disabled={terminatingTerminalId !== null}
+                        onClick={() => void onTerminate(terminal.id)}
+                        size="icon-sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Square aria-hidden="true" className="size-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{terminateLabel}</TooltipContent>
+                  </Tooltip>
                 </div>
               );
             })}
@@ -889,7 +925,8 @@ function SubagentSection({
               subagent.reasoningEffort,
             ].filter((value): value is string => value !== undefined);
             return (
-              <button
+              <Button
+                variant="ghost"
                 aria-haspopup="dialog"
                 aria-label={i18n.t("inspector.subagentOutput", {
                   nickname: subagent.nickname,
@@ -908,7 +945,7 @@ function SubagentSection({
                 {metadata.length === 0 ? null : (
                   <p className="pb-2 text-caption text-muted-foreground">{metadata.join(" · ")}</p>
                 )}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -983,7 +1020,7 @@ function InspectorSourceRow({ source }: Readonly<{ source: InspectorSource }>) {
     source.kind === "project" ? (
       <FolderRoot aria-hidden="true" className="size-3.5" />
     ) : source.kind === "skill" ? (
-      <Sparkles aria-hidden="true" className="size-3.5 text-accent" />
+      <Sparkles aria-hidden="true" className="size-3.5 text-primary" />
     ) : (
       <Paperclip aria-hidden="true" className="size-3.5" />
     );
