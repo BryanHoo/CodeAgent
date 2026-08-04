@@ -70,7 +70,7 @@ export function PairingGate({
               <input
                 aria-label={t("access.codeLabel")}
                 autoComplete="one-time-code"
-                className="access-code-input min-w-0 flex-1 bg-transparent px-3 font-mono text-body outline-none"
+                className="access-code-input min-w-0 flex-1 bg-transparent px-3 font-mono text-body"
                 id="access-pairing-code"
                 onChange={(event) => {
                   setCode(event.currentTarget.value);

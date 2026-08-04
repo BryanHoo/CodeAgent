@@ -259,6 +259,11 @@ a {
   outline-offset: 2px;
 }
 
+/* 配对表单由外层 focus-within 绘制焦点，输入框自身不叠加全局轮廓。 */
+.access-code-input:focus-visible {
+  outline: none;
+}
+
 /* Composer 以整体外框表达焦点，内部输入与工具控件不再重复绘制主色轮廓。 */
 [data-prompt-input] :focus-visible {
   outline: none;

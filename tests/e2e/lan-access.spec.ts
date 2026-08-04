@@ -20,6 +20,9 @@ test("pairs real browsers, persists the cookie, and invalidates it on logout", a
   expect(sockets).toEqual([]);
 
   const codeInput = page.getByRole("textbox", { name: "配对码" });
+  await expect(page.locator("#access-pairing-code")).toHaveCount(1);
+  await codeInput.focus();
+  await expect(codeInput).toHaveCSS("outline-style", "none");
   await codeInput.fill("wrong-pairing-code");
   await page.getByRole("button", { name: "配对" }).click();
   await expect(page.getByRole("alert")).toContainText("无法完成配对");
