@@ -44,13 +44,24 @@ const UNC_FILE_REFERENCE_PREFIX = "/__code_agent_unc__/";
 const RELATIVE_FILE_REFERENCE_PREFIX = "/__code_agent_relative__/";
 const RELATIVE_MARKDOWN_FILE_REFERENCE_PATTERN =
   /(?<=\]\()(?![a-z][a-z0-9+.-]*:|\/|#)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
+const LOCAL_MARKDOWN_FILE_REFERENCE_PATTERN =
+  /(?<=\]\()\/(?!\/)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
+
+function decodeMarkdownFileReference(href: string): string {
+  try {
+    // Markdown href 遵循 URL 编码规则；预览前只解码一次，避免 Client 再次编码百分号。
+    return decodeURIComponent(href);
+  } catch {
+    return href;
+  }
+}
 
 function getFileReferenceMetadata(href: string | undefined): FileReferenceMetadata | null {
   if (href === undefined) {
     return null;
   }
 
-  const match = LOCAL_FILE_REFERENCE_PATTERN.exec(href);
+  const match = LOCAL_FILE_REFERENCE_PATTERN.exec(decodeMarkdownFileReference(href));
   const matchedGroups = match?.groups;
   if (matchedGroups === undefined) {
     return null;
@@ -74,8 +85,8 @@ function getFileReferenceMetadata(href: string | undefined): FileReferenceMetada
   };
 }
 
-function normalizeWindowsMarkdownFileReferences(markdown: string): string {
-  // 将 Windows 路径转成 Markdown 可安全解析的斜杠形式，盘符路径点击时再移除前导斜杠。
+function normalizeMarkdownFileReferences(markdown: string): string {
+  // 先统一本地路径形式，再编码 Markdown 目标中不允许裸写的空白字符。
   return markdown
     .replace(WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN, (reference) => {
       const normalizedReference = reference.replaceAll("\\", "/");
@@ -87,6 +98,9 @@ function normalizeWindowsMarkdownFileReferences(markdown: string): string {
     .replace(
       RELATIVE_MARKDOWN_FILE_REFERENCE_PATTERN,
       (reference) => `${RELATIVE_FILE_REFERENCE_PREFIX}${reference}`,
+    )
+    .replace(LOCAL_MARKDOWN_FILE_REFERENCE_PATTERN, (reference) =>
+      reference.replaceAll(" ", "%20").replaceAll("\t", "%09"),
     );
 }
 
@@ -406,7 +420,7 @@ function MessageResponseContent({
   ...props
 }: MessageResponseProps) {
   const parsedResponse = parseCodeComments(children ?? "");
-  const normalizedMarkdown = normalizeWindowsMarkdownFileReferences(parsedResponse.markdown);
+  const normalizedMarkdown = normalizeMarkdownFileReferences(parsedResponse.markdown);
   const markdownComponents: Components = {
     ...components,
     a: MarkdownLink,

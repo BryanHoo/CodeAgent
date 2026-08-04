@@ -304,6 +304,55 @@ describe("AI Elements primitives", () => {
     expect(markup).not.toContain('href="/workspace/docs/architecture-design.md:716"');
   });
 
+  it("decodes URL-encoded UTF-8 local file references before preview", () => {
+    const markup = renderToStaticMarkup(
+      <Message from="assistant">
+        <MessageContent>
+          <MessageResponse onOpenFileReference={() => undefined}>
+            {
+              "[后续工作交接.pptx](/home/taoye/%E4%B8%8B%E8%BD%BD/AI%E9%A2%86%E8%88%AA%C2%B7%E6%99%BA%E8%A7%81%E6%9C%AA%E6%9D%A5/%E5%90%8E%E7%BB%AD%E5%B7%A5%E4%BD%9C%E4%BA%A4%E6%8E%A5.pptx)"
+            }
+          </MessageResponse>
+        </MessageContent>
+      </Message>,
+    );
+
+    expect(markup).toContain('title="/home/taoye/下载/AI领航·智见未来/后续工作交接.pptx"');
+    expect(markup).not.toContain("%E4%B8%8B%E8%BD%BD");
+  });
+
+  it("renders local file references containing unencoded spaces", () => {
+    const markup = renderToStaticMarkup(
+      <Message from="assistant">
+        <MessageContent>
+          <MessageResponse onOpenFileReference={() => undefined}>
+            {"[后续工作交接.pptx](/home/taoye/下载/AI 领航/后续 工作交接.pptx)"}
+          </MessageResponse>
+        </MessageContent>
+      </Message>,
+    );
+
+    expect(markup).toContain('title="/home/taoye/下载/AI 领航/后续 工作交接.pptx"');
+    expect(markup).toContain('data-file-reference="true"');
+  });
+
+  it("decodes UTF-8 byte runs without rewriting literal percent signs", () => {
+    const markup = renderToStaticMarkup(
+      <Message from="assistant">
+        <MessageContent>
+          <MessageResponse onOpenFileReference={() => undefined}>
+            {
+              "[后续工作交接.pptx](/home/taoye/100%完成/%E5%90%8E%E7%BB%AD%E5%B7%A5%E4%BD%9C%E4%BA%A4%E6%8E%A5.pptx)"
+            }
+          </MessageResponse>
+        </MessageContent>
+      </Message>,
+    );
+
+    expect(markup).toContain('title="/home/taoye/100%完成/后续工作交接.pptx"');
+    expect(markup).not.toContain("%E5%90%8E%E7%BB%AD");
+  });
+
   it("renders Windows Markdown file references as source preview buttons", () => {
     const markup = renderToStaticMarkup(
       <Message from="assistant">

@@ -340,7 +340,7 @@ export const projectFileTreeByDirectory = new Map<string | null, object>([
         { path: "design", type: "directory" },
         { path: "docs", type: "directory" },
         { path: "package.json", type: "file" },
-        { path: "report.docx", type: "file" },
+        { path: "100%完成 后续工作交接.pptx", type: "file" },
       ],
       path: null,
     },
@@ -414,7 +414,7 @@ export const taskSnapshot = {
         {
           id: "message-2",
           role: "assistant",
-          text: "工作台界面已按统一的 AI Elements 结构重新组织。\n\n[architecture-design.md](/workspace/CodeAgent/docs/architecture-design.md:716)\n\n[result.png](/workspace/CodeAgent/design/result.png)\n\n[report.docx](/workspace/CodeAgent/report.docx)\n\n[OpenAI](https://openai.com)",
+          text: "工作台界面已按统一的 AI Elements 结构重新组织。\n\n[architecture-design.md](/workspace/CodeAgent/docs/architecture-design.md:716)\n\n[result.png](/workspace/CodeAgent/design/result.png)\n\n[后续工作交接.pptx](/home/taoye/100%完成/AI 领航/%E5%90%8E%E7%BB%AD%E5%B7%A5%E4%BD%9C%E4%BA%A4%E6%8E%A5.pptx)\n\n[OpenAI](https://openai.com)",
           type: "message",
         },
       ],

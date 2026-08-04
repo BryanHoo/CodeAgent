@@ -19,7 +19,7 @@
 - 测试断言用户可观察行为，不复制实现细节。
 - Snapshot 恢复 E2E 必须覆盖至少一次请求失败、旧 Timeline 与非阻塞恢复状态持续可见、自动重试成功，以及成功后新实时事件继续渲染。
 - i18n 单元测试必须覆盖语言匹配、损坏存储回退、资源 key 对齐和 `<html lang>` 同步；关键 E2E 必须覆盖设置内切换英文、刷新后持久化、Codex 官方英文术语，以及用户/Assistant/服务端动态内容保持原样。
-- Agent 消息中的本地文件引用必须覆盖 POSIX、Windows 盘符和 UNC 路径；这些路径只能进入受控源码预览，外部 URL 仍使用 Markdown 渲染器的默认安全策略。
+- Agent 消息中的本地文件引用必须覆盖 POSIX、Windows 盘符、UNC、原始或 URL 编码的 UTF-8 路径、未编码空白和字面 `%`；本地 Markdown 目标在解析前编码不允许裸写的空白，href 在进入受控预览前只解码一次，外部 URL 仍使用 Markdown 渲染器的默认安全策略。
 - 持有事件序号、Session 或场景状态的 E2E Server 必须由 worker fixture 为每个 Playwright worker 启动独立进程，并使用操作系统动态分配的独立端口；不得跨 worker 共享内存状态、实时事件或静态资源缓存。
 - LAN Access E2E 必须使用独立 Worker Fastify 进程和真实 Cookie、HTTP、WebSocket，不得用 `page.route()` 伪造 Access API。至少覆盖错误与正确配对、刷新保持、无 Cookie Browser Context、注销失效，以及未认证时无 Project 请求或 WebSocket。
 - 大型 App Shell Playwright 套件按 Settings/Navigation、Composer、Runtime、Inspector/Layout 领域拆分，共享默认 API mock 只能放入 per-test fixture；领域文件不得共享可变模块状态或依赖执行顺序。Fake App Server 场景在领域文件内部串行，领域文件之间保持并行，并校验迁移前后测试总数不减少。

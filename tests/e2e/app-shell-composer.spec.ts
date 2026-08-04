@@ -499,7 +499,8 @@ test("routes assistant links, images, and system files by Markdown file rules", 
     }
     const body = parseRequestRecord(request.postData());
     return (
-      body["appId"] === "system-default" && body["path"] === "/workspace/CodeAgent/report.docx"
+      body["appId"] === "system-default" &&
+      body["path"] === "/home/taoye/100%完成/AI 领航/后续工作交接.pptx"
     );
   });
   await page.goto("/p/code-agent/t/task-1");
@@ -518,9 +519,9 @@ test("routes assistant links, images, and system files by Markdown file rules", 
   await page.keyboard.press("Escape");
   await expect(imageDialog).toBeHidden();
 
-  await page.getByRole("button", { name: "report.docx" }).click();
+  await page.getByRole("button", { name: "后续工作交接.pptx" }).click();
   await systemOpenRequest;
-  await expect(page.getByRole("dialog", { name: "report.docx" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "后续工作交接.pptx" })).toHaveCount(0);
 });
 
 test("project file tree opens changed, source, image, and system files by shared rules", async ({
@@ -574,11 +575,11 @@ test("project file tree opens changed, source, image, and system files by shared
       return false;
     }
     const body = parseRequestRecord(request.postData());
-    return body["appId"] === "system-default" && body["path"] === "report.docx";
+    return body["appId"] === "system-default" && body["path"] === "100%完成 后续工作交接.pptx";
   });
-  await fileTree.getByRole("treeitem", { name: "report.docx" }).click();
+  await fileTree.getByRole("treeitem", { name: "100%完成 后续工作交接.pptx" }).click();
   await systemOpenRequest;
-  await expect(page.getByRole("dialog", { name: "report.docx" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "100%完成 后续工作交接.pptx" })).toHaveCount(0);
 });
 
 test("project file tree context menu opens files and folders with a selected app", async ({
