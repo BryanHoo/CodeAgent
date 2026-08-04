@@ -1,4 +1,10 @@
 {
   "files": [],
+  "compilerOptions": {
+    // shadcn CLI 只读取入口配置，不跟随 Project References 解析 tsconfig.app.json。
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
   "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
 }
