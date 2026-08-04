@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { PendingRequest } from "@code-agent/protocol";
 
 import {
+  buildProjectAttachmentUrl,
   buildProjectImageFileUrl,
   CodeAgentClient,
   CodeAgentHttpError,
@@ -115,6 +116,12 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("builds opaque pending attachment preview URLs", () => {
+    expect(buildProjectAttachmentUrl("http://127.0.0.1:3210/", "code agent", "image/1")).toBe(
+      "http://127.0.0.1:3210/v1/projects/code%20agent/attachments/image%2F1",
+    );
+  });
+
   it("builds encoded historical attachment URLs from the configured base URL", () => {
     const client = new CodeAgentClient({ baseUrl: "http://127.0.0.1:3210/" });
 
@@ -191,6 +198,39 @@ describe("CodeAgentClient", () => {
       body: JSON.stringify({ rootPath: project.rootPath }),
       method: "POST",
     });
+  });
+
+  it("browses host attachment files and imports the selected host path", async () => {
+    const selectedPath = "/Users/bryan/Pictures/screen image.png";
+    const listing = {
+      entries: [{ name: "screen image.png", path: selectedPath, type: "file" as const }],
+      parentPath: "/Users/bryan",
+      path: "/Users/bryan/Pictures",
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(listing))
+      .mockResolvedValueOnce(jsonResponse({ attachment }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.listHostFiles("image", listing.path)).resolves.toEqual(listing);
+    await expect(
+      client.importHostAttachment("code agent", "image", selectedPath, {
+        idempotencyKey: "host-image-key",
+      }),
+    ).resolves.toEqual({ attachment });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/host-files?kind=image&path=%2FUsers%2Fbryan%2FPictures",
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/v1/projects/code%20agent/attachments/image/host");
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      body: JSON.stringify({ path: selectedPath }),
+      method: "POST",
+    });
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("idempotency-key")).toBe(
+      "host-image-key",
+    );
   });
 
   it("renames and removes an encoded project id with idempotency keys", async () => {

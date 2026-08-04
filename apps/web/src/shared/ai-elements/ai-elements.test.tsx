@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { Conversation, ConversationContent, ConversationVirtualList } from "./conversation.js";
 import {
@@ -473,7 +473,7 @@ describe("AI Elements primitives", () => {
         </PromptInputBody>
         <PromptInputFooter>
           <PromptInputTools>
-            <PromptInputActionAddAttachments />
+            <PromptInputActionAddAttachments onSelectKind={vi.fn()} />
           </PromptInputTools>
           <PromptInputSubmit aria-label="提交" disabled status="idle" />
         </PromptInputFooter>
@@ -484,9 +484,7 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('aria-label="提交"');
     expect(markup).toContain("disabled");
     expect(markup).toContain("shadow-floating");
-    expect(markup).toContain('type="file"');
-    expect(markup).toContain('accept=".png,.jpg,.jpeg,.webp,.gif"');
-    expect(markup).toContain('accept=".pdf,.docx,.xlsx,.txt,.md"');
+    expect(markup).not.toContain('type="file"');
     expect(markup).toContain('aria-label="添加图片或文件"');
     expect(markup).toContain("添加图片");
     expect(markup).toContain("添加文件");

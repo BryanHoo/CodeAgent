@@ -10,7 +10,6 @@ import {
   useRef,
   useState,
   type ButtonHTMLAttributes,
-  type ChangeEvent,
   type FormHTMLAttributes,
   type HTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -19,13 +18,19 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import { v4 as createUuid } from "uuid";
+import type { AgentAttachment } from "@code-agent/protocol";
 
 import { useTranslation } from "../../i18n/i18n.js";
 import { Button } from "../ui/button.js";
-import { Input } from "../ui/input.js";
 import type { AttachmentData } from "./attachments.js";
 
-export type PromptInputAttachment = AttachmentData & Readonly<{ file: File }>;
+export type PromptInputAttachment = AttachmentData &
+  Readonly<{ file: File; source: "browser" } | { attachment: AgentAttachment; source: "host" }>;
+
+export type BrowserPromptInputAttachment = Extract<
+  PromptInputAttachment,
+  Readonly<{ source: "browser" }>
+>;
 
 export type PromptInputMessage = Readonly<{
   files: readonly PromptInputAttachment[];
@@ -59,13 +64,12 @@ type PromptInputError = Readonly<{
   message: string;
 }>;
 
-type PromptInputAttachmentKind = "file" | "image";
+export type PromptInputAttachmentKind = "file" | "image";
 
 type PromptInputAttachmentsContextValue = Readonly<{
   clear: () => void;
   disabled: boolean;
   files: readonly PromptInputAttachment[];
-  openFileDialog: (kind: PromptInputAttachmentKind) => void;
   remove: (id: string) => void;
 }>;
 
@@ -170,8 +174,6 @@ export function PromptInput({
   const files = attachments ?? internalFiles;
   const filesRef = useRef(files);
   const controlledRef = useRef(attachments !== undefined);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const previousResetKeyRef = useRef(resetKey);
   filesRef.current = files;
   controlledRef.current = attachments !== undefined;
@@ -264,6 +266,7 @@ export function PromptInput({
             name: file.name,
             previewUrl: URL.createObjectURL(file),
             size: file.size,
+            source: "browser",
           });
           if (kind === "image") {
             imageCount += 1;
@@ -299,8 +302,6 @@ export function PromptInput({
       current.forEach(revokePreview);
       return [];
     });
-    if (fileInputRef.current !== null) fileInputRef.current.value = "";
-    if (imageInputRef.current !== null) imageInputRef.current.value = "";
   }, [updateFiles]);
 
   useLayoutEffect(() => {
@@ -370,11 +371,6 @@ export function PromptInput({
       clear,
       disabled,
       files,
-      openFileDialog: (kind) => {
-        if (!disabled) {
-          (kind === "image" ? imageInputRef : fileInputRef).current?.click();
-        }
-      },
       remove,
     }),
     [clear, disabled, files, remove],
@@ -421,32 +417,6 @@ export function PromptInput({
           onSubmit?.({ files, text: typeof value === "string" ? value : "" }, event);
         }}
       >
-        <Input
-          accept={imageAccept}
-          className="sr-only"
-          disabled={disabled}
-          multiple={multiple}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => {
-            addFiles([...(event.currentTarget.files ?? [])]);
-            event.currentTarget.value = "";
-          }}
-          ref={imageInputRef}
-          tabIndex={-1}
-          type="file"
-        />
-        <Input
-          accept={fileAccept}
-          className="sr-only"
-          disabled={disabled}
-          multiple={multiple}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => {
-            addFiles([...(event.currentTarget.files ?? [])]);
-            event.currentTarget.value = "";
-          }}
-          ref={fileInputRef}
-          tabIndex={-1}
-          type="file"
-        />
         {children}
       </form>
     </PromptInputAttachmentsContext.Provider>
@@ -595,12 +565,16 @@ export const PromptInputTextarea = forwardRef<HTMLTextAreaElement, PromptInputTe
   },
 );
 
-type PromptInputActionAddAttachmentsProps = PromptInputButtonProps & { label?: string };
+type PromptInputActionAddAttachmentsProps = PromptInputButtonProps & {
+  label?: string;
+  onSelectKind: (kind: PromptInputAttachmentKind) => void;
+};
 
 export function PromptInputActionAddAttachments({
   children,
   label,
   onClick,
+  onSelectKind,
   ...props
 }: PromptInputActionAddAttachmentsProps) {
   const attachments = usePromptInputAttachments();
@@ -640,7 +614,7 @@ export function PromptInputActionAddAttachments({
         }}
         title={accessibleLabel}
       >
-        {children ?? <Paperclip className="size-3.5" aria-hidden="true" />}
+        {children ?? <Paperclip aria-hidden="true" className="size-3.5" />}
       </PromptInputButton>
       <div
         className="absolute bottom-9 left-0 z-50 min-w-36 rounded-control border border-separator-strong bg-raised p-1 shadow-floating"
@@ -652,7 +626,7 @@ export function PromptInputActionAddAttachments({
           className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-left text-label text-foreground hover:bg-control-hover"
           onClick={() => {
             setOpen(false);
-            attachments.openFileDialog("image");
+            onSelectKind("image");
           }}
           role="menuitem"
           type="button"
@@ -665,7 +639,7 @@ export function PromptInputActionAddAttachments({
           className="flex h-8 w-full items-center gap-2 rounded-control px-2 text-left text-label text-foreground hover:bg-control-hover"
           onClick={() => {
             setOpen(false);
-            attachments.openFileDialog("file");
+            onSelectKind("file");
           }}
           role="menuitem"
           type="button"

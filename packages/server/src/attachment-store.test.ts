@@ -38,9 +38,14 @@ describe("AttachmentStore", () => {
       name: "screen.png",
       size: 68,
     });
+    await expect(store.read("code-agent", attachment.id)).resolves.toEqual({
+      attachment,
+      content: Buffer.from(pixelDataUrl.split(",")[1] ?? "", "base64"),
+    });
     await expect(store.resolve("code-agent", [attachment.id])).resolves.toEqual([
       { kind: "image", mediaType: "image/png", size: 68, url: pixelDataUrl },
     ]);
+    await expect(store.read("other", attachment.id)).rejects.toThrow(AttachmentNotFoundError);
     await expect(store.resolve("other", [attachment.id])).rejects.toThrow(AttachmentNotFoundError);
   });
 

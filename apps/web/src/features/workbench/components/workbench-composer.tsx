@@ -1,4 +1,5 @@
 import type {
+  AgentAttachment,
   AgentCapabilities,
   AgentGlobalSettings,
   AgentMessageAttachment,
@@ -10,6 +11,7 @@ import type {
   AgentTaskSettings,
   AgentTurn,
   AgentTurnOptions,
+  HostFileKind,
   ProjectGitStatus,
 } from "@code-agent/protocol";
 import {
@@ -32,12 +34,14 @@ import {
   type QueuedComposerPrompt,
 } from "../composer-draft-context.js";
 import type {
+  BrowserPromptInputAttachment,
   PromptInputAttachment,
   PromptInputMessage,
 } from "../../../shared/ai-elements/prompt-input.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 import { useWorkbenchComposerController } from "../hooks/use-workbench-composer-controller.js";
 import { WorkbenchComposerView } from "./workbench-composer-view.js";
+import { HostAttachmentPickerDialog } from "./host-attachment-picker-dialog.js";
 import {
   insertPromptSkill,
   isPromptSkillContentEmpty,
@@ -126,6 +130,16 @@ type WorkbenchComposerProps = Readonly<{
   taskId?: string;
 }>;
 
+export async function resolvePromptAttachment(
+  attachment: PromptInputAttachment,
+  uploadBrowserAttachment: (attachment: BrowserPromptInputAttachment) => Promise<AgentAttachment>,
+): Promise<AgentAttachment> {
+  if (attachment.source === "host") {
+    return attachment.attachment;
+  }
+  return uploadBrowserAttachment(attachment);
+}
+
 export function WorkbenchComposer({
   capabilities,
   client,
@@ -161,6 +175,7 @@ export function WorkbenchComposer({
   const [attachments, setAttachments] = useState<readonly PromptInputAttachment[]>(
     initialComposerDraft.attachments,
   );
+  const [attachmentPickerKind, setAttachmentPickerKind] = useState<HostFileKind>();
   const [commandDraftMode, setCommandDraftMode] = useState<ComposerCommandDraftMode | null>(
     initialComposerDraft.commandDraftMode,
   );
@@ -325,6 +340,7 @@ export function WorkbenchComposer({
       // 切换聊天时恢复对应草稿，同时保留编辑节点和焦点，避免重建原生 IME 会话。
       setPromptContent(restoredDraft.content);
       setAttachments(restoredDraft.attachments);
+      setAttachmentPickerKind(undefined);
       setCommandDraftMode(restoredDraft.commandDraftMode);
       setQueuedPrompts(restoredDraft.queuedPrompts);
       skillEditorRef.current?.replace(restoredDraft.content);
@@ -456,27 +472,29 @@ export function WorkbenchComposer({
     let messageAttachments: readonly AgentMessageAttachment[];
     try {
       messageAttachments = await Promise.all(
-        message.files.map(async (attachment) => {
-          const uploaded = uploadedAttachments.current.get(attachment.id);
-          if (uploaded !== undefined) {
-            return uploaded;
-          }
-          const idempotencyKey = uploadAttempts.current.get(attachment.id) ?? createUuid();
-          uploadAttempts.current.set(attachment.id, idempotencyKey);
-          const response = await client.uploadAttachment(
-            projectId,
-            {
-              content: attachment.file,
-              kind: attachment.kind,
-              name: attachment.name,
-            },
-            { idempotencyKey },
-          );
-          if (isCurrentScope(requestScope)) {
-            uploadedAttachments.current.set(attachment.id, response.attachment);
-          }
-          return response.attachment;
-        }),
+        message.files.map((attachment) =>
+          resolvePromptAttachment(attachment, async (browserAttachment) => {
+            const uploaded = uploadedAttachments.current.get(browserAttachment.id);
+            if (uploaded !== undefined) {
+              return uploaded;
+            }
+            const idempotencyKey = uploadAttempts.current.get(browserAttachment.id) ?? createUuid();
+            uploadAttempts.current.set(browserAttachment.id, idempotencyKey);
+            const response = await client.uploadAttachment(
+              projectId,
+              {
+                content: browserAttachment.file,
+                kind: browserAttachment.kind,
+                name: browserAttachment.name,
+              },
+              { idempotencyKey },
+            );
+            if (isCurrentScope(requestScope)) {
+              uploadedAttachments.current.set(browserAttachment.id, response.attachment);
+            }
+            return response.attachment;
+          }),
+        ),
       );
       input = {
         attachments: messageAttachments.map((attachment) => ({ id: attachment.id })),
@@ -944,7 +962,7 @@ export function WorkbenchComposer({
     canSteer,
   );
 
-  return (
+  const composerView = (
     <WorkbenchComposerView
       activeCommandIndex={activeCommandIndex}
       activeCommandItemId={activeCommandItemId}
@@ -1020,6 +1038,7 @@ export function WorkbenchComposer({
         setCommandSlashCommand(slashCommand);
       }}
       onSelectActiveCommand={selectActiveCommandItem}
+      onSelectAttachmentKind={setAttachmentPickerKind}
       onSelectSkill={selectSkill}
       onSettingsChange={updateSettings}
       onSubmit={(message) => {
@@ -1057,5 +1076,28 @@ export function WorkbenchComposer({
       taskId={taskId}
       turnControlsDisabled={turnControlsDisabled}
     />
+  );
+  if (attachmentPickerKind === undefined) {
+    return composerView;
+  }
+  return (
+    <>
+      {composerView}
+      <HostAttachmentPickerDialog
+        client={client}
+        kind={attachmentPickerKind}
+        onAdd={(attachment) => {
+          if (!isCurrentScope(routeScope)) {
+            return;
+          }
+          handleAttachmentsChange([...attachments, attachment]);
+          setAttachmentPickerKind(undefined);
+        }}
+        onClose={() => {
+          setAttachmentPickerKind(undefined);
+        }}
+        projectId={projectId}
+      />
+    </>
   );
 }

@@ -71,6 +71,51 @@ export const ProjectDirectoryListingSchema = Type.Object(
 
 export type ProjectDirectoryListing = Readonly<Static<typeof ProjectDirectoryListingSchema>>;
 
+export const HostFileKindSchema = Type.Union([Type.Literal("file"), Type.Literal("image")]);
+
+export type HostFileKind = Static<typeof HostFileKindSchema>;
+
+export const HostFileQuerySchema = Type.Object(
+  {
+    kind: HostFileKindSchema,
+    path: Type.Optional(ProjectDirectoryPathSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type HostFileQuery = Readonly<Static<typeof HostFileQuerySchema>>;
+
+export const HostFileEntrySchema = Type.Object(
+  {
+    name: Type.String({ minLength: 1 }),
+    path: ProjectDirectoryPathSchema,
+    type: Type.Union([Type.Literal("directory"), Type.Literal("file")]),
+  },
+  { additionalProperties: false },
+);
+
+export type HostFileEntry = Readonly<Static<typeof HostFileEntrySchema>>;
+
+export const HostFileListingSchema = Type.Object(
+  {
+    entries: Type.Array(HostFileEntrySchema),
+    parentPath: Type.Union([ProjectDirectoryPathSchema, Type.Null()]),
+    path: ProjectDirectoryPathSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type HostFileListing = Readonly<Static<typeof HostFileListingSchema>>;
+
+export const ImportHostAttachmentRequestSchema = Type.Object(
+  { path: ProjectDirectoryPathSchema },
+  { additionalProperties: false },
+);
+
+export type ImportHostAttachmentRequest = Readonly<
+  Static<typeof ImportHostAttachmentRequestSchema>
+>;
+
 export const AddProjectRequestSchema = Type.Object(
   { rootPath: ProjectDirectoryPathSchema },
   { additionalProperties: false },

@@ -1,4 +1,4 @@
-import { AgentAttachmentKindSchema } from "@code-agent/protocol";
+import { AgentAttachmentKindSchema, HostFileKindSchema } from "@code-agent/protocol";
 
 export const ProjectParamsSchema = {
   additionalProperties: false,
@@ -14,6 +14,26 @@ export const ProjectAttachmentParamsSchema = {
     projectId: { minLength: 1, type: "string" },
   },
   required: ["kind", "projectId"],
+  type: "object",
+} as const;
+
+export const ProjectHostAttachmentParamsSchema = {
+  additionalProperties: false,
+  properties: {
+    kind: HostFileKindSchema,
+    projectId: { minLength: 1, type: "string" },
+  },
+  required: ["kind", "projectId"],
+  type: "object",
+} as const;
+
+export const ProjectStoredAttachmentParamsSchema = {
+  additionalProperties: false,
+  properties: {
+    attachmentId: { minLength: 1, type: "string" },
+    projectId: { minLength: 1, type: "string" },
+  },
+  required: ["attachmentId", "projectId"],
   type: "object",
 } as const;
 

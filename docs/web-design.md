@@ -269,7 +269,7 @@ Project 名称行短按继续展开或收起 Task；指针移动超过点击容�
 - Inspector 在宽屏工作台默认显示，窄窗口关闭并按需作为抽屉打开。
 - Inspector 的“变更”页签固定保留只读的未提交变更摘要：左侧在标题下方同行展示变更总数和增删统计，最右侧并排展示相同中性背景的“审核”与“提交”按钮。“审核”打开统一文件审核 Dialog，“提交”暂不绑定操作；摘要下方使用 AI Elements `FileTree` 展示受限 Project 文件树，目录默认折叠并在用户展开时按需加载直接子项。存在 Git 变更的文件选择打开 Diff；其余文件复用 AI Markdown 文件引用分流，在项目内预览源码、文档和图片，并将不可预览格式交给系统默认应用。文件或目录节点右键后进入选中高亮态，并显示中栏 Project 打开控件的同一宿主应用列表；菜单顶部标识“打开方式”和当前目标路径，选择后立即用对应应用打开该目标，但不改写中栏默认应用偏好。
 - Composer 固定在 Timeline 底部，但不能覆盖滚动内容。
-- Composer 左侧依次展示附件、审批和沙盒模式；沙盒模式使用 Codex 有效 Project 配置初始化，并允许选择只读、工作区可写或完全访问。右侧继续展示模型、思考量和提交操作。
+- Composer 左侧依次展示附件、审批和沙盒模式；附件菜单的“添加图片”和“添加文件”打开宿主 FileTree Dialog，从 CodeAgent 运行设备的主目录开始按需浏览，已配对 LAN 浏览器使用相同交互，不调用浏览器原生文件选择器。沙盒模式使用 Codex 有效 Project 配置初始化，并允许选择只读、工作区可写或完全访问。右侧继续展示模型、思考量和提交操作。
 - 活动 Turn 运行时，非空 Composer 按全局默认行为将消息加入当前 Task 的 FIFO 队列或立即作为 `turn/steer` 引导发送；空输入仍显示停止操作。队列固定展示在输入框外部上方，每项提供带 Tooltip 的立即引导和取消图标按钮。
 - 排队项保存文本、Skill 与本地附件引用，附件只在实际发送时上传；当前 Turn 结束后自动启动队首消息，发送失败时保留队列。队列按 Task 草稿作用域隔离，取消、发送或 Draft Store 释放时同步释放不再使用的附件预览。
 - Composer 在文本开头或空白字符后输入 `/` 时显示外部浮层，连续正文字符后的 `/` 不触发；浮层先展示本地 Task 命令，再在命令组下方展示当前 Project 的 Codex Skills。每次选择只移除当前 Slash 片段并保留已有正文，允许在正文任意位置插入多个有序的 `accent` 主色 Token。Token 显示 Skill 展示名，内部值与复制文本为 `$<skill.name>`，可点击或使用邻接删除键移除。提交按 Token 顺序携带统一 Skill ID 与名称，不把 `$name` 拼接进普通正文，也不接收原生路径。
@@ -698,9 +698,9 @@ PromptInputMessage
   -> POST /v1/projects/:projectId/tasks/:taskId/turns
 ```
 
-附件必须先通过幂等 `POST /v1/projects/:projectId/attachments` 转换为 Server 受控引用。浏览器只把附件 ID 放入 `AgentPromptInput`，不得提交任意本地绝对路径作为已授权文件。普通文件由 Server 写入随机命名的 Runtime 临时目录并映射为 Codex `mention`，图片映射为 Codex `image`；纯文本粘贴严格超过 1,000 个 Unicode 字符时，Composer 将其转换为名为 `Pasted text.txt` 的 `text/plain` 附件，不把全文插入编辑器，Server 严格解码 UTF-8 后由 Provider 以带完整字节范围 `text_elements` 的独立 Codex 文本输入提交。
+附件必须先转换为 Server 受控引用。浏览器拖拽和粘贴通过幂等 `POST /v1/projects/:projectId/attachments/:kind` 上传二进制；附件按钮先通过 `GET /v1/host-files` 浏览宿主目录，再通过幂等 `POST /v1/projects/:projectId/attachments/:kind/host` 提交选中的严格绝对路径，由 Server 重新校验并直接导入统一附件 Store。Composer 草稿和队列只保存返回的 `AgentAttachment`，`AgentPromptInput` 仍只携带附件 ID，宿主路径不进入 Turn。普通文件由 Server 写入随机命名的 Runtime 临时目录并映射为 Codex `mention`，图片映射为 Codex `image`；纯文本粘贴严格超过 1,000 个 Unicode 字符时，Composer 将其转换为名为 `Pasted text.txt` 的 `text/plain` 附件，不把全文插入编辑器，Server 严格解码 UTF-8 后由 Provider 以带完整字节范围 `text_elements` 的独立 Codex 文本输入提交。
 
-附件菜单分别提供“添加图片”和“添加文件”。文件覆盖 OpenAI File Inputs 公布的 PDF、表格、富文档、演示、文本和代码格式，单个及同一 Prompt 合计最大 `50 MiB`；图片接受 PNG、JPEG、WebP 与非动画 GIF，同一 Prompt 最多 `1,500` 张、合计最大 `512 MiB`。预览使用短生命周期 Blob URL；删除、提交成功和组件卸载时立即释放。Server Store 同时限制总字节数和 TTL；普通文件在对应 Turn 结束后删除，图片和文本在 Provider 接受后消费。
+附件菜单分别提供“添加图片”和“添加文件”。文件覆盖 OpenAI File Inputs 公布的 PDF、表格、富文档、演示、文本和代码格式，单个及同一 Prompt 合计最大 `50 MiB`；图片接受 PNG、JPEG、WebP 与非动画 GIF，单张最大 `10 MiB`，同一 Prompt 最多 `20` 张且合计最大 `50 MiB`。拖拽和粘贴预览使用短生命周期 Blob URL，删除、提交成功和组件卸载时立即释放；宿主图片使用 Project 作用域的随机附件 ID 预览，不把宿主路径写入 URL。Server Store 同时限制总字节数和 TTL；普通文件在对应 Turn 结束后删除，图片和文本在 Provider 接受后消费。
 
 模型选择通过 `GET /v1/models` 读取真实 Provider 目录并优先选择 `isDefault`。思考量紧邻模型，只展示所选模型的 `supportedReasoningEfforts`，无有效选择时使用 `defaultReasoningEffort`。全局默认通过原子 `PUT /v1/settings` 保存审批、审核方、Agent 模型与思考量、沙盒模式、提交消息模型与思考量、提交提示词及默认打开应用；Project 默认通过原子 `PUT /v1/projects/:projectId/defaults` 保存模型、思考量与沙盒模式；已有 Task 通过原子 `PUT /v1/projects/:projectId/tasks/:taskId/settings` 保存完整设置。新 Task 创建时按 `Task > Project > Global` 固化当时的有效值，全局修改不得改写已有 Project 或 Task 记录。提交消息生成始终使用独立的全局提交配置，不继承已有 Task 或 Project 默认值。
 

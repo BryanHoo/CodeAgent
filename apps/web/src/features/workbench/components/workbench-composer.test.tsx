@@ -15,6 +15,7 @@ import {
   resolveComposerSubmitAction,
   resolveComposerPlaceholder,
   resolveReasoningEffort,
+  resolvePromptAttachment,
   startPromptTurn,
   startTaskReview,
   steerPromptTurn,
@@ -81,6 +82,34 @@ describe("WorkbenchComposer", () => {
   it("uses the official large-paste threshold and attachment name", () => {
     expect(LARGE_PASTE_CHARACTER_THRESHOLD).toBe(1_000);
     expect(PASTED_TEXT_ATTACHMENT_NAME).toBe("Pasted text.txt");
+  });
+
+  it("reuses an imported host attachment without uploading browser content again", async () => {
+    const attachment = {
+      id: "host-image",
+      kind: "image" as const,
+      mediaType: "image/png",
+      name: "screen.png",
+      size: 68,
+    };
+    const uploadBrowserAttachment = vi.fn();
+
+    await expect(
+      resolvePromptAttachment(
+        {
+          attachment,
+          id: attachment.id,
+          kind: attachment.kind,
+          mediaType: attachment.mediaType,
+          name: attachment.name,
+          previewUrl: "/v1/projects/code-agent/files/image?path=screen.png",
+          size: attachment.size,
+          source: "host",
+        },
+        uploadBrowserAttachment,
+      ),
+    ).resolves.toEqual(attachment);
+    expect(uploadBrowserAttachment).not.toHaveBeenCalled();
   });
 
   it("derives available actions from provider capabilities and task context", () => {

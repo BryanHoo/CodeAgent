@@ -21,6 +21,7 @@ import { Buffer } from "node:buffer";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { brotliDecompressSync, gunzipSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -45,6 +46,10 @@ const turnOptions = {
   reasoningEffort: "high",
   sandboxMode: "workspace-write",
 } as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 async function multipartAttachment(
   kind: "file" | "image" | "text",
@@ -886,6 +891,85 @@ describe("CodeAgent Server", () => {
     expect(response.json()).toEqual({ project: selectedProject });
     expect(resolveProjectDirectory).toHaveBeenCalledWith(selectedPath);
     expect(register).toHaveBeenCalledWith({ name: "CodeAgent", rootPath: selectedPath });
+  });
+
+  it("browses supported host files and imports a selected file idempotently", async () => {
+    const { provider } = createProvider();
+    const selectedPath = "/Users/bryan/Pictures/screen.png";
+    const listing = {
+      entries: [
+        { name: "design", path: "/Users/bryan/Pictures/design", type: "directory" as const },
+        { name: "screen.png", path: selectedPath, type: "file" as const },
+      ],
+      parentPath: "/Users/bryan",
+      path: "/Users/bryan/Pictures",
+    };
+    const readHostFileDirectory = vi.fn(() => Promise.resolve(listing));
+    const resolveHostAttachment = vi.fn(() =>
+      Promise.resolve({
+        content: Readable.from(Buffer.from(pixelDataUrl.split(",")[1] ?? "", "base64")),
+        kind: "image" as const,
+        mediaType: "image/png" as const,
+        name: "screen.png",
+      }),
+    );
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, { readHostFileDirectory, resolveHostAttachment }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const files = await app.inject({
+      method: "GET",
+      url: "/v1/host-files?kind=image&path=%2FUsers%2Fbryan%2FPictures",
+    });
+    const importRequest = {
+      headers: { "idempotency-key": "import-host-image" },
+      method: "POST" as const,
+      payload: { path: selectedPath },
+      url: "/v1/projects/code-agent/attachments/image/host",
+    };
+    const imported = await app.inject(importRequest);
+    const repeated = await app.inject(importRequest);
+    const importedBody: unknown = imported.json();
+    const importedAttachment = isRecord(importedBody) ? importedBody["attachment"] : undefined;
+    const importedAttachmentId =
+      isRecord(importedAttachment) && typeof importedAttachment["id"] === "string"
+        ? importedAttachment["id"]
+        : undefined;
+    if (importedAttachmentId === undefined) {
+      throw new Error("Imported host attachment response is invalid");
+    }
+    const preview = await app.inject({
+      method: "GET",
+      url: `/v1/projects/code-agent/attachments/${encodeURIComponent(importedAttachmentId)}`,
+    });
+    const missingPreview = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/attachments/missing",
+    });
+    const resolveCallsBeforeMissingProject = resolveHostAttachment.mock.calls.length;
+    const missingProject = await app.inject({
+      ...importRequest,
+      headers: { "idempotency-key": "missing-project-host-image" },
+      url: "/v1/projects/missing/attachments/image/host",
+    });
+
+    expect(files.statusCode).toBe(200);
+    expect(files.json()).toEqual(listing);
+    expect(readHostFileDirectory).toHaveBeenCalledWith("image", "/Users/bryan/Pictures");
+    expect(imported.statusCode).toBe(201);
+    expect(imported.json()).toMatchObject({
+      attachment: { kind: "image", mediaType: "image/png", name: "screen.png", size: 68 },
+    });
+    expect(repeated.json()).toEqual(imported.json());
+    expect(preview.statusCode).toBe(200);
+    expect(preview.headers["content-type"]).toBe("image/png");
+    expect(preview.headers["cache-control"]).toBe("no-store");
+    expect(preview.rawPayload).toEqual(Buffer.from(pixelDataUrl.split(",")[1] ?? "", "base64"));
+    expect(missingPreview.statusCode).toBe(404);
+    expect(resolveHostAttachment).toHaveBeenCalledWith("image", selectedPath);
+    expect(missingProject.statusCode).toBe(404);
+    expect(resolveHostAttachment).toHaveBeenCalledTimes(resolveCallsBeforeMissingProject);
   });
 
   it("renames and removes only the registered project idempotently", async () => {

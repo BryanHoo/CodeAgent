@@ -1,4 +1,11 @@
-import { expect, taskSnapshot, taskSnapshotResponse, tasks, test } from "./fixtures/app-shell.js";
+import {
+  chooseHostAttachment,
+  expect,
+  taskSnapshot,
+  taskSnapshotResponse,
+  tasks,
+  test,
+} from "./fixtures/app-shell.js";
 
 test.describe.configure({ mode: "serial" });
 
@@ -1066,7 +1073,7 @@ test("ignores repeated interrupt clicks while the request is in flight", async (
 });
 
 test("preserves the prompt draft when submission fails", async ({ page }) => {
-  await page.route("**/v1/projects/code-agent/attachments/*", async (route) => {
+  await page.route("**/v1/projects/code-agent/attachments/image/host", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -1094,18 +1101,7 @@ test("preserves the prompt draft when submission fails", async ({ page }) => {
   });
   await page.goto("/p/code-agent");
   const prompt = page.getByRole("textbox", { name: "任务输入" });
-  const chooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "添加图片或文件" }).click();
-  await page.getByRole("menuitem", { name: "添加图片" }).click();
-  const chooser = await chooserPromise;
-  await chooser.setFiles({
-    buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-      "base64",
-    ),
-    mimeType: "image/png",
-    name: "preserved.png",
-  });
+  await chooseHostAttachment(page, "image", "preserved.png");
 
   await prompt.fill("失败后保留这段草稿");
   await page.getByRole("button", { exact: true, name: "提交" }).click();

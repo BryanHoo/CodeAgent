@@ -64,6 +64,11 @@ export type StoredAttachmentUpload = Readonly<{
   contentDigest: string;
 }>;
 
+export type StoredAttachmentContent = Readonly<{
+  attachment: AgentAttachment;
+  content: Buffer;
+}>;
+
 interface StoredAttachment {
   attachment: AgentAttachment;
   consumedTurnId?: string;
@@ -368,6 +373,16 @@ export class AttachmentStore {
       }
     }
     return resolved;
+  }
+
+  public async read(projectId: string, id: string): Promise<StoredAttachmentContent> {
+    await this.#pruneExpired();
+    const entry = this.#entries.get(id);
+    if (entry?.projectId !== projectId || entry.consumedTurnId !== undefined) {
+      throw new AttachmentNotFoundError();
+    }
+    // 预览只通过随机附件 ID 读取已导入副本，不向浏览器暴露宿主文件路径。
+    return { attachment: entry.attachment, content: await readFile(entry.path) };
   }
 
   public async consume(projectId: string, ids: readonly string[], turnId?: string): Promise<void> {

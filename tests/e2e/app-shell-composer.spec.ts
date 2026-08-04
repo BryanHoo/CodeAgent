@@ -1,5 +1,6 @@
 import {
   architectureSourcePreview,
+  chooseHostAttachment,
   expect,
   parseRequestRecord,
   projectGitStatus,
@@ -10,6 +11,20 @@ import {
 } from "./fixtures/app-shell.js";
 
 test.describe.configure({ mode: "serial" });
+
+test("keeps composer attachment icons aligned with the compact toolbar", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const attachmentButton = page.getByRole("button", { name: "添加图片或文件" });
+  await expect(attachmentButton).toHaveCSS("height", "28px");
+  await expect(attachmentButton.locator("svg")).toHaveCSS("width", "14px");
+  await expect(attachmentButton.locator("svg")).toHaveCSS("height", "14px");
+
+  await attachmentButton.click();
+  const imageMenuIcon = page.getByRole("menuitem", { name: "添加图片" }).locator("svg");
+  await expect(imageMenuIcon).toHaveCSS("width", "16px");
+  await expect(imageMenuIcon).toHaveCSS("height", "16px");
+});
 
 test("does not submit or select a command when Safari confirms an IME candidate", async ({
   page,
@@ -741,17 +756,24 @@ test("converts large pasted text into a submitted file attachment", async ({ pag
   });
 });
 
-test("submits attachments, approval policy, model, and reasoning effort through the real client contract", async ({
+test("submits host attachments, approval policy, model, and reasoning effort through the real client contract", async ({
   page,
 }) => {
-  let uploadRequest:
-    { contentType: string | undefined; postData: string | null; url: string } | undefined;
+  let importRequest: { body: unknown; url: string } | undefined;
   let turnBody: unknown;
-  await page.route("**/v1/projects/code-agent/attachments/*", async (route) => {
+  const previewRequests: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "GET" &&
+      request.url().endsWith("/v1/projects/code-agent/attachments/attachment-1")
+    ) {
+      previewRequests.push(request.url());
+    }
+  });
+  await page.route("**/v1/projects/code-agent/attachments/image/host", async (route) => {
     const request = route.request();
-    uploadRequest = {
-      contentType: request.headers()["content-type"],
-      postData: request.postData(),
+    importRequest = {
+      body: request.postDataJSON(),
       url: request.url(),
     };
     await route.fulfill({
@@ -804,19 +826,9 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   );
   await approvalSelect.selectOption("auto-review");
   await sandboxSelect.selectOption("danger-full-access");
-  const chooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "添加图片或文件" }).click();
-  await page.getByRole("menuitem", { name: "添加图片" }).click();
-  const chooser = await chooserPromise;
-  await chooser.setFiles({
-    buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-      "base64",
-    ),
-    mimeType: "image/png",
-    name: "screen.png",
-  });
+  await chooseHostAttachment(page, "image", "screen.png");
   await expect(page.getByText("screen.png", { exact: true })).toBeVisible();
+  await expect.poll(() => previewRequests).toHaveLength(1);
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   const commandMenu = page.getByRole("listbox", { name: "输入命令" });
   await prompt.fill("/security");
@@ -838,9 +850,8 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   await expect(prompt.locator("[data-prompt-skill-id]")).toHaveCount(0);
   await expect(page.getByText("screen.png", { exact: true })).toHaveCount(0);
   await expect(page.locator('[data-message-skill="documentation-writer"]')).toBeVisible();
-  expect(uploadRequest?.url).toMatch(/\/attachments\/image$/u);
-  expect(uploadRequest?.contentType).toMatch(/^multipart\/form-data; boundary=/u);
-  expect(uploadRequest?.postData).toContain('name="attachment"; filename="screen.png"');
+  expect(importRequest?.url).toMatch(/\/attachments\/image\/host$/u);
+  expect(importRequest?.body).toEqual({ path: "/Users/bryan/Attachments/screen.png" });
   expect(turnBody).toEqual({
     input: {
       attachments: [{ id: "attachment-1" }],
@@ -861,15 +872,13 @@ test("submits attachments, approval policy, model, and reasoning effort through 
   });
 });
 
-test("selects and submits an official file input as an attachment", async ({ page }) => {
-  let uploadRequest:
-    { contentType: string | undefined; postData: string | null; url: string } | undefined;
+test("selects and submits a host file as an attachment", async ({ page }) => {
+  let importRequest: { body: unknown; url: string } | undefined;
   let turnBody: unknown;
-  await page.route("**/v1/projects/code-agent/attachments/*", async (route) => {
+  await page.route("**/v1/projects/code-agent/attachments/file/host", async (route) => {
     const request = route.request();
-    uploadRequest = {
-      contentType: request.headers()["content-type"],
-      postData: request.postData(),
+    importRequest = {
+      body: request.postDataJSON(),
       url: request.url(),
     };
     await route.fulfill({
@@ -906,23 +915,14 @@ test("selects and submits an official file input as an attachment", async ({ pag
   });
   await page.goto("/p/code-agent/t/task-1");
 
-  const chooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "添加图片或文件" }).click();
-  await page.getByRole("menuitem", { name: "添加文件" }).click();
-  const chooser = await chooserPromise;
-  await chooser.setFiles({
-    buffer: Buffer.from("%PDF-1.4"),
-    mimeType: "application/pdf",
-    name: "specification.pdf",
-  });
+  await chooseHostAttachment(page, "file", "specification.pdf");
   await expect(page.getByText("specification.pdf", { exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "任务输入" }).fill("总结附件");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
   await expect.poll(() => turnBody).not.toBeUndefined();
 
-  expect(uploadRequest?.url).toMatch(/\/attachments\/file$/u);
-  expect(uploadRequest?.contentType).toMatch(/^multipart\/form-data; boundary=/u);
-  expect(uploadRequest?.postData).toContain('name="attachment"; filename="specification.pdf"');
+  expect(importRequest?.url).toMatch(/\/attachments\/file\/host$/u);
+  expect(importRequest?.body).toEqual({ path: "/Users/bryan/Attachments/specification.pdf" });
   expect(turnBody).toMatchObject({
     input: {
       attachments: [{ id: "attachment-pdf" }],
@@ -1233,18 +1233,7 @@ test("stores composer drafts independently between task routes", async ({ page }
   });
   await page.goto("/p/code-agent/t/task-1");
   await page.getByRole("textbox", { name: "任务输入" }).fill("只属于 Task A 的草稿");
-  const chooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "添加图片或文件" }).click();
-  await page.getByRole("menuitem", { name: "添加图片" }).click();
-  const chooser = await chooserPromise;
-  await chooser.setFiles({
-    buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-      "base64",
-    ),
-    mimeType: "image/png",
-    name: "task-draft.png",
-  });
+  await chooseHostAttachment(page, "image", "task-draft.png");
   await expect(page.getByText("task-draft.png", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: /优化输入框交互/ }).click();

@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { expect, test as base } from "@playwright/test";
+import { expect, test as base, type Page } from "@playwright/test";
 
 export { expect };
 
@@ -118,6 +118,21 @@ export function parseRequestRecord(requestBody: string | null): Record<string, u
     throw new Error("Invalid JSON request body");
   }
   return value;
+}
+
+export async function chooseHostAttachment(
+  page: Page,
+  kind: "file" | "image",
+  fileName: string,
+): Promise<void> {
+  await page.getByRole("button", { name: "添加图片或文件" }).click();
+  await page.getByRole("menuitem", { name: kind === "image" ? "添加图片" : "添加文件" }).click();
+  const dialog = page.getByRole("dialog", {
+    name: kind === "image" ? "选择本机图片" : "选择本机文件",
+  });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("treeitem", { exact: true, name: fileName }).click();
+  await dialog.getByRole("button", { name: "添加所选文件" }).click();
 }
 
 export function parseProjectDefaultsRequest(requestBody: string | null) {
@@ -496,6 +511,19 @@ test.beforeEach(async ({ page }) => {
       });
       return;
     }
+    if (
+      /^\/v1\/projects\/[^/]+\/attachments\/[^/]+$/u.test(url.pathname) &&
+      route.request().method() === "GET"
+    ) {
+      await route.fulfill({
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64",
+        ),
+        contentType: "image/png",
+      });
+      return;
+    }
 
     let body: unknown;
 
@@ -558,6 +586,41 @@ test.beforeEach(async ({ page }) => {
         return project;
       });
       body = { data: routedProjects, nextCursor: null };
+    } else if (url.pathname === "/v1/host-files") {
+      const kind = url.searchParams.get("kind");
+      const fileNames =
+        kind === "image"
+          ? ["draft.png", "preserved.png", "screen.png", "task-draft.png"]
+          : ["specification.pdf"];
+      body = {
+        entries: fileNames.map((name) => ({
+          name,
+          path: `/Users/bryan/Attachments/${name}`,
+          type: "file",
+        })),
+        parentPath: "/Users/bryan",
+        path: "/Users/bryan/Attachments",
+      };
+    } else if (
+      /^\/v1\/projects\/[^/]+\/attachments\/(file|image)\/host$/u.test(url.pathname) &&
+      route.request().method() === "POST"
+    ) {
+      const kind = url.pathname.includes("/attachments/image/") ? "image" : "file";
+      const request = parseRequestRecord(route.request().postData());
+      const path = request["path"];
+      if (typeof path !== "string") {
+        throw new Error("Invalid host attachment request");
+      }
+      const name = path.split("/").at(-1) ?? "attachment";
+      body = {
+        attachment: {
+          id: `attachment-host-${name}`,
+          kind,
+          mediaType: kind === "image" ? "image/png" : "application/pdf",
+          name,
+          size: kind === "image" ? 68 : 8,
+        },
+      };
     } else if (url.pathname === "/v1/project-directories") {
       const path = url.searchParams.get("path");
       body =

@@ -45,6 +45,9 @@ import {
   HealthResponseSchema,
   GenerateCommitMessageRequestSchema,
   GenerateCommitMessageResponseSchema,
+  HostFileListingSchema,
+  HostFileQuerySchema,
+  ImportHostAttachmentRequestSchema,
   ProjectPageSchema,
   ProjectDirectoryListingSchema,
   ProjectDirectoryQuerySchema,
@@ -113,6 +116,48 @@ describe("project protocol", () => {
         path: "/Users/bryan/Develop",
       }),
     ).toBe(true);
+  });
+
+  it("validates host attachment file queries, listings, and imports", () => {
+    expect(Value.Check(HostFileQuerySchema, { kind: "image" })).toBe(true);
+    expect(
+      Value.Check(HostFileQuerySchema, {
+        kind: "file",
+        path: "C:\\Users\\bryan\\Documents",
+      }),
+    ).toBe(true);
+    expect(Value.Check(HostFileQuerySchema, { kind: "text" })).toBe(false);
+    expect(Value.Check(HostFileQuerySchema, { kind: "file", path: "relative/path" })).toBe(false);
+    expect(Value.Check(HostFileQuerySchema, { extra: true, kind: "file" })).toBe(false);
+
+    expect(
+      Value.Check(HostFileListingSchema, {
+        entries: [
+          { name: "design", path: "/Users/bryan/design", type: "directory" },
+          { name: "screen.png", path: "/Users/bryan/screen.png", type: "file" },
+        ],
+        parentPath: "/Users",
+        path: "/Users/bryan",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(HostFileListingSchema, {
+        entries: [{ name: "screen.png", path: "relative/screen.png", type: "file" }],
+        parentPath: null,
+        path: "/",
+      }),
+    ).toBe(false);
+
+    expect(
+      Value.Check(ImportHostAttachmentRequestSchema, { path: "/Users/bryan/screen.png" }),
+    ).toBe(true);
+    expect(Value.Check(ImportHostAttachmentRequestSchema, { path: "screen.png" })).toBe(false);
+    expect(
+      Value.Check(ImportHostAttachmentRequestSchema, {
+        extra: true,
+        path: "/Users/bryan/screen.png",
+      }),
+    ).toBe(false);
   });
 
   it("defines a public project with its local root path", () => {

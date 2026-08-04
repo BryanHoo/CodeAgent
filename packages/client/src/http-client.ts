@@ -21,6 +21,7 @@ import {
   AgentTaskSettingsResponseSchema,
   HealthResponseSchema,
   GenerateCommitMessageResponseSchema,
+  HostFileListingSchema,
   ProjectPageSchema,
   ProjectFileTreeSchema,
   ProjectOpenCapabilitiesResponseSchema,
@@ -70,6 +71,8 @@ import {
   type HealthResponse,
   type GenerateCommitMessageRequest,
   type GenerateCommitMessageResponse,
+  type HostFileKind,
+  type HostFileListing,
   type InterruptAgentTurnResponse,
   type ProjectPage,
   type ProjectFileTree,
@@ -209,6 +212,14 @@ export function buildProjectImageFileUrl(baseUrl: string, projectId: string, pat
   return `${baseUrl.replace(/\/$/u, "")}${requestPath}`;
 }
 
+export function buildProjectAttachmentUrl(
+  baseUrl: string,
+  projectId: string,
+  attachmentId: string,
+): string {
+  return `${baseUrl.replace(/\/$/u, "")}${projectPath(projectId)}/attachments/${encodeURIComponent(attachmentId)}`;
+}
+
 export class CodeAgentClient {
   readonly #baseUrl: string;
   readonly #fetch: typeof globalThis.fetch;
@@ -311,6 +322,18 @@ export class CodeAgentClient {
     return this.#read(
       appendQuery("/v1/project-directories", { path }),
       ProjectDirectoryListingSchema,
+      options,
+    );
+  }
+
+  public async listHostFiles(
+    kind: HostFileKind,
+    path?: string,
+    options: ReadOptions = {},
+  ): Promise<HostFileListing> {
+    return this.#read(
+      appendQuery("/v1/host-files", { kind, path }),
+      HostFileListingSchema,
       options,
     );
   }
@@ -683,6 +706,20 @@ export class CodeAgentClient {
         ...(options.signal === undefined ? {} : { signal: options.signal }),
         timeoutMs: this.#requestTimeouts.mutationMs,
       },
+    );
+  }
+
+  public async importHostAttachment(
+    projectId: string,
+    kind: HostFileKind,
+    path: string,
+    options: MutationOptions = {},
+  ): Promise<AgentAttachmentUploadResponse> {
+    return this.#mutation(
+      `${projectPath(projectId)}/attachments/${kind}/host`,
+      { path },
+      AgentAttachmentUploadResponseSchema,
+      options,
     );
   }
 

@@ -31,6 +31,8 @@ import {
   type CommitProjectChangesRequest,
   type CommitProjectChangesResponse,
   type GenerateCommitMessageRequest,
+  type HostFileKind,
+  type HostFileListing,
   type ProjectFileTree,
   type ProjectDirectoryListing,
   type ProjectGitStatus,
@@ -54,6 +56,11 @@ import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js"
 import { commitSelectedProjectChanges, type GitCommitError } from "./git-commit.js";
 import { buildCommitMessagePrompt } from "./git-commit-message.js";
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
+import {
+  readHostFileDirectory,
+  resolveHostAttachment,
+  type HostAttachmentSource,
+} from "./host-file-browser.js";
 import { readProjectFileTree } from "./project-file-tree.js";
 import { readProjectImageFile, type ProjectImageFile } from "./project-image-file.js";
 import { readProjectSourceFile } from "./project-source-file.js";
@@ -95,6 +102,7 @@ export interface CreateCodeAgentServerOptions {
     request: CommitProjectChangesRequest,
   ) => Promise<CommitProjectChangesResponse>;
   readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
+  readHostFileDirectory?: (kind: HostFileKind, path?: string) => Promise<HostFileListing>;
   readProjectFileTree?: (projectRoot: string, directoryPath?: string) => Promise<ProjectFileTree>;
   readProjectDirectory?: (path?: string) => Promise<ProjectDirectoryListing>;
   readProjectImageFile?: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
@@ -104,6 +112,7 @@ export interface CreateCodeAgentServerOptions {
     changes: Parameters<typeof prepareTurnFileRollback>[1],
   ) => Promise<PreparedTurnFileRollback>;
   resolveProjectDirectory?: (path: string) => Promise<string>;
+  resolveHostAttachment?: (kind: HostFileKind, path: string) => Promise<HostAttachmentSource>;
   staticRoot?: string;
 }
 
@@ -996,6 +1005,7 @@ export async function createCodeAgentServer(
     readEffectiveProjectDefaults,
     readEffectiveTaskSettings,
     readFileTree,
+    readHostFileDirectory: options.readHostFileDirectory ?? readHostFileDirectory,
     readProjectDirectory: options.readProjectDirectory ?? readProjectDirectory,
     readImageFile,
     readInheritedTaskSettings,
@@ -1005,6 +1015,7 @@ export async function createCodeAgentServer(
     resolveProviderTurnInput,
     runIdempotent,
     resolveProjectDirectory: options.resolveProjectDirectory ?? resolveProjectDirectory,
+    resolveHostAttachment: options.resolveHostAttachment ?? resolveHostAttachment,
     settingsRepository: options.settingsRepository,
     taskFromSnapshot,
     taskStartRecoveries,

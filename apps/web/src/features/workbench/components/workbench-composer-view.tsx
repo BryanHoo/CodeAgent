@@ -59,6 +59,7 @@ import {
   isPromptInputNewlineShortcut,
   usePromptInputAttachments,
   type PromptInputAttachment,
+  type PromptInputAttachmentKind,
   type PromptInputMessage,
 } from "../../../shared/ai-elements/prompt-input.js";
 import { useTranslation } from "../../../i18n/i18n.js";
@@ -174,6 +175,7 @@ export type WorkbenchComposerViewProps = Readonly<{
     cursorOffset: number,
   ) => void;
   onSelectActiveCommand: () => void;
+  onSelectAttachmentKind: (kind: PromptInputAttachmentKind) => void;
   onSelectSkill: (skill: AgentSkill) => void;
   onSettingsChange: (settings: AgentTaskSettings, field: keyof AgentTaskSettings) => void;
   onSubmit: (message: PromptInputMessage) => void;
@@ -497,6 +499,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
             <PromptInputTools className="max-workbench:shrink-0 max-workbench:gap-0.5">
               <PromptInputActionAddAttachments
                 disabled={props.attachmentsDisabled || props.commandDraftMode === "feedback"}
+                onSelectKind={props.onSelectAttachmentKind}
               />
               <PromptInputSelect
                 aria-label={t("composer.approvalMode")}

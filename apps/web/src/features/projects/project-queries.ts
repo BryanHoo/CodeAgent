@@ -32,6 +32,10 @@ export type CodeAgentGitMutationClient = Pick<
 >;
 export type CodeAgentFileTreeClient = Pick<CodeAgentClient, "listProjectFiles">;
 export type CodeAgentProjectDirectoryClient = Pick<CodeAgentClient, "listProjectDirectories">;
+export type CodeAgentHostAttachmentClient = Pick<
+  CodeAgentClient,
+  "importHostAttachment" | "listHostFiles"
+>;
 export type CodeAgentSourceFileClient = Pick<CodeAgentClient, "readProjectSourceFile">;
 export type CodeAgentProjectOpenClient = Pick<
   CodeAgentClient,
@@ -64,6 +68,8 @@ export type CodeAgentMutationClient = Pick<
   | "compactTask"
   | "forkTask"
   | "interruptTurn"
+  | "importHostAttachment"
+  | "listHostFiles"
   | "pinTask"
   | "removeProject"
   | "renameProject"

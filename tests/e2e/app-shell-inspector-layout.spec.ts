@@ -1,4 +1,5 @@
 import {
+  chooseHostAttachment,
   expect,
   parseRequestRecord,
   projects,
@@ -406,18 +407,7 @@ test("stores new-chat text and attachments independently between projects", asyn
   await page.goto("/p/code-agent");
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   await prompt.fill("保留这段新聊天草稿");
-  const chooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "添加图片或文件" }).click();
-  await page.getByRole("menuitem", { name: "添加图片" }).click();
-  const chooser = await chooserPromise;
-  await chooser.setFiles({
-    buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-      "base64",
-    ),
-    mimeType: "image/png",
-    name: "draft.png",
-  });
+  await chooseHostAttachment(page, "image", "draft.png");
   await expect(page.getByText("draft.png", { exact: true })).toBeVisible();
 
   const projectSelect = page.getByRole("combobox", { name: "选择新聊天项目" });

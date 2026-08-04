@@ -428,9 +428,12 @@ Agent Actions 使用 Provider 无关的模型、附件和写入端点：
 
 ```text
 GET  /v1/models
+GET  /v1/host-files?kind=:kind&path=:absoluteDirectory
 GET  /v1/projects/:projectId/skills
+GET  /v1/projects/:projectId/attachments/:attachmentId
 GET  /v1/projects/:projectId/tasks/:taskId/attachments/:attachmentId
 POST /v1/projects/:projectId/attachments/:kind
+POST /v1/projects/:projectId/attachments/:kind/host
 POST /v1/projects/:projectId/tasks
 POST /v1/projects/:projectId/tasks/:taskId/turns
 POST /v1/projects/:projectId/tasks/:taskId/turns/:turnId/interrupt
@@ -443,6 +446,8 @@ POST /v1/projects/:projectId/tasks/:taskId/feedback
 所有写请求必须携带非空 `Idempotency-Key`。Server 以操作、资源和 Key 共同确定幂等范围：相同 Payload 复用进行中或成功结果，不同 Payload 返回 `IDEMPOTENCY_CONFLICT`，失败结果允许同 Key 重试。
 
 新上传图片、文件与生成文本通过 `multipart/form-data` 二进制流进入有容量和过期时间限制的 Server Store，附件类型由 `:kind` 路径参数在解析 Body 前确定。Server 先按 `Content-Length` 拒绝明显超限请求，再按流式字节数强制执行单附件限制；所有类型均使用异步文件 API 写入 Runtime 隔离临时目录，内存不长期保留 Base64。浏览器只获得随机附件 ID。Turn 启动前 Server 才按需将图片临时解析为 Provider Data URL、将普通文件解析为临时路径；Provider 分别映射为 Codex `image` 与 `mention`，粘贴文本映射为带 UTF-8 `text_elements` 范围的 `text`。成功后消费图片和文本引用，普通文件保留到 Turn 终态，失败时保留引用供重试。历史图片和粘贴文本采用独立的 Provider 授权记录；Provider 将 `text_elements` 恢复为附件并从用户可见正文剔除，Task Snapshot 只返回 `{ id, kind, mediaType, name, size }`。浏览器通过 Project/Task 作用域 GET 端点按需读取正文，Server 不再次重建 Snapshot，也不暴露 Codex 本地路径。`GET /v1/models` 直接映射 Provider 模型目录及其默认、可用思考量，页面不得把硬编码模型或思考量作为成功态数据。`GET /v1/projects/:projectId/skills` 返回当前 Project 的统一 Skill 目录，只包含不透明 ID 和展示元数据；原生路径不得进入 HTTP 契约。
+
+Composer 的“添加图片”和“添加文件”不调用浏览器原生文件选择器，而通过 `GET /v1/host-files` 从宿主主目录开始按需浏览真实目录和当前类型支持的普通文件；本地与已配对 LAN 浏览器使用同一链路。确认后 `POST /v1/projects/:projectId/attachments/:kind/host` 重新校验绝对路径、普通文件身份、符号链接和类型，并将文件句柄流写入现有附件 Store。该链路沿用相同的单附件、总容量、内容签名和 TTL 限制，只向浏览器返回随机附件 ID；待提交图片通过 `GET /v1/projects/:projectId/attachments/:attachmentId` 预览，宿主路径不得进入预览 URL 或 Turn。
 
 `turn/interrupt` 只返回 `{ status: "interrupting", taskId, turnId }`；Turn 是否真正中断由后续 `turn.completed` 事件决定。错误统一映射为 Protocol 定义的 `{ code, message, retryable }`，不得向 Web 暴露原生 RPC 细节。
 

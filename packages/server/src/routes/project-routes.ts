@@ -12,6 +12,9 @@ import {
   AgentProjectDefaultsSchema,
   AgentSkillPageSchema,
   AgentMutationErrorSchema,
+  HostFileListingSchema,
+  HostFileQuerySchema,
+  ImportHostAttachmentRequestSchema,
   ProjectPageSchema,
   ProjectDirectoryListingSchema,
   ProjectDirectoryQuerySchema,
@@ -34,6 +37,8 @@ import {
   type AgentTaskSettings,
   type CommitProjectChangesRequest,
   type GenerateCommitMessageRequest,
+  type HostFileQuery,
+  type ImportHostAttachmentRequest,
   type ProjectFileTreeQuery,
   type ProjectDirectoryQuery,
   type OpenProjectRequest,
@@ -42,8 +47,9 @@ import {
   type RemoveProjectRequest,
 } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
-import type { StoredAttachmentUpload } from "../attachment-store.js";
+import { AttachmentNotFoundError, type StoredAttachmentUpload } from "../attachment-store.js";
 import { GitCommitError } from "../git-commit.js";
+import { HostFileBrowserError } from "../host-file-browser.js";
 import { ProjectOpenAppUnavailableError, ProjectOpenTargetInvalidError } from "../project-open.js";
 import { ProjectDirectoryBrowserError } from "../project-directory-browser.js";
 
@@ -52,7 +58,9 @@ import {
   ErrorResponseSchema,
   IdempotencyHeadersSchema,
   ProjectAttachmentParamsSchema,
+  ProjectHostAttachmentParamsSchema,
   ProjectParamsSchema,
+  ProjectStoredAttachmentParamsSchema,
   SourceFileQuerySchema,
 } from "./schemas.js";
 
@@ -79,6 +87,7 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     readEffectiveGlobalSettings,
     readEffectiveProjectDefaults,
     readFileTree,
+    readHostFileDirectory,
     readProjectDirectory,
     readImageFile,
     readProjectGitStatus,
@@ -86,6 +95,7 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     releaseProjectContext,
     runIdempotent,
     resolveProjectDirectory,
+    resolveHostAttachment,
     settingsRepository,
     toGitCommitHttpError,
   } = context;
@@ -94,6 +104,26 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     data: await projectRepository.list(),
     nextCursor: null,
   }));
+
+  app.get<{ Querystring: HostFileQuery }>(
+    "/v1/host-files",
+    {
+      schema: {
+        querystring: HostFileQuerySchema,
+        response: { 200: HostFileListingSchema, 400: AgentMutationErrorSchema },
+      },
+    },
+    async (request) => {
+      try {
+        return await readHostFileDirectory(request.query.kind, request.query.path);
+      } catch (error) {
+        if (error instanceof HostFileBrowserError) {
+          throw new MutationHttpError("INVALID_REQUEST", error.message, 400);
+        }
+        throw error;
+      }
+    },
+  );
 
   app.get<{ Querystring: ProjectDirectoryQuery }>(
     "/v1/project-directories",
@@ -660,6 +690,68 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
   );
 
   app.post<{
+    Body: ImportHostAttachmentRequest;
+    Headers: { "idempotency-key": string };
+    Params: { kind: "file" | "image"; projectId: string };
+  }>(
+    "/v1/projects/:projectId/attachments/:kind/host",
+    {
+      schema: {
+        body: ImportHostAttachmentRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectHostAttachmentParamsSchema,
+        response: {
+          201: AgentAttachmentUploadResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          413: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if ((await getProjectContext(request.params.projectId)) === undefined) {
+        throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+      }
+
+      let upload: StoredAttachmentUpload | undefined;
+      try {
+        const source = await resolveHostAttachment(request.params.kind, request.body.path);
+        upload = await attachmentStore.add(request.params.projectId, source);
+        const currentUpload = upload;
+        const attachment = await runIdempotent(
+          ["import-host-attachment", request.params.projectId],
+          request.headers["idempotency-key"],
+          {
+            contentDigest: upload.contentDigest,
+            kind: upload.attachment.kind,
+            mediaType: upload.attachment.mediaType,
+            name: upload.attachment.name,
+            size: upload.attachment.size,
+          },
+          () => currentUpload.attachment,
+        );
+        if (attachment.id !== upload.attachment.id) {
+          await attachmentStore.discard(upload.attachment.id);
+        }
+        return await reply.code(201).send({ attachment });
+      } catch (error) {
+        if (upload !== undefined) {
+          await attachmentStore.discard(upload.attachment.id);
+        }
+        if (error instanceof RangeError) {
+          throw new MutationHttpError("INVALID_REQUEST", "Attachment is too large", 413);
+        }
+        if (error instanceof HostFileBrowserError || error instanceof TypeError) {
+          throw new MutationHttpError("INVALID_REQUEST", "Host attachment is invalid", 400);
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post<{
     Headers: { "idempotency-key": string };
     Params: { kind: AgentAttachmentKind; projectId: string };
   }>(
@@ -740,6 +832,35 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         }
         if (error instanceof TypeError) {
           throw new MutationHttpError("INVALID_REQUEST", "Attachment is invalid", 400);
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.get<{ Params: { attachmentId: string; projectId: string } }>(
+    "/v1/projects/:projectId/attachments/:attachmentId",
+    {
+      schema: {
+        params: ProjectStoredAttachmentParamsSchema,
+        response: { 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const stored = await attachmentStore.read(
+          request.params.projectId,
+          request.params.attachmentId,
+        );
+        return await reply
+          .header("x-content-type-options", "nosniff")
+          .type(stored.attachment.mediaType)
+          .send(stored.content);
+      } catch (error) {
+        if (error instanceof AttachmentNotFoundError) {
+          return reply
+            .code(404)
+            .send({ code: "ATTACHMENT_NOT_FOUND", message: "Attachment not found" });
         }
         throw error;
       }
