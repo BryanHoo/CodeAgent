@@ -4,6 +4,22 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-05
+
+### 新增
+
+- 支持通过 Web 目录树浏览运行设备并选择项目文件夹，移除对宿主系统目录选择器的依赖。
+- 添加宿主文件附件选择与安全导入流程，可在 Composer 中浏览、导入并预览运行设备上的文件和图片。
+
+### 优化
+
+- 引入与现有设计令牌一致的 shadcn 基础组件，统一弹层、菜单、按钮、输入框和提示信息的交互与可访问性行为。
+- 使用共享 Dropdown Menu、Context Menu 和 Tooltip 重构侧栏、项目打开及消息工具交互。
+
+### 修复
+
+- 修复 shadcn CLI 无法解析 Web 应用源码路径别名的问题。
+
 ## [1.2.1] - 2026-08-04
 
 ### 修复
@@ -135,7 +151,8 @@ CodeAgent 首个稳定版本，集中发布本地 Coding Agent 工作台的完�
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/BryanHoo/CodeAgent/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.0.0...v1.1.0
