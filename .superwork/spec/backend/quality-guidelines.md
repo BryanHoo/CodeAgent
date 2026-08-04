@@ -8,7 +8,7 @@
 - LAN Cookie 使用 `HttpOnly; SameSite=Strict; Path=/` 和固定绝对 `Max-Age`，明文 HTTP 不设置 `Secure`。所有 `/v1/*` 使用 `no-store`，应用响应设置 CSP、Frame、MIME、Referrer 与 Permissions 安全头，不为 HTTP 设置 HSTS。
 - Fastify 使用 JSON Schema 验证输入并序列化输出。
 - 生产静态资源必须协商 Brotli 或 Gzip 响应压缩；`/assets/*` 内容哈希资源固定返回一年 `immutable` 公共缓存，HTML 与 SPA 回退入口保持 `max-age=0` 重新验证。
-- Project 路径每次操作都执行绝对路径、`realpath` 和允许根目录包含关系校验。
+- Project 相对路径每次操作都执行绝对路径、`realpath` 和允许根目录包含关系校验；AI 回复中的显式绝对文件引用允许访问 Project 外目标，但必须通过认证并校验 `realpath`、可读性、目标类型和预览上限。
 - 默认只监听 `127.0.0.1`；WebSocket 校验 Origin，远程模式必须增加认证和 TLS 边界。
 - Approval 同时校验用户、Runtime、Task、Turn、Request 身份与状态。
 

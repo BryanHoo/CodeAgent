@@ -43,29 +43,31 @@ export async function readProjectImageFile(
   }
 
   const resolvedProjectRoot = await realpath(projectRoot);
-  const lexicalProjectRoot = resolve(projectRoot);
-  const candidatePath = isAbsolute(requestedPath)
+  const isAbsoluteReference = isAbsolute(requestedPath);
+  const candidatePath = isAbsoluteReference
     ? requestedPath
     : resolve(resolvedProjectRoot, requestedPath);
-  const projectRelativePath = relative(
-    isAbsolute(requestedPath) ? lexicalProjectRoot : resolvedProjectRoot,
-    candidatePath,
-  );
-  if (projectRelativePath.length === 0 || isOutsideProject(projectRelativePath)) {
+  const projectRelativePath = relative(resolvedProjectRoot, candidatePath);
+  if (
+    !isAbsoluteReference &&
+    (projectRelativePath.length === 0 || isOutsideProject(projectRelativePath))
+  ) {
     throw new TypeError("Project image file is outside the project root");
   }
 
-  let currentPath = resolvedProjectRoot;
-  // 图片路径逐段拒绝符号链接，避免模型输出借助 Project 内别名读取其他位置。
-  for (const segment of projectRelativePath.split(sep)) {
-    currentPath = resolve(currentPath, segment);
-    if ((await lstat(currentPath)).isSymbolicLink()) {
-      throw new TypeError("Project image file is outside the project root");
+  if (!isAbsoluteReference) {
+    let currentPath = resolvedProjectRoot;
+    // Project 相对路径逐段拒绝符号链接，避免普通文件树路径逃逸。
+    for (const segment of projectRelativePath.split(sep)) {
+      currentPath = resolve(currentPath, segment);
+      if ((await lstat(currentPath)).isSymbolicLink()) {
+        throw new TypeError("Project image file is outside the project root");
+      }
     }
   }
 
   const resolvedImagePath = await realpath(candidatePath);
-  if (isOutsideProject(relative(resolvedProjectRoot, resolvedImagePath))) {
+  if (!isAbsoluteReference && isOutsideProject(relative(resolvedProjectRoot, resolvedImagePath))) {
     throw new TypeError("Project image file is outside the project root");
   }
   const imageStats = await stat(resolvedImagePath);
@@ -85,6 +87,8 @@ export async function readProjectImageFile(
   return {
     content,
     mediaType,
-    path: relative(resolvedProjectRoot, resolvedImagePath).split(sep).join("/"),
+    path: isAbsoluteReference
+      ? resolvedImagePath
+      : relative(resolvedProjectRoot, resolvedImagePath).split(sep).join("/"),
   };
 }

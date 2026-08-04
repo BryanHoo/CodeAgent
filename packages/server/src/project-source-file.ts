@@ -19,12 +19,14 @@ export async function readProjectSourceFile(
   }
 
   const resolvedProjectRoot = await realpath(projectRoot);
-  const candidatePath = isAbsolute(requestedPath)
+  const isAbsoluteReference = isAbsolute(requestedPath);
+  const candidatePath = isAbsoluteReference
     ? requestedPath
     : resolve(resolvedProjectRoot, requestedPath);
   const resolvedSourcePath = await realpath(candidatePath);
   const projectRelativePath = relative(resolvedProjectRoot, resolvedSourcePath);
-  if (isOutsideProject(projectRelativePath)) {
+  // 显式绝对路径来自 AI 文件引用，可以指向本机任意可读文件；相对路径仍受 Project 约束。
+  if (!isAbsoluteReference && isOutsideProject(projectRelativePath)) {
     throw new TypeError("Source file is outside the project root");
   }
 
@@ -53,7 +55,7 @@ export async function readProjectSourceFile(
     content: exceedsLineLimit
       ? previewLines.slice(0, MAX_SOURCE_FILE_PREVIEW_LINES).join("\n")
       : decodedContent,
-    path: projectRelativePath.split(sep).join("/"),
+    path: isAbsoluteReference ? resolvedSourcePath : projectRelativePath.split(sep).join("/"),
     truncated: sourceStats.size > previewByteLength || exceedsLineLimit,
   };
 }

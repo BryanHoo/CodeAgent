@@ -1,4 +1,4 @@
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -23,11 +23,27 @@ describe("readProjectImageFile", () => {
     temporaryPaths.push(projectRoot);
     const imagePath = join(projectRoot, "result.png");
     await writeFile(imagePath, pngContent);
+    const resolvedImagePath = await realpath(imagePath);
 
     await expect(readProjectImageFile(projectRoot, imagePath)).resolves.toEqual({
       content: pngContent,
       mediaType: "image/png",
-      path: "result.png",
+      path: resolvedImagePath,
+    });
+  });
+
+  it("reads a supported image from an absolute path outside the project root", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "code-agent-image-project-"));
+    const outsideRoot = await mkdtemp(join(tmpdir(), "code-agent-image-outside-"));
+    temporaryPaths.push(projectRoot, outsideRoot);
+    const imagePath = join(outsideRoot, "result.png");
+    await writeFile(imagePath, pngContent);
+    const resolvedImagePath = await realpath(imagePath);
+
+    await expect(readProjectImageFile(projectRoot, imagePath)).resolves.toEqual({
+      content: pngContent,
+      mediaType: "image/png",
+      path: resolvedImagePath,
     });
   });
 

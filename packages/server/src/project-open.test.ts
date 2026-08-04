@@ -7,9 +7,10 @@ import { describe, expect, it, vi } from "vitest";
 import { createProjectOpenService } from "./project-open.js";
 
 describe("createProjectOpenService", () => {
-  it("opens an absolute file reference inside the Project with the system application", async () => {
-    const projectRoot = await mkdtemp(join(tmpdir(), "code-agent-open-absolute-"));
-    const documentPath = join(projectRoot, "report.docx");
+  it("opens an absolute file reference outside the Project with the system application", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "code-agent-open-project-"));
+    const outsideRoot = await mkdtemp(join(tmpdir(), "code-agent-open-absolute-"));
+    const documentPath = join(outsideRoot, "report.docx");
     await writeFile(documentPath, "document");
     const spawnDetached = vi.fn(() => Promise.resolve());
     const service = createProjectOpenService({
@@ -29,7 +30,10 @@ describe("createProjectOpenService", () => {
         expect.objectContaining({ shell: false }),
       );
     } finally {
-      await rm(projectRoot, { force: true, recursive: true });
+      await Promise.all([
+        rm(projectRoot, { force: true, recursive: true }),
+        rm(outsideRoot, { force: true, recursive: true }),
+      ]);
     }
   });
 

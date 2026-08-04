@@ -430,7 +430,7 @@ describe("project protocol", () => {
         path: "/workspace/CodeAgent/docs/architecture-design.md",
         truncated: false,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("describes an unbounded project-relative directory listing", () => {

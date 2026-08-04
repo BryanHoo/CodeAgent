@@ -457,13 +457,13 @@ GET /v1/projects/:projectId/files/tree?path=src/components
 
 Server 固定从已注册 Project 的根目录解析可选的 Project 相对目录，每次返回目标目录 `path` 与其直接目录/文件条目，不设置条目数量上限。目录解析沿根目录逐层应用 Project 内任意层级的 `.gitignore`，不依赖根目录是否为 Git 仓库或是否存在根级规则；同时跳过符号链接、`.git`、`node_modules`、构建和覆盖率目录，并限制为 `20` 层。`path` 必须通过严格 Schema 校验，拒绝绝对路径、点路径、反斜杠和额外字段，不能透传任意文件系统路径。
 
-AI 回复中的本地文件引用通过以下只读端点打开：
+AI 回复中的本地文件引用通过以下受认证只读端点打开：
 
 ```text
 GET /v1/projects/:projectId/files/source?path=:path
 ```
 
-Server 必须先验证 Project，再对 Project 根目录和目标文件执行 `realpath` 边界检查，拒绝越界路径、越界符号链接、目录和二进制文件。响应只返回 Project 相对路径、文本预览与 `truncated`，单次最多读取 `256 KiB`、最多返回 `4,000` 行；Web 在弹窗中显示行号、定位引用行，并明确提示内容已截断。
+Server 必须先验证 Project。相对引用从 Project 根目录解析，并通过 `realpath` 包含关系拒绝逃逸路径和越界符号链接；显式绝对引用直接解析本机真实路径，允许读取 Project 外的可读普通文件。响应返回解析后的相对或绝对路径、文本预览与 `truncated`，拒绝目录和二进制内容，单次最多读取 `256 KiB`、最多返回 `4,000` 行；图片引用同样允许显式绝对路径，但继续校验普通文件、`20 MiB` 上限和 GIF、JPEG、PNG、WebP 内容签名。Web 在弹窗中显示路径、行号、目标行和截断状态。
 
 ## 9. 统一领域模型
 
@@ -891,11 +891,11 @@ App Server 返回错误码 `-32001` 时，Adapter 使用带 jitter 的指数退�
 - 配对失败按远端 IP 每分钟最多 5 次，并使用有界失败窗口；错误响应保持通用。Cookie 写请求和所有 WebSocket Upgrade 必须严格校验 `Origin` 与 `Host` 同源，不启用 CORS。
 - 所有 `/v1/*` 响应使用 `Cache-Control: no-store`；应用响应设置 CSP、`X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer` 和受限 `Permissions-Policy`，HTTP 模式不设置 HSTS。
 
-### 14.2 Project 边界
+### 14.2 Project 与本机文件边界
 
-每次 HTTP 和 WebSocket 操作都必须检查 Project 权限。
+每次 HTTP 和 WebSocket 操作都必须检查 Project 权限。文件树、Git、回滚及普通 Project 菜单路径始终限制在 Project 根目录内。
 
-路径校验流程：
+Project 相对路径校验流程：
 
 ```text
 1. 将用户输入转换为绝对路径。
@@ -906,6 +906,8 @@ App Server 返回错误码 `-32001` 时，Adapter 使用带 jitter 的指数退�
 ```
 
 不能仅在页面选择 Project 时校验一次。
+
+AI 回复中的显式绝对文件引用属于受认证的本机只读能力，不执行 Project 包含关系校验；Server 必须对目标执行 `realpath`，确认文件存在、可读且类型受对应预览器支持，并继续执行大小、二进制内容和图片签名限制。宿主应用打开只允许真实文件或目录，并使用 `shell: false` 和参数数组执行。
 
 ### 14.3 禁止直接暴露的能力
 

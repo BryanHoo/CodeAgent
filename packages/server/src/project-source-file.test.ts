@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -33,9 +33,26 @@ describe("readProjectSourceFile", () => {
     const sourcePath = join(projectRoot, "docs", "architecture-design.md");
     await writeFile(sourcePath, "# Architecture\n\nDetails\n");
 
-    await expect(readProjectSourceFile(projectRoot, sourcePath)).resolves.toEqual({
+    await expect(
+      readProjectSourceFile(projectRoot, "docs/architecture-design.md"),
+    ).resolves.toEqual({
       content: "# Architecture\n\nDetails\n",
       path: "docs/architecture-design.md",
+      truncated: false,
+    });
+  });
+
+  it("reads text files from an absolute path outside the project root", async () => {
+    const projectRoot = await createTemporaryProject();
+    const outsideRoot = await mkdtemp(join(tmpdir(), "code-agent-source-outside-"));
+    temporaryDirectories.push(outsideRoot);
+    const sourcePath = join(outsideRoot, "report.md");
+    await writeFile(sourcePath, "# Report\n\nDetails\n");
+    const resolvedSourcePath = await realpath(sourcePath);
+
+    await expect(readProjectSourceFile(projectRoot, sourcePath)).resolves.toEqual({
+      content: "# Report\n\nDetails\n",
+      path: resolvedSourcePath,
       truncated: false,
     });
   });
@@ -64,7 +81,7 @@ describe("readProjectSourceFile", () => {
     expect(preview.truncated).toBe(true);
   });
 
-  it("rejects files and symbolic links outside the project root", async () => {
+  it("rejects project-relative symbolic links outside the project root", async () => {
     const projectRoot = await createTemporaryProject();
     const outsidePath = join(tmpdir(), `outside-${String(Date.now())}.md`);
     temporaryDirectories.push(outsidePath);
@@ -72,10 +89,7 @@ describe("readProjectSourceFile", () => {
     const linkedPath = join(projectRoot, "docs", "outside.md");
     await symlink(outsidePath, linkedPath);
 
-    await expect(readProjectSourceFile(projectRoot, outsidePath)).rejects.toThrow(
-      "outside the project root",
-    );
-    await expect(readProjectSourceFile(projectRoot, linkedPath)).rejects.toThrow(
+    await expect(readProjectSourceFile(projectRoot, "docs/outside.md")).rejects.toThrow(
       "outside the project root",
     );
   });

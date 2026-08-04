@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access, lstat, realpath } from "node:fs/promises";
+import { access, lstat, realpath, stat } from "node:fs/promises";
 import {
   dirname,
   isAbsolute,
@@ -109,9 +109,24 @@ async function resolveProjectOpenTarget(
       throw new ProjectOpenTargetInvalidError();
     }
     const resolvedProjectRoot = await realpath(projectRoot);
-    const relativeTargetPath = isAbsolute(projectPath)
-      ? relative(resolvePath(projectRoot), projectPath)
-      : projectPath;
+    if (isAbsolute(projectPath)) {
+      // AI 输出的显式绝对路径允许打开 Project 外的本机可读文件。
+      const resolvedTargetPath = await realpath(projectPath);
+      const targetStats = await stat(resolvedTargetPath);
+      if (!targetStats.isDirectory() && !targetStats.isFile()) {
+        throw new ProjectOpenTargetInvalidError();
+      }
+      await access(resolvedTargetPath, constants.R_OK);
+      const type = targetStats.isDirectory() ? "directory" : "file";
+      return {
+        absolutePath: resolvedTargetPath,
+        directoryPath: type === "directory" ? resolvedTargetPath : dirname(resolvedTargetPath),
+        projectRoot: resolvedProjectRoot,
+        type,
+      };
+    }
+
+    const relativeTargetPath = projectPath;
     if (
       isOutsideProject(relativeTargetPath) ||
       relativeTargetPath.endsWith("/") ||

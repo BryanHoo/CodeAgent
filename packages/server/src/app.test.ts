@@ -1406,12 +1406,12 @@ describe("CodeAgent Server", () => {
     expect(commitProjectChanges).toHaveBeenCalledOnce();
   });
 
-  it("serves bounded source previews only for the configured project", async () => {
+  it("serves bounded local source previews for the configured project", async () => {
     const { provider } = createProvider();
     const readProjectSourceFile = vi.fn(() =>
       Promise.resolve({
         content: "### 11.7 认证\n",
-        path: "docs/architecture-design.md",
+        path: "/home/test/reports/architecture-design.md",
         truncated: true,
       }),
     );
@@ -1422,7 +1422,7 @@ describe("CodeAgent Server", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/files/source?path=%2Fworkspace%2FCodeAgent%2Fdocs%2Farchitecture-design.md",
+      url: "/v1/projects/code-agent/files/source?path=%2Fhome%2Ftest%2Freports%2Farchitecture-design.md",
     });
     const missingProjectResponse = await app.inject({
       method: "GET",
@@ -1432,12 +1432,12 @@ describe("CodeAgent Server", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       content: "### 11.7 认证\n",
-      path: "docs/architecture-design.md",
+      path: "/home/test/reports/architecture-design.md",
       truncated: true,
     });
     expect(readProjectSourceFile).toHaveBeenCalledWith(
       project.rootPath,
-      "/workspace/CodeAgent/docs/architecture-design.md",
+      "/home/test/reports/architecture-design.md",
     );
     expect(missingProjectResponse.statusCode).toBe(404);
     expect(readProjectSourceFile).toHaveBeenCalledTimes(1);

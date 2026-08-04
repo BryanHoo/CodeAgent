@@ -639,7 +639,7 @@ export type ProjectFileTree = Readonly<Static<typeof ProjectFileTreeSchema>>;
 export const ProjectSourceFileSchema = Type.Object(
   {
     content: Type.String(),
-    path: ProjectRelativePathSchema,
+    path: ProjectFileReferencePathSchema,
     truncated: Type.Boolean(),
   },
   { additionalProperties: false },

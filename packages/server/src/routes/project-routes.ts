@@ -590,7 +590,7 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
           .type(image.mediaType)
           .send(image.content);
       } catch {
-        // 路径和签名错误统一隐藏，避免模型输出探测宿主文件系统。
+        // 路径不可读、文件超限和签名错误统一隐藏，不向页面泄露具体文件系统状态。
         return reply.code(404).send({
           code: "PROJECT_IMAGE_NOT_FOUND",
           message: "Project image is unavailable",
@@ -619,7 +619,7 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
       try {
         return await readSourceFile(context.project.rootPath, request.query.path);
       } catch {
-        // 路径越界、文件不存在和二进制文件统一隐藏为不可预览，避免泄露本机文件信息。
+        // 路径不可读、文件不存在和二进制内容统一隐藏为不可预览。
         return reply.code(404).send({
           code: "SOURCE_FILE_NOT_FOUND",
           message: "Source file is unavailable",

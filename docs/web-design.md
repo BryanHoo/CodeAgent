@@ -831,7 +831,7 @@ Server 必须执行最终权限判断。Web 只负责减少误操作和展示已
 
 - WebSocket 由 Server 校验 Origin 和 Session。
 - 所有 Mutation 使用统一 Client，并处理 CSRF、部署访问认证和 Idempotency。
-- Project 文件操作每次由 Server 校验绝对路径、`realpath` 和允许根目录。
+- Project 相对文件操作每次由 Server 校验绝对路径、`realpath` 和允许根目录；AI 回复中的显式绝对文件引用由受认证预览接口直接校验本机目标的存在性、可读性、类型和大小。
 - Approval 必须由 Server 校验当前 Pending Request，Web 禁止构造任意 Provider 响应。
 - 不向页面暴露任意 JSON-RPC、`command/exec`、`process/spawn` 或文件系统透传接口。
 
