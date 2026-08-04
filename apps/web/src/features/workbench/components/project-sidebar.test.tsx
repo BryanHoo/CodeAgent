@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { changeAppLanguage } from "../../../i18n/i18n.js";
+import { DropdownMenu } from "../../../shared/ui/dropdown-menu.js";
 import { requestNextProjectTaskPage } from "../../projects/project-context.js";
 import {
   deriveProjectSidebarConnectionState,
@@ -204,22 +205,28 @@ describe("SidebarSettingsButton", () => {
 describe("TaskActionMenu", () => {
   it("offers pin, rename, and archive commands", () => {
     const markup = renderToStaticMarkup(
-      <TaskActionMenu
-        isPending={false}
-        onArchive={() => undefined}
-        onPin={() => undefined}
-        onRename={() => undefined}
-        task={{
-          id: "task-1",
-          pinned: false,
-          projectId: "code-agent",
-          title: "结构化历史",
-          updatedAt: "2026-07-23T00:01:00.000Z",
-        }}
-      />,
+      <DropdownMenu open>
+        <TaskActionMenu
+          isPending={false}
+          onArchive={() => undefined}
+          onPin={() => undefined}
+          onRename={() => undefined}
+          task={{
+            id: "task-1",
+            pinned: false,
+            projectId: "code-agent",
+            title: "结构化历史",
+            updatedAt: "2026-07-23T00:01:00.000Z",
+          }}
+        />
+      </DropdownMenu>,
     );
 
     expect(markup).toContain('role="menu"');
+    expect(markup).toContain('aria-label="结构化历史 的任务操作"');
+    expect(markup).not.toContain("aria-labelledby");
+    expect(markup).toContain('data-slot="dropdown-menu-content"');
+    expect(markup.match(/data-slot="dropdown-menu-item"/gu)).toHaveLength(3);
     expect(markup).toContain("固定");
     expect(markup).toContain("重命名");
     expect(markup).toContain("归档");
@@ -236,15 +243,21 @@ describe("Project folder actions", () => {
 
   it("offers only rename and remove commands in that order", () => {
     const markup = renderToStaticMarkup(
-      <ProjectActionMenu
-        isPending={false}
-        onRemove={() => undefined}
-        onRename={() => undefined}
-        project={project}
-      />,
+      <DropdownMenu open>
+        <ProjectActionMenu
+          isPending={false}
+          onRemove={() => undefined}
+          onRename={() => undefined}
+          project={project}
+        />
+      </DropdownMenu>,
     );
 
     expect(markup).toContain('role="menu"');
+    expect(markup).toContain('aria-label="CodeAgent 的项目操作"');
+    expect(markup).not.toContain("aria-labelledby");
+    expect(markup).toContain('data-slot="dropdown-menu-content"');
+    expect(markup.match(/data-slot="dropdown-menu-item"/gu)).toHaveLength(2);
     expect(markup.indexOf("重命名")).toBeLessThan(markup.indexOf("删除"));
     expect(markup).not.toContain("新建任务");
     expect(markup).not.toContain("归档");

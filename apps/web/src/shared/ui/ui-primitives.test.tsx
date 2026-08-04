@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import { Button } from "./button.js";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "./dialog.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./dropdown-menu.js";
 import { Input } from "./input.js";
 import { Tooltip, TooltipProvider, TooltipTrigger } from "./tooltip.js";
 
@@ -77,5 +83,24 @@ describe("shadcn UI primitives", () => {
 
     expect(markup).toContain("min-w-0");
     expect(markup).toContain("w-[calc(100%-2rem)]");
+  });
+
+  it("composes a portalled dropdown menu without replacing the trigger button", () => {
+    const markup = renderToStaticMarkup(
+      <DropdownMenu open>
+        <DropdownMenuTrigger asChild>
+          <button type="button">更多</button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent aria-label="操作菜单">
+          <DropdownMenuItem className="text-danger">删除</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+
+    expect(markup.match(/<button/gu)).toHaveLength(1);
+    expect(markup).toContain('data-slot="dropdown-menu-trigger"');
+    expect(markup).toContain('data-slot="dropdown-menu-content"');
+    expect(markup).toContain('data-slot="dropdown-menu-item"');
+    expect(markup).toContain("text-danger");
   });
 });

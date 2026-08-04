@@ -21,11 +21,16 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { Button } from "../../../shared/ui/button.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../../shared/ui/dropdown-menu.js";
 import { Input } from "../../../shared/ui/input.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
@@ -64,11 +69,6 @@ import { ProjectRenameDialog } from "./project-rename-dialog.js";
 const primaryActionClassName =
   "flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small font-medium text-foreground transition-colors hover:bg-control-hover";
 const primaryActionIconClassName = "size-4 shrink-0 text-muted-foreground";
-const taskActionMenuGap = 2;
-const taskActionMenuHeight = 104;
-const taskActionMenuWidth = 128;
-const taskActionMenuViewportPadding = 8;
-const projectActionMenuHeight = 72;
 const EMPTY_PROJECT_TASKS: readonly AgentTask[] = [];
 
 type ProjectSidebarProps = Readonly<{
@@ -824,121 +824,33 @@ type ProjectActionsProps = Readonly<{
 
 function ProjectActions({ isPending, onRemove, onRename, project }: ProjectActionsProps) {
   const { t } = useTranslation("workbench");
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPosition, setMenuPosition] = useState<Readonly<{ left: number; top: number }>>();
-  const menuContainerRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  const updateMenuPosition = useCallback(() => {
-    const trigger = triggerRef.current;
-    if (trigger === null) {
-      return;
-    }
-    const triggerRect = trigger.getBoundingClientRect();
-    const maximumLeft = Math.max(
-      taskActionMenuViewportPadding,
-      window.innerWidth - taskActionMenuWidth - taskActionMenuViewportPadding,
-    );
-    const belowTop = triggerRect.bottom + taskActionMenuGap;
-    const maximumTop = window.innerHeight - projectActionMenuHeight - taskActionMenuViewportPadding;
-    setMenuPosition({
-      left: Math.min(Math.max(triggerRect.left, taskActionMenuViewportPadding), maximumLeft),
-      top:
-        belowTop <= maximumTop
-          ? belowTop
-          : Math.max(
-              taskActionMenuViewportPadding,
-              triggerRect.top - projectActionMenuHeight - taskActionMenuGap,
-            ),
-    });
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!menuOpen) {
-      setMenuPosition(undefined);
-      return;
-    }
-    updateMenuPosition();
-    window.addEventListener("resize", updateMenuPosition);
-    window.addEventListener("scroll", updateMenuPosition, true);
-    return () => {
-      window.removeEventListener("resize", updateMenuPosition);
-      window.removeEventListener("scroll", updateMenuPosition, true);
-    };
-  }, [menuOpen, updateMenuPosition]);
-
-  useEffect(() => {
-    if (!menuOpen) {
-      return;
-    }
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (
-        !menuContainerRef.current?.contains(event.target as Node) &&
-        !menuRef.current?.contains(event.target as Node)
-      ) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-    };
-  }, [menuOpen]);
 
   return (
-    // 键盘事件从内部按钮冒泡到容器，仅用于统一处理 Escape，不让容器成为交互控件。
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
-    <div
-      className="relative shrink-0"
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && menuOpen) {
-          event.preventDefault();
-          setMenuOpen(false);
-          triggerRef.current?.focus();
-        }
-      }}
-      ref={menuContainerRef}
-    >
-      <Button
-        variant="ghost"
-        aria-expanded={menuOpen}
-        aria-haspopup="menu"
-        aria-label={t("sidebar.openProjectActions", { project: project.name })}
-        className="grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus"
-        disabled={isPending}
-        id={`project-actions-${project.id}`}
-        onClick={() => {
-          setMenuOpen((open) => !open);
-        }}
-        ref={triggerRef}
-        type="button"
-      >
-        <Ellipsis className="size-3.5" aria-hidden="true" />
-      </Button>
-      {menuOpen && menuPosition !== undefined && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className="fixed z-50"
-              ref={menuRef}
-              style={{ left: menuPosition.left, top: menuPosition.top }}
-            >
-              <ProjectActionMenu
-                isPending={isPending}
-                onRemove={() => {
-                  setMenuOpen(false);
-                  onRemove(project);
-                }}
-                onRename={() => {
-                  setMenuOpen(false);
-                  onRename(project);
-                }}
-                project={project}
-              />
-            </div>,
-            document.body,
-          )
-        : null}
+    <div className="relative shrink-0">
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            aria-label={t("sidebar.openProjectActions", { project: project.name })}
+            className="grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus"
+            disabled={isPending}
+            id={`project-actions-${project.id}`}
+            type="button"
+          >
+            <Ellipsis className="size-3.5" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <ProjectActionMenu
+          isPending={isPending}
+          onRemove={() => {
+            onRemove(project);
+          }}
+          onRename={() => {
+            onRename(project);
+          }}
+          project={project}
+        />
+      </DropdownMenu>
     </div>
   );
 }
@@ -950,8 +862,7 @@ type ProjectActionMenuProps = Readonly<{
   project: Project;
 }>;
 
-const projectActionClassName =
-  "flex h-8 w-full items-center gap-2 rounded-control px-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover disabled:opacity-50";
+const projectActionClassName = "h-8 w-full text-left text-foreground";
 
 export function ProjectActionMenu({
   isPending,
@@ -961,34 +872,25 @@ export function ProjectActionMenu({
 }: ProjectActionMenuProps) {
   const { t } = useTranslation("workbench");
   return (
-    <div
+    <DropdownMenuContent
+      align="start"
       aria-label={t("sidebar.projectActions", { project: project.name })}
-      className="w-32 rounded-surface bg-raised p-1 shadow-floating"
-      role="menu"
+      aria-labelledby={undefined}
+      className="w-32"
     >
-      <Button
-        variant="ghost"
-        className={projectActionClassName}
-        disabled={isPending}
-        onClick={onRename}
-        role="menuitem"
-        type="button"
-      >
+      <DropdownMenuItem className={projectActionClassName} disabled={isPending} onSelect={onRename}>
         <Pencil className="size-3.5" aria-hidden="true" />
         {t("sidebar.rename")}
-      </Button>
-      <Button
-        variant="ghost"
+      </DropdownMenuItem>
+      <DropdownMenuItem
         className={`${projectActionClassName} text-danger`}
         disabled={isPending}
-        onClick={onRemove}
-        role="menuitem"
-        type="button"
+        onSelect={onRemove}
       >
         <Trash2 className="size-3.5" aria-hidden="true" />
         {t("sidebar.remove")}
-      </Button>
-    </div>
+      </DropdownMenuItem>
+    </DropdownMenuContent>
   );
 }
 
@@ -1061,85 +963,9 @@ function TaskLink({
   task,
 }: TaskLinkProps) {
   const { t } = useTranslation("workbench");
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPosition, setMenuPosition] = useState<Readonly<{ left: number; top: number }>>();
-  const menuContainerRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  const updateMenuPosition = useCallback(() => {
-    const container = menuContainerRef.current;
-    const trigger = triggerRef.current;
-    if (container === null || trigger === null) {
-      return;
-    }
-    const triggerRect = trigger.getBoundingClientRect();
-    const maximumLeft = Math.max(
-      taskActionMenuViewportPadding,
-      window.innerWidth - taskActionMenuWidth - taskActionMenuViewportPadding,
-    );
-    const belowTop = triggerRect.bottom + taskActionMenuGap;
-    const maximumTop = window.innerHeight - taskActionMenuHeight - taskActionMenuViewportPadding;
-
-    // 菜单左边缘与省略号按钮对齐，并在靠近视口底部时翻转到行上方。
-    setMenuPosition({
-      left: Math.min(Math.max(triggerRect.left, taskActionMenuViewportPadding), maximumLeft),
-      top:
-        belowTop <= maximumTop
-          ? belowTop
-          : Math.max(
-              taskActionMenuViewportPadding,
-              triggerRect.top - taskActionMenuHeight - taskActionMenuGap,
-            ),
-    });
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!menuOpen) {
-      setMenuPosition(undefined);
-      return;
-    }
-    updateMenuPosition();
-    window.addEventListener("resize", updateMenuPosition);
-    window.addEventListener("scroll", updateMenuPosition, true);
-    return () => {
-      window.removeEventListener("resize", updateMenuPosition);
-      window.removeEventListener("scroll", updateMenuPosition, true);
-    };
-  }, [menuOpen, updateMenuPosition]);
-
-  useEffect(() => {
-    if (!menuOpen) {
-      return;
-    }
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (
-        !menuContainerRef.current?.contains(event.target as Node) &&
-        !menuRef.current?.contains(event.target as Node)
-      ) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-    };
-  }, [menuOpen]);
 
   return (
-    // 键盘事件从内部按钮冒泡到容器，仅用于统一处理 Escape，不让容器成为交互控件。
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
-    <div
-      className="group relative min-w-0"
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && menuOpen) {
-          event.preventDefault();
-          setMenuOpen(false);
-          triggerRef.current?.focus();
-        }
-      }}
-      ref={menuContainerRef}
-    >
+    <div className="group relative min-w-0">
       <Link
         aria-current={active ? "page" : undefined}
         className={`flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-body-small transition-colors ${
@@ -1160,48 +986,32 @@ function TaskLink({
           updatedAt={task.updatedAt}
         />
       </Link>
-      <Button
-        variant="ghost"
-        aria-expanded={menuOpen}
-        aria-haspopup="menu"
-        aria-label={t("sidebar.openTaskActions", { task: task.title })}
-        className="task-actions absolute right-1 top-1 grid size-6 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:opacity-100 focus-visible:shadow-focus"
-        disabled={isActionPending}
-        onClick={() => {
-          setMenuOpen((open) => !open);
-        }}
-        ref={triggerRef}
-        type="button"
-      >
-        <Ellipsis className="size-4" aria-hidden="true" />
-      </Button>
-      {menuOpen && menuPosition !== undefined && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className="fixed z-50"
-              ref={menuRef}
-              style={{ left: menuPosition.left, top: menuPosition.top }}
-            >
-              <TaskActionMenu
-                isPending={isActionPending}
-                onArchive={() => {
-                  setMenuOpen(false);
-                  onArchive(task);
-                }}
-                onPin={() => {
-                  setMenuOpen(false);
-                  onPin(task);
-                }}
-                onRename={() => {
-                  setMenuOpen(false);
-                  onRename(task);
-                }}
-                task={task}
-              />
-            </div>,
-            document.body,
-          )
-        : null}
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            aria-label={t("sidebar.openTaskActions", { task: task.title })}
+            className="task-actions absolute right-1 top-1 grid size-6 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:opacity-100 focus-visible:shadow-focus"
+            disabled={isActionPending}
+            type="button"
+          >
+            <Ellipsis className="size-4" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <TaskActionMenu
+          isPending={isActionPending}
+          onArchive={() => {
+            onArchive(task);
+          }}
+          onPin={() => {
+            onPin(task);
+          }}
+          onRename={() => {
+            onRename(task);
+          }}
+          task={task}
+        />
+      </DropdownMenu>
     </div>
   );
 }
@@ -1280,8 +1090,7 @@ type TaskActionMenuProps = Readonly<{
   task: AgentTask;
 }>;
 
-const taskActionClassName =
-  "flex h-8 w-full items-center gap-2 rounded-control px-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover disabled:opacity-50";
+const taskActionClassName = "h-8 w-full text-left text-foreground";
 
 export function TaskActionMenu({
   isPending,
@@ -1292,44 +1101,28 @@ export function TaskActionMenu({
 }: TaskActionMenuProps) {
   const { t } = useTranslation("workbench");
   return (
-    <div
+    <DropdownMenuContent
+      align="start"
       aria-label={t("sidebar.taskActions", { task: task.title })}
-      className="w-32 rounded-surface bg-raised p-1 shadow-floating"
-      role="menu"
+      aria-labelledby={undefined}
+      className="w-32"
     >
-      <Button
-        variant="ghost"
-        className={taskActionClassName}
-        disabled={isPending}
-        onClick={onPin}
-        role="menuitem"
-        type="button"
-      >
+      <DropdownMenuItem className={taskActionClassName} disabled={isPending} onSelect={onPin}>
         <Pin className="size-3.5" aria-hidden="true" />
         {task.pinned ? t("sidebar.unpin") : t("sidebar.pin")}
-      </Button>
-      <Button
-        variant="ghost"
-        className={taskActionClassName}
-        disabled={isPending}
-        onClick={onRename}
-        role="menuitem"
-        type="button"
-      >
+      </DropdownMenuItem>
+      <DropdownMenuItem className={taskActionClassName} disabled={isPending} onSelect={onRename}>
         <Pencil className="size-3.5" aria-hidden="true" />
         {t("sidebar.rename")}
-      </Button>
-      <Button
-        variant="ghost"
+      </DropdownMenuItem>
+      <DropdownMenuItem
         className={`${taskActionClassName} text-danger`}
         disabled={isPending}
-        onClick={onArchive}
-        role="menuitem"
-        type="button"
+        onSelect={onArchive}
       >
         <Archive className="size-3.5" aria-hidden="true" />
         {t("sidebar.archive")}
-      </Button>
-    </div>
+      </DropdownMenuItem>
+    </DropdownMenuContent>
   );
 }
