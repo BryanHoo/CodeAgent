@@ -2,11 +2,22 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { Button } from "./button.js";
+import { ButtonGroup } from "./button-group.js";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "./context-menu.js";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "./dialog.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "./dropdown-menu.js";
 import { Input } from "./input.js";
@@ -102,5 +113,53 @@ describe("shadcn UI primitives", () => {
     expect(markup).toContain('data-slot="dropdown-menu-content"');
     expect(markup).toContain('data-slot="dropdown-menu-item"');
     expect(markup).toContain("text-danger");
+  });
+
+  it("renders dropdown radio choices inside a button group", () => {
+    const groupMarkup = renderToStaticMarkup(
+      <ButtonGroup>
+        <button type="button">打开</button>
+        <button type="button">选择应用</button>
+      </ButtonGroup>,
+    );
+    const menuMarkup = renderToStaticMarkup(
+      <DropdownMenu open>
+        <DropdownMenuContent aria-label="选择应用">
+          <DropdownMenuRadioGroup value="zed">
+            <DropdownMenuRadioItem value="zed">Zed</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+
+    expect(groupMarkup).toContain('data-slot="button-group"');
+    expect(groupMarkup).toContain('role="group"');
+    expect(menuMarkup).toContain('data-slot="dropdown-menu-radio-group"');
+    expect(menuMarkup).toContain('data-slot="dropdown-menu-radio-item"');
+    expect(menuMarkup).toContain('role="menuitemradio"');
+  });
+
+  it("composes a portalled context menu around its existing trigger DOM", () => {
+    const markup = renderToStaticMarkup(
+      <ContextMenu open>
+        <ContextMenuTrigger asChild>
+          <div aria-selected="false" role="treeitem">
+            README.md
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent aria-label="打开 README.md 的方式">
+          <ContextMenuLabel>打开方式</ContextMenuLabel>
+          <ContextMenuSeparator />
+          <ContextMenuItem>Zed</ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>,
+    );
+
+    expect(markup.match(/role="treeitem"/gu)).toHaveLength(1);
+    expect(markup).toContain('data-slot="context-menu-trigger"');
+    expect(markup).toContain('data-slot="context-menu-content"');
+    expect(markup).toContain('data-slot="context-menu-label"');
+    expect(markup).toContain('data-slot="context-menu-separator"');
+    expect(markup).toContain('data-slot="context-menu-item"');
   });
 });

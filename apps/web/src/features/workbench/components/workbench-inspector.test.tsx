@@ -171,6 +171,25 @@ describe("WorkbenchInspector", () => {
     expect(componentsExpandedMarkup).toContain("app.tsx");
   });
 
+  it("uses context-menu triggers for project files and folders", () => {
+    const markup = renderInspectorMarkup(
+      <WorkbenchInspector
+        fileTreeDirectories={fileTreeDirectories}
+        projectName="CodeAgent"
+        projectOpenApps={[
+          { id: "zed", kind: "editor", name: "Zed" },
+          { id: "finder", kind: "file-manager", name: "Finder" },
+        ]}
+        projectPath="/workspace/CodeAgent"
+      />,
+    );
+
+    expect(markup.match(/data-slot="context-menu-trigger"/gu)).toHaveLength(2);
+    expect(markup).toContain('role="treeitem"');
+    expect(markup).toContain("README.md");
+    expect(markup).toContain("src");
+  });
+
   it("moves Git change stats from the nearest collapsed ancestor to the visible file", () => {
     const renderInspector = (expandedFileTreePaths: Set<string>) =>
       renderInspectorMarkup(

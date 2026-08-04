@@ -1,19 +1,27 @@
 import type { ProjectOpenApp, ProjectOpenAppId, ProjectOpenAppKind } from "@code-agent/protocol";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import {
-  Check,
-  ChevronDown,
-  Code2,
-  ExternalLink,
-  FolderOpen,
-  Terminal,
-  Wrench,
-} from "lucide-react";
+import { ChevronDown, Code2, ExternalLink, FolderOpen, Terminal, Wrench } from "lucide-react";
+import type { ReactElement } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { Button } from "../../../shared/ui/button.js";
+import { ButtonGroup } from "../../../shared/ui/button-group.js";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "../../../shared/ui/context-menu.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "../../../shared/ui/dropdown-menu.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 import type { CodeAgentProjectOpenClient } from "../../projects/project-queries.js";
 import { projectOpenCapabilitiesQueryOptions } from "../../projects/project-queries.js";
@@ -35,13 +43,9 @@ const appKindIcons = {
 
 type ProjectOpenMenuItemsProps = Readonly<{
   apps: readonly ProjectOpenApp[];
-  ariaLabel?: string;
-  detail?: string;
   isPending: boolean;
-  mode?: "command" | "selection";
   onSelect: (appId: ProjectOpenAppId) => void;
   selectedAppId?: ProjectOpenAppId;
-  title?: string;
 }>;
 
 type ProjectOpenTargetType = "directory" | "file";
@@ -55,178 +59,152 @@ export function getProjectOpenAppsForTarget(
 
 export function ProjectOpenMenuItems({
   apps,
-  ariaLabel,
-  detail,
   isPending,
-  mode = "selection",
   onSelect,
   selectedAppId,
-  title,
 }: ProjectOpenMenuItemsProps) {
   const { t } = useTranslation("workbench");
   return (
-    <div
-      aria-label={ariaLabel ?? t("openMenu.choose")}
-      className="w-60 rounded-surface border border-separator-strong bg-raised p-1.5 shadow-floating"
-      role="menu"
+    <DropdownMenuContent
+      align="end"
+      aria-label={t("openMenu.choose")}
+      className="w-60 border border-separator-strong p-1.5"
+      sideOffset={6}
     >
-      {title === undefined ? null : (
-        <div className="mb-1 border-b border-separator px-2 pb-1.5 pt-0.5" role="presentation">
-          <p className="text-label font-medium text-foreground">{title}</p>
-          {detail === undefined ? null : (
-            <p className="mt-0.5 truncate text-meta text-muted-foreground" title={detail}>
-              {detail}
-            </p>
-          )}
-        </div>
-      )}
-      {apps.map((app) => {
-        const Icon = appKindIcons[app.kind];
-        const selected = app.id === selectedAppId;
-        const appName = app.kind === "system-default" ? t("openMenu.systemDefault") : app.name;
-        return (
-          <Button
-            variant="ghost"
-            aria-label={appName}
-            className="flex h-9 w-full items-center gap-2.5 rounded-control px-2 text-left text-body-small text-foreground transition-colors hover:bg-control-hover focus-visible:bg-control-hover focus-visible:shadow-focus disabled:opacity-50"
-            disabled={isPending}
-            key={app.id}
-            onClick={() => {
-              onSelect(app.id);
-            }}
-            role={mode === "selection" ? "menuitemradio" : "menuitem"}
-            type="button"
-            {...(mode === "selection" ? { "aria-checked": selected } : {})}
-          >
-            <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate">{appName}</span>
-            {mode === "selection" && selected ? (
-              <Check className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
-            ) : null}
-          </Button>
-        );
-      })}
-    </div>
+      <DropdownMenuRadioGroup
+        onValueChange={(appId) => {
+          onSelect(appId as ProjectOpenAppId);
+        }}
+        {...(selectedAppId === undefined ? {} : { value: selectedAppId })}
+      >
+        {apps.map((app) => {
+          const Icon = appKindIcons[app.kind];
+          const appName = app.kind === "system-default" ? t("openMenu.systemDefault") : app.name;
+          return (
+            <DropdownMenuRadioItem
+              aria-label={appName}
+              className="h-9"
+              disabled={isPending}
+              key={app.id}
+              value={app.id}
+            >
+              <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate">{appName}</span>
+            </DropdownMenuRadioItem>
+          );
+        })}
+      </DropdownMenuRadioGroup>
+    </DropdownMenuContent>
   );
-}
-
-const contextMenuViewportPadding = 8;
-const contextMenuWidth = 240;
-const contextMenuItemHeight = 36;
-const contextMenuVerticalChrome = 12;
-// 标题区使用固定估算高度，确保菜单靠近视口底部时不会被裁切。
-const contextMenuHeaderHeight = 46;
-
-type ProjectOpenContextMenuPositionInput = Readonly<{
-  appCount: number;
-  pointerX: number;
-  pointerY: number;
-  viewportHeight: number;
-  viewportWidth: number;
-}>;
-
-export function getProjectOpenContextMenuPosition({
-  appCount,
-  pointerX,
-  pointerY,
-  viewportHeight,
-  viewportWidth,
-}: ProjectOpenContextMenuPositionInput) {
-  const estimatedHeight =
-    appCount * contextMenuItemHeight + contextMenuVerticalChrome + contextMenuHeaderHeight;
-  return {
-    left: Math.max(
-      contextMenuViewportPadding,
-      Math.min(pointerX, viewportWidth - contextMenuWidth - contextMenuViewportPadding),
-    ),
-    top: Math.max(
-      contextMenuViewportPadding,
-      Math.min(pointerY, viewportHeight - estimatedHeight - contextMenuViewportPadding),
-    ),
-  };
 }
 
 export type ProjectOpenContextMenuTarget = Readonly<{
   path: string;
-  pointerX: number;
-  pointerY: number;
   type: ProjectOpenTargetType;
 }>;
 
+type ProjectOpenContextMenuItemsProps = Readonly<{
+  apps: readonly ProjectOpenApp[];
+  ariaLabel?: string;
+  detail: string;
+  isPending: boolean;
+  onSelect: (appId: ProjectOpenAppId) => void;
+  title: string;
+}>;
+
+export function ProjectOpenContextMenuItems({
+  apps,
+  ariaLabel,
+  detail,
+  isPending,
+  onSelect,
+  title,
+}: ProjectOpenContextMenuItemsProps) {
+  const { t } = useTranslation("workbench");
+  return (
+    <ContextMenuContent aria-label={ariaLabel} className="w-60">
+      <ContextMenuLabel className="py-0.5">
+        <p>{title}</p>
+        <p className="mt-0.5 truncate text-meta font-normal text-muted-foreground" title={detail}>
+          {detail}
+        </p>
+      </ContextMenuLabel>
+      <ContextMenuSeparator />
+      {apps.map((app) => {
+        const Icon = appKindIcons[app.kind];
+        const appName = app.kind === "system-default" ? t("openMenu.systemDefault") : app.name;
+        return (
+          <ContextMenuItem
+            aria-label={appName}
+            className="h-9"
+            disabled={isPending}
+            key={app.id}
+            onSelect={() => {
+              onSelect(app.id);
+            }}
+          >
+            <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">{appName}</span>
+          </ContextMenuItem>
+        );
+      })}
+    </ContextMenuContent>
+  );
+}
+
 type ProjectOpenContextMenuProps = Readonly<{
   apps: readonly ProjectOpenApp[];
+  children: ReactElement;
   isPending: boolean;
-  onClose: () => void;
+  onOpen: () => void;
   onSelect: (appId: ProjectOpenAppId, path: string) => void;
   target: ProjectOpenContextMenuTarget;
 }>;
 
 export function ProjectOpenContextMenu({
   apps,
+  children,
   isPending,
-  onClose,
+  onOpen,
   onSelect,
   target,
 }: ProjectOpenContextMenuProps) {
   const { t } = useTranslation("workbench");
-  const containerRef = useRef<HTMLDivElement>(null);
   const targetApps = getProjectOpenAppsForTarget(apps, target.type);
 
-  useEffect(() => {
-    const focusFrame = requestAnimationFrame(() => {
-      containerRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
-    });
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        onClose();
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      cancelAnimationFrame(focusFrame);
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [onClose]);
+  if (targetApps.length === 0) {
+    return children;
+  }
 
-  const position = getProjectOpenContextMenuPosition({
-    appCount: targetApps.length,
-    pointerX: target.pointerX,
-    pointerY: target.pointerY,
-    viewportHeight: window.innerHeight,
-    viewportWidth: window.innerWidth,
-  });
-
-  return createPortal(
-    <div
-      className="fixed z-50"
-      onContextMenu={(event) => {
-        event.preventDefault();
+  return (
+    <ContextMenu
+      modal={false}
+      onOpenChange={(open) => {
+        if (open) {
+          onOpen();
+        }
       }}
-      ref={containerRef}
-      style={position}
     >
-      <ProjectOpenMenuItems
+      <ContextMenuTrigger
+        asChild
+        // 文件树节点递归嵌套，阻止右键事件继续触发父目录菜单。
+        onContextMenu={(event) => {
+          event.stopPropagation();
+        }}
+      >
+        {children}
+      </ContextMenuTrigger>
+      <ProjectOpenContextMenuItems
         apps={targetApps}
         ariaLabel={t("openMenu.targetLabel", { path: target.path })}
         detail={target.path}
         isPending={isPending}
-        mode="command"
         onSelect={(appId) => {
-          onClose();
           onSelect(appId, target.path);
         }}
         title={t("openMenu.title")}
       />
-    </div>,
-    document.body,
+    </ContextMenu>
   );
 }
 
@@ -238,8 +216,6 @@ type ProjectOpenMenuProps = Readonly<{
 
 export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: ProjectOpenMenuProps) {
   const { t } = useTranslation("workbench");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [actionError, setActionError] = useState(false);
   const [selectedApps, setSelectedApps] = useState<Readonly<Record<string, ProjectOpenAppId>>>({});
@@ -265,27 +241,11 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
     setMenuOpen(false);
   }, [projectId]);
 
-  useEffect(() => {
-    if (!menuOpen) {
-      return;
-    }
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-    };
-  }, [menuOpen]);
-
   const selectApp = (appId: ProjectOpenAppId) => {
     setSelectedApps((current) => ({ ...current, [projectId]: appId }));
     writeProjectOpenAppId(preferenceStorage, projectId, appId);
     setActionError(false);
     setMenuOpen(false);
-    menuTriggerRef.current?.focus();
   };
   const openButtonLabel = capabilitiesQuery.isPending
     ? t("openMenu.detect")
@@ -295,84 +255,55 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
   const compactOpenButtonLabel = selectedApp?.name ?? openButtonLabel;
 
   return (
-    // 键盘事件从内部按钮冒泡到容器，仅用于统一处理 Escape，不让容器成为交互控件。
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
-    <div
-      className="relative inline-flex shrink-0"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) {
-          setMenuOpen(false);
-        }
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && menuOpen) {
-          event.preventDefault();
-          setMenuOpen(false);
-          menuTriggerRef.current?.focus();
-        }
-      }}
-      ref={containerRef}
-    >
-      <div className="flex h-7 overflow-hidden rounded-control border border-separator-strong bg-control shadow-control max-workbench:h-11">
-        <Button
-          variant="ghost"
-          aria-label={openButtonLabel}
-          className="min-w-0 max-w-36 truncate px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus disabled:cursor-not-allowed disabled:text-muted-foreground sm:max-w-48"
-          disabled={selectedApp === undefined || openMutation.isPending}
-          onClick={() => {
-            if (selectedApp !== undefined) {
-              setActionError(false);
-              void openActionLockRef.current.run(() => openMutation.mutateAsync(selectedApp.id));
-            }
-          }}
-          title={openButtonLabel}
-          type="button"
-        >
-          <span className="hidden sm:inline">{openButtonLabel}</span>
-          <span className="sm:hidden">{compactOpenButtonLabel}</span>
-        </Button>
-        <Button
-          variant="ghost"
-          aria-expanded={menuOpen}
-          aria-haspopup="menu"
-          aria-label={t("openMenu.choose")}
-          className="inline-grid size-7 shrink-0 place-items-center border-l border-separator text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus disabled:cursor-not-allowed disabled:opacity-45 max-workbench:size-11"
-          disabled={apps.length === 0 || openMutation.isPending}
-          onClick={() => {
-            setActionError(false);
-            setMenuOpen((open) => !open);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setMenuOpen(true);
-              requestAnimationFrame(() => {
-                containerRef.current
-                  ?.querySelector<HTMLButtonElement>('[role="menuitemradio"]')
-                  ?.focus();
-              });
-            }
-          }}
-          ref={menuTriggerRef}
-          type="button"
-        >
-          <ChevronDown
-            className={`size-3.5 transition-transform ${menuOpen ? "rotate-180" : ""}`}
-            aria-hidden="true"
-          />
-        </Button>
-      </div>
-
-      {menuOpen ? (
-        <div className="absolute right-0 top-full z-50 pt-1.5">
-          <ProjectOpenMenuItems
-            apps={apps}
-            isPending={openMutation.isPending}
-            onSelect={selectApp}
-            {...(selectedApp === undefined ? {} : { selectedAppId: selectedApp.id })}
-          />
-        </div>
-      ) : null}
+    <div className="relative inline-flex shrink-0">
+      <DropdownMenu
+        modal={false}
+        onOpenChange={(open) => {
+          setActionError(false);
+          setMenuOpen(open);
+        }}
+        open={menuOpen}
+      >
+        <ButtonGroup className="h-7 overflow-hidden rounded-control border border-separator-strong bg-control shadow-control max-workbench:h-11">
+          <Button
+            variant="ghost"
+            aria-label={openButtonLabel}
+            className="min-w-0 max-w-36 truncate rounded-none px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus disabled:cursor-not-allowed disabled:text-muted-foreground sm:max-w-48"
+            disabled={selectedApp === undefined || openMutation.isPending}
+            onClick={() => {
+              if (selectedApp !== undefined) {
+                setActionError(false);
+                void openActionLockRef.current.run(() => openMutation.mutateAsync(selectedApp.id));
+              }
+            }}
+            title={openButtonLabel}
+            type="button"
+          >
+            <span className="hidden sm:inline">{openButtonLabel}</span>
+            <span className="sm:hidden">{compactOpenButtonLabel}</span>
+          </Button>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              aria-label={t("openMenu.choose")}
+              className="inline-grid size-7 shrink-0 place-items-center rounded-none border-l border-separator text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus disabled:cursor-not-allowed disabled:opacity-45 max-workbench:size-11"
+              disabled={apps.length === 0 || openMutation.isPending}
+              type="button"
+            >
+              <ChevronDown
+                className={`size-3.5 transition-transform ${menuOpen ? "rotate-180" : ""}`}
+                aria-hidden="true"
+              />
+            </Button>
+          </DropdownMenuTrigger>
+        </ButtonGroup>
+        <ProjectOpenMenuItems
+          apps={apps}
+          isPending={openMutation.isPending}
+          onSelect={selectApp}
+          {...(selectedApp === undefined ? {} : { selectedAppId: selectedApp.id })}
+        />
+      </DropdownMenu>
       {actionError ? (
         <p
           className="absolute right-0 top-full z-50 mt-1.5 w-60 rounded-control bg-danger-soft px-2 py-1.5 text-meta text-danger shadow-floating"

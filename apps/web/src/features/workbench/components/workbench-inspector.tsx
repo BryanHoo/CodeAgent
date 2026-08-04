@@ -29,11 +29,7 @@ import { FileTree, FileTreeFile, FileTreeFolder } from "../../../shared/ai-eleme
 import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
 import { Button } from "../../../shared/ui/button.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
-import {
-  getProjectOpenAppsForTarget,
-  ProjectOpenContextMenu,
-  type ProjectOpenContextMenuTarget,
-} from "./project-open-menu.js";
+import { ProjectOpenContextMenu } from "./project-open-menu.js";
 import {
   formatSubagentModel,
   toSubagentTaskStatus,
@@ -103,8 +99,11 @@ type ProjectFileTreeNodesProps = Readonly<{
   directoryStates: ReadonlyMap<string | null, ProjectFileTreeDirectoryState>;
   entries: readonly ProjectFileTreeEntry[];
   expandedPaths: ReadonlySet<string>;
-  onOpenContextMenu: (target: ProjectOpenContextMenuTarget) => void;
+  onContextMenuOpen: (path: string) => void;
+  onOpenProjectPath: (appId: ProjectOpenAppId, path: string) => void;
   onRefreshDirectory: (directoryPath: string | null) => void;
+  projectOpenApps: readonly ProjectOpenApp[];
+  projectOpenPending: boolean;
 }>;
 
 type FileTreeChangeStats = Readonly<{
@@ -235,15 +234,21 @@ function ProjectFileTreeDirectoryChildren({
   directoryPath,
   directoryStates,
   expandedPaths,
-  onOpenContextMenu,
+  onContextMenuOpen,
+  onOpenProjectPath,
   onRefreshDirectory,
+  projectOpenApps,
+  projectOpenPending,
 }: Readonly<{
   changeStatsByPath: ReadonlyMap<string, FileTreeChangeStats>;
   directoryPath: string;
   directoryStates: ReadonlyMap<string | null, ProjectFileTreeDirectoryState>;
   expandedPaths: ReadonlySet<string>;
-  onOpenContextMenu: (target: ProjectOpenContextMenuTarget) => void;
+  onContextMenuOpen: (path: string) => void;
+  onOpenProjectPath: (appId: ProjectOpenAppId, path: string) => void;
   onRefreshDirectory: (directoryPath: string | null) => void;
+  projectOpenApps: readonly ProjectOpenApp[];
+  projectOpenPending: boolean;
 }>) {
   const state = directoryStates.get(directoryPath);
   const name = getProjectFileName(directoryPath);
@@ -308,8 +313,11 @@ function ProjectFileTreeDirectoryChildren({
       directoryStates={directoryStates}
       entries={state.data?.entries ?? []}
       expandedPaths={expandedPaths}
-      onOpenContextMenu={onOpenContextMenu}
+      onContextMenuOpen={onContextMenuOpen}
+      onOpenProjectPath={onOpenProjectPath}
       onRefreshDirectory={onRefreshDirectory}
+      projectOpenApps={projectOpenApps}
+      projectOpenPending={projectOpenPending}
     />
   );
 }
@@ -319,8 +327,11 @@ function ProjectFileTreeNodes({
   directoryStates,
   entries,
   expandedPaths,
-  onOpenContextMenu,
+  onContextMenuOpen,
+  onOpenProjectPath,
   onRefreshDirectory,
+  projectOpenApps,
+  projectOpenPending,
 }: ProjectFileTreeNodesProps) {
   return entries.map((entry) => {
     const name = getProjectFileName(entry.path);
@@ -339,46 +350,43 @@ function ProjectFileTreeNodes({
         />
       );
     return entry.type === "directory" ? (
-      <FileTreeFolder
+      <ProjectOpenContextMenu
+        apps={projectOpenApps}
+        isPending={projectOpenPending}
         key={entry.path}
-        name={name}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          onOpenContextMenu({
-            path: entry.path,
-            pointerX: event.clientX,
-            pointerY: event.clientY,
-            type: entry.type,
-          });
+        onOpen={() => {
+          onContextMenuOpen(entry.path);
         }}
-        path={entry.path}
-        trailing={trailing}
+        onSelect={onOpenProjectPath}
+        target={{ path: entry.path, type: entry.type }}
       >
-        <ProjectFileTreeDirectoryChildren
-          changeStatsByPath={changeStatsByPath}
-          directoryPath={entry.path}
-          directoryStates={directoryStates}
-          expandedPaths={expandedPaths}
-          onOpenContextMenu={onOpenContextMenu}
-          onRefreshDirectory={onRefreshDirectory}
-        />
-      </FileTreeFolder>
+        <FileTreeFolder name={name} path={entry.path} trailing={trailing}>
+          <ProjectFileTreeDirectoryChildren
+            changeStatsByPath={changeStatsByPath}
+            directoryPath={entry.path}
+            directoryStates={directoryStates}
+            expandedPaths={expandedPaths}
+            onContextMenuOpen={onContextMenuOpen}
+            onOpenProjectPath={onOpenProjectPath}
+            onRefreshDirectory={onRefreshDirectory}
+            projectOpenApps={projectOpenApps}
+            projectOpenPending={projectOpenPending}
+          />
+        </FileTreeFolder>
+      </ProjectOpenContextMenu>
     ) : (
-      <FileTreeFile
+      <ProjectOpenContextMenu
+        apps={projectOpenApps}
+        isPending={projectOpenPending}
         key={entry.path}
-        name={name}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          onOpenContextMenu({
-            path: entry.path,
-            pointerX: event.clientX,
-            pointerY: event.clientY,
-            type: entry.type,
-          });
+        onOpen={() => {
+          onContextMenuOpen(entry.path);
         }}
-        path={entry.path}
-        trailing={trailing}
-      />
+        onSelect={onOpenProjectPath}
+        target={{ path: entry.path, type: entry.type }}
+      >
+        <FileTreeFile name={name} path={entry.path} trailing={trailing} />
+      </ProjectOpenContextMenu>
     );
   });
 }
@@ -489,9 +497,6 @@ export function WorkbenchInspector({
   const fileChangesByPath = changeSummary.changesByPath;
   const fileTreeChangeStats = changeSummary.statsByPath;
   const [selectedTreePath, setSelectedTreePath] = useState<string>();
-  const [projectOpenTarget, setProjectOpenTarget] = useState<ProjectOpenContextMenuTarget | null>(
-    null,
-  );
   const { additions, removals } = changeSummary;
   const sources = useMemo(
     () => collectInspectorSources(projectName, projectPath, task?.turns ?? [], skills),
@@ -732,14 +737,14 @@ export function WorkbenchInspector({
                       directoryStates={fileTreeDirectoryStates}
                       entries={rootFileTreeState?.data?.entries ?? []}
                       expandedPaths={expandedFileTreePaths}
-                      onOpenContextMenu={(target) => {
+                      onContextMenuOpen={(path) => {
                         // 右键目标先进入文件树选中态，让菜单与当前操作对象保持一致。
-                        setSelectedTreePath(target.path);
-                        if (getProjectOpenAppsForTarget(projectOpenApps, target.type).length > 0) {
-                          setProjectOpenTarget(target);
-                        }
+                        setSelectedTreePath(path);
                       }}
+                      onOpenProjectPath={onOpenProjectPath}
                       onRefreshDirectory={onRefreshFileTreeDirectory}
+                      projectOpenApps={projectOpenApps}
+                      projectOpenPending={projectOpenPending}
                     />
                   </FileTree>
                 )}
@@ -784,17 +789,6 @@ export function WorkbenchInspector({
           </div>
         )}
       </div>
-      {projectOpenTarget === null ? null : (
-        <ProjectOpenContextMenu
-          apps={projectOpenApps}
-          isPending={projectOpenPending}
-          onClose={() => {
-            setProjectOpenTarget(null);
-          }}
-          onSelect={onOpenProjectPath}
-          target={projectOpenTarget}
-        />
-      )}
       {projectOpenError === null ? null : (
         <p
           className="absolute bottom-3 right-3 z-40 w-60 rounded-control bg-danger-soft px-2 py-1.5 text-meta text-danger shadow-floating"
