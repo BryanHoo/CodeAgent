@@ -975,7 +975,7 @@ test("shows the complete truncated command title on hover and focus", async ({ p
   await commandTitle.hover();
   const tooltip = page.getByRole("tooltip");
   await expect(tooltip).toHaveText(command);
-  expect(await tooltip.evaluate((element) => element.parentElement === document.body)).toBe(true);
+  expect(await tooltip.evaluate((element) => element.closest("details") === null)).toBe(true);
 
   await page.mouse.move(0, 0);
   await expect(tooltip).toHaveCount(0);

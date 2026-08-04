@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import performanceBudgets from "../../../../../../tests/performance-budgets.json" with { type: "json" };
+import { TooltipProvider } from "../../../shared/ui/tooltip.js";
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import { createTaskStore } from "../../conversation/runtime/task-store.js";
 import { TaskTimeline } from "./task-timeline.js";
@@ -58,17 +59,19 @@ describe("TaskTimeline performance", () => {
 
     const renderStartedAt = performance.now();
     const markup = renderToStaticMarkup(
-      <TaskTimeline
-        projectId={snapshot.projectId}
-        runtime={{
-          connectionState: "connected",
-          error: null,
-          isPending: false,
-          snapshot,
-          store,
-        }}
-        taskId={snapshot.id}
-      />,
+      <TooltipProvider>
+        <TaskTimeline
+          projectId={snapshot.projectId}
+          runtime={{
+            connectionState: "connected",
+            error: null,
+            isPending: false,
+            snapshot,
+            store,
+          }}
+          taskId={snapshot.id}
+        />
+      </TooltipProvider>,
     );
     const renderDurationMs = performance.now() - renderStartedAt;
 

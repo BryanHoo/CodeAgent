@@ -1,7 +1,9 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactNode } from "react";
+import { renderToStaticMarkup as renderReactToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { changeAppLanguage } from "../../../i18n/i18n.js";
+import { TooltipProvider } from "../../../shared/ui/tooltip.js";
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import { createTaskStore } from "../../conversation/runtime/task-store.js";
 import {
@@ -9,6 +11,10 @@ import {
   TaskSnapshotTimeline,
   TaskTimeline,
 } from "./task-timeline.js";
+
+function renderToStaticMarkup(children: ReactNode) {
+  return renderReactToStaticMarkup(<TooltipProvider>{children}</TooltipProvider>);
+}
 
 const completedTurn: RuntimeTaskSnapshot["turns"][number] = {
   completedAt: "2026-07-24T00:01:00.000Z",

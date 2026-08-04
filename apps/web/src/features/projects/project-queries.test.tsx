@@ -2,6 +2,7 @@ import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "../../shared/ui/tooltip.js";
 import { TaskSnapshotTimeline } from "../workbench/components/task-timeline.js";
 import {
   capabilitiesQueryOptions,
@@ -623,7 +624,11 @@ describe("project queries", () => {
   });
 
   it("renders user-visible structured items without exposing reasoning", () => {
-    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={snapshot} />);
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <TaskSnapshotTimeline snapshot={snapshot} />
+      </TooltipProvider>,
+    );
 
     for (const text of [
       "读取真实历史",

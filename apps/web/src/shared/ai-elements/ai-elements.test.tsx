@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
 import { Conversation, ConversationContent, ConversationVirtualList } from "./conversation.js";
@@ -26,7 +27,7 @@ import {
 } from "./code-block.js";
 import { Context, ContextTrigger, formatContextUsage } from "./context.js";
 import { FileTree, FileTreeFile, FileTreeFolder } from "./file-tree.js";
-import { Message, MessageContent, MessageResponse } from "./message.js";
+import { Message, MessageAction, MessageContent, MessageResponse } from "./message.js";
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -46,6 +47,10 @@ import {
 import { Shimmer } from "./shimmer.js";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "./tool.js";
 import { TooltipProvider } from "../ui/tooltip.js";
+
+function renderWithTooltipProvider(children: ReactNode) {
+  return renderToStaticMarkup(<TooltipProvider>{children}</TooltipProvider>);
+}
 
 describe("AI Elements primitives", () => {
   it("renders an accessible file tree with folders collapsed by default", () => {
@@ -119,7 +124,7 @@ describe("AI Elements primitives", () => {
   });
 
   it("renders a structured agent message and tool timeline", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderWithTooltipProvider(
       <Conversation aria-label="会话" conversationId="test-conversation">
         <ConversationContent>
           <Message from="assistant">
@@ -140,6 +145,28 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain("已完成");
     expect(markup).toContain("bg-control");
     expect(markup).toContain("rounded-surface");
+  });
+
+  it("composes message actions with the shared tooltip", () => {
+    const markup = renderWithTooltipProvider(
+      <MessageAction tooltip="复制消息">复制图标</MessageAction>,
+    );
+
+    expect(markup).toContain('data-slot="tooltip-trigger"');
+    expect(markup.match(/<button/gu)).toHaveLength(1);
+    expect(markup).toContain('aria-label="复制消息"');
+    expect(markup).not.toContain('title="复制消息"');
+  });
+
+  it("composes the tool header with the shared tooltip trigger", () => {
+    const markup = renderWithTooltipProvider(
+      <Tool>
+        <ToolHeader state="output-available" title="读取完整命令" />
+      </Tool>,
+    );
+
+    expect(markup).toContain('data-slot="tooltip-trigger"');
+    expect(markup.match(/<summary/gu)).toHaveLength(1);
   });
 
   it("only renders the visible Turn range in a long conversation", () => {
@@ -175,7 +202,7 @@ describe("AI Elements primitives", () => {
   });
 
   it("renders localized tool states with structured JSON input and output", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderWithTooltipProvider(
       <Tool defaultOpen>
         <ToolHeader state="output-available" title="读取文件" />
         <ToolContent>
@@ -195,13 +222,13 @@ describe("AI Elements primitives", () => {
   });
 
   it("does not render tool details until the tool is opened", () => {
-    const collapsedMarkup = renderToStaticMarkup(
+    const collapsedMarkup = renderWithTooltipProvider(
       <Tool>
         <ToolHeader state="output-available" title="读取大型结果" />
         <ToolContent>仅展开后渲染的大型内容</ToolContent>
       </Tool>,
     );
-    const expandedMarkup = renderToStaticMarkup(
+    const expandedMarkup = renderWithTooltipProvider(
       <Tool defaultOpen>
         <ToolHeader state="output-available" title="读取大型结果" />
         <ToolContent>仅展开后渲染的大型内容</ToolContent>
@@ -214,12 +241,12 @@ describe("AI Elements primitives", () => {
   });
 
   it("renders denied and failed tools as distinct error states", () => {
-    const deniedMarkup = renderToStaticMarkup(
+    const deniedMarkup = renderWithTooltipProvider(
       <Tool>
         <ToolHeader state="output-denied" title="执行命令" />
       </Tool>,
     );
-    const failedMarkup = renderToStaticMarkup(
+    const failedMarkup = renderWithTooltipProvider(
       <Tool defaultOpen>
         <ToolHeader state="output-error" title="读取文件" />
         <ToolContent>

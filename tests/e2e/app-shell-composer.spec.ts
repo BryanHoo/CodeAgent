@@ -315,8 +315,11 @@ test("从最新 AI 回复复制任务", async ({ page }) => {
   const latestReply = page
     .locator('article[data-role="assistant"]')
     .filter({ hasText: "工作台界面已按统一的 AI Elements 结构重新组织。" });
-  await expect(latestReply.getByRole("button", { name: "复制消息" })).toBeVisible();
+  const copyMessageButton = latestReply.getByRole("button", { name: "复制消息" });
+  await expect(copyMessageButton).toBeVisible();
   await expect(latestReply.getByRole("button", { name: "复制任务" })).toBeVisible();
+  await copyMessageButton.hover();
+  await expect(page.getByRole("tooltip")).toHaveText("复制消息");
 
   await latestReply.getByRole("button", { name: "复制任务" }).click();
 

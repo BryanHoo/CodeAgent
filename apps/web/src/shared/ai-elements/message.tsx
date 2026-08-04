@@ -16,6 +16,7 @@ import { Block, Streamdown, StreamdownContext, type BlockProps, type Components 
 
 import { useTranslation } from "../../i18n/i18n.js";
 import { Button } from "../ui/button.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.js";
 import { CodeComments, parseCodeComments } from "./code-comments.js";
 
 type MarkdownLinkProps = ComponentProps<"a"> & {
@@ -216,14 +217,18 @@ export function MessageAction({
   const accessibleLabel = label ?? tooltip;
 
   return (
-    <Button
-      variant="ghost"
-      aria-label={accessibleLabel}
-      className={`grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground ${className}`}
-      title={tooltip}
-      type={type}
-      {...props}
-    />
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          aria-label={accessibleLabel}
+          className={`grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground ${className}`}
+          type={type}
+          {...props}
+        />
+      </TooltipTrigger>
+      {tooltip === undefined ? null : <TooltipContent>{tooltip}</TooltipContent>}
+    </Tooltip>
   );
 }
 
