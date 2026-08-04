@@ -545,6 +545,31 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       if (event.defaultPrevented || isPromptInputComposing(event.nativeEvent) || disabled) {
         return;
       }
+      if (
+        event.key === "End" &&
+        !(event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
+      ) {
+        const root = event.currentTarget;
+        const selection = document.getSelection();
+        const serializedText = serializePromptSkillContent(contentRef.current);
+        const trailingPart = contentRef.current.at(-1);
+        const trailingSkillStart =
+          trailingPart?.type === "skill"
+            ? serializedText.length - skillPlainText(trailingPart.skill).length
+            : undefined;
+        const cursorOffset = selectionOffset(root);
+        if (
+          selection?.isCollapsed === true &&
+          trailingSkillStart !== undefined &&
+          cursorOffset <= trailingSkillStart &&
+          serializedText.slice(cursorOffset, trailingSkillStart).trim() === ""
+        ) {
+          // 非编辑 Token 会截断 Chromium 的 End；只在末尾空白区补齐原生行尾语义。
+          event.preventDefault();
+          placeCaret(root, serializedText.length);
+          return;
+        }
+      }
       if (event.key === "Backspace") {
         const selection = document.getSelection();
         const anchorNode = selection?.anchorNode;

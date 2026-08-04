@@ -252,6 +252,19 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   await expect(selectedDocumentationSkill).toBeVisible();
   await prompt.focus();
   await prompt.press("End");
+  const endCaretAnchor = await prompt.evaluate((editor) => {
+    const selection = document.getSelection();
+    const anchorNode = selection?.anchorNode;
+    return {
+      anchorOffset: selection?.anchorOffset,
+      anchoredAfterSkill:
+        anchorNode instanceof Node &&
+        editor.contains(anchorNode) &&
+        anchorNode.parentElement?.dataset["promptCaretAnchor"] !== undefined &&
+        anchorNode.parentElement.previousElementSibling?.matches("[data-prompt-skill-id]") === true,
+    };
+  });
+  expect(endCaretAnchor).toEqual({ anchorOffset: 1, anchoredAfterSkill: true });
   await prompt.press("Backspace");
   await expect(selectedDocumentationSkill).toBeHidden();
 

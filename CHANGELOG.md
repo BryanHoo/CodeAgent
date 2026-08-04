@@ -4,6 +4,23 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-04
+
+### 新增
+
+- 添加可信局域网配对访问控制，使用启动期配对码、限流和有界 Session 保护业务 HTTP 与 WebSocket 接口。
+- 支持经认证预览和打开 Project 外的本机绝对文件引用，并保持内容签名、大小和路径边界校验。
+
+### 优化
+
+- 优化移动端工作台、Composer、Diff 审核与 Inspector 布局，完善动态视口、安全区域和触控交互。
+- 调整 CLI 启动行为：本地模式自动打开浏览器，LAN 模式仅展示物理网络接口的私有 IPv4 地址且不自动打开浏览器。
+
+### 修复
+
+- 修复局域网配对输入框重复显示焦点轮廓的问题。
+- 修复 Chromium 中末尾 Skill Token 阻断 `End` 定位，导致 Backspace 无法邻接删除的问题。
+
 ## [1.1.0] - 2026-08-04
 
 ### 新增
@@ -112,7 +129,8 @@ CodeAgent 首个稳定版本，集中发布本地 Coding Agent 工作台的完�
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.6...v1.0.0
 [0.0.6]: https://github.com/BryanHoo/CodeAgent/compare/v0.0.5...v0.0.6
