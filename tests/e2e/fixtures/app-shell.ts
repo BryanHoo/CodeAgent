@@ -361,6 +361,25 @@ export const projectFileTreeByDirectory = new Map<string | null, object>([
   ],
 ]);
 
+export const projectDirectoryListings = new Map<string | null, object>([
+  [
+    null,
+    {
+      entries: [
+        { name: "AddedProject", path: "/workspace/AddedProject" },
+        { name: "CodeAgent", path: "/workspace/CodeAgent" },
+        { name: "superwork", path: "/workspace/superwork" },
+      ],
+      parentPath: "/",
+      path: "/workspace",
+    },
+  ],
+  [
+    "/workspace/AddedProject",
+    { entries: [], parentPath: "/workspace", path: "/workspace/AddedProject" },
+  ],
+]);
+
 export const taskSnapshot = {
   ...tasks[0],
   contextUsage: { contextWindow: 200_000, usedTokens: 25_000 },
@@ -539,12 +558,22 @@ test.beforeEach(async ({ page }) => {
         return project;
       });
       body = { data: routedProjects, nextCursor: null };
+    } else if (url.pathname === "/v1/project-directories") {
+      const path = url.searchParams.get("path");
+      body =
+        projectDirectoryListings.get(path) ??
+        ({ entries: [], parentPath: "/workspace", path } as const);
     } else if (url.pathname === "/v1/projects" && route.request().method() === "POST") {
+      const request = parseRequestRecord(route.request().postData());
+      const rootPath = request["rootPath"];
+      if (rootPath !== "/workspace/AddedProject") {
+        throw new Error("Invalid add project request");
+      }
       const addedProject = {
         createdAt: "2026-07-25T00:00:00.000Z",
         id: "added-project",
         name: "AddedProject",
-        rootPath: "/workspace/AddedProject",
+        rootPath,
       };
       routedProjects = [...routedProjects, addedProject];
       body = { project: addedProject };

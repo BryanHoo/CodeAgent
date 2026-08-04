@@ -33,6 +33,20 @@ test("pairs real browsers, persists the cookie, and invalidates it on logout", a
   await expect(page.getByRole("button", { name: "切换项目 CodeAgent" })).toBeVisible();
   await expect.poll(() => sockets.length).toBeGreaterThan(0);
 
+  // 配对后的远程 Web 必须直接通过 Server API 浏览宿主目录，不依赖浏览器所在机器的原生选择器。
+  const directoryListingResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/v1/project-directories" && response.request().method() === "GET";
+  });
+  await page.getByRole("button", { name: "添加项目" }).click();
+  const projectPicker = page.getByRole("dialog", { name: "选择项目文件夹" });
+  await expect(projectPicker).toBeVisible();
+  expect((await directoryListingResponse).ok()).toBe(true);
+  await expect(projectPicker.getByRole("tree", { name: "项目文件夹目录树" })).toBeVisible();
+  await expect(projectPicker.getByRole("button", { name: "添加此文件夹" })).toBeEnabled();
+  await projectPicker.getByRole("button", { name: "取消" }).click();
+  await expect(projectPicker).toBeHidden();
+
   const cookies = await page.context().cookies(lanServerUrl);
   expect(cookies).toContainEqual(
     expect.objectContaining({

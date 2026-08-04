@@ -22,6 +22,7 @@ import {
   AgentTaskSchema,
   AgentTaskSettingsResponseSchema,
   AgentTaskSettingsSchema,
+  AddProjectRequestSchema,
   AddProjectResponseSchema,
   ArchiveAgentTaskRequestSchema,
   ArchiveAgentTaskResponseSchema,
@@ -45,6 +46,8 @@ import {
   GenerateCommitMessageRequestSchema,
   GenerateCommitMessageResponseSchema,
   ProjectPageSchema,
+  ProjectDirectoryListingSchema,
+  ProjectDirectoryQuerySchema,
   ProjectFileTreeQuerySchema,
   ProjectGitStatusSchema,
   ProjectFileTreeSchema,
@@ -79,16 +82,35 @@ import {
 } from "./project.js";
 
 describe("project protocol", () => {
-  it("accepts a selected project or a cancelled host directory selection", () => {
-    expect(Value.Check(AddProjectResponseSchema, { project: null })).toBe(true);
+  it("requires an absolute directory when adding a project", () => {
+    const project = {
+      createdAt: "2026-07-25T00:00:00.000Z",
+      id: "code-agent",
+      name: "CodeAgent",
+      rootPath: "/workspace/CodeAgent",
+    };
+
+    expect(Value.Check(AddProjectRequestSchema, { rootPath: project.rootPath })).toBe(true);
+    expect(Value.Check(AddProjectRequestSchema, { rootPath: "workspace/CodeAgent" })).toBe(false);
+    expect(Value.Check(AddProjectResponseSchema, { project })).toBe(true);
+    expect(Value.Check(AddProjectResponseSchema, { project: null })).toBe(false);
+  });
+
+  it("validates host directory queries and listings", () => {
+    expect(Value.Check(ProjectDirectoryQuerySchema, {})).toBe(true);
+    expect(Value.Check(ProjectDirectoryQuerySchema, { path: "/Users/bryan/Develop" })).toBe(true);
+    expect(Value.Check(ProjectDirectoryQuerySchema, { path: "C:\\Users\\bryan\\Develop" })).toBe(
+      true,
+    );
+    expect(Value.Check(ProjectDirectoryQuerySchema, { path: "relative/project" })).toBe(false);
     expect(
-      Value.Check(AddProjectResponseSchema, {
-        project: {
-          createdAt: "2026-07-25T00:00:00.000Z",
-          id: "code-agent",
-          name: "CodeAgent",
-          rootPath: "/workspace/CodeAgent",
-        },
+      Value.Check(ProjectDirectoryListingSchema, {
+        entries: [
+          { name: "CodeAgent", path: "/Users/bryan/Develop/CodeAgent" },
+          { name: "superwork", path: "/Users/bryan/Develop/superwork" },
+        ],
+        parentPath: "/Users/bryan",
+        path: "/Users/bryan/Develop",
       }),
     ).toBe(true);
   });

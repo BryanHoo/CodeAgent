@@ -55,7 +55,7 @@ code-agent doctor
 code-agent version
 ```
 
-`start` 支持 `--codex-bin` 和 `--codex-home`。默认只监听 `127.0.0.1:3210`，本地模式启动后浏览器会打开 `http://127.0.0.1:3210`。首次启动项目列表为空，通过 Projects 标题右侧的 `+` 使用系统目录选择器添加文件夹；Project、Project 新 Task 默认模型设置和 Task 完整设置写入 `CODEX_HOME/code-agent/state.sqlite3`。收到 `SIGINT` 或 `SIGTERM` 后会依次关闭 HTTP Server、数据库 Worker 和全局长驻 Codex App Server。
+`start` 支持 `--codex-bin` 和 `--codex-home`。默认只监听 `127.0.0.1:3210`，本地模式启动后浏览器会打开 `http://127.0.0.1:3210`。首次启动项目列表为空，通过 Projects 标题右侧的 `+` 在 Web 目录树中选择运行 CodeAgent 的设备上的文件夹；Project、Project 新 Task 默认模型设置和 Task 完整设置写入 `CODEX_HOME/code-agent/state.sqlite3`。收到 `SIGINT` 或 `SIGTERM` 后会依次关闭 HTTP Server、数据库 Worker 和全局长驻 Codex App Server。
 
 可信局域网内可显式运行 `code-agent start --lan [--session-ttl <duration>]`。LAN 模式监听 `0.0.0.0:3210` 且不会自动打开浏览器，终端只显示物理网络接口上的私有 IPv4 URL 和本次启动的配对码；配对码不会进入 URL 或持久化存储。Session 默认绝对有效 `24h` 且请求不会续期，可设置 `1m` 至 `30d` 的整数分钟、小时或天数，例如 `30m`、`12h`、`7d`。该模式使用明文 HTTP，只适用于可信局域网，不提供传输加密或互联网暴露保护；进程重启后配对码和全部 Session 立即失效。
 

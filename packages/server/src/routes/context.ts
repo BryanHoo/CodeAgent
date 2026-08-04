@@ -21,6 +21,7 @@ import type {
   CommitProjectChangesResponse,
   GenerateCommitMessageRequest,
   Project,
+  ProjectDirectoryListing,
   ProjectFileTree,
   ProjectGitStatus,
   ProjectSourceFile,
@@ -135,6 +136,7 @@ export interface ServerRouteContext {
     models?: readonly AgentModel[],
   ) => Promise<AgentTaskSettings>;
   readonly readFileTree: (projectRoot: string, directoryPath?: string) => Promise<ProjectFileTree>;
+  readonly readProjectDirectory: (path?: string) => Promise<ProjectDirectoryListing>;
   readonly readImageFile: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
   readonly readProjectGitStatus: (projectRoot: string) => Promise<ProjectGitStatus>;
   readonly readSourceFile: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
@@ -146,7 +148,7 @@ export interface ServerRouteContext {
     Readonly<{ attachmentIds: readonly string[]; providerInput: AgentProviderTurnInput }>
   >;
   readonly runIdempotent: RunIdempotent;
-  readonly selectProjectDirectory: () => Promise<string | undefined>;
+  readonly resolveProjectDirectory: (path: string) => Promise<string>;
   readonly settingsRepository: AgentSettingsRepository;
   readonly taskFromSnapshot: (
     snapshot: Awaited<ReturnType<AgentProvider["readTask"]>> & object,

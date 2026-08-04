@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import {
   AddProjectResponseSchema,
+  AddProjectRequestSchema,
   AgentMcpServerPageSchema,
   CommitProjectChangesRequestSchema,
   CommitProjectChangesResponseSchema,
@@ -12,6 +13,8 @@ import {
   AgentSkillPageSchema,
   AgentMutationErrorSchema,
   ProjectPageSchema,
+  ProjectDirectoryListingSchema,
+  ProjectDirectoryQuerySchema,
   ProjectFileTreeQuerySchema,
   ProjectFileTreeSchema,
   ProjectGitStatusSchema,
@@ -25,13 +28,14 @@ import {
   ReorderProjectsResponseSchema,
   RemoveProjectRequestSchema,
   RemoveProjectResponseSchema,
-  StartAgentTaskRequestSchema,
   type AgentAttachmentKind,
+  type AddProjectRequest,
   type AgentProjectDefaults,
   type AgentTaskSettings,
   type CommitProjectChangesRequest,
   type GenerateCommitMessageRequest,
   type ProjectFileTreeQuery,
+  type ProjectDirectoryQuery,
   type OpenProjectRequest,
   type RenameProjectRequest,
   type ReorderProjectsRequest,
@@ -41,6 +45,7 @@ import type { FastifyPluginCallback } from "fastify";
 import type { StoredAttachmentUpload } from "../attachment-store.js";
 import { GitCommitError } from "../git-commit.js";
 import { ProjectOpenAppUnavailableError, ProjectOpenTargetInvalidError } from "../project-open.js";
+import { ProjectDirectoryBrowserError } from "../project-directory-browser.js";
 
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import {
@@ -74,12 +79,13 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     readEffectiveGlobalSettings,
     readEffectiveProjectDefaults,
     readFileTree,
+    readProjectDirectory,
     readImageFile,
     readProjectGitStatus,
     readSourceFile,
     releaseProjectContext,
     runIdempotent,
-    selectProjectDirectory,
+    resolveProjectDirectory,
     settingsRepository,
     toGitCommitHttpError,
   } = context;
@@ -88,6 +94,26 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     data: await projectRepository.list(),
     nextCursor: null,
   }));
+
+  app.get<{ Querystring: ProjectDirectoryQuery }>(
+    "/v1/project-directories",
+    {
+      schema: {
+        querystring: ProjectDirectoryQuerySchema,
+        response: { 200: ProjectDirectoryListingSchema, 400: AgentMutationErrorSchema },
+      },
+    },
+    async (request) => {
+      try {
+        return await readProjectDirectory(request.query.path);
+      } catch (error) {
+        if (error instanceof ProjectDirectoryBrowserError) {
+          throw new MutationHttpError("INVALID_REQUEST", error.message, 400);
+        }
+        throw error;
+      }
+    },
+  );
 
   app.get<{ Params: { projectId: string } }>(
     "/v1/projects/:projectId/open-capabilities",
@@ -290,13 +316,13 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
   );
 
   app.post<{
-    Body: Record<string, never>;
+    Body: AddProjectRequest;
     Headers: { "idempotency-key": string };
   }>(
     "/v1/projects",
     {
       schema: {
-        body: StartAgentTaskRequestSchema,
+        body: AddProjectRequestSchema,
         headers: IdempotencyHeadersSchema,
         response: {
           200: AddProjectResponseSchema,
@@ -308,9 +334,14 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     },
     async (request) =>
       runIdempotent(["add-project"], request.headers["idempotency-key"], request.body, async () => {
-        const selectedPath = await selectProjectDirectory();
-        if (selectedPath === undefined) {
-          return { project: null };
+        let selectedPath: string;
+        try {
+          selectedPath = await resolveProjectDirectory(request.body.rootPath);
+        } catch (error) {
+          if (error instanceof ProjectDirectoryBrowserError) {
+            throw new MutationHttpError("INVALID_REQUEST", error.message, 400);
+          }
+          throw error;
         }
         const project = await projectRepository.register({
           name: basename(selectedPath),

@@ -32,6 +32,7 @@ import {
   type CommitProjectChangesResponse,
   type GenerateCommitMessageRequest,
   type ProjectFileTree,
+  type ProjectDirectoryListing,
   type ProjectGitStatus,
   type ProjectSourceFile,
 } from "@code-agent/protocol";
@@ -57,6 +58,7 @@ import { readProjectFileTree } from "./project-file-tree.js";
 import { readProjectImageFile, type ProjectImageFile } from "./project-image-file.js";
 import { readProjectSourceFile } from "./project-source-file.js";
 import { createProjectOpenService, type ProjectOpenService } from "./project-open.js";
+import { readProjectDirectory, resolveProjectDirectory } from "./project-directory-browser.js";
 import { prepareTurnFileRollback, type PreparedTurnFileRollback } from "./turn-file-rollback.js";
 import {
   MutationHttpError,
@@ -94,13 +96,14 @@ export interface CreateCodeAgentServerOptions {
   ) => Promise<CommitProjectChangesResponse>;
   readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
   readProjectFileTree?: (projectRoot: string, directoryPath?: string) => Promise<ProjectFileTree>;
+  readProjectDirectory?: (path?: string) => Promise<ProjectDirectoryListing>;
   readProjectImageFile?: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
   readProjectSourceFile?: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
   prepareTurnFileRollback?: (
     projectRoot: string,
     changes: Parameters<typeof prepareTurnFileRollback>[1],
   ) => Promise<PreparedTurnFileRollback>;
-  selectProjectDirectory: () => Promise<string | undefined>;
+  resolveProjectDirectory?: (path: string) => Promise<string>;
   staticRoot?: string;
 }
 
@@ -993,6 +996,7 @@ export async function createCodeAgentServer(
     readEffectiveProjectDefaults,
     readEffectiveTaskSettings,
     readFileTree,
+    readProjectDirectory: options.readProjectDirectory ?? readProjectDirectory,
     readImageFile,
     readInheritedTaskSettings,
     readProjectGitStatus,
@@ -1000,7 +1004,7 @@ export async function createCodeAgentServer(
     releaseProjectContext,
     resolveProviderTurnInput,
     runIdempotent,
-    selectProjectDirectory: options.selectProjectDirectory,
+    resolveProjectDirectory: options.resolveProjectDirectory ?? resolveProjectDirectory,
     settingsRepository: options.settingsRepository,
     taskFromSnapshot,
     taskStartRecoveries,

@@ -1,4 +1,11 @@
-import { expect, projects, taskSnapshot, tasks, test } from "./fixtures/app-shell.js";
+import {
+  expect,
+  parseRequestRecord,
+  projects,
+  taskSnapshot,
+  tasks,
+  test,
+} from "./fixtures/app-shell.js";
 
 test.describe.configure({ mode: "serial" });
 
@@ -57,6 +64,14 @@ test("preserves the original sidebar control typography and dimensions", async (
   await expect
     .poll(() => readControlStyle(sidebar.getByRole("button", { name: "添加项目" })))
     .toMatchObject({ display: "grid", height: "28px", width: "28px" });
+  const addProjectIcon = sidebar.getByRole("button", { name: "添加项目" }).locator("svg");
+  const addTaskIcon = sidebar
+    .getByRole("button", { name: "在 CodeAgent 中新建任务" })
+    .locator("svg");
+  await expect(addProjectIcon).toHaveCSS("height", "14px");
+  await expect(addProjectIcon).toHaveCSS("width", "14px");
+  await expect(addTaskIcon).toHaveCSS("height", "14px");
+  await expect(addTaskIcon).toHaveCSS("width", "14px");
   await expect(sidebar.getByRole("textbox", { name: "搜索任务" })).toHaveCSS("height", "36px");
 });
 
@@ -123,30 +138,42 @@ test("keeps the original sidebar logo and provides it as favicon", async ({ page
   expect(faviconDefinition.styles).toContain("@media (prefers-color-scheme: dark)");
 });
 
-test("adds a folder through the host project picker", async ({ page }) => {
+test("adds a folder through the Web project directory picker", async ({ page }) => {
   let addProjectRequestCount = 0;
+  let addedRootPath: unknown;
   await page.route("**/v1/projects", async (route) => {
     if (route.request().method() === "POST") {
       addProjectRequestCount += 1;
+      addedRootPath = Reflect.get(parseRequestRecord(route.request().postData()), "rootPath");
     }
     await route.fallback();
   });
   await page.goto("/p/code-agent");
 
-  await page.getByRole("button", { name: "添加项目" }).evaluate((button) => {
+  await page.getByRole("button", { name: "添加项目" }).click();
+  const picker = page.getByRole("dialog", { name: "选择项目文件夹" });
+  await expect(picker).toBeVisible();
+  await picker.getByRole("button", { name: "取消" }).click();
+  await expect(picker).toBeHidden();
+  expect(addProjectRequestCount).toBe(0);
+
+  await page.getByRole("button", { name: "添加项目" }).click();
+  await picker.getByRole("button", { exact: true, name: "AddedProject" }).click();
+  await picker.getByRole("button", { name: "添加此文件夹" }).evaluate((button) => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 
   await expect(page).toHaveURL(/\/p\/added-project$/);
   expect(addProjectRequestCount).toBe(1);
+  expect(addedRootPath).toBe("/workspace/AddedProject");
   await expect(page.getByRole("heading", { name: "AddedProject" })).toBeVisible();
   await expect(
     page.getByRole("complementary", { name: "项目侧栏" }).getByRole("link", { name: "新聊天" }),
   ).toHaveCount(0);
 });
 
-test("handles a host project picker failure without an unhandled rejection", async ({ page }) => {
+test("keeps the Web directory picker open after add failure", async ({ page }) => {
   const pageErrors: Error[] = [];
   page.on("pageerror", (error) => {
     pageErrors.push(error);
@@ -165,8 +192,12 @@ test("handles a host project picker failure without an unhandled rejection", asy
   await page.goto("/p/code-agent");
 
   await page.getByRole("button", { name: "添加项目" }).click();
+  const picker = page.getByRole("dialog", { name: "选择项目文件夹" });
+  await picker.getByRole("button", { exact: true, name: "AddedProject" }).click();
+  await picker.getByRole("button", { name: "添加此文件夹" }).click();
 
-  await expect(page.getByRole("alert")).toContainText("无法添加项目");
+  await expect(picker.getByRole("alert")).toContainText("无法添加所选文件夹");
+  await expect(picker).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
 

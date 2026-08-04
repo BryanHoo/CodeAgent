@@ -121,7 +121,6 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
       lifecycle.push("browser.open");
       return Promise.resolve();
     }),
-    selectProjectDirectory: vi.fn(() => Promise.resolve(undefined)),
     startCodexAppServer: vi.fn(() =>
       Promise.resolve({ client, close, pid: 4321, waitForExit: () => exit }),
     ),
@@ -233,7 +232,6 @@ describe("runCli", () => {
     expect(harness.dependencies.createServer).toHaveBeenCalledWith({
       projectRepository: harness.stateRepository,
       provider: harness.runtimeProvider,
-      selectProjectDirectory: harness.dependencies.selectProjectDirectory,
       settingsRepository: harness.stateRepository,
       staticRoot: "/package/dist/web",
     });

@@ -98,7 +98,7 @@ type ProjectDataContextValue = Readonly<{
 }>;
 
 type ProjectActionsContextValue = Readonly<{
-  addProject: () => Promise<Project | undefined>;
+  addProject: (rootPath: string) => Promise<Project | undefined>;
   fetchNextProjectTaskPage: (projectId: string) => Promise<void>;
   forgetTask: (projectId: string, taskId: string) => void;
   markTaskRunning: (projectId: string, taskId: string) => void;
@@ -117,7 +117,7 @@ type ProjectActivityContextValue = Readonly<{
   addProjectError: Error | null;
   isProjectActionPending: boolean;
   isProjectOrderPending: boolean;
-  isProjectPickerOpen: boolean;
+  isProjectAddPending: boolean;
   projectActionError: Error | null;
   projectOrderError: Error | null;
   taskActivity: TaskActivityMap;
@@ -272,7 +272,7 @@ export function ProjectProvider({
     });
   }, [client, gitStatusCoordinator, queryClient, taskNotifier]);
   const [addProjectError, setAddProjectError] = useState<Error | null>(null);
-  const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false);
+  const [isProjectAddPending, setIsProjectAddPending] = useState(false);
   const [projectOrderError, setProjectOrderError] = useState<Error | null>(null);
   const [projectActionError, setProjectActionError] = useState<Error | null>(null);
   const [projectTaskResults, setProjectTaskResults] = useState<
@@ -402,17 +402,14 @@ export function ProjectProvider({
     void projectRuntime.requestNotificationPermission();
   }, [projectRuntime]);
   const addProject = useCallback(
-    () =>
+    (rootPath: string) =>
       addProjectLockRef.current.run(async () => {
-        setIsProjectPickerOpen(true);
+        setIsProjectAddPending(true);
         setAddProjectError(null);
         try {
-          const response = await client.addProject();
-          if (response.project !== null) {
-            await queryClient.invalidateQueries({ queryKey: ["projects"] });
-            return response.project;
-          }
-          return undefined;
+          const response = await client.addProject(rootPath);
+          await queryClient.invalidateQueries({ queryKey: ["projects"] });
+          return response.project;
         } catch (error) {
           const normalizedError =
             error instanceof Error
@@ -422,7 +419,7 @@ export function ProjectProvider({
           // 错误已进入可见状态，避免按钮事件产生未处理的 Promise rejection。
           return undefined;
         } finally {
-          setIsProjectPickerOpen(false);
+          setIsProjectAddPending(false);
         }
       }),
     [client, queryClient],
@@ -583,14 +580,14 @@ export function ProjectProvider({
       addProjectError,
       isProjectActionPending: isProjectRenamePending || isProjectRemovePending,
       isProjectOrderPending,
-      isProjectPickerOpen,
+      isProjectAddPending,
       projectActionError,
       projectOrderError,
       taskActivity,
     }),
     [
       addProjectError,
-      isProjectPickerOpen,
+      isProjectAddPending,
       projectActionError,
       projectOrderError,
       isProjectOrderPending,

@@ -61,7 +61,6 @@ const server = await createCodeAgentServer({
     reorder: () => Promise.resolve([project]),
   },
   provider,
-  selectProjectDirectory: () => Promise.resolve(undefined),
   settingsRepository: {
     // 保持真实服务的全局设置读写契约，确保运行时回退链可正常执行。
     readGlobalSettings: () => Promise.resolve(globalSettings),

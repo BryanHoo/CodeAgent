@@ -34,7 +34,6 @@ import {
   listLanAccessUrls,
   parseSessionTtl,
 } from "./lan-access.js";
-import { selectSystemDirectory } from "./system-directory-picker.js";
 
 interface CliManagedRuntime {
   client: CodexRpcClient;
@@ -60,7 +59,6 @@ interface CreateServerInput {
   access?: CodeAgentAccessOptions;
   projectRepository: ProjectRepository;
   provider: AgentRuntimeProvider;
-  selectProjectDirectory: () => Promise<string | undefined>;
   settingsRepository: AgentSettingsRepository;
   staticRoot: string;
 }
@@ -78,7 +76,6 @@ export interface CliDependencies {
   locateCodexBinary: (options?: LocateCodexBinaryOptions) => Promise<CodexBinary>;
   nodeVersion: string;
   openBrowser: (url: string) => Promise<void>;
-  selectProjectDirectory: () => Promise<string | undefined>;
   startCodexAppServer: (options?: StartCodexAppServerOptions) => Promise<CliManagedRuntime>;
   webRoot: string;
 }
@@ -108,7 +105,6 @@ const defaultDependencies: CliDependencies = {
   locateCodexBinary,
   nodeVersion: process.versions.node,
   openBrowser: openSystemBrowser,
-  selectProjectDirectory: selectSystemDirectory,
   startCodexAppServer,
   webRoot: fileURLToPath(new URL("../dist/web", import.meta.url)),
 };
@@ -316,7 +312,6 @@ async function runStart(
       ...(access === undefined ? {} : { access }),
       projectRepository: stateRepository,
       provider,
-      selectProjectDirectory: dependencies.selectProjectDirectory,
       settingsRepository: stateRepository,
       staticRoot: dependencies.webRoot,
     });

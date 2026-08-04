@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { changeAppLanguage } from "../../../i18n/i18n.js";
 import { DropdownMenu } from "../../../shared/ui/dropdown-menu.js";
+import { TooltipProvider } from "../../../shared/ui/tooltip.js";
 import { requestNextProjectTaskPage } from "../../projects/project-context.js";
 import {
   deriveProjectSidebarConnectionState,
@@ -10,6 +11,7 @@ import {
   getProjectSidebarConnectionStatus,
   groupTasksByProjectId,
   ProjectActionMenu,
+  ProjectPickerButton,
   SidebarSettingsButton,
   TaskStatusIndicator,
   TaskActionMenu,
@@ -156,6 +158,20 @@ describe("ProjectSidebar connection status", () => {
       labelKey: "sidebar.connection.offline",
       toneClassName: "text-danger",
     });
+  });
+});
+
+describe("ProjectPickerButton", () => {
+  it("opens the Web directory picker without exposing native picker state", () => {
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <ProjectPickerButton disabled={false} onOpen={vi.fn()} />
+      </TooltipProvider>,
+    );
+
+    expect(markup).toContain('aria-label="添加项目"');
+    expect(markup).toContain('data-size="icon-sm"');
+    expect(markup).not.toContain("LoaderCircle");
   });
 });
 

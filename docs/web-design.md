@@ -242,7 +242,7 @@ apps/web/src/shared/ai-elements/
 
 Project 和 Task ID 必须来自 Server，URL 只表示导航意图，不能代替权限校验。
 
-Project 不使用独立页面。用户在工作台左栏通过目录选择器添加本地文件夹，文件夹名作为 Project 名称；本地 Runtime 校验真实路径并由 Server 持久化，Web 只通过 Client API 读取和注册 Project，不直接访问数据库。
+Project 不使用独立页面。用户在工作台左栏打开 shadcn Dialog，通过 AI Elements `FileTree` 浏览运行 CodeAgent 的设备上的目录；初始位置为 Server 用户主目录，目录展开时按需读取直接子目录，并可向上导航。确认后以所选绝对路径注册 Project，文件夹名作为 Project 名称；Server 规范化并校验真实目录后持久化，Web 只通过 Client API 读取和注册 Project，不直接访问文件系统或数据库。该链路同时服务本地与已配对 LAN 浏览器，不调用 Server 宿主 GUI。
 
 每个 Project 名称行在新建 Task 的 `+` 左侧显示省略号菜单，菜单只提供重命名和删除。重命名仅更新 CodeAgent 持久化的展示名，不修改 `rootPath` 或磁盘文件夹名；删除仅移除 Project 注册、关联的本地设置/元数据以及对应 Web/Server Runtime，不删除磁盘目录、文件或 Codex Task。删除当前 Project 后进入剩余列表首项，删除最后一个 Project 后进入工作台空状态。
 

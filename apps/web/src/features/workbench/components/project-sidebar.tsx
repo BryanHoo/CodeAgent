@@ -63,6 +63,7 @@ import {
   writeExpandedProjectIds,
 } from "../project-sidebar-preferences.js";
 import { TaskRenameDialog } from "./task-rename-dialog.js";
+import { ProjectDirectoryPickerDialog } from "../../projects/components/project-directory-picker-dialog.js";
 import { ProjectRemoveDialog } from "./project-remove-dialog.js";
 import { ProjectRenameDialog } from "./project-rename-dialog.js";
 
@@ -221,7 +222,7 @@ export function ProjectSidebar({
     addProjectError,
     isProjectActionPending,
     isProjectOrderPending,
-    isProjectPickerOpen,
+    isProjectAddPending,
     projectActionError,
     projectOrderError,
     taskActivity,
@@ -248,6 +249,8 @@ export function ProjectSidebar({
   const [renamingTask, setRenamingTask] = useState<AgentTask | null>(null);
   const [renamingProject, setRenamingProject] = useState<Project | null>(null);
   const [removingProject, setRemovingProject] = useState<Project | null>(null);
+  const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false);
+  const [hasSubmittedAddProject, setHasSubmittedAddProject] = useState(false);
   const [hasSubmittedProjectAction, setHasSubmittedProjectAction] = useState(false);
   const [taskActionError, setTaskActionError] = useState<string | null>(null);
   const pinMutation = useMutation(taskPinMutationOptions(client));
@@ -347,9 +350,12 @@ export function ProjectSidebar({
     });
   };
 
-  const openProjectPicker = async () => {
-    const project = await addProject();
+  const addSelectedProject = async (rootPath: string) => {
+    setHasSubmittedAddProject(true);
+    const project = await addProject(rootPath);
     if (project !== undefined) {
+      setIsProjectPickerOpen(false);
+      setHasSubmittedAddProject(false);
       updateExpandedProjects((current) => new Set(current).add(project.id));
       await navigate({ params: { projectId: project.id }, to: "/p/$projectId" });
     }
@@ -555,25 +561,13 @@ export function ProjectSidebar({
             <h2 className="text-body-small font-semibold text-foreground" id="projects-title">
               {t("sidebar.projects")}
             </h2>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  aria-label={t("sidebar.addProject")}
-                  disabled={isProjectPickerOpen}
-                  onClick={() => void openProjectPicker()}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  {isProjectPickerOpen ? (
-                    <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Plus className="size-3.5" aria-hidden="true" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t("sidebar.addProject")}</TooltipContent>
-            </Tooltip>
+            <ProjectPickerButton
+              disabled={isProjectAddPending}
+              onOpen={() => {
+                setHasSubmittedAddProject(false);
+                setIsProjectPickerOpen(true);
+              }}
+            />
           </div>
 
           {isPending || hasPendingTasks ? (
@@ -587,11 +581,6 @@ export function ProjectSidebar({
           {error === null && !hasTaskError ? null : (
             <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
               {t("sidebar.errorLoadTasks")}
-            </p>
-          )}
-          {addProjectError === null ? null : (
-            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              {t("sidebar.errorAddProject")}
             </p>
           )}
           {taskActionError === null ? null : (
@@ -778,6 +767,21 @@ export function ProjectSidebar({
         />
       )}
 
+      {isProjectPickerOpen ? (
+        <ProjectDirectoryPickerDialog
+          addError={hasSubmittedAddProject ? addProjectError : null}
+          client={client}
+          isAdding={isProjectAddPending}
+          onAdd={addSelectedProject}
+          onClose={() => {
+            if (!isProjectAddPending) {
+              setIsProjectPickerOpen(false);
+              setHasSubmittedAddProject(false);
+            }
+          }}
+        />
+      ) : null}
+
       {renamingProject === null ? null : (
         <ProjectRenameDialog
           error={hasSubmittedProjectAction ? (projectActionError?.message ?? null) : null}
@@ -812,6 +816,30 @@ export function ProjectSidebar({
         <SidebarSettingsButton connectionState={connectionState} onOpen={onOpenSettings} />
       </div>
     </aside>
+  );
+}
+
+export function ProjectPickerButton({
+  disabled,
+  onOpen,
+}: Readonly<{ disabled: boolean; onOpen: () => void }>) {
+  const { t } = useTranslation("workbench");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          aria-label={t("sidebar.addProject")}
+          disabled={disabled}
+          onClick={onOpen}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
+          <Plus aria-hidden="true" className="size-3.5" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{t("sidebar.addProject")}</TooltipContent>
+    </Tooltip>
   );
 }
 

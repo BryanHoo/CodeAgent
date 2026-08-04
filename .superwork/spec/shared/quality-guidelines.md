@@ -11,6 +11,7 @@
 - Project、Task 等 Protocol 类型必须有对应 JSON Schema 或明确生成来源，运行时边界不得只依赖 TypeScript 类型。
 - 代码审查请求使用携带严格 `AgentReviewTarget` 的 `AgentReviewItem` 进入 Snapshot 和实时事件，禁止用普通用户消息或 Provider 原生 Prompt 表达审查模式。
 - `Project.rootPath` 由本地 Runtime 校验后随 Project 契约返回，用于当前工作台展示，并由 `ProjectSchema` 校验为非空字符串。
+- Project 目录浏览必须使用严格的 `ProjectDirectoryQuery` 与 `ProjectDirectoryListing` Schema，返回规范化的当前绝对路径、可空父路径和直接子目录；路径契约必须覆盖 POSIX、Windows Drive 与 UNC 绝对路径，并拒绝 NUL 和换行控制字符。Project 注册只接受显式 `AddProjectRequest.rootPath`，Client、Server 与 Web 不得保留原生目录选择器或空请求体分支。
 - Project 重命名只允许更新本地 `projects.name` 展示名，必须保持 `id`、`rootPath`、`createdAt` 和磁盘目录不变；Project 删除只移除 CodeAgent 注册及级联的本地设置/元数据，并释放对应 Web/Server Runtime，不得删除磁盘文件或归档 Provider Task。两种操作均使用独立严格 Mutation Schema 和 `Idempotency-Key`。
 - `ProjectGitStatus` 必须同时返回可空的当前 `branch`、无重复的 `baseBranches`、`repositoryMode`、稳定 `snapshot`、`staged` 和 `unstaged`；其中 Git 状态和提交选择只允许 Project 相对路径，但 Provider Task 历史中的 `AgentFileChange` 仍可保留绝对路径。Client 与 Fastify 响应边界必须使用同一严格 Schema 校验，Web 不得硬编码分支名称。
 - Git message 生成、commit 和 commit+push 使用独立严格 Mutation Schema 与 `Idempotency-Key`，请求携带同一 `expectedSnapshot` 和无重复的 Project 相对路径；响应必须区分未请求、已推送、推送失败和未配置 upstream，不能把 commit 后 push 失败归一化为整体失败。

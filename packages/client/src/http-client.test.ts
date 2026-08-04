@@ -159,16 +159,38 @@ describe("CodeAgentClient", () => {
     );
   });
 
-  it("opens the host directory picker through the projects endpoint", async () => {
+  it("browses host directories and registers the selected project path", async () => {
+    const project = {
+      createdAt: "2026-07-23T00:00:00.000Z",
+      id: "code-agent",
+      name: "CodeAgent",
+      rootPath: "/Users/bryan/Develop/CodeAgent",
+    };
+    const listing = {
+      entries: [{ name: "CodeAgent", path: project.rootPath }],
+      parentPath: "/Users/bryan",
+      path: "/Users/bryan/Develop",
+    };
     const fetchMock = vi.fn<typeof fetch>();
-    fetchMock.mockResolvedValue(jsonResponse({ project: null }));
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(listing))
+      .mockResolvedValueOnce(jsonResponse({ project }));
     const client = new CodeAgentClient({ fetch: fetchMock });
 
-    await expect(client.addProject({ idempotencyKey: "project-key" })).resolves.toEqual({
-      project: null,
+    await expect(client.listProjectDirectories(listing.path)).resolves.toEqual(listing);
+    await expect(
+      client.addProject(project.rootPath, { idempotencyKey: "project-key" }),
+    ).resolves.toEqual({
+      project,
     });
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects");
-    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ body: "{}", method: "POST" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/project-directories?path=%2FUsers%2Fbryan%2FDevelop",
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/v1/projects");
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      body: JSON.stringify({ rootPath: project.rootPath }),
+      method: "POST",
+    });
   });
 
   it("renames and removes an encoded project id with idempotency keys", async () => {

@@ -31,6 +31,7 @@ export type CodeAgentGitMutationClient = Pick<
   "commitProjectChanges" | "generateCommitMessage"
 >;
 export type CodeAgentFileTreeClient = Pick<CodeAgentClient, "listProjectFiles">;
+export type CodeAgentProjectDirectoryClient = Pick<CodeAgentClient, "listProjectDirectories">;
 export type CodeAgentSourceFileClient = Pick<CodeAgentClient, "readProjectSourceFile">;
 export type CodeAgentProjectOpenClient = Pick<
   CodeAgentClient,
@@ -82,6 +83,7 @@ export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentGitStatusClient &
   CodeAgentGitMutationClient &
   CodeAgentFileTreeClient &
+  CodeAgentProjectDirectoryClient &
   CodeAgentProjectOpenClient &
   CodeAgentRuntimeClient &
   CodeAgentMutationClient &

@@ -35,8 +35,51 @@ export const ProjectSchema = Type.Object(
 
 export type Project = Readonly<Static<typeof ProjectSchema>>;
 
+export const ProjectDirectoryPathSchema = Type.String({
+  maxLength: 32_768,
+  minLength: 1,
+  pattern: "^(?!.*[\\u0000\\r\\n])(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\[^\\\\/]+[\\\\/][^\\\\/]+).*$",
+});
+
+export type ProjectDirectoryPath = Static<typeof ProjectDirectoryPathSchema>;
+
+export const ProjectDirectoryQuerySchema = Type.Object(
+  { path: Type.Optional(ProjectDirectoryPathSchema) },
+  { additionalProperties: false },
+);
+
+export type ProjectDirectoryQuery = Readonly<Static<typeof ProjectDirectoryQuerySchema>>;
+
+export const ProjectDirectoryEntrySchema = Type.Object(
+  {
+    name: Type.String({ minLength: 1 }),
+    path: ProjectDirectoryPathSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectDirectoryEntry = Readonly<Static<typeof ProjectDirectoryEntrySchema>>;
+
+export const ProjectDirectoryListingSchema = Type.Object(
+  {
+    entries: Type.Array(ProjectDirectoryEntrySchema),
+    parentPath: Type.Union([ProjectDirectoryPathSchema, Type.Null()]),
+    path: ProjectDirectoryPathSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectDirectoryListing = Readonly<Static<typeof ProjectDirectoryListingSchema>>;
+
+export const AddProjectRequestSchema = Type.Object(
+  { rootPath: ProjectDirectoryPathSchema },
+  { additionalProperties: false },
+);
+
+export type AddProjectRequest = Readonly<Static<typeof AddProjectRequestSchema>>;
+
 export const AddProjectResponseSchema = Type.Object(
-  { project: Type.Union([ProjectSchema, Type.Null()]) },
+  { project: ProjectSchema },
   { additionalProperties: false },
 );
 

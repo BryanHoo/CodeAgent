@@ -365,7 +365,6 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
       }),
     },
     provider: runtimeProvider,
-    selectProjectDirectory: vi.fn(() => Promise.resolve(undefined)),
     settingsRepository: createSettingsRepository().repository,
     ...overrides,
   };
@@ -843,9 +842,19 @@ describe("CodeAgent Server", () => {
     expect(staleResponse.json()).toMatchObject({ code: "INVALID_REQUEST", retryable: false });
   });
 
-  it("adds a project through the host directory selector", async () => {
+  it("browses host directories and adds the explicitly selected project", async () => {
     const { provider } = createProvider();
-    const register = vi.fn(() => Promise.resolve(project));
+    const selectedPath = "/Users/bryan/Develop/CodeAgent";
+    const selectedProject = { ...project, rootPath: selectedPath };
+    const register = vi.fn(() => Promise.resolve(selectedProject));
+    const readProjectDirectory = vi.fn(() =>
+      Promise.resolve({
+        entries: [{ name: "CodeAgent", path: selectedPath }],
+        parentPath: "/Users/bryan",
+        path: "/Users/bryan/Develop",
+      }),
+    );
+    const resolveProjectDirectory = vi.fn(() => Promise.resolve(selectedPath));
     const app = await createCodeAgentServer(
       createServerOptions(provider, {
         projectRepository: {
@@ -853,21 +862,30 @@ describe("CodeAgent Server", () => {
           read: () => Promise.resolve(undefined),
           register,
         },
-        selectProjectDirectory: () => Promise.resolve(project.rootPath),
+        readProjectDirectory,
+        resolveProjectDirectory,
       }),
     );
     closeCallbacks.push(() => app.close());
 
+    const listing = await app.inject({
+      method: "GET",
+      url: "/v1/project-directories?path=%2FUsers%2Fbryan%2FDevelop",
+    });
     const response = await app.inject({
       headers: { "idempotency-key": "add-project" },
       method: "POST",
-      payload: {},
+      payload: { rootPath: selectedPath },
       url: "/v1/projects",
     });
 
+    expect(listing.statusCode).toBe(200);
+    expect(listing.json()).toMatchObject({ path: "/Users/bryan/Develop" });
+    expect(readProjectDirectory).toHaveBeenCalledWith("/Users/bryan/Develop");
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ project });
-    expect(register).toHaveBeenCalledWith({ name: "CodeAgent", rootPath: project.rootPath });
+    expect(response.json()).toEqual({ project: selectedProject });
+    expect(resolveProjectDirectory).toHaveBeenCalledWith(selectedPath);
+    expect(register).toHaveBeenCalledWith({ name: "CodeAgent", rootPath: selectedPath });
   });
 
   it("renames and removes only the registered project idempotently", async () => {
@@ -2289,7 +2307,6 @@ describe("CodeAgent Server", () => {
         reorder: () => Promise.resolve([project, otherProject]),
       },
       provider: runtimeProvider,
-      selectProjectDirectory: () => Promise.resolve(undefined),
       settingsRepository: createSettingsRepository().repository,
     });
     closeCallbacks.push(() => app.close());

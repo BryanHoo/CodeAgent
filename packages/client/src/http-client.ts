@@ -1,6 +1,7 @@
 import {
   AgentCapabilitiesSchema,
   AgentBackgroundTerminalPageSchema,
+  ProjectDirectoryListingSchema,
   AddProjectResponseSchema,
   ArchiveAgentTaskResponseSchema,
   CompactAgentTaskResponseSchema,
@@ -42,6 +43,7 @@ import {
   UnsubscribeAgentTaskResponseSchema,
   type AgentCapabilities,
   type AgentBackgroundTerminalPage,
+  type ProjectDirectoryListing,
   type AddProjectResponse,
   type ArchiveAgentTaskResponse,
   type CompactAgentTaskResponse,
@@ -302,6 +304,17 @@ export class CodeAgentClient {
     return this.#read("/v1/projects", ProjectPageSchema, options);
   }
 
+  public async listProjectDirectories(
+    path?: string,
+    options: ReadOptions = {},
+  ): Promise<ProjectDirectoryListing> {
+    return this.#read(
+      appendQuery("/v1/project-directories", { path }),
+      ProjectDirectoryListingSchema,
+      options,
+    );
+  }
+
   public async reorderProjects(
     projectIds: readonly string[],
     options: MutationOptions = {},
@@ -340,8 +353,11 @@ export class CodeAgentClient {
     );
   }
 
-  public async addProject(options: MutationOptions = {}): Promise<AddProjectResponse> {
-    return this.#mutation("/v1/projects", {}, AddProjectResponseSchema, options);
+  public async addProject(
+    rootPath: string,
+    options: MutationOptions = {},
+  ): Promise<AddProjectResponse> {
+    return this.#mutation("/v1/projects", { rootPath }, AddProjectResponseSchema, options);
   }
 
   public async renameProject(

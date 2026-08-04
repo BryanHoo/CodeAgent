@@ -289,7 +289,7 @@ code-agent start --codex-home /path/to/codex-home
 --codex-home <path>
 ```
 
-CLI 启动一个不绑定 Project 的全局 `codex app-server --listen stdio://`。Project 默认列表为空，由 Web 通过宿主系统目录选择器添加，并持久化到 `CODEX_HOME/code-agent/state.sqlite3`。
+CLI 启动一个不绑定 Project 的全局 `codex app-server --listen stdio://`。Project 默认列表为空，由 Web 通过 Server 目录浏览 API 选择并注册绝对目录，再持久化到 `CODEX_HOME/code-agent/state.sqlite3`；本地和已配对 LAN 浏览器使用同一链路，不触发 Server 宿主 GUI。
 
 ### 6.2 默认配置
 

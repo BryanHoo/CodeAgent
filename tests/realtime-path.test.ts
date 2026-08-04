@@ -95,7 +95,6 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
       reorder: () => Promise.resolve([project]),
     },
     provider,
-    selectProjectDirectory: () => Promise.resolve(undefined),
     settingsRepository: {
       readGlobalSettings: () => Promise.resolve(globalSettings),
       readProjectDefaults: (projectId: string) => Promise.resolve(projectDefaults.get(projectId)),
