@@ -91,6 +91,18 @@
   color-scheme: dark;
 }
 
+.access-gate-mark {
+  width: 0.25rem;
+  height: 1.5rem;
+  border-radius: 2px;
+  background: var(--ui-color-accent);
+}
+
+.access-code-input {
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Shimmer 只用于持续生成状态，并尊重系统的减弱动态效果设置。 */
 .ai-shimmer {
   color: transparent;

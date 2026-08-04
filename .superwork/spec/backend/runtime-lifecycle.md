@@ -41,6 +41,8 @@
 
 ## Server 与持久化
 
+- CLI 默认监听 `127.0.0.1:3210`；只有 `--lan` 才生成启动期配对码、传入进程内 Access 配置并监听 `0.0.0.0:3210`。浏览器仍打开无凭据的 `http://127.0.0.1:3210`，终端只列出有效外部 IPv4 URL，不把 `0.0.0.0` 当作访问地址。
+- LAN 配对码、Session、失败窗口和清理定时器只属于当前 Fastify 实例；关闭时必须清空，重启不得恢复。Session 使用签发时固定的绝对期限，请求不得续期。
 - Fastify 资源通过插件封装，并在 `onClose` 中释放。
 - 普通 HTTP 路由使用 Fastify 原生 60 秒 `handlerTimeout` 和 `request.signal` 执行协作取消；Event Stream WebSocket 是显式长连接，不继承 Handler 截止时间，其有界性由队列、背压和连接关闭生命周期保证。
 - Project 列表默认空，通过宿主系统目录选择器注册，并持久化到 `CODEX_HOME/code-agent/state.sqlite3`；重复真实路径幂等返回已有 Project。

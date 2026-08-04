@@ -1427,6 +1427,11 @@ describe("TaskSnapshotTimeline", () => {
   });
 
   it("renders each changed file with its operation and diff statistics", () => {
+    const browserCrypto = globalThis.crypto;
+    // 局域网 HTTP 页面保留 getRandomValues，但不会暴露仅限安全上下文的 randomUUID。
+    vi.stubGlobal("crypto", {
+      getRandomValues: browserCrypto.getRandomValues.bind(browserCrypto),
+    });
     const fileChangeSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: [
@@ -1455,9 +1460,14 @@ describe("TaskSnapshotTimeline", () => {
       ],
     };
 
-    const markup = renderToStaticMarkup(
-      <TaskSnapshotTimeline canRollbackTurns snapshot={fileChangeSnapshot} />,
-    );
+    let markup: string;
+    try {
+      markup = renderToStaticMarkup(
+        <TaskSnapshotTimeline canRollbackTurns snapshot={fileChangeSnapshot} />,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
 
     expect(markup).toContain("已编辑 2 个文件");
     expect(markup).toContain('aria-label="本次修改了 2 个文件"');

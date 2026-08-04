@@ -21,6 +21,10 @@ import {
 import { i18n } from "../../i18n/i18n.js";
 
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
+export type CodeAgentAccessClient = Pick<
+  CodeAgentClient,
+  "getAccessStatus" | "logoutAccess" | "pairAccess" | "subscribeUnauthorized"
+>;
 export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
 export type CodeAgentGitMutationClient = Pick<
   CodeAgentClient,

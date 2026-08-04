@@ -899,4 +899,47 @@ describe("CodeAgentClient", () => {
       new CodeAgentClient({ fetch: invalidSchemaFetch }).listTasks("code-agent"),
     ).rejects.toBeInstanceOf(CodeAgentResponseError);
   });
+
+  it("uses same-origin credentials for access status, pairing, and logout", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: false, mode: "lan", version: 1 }))
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true, mode: "lan", version: 1 }))
+      .mockResolvedValueOnce(jsonResponse({ authenticated: false, mode: "lan", version: 1 }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await client.getAccessStatus();
+    await client.pairAccess("secret-pairing-code");
+    await client.logoutAccess();
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/v1/access",
+      "/v1/access/pair",
+      "/v1/access/logout",
+    ]);
+    expect(fetchMock.mock.calls.map((call) => call[1]?.credentials)).toEqual([
+      "same-origin",
+      "same-origin",
+      "same-origin",
+    ]);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      body: JSON.stringify({ code: "secret-pairing-code" }),
+      method: "POST",
+    });
+  });
+
+  it("notifies unauthorized subscribers without swallowing the request error", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValueOnce(
+      new Response(null, { status: 401, statusText: "Unauthorized" }),
+    );
+    const client = new CodeAgentClient({ fetch: fetchMock });
+    const listener = vi.fn();
+    const unsubscribe = client.subscribeUnauthorized(listener);
+
+    await expect(client.listProjects()).rejects.toMatchObject({ status: 401 });
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+  });
 });

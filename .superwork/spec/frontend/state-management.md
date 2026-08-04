@@ -6,6 +6,8 @@
 
 ## Rules
 
+- Access 状态先于 Project Snapshot、Query Cache 和 Event Runtime 初始化。Local 状态直接放行业务树；LAN 未认证状态只保留 `{ authenticated: false, mode: "lan", version: 1 }`，不得缓存配对码。
+- 任意 Client `401` 或 LAN 注销成功后必须立即清空 Query Cache 并卸载 Project Runtime、Composer Draft Provider 与 Router 业务树；Provider 清理必须关闭 WebSocket、释放附件 Blob URL 和内存草稿。刷新后的认证只从 HttpOnly Cookie 重新读取。
 - 瞬时 UI 状态默认保留在最近组件或功能内。
 - HTTP Snapshot 由服务端状态层持有；实时事件按 Task、Turn 和 Item ID 归一化合并。
 - 高扇出 React Provider 必须按只读数据、稳定操作和高频活动状态拆分 Context，消费者只通过专用 Hook 订阅所需边界；每个 Provider value 及派生数组、Map 必须保持引用稳定，Mutation Pending 或单个活动状态变化不得使无关数据/操作消费者重新渲染。

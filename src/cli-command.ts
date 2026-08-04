@@ -22,11 +22,18 @@ import {
 import {
   createCodeAgentServer,
   SqliteStateRepository,
+  type CodeAgentAccessOptions,
   type SqliteDatabaseDiagnostics,
 } from "@code-agent/server";
 
 import packageManifest from "../package.json" with { type: "json" };
 import { openSystemBrowser } from "./system-browser.js";
+import {
+  DEFAULT_LAN_SESSION_TTL,
+  generateLanPairingCode,
+  listLanAccessUrls,
+  parseSessionTtl,
+} from "./lan-access.js";
 import { selectSystemDirectory } from "./system-directory-picker.js";
 
 interface CliManagedRuntime {
@@ -50,6 +57,7 @@ interface CreateRuntimeProviderInput {
 }
 
 interface CreateServerInput {
+  access?: CodeAgentAccessOptions;
   projectRepository: ProjectRepository;
   provider: AgentRuntimeProvider;
   selectProjectDirectory: () => Promise<string | undefined>;
@@ -65,6 +73,8 @@ export interface CliDependencies {
     input: CreateRuntimeProviderInput,
   ) => AgentRuntimeProvider | Promise<AgentRuntimeProvider>;
   createServer: (input: CreateServerInput) => Promise<CliManagedServer>;
+  generateLanPairingCode: () => string;
+  listLanAccessUrls: (port: number) => readonly string[];
   locateCodexBinary: (options?: LocateCodexBinaryOptions) => Promise<CodexBinary>;
   nodeVersion: string;
   openBrowser: (url: string) => Promise<void>;
@@ -83,6 +93,8 @@ export interface RunCliOptions {
 interface ParsedCommandOptions {
   codexBin?: string;
   codexHome?: string;
+  lan?: boolean;
+  sessionTtl?: string;
 }
 
 const defaultDependencies: CliDependencies = {
@@ -91,6 +103,8 @@ const defaultDependencies: CliDependencies = {
   createStateRepository: (databasePath) => SqliteStateRepository.open(databasePath),
   createRuntimeProvider: createCodexRuntimeProvider,
   createServer: createCodeAgentServer,
+  generateLanPairingCode,
+  listLanAccessUrls,
   locateCodexBinary,
   nodeVersion: process.versions.node,
   openBrowser: openSystemBrowser,
@@ -102,21 +116,33 @@ const defaultDependencies: CliDependencies = {
 const HELP = `Usage: code-agent <command> [options]
 
 Commands:
-  code-agent start [--codex-bin <path>] [--codex-home <path>]
+  code-agent start [--lan] [--session-ttl <duration>] [--codex-bin <path>] [--codex-home <path>]
   code-agent doctor [--codex-bin <path>] [--codex-home <path>]
   code-agent version
 `;
 
 function parseCommandOptions(
   args: readonly string[],
-  allowedOptions: ReadonlySet<string>,
+  valueOptions: ReadonlySet<string>,
+  flagOptions: ReadonlySet<string> = new Set(),
 ): ParsedCommandOptions {
   const parsed: ParsedCommandOptions = {};
+  const seen = new Set<string>();
 
-  for (let index = 0; index < args.length; index += 2) {
+  for (let index = 0; index < args.length; index += 1) {
     const option = args[index];
-    if (!option || !allowedOptions.has(option)) {
+    if (!option || (!valueOptions.has(option) && !flagOptions.has(option))) {
       throw new Error(`Unknown option: ${option ?? "<empty>"}`);
+    }
+    if (seen.has(option)) {
+      throw new Error(`Duplicate option: ${option}`);
+    }
+    seen.add(option);
+    if (flagOptions.has(option)) {
+      if (option === "--lan") {
+        parsed.lan = true;
+      }
+      continue;
     }
     const value = args[index + 1];
     if (!value || value.startsWith("--")) {
@@ -127,7 +153,10 @@ function parseCommandOptions(
       parsed.codexBin = value;
     } else if (option === "--codex-home") {
       parsed.codexHome = value;
+    } else if (option === "--session-ttl") {
+      parsed.sessionTtl = value;
     }
+    index += 1;
   }
 
   return parsed;
@@ -237,8 +266,25 @@ async function runStart(
   dependencies: CliDependencies,
   signal: AbortSignal | undefined,
   stderr: (message: string) => void,
+  stdout: (message: string) => void,
 ): Promise<number> {
-  const options = parseCommandOptions(args, new Set(["--codex-bin", "--codex-home"]));
+  const options = parseCommandOptions(
+    args,
+    new Set(["--codex-bin", "--codex-home", "--session-ttl"]),
+    new Set(["--lan"]),
+  );
+  if (options.sessionTtl !== undefined && options.lan !== true) {
+    throw new Error("--session-ttl can only be used with --lan");
+  }
+  const sessionTtlText = options.sessionTtl ?? DEFAULT_LAN_SESSION_TTL;
+  const sessionTtlMs = options.lan === true ? parseSessionTtl(sessionTtlText) : undefined;
+  const access =
+    sessionTtlMs === undefined
+      ? undefined
+      : {
+          pairingCode: dependencies.generateLanPairingCode(),
+          sessionTtlMs,
+        };
   const ownedShutdown = signal ? null : createProcessShutdownSignal();
   const shutdownSignal = signal ?? ownedShutdown?.signal;
   if (!shutdownSignal) {
@@ -267,16 +313,30 @@ async function runStart(
       client: runtime.client,
     });
     server = await dependencies.createServer({
+      ...(access === undefined ? {} : { access }),
       projectRepository: stateRepository,
       provider,
       selectProjectDirectory: dependencies.selectProjectDirectory,
       settingsRepository: stateRepository,
       staticRoot: dependencies.webRoot,
     });
-    const url = await server.listen({ host: "127.0.0.1", port: 3210 });
+    await server.listen({ host: options.lan === true ? "0.0.0.0" : "127.0.0.1", port: 3210 });
+
+    if (access !== undefined) {
+      const urls = dependencies.listLanAccessUrls(3210);
+      stdout("[warn] Trusted LAN HTTP access is unencrypted.\n");
+      if (urls.length === 0) {
+        stderr("[warn] No external IPv4 LAN address was found; the server is still running.\n");
+      } else {
+        stdout(`LAN URLs:\n${urls.map((url) => `  ${url}`).join("\n")}\n`);
+      }
+      stdout(`Pairing code: ${access.pairingCode}\n`);
+      stdout(`Session lifetime: ${sessionTtlText} (absolute, no renewal)\n`);
+      stdout("Restarting CodeAgent invalidates this code and all LAN sessions.\n");
+    }
 
     try {
-      await dependencies.openBrowser(url);
+      await dependencies.openBrowser("http://127.0.0.1:3210");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       stderr(`[warn] Failed to open browser: ${message}\n`);
@@ -319,7 +379,9 @@ export async function runCli(
   const dependencies = options.dependencies ?? defaultDependencies;
   const stdout = options.stdout ?? ((message: string) => process.stdout.write(message));
   const stderr = options.stderr ?? ((message: string) => process.stderr.write(message));
-  const [command, ...args] = argv;
+  const [command, ...rawArgs] = argv;
+  // `pnpm run <script> -- ...` 会把分隔符传给脚本；只剥离命令后的首个分隔符。
+  const args = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
 
   try {
     if (!command || command === "--help" || command === "-h") {
@@ -337,7 +399,7 @@ export async function runCli(
       return await runDoctor(args, dependencies, stdout);
     }
     if (command === "start") {
-      return await runStart(args, dependencies, options.signal, stderr);
+      return await runStart(args, dependencies, options.signal, stderr, stdout);
     }
     throw new Error(`Unknown command: ${command}`);
   } catch (error) {

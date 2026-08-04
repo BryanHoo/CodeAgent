@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 
-import { createAppQueryClient, navigateToTaskFromNotification } from "./providers.js";
+import {
+  AccessControlledContent,
+  createAppQueryClient,
+  navigateToTaskFromNotification,
+} from "./providers.js";
 import { router } from "./router.js";
 
 describe("createAppQueryClient", () => {
@@ -24,5 +29,41 @@ describe("createAppQueryClient", () => {
       to: "/p/$projectId/t/$taskId",
     });
     navigate.mockRestore();
+  });
+
+  it("does not render the business provider subtree before authentication", () => {
+    const unauthenticated = renderToStaticMarkup(
+      <AccessControlledContent
+        access={{
+          error: null,
+          loading: false,
+          logout: vi.fn(),
+          pair: vi.fn(),
+          pairing: false,
+          retry: vi.fn(),
+          status: { authenticated: false, mode: "lan", version: 1 },
+        }}
+      >
+        <div>secret-workbench</div>
+      </AccessControlledContent>,
+    );
+    const authenticated = renderToStaticMarkup(
+      <AccessControlledContent
+        access={{
+          error: null,
+          loading: false,
+          logout: vi.fn(),
+          pair: vi.fn(),
+          pairing: false,
+          retry: vi.fn(),
+          status: { authenticated: true, mode: "local", version: 1 },
+        }}
+      >
+        <div>secret-workbench</div>
+      </AccessControlledContent>,
+    );
+
+    expect(unauthenticated).not.toContain("secret-workbench");
+    expect(authenticated).toContain("secret-workbench");
   });
 });

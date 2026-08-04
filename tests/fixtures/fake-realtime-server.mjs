@@ -46,7 +46,11 @@ const provider = createCodexRuntimeProvider({ client: runtime.client });
 let globalSettings;
 const projectDefaults = new Map();
 const taskSettings = new Map();
+const pairingCode = process.env["CODE_AGENT_E2E_PAIRING_CODE"];
 const server = await createCodeAgentServer({
+  ...(pairingCode === undefined
+    ? {}
+    : { access: { pairingCode, sessionTtlMs: 24 * 60 * 60 * 1_000 } }),
   eventSessionId: "e2e-session",
   projectRepository: {
     list: () => Promise.resolve([project]),

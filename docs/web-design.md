@@ -335,6 +335,12 @@ apps/web/src/
 
 `CodeAgentClient.subscribeEvents` 以 Snapshot 的 `sessionId` 和 `sequence` 建立连接。Client 负责 Schema 校验、重复事件过滤、Sequence Gap 检测、退避重连和取消时清理 Socket、Timer 与全部监听器；它通过回调报告连接状态与 `resync.required`，不持有 React 状态。
 
+### 10.2 网络 Access 门禁
+
+`AccessProvider` 位于 `ProjectProvider`、`ComposerDraftProvider` 和 Router 业务子树之外。应用启动后先调用 `GET /v1/access`：Local 模式直接进入工作台；LAN 未认证模式只挂载 `PairingGate`，不得请求 Project、Model、Settings 或建立 Event WebSocket。配对成功后在原深链 URL 原地挂载工作台，配对码只存在于表单局部状态，不进入 Query Cache、`localStorage`、URL 或 Toast。
+
+`CodeAgentClient` 的所有 Fetch 固定使用 `credentials: "same-origin"`，成功响应经过 Protocol Schema 校验。任意请求收到 `401` 时，Access 边界必须保留原 HTTP 错误并同步通知页面：页面立即清空 Query Cache，卸载 Project Runtime、Event WebSocket 与 Composer Draft Store，并释放附件 Blob URL。LAN 设置页的“退出局域网访问”调用同一清理路径；刷新只依赖 HttpOnly Cookie 恢复，不建立浏览器持久认证副本。
+
 不负责：
 
 - React 状态。
@@ -342,7 +348,7 @@ apps/web/src/
 - 页面导航和弹窗。
 - Provider 专有 RPC。
 
-### 10.2 `apps/web`
+### 10.3 `apps/web`
 
 负责：
 

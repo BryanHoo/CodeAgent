@@ -1,16 +1,40 @@
 import type { EventStreamMessage } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
+import type { WebSocket } from "ws";
 import { sendEventStreamMessage } from "../event-socket-sender.js";
 
+import { ACCESS_SESSION_COOKIE } from "./access-routes.js";
 import type { ServerRouteContext } from "./context.js";
 import { EventQuerySchema, ProjectParamsSchema } from "./schemas.js";
+
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+function scheduleSessionExpiry(socket: WebSocket, expiresAt: number): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expire = () => {
+    const remainingMs = expiresAt - Date.now();
+    if (remainingMs <= 0) {
+      socket.close(1008, "Access session expired");
+      return;
+    }
+    // Node 定时器有 32 位延迟上限，长会话分段等待但仍使用固定绝对期限。
+    timer = setTimeout(expire, Math.min(remainingMs, MAX_TIMER_DELAY_MS));
+    timer.unref();
+  };
+  expire();
+  return () => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  };
+}
 
 export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
   app,
   context,
   done,
 ) => {
-  const { getProjectContext, projectContexts } = context;
+  const { accessService, getProjectContext, projectContexts } = context;
 
   app.get<{ Params: { projectId: string }; Querystring: { afterSequence: number } }>(
     "/v1/projects/:projectId/events",
@@ -21,32 +45,16 @@ export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
             .code(404)
             .send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
         }
-        const origin = request.headers.origin;
-        const host = request.headers.host;
-        if (origin === undefined) {
-          return;
-        }
-        try {
-          const parsedOrigin = new URL(origin);
-          if (
-            host === undefined ||
-            (parsedOrigin.protocol !== "http:" && parsedOrigin.protocol !== "https:") ||
-            parsedOrigin.host !== host
-          ) {
-            return await reply
-              .code(403)
-              .send({ code: "ORIGIN_REJECTED", message: "Origin rejected" });
-          }
-        } catch {
-          return await reply
-            .code(403)
-            .send({ code: "ORIGIN_REJECTED", message: "Origin rejected" });
-        }
       },
       schema: { params: ProjectParamsSchema, querystring: EventQuerySchema },
       websocket: true,
     },
     (socket, request) => {
+      const sessionExpiresAt = accessService?.expiresAt(request.cookies[ACCESS_SESSION_COOKIE]);
+      if (accessService !== undefined && sessionExpiresAt === undefined) {
+        socket.close(1008, "Access session expired");
+        return;
+      }
       const context = projectContexts.get(request.params.projectId);
       if (context === undefined) {
         socket.close(1008, "Project not found");
@@ -56,11 +64,16 @@ export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
       context.transportMetrics.activeClients += 1;
       let cleanedUp = false;
       let unsubscribe: () => void = () => undefined;
+      const cancelSessionExpiry =
+        sessionExpiresAt === undefined
+          ? () => undefined
+          : scheduleSessionExpiry(socket, sessionExpiresAt);
       const cleanup = () => {
         if (cleanedUp) {
           return;
         }
         cleanedUp = true;
+        cancelSessionExpiry();
         unsubscribe();
         context.transportMetrics.activeClients -= 1;
       };

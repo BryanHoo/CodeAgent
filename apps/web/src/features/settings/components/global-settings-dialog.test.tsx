@@ -87,6 +87,37 @@ describe("GlobalSettingsDialog", () => {
     expect(markup).not.toContain("__SYSTEM_DEFAULT__");
   });
 
+  it("offers explicit logout only for LAN access", () => {
+    const markup = renderToStaticMarkup(
+      <GlobalSettingsDialog
+        accessMode="lan"
+        apps={[]}
+        error={null}
+        isPending={false}
+        models={models}
+        onClose={vi.fn()}
+        onLogoutAccess={vi.fn()}
+        onRetry={vi.fn()}
+        onSave={vi.fn()}
+        settings={{
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          commitMessageModel: "gpt-5.6-sol",
+          commitMessagePrompt: "",
+          commitMessageReasoningEffort: "high",
+          defaultOpenAppId: null,
+          followUpBehavior: "queue",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+          sandboxMode: "workspace-write",
+        }}
+      />,
+    );
+
+    expect(markup).toContain("局域网访问");
+    expect(markup).toContain("退出局域网访问");
+  });
+
   it("uses the selected model default when the previous effort is unavailable", () => {
     expect(resolveGlobalSettingsModel(models, "gpt-5.6-terra", "high")).toEqual({
       model: "gpt-5.6-terra",

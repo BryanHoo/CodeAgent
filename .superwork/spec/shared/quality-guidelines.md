@@ -6,6 +6,8 @@
 
 ## Rules
 
+- 网络 Access 契约必须独立于 Codex 账号和 Provider 类型，使用严格版本化 Schema 定义 `local | lan` 状态、配对、注销及 `ACCESS_DENIED`、`PAIRING_FAILED`、`PAIRING_RATE_LIMITED` 错误。Protocol、Client、Server 与 Web 消费者必须同步更新。
+- Client 所有 Fetch 必须显式使用 `credentials: "same-origin"`；配对码只能进入 `POST /v1/access/pair` JSON Body。`401` 通知不得吞掉或改写原 HTTP 或 Mutation 错误。
 - Project、Task 等 Protocol 类型必须有对应 JSON Schema 或明确生成来源，运行时边界不得只依赖 TypeScript 类型。
 - 代码审查请求使用携带严格 `AgentReviewTarget` 的 `AgentReviewItem` 进入 Snapshot 和实时事件，禁止用普通用户消息或 Provider 原生 Prompt 表达审查模式。
 - `Project.rootPath` 由本地 Runtime 校验后随 Project 契约返回，用于当前工作台展示，并由 `ProjectSchema` 校验为非空字符串。

@@ -62,6 +62,7 @@
     "@eslint/js": "catalog:",
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
+    "@types/ws": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "dependency-cruiser": "catalog:",
     "eslint": "catalog:",
@@ -73,7 +74,8 @@
     "tsup": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "ws": "catalog:"
   },
   "license": "MIT"
 }

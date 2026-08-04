@@ -36,6 +36,7 @@ import {
   type ProjectSourceFile,
 } from "@code-agent/protocol";
 import fastifyCompress from "@fastify/compress";
+import fastifyCookie from "@fastify/cookie";
 import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
@@ -47,6 +48,7 @@ import Fastify, {
 } from "fastify";
 
 import { AgentEventStream } from "./agent-event-stream.js";
+import { AccessSessionService, type CodeAgentAccessOptions } from "./access-control.js";
 import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js";
 import { commitSelectedProjectChanges, type GitCommitError } from "./git-commit.js";
 import { buildCommitMessagePrompt } from "./git-commit-message.js";
@@ -65,12 +67,14 @@ import {
   type TaskStartRecovery,
 } from "./routes/context.js";
 import { registerEventRoutes } from "./routes/event-routes.js";
+import { ACCESS_SESSION_COOKIE, registerAccessRoutes } from "./routes/access-routes.js";
 import { registerProjectRoutes } from "./routes/project-routes.js";
 import { registerRuntimeRoutes } from "./routes/runtime-routes.js";
 import { registerTaskRoutes } from "./routes/task-routes.js";
 import { registerTurnRoutes } from "./routes/turn-routes.js";
 
 export interface CreateCodeAgentServerOptions {
+  access?: CodeAgentAccessOptions;
   eventBufferSize?: number;
   eventSessionId?: string;
   handlerTimeoutMs?: number;
@@ -837,6 +841,62 @@ export async function createCodeAgentServer(
   };
 
   await app.register(fastifyWebsocket, { options: { maxPayload: 64 * 1024 } });
+  await app.register(fastifyCookie);
+  const accessService =
+    options.access === undefined ? undefined : new AccessSessionService(options.access);
+  app.addHook("onRequest", async (request, reply) => {
+    const pathname = request.url.split("?", 1)[0] ?? request.url;
+    const websocket = request.headers.upgrade?.toLowerCase() === "websocket";
+    const sessionId = request.cookies[ACCESS_SESSION_COOKIE];
+    const authenticated =
+      options.access === undefined || accessService?.validate(sessionId) === true;
+    const anonymous =
+      !pathname.startsWith("/v1/") ||
+      (request.method === "GET" && (pathname === "/v1/health" || pathname === "/v1/access")) ||
+      (request.method === "POST" && pathname === "/v1/access/pair");
+
+    if (!anonymous && !authenticated) {
+      return reply
+        .code(401)
+        .send({ code: "ACCESS_DENIED", message: "Access denied", retryable: false });
+    }
+
+    const browserWrite =
+      !["GET", "HEAD", "OPTIONS"].includes(request.method) && sessionId !== undefined;
+    if (websocket || browserWrite) {
+      const origin = request.headers.origin;
+      const host = request.headers.host;
+      try {
+        const parsedOrigin = origin === undefined ? undefined : new URL(origin);
+        if (
+          parsedOrigin === undefined ||
+          host === undefined ||
+          (parsedOrigin.protocol !== "http:" && parsedOrigin.protocol !== "https:") ||
+          parsedOrigin.host !== host
+        ) {
+          throw new Error("Origin mismatch");
+        }
+      } catch {
+        return reply
+          .code(403)
+          .send({ code: "ACCESS_DENIED", message: "Access denied", retryable: false });
+      }
+    }
+  });
+  app.addHook("onSend", async (request, reply, payload) => {
+    reply.headers({
+      "Content-Security-Policy":
+        "default-src 'self'; base-uri 'none'; connect-src 'self'; frame-ancestors 'none'; img-src 'self' blob: data:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+      "Permissions-Policy": "camera=(), geolocation=(), microphone=()",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+    });
+    if (request.url.startsWith("/v1/")) {
+      reply.header("Cache-Control", "no-store");
+    }
+    return payload;
+  });
   await app.register(fastifyMultipart, {
     limits: { fields: 0, files: 1, fileSize: MAX_AGENT_FILE_BYTES, parts: 1 },
   });
@@ -850,7 +910,11 @@ export async function createCodeAgentServer(
     }
     if (typeof error === "object" && error !== null && "validation" in error) {
       const key = request.headers["idempotency-key"];
+      const accessMutation =
+        request.routeOptions.url === "/v1/access/pair" ||
+        request.routeOptions.url === "/v1/access/logout";
       const missingKey =
+        !accessMutation &&
         (request.method === "POST" || request.method === "PUT") &&
         (key === undefined || key === "");
       return reply.code(400).send({
@@ -862,6 +926,8 @@ export async function createCodeAgentServer(
     return reply.send(error);
   });
   app.addHook("onClose", async () => {
+    // Access 内存必须先随 Server 生命周期失效，重启不能恢复 Session。
+    accessService?.close();
     await Promise.all([...projectContexts.keys()].map(releaseProjectContext));
     await attachmentStore.dispose();
     activeGitMutations.clear();
@@ -902,6 +968,7 @@ export async function createCodeAgentServer(
   }
 
   const routeContext: ServerRouteContext = {
+    ...(accessService === undefined ? {} : { accessService }),
     activeGitMutations,
     assertCommitSelection,
     assertValidProjectDefaults,
@@ -940,6 +1007,10 @@ export async function createCodeAgentServer(
     toGitCommitHttpError,
     toPendingRequestHttpError,
   };
+  await app.register(registerAccessRoutes, {
+    ...(options.access === undefined ? {} : { access: options.access }),
+    ...(accessService === undefined ? {} : { service: accessService }),
+  });
   await app.register(registerRuntimeRoutes, routeContext);
   await app.register(registerProjectRoutes, routeContext);
   await app.register(registerTaskRoutes, routeContext);

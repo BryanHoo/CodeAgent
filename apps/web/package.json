@@ -24,6 +24,7 @@
     "shiki": "catalog:",
     "sonner": "catalog:",
     "streamdown": "catalog:",
+    "uuid": "catalog:",
     "zustand": "catalog:"
   },
   "devDependencies": {

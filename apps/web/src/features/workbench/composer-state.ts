@@ -10,6 +10,7 @@ import type {
   AgentTurn,
   AgentTurnOptions,
 } from "@code-agent/protocol";
+import { v4 as createUuid } from "uuid";
 
 import { i18n } from "../../i18n/i18n.js";
 import type { TaskRuntimeView } from "../conversation/runtime/use-task-runtime.js";
@@ -46,7 +47,7 @@ export type IdempotencyAttempt = Readonly<{
 export function resolveIdempotencyAttempt(
   previous: IdempotencyAttempt | undefined,
   fingerprint: string,
-  createKey: () => string = () => globalThis.crypto.randomUUID(),
+  createKey: () => string = createUuid,
 ): IdempotencyAttempt {
   return previous?.fingerprint === fingerprint ? previous : { fingerprint, key: createKey() };
 }

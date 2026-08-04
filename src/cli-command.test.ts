@@ -110,6 +110,8 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
       lifecycle.push("provider.create");
       return runtimeProvider;
     }),
+    generateLanPairingCode: vi.fn(() => "fixed-test-pairing-code"),
+    listLanAccessUrls: vi.fn(() => ["http://192.168.1.20:3210"]),
     createServer: vi.fn(() => Promise.resolve({ close: serverClose, listen: serverListen })),
     locateCodexBinary: vi.fn(() =>
       Promise.resolve({ path: "/fake/codex", source: "explicit" as const }),
@@ -286,6 +288,46 @@ describe("runCli", () => {
     expect(harness.stderr.join("")).toContain(
       "Codex App Server exited before shutdown with code 23",
     );
+  });
+
+  it("starts explicit LAN access while opening the loopback browser URL", async () => {
+    const harness = createHarness();
+    const controller = new AbortController();
+    const run = runCli(["start", "--", "--lan", "--session-ttl", "12h"], {
+      ...harness.options,
+      signal: controller.signal,
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.serverListen).toHaveBeenCalledOnce();
+    });
+    expect(harness.dependencies.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        access: { pairingCode: "fixed-test-pairing-code", sessionTtlMs: 43_200_000 },
+      }),
+    );
+    expect(harness.serverListen).toHaveBeenCalledWith({ host: "0.0.0.0", port: 3210 });
+    expect(harness.dependencies.openBrowser).toHaveBeenCalledWith("http://127.0.0.1:3210");
+    expect(harness.stdout.join("\n")).toContain("http://192.168.1.20:3210");
+    expect(harness.stdout.join("\n")).toContain("fixed-test-pairing-code");
+    expect(harness.stdout.join("\n")).not.toContain("http://0.0.0.0:3210");
+
+    controller.abort();
+    await expect(run).resolves.toBe(0);
+  });
+
+  it("rejects invalid LAN options before starting runtime resources", async () => {
+    for (const args of [
+      ["start", "--session-ttl", "12h"],
+      ["start", "--lan", "--session-ttl", "31d"],
+      ["start", "--lan", "--lan"],
+      ["start", "--lan", "--codex-bin", "/first", "--codex-bin", "/second"],
+    ]) {
+      const harness = createHarness();
+      await expect(runCli(args, harness.options)).resolves.toBe(1);
+      expect(harness.dependencies.createStateRepository).not.toHaveBeenCalled();
+      expect(harness.dependencies.startCodexAppServer).not.toHaveBeenCalled();
+    }
   });
 
   it("keeps the server running when opening the browser fails", async () => {

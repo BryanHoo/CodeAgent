@@ -11,6 +11,7 @@ import {
   AgentMcpServerPageSchema,
   AgentModelPageSchema,
   AgentMutationErrorSchema,
+  AccessStatusResponseSchema,
   AgentProjectDefaultsResponseSchema,
   AgentSkillPageSchema,
   InterruptAgentTurnResponseSchema,
@@ -50,6 +51,7 @@ import {
   type AgentAttachmentUploadResponse,
   type AgentAttachmentKind,
   type AgentMutationError,
+  type AccessStatusResponse,
   type AgentGlobalSettings,
   type AgentGlobalSettingsResponse,
   type AgentMcpServerPage,
@@ -95,6 +97,7 @@ import {
 } from "@code-agent/protocol";
 import type { Static, TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
+import { v4 as createUuid } from "uuid";
 
 import {
   startAgentEventSubscription,
@@ -134,6 +137,8 @@ export type MutationOptions = Readonly<{
   idempotencyKey?: string;
   signal?: AbortSignal;
 }>;
+
+export type UnauthorizedListener = () => void;
 
 export type PendingRequestResolution<T extends PendingRequest> = Extract<
   ResolvePendingRequestRequest,
@@ -207,6 +212,7 @@ export class CodeAgentClient {
   readonly #fetch: typeof globalThis.fetch;
   readonly #requestTimeouts: CodeAgentRequestTimeouts;
   readonly #webSocketFactory: WebSocketFactory;
+  readonly #unauthorizedListeners = new Set<UnauthorizedListener>();
 
   public constructor(options: CodeAgentClientOptions = {}) {
     this.#baseUrl = options.baseUrl?.replace(/\/$/u, "") ?? "";
@@ -221,6 +227,39 @@ export class CodeAgentClient {
 
   public async getHealth(options: ReadOptions = {}): Promise<HealthResponse> {
     return this.#read("/v1/health", HealthResponseSchema, options);
+  }
+
+  public async getAccessStatus(options: ReadOptions = {}): Promise<AccessStatusResponse> {
+    return this.#read("/v1/access", AccessStatusResponseSchema, options);
+  }
+
+  public async pairAccess(code: string): Promise<AccessStatusResponse> {
+    return this.#request(
+      "/v1/access/pair",
+      AccessStatusResponseSchema,
+      {
+        body: JSON.stringify({ code }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+      AgentMutationErrorSchema,
+      { timeoutMs: this.#requestTimeouts.mutationMs },
+    );
+  }
+
+  public async logoutAccess(): Promise<AccessStatusResponse> {
+    return this.#request(
+      "/v1/access/logout",
+      AccessStatusResponseSchema,
+      { body: "{}", headers: { "content-type": "application/json" }, method: "POST" },
+      AgentMutationErrorSchema,
+      { timeoutMs: this.#requestTimeouts.mutationMs },
+    );
+  }
+
+  public subscribeUnauthorized(listener: UnauthorizedListener): () => void {
+    this.#unauthorizedListeners.add(listener);
+    return () => this.#unauthorizedListeners.delete(listener);
   }
 
   public async getCapabilities(options: ReadOptions = {}): Promise<AgentCapabilities> {
@@ -619,7 +658,7 @@ export class CodeAgentClient {
       {
         body,
         headers: {
-          "idempotency-key": options.idempotencyKey ?? globalThis.crypto.randomUUID(),
+          "idempotency-key": options.idempotencyKey ?? createUuid(),
         },
         method: "POST",
       },
@@ -732,7 +771,7 @@ export class CodeAgentClient {
         body: JSON.stringify(body),
         headers: {
           "content-type": "application/json",
-          "idempotency-key": options.idempotencyKey ?? globalThis.crypto.randomUUID(),
+          "idempotency-key": options.idempotencyKey ?? createUuid(),
         },
         method,
       },
@@ -769,10 +808,21 @@ export class CodeAgentClient {
         : AbortSignal.any([requestOptions.signal, timeoutSignal]);
     const response = await this.#fetch(`${this.#baseUrl}${path}`, {
       ...init,
+      credentials: "same-origin",
       headers: { accept: "application/json", ...(init.headers as Record<string, string>) },
       signal,
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        // 认证失效先通知运行时卸载敏感状态，同时保留原请求错误语义。
+        for (const listener of this.#unauthorizedListeners) {
+          try {
+            listener();
+          } catch {
+            // 单个页面订阅者不得改变 HTTP 错误边界。
+          }
+        }
+      }
       if (errorSchema !== undefined) {
         let errorBody: unknown;
         try {

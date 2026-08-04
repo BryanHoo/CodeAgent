@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@code-agent/protocol": "workspace:*",
-    "@sinclair/typebox": "catalog:"
+    "@sinclair/typebox": "catalog:",
+    "uuid": "catalog:"
   }
 }

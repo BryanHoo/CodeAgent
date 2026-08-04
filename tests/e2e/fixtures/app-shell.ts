@@ -480,7 +480,9 @@ test.beforeEach(async ({ page }) => {
 
     let body: unknown;
 
-    if (url.pathname === "/v1/health") {
+    if (url.pathname === "/v1/access") {
+      body = { authenticated: true, mode: "local", version: 1 };
+    } else if (url.pathname === "/v1/health") {
       body = { status: "ok", version: 1 };
     } else if (url.pathname === "/v1/capabilities") {
       body = {

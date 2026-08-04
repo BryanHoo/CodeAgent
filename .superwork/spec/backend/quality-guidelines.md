@@ -2,6 +2,10 @@
 
 ## 边界与安全
 
+- 默认启动只能监听 Loopback；LAN 监听必须由显式 `--lan` 启用，并使用可信局域网配对认证。该模式是明文 HTTP，禁止描述为加密或安全远程访问。
+- LAN 模式的匿名范围只能是静态 SPA、`GET /v1/health`、`GET /v1/access` 和 `POST /v1/access/pair`；其余 `/v1/*` 和 WebSocket Upgrade 必须由根级 Hook 认证。Cookie 写请求与所有 WebSocket 必须严格校验 `Origin` 和 `Host` 同源。
+- 配对码至少 128 bit 熵，Session ID 至少 256 bit；二者不得进入 URL、环境变量、日志或持久层。Session 与按 IP 配对失败窗口必须有界，关闭时清空；失败每分钟最多 5 次且响应不得泄漏匹配细节。
+- LAN Cookie 使用 `HttpOnly; SameSite=Strict; Path=/` 和固定绝对 `Max-Age`，明文 HTTP 不设置 `Secure`。所有 `/v1/*` 使用 `no-store`，应用响应设置 CSP、Frame、MIME、Referrer 与 Permissions 安全头，不为 HTTP 设置 HSTS。
 - Fastify 使用 JSON Schema 验证输入并序列化输出。
 - 生产静态资源必须协商 Brotli 或 Gzip 响应压缩；`/assets/*` 内容哈希资源固定返回一年 `immutable` 公共缓存，HTML 与 SPA 回退入口保持 `max-age=0` 重新验证。
 - Project 路径每次操作都执行绝对路径、`realpath` 和允许根目录包含关系校验。
@@ -21,6 +25,7 @@
 - JSONL 分帧测试覆盖多字节 UTF-8 字符跨 Buffer 边界；RPC 关联、服务端请求响应、超时、审批状态机和事件映射使用 Vitest 单元测试。
 - Binary 定位测试必须确认包内路径落到当前平台的原生可执行文件；Windows 只接受 `.exe`，不得把 `.cmd`、`.bat` 或 JS launcher 当作受管 App Server 进程。
 - 根 CLI 的系统集成测试必须覆盖 Windows UTF-8 目录、平台取消与真实失败的区分，以及 Linux 目录选择器和浏览器启动器的缺失回退；CI 质量门禁至少在 Ubuntu 与 Windows 上运行。
+- 根 CLI 参数测试必须覆盖 `pnpm run start -- ...` 转发的单个 `--` 分隔符；只忽略命令后的首个分隔符，后续未知或重复选项仍必须拒绝。
 - Project 宿主打开测试必须覆盖 Windows Explorer 成功转交后不误报失败，以及 Windows Terminal 强制在目标目录打开独立新窗口。
 - 子进程关闭测试覆盖发送 `SIGKILL` 后仍未退出的路径，并验证关闭 Promise 在截止时间内失败。
 - Provider 集成使用 Fake App Server，不依赖真实账号完成默认 CI。

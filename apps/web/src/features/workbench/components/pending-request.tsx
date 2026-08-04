@@ -4,6 +4,7 @@ import type {
   ResolvePendingRequestRequest,
 } from "@code-agent/protocol";
 import { useEffect, useRef, useState } from "react";
+import { v4 as createUuid } from "uuid";
 
 import {
   Confirmation,
@@ -27,7 +28,7 @@ export type PendingRequestResolutionAttempt = Readonly<{
 export function resolvePendingRequestAttempt(
   attempt: PendingRequestResolutionAttempt | undefined,
   resolution: PendingRequestResolution,
-  createKey: () => string = () => globalThis.crypto.randomUUID(),
+  createKey: () => string = createUuid,
 ): PendingRequestResolutionAttempt {
   const fingerprint = JSON.stringify(resolution);
   return attempt?.fingerprint === fingerprint ? attempt : { fingerprint, key: createKey() };

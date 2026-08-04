@@ -27,6 +27,7 @@ import type {
 } from "@code-agent/protocol";
 
 import type { AgentEventStream } from "../agent-event-stream.js";
+import type { AccessSessionService } from "../access-control.js";
 import type { AttachmentStore } from "../attachment-store.js";
 import type { GitCommitError } from "../git-commit.js";
 import type { ProjectOpenService } from "../project-open.js";
@@ -75,6 +76,7 @@ export type TaskStartRecovery = Readonly<{
 }>;
 
 export interface ServerRouteContext {
+  readonly accessService?: AccessSessionService;
   readonly activeGitMutations: Set<string>;
   readonly assertCommitSelection: (
     status: ProjectGitStatus,

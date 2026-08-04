@@ -1121,6 +1121,15 @@ describe("project protocol", () => {
         retryable: false,
       }),
     ).toBe(true);
+    for (const code of ["ACCESS_DENIED", "PAIRING_FAILED", "PAIRING_RATE_LIMITED"]) {
+      expect(
+        Value.Check(AgentMutationErrorSchema, {
+          code,
+          message: "Access request failed",
+          retryable: false,
+        }),
+      ).toBe(true);
+    }
   });
 
   it("uses bounded image, file, and pasted text input limits", () => {

@@ -17,6 +17,7 @@ import {
   SquareTerminal,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { v4 as createUuid } from "uuid";
 import { useStore } from "zustand";
 
 import { getCurrentLanguage, i18n, useTranslation } from "../../../i18n/i18n.js";
@@ -521,7 +522,7 @@ function MessageMetadata({
       if (onForkTask === undefined) {
         return;
       }
-      forkIdempotencyKeyRef.current ??= globalThis.crypto.randomUUID();
+      forkIdempotencyKeyRef.current ??= createUuid();
       setForkPending(true);
       setForkError(false);
       try {
@@ -653,7 +654,7 @@ function ChangedFilesCard({
   const [expanded, setExpanded] = useState(false);
   const [rollbackError, setRollbackError] = useState<string | null>(null);
   const [rollbackPending, setRollbackPending] = useState(false);
-  const [rollbackIdempotencyKey] = useState(() => globalThis.crypto.randomUUID());
+  const [rollbackIdempotencyKey] = useState(() => createUuid());
   const rollbackLockRef = useRef(createAsyncActionLock());
   const summary = summarizeFileChanges(changes);
   const visibleChanges = expanded ? summary.changes : summary.changes.slice(0, 3);

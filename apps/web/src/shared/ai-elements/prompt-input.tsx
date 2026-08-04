@@ -18,6 +18,7 @@ import {
   type SubmitEvent,
   type TextareaHTMLAttributes,
 } from "react";
+import { v4 as createUuid } from "uuid";
 
 import { useTranslation } from "../../i18n/i18n.js";
 import type { AttachmentData } from "./attachments.js";
@@ -255,7 +256,7 @@ export function PromptInput({
           }
           accepted.push({
             file,
-            id: globalThis.crypto.randomUUID(),
+            id: createUuid(),
             kind,
             mediaType: file.type,
             name: file.name,

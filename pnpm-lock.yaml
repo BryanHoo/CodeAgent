@@ -12,6 +12,9 @@ catalogs:
     '@fastify/compress':
       specifier: 9.1.0
       version: 9.1.0
+    '@fastify/cookie':
+      specifier: 11.1.2
+      version: 11.1.2
     '@fastify/multipart':
       specifier: 10.1.0
       version: 10.1.0
@@ -138,6 +141,9 @@ catalogs:
     typescript-eslint:
       specifier: 8.65.0
       version: 8.65.0
+    uuid:
+      specifier: 14.0.1
+      version: 14.0.1
     vite:
       specifier: 8.1.5
       version: 8.1.5
@@ -171,6 +177,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
+      '@types/ws':
+        specifier: 'catalog:'
+        version: 8.18.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.10(vitest@4.1.10)
@@ -207,6 +216,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(esbuild@0.27.7)(jiti@2.7.0)
+      ws:
+        specifier: 'catalog:'
+        version: 8.21.1
 
   apps/web:
     dependencies:
@@ -255,6 +267,9 @@ importers:
       streamdown:
         specifier: 'catalog:'
         version: 2.5.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@7.2.0)
+      uuid:
+        specifier: 'catalog:'
+        version: 14.0.1
       zustand:
         specifier: 'catalog:'
         version: 5.0.14(@types/react@19.2.17)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8))
@@ -286,6 +301,9 @@ importers:
       '@sinclair/typebox':
         specifier: 'catalog:'
         version: 0.34.52
+      uuid:
+        specifier: 'catalog:'
+        version: 14.0.1
 
   packages/core:
     dependencies:
@@ -328,6 +346,9 @@ importers:
       '@fastify/compress':
         specifier: 'catalog:'
         version: 9.1.0
+      '@fastify/cookie':
+        specifier: 'catalog:'
+        version: 11.1.2
       '@fastify/multipart':
         specifier: 'catalog:'
         version: 10.1.0
@@ -667,6 +688,9 @@ packages:
 
   '@fastify/compress@9.1.0':
     resolution: {integrity: sha512-b/rc+dHqDIDyl/KIaGzjT3l5CXmWIjEGJh2qZHyOwtVNX4htHqmnLbsUO8zz8E0n/S1cu7EVmQexBit+EUFumw==}
+
+  '@fastify/cookie@11.1.2':
+    resolution: {integrity: sha512-Dtrpk/YOGUsbRMvP/8ZqPpwnMRv0qSqodFdoQ2B589Obc7jw4s4Qla+cV72Bsm7WsZJnqlYFX/i7uSBq0xzg6g==}
 
   '@fastify/deepmerge@3.2.1':
     resolution: {integrity: sha512-N5Oqvltoa2r9z1tbx4xjky0oRR60v+T47Ic4J1ukoVQcptLOrIdRnCSdTGmOmajZuHVKlTnfcmrjyqsGEW1ztA==}
@@ -1774,6 +1798,10 @@ packages:
   cookie@1.1.1:
     resolution: {integrity: sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ==}
     engines: {node: '>=18'}
+
+  cookie@2.0.1:
+    resolution: {integrity: sha512-yuToqVvRrj6pfDXREyQAAv8SkAEk/8GS3jQRTiUMm66TVtBYmqQeoEjL2Lmq8Rpo6271vH76InTChTitEAm65w==}
+    engines: {node: '>=22'}
 
   cose-base@1.0.3:
     resolution: {integrity: sha512-s9whTXInMSgAp/NVXVNuVxVKzGH2qck3aQlVHxDCdAEPgtMKwc4Wq6/QKhgdEdgbLSi9rBTAcPoRa6JpiG4ksg==}
@@ -4250,6 +4278,11 @@ snapshots:
       minipass: 7.1.3
       readable-stream: 4.7.0
 
+  '@fastify/cookie@11.1.2':
+    dependencies:
+      cookie: 2.0.1
+      fastify-plugin: 6.0.0
+
   '@fastify/deepmerge@3.2.1': {}
 
   '@fastify/error@4.2.0': {}
@@ -5286,6 +5319,8 @@ snapshots:
   cookie-es@3.1.1: {}
 
   cookie@1.1.1: {}
+
+  cookie@2.0.1: {}
 
   cose-base@1.0.3:
     dependencies:

@@ -1,4 +1,10 @@
 export const settings = {
+  access: {
+    currentSession: "Current browser",
+    loggingOut: "Logging out",
+    logout: "Log out of LAN access",
+    sessionDescription: "This browser is paired with the current CodeAgent LAN session.",
+  },
   actions: {
     cancel: "Cancel",
     close: "Close",
@@ -29,6 +35,7 @@ export const settings = {
   },
   errors: {
     load: "Unable to load global settings",
+    logout: "Unable to log out of LAN access",
     save: "Unable to save global settings",
   },
   fields: {
@@ -62,6 +69,7 @@ export const settings = {
     workspaceWrite: "Workspace write",
   },
   sections: {
+    access: "LAN access",
     agent: "Agent defaults",
     appearance: "Appearance",
     commit: "Commit messages",

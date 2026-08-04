@@ -1,6 +1,7 @@
 import type { AgentBackgroundTerminal } from "@code-agent/protocol";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { v4 as createUuid } from "uuid";
 
 import { i18n } from "../../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
@@ -53,8 +54,7 @@ export function useBackgroundTerminals(
       if (taskId === undefined) {
         return;
       }
-      const idempotencyKey =
-        idempotencyKeysRef.current.get(terminalId) ?? globalThis.crypto.randomUUID();
+      const idempotencyKey = idempotencyKeysRef.current.get(terminalId) ?? createUuid();
       idempotencyKeysRef.current.set(terminalId, idempotencyKey);
       await client.terminateBackgroundTerminal(projectId, taskId, terminalId, { idempotencyKey });
     },

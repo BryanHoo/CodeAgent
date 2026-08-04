@@ -9,6 +9,7 @@
 - 组件与状态逻辑使用 Vitest；关键用户流程使用 `tests/e2e` 下的 Playwright 测试。
 - 页面行为变化运行 `pnpm test:e2e`，基础门禁运行 `pnpm check`。
 - Web 支持 Chrome/Chromium 116+、Firefox 124+ 和 Safari 17.4+；`apps/web/vite.config.ts` 的 `build.target` 必须保持相同最低版本。Vite 不为运行时 API 注入 polyfill，使用新的浏览器 API 前必须验证该版本矩阵；Chromium E2E 只作为关键流程门禁，不代表完整跨浏览器覆盖。
+- 浏览器侧 UUID 统一使用 `uuid` 的 `v4()`，不得直接依赖仅在安全上下文提供的 `crypto.randomUUID()`；回归测试必须覆盖局域网 HTTP 环境中仅有 `crypto.getRandomValues()` 的情况。
 - Web ESLint 必须启用 `react-hooks/rules-of-hooks`、`react-hooks/exhaustive-deps` 和 `eslint-plugin-jsx-a11y` 推荐规则；原生 Dialog、ARIA 复合控件等已验证语义只能使用带原因的局部例外，禁止全局降级规则。
 - 检查键盘操作、焦点、可访问名称、空状态、错误状态与慢连接状态。
 - 流式输出和长历史变更检查渲染次数、DOM 规模及布局稳定性。
@@ -19,4 +20,5 @@
 - i18n 单元测试必须覆盖语言匹配、损坏存储回退、资源 key 对齐和 `<html lang>` 同步；关键 E2E 必须覆盖设置内切换英文、刷新后持久化、Codex 官方英文术语，以及用户/Assistant/服务端动态内容保持原样。
 - Agent 消息中的本地文件引用必须覆盖 POSIX、Windows 盘符和 UNC 路径；这些路径只能进入受控源码预览，外部 URL 仍使用 Markdown 渲染器的默认安全策略。
 - 持有事件序号、Session 或场景状态的 E2E Server 必须由 worker fixture 为每个 Playwright worker 启动独立进程，并使用操作系统动态分配的独立端口；不得跨 worker 共享内存状态、实时事件或静态资源缓存。
+- LAN Access E2E 必须使用独立 Worker Fastify 进程和真实 Cookie、HTTP、WebSocket，不得用 `page.route()` 伪造 Access API。至少覆盖错误与正确配对、刷新保持、无 Cookie Browser Context、注销失效，以及未认证时无 Project 请求或 WebSocket。
 - 大型 App Shell Playwright 套件按 Settings/Navigation、Composer、Runtime、Inspector/Layout 领域拆分，共享默认 API mock 只能放入 per-test fixture；领域文件不得共享可变模块状态或依赖执行顺序。Fake App Server 场景在领域文件内部串行，领域文件之间保持并行，并校验迁移前后测试总数不减少。

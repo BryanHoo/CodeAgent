@@ -1,4 +1,10 @@
 export const settings = {
+  access: {
+    currentSession: "当前浏览器",
+    loggingOut: "正在退出",
+    logout: "退出局域网访问",
+    sessionDescription: "此浏览器当前已配对到本次 CodeAgent 局域网会话。",
+  },
   actions: {
     cancel: "取消",
     close: "关闭",
@@ -29,6 +35,7 @@ export const settings = {
   },
   errors: {
     load: "无法加载全局设置",
+    logout: "无法退出局域网访问",
     save: "无法保存全局设置",
   },
   fields: {
@@ -62,6 +69,7 @@ export const settings = {
     workspaceWrite: "工作区可写",
   },
   sections: {
+    access: "局域网访问",
     agent: "Agent 默认值",
     appearance: "外观",
     commit: "提交消息",

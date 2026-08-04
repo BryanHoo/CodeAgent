@@ -6,6 +6,8 @@
 
 ## Rules
 
+- `PairingGate` 必须位于 Router 和全部业务 Provider 之外；LAN 未认证时只显示品牌、配对码表单、提交、通用错误与重试状态，不挂载 Project、Settings、Composer 或 Event Runtime，也不创建独立登录路由。
+- 配对表单必须提供可访问 Label、提交状态和键盘焦点；配对码只保留在表单局部状态。LAN 设置页必须提供明确注销动作，并复用顶层 Access 清理边界。
 - 每个组件只承担一个可描述的界面职责，紧凑工作台界面避免装饰性嵌套卡片。
 - 会触发网络 Mutation、宿主应用或持久化副作用的按钮和表单必须在事件入口同步单飞，直到当前 Promise 成功或失败后再允许执行；不得只依赖下一次 React 渲染的 `isPending`，也不得使用固定毫秒 debounce。锁按 Project、Task 或请求身份隔离，切换作用域不能被旧请求阻塞；失败重试继续遵循原 `Idempotency-Key` 规则。
 - 工作台的项目打开控件使用分段按钮：左侧不显示图标，只显示“在 <应用名称> 中打开”并执行当前选择；右侧 `ChevronDown` 只负责打开应用菜单，hover 不得自动展开。菜单项只能来自 Server 返回的当前宿主应用目录，选择按 Project 写入版本化浏览器偏好，并支持 ArrowDown、Escape、焦点离开和外部点击；Project 没有本地偏好时依次使用全局默认和首个可用应用。

@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { v4 as createUuid } from "uuid";
 
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
@@ -423,7 +424,7 @@ export function WorkbenchComposer({
     if (action === "queue") {
       const queuedPrompt: QueuedComposerPrompt = {
         files: message.files,
-        id: globalThis.crypto.randomUUID(),
+        id: createUuid(),
         skills,
         text,
       };
@@ -460,8 +461,7 @@ export function WorkbenchComposer({
           if (uploaded !== undefined) {
             return uploaded;
           }
-          const idempotencyKey =
-            uploadAttempts.current.get(attachment.id) ?? globalThis.crypto.randomUUID();
+          const idempotencyKey = uploadAttempts.current.get(attachment.id) ?? createUuid();
           uploadAttempts.current.set(attachment.id, idempotencyKey);
           const response = await client.uploadAttachment(
             projectId,

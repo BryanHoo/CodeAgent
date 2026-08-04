@@ -31,6 +31,7 @@ import {
 import { PanelLeft, PanelRight, Pencil } from "lucide-react";
 
 import { useProjectActions, useProjectData } from "../../projects/project-context.js";
+import { useAccess } from "../../access/access-context.js";
 import {
   useTaskRuntime,
   type TaskRuntimeView,
@@ -159,6 +160,7 @@ function useSubmissionStartedAt() {
 
 export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const { t } = useTranslation("workbench");
+  const access = useAccess();
   const { capabilities, client, error, isPending, projects, projectTaskStates, tasks } =
     useProjectData();
   const {
@@ -927,6 +929,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
       ) : null}
       {globalSettingsOpen ? (
         <GlobalSettingsDialog
+          {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
           apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
           error={
             globalSettingsQuery.error ?? modelsQuery.error ?? projectOpenCapabilitiesQuery.error
@@ -943,6 +946,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
               document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
             });
           }}
+          onLogoutAccess={access.logout}
           onRetry={() =>
             Promise.all([
               globalSettingsQuery.refetch(),

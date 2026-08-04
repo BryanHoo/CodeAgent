@@ -10,6 +10,7 @@ import {
 } from "../../features/projects/project-queries.js";
 import { GlobalSettingsDialog } from "../../features/settings/components/global-settings-dialog.js";
 import { useTranslation } from "../../i18n/i18n.js";
+import { useAccess } from "../../features/access/access-context.js";
 import { RuntimeUnavailable } from "../../shared/ui/runtime-unavailable.js";
 import { ProjectSidebar } from "../../features/workbench/components/project-sidebar.js";
 import {
@@ -27,6 +28,7 @@ export const indexRoute = createRoute({
 
 function IndexPage() {
   const { t } = useTranslation("common");
+  const access = useAccess();
   const { client, error, isPending, projects } = useProjectData();
   const { retry } = useProjectActions();
   const navigate = useNavigate();
@@ -90,6 +92,7 @@ function IndexPage() {
       </main>
       {globalSettingsOpen ? (
         <GlobalSettingsDialog
+          {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
           apps={[]}
           error={globalSettingsQuery.error ?? modelsQuery.error}
           isPending={globalSettingsQuery.isPending || modelsQuery.isPending}
@@ -100,6 +103,7 @@ function IndexPage() {
               document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
             });
           }}
+          onLogoutAccess={access.logout}
           onRetry={() => Promise.all([globalSettingsQuery.refetch(), modelsQuery.refetch()])}
           onSave={(settings) => globalSettingsMutation.mutateAsync(settings).then(() => undefined)}
           {...(globalSettingsQuery.data === undefined

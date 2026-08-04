@@ -16,6 +16,7 @@ import {
 } from "@code-agent/provider-codex";
 import { createCodeAgentServer } from "@code-agent/server";
 import { afterEach, describe, expect, it } from "vitest";
+import { WebSocket as NodeWebSocket } from "ws";
 
 const fakeAppServerPath = fileURLToPath(
   new URL("../packages/provider-codex/test/fixtures/fake-app-server.mjs", import.meta.url),
@@ -40,6 +41,15 @@ const turnOptions = {
 
 const runtimes: CodexAppServerProcess[] = [];
 const servers: Awaited<ReturnType<typeof createCodeAgentServer>>[] = [];
+
+function createRealtimeClient(baseUrl: string): CodeAgentClient {
+  const origin = new URL(baseUrl).origin;
+  return new CodeAgentClient({
+    baseUrl,
+    // Node 集成测试显式模拟浏览器自动附带的同源 Origin。
+    webSocketFactory: (url) => new NodeWebSocket(url, { origin }) as unknown as WebSocket,
+  });
+}
 
 async function startFakeAppServer(scenario: string): Promise<CodexAppServerProcess> {
   // Fake Server 是 Node.js 脚本，Windows 必须通过原生 node.exe 启动。
@@ -127,7 +137,7 @@ describe("Realtime Path", () => {
     });
     servers.push(server);
     const baseUrl = await server.listen({ host: "127.0.0.1", port: 0 });
-    const client = new CodeAgentClient({ baseUrl });
+    const client = createRealtimeClient(baseUrl);
     const snapshot = await client.readTask(project.id, "task-realtime");
     const events: AgentEvent[] = [];
 
@@ -197,7 +207,7 @@ describe("Realtime Path", () => {
     });
     servers.push(server);
     const baseUrl = await server.listen({ host: "127.0.0.1", port: 0 });
-    const client = new CodeAgentClient({ baseUrl });
+    const client = createRealtimeClient(baseUrl);
     const models = await client.listModels();
     const created = await client.startTask(project.id, { idempotencyKey: "create-complete" });
     const uploaded = await client.uploadAttachment(
@@ -287,7 +297,7 @@ describe("Realtime Path", () => {
     });
     servers.push(server);
     const baseUrl = await server.listen({ host: "127.0.0.1", port: 0 });
-    const client = new CodeAgentClient({ baseUrl });
+    const client = createRealtimeClient(baseUrl);
     const created = await client.startTask(project.id, { idempotencyKey: "create-interrupt" });
     const snapshot = await client.readTask(project.id, created.task.id);
     const events: AgentEvent[] = [];

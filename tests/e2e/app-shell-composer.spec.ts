@@ -997,9 +997,12 @@ test("opens file diffs from the timeline and uncommitted review button", async (
     reviewNavigation.boundingBox(),
   ]);
   expect(reviewContentBox?.x).toBeLessThan(reviewNavigationBox?.x ?? 0);
-  await reviewContent.locator(".file-diff-renderer").evaluate((element) => {
+  await reviewContent.evaluate((element) => {
     // 模拟长 Diff，确保左侧审核区产生真实滚动距离。
-    element.setAttribute("style", "min-height: 2000px");
+    const spacer = document.createElement("div");
+    spacer.setAttribute("aria-hidden", "true");
+    spacer.style.height = "2000px";
+    element.append(spacer);
   });
   await reviewContent.evaluate((element) => {
     element.scrollTop = 320;

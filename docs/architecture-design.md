@@ -882,11 +882,14 @@ App Server 返回错误码 `-32001` 时，Adapter 使用带 jitter 的指数退�
 
 ### 14.1 默认网络边界
 
-- 默认只监听 `127.0.0.1`。
-- 不允许未经初始化直接监听 `0.0.0.0`。
-- 非 Loopback 模式必须启用认证、TLS 或可信反向代理。
-- WebSocket 必须校验 `Origin`。
-- 非 Loopback 访问认证的 Session Cookie 使用 `HttpOnly`、`SameSite` 和合适的 `Secure` 设置。
+- `code-agent start` 默认只监听 `127.0.0.1:3210`，不启用配对；只有显式 `code-agent start --lan [--session-ttl <duration>]` 才监听 `0.0.0.0:3210`。
+- LAN 模式是可信局域网内的明文 HTTP 便利能力，不提供 TLS、远程身份、账号、RBAC 或互联网暴露保护。配对码和 Session Cookie 会在网络中明文传输，只能在用户信任的网络中使用。
+- LAN 启动时以 `node:crypto` 生成至少 128 bit 熵的配对码，只写当前终端并通过进程内参数传入 Server；不得进入 URL、环境变量、结构化日志、浏览器存储或 SQLite。进程重启后旧配对码和全部 Session 失效。
+- 配对成功签发至少 256 bit 随机 Session ID，服务端只保存在有界进程内 Store；Cookie 固定使用 `HttpOnly; SameSite=Strict; Path=/`。目标是 HTTP，因此不设置会阻止 Cookie 发送的 `Secure`。
+- Session 默认绝对有效 `24h`，`--session-ttl` 只接受 `1m` 至 `30d` 的整数 `m`、`h`、`d` 时长。有效期在签发时固定，请求不续期；注销删除当前 Session，Server 关闭清空全部 Session、失败窗口和定时器。
+- 匿名范围仅包含静态 SPA、`GET /v1/health`、`GET /v1/access` 和 `POST /v1/access/pair`。其余 `/v1/*`、附件、源码、指标、Mutation 与 WebSocket Upgrade 全部由 Fastify 根级 Hook 认证。
+- 配对失败按远端 IP 每分钟最多 5 次，并使用有界失败窗口；错误响应保持通用。Cookie 写请求和所有 WebSocket Upgrade 必须严格校验 `Origin` 与 `Host` 同源，不启用 CORS。
+- 所有 `/v1/*` 响应使用 `Cache-Control: no-store`；应用响应设置 CSP、`X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer` 和受限 `Permissions-Policy`，HTTP 模式不设置 HSTS。
 
 ### 14.2 Project 边界
 

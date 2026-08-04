@@ -1407,6 +1407,7 @@ export const RollbackAgentTurnResponseSchema = Type.Object(
 export type RollbackAgentTurnResponse = Readonly<Static<typeof RollbackAgentTurnResponseSchema>>;
 
 export const AgentMutationErrorCodeSchema = Type.Union([
+  Type.Literal("ACCESS_DENIED"),
   Type.Literal("IDEMPOTENCY_KEY_REQUIRED"),
   Type.Literal("IDEMPOTENCY_CONFLICT"),
   Type.Literal("INVALID_REQUEST"),
@@ -1421,6 +1422,8 @@ export const AgentMutationErrorCodeSchema = Type.Union([
   Type.Literal("PENDING_REQUEST_EXPIRED"),
   Type.Literal("PENDING_REQUEST_ALREADY_RESOLVED"),
   Type.Literal("PENDING_REQUEST_MISMATCH"),
+  Type.Literal("PAIRING_FAILED"),
+  Type.Literal("PAIRING_RATE_LIMITED"),
   Type.Literal("GIT_STATUS_CHANGED"),
   Type.Literal("GIT_REPOSITORY_UNAVAILABLE"),
   Type.Literal("GIT_PATH_UNAVAILABLE"),

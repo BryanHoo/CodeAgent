@@ -3,6 +3,13 @@ import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 
 import { ProjectProvider } from "../features/projects/project-context.js";
+import {
+  AccessProvider,
+  useAccess,
+  type AccessContextValue,
+} from "../features/access/access-context.js";
+import { PairingGate } from "../features/access/pairing-gate.js";
+import { codeAgentClient } from "../features/projects/project-queries.js";
 import { createBrowserTaskNotifier } from "../features/notifications/browser-task-notifier.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
@@ -45,22 +52,53 @@ type AppProvidersProps = Readonly<{
   children: ReactNode;
 }>;
 
-export function AppProviders({ children }: AppProvidersProps) {
+export function AccessControlledContent({
+  access,
+  children,
+}: Readonly<{ access: AccessContextValue; children: ReactNode }>) {
+  if (access.status?.authenticated === true) {
+    return children;
+  }
+  return (
+    <PairingGate
+      error={access.error}
+      loading={access.loading}
+      onPair={access.pair}
+      onRetry={access.retry}
+      pairing={access.pairing}
+    />
+  );
+}
+
+function AppProviderContent({ children }: AppProvidersProps) {
+  const access = useAccess();
   const { t } = useTranslation("common");
+  return (
+    <>
+      <AccessControlledContent access={access}>
+        <ProjectProvider taskNotifier={taskNotifier}>
+          <ComposerDraftProvider>{children}</ComposerDraftProvider>
+        </ProjectProvider>
+      </AccessControlledContent>
+      <Toaster
+        containerAriaLabel={t("app.notificationRegion")}
+        duration={5_000}
+        position="top-center"
+        richColors
+        theme="system"
+      />
+    </>
+  );
+}
+
+export function AppProviders({ children }: AppProvidersProps) {
   // SPA 生命周期内复用同一个 QueryClient，避免导航时丢失服务端状态缓存。
   return (
     <I18nextProvider i18n={i18n}>
       <QueryClientProvider client={queryClient}>
-        <ProjectProvider taskNotifier={taskNotifier}>
-          <ComposerDraftProvider>{children}</ComposerDraftProvider>
-        </ProjectProvider>
-        <Toaster
-          containerAriaLabel={t("app.notificationRegion")}
-          duration={5_000}
-          position="top-center"
-          richColors
-          theme="system"
-        />
+        <AccessProvider client={codeAgentClient} queryClient={queryClient}>
+          <AppProviderContent>{children}</AppProviderContent>
+        </AccessProvider>
       </QueryClientProvider>
     </I18nextProvider>
   );

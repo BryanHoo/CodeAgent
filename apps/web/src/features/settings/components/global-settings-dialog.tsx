@@ -1,4 +1,5 @@
 import type {
+  AccessMode,
   AgentGlobalSettings,
   AgentModel,
   AgentProjectDefaults,
@@ -10,6 +11,8 @@ import {
   GitCommitHorizontal,
   MonitorCog,
   Moon,
+  LogOut,
+  Network,
   Palette,
   Settings,
   Sun,
@@ -29,7 +32,7 @@ import {
 } from "../theme-preference.js";
 
 type ApprovalMode = AgentGlobalSettings["approvalPolicy"] | "auto-review";
-type SettingsSectionId = "agent" | "appearance" | "commit" | "integration";
+type SettingsSectionId = "access" | "agent" | "appearance" | "commit" | "integration";
 
 const settingsSections: readonly Readonly<{
   icon: LucideIcon;
@@ -39,6 +42,7 @@ const settingsSections: readonly Readonly<{
   { icon: Bot, id: "agent" },
   { icon: GitCommitHorizontal, id: "commit" },
   { icon: MonitorCog, id: "integration" },
+  { icon: Network, id: "access" },
 ];
 
 export function resolveGlobalSettingsModel(
@@ -90,22 +94,26 @@ function readInitialTheme(): ThemePreference {
 }
 
 type GlobalSettingsDialogProps = Readonly<{
+  accessMode?: AccessMode;
   apps: readonly ProjectOpenApp[];
   error: Error | null;
   isPending: boolean;
   models: readonly AgentModel[];
   onClose: () => void;
+  onLogoutAccess?: () => Promise<void>;
   onRetry: () => unknown;
   onSave: (settings: AgentGlobalSettings) => Promise<void>;
   settings?: AgentGlobalSettings;
 }>;
 
 export function GlobalSettingsDialog({
+  accessMode = "local",
   apps,
   error,
   isPending,
   models,
   onClose,
+  onLogoutAccess,
   onRetry,
   onSave,
   settings,
@@ -120,6 +128,8 @@ export function GlobalSettingsDialog({
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
   const [saveError, setSaveError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState(false);
   const selectedModel = models.find((model) => model.id === draft.model);
   const selectedCommitModel = models.find((model) => model.id === draft.commitMessageModel);
 
@@ -216,25 +226,27 @@ export function GlobalSettingsDialog({
               aria-label={t("navigationLabel")}
               className="flex min-w-0 gap-1 overflow-x-auto sm:flex-col sm:overflow-visible"
             >
-              {settingsSections.map((section) => {
-                const Icon = section.icon;
-                const selected = activeSection === section.id;
-                return (
-                  <button
-                    aria-controls={`settings-panel-${section.id}`}
-                    aria-current={selected ? "page" : undefined}
-                    className={`flex h-9 shrink-0 items-center gap-2 rounded-control px-2.5 text-left text-body-small font-medium transition-colors focus-visible:shadow-focus sm:w-full ${selected ? "bg-accent text-white shadow-control" : "text-muted-foreground hover:bg-control-hover hover:text-foreground"}`}
-                    key={section.id}
-                    onClick={() => {
-                      setActiveSection(section.id);
-                    }}
-                    type="button"
-                  >
-                    <Icon aria-hidden="true" className="size-4 shrink-0" />
-                    <span>{t(`sections.${section.id}`)}</span>
-                  </button>
-                );
-              })}
+              {settingsSections
+                .filter((section) => section.id !== "access" || accessMode === "lan")
+                .map((section) => {
+                  const Icon = section.icon;
+                  const selected = activeSection === section.id;
+                  return (
+                    <button
+                      aria-controls={`settings-panel-${section.id}`}
+                      aria-current={selected ? "page" : undefined}
+                      className={`flex h-9 shrink-0 items-center gap-2 rounded-control px-2.5 text-left text-body-small font-medium transition-colors focus-visible:shadow-focus sm:w-full ${selected ? "bg-accent text-white shadow-control" : "text-muted-foreground hover:bg-control-hover hover:text-foreground"}`}
+                      key={section.id}
+                      onClick={() => {
+                        setActiveSection(section.id);
+                      }}
+                      type="button"
+                    >
+                      <Icon aria-hidden="true" className="size-4 shrink-0" />
+                      <span>{t(`sections.${section.id}`)}</span>
+                    </button>
+                  );
+                })}
             </nav>
           </aside>
 
@@ -302,6 +314,47 @@ export function GlobalSettingsDialog({
                     </SettingsSelect>
                   </SettingsField>
                 </SettingsPanel>
+
+                {accessMode === "lan" ? (
+                  <SettingsPanel
+                    activeSection={activeSection}
+                    id="access"
+                    title={t("sections.access")}
+                  >
+                    <SettingsField label={t("access.currentSession")}>
+                      <div className="flex min-w-0 flex-col items-start gap-2 py-1">
+                        <p className="text-body-small text-muted-foreground">
+                          {t("access.sessionDescription")}
+                        </p>
+                        <button
+                          className="inline-flex h-8 items-center gap-2 rounded-control bg-control px-3 text-body-small font-medium text-danger hover:bg-control-hover focus-visible:shadow-focus disabled:opacity-50"
+                          disabled={isLoggingOut || onLogoutAccess === undefined}
+                          onClick={() => {
+                            if (onLogoutAccess === undefined) return;
+                            setLogoutError(false);
+                            setIsLoggingOut(true);
+                            void onLogoutAccess()
+                              .catch(() => {
+                                setLogoutError(true);
+                              })
+                              .finally(() => {
+                                setIsLoggingOut(false);
+                              });
+                          }}
+                          type="button"
+                        >
+                          <LogOut aria-hidden="true" className="size-4" />
+                          {isLoggingOut ? t("access.loggingOut") : t("access.logout")}
+                        </button>
+                        {logoutError ? (
+                          <p className="text-meta text-danger" role="alert">
+                            {t("errors.logout")}
+                          </p>
+                        ) : null}
+                      </div>
+                    </SettingsField>
+                  </SettingsPanel>
+                ) : null}
 
                 <SettingsPanel activeSection={activeSection} id="agent" title={t("sections.agent")}>
                   <SettingsField label={t("fields.approvalPolicy")}>

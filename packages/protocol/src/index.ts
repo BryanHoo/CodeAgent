@@ -1,5 +1,17 @@
 // 统一协议、JSON Schema 与事件信封只能从此公开入口导出。
 export {
+  AccessModeSchema,
+  AccessStatusResponseSchema,
+  LogoutAccessResponseSchema,
+  PairAccessRequestSchema,
+  PairAccessResponseSchema,
+  type AccessMode,
+  type AccessStatusResponse,
+  type LogoutAccessResponse,
+  type PairAccessRequest,
+  type PairAccessResponse,
+} from "./access.js";
+export {
   AgentEventSchema,
   AgentTaskSnapshotResponseSchema,
   CommandOutputDeltaEventSchema,
