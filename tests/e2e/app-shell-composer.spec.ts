@@ -979,6 +979,8 @@ test("opens file diffs from the timeline and uncommitted review button", async (
   const reviewDialog = page.getByRole("dialog");
   const reviewContent = reviewDialog.getByRole("region", { name: "审核文件内容" });
   const reviewNavigation = reviewDialog.getByRole("complementary", { name: "变更文件导航" });
+  await expect(reviewNavigation).toBeVisible();
+  await expect(reviewDialog.getByRole("button", { name: "收起变更文件导航" })).toBeVisible();
   const changedFileTree = reviewDialog.getByRole("tree", { name: "变更文件导航" });
   const packageFileTreeItem = changedFileTree.getByRole("treeitem", {
     name: "package.json，新增 1 行，删除 1 行",

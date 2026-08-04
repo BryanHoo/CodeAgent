@@ -290,6 +290,7 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
     : selectedApp === undefined
       ? t("openMenu.none")
       : t("openMenu.openIn", { app: selectedApp.name });
+  const compactOpenButtonLabel = selectedApp?.name ?? openButtonLabel;
 
   return (
     // 键盘事件从内部按钮冒泡到容器，仅用于统一处理 Escape，不让容器成为交互控件。
@@ -310,7 +311,7 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
       }}
       ref={containerRef}
     >
-      <div className="flex h-7 overflow-hidden rounded-control border border-separator-strong bg-control shadow-control">
+      <div className="flex h-7 overflow-hidden rounded-control border border-separator-strong bg-control shadow-control max-workbench:h-11">
         <button
           aria-label={openButtonLabel}
           className="min-w-0 max-w-36 truncate px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus disabled:cursor-not-allowed disabled:text-muted-foreground sm:max-w-48"
@@ -324,13 +325,14 @@ export function ProjectOpenMenu({ client, defaultOpenAppId, projectId }: Project
           title={openButtonLabel}
           type="button"
         >
-          {openButtonLabel}
+          <span className="hidden sm:inline">{openButtonLabel}</span>
+          <span className="sm:hidden">{compactOpenButtonLabel}</span>
         </button>
         <button
           aria-expanded={menuOpen}
           aria-haspopup="menu"
           aria-label={t("openMenu.choose")}
-          className="inline-grid size-7 shrink-0 place-items-center border-l border-separator text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus disabled:cursor-not-allowed disabled:opacity-45"
+          className="inline-grid size-7 shrink-0 place-items-center border-l border-separator text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus disabled:cursor-not-allowed disabled:opacity-45 max-workbench:size-11"
           disabled={apps.length === 0 || openMutation.isPending}
           onClick={() => {
             setActionError(false);

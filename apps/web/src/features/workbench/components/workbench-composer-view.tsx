@@ -473,13 +473,14 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
               </p>
             )}
           </PromptInputBody>
-          <PromptInputFooter>
-            <PromptInputTools>
+          <PromptInputFooter className="max-workbench:gap-0.5">
+            <PromptInputTools className="max-workbench:shrink-0 max-workbench:gap-0.5">
               <PromptInputActionAddAttachments
                 disabled={props.attachmentsDisabled || props.commandDraftMode === "feedback"}
               />
               <PromptInputSelect
                 aria-label={t("composer.approvalMode")}
+                className="max-workbench:w-11 max-workbench:max-w-11 max-workbench:px-1 max-workbench:[field-sizing:fixed]"
                 disabled={props.turnControlsDisabled}
                 onChange={(event) => {
                   props.onSettingsChange(
@@ -499,6 +500,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
               </PromptInputSelect>
               <PromptInputSelect
                 aria-label={t("composer.sandboxMode")}
+                className="max-workbench:w-11 max-workbench:max-w-11 max-workbench:px-1 max-workbench:[field-sizing:fixed]"
                 disabled={props.turnControlsDisabled}
                 onChange={(event) => {
                   props.onSettingsChange(
@@ -516,9 +518,11 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                 <option value="danger-full-access">{t("settings:sandbox.dangerFullAccess")}</option>
               </PromptInputSelect>
             </PromptInputTools>
-            <div className="flex min-w-0 items-center gap-1">
+            {/* 移动端压缩选择器的展示宽度，保持所有常用操作始终位于同一行。 */}
+            <div className="flex min-w-0 items-center gap-1 max-workbench:shrink-0 max-workbench:gap-0.5">
               <PromptInputSelect
                 aria-label={t("composer.modelSelect")}
+                className="max-workbench:w-16 max-workbench:max-w-16 max-workbench:px-1 max-workbench:[field-sizing:fixed]"
                 disabled={
                   props.turnControlsDisabled ||
                   props.modelsPending ||
@@ -559,6 +563,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
               </PromptInputSelect>
               <PromptInputSelect
                 aria-label={t("composer.reasonEffortSelect")}
+                className="max-workbench:w-8 max-workbench:max-w-8 max-workbench:px-1 max-workbench:[field-sizing:fixed]"
                 disabled={
                   props.turnControlsDisabled ||
                   props.modelsPending ||

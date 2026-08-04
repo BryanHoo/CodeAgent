@@ -31,6 +31,12 @@
       "skillPath": "skills/pnpm/SKILL.md",
       "computedHash": "2ec08c851c6f901d4ed72c21b826416ed074a487db65662b36249418afd728bf"
     },
+    "tailwindcss-mobile-first": {
+      "source": "josiahsiegel/claude-plugin-marketplace",
+      "sourceType": "github",
+      "skillPath": "plugins/tailwindcss-master/skills/tailwindcss-mobile-first/SKILL.md",
+      "computedHash": "b57cdd86a0bc0bfb35e5e42e6adf79c5fece774cea7340f1d992ff6e93cdc002"
+    },
     "vercel-react-best-practices": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",

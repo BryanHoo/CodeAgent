@@ -683,7 +683,7 @@ export function PromptInputButton({
 }: PromptInputButtonProps) {
   return (
     <button
-      className={`inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-label text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
+      className={`inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-label text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 max-workbench:h-11 max-workbench:min-w-11 ${className}`}
       type={type}
       {...props}
     >
@@ -697,7 +697,7 @@ type PromptInputSelectProps = SelectHTMLAttributes<HTMLSelectElement>;
 export function PromptInputSelect({ className = "", ...props }: PromptInputSelectProps) {
   return (
     <select
-      className={`h-7 w-auto max-w-40 appearance-none rounded-control border-0 bg-transparent px-1.5 text-label text-muted-foreground outline-none [field-sizing:content] hover:bg-control-hover disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
+      className={`h-7 w-auto max-w-40 appearance-none rounded-control border-0 bg-transparent px-1.5 text-label text-muted-foreground outline-none [field-sizing:content] hover:bg-control-hover disabled:cursor-not-allowed disabled:opacity-45 max-workbench:h-11 ${className}`}
       {...props}
     />
   );
@@ -718,7 +718,7 @@ export function PromptInputSubmit({
 
   return (
     <button
-      className={`grid size-8 shrink-0 place-items-center rounded-pill bg-foreground text-raised transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:bg-control-active disabled:text-muted-foreground ${className}`}
+      className={`grid size-8 shrink-0 place-items-center rounded-pill bg-foreground text-raised transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:bg-control-active disabled:text-muted-foreground max-workbench:size-11 ${className}`}
       type={type}
       {...props}
     >

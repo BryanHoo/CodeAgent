@@ -53,8 +53,8 @@ export function FileDiffDialog({ change, onClose }: FileDiffDialogProps) {
       }}
       ref={dialogRef}
     >
-      <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-raised">
-        <header className="flex min-h-toolbar items-center gap-3 px-3 shadow-toolbar sm:px-4">
+      <section className="grid h-full min-h-0 w-full min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-raised">
+        <header className="flex min-w-0 min-h-toolbar items-center gap-3 px-3 shadow-toolbar sm:px-4">
           <FileCode2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-body-small font-semibold" id={titleId} title={change.path}>
@@ -72,7 +72,7 @@ export function FileDiffDialog({ change, onClose }: FileDiffDialogProps) {
             </IconButton>
           </div>
         </header>
-        <div className="min-h-0 overflow-auto bg-content">
+        <div className="min-h-0 min-w-0 overflow-auto bg-content">
           <Suspense
             fallback={
               <div

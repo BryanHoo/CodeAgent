@@ -819,6 +819,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         mcpServersError={mcpServersQuery.error}
         mcpServersPending={mcpServersQuery.isPending}
         key={`${projectId}:${taskId ?? "draft"}:${subagents.length > 0 ? "with-subagents" : "without-subagents"}:${backgroundTerminals.terminals.length > 0 ? "with-terminals" : "without-terminals"}`}
+        onClose={closeInspector}
         onFileTreeExpandedChange={(nextExpandedPaths) => {
           setFileTreeExpansion((current) => {
             const previousPaths =

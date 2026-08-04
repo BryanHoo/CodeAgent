@@ -29,7 +29,7 @@ export function PairingGate({
   };
 
   return (
-    <main className="access-gate grid min-h-dvh place-items-center bg-window px-5 py-10 text-foreground">
+    <main className="access-gate grid h-full min-h-0 place-items-center overflow-y-auto bg-window px-5 py-10 text-foreground">
       <section aria-labelledby="access-gate-title" className="w-full max-w-sm">
         <div className="mb-8 flex items-center gap-3">
           <span className="access-gate-mark" aria-hidden="true" />

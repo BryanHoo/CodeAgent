@@ -1,4 +1,12 @@
-import { ChevronDown, ChevronUp, FileCode2, Files, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  FileCode2,
+  Files,
+  PanelRightClose,
+  PanelRightOpen,
+  X,
+} from "lucide-react";
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { FileTree, FileTreeFile, FileTreeFolder } from "../../shared/ai-elements/file-tree.js";
@@ -8,6 +16,11 @@ import type { AgentFileChange } from "./file-change.js";
 import { countFileChangeLines, getFileName } from "./file-change.js";
 
 const PatchDiffViewer = lazy(() => import("./patch-diff-viewer.js"));
+const reviewNavigationOverlayQuery = "(max-width: 760px)";
+
+function shouldOpenReviewNavigation() {
+  return typeof window === "undefined" || !window.matchMedia(reviewNavigationOverlayQuery).matches;
+}
 
 export type ReviewFileTreeFile = Readonly<{
   additions: number;
@@ -219,6 +232,7 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const reviewContentRef = useRef<HTMLElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [navigationOpen, setNavigationOpen] = useState(shouldOpenReviewNavigation);
   const fileTree = useMemo(() => buildReviewFileTree(changes ?? []), [changes]);
   const fileIndexByPath = useMemo(
     () =>
@@ -236,6 +250,8 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
       return;
     }
     setCurrentIndex(0);
+    // 初始状态与工作台移动断点一致：桌面直接展示导航，移动端优先保留 Diff 宽度。
+    setNavigationOpen(shouldOpenReviewNavigation());
     const dialog = dialogRef.current;
     if (dialog !== null && !dialog.open) {
       dialog.showModal();
@@ -303,8 +319,8 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
       }}
       ref={dialogRef}
     >
-      <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-raised">
-        <header className="flex min-h-toolbar items-center gap-2 px-3 shadow-toolbar sm:px-4">
+      <section className="grid h-full min-h-0 w-full min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-raised">
+        <header className="flex min-h-toolbar min-w-0 items-center gap-2 px-3 shadow-toolbar sm:px-4">
           <FileCode2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-body-small font-semibold" id={titleId} title={change.path}>
@@ -338,15 +354,36 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
             >
               <ChevronDown className="size-3.5" aria-hidden="true" />
             </IconButton>
+            <IconButton
+              aria-controls="file-review-navigation"
+              aria-expanded={navigationOpen}
+              label={t(
+                navigationOpen
+                  ? "diff.collapseChangedFilesNavigation"
+                  : "diff.expandChangedFilesNavigation",
+              )}
+              onClick={() => {
+                setNavigationOpen((open) => !open);
+              }}
+              size="small"
+            >
+              {navigationOpen ? (
+                <PanelRightClose className="size-3.5" aria-hidden="true" />
+              ) : (
+                <PanelRightOpen className="size-3.5" aria-hidden="true" />
+              )}
+            </IconButton>
             <IconButton label={t("diff.closeReview")} onClick={onClose} size="small">
               <X className="size-3.5" aria-hidden="true" />
             </IconButton>
           </div>
         </header>
-        <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(12rem,26%)] bg-content">
+        <div
+          className={`relative grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] bg-content ${navigationOpen ? "workbench:grid-cols-[minmax(0,1fr)_minmax(12rem,26%)]" : ""}`}
+        >
           <section
             aria-label={t("diff.reviewContent")}
-            className="min-h-0 overflow-auto"
+            className="min-h-0 min-w-0 overflow-auto"
             ref={reviewContentRef}
           >
             <Suspense
@@ -364,7 +401,9 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
           </section>
           <aside
             aria-label={t("diff.changedFilesNavigation")}
-            className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] border-l border-separator bg-panel"
+            className="absolute inset-y-0 right-0 z-10 grid min-h-0 w-[min(16rem,82%)] grid-rows-[auto_minmax(0,1fr)] border-l border-separator bg-panel shadow-panel workbench:static workbench:z-auto workbench:w-auto workbench:shadow-none"
+            hidden={!navigationOpen}
+            id="file-review-navigation"
           >
             <div className="flex min-h-toolbar items-center gap-2 border-b border-separator px-3">
               <Files aria-hidden="true" className="size-3.5 text-muted-foreground" />

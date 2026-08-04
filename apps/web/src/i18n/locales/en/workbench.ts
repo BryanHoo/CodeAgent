@@ -36,6 +36,8 @@ export const workbench = {
     changedFilesNavigation: "Changed files navigation",
     close: "Close file Diff",
     closeReview: "Close file review",
+    collapseChangedFilesNavigation: "Collapse changed files navigation",
+    expandChangedFilesNavigation: "Expand changed files navigation",
     fileStats: "{{path}}, {{additions}} lines added, {{removals}} lines removed",
     loading: "Loading Diff",
     nextFile: "Review next file",

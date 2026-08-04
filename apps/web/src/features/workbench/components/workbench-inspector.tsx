@@ -14,6 +14,7 @@ import {
   FolderRoot,
   LoaderCircle,
   Paperclip,
+  PanelRightClose,
   Plug,
   RefreshCw,
   Sparkles,
@@ -60,6 +61,7 @@ type WorkbenchInspectorProps = Readonly<{
   onRefreshFileTreeDirectory?: (directoryPath: string | null) => void;
   onRefreshGitStatus?: () => void;
   onCommitChanges?: () => void;
+  onClose?: () => void;
   onReviewChanges?: (changes: readonly AgentFileChange[]) => void;
   onTerminateBackgroundTerminal?: (terminalId: string) => Promise<void>;
   projectName: string;
@@ -451,6 +453,7 @@ export function WorkbenchInspector({
   onRefreshFileTreeDirectory = () => undefined,
   onRefreshGitStatus = () => undefined,
   onCommitChanges = () => undefined,
+  onClose,
   onReviewChanges = () => undefined,
   onTerminateBackgroundTerminal = () => Promise.resolve(),
   projectName,
@@ -506,10 +509,20 @@ export function WorkbenchInspector({
       aria-label={i18n.t("inspector.title", { ns: "conversation" })}
       className="workbench-inspector relative z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse"
     >
-      <div className="flex h-workbench-header items-center px-3">
-        <h2 className="text-body-small font-semibold text-foreground">
+      <div className="flex h-workbench-header items-center justify-between gap-2 px-3">
+        <h2 className="min-w-0 flex-1 truncate text-body-small font-semibold text-foreground">
           {i18n.t("inspector.title", { ns: "conversation" })}
         </h2>
+        {onClose === undefined ? null : (
+          <IconButton
+            className="min-[1101px]:hidden"
+            label={i18n.t("shell.closeInspector", { ns: "workbench" })}
+            onClick={onClose}
+            size="small"
+          >
+            <PanelRightClose aria-hidden="true" className="size-3.5" />
+          </IconButton>
+        )}
       </div>
 
       <div className="px-2.5 pb-1.5">

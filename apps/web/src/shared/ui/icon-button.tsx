@@ -37,7 +37,8 @@ export function IconButton({
   const tooltipId = useId();
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState<TooltipPosition>();
-  const sizeClass = size === "small" ? "size-7" : "size-9";
+  const sizeClass =
+    size === "small" ? "size-7 max-workbench:size-11" : "size-9 max-workbench:size-11";
   const toneClass =
     tone === "accent"
       ? "bg-accent text-white hover:bg-accent-strong"

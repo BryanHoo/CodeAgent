@@ -722,7 +722,7 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   const contextUsageTooltip = page.getByRole("tooltip");
   await expect(contextUsageTooltip).toContainText("13% 上下文已使用");
   await expect(contextUsageTooltip).toContainText("25K / 200K tokens");
-  await expect(inspector.getByRole("button", { name: "关闭上下文面板" })).toHaveCount(0);
+  await expect(inspector.getByRole("button", { name: "关闭上下文面板" })).toBeHidden();
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
 });
 

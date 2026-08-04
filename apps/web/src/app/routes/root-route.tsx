@@ -38,7 +38,7 @@ function RouteError({ error, reset }: Readonly<{ error: Error; reset: () => void
 
 function RootLayout() {
   return (
-    <div className="h-dvh min-h-0 bg-window text-foreground" data-testid="app-root">
+    <div className="h-full min-h-0 bg-window text-foreground" data-testid="app-root">
       <Outlet />
     </div>
   );
