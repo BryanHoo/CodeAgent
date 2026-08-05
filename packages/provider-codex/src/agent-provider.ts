@@ -914,14 +914,14 @@ export class CodexAgentProvider implements AgentProvider {
     return turns;
   }
 
-  public readTaskAttachment(
+  public async readTaskAttachment(
     taskId: string,
     attachmentId: string,
   ): Promise<AgentProviderAttachment | undefined> {
     if (!this.#runtime.projectTaskIds.has(taskId)) {
-      return Promise.resolve(undefined);
+      return undefined;
     }
-    return Promise.resolve(this.#historicalAttachments.read(taskId, attachmentId));
+    return this.#historicalAttachments.read(taskId, attachmentId);
   }
 
   public async resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest> {

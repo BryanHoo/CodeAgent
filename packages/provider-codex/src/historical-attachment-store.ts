@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
-import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
 import { basename, extname, isAbsolute } from "node:path";
 
 import type { AgentProviderAttachment } from "@code-agent/core";
@@ -27,8 +28,9 @@ export interface CodexHistoricalAttachmentStoreOptions {
   maxBytes?: number;
   maxEntries?: number;
   maxTotalBytes?: number;
-  readFile?: (path: string) => Buffer;
+  readFile?: (path: string) => Promise<Buffer>;
   readHeader?: (path: string) => Buffer;
+  readStats?: (path: string) => Promise<HistoricalFileStats>;
   statFile?: (path: string) => HistoricalFileStats;
   ttlMs?: number;
 }
@@ -95,6 +97,11 @@ function readFileStats(path: string): HistoricalFileStats {
   return { isFile: stats.isFile(), mtimeMs: stats.mtimeMs, size: stats.size };
 }
 
+async function readFileStatsAsync(path: string): Promise<HistoricalFileStats> {
+  const stats = await stat(path);
+  return { isFile: stats.isFile(), mtimeMs: stats.mtimeMs, size: stats.size };
+}
+
 export class CodexHistoricalAttachmentStore {
   readonly #clock: () => number;
   readonly #createId: () => string;
@@ -102,8 +109,9 @@ export class CodexHistoricalAttachmentStore {
   readonly #maxBytes: number;
   readonly #maxEntries: number;
   readonly #maxTotalBytes: number;
-  readonly #readFile: (path: string) => Buffer;
+  readonly #readFile: (path: string) => Promise<Buffer>;
   readonly #readHeader: (path: string) => Buffer;
+  readonly #readStats: (path: string) => Promise<HistoricalFileStats>;
   readonly #statFile: (path: string) => HistoricalFileStats;
   readonly #ttlMs: number;
   #totalBytes = 0;
@@ -114,8 +122,9 @@ export class CodexHistoricalAttachmentStore {
     this.#maxBytes = options.maxBytes ?? MAX_AGENT_HISTORY_IMAGE_TOTAL_BYTES;
     this.#maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
     this.#maxTotalBytes = options.maxTotalBytes ?? DEFAULT_MAX_TOTAL_BYTES;
-    this.#readFile = options.readFile ?? readFileSync;
+    this.#readFile = options.readFile ?? readFile;
     this.#readHeader = options.readHeader ?? readFileHeader;
+    this.#readStats = options.readStats ?? readFileStatsAsync;
     this.#statFile = options.statFile ?? readFileStats;
     this.#ttlMs = options.ttlMs ?? DEFAULT_ATTACHMENT_TTL_MS;
   }
@@ -267,7 +276,10 @@ export class CodexHistoricalAttachmentStore {
     return attachment;
   }
 
-  public read(taskId: string, attachmentId: string): AgentProviderAttachment | undefined {
+  public async read(
+    taskId: string,
+    attachmentId: string,
+  ): Promise<AgentProviderAttachment | undefined> {
     this.#pruneExpired();
     const entry = this.#entries.get(attachmentId);
     if (entry?.projectTaskId !== taskId) {
@@ -277,7 +289,8 @@ export class CodexHistoricalAttachmentStore {
       return { ...entry.attachment, content: entry.content };
     }
     try {
-      const stats = this.#statFile(entry.path);
+      // 正文读取前异步复验文件状态，避免历史附件请求阻塞 Node.js 事件循环。
+      const stats = await this.#readStats(entry.path);
       if (
         !stats.isFile ||
         stats.size !== entry.attachment.size ||
@@ -286,7 +299,7 @@ export class CodexHistoricalAttachmentStore {
         this.#delete(attachmentId);
         return undefined;
       }
-      const content = this.#readFile(entry.path);
+      const content = await this.#readFile(entry.path);
       if (
         content.byteLength !== entry.attachment.size ||
         detectImageMediaType(content) !== entry.attachment.mediaType

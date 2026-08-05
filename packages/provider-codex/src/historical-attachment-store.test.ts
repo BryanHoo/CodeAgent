@@ -8,7 +8,7 @@ const pngContent = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const pngDataUrl = `data:image/png;base64,${pngContent.toString("base64")}`;
 
 describe("CodexHistoricalAttachmentStore", () => {
-  it("registers inline images as random metadata without exposing their data URL", () => {
+  it("registers inline images as random metadata without exposing their data URL", async () => {
     const store = new CodexHistoricalAttachmentStore({ createId: () => "history-random-1" });
 
     const attachment = store.addDataUrl("task-1", { name: "diagram.png", url: pngDataUrl }, 0);
@@ -21,8 +21,8 @@ describe("CodexHistoricalAttachmentStore", () => {
       size: pngContent.byteLength,
     });
     expect(attachment).not.toHaveProperty("url");
-    expect(store.read("task-other", "history-random-1")).toBeUndefined();
-    expect(store.read("task-1", "history-random-1")).toMatchObject({
+    await expect(store.read("task-other", "history-random-1")).resolves.toBeUndefined();
+    await expect(store.read("task-1", "history-random-1")).resolves.toMatchObject({
       content: pngContent,
       mediaType: "image/png",
       name: "diagram.png",
@@ -30,12 +30,19 @@ describe("CodexHistoricalAttachmentStore", () => {
     });
   });
 
-  it("defers local image body reads and revalidates the file on demand", () => {
-    const readFile = vi.fn(() => pngContent);
+  it("defers local image body reads and revalidates the file asynchronously on demand", async () => {
+    let completeRead: ((content: Buffer) => void) | undefined;
+    const readFile = vi.fn(
+      () =>
+        new Promise<Buffer>((resolve) => {
+          completeRead = resolve;
+        }),
+    );
     const store = new CodexHistoricalAttachmentStore({
       createId: () => "history-local-1",
       readFile,
       readHeader: () => pngContent,
+      readStats: () => Promise.resolve({ isFile: true, mtimeMs: 100, size: pngContent.byteLength }),
       statFile: () => ({ isFile: true, mtimeMs: 100, size: pngContent.byteLength }),
     });
 
@@ -49,18 +56,29 @@ describe("CodexHistoricalAttachmentStore", () => {
       size: pngContent.byteLength,
     });
     expect(readFile).not.toHaveBeenCalled();
-    expect(store.read("task-1", "history-local-1")?.content).toEqual(pngContent);
+    const pendingRead = store.read("task-1", "history-local-1");
+    await Promise.resolve();
     expect(readFile).toHaveBeenCalledOnce();
+    let settled = false;
+    void pendingRead.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    completeRead?.(pngContent);
+    await expect(pendingRead).resolves.toMatchObject({ content: pngContent });
   });
 
-  it("rejects local images changed after registration", () => {
+  it("rejects local images changed after registration", async () => {
     let mtimeMs = 100;
     const readFile = vi.fn(() => pngContent);
     const changedMetadataStore = new CodexHistoricalAttachmentStore({
       createId: () => "history-local-metadata",
-      readFile,
+      readFile: () => Promise.resolve(readFile()),
       readHeader: () => pngContent,
-      statFile: () => ({ isFile: true, mtimeMs, size: pngContent.byteLength }),
+      readStats: () => Promise.resolve({ isFile: true, mtimeMs, size: pngContent.byteLength }),
+      statFile: () => ({ isFile: true, mtimeMs: 100, size: pngContent.byteLength }),
     });
     const metadataAttachment = changedMetadataStore.addLocalImage(
       "task-1",
@@ -69,13 +87,16 @@ describe("CodexHistoricalAttachmentStore", () => {
     );
 
     mtimeMs = 101;
-    expect(changedMetadataStore.read("task-1", metadataAttachment?.id ?? "")).toBeUndefined();
+    await expect(
+      changedMetadataStore.read("task-1", metadataAttachment?.id ?? ""),
+    ).resolves.toBeUndefined();
     expect(readFile).not.toHaveBeenCalled();
 
     const changedContentStore = new CodexHistoricalAttachmentStore({
       createId: () => "history-local-content",
-      readFile: () => Buffer.from("not-png!"),
+      readFile: () => Promise.resolve(Buffer.from("not-png!")),
       readHeader: () => pngContent,
+      readStats: () => Promise.resolve({ isFile: true, mtimeMs: 100, size: pngContent.byteLength }),
       statFile: () => ({ isFile: true, mtimeMs: 100, size: pngContent.byteLength }),
     });
     const contentAttachment = changedContentStore.addLocalImage(
@@ -84,10 +105,12 @@ describe("CodexHistoricalAttachmentStore", () => {
       0,
     );
 
-    expect(changedContentStore.read("task-1", contentAttachment?.id ?? "")).toBeUndefined();
+    await expect(
+      changedContentStore.read("task-1", contentAttachment?.id ?? ""),
+    ).resolves.toBeUndefined();
   });
 
-  it("enforces entry, total-byte, TTL, and task cleanup bounds", () => {
+  it("enforces entry, total-byte, TTL, and task cleanup bounds", async () => {
     let now = 100;
     let nextId = 0;
     const store = new CodexHistoricalAttachmentStore({
@@ -105,11 +128,11 @@ describe("CodexHistoricalAttachmentStore", () => {
     expect(second).toBeDefined();
     expect(store.addDataUrl("task-1", { name: "third.png", url: pngDataUrl }, 2)).toBeUndefined();
     store.clearTask("task-1");
-    expect(store.read("task-1", first?.id ?? "")).toBeUndefined();
+    await expect(store.read("task-1", first?.id ?? "")).resolves.toBeUndefined();
 
     const expiring = store.addDataUrl("task-2", { name: "expiring.png", url: pngDataUrl }, 0);
     now = 151;
-    expect(store.read("task-2", expiring?.id ?? "")).toBeUndefined();
+    await expect(store.read("task-2", expiring?.id ?? "")).resolves.toBeUndefined();
   });
 
   it("rejects invalid signatures and images over the per-file limit", () => {
