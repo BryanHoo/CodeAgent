@@ -649,6 +649,11 @@ test("project file tree context menu opens files and folders with a selected app
   await expect(folderAction).toHaveCSS("opacity", "1");
   await folderAction.click();
   const folderActionMenu = page.getByRole("menu", { name: "打开 docs 的方式" });
+  const folderActionMenuIcon = folderActionMenu
+    .getByRole("menuitem", { name: "Zed" })
+    .locator("svg");
+  await expect(folderActionMenuIcon).toHaveCSS("width", "16px");
+  await expect(folderActionMenuIcon).toHaveCSS("height", "16px");
   await folderActionMenu.getByRole("menuitem", { name: "Zed" }).click();
   await folderActionRequest;
   await expect(folderActionMenu).not.toBeAttached();

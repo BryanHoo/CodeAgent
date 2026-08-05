@@ -167,7 +167,7 @@ export function ProjectOpenDropdownMenu({
                   onSelect(app.id, target.path);
                 }}
               >
-                <Icon aria-hidden="true" />
+                <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate">{appName}</span>
               </DropdownMenuItem>
             );
