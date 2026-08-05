@@ -3,66 +3,29 @@ import {
   AGENT_IMAGE_ACCEPT,
   MAX_AGENT_FILE_BYTES,
   MAX_AGENT_FILE_TOTAL_BYTES,
-  MAX_AGENT_IMAGE_BYTES,
   MAX_AGENT_IMAGES,
+  MAX_AGENT_IMAGE_BYTES,
   MAX_AGENT_IMAGE_TOTAL_BYTES,
-  type AgentContextUsage,
-  type AgentModel,
-  type AgentReviewTarget,
   type AgentSandboxMode,
-  type AgentSkill,
-  type AgentTaskSettings,
-  type ProjectGitStatus,
 } from "@code-agent/protocol";
-import {
-  Bug,
-  CircleGauge,
-  FilePlus2,
-  Folder,
-  GitBranch,
-  GitFork,
-  Lightbulb,
-  SendHorizontal,
-  Sparkles,
-  X,
-} from "lucide-react";
-import type { Dispatch, RefObject, SetStateAction } from "react";
+import { Folder, GitBranch, SendHorizontal, X } from "lucide-react";
 
-import {
-  Attachment,
-  AttachmentInfo,
-  AttachmentPreview,
-  AttachmentRemove,
-  Attachments,
-} from "../../../shared/ai-elements/attachments.js";
+import { useTranslation } from "../../../i18n/i18n.js";
 import { Context, ContextTrigger } from "../../../shared/ai-elements/context.js";
-import { Button } from "../../../shared/ui/button.js";
-import { Input } from "../../../shared/ui/input.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import {
   PromptInput,
   PromptInputActionAddAttachments,
   PromptInputBody,
-  PromptInputButton,
-  PromptInputCommand,
-  PromptInputCommandEmpty,
-  PromptInputCommandGroup,
-  PromptInputCommandItem,
-  PromptInputCommandList,
   PromptInputFooter,
-  PromptInputHeader,
   PromptInputSelect,
   PromptInputSubmit,
   PromptInputTools,
   isPromptInputComposing,
   isPromptInputNewlineShortcut,
-  usePromptInputAttachments,
-  type PromptInputAttachment,
-  type PromptInputAttachmentKind,
-  type PromptInputMessage,
 } from "../../../shared/ai-elements/prompt-input.js";
-import { useTranslation } from "../../../i18n/i18n.js";
-import type { QueuedComposerPrompt } from "../composer-draft-context.js";
+import { Button } from "../../../shared/ui/button.js";
+import { Input } from "../../../shared/ui/input.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import {
   LARGE_PASTE_CHARACTER_THRESHOLD,
   PASTED_TEXT_ATTACHMENT_NAME,
@@ -71,291 +34,25 @@ import {
   resolveComposerPlaceholder,
   resolveReasoningEffort,
   type ApprovalMode,
-  type ComposerState,
-  type ComposerSubmitAction,
 } from "../composer-state.js";
+import { movePromptCommandSelection } from "./prompt-command.js";
+import { PromptSkillEditor } from "./prompt-skill-editor.js";
+import { ComposerCommandMenu } from "./workbench-composer-command-menu.js";
+import { ComposerAttachments, PlanModeTag } from "./workbench-composer-toolbar.js";
 import {
-  movePromptCommandSelection,
-  type PromptCommandAction,
-  type PromptCommandItem,
-} from "./prompt-command.js";
-import {
-  PromptSkillEditor,
-  type PromptSkillContent,
-  type PromptSkillEditorHandle,
-} from "./prompt-skill-editor.js";
+  resolveQueuedPromptSummary,
+  type WorkbenchComposerViewProps,
+} from "./workbench-composer-view-contracts.js";
 
-function PromptCommandIcon({ action }: Readonly<{ action: PromptCommandAction }>) {
-  const className = "size-4 shrink-0 text-primary";
-  switch (action) {
-    case "review":
-      return <Bug aria-hidden="true" className={className} />;
-    case "initialize":
-      return <FilePlus2 aria-hidden="true" className={className} />;
-    case "compact":
-      return <CircleGauge aria-hidden="true" className={className} />;
-    case "fork":
-      return <GitFork aria-hidden="true" className={className} />;
-    case "plan":
-      return <Lightbulb aria-hidden="true" className={className} />;
-  }
-}
-
-export function PlanModeTag({
-  disabled,
-  onRemove,
-}: Readonly<{ disabled: boolean; onRemove: () => void }>) {
-  const { t } = useTranslation("workbench");
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <PromptInputButton
-          aria-label={t("composer.cancelPlanMode")}
-          className="group/plan-mode gap-1 px-1.5 text-foreground max-workbench:gap-0.5"
-          data-plan-mode=""
-          disabled={disabled}
-          onClick={onRemove}
-        >
-          <Lightbulb aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
-          <span className="max-workbench:hidden">{t("composer.planMode")}</span>
-          <X
-            aria-hidden="true"
-            className="size-3 shrink-0 opacity-0 transition-opacity group-hover/plan-mode:opacity-100 group-focus-visible/plan-mode:opacity-100"
-          />
-        </PromptInputButton>
-      </TooltipTrigger>
-      <TooltipContent>{t("composer.cancelPlanMode")}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function ComposerAttachments() {
-  const { t } = useTranslation("workbench");
-  const attachments = usePromptInputAttachments();
-  if (attachments.files.length === 0) {
-    return null;
-  }
-  return (
-    <PromptInputHeader>
-      <Attachments aria-label={t("composer.addedAttachments")}>
-        {attachments.files.map((attachment) => (
-          <Attachment
-            data={attachment}
-            key={attachment.id}
-            onRemove={() => {
-              attachments.remove(attachment.id);
-            }}
-          >
-            <AttachmentPreview />
-            <AttachmentInfo />
-            <AttachmentRemove disabled={attachments.disabled} />
-          </Attachment>
-        ))}
-      </Attachments>
-    </PromptInputHeader>
-  );
-}
-
-type CommandAvailability = Readonly<{ available: boolean; reason?: string }>;
-
-export type WorkbenchComposerViewProps = Readonly<{
-  activeCommandIndex: number;
-  activeCommandItemId: string | undefined;
-  activeSettings: AgentTaskSettings;
-  activeTurnId: string | undefined;
-  attachments: readonly PromptInputAttachment[];
-  attachmentsDisabled: boolean;
-  baseBranches: readonly string[];
-  canInterrupt: boolean;
-  canSteer: boolean;
-  canSubmit: boolean;
-  commandMenuId: string;
-  commandMenuOpen: boolean;
-  commandNotice: string | undefined;
-  commandSurfaceRef: RefObject<HTMLDivElement | null>;
-  composerScope: string;
-  contextUsage: AgentContextUsage | null | undefined;
-  draftInputDisabled: boolean;
-  filteredCommands: readonly PromptCommandItem[];
-  filteredSkills: readonly AgentSkill[];
-  getCommandAvailability: (command: PromptCommandItem) => CommandAvailability;
-  gitStatus: ProjectGitStatus | undefined;
-  hasComposerInput: boolean;
-  isSubmitting: boolean;
-  menuItemCount: number;
-  models: readonly AgentModel[];
-  modelsError: Error | null;
-  modelsPending: boolean;
-  mutationError: Error | null;
-  onAttachmentsChange: (files: readonly PromptInputAttachment[]) => void;
-  onExecuteCommand: (command: PromptCommandItem) => void;
-  onExecuteReview: (target: AgentReviewTarget) => void;
-  onInterrupt: () => void;
-  onOpenReviewBranches: () => void;
-  onPlanModeRemove: () => void;
-  onPromptChange: (
-    content: PromptSkillContent,
-    serializedText: string,
-    cursorOffset: number,
-  ) => void;
-  onSelectActiveCommand: () => void;
-  onSelectAttachmentKind: (kind: PromptInputAttachmentKind) => void;
-  onSelectSkill: (skill: AgentSkill) => void;
-  onSettingsChange: (settings: AgentTaskSettings, field: keyof AgentTaskSettings) => void;
-  onSubmit: (message: PromptInputMessage) => void;
-  onViewError: (error: Error) => void;
-  projectPath: string;
-  planModeEnabled: boolean;
-  promptContent: PromptSkillContent;
-  promptSubmissionText: string;
-  queuedPrompts: readonly QueuedComposerPrompt[];
-  removeQueuedPrompt: (queuedPromptId: string) => void;
-  reviewMenuMode: "branches" | "scopes" | null;
-  selectedModel: AgentModel | undefined;
-  selectedReasoningEffort: string | undefined;
-  setActiveCommandIndex: Dispatch<SetStateAction<number>>;
-  skillEditorRef: RefObject<PromptSkillEditorHandle | null>;
-  state: ComposerState;
-  steerQueuedPrompt: (queuedPrompt: QueuedComposerPrompt) => void;
-  submitAction: ComposerSubmitAction;
-  taskId: string | undefined;
-  turnControlsDisabled: boolean;
-}>;
-
-export function resolveQueuedPromptSummary(
-  queuedPrompt: QueuedComposerPrompt,
-  attachmentSummary: string,
-): string {
-  return (
-    queuedPrompt.text ||
-    queuedPrompt.skills.map((skill) => `$${skill.name}`).join(" ") ||
-    attachmentSummary
-  );
-}
+export { PlanModeTag } from "./workbench-composer-toolbar.js";
+export * from "./workbench-composer-view-contracts.js";
 
 export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
   const { t } = useTranslation(["workbench", "settings"]);
-  const commandMenu =
-    !props.commandMenuOpen || props.turnControlsDisabled ? null : (
-      <PromptInputCommand
-        aria-label={t("composer.commandInput")}
-        className="absolute inset-x-0 bottom-full z-20 mb-2"
-        id={props.commandMenuId}
-      >
-        <PromptInputCommandList>
-          {props.reviewMenuMode === "scopes" ? (
-            <PromptInputCommandGroup label={t("composer.reviewScopeGroup")}>
-              <PromptInputCommandItem
-                active={props.activeCommandIndex === 0}
-                id={`${props.commandMenuId}-item-0`}
-                onClick={() => {
-                  props.onExecuteReview({ type: "uncommitted_changes" });
-                }}
-              >
-                <Bug aria-hidden="true" className="size-4 shrink-0 text-primary" />
-                <span className="font-medium">{t("composer.reviewUncommitted")}</span>
-              </PromptInputCommandItem>
-              <PromptInputCommandItem
-                active={props.activeCommandIndex === 1}
-                aria-description={
-                  props.baseBranches.length === 0
-                    ? t("composer.noBaseBranch")
-                    : props.baseBranches[0]
-                }
-                disabled={props.baseBranches.length === 0}
-                id={`${props.commandMenuId}-item-1`}
-                onClick={props.onOpenReviewBranches}
-              >
-                <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="font-medium">{t("composer.baseBranchReview")}</span>
-                  <span className="truncate text-caption text-muted-foreground">
-                    {props.baseBranches[0] ?? t("composer.noBaseBranch")}
-                  </span>
-                </span>
-              </PromptInputCommandItem>
-            </PromptInputCommandGroup>
-          ) : props.reviewMenuMode === "branches" ? (
-            <PromptInputCommandGroup label={t("composer.reviewBaseBranchGroup")}>
-              {props.baseBranches.map((branch, index) => (
-                <PromptInputCommandItem
-                  active={props.activeCommandIndex === index}
-                  id={`${props.commandMenuId}-item-${String(index)}`}
-                  key={branch}
-                  onClick={() => {
-                    props.onExecuteReview({ branch, type: "base_branch" });
-                  }}
-                >
-                  <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
-                  <span className="truncate font-medium">{branch}</span>
-                </PromptInputCommandItem>
-              ))}
-            </PromptInputCommandGroup>
-          ) : (
-            <>
-              <PromptInputCommandGroup label={t("composer.commandGroup")}>
-                {props.filteredCommands.map((command, index) => {
-                  const availability = props.getCommandAvailability(command);
-                  return (
-                    <PromptInputCommandItem
-                      active={index === props.activeCommandIndex}
-                      aria-description={availability.reason}
-                      disabled={!availability.available}
-                      id={`${props.commandMenuId}-item-${String(index)}`}
-                      key={command.id}
-                      onClick={() => {
-                        props.onExecuteCommand(command);
-                      }}
-                    >
-                      <PromptCommandIcon action={command.action} />
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="font-medium">{command.label}</span>
-                        <span className="text-caption text-muted-foreground">
-                          {availability.reason ?? command.description}
-                        </span>
-                      </span>
-                    </PromptInputCommandItem>
-                  );
-                })}
-              </PromptInputCommandGroup>
-              {props.filteredSkills.length === 0 ? null : (
-                <PromptInputCommandGroup label="Skills">
-                  {props.filteredSkills.map((skill, index) => {
-                    const menuIndex = props.filteredCommands.length + index;
-                    return (
-                      <PromptInputCommandItem
-                        active={menuIndex === props.activeCommandIndex}
-                        id={`${props.commandMenuId}-item-${String(menuIndex)}`}
-                        key={skill.id}
-                        onClick={() => {
-                          props.onSelectSkill(skill);
-                        }}
-                      >
-                        <Sparkles aria-hidden="true" className="size-4 shrink-0 text-primary" />
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="font-medium text-primary">{skill.displayName}</span>
-                          <span className="block max-w-full truncate text-caption text-muted-foreground">
-                            /{skill.name} · {skill.description}
-                          </span>
-                        </span>
-                      </PromptInputCommandItem>
-                    );
-                  })}
-                </PromptInputCommandGroup>
-              )}
-              {props.menuItemCount === 0 ? (
-                <PromptInputCommandEmpty>{t("composer.commandNoMatch")}</PromptInputCommandEmpty>
-              ) : null}
-            </>
-          )}
-        </PromptInputCommandList>
-      </PromptInputCommand>
-    );
-
   return (
     <section className="shrink-0 bg-content px-3 pb-2 sm:px-5" aria-label={t("composer.landmark")}>
       <div className="relative mx-auto w-full max-w-content" ref={props.commandSurfaceRef}>
-        {commandMenu}
+        <ComposerCommandMenu props={props} />
         {props.queuedPrompts.length === 0 ? null : (
           <div aria-label={t("composer.queuedMessages")} className="mb-2 space-y-1.5" role="list">
             {props.queuedPrompts.map((queuedPrompt) => {

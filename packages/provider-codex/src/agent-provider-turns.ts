@@ -1,0 +1,343 @@
+import { Buffer } from "node:buffer";
+import type {
+  AgentProviderTurnInput,
+  ListAgentTasksInput,
+  StartAgentTaskOptions,
+} from "@code-agent/core";
+import type {
+  AgentBackgroundTerminal,
+  AgentBackgroundTerminalPage,
+  AgentTask,
+  AgentTaskPage,
+  AgentTurn,
+  AgentTurnOptions,
+  AgentReviewTarget,
+  UploadAgentFeedbackRequest,
+} from "@code-agent/protocol";
+import {
+  CodexProtocolMappingError,
+  expectBoolean,
+  expectRecord,
+  expectString,
+  mapAgentTurn,
+  mapBackgroundTerminal,
+  mapSandboxPolicy,
+  optionalString,
+} from "./codex-protocol-mapping.js";
+
+import { CodexAgentProviderBase } from "./agent-provider-base.js";
+import { isBackgroundTerminalThreadMissingError, mapAgentTask } from "./agent-provider-base.js";
+
+export abstract class CodexAgentProviderTurns extends CodexAgentProviderBase {
+  public async startTask(options: StartAgentTaskOptions = {}): Promise<AgentTask> {
+    const response = expectRecord(
+      await this.client.request("thread/start", {
+        cwd: this.project.rootPath,
+        ...(options.ephemeral === true ? { ephemeral: true } : {}),
+      }),
+      "thread/start response",
+    );
+    const task = await mapAgentTask(
+      expectRecord(response["thread"], "thread/start thread"),
+      this.project,
+    );
+    // 新建 Task 必须立即接收后续 Turn 通知，不能等待下一次列表刷新。
+    this.runtime.projectTaskIds.add(task.id);
+    this.runtime.resumedTaskIds.add(task.id);
+    // 临时 Task 只服务 Server 内部操作，不能进入用户可见的列表回退。
+    if (options.ephemeral !== true) {
+      this.runtime.unmaterializedTasks.set(task.id, task);
+    }
+    return task;
+  }
+
+  public async startTurn(
+    taskId: string,
+    input: AgentProviderTurnInput,
+    options: AgentTurnOptions,
+  ): Promise<AgentTurn> {
+    this.assertKnownProjectTask(taskId);
+    const codexInput = await this.mapTurnInput(input);
+    await this.resumeTask(taskId);
+    const response = expectRecord(
+      await this.client.request("turn/start", {
+        approvalPolicy: options.approvalPolicy,
+        approvalsReviewer: options.approvalsReviewer,
+        // Codex collaboration mode 会粘附到 Thread；普通 Turn 必须显式恢复默认执行模式。
+        collaborationMode: {
+          mode: options.collaborationMode === "plan" ? "plan" : "default",
+          settings: {
+            developer_instructions: null,
+            model: options.model,
+            reasoning_effort: options.reasoningEffort,
+          },
+        },
+        effort: options.reasoningEffort,
+        input: codexInput,
+        model: options.model,
+        ...(input.outputSchema === undefined ? {} : { outputSchema: input.outputSchema }),
+        sandboxPolicy: mapSandboxPolicy(options.sandboxMode),
+        threadId: taskId,
+      }),
+      "turn/start response",
+    );
+    const turn = mapAgentTurn(
+      response["turn"],
+      (part, imageIndex) => this.mapMessageImage(taskId, part, imageIndex),
+      (input, textIndex) => this.mapMessageText(taskId, input, textIndex),
+    );
+    if (turn.status === "running") {
+      this.runtime.runningTaskIds.add(taskId);
+    }
+    return turn;
+  }
+
+  public async steerTurn(
+    taskId: string,
+    turnId: string,
+    input: AgentProviderTurnInput,
+  ): Promise<void> {
+    this.assertKnownProjectTask(taskId);
+    const codexInput = await this.mapTurnInput(input);
+    const response = expectRecord(
+      await this.client.request("turn/steer", {
+        expectedTurnId: turnId,
+        input: codexInput,
+        threadId: taskId,
+      }),
+      "turn/steer response",
+    );
+    if (response["turnId"] !== turnId) {
+      throw new CodexProtocolMappingError("turn/steer returned an unexpected turn id");
+    }
+  }
+
+  protected async mapTurnInput(input: AgentProviderTurnInput) {
+    if (input.skills.some((skill) => !this.skillsById.has(skill.id))) {
+      await this.listSkills();
+    }
+    // 每个引用独立解析为 Codex 原生 Skill part，并保持 Composer 中的选择顺序。
+    const skills = input.skills.map((reference) => {
+      const skill = this.skillsById.get(reference.id);
+      if (skill?.name !== reference.name) {
+        throw new CodexProtocolMappingError("Provider turn skill is unavailable");
+      }
+      return { name: skill.name, path: skill.path, type: "skill" as const };
+    });
+    const images = input.images.map((image) => {
+      if (!image.url.startsWith(`data:${image.mediaType};base64,`)) {
+        throw new CodexProtocolMappingError("Provider image URL does not match its media type");
+      }
+      return { type: "image" as const, url: image.url };
+    });
+    const files = input.files.map((file) => ({
+      name: file.name,
+      path: file.path,
+      type: "mention" as const,
+    }));
+    const textAttachments = input.textAttachments.map((attachment) => ({
+      text: attachment.text,
+      text_elements: [
+        {
+          byteRange: { end: Buffer.byteLength(attachment.text, "utf8"), start: 0 },
+          placeholder: attachment.name,
+        },
+      ],
+      type: "text" as const,
+    }));
+    const codexInput = [
+      ...skills,
+      ...(input.text.length === 0
+        ? []
+        : [{ text: input.text, text_elements: [], type: "text" as const }]),
+      ...textAttachments,
+      ...files,
+      ...images,
+    ];
+    if (codexInput.length === 0) {
+      throw new CodexProtocolMappingError("Provider turn input must not be empty");
+    }
+    return codexInput;
+  }
+
+  public async startReview(taskId: string, target: AgentReviewTarget): Promise<AgentTurn> {
+    this.assertKnownProjectTask(taskId);
+    const nativeTarget =
+      target.type === "uncommitted_changes"
+        ? { type: "uncommittedChanges" as const }
+        : target.type === "base_branch"
+          ? { branch: target.branch, type: "baseBranch" as const }
+          : target.type === "commit"
+            ? { sha: target.sha, title: target.title ?? null, type: "commit" as const }
+            : { instructions: target.instructions, type: "custom" as const };
+    // Notification 可能早于 RPC 响应到达，先记录目标以隐藏内部 Prompt 并生成稳定审查 Item。
+    this.runtime.activeReviewTargets.set(taskId, target);
+    let response: Record<string, unknown>;
+    try {
+      response = expectRecord(
+        await this.client.request("review/start", {
+          delivery: "inline",
+          target: nativeTarget,
+          threadId: taskId,
+        }),
+        "review/start response",
+      );
+    } catch (error) {
+      this.runtime.activeReviewTargets.delete(taskId);
+      this.runtime.activeReviewTurnIds.delete(taskId);
+      this.runtime.activeReviewWorkerTaskIds.delete(taskId);
+      this.runtime.reviewWorkerOutputTaskIds.delete(taskId);
+      throw error;
+    }
+    if (expectString(response["reviewThreadId"], "review/start thread id") !== taskId) {
+      throw new CodexProtocolMappingError("review/start returned a different thread");
+    }
+    const turn = mapAgentTurn(
+      response["turn"],
+      (part, imageIndex) => this.mapMessageImage(taskId, part, imageIndex),
+      (input, textIndex) => this.mapMessageText(taskId, input, textIndex),
+      target,
+    );
+    // enteredReviewMode 通常先到；RPC 结果是外层 Turn ID 的最终校准来源。
+    this.runtime.activeReviewTurnIds.set(taskId, turn.id);
+    if (turn.status !== "running") {
+      this.runtime.activeReviewTargets.delete(taskId);
+      this.runtime.activeReviewTurnIds.delete(taskId);
+      this.runtime.activeReviewWorkerTaskIds.delete(taskId);
+      this.runtime.reviewWorkerOutputTaskIds.delete(taskId);
+    }
+    return turn;
+  }
+
+  public async interruptTurn(taskId: string, turnId: string): Promise<void> {
+    this.assertKnownProjectTask(taskId);
+    // review 的外层 Turn 只负责展示，真正可终止的是 reviewer 子 Thread 的运行中 Turn。
+    const interruptTaskId = this.runtime.reviewWorkerTaskIds.get(taskId) ?? taskId;
+    const interruptTurnId = this.runtime.reviewWorkerTurnIds.get(taskId) ?? turnId;
+    expectRecord(
+      await this.client.request("turn/interrupt", {
+        threadId: interruptTaskId,
+        turnId: interruptTurnId,
+      }),
+      "turn/interrupt response",
+    );
+  }
+
+  public async listBackgroundTerminals(taskId: string): Promise<AgentBackgroundTerminalPage> {
+    this.assertKnownProjectTask(taskId);
+    const terminals: AgentBackgroundTerminal[] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+
+    try {
+      do {
+        const response = expectRecord(
+          await this.client.request("thread/backgroundTerminals/list", {
+            ...(cursor === undefined ? {} : { cursor }),
+            limit: 100,
+            threadId: taskId,
+          }),
+          "thread/backgroundTerminals/list response",
+        );
+        if (!Array.isArray(response["data"])) {
+          throw new CodexProtocolMappingError("background terminal list data must be an array");
+        }
+        terminals.push(...response["data"].map(mapBackgroundTerminal));
+        const nextCursor = optionalString(response["nextCursor"]);
+        if (nextCursor === undefined) {
+          cursor = undefined;
+        } else {
+          if (seenCursors.has(nextCursor)) {
+            throw new CodexProtocolMappingError("background terminal list cursor must advance");
+          }
+          seenCursors.add(nextCursor);
+          cursor = nextCursor;
+        }
+      } while (cursor !== undefined);
+    } catch (error) {
+      if (isBackgroundTerminalThreadMissingError(error)) {
+        // 历史 Task 可从持久化记录读取，但未加载到当前运行时，因此不可能存在后台终端。
+        return { data: [] };
+      }
+      throw error;
+    }
+
+    return { data: terminals };
+  }
+
+  public async terminateBackgroundTerminal(taskId: string, terminalId: string): Promise<boolean> {
+    this.assertKnownProjectTask(taskId);
+    const response = expectRecord(
+      await this.client.request("thread/backgroundTerminals/terminate", {
+        processId: terminalId,
+        threadId: taskId,
+      }),
+      "thread/backgroundTerminals/terminate response",
+    );
+    return expectBoolean(response["terminated"], "background terminal terminate result");
+  }
+
+  public async rollbackLatestTurn(taskId: string): Promise<void> {
+    this.assertKnownProjectTask(taskId);
+    const response = expectRecord(
+      await this.client.request("thread/rollback", { numTurns: 1, threadId: taskId }),
+      "thread/rollback response",
+    );
+    const thread = expectRecord(response["thread"], "thread/rollback thread");
+    if (expectString(thread["id"], "thread/rollback thread id") !== taskId) {
+      throw new CodexProtocolMappingError("thread/rollback returned a different thread");
+    }
+    if (!Array.isArray(thread["turns"])) {
+      throw new CodexProtocolMappingError("thread/rollback turns must be an array");
+    }
+  }
+
+  public async uploadFeedback(taskId: string, input: UploadAgentFeedbackRequest): Promise<void> {
+    this.assertKnownProjectTask(taskId);
+    const response = expectRecord(
+      await this.client.request("feedback/upload", { ...input, threadId: taskId }),
+      "feedback/upload response",
+    );
+    if (expectString(response["threadId"], "feedback/upload thread id") !== taskId) {
+      throw new CodexProtocolMappingError("feedback/upload returned a different thread");
+    }
+  }
+
+  public async listTasks(input: ListAgentTasksInput = {}): Promise<AgentTaskPage> {
+    const response = expectRecord(
+      await this.client.request("thread/list", {
+        ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+        cwd: this.project.rootPath,
+        ...(input.limit === undefined ? {} : { limit: input.limit }),
+        sortDirection: "desc",
+        sortKey: "updated_at",
+      }),
+      "thread/list response",
+    );
+    if (!Array.isArray(response["data"])) {
+      throw new CodexProtocolMappingError("thread/list data must be an array");
+    }
+    const nextCursor = response["nextCursor"];
+    if (nextCursor !== null && nextCursor !== undefined && typeof nextCursor !== "string") {
+      throw new CodexProtocolMappingError("thread/list nextCursor must be a string or null");
+    }
+    const nativeTasks = await Promise.all(
+      response["data"].map((thread) =>
+        mapAgentTask(expectRecord(thread, "Codex thread"), this.project),
+      ),
+    );
+    for (const task of nativeTasks) {
+      this.runtime.projectTaskIds.add(task.id);
+      this.runtime.unmaterializedTasks.delete(task.id);
+    }
+    // thread/list 可能晚于 thread/start materialize；首屏先合并本地已确认的新 Task。
+    const pendingTasks =
+      input.cursor === undefined
+        ? [...this.runtime.unmaterializedTasks.values()].toSorted((leftTask, rightTask) =>
+            rightTask.updatedAt.localeCompare(leftTask.updatedAt),
+          )
+        : [];
+    const data = [...pendingTasks, ...nativeTasks];
+    return { data, nextCursor: nextCursor ?? null };
+  }
+}

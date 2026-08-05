@@ -1,0 +1,277 @@
+import { Type, type Static } from "@sinclair/typebox";
+
+import {
+  AgentAttachmentKindSchema,
+  AgentAttachmentMediaTypeSchema,
+  AgentCommandItemSchema,
+  AgentItemStatusSchema,
+  AgentMessageItemSchema,
+  AgentReasoningItemSchema,
+  MAX_AGENT_ATTACHMENT_BYTES,
+} from "./agent-attachments.js";
+import { NullableDateTimeSchema } from "./project-files.js";
+import { AgentFileChangeSchema } from "./project-git.js";
+
+export const AgentFileChangeItemSchema = Type.Object(
+  {
+    changes: Type.Array(AgentFileChangeSchema),
+    id: Type.String({ minLength: 1 }),
+    status: AgentItemStatusSchema,
+    type: Type.Literal("file_change"),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentToolItemSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    input: Type.Optional(Type.Unknown()),
+    name: Type.String({ minLength: 1 }),
+    output: Type.Optional(Type.Unknown()),
+    status: AgentItemStatusSchema,
+    type: Type.Literal("tool"),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentPlanItemSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    text: Type.String(),
+    type: Type.Literal("plan"),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentActivityItemSchema = Type.Object(
+  {
+    detail: Type.Optional(Type.String()),
+    id: Type.String({ minLength: 1 }),
+    label: Type.String({ minLength: 1 }),
+    status: Type.Optional(AgentItemStatusSchema),
+    type: Type.Literal("activity"),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentApprovalReviewStatusSchema = Type.Union([
+  Type.Literal("in_progress"),
+  Type.Literal("approved"),
+  Type.Literal("denied"),
+  Type.Literal("timed_out"),
+  Type.Literal("aborted"),
+]);
+
+export const AgentApprovalReviewActionSchema = Type.Object(
+  {
+    detail: Type.String(),
+    type: Type.Union([
+      Type.Literal("command"),
+      Type.Literal("file_change"),
+      Type.Literal("network_access"),
+      Type.Literal("mcp_tool_call"),
+      Type.Literal("permissions"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentApprovalReviewItemSchema = Type.Object(
+  {
+    action: AgentApprovalReviewActionSchema,
+    id: Type.String({ minLength: 1 }),
+    rationale: Type.Optional(Type.String()),
+    riskLevel: Type.Optional(
+      Type.Union([
+        Type.Literal("low"),
+        Type.Literal("medium"),
+        Type.Literal("high"),
+        Type.Literal("critical"),
+      ]),
+    ),
+    status: AgentApprovalReviewStatusSchema,
+    targetItemId: Type.Optional(Type.String({ minLength: 1 })),
+    type: Type.Literal("approval_review"),
+    userAuthorization: Type.Optional(
+      Type.Union([
+        Type.Literal("unknown"),
+        Type.Literal("low"),
+        Type.Literal("medium"),
+        Type.Literal("high"),
+      ]),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+const AgentReviewItemTargetSchema = Type.Union([
+  Type.Object({ type: Type.Literal("uncommitted_changes") }, { additionalProperties: false }),
+  Type.Object(
+    { branch: Type.String({ minLength: 1 }), type: Type.Literal("base_branch") },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      sha: Type.String({ minLength: 1 }),
+      title: Type.Optional(Type.String({ minLength: 1 })),
+      type: Type.Literal("commit"),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      instructions: Type.String({ minLength: 1 }),
+      type: Type.Literal("custom"),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export const AgentReviewItemSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    // Fastify 响应序列化器要求判别 Union 直接展开，不能复用请求侧 Intersect Schema。
+    target: AgentReviewItemTargetSchema,
+    type: Type.Literal("review"),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentItemSchema = Type.Union([
+  AgentMessageItemSchema,
+  AgentReasoningItemSchema,
+  AgentCommandItemSchema,
+  AgentFileChangeItemSchema,
+  AgentToolItemSchema,
+  AgentPlanItemSchema,
+  AgentActivityItemSchema,
+  AgentApprovalReviewItemSchema,
+  AgentReviewItemSchema,
+]);
+
+export type AgentItem = Readonly<Static<typeof AgentItemSchema>>;
+
+export const AgentTurnStatusSchema = Type.Union([
+  Type.Literal("running"),
+  Type.Literal("completed"),
+  Type.Literal("failed"),
+  Type.Literal("interrupted"),
+]);
+
+export const AgentTurnSchema = Type.Object(
+  {
+    completedAt: NullableDateTimeSchema,
+    error: Type.Union([Type.String(), Type.Null()]),
+    id: Type.String({ minLength: 1 }),
+    items: Type.Array(AgentItemSchema),
+    startedAt: NullableDateTimeSchema,
+    status: AgentTurnStatusSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type AgentTurn = Readonly<Static<typeof AgentTurnSchema>>;
+
+export const AgentAttachmentSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    kind: AgentAttachmentKindSchema,
+    mediaType: AgentAttachmentMediaTypeSchema,
+    name: Type.String({ maxLength: 255, minLength: 1 }),
+    size: Type.Integer({ maximum: MAX_AGENT_ATTACHMENT_BYTES, minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentAttachment = Readonly<Static<typeof AgentAttachmentSchema>>;
+
+export const AgentAttachmentUploadResponseSchema = Type.Object(
+  { attachment: AgentAttachmentSchema },
+  { additionalProperties: false },
+);
+
+export type AgentAttachmentUploadResponse = Readonly<
+  Static<typeof AgentAttachmentUploadResponseSchema>
+>;
+
+export const AgentSkillScopeSchema = Type.Union([
+  Type.Literal("user"),
+  Type.Literal("repo"),
+  Type.Literal("system"),
+  Type.Literal("admin"),
+]);
+
+export const AgentSkillSchema = Type.Object(
+  {
+    description: Type.String(),
+    displayName: Type.String({ minLength: 1 }),
+    id: Type.String({ minLength: 1 }),
+    name: Type.String({ minLength: 1 }),
+    scope: AgentSkillScopeSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type AgentSkill = Readonly<Static<typeof AgentSkillSchema>>;
+
+export const AgentMcpServerSchema = Type.Object(
+  { name: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+
+export type AgentMcpServer = Readonly<Static<typeof AgentMcpServerSchema>>;
+
+export const AgentMcpServerPageSchema = Type.Object(
+  { data: Type.Array(AgentMcpServerSchema, { uniqueItems: true }) },
+  { additionalProperties: false },
+);
+
+export type AgentMcpServerPage = Readonly<Static<typeof AgentMcpServerPageSchema>>;
+
+export const AgentSkillReferenceSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    name: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentSkillReference = Readonly<Static<typeof AgentSkillReferenceSchema>>;
+
+const AgentAttachmentReferenceSchema = Type.Object(
+  { id: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+
+const AgentPromptInputProperties = {
+  attachments: Type.Array(AgentAttachmentReferenceSchema),
+  skills: Type.Array(AgentSkillReferenceSchema),
+  text: Type.String({ maxLength: 100_000 }),
+  type: Type.Literal("prompt"),
+};
+
+export const AgentPromptInputSchema = Type.Union([
+  Type.Object(
+    {
+      ...AgentPromptInputProperties,
+      text: Type.String({ maxLength: 100_000, minLength: 1 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...AgentPromptInputProperties,
+      attachments: Type.Array(AgentAttachmentReferenceSchema, { minItems: 1 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...AgentPromptInputProperties,
+      skills: Type.Array(AgentSkillReferenceSchema, { minItems: 1 }),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export type AgentPromptInput = Readonly<Static<typeof AgentPromptInputSchema>>;

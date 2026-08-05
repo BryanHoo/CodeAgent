@@ -44,5 +44,6 @@
 - `POST /v1/projects/:projectId/tasks/:taskId/pending-requests/:requestId/resolve` 必须携带 `Idempotency-Key`，并校验 `projectId + taskId + turnId + itemId + requestId`、请求类型、可用决策、User Input 单值与固定选项和当前状态。
 - 读取剪贴板的 Playwright 用例必须在 Browser Context 显式声明 `clipboard-read` 和 `clipboard-write` 权限，不得依赖开发机或 CI Runner 的默认授权。
 - `dependency-cruiser` 必须分析 TypeScript 编译前依赖，使纯类型模块不会被误判为 orphan，并确保类型导入同样接受跨包依赖边界校验。
+- ESLint 必须对生产 JavaScript/TypeScript 模块强制执行 500 行上限，超限模块按职责拆分；仅声明文件、测试/规格文件、测试 fixture 与 E2E 场景可在集中配置中豁免，生产文件不得使用单文件例外。
 - 变更按新协议逻辑实现并删除冗余旧路径；破坏性变更明确升级 API 或事件版本。
 - 更新所有消费者、契约测试和架构文档后运行 `pnpm check`。

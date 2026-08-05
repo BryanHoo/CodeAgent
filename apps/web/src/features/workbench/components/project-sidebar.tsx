@@ -2,44 +2,15 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import type { AgentEventConnectionState } from "@code-agent/client";
 import type { AgentTask, Project } from "@code-agent/protocol";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Archive,
-  CircleAlert,
-  CircleCheck,
-  Ellipsis,
-  Folder,
-  LoaderCircle,
-  PanelLeftClose,
-  Pencil,
-  Pin,
-  Plus,
-  Search,
-  Send,
-  Settings,
-  ShieldQuestion,
-  Trash2,
-  Wifi,
-  WifiOff,
-} from "lucide-react";
+import { PanelLeftClose, Search, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { Button } from "../../../shared/ui/button.js";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../../../shared/ui/dropdown-menu.js";
 import { Input } from "../../../shared/ui/input.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
-import { i18n, useTranslation } from "../../../i18n/i18n.js";
-import {
-  formatTaskAge,
-  getPinnedTasks,
-  getProjectTaskPreview,
-  PROJECT_TASK_PREVIEW_LIMIT,
-} from "../../projects/project-data.js";
+import { useTranslation } from "../../../i18n/i18n.js";
+import { getPinnedTasks } from "../../projects/project-data.js";
 import {
   useProjectActions,
   useProjectActivity,
@@ -54,7 +25,6 @@ import {
   taskRenameMutationOptions,
 } from "../../projects/project-queries.js";
 import { removeRetainedTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
-import { getTaskActivity, type TaskAttention } from "../../conversation/runtime/task-activity.js";
 import { useProjectReordering } from "../hooks/use-project-reordering.js";
 import {
   getProjectSidebarPreferenceStorage,
@@ -67,11 +37,16 @@ import { ProjectDirectoryPickerDialog } from "../../projects/components/project-
 import { ProjectRemoveDialog } from "./project-remove-dialog.js";
 import { ProjectRenameDialog } from "./project-rename-dialog.js";
 
+import { ProjectSidebarTaskList } from "./project-sidebar-task-list.js";
+import { SidebarSettingsButton } from "./project-sidebar-actions.js";
+import { groupTasksByProjectId } from "./project-sidebar-state.js";
+export * from "./project-sidebar-actions.js";
+export * from "./project-sidebar-state.js";
+export * from "./project-sidebar-task-row.js";
+
 const primaryActionClassName =
   "flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small font-medium text-foreground transition-colors hover:bg-control-hover";
 const primaryActionIconClassName = "size-4 shrink-0 text-muted-foreground";
-const EMPTY_PROJECT_TASKS: readonly AgentTask[] = [];
-
 type ProjectSidebarProps = Readonly<{
   connectionState: AgentEventConnectionState;
   onClose: () => void;
@@ -79,126 +54,6 @@ type ProjectSidebarProps = Readonly<{
   projectId?: string;
   taskId?: string;
 }>;
-
-type ProjectSidebarConnectionInput = Readonly<{
-  hasActiveTask: boolean;
-  projectDataFailed: boolean;
-  projectDataPending: boolean;
-  taskConnectionState: AgentEventConnectionState;
-}>;
-
-type ProjectTaskPaginationControlInput = Readonly<{
-  error: Error | null;
-  hasHiddenLoadedTasks: boolean;
-  hasNextPage: boolean;
-  isExpanded: boolean;
-  isFetchingNextPage: boolean;
-}>;
-
-export function groupTasksByProjectId(
-  tasks: readonly AgentTask[],
-): ReadonlyMap<string, readonly AgentTask[]> {
-  const tasksByProjectId = new Map<string, AgentTask[]>();
-  for (const task of tasks) {
-    const projectTasks = tasksByProjectId.get(task.projectId);
-    if (projectTasks === undefined) {
-      tasksByProjectId.set(task.projectId, [task]);
-    } else {
-      projectTasks.push(task);
-    }
-  }
-  return tasksByProjectId;
-}
-
-export function getProjectTaskPaginationControl({
-  error,
-  hasHiddenLoadedTasks,
-  hasNextPage,
-  isExpanded,
-  isFetchingNextPage,
-}: ProjectTaskPaginationControlInput) {
-  if (!isExpanded) {
-    if (hasHiddenLoadedTasks) {
-      return {
-        action: "expand",
-        disabled: false,
-        label: i18n.t("sidebar.expand", { ns: "workbench" }),
-      } as const;
-    }
-    return hasNextPage
-      ? ({
-          action: "expand-and-load",
-          disabled: false,
-          label: i18n.t("sidebar.expand", { ns: "workbench" }),
-        } as const)
-      : null;
-  }
-
-  if (hasNextPage) {
-    return {
-      action: "load",
-      disabled: isFetchingNextPage,
-      label: isFetchingNextPage
-        ? i18n.t("sidebar.expandLoading", { ns: "workbench" })
-        : error === null
-          ? i18n.t("sidebar.expand", { ns: "workbench" })
-          : i18n.t("sidebar.expandRetry", { ns: "workbench" }),
-    } as const;
-  }
-
-  return hasHiddenLoadedTasks
-    ? ({
-        action: "collapse",
-        disabled: false,
-        label: i18n.t("sidebar.collapse", { ns: "workbench" }),
-      } as const)
-    : null;
-}
-
-export function deriveProjectSidebarConnectionState({
-  hasActiveTask,
-  projectDataFailed,
-  projectDataPending,
-  taskConnectionState,
-}: ProjectSidebarConnectionInput): AgentEventConnectionState {
-  // 活动任务以实时终端链路为准；新任务页则使用 HTTP Runtime 的可用性作为连接依据。
-  if (hasActiveTask) {
-    return taskConnectionState;
-  }
-  if (projectDataFailed) {
-    return "closed";
-  }
-  if (projectDataPending) {
-    return "connecting";
-  }
-  return "connected";
-}
-
-export function getProjectSidebarConnectionStatus(connectionState: AgentEventConnectionState) {
-  // 连接状态只映射稳定翻译 key，当前语言由渲染组件统一解析。
-  switch (connectionState) {
-    case "connected":
-      return {
-        labelKey: "sidebar.connection.online",
-        toneClassName: "text-diff-added",
-      } as const;
-    case "connecting":
-      return {
-        labelKey: "sidebar.connection.connecting",
-        toneClassName: "text-warning",
-      } as const;
-    case "reconnecting":
-      return {
-        labelKey: "sidebar.connection.reconnecting",
-        toneClassName: "text-warning",
-      } as const;
-    case "closed":
-      return {
-        labelKey: "sidebar.connection.offline",
-        toneClassName: "text-danger",
-      } as const;
-  }
-}
 
 export function ProjectSidebar({
   connectionState,
@@ -521,239 +376,50 @@ export function ProjectSidebar({
         )}
       </nav>
 
-      {/* 限制项目区的固有宽度，长 Task 标题不能把右侧操作按钮推出 Sidebar。 */}
-      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden px-2 pt-5">
-        {pinnedTasks.length > 0 ? (
-          <section
-            className="mb-4 max-h-40 shrink-0 overflow-y-auto"
-            aria-labelledby="pinned-title"
-          >
-            <h2
-              className="px-2 pb-2 text-meta font-semibold text-muted-foreground"
-              id="pinned-title"
-            >
-              {t("sidebar.pinned")}
-            </h2>
-            <div className="space-y-0.5">
-              {pinnedTasks.map((task) => {
-                const activity = getTaskActivity(taskActivity, task.projectId, task.id);
-                return (
-                  <TaskLink
-                    active={task.projectId === projectId && task.id === taskId}
-                    attention={activity.attention}
-                    icon={<Pin className="size-3.5" aria-hidden="true" />}
-                    key={`${task.projectId}:${task.id}`}
-                    isActionPending={taskActionPending}
-                    isRunning={activity.isRunning}
-                    onArchive={(task) => void archiveTask(task)}
-                    onPin={(task) => void pinTask(task)}
-                    onRename={setRenamingTask}
-                    task={task}
-                  />
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-labelledby="projects-title">
-          <div className="flex h-8 min-w-0 w-full shrink-0 items-center justify-between pl-2">
-            <h2 className="text-body-small font-semibold text-foreground" id="projects-title">
-              {t("sidebar.projects")}
-            </h2>
-            <ProjectPickerButton
-              disabled={isProjectAddPending}
-              onOpen={() => {
-                setHasSubmittedAddProject(false);
-                setIsProjectPickerOpen(true);
-              }}
-            />
-          </div>
-
-          {isPending || hasPendingTasks ? (
-            <p className="px-2 py-1.5 text-meta text-subtle-foreground">
-              {t("sidebar.taskLoading")}
-            </p>
-          ) : null}
-          {taskSearch.isPending ? (
-            <p className="px-2 py-1.5 text-meta text-subtle-foreground">{t("sidebar.searchAll")}</p>
-          ) : null}
-          {error === null && !hasTaskError ? null : (
-            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              {t("sidebar.errorLoadTasks")}
-            </p>
-          )}
-          {taskActionError === null ? null : (
-            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              {taskActionError}
-            </p>
-          )}
-          {taskSearch.error === null ? null : (
-            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              {t("sidebar.errorSearchTasks")}
-            </p>
-          )}
-          {projectOrderError === null ? null : (
-            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              {t("sidebar.errorProjectOrder")}
-            </p>
-          )}
-          <p aria-live="polite" className="sr-only">
-            {projectOrderAnnouncement}
-          </p>
-
-          <div
-            className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-3"
-            data-testid="project-tree-scroll"
-          >
-            {orderedProjects.map((project) => {
-              const projectTasks = tasksByProjectId.get(project.id) ?? EMPTY_PROJECT_TASKS;
-              const expanded = expandedProjects.has(project.id);
-              const showAllTasks = expandedTaskProjects.has(project.id);
-              const taskPreview = getProjectTaskPreview(projectTasks, showAllTasks);
-              const projectTaskState = projectTaskStates.get(project.id);
-              const taskPaginationControl = getProjectTaskPaginationControl({
-                error: projectTaskState?.error ?? null,
-                hasHiddenLoadedTasks: projectTasks.length > PROJECT_TASK_PREVIEW_LIMIT,
-                hasNextPage:
-                  normalizedQuery.length === 0 ? (projectTaskState?.hasNextPage ?? false) : false,
-                isExpanded: showAllTasks,
-                isFetchingNextPage: projectTaskState?.isFetchingNextPage ?? false,
-              });
-
-              return (
-                <div
-                  className={`min-w-0 transition-[opacity,transform] ${
-                    reorderingProjectId === project.id ? "relative z-10 opacity-80" : ""
-                  }`}
-                  data-project-reordering={reorderingProjectId === project.id ? "true" : "false"}
-                  key={project.id}
-                >
-                  <div className="group/project flex min-w-0 items-center gap-0.5">
-                    <Button
-                      variant="ghost"
-                      aria-expanded={expanded}
-                      aria-label={t("sidebar.toggleProject", { project: project.name })}
-                      className={`flex h-8 min-w-0 flex-1 touch-pan-y select-none items-center gap-2 rounded-control px-2 text-body-small font-medium transition-colors hover:bg-control-hover hover:text-foreground ${
-                        reorderingProjectId === project.id
-                          ? "cursor-grabbing bg-control-active text-foreground shadow-sm"
-                          : "cursor-grab text-muted-foreground"
-                      }`}
-                      onClick={() => {
-                        toggleProject(project.id);
-                      }}
-                      type="button"
-                      {...getProjectReorderProps(project.id)}
-                    >
-                      <Folder className="size-4 shrink-0" aria-hidden="true" />
-                      <span className="truncate">{project.name}</span>
-                    </Button>
-                    <ProjectActions
-                      isPending={isProjectActionPending}
-                      onRemove={(targetProject) => {
-                        setHasSubmittedProjectAction(false);
-                        setRemovingProject(targetProject);
-                      }}
-                      onRename={(targetProject) => {
-                        setHasSubmittedProjectAction(false);
-                        setRenamingProject(targetProject);
-                      }}
-                      project={project}
-                    />
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          aria-label={t("sidebar.createInProject", { project: project.name })}
-                          onClick={() => {
-                            void openProjectDraft(project.id);
-                          }}
-                          size="icon-sm"
-                          type="button"
-                          variant="ghost"
-                        >
-                          <Plus className="size-3.5" aria-hidden="true" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {t("sidebar.createInProject", { project: project.name })}
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-
-                  {expanded ? (
-                    <div className="mt-0.5 min-w-0 space-y-0.5 pl-5">
-                      {taskPreview.tasks.map((task) => {
-                        const activity = getTaskActivity(taskActivity, task.projectId, task.id);
-                        return (
-                          <TaskLink
-                            active={project.id === projectId && task.id === taskId}
-                            attention={activity.attention}
-                            isActionPending={taskActionPending}
-                            isRunning={activity.isRunning}
-                            key={`${task.projectId}:${task.id}`}
-                            onArchive={(task) => void archiveTask(task)}
-                            onPin={(task) => void pinTask(task)}
-                            onRename={setRenamingTask}
-                            task={task}
-                          />
-                        );
-                      })}
-                      {taskPaginationControl === null ? null : (
-                        <Button
-                          variant="ghost"
-                          aria-expanded={showAllTasks}
-                          className="flex h-7 w-full items-center rounded-control px-2 text-left text-meta font-medium text-subtle-foreground transition-colors hover:bg-control-hover hover:text-foreground"
-                          disabled={taskPaginationControl.disabled}
-                          onClick={() => {
-                            if (
-                              taskPaginationControl.action === "expand" ||
-                              taskPaginationControl.action === "expand-and-load"
-                            ) {
-                              setExpandedTaskProjects((current) =>
-                                new Set(current).add(project.id),
-                              );
-                            } else if (taskPaginationControl.action === "collapse") {
-                              setExpandedTaskProjects((current) => {
-                                const next = new Set(current);
-                                next.delete(project.id);
-                                return next;
-                              });
-                            }
-
-                            if (
-                              taskPaginationControl.action === "expand-and-load" ||
-                              taskPaginationControl.action === "load"
-                            ) {
-                              // 下一页错误由对应 Project Query 持有，现有 Task 始终保持可见。
-                              void fetchNextProjectTaskPage(project.id).catch(() => undefined);
-                            }
-                          }}
-                          type="button"
-                        >
-                          {taskPaginationControl.label}
-                        </Button>
-                      )}
-                      {projectTasks.length === 0 && normalizedQuery.length === 0 ? (
-                        <p className="px-2 py-1.5 text-meta text-subtle-foreground">
-                          {t("sidebar.noTasks")}
-                        </p>
-                      ) : null}
-                      {projectTasks.length === 0 &&
-                      normalizedQuery.length > 0 &&
-                      !taskSearch.isPending &&
-                      taskSearch.error === null ? (
-                        <p className="px-2 py-1.5 text-meta text-subtle-foreground">
-                          {t("sidebar.noMatchingTasks")}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      </div>
+      <ProjectSidebarTaskList
+        archiveTask={archiveTask}
+        error={error}
+        expandedProjects={expandedProjects}
+        expandedTaskProjects={expandedTaskProjects}
+        fetchNextProjectTaskPage={fetchNextProjectTaskPage}
+        getProjectReorderProps={getProjectReorderProps}
+        hasPendingTasks={hasPendingTasks}
+        hasTaskError={hasTaskError}
+        isPending={isPending}
+        isProjectActionPending={isProjectActionPending}
+        isProjectAddPending={isProjectAddPending}
+        normalizedQuery={normalizedQuery}
+        onOpenProjectDraft={openProjectDraft}
+        onOpenProjectPicker={() => {
+          setHasSubmittedAddProject(false);
+          setIsProjectPickerOpen(true);
+        }}
+        onRemoveProject={(project) => {
+          setHasSubmittedProjectAction(false);
+          setRemovingProject(project);
+        }}
+        onRenameProject={(project) => {
+          setHasSubmittedProjectAction(false);
+          setRenamingProject(project);
+        }}
+        orderedProjects={orderedProjects}
+        pinTask={pinTask}
+        pinnedTasks={pinnedTasks}
+        {...(projectId === undefined ? {} : { projectId })}
+        projectOrderAnnouncement={projectOrderAnnouncement}
+        projectOrderError={projectOrderError}
+        projectTaskStates={projectTaskStates}
+        reorderingProjectId={reorderingProjectId}
+        setExpandedTaskProjects={setExpandedTaskProjects}
+        setRenamingTask={setRenamingTask}
+        taskActionError={taskActionError}
+        taskActionPending={taskActionPending}
+        taskActivity={taskActivity}
+        {...(taskId === undefined ? {} : { taskId })}
+        taskSearch={taskSearch}
+        tasksByProjectId={tasksByProjectId}
+        toggleProject={toggleProject}
+      />
 
       {renamingTask === null ? null : (
         <TaskRenameDialog
@@ -816,341 +482,5 @@ export function ProjectSidebar({
         <SidebarSettingsButton connectionState={connectionState} onOpen={onOpenSettings} />
       </div>
     </aside>
-  );
-}
-
-export function ProjectPickerButton({
-  disabled,
-  onOpen,
-}: Readonly<{ disabled: boolean; onOpen: () => void }>) {
-  const { t } = useTranslation("workbench");
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          aria-label={t("sidebar.addProject")}
-          disabled={disabled}
-          onClick={onOpen}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          <Plus aria-hidden="true" className="size-3.5" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{t("sidebar.addProject")}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-type ProjectActionsProps = Readonly<{
-  isPending: boolean;
-  onRemove: (project: Project) => void;
-  onRename: (project: Project) => void;
-  project: Project;
-}>;
-
-export function ProjectActions({ isPending, onRemove, onRename, project }: ProjectActionsProps) {
-  const { t } = useTranslation("workbench");
-
-  return (
-    <div className="relative shrink-0">
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            aria-label={t("sidebar.openProjectActions", { project: project.name })}
-            className="grid size-7 place-items-center rounded-control text-muted-foreground opacity-0 transition-[color,background-color,opacity] hover:bg-control-hover hover:text-foreground focus-visible:opacity-100 focus-visible:shadow-focus group-hover/project:opacity-100 data-[state=open]:opacity-100"
-            disabled={isPending}
-            id={`project-actions-${project.id}`}
-            type="button"
-          >
-            <Ellipsis className="size-3.5" aria-hidden="true" />
-          </Button>
-        </DropdownMenuTrigger>
-        <ProjectActionMenu
-          isPending={isPending}
-          onRemove={() => {
-            onRemove(project);
-          }}
-          onRename={() => {
-            onRename(project);
-          }}
-          project={project}
-        />
-      </DropdownMenu>
-    </div>
-  );
-}
-
-type ProjectActionMenuProps = Readonly<{
-  isPending: boolean;
-  onRemove: () => void;
-  onRename: () => void;
-  project: Project;
-}>;
-
-const projectActionClassName = "h-8 w-full text-left text-foreground";
-
-export function ProjectActionMenu({
-  isPending,
-  onRemove,
-  onRename,
-  project,
-}: ProjectActionMenuProps) {
-  const { t } = useTranslation("workbench");
-  return (
-    <DropdownMenuContent
-      align="start"
-      aria-label={t("sidebar.projectActions", { project: project.name })}
-      aria-labelledby={undefined}
-      className="w-32"
-    >
-      <DropdownMenuItem className={projectActionClassName} disabled={isPending} onSelect={onRename}>
-        <Pencil className="size-3.5" aria-hidden="true" />
-        {t("sidebar.rename")}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        className={`${projectActionClassName} text-danger`}
-        disabled={isPending}
-        onSelect={onRemove}
-      >
-        <Trash2 className="size-3.5" aria-hidden="true" />
-        {t("sidebar.remove")}
-      </DropdownMenuItem>
-    </DropdownMenuContent>
-  );
-}
-
-export function SidebarSettingsButton({
-  connectionState,
-  onOpen,
-}: Readonly<{ connectionState: AgentEventConnectionState; onOpen: () => void }>) {
-  const { t } = useTranslation("workbench");
-  const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
-  const connectionStatusLabel = t(connectionStatus.labelKey);
-  return (
-    <Button
-      variant="ghost"
-      aria-label={t("sidebar.connectionSettings", { status: connectionStatusLabel })}
-      className="flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
-      id="global-settings-trigger"
-      onClick={onOpen}
-      type="button"
-    >
-      <Settings className="size-4" aria-hidden="true" />
-      {t("sidebar.settings")}
-      <span
-        aria-live="polite"
-        className={`ml-auto inline-flex items-center gap-1 text-caption ${connectionStatus.toneClassName}`}
-      >
-        <ProjectSidebarConnectionIcon connectionState={connectionState} />
-        {connectionStatusLabel}
-      </span>
-    </Button>
-  );
-}
-
-function ProjectSidebarConnectionIcon({
-  connectionState,
-}: Readonly<{ connectionState: AgentEventConnectionState }>) {
-  if (connectionState === "connected") {
-    return <Wifi className="size-3" aria-hidden="true" />;
-  }
-  if (connectionState === "closed") {
-    return <WifiOff className="size-3" aria-hidden="true" />;
-  }
-  return (
-    <span className="inline-flex animate-spin" aria-hidden="true">
-      <LoaderCircle className="size-3" />
-    </span>
-  );
-}
-
-type TaskLinkProps = Readonly<{
-  active: boolean;
-  attention: TaskAttention;
-  icon?: React.ReactNode;
-  isActionPending: boolean;
-  isRunning: boolean;
-  onArchive: (task: AgentTask) => void;
-  onPin: (task: AgentTask) => void;
-  onRename: (task: AgentTask) => void;
-  task: AgentTask;
-}>;
-
-function TaskLink({
-  active,
-  attention,
-  icon,
-  isActionPending,
-  isRunning,
-  onArchive,
-  onPin,
-  onRename,
-  task,
-}: TaskLinkProps) {
-  const { t } = useTranslation("workbench");
-
-  return (
-    <div className="group relative min-w-0">
-      <Link
-        aria-current={active ? "page" : undefined}
-        className={`flex h-8 min-w-0 items-center gap-2 rounded-control px-2 text-body-small transition-colors ${
-          active
-            ? "bg-control-active font-medium text-foreground"
-            : "text-muted-foreground hover:bg-control-hover hover:text-foreground"
-        }`}
-        params={{ projectId: task.projectId, taskId: task.id }}
-        to="/p/$projectId/t/$taskId"
-      >
-        {icon === undefined ? null : (
-          <span className="shrink-0 text-subtle-foreground">{icon}</span>
-        )}
-        <span className="min-w-0 flex-1 truncate">{task.title}</span>
-        <TaskStatusIndicator
-          attention={attention}
-          isRunning={isRunning}
-          updatedAt={task.updatedAt}
-        />
-      </Link>
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            aria-label={t("sidebar.openTaskActions", { task: task.title })}
-            className="task-actions absolute right-1 top-1 grid size-6 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:opacity-100 focus-visible:shadow-focus"
-            disabled={isActionPending}
-            type="button"
-          >
-            <Ellipsis className="size-4" aria-hidden="true" />
-          </Button>
-        </DropdownMenuTrigger>
-        <TaskActionMenu
-          isPending={isActionPending}
-          onArchive={() => {
-            onArchive(task);
-          }}
-          onPin={() => {
-            onPin(task);
-          }}
-          onRename={() => {
-            onRename(task);
-          }}
-          task={task}
-        />
-      </DropdownMenu>
-    </div>
-  );
-}
-
-type TaskStatusIndicatorProps = Readonly<{
-  attention: TaskAttention;
-  isRunning: boolean;
-  updatedAt: string;
-}>;
-
-export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskStatusIndicatorProps) {
-  const { t } = useTranslation("workbench");
-  if (attention === "approval") {
-    return (
-      <span
-        aria-label={t("sidebar.taskApproval")}
-        className="task-status ml-auto inline-flex shrink-0 text-primary"
-        role="status"
-      >
-        <ShieldQuestion className="size-3.5" aria-hidden="true" />
-      </span>
-    );
-  }
-
-  if (isRunning) {
-    return (
-      <span
-        aria-label={t("sidebar.taskRunning")}
-        className="task-status ml-auto inline-flex shrink-0 text-subtle-foreground"
-        role="status"
-      >
-        {/* 动画放在 HTML 容器上，确保 SVG 图标在各浏览器中平滑旋转。 */}
-        <span className="inline-flex animate-spin" aria-hidden="true">
-          <LoaderCircle className="size-3.5" />
-        </span>
-      </span>
-    );
-  }
-
-  if (attention === "completed") {
-    return (
-      <span
-        aria-label={t("sidebar.taskComplete")}
-        className="task-status ml-auto inline-flex shrink-0 text-diff-added"
-        role="status"
-      >
-        <CircleCheck className="size-3.5" aria-hidden="true" />
-      </span>
-    );
-  }
-
-  if (attention === "failed") {
-    return (
-      <span
-        aria-label={t("sidebar.taskIncomplete")}
-        className="task-status ml-auto inline-flex shrink-0 text-danger"
-        role="status"
-      >
-        <CircleAlert className="size-3.5" aria-hidden="true" />
-      </span>
-    );
-  }
-
-  return (
-    <span className="task-age task-status ml-auto shrink-0 text-caption text-subtle-foreground">
-      {formatTaskAge(updatedAt)}
-    </span>
-  );
-}
-
-type TaskActionMenuProps = Readonly<{
-  isPending: boolean;
-  onArchive: () => void;
-  onPin: () => void;
-  onRename: () => void;
-  task: AgentTask;
-}>;
-
-const taskActionClassName = "h-8 w-full text-left text-foreground";
-
-export function TaskActionMenu({
-  isPending,
-  onArchive,
-  onPin,
-  onRename,
-  task,
-}: TaskActionMenuProps) {
-  const { t } = useTranslation("workbench");
-  return (
-    <DropdownMenuContent
-      align="start"
-      aria-label={t("sidebar.taskActions", { task: task.title })}
-      aria-labelledby={undefined}
-      className="w-32"
-    >
-      <DropdownMenuItem className={taskActionClassName} disabled={isPending} onSelect={onPin}>
-        <Pin className="size-3.5" aria-hidden="true" />
-        {task.pinned ? t("sidebar.unpin") : t("sidebar.pin")}
-      </DropdownMenuItem>
-      <DropdownMenuItem className={taskActionClassName} disabled={isPending} onSelect={onRename}>
-        <Pencil className="size-3.5" aria-hidden="true" />
-        {t("sidebar.rename")}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        className={`${taskActionClassName} text-danger`}
-        disabled={isPending}
-        onSelect={onArchive}
-      >
-        <Archive className="size-3.5" aria-hidden="true" />
-        {t("sidebar.archive")}
-      </DropdownMenuItem>
-    </DropdownMenuContent>
   );
 }

@@ -2,26 +2,11 @@ import type {
   AccessMode,
   AgentGlobalSettings,
   AgentModel,
-  AgentProjectDefaults,
   ProjectOpenApp,
 } from "@code-agent/protocol";
-import {
-  Bot,
-  ChevronDown,
-  GitCommitHorizontal,
-  MonitorCog,
-  Moon,
-  LogOut,
-  Network,
-  Palette,
-  Settings,
-  Sun,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import { useEffect, useRef, useState, type SelectHTMLAttributes } from "react";
+import { LogOut, Moon, Settings, Sun, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
-import { PromptInputSelect } from "../../../shared/ai-elements/prompt-input.js";
 import { Button } from "../../../shared/ui/button.js";
 import { Dialog, DialogContent, DialogTitle } from "../../../shared/ui/dialog.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
@@ -29,72 +14,29 @@ import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.j
 import { changeAppLanguage, getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
 import {
   applyThemePreference,
-  readThemePreference,
   saveThemePreference,
   type ThemePreference,
 } from "../theme-preference.js";
+import {
+  ModelSelect,
+  ReasoningSelect,
+  SettingsField,
+  SettingsPanel,
+  SettingsSelect,
+  ThemeButton,
+  settingsSections,
+  type SettingsSectionId,
+} from "./global-settings-fields.js";
+import {
+  applyApprovalMode,
+  createFallbackSettings,
+  deriveApprovalMode,
+  readInitialTheme,
+  resolveGlobalSettingsModel,
+  type ApprovalMode,
+} from "./global-settings-model.js";
 
-type ApprovalMode = AgentGlobalSettings["approvalPolicy"] | "auto-review";
-type SettingsSectionId = "access" | "agent" | "appearance" | "commit" | "integration";
-
-const settingsSections: readonly Readonly<{
-  icon: LucideIcon;
-  id: SettingsSectionId;
-}>[] = [
-  { icon: Palette, id: "appearance" },
-  { icon: Bot, id: "agent" },
-  { icon: GitCommitHorizontal, id: "commit" },
-  { icon: MonitorCog, id: "integration" },
-  { icon: Network, id: "access" },
-];
-
-export function resolveGlobalSettingsModel(
-  models: readonly AgentModel[],
-  modelId: string,
-  requestedEffort: string,
-): Pick<AgentProjectDefaults, "model" | "reasoningEffort"> {
-  const model = models.find((item) => item.id === modelId);
-  if (model === undefined) {
-    return { model: modelId, reasoningEffort: requestedEffort };
-  }
-  const reasoningEffort = model.supportedReasoningEfforts.some(
-    (effort) => effort.id === requestedEffort,
-  )
-    ? requestedEffort
-    : model.defaultReasoningEffort;
-  return { model: model.id, reasoningEffort };
-}
-
-function deriveApprovalMode(settings: AgentGlobalSettings): ApprovalMode {
-  return settings.approvalsReviewer === "auto_review" ? "auto-review" : settings.approvalPolicy;
-}
-
-function applyApprovalMode(settings: AgentGlobalSettings, mode: ApprovalMode): AgentGlobalSettings {
-  // 自动审批由 on-request 与 auto_review 共同表达，不能映射为权限更宽的 never。
-  return mode === "auto-review"
-    ? { ...settings, approvalPolicy: "on-request", approvalsReviewer: "auto_review" }
-    : { ...settings, approvalPolicy: mode, approvalsReviewer: "user" };
-}
-
-function createFallbackSettings(models: readonly AgentModel[]): AgentGlobalSettings {
-  const model = models.find((item) => item.isDefault) ?? models[0];
-  return {
-    approvalPolicy: "on-request",
-    approvalsReviewer: "user",
-    commitMessageModel: model?.id ?? "",
-    commitMessagePrompt: "",
-    commitMessageReasoningEffort: model?.defaultReasoningEffort ?? "",
-    defaultOpenAppId: null,
-    followUpBehavior: "queue",
-    model: model?.id ?? "",
-    reasoningEffort: model?.defaultReasoningEffort ?? "",
-    sandboxMode: "workspace-write",
-  };
-}
-
-function readInitialTheme(): ThemePreference {
-  return typeof window === "undefined" ? "light" : readThemePreference(window.localStorage);
-}
+export { resolveGlobalSettingsModel } from "./global-settings-model.js";
 
 type GlobalSettingsDialogProps = Readonly<{
   accessMode?: AccessMode;
@@ -553,151 +495,5 @@ export function GlobalSettingsDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function SettingsPanel({
-  activeSection,
-  children,
-  id,
-  title,
-}: Readonly<{
-  activeSection: SettingsSectionId;
-  children: React.ReactNode;
-  id: SettingsSectionId;
-  title: string;
-}>) {
-  return (
-    <section hidden={activeSection !== id} id={`settings-panel-${id}`}>
-      <h3 className="mb-4 text-heading font-semibold">{title}</h3>
-      <div className="divide-y divide-separator">{children}</div>
-    </section>
-  );
-}
-
-function SettingsField({
-  alignStart = false,
-  children,
-  label,
-}: Readonly<{
-  alignStart?: boolean;
-  children: React.ReactNode;
-  label: string;
-}>) {
-  return (
-    <div
-      className={`grid min-h-16 gap-3 py-3 sm:grid-cols-[9rem_minmax(0,1fr)] ${alignStart ? "items-start" : "items-center"}`}
-    >
-      <span className={`text-body-small font-medium text-foreground ${alignStart ? "pt-2" : ""}`}>
-        {label}
-      </span>
-      {children}
-    </div>
-  );
-}
-
-function ThemeButton({
-  ariaLabel,
-  icon: Icon,
-  label,
-  onClick,
-  selected,
-}: Readonly<{
-  ariaLabel: string;
-  icon: LucideIcon;
-  label: string;
-  onClick: () => void;
-  selected: boolean;
-}>) {
-  return (
-    <Button
-      aria-label={ariaLabel}
-      aria-pressed={selected}
-      className={`inline-flex h-8 items-center justify-center gap-2 rounded-[5px] text-body-small font-medium transition-colors ${selected ? "bg-raised text-foreground shadow-control" : "text-muted-foreground hover:text-foreground"}`}
-      onClick={onClick}
-      type="button"
-      variant="ghost"
-    >
-      <Icon aria-hidden="true" className="size-4" />
-      <span>{label}</span>
-    </Button>
-  );
-}
-
-function ModelSelect({
-  ariaLabel,
-  disabled,
-  models,
-  onChange,
-  value,
-}: Readonly<{
-  ariaLabel: string;
-  disabled: boolean;
-  models: readonly AgentModel[];
-  onChange: (modelId: string) => void;
-  value: string;
-}>) {
-  return (
-    <SettingsSelect
-      aria-label={ariaLabel}
-      disabled={disabled}
-      onChange={(event) => {
-        onChange(event.currentTarget.value);
-      }}
-      value={value}
-    >
-      {models.map((model) => (
-        <option key={model.id} value={model.id}>
-          {model.displayName}
-        </option>
-      ))}
-    </SettingsSelect>
-  );
-}
-
-function ReasoningSelect({
-  ariaLabel,
-  disabled,
-  model,
-  onChange,
-  value,
-}: Readonly<{
-  ariaLabel: string;
-  disabled: boolean;
-  model: AgentModel | undefined;
-  onChange: (effort: string) => void;
-  value: string;
-}>) {
-  const { t } = useTranslation("settings");
-  return (
-    <SettingsSelect
-      aria-label={ariaLabel}
-      disabled={disabled}
-      onChange={(event) => {
-        onChange(event.currentTarget.value);
-      }}
-      value={value}
-    >
-      {model?.supportedReasoningEfforts.map((effort) => (
-        <option key={effort.id} value={effort.id}>
-          {t(`effort.${effort.id}`, { defaultValue: effort.id })}
-        </option>
-      ))}
-    </SettingsSelect>
-  );
-}
-
-function SettingsSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <div className="relative min-w-0">
-      <PromptInputSelect
-        className="h-9 w-full max-w-none !border !border-separator-strong !bg-control px-2.5 pr-8 text-body-small text-foreground"
-        {...props}
-      />
-      <ChevronDown
-        aria-hidden="true"
-        className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-      />
-    </div>
   );
 }

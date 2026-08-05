@@ -1,0 +1,415 @@
+import { createHash } from "node:crypto";
+import type {
+  AgentBackgroundTerminal,
+  AgentSandboxMode,
+  AgentSkillPage,
+  PendingApprovalDecision,
+  PendingRequest,
+  Project,
+} from "@code-agent/protocol";
+import type { RpcRequestId, RpcServerRequest } from "./jsonl-rpc-client.js";
+
+export class CodexProtocolMappingError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = "CodexProtocolMappingError";
+  }
+}
+
+export const MAX_COMMAND_OUTPUT_BYTES = 1_048_576;
+export const MAX_COMMAND_OUTPUT_LINES = 10_000;
+export const CODEX_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
+  "error",
+  "item/agentMessage/delta",
+  "item/autoApprovalReview/completed",
+  "item/autoApprovalReview/started",
+  "item/commandExecution/outputDelta",
+  "item/completed",
+  "item/reasoning/summaryTextDelta",
+  "item/reasoning/textDelta",
+  "item/started",
+  "thread/tokenUsage/updated",
+  "turn/completed",
+  "turn/started",
+]);
+
+export interface PendingCodexRequest {
+  denyDecision?: "cancel" | "decline";
+  providerRequestId: RpcRequestId;
+  request: PendingRequest & { status: "pending" };
+}
+
+type NetworkAccess = NonNullable<
+  Extract<PendingRequest, { type: "command_approval" }>["networkAccess"]
+>;
+type PendingUserInputQuestion = Extract<
+  PendingRequest,
+  { type: "user_input" }
+>["questions"][number];
+
+type CodexSandboxPolicy =
+  | Readonly<{ type: "dangerFullAccess" }>
+  | Readonly<{ networkAccess: boolean; type: "readOnly" }>
+  | Readonly<{
+      excludeSlashTmp: boolean;
+      excludeTmpdirEnvVar: boolean;
+      networkAccess: boolean;
+      type: "workspaceWrite";
+      writableRoots: readonly string[];
+    }>;
+
+export type CodexSkill = Readonly<{
+  description: string;
+  displayName: string;
+  enabled: boolean;
+  id: string;
+  name: string;
+  path: string;
+  scope: AgentSkillPage["data"][number]["scope"];
+}>;
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function expectRecord(value: unknown, context: string): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new CodexProtocolMappingError(`${context} must be an object`);
+  }
+  return value;
+}
+
+export function mapSandboxMode(value: unknown): AgentSandboxMode {
+  if (value === null) {
+    // Codex 未配置时采用其交互式编码安全默认值。
+    return "workspace-write";
+  }
+  if (value === "read-only" || value === "workspace-write" || value === "danger-full-access") {
+    return value;
+  }
+  throw new CodexProtocolMappingError("config/read sandbox_mode is invalid");
+}
+
+export function mapSandboxPolicy(mode: AgentSandboxMode): CodexSandboxPolicy {
+  if (mode === "danger-full-access") {
+    return { type: "dangerFullAccess" };
+  }
+  if (mode === "read-only") {
+    return { networkAccess: false, type: "readOnly" };
+  }
+  return {
+    excludeSlashTmp: false,
+    excludeTmpdirEnvVar: false,
+    networkAccess: false,
+    type: "workspaceWrite",
+    writableRoots: [],
+  };
+}
+
+export function expectString(value: unknown, context: string): string {
+  if (typeof value !== "string") {
+    throw new CodexProtocolMappingError(`${context} must be a string`);
+  }
+  return value;
+}
+
+export function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+export function optionalInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) ? value : undefined;
+}
+
+export function mapBackgroundTerminal(value: unknown): AgentBackgroundTerminal {
+  const terminal = expectRecord(value, "background terminal");
+  return {
+    command: expectString(terminal["command"], "background terminal command"),
+    cwd: expectString(terminal["cwd"], "background terminal cwd"),
+    // Codex processId 只在 Provider 边界出现，统一协议将其视为不透明终端标识。
+    id: expectString(terminal["processId"], "background terminal process id"),
+    itemId: expectString(terminal["itemId"], "background terminal item id"),
+  };
+}
+
+function optionalNullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+export function expectBoolean(value: unknown, context: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new CodexProtocolMappingError(`${context} must be a boolean`);
+  }
+  return value;
+}
+
+function createSkillId(name: string, path: string): string {
+  // 浏览器只持有稳定摘要，Codex 绝对路径始终留在 Provider 边界内。
+  const digest = createHash("sha256").update(`${name}\0${path}`).digest("hex");
+  return `skill_${digest.slice(0, 32)}`;
+}
+
+export function mapCodexSkill(value: unknown): CodexSkill {
+  const skill = expectRecord(value, "skills/list skill");
+  const name = expectString(skill["name"], "skills/list skill name");
+  const path = expectString(skill["path"], "skills/list skill path");
+  const scope = skill["scope"];
+  if (scope !== "user" && scope !== "repo" && scope !== "system" && scope !== "admin") {
+    throw new CodexProtocolMappingError("skills/list skill scope is invalid");
+  }
+  const skillInterface = skill["interface"];
+  const interfaceRecord =
+    skillInterface === null || skillInterface === undefined
+      ? undefined
+      : expectRecord(skillInterface, "skills/list skill interface");
+  const displayName = optionalString(interfaceRecord?.["displayName"]) ?? name;
+  const description =
+    optionalString(interfaceRecord?.["shortDescription"]) ??
+    optionalString(skill["shortDescription"]) ??
+    expectString(skill["description"], "skills/list skill description");
+  return {
+    description,
+    displayName,
+    enabled: expectBoolean(skill["enabled"], "skills/list skill enabled"),
+    id: createSkillId(name, path),
+    name,
+    path,
+    scope,
+  };
+}
+
+export function requestIdKey(id: RpcRequestId): string {
+  return `${typeof id}:${String(id)}`;
+}
+
+function toDateTimeMs(value: unknown, context: string): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new CodexProtocolMappingError(`${context} must be a Unix timestamp in milliseconds`);
+  }
+  return new Date(value).toISOString();
+}
+
+function mapApprovalDecisions(value: unknown): {
+  availableDecisions: PendingApprovalDecision[];
+  denyDecision: "cancel" | "decline";
+} {
+  const nativeDecisions = Array.isArray(value)
+    ? value.filter((decision): decision is string => typeof decision === "string")
+    : ["accept", "acceptForSession", "decline"];
+  const availableDecisions: PendingApprovalDecision[] = [];
+  if (nativeDecisions.includes("accept")) {
+    availableDecisions.push("allow");
+  }
+  if (nativeDecisions.includes("acceptForSession")) {
+    availableDecisions.push("allow_for_session");
+  }
+  if (nativeDecisions.includes("decline") || nativeDecisions.includes("cancel")) {
+    availableDecisions.push("deny");
+  }
+  if (availableDecisions.length === 0) {
+    throw new CodexProtocolMappingError("Codex approval has no supported decisions");
+  }
+  return {
+    availableDecisions,
+    denyDecision: nativeDecisions.includes("decline") ? "decline" : "cancel",
+  };
+}
+
+function isNetworkApprovalProtocol(value: unknown): value is NetworkAccess["protocol"] {
+  return value === "http" || value === "https" || value === "socks5Tcp" || value === "socks5Udp";
+}
+
+function mapNetworkApprovalContext(value: unknown): NetworkAccess | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  // 只向上暴露用户做网络授权所需的稳定目标信息。
+  const context = expectRecord(value, "Codex network approval context");
+  const host = expectString(context["host"], "Codex network approval host");
+  const protocol = context["protocol"];
+  if (host.length === 0) {
+    throw new CodexProtocolMappingError("Codex network approval host must not be empty");
+  }
+  if (!isNetworkApprovalProtocol(protocol)) {
+    throw new CodexProtocolMappingError("Codex network approval protocol is invalid");
+  }
+  return { host, protocol };
+}
+
+function isConfirmationOptions(options: readonly { label: string }[]): boolean {
+  if (options.length !== 2) {
+    return false;
+  }
+  const labels = new Set(options.map((option) => option.label.trim().toLocaleLowerCase()));
+  return [
+    ["yes", "no"],
+    ["是", "否"],
+    ["确认", "取消"],
+    ["allow", "deny"],
+    ["accept", "decline"],
+  ].some((pair) => pair.every((label) => labels.has(label)));
+}
+
+function mapUserInputQuestions(value: unknown): PendingUserInputQuestion[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 3) {
+    throw new CodexProtocolMappingError("Codex user input questions must contain 1 to 3 items");
+  }
+  return value.map((questionValue) => {
+    const question = expectRecord(questionValue, "Codex user input question");
+    const nativeOptions = question["options"] ?? null;
+    if (nativeOptions !== null && !Array.isArray(nativeOptions)) {
+      throw new CodexProtocolMappingError("Codex user input options must be an array or null");
+    }
+    const isOther =
+      question["isOther"] === undefined
+        ? false
+        : expectBoolean(question["isOther"], "Codex user input question isOther");
+    const options = (nativeOptions ?? []).map((optionValue) => {
+      const option = expectRecord(optionValue, "Codex user input option");
+      return {
+        description: expectString(option["description"], "Codex user input option description"),
+        label: expectString(option["label"], "Codex user input option label"),
+      };
+    });
+    if (nativeOptions !== null && options.length === 0 && !isOther) {
+      throw new CodexProtocolMappingError("Codex choice question has no available answer");
+    }
+    const mappedQuestion = {
+      header: expectString(question["header"], "Codex user input question header"),
+      id: expectString(question["id"], "Codex user input question id"),
+      isOther,
+      isSecret:
+        question["isSecret"] === undefined
+          ? false
+          : expectBoolean(question["isSecret"], "Codex user input question isSecret"),
+      options,
+      prompt: expectString(question["question"], "Codex user input question prompt"),
+    };
+    if (nativeOptions === null) {
+      return { ...mappedQuestion, type: "short_text" };
+    }
+    if (isConfirmationOptions(options) && !isOther) {
+      return { ...mappedQuestion, isOther: false, type: "confirmation" };
+    }
+    return { ...mappedQuestion, type: "choice" };
+  });
+}
+
+export function userInputAnswersMatchRequest(
+  request: Extract<PendingRequest, { type: "user_input" }>,
+  answers: Readonly<Record<string, readonly string[]>>,
+): boolean {
+  const answerIds = Object.keys(answers);
+  const questionIds = new Set(request.questions.map((question) => question.id));
+  if (answerIds.length !== questionIds.size || answerIds.some((id) => !questionIds.has(id))) {
+    return false;
+  }
+  // 当前统一协议只提供单选、确认和短文本；固定选项不能接受任意值。
+  return request.questions.every((question) => {
+    const values = answers[question.id];
+    const answer = values?.[0];
+    if (values?.length !== 1 || answer === undefined || answer.trim().length === 0) {
+      return false;
+    }
+    if (question.type === "short_text" || question.isOther) {
+      return true;
+    }
+    return question.options.some((option) => option.label === answer);
+  });
+}
+
+export function mapCodexServerRequest(
+  serverRequest: RpcServerRequest,
+  project: Project,
+): PendingCodexRequest | undefined {
+  if (
+    serverRequest.method !== "item/commandExecution/requestApproval" &&
+    serverRequest.method !== "item/fileChange/requestApproval" &&
+    serverRequest.method !== "item/tool/requestUserInput"
+  ) {
+    return undefined;
+  }
+  const params = expectRecord(serverRequest.params, `Codex ${serverRequest.method} params`);
+  const taskId = expectString(params["threadId"], `Codex ${serverRequest.method} threadId`);
+  const turnId = expectString(params["turnId"], `Codex ${serverRequest.method} turnId`);
+  const itemId = expectString(params["itemId"], `Codex ${serverRequest.method} itemId`);
+  const requestId = requestIdKey(serverRequest.id);
+
+  if (serverRequest.method === "item/tool/requestUserInput") {
+    const autoResolutionMs = params["autoResolutionMs"] ?? null;
+    if (
+      autoResolutionMs !== null &&
+      (typeof autoResolutionMs !== "number" ||
+        !Number.isInteger(autoResolutionMs) ||
+        autoResolutionMs < 0)
+    ) {
+      throw new CodexProtocolMappingError("Codex user input autoResolutionMs is invalid");
+    }
+    const createdAtMs = Date.now();
+    return {
+      providerRequestId: serverRequest.id,
+      request: {
+        createdAt: new Date(createdAtMs).toISOString(),
+        expiresAt:
+          autoResolutionMs === null ? null : new Date(createdAtMs + autoResolutionMs).toISOString(),
+        itemId,
+        projectId: project.id,
+        questions: mapUserInputQuestions(params["questions"]),
+        requestId,
+        status: "pending",
+        taskId,
+        turnId,
+        type: "user_input",
+      },
+    };
+  }
+
+  const decisions = mapApprovalDecisions(params["availableDecisions"]);
+  const identity = {
+    createdAt: toDateTimeMs(params["startedAtMs"], `Codex ${serverRequest.method} startedAtMs`),
+    expiresAt: null,
+    itemId,
+    projectId: project.id,
+    requestId,
+    status: "pending" as const,
+    taskId,
+    turnId,
+  };
+  if (serverRequest.method === "item/commandExecution/requestApproval") {
+    return {
+      denyDecision: decisions.denyDecision,
+      providerRequestId: serverRequest.id,
+      request: {
+        ...identity,
+        availableDecisions: decisions.availableDecisions,
+        command: optionalNullableString(params["command"]),
+        cwd: optionalNullableString(params["cwd"]),
+        networkAccess: mapNetworkApprovalContext(params["networkApprovalContext"]),
+        reason: optionalNullableString(params["reason"]),
+        type: "command_approval",
+      },
+    };
+  }
+  return {
+    denyDecision: decisions.denyDecision,
+    providerRequestId: serverRequest.id,
+    request: {
+      ...identity,
+      availableDecisions: decisions.availableDecisions,
+      grantRoot: optionalNullableString(params["grantRoot"]),
+      reason: optionalNullableString(params["reason"]),
+      type: "file_change_approval",
+    },
+  };
+}
+
+export function toDateTime(value: unknown, context: string): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new CodexProtocolMappingError(`${context} must be a Unix timestamp`);
+  }
+  return new Date(value * 1_000).toISOString();
+}
+
+export function toNullableDateTime(value: unknown, context: string): string | null {
+  return value === null || value === undefined ? null : toDateTime(value, context);
+}

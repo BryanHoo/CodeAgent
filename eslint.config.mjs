@@ -19,6 +19,24 @@ export default tseslint.config(
   },
   eslint.configs.recommended,
   {
+    files: ["**/*.{js,mjs,cjs,ts,tsx}"],
+    rules: {
+      // 生产模块保持单一职责；测试场景和 fixture 在下方集中豁免。
+      "max-lines": ["error", { max: 500, skipBlankLines: false, skipComments: false }],
+    },
+  },
+  {
+    files: [
+      "**/*.d.ts",
+      "**/*.{test,spec}.{js,mjs,cjs,ts,tsx}",
+      "**/test/fixtures/**/*.{js,mjs,cjs,ts,tsx}",
+      "tests/e2e/**/*.{js,mjs,cjs,ts,tsx}",
+    ],
+    rules: {
+      "max-lines": "off",
+    },
+  },
+  {
     files: ["**/*.{js,mjs,cjs}"],
     languageOptions: {
       globals: globals.node,
