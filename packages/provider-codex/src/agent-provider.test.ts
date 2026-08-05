@@ -1848,73 +1848,75 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
-  it("lists only enabled project MCP servers without exposing their configuration", async () => {
+  it("lists only MCP servers readable by the current task across all pages", async () => {
     const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
       {
-        config: {
-          mcp_servers: {
-            disabled: { command: "disabled-command", enabled: false },
-            "fast-context": { command: "fast-context", enabled: true },
-            playwright: { command: "npx" },
+        data: [
+          {
+            authStatus: "unsupported",
+            name: "playwright",
+            resourceTemplates: [],
+            resources: [],
+            serverInfo: null,
+            tools: { browser_open: { description: "secret detail", inputSchema: {} } },
           },
-        },
-        layers: null,
-        origins: {},
+        ],
+        nextCursor: "page-2",
       },
-      { config: {}, layers: null, origins: {} },
+      {
+        data: [
+          {
+            authStatus: "notLoggedIn",
+            name: "fast-context",
+            resourceTemplates: [],
+            resources: [],
+            serverInfo: null,
+            tools: {},
+          },
+          {
+            authStatus: "notLoggedIn",
+            name: "playwright",
+            resourceTemplates: [],
+            resources: [],
+            serverInfo: null,
+            tools: {},
+          },
+        ],
+        nextCursor: null,
+      },
     ]);
     const provider = createCodexAgentProvider({ client: rpc, project });
 
-    await expect(provider.listMcpServers()).resolves.toEqual({
+    await provider.startTask();
+    await expect(provider.listMcpServers("task-1")).resolves.toEqual({
       data: [{ name: "fast-context" }, { name: "playwright" }],
     });
-    await expect(provider.listMcpServers()).resolves.toEqual({ data: [] });
     expect(rpc.calls).toEqual([
-      { method: "config/read", params: { cwd: project.rootPath } },
-      { method: "config/read", params: { cwd: project.rootPath } },
+      { method: "thread/start", params: { cwd: project.rootPath } },
+      {
+        method: "mcpServerStatus/list",
+        params: { detail: "toolsAndAuthOnly", threadId: "task-1" },
+      },
+      {
+        method: "mcpServerStatus/list",
+        params: { cursor: "page-2", detail: "toolsAndAuthOnly", threadId: "task-1" },
+      },
     ]);
   });
 
-  it("keeps MCP configuration isolated by project cwd", async () => {
-    const otherProject: Project = {
-      ...project,
-      id: "other-project",
-      name: "Other Project",
-      rootPath: "/workspace/Other",
-    };
+  it("rejects repeated MCP status cursors for a task", async () => {
     const rpc = new FakeRpcClient([
-      { config: { mcp_servers: { projectA: { command: "a" } } }, layers: null, origins: {} },
-      { config: { mcp_servers: { projectB: { command: "b" } } }, layers: null, origins: {} },
+      { thread: nativeThread() },
+      { data: [], nextCursor: "same-page" },
+      { data: [], nextCursor: "same-page" },
     ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
 
-    await expect(
-      createCodexAgentProvider({ client: rpc, project }).listMcpServers(),
-    ).resolves.toEqual({ data: [{ name: "projectA" }] });
-    await expect(
-      createCodexAgentProvider({ client: rpc, project: otherProject }).listMcpServers(),
-    ).resolves.toEqual({ data: [{ name: "projectB" }] });
-    expect(rpc.calls).toEqual([
-      { method: "config/read", params: { cwd: project.rootPath } },
-      { method: "config/read", params: { cwd: otherProject.rootPath } },
-    ]);
-  });
-
-  it.each([
-    ["empty name", { "": { command: "invalid" } }, "MCP server name is invalid"],
-    ["invalid entry", { invalid: "command" }, "MCP server invalid must be an object"],
-    [
-      "invalid enabled flag",
-      { invalid: { command: "invalid", enabled: "yes" } },
-      "MCP server enabled is invalid",
-    ],
-  ])("rejects %s in project MCP configuration", async (_label, mcpServers, error) => {
-    const rpc = new FakeRpcClient([
-      { config: { mcp_servers: mcpServers }, layers: null, origins: {} },
-    ]);
-
-    await expect(
-      createCodexAgentProvider({ client: rpc, project }).listMcpServers(),
-    ).rejects.toThrow(error);
+    await provider.startTask();
+    await expect(provider.listMcpServers("task-1")).rejects.toThrow(
+      "mcpServerStatus/list returned a repeated cursor",
+    );
   });
 
   it("maps task and turn mutations to Codex App Server RPC", async () => {

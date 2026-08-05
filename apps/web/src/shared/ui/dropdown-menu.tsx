@@ -68,6 +68,36 @@ function DropdownMenuItem({
   );
 }
 
+function DropdownMenuGroup(props: ComponentProps<typeof DropdownMenuPrimitive.Group>) {
+  return <DropdownMenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />;
+}
+
+function DropdownMenuLabel({
+  className,
+  ...props
+}: ComponentProps<typeof DropdownMenuPrimitive.Label>) {
+  return (
+    <DropdownMenuPrimitive.Label
+      className={cn("px-2 py-1 text-label font-medium text-foreground", className)}
+      data-slot="dropdown-menu-label"
+      {...props}
+    />
+  );
+}
+
+function DropdownMenuSeparator({
+  className,
+  ...props
+}: ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
+  return (
+    <DropdownMenuPrimitive.Separator
+      className={cn("-mx-1 my-1 h-px bg-separator", className)}
+      data-slot="dropdown-menu-separator"
+      {...props}
+    />
+  );
+}
+
 function DropdownMenuRadioGroup(props: ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
   return <DropdownMenuPrimitive.RadioGroup data-slot="dropdown-menu-radio-group" {...props} />;
 }
@@ -99,9 +129,12 @@ function DropdownMenuRadioItem({
 export {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuPortal,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 };

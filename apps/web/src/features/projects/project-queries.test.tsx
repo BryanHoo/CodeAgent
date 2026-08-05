@@ -233,19 +233,29 @@ describe("project queries", () => {
     expect(listProjectFiles.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("loads enabled MCP servers with a project-scoped query key", async () => {
+  it("loads readable MCP servers with a task-scoped query key", async () => {
     const listMcpServers = vi.fn<CodeAgentMcpServersClient["listMcpServers"]>(() =>
       Promise.resolve({ data: [{ name: "fast-context" }] }),
     );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const options = mcpServersQueryOptions("code-agent", { listMcpServers });
+    const options = mcpServersQueryOptions("code-agent", "task-1", { listMcpServers });
 
     await expect(queryClient.fetchQuery(options)).resolves.toEqual({
       data: [{ name: "fast-context" }],
     });
-    expect(options.queryKey).toEqual(["projects", "code-agent", "mcp-servers"]);
+    expect(options.queryKey).toEqual(["projects", "code-agent", "tasks", "task-1", "mcp-servers"]);
     expect(listMcpServers.mock.calls[0]?.[0]).toBe("code-agent");
-    expect(listMcpServers.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    expect(listMcpServers.mock.calls[0]?.[1]).toBe("task-1");
+    expect(listMcpServers.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("disables the MCP query when no task is selected", () => {
+    const listMcpServers = vi.fn<CodeAgentMcpServersClient["listMcpServers"]>();
+    const options = mcpServersQueryOptions("code-agent", undefined, { listMcpServers });
+
+    expect(options.enabled).toBe(false);
+    expect(options.queryKey).toEqual(["projects", "code-agent", "tasks", null, "mcp-servers"]);
+    expect(listMcpServers).not.toHaveBeenCalled();
   });
 
   it("loads projects, project tasks, and task snapshots through the client", async () => {

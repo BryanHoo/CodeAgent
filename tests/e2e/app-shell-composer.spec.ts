@@ -526,7 +526,7 @@ test("routes assistant links, images, and system files by Markdown file rules", 
   await page.keyboard.press("Escape");
   await expect(imageDialog).toBeHidden();
 
-  await page.getByRole("button", { name: "后续工作交接.pptx" }).click();
+  await page.getByRole("button", { exact: true, name: "后续工作交接.pptx" }).click();
   await systemOpenRequest;
   await expect(page.getByRole("dialog", { name: "后续工作交接.pptx" })).toHaveCount(0);
 });
@@ -636,6 +636,23 @@ test("project file tree context menu opens files and folders with a selected app
   await folderRequest;
   await expect(folderMenu).not.toBeAttached();
 
+  const folderActionRequest = page.waitForRequest((request) => {
+    if (!/^\/v1\/projects\/code-agent\/open$/u.test(new URL(request.url()).pathname)) {
+      return false;
+    }
+    const body = parseRequestRecord(request.postData());
+    return body["appId"] === "zed" && body["path"] === "docs";
+  });
+  const folderAction = docsTreeItem.getByRole("button", { name: "打开 docs 的方式" });
+  await expect(folderAction).toHaveClass(/opacity-0/u);
+  await docsTreeItem.hover();
+  await expect(folderAction).toHaveCSS("opacity", "1");
+  await folderAction.click();
+  const folderActionMenu = page.getByRole("menu", { name: "打开 docs 的方式" });
+  await folderActionMenu.getByRole("menuitem", { name: "Zed" }).click();
+  await folderActionRequest;
+  await expect(folderActionMenu).not.toBeAttached();
+
   const fileRequest = page.waitForRequest((request) => {
     if (!/^\/v1\/projects\/code-agent\/open$/u.test(new URL(request.url()).pathname)) {
       return false;
@@ -651,6 +668,22 @@ test("project file tree context menu opens files and folders with a selected app
   await fileMenu.getByRole("menuitem", { name: "系统默认应用" }).click();
   await fileRequest;
   await expect(fileMenu).not.toBeAttached();
+
+  const fileActionRequest = page.waitForRequest((request) => {
+    if (!/^\/v1\/projects\/code-agent\/open$/u.test(new URL(request.url()).pathname)) {
+      return false;
+    }
+    const body = parseRequestRecord(request.postData());
+    return body["appId"] === "zed" && body["path"] === "package.json";
+  });
+  const fileAction = packageTreeItem.getByRole("button", { name: "打开 package.json 的方式" });
+  await packageTreeItem.hover();
+  await expect(fileAction).toBeVisible();
+  await fileAction.click();
+  const fileActionMenu = page.getByRole("menu", { name: "打开 package.json 的方式" });
+  await fileActionMenu.getByRole("menuitem", { name: "Zed" }).click();
+  await fileActionRequest;
+  await expect(fileActionMenu).not.toBeAttached();
 });
 
 test("keeps pasted images in attachments instead of the text editor", async ({ page }) => {

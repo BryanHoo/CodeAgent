@@ -682,14 +682,30 @@ input.on("line", (line) => {
       id: message.id,
       result: {
         config: {
-          mcp_servers: {
-            disabled: { command: "disabled-mcp", enabled: false },
-            "fast-context": { command: "fast-context", enabled: true },
-          },
           sandbox_mode: "workspace-write",
         },
         layers: null,
         origins: {},
+      },
+    });
+    return;
+  }
+
+  if (message.method === "mcpServerStatus/list") {
+    send({
+      id: message.id,
+      result: {
+        data: [
+          {
+            authStatus: "notLoggedIn",
+            name: "fast-context",
+            resourceTemplates: [],
+            resources: [],
+            serverInfo: null,
+            tools: {},
+          },
+        ],
+        nextCursor: null,
       },
     });
     return;

@@ -557,7 +557,7 @@ test.beforeEach(async ({ page }) => {
       body = { settings: globalSettings };
     } else if (/^\/v1\/projects\/[^/]+\/skills$/u.test(url.pathname)) {
       body = { data: skills, nextCursor: null };
-    } else if (/^\/v1\/projects\/[^/]+\/mcp-servers$/u.test(url.pathname)) {
+    } else if (/^\/v1\/projects\/[^/]+\/tasks\/[^/]+\/mcp-servers$/u.test(url.pathname)) {
       body = { data: mcpServers };
     } else if (/^\/v1\/projects\/[^/]+\/open-capabilities$/u.test(url.pathname)) {
       body = {

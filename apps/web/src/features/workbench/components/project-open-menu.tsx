@@ -1,5 +1,5 @@
 import type { ProjectOpenApp, ProjectOpenAppId, ProjectOpenAppKind } from "@code-agent/protocol";
-import { Code2, ExternalLink, FolderOpen, Terminal, Wrench } from "lucide-react";
+import { Code2, Ellipsis, ExternalLink, FolderOpen, Terminal, Wrench } from "lucide-react";
 import type { ReactElement } from "react";
 
 import {
@@ -10,6 +10,17 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "../../../shared/ui/context-menu.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../../shared/ui/dropdown-menu.js";
+import { Button } from "../../../shared/ui/button.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 
 const appKindIcons = {
@@ -80,6 +91,90 @@ export function ProjectOpenContextMenuItems({
         );
       })}
     </ContextMenuContent>
+  );
+}
+
+type ProjectOpenDropdownMenuProps = Readonly<{
+  apps: readonly ProjectOpenApp[];
+  isPending: boolean;
+  onOpen: () => void;
+  onSelect: (appId: ProjectOpenAppId, path: string) => void;
+  target: ProjectOpenContextMenuTarget;
+}>;
+
+export function ProjectOpenDropdownMenu({
+  apps,
+  isPending,
+  onOpen,
+  onSelect,
+  target,
+}: ProjectOpenDropdownMenuProps) {
+  const { t } = useTranslation("workbench");
+  // 行尾入口复用右键菜单的目标过滤，目录不会暴露仅文件可用的系统默认应用。
+  const targetApps = getProjectOpenAppsForTarget(apps, target.type);
+  const targetLabel = t("openMenu.targetLabel", { path: target.path });
+
+  if (targetApps.length === 0) {
+    return null;
+  }
+
+  return (
+    <DropdownMenu
+      modal={false}
+      onOpenChange={(open) => {
+        if (open) {
+          onOpen();
+        }
+      }}
+    >
+      <Tooltip>
+        <DropdownMenuTrigger asChild>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label={targetLabel}
+              className="pointer-events-none size-5 shrink-0 opacity-0 transition-opacity group-hover/file-tree-node:pointer-events-auto group-hover/file-tree-node:opacity-100 group-focus-within/file-tree-node:pointer-events-auto group-focus-within/file-tree-node:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100"
+              type="button"
+              variant="ghost"
+            >
+              <Ellipsis aria-hidden="true" className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+        </DropdownMenuTrigger>
+        <TooltipContent side="left">{t("openMenu.title")}</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" aria-label={targetLabel} className="w-60">
+        <DropdownMenuLabel className="py-0.5">
+          <p>{t("openMenu.title")}</p>
+          <p
+            className="mt-0.5 truncate text-meta font-normal text-muted-foreground"
+            title={target.path}
+          >
+            {target.path}
+          </p>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          {targetApps.map((app) => {
+            const Icon = appKindIcons[app.kind];
+            const appName = app.kind === "system-default" ? t("openMenu.systemDefault") : app.name;
+            return (
+              <DropdownMenuItem
+                aria-label={appName}
+                className="h-9"
+                disabled={isPending}
+                key={app.id}
+                onSelect={() => {
+                  onSelect(app.id, target.path);
+                }}
+              >
+                <Icon aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{appName}</span>
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

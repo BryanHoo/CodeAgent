@@ -709,7 +709,7 @@ Server 内部生成提交消息时调用 `startTask({ ephemeral: true })`。Serv
 
 Task 列表和 Snapshot 直接将 Codex `Thread.isPinned` 映射为统一 `pinned`。固定或取消固定调用 `thread/metadata/update`，Provider 校验响应 Thread ID、Project `cwd` 与目标状态后返回权威 Task；Server 不覆盖该值，也不保存本地副本。
 
-MCP Inspector 使用 `config/read { cwd: project.rootPath }` 获取当前 Project 的生效 `mcp_servers`，过滤禁用项后只交付名称。`mcpServerStatus/list` 在无 `threadId` 时只有进程级作用域，携带未加载 Thread 时不可用，因此单 App Server 多 Project 架构不使用它替代项目配置查询，也不为检查器创建或恢复 Thread。
+MCP Inspector 使用 `mcpServerStatus/list { threadId, detail: "toolsAndAuthOnly" }` 分页获取当前 Task 可读取的 MCP 服务，并只交付去重后的名称。Server 通过 Task 级资源路径校验 Project 归属，Web Query 键同时包含 Project ID 与 Task ID；没有当前 Task 时不发起请求。无 `threadId` 的进程级结果和 `config/read mcp_servers` 都不能表达当前 Task 的实际可读清单，因此不得作为回退。
 
 ### 11.5 事件映射
 

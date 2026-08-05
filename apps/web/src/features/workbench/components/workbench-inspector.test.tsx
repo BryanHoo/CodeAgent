@@ -169,7 +169,7 @@ describe("WorkbenchInspector", () => {
     expect(componentsExpandedMarkup).toContain("app.tsx");
   });
 
-  it("uses context-menu triggers for project files and folders", () => {
+  it("uses context-menu and hover action triggers for project files and folders", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
@@ -183,6 +183,11 @@ describe("WorkbenchInspector", () => {
     );
 
     expect(markup.match(/data-slot="context-menu-trigger"/gu)).toHaveLength(3);
+    expect(markup.match(/data-slot="dropdown-menu-trigger"/gu)).toHaveLength(3);
+    expect(markup).toContain('aria-label="打开 /workspace/CodeAgent 的方式"');
+    expect(markup).toContain('aria-label="打开 src 的方式"');
+    expect(markup).toContain('aria-label="打开 README.md 的方式"');
+    expect(markup).toContain("group-hover/file-tree-node:opacity-100");
     expect(markup).toContain('role="treeitem"');
     expect(markup).toContain('aria-label="收起文件夹 CodeAgent"');
     expect(markup).toContain("README.md");
@@ -464,6 +469,6 @@ describe("WorkbenchInspector", () => {
     expect(renderState({ mcpServersError: new Error("MCP unavailable") })).toContain(
       "无法读取 MCP",
     );
-    expect(renderState({ mcpServers: [] })).toContain("当前项目未启用 MCP");
+    expect(renderState({ mcpServers: [] })).toContain("当前任务没有可读取的 MCP");
   });
 });

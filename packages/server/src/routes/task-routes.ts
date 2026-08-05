@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import {
   AgentBackgroundTerminalPageSchema,
+  AgentMcpServerPageSchema,
   ArchiveAgentTaskRequestSchema,
   ArchiveAgentTaskResponseSchema,
   CompactAgentTaskRequestSchema,
@@ -129,6 +130,23 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
         request.params.taskId,
       );
       return { checkpoint, snapshot: { ...task, settings } };
+    },
+  );
+
+  app.get<{ Params: { projectId: string; taskId: string } }>(
+    "/v1/projects/:projectId/tasks/:taskId/mcp-servers",
+    {
+      schema: {
+        params: ProjectTaskParamsSchema,
+        response: { 200: AgentMcpServerPageSchema, 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const projectContext = await getProjectContext(request.params.projectId);
+      if (projectContext === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      return projectContext.provider.listMcpServers(request.params.taskId);
     },
   );
 

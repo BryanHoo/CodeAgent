@@ -1630,7 +1630,7 @@ describe("CodeAgent Server", () => {
     const models = await app.inject({ method: "GET", url: "/v1/models" });
     const mcpServers = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/mcp-servers",
+      url: "/v1/projects/code-agent/tasks/task-1/mcp-servers",
     });
     const skills = await app.inject({ method: "GET", url: "/v1/projects/code-agent/skills" });
     const uploadRequest = await multipartAttachment(
@@ -1678,6 +1678,7 @@ describe("CodeAgent Server", () => {
       data: [{ name: "fast-context" }, { name: "chrome-devtools" }],
     });
     expect(listMcpServers).toHaveBeenCalledOnce();
+    expect(listMcpServers).toHaveBeenCalledWith("task-1");
     expect(skills.statusCode).toBe(200);
     expect(skills.json()).toMatchObject({ data: [{ name: "review-security" }] });
     expect(listSkills).toHaveBeenCalledOnce();

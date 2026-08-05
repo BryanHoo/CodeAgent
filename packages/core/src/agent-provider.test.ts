@@ -59,7 +59,8 @@ describe("AgentProvider", () => {
           nextCursor: null,
         });
       },
-      listMcpServers() {
+      listMcpServers(taskId) {
+        expect(taskId).toBe("task-1");
         return Promise.resolve({ data: [{ name: "fast-context" }] });
       },
       listSkills() {
@@ -225,7 +226,7 @@ describe("AgentProvider", () => {
     await expect(provider.listModels()).resolves.toMatchObject({
       data: [{ id: "gpt-5.6-sol", isDefault: true }],
     });
-    await expect(provider.listMcpServers()).resolves.toEqual({
+    await expect(provider.listMcpServers("task-1")).resolves.toEqual({
       data: [{ name: "fast-context" }],
     });
     await expect(provider.listSkills()).resolves.toMatchObject({

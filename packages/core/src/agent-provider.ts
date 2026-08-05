@@ -94,7 +94,7 @@ export interface AgentProvider {
   forkTask(taskId: string): Promise<AgentTask>;
   getCapabilities(): Promise<AgentCapabilities>;
   listModels(): Promise<AgentModelPage>;
-  listMcpServers(): Promise<AgentMcpServerPage>;
+  listMcpServers(taskId: string): Promise<AgentMcpServerPage>;
   listBackgroundTerminals(taskId: string): Promise<AgentBackgroundTerminalPage>;
   listSkills(): Promise<AgentSkillPage>;
   listTasks(input?: ListAgentTasksInput): Promise<AgentTaskPage>;

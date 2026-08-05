@@ -706,7 +706,7 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
 });
 
-test("renders enabled MCP servers and sources in inspector", async ({ page }) => {
+test("renders task-readable MCP servers and sources in inspector", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const inspector = page.getByRole("complementary", { name: "运行环境" });

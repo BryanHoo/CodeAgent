@@ -178,7 +178,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const modelsQuery = useQuery(modelsQueryOptions(client));
-  const mcpServersQuery = useQuery(mcpServersQueryOptions(projectId, client));
+  const mcpServersQuery = useQuery(mcpServersQueryOptions(projectId, taskId, client));
   const globalSettingsQuery = useQuery(globalSettingsQueryOptions(client));
   const projectOpenCapabilitiesQuery = useQuery(
     projectOpenCapabilitiesQueryOptions(projectId, client),
@@ -842,7 +842,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         gitStatusRefreshing={gitStatusQuery.isFetching}
         mcpServers={mcpServersQuery.data?.data ?? []}
         mcpServersError={mcpServersQuery.error}
-        mcpServersPending={mcpServersQuery.isPending}
+        mcpServersPending={taskId !== undefined && mcpServersQuery.isPending}
         key={`${projectId}:${taskId ?? "draft"}`}
         onClose={closeInspector}
         onFileTreeExpandedChange={(nextExpandedPaths) => {

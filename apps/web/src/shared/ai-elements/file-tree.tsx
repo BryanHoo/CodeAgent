@@ -143,7 +143,7 @@ export function FileTreeFolder({
       {...props}
     >
       <div
-        className={`flex min-h-7 w-full items-center gap-1 rounded-control px-1.5 text-left transition-colors hover:bg-control-hover ${isSelected ? "bg-control" : ""}`}
+        className={`group/file-tree-node flex min-h-7 w-full items-center gap-1 rounded-control px-1.5 text-left transition-colors hover:bg-control-hover ${isSelected ? "bg-control" : ""}`}
       >
         <Button
           variant="ghost"
@@ -213,7 +213,7 @@ export function FileTreeFile({
   return (
     <div
       aria-selected={isSelected}
-      className={`flex min-h-7 cursor-pointer items-center gap-1.5 rounded-control px-1.5 transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none ${isSelected ? "bg-control" : ""} ${className}`}
+      className={`group/file-tree-node flex min-h-7 cursor-pointer items-center gap-1.5 rounded-control px-1.5 transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none ${isSelected ? "bg-control" : ""} ${className}`}
       onClick={selectFile}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {

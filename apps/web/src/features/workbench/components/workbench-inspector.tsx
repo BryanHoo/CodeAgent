@@ -25,11 +25,20 @@ import { useMemo, useState } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import { countFileChangeLines, type AgentFileChange } from "../../diff/file-change.js";
-import { FileTree, FileTreeFile, FileTreeFolder } from "../../../shared/ai-elements/file-tree.js";
+import {
+  FileTree,
+  FileTreeActions,
+  FileTreeFile,
+  FileTreeFolder,
+} from "../../../shared/ai-elements/file-tree.js";
 import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
 import { Button } from "../../../shared/ui/button.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
-import { ProjectOpenContextMenu } from "./project-open-menu.js";
+import {
+  getProjectOpenAppsForTarget,
+  ProjectOpenContextMenu,
+  ProjectOpenDropdownMenu,
+} from "./project-open-menu.js";
 import {
   formatSubagentModel,
   toSubagentTaskStatus,
@@ -345,13 +354,30 @@ function ProjectFileTreeNodes({
       directoryStates,
       expandedPaths,
     );
-    const trailing =
-      changeStats === undefined ? undefined : (
+    const changeIndicator =
+      changeStats === undefined ? null : (
         <FileTreeChangeIndicator
           isDirectory={entry.type === "directory"}
           path={entry.path}
           stats={changeStats}
         />
+      );
+    const trailing =
+      getProjectOpenAppsForTarget(projectOpenApps, entry.type).length === 0 ? (
+        (changeIndicator ?? undefined)
+      ) : (
+        <FileTreeActions>
+          {changeIndicator}
+          <ProjectOpenDropdownMenu
+            apps={projectOpenApps}
+            isPending={projectOpenPending}
+            onOpen={() => {
+              onContextMenuOpen(entry.path);
+            }}
+            onSelect={onOpenProjectPath}
+            target={{ path: entry.path, type: entry.type }}
+          />
+        </FileTreeActions>
       );
     return entry.type === "directory" ? (
       <ProjectOpenContextMenu
@@ -760,7 +786,28 @@ export function WorkbenchInspector({
                       }}
                       target={{ path: projectPath, type: "directory" }}
                     >
-                      <FileTreeFolder name={projectRootName} path={projectPath}>
+                      <FileTreeFolder
+                        name={projectRootName}
+                        path={projectPath}
+                        trailing={
+                          getProjectOpenAppsForTarget(projectOpenApps, "directory").length ===
+                          0 ? undefined : (
+                            <FileTreeActions>
+                              <ProjectOpenDropdownMenu
+                                apps={projectOpenApps}
+                                isPending={projectOpenPending}
+                                onOpen={() => {
+                                  setSelectedTreePath(projectPath);
+                                }}
+                                onSelect={(appId) => {
+                                  onOpenProjectPath(appId);
+                                }}
+                                target={{ path: projectPath, type: "directory" }}
+                              />
+                            </FileTreeActions>
+                          )
+                        }
+                      >
                         <ProjectFileTreeNodes
                           changeStatsByPath={fileTreeChangeStats}
                           directoryStates={fileTreeDirectoryStates}

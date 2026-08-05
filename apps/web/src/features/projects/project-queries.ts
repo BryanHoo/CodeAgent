@@ -498,11 +498,16 @@ export function skillsQueryOptions(
 
 export function mcpServersQueryOptions(
   projectId: string,
+  taskId: string | undefined,
   client: CodeAgentMcpServersClient = codeAgentClient,
 ) {
   return queryOptions({
-    queryFn: ({ signal }) => client.listMcpServers(projectId, { signal }),
-    queryKey: ["projects", projectId, "mcp-servers"] as const,
+    enabled: taskId !== undefined,
+    queryFn: ({ signal }) =>
+      taskId === undefined
+        ? Promise.resolve({ data: [] })
+        : client.listMcpServers(projectId, taskId, { signal }),
+    queryKey: ["projects", projectId, "tasks", taskId ?? null, "mcp-servers"] as const,
   });
 }
 

@@ -312,9 +312,14 @@ export class CodeAgentClient {
 
   public async listMcpServers(
     projectId: string,
+    taskId: string,
     options: ReadOptions = {},
   ): Promise<AgentMcpServerPage> {
-    return this.#read(`${projectPath(projectId)}/mcp-servers`, AgentMcpServerPageSchema, options);
+    return this.#read(
+      `${taskPath(projectId, taskId)}/mcp-servers`,
+      AgentMcpServerPageSchema,
+      options,
+    );
   }
 
   public async listProjects(options: ReadOptions = {}): Promise<ProjectPage> {

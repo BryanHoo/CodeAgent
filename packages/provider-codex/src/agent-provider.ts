@@ -311,36 +311,52 @@ export class CodexAgentProvider implements AgentProvider {
     return mapAgentTask(thread, this.#project);
   }
 
-  public async listMcpServers(): Promise<AgentMcpServerPage> {
-    // 运行时状态接口没有 cwd 作用域；单进程多 Project 必须读取目标目录的生效配置。
-    const response = expectRecord(
-      await this.#client.request("config/read", { cwd: this.#project.rootPath }),
-      "config/read response",
-    );
-    const config = expectRecord(response["config"], "config/read config");
-    const rawMcpServers = config["mcp_servers"];
-    if (rawMcpServers === undefined) {
-      return { data: [] };
+  public async listMcpServers(taskId: string): Promise<AgentMcpServerPage> {
+    this.#assertKnownProjectTask(taskId);
+    const names = new Set<string>();
+    const visitedCursors = new Set<string>();
+    let cursor: string | undefined;
+
+    for (;;) {
+      const response = expectRecord(
+        await this.#client.request("mcpServerStatus/list", {
+          ...(cursor === undefined ? {} : { cursor }),
+          detail: "toolsAndAuthOnly",
+          threadId: taskId,
+        }),
+        "mcpServerStatus/list response",
+      );
+      const page = response["data"];
+      if (!Array.isArray(page)) {
+        throw new CodexProtocolMappingError("mcpServerStatus/list data must be an array");
+      }
+      // 状态详情可能包含工具和认证信息，Provider 边界仅保留当前 Task 可见的服务名称。
+      for (const entry of page) {
+        const server = expectRecord(entry, "mcpServerStatus/list server");
+        const name = expectString(server["name"], "mcpServerStatus/list server name");
+        if (name.length === 0) {
+          throw new CodexProtocolMappingError("mcpServerStatus/list server name is invalid");
+        }
+        names.add(name);
+      }
+
+      const nextCursor = response["nextCursor"];
+      if (nextCursor !== null && nextCursor !== undefined && typeof nextCursor !== "string") {
+        throw new CodexProtocolMappingError(
+          "mcpServerStatus/list nextCursor must be a string or null",
+        );
+      }
+      if (nextCursor === null || nextCursor === undefined) {
+        break;
+      }
+      if (visitedCursors.has(nextCursor)) {
+        throw new CodexProtocolMappingError("mcpServerStatus/list returned a repeated cursor");
+      }
+      visitedCursors.add(nextCursor);
+      cursor = nextCursor;
     }
 
-    const mcpServers = expectRecord(rawMcpServers, "config/read mcp_servers");
-    // 配置只在 Provider 边界判定启用状态，对外只保留名称以隔离命令、环境变量和 Secret。
-    const data = Object.entries(mcpServers)
-      .filter(([name, value]) => {
-        if (name.length === 0) {
-          throw new CodexProtocolMappingError("config/read MCP server name is invalid");
-        }
-        const server = expectRecord(value, `config/read MCP server ${name}`);
-        const enabled = server["enabled"];
-        if (enabled !== undefined && typeof enabled !== "boolean") {
-          throw new CodexProtocolMappingError("config/read MCP server enabled is invalid");
-        }
-        return enabled !== false;
-      })
-      .map(([name]) => ({ name }))
-      .sort((left, right) => left.name.localeCompare(right.name));
-
-    return { data };
+    return { data: [...names].toSorted().map((name) => ({ name })) };
   }
 
   public async listModels(): Promise<AgentModelPage> {
@@ -1504,8 +1520,9 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     return this.#delegate.listModels();
   }
 
-  public listMcpServers(): Promise<AgentMcpServerPage> {
-    return this.#delegate.listMcpServers();
+  public async listMcpServers(taskId: string): Promise<AgentMcpServerPage> {
+    await this.#ensureTaskOwner(taskId);
+    return this.#delegate.listMcpServers(taskId);
   }
 
   public listSkills(): Promise<AgentSkillPage> {
