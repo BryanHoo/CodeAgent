@@ -43,6 +43,7 @@ import {
   StartAgentTurnResponseSchema,
   SteerAgentTurnRequestSchema,
   SteerAgentTurnResponseSchema,
+  BrowserSessionResponseSchema,
   HealthResponseSchema,
   GenerateCommitMessageRequestSchema,
   GenerateCommitMessageResponseSchema,
@@ -906,6 +907,16 @@ describe("project protocol", () => {
 
   it("validates health and capability responses", () => {
     expect(Value.Check(HealthResponseSchema, { status: "ok", version: 1 })).toBe(true);
+    expect(Value.Check(BrowserSessionResponseSchema, { instanceId: "runtime-1", version: 1 })).toBe(
+      true,
+    );
+    expect(
+      Value.Check(BrowserSessionResponseSchema, {
+        instanceId: "runtime-1",
+        legacy: true,
+        version: 1,
+      }),
+    ).toBe(false);
     expect(
       Value.Check(AgentCapabilitiesSchema, {
         feedback: { upload: true },

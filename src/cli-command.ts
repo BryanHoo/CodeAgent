@@ -44,6 +44,7 @@ interface CliManagedRuntime {
 interface CliManagedServer {
   close: () => Promise<void>;
   listen: (options: { host: string; port: number }) => Promise<string>;
+  waitForBrowserConnection: (timeoutMs: number) => Promise<boolean>;
 }
 
 interface CliManagedStateRepository extends ProjectRepository, AgentSettingsRepository {
@@ -99,7 +100,40 @@ const defaultDependencies: CliDependencies = {
   checkCodexVersion,
   createStateRepository: (databasePath) => SqliteStateRepository.open(databasePath),
   createRuntimeProvider: createCodexRuntimeProvider,
-  createServer: createCodeAgentServer,
+  createServer: async (input) => {
+    let browserConnected = false;
+    const connectionResolvers = new Set<() => void>();
+    const server = await createCodeAgentServer({
+      ...input,
+      onBrowserConnection: () => {
+        browserConnected = true;
+        for (const resolve of connectionResolvers) {
+          resolve();
+        }
+        connectionResolvers.clear();
+      },
+    });
+    return {
+      close: () => server.close(),
+      listen: (options) => server.listen(options),
+      waitForBrowserConnection: (timeoutMs) => {
+        if (browserConnected) {
+          return Promise.resolve(true);
+        }
+        return new Promise<boolean>((resolve) => {
+          const onConnection = () => {
+            clearTimeout(timeout);
+            resolve(true);
+          };
+          const timeout = setTimeout(() => {
+            connectionResolvers.delete(onConnection);
+            resolve(false);
+          }, timeoutMs);
+          connectionResolvers.add(onConnection);
+        });
+      },
+    };
+  },
   generateLanPairingCode,
   listLanAccessUrls,
   locateCodexBinary,
@@ -108,6 +142,8 @@ const defaultDependencies: CliDependencies = {
   startCodexAppServer,
   webRoot: fileURLToPath(new URL("../dist/web", import.meta.url)),
 };
+
+const BROWSER_CONNECTION_WAIT_MS = 1_250;
 
 const HELP = `Usage: code-agent <command> [options]
 
@@ -332,7 +368,11 @@ async function runStart(
 
     if (options.lan !== true) {
       try {
-        await dependencies.openBrowser("http://127.0.0.1:3210");
+        // 旧页面会在服务恢复后主动刷新；只有未收到页面握手时才打开新标签。
+        const browserConnected = await server.waitForBrowserConnection(BROWSER_CONNECTION_WAIT_MS);
+        if (!browserConnected) {
+          await dependencies.openBrowser("http://127.0.0.1:3210");
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         stderr(`[warn] Failed to open browser: ${message}\n`);

@@ -19,6 +19,7 @@ import {
   AgentTaskPageSchema,
   AgentTaskSnapshotResponseSchema,
   AgentTaskSettingsResponseSchema,
+  BrowserSessionResponseSchema,
   HealthResponseSchema,
   GenerateCommitMessageResponseSchema,
   HostFileListingSchema,
@@ -68,6 +69,7 @@ import {
   type AgentTaskSnapshotResponse,
   type AgentTaskSettings,
   type AgentTaskSettingsResponse,
+  type BrowserSessionResponse,
   type HealthResponse,
   type GenerateCommitMessageRequest,
   type GenerateCommitMessageResponse,
@@ -240,6 +242,10 @@ export class CodeAgentClient {
 
   public async getHealth(options: ReadOptions = {}): Promise<HealthResponse> {
     return this.#read("/v1/health", HealthResponseSchema, options);
+  }
+
+  public async getBrowserSession(options: ReadOptions = {}): Promise<BrowserSessionResponse> {
+    return this.#read("/v1/browser-session", BrowserSessionResponseSchema, options);
   }
 
   public async getAccessStatus(options: ReadOptions = {}): Promise<AccessStatusResponse> {

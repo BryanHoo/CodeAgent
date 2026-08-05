@@ -503,6 +503,25 @@ describe("server diagnostics", () => {
 });
 
 describe("CodeAgent Server", () => {
+  it("reports a stable browser session and observes browser connections", async () => {
+    const onBrowserConnection = vi.fn();
+    const app = await createCodeAgentServer(
+      createServerOptions(createProvider().provider, { onBrowserConnection }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const first = await app.inject({ method: "GET", url: "/v1/browser-session" });
+    const second = await app.inject({ method: "GET", url: "/v1/browser-session" });
+    const firstBody = first.json<{ instanceId: string; version: number }>();
+    const secondBody = second.json<{ instanceId: string; version: number }>();
+
+    expect(first.statusCode).toBe(200);
+    expect(firstBody).toEqual(secondBody);
+    expect(typeof firstBody.instanceId).toBe("string");
+    expect(firstBody.version).toBe(1);
+    expect(onBrowserConnection).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps local access open and protects LAN business routes", async () => {
     const local = await createCodeAgentServer(createServerOptions(createProvider().provider));
     closeCallbacks.push(() => local.close());

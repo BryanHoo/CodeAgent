@@ -27,6 +27,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     lifecycle.push("server.listen");
     return Promise.resolve("http://127.0.0.1:3210");
   });
+  const waitForBrowserConnection = vi.fn(() => Promise.resolve(false));
   const client = {
     notify: vi.fn(),
     onNotification: vi.fn(() => () => undefined),
@@ -112,7 +113,9 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     }),
     generateLanPairingCode: vi.fn(() => "fixed-test-pairing-code"),
     listLanAccessUrls: vi.fn(() => ["http://192.168.1.20:3210"]),
-    createServer: vi.fn(() => Promise.resolve({ close: serverClose, listen: serverListen })),
+    createServer: vi.fn(() =>
+      Promise.resolve({ close: serverClose, listen: serverListen, waitForBrowserConnection }),
+    ),
     locateCodexBinary: vi.fn(() =>
       Promise.resolve({ path: "/fake/codex", source: "explicit" as const }),
     ),
@@ -153,6 +156,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     serverClose,
     serverListen,
     stdout,
+    waitForBrowserConnection,
   };
 }
 
@@ -288,6 +292,21 @@ describe("runCli", () => {
     );
   });
 
+  it("keeps an existing browser page instead of opening a new one", async () => {
+    const harness = createHarness();
+    harness.waitForBrowserConnection.mockResolvedValue(true);
+    const controller = new AbortController();
+    const run = runCli(["start"], { ...harness.options, signal: controller.signal });
+
+    await vi.waitFor(() => {
+      expect(harness.waitForBrowserConnection).toHaveBeenCalledOnce();
+    });
+    expect(harness.dependencies.openBrowser).not.toHaveBeenCalled();
+
+    controller.abort();
+    await expect(run).resolves.toBe(0);
+  });
+
   it("starts explicit LAN access without opening a browser", async () => {
     const harness = createHarness();
     const controller = new AbortController();
@@ -364,7 +383,13 @@ describe("runCli", () => {
     const serverClose = vi.fn(() => Promise.reject(new Error("server close failed")));
     const serverListen = vi.fn(() => Promise.resolve("http://127.0.0.1:3210"));
     const harness = createHarness({
-      createServer: vi.fn(() => Promise.resolve({ close: serverClose, listen: serverListen })),
+      createServer: vi.fn(() =>
+        Promise.resolve({
+          close: serverClose,
+          listen: serverListen,
+          waitForBrowserConnection: vi.fn(() => Promise.resolve(false)),
+        }),
+      ),
     });
     const controller = new AbortController();
     const run = runCli(["start"], { ...harness.options, signal: controller.signal });

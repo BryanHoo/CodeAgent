@@ -18,6 +18,7 @@ import {
   MAX_AGENT_IMAGES,
   MAX_AGENT_IMAGE_TOTAL_BYTES,
   MAX_AGENT_TEXT_BYTES,
+  BrowserSessionResponseSchema,
   type AgentAttachmentKind,
   type AgentGlobalSettings,
   type AgentModel,
@@ -93,6 +94,7 @@ export interface CreateCodeAgentServerOptions {
   logDestination?: Readonly<{ write: (message: string) => void }>;
   modelCatalogCacheMaxBytes?: number;
   modelCatalogCacheTtlMs?: number;
+  onBrowserConnection?: () => void;
   projectRepository: ProjectRepository;
   projectOpenService?: ProjectOpenService;
   provider: AgentRuntimeProvider;
@@ -502,6 +504,7 @@ function toGitCommitHttpError(error: GitCommitError): MutationHttpError {
 export async function createCodeAgentServer(
   options: CreateCodeAgentServerOptions,
 ): Promise<FastifyInstance> {
+  const browserSessionId = randomUUID();
   const handlerTimeoutMs = options.handlerTimeoutMs ?? DEFAULT_HANDLER_TIMEOUT_MS;
   const logger =
     options.loggerEnabled === false
@@ -1026,6 +1029,15 @@ export async function createCodeAgentServer(
     ...(options.access === undefined ? {} : { access: options.access }),
     ...(accessService === undefined ? {} : { service: accessService }),
   });
+  app.get(
+    "/v1/browser-session",
+    { schema: { response: { 200: BrowserSessionResponseSchema } } },
+    () => {
+      // 页面轮询既用于报告旧标签存在，也用于识别服务是否已重新启动。
+      options.onBrowserConnection?.();
+      return { instanceId: browserSessionId, version: 1 as const };
+    },
+  );
   await app.register(registerRuntimeRoutes, routeContext);
   await app.register(registerProjectRoutes, routeContext);
   await app.register(registerTaskRoutes, routeContext);

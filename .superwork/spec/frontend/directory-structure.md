@@ -8,6 +8,7 @@
 
 - `src/main.tsx` 只创建 React Root 并装配应用级 Provider。
 - `src/App.tsx` 只承担应用外壳和顶层导航结构。
+- `src/app/browser-session.ts` 负责进程级页面握手与 Server 重启刷新，必须通过 `packages/client` 读取严格 Schema，且不得依赖 Project Runtime 是否已创建。
 - `src/app/routes` 只定义业务页面与路由级状态，不提供登录页面或认证回调路由。
 - Project 与 Task 路由只同步保留路径匹配等关键配置；工作台组件使用 TanStack Router `Route.lazy()` 与 `createLazyRoute()` 按需加载，避免 Markdown、终端和 Inspector 依赖进入首屏入口。
 - 功能代码按真实用户能力放入 `src/features/<feature>`，不要按技术类型堆放全局目录。

@@ -887,7 +887,7 @@ App Server 返回错误码 `-32001` 时，Adapter 使用带 jitter 的指数退�
 
 ### 14.1 默认网络边界
 
-- `code-agent start` 默认只监听 `127.0.0.1:3210` 并自动打开浏览器，不启用配对；只有显式 `code-agent start --lan [--session-ttl <duration>]` 才监听 `0.0.0.0:3210`。LAN 模式不自动打开浏览器，终端只列出物理网络接口上的私有 IPv4 URL。
+- `code-agent start` 默认只监听 `127.0.0.1:3210`，并在所有平台先等待已打开页面通过进程级浏览器会话完成握手；旧页面检测到 Server 实例变化后刷新当前标签，CLI 仅在有界等待超时后打开新标签。只有显式 `code-agent start --lan [--session-ttl <duration>]` 才监听 `0.0.0.0:3210`；LAN 模式不自动打开浏览器，终端只列出物理网络接口上的私有 IPv4 URL。
 - LAN 模式是可信局域网内的明文 HTTP 便利能力，不提供 TLS、远程身份、账号、RBAC 或互联网暴露保护。配对码和 Session Cookie 会在网络中明文传输，只能在用户信任的网络中使用。
 - LAN 启动时以 `node:crypto` 生成至少 128 bit 熵的配对码，只写当前终端并通过进程内参数传入 Server；不得进入 URL、环境变量、结构化日志、浏览器存储或 SQLite。进程重启后旧配对码和全部 Session 失效。
 - 配对成功签发至少 256 bit 随机 Session ID，服务端只保存在有界进程内 Store；Cookie 固定使用 `HttpOnly; SameSite=Strict; Path=/`。目标是 HTTP，因此不设置会阻止 Cookie 发送的 `Secure`。

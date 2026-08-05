@@ -1666,6 +1666,16 @@ export const HealthResponseSchema = Type.Object(
 
 export type HealthResponse = Readonly<Static<typeof HealthResponseSchema>>;
 
+export const BrowserSessionResponseSchema = Type.Object(
+  {
+    instanceId: Type.String({ minLength: 1 }),
+    version: Type.Literal(1),
+  },
+  { additionalProperties: false },
+);
+
+export type BrowserSessionResponse = Readonly<Static<typeof BrowserSessionResponseSchema>>;
+
 export const AgentCapabilitiesSchema = Type.Object(
   {
     feedback: Type.Object({ upload: Type.Boolean() }, { additionalProperties: false }),
