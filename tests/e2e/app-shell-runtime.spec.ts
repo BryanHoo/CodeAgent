@@ -1030,6 +1030,7 @@ test("answers a user input request and completes the turn", async ({ page }) => 
   await page.getByRole("radio", { name: /继续/ }).check();
   await page.getByRole("button", { exact: true, name: "提交回答" }).click();
 
+  await expect(page.getByText("执行模式: 继续", { exact: true })).toBeVisible();
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
 });

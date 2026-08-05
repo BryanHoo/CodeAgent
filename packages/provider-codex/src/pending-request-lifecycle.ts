@@ -15,10 +15,37 @@ const MAX_TERMINAL_PENDING_REQUESTS = 1_000;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 type ResolvingPendingRequest = Readonly<{
+  answerItem?: UserInputAnswerItem;
   fingerprint: string;
   status: "expired" | "resolved";
   promise: Promise<PendingRequest>;
 }>;
+
+type UserInputAnswerItem = Readonly<{
+  id: string;
+  role: "user";
+  text: string;
+  type: "message";
+}>;
+
+function createUserInputAnswerItem(
+  request: Extract<PendingRequest, { type: "user_input" }>,
+  answers: Readonly<Record<string, readonly string[]>>,
+): UserInputAnswerItem {
+  // Codex 只发送 resolved 通知，Provider 需要补出可流式展示的用户回答，同时隐藏密文。
+  const text = request.questions
+    .map((question) => {
+      const answer = question.isSecret ? "******" : (answers[question.id]?.[0] ?? "");
+      return `- ${question.header}: ${answer}`;
+    })
+    .join("\n");
+  return {
+    id: `user-input-answer-${request.requestId}`,
+    role: "user",
+    text,
+    type: "message",
+  };
+}
 
 export interface PendingRequestLifecycleOptions {
   publish: (event: AgentProviderEvent) => void;
@@ -94,6 +121,7 @@ export class PendingRequestLifecycle {
       );
     }
 
+    let answerItem: UserInputAnswerItem | undefined;
     let result: unknown;
     if (input.type === "user_input") {
       if (request.type !== "user_input") {
@@ -113,6 +141,7 @@ export class PendingRequestLifecycle {
           ]),
         ),
       };
+      answerItem = createUserInputAnswerItem(request, input.resolution.answers);
     } else {
       if (request.type === "user_input") {
         throw new PendingRequestResolutionError("mismatch", "Pending request type does not match");
@@ -149,7 +178,7 @@ export class PendingRequestLifecycle {
       this.#expire(entry);
       throw new PendingRequestResolutionError("expired", "Pending request expired");
     }
-    return this.#beginResolution(entry, result, fingerprint, "resolved");
+    return this.#beginResolution(entry, result, fingerprint, "resolved", answerItem);
   }
 
   public handleResolved(requestId: string, taskId: string): boolean {
@@ -158,8 +187,8 @@ export class PendingRequestLifecycle {
       return false;
     }
     if (entry.request.taskId === taskId) {
-      const status = this.#resolvingRequests.get(requestId)?.status ?? "expired";
-      this.#terminalize(entry, status);
+      const resolving = this.#resolvingRequests.get(requestId);
+      this.#terminalize(entry, resolving?.status ?? "expired", resolving?.answerItem);
     }
     return true;
   }
@@ -202,13 +231,14 @@ export class PendingRequestLifecycle {
     result: unknown,
     fingerprint: string,
     status: "expired" | "resolved",
+    answerItem?: UserInputAnswerItem,
   ): Promise<PendingRequest> {
     const requestId = entry.request.requestId;
     // 响应失败时保留到期定时器，让自动过期仍可接管。
     const promise = Promise.resolve()
       .then(() => this.#respond(entry.providerRequestId, result))
       .then(
-        () => this.#terminalize(entry, status),
+        () => this.#terminalize(entry, status, answerItem),
         (error: unknown) => {
           const terminalRequest = this.#terminalRequests.get(requestId);
           if (terminalRequest?.status === "resolved") {
@@ -217,7 +247,12 @@ export class PendingRequestLifecycle {
           throw error;
         },
       );
-    const resolving = { fingerprint, promise, status };
+    const resolving = {
+      ...(answerItem === undefined ? {} : { answerItem }),
+      fingerprint,
+      promise,
+      status,
+    };
     this.#resolvingRequests.set(requestId, resolving);
     const clearResolution = () => {
       if (this.#resolvingRequests.get(requestId) === resolving) {
@@ -276,7 +311,11 @@ export class PendingRequestLifecycle {
     }
   }
 
-  #terminalize(entry: PendingCodexRequest, status: "expired" | "resolved"): PendingRequest {
+  #terminalize(
+    entry: PendingCodexRequest,
+    status: "expired" | "resolved",
+    answerItem?: UserInputAnswerItem,
+  ): PendingRequest {
     if (!this.#pendingRequests.delete(entry.request.requestId)) {
       return this.#terminalRequests.get(entry.request.requestId) ?? entry.request;
     }
@@ -300,6 +339,15 @@ export class PendingRequestLifecycle {
         turnId: request.turnId,
         type: "pending_request.resolved",
       });
+      if (answerItem !== undefined) {
+        this.#publish({
+          itemId: answerItem.id,
+          payload: { item: answerItem },
+          taskId: request.taskId,
+          turnId: request.turnId,
+          type: "item.completed",
+        });
+      }
     } else {
       this.#publish({
         itemId: request.itemId,

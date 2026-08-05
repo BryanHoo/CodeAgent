@@ -330,8 +330,7 @@ function UserInputRequestCard({
       )}
       <div className="mt-3 flex justify-end">
         <Button
-          variant="ghost"
-          className="h-8 rounded-control bg-foreground px-3 text-label font-medium text-raised disabled:cursor-not-allowed disabled:opacity-45"
+          className="h-8 rounded-control px-3 text-label font-medium"
           disabled={!canSubmit}
           type="submit"
         >

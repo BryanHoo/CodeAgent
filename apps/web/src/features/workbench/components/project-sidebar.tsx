@@ -629,7 +629,7 @@ export function ProjectSidebar({
                   data-project-reordering={reorderingProjectId === project.id ? "true" : "false"}
                   key={project.id}
                 >
-                  <div className="flex min-w-0 items-center gap-0.5">
+                  <div className="group/project flex min-w-0 items-center gap-0.5">
                     <Button
                       variant="ghost"
                       aria-expanded={expanded}
@@ -702,7 +702,7 @@ export function ProjectSidebar({
                         <Button
                           variant="ghost"
                           aria-expanded={showAllTasks}
-                          className="flex h-7 w-full items-center rounded-control px-2 text-left text-meta font-medium text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+                          className="flex h-7 w-full items-center rounded-control px-2 text-left text-meta font-medium text-subtle-foreground transition-colors hover:bg-control-hover hover:text-foreground"
                           disabled={taskPaginationControl.disabled}
                           onClick={() => {
                             if (
@@ -850,7 +850,7 @@ type ProjectActionsProps = Readonly<{
   project: Project;
 }>;
 
-function ProjectActions({ isPending, onRemove, onRename, project }: ProjectActionsProps) {
+export function ProjectActions({ isPending, onRemove, onRename, project }: ProjectActionsProps) {
   const { t } = useTranslation("workbench");
 
   return (
@@ -860,7 +860,7 @@ function ProjectActions({ isPending, onRemove, onRename, project }: ProjectActio
           <Button
             variant="ghost"
             aria-label={t("sidebar.openProjectActions", { project: project.name })}
-            className="grid size-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground focus-visible:shadow-focus"
+            className="grid size-7 place-items-center rounded-control text-muted-foreground opacity-0 transition-[color,background-color,opacity] hover:bg-control-hover hover:text-foreground focus-visible:opacity-100 focus-visible:shadow-focus group-hover/project:opacity-100 data-[state=open]:opacity-100"
             disabled={isPending}
             id={`project-actions-${project.id}`}
             type="button"

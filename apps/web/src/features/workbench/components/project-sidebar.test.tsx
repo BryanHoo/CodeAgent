@@ -11,6 +11,7 @@ import {
   getProjectSidebarConnectionStatus,
   groupTasksByProjectId,
   ProjectActionMenu,
+  ProjectActions,
   ProjectPickerButton,
   SidebarSettingsButton,
   TaskStatusIndicator,
@@ -256,6 +257,22 @@ describe("Project folder actions", () => {
     name: "CodeAgent",
     rootPath: "/workspace/CodeAgent",
   };
+
+  it("hides the action icon until the folder row is hovered or focused", () => {
+    const markup = renderToStaticMarkup(
+      <ProjectActions
+        isPending={false}
+        onRemove={() => undefined}
+        onRename={() => undefined}
+        project={project}
+      />,
+    );
+
+    expect(markup).toContain("opacity-0");
+    expect(markup).toContain("group-hover/project:opacity-100");
+    expect(markup).toContain("focus-visible:opacity-100");
+    expect(markup).toContain("data-[state=open]:opacity-100");
+  });
 
   it("offers only rename and remove commands in that order", () => {
     const markup = renderToStaticMarkup(

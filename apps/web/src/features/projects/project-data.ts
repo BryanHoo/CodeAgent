@@ -14,7 +14,14 @@ export function getProjectTaskPreview(tasks: readonly AgentTask[], expanded: boo
 }
 
 export function formatTaskAge(updatedAt: string) {
-  const elapsedHours = Math.max(1, Math.floor((Date.now() - Date.parse(updatedAt)) / 3_600_000));
+  const elapsedMinutes = Math.max(1, Math.floor((Date.now() - Date.parse(updatedAt)) / 60_000));
+
+  // 一小时内保留分钟精度，避免新任务统一显示为 1h。
+  if (elapsedMinutes < 60) {
+    return `${String(elapsedMinutes)}m`;
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
 
   if (elapsedHours < 24) {
     return `${String(elapsedHours)}h`;

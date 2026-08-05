@@ -126,6 +126,7 @@ describe("PendingRequestCard", () => {
     expect(markup).toContain('aria-pressed="false"');
     expect(markup).toContain('type="text"');
     expect(markup).toContain("提交回答");
+    expect(markup).toMatch(/class="[^"]*bg-accent[^"]*"[^>]*>提交回答<\/button>/);
   });
 
   it("keeps expired requests visible without interactive controls", () => {
