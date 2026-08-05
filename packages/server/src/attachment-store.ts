@@ -385,14 +385,24 @@ export class AttachmentStore {
     return { attachment: entry.attachment, content: await readFile(entry.path) };
   }
 
+  public async readSubmitted(projectId: string, id: string): Promise<StoredAttachmentContent> {
+    await this.#pruneExpired();
+    const entry = this.#entries.get(id);
+    if (entry?.projectId !== projectId || entry.consumedTurnId === undefined) {
+      throw new AttachmentNotFoundError();
+    }
+    // 任务时间线只读取已提交副本，待提交预览与运行中消息保持清晰边界。
+    return { attachment: entry.attachment, content: await readFile(entry.path) };
+  }
+
   public async consume(projectId: string, ids: readonly string[], turnId?: string): Promise<void> {
     for (const id of new Set(ids)) {
       const entry = this.#entries.get(id);
       if (entry?.projectId !== projectId) {
         continue;
       }
-      if (entry.attachment.kind === "file" && turnId !== undefined) {
-        // Mention 路径要保留到 Turn 结束，Codex 才能在后续工具调用中读取文件。
+      if (turnId !== undefined) {
+        // 运行中附件保留到 Turn 结束，供 Provider 文件引用和乐观消息预览共同读取。
         entry.consumedTurnId = turnId;
         entry.expiresAt = this.#clock() + this.#ttlMs;
       } else {

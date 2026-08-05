@@ -1785,6 +1785,42 @@ describe("CodeAgent Server", () => {
     expect(readTaskAttachment).toHaveBeenNthCalledWith(1, "task-1", "history/image-1");
   });
 
+  it("serves a submitted attachment before the Provider history is available", async () => {
+    const { app, readTaskAttachment } = await createHarness();
+    const imageContent = Buffer.from(pixelDataUrl.split(",")[1] ?? "", "base64");
+    const uploaded = await app.inject(
+      await multipartAttachment(
+        "image",
+        "screen.png",
+        "image/png",
+        imageContent,
+        "upload-pending-image",
+      ),
+    );
+    const attachment = uploaded.json<{ attachment: { id: string } }>().attachment;
+
+    const turn = await app.inject({
+      headers: { "idempotency-key": "pending-image-turn" },
+      method: "POST",
+      payload: {
+        input: { attachments: [{ id: attachment.id }], skills: [], text: "", type: "prompt" },
+        options: turnOptions,
+      },
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
+    });
+    const preview = await app.inject({
+      method: "GET",
+      url: `/v1/projects/code-agent/tasks/task-1/attachments/${attachment.id}`,
+    });
+
+    expect(turn.statusCode).toBe(201);
+    expect(preview.statusCode).toBe(200);
+    expect(preview.headers["content-type"]).toBe("image/png");
+    expect(preview.headers["x-content-type-options"]).toBe("nosniff");
+    expect(preview.rawPayload).toEqual(imageContent);
+    expect(readTaskAttachment).toHaveBeenCalledWith("task-1", attachment.id);
+  });
+
   it("lists project tasks with validated pagination", async () => {
     const { app, listTasks } = await createHarness();
     const response = await app.inject({

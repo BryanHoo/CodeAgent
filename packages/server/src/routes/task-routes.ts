@@ -33,6 +33,7 @@ import {
 } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
 
+import { AttachmentNotFoundError } from "../attachment-store.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import {
   ErrorResponseSchema,
@@ -51,6 +52,7 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
 ) => {
   const {
     assertValidProjectDefaults,
+    attachmentStore,
     getProjectContext,
     listModels,
     readEffectiveTaskSettings,
@@ -143,14 +145,30 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
       if (context === undefined) {
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
-      const attachment = await context.provider.readTaskAttachment(
+      let attachment = await context.provider.readTaskAttachment(
         request.params.taskId,
         request.params.attachmentId,
       );
       if (attachment === undefined) {
-        return reply
-          .code(404)
-          .send({ code: "ATTACHMENT_NOT_FOUND", message: "Attachment not found" });
+        const task = await context.provider.readTask(request.params.taskId);
+        if (task?.projectId !== context.project.id) {
+          return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
+        }
+        try {
+          // Provider 历史尚未同步时，继续交付本次 Turn 保留的上传内容。
+          const stored = await attachmentStore.readSubmitted(
+            request.params.projectId,
+            request.params.attachmentId,
+          );
+          attachment = { ...stored.attachment, content: stored.content };
+        } catch (error) {
+          if (error instanceof AttachmentNotFoundError) {
+            return reply
+              .code(404)
+              .send({ code: "ATTACHMENT_NOT_FOUND", message: "Attachment not found" });
+          }
+          throw error;
+        }
       }
       // 随机 ID 已绑定 Project/Task；响应只交付已复验的附件正文，不暴露本地路径。
       return reply
