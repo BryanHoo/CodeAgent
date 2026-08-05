@@ -649,4 +649,30 @@ describe("project runtime manager", () => {
     detach();
     manager.dispose();
   });
+
+  it("retries Snapshot recovery without Task Store consumers and resumes Project events", async () => {
+    vi.useFakeTimers();
+    const harness = createClientHarness();
+    const manager = createProjectRuntimeManager(harness.client);
+    harness.client.readTask
+      .mockRejectedValueOnce(new Error("Snapshot recovery failed"))
+      .mockResolvedValueOnce(createSnapshotResponse("task-1", { sequence: 8 }));
+    manager.observeSnapshot(createSnapshotResponse("task-1"));
+
+    harness.requireResync();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.client.readTask).toHaveBeenCalledTimes(1);
+    expect(harness.client.subscribeEvents).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(harness.client.readTask).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(harness.client.readTask).toHaveBeenCalledTimes(2);
+    expect(harness.client.subscribeEvents).toHaveBeenCalledTimes(2);
+
+    harness.emit(createTurnCompletedEvent("task-1", 9));
+    expect(getTaskActivity(manager.getTaskActivity(), "project-1", "task-1").isRunning).toBe(false);
+    manager.dispose();
+  });
 });

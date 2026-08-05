@@ -10,7 +10,7 @@ import {
   type RecoverTaskSnapshot,
 } from "./project-runtime-history.js";
 
-import { TaskEventTarget } from "./project-runtime-recovery.js";
+import { SnapshotRecoveryController, TaskEventTarget } from "./project-runtime-recovery.js";
 
 type ProjectRuntimeCallbacks = Readonly<{
   getTaskActivity: () => TaskActivityMap;
@@ -25,6 +25,7 @@ export class ProjectEventRuntime {
   readonly #eventHistory: ProjectEventHistory;
   readonly #idleTimeoutMs: number;
   readonly #projectId: string;
+  readonly #snapshotRecovery: SnapshotRecoveryController<AgentTaskSnapshotResponse>;
   readonly #targets = new Map<TaskStore, TaskEventTarget>();
   #connectionCleanup: (() => void) | undefined;
   #connectionState: AgentEventConnectionState = "closed";
@@ -33,7 +34,6 @@ export class ProjectEventRuntime {
   #lastAccessAt = Date.now();
   #latestSequence = 0;
   #latestSnapshotTaskId: string | undefined;
-  #recoveringSnapshot = false;
   #sessionId: string | undefined;
   #snapshotRecoveryRequired = false;
 
@@ -51,6 +51,15 @@ export class ProjectEventRuntime {
       maxBytes: options.maxEventHistoryBytes,
       maxEvents: options.maxEventHistoryEvents,
     });
+    this.#snapshotRecovery = new SnapshotRecoveryController(
+      async () => {
+        const taskId = this.#latestSnapshotTaskId;
+        return taskId === undefined ? undefined : this.#client.readTask(this.#projectId, taskId);
+      },
+      (response) => {
+        this.#callbacks.onSnapshot(response);
+      },
+    );
   }
 
   public attachTaskStore(
@@ -105,6 +114,7 @@ export class ProjectEventRuntime {
     }
     this.#disposed = true;
     this.#clearIdleTimer();
+    this.#snapshotRecovery.dispose();
     this.#stopConnection();
     for (const target of this.#targets.values()) {
       target.dispose();
@@ -116,6 +126,7 @@ export class ProjectEventRuntime {
   public forgetTask(taskId: string): void {
     if (this.#latestSnapshotTaskId === taskId) {
       this.#latestSnapshotTaskId = undefined;
+      this.#snapshotRecovery.reset();
     }
     this.#reevaluateIdleRelease();
   }
@@ -128,6 +139,7 @@ export class ProjectEventRuntime {
   public observeSnapshot(response: AgentTaskSnapshotResponse): void {
     this.#assertSnapshotProject(response);
     this.#latestSnapshotTaskId = response.snapshot.id;
+    this.#snapshotRecovery.reset();
     this.#snapshotRecoveryRequired = false;
     this.#touch();
     this.#ensureConnection(response.checkpoint);
@@ -307,19 +319,11 @@ export class ProjectEventRuntime {
       return;
     }
     const taskId = this.#latestSnapshotTaskId;
-    if (taskId === undefined || this.#recoveringSnapshot) {
+    if (taskId === undefined) {
       return;
     }
-    this.#recoveringSnapshot = true;
-    void this.#client
-      .readTask(this.#projectId, taskId)
-      .then((response) => {
-        this.#callbacks.onSnapshot(response);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        this.#recoveringSnapshot = false;
-      });
+    // 后台 Project 也复用有界退避，首次 Snapshot 失败不能让已关闭连接永久失联。
+    this.#snapshotRecovery.requestRecovery();
   }
 
   #stopConnection(): void {
