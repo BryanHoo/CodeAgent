@@ -157,6 +157,15 @@ describe("CodexAgentProvider", () => {
       private: "unknown-secret-body",
       threadId: "task-1",
     });
+    provider.receiveNotification("thread/goal/updated", {
+      goal: {
+        objective: "完成 Goal 协议适配",
+        status: "active",
+        threadId: "task-1",
+      },
+      threadId: "task-1",
+      turnId: null,
+    });
     provider.receiveNotification("item/agentMessage/delta", {
       delta: { body: "invalid-secret-body" },
       itemId: "item-1",
@@ -203,6 +212,104 @@ describe("CodexAgentProvider", () => {
         type: "message.delta",
       },
     ]);
+  });
+
+  it("sets a persistent goal before starting the first goal turn", async () => {
+    const runningGoalTurn = {
+      completedAt: null,
+      durationMs: null,
+      error: null,
+      id: "turn-goal",
+      items: [],
+      itemsView: { type: "full" },
+      startedAt: 1_754_396_400,
+      status: "inProgress",
+    };
+    const goalResponse = {
+      goal: {
+        createdAt: 1_754_396_400,
+        objective: "完成 Goal 协议适配",
+        status: "active",
+        threadId: "task-1",
+        timeUsedSeconds: 0,
+        tokenBudget: null,
+        tokensUsed: 0,
+        updatedAt: 1_754_396_400,
+      },
+    };
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      {},
+      () => {
+        rpc.emitNotification("turn/started", {
+          threadId: "task-1",
+          turn: runningGoalTurn,
+        });
+        return goalResponse;
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await provider.startTask();
+    await expect(
+      provider.startTurn(
+        "task-1",
+        {
+          files: [],
+          images: [],
+          skills: [],
+          text: "  完成 Goal 协议适配  ",
+          textAttachments: [],
+        },
+        {
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          goalMode: true,
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+          sandboxMode: "workspace-write",
+        },
+      ),
+    ).resolves.toMatchObject({ id: "turn-goal", status: "running" });
+
+    expect(rpc.calls.map(({ method }) => method)).toEqual([
+      "thread/start",
+      "thread/settings/update",
+      "thread/goal/set",
+    ]);
+    expect(rpc.calls[1]).toEqual({
+      method: "thread/settings/update",
+      params: {
+        approvalPolicy: "on-request",
+        approvalsReviewer: "user",
+        collaborationMode: {
+          mode: "default",
+          settings: {
+            developer_instructions: null,
+            model: "gpt-5.6-sol",
+            reasoning_effort: "high",
+          },
+        },
+        effort: "high",
+        model: "gpt-5.6-sol",
+        sandboxPolicy: {
+          excludeSlashTmp: false,
+          excludeTmpdirEnvVar: false,
+          networkAccess: false,
+          type: "workspaceWrite",
+          writableRoots: [],
+        },
+        threadId: "task-1",
+      },
+    });
+    expect(rpc.calls[2]).toEqual({
+      method: "thread/goal/set",
+      params: {
+        objective: "完成 Goal 协议适配",
+        status: "active",
+        threadId: "task-1",
+      },
+    });
   });
 
   it("streams automatic approval review lifecycle as timeline items", async () => {

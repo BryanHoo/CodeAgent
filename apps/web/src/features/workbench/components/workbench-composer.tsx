@@ -96,6 +96,7 @@ export function WorkbenchComposer({
     commandMenuOpen,
     commandNotice,
     commandSurfaceRef,
+    composerMode,
     composerController,
     composerDraftStore,
     composerScope,
@@ -109,7 +110,6 @@ export function WorkbenchComposer({
     menuItemCount,
     mutationError,
     pendingTask,
-    planModeEnabled,
     promptContent,
     promptSubmission,
     queuedPrompts,
@@ -127,7 +127,7 @@ export function WorkbenchComposer({
     setCommandSlashCommand,
     setIsSubmitting,
     setMutationError,
-    setPlanModeState,
+    setComposerModeState,
     setPromptContent,
     setQueuedPrompts,
     setReviewMenuMode,
@@ -196,14 +196,17 @@ export function WorkbenchComposer({
     composerDraftStore,
     composerScope,
     controller: composerController,
+    composerMode,
     followUpBehavior,
     onDirectSubmission,
+    onGoalStarted: () => {
+      setComposerModeState(undefined);
+    },
     onRequestNotificationPermission,
     onTaskCreated,
     onTaskStarted,
     onTurnStarted,
     pendingTask,
-    planModeEnabled,
     projectId,
     promptContent,
     queuedPrompts,
@@ -223,10 +226,10 @@ export function WorkbenchComposer({
   useImperativeHandle(buildPlanRef, () => ({
     buildPlan: () => {
       // 构建动作必须退出计划模式，否则后续 Turn 会再次请求生成计划。
-      setPlanModeState(undefined);
+      setComposerModeState(undefined);
       return submitPrompt({ files: [], text: t("composer.buildPlanPrompt") }, [], {
+        composerMode: null,
         forceAction: "start",
-        planModeEnabled: false,
       });
     },
   }));
@@ -362,6 +365,7 @@ export function WorkbenchComposer({
       commandMenuOpen={commandMenuOpen}
       commandNotice={commandNotice}
       commandSurfaceRef={commandSurfaceRef}
+      composerMode={composerMode}
       composerScope={composerScope}
       contextUsage={contextUsage}
       draftInputDisabled={draftInputDisabled}
@@ -376,8 +380,8 @@ export function WorkbenchComposer({
       modelsError={modelsError}
       modelsPending={modelsPending}
       mutationError={mutationError}
-      onPlanModeRemove={() => {
-        setPlanModeState(undefined);
+      onComposerModeRemove={() => {
+        setComposerModeState(undefined);
       }}
       onAttachmentsChange={handleAttachmentsChange}
       onExecuteCommand={(command) => {
@@ -424,7 +428,6 @@ export function WorkbenchComposer({
         setMutationError(error);
       }}
       projectPath={projectPath}
-      planModeEnabled={planModeEnabled}
       promptContent={promptContent}
       promptSubmissionText={promptSubmission.text}
       queuedPrompts={queuedPrompts}

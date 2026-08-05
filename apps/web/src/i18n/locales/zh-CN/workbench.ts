@@ -52,6 +52,7 @@ export const workbench = {
     attachmentUploadFailed: "附件上传失败",
     baseBranchReview: "基于基础分支进行审查",
     buildPlanPrompt: "请开始按照上述计划进行开发。",
+    cancelGoalMode: "取消目标模式",
     cancelPlanMode: "取消计划模式",
     cancelQueued: "取消排队：{{summary}}",
     cancelQueuedTooltip: "取消排队",
@@ -60,6 +61,9 @@ export const workbench = {
     commandNoMatch: "没有匹配的 Skill 或命令",
     compacting: "正在压缩上下文",
     gitBranchMissing: "未检出分支",
+    goalMode: "目标",
+    goalObjectiveRequired: "目标模式需要输入目标文本",
+    goalObjectiveTooLong: "目标文本不能超过 4,000 个字符",
     initializingAgentsPrompt:
       "请检查当前项目，并在项目根目录创建或完善 AGENTS.md，写入适用于 Codex 的项目说明、常用命令和验证要求。",
     landmark: "消息编辑器",
@@ -108,6 +112,10 @@ export const workbench = {
     fork: {
       description: "复制当前任务及其对话历史",
       label: "复制",
+    },
+    goal: {
+      description: "设置持久目标并持续工作直到完成",
+      label: "目标",
     },
     initialize: {
       description: "创建包含 Codex 说明的 AGENTS.md 文件",

@@ -1,5 +1,6 @@
-import { Bug, CircleGauge, FilePlus2, GitFork, Lightbulb, X } from "lucide-react";
+import { Bug, CircleGauge, FilePlus2, GitFork, Lightbulb, Target, X } from "lucide-react";
 import type { PromptCommandAction } from "./prompt-command.js";
+import type { ComposerMode } from "./workbench-composer-contracts.js";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import {
@@ -29,33 +30,40 @@ export function PromptCommandIcon({ action }: Readonly<{ action: PromptCommandAc
       return <GitFork aria-hidden="true" className={className} />;
     case "plan":
       return <Lightbulb aria-hidden="true" className={className} />;
+    case "goal":
+      return <Target aria-hidden="true" className={className} />;
   }
 }
 
-export function PlanModeTag({
+export function ComposerModeTag({
   disabled,
+  mode,
   onRemove,
-}: Readonly<{ disabled: boolean; onRemove: () => void }>) {
+}: Readonly<{ disabled: boolean; mode: ComposerMode; onRemove: () => void }>) {
   const { t } = useTranslation("workbench");
+  const isGoal = mode === "goal";
+  const label = t(isGoal ? "composer.goalMode" : "composer.planMode");
+  const cancelLabel = t(isGoal ? "composer.cancelGoalMode" : "composer.cancelPlanMode");
+  const ModeIcon = isGoal ? Target : Lightbulb;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <PromptInputButton
-          aria-label={t("composer.cancelPlanMode")}
-          className="group/plan-mode gap-1 px-1.5 text-foreground max-workbench:gap-0.5"
-          data-plan-mode=""
+          aria-label={cancelLabel}
+          className="group/composer-mode gap-1 px-1.5 text-foreground max-workbench:gap-0.5"
+          {...(isGoal ? { "data-goal-mode": "" } : { "data-plan-mode": "" })}
           disabled={disabled}
           onClick={onRemove}
         >
-          <Lightbulb aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
-          <span className="max-workbench:hidden">{t("composer.planMode")}</span>
+          <ModeIcon aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+          <span className="max-workbench:hidden">{label}</span>
           <X
             aria-hidden="true"
-            className="size-3 shrink-0 opacity-0 transition-opacity group-hover/plan-mode:opacity-100 group-focus-visible/plan-mode:opacity-100"
+            className="size-3 shrink-0 opacity-0 transition-opacity group-hover/composer-mode:opacity-100 group-focus-visible/composer-mode:opacity-100"
           />
         </PromptInputButton>
       </TooltipTrigger>
-      <TooltipContent>{t("composer.cancelPlanMode")}</TooltipContent>
+      <TooltipContent>{cancelLabel}</TooltipContent>
     </Tooltip>
   );
 }

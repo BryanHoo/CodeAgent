@@ -17,6 +17,7 @@ import type { QueuedComposerPrompt } from "../composer-draft-context.js";
 import type { ComposerState, ComposerSubmitAction } from "../composer-state.js";
 import type { PromptCommandItem } from "./prompt-command.js";
 import type { PromptSkillContent, PromptSkillEditorHandle } from "./prompt-skill-editor.js";
+import type { ComposerMode } from "./workbench-composer-contracts.js";
 
 export type CommandAvailability = Readonly<{ available: boolean; reason?: string }>;
 
@@ -35,6 +36,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   commandMenuOpen: boolean;
   commandNotice: string | undefined;
   commandSurfaceRef: RefObject<HTMLDivElement | null>;
+  composerMode: ComposerMode | undefined;
   composerScope: string;
   contextUsage: AgentContextUsage | null | undefined;
   draftInputDisabled: boolean;
@@ -54,7 +56,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   onExecuteReview: (target: AgentReviewTarget) => void;
   onInterrupt: () => void;
   onOpenReviewBranches: () => void;
-  onPlanModeRemove: () => void;
+  onComposerModeRemove: () => void;
   onPromptChange: (
     content: PromptSkillContent,
     serializedText: string,
@@ -67,7 +69,6 @@ export type WorkbenchComposerViewProps = Readonly<{
   onSubmit: (message: PromptInputMessage) => void;
   onViewError: (error: Error) => void;
   projectPath: string;
-  planModeEnabled: boolean;
   promptContent: PromptSkillContent;
   promptSubmissionText: string;
   queuedPrompts: readonly QueuedComposerPrompt[];

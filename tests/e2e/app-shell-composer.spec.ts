@@ -155,7 +155,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   const commandMenu = page.getByRole("listbox", { name: "输入命令" });
   await expect(commandMenu).toBeVisible();
   expect(await commandMenu.evaluate((menu) => menu.closest("form") === null)).toBe(true);
-  await expect(commandMenu.getByRole("option")).toHaveCount(7);
+  await expect(commandMenu.getByRole("option")).toHaveCount(8);
   await expect(commandMenu.getByRole("option", { name: /代码审查/u })).toHaveAttribute(
     "data-active",
     "true",
@@ -189,7 +189,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   }
   await expect(commandMenu.getByRole("option", { name: /副任务|反馈/u })).toHaveCount(0);
 
-  for (let movementIndex = 0; movementIndex < 6; movementIndex += 1) {
+  for (let movementIndex = 0; movementIndex < 7; movementIndex += 1) {
     await prompt.press("ArrowDown");
   }
   await expect(commandMenu.getByRole("option", { name: /Documentation writer/u })).toHaveAttribute(
@@ -931,6 +931,69 @@ test("submits host attachments, approval policy, model, and reasoning effort thr
       model: "gpt-5.6-terra",
       reasoningEffort: "low",
       sandboxMode: "danger-full-access",
+    },
+  });
+});
+
+test("selects, clears, and submits goal mode", async ({ page }) => {
+  let turnBody: unknown;
+  await page.route("**/v1/projects/code-agent/tasks/task-1/turns", async (route) => {
+    turnBody = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        taskId: "task-1",
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "turn-goal",
+          items: [],
+          startedAt: "2026-08-05T13:00:00.000Z",
+          status: "running",
+        },
+      },
+      status: 201,
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  const commandMenu = page.getByRole("listbox", { name: "输入命令" });
+  const sandboxSelect = page.getByRole("combobox", { name: "沙盒模式" });
+  await prompt.fill("/goal");
+  await expect(commandMenu.getByRole("option", { name: /目标/u })).toBeVisible();
+  await prompt.press("Enter");
+
+  const goalModeTag = page.getByRole("button", { name: "取消目标模式" });
+  await expect(goalModeTag).toBeVisible();
+  await expect
+    .poll(() =>
+      sandboxSelect.evaluate(
+        (element) => element.nextElementSibling?.hasAttribute("data-goal-mode") ?? false,
+      ),
+    )
+    .toBe(true);
+  await goalModeTag.hover();
+  await expect(goalModeTag.locator("svg").last()).toHaveCSS("opacity", "1");
+  await goalModeTag.click();
+  await expect(goalModeTag).toHaveCount(0);
+
+  await prompt.fill("/goal");
+  await prompt.press("Enter");
+  await prompt.fill("仅回复 GOAL_MODE_CHECK，不修改文件");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+
+  await expect(page.getByRole("button", { name: "取消目标模式" })).toHaveCount(0);
+  expect(turnBody).toEqual({
+    input: {
+      attachments: [],
+      skills: [],
+      text: "仅回复 GOAL_MODE_CHECK，不修改文件",
+      type: "prompt",
+    },
+    options: {
+      ...taskSnapshot.settings,
+      goalMode: true,
     },
   });
 });

@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import type {
+  AgentProviderEventListener,
   AgentProviderTurnInput,
   ListAgentTasksInput,
   StartAgentTaskOptions,
@@ -27,6 +28,25 @@ import {
 
 import { CodexAgentProviderBase } from "./agent-provider-base.js";
 import { isBackgroundTerminalThreadMissingError, mapAgentTask } from "./agent-provider-base.js";
+
+function mapCodexTurnSettings(options: AgentTurnOptions) {
+  // 普通 Turn 与 Goal 自动 Turn 必须使用完全相同的执行设置。
+  return {
+    approvalPolicy: options.approvalPolicy,
+    approvalsReviewer: options.approvalsReviewer,
+    collaborationMode: {
+      mode: options.collaborationMode === "plan" ? ("plan" as const) : ("default" as const),
+      settings: {
+        developer_instructions: null,
+        model: options.model,
+        reasoning_effort: options.reasoningEffort,
+      },
+    },
+    effort: options.reasoningEffort,
+    model: options.model,
+    sandboxPolicy: mapSandboxPolicy(options.sandboxMode),
+  };
+}
 
 export abstract class CodexAgentProviderTurns extends CodexAgentProviderBase {
   public async startTask(options: StartAgentTaskOptions = {}): Promise<AgentTask> {
@@ -57,26 +77,70 @@ export abstract class CodexAgentProviderTurns extends CodexAgentProviderBase {
     options: AgentTurnOptions,
   ): Promise<AgentTurn> {
     this.assertKnownProjectTask(taskId);
-    const codexInput = await this.mapTurnInput(input);
     await this.resumeTask(taskId);
+    if (options.goalMode === true) {
+      const objective = input.text.trim();
+      if (objective.length === 0 || objective.length > 4_000) {
+        throw new CodexProtocolMappingError(
+          "Codex goal objective must contain between 1 and 4000 characters",
+        );
+      }
+      let resolveStartedTurn: (turn: AgentTurn) => void = () => undefined;
+      const startedTurn = new Promise<AgentTurn>((resolve) => {
+        resolveStartedTurn = resolve;
+      });
+      const listener: AgentProviderEventListener = (event) => {
+        if (event.taskId === taskId && event.type === "turn.started") {
+          resolveStartedTurn(event.payload.turn);
+        }
+      };
+      this.eventListeners.add(listener);
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        expectRecord(
+          await this.client.request("thread/settings/update", {
+            ...mapCodexTurnSettings(options),
+            threadId: taskId,
+          }),
+          "thread/settings/update response",
+        );
+        const goalResponse = expectRecord(
+          await this.client.request("thread/goal/set", {
+            objective,
+            status: "active",
+            threadId: taskId,
+          }),
+          "thread/goal/set response",
+        );
+        const goal = expectRecord(goalResponse["goal"], "thread/goal/set goal");
+        // Goal 会自动启动首个 Turn；校验持久目标后等待对应的启动通知。
+        if (
+          expectString(goal["threadId"], "thread/goal/set thread id") !== taskId ||
+          expectString(goal["objective"], "thread/goal/set objective") !== objective
+        ) {
+          throw new CodexProtocolMappingError("thread/goal/set returned an unexpected goal");
+        }
+        const timeoutTurn = new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => {
+            reject(new CodexProtocolMappingError("thread/goal/set did not start a turn"));
+          }, 30_000);
+          timeout.unref();
+        });
+        return await Promise.race([startedTurn, timeoutTurn]);
+      } finally {
+        this.eventListeners.delete(listener);
+        if (timeout !== undefined) {
+          clearTimeout(timeout);
+        }
+      }
+    }
+    const codexInput = await this.mapTurnInput(input);
     const response = expectRecord(
       await this.client.request("turn/start", {
-        approvalPolicy: options.approvalPolicy,
-        approvalsReviewer: options.approvalsReviewer,
         // Codex collaboration mode 会粘附到 Thread；普通 Turn 必须显式恢复默认执行模式。
-        collaborationMode: {
-          mode: options.collaborationMode === "plan" ? "plan" : "default",
-          settings: {
-            developer_instructions: null,
-            model: options.model,
-            reasoning_effort: options.reasoningEffort,
-          },
-        },
-        effort: options.reasoningEffort,
+        ...mapCodexTurnSettings(options),
         input: codexInput,
-        model: options.model,
         ...(input.outputSchema === undefined ? {} : { outputSchema: input.outputSchema }),
-        sandboxPolicy: mapSandboxPolicy(options.sandboxMode),
         threadId: taskId,
       }),
       "turn/start response",

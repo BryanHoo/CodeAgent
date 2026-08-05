@@ -2,7 +2,7 @@ import type { AgentCapabilities, AgentSkill } from "@code-agent/protocol";
 
 import { i18n } from "../../../i18n/i18n.js";
 
-export type PromptCommandAction = "compact" | "fork" | "initialize" | "plan" | "review";
+export type PromptCommandAction = "compact" | "fork" | "goal" | "initialize" | "plan" | "review";
 
 export type PromptCommandItem = Readonly<{
   action: PromptCommandAction;
@@ -50,6 +50,13 @@ export function getPromptCommandItems(): readonly PromptCommandItem[] {
       keywords: ["plan", "planning", "计划", "规划"],
       label: translate("promptCommand.plan.label"),
     },
+    {
+      action: "goal",
+      description: translate("promptCommand.goal.description"),
+      id: "goal",
+      keywords: ["goal", "objective", "目标", "长期任务"],
+      label: translate("promptCommand.goal.label"),
+    },
   ];
 }
 
@@ -66,6 +73,7 @@ export function getPromptCommandAvailability(
   }
   if (
     item.action !== "initialize" &&
+    item.action !== "goal" &&
     item.action !== "plan" &&
     item.action !== "review" &&
     !hasTask
@@ -83,7 +91,7 @@ export function getPromptCommandAvailability(
         ? capabilities.turns.review && (hasTask || capabilities.tasks.start)
         : item.action === "compact"
           ? capabilities.turns.compact
-          : item.action === "plan"
+          : item.action === "plan" || item.action === "goal"
             ? capabilities.turns.start
             : capabilities.tasks.fork;
   return available

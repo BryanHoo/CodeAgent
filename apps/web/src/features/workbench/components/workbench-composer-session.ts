@@ -35,6 +35,7 @@ import {
   type PromptSkillEditorHandle,
 } from "./prompt-skill-editor.js";
 import type { WorkbenchComposerProps } from "./workbench-composer-contracts.js";
+import type { ComposerMode } from "./workbench-composer-contracts.js";
 
 type ComposerSessionOptions = Readonly<{
   capabilities: AgentCapabilities | undefined;
@@ -80,7 +81,8 @@ export function useComposerSession({
   const [promptContent, setPromptContent] = useState<PromptSkillContent>(
     initialComposerDraft.content,
   );
-  const [planModeState, setPlanModeState] = useState<Readonly<{ scope: string }>>();
+  const [composerModeState, setComposerModeState] =
+    useState<Readonly<{ mode: ComposerMode; scope: string }>>();
   const [queuedPrompts, setQueuedPrompts] = useState<readonly QueuedComposerPrompt[]>(
     initialComposerDraft.queuedPrompts,
   );
@@ -120,7 +122,7 @@ export function useComposerSession({
   const promptSubmission = toPromptSkillSubmission(promptContent);
   const activeSettings =
     settingsOverride?.scope === routeScope ? settingsOverride.settings : settings;
-  const planModeEnabled = planModeState?.scope === routeScope;
+  const composerMode = composerModeState?.scope === routeScope ? composerModeState.mode : undefined;
   const selectedModel =
     models.find((model) => model.id === activeSettings.model) ??
     models.find((model) => model.isDefault) ??
@@ -217,6 +219,7 @@ export function useComposerSession({
       setQueuedPrompts(restoredDraft.queuedPrompts);
       skillEditorRef.current?.replace(restoredDraft.content);
       setSettingsOverride(undefined);
+      setComposerModeState(undefined);
       setActiveCommandIndex(0);
       setCommandMenuOpen(false);
       setReviewMenuMode(null);
@@ -262,7 +265,7 @@ export function useComposerSession({
     menuItemCount,
     mutationError,
     pendingTask,
-    planModeEnabled,
+    composerMode,
     promptContent,
     promptSubmission,
     queuedPrompts,
@@ -282,7 +285,7 @@ export function useComposerSession({
     setIsSubmitting,
     setMutationError,
     setPendingTaskState,
-    setPlanModeState,
+    setComposerModeState,
     setPromptContent,
     setQueuedPrompts,
     setReviewMenuMode,

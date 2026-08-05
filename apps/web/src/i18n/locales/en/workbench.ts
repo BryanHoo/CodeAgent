@@ -53,6 +53,7 @@ export const workbench = {
     attachmentUploadFailed: "Unable to upload attachment",
     baseBranchReview: "Review against a base branch",
     buildPlanPrompt: "Start implementing the plan above.",
+    cancelGoalMode: "Cancel Goal mode",
     cancelPlanMode: "Cancel plan mode",
     cancelQueued: "Cancel queued message: {{summary}}",
     cancelQueuedTooltip: "Cancel queued message",
@@ -61,6 +62,9 @@ export const workbench = {
     commandNoMatch: "No matching Skill or command",
     compacting: "Compacting context",
     gitBranchMissing: "No branch checked out",
+    goalMode: "Goal",
+    goalObjectiveRequired: "Goal mode requires an objective",
+    goalObjectiveTooLong: "The goal objective cannot exceed 4,000 characters",
     initializingAgentsPrompt:
       "Inspect the current project and create or improve AGENTS.md in the project root with Codex project guidance, common commands, and verification requirements.",
     landmark: "Message composer",
@@ -109,6 +113,10 @@ export const workbench = {
     fork: {
       description: "Copy the current task and its conversation history",
       label: "Fork",
+    },
+    goal: {
+      description: "Set a persistent goal and keep working until it is complete",
+      label: "Goal",
     },
     initialize: {
       description: "Create an AGENTS.md file with Codex guidance",

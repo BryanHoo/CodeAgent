@@ -57,6 +57,10 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
       }
       return;
     }
+    if (method === "thread/goal/updated" || method === "thread/goal/cleared") {
+      // Goal 状态由 Codex 持久化；当前产品只复用其 Turn 输出，不重复发布时间线事件。
+      return;
+    }
     const nativeTaskId = readTaskId(params) ?? "";
     const taskId = this.runtime.reviewWorkerParentTaskIds.get(nativeTaskId) ?? nativeTaskId;
     const nativeTurnId = readNotificationTurnId(method, params);

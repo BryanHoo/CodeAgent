@@ -63,7 +63,7 @@ code-agent version
 
 `doctor` 会检查数据库可写性、Migration 版本、`PRAGMA integrity_check`、WAL 和运行所需的 SQLite PRAGMA。
 
-在 Composer 起始位置输入 `/`，可执行代码审查、初始化、副任务、上下文压缩、反馈和在新任务中继续。代码审查、压缩、反馈与续接直接调用 Codex App Server 对应能力；初始化和副任务通过正常 Turn 提交。
+在 Composer 起始位置输入 `/`，可执行代码审查、初始化、副任务、上下文压缩、反馈、在新任务中继续，以及选择 Plan 或 Goal 模式。代码审查、压缩、反馈与续接直接调用 Codex App Server 对应能力；Goal 使用官方 `thread/goal/set` 协议，初始化和副任务通过正常 Turn 提交。
 
 ## 仓库结构
 

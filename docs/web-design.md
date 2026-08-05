@@ -710,6 +710,8 @@ PromptInputMessage
 
 批准模式、模型和思考量 Select 隐藏原生箭头并按当前文字收缩。PromptInput 保留透明单像素边框以避免布局跳动，聚焦后切换为主色；分支与项目路径行最右显示 `contextUsage` 百分比，Tooltip 展示 Token 明细，未知时显示 `上下文 --`。
 
+斜杠命令提供互斥的 Plan 与 Goal 模式。选择后在沙盒模式旁显示模式标签，hover 或键盘聚焦时显示 `X`，点击只取消待提交模式。Goal 正文同时作为 1 至 4,000 字符的 objective 和首轮 Prompt；成功启动后清除标签。真实 Goal Turn 仍只产生现有 Message、Tool 与 Turn 状态，因此 Timeline 继续使用 AI Elements `Message` 等既有组件，无需增加 Goal 专用内容卡片。
+
 ### 18.3 Turn Start、Steer 与 Interrupt
 
 Composer 使用以下状态和主动作：

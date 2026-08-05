@@ -52,7 +52,7 @@ export function createComposerCommands({
     setCommandNotice,
     setCommandQuery,
     setCommandSlashCommand,
-    setPlanModeState,
+    setComposerModeState,
     setReviewMenuMode,
     skillEditorRef,
     state,
@@ -88,7 +88,7 @@ export function createComposerCommands({
     if (!getCommandAvailability(command).available) {
       return;
     }
-    if (command.action === "plan") {
+    if (command.action === "plan" || command.action === "goal") {
       const slashCommand = commandSlashCommand;
       if (slashCommand === undefined) {
         return;
@@ -98,7 +98,7 @@ export function createComposerCommands({
         removePromptSlashCommand(currentContent, slashCommand),
         slashCommand.start,
       );
-      setPlanModeState({ scope: routeScope });
+      setComposerModeState({ mode: command.action, scope: routeScope });
       closeCommandMenu();
       setCommandNotice(undefined);
       focusEditor(slashCommand.start);

@@ -98,6 +98,7 @@ describe("prompt slash command", () => {
       "压缩",
       "复制",
       "计划",
+      "目标",
     ]);
     expect(promptCommandItems.every((item) => item.description.length > 0)).toBe(true);
   });
@@ -120,6 +121,7 @@ describe("prompt slash command", () => {
     const review = findCommand("review");
     const initialize = findCommand("initialize");
     const plan = findCommand("plan");
+    const goal = findCommand("goal");
 
     expect(getPromptCommandAvailability(review, capabilities, true)).toEqual({
       available: true,
@@ -131,6 +133,7 @@ describe("prompt slash command", () => {
       available: true,
     });
     expect(getPromptCommandAvailability(plan, capabilities, false)).toEqual({ available: true });
+    expect(getPromptCommandAvailability(goal, capabilities, false)).toEqual({ available: true });
     expect(
       getPromptCommandAvailability(
         review,

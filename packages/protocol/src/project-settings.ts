@@ -127,10 +127,11 @@ export type AgentTaskSettingsResponse = Readonly<Static<typeof AgentTaskSettings
 
 const AgentTurnOptionProperties = {
   collaborationMode: Type.Optional(AgentCollaborationModeSchema),
+  goalMode: Type.Optional(Type.Literal(true)),
   ...AgentTaskSettingProperties,
 };
 
-// Collaboration mode only controls Turn execution and must not enter persisted Task settings.
+// Collaboration 与 Goal 模式只控制当前 Turn，不得进入持久化 Task 设置。
 export const AgentTurnOptionsSchema = Type.Union([
   Type.Object(
     {

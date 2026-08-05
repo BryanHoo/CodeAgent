@@ -67,14 +67,23 @@ describe("WorkbenchComposer", () => {
   });
 
   it("adds plan mode only to the active Turn options", () => {
-    expect(createComposerTurnOptions(task.settings, model.id, "high", true)).toEqual({
+    expect(createComposerTurnOptions(task.settings, model.id, "high", "plan")).toEqual({
       ...task.settings,
       collaborationMode: "plan",
       model: model.id,
       reasoningEffort: "high",
     });
-    expect(createComposerTurnOptions(task.settings, model.id, "high", false)).toEqual({
+    expect(createComposerTurnOptions(task.settings, model.id, "high", undefined)).toEqual({
       ...task.settings,
+      model: model.id,
+      reasoningEffort: "high",
+    });
+  });
+
+  it("adds goal mode only to the first Goal Turn options", () => {
+    expect(createComposerTurnOptions(task.settings, model.id, "high", "goal")).toEqual({
+      ...task.settings,
+      goalMode: true,
       model: model.id,
       reasoningEffort: "high",
     });

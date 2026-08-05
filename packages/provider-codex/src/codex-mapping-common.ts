@@ -28,6 +28,8 @@ export const CODEX_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
   "item/reasoning/summaryTextDelta",
   "item/reasoning/textDelta",
   "item/started",
+  "thread/goal/cleared",
+  "thread/goal/updated",
   "thread/tokenUsage/updated",
   "turn/completed",
   "turn/started",

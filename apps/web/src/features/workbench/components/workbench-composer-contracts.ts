@@ -21,15 +21,18 @@ import type {
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
 
+export type ComposerMode = "goal" | "plan";
+
 export function createComposerTurnOptions(
   settings: AgentTaskSettings,
   model: string,
   reasoningEffort: string | undefined,
-  planModeEnabled: boolean,
+  mode: ComposerMode | undefined,
 ): AgentTurnOptions {
   return {
     ...settings,
-    ...(planModeEnabled ? { collaborationMode: "plan" as const } : {}),
+    ...(mode === "plan" ? { collaborationMode: "plan" as const } : {}),
+    ...(mode === "goal" ? { goalMode: true as const } : {}),
     model,
     reasoningEffort: reasoningEffort ?? settings.reasoningEffort,
   };

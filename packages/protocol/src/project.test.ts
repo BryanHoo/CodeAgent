@@ -1100,6 +1100,16 @@ describe("project protocol", () => {
     };
     expect(Value.Check(AgentTurnOptionsSchema, planTurnOptions)).toBe(true);
     expect(Value.Check(AgentTaskSettingsSchema, planTurnOptions)).toBe(false);
+    const goalTurnOptions = {
+      approvalPolicy: "on-request",
+      approvalsReviewer: "user",
+      goalMode: true,
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write",
+    };
+    expect(Value.Check(AgentTurnOptionsSchema, goalTurnOptions)).toBe(true);
+    expect(Value.Check(AgentTaskSettingsSchema, goalTurnOptions)).toBe(false);
     expect(
       Value.Check(AgentPromptInputSchema, {
         attachments: [{ id: attachment.id }],

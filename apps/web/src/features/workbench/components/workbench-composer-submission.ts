@@ -32,6 +32,7 @@ import {
 import {
   createComposerTurnOptions,
   resolvePromptAttachment,
+  type ComposerMode,
   type WorkbenchComposerProps,
 } from "./workbench-composer-contracts.js";
 
@@ -53,7 +54,8 @@ type ComposerSubmissionOptions = Readonly<{
   onTaskStarted: WorkbenchComposerProps["onTaskStarted"];
   onTurnStarted: WorkbenchComposerProps["onTurnStarted"];
   pendingTask: AgentTask | undefined;
-  planModeEnabled: boolean;
+  composerMode: ComposerMode | undefined;
+  onGoalStarted: () => void;
   projectId: string;
   promptContent: PromptSkillContent;
   queuedPrompts: readonly QueuedComposerPrompt[];
@@ -88,7 +90,8 @@ export function createComposerSubmission({
   onTaskStarted,
   onTurnStarted,
   pendingTask,
-  planModeEnabled,
+  composerMode,
+  onGoalStarted,
   projectId,
   promptContent,
   queuedPrompts,
@@ -123,12 +126,22 @@ export function createComposerSubmission({
     options: Readonly<{
       clearInputOnSuccess?: boolean;
       forceAction?: "start" | "steer";
-      planModeEnabled?: boolean;
+      composerMode?: ComposerMode | null;
       requestTimelineScroll?: boolean;
     }> = {},
   ): Promise<boolean> => {
     const requestScope = routeScope;
     const text = message.text.trim();
+    const requestedComposerMode =
+      options.composerMode === null ? undefined : (options.composerMode ?? composerMode);
+    if (requestedComposerMode === "goal" && (text.length === 0 || text.length > 4_000)) {
+      setMutationError(
+        new Error(
+          t(text.length === 0 ? "composer.goalObjectiveRequired" : "composer.goalObjectiveTooLong"),
+        ),
+      );
+      return false;
+    }
     const skills =
       promptSkills ??
       toPromptSkillSubmission(skillEditorRef.current?.getContent() ?? promptContent).skills;
@@ -266,7 +279,7 @@ export function createComposerSubmission({
       activeSettings,
       selectedModel.id,
       selectedReasoningEffort,
-      options.planModeEnabled ?? planModeEnabled,
+      requestedComposerMode,
     );
     const turnAttempt = resolveIdempotencyAttempt(
       startTurnAttempt.current,
@@ -302,6 +315,10 @@ export function createComposerSubmission({
         if (options.clearInputOnSuccess !== false) {
           clearComposerInput();
         }
+        if (turnOptions.goalMode === true) {
+          // Goal 已写入 Codex Thread，后续消息必须恢复为普通提交，避免替换目标。
+          onGoalStarted();
+        }
         setSubmittedTurnState({ scope: requestScope, turnId: result.turn.id });
       }
       // Mutation 返回后立即上报本次提交，Timeline 不等待 Provider Snapshot 落盘。
@@ -336,7 +353,7 @@ export function createComposerSubmission({
     options: Readonly<{
       clearInputOnSuccess?: boolean;
       forceAction?: "start" | "steer";
-      planModeEnabled?: boolean;
+      composerMode?: ComposerMode | null;
       requestTimelineScroll?: boolean;
     }> = {},
   ): Promise<boolean> =>

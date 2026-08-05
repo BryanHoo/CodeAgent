@@ -38,13 +38,13 @@ import {
 import { movePromptCommandSelection } from "./prompt-command.js";
 import { PromptSkillEditor } from "./prompt-skill-editor.js";
 import { ComposerCommandMenu } from "./workbench-composer-command-menu.js";
-import { ComposerAttachments, PlanModeTag } from "./workbench-composer-toolbar.js";
+import { ComposerAttachments, ComposerModeTag } from "./workbench-composer-toolbar.js";
 import {
   resolveQueuedPromptSummary,
   type WorkbenchComposerViewProps,
 } from "./workbench-composer-view-contracts.js";
 
-export { PlanModeTag } from "./workbench-composer-toolbar.js";
+export { ComposerModeTag } from "./workbench-composer-toolbar.js";
 export * from "./workbench-composer-view-contracts.js";
 
 export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
@@ -227,12 +227,13 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                 <option value="workspace-write">{t("settings:sandbox.workspaceWrite")}</option>
                 <option value="danger-full-access">{t("settings:sandbox.dangerFullAccess")}</option>
               </PromptInputSelect>
-              {props.planModeEnabled ? (
-                <PlanModeTag
+              {props.composerMode === undefined ? null : (
+                <ComposerModeTag
                   disabled={props.turnControlsDisabled}
-                  onRemove={props.onPlanModeRemove}
+                  mode={props.composerMode}
+                  onRemove={props.onComposerModeRemove}
                 />
-              ) : null}
+              )}
             </PromptInputTools>
             {/* 移动端压缩选择器的展示宽度，保持所有常用操作始终位于同一行。 */}
             <div className="flex min-w-0 items-center gap-1 max-workbench:shrink-0 max-workbench:gap-0.5">
