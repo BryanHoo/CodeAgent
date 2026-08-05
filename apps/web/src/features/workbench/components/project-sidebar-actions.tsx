@@ -1,5 +1,5 @@
 import type { AgentEventConnectionState } from "@code-agent/client";
-import type { Project } from "@code-agent/protocol";
+import type { AppInfoResponse, Project } from "@code-agent/protocol";
 import {
   Ellipsis,
   LoaderCircle,
@@ -126,16 +126,27 @@ export function ProjectActionMenu({
 }
 
 export function SidebarSettingsButton({
+  appInfo,
   connectionState,
   onOpen,
-}: Readonly<{ connectionState: AgentEventConnectionState; onOpen: () => void }>) {
+}: Readonly<{
+  appInfo?: AppInfoResponse;
+  connectionState: AgentEventConnectionState;
+  onOpen: () => void;
+}>) {
   const { t } = useTranslation("workbench");
   const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
   const connectionStatusLabel = t(connectionStatus.labelKey);
+  const appVersion = appInfo?.appVersion ?? "…";
+  const updateLabel = appInfo?.updateAvailable === true ? t("sidebar.updateAvailableLabel") : "";
   return (
     <Button
       variant="ghost"
-      aria-label={t("sidebar.connectionSettings", { status: connectionStatusLabel })}
+      aria-label={t("sidebar.connectionSettings", {
+        status: connectionStatusLabel,
+        update: updateLabel,
+        version: appVersion,
+      })}
       className="flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
       id="global-settings-trigger"
       onClick={onOpen}
@@ -143,12 +154,19 @@ export function SidebarSettingsButton({
     >
       <Settings className="size-4" aria-hidden="true" />
       {t("sidebar.settings")}
-      <span
-        aria-live="polite"
-        className={`ml-auto inline-flex items-center gap-1 text-caption ${connectionStatus.toneClassName}`}
-      >
-        <ProjectSidebarConnectionIcon connectionState={connectionState} />
-        {connectionStatusLabel}
+      <span aria-live="polite" className="ml-auto inline-flex items-center gap-1 text-caption">
+        <span
+          className={appInfo?.updateAvailable === true ? "text-warning" : "text-muted-foreground"}
+        >
+          v{appVersion}
+        </span>
+        <span aria-hidden="true" className="text-muted-foreground">
+          ·
+        </span>
+        <span className={`inline-flex items-center gap-1 ${connectionStatus.toneClassName}`}>
+          <ProjectSidebarConnectionIcon connectionState={connectionState} />
+          {connectionStatusLabel}
+        </span>
       </span>
     </Button>
   );

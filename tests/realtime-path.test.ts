@@ -86,6 +86,7 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
   const taskSettings = new Map<string, AgentTaskSettings>();
 
   return {
+    installAppUpdate: () => Promise.reject(new Error("No update available")),
     projectRepository: {
       list: () => Promise.resolve([project]),
       read: (projectId: string) => Promise.resolve(projectId === project.id ? project : undefined),
@@ -95,6 +96,14 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
       reorder: () => Promise.resolve([project]),
     },
     provider,
+    readAppInfo: () =>
+      Promise.resolve({
+        appVersion: "1.3.0",
+        codexVersion: "0.146.0",
+        latestVersion: "1.3.0",
+        status: "current" as const,
+        updateAvailable: false,
+      }),
     settingsRepository: {
       readGlobalSettings: () => Promise.resolve(globalSettings),
       readProjectDefaults: (projectId: string) => Promise.resolve(projectDefaults.get(projectId)),

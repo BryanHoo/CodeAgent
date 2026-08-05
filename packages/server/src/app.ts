@@ -95,7 +95,7 @@ export async function createCodeAgentServer(
   app.addHook("onRoute", (routeOptions) => {
     // WebSocket 是显式长连接；普通 HTTP 路由使用 Fastify 原生 request.signal 协作取消。
     if (handlerTimeoutMs > 0 && routeOptions.websocket !== true) {
-      routeOptions.handlerTimeout = handlerTimeoutMs;
+      routeOptions.handlerTimeout ??= handlerTimeoutMs;
     }
   });
   const readProjectGitStatus = options.readProjectGitStatus ?? readGitWorkingTreeStatus;
@@ -444,6 +444,7 @@ export async function createCodeAgentServer(
     generateCommitMessageWithCodex,
     getProjectContext,
     idempotencyCacheSize,
+    installAppUpdate: options.installAppUpdate,
     listModels,
     maximumAttachmentBytes,
     modelCatalogCache,
@@ -453,6 +454,7 @@ export async function createCodeAgentServer(
     projectOpenService,
     projectRepository: options.projectRepository,
     provider: options.provider,
+    readAppInfo: options.readAppInfo,
     readEffectiveGlobalSettings,
     readEffectiveProjectDefaults,
     readEffectiveTaskSettings,

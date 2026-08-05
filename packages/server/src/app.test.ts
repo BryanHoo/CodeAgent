@@ -337,6 +337,7 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
   };
   return {
     handlerTimeoutMs: 0,
+    installAppUpdate: vi.fn(() => Promise.reject(new Error("No update available"))),
     loggerEnabled: false,
     projectRepository: {
       list: vi.fn(() => Promise.resolve(orderedProjects)),
@@ -370,6 +371,15 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
       }),
     },
     provider: runtimeProvider,
+    readAppInfo: vi.fn(() =>
+      Promise.resolve({
+        appVersion: "1.3.0",
+        codexVersion: "0.146.0",
+        latestVersion: "1.3.0",
+        status: "current" as const,
+        updateAvailable: false,
+      }),
+    ),
     settingsRepository: createSettingsRepository().repository,
     ...overrides,
   };
@@ -759,6 +769,56 @@ describe("CodeAgent Server", () => {
       },
     });
     expect(projectsResponse.json()).toEqual({ data: [project], nextCursor: null });
+  });
+
+  it("serves application versions and installs an update idempotently", async () => {
+    const provider = createProvider().provider;
+    const readAppInfo = vi.fn(() =>
+      Promise.resolve({
+        appVersion: "1.3.0",
+        codexVersion: "0.146.0",
+        latestVersion: "1.4.0",
+        status: "available" as const,
+        updateAvailable: true,
+      }),
+    );
+    const installAppUpdate = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return {
+        appVersion: "1.3.0",
+        codexVersion: "0.146.0",
+        latestVersion: "1.4.0",
+        status: "restart-required" as const,
+        updateAvailable: false,
+      };
+    });
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, { handlerTimeoutMs: 10, installAppUpdate, readAppInfo }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const infoResponse = await app.inject({ method: "GET", url: "/v1/app-info" });
+    const request = {
+      headers: { "idempotency-key": "install-update-1" },
+      method: "POST" as const,
+      payload: { version: "1.4.0" },
+      url: "/v1/app-update",
+    };
+    const firstResponse = await app.inject(request);
+    const repeatedResponse = await app.inject(request);
+
+    expect(infoResponse.statusCode).toBe(200);
+    expect(infoResponse.json()).toEqual({
+      appVersion: "1.3.0",
+      codexVersion: "0.146.0",
+      latestVersion: "1.4.0",
+      status: "available",
+      updateAvailable: true,
+    });
+    expect(firstResponse.statusCode).toBe(200);
+    expect(repeatedResponse.json()).toEqual(firstResponse.json());
+    expect(installAppUpdate).toHaveBeenCalledOnce();
+    expect(installAppUpdate).toHaveBeenCalledWith("1.4.0");
   });
 
   it("opens only a registered project through a supported host app idempotently", async () => {
@@ -2437,6 +2497,7 @@ describe("CodeAgent Server", () => {
       releaseProject: () => Promise.resolve(),
     };
     const app = await createCodeAgentServer({
+      installAppUpdate: vi.fn(() => Promise.reject(new Error("No update available"))),
       projectRepository: {
         list: () => Promise.resolve([project, otherProject]),
         read: (projectId) =>
@@ -2447,6 +2508,15 @@ describe("CodeAgent Server", () => {
         reorder: () => Promise.resolve([project, otherProject]),
       },
       provider: runtimeProvider,
+      readAppInfo: vi.fn(() =>
+        Promise.resolve({
+          appVersion: "1.3.0",
+          codexVersion: "0.146.0",
+          latestVersion: "1.3.0",
+          status: "current" as const,
+          updateAvailable: false,
+        }),
+      ),
       settingsRepository: createSettingsRepository().repository,
     });
     closeCallbacks.push(() => app.close());

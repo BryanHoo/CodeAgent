@@ -289,9 +289,15 @@ code-agent start --codex-home /path/to/codex-home
 --codex-home <path>
 ```
 
+### 6.2 应用版本与更新
+
+CLI 启动 Codex App Server 后，将根包版本和实际 Codex Binary 版本注入 HTTP Server。`GET /v1/app-info` 返回当前版本、npm `latest` 版本和更新状态；registry 检查失败时仍返回本地版本，不阻断工作台。
+
+`POST /v1/app-update` 使用 `Idempotency-Key`，只接受严格 SemVer 且必须等于本次重新读取的 `latest`。安装固定通过参数数组执行 `npm install --global @bryanhu/code-agent@<version>`，不经过 shell；成功仅表示新版已安装，当前进程继续运行旧代码并要求用户重启。
+
 CLI 启动一个不绑定 Project 的全局 `codex app-server --listen stdio://`。Project 默认列表为空，由 Web 通过 Server 目录浏览 API 选择并注册绝对目录，再持久化到 `CODEX_HOME/code-agent/state.sqlite3`；本地和已配对 LAN 浏览器使用同一链路，不触发 Server 宿主 GUI。
 
-### 6.2 默认配置
+### 6.3 默认配置
 
 ```json
 {
@@ -304,7 +310,7 @@ CLI 启动一个不绑定 Project 的全局 `codex app-server --listen stdio://`
 }
 ```
 
-### 6.3 启动流程
+### 6.4 启动流程
 
 ```text
 1. 加载 CLI 参数和配置文件。

@@ -4,10 +4,12 @@ import type {
   ProjectRepository,
 } from "@code-agent/core";
 import type {
+  AppInfoResponse,
   CommitProjectChangesRequest,
   CommitProjectChangesResponse,
   HostFileKind,
   HostFileListing,
+  InstallAppUpdateResponse,
   ProjectDirectoryListing,
   ProjectFileTree,
   ProjectGitStatus,
@@ -27,6 +29,7 @@ export interface CreateCodeAgentServerOptions {
   handlerTimeoutMs?: number;
   idempotencyCacheSize?: number;
   idempotencyTtlMs?: number;
+  installAppUpdate: (version: string) => Promise<InstallAppUpdateResponse>;
   loggerEnabled?: boolean;
   logDestination?: Readonly<{ write: (message: string) => void }>;
   modelCatalogCacheMaxBytes?: number;
@@ -35,6 +38,7 @@ export interface CreateCodeAgentServerOptions {
   projectRepository: ProjectRepository;
   projectOpenService?: ProjectOpenService;
   provider: AgentRuntimeProvider;
+  readAppInfo: () => Promise<AppInfoResponse>;
   settingsRepository: AgentSettingsRepository;
   commitProjectChanges?: (
     projectRoot: string,

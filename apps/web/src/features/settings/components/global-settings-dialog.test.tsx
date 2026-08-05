@@ -1,11 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import type { AgentModel } from "@code-agent/protocol";
+import type { AppInfoResponse, AgentModel } from "@code-agent/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import { changeAppLanguage } from "../../../i18n/i18n.js";
 import { TooltipProvider } from "../../../shared/ui/tooltip.js";
 import { GlobalSettingsDialog, resolveGlobalSettingsModel } from "./global-settings-dialog.js";
+import { GlobalSettingsAbout } from "./global-settings-about.js";
 
 function renderSettingsDialog(children: ReactNode): string {
   return renderToStaticMarkup(<TooltipProvider>{children}</TooltipProvider>);
@@ -123,6 +124,135 @@ describe("GlobalSettingsDialog", () => {
 
     expect(markup).toContain("局域网访问");
     expect(markup).toContain("退出局域网访问");
+  });
+
+  it("shows CodeAgent and Codex versions with an available update", () => {
+    const appInfo: AppInfoResponse = {
+      appVersion: "1.3.0",
+      codexVersion: "0.146.0",
+      latestVersion: "1.4.0",
+      status: "available" as const,
+      updateAvailable: true,
+    };
+    const markup = renderSettingsDialog(
+      <GlobalSettingsDialog
+        appInfo={appInfo}
+        appInfoError={null}
+        apps={[]}
+        error={null}
+        initialSection="about"
+        isAppInfoPending={false}
+        isPending={false}
+        models={models}
+        onClose={vi.fn()}
+        onRetry={vi.fn()}
+        onRetryAppInfo={vi.fn()}
+        onSave={vi.fn()}
+        onUpdate={vi.fn()}
+        settings={{
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          commitMessageModel: "gpt-5.6-sol",
+          commitMessagePrompt: "",
+          commitMessageReasoningEffort: "high",
+          defaultOpenAppId: null,
+          followUpBehavior: "queue",
+          model: "gpt-5.6-sol",
+          reasoningEffort: "high",
+          sandboxMode: "workspace-write",
+        }}
+      />,
+    );
+
+    expect(markup).toContain("关于");
+    expect(markup).toContain("CodeAgent 版本");
+    expect(markup).toContain("1.3.0");
+    expect(markup).toContain("Codex 版本");
+    expect(markup).toContain("0.146.0");
+    expect(markup).toContain("发现新版本 1.4.0");
+    expect(markup).toContain("更新到 1.4.0");
+    expect(markup).toContain('<section id="settings-panel-about">');
+  });
+
+  it("keeps About available when global settings fail to load", () => {
+    const markup = renderSettingsDialog(
+      <GlobalSettingsDialog
+        appInfo={{
+          appVersion: "1.3.0",
+          codexVersion: "0.146.0",
+          latestVersion: "1.4.0",
+          status: "available",
+          updateAvailable: true,
+        }}
+        apps={[]}
+        error={new Error("settings unavailable")}
+        initialSection="about"
+        isPending={false}
+        models={models}
+        onClose={vi.fn()}
+        onRetry={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("CodeAgent 版本");
+    expect(markup).toContain("Codex 版本");
+    expect(markup).not.toContain("加载全局设置失败");
+  });
+
+  it("shows updating, restart, and update-check failure states", () => {
+    const available: AppInfoResponse = {
+      appVersion: "1.3.0",
+      codexVersion: "0.146.0",
+      latestVersion: "1.4.0",
+      status: "available",
+      updateAvailable: true,
+    };
+    const updating = renderSettingsDialog(
+      <GlobalSettingsAbout
+        activeSection="about"
+        appInfo={available}
+        error={null}
+        isPending={false}
+        isUpdatePending
+        onRetry={vi.fn()}
+        onUpdate={vi.fn()}
+      />,
+    );
+    const restartRequired = renderSettingsDialog(
+      <GlobalSettingsAbout
+        activeSection="about"
+        appInfo={{
+          ...available,
+          status: "restart-required",
+          updateAvailable: false,
+        }}
+        error={null}
+        isPending={false}
+        onRetry={vi.fn()}
+        onUpdate={vi.fn()}
+      />,
+    );
+    const checkFailed = renderSettingsDialog(
+      <GlobalSettingsAbout
+        activeSection="about"
+        appInfo={{
+          ...available,
+          latestVersion: null,
+          status: "check-failed",
+          updateAvailable: false,
+        }}
+        error={null}
+        isPending={false}
+        onRetry={vi.fn()}
+        onUpdate={vi.fn()}
+      />,
+    );
+
+    expect(updating).toContain("正在更新");
+    expect(restartRequired).toContain("更新完成，重启 CodeAgent 后生效");
+    expect(checkFailed).toContain("无法检查更新");
+    expect(checkFailed).toContain("重新检查");
   });
 
   it("uses the selected model default when the previous effort is unavailable", () => {

@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { AgentEventConnectionState } from "@code-agent/client";
-import type { AgentTask, Project } from "@code-agent/protocol";
+import type { AgentTask, AppInfoResponse, Project } from "@code-agent/protocol";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PanelLeftClose, Search, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -48,6 +48,7 @@ const primaryActionClassName =
   "flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small font-medium text-foreground transition-colors hover:bg-control-hover";
 const primaryActionIconClassName = "size-4 shrink-0 text-muted-foreground";
 type ProjectSidebarProps = Readonly<{
+  appInfo?: AppInfoResponse;
   connectionState: AgentEventConnectionState;
   onClose: () => void;
   onOpenSettings: () => void;
@@ -56,6 +57,7 @@ type ProjectSidebarProps = Readonly<{
 }>;
 
 export function ProjectSidebar({
+  appInfo,
   connectionState,
   onClose,
   onOpenSettings,
@@ -479,7 +481,11 @@ export function ProjectSidebar({
       )}
 
       <div className="p-2">
-        <SidebarSettingsButton connectionState={connectionState} onOpen={onOpenSettings} />
+        <SidebarSettingsButton
+          {...(appInfo === undefined ? {} : { appInfo })}
+          connectionState={connectionState}
+          onOpen={onOpenSettings}
+        />
       </div>
     </aside>
   );

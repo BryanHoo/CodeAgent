@@ -30,6 +30,7 @@ export function WorkbenchShellLayout({
   taskId?: string;
 }>) {
   const {
+    appInfoQuery,
     backgroundTerminals,
     beginNewChatSubmission,
     capabilities,
@@ -110,6 +111,7 @@ export function WorkbenchShellLayout({
       }
     >
       <ProjectSidebar
+        {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
         connectionState={sidebarConnectionState}
         onClose={closeSidebar}
         onOpenSettings={() => {

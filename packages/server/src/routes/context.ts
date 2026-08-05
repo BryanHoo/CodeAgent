@@ -7,6 +7,7 @@ import type {
   ProjectRepository,
 } from "@code-agent/core";
 import type {
+  AppInfoResponse,
   AgentAttachmentKind,
   AgentCapabilities,
   AgentGlobalSettings,
@@ -22,6 +23,7 @@ import type {
   GenerateCommitMessageRequest,
   HostFileKind,
   HostFileListing,
+  InstallAppUpdateResponse,
   Project,
   ProjectDirectoryListing,
   ProjectFileTree,
@@ -109,6 +111,7 @@ export interface ServerRouteContext {
   readonly getProjectContext: ProjectContextResolver;
   readonly fingerprintPayload: (payload: unknown) => string;
   readonly idempotencyCacheSize: number;
+  readonly installAppUpdate: (version: string) => Promise<InstallAppUpdateResponse>;
   readonly listModels: () => Promise<readonly AgentModel[]>;
   readonly maximumAttachmentBytes: (kind: AgentAttachmentKind) => number;
   readonly modelCatalogCache: Readonly<{ read: () => Promise<AgentModelPage> }>;
@@ -124,6 +127,7 @@ export interface ServerRouteContext {
   readonly readEffectiveGlobalSettings: (
     models?: readonly AgentModel[],
   ) => Promise<AgentGlobalSettings>;
+  readonly readAppInfo: () => Promise<AppInfoResponse>;
   readonly readEffectiveProjectDefaults: (
     projectId: string,
     models?: readonly AgentModel[],

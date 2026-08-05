@@ -16,6 +16,7 @@ import {
   type ProjectTaskInfiniteData,
   type CodeAgentSnapshotClient,
   type CodeAgentCapabilitiesClient,
+  type CodeAgentAppUpdateClient,
   type CodeAgentModelsClient,
   type CodeAgentSettingsClient,
   type CodeAgentSkillsClient,
@@ -102,6 +103,22 @@ export function modelsQueryOptions(client: CodeAgentModelsClient = codeAgentClie
     queryFn: ({ signal }) => client.listModels({ signal }),
     queryKey: ["models"] as const,
     staleTime: 5 * 60_000,
+  });
+}
+
+export function appInfoQueryOptions(client: CodeAgentAppUpdateClient = codeAgentClient) {
+  return queryOptions({
+    queryFn: ({ signal }) => client.getAppInfo({ signal }),
+    queryKey: ["app-info"] as const,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function appUpdateMutationOptions(client: CodeAgentAppUpdateClient = codeAgentClient) {
+  return mutationOptions({
+    mutationFn: (version: string) => client.installAppUpdate(version),
+    mutationKey: ["app-update", "install"] as const,
+    scope: { id: "app-update" },
   });
 }
 

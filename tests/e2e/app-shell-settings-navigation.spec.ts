@@ -25,11 +25,12 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(taskModel).toHaveValue("gpt-5.6-sol");
   await expect(taskApproval).toHaveValue("on-request");
 
-  await page.getByRole("button", { name: /设置，终端连接状态/u }).click();
+  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
   const dialog = page.getByRole("dialog", { name: "全局设置" });
   await expect(dialog).toBeVisible();
   await expect(page).toHaveURL(workbenchUrl);
 
+  await dialog.getByRole("button", { name: "外观" }).click();
   await dialog.getByRole("button", { name: "深色模式" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await dialog.getByRole("button", { name: "Agent 默认值" }).click();
@@ -51,8 +52,9 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(taskModel).toHaveValue("gpt-5.6-sol");
   await expect(taskApproval).toHaveValue("on-request");
 
-  await page.getByRole("button", { name: /设置，终端连接状态/u }).click();
+  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
   const reopenedDialog = page.getByRole("dialog", { name: "全局设置" });
+  await reopenedDialog.getByRole("button", { name: "外观" }).click();
   await expect(reopenedDialog.getByRole("button", { name: "深色模式" })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -92,8 +94,9 @@ test("edits global defaults in a dialog without overriding task settings", async
 test("switches the interface language and restores it after reload", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  await page.getByRole("button", { name: /设置，终端连接状态/u }).click();
+  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
   const chineseDialog = page.getByRole("dialog", { name: "全局设置" });
+  await chineseDialog.getByRole("button", { name: "外观" }).click();
   await chineseDialog.getByRole("combobox", { name: "语言" }).selectOption("en");
 
   const englishDialog = page.getByRole("dialog", { name: "Global settings" });
@@ -111,8 +114,58 @@ test("switches the interface language and restores it after reload", async ({ pa
   await page.reload();
 
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await page.getByRole("button", { name: /Settings, terminal connection status/u }).click();
+  await page
+    .getByRole("button", { name: /Settings, CodeAgent .*terminal connection status/u })
+    .click();
   await expect(page.getByRole("dialog", { name: "Global settings" })).toBeVisible();
+});
+
+test("opens About from the sidebar and installs an available update", async ({ page }) => {
+  let updateRequest: Record<string, unknown> | undefined;
+  await page.route("**/v1/app-info", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        appVersion: "1.3.0",
+        codexVersion: "0.146.0",
+        latestVersion: "1.4.0",
+        status: "available",
+        updateAvailable: true,
+      },
+    });
+  });
+  await page.route("**/v1/app-update", async (route) => {
+    updateRequest = parseRequestRecord(route.request().postData());
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        appVersion: "1.3.0",
+        codexVersion: "0.146.0",
+        latestVersion: "1.4.0",
+        status: "restart-required",
+        updateAvailable: false,
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const settingsButton = page.getByRole("button", {
+    name: /设置，CodeAgent 1\.3\.0，有可用更新，终端连接状态：在线/u,
+  });
+  await expect(settingsButton.getByText("v1.3.0")).toHaveClass(/text-warning/u);
+  await settingsButton.click();
+
+  const dialog = page.getByRole("dialog", { name: "全局设置" });
+  await expect(dialog.getByRole("button", { name: "关于" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(dialog.getByText("1.3.0", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("0.146.0", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "更新到 1.4.0" }).click();
+
+  await expect.poll(() => updateRequest).toEqual({ version: "1.4.0" });
+  await expect(dialog.getByText("更新完成，重启 CodeAgent 后生效")).toBeVisible();
 });
 
 test("uses global defaults throughout a new task composer", async ({ page }) => {

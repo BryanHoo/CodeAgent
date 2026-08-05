@@ -9,6 +9,7 @@
 - 网络 Access 契约必须独立于 Codex 账号和 Provider 类型，使用严格版本化 Schema 定义 `local | lan` 状态、配对、注销及 `ACCESS_DENIED`、`PAIRING_FAILED`、`PAIRING_RATE_LIMITED` 错误。Protocol、Client、Server 与 Web 消费者必须同步更新。
 - Client 所有 Fetch 必须显式使用 `credentials: "same-origin"`；配对码只能进入 `POST /v1/access/pair` JSON Body。`401` 通知不得吞掉或改写原 HTTP 或 Mutation 错误。
 - Project、Task 等 Protocol 类型必须有对应 JSON Schema 或明确生成来源，运行时边界不得只依赖 TypeScript 类型。
+- 应用信息和更新必须使用严格 `AppInfoResponse`、`InstallAppUpdateRequest` 与 `InstallAppUpdateResponse` Schema；Client 必须校验 CodeAgent/Codex/current/latest/status 字段。更新请求只接受目标 SemVer 并携带 `Idempotency-Key`，Server 必须区分无可用更新、检查失败与安装失败，Web 不得根据版本字符串自行执行包管理命令。
 - 代码审查请求使用携带严格 `AgentReviewTarget` 的 `AgentReviewItem` 进入 Snapshot 和实时事件，禁止用普通用户消息或 Provider 原生 Prompt 表达审查模式。
 - Codex `review/start` 必须通过 `thread/started.thread.parentThreadId` 将独立 reviewer 子 Thread 关联到父 Task，并将外层审查 Turn 与 worker Turn 投影成同一个用户可见 Turn：只保留一个结构化审查请求，隐藏 worker 的重复 Prompt，按原顺序保留 worker 的 commentary、工具和最终回复；仅在 worker 已交付最终回复时抑制外层重复结果。worker 终态只清理其待处理请求，外层 `exitedReviewMode` 与 `turn/completed` 才结束审查运行态和处理计时；历史 Snapshot 必须读取 `subAgentReview` 子 Thread，并与实时事件生成相同投影。
 - `Project.rootPath` 由本地 Runtime 校验后随 Project 契约返回，用于当前工作台展示，并由 `ProjectSchema` 校验为非空字符串。

@@ -24,6 +24,8 @@ export function WorkbenchShellDialogs({
 }>) {
   const {
     access,
+    appInfoQuery,
+    appUpdateMutation,
     client,
     closeTaskRenameDialog,
     commitChangesLauncherRef,
@@ -106,6 +108,8 @@ export function WorkbenchShellDialogs({
       {globalSettingsOpen ? (
         <GlobalSettingsDialog
           {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
+          {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
+          appInfoError={appInfoQuery.error}
           apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
           error={
             globalSettingsQuery.error ?? modelsQuery.error ?? projectOpenCapabilitiesQuery.error
@@ -115,6 +119,9 @@ export function WorkbenchShellDialogs({
             modelsQuery.isPending ||
             projectOpenCapabilitiesQuery.isPending
           }
+          initialSection="about"
+          isAppInfoPending={appInfoQuery.isPending}
+          isAppUpdatePending={appUpdateMutation.isPending}
           models={models}
           onClose={() => {
             setGlobalSettingsOpen(false);
@@ -130,7 +137,10 @@ export function WorkbenchShellDialogs({
               projectOpenCapabilitiesQuery.refetch(),
             ])
           }
+          onRetryAppInfo={() => appInfoQuery.refetch()}
           onSave={(settings) => globalSettingsMutation.mutateAsync(settings).then(() => undefined)}
+          onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
+          updateError={appUpdateMutation.error}
           {...(globalSettingsQuery.data === undefined
             ? {}
             : { settings: globalSettingsQuery.data.settings })}

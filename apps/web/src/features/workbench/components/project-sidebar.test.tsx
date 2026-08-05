@@ -177,6 +177,14 @@ describe("ProjectPickerButton", () => {
 });
 
 describe("SidebarSettingsButton", () => {
+  const appInfo = {
+    appVersion: "1.3.0",
+    codexVersion: "0.146.0",
+    latestVersion: "1.3.0",
+    status: "current" as const,
+    updateAvailable: false,
+  };
+
   it("renders every connection status in Chinese", async () => {
     await changeAppLanguage("zh-CN");
     const cases = [
@@ -188,9 +196,14 @@ describe("SidebarSettingsButton", () => {
 
     for (const [connectionState, label] of cases) {
       const markup = renderToStaticMarkup(
-        <SidebarSettingsButton connectionState={connectionState} onOpen={vi.fn()} />,
+        <SidebarSettingsButton
+          appInfo={appInfo}
+          connectionState={connectionState}
+          onOpen={vi.fn()}
+        />,
       );
-      expect(markup).toContain(`终端连接状态：${label}`);
+      expect(markup).toContain(`CodeAgent 1.3.0，终端连接状态：${label}`);
+      expect(markup).toContain("v1.3.0");
       expect(markup).toContain(`>${label}</span>`);
       expect(markup).not.toContain("href=");
     }
@@ -208,14 +221,37 @@ describe("SidebarSettingsButton", () => {
 
       for (const [connectionState, label] of cases) {
         const markup = renderToStaticMarkup(
-          <SidebarSettingsButton connectionState={connectionState} onOpen={vi.fn()} />,
+          <SidebarSettingsButton
+            appInfo={appInfo}
+            connectionState={connectionState}
+            onOpen={vi.fn()}
+          />,
         );
-        expect(markup).toContain(`terminal connection status: ${label}`);
+        expect(markup).toContain(`CodeAgent 1.3.0, terminal connection status: ${label}`);
         expect(markup).toContain(`>${label}</span>`);
       }
     } finally {
       await changeAppLanguage("zh-CN");
     }
+  });
+
+  it("uses a distinct version state when an update is available", async () => {
+    await changeAppLanguage("zh-CN");
+    const markup = renderToStaticMarkup(
+      <SidebarSettingsButton
+        appInfo={{
+          ...appInfo,
+          latestVersion: "1.4.0",
+          status: "available",
+          updateAvailable: true,
+        }}
+        connectionState="connected"
+        onOpen={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("CodeAgent 1.3.0，有可用更新，终端连接状态：在线");
+    expect(markup).toContain('class="text-warning"');
   });
 });
 

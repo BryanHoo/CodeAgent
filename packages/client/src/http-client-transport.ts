@@ -4,8 +4,10 @@ import {
   AgentGlobalSettingsResponseSchema,
   AgentModelPageSchema,
   AgentMutationErrorSchema,
+  AppInfoResponseSchema,
   BrowserSessionResponseSchema,
   HealthResponseSchema,
+  InstallAppUpdateResponseSchema,
   type AccessStatusResponse,
   type AgentAttachmentKind,
   type AgentCapabilities,
@@ -13,8 +15,10 @@ import {
   type AgentGlobalSettingsResponse,
   type AgentModelPage,
   type AgentMutationError,
+  type AppInfoResponse,
   type BrowserSessionResponse,
   type HealthResponse,
+  type InstallAppUpdateResponse,
   type PendingRequest,
   type ResolvePendingRequestRequest,
 } from "@code-agent/protocol";
@@ -27,6 +31,8 @@ import {
   type SubscribeAgentEventsOptions,
   type WebSocketFactory,
 } from "./event-client.js";
+
+const APP_UPDATE_REQUEST_TIMEOUT_MS = 150_000;
 
 export interface CodeAgentClientOptions {
   baseUrl?: string;
@@ -163,6 +169,24 @@ export class CodeAgentTransport {
     return this.read("/v1/health", HealthResponseSchema, options);
   }
 
+  public async getAppInfo(options: ReadOptions = {}): Promise<AppInfoResponse> {
+    return this.read("/v1/app-info", AppInfoResponseSchema, options);
+  }
+
+  public async installAppUpdate(
+    version: string,
+    options: MutationOptions = {},
+  ): Promise<InstallAppUpdateResponse> {
+    return this.mutation(
+      "/v1/app-update",
+      { version },
+      InstallAppUpdateResponseSchema,
+      options,
+      "POST",
+      APP_UPDATE_REQUEST_TIMEOUT_MS,
+    );
+  }
+
   public async getBrowserSession(options: ReadOptions = {}): Promise<BrowserSessionResponse> {
     return this.read("/v1/browser-session", BrowserSessionResponseSchema, options);
   }
@@ -239,6 +263,7 @@ export class CodeAgentTransport {
     schema: T,
     options: MutationOptions,
     method: "POST" | "PUT" = "POST",
+    timeoutMs = this.requestTimeouts.mutationMs,
   ): Promise<Static<T>> {
     return this.request(
       path,
@@ -254,7 +279,7 @@ export class CodeAgentTransport {
       AgentMutationErrorSchema,
       {
         ...(options.signal === undefined ? {} : { signal: options.signal }),
-        timeoutMs: this.requestTimeouts.mutationMs,
+        timeoutMs,
       },
     );
   }

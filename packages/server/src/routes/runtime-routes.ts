@@ -4,14 +4,20 @@ import {
   AgentGlobalSettingsSchema,
   AgentModelPageSchema,
   AgentMutationErrorSchema,
+  AppInfoResponseSchema,
   EventStreamMetricsResponseSchema,
   HealthResponseSchema,
+  InstallAppUpdateRequestSchema,
+  InstallAppUpdateResponseSchema,
   type AgentGlobalSettings,
+  type InstallAppUpdateRequest,
 } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
 
-import type { ServerRouteContext } from "./context.js";
+import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import { IdempotencyHeadersSchema } from "./schemas.js";
+
+const APP_UPDATE_HANDLER_TIMEOUT_MS = 150_000;
 
 export const registerRuntimeRoutes: FastifyPluginCallback<ServerRouteContext> = (
   app,
@@ -21,9 +27,11 @@ export const registerRuntimeRoutes: FastifyPluginCallback<ServerRouteContext> = 
   const {
     assertValidProjectDefaults,
     capabilities,
+    installAppUpdate,
     listModels,
     modelCatalogCache,
     projectContexts,
+    readAppInfo,
     readEffectiveGlobalSettings,
     runIdempotent,
     settingsRepository,
@@ -33,6 +41,57 @@ export const registerRuntimeRoutes: FastifyPluginCallback<ServerRouteContext> = 
     status: "ok" as const,
     version: 1 as const,
   }));
+
+  app.get("/v1/app-info", { schema: { response: { 200: AppInfoResponseSchema } } }, () =>
+    readAppInfo(),
+  );
+
+  app.post<{
+    Body: InstallAppUpdateRequest;
+    Headers: { "idempotency-key": string };
+  }>(
+    "/v1/app-update",
+    {
+      handlerTimeout: APP_UPDATE_HANDLER_TIMEOUT_MS,
+      schema: {
+        body: InstallAppUpdateRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        response: {
+          200: InstallAppUpdateResponseSchema,
+          400: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        ["install-app-update"],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          try {
+            return await installAppUpdate(request.body.version);
+          } catch (error) {
+            const code =
+              typeof error === "object" &&
+              error !== null &&
+              "code" in error &&
+              (error.code === "UPDATE_NOT_AVAILABLE" ||
+                error.code === "UPDATE_CHECK_FAILED" ||
+                error.code === "UPDATE_INSTALL_FAILED")
+                ? error.code
+                : "UPDATE_INSTALL_FAILED";
+            throw new MutationHttpError(
+              code,
+              error instanceof Error ? error.message : "Failed to install the CodeAgent update",
+              code === "UPDATE_NOT_AVAILABLE" ? 409 : 502,
+              code !== "UPDATE_NOT_AVAILABLE",
+            );
+          }
+        },
+      ),
+  );
 
   app.get(
     "/v1/metrics/events",

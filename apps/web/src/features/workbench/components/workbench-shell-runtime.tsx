@@ -22,6 +22,8 @@ import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { useProjectActions, useProjectData } from "../../projects/project-context.js";
 import {
+  appInfoQueryOptions,
+  appUpdateMutationOptions,
   globalSettingsMutationOptions,
   globalSettingsQueryOptions,
   mcpServersQueryOptions,
@@ -121,6 +123,13 @@ export function useWorkbenchShellRuntime({ projectId, taskId }: WorkbenchShellPr
   } = useProjectActions();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const appInfoQuery = useQuery(appInfoQueryOptions(client));
+  const appUpdateMutation = useMutation({
+    ...appUpdateMutationOptions(client),
+    onSuccess(response) {
+      queryClient.setQueryData(["app-info"], response);
+    },
+  });
   const modelsQuery = useQuery(modelsQueryOptions(client));
   const mcpServersQuery = useQuery(mcpServersQueryOptions(projectId, taskId, client));
   const globalSettingsQuery = useQuery(globalSettingsQueryOptions(client));
@@ -315,6 +324,8 @@ export function useWorkbenchShellRuntime({ projectId, taskId }: WorkbenchShellPr
   return {
     access,
     activeTaskRenameLockRef,
+    appInfoQuery,
+    appUpdateMutation,
     backgroundTerminals,
     beginNewChatSubmission,
     capabilities,

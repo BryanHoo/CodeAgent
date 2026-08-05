@@ -3,6 +3,7 @@ import {
   Bot,
   ChevronDown,
   GitCommitHorizontal,
+  Info,
   MonitorCog,
   Network,
   Palette,
@@ -14,7 +15,8 @@ import { useTranslation } from "../../../i18n/i18n.js";
 import { PromptInputSelect } from "../../../shared/ai-elements/prompt-input.js";
 import { Button } from "../../../shared/ui/button.js";
 
-export type SettingsSectionId = "access" | "agent" | "appearance" | "commit" | "integration";
+export type SettingsSectionId =
+  "about" | "access" | "agent" | "appearance" | "commit" | "integration";
 
 export const settingsSections: readonly Readonly<{
   icon: LucideIcon;
@@ -25,6 +27,7 @@ export const settingsSections: readonly Readonly<{
   { icon: GitCommitHorizontal, id: "commit" },
   { icon: MonitorCog, id: "integration" },
   { icon: Network, id: "access" },
+  { icon: Info, id: "about" },
 ];
 
 export function SettingsPanel({

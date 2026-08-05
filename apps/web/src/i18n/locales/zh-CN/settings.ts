@@ -1,4 +1,16 @@
 export const settings = {
+  about: {
+    available: "发现新版本 {{version}}",
+    codeAgentVersion: "CodeAgent 版本",
+    codexVersion: "Codex 版本",
+    current: "已是最新版本",
+    loading: "正在检查更新",
+    restartRequired: "更新完成，重启 CodeAgent 后生效",
+    retry: "重新检查",
+    update: "软件更新",
+    updateTo: "更新到 {{version}}",
+    updating: "正在更新",
+  },
   access: {
     currentSession: "当前浏览器",
     loggingOut: "正在退出",
@@ -34,9 +46,12 @@ export const settings = {
     xhigh: "极高",
   },
   errors: {
+    appInfo: "无法加载版本信息",
     load: "无法加载全局设置",
     logout: "无法退出局域网访问",
     save: "无法保存全局设置",
+    update: "更新失败，请重试",
+    updateCheck: "无法检查更新",
   },
   fields: {
     approvalPolicy: "审批",
@@ -69,6 +84,7 @@ export const settings = {
     workspaceWrite: "工作区可写",
   },
   sections: {
+    about: "关于",
     access: "局域网访问",
     agent: "Agent 默认值",
     appearance: "外观",

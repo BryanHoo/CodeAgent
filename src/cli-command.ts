@@ -27,6 +27,7 @@ import {
 } from "@code-agent/server";
 
 import packageManifest from "../package.json" with { type: "json" };
+import { createAppUpdateService } from "./app-update.js";
 import { openSystemBrowser } from "./system-browser.js";
 import {
   DEFAULT_LAN_SESSION_TTL,
@@ -38,6 +39,7 @@ import {
 interface CliManagedRuntime {
   client: CodexRpcClient;
   close: () => Promise<void>;
+  version: CodexVersionInfo;
   waitForExit: () => Promise<CodexProcessExit>;
 }
 
@@ -58,8 +60,10 @@ interface CreateRuntimeProviderInput {
 
 interface CreateServerInput {
   access?: CodeAgentAccessOptions;
+  installAppUpdate: ReturnType<typeof createAppUpdateService>["install"];
   projectRepository: ProjectRepository;
   provider: AgentRuntimeProvider;
+  readAppInfo: ReturnType<typeof createAppUpdateService>["read"];
   settingsRepository: AgentSettingsRepository;
   staticRoot: string;
 }
@@ -344,10 +348,16 @@ async function runStart(
     const provider = await dependencies.createRuntimeProvider({
       client: runtime.client,
     });
+    const appUpdateService = createAppUpdateService({
+      appVersion: dependencies.appVersion,
+      codexVersion: runtime.version.version,
+    });
     server = await dependencies.createServer({
       ...(access === undefined ? {} : { access }),
       projectRepository: stateRepository,
       provider,
+      installAppUpdate: appUpdateService.install,
+      readAppInfo: appUpdateService.read,
       settingsRepository: stateRepository,
       staticRoot: dependencies.webRoot,
     });

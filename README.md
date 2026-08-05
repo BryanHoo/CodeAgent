@@ -17,6 +17,8 @@ npm install --global @bryanhu/code-agent
 code-agent start
 ```
 
+工作台左栏会显示当前 CodeAgent 版本和连接状态。设置的“关于”模块同时展示 CodeAgent 与 Codex 版本，并从 npm `latest` 标签检查新版；点击更新会执行全局 npm 安装，完成后需要重启 CodeAgent。
+
 运行前需要：
 
 - Node.js 24 或更高版本

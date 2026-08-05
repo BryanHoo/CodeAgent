@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 
 import { useProjectActions, useProjectData } from "../../features/projects/project-context.js";
 import {
+  appInfoQueryOptions,
+  appUpdateMutationOptions,
   globalSettingsMutationOptions,
   globalSettingsQueryOptions,
   modelsQueryOptions,
@@ -33,6 +35,13 @@ function IndexPage() {
   const { retry } = useProjectActions();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const appInfoQuery = useQuery(appInfoQueryOptions(client));
+  const appUpdateMutation = useMutation({
+    ...appUpdateMutationOptions(client),
+    onSuccess(response) {
+      queryClient.setQueryData(["app-info"], response);
+    },
+  });
   const globalSettingsQuery = useQuery(globalSettingsQueryOptions(client));
   const modelsQuery = useQuery(modelsQueryOptions(client));
   const globalSettingsMutation = useMutation({
@@ -81,6 +90,7 @@ function IndexPage() {
       data-sidebar-open="true"
     >
       <ProjectSidebar
+        {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
         connectionState="connected"
         onClose={() => undefined}
         onOpenSettings={() => {
@@ -93,9 +103,14 @@ function IndexPage() {
       {globalSettingsOpen ? (
         <GlobalSettingsDialog
           {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
+          {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
+          appInfoError={appInfoQuery.error}
+          initialSection="about"
           apps={[]}
           error={globalSettingsQuery.error ?? modelsQuery.error}
           isPending={globalSettingsQuery.isPending || modelsQuery.isPending}
+          isAppInfoPending={appInfoQuery.isPending}
+          isAppUpdatePending={appUpdateMutation.isPending}
           models={modelsQuery.data?.data ?? []}
           onClose={() => {
             setGlobalSettingsOpen(false);
@@ -105,7 +120,10 @@ function IndexPage() {
           }}
           onLogoutAccess={access.logout}
           onRetry={() => Promise.all([globalSettingsQuery.refetch(), modelsQuery.refetch()])}
+          onRetryAppInfo={() => appInfoQuery.refetch()}
           onSave={(settings) => globalSettingsMutation.mutateAsync(settings).then(() => undefined)}
+          onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
+          updateError={appUpdateMutation.error}
           {...(globalSettingsQuery.data === undefined
             ? {}
             : { settings: globalSettingsQuery.data.settings })}

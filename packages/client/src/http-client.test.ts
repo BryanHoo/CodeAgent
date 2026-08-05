@@ -612,6 +612,55 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("reads application versions and installs a validated update", async () => {
+    const available = {
+      appVersion: "1.3.0",
+      codexVersion: "0.146.0",
+      latestVersion: "1.4.0",
+      status: "available" as const,
+      updateAvailable: true,
+    };
+    const installed = {
+      ...available,
+      status: "restart-required" as const,
+      updateAvailable: false as const,
+    };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(available))
+      .mockResolvedValueOnce(jsonResponse(installed));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.getAppInfo()).resolves.toEqual(available);
+    await expect(
+      client.installAppUpdate("1.4.0", { idempotencyKey: "app-update-key" }),
+    ).resolves.toEqual(installed);
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(["/v1/app-info", "/v1/app-update"]);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      body: JSON.stringify({ version: "1.4.0" }),
+      method: "POST",
+    });
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("idempotency-key")).toBe(
+      "app-update-key",
+    );
+  });
+
+  it("rejects malformed application information", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        appVersion: "1.3.0",
+        codexVersion: "0.146.0",
+        latestVersion: "latest",
+        status: "available",
+        updateAvailable: true,
+      }),
+    );
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.getAppInfo()).rejects.toBeInstanceOf(CodeAgentResponseError);
+  });
+
   it("rejects malformed settings responses", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock.mockResolvedValue(

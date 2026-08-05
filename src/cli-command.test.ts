@@ -125,7 +125,13 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
       return Promise.resolve();
     }),
     startCodexAppServer: vi.fn(() =>
-      Promise.resolve({ client, close, pid: 4321, waitForExit: () => exit }),
+      Promise.resolve({
+        client,
+        close,
+        pid: 4321,
+        version: { raw: "codex-cli 0.146.0", version: "0.146.0" },
+        waitForExit: () => exit,
+      }),
     ),
     webRoot: "/package/dist/web",
     ...overrides,
@@ -233,12 +239,15 @@ describe("runCli", () => {
     expect(harness.dependencies.createRuntimeProvider).toHaveBeenCalledWith({
       client: harness.client,
     });
-    expect(harness.dependencies.createServer).toHaveBeenCalledWith({
+    const [serverOptions] = vi.mocked(harness.dependencies.createServer).mock.calls[0] ?? [];
+    expect(serverOptions).toMatchObject({
       projectRepository: harness.stateRepository,
       provider: harness.runtimeProvider,
       settingsRepository: harness.stateRepository,
       staticRoot: "/package/dist/web",
     });
+    expect(typeof serverOptions?.installAppUpdate).toBe("function");
+    expect(typeof serverOptions?.readAppInfo).toBe("function");
     expect(harness.dependencies.createStateRepository).toHaveBeenCalledWith(
       join("/custom/home", "code-agent", "state.sqlite3"),
     );
@@ -275,6 +284,7 @@ describe("runCli", () => {
             respondToServerRequest: vi.fn(),
           },
           pid: 4321,
+          version: { raw: "codex-cli 0.146.0", version: "0.146.0" },
           waitForExit: () => Promise.resolve({ code: 23, signal: null }),
         }),
       ),

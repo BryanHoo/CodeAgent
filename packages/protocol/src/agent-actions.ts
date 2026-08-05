@@ -201,6 +201,9 @@ export const AgentMutationErrorCodeSchema = Type.Union([
   Type.Literal("GIT_COMMIT_FAILED"),
   Type.Literal("GIT_MUTATION_IN_PROGRESS"),
   Type.Literal("COMMIT_MESSAGE_GENERATION_FAILED"),
+  Type.Literal("UPDATE_NOT_AVAILABLE"),
+  Type.Literal("UPDATE_CHECK_FAILED"),
+  Type.Literal("UPDATE_INSTALL_FAILED"),
   Type.Literal("PROVIDER_ERROR"),
 ]);
 

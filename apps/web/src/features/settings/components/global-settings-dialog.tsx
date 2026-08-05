@@ -2,9 +2,10 @@ import type {
   AccessMode,
   AgentGlobalSettings,
   AgentModel,
+  AppInfoResponse,
   ProjectOpenApp,
 } from "@code-agent/protocol";
-import { LogOut, Moon, Settings, Sun, X } from "lucide-react";
+import { Moon, Settings, Sun, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../shared/ui/button.js";
@@ -35,45 +36,61 @@ import {
   resolveGlobalSettingsModel,
   type ApprovalMode,
 } from "./global-settings-model.js";
+import { GlobalSettingsAbout } from "./global-settings-about.js";
+import { GlobalSettingsAccess } from "./global-settings-access.js";
 
 export { resolveGlobalSettingsModel } from "./global-settings-model.js";
 
 type GlobalSettingsDialogProps = Readonly<{
   accessMode?: AccessMode;
+  appInfo?: AppInfoResponse;
+  appInfoError?: Error | null;
   apps: readonly ProjectOpenApp[];
   error: Error | null;
+  initialSection?: SettingsSectionId;
+  isAppInfoPending?: boolean;
+  isAppUpdatePending?: boolean;
   isPending: boolean;
   models: readonly AgentModel[];
   onClose: () => void;
   onLogoutAccess?: () => Promise<void>;
   onRetry: () => unknown;
+  onRetryAppInfo?: () => unknown;
   onSave: (settings: AgentGlobalSettings) => Promise<void>;
+  onUpdate?: (version: string) => Promise<void>;
+  updateError?: Error | null;
   settings?: AgentGlobalSettings;
 }>;
 
 export function GlobalSettingsDialog({
   accessMode = "local",
+  appInfo,
+  appInfoError = null,
   apps,
   error,
+  initialSection = "appearance",
+  isAppInfoPending = false,
+  isAppUpdatePending = false,
   isPending,
   models,
   onClose,
   onLogoutAccess,
   onRetry,
+  onRetryAppInfo = () => undefined,
   onSave,
+  onUpdate = () => Promise.resolve(),
   settings,
+  updateError = null,
 }: GlobalSettingsDialogProps) {
   const { t } = useTranslation("settings");
   const saveLockRef = useRef(createAsyncActionLock());
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>("appearance");
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection);
   const [draft, setDraft] = useState<AgentGlobalSettings>(
     () => settings ?? createFallbackSettings(models),
   );
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
   const [saveError, setSaveError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [logoutError, setLogoutError] = useState(false);
   const selectedModel = models.find((model) => model.id === draft.model);
   const selectedCommitModel = models.find((model) => model.id === draft.commitMessageModel);
 
@@ -193,7 +210,18 @@ export function GlobalSettingsDialog({
             </aside>
 
             <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
-              {error !== null ? (
+              <GlobalSettingsAbout
+                activeSection={activeSection}
+                {...(appInfo === undefined ? {} : { appInfo })}
+                error={appInfoError}
+                isPending={isAppInfoPending}
+                isUpdatePending={isAppUpdatePending}
+                onRetry={onRetryAppInfo}
+                onUpdate={onUpdate}
+                updateError={updateError}
+              />
+
+              {activeSection === "about" ? null : error !== null ? (
                 <div
                   className="flex min-h-40 flex-col items-center justify-center gap-3"
                   role="alert"
@@ -259,45 +287,10 @@ export function GlobalSettingsDialog({
                   </SettingsPanel>
 
                   {accessMode === "lan" ? (
-                    <SettingsPanel
+                    <GlobalSettingsAccess
                       activeSection={activeSection}
-                      id="access"
-                      title={t("sections.access")}
-                    >
-                      <SettingsField label={t("access.currentSession")}>
-                        <div className="flex min-w-0 flex-col items-start gap-2 py-1">
-                          <p className="text-body-small text-muted-foreground">
-                            {t("access.sessionDescription")}
-                          </p>
-                          <Button
-                            variant="ghost"
-                            className="inline-flex h-8 items-center gap-2 rounded-control bg-control px-3 text-body-small font-medium text-danger hover:bg-control-hover focus-visible:shadow-focus disabled:opacity-50"
-                            disabled={isLoggingOut || onLogoutAccess === undefined}
-                            onClick={() => {
-                              if (onLogoutAccess === undefined) return;
-                              setLogoutError(false);
-                              setIsLoggingOut(true);
-                              void onLogoutAccess()
-                                .catch(() => {
-                                  setLogoutError(true);
-                                })
-                                .finally(() => {
-                                  setIsLoggingOut(false);
-                                });
-                            }}
-                            type="button"
-                          >
-                            <LogOut aria-hidden="true" className="size-4" />
-                            {isLoggingOut ? t("access.loggingOut") : t("access.logout")}
-                          </Button>
-                          {logoutError ? (
-                            <p className="text-meta text-danger" role="alert">
-                              {t("errors.logout")}
-                            </p>
-                          ) : null}
-                        </div>
-                      </SettingsField>
-                    </SettingsPanel>
+                      {...(onLogoutAccess === undefined ? {} : { onLogout: onLogoutAccess })}
+                    />
                   ) : null}
 
                   <SettingsPanel

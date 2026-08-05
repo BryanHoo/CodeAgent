@@ -1,4 +1,16 @@
 export const settings = {
+  about: {
+    available: "Version {{version}} is available",
+    codeAgentVersion: "CodeAgent version",
+    codexVersion: "Codex version",
+    current: "CodeAgent is up to date",
+    loading: "Checking for updates",
+    restartRequired: "Update installed. Restart CodeAgent to apply it.",
+    retry: "Check again",
+    update: "Software update",
+    updateTo: "Update to {{version}}",
+    updating: "Updating",
+  },
   access: {
     currentSession: "Current browser",
     loggingOut: "Logging out",
@@ -34,9 +46,12 @@ export const settings = {
     xhigh: "Extra high",
   },
   errors: {
+    appInfo: "Unable to load version information",
     load: "Unable to load global settings",
     logout: "Unable to log out of LAN access",
     save: "Unable to save global settings",
+    update: "Update failed. Try again.",
+    updateCheck: "Unable to check for updates",
   },
   fields: {
     approvalPolicy: "Approval policy",
@@ -69,6 +84,7 @@ export const settings = {
     workspaceWrite: "Workspace write",
   },
   sections: {
+    about: "About",
     access: "LAN access",
     agent: "Agent defaults",
     appearance: "Appearance",

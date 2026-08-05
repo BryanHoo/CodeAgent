@@ -34,8 +34,8 @@
 - 中栏已有 Task 标题使用带 `Pencil` 图标的可访问按钮打开同一重命名 Dialog；保存成功后同步更新中栏、`Pinned`、`Projects` 与已加载的搜索源，失败时保留 Dialog 并显示错误。新聊天标题保持只读。
 - 浏览器获得系统通知权限后，仅当页面隐藏或浏览器窗口失焦时，Task 完成、不可恢复中断或错误、等待审批及等待用户输入才发送系统通知；通知标题必须包含来自 Snapshot 或 Project Task Query 的最新 Task 名称，不能展示原生 Task ID。点击通知必须先聚焦现有页面，再通过应用 Router 进入对应 Task，不得使用 `location.assign` 或其他整页重载方式。首次 Prompt、Review 或 Compact 启动时在当前用户手势内申请权限，权限不可用不得阻断 Task 操作。
 - `Projects` 标题右侧使用可访问的 `+` 图标打开统一 shadcn Dialog；Dialog 从 Server 用户主目录开始，通过 AI Elements `FileTree` 按需读取直接子目录，支持向上导航、选择、加载失败重试与取消。确认后以所选绝对路径注册 Project，成功后刷新项目树并进入新 Project；取消选择保持当前界面，项目列表为空时不得伪造默认 Project。目录读取与注册必须分别单飞，LAN 浏览器不得触发 Server 宿主 GUI。
-- 左栏 Settings 旁的连接状态必须反映真实 Runtime：活动 Task 使用其实时事件连接状态，新建 Task 页面使用 HTTP Runtime 的加载、可用和失败状态；不得硬编码在线或离线文案。
-- 左栏 Settings 必须使用按钮在当前工作台打开可访问的统一 shadcn Dialog，不注册独立设置路由。弹窗使用 macOS 设置式双栏，将字段归入“外观”“Agent 默认值”“提交消息”“应用集成”，窄屏改为顶部横向分类；模型与思考量使用带边界和 Chevron 的 AI Elements `PromptInputSelect`。Dialog 必须支持加载、失败重试、全局设置完整对象原子保存、Escape、backdrop 与关闭后焦点恢复。
+- 左栏 Settings 旁必须同行展示当前 CodeAgent 版本和真实 Runtime 连接状态：活动 Task 使用其实时事件连接状态，新建 Task 页面使用 HTTP Runtime 的加载、可用和失败状态；有可用更新时版本使用警示状态，不得硬编码版本、在线或离线文案。
+- 左栏 Settings 必须使用按钮在当前工作台打开可访问的统一 shadcn Dialog 并默认进入“关于”，不注册独立设置路由。弹窗使用 macOS 设置式双栏，将字段归入“外观”“Agent 默认值”“提交消息”“应用集成”“关于”，窄屏改为顶部横向分类；“关于”独立展示 CodeAgent/Codex 版本、检查失败、可更新、更新中和重启提示，更新动作必须同步单飞且不得提交全局 Agent 设置；模型与思考量使用带边界和 Chevron 的 AI Elements `PromptInputSelect`。Dialog 必须支持加载、失败重试、全局设置完整对象原子保存、Escape、backdrop 与关闭后焦点恢复。
 - Project 名称只切换对应任务树的展开状态；名称右侧的可访问 `+` 图标进入该 Project 的“新聊天”草稿，顶部“新建任务”始终进入第一个 Project 的草稿，新增文件夹后进入该 Project 草稿，目标草稿已打开时直接复用。新聊天入口只能重置中栏和切换 Project，左栏不得出现临时“新聊天”Task。
 - 新聊天草稿在首次 Prompt 提交或代码审查命令执行前不得创建 Codex Task；空 Timeline 的 Project 名称必须保留原生 Project 选择器交互，首次点击必须打开选项列表，切换 Project 时保存当前 Project 草稿并恢复目标 Project 草稿。可见名称必须使用与两侧标题相同的行高并按视觉中线对齐，透明原生选择器只覆盖其上负责交互；可视宽度必须跟随当前 Project 名称，不能由最长备选项撑宽后依赖原生 `text-align` 居中。几何回归必须覆盖当前名称较短且存在更长备选项的场景，避免 Safari 把选中项绘制到控件一侧或与两侧文字上下错位。首次提交后，`startTask` 返回真实 `taskId` 时立即把 Task 写入对应 Project 列表并选中，`startTurn` 成功后再进入 Task 路由并由 Codex 返回的名称替换“新聊天”。
 - 通过显式 Props 或专用 Hook 获取数据，不从组件内部访问 Server 或 Provider。
