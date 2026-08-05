@@ -51,6 +51,7 @@ export const workbench = {
     attachmentReadFailed: "附件读取失败",
     attachmentUploadFailed: "附件上传失败",
     baseBranchReview: "基于基础分支进行审查",
+    buildPlanPrompt: "请开始按照上述计划进行开发。",
     cancelPlanMode: "取消计划模式",
     cancelQueued: "取消排队：{{summary}}",
     cancelQueuedTooltip: "取消排队",

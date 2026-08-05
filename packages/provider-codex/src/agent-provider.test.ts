@@ -806,6 +806,19 @@ describe("CodexAgentProvider", () => {
       method: "thread/resume",
       params: { threadId: "task-1" },
     });
+    expect(rpc.calls[2]).toMatchObject({
+      method: "turn/start",
+      params: {
+        collaborationMode: {
+          mode: "default",
+          settings: {
+            developer_instructions: null,
+            model: "gpt-5.6-sol",
+            reasoning_effort: "high",
+          },
+        },
+      },
+    });
   });
 
   it("steers the active Codex turn with the expected turn id", async () => {
@@ -1967,6 +1980,14 @@ describe("CodexAgentProvider", () => {
         params: {
           approvalPolicy: "on-request",
           approvalsReviewer: "auto_review",
+          collaborationMode: {
+            mode: "default",
+            settings: {
+              developer_instructions: null,
+              model: "gpt-5.6-sol",
+              reasoning_effort: "high",
+            },
+          },
           input: [
             { text: "实现写入闭环", text_elements: [], type: "text" },
             {

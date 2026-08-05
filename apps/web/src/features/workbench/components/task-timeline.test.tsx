@@ -1319,17 +1319,25 @@ describe("TaskSnapshotTimeline", () => {
       ],
     };
 
-    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningPlanSnapshot} />);
+    const markup = renderToStaticMarkup(
+      <TaskSnapshotTimeline
+        onBuildPlan={() => Promise.resolve(true)}
+        snapshot={runningPlanSnapshot}
+      />,
+    );
 
     expect(markup).toContain('data-ai-plan=""');
     expect(markup).toContain('data-streaming="true"');
     expect(markup).toMatch(/<details[^>]* open/);
     expect(markup).toContain("正在生成计划");
-    expect(markup).toContain(planText);
+    expect(markup).toContain('data-streamdown="ordered-list"');
+    expect(markup).toContain("保留原始文本</li>");
+    expect(markup).toContain("接入 Plan 组件</li>");
+    expect(markup).not.toContain(">构建<");
     expect(markup).not.toContain("lucide-wrench");
   });
 
-  it("renders a completed plan as non-streaming collapsible content", () => {
+  it("renders a completed plan as an actionable AI Elements card", () => {
     const planText = "# 实施计划\n\n- 保留 `Protocol`";
     const completedPlanSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
@@ -1341,12 +1349,20 @@ describe("TaskSnapshotTimeline", () => {
       ],
     };
 
-    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={completedPlanSnapshot} />);
+    const markup = renderToStaticMarkup(
+      <TaskSnapshotTimeline
+        onBuildPlan={() => Promise.resolve(true)}
+        snapshot={completedPlanSnapshot}
+      />,
+    );
 
     expect(markup).toContain('data-ai-plan=""');
+    expect(markup).toContain('data-ai-plan-card=""');
     expect(markup).toContain('data-streaming="false"');
-    expect(markup).toContain("执行计划");
-    expect(markup).toContain(planText);
+    expect(markup).toContain("计划已生成，可开始构建");
+    expect(markup).toContain("<h1");
+    expect(markup).toContain("实施计划</h1>");
+    expect(markup).toContain(">构建<");
     expect(markup).not.toContain("lucide-wrench");
   });
 

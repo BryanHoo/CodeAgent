@@ -1,5 +1,7 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronsUpDown } from "lucide-react";
 import { createContext, useContext, useMemo, type HTMLAttributes, type ReactNode } from "react";
+
+import { cn } from "../lib/utils.js";
 
 type PlanContextValue = Readonly<{
   isStreaming: boolean;
@@ -26,8 +28,12 @@ export function Plan({
   return (
     <PlanContext.Provider value={contextValue}>
       <details
-        className={`group/plan w-full border-l-2 border-primary pl-3 ${className}`}
+        className={cn(
+          "group/plan w-full overflow-hidden rounded-surface border border-separator bg-panel",
+          className,
+        )}
         data-ai-plan=""
+        data-ai-plan-card=""
         data-streaming={isStreaming}
         open={open ?? defaultOpen}
         {...props}
@@ -43,7 +49,10 @@ export type PlanHeaderProps = HTMLAttributes<HTMLElement>;
 export function PlanHeader({ className = "", ...props }: PlanHeaderProps) {
   return (
     <summary
-      className={`flex min-h-10 cursor-pointer list-none items-center gap-3 py-1 text-foreground transition-colors hover:text-primary [&::-webkit-details-marker]:hidden ${className}`}
+      className={cn(
+        "flex min-h-14 cursor-pointer list-none items-start gap-4 px-4 py-3.5 text-foreground transition-colors hover:bg-control-hover/45 [&::-webkit-details-marker]:hidden",
+        className,
+      )}
       {...props}
     />
   );
@@ -75,7 +84,7 @@ export function PlanDescription({ children, className = "", ...props }: PlanDesc
 
   return (
     <p
-      className={`mt-0.5 text-label text-muted-foreground ${context?.isStreaming === true ? "animate-pulse" : ""} ${className}`}
+      className={`mt-1 text-body-small leading-5 text-muted-foreground ${context?.isStreaming === true ? "animate-pulse" : ""} ${className}`}
       {...props}
     >
       {children}
@@ -94,9 +103,7 @@ export function PlanTrigger({ children, className = "", ...props }: PlanTriggerP
       className={`ml-auto inline-flex size-7 shrink-0 items-center justify-center text-muted-foreground ${className}`}
       {...props}
     >
-      {children ?? (
-        <ChevronRight className="size-4 transition-transform group-open/plan:rotate-90" />
-      )}
+      {children ?? <ChevronsUpDown className="size-4" />}
     </span>
   );
 }
@@ -106,8 +113,20 @@ export type PlanContentProps = HTMLAttributes<HTMLDivElement>;
 export function PlanContent({ className = "", ...props }: PlanContentProps) {
   return (
     <div
-      className={`mb-2 overflow-x-auto border-t border-separator pt-2 font-mono text-meta leading-5 text-muted-foreground ${className}`}
+      className={cn("overflow-x-auto border-t border-separator px-4 py-4", className)}
       {...props}
     />
   );
+}
+
+export type PlanFooterProps = HTMLAttributes<HTMLDivElement>;
+
+export function PlanFooter({ className = "", ...props }: PlanFooterProps) {
+  return <div className={cn("flex items-center px-4 pb-4", className)} {...props} />;
+}
+
+export type PlanActionProps = HTMLAttributes<HTMLDivElement>;
+
+export function PlanAction({ className = "", ...props }: PlanActionProps) {
+  return <div className={cn("flex items-center", className)} {...props} />;
 }

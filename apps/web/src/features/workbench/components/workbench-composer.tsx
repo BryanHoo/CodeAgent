@@ -19,9 +19,11 @@ import {
   useEffect,
   useEffectEvent,
   useId,
+  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
+  type Ref,
 } from "react";
 import { v4 as createUuid } from "uuid";
 
@@ -109,7 +111,12 @@ export function createComposerTurnOptions(
   };
 }
 
+export type WorkbenchComposerHandle = Readonly<{
+  buildPlan: () => Promise<boolean>;
+}>;
+
 type WorkbenchComposerProps = Readonly<{
+  buildPlanRef?: Ref<WorkbenchComposerHandle>;
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentMutationClient;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
@@ -156,6 +163,7 @@ export async function resolvePromptAttachment(
 }
 
 export function WorkbenchComposer({
+  buildPlanRef,
   capabilities,
   client,
   followUpBehavior,
@@ -411,6 +419,7 @@ export function WorkbenchComposer({
     options: Readonly<{
       clearInputOnSuccess?: boolean;
       forceAction?: "start" | "steer";
+      planModeEnabled?: boolean;
       requestTimelineScroll?: boolean;
     }> = {},
   ): Promise<boolean> => {
@@ -553,7 +562,7 @@ export function WorkbenchComposer({
       activeSettings,
       selectedModel.id,
       selectedReasoningEffort,
-      planModeEnabled,
+      options.planModeEnabled ?? planModeEnabled,
     );
     const turnAttempt = resolveIdempotencyAttempt(
       startTurnAttempt.current,
@@ -623,12 +632,24 @@ export function WorkbenchComposer({
     options: Readonly<{
       clearInputOnSuccess?: boolean;
       forceAction?: "start" | "steer";
+      planModeEnabled?: boolean;
       requestTimelineScroll?: boolean;
     }> = {},
   ): Promise<boolean> =>
     composerActionLock
       .run(() => performPromptSubmission(message, promptSkills, options))
       .then((submitted) => submitted ?? false);
+
+  useImperativeHandle(buildPlanRef, () => ({
+    buildPlan: () => {
+      // 构建动作必须退出计划模式，否则后续 Turn 会再次请求生成计划。
+      setPlanModeState(undefined);
+      return submitPrompt({ files: [], text: t("composer.buildPlanPrompt") }, [], {
+        forceAction: "start",
+        planModeEnabled: false,
+      });
+    },
+  }));
 
   const submitQueuedPrompt = useEffectEvent(
     (queuedPrompt: QueuedComposerPrompt, queuedScope: string) => {

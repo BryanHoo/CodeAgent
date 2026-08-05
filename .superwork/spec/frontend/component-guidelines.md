@@ -43,7 +43,7 @@
 - 长列表使用稳定尺寸与虚拟化；流式 Item 独立订阅，避免整个 Task 重渲染。
 - Task Timeline 必须在该 Turn 已产生的消息与结构化结果之后显示归一化错误，使部分回复与最终失败原因保持同一阅读顺序；Command 继续使用 `Tool` 表达调用和状态，输出使用 AI Elements `Terminal` 解析 ANSI、复制、流式跟随和自动滚动，并明确标识截断状态。历史输出保持只读，不提供清空操作；缺少输出时只能展示真实 `cwd`，不得伪造内容。
 - 通用 Tool 必须使用 AI Elements `ToolInput` 与 `ToolOutput` 分区展示参数、JSON 结果和错误文本；`AgentItemStatus` 只在 Timeline 视图边界映射为 AI Elements Tool 执行状态，不向 Web 引入 `ToolUIPart` 或 AI SDK Runtime。Command 与通用 Tool 无论运行或终态都必须默认收起，并在摘要中保留当前状态；参数、输出、错误和 Terminal 只在用户首次展开时挂载，重新折叠后立即卸载。
-- Task Timeline 的 Plan Item 必须使用 AI Elements `Plan` 组合组件并原样展示计划文本；仅当它是运行中 Turn 的当前最后一个 Item 时启用 `isStreaming`，不得为展示状态扩展 Protocol 或使用 `Tool` 模拟 Plan。
+- Task Timeline 的 Plan Item 必须使用 AI Elements `Plan` 卡片和统一 Markdown 渲染器原样展示计划文本；仅当它是运行中 Turn 的当前最后一个 Item 时启用 `isStreaming`，不得为展示状态扩展 Protocol 或使用 `Tool` 模拟 Plan。运行中的计划只展示生成状态，最新完成计划才提供单飞的“构建”动作；构建成功必须清除计划模式标签，并通过普通 Turn 提交开发指令，不得再次携带 `collaborationMode: "plan"`。
 - Task Timeline 仅将 `AgentItem` 中的 `activity` 映射为 AI Elements `Task`，按 Activity 状态映射进度；有 `detail` 时允许展开，没有 `detail` 时保持紧凑。不得继续用 `Tool` 模拟 Activity，也不得把 CodeAgent 的整个 Task 或 Turn 映射为 AI Elements `Task`。
 - Codex 子代理协作使用统一 `agent/*` Tool 数据；中间 Timeline 只用不可交互的 AI Elements `Task` 展示操作名称、数量与聚合状态，不展示任务正文、模型或子线程 ID。右侧 Inspector 的“上下文”页签必须提供“子代理”栏目，按唯一子线程 Task ID 逐项展示 Codex `agentPath` 提供的昵称、模型、思考量和状态，不展示线程 ID或提示词；父回复完成后继续保留仍存在的子代理，只有明确的 `agent/close` 操作才移除对应项。有子代理的 Task 首次进入时优先展示该页签。单击栏目项打开可访问的统一 shadcn Dialog，并按子线程 Task ID 挂载独立 Runtime，以 AI Elements Timeline 展示 Snapshot 与流式 Item。关闭 Dialog 必须卸载 Runtime 并取消实时订阅，但不能中断 Codex 子代理；再次打开时重新读取最新 Snapshot checkpoint 并继续接收后续事件，不能只展示父协作 Item 的完成摘要。
 - 右侧 Inspector 的“上下文”页签必须在“运行中的终端”栏目展示当前 Task 的后台终端命令与工作目录，并提供带可访问名称的停止图标按钮。终端可以晚于 AI 回复结束，Turn 完成不得移除该栏目；停止提交期间禁用操作，失败显示可重试错误，完整输出仍只在 Timeline 展示。

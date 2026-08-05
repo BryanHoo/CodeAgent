@@ -52,6 +52,7 @@ export const workbench = {
     attachmentReadFailed: "Unable to read attachment",
     attachmentUploadFailed: "Unable to upload attachment",
     baseBranchReview: "Review against a base branch",
+    buildPlanPrompt: "Start implementing the plan above.",
     cancelPlanMode: "Cancel plan mode",
     cancelQueued: "Cancel queued message: {{summary}}",
     cancelQueuedTooltip: "Cancel queued message",

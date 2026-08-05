@@ -76,7 +76,7 @@ import { SubagentOutputDialog } from "./subagent-output-dialog.js";
 import { TaskRenameDialog } from "./task-rename-dialog.js";
 import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
-import { WorkbenchComposer } from "./workbench-composer.js";
+import { WorkbenchComposer, type WorkbenchComposerHandle } from "./workbench-composer.js";
 import { WorkbenchInspector, type ProjectFileTreeDirectoryState } from "./workbench-inspector.js";
 import {
   CommitChangesLauncher,
@@ -1035,6 +1035,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
 }>) {
   const queryClient = useQueryClient();
   const taskScope = `${projectId}:${taskId}`;
+  const composerRef = useRef<WorkbenchComposerHandle>(null);
   const [timelineScrollToBottomSignal, setTimelineScrollToBottomSignal] = useState(0);
   const {
     beginSubmission,
@@ -1122,6 +1123,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
     <>
       <TaskTimeline
         canRollbackTurns={capabilities?.turns.rollback ?? false}
+        onBuildPlan={() => composerRef.current?.buildPlan() ?? Promise.resolve(false)}
         {...(capabilities?.tasks.fork === true ? { onForkTask: forkTask } : {})}
         onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
@@ -1142,6 +1144,7 @@ const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         {...(startingSnapshot === undefined ? {} : { startingSnapshot })}
       />
       <WorkbenchComposer
+        buildPlanRef={composerRef}
         capabilities={capabilities}
         client={client}
         followUpBehavior={followUpBehavior}

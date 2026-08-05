@@ -10,8 +10,10 @@ import {
   Check,
   Copy,
   FilePenLine,
+  FileText,
   Files,
   GitFork,
+  LoaderCircle,
   MessageSquareCode,
   RotateCcw,
   SquareTerminal,
@@ -62,8 +64,10 @@ import {
 } from "../../../shared/ai-elements/message.js";
 import {
   Plan,
+  PlanAction,
   PlanContent,
   PlanDescription,
+  PlanFooter,
   PlanHeader,
   PlanTitle,
   PlanTrigger,
@@ -105,9 +109,11 @@ import {
 } from "./subagent.js";
 
 type ForkTaskAction = (idempotencyKey: string) => Promise<void>;
+type BuildPlanAction = () => Promise<boolean>;
 
 type TaskTimelineCommonProps = Readonly<{
   canRollbackTurns?: boolean;
+  onBuildPlan?: BuildPlanAction;
   onForkTask?: ForkTaskAction;
   onOpenFileDiff?: (change: AgentFileChange) => void;
   onReviewFileChanges?: (changes: readonly AgentFileChange[]) => void;
@@ -246,6 +252,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
   }
   const {
     canRollbackTurns = false,
+    onBuildPlan,
     onForkTask,
     onOpenFileDiff,
     onOpenSourceFile,
@@ -271,6 +278,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
       onResolvePendingRequest={onResolvePendingRequest ?? ignorePendingRequest}
       onRollbackTurn={onRollbackTurn ?? ignoreRollback}
       canRollbackTurns={canRollbackTurns}
+      {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
       {...(onForkTask === undefined ? {} : { onForkTask })}
       runtime={runtime}
       scrollToBottomSignal={scrollToBottomSignal}
@@ -283,6 +291,7 @@ export function TaskTimeline(props: TaskTimelineProps) {
 
 function ActiveTaskTimeline({
   canRollbackTurns,
+  onBuildPlan,
   onForkTask,
   onOpenFileDiff,
   onOpenSourceFile,
@@ -306,6 +315,7 @@ function ActiveTaskTimeline({
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
   canRollbackTurns: boolean;
+  onBuildPlan?: BuildPlanAction;
   runtime: TaskRuntimeView;
   scrollToBottomSignal: number | undefined;
   submissionStartedAt: string | undefined;
@@ -343,6 +353,7 @@ function ActiveTaskTimeline({
       <TaskStoreTimeline
         canRollbackTurns={canRollbackTurns}
         connected={runtime.connectionState === "connected"}
+        {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
         {...(onForkTask === undefined ? {} : { onForkTask })}
         onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
@@ -978,6 +989,7 @@ export function resolveMessageResponseRendering({
 function TimelineItemContent({
   isLastTurnItem,
   item,
+  onBuildPlan,
   onOpenSourceFile,
   projectId,
   taskId,
@@ -985,6 +997,7 @@ function TimelineItemContent({
 }: Readonly<{
   isLastTurnItem: boolean;
   item: AgentItem;
+  onBuildPlan?: BuildPlanAction;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   projectId: string;
   taskId: string;
@@ -1156,18 +1169,30 @@ function TimelineItemContent({
         <Plan defaultOpen isStreaming={isStreamingPlan}>
           <PlanHeader>
             <div className="min-w-0 flex-1">
-              <PlanTitle>{i18n.t("timeline.plan", { ns: "conversation" })}</PlanTitle>
+              <div className="flex items-center gap-2">
+                <FileText aria-hidden="true" className="size-4 shrink-0" />
+                <PlanTitle>{i18n.t("timeline.plan", { ns: "conversation" })}</PlanTitle>
+              </div>
               <PlanDescription>
                 {isStreamingPlan
                   ? i18n.t("timeline.planGenerating", { ns: "conversation" })
-                  : i18n.t("timeline.planExecuting", { ns: "conversation" })}
+                  : i18n.t("timeline.planReady", { ns: "conversation" })}
               </PlanDescription>
             </div>
             <PlanTrigger />
           </PlanHeader>
           <PlanContent>
-            <pre className="whitespace-pre-wrap">{item.text}</pre>
+            <MessageResponse mode={isStreamingPlan ? "streaming" : "static"}>
+              {item.text}
+            </MessageResponse>
           </PlanContent>
+          {isStreamingPlan || onBuildPlan === undefined ? null : (
+            <PlanFooter className="justify-end">
+              <PlanAction>
+                <BuildPlanButton onBuildPlan={onBuildPlan} />
+              </PlanAction>
+            </PlanFooter>
+          )}
         </Plan>
       );
     }
@@ -1186,6 +1211,33 @@ function TimelineItemContent({
         </Task>
       );
   }
+}
+
+function BuildPlanButton({ onBuildPlan }: Readonly<{ onBuildPlan: BuildPlanAction }>) {
+  const [isBuilding, setIsBuilding] = useState(false);
+
+  return (
+    <Button
+      disabled={isBuilding}
+      onClick={() => {
+        setIsBuilding(true);
+        void onBuildPlan().then(
+          (started) => {
+            if (!started) {
+              setIsBuilding(false);
+            }
+          },
+          () => {
+            setIsBuilding(false);
+          },
+        );
+      }}
+      type="button"
+    >
+      {isBuilding ? <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" /> : null}
+      {i18n.t("timeline.buildPlan", { ns: "conversation" })}
+    </Button>
+  );
 }
 
 type StoredTurnTimelineGroup =
@@ -1229,6 +1281,7 @@ function useTaskItem(itemStore: TaskItemStore): AgentItem {
 function StoredTimelineItemContentValue({
   isLastTurnItem,
   itemStore,
+  onBuildPlan,
   onOpenSourceFile,
   projectId,
   taskId,
@@ -1236,6 +1289,7 @@ function StoredTimelineItemContentValue({
 }: Readonly<{
   isLastTurnItem: boolean;
   itemStore: TaskItemStore;
+  onBuildPlan?: BuildPlanAction;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   projectId: string;
   taskId: string;
@@ -1246,6 +1300,7 @@ function StoredTimelineItemContentValue({
     <TimelineItemContent
       isLastTurnItem={isLastTurnItem}
       item={item}
+      {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
       onOpenSourceFile={onOpenSourceFile}
       projectId={projectId}
       taskId={taskId}
@@ -1257,6 +1312,7 @@ function StoredTimelineItemContentValue({
 function StoredTimelineItemContent({
   isLastTurnItem,
   itemId,
+  onBuildPlan,
   onOpenSourceFile,
   projectId,
   store,
@@ -1265,6 +1321,7 @@ function StoredTimelineItemContent({
 }: Readonly<{
   isLastTurnItem: boolean;
   itemId: string;
+  onBuildPlan?: BuildPlanAction;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   projectId: string;
   store: TaskStore;
@@ -1276,6 +1333,7 @@ function StoredTimelineItemContent({
     <StoredTimelineItemContentValue
       isLastTurnItem={isLastTurnItem}
       itemStore={itemStore}
+      {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
       onOpenSourceFile={onOpenSourceFile}
       projectId={projectId}
       taskId={taskId}
@@ -1399,6 +1457,7 @@ function StoredAssistantGroup({
   latestSnapshotTimestamp,
   onOpenFileDiff,
   onForkTask,
+  onBuildPlan,
   onOpenSourceFile,
   onReviewFileChanges,
   onRollbackTurn,
@@ -1415,6 +1474,7 @@ function StoredAssistantGroup({
   latestSnapshotTimestamp: string;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onForkTask?: ForkTaskAction;
+  onBuildPlan?: BuildPlanAction;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
   onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
@@ -1452,6 +1512,7 @@ function StoredAssistantGroup({
             isLastTurnItem={itemId === lastTurnItemId}
             itemId={itemId}
             key={itemId}
+            {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
             onOpenSourceFile={onOpenSourceFile}
             projectId={projectId}
             store={store}
@@ -1483,6 +1544,7 @@ function StoredAssistantGroup({
 
 function StoreTurnTimelineSection({
   canRollback,
+  onBuildPlan,
   onForkTask,
   onOpenFileDiff,
   onOpenSourceFile,
@@ -1496,6 +1558,7 @@ function StoreTurnTimelineSection({
   suppressEmptyRunningStatus,
 }: Readonly<{
   canRollback: boolean;
+  onBuildPlan?: BuildPlanAction;
   onForkTask?: ForkTaskAction;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
@@ -1547,6 +1610,7 @@ function StoreTurnTimelineSection({
             key={group.key}
             lastTurnItemId={lastTurnItemId}
             latestSnapshotTimestamp={latestSnapshotTimestamp}
+            {...(turn.status === "completed" && onBuildPlan !== undefined ? { onBuildPlan } : {})}
             onOpenFileDiff={onOpenFileDiff}
             {...(turn.status === "completed" &&
             groupIndex === latestAssistantGroupIndex &&
@@ -1621,6 +1685,7 @@ function StorePendingRequestList({
 function TaskStoreTimeline({
   canRollbackTurns,
   connected,
+  onBuildPlan,
   onForkTask,
   onOpenFileDiff,
   onOpenSourceFile,
@@ -1634,6 +1699,7 @@ function TaskStoreTimeline({
 }: Readonly<{
   canRollbackTurns: boolean;
   connected: boolean;
+  onBuildPlan?: BuildPlanAction;
   onForkTask?: ForkTaskAction;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
@@ -1720,6 +1786,9 @@ function TaskStoreTimeline({
         renderItem={(turnId, turnIndex) => (
           <StoreTurnTimelineSection
             canRollback={connected && canRollbackTurns && turnId === latestTurnId}
+            {...(connected && turnId === latestTurnId && onBuildPlan !== undefined
+              ? { onBuildPlan }
+              : {})}
             {...(connected && turnId === latestTurnId && onForkTask !== undefined
               ? { onForkTask }
               : {})}
@@ -1744,6 +1813,7 @@ function TaskStoreTimeline({
 export function TaskSnapshotTimeline({
   canRollbackTurns = false,
   connected = true,
+  onBuildPlan,
   onForkTask,
   onOpenFileDiff = () => undefined,
   onOpenSourceFile = () => undefined,
@@ -1754,6 +1824,7 @@ export function TaskSnapshotTimeline({
 }: Readonly<{
   canRollbackTurns?: boolean;
   connected?: boolean;
+  onBuildPlan?: BuildPlanAction;
   onForkTask?: ForkTaskAction;
   onOpenFileDiff?: (change: AgentFileChange) => void;
   onOpenSourceFile?: (reference: MessageFileReference) => void;
@@ -1783,6 +1854,7 @@ export function TaskSnapshotTimeline({
     <TaskStoreTimeline
       canRollbackTurns={canRollbackTurns}
       connected={connected}
+      {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
       {...(onForkTask === undefined ? {} : { onForkTask })}
       onOpenFileDiff={onOpenFileDiff}
       onOpenSourceFile={onOpenSourceFile}

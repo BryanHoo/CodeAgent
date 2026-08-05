@@ -463,18 +463,15 @@ export class CodexAgentProvider implements AgentProvider {
       await this.#client.request("turn/start", {
         approvalPolicy: options.approvalPolicy,
         approvalsReviewer: options.approvalsReviewer,
-        ...(options.collaborationMode === "plan"
-          ? {
-              collaborationMode: {
-                mode: "plan",
-                settings: {
-                  developer_instructions: null,
-                  model: options.model,
-                  reasoning_effort: options.reasoningEffort,
-                },
-              },
-            }
-          : {}),
+        // Codex collaboration mode 会粘附到 Thread；普通 Turn 必须显式恢复默认执行模式。
+        collaborationMode: {
+          mode: options.collaborationMode === "plan" ? "plan" : "default",
+          settings: {
+            developer_instructions: null,
+            model: options.model,
+            reasoning_effort: options.reasoningEffort,
+          },
+        },
         effort: options.reasoningEffort,
         input: codexInput,
         model: options.model,
