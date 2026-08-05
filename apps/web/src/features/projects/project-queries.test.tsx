@@ -632,7 +632,6 @@ describe("project queries", () => {
 
     for (const text of [
       "读取真实历史",
-      "Turn 执行失败",
       "模型服务不可用",
       "pnpm check",
       "src/index.ts",
@@ -642,6 +641,7 @@ describe("project queries", () => {
     ]) {
       expect(markup).toContain(text);
     }
+    expect(markup).not.toContain("Turn 执行失败");
     expect(markup).not.toContain("输出已截断");
     expect(markup).not.toContain("分析协议");
     expect(markup).not.toContain("按统一边界实现");

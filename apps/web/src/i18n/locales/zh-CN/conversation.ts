@@ -193,7 +193,6 @@ export const conversation = {
     selectProject: "选择新聊天项目",
     showImage: "查看图片 {{name}}",
     skillsUsed: "使用的 Skills",
-    turnFailed: "Turn 执行失败",
     editedFiles: "已编辑 {{count}} 个文件",
   },
 } as const;

@@ -1505,8 +1505,7 @@ function StoreTurnTimelineSection({
           className="rounded-surface bg-control px-3 py-2 text-label leading-5 text-danger"
           role="alert"
         >
-          <p className="font-medium">{i18n.t("timeline.turnFailed", { ns: "conversation" })}</p>
-          <p className="mt-1">{turn.error}</p>
+          <p>{turn.error}</p>
         </div>
       )}
     </section>

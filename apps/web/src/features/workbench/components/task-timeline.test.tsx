@@ -847,7 +847,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("contain-intrinsic-size:auto_300px");
   });
 
-  it("renders a failed turn error after its partial assistant reply", () => {
+  it("renders only the raw failed turn error after its partial assistant reply", () => {
     const failedSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       status: "failed",
@@ -871,8 +871,8 @@ describe("TaskSnapshotTimeline", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={failedSnapshot} />);
 
     expect(markup).toContain('role="alert"');
-    expect(markup).toContain("Turn 执行失败");
     expect(markup).toContain("上游服务暂时不可用");
+    expect(markup).not.toContain("Turn 执行失败");
     expect(markup.indexOf("已经完成部分分析。")).toBeLessThan(markup.indexOf("上游服务暂时不可用"));
   });
 

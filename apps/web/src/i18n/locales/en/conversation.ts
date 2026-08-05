@@ -194,7 +194,6 @@ export const conversation = {
     selectProject: "Select a project for the new chat",
     showImage: "View image {{name}}",
     skillsUsed: "Skills used",
-    turnFailed: "Turn failed",
     editedFiles: "Edited {{count}} files",
   },
 } as const;
