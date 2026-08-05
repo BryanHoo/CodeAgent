@@ -109,7 +109,6 @@ export interface AgentProvider {
   ): Promise<AgentProviderAttachment | undefined>;
   renameTask(taskId: string, title: string): Promise<void>;
   resolvePendingRequest(input: ResolvePendingRequestInput): Promise<PendingRequest>;
-  rollbackLatestTurn(taskId: string): Promise<void>;
   startReview(taskId: string, target: AgentReviewTarget): Promise<AgentTurn>;
   startTask(options?: StartAgentTaskOptions): Promise<AgentTask>;
   startTurn(

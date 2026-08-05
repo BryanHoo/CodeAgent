@@ -21,12 +21,10 @@ type ForkTaskAction = (idempotencyKey: string) => Promise<void>;
 type BuildPlanAction = () => Promise<boolean>;
 
 type TaskTimelineCommonProps = Readonly<{
-  canRollbackTurns?: boolean;
   onBuildPlan?: BuildPlanAction;
   onForkTask?: ForkTaskAction;
   onOpenFileDiff?: (change: AgentFileChange) => void;
   onReviewFileChanges?: (changes: readonly AgentFileChange[]) => void;
-  onRollbackTurn?: (turnId: string, idempotencyKey: string) => Promise<void>;
   onOpenSourceFile?: (reference: MessageFileReference) => void;
   onResolvePendingRequest?: (
     request: PendingRequest,
@@ -58,7 +56,6 @@ const ignoreFileChange = () => undefined;
 const ignoreSourceFile = () => undefined;
 const ignoreFileChanges = () => undefined;
 const ignorePendingRequest = () => Promise.resolve();
-const ignoreRollback = () => Promise.resolve();
 export function TaskTimeline(props: TaskTimelineProps) {
   useTranslation("conversation");
   if (props.taskId === undefined) {
@@ -86,14 +83,12 @@ export function TaskTimeline(props: TaskTimelineProps) {
     );
   }
   const {
-    canRollbackTurns = false,
     onBuildPlan,
     onForkTask,
     onOpenFileDiff,
     onOpenSourceFile,
     onReviewFileChanges,
     onResolvePendingRequest,
-    onRollbackTurn,
     runtime,
     scrollToBottomSignal,
     submissionStartedAt,
@@ -111,8 +106,6 @@ export function TaskTimeline(props: TaskTimelineProps) {
       onOpenSourceFile={onOpenSourceFile ?? ignoreSourceFile}
       onReviewFileChanges={onReviewFileChanges ?? ignoreFileChanges}
       onResolvePendingRequest={onResolvePendingRequest ?? ignorePendingRequest}
-      onRollbackTurn={onRollbackTurn ?? ignoreRollback}
-      canRollbackTurns={canRollbackTurns}
       {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
       {...(onForkTask === undefined ? {} : { onForkTask })}
       runtime={runtime}
@@ -125,14 +118,12 @@ export function TaskTimeline(props: TaskTimelineProps) {
 }
 
 function ActiveTaskTimeline({
-  canRollbackTurns,
   onBuildPlan,
   onForkTask,
   onOpenFileDiff,
   onOpenSourceFile,
   onReviewFileChanges,
   onResolvePendingRequest,
-  onRollbackTurn,
   runtime,
   scrollToBottomSignal,
   submissionStartedAt,
@@ -148,8 +139,6 @@ function ActiveTaskTimeline({
   onForkTask?: ForkTaskAction;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
-  onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
-  canRollbackTurns: boolean;
   onBuildPlan?: BuildPlanAction;
   runtime: TaskRuntimeView;
   scrollToBottomSignal: number | undefined;
@@ -186,7 +175,6 @@ function ActiveTaskTimeline({
         </div>
       ) : null}
       <TaskStoreTimeline
-        canRollbackTurns={canRollbackTurns}
         connected={runtime.connectionState === "connected"}
         {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
         {...(onForkTask === undefined ? {} : { onForkTask })}
@@ -194,7 +182,6 @@ function ActiveTaskTimeline({
         onOpenSourceFile={onOpenSourceFile}
         onReviewFileChanges={onReviewFileChanges}
         onResolvePendingRequest={onResolvePendingRequest}
-        onRollbackTurn={onRollbackTurn}
         {...(scrollToBottomSignal === undefined ? {} : { scrollToBottomSignal })}
         store={runtime.store}
         {...(submissionStartedAt === undefined ? {} : { submissionStartedAt })}
@@ -205,7 +192,6 @@ function ActiveTaskTimeline({
 }
 
 export function TaskSnapshotTimeline({
-  canRollbackTurns = false,
   connected = true,
   onBuildPlan,
   onForkTask,
@@ -213,10 +199,8 @@ export function TaskSnapshotTimeline({
   onOpenSourceFile = () => undefined,
   onReviewFileChanges = () => undefined,
   onResolvePendingRequest = () => Promise.resolve(),
-  onRollbackTurn = () => Promise.resolve(),
   snapshot,
 }: Readonly<{
-  canRollbackTurns?: boolean;
   connected?: boolean;
   onBuildPlan?: BuildPlanAction;
   onForkTask?: ForkTaskAction;
@@ -228,7 +212,6 @@ export function TaskSnapshotTimeline({
     resolution: PendingRequestResolution,
     idempotencyKey: string,
   ) => Promise<void>;
-  onRollbackTurn?: (turnId: string, idempotencyKey: string) => Promise<void>;
   snapshot: RuntimeTaskSnapshot;
 }>) {
   useTranslation("conversation");
@@ -246,7 +229,6 @@ export function TaskSnapshotTimeline({
   );
   return (
     <TaskStoreTimeline
-      canRollbackTurns={canRollbackTurns}
       connected={connected}
       {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
       {...(onForkTask === undefined ? {} : { onForkTask })}
@@ -254,7 +236,6 @@ export function TaskSnapshotTimeline({
       onOpenSourceFile={onOpenSourceFile}
       onReviewFileChanges={onReviewFileChanges}
       onResolvePendingRequest={onResolvePendingRequest}
-      onRollbackTurn={onRollbackTurn}
       store={store}
     />
   );

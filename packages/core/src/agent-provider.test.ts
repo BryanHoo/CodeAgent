@@ -19,7 +19,6 @@ describe("AgentProvider", () => {
             compact: true,
             interrupt: true,
             review: true,
-            rollback: true,
             start: true,
             steer: true,
           },
@@ -104,10 +103,6 @@ describe("AgentProvider", () => {
         return Promise.resolve(undefined);
       },
       renameTask() {
-        return Promise.resolve();
-      },
-      rollbackLatestTurn(taskId) {
-        expect(taskId).toBe("task-1");
         return Promise.resolve();
       },
       startReview(taskId, target) {
@@ -214,7 +209,6 @@ describe("AgentProvider", () => {
         compact: true,
         interrupt: true,
         review: true,
-        rollback: true,
         start: true,
         steer: true,
       },
@@ -290,7 +284,6 @@ describe("AgentProvider", () => {
       }),
     ).resolves.toBeUndefined();
     await expect(provider.interruptTurn("task-1", "turn-1")).resolves.toBeUndefined();
-    await expect(provider.rollbackLatestTurn("task-1")).resolves.toBeUndefined();
     await expect(provider.compactTask("task-1")).resolves.toBeUndefined();
     await expect(provider.forkTask("task-1")).resolves.toMatchObject({ id: "task-1-fork" });
     await expect(

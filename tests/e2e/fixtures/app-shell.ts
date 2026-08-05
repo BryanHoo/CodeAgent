@@ -551,7 +551,6 @@ test.beforeEach(async ({ page }) => {
           compact: true,
           interrupt: true,
           review: true,
-          rollback: true,
           start: true,
           steer: true,
         },

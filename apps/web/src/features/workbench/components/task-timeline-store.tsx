@@ -32,7 +32,6 @@ import {
 const getTurnIdKey = (turnId: string) => turnId;
 
 export function StoredAssistantGroup({
-  canRollback,
   itemIds,
   lastTurnItemId,
   latestSnapshotTimestamp,
@@ -41,7 +40,6 @@ export function StoredAssistantGroup({
   onBuildPlan,
   onOpenSourceFile,
   onReviewFileChanges,
-  onRollbackTurn,
   projectId,
   showProcessingTime,
   showRunningShimmer,
@@ -49,7 +47,6 @@ export function StoredAssistantGroup({
   taskId,
   turn,
 }: Readonly<{
-  canRollback: boolean;
   itemIds: readonly string[];
   lastTurnItemId: string | undefined;
   latestSnapshotTimestamp: string;
@@ -58,7 +55,6 @@ export function StoredAssistantGroup({
   onBuildPlan?: BuildPlanAction;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
-  onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
   projectId: string;
   showProcessingTime: boolean;
   showRunningShimmer: boolean;
@@ -105,11 +101,9 @@ export function StoredAssistantGroup({
       </div>
       {turn.status !== "running" && responseFileChanges.length > 0 ? (
         <ChangedFilesCard
-          canRollback={canRollback}
           changes={responseFileChanges}
           onOpenFileDiff={onOpenFileDiff}
           onReviewFileChanges={onReviewFileChanges}
-          onRollback={(idempotencyKey) => onRollbackTurn(turn.id, idempotencyKey)}
         />
       ) : null}
       {turn.status !== "running" && assistantText.trim().length > 0 ? (
@@ -124,13 +118,11 @@ export function StoredAssistantGroup({
 }
 
 export function StoreTurnTimelineSection({
-  canRollback,
   onBuildPlan,
   onForkTask,
   onOpenFileDiff,
   onOpenSourceFile,
   onReviewFileChanges,
-  onRollbackTurn,
   projectId,
   store,
   taskId,
@@ -138,13 +130,11 @@ export function StoreTurnTimelineSection({
   turnIndex,
   suppressEmptyRunningStatus,
 }: Readonly<{
-  canRollback: boolean;
   onBuildPlan?: BuildPlanAction;
   onForkTask?: ForkTaskAction;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
-  onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
   projectId: string;
   store: TaskStore;
   taskId: string;
@@ -186,7 +176,6 @@ export function StoreTurnTimelineSection({
           />
         ) : (
           <StoredAssistantGroup
-            canRollback={canRollback && turn.status === "completed"}
             itemIds={group.itemIds}
             key={group.key}
             lastTurnItemId={lastTurnItemId}
@@ -200,7 +189,6 @@ export function StoreTurnTimelineSection({
               : {})}
             onOpenSourceFile={onOpenSourceFile}
             onReviewFileChanges={onReviewFileChanges}
-            onRollbackTurn={onRollbackTurn}
             projectId={projectId}
             showProcessingTime={groupIndex === firstAssistantGroupIndex}
             showRunningShimmer={
@@ -264,7 +252,6 @@ export function StorePendingRequestList({
 }
 
 export function TaskStoreTimeline({
-  canRollbackTurns,
   connected,
   onBuildPlan,
   onForkTask,
@@ -272,13 +259,11 @@ export function TaskStoreTimeline({
   onOpenSourceFile,
   onReviewFileChanges,
   onResolvePendingRequest,
-  onRollbackTurn,
   scrollToBottomSignal,
   store,
   submissionStartedAt,
   submissionTurnId,
 }: Readonly<{
-  canRollbackTurns: boolean;
   connected: boolean;
   onBuildPlan?: BuildPlanAction;
   onForkTask?: ForkTaskAction;
@@ -290,7 +275,6 @@ export function TaskStoreTimeline({
     resolution: PendingRequestResolution,
     idempotencyKey: string,
   ) => Promise<void>;
-  onRollbackTurn: (turnId: string, idempotencyKey: string) => Promise<void>;
   scrollToBottomSignal?: number;
   store: TaskStore;
   submissionStartedAt?: string;
@@ -366,7 +350,6 @@ export function TaskStoreTimeline({
         items={turnIds}
         renderItem={(turnId, turnIndex) => (
           <StoreTurnTimelineSection
-            canRollback={connected && canRollbackTurns && turnId === latestTurnId}
             {...(connected && turnId === latestTurnId && onBuildPlan !== undefined
               ? { onBuildPlan }
               : {})}
@@ -376,7 +359,6 @@ export function TaskStoreTimeline({
             onOpenFileDiff={onOpenFileDiff}
             onOpenSourceFile={onOpenSourceFile}
             onReviewFileChanges={onReviewFileChanges}
-            onRollbackTurn={onRollbackTurn}
             projectId={projectId}
             store={store}
             taskId={taskId}

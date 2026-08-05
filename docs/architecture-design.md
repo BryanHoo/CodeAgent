@@ -412,7 +412,6 @@ export interface ProviderCapabilities {
   turns: {
     start: boolean;
     interrupt: boolean;
-    rollback: boolean;
     review: boolean;
     compact: boolean;
   };
@@ -907,7 +906,7 @@ App Server 返回错误码 `-32001` 时，Adapter 使用带 jitter 的指数退�
 
 ### 14.2 Project 与本机文件边界
 
-每次 HTTP 和 WebSocket 操作都必须检查 Project 权限。文件树、Git、回滚及普通 Project 菜单路径始终限制在 Project 根目录内。
+每次 HTTP 和 WebSocket 操作都必须检查 Project 权限。文件树、Git 及普通 Project 菜单路径始终限制在 Project 根目录内。
 
 Project 相对路径校验流程：
 

@@ -502,7 +502,6 @@ describe("CodeAgentClient", () => {
             compact: true,
             interrupt: true,
             review: true,
-            rollback: true,
             start: true,
             steer: true,
           },
@@ -692,14 +691,6 @@ describe("CodeAgentClient", () => {
       )
       .mockResolvedValueOnce(
         jsonResponse({ status: "interrupting", taskId: task.id, turnId: runningTurn.id }),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          restoredFiles: ["src/index.ts"],
-          status: "rolled_back",
-          taskId: task.id,
-          turnId: runningTurn.id,
-        }),
       );
     const client = new CodeAgentClient({ fetch: fetchMock });
 
@@ -741,12 +732,7 @@ describe("CodeAgentClient", () => {
     await client.interruptTurn("code-agent", task.id, runningTurn.id, {
       idempotencyKey: "interrupt-key",
     });
-    await client.rollbackTurn("code-agent", task.id, runningTurn.id, {
-      idempotencyKey: "rollback-key",
-    });
-
-    const [taskCall, attachmentCall, turnCall, steerCall, interruptCall, rollbackCall] =
-      fetchMock.mock.calls;
+    const [taskCall, attachmentCall, turnCall, steerCall, interruptCall] = fetchMock.mock.calls;
     expect(taskCall?.[0]).toBe("/v1/projects/code-agent/tasks");
     expect(taskCall?.[1]).toMatchObject({ body: "{}", method: "POST" });
     expect(new Headers(taskCall?.[1]?.headers).get("idempotency-key")).toBe("task-key");
@@ -796,12 +782,6 @@ describe("CodeAgentClient", () => {
       method: "POST",
     });
     expect(new Headers(interruptCall?.[1]?.headers).get("idempotency-key")).toBe("interrupt-key");
-    expect(rollbackCall?.[0]).toBe("/v1/projects/code-agent/tasks/task-1/turns/turn-1/rollback");
-    expect(rollbackCall?.[1]).toMatchObject({
-      body: JSON.stringify({ taskId: "task-1" }),
-      method: "POST",
-    });
-    expect(new Headers(rollbackCall?.[1]?.headers).get("idempotency-key")).toBe("rollback-key");
   });
 
   it("sends typed task command mutations with idempotency keys", async () => {

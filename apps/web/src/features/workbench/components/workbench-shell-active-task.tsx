@@ -150,14 +150,6 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
     resolution: PendingRequestResolution,
     idempotencyKey: string,
   ) => client.resolvePendingRequest(request, resolution, { idempotencyKey }).then(() => undefined);
-  const rollbackTurn = async (turnId: string, idempotencyKey: string) => {
-    await client.rollbackTurn(projectId, taskId, turnId, { idempotencyKey });
-    // Codex 回滚不会发送统一事件；成功后主动刷新会话与工作区状态。
-    await Promise.all([
-      queryClient.refetchQueries({ queryKey: ["projects", projectId, "tasks", taskId] }),
-      queryClient.invalidateQueries({ queryKey: ["projects", projectId, "git-status"] }),
-    ]);
-  };
   const forkTask = async (idempotencyKey: string) => {
     const response = await client.forkTask(projectId, taskId, { idempotencyKey });
     // 复用统一的新任务入口，保证列表缓存先于路由切换更新。
@@ -167,14 +159,12 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   return (
     <>
       <TaskTimeline
-        canRollbackTurns={capabilities?.turns.rollback ?? false}
         onBuildPlan={() => composerRef.current?.buildPlan() ?? Promise.resolve(false)}
         {...(capabilities?.tasks.fork === true ? { onForkTask: forkTask } : {})}
         onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
         onReviewFileChanges={onReviewFileChanges}
         onResolvePendingRequest={resolvePendingRequest}
-        onRollbackTurn={rollbackTurn}
         projectId={projectId}
         key={taskScope}
         runtime={visibleRuntime}

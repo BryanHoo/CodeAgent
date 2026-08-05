@@ -20,7 +20,6 @@ import type { CodeAgentAccessOptions } from "./access-control.js";
 import type { HostAttachmentSource } from "./host-file-browser.js";
 import type { ProjectImageFile } from "./project-image-file.js";
 import type { ProjectOpenService } from "./project-open.js";
-import type { PreparedTurnFileRollback, prepareTurnFileRollback } from "./turn-file-rollback.js";
 
 export interface CreateCodeAgentServerOptions {
   access?: CodeAgentAccessOptions;
@@ -50,10 +49,6 @@ export interface CreateCodeAgentServerOptions {
   readProjectDirectory?: (path?: string) => Promise<ProjectDirectoryListing>;
   readProjectImageFile?: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
   readProjectSourceFile?: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
-  prepareTurnFileRollback?: (
-    projectRoot: string,
-    changes: Parameters<typeof prepareTurnFileRollback>[1],
-  ) => Promise<PreparedTurnFileRollback>;
   resolveProjectDirectory?: (path: string) => Promise<string>;
   resolveHostAttachment?: (kind: HostFileKind, path: string) => Promise<HostAttachmentSource>;
   staticRoot?: string;

@@ -169,11 +169,6 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     return this.#delegate.resolvePendingRequest(input);
   }
 
-  public rollbackLatestTurn(taskId: string): Promise<void> {
-    this.#runtime.assertTaskOwner(this.#project, taskId);
-    return this.#delegate.rollbackLatestTurn(taskId);
-  }
-
   public startReview(taskId: string, target: AgentReviewTarget): Promise<AgentTurn> {
     this.#runtime.assertTaskOwner(this.#project, taskId);
     return this.#delegate.startReview(taskId, target);
@@ -322,7 +317,6 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
         compact: true,
         interrupt: true,
         review: true,
-        rollback: true,
         start: true,
         steer: true,
       },

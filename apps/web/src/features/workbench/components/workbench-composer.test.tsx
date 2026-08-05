@@ -144,7 +144,6 @@ describe("WorkbenchComposer", () => {
         compact: false,
         interrupt: false,
         review: false,
-        rollback: false,
         start: true,
         steer: false,
       },

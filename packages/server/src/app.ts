@@ -23,7 +23,6 @@ import { readProjectImageFile } from "./project-image-file.js";
 import { readProjectSourceFile } from "./project-source-file.js";
 import { createProjectOpenService } from "./project-open.js";
 import { readProjectDirectory, resolveProjectDirectory } from "./project-directory-browser.js";
-import { prepareTurnFileRollback } from "./turn-file-rollback.js";
 import {
   MutationHttpError,
   type ProjectContextResolver,
@@ -104,7 +103,6 @@ export async function createCodeAgentServer(
   const readImageFile = options.readProjectImageFile ?? readProjectImageFile;
   const readSourceFile = options.readProjectSourceFile ?? readProjectSourceFile;
   const projectOpenService = options.projectOpenService ?? createProjectOpenService();
-  const prepareFileRollback = options.prepareTurnFileRollback ?? prepareTurnFileRollback;
   const attachmentStore = new AttachmentStore();
   const resolveProviderTurnInput = async (
     projectId: string,
@@ -449,7 +447,6 @@ export async function createCodeAgentServer(
     maximumAttachmentBytes,
     modelCatalogCache,
     multipartEnvelopeBytes: MULTIPART_ENVELOPE_BYTES,
-    prepareFileRollback,
     projectContexts,
     projectOpenService,
     projectRepository: options.projectRepository,

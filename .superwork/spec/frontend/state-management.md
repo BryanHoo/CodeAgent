@@ -26,7 +26,7 @@
 - `provider.error` 标记 `willRetry` 时只作为当前 Turn 的临时提示；后续收到新的 Message、Reasoning 或 Command Delta 即清除。不可重试错误继续保留到权威终态，不能因部分回复或缺少错误文本的终态被覆盖。
 - Approval、Error 和 Terminal State 不得因合并或反压丢失。
 - `interrupted` Turn 的终态 Payload 可能只包含部分 Item；同 ID 终态实体覆盖流式实体，但缺失的已展示 Item 必须保留，停止操作不得清空已生成回复。
-- `turn.completed` 与重复 Snapshot 都可能只携带持久化摘要；同一 Turn 按 Item ID 由新实体覆盖旧实体，未重复携带的已接收 Item 必须保留。Provider 对同一 Message 的实时 ID 与 Snapshot ID 不稳定时，优先按 Item ID 确认实体；文本前缀只允许作为同角色、两侧非空且候选关系双方唯一时的兜底匹配。匹配后保留实时 ID 继续接收 Delta，并吸收 Snapshot 的完整内容和元数据；重复、空文本或前缀歧义必须保留各自 ID，不能错误折叠。完成态合并不得移动已展示 Item；终态新增 Item 按下一个共同 Item 插入，无后续共同 Item 时追加。终态真实 User Item 必须原子替换 `submitted-user-<turnId>` 占位符，不能重复展示或落到 Assistant Item 之后。Snapshot 明确移除整个 Turn 时才删除该 Turn，保证回滚仍以权威历史为准。
+- `turn.completed` 与重复 Snapshot 都可能只携带持久化摘要；同一 Turn 按 Item ID 由新实体覆盖旧实体，未重复携带的已接收 Item 必须保留。Provider 对同一 Message 的实时 ID 与 Snapshot ID 不稳定时，优先按 Item ID 确认实体；文本前缀只允许作为同角色、两侧非空且候选关系双方唯一时的兜底匹配。匹配后保留实时 ID 继续接收 Delta，并吸收 Snapshot 的完整内容和元数据；重复、空文本或前缀歧义必须保留各自 ID，不能错误折叠。完成态合并不得移动已展示 Item；终态新增 Item 按下一个共同 Item 插入，无后续共同 Item 时追加。终态真实 User Item 必须原子替换 `submitted-user-<turnId>` 占位符，不能重复展示或落到 Assistant Item 之后。Snapshot 明确移除整个 Turn 时才删除该 Turn，以权威历史为准。
 - Pending Request 按 `requestId` 合并 Snapshot 与实时生命周期事件；多个未解决请求按到达顺序展示，仅队首允许提交，重连期间全部暂停提交。Task Store 保留全部活动请求和最近 20 个终态请求，兼容 HTTP Snapshot 重建只输出 `pending`，避免长会话持续扩大状态与 Timeline 遍历量。
 - Task Runtime 使用 `zustand/vanilla` 按 `projectId + taskId` 创建独立 Store；Turn、Item 与 Pending Request 必须分别保存有序 ID 和实体映射，Item 实体各自使用独立 Store。每次 Snapshot Hydrate 或 Reconcile 重建 Turn/Item 容器时必须基于当前值单调推进结构修订号，不能重置修订号或只依赖 Task 元数据变化触发兼容快照重建；否则 Task 仍为 `running` 但中间 Snapshot 暂缺乐观 Turn 时，会让已提交消息和运行状态持续空白。
 - 文本 Delta 只向目标 Item Store 的 Chunk 列表追加，并在同一事件批次结束后发布一次；不得替换 Task 的稳定 Item Map、既有 Turn、Item 顺序或其他实体引用。Item 组件只订阅对应 Item Store，终态事件再以权威完整字符串替换流式 Chunk。
@@ -42,7 +42,6 @@
 - Task 归档成功后必须清理 `taskActivity`、最近 Snapshot 恢复引用、非活动 Runtime Store 与 Task Snapshot Query；不可见 Task 收到 `turn.completed` 后再次尝试安全 unsubscribe，避免首次切换时因运行态跳过后永久保留 Thread。
 - Composer 只使用 `idle`、`submitting`、`running`、`reconnecting`、`failed` 五种状态；运行态来自活动 Turn，重连态暂停网络 Mutation，失败态保留草稿。
 - 同一次用户动作在结果尚未确定前重试时必须复用原 `Idempotency-Key`；输入或目标变化后生成新 Key。
-- Turn 撤销的提交、失败和 Idempotency Key 属于对应回复卡片的瞬时状态；同一次撤销重试复用原 Key。撤销成功后主动刷新 Task Snapshot 与 Project Git 状态，因为 Codex 会话回滚不保证产生统一实时事件。
 - Git 提交弹窗的文件选择、可编辑 message 和部分成功结果属于瞬时 UI 状态；打开时按路径合并 staged/unstaged 记录并默认全选。生成与提交必须携带当前 Git `snapshot` 和所选路径；提交成功后失效 `['projects', projectId, 'git-status']`，push 失败或未配置 upstream 时保留 commit 成功结果，不得把它展示为整体失败。聚合子仓库模式必须禁用提交入口。
 - 创建 Task 后启动首个 Turn；若 Turn 启动失败，保留已创建 Task ID 和原始草稿，重试不得重复创建 Task。只有 Turn 启动成功后才清空草稿。
 - `startTask` 返回的 Task 必须立即 upsert 到对应 Project Task Query 并在 Sidebar 选中，不能依赖可能早于 Provider materialize 的抢跑列表刷新；此时保持 Project Composer 和项目级草稿以支持首轮失败重试，首次 `startTurn` 成功后再导航到 Task 路由，并将返回 Turn 作为跨路由短生命周期启动快照。任何 `startTurn` 成功后，若返回 Turn 或后续运行中 Snapshot 尚未包含 User Item，Timeline 必须使用本次提交补齐用户消息，并严格先展示用户消息、再展示“正在思考”；权威 User Item 到达后再无重复地接管展示。

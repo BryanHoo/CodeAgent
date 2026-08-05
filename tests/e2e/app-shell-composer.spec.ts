@@ -1400,7 +1400,6 @@ test("disables composer mutations that the provider does not support", async ({ 
           compact: false,
           interrupt: false,
           review: false,
-          rollback: false,
           start: false,
         },
       },

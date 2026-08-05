@@ -321,7 +321,6 @@ export const AgentCapabilitiesSchema = Type.Object(
         compact: Type.Boolean(),
         interrupt: Type.Boolean(),
         review: Type.Boolean(),
-        rollback: Type.Boolean(),
         start: Type.Boolean(),
         steer: Type.Boolean(),
       },

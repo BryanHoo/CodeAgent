@@ -53,7 +53,6 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     readTaskAttachment: vi.fn(() => Promise.resolve(undefined)),
     renameTask: vi.fn(),
     resolvePendingRequest: vi.fn(),
-    rollbackLatestTurn: vi.fn(),
     startTask: vi.fn(),
     startReview: vi.fn(),
     startTurn: vi.fn(),

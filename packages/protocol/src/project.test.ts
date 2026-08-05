@@ -80,8 +80,6 @@ import {
   RemoveProjectResponseSchema,
   UploadAgentFeedbackRequestSchema,
   UploadAgentFeedbackResponseSchema,
-  RollbackAgentTurnRequestSchema,
-  RollbackAgentTurnResponseSchema,
   ResolvePendingRequestRequestSchema,
   ResolvePendingRequestResponseSchema,
 } from "./project.js";
@@ -927,7 +925,6 @@ describe("project protocol", () => {
           compact: true,
           interrupt: true,
           review: true,
-          rollback: true,
           start: true,
           steer: true,
         },
@@ -991,26 +988,6 @@ describe("project protocol", () => {
     expect(
       Value.Check(UploadAgentFeedbackResponseSchema, { status: "sent", taskId: "task-1" }),
     ).toBe(true);
-  });
-
-  it("validates the latest turn rollback contract", () => {
-    expect(Value.Check(RollbackAgentTurnRequestSchema, { taskId: "task-1" })).toBe(true);
-    expect(
-      Value.Check(RollbackAgentTurnResponseSchema, {
-        restoredFiles: ["src/index.ts"],
-        status: "rolled_back",
-        taskId: "task-1",
-        turnId: "turn-1",
-      }),
-    ).toBe(true);
-    expect(
-      Value.Check(RollbackAgentTurnResponseSchema, {
-        restoredFiles: [],
-        status: "rolled_back",
-        taskId: "task-1",
-        turnId: "turn-1",
-      }),
-    ).toBe(false);
   });
 
   it("validates structured Agent inputs and mutation contracts", () => {

@@ -160,23 +160,6 @@ export const InterruptAgentTurnResponseSchema = Type.Object(
 );
 export type InterruptAgentTurnResponse = Readonly<Static<typeof InterruptAgentTurnResponseSchema>>;
 
-export const RollbackAgentTurnRequestSchema = Type.Object(
-  { taskId: Type.String({ minLength: 1 }) },
-  { additionalProperties: false },
-);
-export type RollbackAgentTurnRequest = Readonly<Static<typeof RollbackAgentTurnRequestSchema>>;
-
-export const RollbackAgentTurnResponseSchema = Type.Object(
-  {
-    restoredFiles: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
-    status: Type.Literal("rolled_back"),
-    taskId: Type.String({ minLength: 1 }),
-    turnId: Type.String({ minLength: 1 }),
-  },
-  { additionalProperties: false },
-);
-export type RollbackAgentTurnResponse = Readonly<Static<typeof RollbackAgentTurnResponseSchema>>;
-
 export const AgentMutationErrorCodeSchema = Type.Union([
   Type.Literal("ACCESS_DENIED"),
   Type.Literal("IDEMPOTENCY_KEY_REQUIRED"),
@@ -186,8 +169,6 @@ export const AgentMutationErrorCodeSchema = Type.Union([
   Type.Literal("TASK_NOT_FOUND"),
   Type.Literal("TURN_NOT_FOUND"),
   Type.Literal("TURN_NOT_RUNNING"),
-  Type.Literal("TURN_NOT_ROLLBACKABLE"),
-  Type.Literal("FILE_ROLLBACK_CONFLICT"),
   Type.Literal("ATTACHMENT_NOT_FOUND"),
   Type.Literal("PENDING_REQUEST_NOT_FOUND"),
   Type.Literal("PENDING_REQUEST_EXPIRED"),

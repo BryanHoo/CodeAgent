@@ -1,10 +1,8 @@
-import { FilePenLine, Files, RotateCcw } from "lucide-react";
-import { useRef, useState } from "react";
-import { v4 as createUuid } from "uuid";
+import { FilePenLine, Files } from "lucide-react";
+import { useState } from "react";
 
 import { i18n } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/ui/button.js";
-import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 
 import {
   countFileChangeLines,
@@ -53,43 +51,18 @@ export function FileChangeButton({
 }
 
 export function ChangedFilesCard({
-  canRollback,
   changes,
   onOpenFileDiff,
   onReviewFileChanges,
-  onRollback,
 }: Readonly<{
-  canRollback: boolean;
   changes: readonly AgentFileChange[];
   onOpenFileDiff: (change: AgentFileChange) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
-  onRollback: (idempotencyKey: string) => Promise<void>;
 }>) {
   const [expanded, setExpanded] = useState(false);
-  const [rollbackError, setRollbackError] = useState<string | null>(null);
-  const [rollbackPending, setRollbackPending] = useState(false);
-  const [rollbackIdempotencyKey] = useState(() => createUuid());
-  const rollbackLockRef = useRef(createAsyncActionLock());
   const summary = summarizeFileChanges(changes);
   const visibleChanges = expanded ? summary.changes : summary.changes.slice(0, 3);
   const hiddenChangeCount = summary.changes.length - visibleChanges.length;
-
-  const rollback = () =>
-    rollbackLockRef.current.run(async () => {
-      setRollbackPending(true);
-      setRollbackError(null);
-      try {
-        await onRollback(rollbackIdempotencyKey);
-      } catch (error) {
-        setRollbackError(
-          error instanceof Error
-            ? error.message
-            : i18n.t("timeline.rollbackError", { ns: "conversation" }),
-        );
-      } finally {
-        setRollbackPending(false);
-      }
-    });
 
   return (
     <section
@@ -115,22 +88,6 @@ export function ChangedFilesCard({
             <span className="text-diff-removed">-{summary.removals}</span>
           </p>
         </div>
-        {canRollback ? (
-          <Button
-            variant="ghost"
-            className="inline-flex h-8 items-center gap-1.5 rounded-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover disabled:cursor-wait disabled:opacity-55"
-            disabled={rollbackPending}
-            onClick={() => {
-              void rollback();
-            }}
-            type="button"
-          >
-            <RotateCcw className="size-3.5" aria-hidden="true" />
-            {rollbackPending
-              ? i18n.t("timeline.rollingBack", { ns: "conversation" })
-              : i18n.t("timeline.rollback", { ns: "conversation" })}
-          </Button>
-        ) : null}
         <Button
           variant="ghost"
           aria-haspopup="dialog"
@@ -175,11 +132,6 @@ export function ChangedFilesCard({
           </Button>
         ) : null}
       </div>
-      {rollbackError === null ? null : (
-        <p className="px-3 pb-3 text-label text-danger" role="alert">
-          {rollbackError}
-        </p>
-      )}
     </section>
   );
 }

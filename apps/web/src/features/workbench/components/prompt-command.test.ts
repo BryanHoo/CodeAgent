@@ -113,7 +113,6 @@ describe("prompt slash command", () => {
         compact: true,
         interrupt: true,
         review: true,
-        rollback: true,
         start: true,
         steer: true,
       },

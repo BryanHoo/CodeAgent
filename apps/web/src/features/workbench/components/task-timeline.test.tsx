@@ -483,7 +483,7 @@ describe("TaskTimeline", () => {
     expect(markup).not.toContain('aria-label="Turn 100"');
   });
 
-  it("does not offer rollback for a failed latest turn in the normalized store", () => {
+  it("renders errors for a failed latest turn in the normalized store", () => {
     const failedSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       status: "failed",
@@ -513,7 +513,6 @@ describe("TaskTimeline", () => {
 
     const markup = renderToStaticMarkup(
       <TaskTimeline
-        canRollbackTurns
         projectId={snapshot.projectId}
         runtime={{
           connectionState: "connected",
@@ -527,7 +526,6 @@ describe("TaskTimeline", () => {
     );
 
     expect(markup).toContain("执行失败");
-    expect(markup).not.toContain(">撤销<");
   });
 });
 
@@ -1519,16 +1517,13 @@ describe("TaskSnapshotTimeline", () => {
 
     let markup: string;
     try {
-      markup = renderToStaticMarkup(
-        <TaskSnapshotTimeline canRollbackTurns snapshot={fileChangeSnapshot} />,
-      );
+      markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={fileChangeSnapshot} />);
     } finally {
       vi.unstubAllGlobals();
     }
 
     expect(markup).toContain("已编辑 2 个文件");
     expect(markup).toContain('aria-label="本次修改了 2 个文件"');
-    expect(markup).toContain(">撤销<");
     expect(markup).toContain(">审核<");
     expect(markup).toContain("已编辑");
     expect(markup).toContain("package.json");

@@ -3,8 +3,6 @@ import {
   AgentMutationErrorSchema,
   InterruptAgentTurnRequestSchema,
   InterruptAgentTurnResponseSchema,
-  RollbackAgentTurnRequestSchema,
-  RollbackAgentTurnResponseSchema,
   ResolvePendingRequestRequestSchema,
   ResolvePendingRequestResponseSchema,
   StartAgentTaskRequestSchema,
@@ -13,15 +11,11 @@ import {
   StartAgentTurnResponseSchema,
   SteerAgentTurnRequestSchema,
   SteerAgentTurnResponseSchema,
-  type RollbackAgentTurnRequest,
   type ResolvePendingRequestRequest,
   type StartAgentTurnRequest,
   type SteerAgentTurnRequest,
 } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
-import type { PreparedTurnFileRollback } from "../turn-file-rollback.js";
-import { TurnFileRollbackError } from "../turn-file-rollback.js";
-
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import {
   IdempotencyHeadersSchema,
@@ -43,7 +37,6 @@ export const registerTurnRoutes: FastifyPluginCallback<ServerRouteContext> = (
     getProjectContext,
     idempotencyCacheSize,
     listModels,
-    prepareFileRollback,
     readInheritedTaskSettings,
     resolveProviderTurnInput,
     runIdempotent,
@@ -51,100 +44,6 @@ export const registerTurnRoutes: FastifyPluginCallback<ServerRouteContext> = (
     taskStartRecoveries,
     toPendingRequestHttpError,
   } = context;
-
-  app.post<{
-    Body: RollbackAgentTurnRequest;
-    Headers: { "idempotency-key": string };
-    Params: { projectId: string; taskId: string; turnId: string };
-  }>(
-    "/v1/projects/:projectId/tasks/:taskId/turns/:turnId/rollback",
-    {
-      schema: {
-        body: RollbackAgentTurnRequestSchema,
-        headers: IdempotencyHeadersSchema,
-        params: ProjectTaskTurnParamsSchema,
-        response: {
-          200: RollbackAgentTurnResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-        },
-      },
-    },
-    async (request) =>
-      runIdempotent(
-        ["rollback-turn", request.params.projectId, request.params.taskId, request.params.turnId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          if (request.body.taskId !== request.params.taskId) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-          const context = await getProjectContext(request.params.projectId);
-          if (context === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-          const latestTurn = task.turns.at(-1);
-          const requestedTurn = task.turns.find((turn) => turn.id === request.params.turnId);
-          if (requestedTurn === undefined) {
-            throw new MutationHttpError("TURN_NOT_FOUND", "Turn not found", 404);
-          }
-          if (latestTurn?.id !== requestedTurn.id || requestedTurn.status !== "completed") {
-            throw new MutationHttpError(
-              "TURN_NOT_ROLLBACKABLE",
-              "Only the latest completed turn can be rolled back",
-              409,
-            );
-          }
-          const changes = requestedTurn.items.flatMap((item) =>
-            item.type === "file_change" && item.status === "completed" ? item.changes : [],
-          );
-          let preparedRollback: PreparedTurnFileRollback;
-          try {
-            preparedRollback = await prepareFileRollback(context.project.rootPath, changes);
-            await preparedRollback.applyReverse();
-          } catch (error) {
-            if (error instanceof TurnFileRollbackError) {
-              throw new MutationHttpError(
-                "FILE_ROLLBACK_CONFLICT",
-                "Files changed after this turn and cannot be safely restored",
-                409,
-              );
-            }
-            throw error;
-          }
-
-          try {
-            // Codex 只撤销会话历史；文件已通过预检并在此前恢复。
-            await context.provider.rollbackLatestTurn(request.params.taskId);
-          } catch (providerError) {
-            try {
-              // Provider 失败时恢复正向补丁，避免会话与工作区状态分裂。
-              await preparedRollback.applyForward();
-            } catch {
-              throw new MutationHttpError(
-                "FILE_ROLLBACK_CONFLICT",
-                "Codex rollback failed and file changes could not be restored",
-                409,
-              );
-            }
-            throw providerError;
-          }
-
-          return {
-            restoredFiles: preparedRollback.restoredFiles,
-            status: "rolled_back" as const,
-            taskId: request.body.taskId,
-            turnId: request.params.turnId,
-          };
-        },
-      ),
-  );
 
   app.post<{
     Body: Record<string, never>;

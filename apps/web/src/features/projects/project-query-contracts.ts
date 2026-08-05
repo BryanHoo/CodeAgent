@@ -65,7 +65,6 @@ export type CodeAgentMutationClient = Pick<
   | "uploadAttachment"
   | "uploadFeedback"
 >;
-export type CodeAgentRollbackClient = Pick<CodeAgentClient, "rollbackTurn">;
 export type CodeAgentPendingRequestClient = Pick<CodeAgentClient, "resolvePendingRequest">;
 export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentBackgroundTerminalClient &
@@ -76,7 +75,6 @@ export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentProjectOpenClient &
   CodeAgentRuntimeClient &
   CodeAgentMutationClient &
-  CodeAgentRollbackClient &
   CodeAgentPendingRequestClient &
   CodeAgentCapabilitiesClient &
   CodeAgentModelsClient &

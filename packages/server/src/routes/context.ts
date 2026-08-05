@@ -38,8 +38,6 @@ import type { GitCommitError } from "../git-commit.js";
 import type { HostAttachmentSource } from "../host-file-browser.js";
 import type { ProjectOpenService } from "../project-open.js";
 import type { ProjectImageFile } from "../project-image-file.js";
-import type { PreparedTurnFileRollback } from "../turn-file-rollback.js";
-import type { prepareTurnFileRollback } from "../turn-file-rollback.js";
 
 export class MutationHttpError extends Error {
   public constructor(
@@ -116,10 +114,6 @@ export interface ServerRouteContext {
   readonly maximumAttachmentBytes: (kind: AgentAttachmentKind) => number;
   readonly modelCatalogCache: Readonly<{ read: () => Promise<AgentModelPage> }>;
   readonly multipartEnvelopeBytes: number;
-  readonly prepareFileRollback: (
-    projectRoot: string,
-    changes: Parameters<typeof prepareTurnFileRollback>[1],
-  ) => Promise<PreparedTurnFileRollback>;
   readonly projectOpenService: ProjectOpenService;
   readonly projectContexts: Map<string, ProjectRuntimeContext>;
   readonly projectRepository: ProjectRepository;

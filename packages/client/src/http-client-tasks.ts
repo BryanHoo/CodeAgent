@@ -13,7 +13,6 @@ import {
   RenameAgentTaskResponseSchema,
   ResolvePendingRequestResponseSchema,
   ReviewAgentTaskResponseSchema,
-  RollbackAgentTurnResponseSchema,
   StartAgentTaskResponseSchema,
   StartAgentTurnResponseSchema,
   SteerAgentTurnResponseSchema,
@@ -40,7 +39,6 @@ import {
   type ResolvePendingRequestResponse,
   type ReviewAgentTaskRequest,
   type ReviewAgentTaskResponse,
-  type RollbackAgentTurnResponse,
   type StartAgentTaskResponse,
   type StartAgentTurnResponse,
   type SteerAgentTurnResponse,
@@ -337,20 +335,6 @@ export class TaskHttpClient extends ProjectHttpClient {
       `${taskPath(projectId, taskId)}/turns/${encodeURIComponent(turnId)}/interrupt`,
       { taskId },
       InterruptAgentTurnResponseSchema,
-      options,
-    );
-  }
-
-  public async rollbackTurn(
-    projectId: string,
-    taskId: string,
-    turnId: string,
-    options: MutationOptions = {},
-  ): Promise<RollbackAgentTurnResponse> {
-    return this.mutation(
-      `${taskPath(projectId, taskId)}/turns/${encodeURIComponent(turnId)}/rollback`,
-      { taskId },
-      RollbackAgentTurnResponseSchema,
       options,
     );
   }
