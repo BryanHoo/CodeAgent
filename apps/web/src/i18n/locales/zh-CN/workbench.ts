@@ -51,17 +51,12 @@ export const workbench = {
     attachmentReadFailed: "附件读取失败",
     attachmentUploadFailed: "附件上传失败",
     baseBranchReview: "基于基础分支进行审查",
-    cancelFeedback: "取消反馈",
     cancelQueued: "取消排队：{{summary}}",
     cancelQueuedTooltip: "取消排队",
-    cancelSubtask: "取消副任务",
     commandGroup: "命令",
     commandInput: "输入命令",
     commandNoMatch: "没有匹配的 Skill 或命令",
     compacting: "正在压缩上下文",
-    feedback: "任务反馈",
-    feedbackPlaceholder: "输入关于此任务的反馈",
-    feedbackSent: "反馈已发送",
     gitBranchMissing: "未检出分支",
     initializingAgentsPrompt:
       "请检查当前项目，并在项目根目录创建或完善 AGENTS.md，写入适用于 Codex 的项目说明、常用命令和验证要求。",
@@ -87,9 +82,6 @@ export const workbench = {
     steerNowTooltip: "立即作为引导发送",
     stop: "停止",
     submit: "提交",
-    subtask: "副任务",
-    subtaskPlaceholder: "描述需要交给子代理的任务",
-    subtaskPrompt: "请使用子代理独立处理以下副任务，并在完成后汇总结果：\n\n{{text}}",
     taskInput: "任务输入",
     taskRunning: "任务运行中",
     uncommittedChangesMissing: "未发现可用的基础分支",
@@ -110,10 +102,6 @@ export const workbench = {
       description: "压缩此任务的上下文",
       label: "压缩",
     },
-    feedback: {
-      description: "发送关于此任务的反馈",
-      label: "反馈",
-    },
     fork: {
       description: "复制当前任务及其对话历史",
       label: "复制",
@@ -125,10 +113,6 @@ export const workbench = {
     review: {
       description: "审查未暂存的更改，或与某个分支进行比较",
       label: "代码审查",
-    },
-    subtask: {
-      description: "发起临时侧边对话",
-      label: "副任务",
     },
   },
   pending: {

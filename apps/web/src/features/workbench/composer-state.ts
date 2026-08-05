@@ -15,7 +15,6 @@ import { v4 as createUuid } from "uuid";
 import { i18n } from "../../i18n/i18n.js";
 import type { TaskRuntimeView } from "../conversation/runtime/use-task-runtime.js";
 import type { CodeAgentMutationClient } from "../projects/project-queries.js";
-import type { ComposerCommandDraftMode } from "./composer-draft-context.js";
 
 export type ComposerState = "failed" | "idle" | "reconnecting" | "running" | "submitting";
 export type ApprovalMode = AgentApprovalPolicy | "auto-review";
@@ -23,17 +22,7 @@ export type ApprovalMode = AgentApprovalPolicy | "auto-review";
 export const LARGE_PASTE_CHARACTER_THRESHOLD = 1_000;
 export const PASTED_TEXT_ATTACHMENT_NAME = "Pasted text.txt";
 
-export function resolveComposerPlaceholder(
-  commandDraftMode: ComposerCommandDraftMode | null,
-  taskId: string | undefined,
-): string {
-  // 命令草稿需要优先说明当前输入目标，普通草稿再按任务上下文提示。
-  if (commandDraftMode === "feedback") {
-    return i18n.t("composer.feedbackPlaceholder", { ns: "workbench" });
-  }
-  if (commandDraftMode === "subtask") {
-    return i18n.t("composer.subtaskPlaceholder", { ns: "workbench" });
-  }
+export function resolveComposerPlaceholder(taskId: string | undefined): string {
   return taskId === undefined
     ? i18n.t("composer.placeholder", { ns: "workbench" })
     : i18n.t("composer.followUpPlaceholder", { ns: "workbench" });

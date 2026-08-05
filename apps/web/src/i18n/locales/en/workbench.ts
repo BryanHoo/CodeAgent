@@ -52,17 +52,12 @@ export const workbench = {
     attachmentReadFailed: "Unable to read attachment",
     attachmentUploadFailed: "Unable to upload attachment",
     baseBranchReview: "Review against a base branch",
-    cancelFeedback: "Cancel feedback",
     cancelQueued: "Cancel queued message: {{summary}}",
     cancelQueuedTooltip: "Cancel queued message",
-    cancelSubtask: "Cancel subtask",
     commandGroup: "Commands",
     commandInput: "Command input",
     commandNoMatch: "No matching Skill or command",
     compacting: "Compacting context",
-    feedback: "Task feedback",
-    feedbackPlaceholder: "Enter feedback about this task",
-    feedbackSent: "Feedback sent",
     gitBranchMissing: "No branch checked out",
     initializingAgentsPrompt:
       "Inspect the current project and create or improve AGENTS.md in the project root with Codex project guidance, common commands, and verification requirements.",
@@ -88,10 +83,6 @@ export const workbench = {
     steerNowTooltip: "Send as a steer now",
     stop: "Stop",
     submit: "Submit",
-    subtask: "Subtask",
-    subtaskPlaceholder: "Describe the task for the subagent",
-    subtaskPrompt:
-      "Use a subagent to handle this independent task and summarize the result when complete:\n\n{{text}}",
     taskInput: "Task input",
     taskRunning: "Task is running",
     uncommittedChangesMissing: "No uncommitted changes available",
@@ -112,10 +103,6 @@ export const workbench = {
       description: "Compact the context for this task",
       label: "Compact",
     },
-    feedback: {
-      description: "Send feedback about this task",
-      label: "Feedback",
-    },
     fork: {
       description: "Copy the current task and its conversation history",
       label: "Fork",
@@ -127,10 +114,6 @@ export const workbench = {
     review: {
       description: "Review uncommitted changes or compare against a branch",
       label: "Code review",
-    },
-    subtask: {
-      description: "Start a temporary side conversation",
-      label: "Subtask",
     },
   },
   pending: {

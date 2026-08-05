@@ -741,8 +741,6 @@ test.beforeEach(async ({ page }) => {
       };
     } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1/compact") {
       body = { status: "compacting", taskId: "task-1" };
-    } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1/feedback") {
-      body = { status: "sent", taskId: "task-1" };
     } else if (url.pathname === "/v1/projects/code-agent/tasks/task-1/review") {
       body = {
         taskId: "task-1",

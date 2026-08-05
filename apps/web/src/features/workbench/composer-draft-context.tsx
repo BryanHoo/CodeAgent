@@ -4,8 +4,6 @@ import type { AgentSkill } from "@code-agent/protocol";
 import type { PromptInputAttachment } from "../../shared/ai-elements/prompt-input.js";
 import type { PromptSkillContent } from "./components/prompt-skill-editor.js";
 
-export type ComposerCommandDraftMode = "feedback" | "subtask";
-
 export type QueuedComposerPrompt = Readonly<{
   files: readonly PromptInputAttachment[];
   id: string;
@@ -15,14 +13,12 @@ export type QueuedComposerPrompt = Readonly<{
 
 export type ComposerDraft = Readonly<{
   attachments: readonly PromptInputAttachment[];
-  commandDraftMode: ComposerCommandDraftMode | null;
   content: PromptSkillContent;
   queuedPrompts: readonly QueuedComposerPrompt[];
 }>;
 
 const emptyComposerDraft: ComposerDraft = {
   attachments: [],
-  commandDraftMode: null,
   content: [],
   queuedPrompts: [],
 };
@@ -42,10 +38,7 @@ export function createComposerDraftScope(projectId: string, taskId?: string): st
 
 function isEmptyComposerDraft(draft: ComposerDraft): boolean {
   return (
-    draft.content.length === 0 &&
-    draft.attachments.length === 0 &&
-    draft.commandDraftMode === null &&
-    draft.queuedPrompts.length === 0
+    draft.content.length === 0 && draft.attachments.length === 0 && draft.queuedPrompts.length === 0
   );
 }
 

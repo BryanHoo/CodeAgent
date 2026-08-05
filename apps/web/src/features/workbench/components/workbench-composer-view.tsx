@@ -21,8 +21,6 @@ import {
   Folder,
   GitBranch,
   GitFork,
-  MessageCirclePlus,
-  MessageSquareText,
   SendHorizontal,
   Sparkles,
   X,
@@ -44,7 +42,6 @@ import {
   PromptInput,
   PromptInputActionAddAttachments,
   PromptInputBody,
-  PromptInputButton,
   PromptInputCommand,
   PromptInputCommandEmpty,
   PromptInputCommandGroup,
@@ -63,7 +60,7 @@ import {
   type PromptInputMessage,
 } from "../../../shared/ai-elements/prompt-input.js";
 import { useTranslation } from "../../../i18n/i18n.js";
-import type { ComposerCommandDraftMode, QueuedComposerPrompt } from "../composer-draft-context.js";
+import type { QueuedComposerPrompt } from "../composer-draft-context.js";
 import {
   LARGE_PASTE_CHARACTER_THRESHOLD,
   PASTED_TEXT_ATTACHMENT_NAME,
@@ -93,12 +90,8 @@ function PromptCommandIcon({ action }: Readonly<{ action: PromptCommandAction }>
       return <Bug aria-hidden="true" className={className} />;
     case "initialize":
       return <FilePlus2 aria-hidden="true" className={className} />;
-    case "subtask":
-      return <MessageCirclePlus aria-hidden="true" className={className} />;
     case "compact":
       return <CircleGauge aria-hidden="true" className={className} />;
-    case "feedback":
-      return <MessageSquareText aria-hidden="true" className={className} />;
     case "fork":
       return <GitFork aria-hidden="true" className={className} />;
   }
@@ -144,7 +137,6 @@ export type WorkbenchComposerViewProps = Readonly<{
   canInterrupt: boolean;
   canSteer: boolean;
   canSubmit: boolean;
-  commandDraftMode: ComposerCommandDraftMode | null;
   commandMenuId: string;
   commandMenuOpen: boolean;
   commandNotice: string | undefined;
@@ -164,7 +156,6 @@ export type WorkbenchComposerViewProps = Readonly<{
   modelsPending: boolean;
   mutationError: Error | null;
   onAttachmentsChange: (files: readonly PromptInputAttachment[]) => void;
-  onCancelCommandDraft: () => void;
   onExecuteCommand: (command: PromptCommandItem) => void;
   onExecuteReview: (target: AgentReviewTarget) => void;
   onInterrupt: () => void;
@@ -399,11 +390,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
           fileAccept={AGENT_FILE_ACCEPT}
           globalDrop
           imageAccept={AGENT_IMAGE_ACCEPT}
-          largePasteCharacterThreshold={
-            props.commandDraftMode === "feedback"
-              ? Number.POSITIVE_INFINITY
-              : LARGE_PASTE_CHARACTER_THRESHOLD
-          }
+          largePasteCharacterThreshold={LARGE_PASTE_CHARACTER_THRESHOLD}
           maxFileSize={MAX_AGENT_FILE_BYTES}
           maxFileTotalSize={MAX_AGENT_FILE_TOTAL_BYTES}
           maxImageSize={MAX_AGENT_IMAGE_BYTES}
@@ -417,37 +404,6 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
           onSubmit={props.onSubmit}
           pastedTextFileName={PASTED_TEXT_ATTACHMENT_NAME}
         >
-          {props.commandDraftMode === null ? null : (
-            <PromptInputHeader className="flex items-center">
-              <PromptInputButton
-                aria-label={
-                  props.commandDraftMode === "feedback"
-                    ? t("composer.cancelFeedback")
-                    : t("composer.cancelSubtask")
-                }
-                className="max-w-full border border-separator-strong bg-control text-foreground"
-                onClick={props.onCancelCommandDraft}
-              >
-                {props.commandDraftMode === "feedback" ? (
-                  <MessageSquareText
-                    className="size-3.5 shrink-0 text-primary"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <MessageCirclePlus
-                    className="size-3.5 shrink-0 text-primary"
-                    aria-hidden="true"
-                  />
-                )}
-                <span>
-                  {props.commandDraftMode === "feedback"
-                    ? t("composer.feedback")
-                    : t("composer.subtask")}
-                </span>
-                <X className="size-3.5 shrink-0" aria-hidden="true" />
-              </PromptInputButton>
-            </PromptInputHeader>
-          )}
           <ComposerAttachments />
           <PromptInputBody>
             <Input name="message" type="hidden" value={props.promptSubmissionText} />
@@ -480,7 +436,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                   props.onSelectActiveCommand();
                 }
               }}
-              placeholder={resolveComposerPlaceholder(props.commandDraftMode, props.taskId)}
+              placeholder={resolveComposerPlaceholder(props.taskId)}
               ref={props.skillEditorRef}
               scope={props.composerScope}
             />
@@ -498,7 +454,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
           <PromptInputFooter className="max-workbench:gap-0.5">
             <PromptInputTools className="max-workbench:shrink-0 max-workbench:gap-0.5">
               <PromptInputActionAddAttachments
-                disabled={props.attachmentsDisabled || props.commandDraftMode === "feedback"}
+                disabled={props.attachmentsDisabled}
                 onSelectKind={props.onSelectAttachmentKind}
               />
               <PromptInputSelect

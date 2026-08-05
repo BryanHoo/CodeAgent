@@ -30,7 +30,6 @@ import type { CodeAgentMutationClient } from "../../projects/project-queries.js"
 import {
   createComposerDraftScope,
   useComposerDraftStore,
-  type ComposerCommandDraftMode,
   type QueuedComposerPrompt,
 } from "../composer-draft-context.js";
 import type {
@@ -176,9 +175,6 @@ export function WorkbenchComposer({
     initialComposerDraft.attachments,
   );
   const [attachmentPickerKind, setAttachmentPickerKind] = useState<HostFileKind>();
-  const [commandDraftMode, setCommandDraftMode] = useState<ComposerCommandDraftMode | null>(
-    initialComposerDraft.commandDraftMode,
-  );
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [reviewMenuMode, setReviewMenuMode] = useState<"branches" | "scopes" | null>(null);
   const [commandNotice, setCommandNotice] = useState<string>();
@@ -293,27 +289,14 @@ export function WorkbenchComposer({
     [composerDraftStore, composerScope],
   );
 
-  const replaceCommandDraftMode = useCallback(
-    (mode: ComposerCommandDraftMode | null) => {
-      setCommandDraftMode(mode);
-      composerDraftStore.update(composerScope, (current) => ({
-        ...current,
-        commandDraftMode: mode,
-      }));
-    },
-    [composerDraftStore, composerScope],
-  );
-
   const clearComposerInput = useCallback(() => {
     composerDraftStore.update(composerScope, (current) => ({
       ...current,
       attachments: [],
-      commandDraftMode: null,
       content: [],
     }));
     setPromptContent([]);
     setAttachments([]);
-    setCommandDraftMode(null);
     skillEditorRef.current?.replace([]);
   }, [composerDraftStore, composerScope]);
 
@@ -341,7 +324,6 @@ export function WorkbenchComposer({
       setPromptContent(restoredDraft.content);
       setAttachments(restoredDraft.attachments);
       setAttachmentPickerKind(undefined);
-      setCommandDraftMode(restoredDraft.commandDraftMode);
       setQueuedPrompts(restoredDraft.queuedPrompts);
       skillEditorRef.current?.replace(restoredDraft.content);
       setSettingsOverride(undefined);
@@ -449,13 +431,11 @@ export function WorkbenchComposer({
       composerDraftStore.update(composerScope, (current) => ({
         ...current,
         attachments: [],
-        commandDraftMode: null,
         content: [],
         queuedPrompts: nextQueuedPrompts,
       }));
       setPromptContent([]);
       setAttachments([]);
-      setCommandDraftMode(null);
       skillEditorRef.current?.replace([]);
       return true;
     }
@@ -686,60 +666,6 @@ export function WorkbenchComposer({
     return availability;
   };
 
-  const beginCommandDraft = (mode: ComposerCommandDraftMode) => {
-    replaceCommandDraftMode(mode);
-    setCommandMenuOpen(false);
-    setCommandQuery("");
-    setCommandSlashCommand(undefined);
-    setCommandNotice(undefined);
-    replacePromptContent([]);
-    handleAttachmentsChange([]);
-    focusEditor();
-  };
-
-  const submitFeedback = (reason: string) =>
-    composerActionLock.run(async () => {
-      const requestScope = routeScope;
-      const normalizedReason = reason.trim();
-      if (
-        activeTaskId === undefined ||
-        normalizedReason === "" ||
-        !capabilities?.feedback.upload ||
-        turnControlsDisabled
-      ) {
-        return;
-      }
-      setIsSubmitting(true);
-      setMutationError(null);
-      const input = { classification: "other", includeLogs: true, reason: normalizedReason };
-      const attempt = resolveIdempotencyAttempt(
-        commandAttempts.current.get("feedback"),
-        JSON.stringify({ input, taskId: activeTaskId }),
-      );
-      commandAttempts.current.set("feedback", attempt);
-      try {
-        await client.uploadFeedback(projectId, activeTaskId, input, {
-          idempotencyKey: attempt.key,
-        });
-        if (isCurrentScope(requestScope)) {
-          commandAttempts.current.delete("feedback");
-          replaceCommandDraftMode(null);
-          setCommandNotice(t("composer.feedbackSent"));
-          replacePromptContent([]);
-        }
-      } catch (error) {
-        if (isCurrentScope(requestScope)) {
-          setMutationError(
-            error instanceof Error ? error : new Error("Feedback submission failed"),
-          );
-        }
-      } finally {
-        if (isCurrentScope(requestScope)) {
-          setIsSubmitting(false);
-        }
-      }
-    });
-
   const executePromptCommand = async (command: PromptCommandItem) => {
     const requestScope = routeScope;
     if (!getCommandAvailability(command).available) {
@@ -758,10 +684,6 @@ export function WorkbenchComposer({
     setCommandMenuOpen(false);
     setReviewMenuMode(null);
 
-    if (command.action === "feedback" || command.action === "subtask") {
-      beginCommandDraft(command.action);
-      return;
-    }
     if (command.action === "initialize") {
       await submitPrompt(
         {
@@ -974,7 +896,6 @@ export function WorkbenchComposer({
       canInterrupt={canInterrupt}
       canSteer={canSteer}
       canSubmit={canSubmit}
-      commandDraftMode={commandDraftMode}
       commandMenuId={commandMenuId}
       commandMenuOpen={commandMenuOpen}
       commandNotice={commandNotice}
@@ -994,11 +915,6 @@ export function WorkbenchComposer({
       modelsPending={modelsPending}
       mutationError={mutationError}
       onAttachmentsChange={handleAttachmentsChange}
-      onCancelCommandDraft={() => {
-        replaceCommandDraftMode(null);
-        replacePromptContent([]);
-        focusEditor();
-      }}
       onExecuteCommand={(command) => {
         void executePromptCommand(command);
       }}
@@ -1019,9 +935,6 @@ export function WorkbenchComposer({
           content: nextContent,
         }));
         setCommandNotice(undefined);
-        if (commandDraftMode !== null) {
-          return;
-        }
         const slashCommand = resolvePromptSlashCommand(serializedText, cursorOffset);
         if (slashCommand === null) {
           setCommandMenuOpen(false);
@@ -1041,20 +954,7 @@ export function WorkbenchComposer({
       onSelectAttachmentKind={setAttachmentPickerKind}
       onSelectSkill={selectSkill}
       onSettingsChange={updateSettings}
-      onSubmit={(message) => {
-        if (commandDraftMode === "feedback") {
-          void submitFeedback(message.text);
-          return;
-        }
-        if (commandDraftMode === "subtask") {
-          void submitPrompt({
-            ...message,
-            text: t("composer.subtaskPrompt", { text: message.text }),
-          });
-          return;
-        }
-        void submitPrompt(message);
-      }}
+      onSubmit={(message) => void submitPrompt(message)}
       onViewError={(error) => {
         setMutationError(error);
       }}

@@ -61,19 +61,17 @@ const turn = {
 
 describe("WorkbenchComposer", () => {
   it("uses concise placeholders for new and existing tasks", () => {
-    expect(resolveComposerPlaceholder(null, undefined)).toBe("告诉 CodeAgent 你想完成什么");
-    expect(resolveComposerPlaceholder(null, "task-1")).toBe("输入后续要求");
-    expect(resolveComposerPlaceholder("feedback", "task-1")).toBe("输入关于此任务的反馈");
-    expect(resolveComposerPlaceholder("subtask", "task-1")).toBe("描述需要交给子代理的任务");
+    expect(resolveComposerPlaceholder(undefined)).toBe("告诉 CodeAgent 你想完成什么");
+    expect(resolveComposerPlaceholder("task-1")).toBe("输入后续要求");
   });
 
   it("resolves Composer placeholders in English", async () => {
     await changeAppLanguage("en");
     try {
-      expect(resolveComposerPlaceholder(null, undefined)).toBe(
+      expect(resolveComposerPlaceholder(undefined)).toBe(
         "Tell CodeAgent what you want to accomplish",
       );
-      expect(resolveComposerPlaceholder(null, "task-1")).toBe("Enter follow-up instructions");
+      expect(resolveComposerPlaceholder("task-1")).toBe("Enter follow-up instructions");
     } finally {
       await changeAppLanguage("zh-CN");
     }

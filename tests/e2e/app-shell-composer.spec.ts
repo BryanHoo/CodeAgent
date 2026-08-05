@@ -155,7 +155,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   const commandMenu = page.getByRole("listbox", { name: "输入命令" });
   await expect(commandMenu).toBeVisible();
   expect(await commandMenu.evaluate((menu) => menu.closest("form") === null)).toBe(true);
-  await expect(commandMenu.getByRole("option")).toHaveCount(8);
+  await expect(commandMenu.getByRole("option")).toHaveCount(6);
   await expect(commandMenu.getByRole("option", { name: /代码审查/u })).toHaveAttribute(
     "data-active",
     "true",
@@ -184,19 +184,18 @@ test("runs official task actions from the slash command menu", async ({ page }) 
       }),
     )
     .toEqual(["hidden", "ellipsis", "nowrap"]);
-  for (const label of ["初始化", "副任务", "压缩", "反馈", "复制"]) {
+  for (const label of ["初始化", "压缩", "复制"]) {
     await expect(commandMenu.getByRole("option", { name: new RegExp(label, "u") })).toBeVisible();
   }
+  await expect(commandMenu.getByRole("option", { name: /副任务|反馈/u })).toHaveCount(0);
 
-  const commandList = commandMenu.locator("[data-prompt-input-command-list]");
-  for (let movementIndex = 0; movementIndex < 7; movementIndex += 1) {
+  for (let movementIndex = 0; movementIndex < 5; movementIndex += 1) {
     await prompt.press("ArrowDown");
   }
   await expect(commandMenu.getByRole("option", { name: /Documentation writer/u })).toHaveAttribute(
     "data-active",
     "true",
   );
-  await expect.poll(() => commandList.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 
   await prompt.fill("说明/security");
   await expect(commandMenu).toBeHidden();
@@ -289,16 +288,6 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   await expect
     .poll(() => commandRequests.map((request) => request.path))
     .toContain("/v1/projects/code-agent/tasks/task-1/compact");
-
-  await prompt.fill("/反馈");
-  await prompt.press("Enter");
-  await expect(page.getByRole("button", { name: "取消反馈" })).toBeVisible();
-  await prompt.fill("Slash 命令操作顺畅");
-  await page.getByRole("button", { exact: true, name: "提交" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "反馈已发送" })).toBeVisible();
-  await expect
-    .poll(() => commandRequests.find((request) => request.path.endsWith("/feedback"))?.body)
-    .toContain("Slash 命令操作顺畅");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await prompt.fill("/");

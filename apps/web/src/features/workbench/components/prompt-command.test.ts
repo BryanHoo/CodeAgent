@@ -95,9 +95,7 @@ describe("prompt slash command", () => {
     expect(promptCommandItems.map((item) => item.label)).toEqual([
       "代码审查",
       "初始化",
-      "副任务",
       "压缩",
-      "反馈",
       "复制",
     ]);
     expect(promptCommandItems.every((item) => item.description.length > 0)).toBe(true);

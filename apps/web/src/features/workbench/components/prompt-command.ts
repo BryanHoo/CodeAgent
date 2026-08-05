@@ -2,8 +2,7 @@ import type { AgentCapabilities, AgentSkill } from "@code-agent/protocol";
 
 import { i18n } from "../../../i18n/i18n.js";
 
-export type PromptCommandAction =
-  "compact" | "feedback" | "fork" | "initialize" | "review" | "subtask";
+export type PromptCommandAction = "compact" | "fork" | "initialize" | "review";
 
 export type PromptCommandItem = Readonly<{
   action: PromptCommandAction;
@@ -31,25 +30,11 @@ export function getPromptCommandItems(): readonly PromptCommandItem[] {
       label: translate("promptCommand.initialize.label"),
     },
     {
-      action: "subtask",
-      description: translate("promptCommand.subtask.description"),
-      id: "subtask",
-      keywords: ["subtask", "subagent", "副任务", "子代理"],
-      label: translate("promptCommand.subtask.label"),
-    },
-    {
       action: "compact",
       description: translate("promptCommand.compact.description"),
       id: "compact",
       keywords: ["compact", "context", "压缩", "上下文"],
       label: translate("promptCommand.compact.label"),
-    },
-    {
-      action: "feedback",
-      description: translate("promptCommand.feedback.description"),
-      id: "feedback",
-      keywords: ["feedback", "反馈"],
-      label: translate("promptCommand.feedback.label"),
     },
     {
       action: "fork",
@@ -82,15 +67,11 @@ export function getPromptCommandAvailability(
   const available =
     item.action === "initialize"
       ? capabilities.turns.start && (hasTask || capabilities.tasks.start)
-      : item.action === "subtask"
-        ? capabilities.turns.start
-        : item.action === "review"
-          ? capabilities.turns.review && (hasTask || capabilities.tasks.start)
-          : item.action === "compact"
-            ? capabilities.turns.compact
-            : item.action === "feedback"
-              ? capabilities.feedback.upload
-              : capabilities.tasks.fork;
+      : item.action === "review"
+        ? capabilities.turns.review && (hasTask || capabilities.tasks.start)
+        : item.action === "compact"
+          ? capabilities.turns.compact
+          : capabilities.tasks.fork;
   return available
     ? { available: true }
     : {
