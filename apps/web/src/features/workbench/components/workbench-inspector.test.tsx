@@ -78,7 +78,7 @@ const fileTreeDirectories: readonly ProjectFileTreeDirectoryState[] = [
 ];
 
 describe("WorkbenchInspector", () => {
-  it("keeps running terminals in context with an accessible stop action", () => {
+  it("keeps the user-controlled project tab selected while terminals are running", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
         backgroundTerminals={[
@@ -95,11 +95,9 @@ describe("WorkbenchInspector", () => {
       />,
     );
 
-    expect(markup).toContain('aria-label="运行中的终端"');
-    expect(markup).toContain("pnpm dev");
-    expect(markup).toContain("/workspace/CodeAgent");
-    expect(markup).toContain('aria-label="停止终端 pnpm dev"');
-    expect(markup).toContain('aria-label="终端运行中"');
+    expect(markup).toMatch(/aria-selected="true"[^>]*role="tab"[^>]*>项目<\/button>/u);
+    expect(markup).not.toContain('aria-label="运行中的终端"');
+    expect(markup).not.toContain("pnpm dev");
   });
 
   it("integrates inline change stats with neutral review and commit actions", () => {
@@ -340,6 +338,7 @@ describe("WorkbenchInspector", () => {
             taskId: "child-protocol",
           },
         ]}
+        tab="context"
       />,
     );
 
@@ -411,6 +410,7 @@ describe("WorkbenchInspector", () => {
             },
           ],
         }}
+        tab="context"
       />,
     );
 
@@ -455,6 +455,7 @@ describe("WorkbenchInspector", () => {
           onReviewChanges={() => undefined}
           projectName="CodeAgent"
           projectPath="/workspace/CodeAgent"
+          tab="context"
           {...props}
         />,
       );

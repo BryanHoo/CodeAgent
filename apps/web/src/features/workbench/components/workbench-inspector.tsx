@@ -61,6 +61,7 @@ type WorkbenchInspectorProps = Readonly<{
   onClose?: () => void;
   onReviewChanges?: (changes: readonly AgentFileChange[]) => void;
   onTerminateBackgroundTerminal?: (terminalId: string) => Promise<void>;
+  onTabChange?: (tab: WorkbenchInspectorTab) => void;
   projectName: string;
   projectOpenApps?: readonly ProjectOpenApp[];
   projectOpenError?: Error | null;
@@ -68,10 +69,13 @@ type WorkbenchInspectorProps = Readonly<{
   projectPath: string;
   skills?: readonly AgentSkill[];
   subagents?: readonly SubagentContextEntry[];
+  tab?: WorkbenchInspectorTab;
   task?: Readonly<{ turns: readonly AgentTurn[] }>;
   terminalMutationError?: Error | null;
   terminatingTerminalId?: string | null;
 }>;
+
+export type WorkbenchInspectorTab = "changes" | "context";
 
 export type ProjectFileTreeDirectoryState = Readonly<{
   data?: ProjectFileTree;
@@ -474,6 +478,7 @@ export function WorkbenchInspector({
   onClose,
   onReviewChanges = () => undefined,
   onTerminateBackgroundTerminal = () => Promise.resolve(),
+  onTabChange = () => undefined,
   projectName,
   projectOpenApps = [],
   projectOpenError = null,
@@ -481,14 +486,12 @@ export function WorkbenchInspector({
   projectPath,
   skills = [],
   subagents = [],
+  tab = "changes",
   task,
   terminalMutationError = null,
   terminatingTerminalId = null,
 }: WorkbenchInspectorProps) {
   useTranslation("conversation");
-  const [tab, setTab] = useState<"changes" | "context">(() =>
-    subagents.length > 0 || backgroundTerminals.length > 0 ? "context" : "changes",
-  );
   const changeSummary = useMemo(() => {
     const changes = [...(gitStatus?.unstaged ?? []), ...(gitStatus?.staged ?? [])];
     return { changes, ...collectFileTreeChangeSummary(changes) };
@@ -569,7 +572,7 @@ export function WorkbenchInspector({
               }`}
               key={value}
               onClick={() => {
-                setTab(value);
+                onTabChange(value);
               }}
               role="tab"
               type="button"

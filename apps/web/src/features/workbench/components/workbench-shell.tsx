@@ -77,7 +77,11 @@ import { TaskRenameDialog } from "./task-rename-dialog.js";
 import { TaskTimeline } from "./task-timeline.js";
 import type { PendingRequestResolution } from "./pending-request.js";
 import { WorkbenchComposer, type WorkbenchComposerHandle } from "./workbench-composer.js";
-import { WorkbenchInspector, type ProjectFileTreeDirectoryState } from "./workbench-inspector.js";
+import {
+  WorkbenchInspector,
+  type ProjectFileTreeDirectoryState,
+  type WorkbenchInspectorTab,
+} from "./workbench-inspector.js";
 import {
   CommitChangesLauncher,
   type CommitChangesLauncherHandle,
@@ -285,6 +289,8 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
   const [inspectorOpen, setInspectorOpen] = useState(() =>
     shouldOpenDesktopPanel(inspectorOverlayQuery),
   );
+  // 右栏页签只响应用户点击，运行态数据更新不能改变当前选择。
+  const [inspectorTab, setInspectorTab] = useState<WorkbenchInspectorTab>("changes");
   const [sidebarWidth, setSidebarWidth] = useState<number>(sidebarWidthLimits.default);
   const [inspectorWidth, setInspectorWidth] = useState<number>(inspectorWidthLimits.default);
   const workbenchShellRef = useRef<HTMLDivElement>(null);
@@ -837,7 +843,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         mcpServers={mcpServersQuery.data?.data ?? []}
         mcpServersError={mcpServersQuery.error}
         mcpServersPending={mcpServersQuery.isPending}
-        key={`${projectId}:${taskId ?? "draft"}:${subagents.length > 0 ? "with-subagents" : "without-subagents"}:${backgroundTerminals.terminals.length > 0 ? "with-terminals" : "without-terminals"}`}
+        key={`${projectId}:${taskId ?? "draft"}`}
         onClose={closeInspector}
         onFileTreeExpandedChange={(nextExpandedPaths) => {
           setFileTreeExpansion((current) => {
@@ -879,6 +885,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         }}
         onReviewChanges={openFileReview}
         onTerminateBackgroundTerminal={backgroundTerminals.terminateTerminal}
+        onTabChange={setInspectorTab}
         onOpenSubagent={(selection) => {
           if (taskId !== undefined) {
             setSubagentDialogSelection({ parentTaskId: taskId, projectId, selection });
@@ -891,6 +898,7 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
         projectPath={projectPath}
         skills={skillsQuery.data?.data ?? []}
         subagents={subagents}
+        tab={inspectorTab}
         terminalMutationError={backgroundTerminals.terminalError}
         terminatingTerminalId={backgroundTerminals.terminatingTerminalId}
         {...(inspectorTask === undefined ? {} : { task: inspectorTask })}
