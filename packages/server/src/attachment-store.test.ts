@@ -190,6 +190,44 @@ describe("AttachmentStore", () => {
     ).rejects.toThrow("Attachment exceeds the maximum size");
   });
 
+  it("enforces entry and byte capacities across concurrent uploads", async () => {
+    const createStore = (limits: { maxEntries: number; maxTotalBytes: number }) => {
+      let nextId = 1;
+      return new AttachmentStore({
+        ...limits,
+        createId: () => `concurrent-${String(nextId++)}`,
+      });
+    };
+    const uploadConcurrently = async (store: AttachmentStore) =>
+      Promise.allSettled([
+        store.add("code-agent", uploadInput(pixelDataUrl, "image", "first.png")),
+        store.add("code-agent", uploadInput(pixelDataUrl, "image", "second.png")),
+      ]);
+    const expectOneCapacityRejection = (
+      results: readonly PromiseSettledResult<unknown>[],
+    ): void => {
+      expect(results.map(({ status }) => status).sort()).toEqual(["fulfilled", "rejected"]);
+      const rejected = results.find(({ status }) => status === "rejected");
+      const reason: unknown = rejected?.status === "rejected" ? rejected.reason : undefined;
+      expect(reason).toBeInstanceOf(RangeError);
+      expect(reason).toMatchObject({ message: "Attachment store capacity exceeded" });
+    };
+
+    const entryLimitedStore = createStore({ maxEntries: 1, maxTotalBytes: 136 });
+    const entryResults = await uploadConcurrently(entryLimitedStore);
+    expectOneCapacityRejection(entryResults);
+    await entryLimitedStore.clear();
+    await expect(
+      entryLimitedStore.add("code-agent", uploadInput(pixelDataUrl, "image", "after-clear.png")),
+    ).resolves.toBeDefined();
+    await entryLimitedStore.dispose();
+
+    const byteLimitedStore = createStore({ maxEntries: 2, maxTotalBytes: 68 });
+    const byteResults = await uploadConcurrently(byteLimitedStore);
+    expectOneCapacityRejection(byteResults);
+    await byteLimitedStore.dispose();
+  });
+
   it("stops streaming an attachment as soon as its byte limit is exceeded", async () => {
     const store = new AttachmentStore({ maxBytes: 2 });
 

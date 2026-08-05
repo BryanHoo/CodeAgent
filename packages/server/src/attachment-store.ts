@@ -24,7 +24,7 @@ import {
 } from "@code-agent/protocol";
 
 const DEFAULT_ATTACHMENT_TTL_MS = 30 * 60 * 1_000;
-const DEFAULT_MAX_ENTRIES = Number.POSITIVE_INFINITY;
+const DEFAULT_MAX_ENTRIES = 1_500;
 const DEFAULT_MAX_TOTAL_BYTES = MAX_AGENT_IMAGE_TOTAL_BYTES + MAX_AGENT_FILE_TOTAL_BYTES;
 const IMAGE_EXTENSIONS = new Map<AgentImageMediaType, string>([
   ["image/gif", ".gif"],
@@ -249,6 +249,7 @@ export class AttachmentStore {
   readonly #maxEntries: number;
   readonly #maxTotalBytes: number;
   readonly #ttlMs: number;
+  #pendingEntries = 0;
   #totalBytes = 0;
 
   public constructor(options: AttachmentStoreOptions = {}) {
@@ -269,32 +270,35 @@ export class AttachmentStore {
     await this.#pruneExpired();
     const extension = validateUploadMetadata(input);
     const maximumBytes = this.#maxBytes ?? maximumBytesFor(input.kind);
-    if (this.#entries.size >= this.#maxEntries) {
+    if (this.#entries.size + this.#pendingEntries >= this.#maxEntries) {
       throw new RangeError("Attachment store capacity exceeded");
     }
+    // 在首次异步文件操作前预留条目，阻止并发上传使用同一个剩余名额。
+    this.#pendingEntries += 1;
 
-    const id = this.#createId();
-    const filePath = join(
-      this.#attachmentDirectory,
-      `${Buffer.from(id).toString("base64url")}${extension}`,
-    );
-    const digest = createHash("sha256");
-    let bytes = 0;
-    const limiter = new Transform({
-      transform(chunk: Buffer, _encoding, callback) {
-        const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-        bytes += value.byteLength;
-        if (bytes > maximumBytes) {
-          callback(new RangeError("Attachment exceeds the maximum size"));
-          return;
-        }
-        digest.update(value);
-        callback(null, value);
-      },
-    });
-
-    await mkdir(this.#attachmentDirectory, { recursive: true });
+    let filePath: string | undefined;
     try {
+      const id = this.#createId();
+      filePath = join(
+        this.#attachmentDirectory,
+        `${Buffer.from(id).toString("base64url")}${extension}`,
+      );
+      const digest = createHash("sha256");
+      let bytes = 0;
+      const limiter = new Transform({
+        transform(chunk: Buffer, _encoding, callback) {
+          const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          bytes += value.byteLength;
+          if (bytes > maximumBytes) {
+            callback(new RangeError("Attachment exceeds the maximum size"));
+            return;
+          }
+          digest.update(value);
+          callback(null, value);
+        },
+      });
+
+      await mkdir(this.#attachmentDirectory, { recursive: true });
       await pipeline(input.content, limiter, createWriteStream(filePath, { flags: "wx" }));
       if (bytes === 0) {
         throw new RangeError("Attachment must not be empty");
@@ -304,29 +308,34 @@ export class AttachmentStore {
       } else if (input.kind === "text") {
         await validateText(filePath);
       }
+
+      const attachment = {
+        id,
+        kind: input.kind,
+        mediaType: input.mediaType,
+        name: input.name,
+        size: bytes,
+      } satisfies AgentAttachment;
       if (this.#totalBytes + bytes > this.#maxTotalBytes) {
         throw new RangeError("Attachment store capacity exceeded");
       }
+      // 总字节检查与提交不让出事件循环，保证并发上传只能基于最新容量提交。
+      this.#entries.set(id, {
+        attachment,
+        expiresAt: this.#clock() + this.#ttlMs,
+        path: filePath,
+        projectId,
+      });
+      this.#totalBytes += bytes;
+      return { attachment, contentDigest: digest.digest("hex") };
     } catch (error) {
-      await removeFile(filePath);
+      if (filePath !== undefined) {
+        await removeFile(filePath);
+      }
       throw error;
+    } finally {
+      this.#pendingEntries -= 1;
     }
-
-    const attachment = {
-      id,
-      kind: input.kind,
-      mediaType: input.mediaType,
-      name: input.name,
-      size: bytes,
-    } satisfies AgentAttachment;
-    this.#entries.set(id, {
-      attachment,
-      expiresAt: this.#clock() + this.#ttlMs,
-      path: filePath,
-      projectId,
-    });
-    this.#totalBytes += bytes;
-    return { attachment, contentDigest: digest.digest("hex") };
   }
 
   public async resolve(
