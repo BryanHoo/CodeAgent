@@ -52,6 +52,37 @@ const snapshot: RuntimeTaskSnapshot = {
 };
 
 describe("TaskTimeline", () => {
+  it("renders automatic approval review results in the assistant timeline", () => {
+    const approvalReviewSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              action: { detail: "/bin/zsh -lc pwd", type: "command" },
+              id: "auto-approval-review-review-1",
+              rationale: "The user explicitly requested this read-only command.",
+              riskLevel: "low",
+              status: "approved",
+              targetItemId: "command-1",
+              type: "approval_review",
+              userAuthorization: "high",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={approvalReviewSnapshot} />);
+
+    expect(markup).toContain("自动审批：已批准");
+    expect(markup).toContain("/bin/zsh -lc pwd");
+    expect(markup).toContain("风险：低");
+    expect(markup).toContain("用户授权：高");
+    expect(markup).toContain("The user explicitly requested this read-only command.");
+  });
+
   it("localizes the running state in English", async () => {
     await changeAppLanguage("en");
     try {

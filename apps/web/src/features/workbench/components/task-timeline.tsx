@@ -797,6 +797,9 @@ function resolveRunningOperation(items: readonly IndexedAgentItem[]): RunningOpe
     if (item.type === "activity") {
       return item.status === "pending" || item.status === "running";
     }
+    if (item.type === "approval_review") {
+      return item.status === "in_progress";
+    }
     return false;
   })?.item;
 
@@ -808,6 +811,12 @@ function resolveRunningOperation(items: readonly IndexedAgentItem[]): RunningOpe
   }
   if (runningItem?.type === "activity") {
     return { label: runningItem.label, type: "operation" };
+  }
+  if (runningItem?.type === "approval_review") {
+    return {
+      label: i18n.t("timeline.approvalReview.reviewing", { ns: "conversation" }),
+      type: "operation",
+    };
   }
 
   const latestItem = items.at(-1)?.item;
@@ -886,6 +895,68 @@ function getReviewMessageText(item: Extract<AgentItem, { type: "review" }>): str
     instructions: target.instructions,
     ns: "conversation",
   });
+}
+
+function ApprovalReviewItem({
+  item,
+}: Readonly<{ item: Extract<AgentItem, { type: "approval_review" }> }>) {
+  const status = i18n.t(`timeline.approvalReview.status.${item.status}`, {
+    ns: "conversation",
+  });
+  const taskStatus: TaskStatus =
+    item.status === "in_progress"
+      ? "in_progress"
+      : item.status === "approved"
+        ? "completed"
+        : "error";
+
+  return (
+    <Task collapsible defaultOpen={item.status !== "approved"} status={taskStatus}>
+      <TaskTrigger
+        title={i18n.t("timeline.approvalReview.title", { ns: "conversation", status })}
+      />
+      <TaskContent>
+        <TaskItem>
+          {i18n.t("timeline.approvalReview.actionDetail", {
+            action: i18n.t(`timeline.approvalReview.action.${item.action.type}`, {
+              ns: "conversation",
+            }),
+            detail: item.action.detail,
+            ns: "conversation",
+          })}
+        </TaskItem>
+        {item.riskLevel === undefined ? null : (
+          <TaskItem>
+            {i18n.t("timeline.approvalReview.risk", {
+              level: i18n.t(`timeline.approvalReview.riskLevel.${item.riskLevel}`, {
+                ns: "conversation",
+              }),
+              ns: "conversation",
+            })}
+          </TaskItem>
+        )}
+        {item.userAuthorization === undefined ? null : (
+          <TaskItem>
+            {i18n.t("timeline.approvalReview.authorization", {
+              level: i18n.t(
+                `timeline.approvalReview.authorizationLevel.${item.userAuthorization}`,
+                { ns: "conversation" },
+              ),
+              ns: "conversation",
+            })}
+          </TaskItem>
+        )}
+        {item.rationale === undefined ? null : (
+          <TaskItem>
+            {i18n.t("timeline.approvalReview.rationale", {
+              ns: "conversation",
+              rationale: item.rationale,
+            })}
+          </TaskItem>
+        )}
+      </TaskContent>
+    </Task>
+  );
 }
 
 export function resolveMessageResponseRendering({
@@ -1021,6 +1092,8 @@ function TimelineItemContent({
     case "reasoning":
       // 原生 Reasoning 仅用于运行时状态同步，避免在界面暴露模型思维链。
       return null;
+    case "approval_review":
+      return <ApprovalReviewItem item={item} />;
     case "command": {
       const commandLabel = getCommandLabel(item.command);
       const commandOutput =

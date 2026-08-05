@@ -45,6 +45,9 @@ export {
 } from "./server-metrics.js";
 export {
   AgentActivityItemSchema,
+  AgentApprovalReviewActionSchema,
+  AgentApprovalReviewItemSchema,
+  AgentApprovalReviewStatusSchema,
   AgentBackgroundTerminalPageSchema,
   AgentBackgroundTerminalSchema,
   AddProjectRequestSchema,

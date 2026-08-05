@@ -777,6 +777,56 @@ export const AgentActivityItemSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const AgentApprovalReviewStatusSchema = Type.Union([
+  Type.Literal("in_progress"),
+  Type.Literal("approved"),
+  Type.Literal("denied"),
+  Type.Literal("timed_out"),
+  Type.Literal("aborted"),
+]);
+
+export const AgentApprovalReviewActionSchema = Type.Object(
+  {
+    detail: Type.String(),
+    type: Type.Union([
+      Type.Literal("command"),
+      Type.Literal("file_change"),
+      Type.Literal("network_access"),
+      Type.Literal("mcp_tool_call"),
+      Type.Literal("permissions"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentApprovalReviewItemSchema = Type.Object(
+  {
+    action: AgentApprovalReviewActionSchema,
+    id: Type.String({ minLength: 1 }),
+    rationale: Type.Optional(Type.String()),
+    riskLevel: Type.Optional(
+      Type.Union([
+        Type.Literal("low"),
+        Type.Literal("medium"),
+        Type.Literal("high"),
+        Type.Literal("critical"),
+      ]),
+    ),
+    status: AgentApprovalReviewStatusSchema,
+    targetItemId: Type.Optional(Type.String({ minLength: 1 })),
+    type: Type.Literal("approval_review"),
+    userAuthorization: Type.Optional(
+      Type.Union([
+        Type.Literal("unknown"),
+        Type.Literal("low"),
+        Type.Literal("medium"),
+        Type.Literal("high"),
+      ]),
+    ),
+  },
+  { additionalProperties: false },
+);
+
 const AgentReviewItemTargetSchema = Type.Union([
   Type.Object({ type: Type.Literal("uncommitted_changes") }, { additionalProperties: false }),
   Type.Object(
@@ -818,6 +868,7 @@ export const AgentItemSchema = Type.Union([
   AgentToolItemSchema,
   AgentPlanItemSchema,
   AgentActivityItemSchema,
+  AgentApprovalReviewItemSchema,
   AgentReviewItemSchema,
 ]);
 

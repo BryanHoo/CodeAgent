@@ -31,6 +31,8 @@ const MAX_COMMAND_OUTPUT_LINES = 10_000;
 export const CODEX_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
   "error",
   "item/agentMessage/delta",
+  "item/autoApprovalReview/completed",
+  "item/autoApprovalReview/started",
   "item/commandExecution/outputDelta",
   "item/completed",
   "item/reasoning/summaryTextDelta",
@@ -520,6 +522,114 @@ function mapItemStatus(value: unknown): AgentItemStatus {
     return value;
   }
   return "completed";
+}
+
+type AgentApprovalReviewItem = Extract<AgentItem, { type: "approval_review" }>;
+
+// App Server 暂未把自动审批建模为普通 Item，这里将两段通知投影为同一流式 Item。
+function mapApprovalReviewStatus(value: unknown): AgentApprovalReviewItem["status"] {
+  if (value === "inProgress") return "in_progress";
+  if (value === "approved" || value === "denied" || value === "aborted") return value;
+  if (value === "timedOut") return "timed_out";
+  throw new CodexProtocolMappingError("Codex automatic approval review status is invalid");
+}
+
+function mapApprovalReviewAction(value: unknown): AgentApprovalReviewItem["action"] {
+  const action = expectRecord(value, "Codex automatic approval review action");
+  const type = expectString(action["type"], "Codex automatic approval review action type");
+  if (type === "command") {
+    return {
+      detail: expectString(action["command"], "Codex automatic approval review command"),
+      type: "command",
+    };
+  }
+  if (type === "execve") {
+    const argv = action["argv"];
+    if (!Array.isArray(argv) || argv.some((part) => typeof part !== "string")) {
+      throw new CodexProtocolMappingError("Codex automatic approval review argv is invalid");
+    }
+    const stringArgv = argv.map((part, index) =>
+      expectString(part, `Codex automatic approval review argv ${String(index)}`),
+    );
+    return {
+      detail: [
+        expectString(action["program"], "Codex automatic approval review program"),
+        ...stringArgv,
+      ].join(" "),
+      type: "command",
+    };
+  }
+  if (type === "applyPatch") {
+    const files = action["files"];
+    if (!Array.isArray(files) || files.some((file) => typeof file !== "string")) {
+      throw new CodexProtocolMappingError("Codex automatic approval review files are invalid");
+    }
+    return { detail: files.join("\n"), type: "file_change" };
+  }
+  if (type === "networkAccess") {
+    return {
+      detail: expectString(action["target"], "Codex automatic approval review network target"),
+      type: "network_access",
+    };
+  }
+  if (type === "mcpToolCall") {
+    const title = optionalString(action["toolTitle"]);
+    return {
+      detail:
+        title ??
+        `${expectString(action["server"], "Codex automatic approval review MCP server")}/${expectString(action["toolName"], "Codex automatic approval review MCP tool")}`,
+      type: "mcp_tool_call",
+    };
+  }
+  if (type === "requestPermissions") {
+    const permissions = expectRecord(
+      action["permissions"],
+      "Codex automatic approval review permissions",
+    );
+    return {
+      detail: optionalString(action["reason"]) ?? JSON.stringify(permissions),
+      type: "permissions",
+    };
+  }
+  throw new CodexProtocolMappingError("Codex automatic approval review action type is invalid");
+}
+
+function mapApprovalReviewItem(params: Record<string, unknown>): AgentApprovalReviewItem {
+  const review = expectRecord(params["review"], "Codex automatic approval review");
+  const riskLevel = optionalString(review["riskLevel"]);
+  const userAuthorization = optionalString(review["userAuthorization"]);
+  if (
+    riskLevel !== undefined &&
+    riskLevel !== "low" &&
+    riskLevel !== "medium" &&
+    riskLevel !== "high" &&
+    riskLevel !== "critical"
+  ) {
+    throw new CodexProtocolMappingError("Codex automatic approval review risk level is invalid");
+  }
+  if (
+    userAuthorization !== undefined &&
+    userAuthorization !== "unknown" &&
+    userAuthorization !== "low" &&
+    userAuthorization !== "medium" &&
+    userAuthorization !== "high"
+  ) {
+    throw new CodexProtocolMappingError(
+      "Codex automatic approval review user authorization is invalid",
+    );
+  }
+  const targetItemId = optionalString(params["targetItemId"]);
+  const rationale = optionalString(review["rationale"]);
+  return {
+    action: mapApprovalReviewAction(params["action"]),
+    id: `auto-approval-review-${expectString(params["reviewId"], "Codex automatic approval review id")}`,
+    ...(rationale === undefined ? {} : { rationale }),
+    ...(riskLevel === undefined ? {} : { riskLevel }),
+    status: mapApprovalReviewStatus(review["status"]),
+    ...(targetItemId === undefined ? {} : { targetItemId }),
+    type: "approval_review",
+    ...(userAuthorization === undefined ? {} : { userAuthorization }),
+  };
 }
 
 type MapCodexMessageImage = (
@@ -1356,6 +1466,20 @@ export function mapCodexNotification(
       taskId,
       turnId,
       type: "provider.error",
+    };
+  }
+
+  if (
+    method === "item/autoApprovalReview/started" ||
+    method === "item/autoApprovalReview/completed"
+  ) {
+    const item = mapApprovalReviewItem(params);
+    return {
+      itemId: item.id,
+      payload: { item },
+      taskId,
+      turnId,
+      type: method === "item/autoApprovalReview/started" ? "item.started" : "item.completed",
     };
   }
 

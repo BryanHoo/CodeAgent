@@ -205,6 +205,81 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
+  it("streams automatic approval review lifecycle as timeline items", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexRuntimeProvider({ client: rpc }).forProject(project);
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+    await provider.listTasks();
+
+    const action = {
+      command: "/bin/zsh -lc pwd",
+      cwd: "/workspace/CodeAgent",
+      source: "shell",
+      type: "command",
+    };
+    rpc.emitNotification("item/autoApprovalReview/started", {
+      action,
+      review: {
+        rationale: null,
+        riskLevel: null,
+        status: "inProgress",
+        userAuthorization: null,
+      },
+      reviewId: "review-1",
+      startedAtMs: 1_753_228_800_000,
+      targetItemId: "command-1",
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("item/autoApprovalReview/completed", {
+      action,
+      completedAtMs: 1_753_228_802_000,
+      decisionSource: "agent",
+      review: {
+        rationale: "The user explicitly requested this read-only command.",
+        riskLevel: "low",
+        status: "approved",
+        userAuthorization: "high",
+      },
+      reviewId: "review-1",
+      startedAtMs: 1_753_228_800_000,
+      targetItemId: "command-1",
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    expect(events).toMatchObject([
+      {
+        itemId: "auto-approval-review-review-1",
+        payload: {
+          item: {
+            action: { detail: "/bin/zsh -lc pwd", type: "command" },
+            id: "auto-approval-review-review-1",
+            status: "in_progress",
+            targetItemId: "command-1",
+            type: "approval_review",
+          },
+        },
+        type: "item.started",
+      },
+      {
+        itemId: "auto-approval-review-review-1",
+        payload: {
+          item: {
+            action: { detail: "/bin/zsh -lc pwd", type: "command" },
+            rationale: "The user explicitly requested this read-only command.",
+            riskLevel: "low",
+            status: "approved",
+            type: "approval_review",
+            userAuthorization: "high",
+          },
+        },
+        type: "item.completed",
+      },
+    ]);
+  });
+
   it("lists and terminates background terminals through the experimental thread API", async () => {
     const rpc = new FakeRpcClient([
       { thread: nativeThread() },
