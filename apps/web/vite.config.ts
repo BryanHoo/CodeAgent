@@ -34,6 +34,7 @@ export default defineConfig({
   },
   build: {
     emptyOutDir: false,
+    manifest: true,
     outDir: "../../dist/web",
     sourcemap: false,
     target: [...supportedBrowserTargets],

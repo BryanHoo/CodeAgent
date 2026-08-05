@@ -6,7 +6,10 @@ describe("Web Vite browser targets", () => {
   it("locks the production build to the supported browser minimums", () => {
     expect(supportedBrowserTargets).toEqual(["chrome116", "firefox124", "safari17.4"]);
     expect(webConfig).toMatchObject({
-      build: { target: ["chrome116", "firefox124", "safari17.4"] },
+      build: {
+        manifest: true,
+        target: ["chrome116", "firefox124", "safari17.4"],
+      },
     });
   });
 });

@@ -1,6 +1,6 @@
 import { createRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { useProjectActions, useProjectData } from "../../features/projects/project-context.js";
 import {
@@ -10,7 +10,7 @@ import {
   globalSettingsQueryOptions,
   modelsQueryOptions,
 } from "../../features/projects/project-queries.js";
-import { GlobalSettingsDialog } from "../../features/settings/components/global-settings-dialog.js";
+import { loadGlobalSettingsDialog } from "../../features/settings/components/global-settings-lazy.js";
 import { useTranslation } from "../../i18n/i18n.js";
 import { useAccess } from "../../features/access/access-context.js";
 import { RuntimeUnavailable } from "../../shared/ui/runtime-unavailable.js";
@@ -21,6 +21,10 @@ import {
   resolveInitialProjectId,
 } from "../../features/workbench/project-sidebar-preferences.js";
 import { rootRoute } from "./root-route.js";
+
+const LazyGlobalSettingsDialog = lazy(() =>
+  loadGlobalSettingsDialog().then((module) => ({ default: module.GlobalSettingsDialog })),
+);
 
 export const indexRoute = createRoute({
   component: IndexPage,
@@ -101,33 +105,37 @@ function IndexPage() {
         {t("app.noProjects")}
       </main>
       {globalSettingsOpen ? (
-        <GlobalSettingsDialog
-          {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
-          {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
-          appInfoError={appInfoQuery.error}
-          initialSection="about"
-          apps={[]}
-          error={globalSettingsQuery.error ?? modelsQuery.error}
-          isPending={globalSettingsQuery.isPending || modelsQuery.isPending}
-          isAppInfoPending={appInfoQuery.isPending}
-          isAppUpdatePending={appUpdateMutation.isPending}
-          models={modelsQuery.data?.data ?? []}
-          onClose={() => {
-            setGlobalSettingsOpen(false);
-            requestAnimationFrame(() => {
-              document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
-            });
-          }}
-          onLogoutAccess={access.logout}
-          onRetry={() => Promise.all([globalSettingsQuery.refetch(), modelsQuery.refetch()])}
-          onRetryAppInfo={() => appInfoQuery.refetch()}
-          onSave={(settings) => globalSettingsMutation.mutateAsync(settings).then(() => undefined)}
-          onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
-          updateError={appUpdateMutation.error}
-          {...(globalSettingsQuery.data === undefined
-            ? {}
-            : { settings: globalSettingsQuery.data.settings })}
-        />
+        <Suspense fallback={null}>
+          <LazyGlobalSettingsDialog
+            {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
+            {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
+            appInfoError={appInfoQuery.error}
+            initialSection="about"
+            apps={[]}
+            error={globalSettingsQuery.error ?? modelsQuery.error}
+            isPending={globalSettingsQuery.isPending || modelsQuery.isPending}
+            isAppInfoPending={appInfoQuery.isPending}
+            isAppUpdatePending={appUpdateMutation.isPending}
+            models={modelsQuery.data?.data ?? []}
+            onClose={() => {
+              setGlobalSettingsOpen(false);
+              requestAnimationFrame(() => {
+                document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
+              });
+            }}
+            onLogoutAccess={access.logout}
+            onRetry={() => Promise.all([globalSettingsQuery.refetch(), modelsQuery.refetch()])}
+            onRetryAppInfo={() => appInfoQuery.refetch()}
+            onSave={(settings) =>
+              globalSettingsMutation.mutateAsync(settings).then(() => undefined)
+            }
+            onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
+            updateError={appUpdateMutation.error}
+            {...(globalSettingsQuery.data === undefined
+              ? {}
+              : { settings: globalSettingsQuery.data.settings })}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

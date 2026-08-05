@@ -1,5 +1,5 @@
 import { PanelLeft, PanelRight, Pencil } from "lucide-react";
-import type { CSSProperties } from "react";
+import { lazy, Suspense, type CSSProperties } from "react";
 
 import { Button } from "../../../shared/ui/button.js";
 import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
@@ -7,15 +7,19 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tool
 import { ProjectSidebar } from "./project-sidebar.js";
 import { TaskTimeline } from "./task-timeline.js";
 import { WorkbenchComposer } from "./workbench-composer.js";
-import { WorkbenchInspector } from "./workbench-inspector.js";
 import { WorkbenchPanelResizer } from "./workbench-panel-resizer.js";
 import type { useWorkbenchShellController } from "./workbench-shell-controller.js";
 import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
+import { loadWorkbenchInspector } from "./workbench-shell-runtime.js";
 import { ActiveTaskWorkbench } from "./workbench-shell-active-task.js";
 
 const sidebarWidthLimits = { default: 288, maximum: 400, minimum: 220 } as const;
 const inspectorWidthLimits = { default: 288, maximum: 480, minimum: 260 } as const;
 const emptyExpandedFileTreePaths = new Set<string>();
+
+const LazyWorkbenchInspector = lazy(() =>
+  loadWorkbenchInspector().then((module) => ({ default: module.WorkbenchInspector })),
+);
 
 type WorkbenchShellStyle = CSSProperties &
   Readonly<{ "--inspector-open-width": string; "--sidebar-open-width": string }>;
@@ -335,79 +339,85 @@ export function WorkbenchShellLayout({
         />
       ) : null}
 
-      <WorkbenchInspector
-        backgroundTerminals={backgroundTerminals.terminals}
-        backgroundTerminalsError={backgroundTerminals.error}
-        backgroundTerminalsPending={backgroundTerminals.isPending}
-        expandedFileTreePaths={expandedFileTreePaths}
-        fileTreeDirectories={fileTreeDirectories}
-        gitStatusError={gitStatusQuery.error}
-        gitStatusPending={gitStatusQuery.isPending}
-        gitStatusRefreshing={gitStatusQuery.isFetching}
-        mcpServers={mcpServersQuery.data?.data ?? []}
-        mcpServersError={mcpServersQuery.error}
-        mcpServersPending={taskId !== undefined && mcpServersQuery.isPending}
-        key={`${projectId}:${taskId ?? "draft"}`}
-        onClose={closeInspector}
-        onFileTreeExpandedChange={(nextExpandedPaths) => {
-          setFileTreeExpansion((current) => {
-            const previousPaths =
-              current.projectId === projectId ? current.paths : emptyExpandedFileTreePaths;
-            const collapsedPaths = [...previousPaths].filter(
-              (path) => !nextExpandedPaths.has(path),
-            );
-            return {
-              paths: new Set(
-                [...nextExpandedPaths].filter(
-                  (path) =>
-                    !collapsedPaths.some((collapsedPath) => path.startsWith(`${collapsedPath}/`)),
-                ),
-              ),
-              projectId,
-            };
-          });
-        }}
-        onOpenFileDiff={openFileDiff}
-        onOpenProjectPath={(appId, path) => {
-          projectPathOpenMutation.reset();
-          void projectPathOpenLockRef.current.run(() =>
-            projectPathOpenMutation.mutateAsync({ appId, path }),
-          );
-        }}
-        onOpenProjectFile={(path) => {
-          openMessageFileReference({ lineNumber: null, path });
-        }}
-        onRefreshGitStatus={() => {
-          void refreshProjectGitStatus(projectId);
-        }}
-        onCommitChanges={() => {
-          commitChangesLauncherRef.current?.open();
-        }}
-        onRefreshFileTreeDirectory={(directoryPath) => {
-          const directoryIndex = fileTreeDirectoryPaths.indexOf(directoryPath);
-          void fileTreeQueries[directoryIndex]?.refetch();
-        }}
-        onReviewChanges={openFileReview}
-        onTerminateBackgroundTerminal={backgroundTerminals.terminateTerminal}
-        onTabChange={setInspectorTab}
-        onOpenSubagent={(selection) => {
-          if (taskId !== undefined) {
-            setSubagentDialogSelection({ parentTaskId: taskId, projectId, selection });
-          }
-        }}
-        projectName={projectName}
-        projectOpenApps={projectOpenCapabilitiesQuery.data?.apps ?? []}
-        projectOpenError={projectPathOpenMutation.error}
-        projectOpenPending={projectPathOpenMutation.isPending}
-        projectPath={projectPath}
-        skills={skillsQuery.data?.data ?? []}
-        subagents={subagents}
-        tab={inspectorTab}
-        terminalMutationError={backgroundTerminals.terminalError}
-        terminatingTerminalId={backgroundTerminals.terminatingTerminalId}
-        {...(inspectorTask === undefined ? {} : { task: inspectorTask })}
-        {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
-      />
+      {inspectorOpen ? (
+        <Suspense fallback={null}>
+          <LazyWorkbenchInspector
+            backgroundTerminals={backgroundTerminals.terminals}
+            backgroundTerminalsError={backgroundTerminals.error}
+            backgroundTerminalsPending={backgroundTerminals.isPending}
+            expandedFileTreePaths={expandedFileTreePaths}
+            fileTreeDirectories={fileTreeDirectories}
+            gitStatusError={gitStatusQuery.error}
+            gitStatusPending={gitStatusQuery.isPending}
+            gitStatusRefreshing={gitStatusQuery.isFetching}
+            mcpServers={mcpServersQuery.data?.data ?? []}
+            mcpServersError={mcpServersQuery.error}
+            mcpServersPending={taskId !== undefined && mcpServersQuery.isPending}
+            key={`${projectId}:${taskId ?? "draft"}`}
+            onClose={closeInspector}
+            onFileTreeExpandedChange={(nextExpandedPaths) => {
+              setFileTreeExpansion((current) => {
+                const previousPaths =
+                  current.projectId === projectId ? current.paths : emptyExpandedFileTreePaths;
+                const collapsedPaths = [...previousPaths].filter(
+                  (path) => !nextExpandedPaths.has(path),
+                );
+                return {
+                  paths: new Set(
+                    [...nextExpandedPaths].filter(
+                      (path) =>
+                        !collapsedPaths.some((collapsedPath) =>
+                          path.startsWith(`${collapsedPath}/`),
+                        ),
+                    ),
+                  ),
+                  projectId,
+                };
+              });
+            }}
+            onOpenFileDiff={openFileDiff}
+            onOpenProjectPath={(appId, path) => {
+              projectPathOpenMutation.reset();
+              void projectPathOpenLockRef.current.run(() =>
+                projectPathOpenMutation.mutateAsync({ appId, path }),
+              );
+            }}
+            onOpenProjectFile={(path) => {
+              openMessageFileReference({ lineNumber: null, path });
+            }}
+            onRefreshGitStatus={() => {
+              void refreshProjectGitStatus(projectId);
+            }}
+            onCommitChanges={() => {
+              commitChangesLauncherRef.current?.open();
+            }}
+            onRefreshFileTreeDirectory={(directoryPath) => {
+              const directoryIndex = fileTreeDirectoryPaths.indexOf(directoryPath);
+              void fileTreeQueries[directoryIndex]?.refetch();
+            }}
+            onReviewChanges={openFileReview}
+            onTerminateBackgroundTerminal={backgroundTerminals.terminateTerminal}
+            onTabChange={setInspectorTab}
+            onOpenSubagent={(selection) => {
+              if (taskId !== undefined) {
+                setSubagentDialogSelection({ parentTaskId: taskId, projectId, selection });
+              }
+            }}
+            projectName={projectName}
+            projectOpenApps={projectOpenCapabilitiesQuery.data?.apps ?? []}
+            projectOpenError={projectPathOpenMutation.error}
+            projectOpenPending={projectPathOpenMutation.isPending}
+            projectPath={projectPath}
+            skills={skillsQuery.data?.data ?? []}
+            subagents={subagents}
+            tab={inspectorTab}
+            terminalMutationError={backgroundTerminals.terminalError}
+            terminatingTerminalId={backgroundTerminals.terminatingTerminalId}
+            {...(inspectorTask === undefined ? {} : { task: inspectorTask })}
+            {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
+          />
+        </Suspense>
+      ) : null}
       <WorkbenchShellDialogs
         context={context}
         projectId={projectId}

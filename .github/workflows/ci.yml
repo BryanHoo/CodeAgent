@@ -35,6 +35,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run quality gates
         run: pnpm check
+      # 复用质量门禁生成的 production 产物，单独展示 Bundle 预算结果且不重复构建。
+      - name: Verify Web Bundle budget
+        run: pnpm run bundle:check
 
   macos-smoke:
     name: macOS smoke

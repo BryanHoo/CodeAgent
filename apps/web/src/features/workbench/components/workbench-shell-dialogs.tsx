@@ -1,13 +1,25 @@
 import { lazy, Suspense } from "react";
 
-import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
-import { FileReviewDialog } from "../../diff/file-review-dialog.js";
-import { GlobalSettingsDialog } from "../../settings/components/global-settings-dialog.js";
+import { loadGlobalSettingsDialog } from "../../settings/components/global-settings-lazy.js";
 import { CommitChangesLauncher } from "./commit-changes-launcher.js";
 import { SubagentOutputDialog } from "./subagent-output-dialog.js";
 import { TaskRenameDialog } from "./task-rename-dialog.js";
 import type { useWorkbenchShellController } from "./workbench-shell-controller.js";
-import { loadProjectSourceDialog } from "./workbench-shell-runtime.js";
+import {
+  loadFileDiffDialog,
+  loadFileReviewDialog,
+  loadProjectSourceDialog,
+} from "./workbench-shell-runtime.js";
+
+const LazyFileDiffDialog = lazy(() =>
+  loadFileDiffDialog().then((module) => ({ default: module.FileDiffDialog })),
+);
+const LazyFileReviewDialog = lazy(() =>
+  loadFileReviewDialog().then((module) => ({ default: module.FileReviewDialog })),
+);
+const LazyGlobalSettingsDialog = lazy(() =>
+  loadGlobalSettingsDialog().then((module) => ({ default: module.GlobalSettingsDialog })),
+);
 
 const LazyProjectSourceDialog = lazy(() =>
   loadProjectSourceDialog().then((module) => ({ default: module.ProjectSourceDialog })),
@@ -54,18 +66,26 @@ export function WorkbenchShellDialogs({
   } = context;
   return (
     <>
-      <FileDiffDialog
-        change={selectedFileChange}
-        onClose={() => {
-          setFileDiffSelection(null);
-        }}
-      />
-      <FileReviewDialog
-        changes={selectedFileReview}
-        onClose={() => {
-          setFileReviewSelection(null);
-        }}
-      />
+      {selectedFileChange === null ? null : (
+        <Suspense fallback={null}>
+          <LazyFileDiffDialog
+            change={selectedFileChange}
+            onClose={() => {
+              setFileDiffSelection(null);
+            }}
+          />
+        </Suspense>
+      )}
+      {selectedFileReview === null ? null : (
+        <Suspense fallback={null}>
+          <LazyFileReviewDialog
+            changes={selectedFileReview}
+            onClose={() => {
+              setFileReviewSelection(null);
+            }}
+          />
+        </Suspense>
+      )}
       {gitStatusQuery.data === undefined ? null : (
         <CommitChangesLauncher
           client={client}
@@ -106,45 +126,49 @@ export function WorkbenchShellDialogs({
         />
       ) : null}
       {globalSettingsOpen ? (
-        <GlobalSettingsDialog
-          {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
-          {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
-          appInfoError={appInfoQuery.error}
-          apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
-          error={
-            globalSettingsQuery.error ?? modelsQuery.error ?? projectOpenCapabilitiesQuery.error
-          }
-          isPending={
-            globalSettingsQuery.isPending ||
-            modelsQuery.isPending ||
-            projectOpenCapabilitiesQuery.isPending
-          }
-          initialSection="about"
-          isAppInfoPending={appInfoQuery.isPending}
-          isAppUpdatePending={appUpdateMutation.isPending}
-          models={models}
-          onClose={() => {
-            setGlobalSettingsOpen(false);
-            requestAnimationFrame(() => {
-              document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
-            });
-          }}
-          onLogoutAccess={access.logout}
-          onRetry={() =>
-            Promise.all([
-              globalSettingsQuery.refetch(),
-              modelsQuery.refetch(),
-              projectOpenCapabilitiesQuery.refetch(),
-            ])
-          }
-          onRetryAppInfo={() => appInfoQuery.refetch()}
-          onSave={(settings) => globalSettingsMutation.mutateAsync(settings).then(() => undefined)}
-          onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
-          updateError={appUpdateMutation.error}
-          {...(globalSettingsQuery.data === undefined
-            ? {}
-            : { settings: globalSettingsQuery.data.settings })}
-        />
+        <Suspense fallback={null}>
+          <LazyGlobalSettingsDialog
+            {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
+            {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
+            appInfoError={appInfoQuery.error}
+            apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
+            error={
+              globalSettingsQuery.error ?? modelsQuery.error ?? projectOpenCapabilitiesQuery.error
+            }
+            isPending={
+              globalSettingsQuery.isPending ||
+              modelsQuery.isPending ||
+              projectOpenCapabilitiesQuery.isPending
+            }
+            initialSection="about"
+            isAppInfoPending={appInfoQuery.isPending}
+            isAppUpdatePending={appUpdateMutation.isPending}
+            models={models}
+            onClose={() => {
+              setGlobalSettingsOpen(false);
+              requestAnimationFrame(() => {
+                document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
+              });
+            }}
+            onLogoutAccess={access.logout}
+            onRetry={() =>
+              Promise.all([
+                globalSettingsQuery.refetch(),
+                modelsQuery.refetch(),
+                projectOpenCapabilitiesQuery.refetch(),
+              ])
+            }
+            onRetryAppInfo={() => appInfoQuery.refetch()}
+            onSave={(settings) =>
+              globalSettingsMutation.mutateAsync(settings).then(() => undefined)
+            }
+            onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
+            updateError={appUpdateMutation.error}
+            {...(globalSettingsQuery.data === undefined
+              ? {}
+              : { settings: globalSettingsQuery.data.settings })}
+          />
+        </Suspense>
       ) : null}
     </>
   );
