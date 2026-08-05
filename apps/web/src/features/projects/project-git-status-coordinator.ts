@@ -4,6 +4,8 @@ import { type CodeAgentGitStatusClient, projectGitStatusQueryOptions } from "./p
 
 export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 10_000;
 export const PROJECT_GIT_STATUS_FILE_CHANGE_DEBOUNCE_MS = 300;
+export const PROJECT_GIT_STATUS_RETRY_BASE_MS = 1_000;
+export const PROJECT_GIT_STATUS_RETRY_MAX_MS = 30_000;
 
 export type ProjectGitActivityReason = "file_changed" | "turn_completed" | "turn_started";
 
@@ -11,17 +13,21 @@ interface ProjectGitStatusCoordinatorOptions {
   readonly fileChangeDebounceMs?: number;
   readonly isPageVisible?: () => boolean;
   readonly pollIntervalMs?: number;
+  readonly random?: () => number;
+  readonly retryBaseMs?: number;
+  readonly retryMaxMs?: number;
 }
 
 interface ProjectPollingState {
   activeTaskIds: Set<string>;
   closed: boolean;
+  consecutiveFailures: number;
   fileChangeTimer: ReturnType<typeof setTimeout> | undefined;
   inFlight: Promise<void> | undefined;
-  pollingSuspended: boolean;
   pollingTimer: ReturnType<typeof setInterval> | undefined;
   projectId: string;
   refreshPending: boolean;
+  retryTimer: ReturnType<typeof setTimeout> | undefined;
 }
 
 function defaultPageVisibility(): boolean {
@@ -35,6 +41,9 @@ export class ProjectGitStatusCoordinator {
   readonly #pollIntervalMs: number;
   readonly #projects = new Map<string, ProjectPollingState>();
   readonly #queryClient: QueryClient;
+  readonly #random: () => number;
+  readonly #retryBaseMs: number;
+  readonly #retryMaxMs: number;
   #disposed = false;
 
   public constructor(
@@ -48,6 +57,9 @@ export class ProjectGitStatusCoordinator {
       options.fileChangeDebounceMs ?? PROJECT_GIT_STATUS_FILE_CHANGE_DEBOUNCE_MS;
     this.#isPageVisible = options.isPageVisible ?? defaultPageVisibility;
     this.#pollIntervalMs = options.pollIntervalMs ?? PROJECT_GIT_STATUS_POLL_INTERVAL_MS;
+    this.#random = options.random ?? Math.random;
+    this.#retryBaseMs = options.retryBaseMs ?? PROJECT_GIT_STATUS_RETRY_BASE_MS;
+    this.#retryMaxMs = options.retryMaxMs ?? PROJECT_GIT_STATUS_RETRY_MAX_MS;
   }
 
   public dispose(): void {
@@ -77,27 +89,27 @@ export class ProjectGitStatusCoordinator {
     const state = this.#getOrCreateState(projectId);
     if (reason === "turn_started") {
       const wasInactive = state.activeTaskIds.size === 0;
-      const wasSuspended = state.pollingSuspended;
+      const wasRecovering = state.consecutiveFailures > 0 || state.retryTimer !== undefined;
       state.activeTaskIds.add(taskId);
-      state.pollingSuspended = false;
-      this.#ensurePolling(state);
-      if (wasInactive || wasSuspended) {
+      if (wasInactive || wasRecovering) {
+        this.#clearRetryTimer(state);
         void this.#requestRefresh(state);
+      } else {
+        this.#ensurePolling(state);
       }
       return;
     }
 
     if (reason === "file_changed") {
       state.activeTaskIds.add(taskId);
-      state.pollingSuspended = false;
-      this.#ensurePolling(state);
+      this.#clearRetryTimer(state);
       this.#scheduleFileChangeRefresh(state);
       return;
     }
 
     state.activeTaskIds.delete(taskId);
-    state.pollingSuspended = false;
     this.#clearFileChangeTimer(state);
+    this.#clearRetryTimer(state);
     if (state.activeTaskIds.size === 0) {
       this.#clearPollingTimer(state);
     }
@@ -110,7 +122,7 @@ export class ProjectGitStatusCoordinator {
       return;
     }
     const state = this.#getOrCreateState(projectId);
-    state.pollingSuspended = false;
+    this.#clearRetryTimer(state);
     await this.#requestRefresh(state);
   }
 
@@ -128,19 +140,28 @@ export class ProjectGitStatusCoordinator {
     }
   }
 
+  #clearRetryTimer(state: ProjectPollingState): void {
+    if (state.retryTimer !== undefined) {
+      clearTimeout(state.retryTimer);
+      state.retryTimer = undefined;
+    }
+  }
+
   #closeState(state: ProjectPollingState): void {
     state.closed = true;
     state.refreshPending = false;
     this.#clearFileChangeTimer(state);
     this.#clearPollingTimer(state);
+    this.#clearRetryTimer(state);
   }
 
   #ensurePolling(state: ProjectPollingState): void {
     if (
       state.closed ||
-      state.pollingSuspended ||
+      state.consecutiveFailures > 0 ||
       state.activeTaskIds.size === 0 ||
-      state.pollingTimer !== undefined
+      state.pollingTimer !== undefined ||
+      state.retryTimer !== undefined
     ) {
       return;
     }
@@ -159,12 +180,13 @@ export class ProjectGitStatusCoordinator {
     const state: ProjectPollingState = {
       activeTaskIds: new Set(),
       closed: false,
+      consecutiveFailures: 0,
       fileChangeTimer: undefined,
       inFlight: undefined,
-      pollingSuspended: false,
       pollingTimer: undefined,
       projectId,
       refreshPending: false,
+      retryTimer: undefined,
     };
     this.#projects.set(projectId, state);
     return state;
@@ -182,14 +204,15 @@ export class ProjectGitStatusCoordinator {
     const refresh = this.#queryClient
       .fetchQuery({
         ...projectGitStatusQueryOptions(state.projectId, this.#client),
+        retry: false,
         staleTime: 0,
       })
       .then(
         () => {
-          state.pollingSuspended = false;
+          state.consecutiveFailures = 0;
         },
         () => {
-          state.pollingSuspended = true;
+          state.consecutiveFailures += 1;
           this.#clearPollingTimer(state);
         },
       )
@@ -203,8 +226,12 @@ export class ProjectGitStatusCoordinator {
           void this.#requestRefresh(state);
           return;
         }
-        if (state.activeTaskIds.size > 0 && !state.pollingSuspended) {
-          this.#ensurePolling(state);
+        if (state.activeTaskIds.size > 0) {
+          if (state.consecutiveFailures > 0) {
+            this.#scheduleRetry(state);
+          } else {
+            this.#ensurePolling(state);
+          }
           return;
         }
         if (state.activeTaskIds.size === 0 && state.fileChangeTimer === undefined) {
@@ -221,5 +248,28 @@ export class ProjectGitStatusCoordinator {
       state.fileChangeTimer = undefined;
       void this.#requestRefresh(state);
     }, this.#fileChangeDebounceMs);
+  }
+
+  #scheduleRetry(state: ProjectPollingState): void {
+    if (state.closed || state.activeTaskIds.size === 0 || state.retryTimer !== undefined) {
+      return;
+    }
+    // 指数退避加入正负 20% 抖动，并保证最终延迟不超过上限。
+    const exponentialDelay = Math.min(
+      this.#retryMaxMs,
+      this.#retryBaseMs * 2 ** Math.min(state.consecutiveFailures - 1, 30),
+    );
+    const jitteredDelay = Math.min(
+      this.#retryMaxMs,
+      Math.round(exponentialDelay * (0.8 + this.#random() * 0.4)),
+    );
+    state.retryTimer = setTimeout(() => {
+      state.retryTimer = undefined;
+      if (this.#isPageVisible()) {
+        void this.#requestRefresh(state);
+      } else {
+        this.#scheduleRetry(state);
+      }
+    }, jitteredDelay);
   }
 }

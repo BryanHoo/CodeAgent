@@ -105,24 +105,53 @@ describe("ProjectGitStatusCoordinator", () => {
     coordinator.dispose();
   });
 
-  it("suspends failed polling until a manual refresh succeeds", async () => {
+  it("retries failed polling automatically and resumes the normal interval after success", async () => {
+    vi.useFakeTimers();
+    const getProjectGitStatus = vi
+      .fn<CodeAgentGitStatusClient["getProjectGitStatus"]>()
+      .mockRejectedValueOnce(new Error("Git unavailable"))
+      .mockResolvedValue(gitStatus);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const coordinator = new ProjectGitStatusCoordinator(
+      queryClient,
+      { getProjectGitStatus },
+      { random: () => 0.5 },
+    );
+
+    coordinator.handleActivity("project-1", "task-1", "turn_started");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(3);
+    coordinator.dispose();
+  });
+
+  it("caps exponential retry jitter after consecutive failures", async () => {
     vi.useFakeTimers();
     const getProjectGitStatus = vi
       .fn<CodeAgentGitStatusClient["getProjectGitStatus"]>()
       .mockRejectedValueOnce(new Error("Git unavailable"))
       .mockRejectedValueOnce(new Error("Git unavailable"))
+      .mockRejectedValueOnce(new Error("Git unavailable"))
       .mockResolvedValue(gitStatus);
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const coordinator = new ProjectGitStatusCoordinator(queryClient, { getProjectGitStatus });
+    const coordinator = new ProjectGitStatusCoordinator(
+      queryClient,
+      { getProjectGitStatus },
+      { random: () => 1, retryBaseMs: 100, retryMaxMs: 250 },
+    );
 
     coordinator.handleActivity("project-1", "task-1", "turn_started");
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(119);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS * 2);
-    expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
-
-    await coordinator.refreshProject("project-1");
-    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(240);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(249);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(4);
     coordinator.dispose();
   });

@@ -271,10 +271,11 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain("workbench-shell.tsx");
   });
 
-  it("offers a manual refresh after Git detection stops", () => {
+  it("shows a non-blocking retry status and offers a manual refresh after Git detection fails", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
+        gitStatus={gitStatus}
         gitStatusError={new Error("not a git repository")}
         onOpenProjectFile={() => undefined}
         onReviewChanges={() => undefined}
@@ -284,7 +285,8 @@ describe("WorkbenchInspector", () => {
       />,
     );
 
-    expect(markup).toContain("Git 变更自动检测已停止");
+    expect(markup).toContain("Git 变更刷新失败，正在自动重试");
+    expect(markup).toContain("2 个变更");
     expect(markup).toContain("手动刷新");
     expect(markup).toContain('aria-label="手动刷新 Git 变更"');
   });

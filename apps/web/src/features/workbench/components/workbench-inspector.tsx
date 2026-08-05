@@ -288,7 +288,7 @@ export function WorkbenchInspector({
                 <div className="mx-2.5 mb-2 flex items-center gap-2 rounded-control bg-control px-2 py-2">
                   <div className="min-w-0 flex-1">
                     <p className="text-label text-diff-removed">
-                      {i18n.t("inspector.gitChangesStopped", { ns: "conversation" })}
+                      {i18n.t("inspector.gitChangesRetrying", { ns: "conversation" })}
                     </p>
                   </div>
                   <Tooltip>

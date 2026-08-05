@@ -66,7 +66,7 @@ export const conversation = {
     gitChanges: "未提交变更",
     gitChangesAria: "未提交变更摘要",
     gitChangesCount: "{{count}} 个变更",
-    gitChangesStopped: "Git 变更自动检测已停止",
+    gitChangesRetrying: "Git 变更刷新失败，正在自动重试",
     gitLoading: "正在读取 Git 变更...",
     loading: "正在读取...",
     mcpEmpty: "当前任务没有可读取的 MCP",

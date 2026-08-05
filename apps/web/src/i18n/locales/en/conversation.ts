@@ -66,7 +66,7 @@ export const conversation = {
     gitChanges: "Uncommitted changes",
     gitChangesAria: "Uncommitted changes summary",
     gitChangesCount: "{{count}} changes",
-    gitChangesStopped: "Automatic Git change detection stopped",
+    gitChangesRetrying: "Git change refresh failed. Retrying automatically",
     gitLoading: "Loading Git changes...",
     loading: "Loading...",
     mcpEmpty: "No MCP servers are readable by this task",
