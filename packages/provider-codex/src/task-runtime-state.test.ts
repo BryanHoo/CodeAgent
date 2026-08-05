@@ -8,6 +8,12 @@ describe("TaskRuntimeState", () => {
     state.projectTaskIds.add("task-1");
     state.resumedTaskIds.add("task-1");
     state.runningTaskIds.add("task-1");
+    state.activeReviewTurnIds.set("task-1", "review-turn");
+    state.activeReviewWorkerTaskIds.add("task-1");
+    state.reviewWorkerOutputTaskIds.add("task-1");
+    state.reviewWorkerTaskIds.set("task-1", "reviewer-thread");
+    state.reviewWorkerTurnIds.set("task-1", "reviewer-turn");
+    state.reviewWorkerParentTaskIds.set("reviewer-thread", "task-1");
     state.contextUsage.set("task-1", { contextWindow: 100, usedTokens: 10 });
     state.unmaterializedTasks.set("task-1", {
       id: "task-1",
@@ -22,6 +28,12 @@ describe("TaskRuntimeState", () => {
     expect(state.projectTaskIds.has("task-1")).toBe(false);
     expect(state.resumedTaskIds.has("task-1")).toBe(false);
     expect(state.runningTaskIds.has("task-1")).toBe(false);
+    expect(state.activeReviewTurnIds.has("task-1")).toBe(false);
+    expect(state.activeReviewWorkerTaskIds.has("task-1")).toBe(false);
+    expect(state.reviewWorkerOutputTaskIds.has("task-1")).toBe(false);
+    expect(state.reviewWorkerTaskIds.has("task-1")).toBe(false);
+    expect(state.reviewWorkerTurnIds.has("task-1")).toBe(false);
+    expect(state.reviewWorkerParentTaskIds.has("reviewer-thread")).toBe(false);
     expect(state.contextUsage.has("task-1")).toBe(false);
     expect(state.unmaterializedTasks.has("task-1")).toBe(false);
   });

@@ -634,7 +634,7 @@ test("uses material hierarchy instead of strong workbench borders", async ({ pag
 
   const presentation = await page.evaluate(() => {
     const sidebar = document.querySelector<HTMLElement>('[aria-label="项目侧栏"]');
-    const inspector = document.querySelector<HTMLElement>('[aria-label="项目检查器"]');
+    const inspector = document.querySelector<HTMLElement>('[aria-label="运行环境"]');
     const timeline = document.querySelector<HTMLElement>('[aria-label="任务时间线"]');
     const sidebarToolbar = sidebar?.querySelector<HTMLElement>(":scope > div") ?? null;
     const inspectorToolbar = inspector?.querySelector<HTMLElement>(":scope > div") ?? null;
@@ -721,7 +721,7 @@ test("supports structured activity without Escape changing panel state", async (
 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("complementary", { name: "项目侧栏" })).toBeVisible();
-  await expect(page.getByRole("complementary", { name: "项目检查器" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "运行环境" })).toBeVisible();
 });
 
 test("resizes desktop workbench panels within bounds", async ({ page }) => {
@@ -731,7 +731,7 @@ test("resizes desktop workbench panels within bounds", async ({ page }) => {
   await expect(page.getByRole("button", { name: "更多操作" })).toHaveCount(0);
 
   const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
-  const inspector = page.getByRole("complementary", { name: "项目检查器" });
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
   const sidebarResizer = page.getByRole("separator", { name: "调整项目侧栏宽度" });
   const inspectorResizer = page.getByRole("separator", { name: "调整上下文面板宽度" });
 
@@ -844,12 +844,12 @@ test("keeps the compact mobile workbench inside the dynamic viewport", async ({ 
 
   await page.getByRole("button", { name: "展开上下文面板" }).click();
   const inspectorClose = page
-    .getByRole("complementary", { name: "项目检查器" })
+    .getByRole("complementary", { name: "运行环境" })
     .getByRole("button", { name: "关闭上下文面板" });
   await expect(inspectorClose).toBeVisible();
   expect((await inspectorClose.boundingBox())?.height).toBeGreaterThanOrEqual(44);
   await inspectorClose.click();
-  await expect(page.getByRole("complementary", { name: "项目检查器" })).not.toBeVisible();
+  await expect(page.getByRole("complementary", { name: "运行环境" })).not.toBeVisible();
 
   expect(
     await page.evaluate(() => ({
@@ -923,12 +923,12 @@ test("closes open workbench panels when the window becomes narrow", async ({ pag
   await page.goto("/p/code-agent/t/task-1");
 
   await expect(page.getByRole("complementary", { name: "项目侧栏" })).toBeVisible();
-  await expect(page.getByRole("complementary", { name: "项目检查器" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "运行环境" })).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
 
   await expect(page.getByRole("complementary", { name: "项目侧栏" })).not.toBeVisible();
-  await expect(page.getByRole("complementary", { name: "项目检查器" })).not.toBeVisible();
+  await expect(page.getByRole("complementary", { name: "运行环境" })).not.toBeVisible();
 });
 
 test("renders a route-level not-found state", async ({ page }) => {

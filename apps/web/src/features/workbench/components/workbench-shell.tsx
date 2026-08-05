@@ -83,7 +83,6 @@ import {
   type CommitChangesLauncherHandle,
 } from "./commit-changes-launcher.js";
 import { WorkbenchPanelResizer } from "./workbench-panel-resizer.js";
-import { ProjectOpenMenu } from "./project-open-menu.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
 
 const sidebarOverlayQuery = "(max-width: 760px)";
@@ -181,8 +180,11 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
     projectOpenCapabilitiesQueryOptions(projectId, client),
   );
   const projectPathOpenMutation = useMutation({
-    mutationFn: ({ appId, path }: Readonly<{ appId: ProjectOpenAppId; path: string }>) =>
-      client.openProject(projectId, { appId, path }),
+    mutationFn: ({
+      appId,
+      path,
+    }: Readonly<{ appId: ProjectOpenAppId; path: string | undefined }>) =>
+      client.openProject(projectId, path === undefined ? { appId } : { appId, path }),
   });
   const projectPathOpenMutationRef = useRef(projectPathOpenMutation);
   projectPathOpenMutationRef.current = projectPathOpenMutation;
@@ -698,13 +700,6 @@ export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
-            <ProjectOpenMenu
-              client={client}
-              projectId={projectId}
-              {...(globalSettingsQuery.data === undefined
-                ? {}
-                : { defaultOpenAppId: globalSettingsQuery.data.settings.defaultOpenAppId })}
-            />
             <Tooltip key={inspectorOpen ? "inspector-open" : "inspector-closed"}>
               <TooltipTrigger asChild>
                 <Button

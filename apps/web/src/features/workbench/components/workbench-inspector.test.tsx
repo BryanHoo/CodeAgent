@@ -129,8 +129,12 @@ describe("WorkbenchInspector", () => {
     expect(markup).toMatch(/<button[^>]*bg-control[^>]*aria-label="审核 2 个未提交变更"/u);
     expect(markup).toMatch(/<button[^>]*bg-control[^>]*aria-label="提交 2 个未提交变更"/u);
     expect(markup).not.toContain("bg-primary");
+    expect(markup).toContain('aria-label="运行环境"');
+    expect(markup).toMatch(/role="tab"[^>]*>项目<\/button>/u);
     expect(markup).toContain('aria-label="项目文件"');
     expect(markup).toContain('role="tree"');
+    expect(markup).toContain('aria-label="收起文件夹 CodeAgent"');
+    expect(markup).toContain(">CodeAgent</span>");
     expect(markup).toContain("src");
     expect(markup).toContain('aria-label="展开文件夹 src"');
     expect(markup).toContain("README.md");
@@ -139,11 +143,7 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain("未暂存");
     expect(markup).not.toContain("已暂存");
 
-    const projectFilesTitleIndex = markup.indexOf(">项目文件</span>");
-    const fileTreeScrollContainerIndex = markup.indexOf("overflow-y-auto px-2.5 pb-2.5");
-    expect(projectFilesTitleIndex).toBeGreaterThan(-1);
-    expect(fileTreeScrollContainerIndex).toBeGreaterThan(-1);
-    expect(projectFilesTitleIndex).toBeLessThan(fileTreeScrollContainerIndex);
+    expect(markup).not.toContain(">项目文件</span>");
   });
 
   it("renders loaded directory children only while their folders are expanded", () => {
@@ -184,8 +184,9 @@ describe("WorkbenchInspector", () => {
       />,
     );
 
-    expect(markup.match(/data-slot="context-menu-trigger"/gu)).toHaveLength(2);
+    expect(markup.match(/data-slot="context-menu-trigger"/gu)).toHaveLength(3);
     expect(markup).toContain('role="treeitem"');
+    expect(markup).toContain('aria-label="收起文件夹 CodeAgent"');
     expect(markup).toContain("README.md");
     expect(markup).toContain("src");
   });
@@ -261,7 +262,8 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain('aria-label="变更操作"');
     expect(markup).not.toContain(">审核</button>");
     expect(markup).not.toContain(">提交</button>");
-    expect(markup).toContain(">项目文件</span>");
+    expect(markup).not.toContain(">项目文件</span>");
+    expect(markup).toContain(">CodeAgent</span>");
     expect(markup).toContain("README.md");
     expect(markup).not.toContain("workbench-shell.tsx");
   });

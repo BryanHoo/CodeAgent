@@ -547,7 +547,7 @@ test("project file tree opens changed, source, image, and system files by shared
 }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const inspector = page.getByRole("complementary", { name: "项目检查器" });
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
   const fileTree = inspector.getByRole("tree", { name: "项目文件" });
   await expect(fileTree).toBeVisible();
   await expect(fileTree.getByRole("treeitem", { name: "architecture-design.md" })).toHaveCount(0);
@@ -605,10 +605,27 @@ test("project file tree context menu opens files and folders with a selected app
 }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const inspector = page.getByRole("complementary", { name: "项目检查器" });
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
   const fileTree = inspector.getByRole("tree", { name: "项目文件" });
-  const defaultOpenButton = page.getByRole("button", { name: "在 Zed 中打开" });
-  await expect(defaultOpenButton).toBeVisible();
+  await expect(page.getByRole("button", { name: "在 Zed 中打开" })).toHaveCount(0);
+
+  const rootRequest = page.waitForRequest((request) => {
+    if (!/^\/v1\/projects\/code-agent\/open$/u.test(new URL(request.url()).pathname)) {
+      return false;
+    }
+    const body = parseRequestRecord(request.postData());
+    return body["appId"] === "finder" && !("path" in body);
+  });
+  const rootTreeItem = fileTree.getByRole("treeitem", { name: "CodeAgent" }).first();
+  await expect(rootTreeItem).toHaveAttribute("aria-expanded", "true");
+  await rootTreeItem
+    .getByRole("button", { exact: true, name: "CodeAgent" })
+    .click({ button: "right" });
+  const rootMenu = page.getByRole("menu", { name: "打开 ~/Develop/person/CodeAgent 的方式" });
+  await expect(rootMenu.getByText("~/Develop/person/CodeAgent", { exact: true })).toBeVisible();
+  await rootMenu.getByRole("menuitem", { name: "Finder" }).click();
+  await rootRequest;
+  await expect(rootMenu).not.toBeAttached();
 
   const folderRequest = page.waitForRequest((request) => {
     if (!/^\/v1\/projects\/code-agent\/open$/u.test(new URL(request.url()).pathname)) {
@@ -629,7 +646,6 @@ test("project file tree context menu opens files and folders with a selected app
   await folderMenu.getByRole("menuitem", { name: "Finder" }).click();
   await folderRequest;
   await expect(folderMenu).not.toBeAttached();
-  await expect(defaultOpenButton).toBeVisible();
 
   const fileRequest = page.waitForRequest((request) => {
     if (!/^\/v1\/projects\/code-agent\/open$/u.test(new URL(request.url()).pathname)) {

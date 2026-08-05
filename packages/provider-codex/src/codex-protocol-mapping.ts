@@ -1095,7 +1095,13 @@ function mapAgentItem(
         type: "review",
       };
     case "exitedReviewMode":
-      return createActivityItem(id, "结束审查", optionalString(item["review"]));
+      // Codex 将最终审查结论放在 exitedReviewMode.review，而不是 agentMessage。
+      return {
+        id,
+        role: "assistant",
+        text: expectString(item["review"], "Codex review result"),
+        type: "message",
+      };
     case "contextCompaction":
       return createActivityItem(id, "上下文压缩");
     default:
@@ -1114,14 +1120,30 @@ export function mapAgentTurn(
   mapImage: MapCodexMessageImage = () => undefined,
   mapText: MapCodexMessageText = () => undefined,
   explicitReviewTarget?: AgentReviewTarget,
+  explicitTurnId?: string,
+  reviewWorker = false,
+  suppressReviewResult = false,
 ): AgentTurn {
   const turn = expectRecord(value, "Codex turn");
   if (!Array.isArray(turn["items"])) {
     throw new CodexProtocolMappingError("Codex turn items must be an array");
   }
-  const turnId = expectString(turn["id"], "Codex turn id");
+  const turnId = explicitTurnId ?? expectString(turn["id"], "Codex turn id");
   const nativeItems = turn["items"].map((item) => expectRecord(item, "Codex turn item"));
   const enteredReviewMode = nativeItems.find((item) => item["type"] === "enteredReviewMode");
+  const exitedReviewMode = nativeItems.findLast(
+    (item) =>
+      item["type"] === "exitedReviewMode" &&
+      typeof item["review"] === "string" &&
+      item["review"].trim().length > 0,
+  );
+  const interruptedReviewMessage = nativeItems.findLast(
+    (item) =>
+      item["type"] === "agentMessage" &&
+      item["phase"] !== "commentary" &&
+      typeof item["text"] === "string" &&
+      item["text"].trim().length > 0,
+  );
   const inferredReviewTarget = nativeItems
     .map(inferReviewTargetFromPrompt)
     .find((target) => target !== undefined);
@@ -1130,6 +1152,11 @@ export function mapAgentTurn(
     (enteredReviewMode === undefined
       ? inferredReviewTarget
       : mapReviewHint(expectString(enteredReviewMode["review"], "Codex review mode hint")));
+  const isReviewTurn =
+    explicitReviewTarget !== undefined ||
+    enteredReviewMode !== undefined ||
+    nativeItems.some((item) => item["type"] === "exitedReviewMode");
+  const reviewResultItem = exitedReviewMode ?? interruptedReviewMessage;
   const subagentNicknames = new Map<string, string>();
   for (const item of nativeItems) {
     if (item["type"] !== "subAgentActivity") {
@@ -1151,24 +1178,88 @@ export function mapAgentTurn(
           ),
     id: turnId,
     // 先收集活动项中的昵称，再回填协作项，避免向 Web 暴露不可读的线程 ID。
-    items: mergeExpandedSkillMessages([
-      ...(reviewTarget === undefined ? [] : [createReviewItem(turnId, reviewTarget)]),
-      ...nativeItems.flatMap((item) => {
-        const type = item["type"];
-        // Review Prompt 是 Codex 内部执行输入；统一时间线只保留一个结构化审查请求。
-        if (
-          type === "enteredReviewMode" ||
-          type === "exitedReviewMode" ||
-          (reviewTarget !== undefined && type === "userMessage")
-        ) {
-          return [];
-        }
-        return [mapAgentItem(item, subagentNicknames, mapImage, mapText)];
-      }),
-    ]),
+    items: reviewWorker
+      ? mergeExpandedSkillMessages([
+          ...(reviewTarget === undefined ? [] : [createReviewItem(turnId, reviewTarget)]),
+          ...nativeItems.flatMap((item) =>
+            item["type"] === "userMessage" ||
+            item["type"] === "enteredReviewMode" ||
+            item["type"] === "exitedReviewMode"
+              ? []
+              : [mapAgentItem(item, subagentNicknames, mapImage, mapText)],
+          ),
+        ])
+      : isReviewTurn
+        ? [
+            ...(reviewTarget === undefined ? [] : [createReviewItem(turnId, reviewTarget)]),
+            ...(reviewResultItem === undefined || suppressReviewResult
+              ? []
+              : [mapAgentItem(reviewResultItem, subagentNicknames, mapImage, mapText)]),
+          ]
+        : mergeExpandedSkillMessages(
+            nativeItems.map((item) => mapAgentItem(item, subagentNicknames, mapImage, mapText)),
+          ),
     startedAt: toNullableDateTime(turn["startedAt"], "Codex turn startedAt"),
     status: mapTurnStatus(turn["status"]),
   };
+}
+
+export function mapAgentTurns(
+  values: readonly unknown[],
+  mapImage: MapCodexMessageImage = () => undefined,
+  mapText: MapCodexMessageText = () => undefined,
+): AgentTurn[] {
+  const turns: AgentTurn[] = [];
+  for (let turnIndex = 0; turnIndex < values.length; turnIndex += 1) {
+    const nativeTurn = expectRecord(values[turnIndex], "Codex turn");
+    const mappedTurn = mapAgentTurn(nativeTurn, mapImage, mapText);
+    const nativeItems = Array.isArray(nativeTurn["items"])
+      ? nativeTurn["items"].map((item) => expectRecord(item, "Codex turn item"))
+      : [];
+    const isReviewContainer = nativeItems.some(
+      (item) => item["type"] === "enteredReviewMode" || item["type"] === "exitedReviewMode",
+    );
+    const nextNativeTurn = values[turnIndex + 1];
+    if (!isReviewContainer || nextNativeTurn === undefined) {
+      turns.push(mappedTurn);
+      continue;
+    }
+
+    const workerTurn = expectRecord(nextNativeTurn, "Codex reviewer turn");
+    const workerItems = Array.isArray(workerTurn["items"])
+      ? workerTurn["items"].map((item) => expectRecord(item, "Codex reviewer item"))
+      : [];
+    const isReviewerWorker = workerItems.some(
+      (item) => item["type"] === "userMessage" && inferReviewTargetFromPrompt(item) !== undefined,
+    );
+    if (!isReviewerWorker) {
+      turns.push(mappedTurn);
+      continue;
+    }
+
+    const mappedWorker = mapAgentTurn(workerTurn, mapImage, mapText);
+    const visibleWorkerItems = mappedWorker.items.filter(
+      (item) => item.type !== "message" || item.role !== "user",
+    );
+    const hasWorkerResponse = visibleWorkerItems.some(
+      (item) => item.type === "message" && item.role === "assistant",
+    );
+    const hasOuterReviewExit = nativeItems.some((item) => item["type"] === "exitedReviewMode");
+    const reviewRequestItems = mappedTurn.items.filter((item) => item.type === "review");
+    const outerFallbackItems = hasWorkerResponse
+      ? []
+      : mappedTurn.items.filter((item) => item.type === "message" && item.role === "assistant");
+    turns.push({
+      completedAt: hasOuterReviewExit ? (mappedTurn.completedAt ?? mappedWorker.completedAt) : null,
+      error: mappedWorker.error ?? mappedTurn.error,
+      id: mappedTurn.id,
+      items: [...reviewRequestItems, ...visibleWorkerItems, ...outerFallbackItems],
+      startedAt: mappedWorker.startedAt ?? mappedTurn.startedAt,
+      status: hasOuterReviewExit ? mappedWorker.status : "running",
+    });
+    turnIndex += 1;
+  }
+  return turns;
 }
 
 export function attachTranscriptSkills(turn: AgentTurn, skillNames: readonly string[]): AgentTurn {
@@ -1212,19 +1303,23 @@ export function mapCodexNotification(
     textIndex: number,
   ) => AgentMessageAttachment | undefined,
   reviewTarget?: AgentReviewTarget,
+  explicitTurnId?: string,
+  reviewWorker = false,
+  suppressReviewResult = false,
+  explicitTaskId?: string,
 ): AgentProviderEvent | undefined {
   if (!CODEX_NOTIFICATION_METHODS.has(method)) {
     return undefined;
   }
 
   const params = expectRecord(value, `Codex ${method} params`);
-  const taskId = expectString(params["threadId"], `Codex ${method} threadId`);
+  const taskId = explicitTaskId ?? expectString(params["threadId"], `Codex ${method} threadId`);
 
   if (method === "thread/tokenUsage/updated") {
     return {
       payload: { usage: mapContextUsage(params["tokenUsage"]) },
       taskId,
-      turnId: expectString(params["turnId"], "Codex token usage turnId"),
+      turnId: explicitTurnId ?? expectString(params["turnId"], "Codex token usage turnId"),
       type: "usage.updated",
     };
   }
@@ -1235,6 +1330,9 @@ export function mapCodexNotification(
       (part, imageIndex) => mapImage(taskId, part, imageIndex),
       (input, textIndex) => mapText(taskId, input, textIndex),
       reviewTarget,
+      explicitTurnId,
+      reviewWorker,
+      suppressReviewResult,
     );
     return {
       payload: { turn },
@@ -1244,7 +1342,7 @@ export function mapCodexNotification(
     };
   }
 
-  const turnId = expectString(params["turnId"], `Codex ${method} turnId`);
+  const turnId = explicitTurnId ?? expectString(params["turnId"], `Codex ${method} turnId`);
   if (method === "error") {
     const error = expectRecord(params["error"], "Codex error notification error");
     if (typeof params["willRetry"] !== "boolean") {
@@ -1291,9 +1389,6 @@ export function mapCodexNotification(
 
   if (method === "item/completed") {
     const nativeItem = expectRecord(params["item"], "Codex completed item");
-    if (nativeItem["type"] === "exitedReviewMode") {
-      return undefined;
-    }
     const promptReviewTarget = inferReviewTargetFromPrompt(nativeItem);
     if (nativeItem["type"] === "userMessage" && reviewTarget !== undefined) {
       return undefined;

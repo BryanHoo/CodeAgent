@@ -63,6 +63,7 @@ import {
   isRecord,
   mapAgentModel,
   mapAgentTurn,
+  mapAgentTurns,
   mapBackgroundTerminal,
   mapCodexNotification,
   mapCodexServerRequest,
@@ -574,6 +575,9 @@ export class CodexAgentProvider implements AgentProvider {
       );
     } catch (error) {
       this.#runtime.activeReviewTargets.delete(taskId);
+      this.#runtime.activeReviewTurnIds.delete(taskId);
+      this.#runtime.activeReviewWorkerTaskIds.delete(taskId);
+      this.#runtime.reviewWorkerOutputTaskIds.delete(taskId);
       throw error;
     }
     if (expectString(response["reviewThreadId"], "review/start thread id") !== taskId) {
@@ -585,16 +589,27 @@ export class CodexAgentProvider implements AgentProvider {
       (input, textIndex) => this.#mapMessageText(taskId, input, textIndex),
       target,
     );
+    // enteredReviewMode 通常先到；RPC 结果是外层 Turn ID 的最终校准来源。
+    this.#runtime.activeReviewTurnIds.set(taskId, turn.id);
     if (turn.status !== "running") {
       this.#runtime.activeReviewTargets.delete(taskId);
+      this.#runtime.activeReviewTurnIds.delete(taskId);
+      this.#runtime.activeReviewWorkerTaskIds.delete(taskId);
+      this.#runtime.reviewWorkerOutputTaskIds.delete(taskId);
     }
     return turn;
   }
 
   public async interruptTurn(taskId: string, turnId: string): Promise<void> {
     this.#assertKnownProjectTask(taskId);
+    // review 的外层 Turn 只负责展示，真正可终止的是 reviewer 子 Thread 的运行中 Turn。
+    const interruptTaskId = this.#runtime.reviewWorkerTaskIds.get(taskId) ?? taskId;
+    const interruptTurnId = this.#runtime.reviewWorkerTurnIds.get(taskId) ?? turnId;
     expectRecord(
-      await this.#client.request("turn/interrupt", { threadId: taskId, turnId }),
+      await this.#client.request("turn/interrupt", {
+        threadId: interruptTaskId,
+        turnId: interruptTurnId,
+      }),
       "turn/interrupt response",
     );
   }
@@ -756,18 +771,27 @@ export class CodexAgentProvider implements AgentProvider {
       if (!Array.isArray(thread["turns"])) {
         throw new CodexProtocolMappingError("thread/read turns must be an array");
       }
+      const nativeTurns = await this.#readReviewWorkerTurns(taskId, thread["turns"]);
       const transcriptSkillsByTurnId = await readCodexTranscriptTurnSkills(taskId);
       // Store 为未变化的来源复用随机授权 ID，重复读取不能使已交付的 Snapshot 图片失效。
-      const turns = thread["turns"]
-        .map((turn) =>
-          mapAgentTurn(
-            turn,
-            (part, imageIndex) => this.#mapMessageImage(taskId, part, imageIndex),
-            (input, textIndex) => this.#mapMessageText(taskId, input, textIndex),
-          ),
-        )
-        .map((turn) => attachTranscriptSkills(turn, transcriptSkillsByTurnId.get(turn.id) ?? []));
-      const status = mapThreadStatus(thread["status"]);
+      const turns = mapAgentTurns(
+        nativeTurns,
+        (part, imageIndex) => this.#mapMessageImage(taskId, part, imageIndex),
+        (input, textIndex) => this.#mapMessageText(taskId, input, textIndex),
+      ).map((turn) => attachTranscriptSkills(turn, transcriptSkillsByTurnId.get(turn.id) ?? []));
+      const status = turns.some((turn) => turn.status === "running")
+        ? "running"
+        : mapThreadStatus(thread["status"]);
+      const runningReviewTurn = turns.findLast(
+        (turn) => turn.status === "running" && turn.items.some((item) => item.type === "review"),
+      );
+      const runningReviewItem = runningReviewTurn?.items.find((item) => item.type === "review");
+      if (runningReviewTurn !== undefined && runningReviewItem?.type === "review") {
+        // 服务重启或页面刷新后，从规范化 Snapshot 恢复后续实时通知所需的父级映射。
+        this.#runtime.activeReviewTargets.set(taskId, runningReviewItem.target);
+        this.#runtime.activeReviewTurnIds.set(taskId, runningReviewTurn.id);
+        this.#runtime.activeReviewWorkerTaskIds.add(taskId);
+      }
       if (status === "running") {
         this.#runtime.runningTaskIds.add(taskId);
       } else {
@@ -784,6 +808,85 @@ export class CodexAgentProvider implements AgentProvider {
     } finally {
       this.#finishTaskRead(taskId, projectOwnershipVerified);
     }
+  }
+
+  async #readReviewWorkerTurns(
+    taskId: string,
+    parentTurns: readonly unknown[],
+  ): Promise<unknown[]> {
+    const reviewTurnIndexes = parentTurns.flatMap((turn, turnIndex) => {
+      const nativeTurn = expectRecord(turn, "Codex turn");
+      const items = nativeTurn["items"];
+      return Array.isArray(items) &&
+        items.some((item) => isRecord(item) && item["type"] === "enteredReviewMode")
+        ? [turnIndex]
+        : [];
+    });
+    if (reviewTurnIndexes.length === 0) {
+      return [...parentTurns];
+    }
+
+    const listResponse = expectRecord(
+      await this.#client.request("thread/list", {
+        limit: 100,
+        parentThreadId: taskId,
+        sortDirection: "asc",
+        sortKey: "created_at",
+        sourceKinds: ["subAgentReview"],
+      }),
+      "review worker thread/list response",
+    );
+    if (!Array.isArray(listResponse["data"])) {
+      throw new CodexProtocolMappingError("review worker thread/list data must be an array");
+    }
+
+    const workerTurnGroups: unknown[][] = [];
+    for (const workerThreadValue of listResponse["data"].slice(0, reviewTurnIndexes.length)) {
+      const workerThread = expectRecord(workerThreadValue, "Codex review worker thread");
+      const workerTaskId = expectString(workerThread["id"], "Codex review worker thread id");
+      const workerResponse = expectRecord(
+        await this.#client.request("thread/read", {
+          includeTurns: true,
+          threadId: workerTaskId,
+        }),
+        "review worker thread/read response",
+      );
+      const loadedWorkerThread = expectRecord(
+        workerResponse["thread"],
+        "Codex loaded review worker thread",
+      );
+      if (!Array.isArray(loadedWorkerThread["turns"])) {
+        throw new CodexProtocolMappingError("review worker thread/read turns must be an array");
+      }
+      const workerTurns = loadedWorkerThread["turns"] as unknown[];
+      this.#runtime.reviewWorkerParentTaskIds.set(workerTaskId, taskId);
+      this.#runtime.reviewWorkerTaskIds.set(taskId, workerTaskId);
+      const runningWorkerTurn = workerTurns.findLast((turn) => {
+        const nativeTurn = expectRecord(turn, "Codex review worker turn");
+        return nativeTurn["status"] === "inProgress";
+      });
+      if (runningWorkerTurn !== undefined) {
+        this.#runtime.reviewWorkerTurnIds.set(
+          taskId,
+          expectString(
+            expectRecord(runningWorkerTurn, "Codex running review worker turn")["id"],
+            "Codex running review worker turn id",
+          ),
+        );
+      }
+      workerTurnGroups.push(workerTurns);
+    }
+
+    const turns: unknown[] = [];
+    let workerIndex = 0;
+    for (let turnIndex = 0; turnIndex < parentTurns.length; turnIndex += 1) {
+      turns.push(parentTurns[turnIndex]);
+      if (reviewTurnIndexes[workerIndex] === turnIndex) {
+        turns.push(...(workerTurnGroups[workerIndex] ?? []));
+        workerIndex += 1;
+      }
+    }
+    return turns;
   }
 
   public readTaskAttachment(
@@ -844,6 +947,80 @@ export class CodexAgentProvider implements AgentProvider {
       this.#handleServerRequestResolved(params);
       return;
     }
+    if (method === "thread/started") {
+      const reviewWorker = readReviewWorkerThread(params);
+      if (
+        reviewWorker !== undefined &&
+        this.#runtime.activeReviewTargets.has(reviewWorker.parentTaskId)
+      ) {
+        // review worker 是独立 Codex Thread，但在产品时间线中属于父 Task 的同一审查回合。
+        this.#runtime.reviewWorkerParentTaskIds.set(
+          reviewWorker.workerTaskId,
+          reviewWorker.parentTaskId,
+        );
+        this.#runtime.reviewWorkerTaskIds.set(reviewWorker.parentTaskId, reviewWorker.workerTaskId);
+        this.#runtime.activeReviewWorkerTaskIds.add(reviewWorker.parentTaskId);
+        void this.#resumeReviewWorker(reviewWorker.workerTaskId);
+      }
+      return;
+    }
+    const nativeTaskId = readTaskId(params) ?? "";
+    const taskId = this.#runtime.reviewWorkerParentTaskIds.get(nativeTaskId) ?? nativeTaskId;
+    const nativeTurnId = readNotificationTurnId(method, params);
+    const activeReviewTarget = this.#runtime.activeReviewTargets.get(taskId);
+    if (
+      activeReviewTarget !== undefined &&
+      nativeTurnId !== undefined &&
+      this.#runtime.activeReviewTurnIds.get(taskId) === undefined &&
+      (method === "turn/started" || readNotificationItemType(params) === "enteredReviewMode")
+    ) {
+      // 官方 review/start 的首个 Turn 是用户可见审查 Turn，后续 reviewer Turn 仅用于内部执行。
+      this.#runtime.activeReviewTurnIds.set(taskId, nativeTurnId);
+    }
+    const reviewTurnId = this.#runtime.activeReviewTurnIds.get(taskId);
+    const isReviewWorker =
+      activeReviewTarget !== undefined &&
+      reviewTurnId !== undefined &&
+      nativeTurnId !== undefined &&
+      (nativeTaskId !== taskId || nativeTurnId !== reviewTurnId);
+    if (isReviewWorker && method === "turn/started") {
+      this.#runtime.activeReviewWorkerTaskIds.add(taskId);
+      this.#runtime.reviewWorkerTurnIds.set(taskId, nativeTurnId);
+    }
+    if (isReviewWorker && method === "turn/completed") {
+      // 内部终态只负责资源清理；外层 review Turn 才是用户可见终态。
+      this.#runtime.reviewWorkerTurnIds.delete(taskId);
+      this.#removeQueuedRequestsForTurn(taskId, nativeTurnId);
+      this.#pendingLifecycle.expireTurn(taskId, nativeTurnId);
+      return;
+    }
+    const reviewItemType = readNotificationItemType(params);
+    if (
+      isReviewWorker &&
+      method === "item/completed" &&
+      reviewItemType === "agentMessage" &&
+      isFinalAgentMessage(params)
+    ) {
+      this.#runtime.reviewWorkerOutputTaskIds.add(taskId);
+    }
+    if (isReviewWorker && reviewItemType === "userMessage") {
+      // Codex 0.146.0 会为 reviewer 写入两条相同 Prompt，均不属于用户对话。
+      return;
+    }
+    const hasReviewWorkerOutput = this.#runtime.reviewWorkerOutputTaskIds.has(taskId);
+    if (
+      activeReviewTarget !== undefined &&
+      reviewTurnId !== undefined &&
+      nativeTurnId === reviewTurnId &&
+      method.startsWith("item/") &&
+      (reviewItemType === "userMessage" ||
+        (reviewItemType === "agentMessage" && !isCommentaryAgentMessage(params)) ||
+        (reviewItemType === "exitedReviewMode" &&
+          (hasReviewWorkerOutput || isReviewerFailureFallback(params))))
+    ) {
+      // 外层仍会代理结构化活动，只过滤内部 Prompt 和已由 worker 交付的重复终态。
+      return;
+    }
     let event: AgentProviderEvent | undefined;
     try {
       event = mapCodexNotification(
@@ -851,7 +1028,11 @@ export class CodexAgentProvider implements AgentProvider {
         params,
         (taskId, part, imageIndex) => this.#mapMessageImage(taskId, part, imageIndex),
         (taskId, input, textIndex) => this.#mapMessageText(taskId, input, textIndex),
-        this.#runtime.activeReviewTargets.get(readTaskId(params) ?? ""),
+        activeReviewTarget,
+        isReviewWorker ? reviewTurnId : undefined,
+        isReviewWorker,
+        hasReviewWorkerOutput && !isReviewWorker,
+        isReviewWorker ? taskId : undefined,
       );
     } catch {
       // 单个原生通知字段漂移不能中断 JSONL Client 或后续关键事件。
@@ -878,6 +1059,15 @@ export class CodexAgentProvider implements AgentProvider {
     if (event.type === "turn.completed") {
       this.#runtime.runningTaskIds.delete(event.taskId);
       this.#runtime.activeReviewTargets.delete(event.taskId);
+      this.#runtime.activeReviewTurnIds.delete(event.taskId);
+      this.#runtime.activeReviewWorkerTaskIds.delete(event.taskId);
+      this.#runtime.reviewWorkerOutputTaskIds.delete(event.taskId);
+      const reviewWorkerTaskId = this.#runtime.reviewWorkerTaskIds.get(event.taskId);
+      if (reviewWorkerTaskId !== undefined) {
+        this.#runtime.reviewWorkerParentTaskIds.delete(reviewWorkerTaskId);
+      }
+      this.#runtime.reviewWorkerTaskIds.delete(event.taskId);
+      this.#runtime.reviewWorkerTurnIds.delete(event.taskId);
       this.#removeQueuedRequestsForTurn(event.taskId, event.turnId);
       this.#pendingLifecycle.expireTurn(event.taskId, event.turnId);
     }
@@ -1135,6 +1325,32 @@ export class CodexAgentProvider implements AgentProvider {
       }
     }
   }
+
+  async #resumeReviewWorker(workerTaskId: string): Promise<void> {
+    try {
+      const response = expectRecord(
+        await this.#client.request("thread/resume", { threadId: workerTaskId }),
+        "review worker thread/resume response",
+      );
+      const thread = expectRecord(response["thread"], "review worker thread/resume thread");
+      if (expectString(thread["id"], "review worker resumed thread id") !== workerTaskId) {
+        throw new CodexProtocolMappingError(
+          "review worker thread/resume returned a different thread",
+        );
+      }
+    } catch {
+      // Snapshot 会补偿订阅建立前的事件；恢复失败不能中断父 Task 的审查生命周期。
+      this.#logger.warn(
+        {
+          codexVersion: SUPPORTED_CODEX_VERSION,
+          diagnosticCode: "review_worker_resume_failed",
+          projectId: this.#project.id,
+          taskId: workerTaskId,
+        },
+        "Codex review worker resume failed",
+      );
+    }
+  }
 }
 
 function readTaskId(value: unknown): string | undefined {
@@ -1146,6 +1362,71 @@ function readTaskId(value: unknown): string | undefined {
   }
   const thread = value["thread"];
   return isRecord(thread) && typeof thread["id"] === "string" ? thread["id"] : undefined;
+}
+
+function readNotificationTurnId(method: string, value: unknown): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  if (method === "turn/started" || method === "turn/completed") {
+    const turn = value["turn"];
+    return isRecord(turn) && typeof turn["id"] === "string" ? turn["id"] : undefined;
+  }
+  return typeof value["turnId"] === "string" ? value["turnId"] : undefined;
+}
+
+function readNotificationItemType(value: unknown): string | undefined {
+  if (!isRecord(value) || !isRecord(value["item"])) {
+    return undefined;
+  }
+  const type = value["item"]["type"];
+  return typeof type === "string" ? type : undefined;
+}
+
+function isFinalAgentMessage(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value["item"])) {
+    return false;
+  }
+  const item = value["item"];
+  return (
+    item["phase"] !== "commentary" &&
+    typeof item["text"] === "string" &&
+    item["text"].trim().length > 0
+  );
+}
+
+function isCommentaryAgentMessage(value: unknown): boolean {
+  return isRecord(value) && isRecord(value["item"]) && value["item"]["phase"] === "commentary";
+}
+
+function isReviewerFailureFallback(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value["item"])) {
+    return false;
+  }
+  // Codex 会先发该占位终态，再由 reviewer 子 Thread 给出真正的中断或失败原因。
+  return value["item"]["review"] === "Reviewer failed to output a response.";
+}
+
+function readReviewWorkerThread(
+  value: unknown,
+): Readonly<{ parentTaskId: string; workerTaskId: string }> | undefined {
+  if (!isRecord(value) || !isRecord(value["thread"])) {
+    return undefined;
+  }
+  const thread = value["thread"];
+  const source = thread["source"];
+  if (
+    typeof thread["id"] !== "string" ||
+    typeof thread["parentThreadId"] !== "string" ||
+    !isRecord(source) ||
+    source["subAgent"] !== "review"
+  ) {
+    return undefined;
+  }
+  return {
+    parentTaskId: thread["parentThreadId"],
+    workerTaskId: thread["id"],
+  };
 }
 
 class CodexRuntimeProjectProvider implements AgentProvider {
@@ -1334,6 +1615,10 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
   readonly #projects = new Map<string, Project>();
   readonly #projectProviders = new Map<string, CodexRuntimeProjectProvider>();
   readonly #rawProviders = new Map<string, CodexAgentProvider>();
+  readonly #reviewWorkerOwners = new Map<
+    string,
+    Readonly<{ parentTaskId: string; projectId: string }>
+  >();
 
   public constructor(
     client: CodexRpcClient,
@@ -1343,10 +1628,34 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
     this.#logger = logger;
     client.onNotification((notification) => {
       const taskId = readTaskId(notification.params);
-      if (taskId !== undefined) {
-        this.#rawProviders
-          .get(this.#owners.projectIdForTask(taskId) ?? "")
-          ?.receiveNotification(notification.method, notification.params);
+      if (taskId === undefined) {
+        return;
+      }
+      const reviewWorker =
+        notification.method === "thread/started"
+          ? readReviewWorkerThread(notification.params)
+          : undefined;
+      if (reviewWorker !== undefined) {
+        const projectId = this.#owners.projectIdForTask(reviewWorker.parentTaskId);
+        if (projectId !== undefined) {
+          // 子 Thread 不进入 Task 列表，只继承父 Task 的事件路由归属。
+          this.#reviewWorkerOwners.set(reviewWorker.workerTaskId, {
+            parentTaskId: reviewWorker.parentTaskId,
+            projectId,
+          });
+          this.#rawProviders
+            .get(projectId)
+            ?.receiveNotification(notification.method, notification.params);
+        }
+        return;
+      }
+      const workerOwner = this.#reviewWorkerOwners.get(taskId);
+      const projectId = this.#owners.projectIdForTask(taskId) ?? workerOwner?.projectId;
+      this.#rawProviders
+        .get(projectId ?? "")
+        ?.receiveNotification(notification.method, notification.params);
+      if (workerOwner !== undefined && notification.method === "turn/completed") {
+        this.#reviewWorkerOwners.delete(taskId);
       }
     });
     client.onServerRequest((request) => {
@@ -1433,6 +1742,11 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
     this.#projectProviders.delete(projectId);
     this.#rawProviders.delete(projectId);
     this.#owners.releaseProject(projectId);
+    for (const [workerTaskId, owner] of this.#reviewWorkerOwners) {
+      if (owner.projectId === projectId) {
+        this.#reviewWorkerOwners.delete(workerTaskId);
+      }
+    }
     provider?.releaseProject();
     return Promise.resolve();
   }
@@ -1455,6 +1769,11 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
 
   public releaseTask(project: Project, taskId: string): void {
     this.#owners.releaseTask(project, taskId);
+    for (const [workerTaskId, owner] of this.#reviewWorkerOwners) {
+      if (owner.parentTaskId === taskId) {
+        this.#reviewWorkerOwners.delete(workerTaskId);
+      }
+    }
   }
 
   public releaseProvisionalTask(project: Project, taskId: string): void {

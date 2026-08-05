@@ -10,8 +10,7 @@
 - 配对表单必须提供可访问 Label、提交状态和键盘焦点；配对码只保留在表单局部状态。LAN 设置页必须提供明确注销动作，并复用顶层 Access 清理边界。
 - 每个组件只承担一个可描述的界面职责，紧凑工作台界面避免装饰性嵌套卡片。
 - 会触发网络 Mutation、宿主应用或持久化副作用的按钮和表单必须在事件入口同步单飞，直到当前 Promise 成功或失败后再允许执行；不得只依赖下一次 React 渲染的 `isPending`，也不得使用固定毫秒 debounce。锁按 Project、Task 或请求身份隔离，切换作用域不能被旧请求阻塞；失败重试继续遵循原 `Idempotency-Key` 规则。
-- 工作台的项目打开控件使用分段按钮：左侧不显示图标，只显示“在 <应用名称> 中打开”并执行当前选择；右侧 `ChevronDown` 只负责打开应用菜单，hover 不得自动展开。菜单项只能来自 Server 返回的当前宿主应用目录，选择按 Project 写入版本化浏览器偏好，并支持 ArrowDown、Escape、焦点离开和外部点击；Project 没有本地偏好时依次使用全局默认和首个可用应用。
-- Inspector Project 文件树的文件与目录节点使用右键菜单复用同一宿主应用目录；文件菜单额外提供系统默认应用，目录菜单不得展示该文件专用能力。右键目标立即进入文件树选中高亮态，菜单顶部显示“打开方式”和当前目标路径。菜单项是立即打开目标的命令，不修改中栏保存的默认应用。菜单必须脱离滚动容器裁剪并限制在视口内，打开后聚焦首项，支持 Escape 和外部点击关闭，请求期间禁用重复操作。
+- Inspector Project 文件树必须以默认展开的项目根文件夹名称开头，不在树外重复显示“项目文件”标题；根节点展开状态只属于界面，不得作为相对目录路径发起文件查询。文件与目录节点使用右键菜单复用同一宿主应用目录；项目根节点菜单显示项目路径，但打开请求必须省略相对 `path`，由 Server 解析为项目根目录。文件菜单额外提供系统默认应用，目录菜单不得展示该文件专用能力。右键目标立即进入文件树选中高亮态，菜单顶部显示“打开方式”和当前目标路径。菜单项是立即打开目标的命令，不修改中栏保存的默认应用。菜单必须脱离滚动容器裁剪并限制在视口内，打开后聚焦首项，支持 Escape 和外部点击关闭，请求期间禁用重复操作。
 - Web 不提供登录路由或账号控件；Provider 资源不可用时展示 `codex login` 指引和 Query 重试操作，不调用账号接口。
 - `shared/ai-elements` 以官方 AI Elements 组件源码和公开 API 为实现基线，只改造样式、基础控件适配与本地化文案以使用本项目设计 Token；不得用功能不完整的自研组件替代官方能力。
 - 通用 `Button`、`Input`、`Tooltip`、`Dialog`、`DropdownMenu`、`ContextMenu` 和 `ButtonGroup` 必须复用 `shared/ui` 的 shadcn 基础组件；shadcn 语义 Token 只能在 `shared/styles/globals.css` 映射到现有 `--ui-*` 变量，不得引入独立默认主题或 Feature 级同类封装。基础组件只统一行为、可访问性和显式项目 variant，不得向既有业务 `className` 注入 shadcn 默认字号、字重、尺寸、间距或布局；`tailwind-merge` 必须登记 `caption`、`meta`、`label`、`body-small`、`body`、`heading`、`title`、`display` 等项目 `text-*` 字号 Token，避免与文字颜色类冲突时误删排版。Dialog 必须保留 Portal、焦点圈定、Escape、backdrop 和关闭后焦点恢复；Tooltip 必须使用应用级 Provider 并限制在视口安全边距内；Dropdown Menu 与 Context Menu 的 Portal、视口碰撞、键盘导航、Escape、外部点击和焦点恢复必须交由 Radix 管理，Feature 不得重复实现坐标计算或全局事件监听。

@@ -10,6 +10,7 @@
 - Client 所有 Fetch 必须显式使用 `credentials: "same-origin"`；配对码只能进入 `POST /v1/access/pair` JSON Body。`401` 通知不得吞掉或改写原 HTTP 或 Mutation 错误。
 - Project、Task 等 Protocol 类型必须有对应 JSON Schema 或明确生成来源，运行时边界不得只依赖 TypeScript 类型。
 - 代码审查请求使用携带严格 `AgentReviewTarget` 的 `AgentReviewItem` 进入 Snapshot 和实时事件，禁止用普通用户消息或 Provider 原生 Prompt 表达审查模式。
+- Codex `review/start` 必须通过 `thread/started.thread.parentThreadId` 将独立 reviewer 子 Thread 关联到父 Task，并将外层审查 Turn 与 worker Turn 投影成同一个用户可见 Turn：只保留一个结构化审查请求，隐藏 worker 的重复 Prompt，按原顺序保留 worker 的 commentary、工具和最终回复；仅在 worker 已交付最终回复时抑制外层重复结果。worker 终态只清理其待处理请求，外层 `exitedReviewMode` 与 `turn/completed` 才结束审查运行态和处理计时；历史 Snapshot 必须读取 `subAgentReview` 子 Thread，并与实时事件生成相同投影。
 - `Project.rootPath` 由本地 Runtime 校验后随 Project 契约返回，用于当前工作台展示，并由 `ProjectSchema` 校验为非空字符串。
 - Project 目录浏览必须使用严格的 `ProjectDirectoryQuery` 与 `ProjectDirectoryListing` Schema，返回规范化的当前绝对路径、可空父路径和直接子目录；路径契约必须覆盖 POSIX、Windows Drive 与 UNC 绝对路径，并拒绝 NUL 和换行控制字符。Project 注册只接受显式 `AddProjectRequest.rootPath`，Client、Server 与 Web 不得保留原生目录选择器或空请求体分支。
 - Project 重命名只允许更新本地 `projects.name` 展示名，必须保持 `id`、`rootPath`、`createdAt` 和磁盘目录不变；Project 删除只移除 CodeAgent 注册及级联的本地设置/元数据，并释放对应 Web/Server Runtime，不得删除磁盘文件或归档 Provider Task。两种操作均使用独立严格 Mutation Schema 和 `Idempotency-Key`。

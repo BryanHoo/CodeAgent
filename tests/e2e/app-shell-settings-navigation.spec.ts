@@ -50,7 +50,6 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(page).toHaveURL(workbenchUrl);
   await expect(taskModel).toHaveValue("gpt-5.6-sol");
   await expect(taskApproval).toHaveValue("on-request");
-  await expect(page.getByRole("button", { name: "在 Finder 中打开" })).toBeVisible();
 
   await page.getByRole("button", { name: /设置，终端连接状态/u }).click();
   const reopenedDialog = page.getByRole("dialog", { name: "全局设置" });
@@ -157,44 +156,24 @@ test("uses global defaults throughout a new task composer", async ({ page }) => 
   await expect(page.getByRole("combobox", { name: "选择思考量" })).toHaveValue("medium");
 });
 
-test("project open split control selects, opens, and restores a host app", async ({ page }) => {
-  const openRequests: Record<string, unknown>[] = [];
-  await page.route("**/v1/projects/code-agent/open", async (route) => {
-    openRequests.push(parseRequestRecord(route.request().postData()));
-    await route.fallback();
-  });
-  await page.route("**/v1/projects/code-agent/open-capabilities", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      json: {
-        apps: [
-          { id: "explorer", kind: "file-manager", name: "文件资源管理器" },
-          { id: "zed", kind: "editor", name: "Zed" },
-        ],
-        platform: "win32",
-      },
-    });
-  });
+test("omits the project open module from the center toolbar", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const menuTrigger = page.getByRole("button", { name: "选择打开方式" });
-  await menuTrigger.hover();
-  await expect(page.getByRole("menu", { name: "选择打开方式" })).toHaveCount(0);
-  await menuTrigger.click();
-  const menu = page.getByRole("menu", { name: "选择打开方式" });
-  await expect(menu).toBeVisible();
-  await menu.getByRole("menuitemradio", { name: "Zed" }).click();
-  const openButton = page.getByRole("button", { name: "在 Zed 中打开" });
-  await expect(openButton).toBeVisible();
+  const fileTree = page
+    .getByRole("complementary", { name: "运行环境" })
+    .getByRole("tree", { name: "项目文件" });
+  await fileTree
+    .getByRole("treeitem", { name: "CodeAgent" })
+    .first()
+    .getByRole("button", { exact: true, name: "CodeAgent" })
+    .click({ button: "right" });
+  await expect(
+    page.getByRole("menu", { name: "打开 ~/Develop/person/CodeAgent 的方式" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
 
-  await openButton.evaluate((button) => {
-    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  });
-  await expect.poll(() => openRequests).toEqual([{ appId: "zed" }]);
-
-  await page.reload();
-  await expect(page.getByRole("button", { name: "在 Zed 中打开" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "在 Zed 中打开" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "选择打开方式" })).toHaveCount(0);
 });
 
 test("restores the project folder expansion preference after reload", async ({ page }) => {
@@ -630,7 +609,7 @@ test("aligns the center toolbar divider with sidebar controls", async ({ page })
     .getByText("CodeAgent", { exact: true })
     .first();
   const centerTitle = page.getByRole("heading", { name: "构建 macOS 工作台", level: 1 });
-  const rightTitle = page.getByRole("heading", { name: "项目检查器", level: 2 });
+  const rightTitle = page.getByRole("heading", { name: "运行环境", level: 2 });
   const search = page.getByRole("textbox", { name: "搜索任务" });
   const tabs = page.getByRole("tablist");
   const [mainHeaderBox, leftTitleBox, centerTitleBox, rightTitleBox, searchBox, tabsBox] =
@@ -675,11 +654,11 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await page.goto("/p/code-agent/t/task-1");
 
   const main = page.getByRole("main", { name: "任务时间线" });
-  const inspector = page.getByRole("complementary", { name: "项目检查器" });
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
   await expect(page.getByRole("complementary", { name: "项目侧栏" })).toBeVisible();
   await expect(main).toBeVisible();
   await expect(inspector).toBeVisible();
-  await expect(page.getByRole("heading", { name: "项目检查器" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "运行环境" })).toBeVisible();
   await expect(page.getByRole("region", { name: "消息编辑器" })).toBeVisible();
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
@@ -730,7 +709,7 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
 test("renders enabled MCP servers and sources in inspector", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const inspector = page.getByRole("complementary", { name: "项目检查器" });
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
   await inspector.getByRole("tab", { name: "上下文" }).click();
   const mcp = inspector.getByRole("region", { name: "MCP" });
   const sources = inspector.getByRole("region", { name: "来源" });

@@ -56,7 +56,7 @@ export const conversation = {
     changeActions: "Change actions",
     changeIndicator: "{{path}}, {{descendant}}{{additions}} additions, {{removals}} deletions",
     changeStats: "Change statistics",
-    changes: "Changes",
+    changes: "Project",
     commit: "Commit",
     context: "Context",
     contextSources: "Context sources",
@@ -104,7 +104,7 @@ export const conversation = {
     terminalStopping: "Stopping {{command}}",
     terminalStopRetry: "Failed to stop terminal. Try again.",
     terminals: "Running terminals",
-    title: "Project inspector",
+    title: "Runtime environment",
   },
   notification: {
     completed: "Task completed",

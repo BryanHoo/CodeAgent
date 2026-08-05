@@ -6,6 +6,12 @@ import type { PendingCodexRequest } from "./codex-protocol-mapping.js";
 /** 集中拥有所有 Task 级运行状态，确保释放时不会遗漏只增不减的 Map。 */
 export class TaskRuntimeState {
   public readonly activeReviewTargets = new Map<string, AgentReviewTarget>();
+  public readonly activeReviewTurnIds = new Map<string, string>();
+  public readonly activeReviewWorkerTaskIds = new Set<string>();
+  public readonly reviewWorkerOutputTaskIds = new Set<string>();
+  public readonly reviewWorkerTaskIds = new Map<string, string>();
+  public readonly reviewWorkerTurnIds = new Map<string, string>();
+  public readonly reviewWorkerParentTaskIds = new Map<string, string>();
   public readonly contextUsage = new Map<string, AgentContextUsage>();
   public readonly pendingTaskEvents = new Map<string, AgentProviderEvent[]>();
   public readonly pendingTaskReads = new Map<string, number>();
@@ -28,6 +34,17 @@ export class TaskRuntimeState {
 
   public clearTask(taskId: string): void {
     this.activeReviewTargets.delete(taskId);
+    this.activeReviewTurnIds.delete(taskId);
+    this.activeReviewWorkerTaskIds.delete(taskId);
+    this.reviewWorkerOutputTaskIds.delete(taskId);
+    this.reviewWorkerTaskIds.delete(taskId);
+    this.reviewWorkerTurnIds.delete(taskId);
+    this.reviewWorkerParentTaskIds.delete(taskId);
+    for (const [workerTaskId, parentTaskId] of this.reviewWorkerParentTaskIds) {
+      if (parentTaskId === taskId) {
+        this.reviewWorkerParentTaskIds.delete(workerTaskId);
+      }
+    }
     this.contextUsage.delete(taskId);
     this.pendingTaskEvents.delete(taskId);
     this.pendingTaskReads.delete(taskId);
@@ -41,6 +58,12 @@ export class TaskRuntimeState {
 
   public clear(): void {
     this.activeReviewTargets.clear();
+    this.activeReviewTurnIds.clear();
+    this.activeReviewWorkerTaskIds.clear();
+    this.reviewWorkerOutputTaskIds.clear();
+    this.reviewWorkerTaskIds.clear();
+    this.reviewWorkerTurnIds.clear();
+    this.reviewWorkerParentTaskIds.clear();
     this.contextUsage.clear();
     this.pendingTaskEvents.clear();
     this.pendingTaskReads.clear();

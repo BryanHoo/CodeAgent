@@ -767,6 +767,79 @@ describe("task store", () => {
     });
   });
 
+  it("keeps streamed reviewer operations when the terminal review projection arrives", () => {
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        itemId: "review-mode-turn-running",
+        payload: {
+          item: {
+            id: "review-mode-turn-running",
+            target: { type: "uncommitted_changes" },
+            type: "review",
+          },
+        },
+        turnId: "turn-running",
+        type: "item.started",
+      },
+      {
+        ...eventEnvelope(12),
+        itemId: "review-command",
+        payload: {
+          item: {
+            command: "git diff",
+            cwd: "/workspace",
+            id: "review-command",
+            outputTruncated: false,
+            status: "completed",
+            type: "command",
+          },
+        },
+        turnId: "turn-running",
+        type: "item.completed",
+      },
+      {
+        ...eventEnvelope(13),
+        payload: {
+          turn: {
+            completedAt: "2026-07-28T00:00:02.000Z",
+            error: null,
+            id: "turn-running",
+            items: [
+              {
+                id: "review-mode-turn-running",
+                target: { type: "uncommitted_changes" },
+                type: "review",
+              },
+              {
+                id: "review-result",
+                role: "assistant",
+                text: "审查完成。",
+                type: "message",
+              },
+            ],
+            startedAt: timestamp,
+            status: "completed",
+          },
+        },
+        turnId: "turn-running",
+        type: "turn.completed",
+      },
+    ]);
+
+    expect(store.getState().reconstructSnapshot()?.turns[1]).toMatchObject({
+      completedAt: "2026-07-28T00:00:02.000Z",
+      items: [
+        { role: "assistant", text: "开始", type: "message" },
+        { type: "review" },
+        { id: "review-command", type: "command" },
+        { role: "assistant", text: "审查完成。", type: "message" },
+      ],
+      status: "completed",
+    });
+  });
+
   it("clears a retrying provider error after the turn resumes output", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
 

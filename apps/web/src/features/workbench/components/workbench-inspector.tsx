@@ -52,7 +52,7 @@ type WorkbenchInspectorProps = Readonly<{
   mcpServersPending?: boolean;
   onFileTreeExpandedChange?: (expandedPaths: Set<string>) => void;
   onOpenFileDiff?: (change: AgentFileChange) => void;
-  onOpenProjectPath?: (appId: ProjectOpenAppId, path: string) => void;
+  onOpenProjectPath?: (appId: ProjectOpenAppId, path?: string) => void;
   onOpenProjectFile?: (path: string) => void;
   onOpenSubagent?: (selection: SubagentSelection) => void;
   onRefreshFileTreeDirectory?: (directoryPath: string | null) => void;
@@ -497,6 +497,7 @@ export function WorkbenchInspector({
   const fileChangesByPath = changeSummary.changesByPath;
   const fileTreeChangeStats = changeSummary.statsByPath;
   const [selectedTreePath, setSelectedTreePath] = useState<string>();
+  const [projectRootExpanded, setProjectRootExpanded] = useState(true);
   const { additions, removals } = changeSummary;
   const sources = useMemo(
     () => collectInspectorSources(projectName, projectPath, task?.turns ?? [], skills),
@@ -507,6 +508,14 @@ export function WorkbenchInspector({
     [fileTreeDirectories],
   );
   const rootFileTreeState = fileTreeDirectoryStates.get(null);
+  const projectRootName = getProjectFileName(projectPath) || projectName;
+  const visibleExpandedFileTreePaths = useMemo(() => {
+    const paths = new Set(expandedFileTreePaths);
+    if (projectRootExpanded) {
+      paths.add(projectPath);
+    }
+    return paths;
+  }, [expandedFileTreePaths, projectPath, projectRootExpanded]);
   const filePaths = useMemo(
     () =>
       new Set(
@@ -673,10 +682,6 @@ export function WorkbenchInspector({
                   {i18n.t("inspector.gitLoading", { ns: "conversation" })}
                 </p>
               ) : null}
-              {/* 标题固定在文件树滚动容器外，滚动长目录时始终保持可见。 */}
-              <div className="mb-1 flex shrink-0 items-center justify-between px-4 text-meta font-medium text-muted-foreground">
-                <span>{i18n.t("inspector.fileTree", { ns: "conversation" })}</span>
-              </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2.5">
                 {rootFileTreeState?.error !== null && rootFileTreeState?.error !== undefined ? (
                   <div className="flex flex-col items-center px-2 py-5 text-center">
@@ -716,9 +721,18 @@ export function WorkbenchInspector({
                 ) : (
                   <FileTree
                     aria-label={i18n.t("inspector.fileTree", { ns: "conversation" })}
-                    expanded={expandedFileTreePaths}
-                    onExpandedChange={onFileTreeExpandedChange}
+                    expanded={visibleExpandedFileTreePaths}
+                    onExpandedChange={(nextExpandedPaths) => {
+                      // 项目根节点仅用于界面分组，不能进入后端的相对目录查询集合。
+                      setProjectRootExpanded(nextExpandedPaths.has(projectPath));
+                      const directoryPaths = new Set(nextExpandedPaths);
+                      directoryPaths.delete(projectPath);
+                      onFileTreeExpandedChange(directoryPaths);
+                    }}
                     onSelect={(path) => {
+                      if (path === projectPath) {
+                        return;
+                      }
                       if (!filePaths.has(path)) {
                         return;
                       }
@@ -732,20 +746,34 @@ export function WorkbenchInspector({
                     }}
                     {...(selectedTreePath === undefined ? {} : { selectedPath: selectedTreePath })}
                   >
-                    <ProjectFileTreeNodes
-                      changeStatsByPath={fileTreeChangeStats}
-                      directoryStates={fileTreeDirectoryStates}
-                      entries={rootFileTreeState?.data?.entries ?? []}
-                      expandedPaths={expandedFileTreePaths}
-                      onContextMenuOpen={(path) => {
-                        // 右键目标先进入文件树选中态，让菜单与当前操作对象保持一致。
-                        setSelectedTreePath(path);
+                    <ProjectOpenContextMenu
+                      apps={projectOpenApps}
+                      isPending={projectOpenPending}
+                      onOpen={() => {
+                        setSelectedTreePath(projectPath);
                       }}
-                      onOpenProjectPath={onOpenProjectPath}
-                      onRefreshDirectory={onRefreshFileTreeDirectory}
-                      projectOpenApps={projectOpenApps}
-                      projectOpenPending={projectOpenPending}
-                    />
+                      onSelect={(appId) => {
+                        onOpenProjectPath(appId);
+                      }}
+                      target={{ path: projectPath, type: "directory" }}
+                    >
+                      <FileTreeFolder name={projectRootName} path={projectPath}>
+                        <ProjectFileTreeNodes
+                          changeStatsByPath={fileTreeChangeStats}
+                          directoryStates={fileTreeDirectoryStates}
+                          entries={rootFileTreeState?.data?.entries ?? []}
+                          expandedPaths={expandedFileTreePaths}
+                          onContextMenuOpen={(path) => {
+                            // 右键目标先进入文件树选中态，让菜单与当前操作对象保持一致。
+                            setSelectedTreePath(path);
+                          }}
+                          onOpenProjectPath={onOpenProjectPath}
+                          onRefreshDirectory={onRefreshFileTreeDirectory}
+                          projectOpenApps={projectOpenApps}
+                          projectOpenPending={projectOpenPending}
+                        />
+                      </FileTreeFolder>
+                    </ProjectOpenContextMenu>
                   </FileTree>
                 )}
               </div>

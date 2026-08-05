@@ -56,7 +56,7 @@ export const conversation = {
     changeActions: "变更操作",
     changeIndicator: "{{path}}，{{descendant}}新增 {{additions}} 行，删除 {{removals}} 行",
     changeStats: "变更统计",
-    changes: "变更",
+    changes: "项目",
     commit: "提交",
     context: "上下文",
     contextSources: "上下文来源",
@@ -104,7 +104,7 @@ export const conversation = {
     terminalStopping: "正在停止 {{command}}",
     terminalStopRetry: "停止终端失败，请重试",
     terminals: "运行中的终端",
-    title: "项目检查器",
+    title: "运行环境",
   },
   notification: {
     completed: "Task 已完成",

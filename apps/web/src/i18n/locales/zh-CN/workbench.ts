@@ -96,11 +96,6 @@ export const workbench = {
     followUpPlaceholder: "输入后续要求",
   },
   openMenu: {
-    choose: "选择打开方式",
-    detect: "正在检测打开方式",
-    error: "无法打开项目，请确认应用仍可用",
-    none: "没有可用的打开方式",
-    openIn: "在 {{app}} 中打开",
     systemDefault: "系统默认应用",
     targetLabel: "打开 {{path}} 的方式",
     title: "打开方式",
