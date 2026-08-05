@@ -1,13 +1,35 @@
 import { createReadStream } from "node:fs";
-import { glob } from "node:fs/promises";
+import { glob, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 
 const EXPANDED_SKILL_PATTERN =
   /^<skill>\s*<name>(?<name>[^<]+)<\/name>\s*<path>(?<path>[^<]+)<\/path>[\s\S]*<\/skill>\s*$/u;
 const LINKED_SKILL_PATTERN = /\[\$(?<name>[^\]\s]+)\]\((?<path>[^)]+\/SKILL\.md)\)/gu;
 const SAFE_THREAD_ID_PATTERN = /^[a-zA-Z0-9_-]+$/u;
+const TRANSCRIPT_DISCOVERY_INTERVAL_MS = 5_000;
+const MAX_CACHED_THREADS = 256;
+const MAX_TRANSCRIPT_FILES_PER_THREAD = 8;
+const MAX_TRANSCRIPT_BYTES_PER_READ = 8 * 1024 * 1024;
+const MAX_TRANSCRIPT_LINE_BYTES = 1024 * 1024;
+
+interface TranscriptFileCache {
+  discardUntilNewline: boolean;
+  mtimeMs: number;
+  offset: number;
+  pendingLine: Buffer;
+  size: number;
+  skillNamesByTurnId: Map<string, Set<string>>;
+}
+
+interface TranscriptThreadCache {
+  files: Map<string, TranscriptFileCache>;
+  lastDiscoveryAt: number;
+  pendingRead: Promise<ReadonlyMap<string, readonly string[]>> | undefined;
+  transcriptPaths: string[];
+}
+
+const transcriptCacheByThread = new Map<string, TranscriptThreadCache>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -72,6 +94,189 @@ function collectTranscriptLineSkills(
   }
 }
 
+function getTranscriptThreadCache(cacheKey: string): TranscriptThreadCache {
+  const existing = transcriptCacheByThread.get(cacheKey);
+  if (existing !== undefined) {
+    // Map 的插入顺序充当轻量 LRU，避免长期运行时缓存只增不减。
+    transcriptCacheByThread.delete(cacheKey);
+    transcriptCacheByThread.set(cacheKey, existing);
+    return existing;
+  }
+
+  const created: TranscriptThreadCache = {
+    files: new Map(),
+    lastDiscoveryAt: 0,
+    pendingRead: undefined,
+    transcriptPaths: [],
+  };
+  transcriptCacheByThread.set(cacheKey, created);
+  while (transcriptCacheByThread.size > MAX_CACHED_THREADS) {
+    const oldestKey = transcriptCacheByThread.keys().next().value;
+    if (oldestKey === undefined) {
+      break;
+    }
+    transcriptCacheByThread.delete(oldestKey);
+  }
+  return created;
+}
+
+async function discoverTranscriptPaths(
+  cache: TranscriptThreadCache,
+  transcriptPattern: string,
+): Promise<void> {
+  const now = Date.now();
+  if (
+    cache.transcriptPaths.length > 0 ||
+    now - cache.lastDiscoveryAt < TRANSCRIPT_DISCOVERY_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  const transcriptPaths: string[] = [];
+  for await (const transcriptPath of glob(transcriptPattern)) {
+    transcriptPaths.push(transcriptPath);
+    if (transcriptPaths.length >= MAX_TRANSCRIPT_FILES_PER_THREAD) {
+      break;
+    }
+  }
+  cache.transcriptPaths = transcriptPaths;
+  cache.lastDiscoveryAt = now;
+
+  const discoveredPaths = new Set(transcriptPaths);
+  for (const cachedPath of cache.files.keys()) {
+    if (!discoveredPaths.has(cachedPath)) {
+      cache.files.delete(cachedPath);
+    }
+  }
+}
+
+async function parseTranscriptFileIncrementally(
+  transcriptPath: string,
+  cache: TranscriptThreadCache,
+  remainingBytes: number,
+): Promise<number> {
+  const transcriptStats = await stat(transcriptPath);
+  const cachedFile = cache.files.get(transcriptPath);
+  if (
+    cachedFile?.mtimeMs === transcriptStats.mtimeMs &&
+    cachedFile.size === transcriptStats.size &&
+    cachedFile.offset === transcriptStats.size
+  ) {
+    return 0;
+  }
+
+  const canContinue =
+    cachedFile !== undefined &&
+    transcriptStats.size >= cachedFile.size &&
+    transcriptStats.size >= cachedFile.offset &&
+    (transcriptStats.size > cachedFile.size || transcriptStats.mtimeMs === cachedFile.mtimeMs);
+  const fileCache: TranscriptFileCache = canContinue
+    ? cachedFile
+    : {
+        discardUntilNewline: false,
+        mtimeMs: 0,
+        offset: 0,
+        pendingLine: Buffer.alloc(0),
+        size: 0,
+        skillNamesByTurnId: new Map(),
+      };
+  const availableBytes = transcriptStats.size - fileCache.offset;
+  const bytesToRead = Math.min(availableBytes, remainingBytes);
+  if (bytesToRead <= 0) {
+    fileCache.mtimeMs = transcriptStats.mtimeMs;
+    fileCache.size = transcriptStats.size;
+    cache.files.set(transcriptPath, fileCache);
+    return 0;
+  }
+
+  const stream = createReadStream(transcriptPath, {
+    end: fileCache.offset + bytesToRead - 1,
+    start: fileCache.offset,
+  });
+  for await (const chunk of stream as AsyncIterable<Buffer>) {
+    const data =
+      fileCache.pendingLine.length === 0 ? chunk : Buffer.concat([fileCache.pendingLine, chunk]);
+    fileCache.pendingLine = Buffer.alloc(0);
+    let lineStart = 0;
+    let lineEnd = data.indexOf(0x0a, lineStart);
+    while (lineEnd >= 0) {
+      const line = data.subarray(lineStart, lineEnd);
+      if (!fileCache.discardUntilNewline && line.length <= MAX_TRANSCRIPT_LINE_BYTES) {
+        const contentEnd = line.at(-1) === 0x0d ? line.length - 1 : line.length;
+        collectTranscriptLineSkills(
+          line.subarray(0, contentEnd).toString("utf8"),
+          fileCache.skillNamesByTurnId,
+        );
+      }
+      fileCache.discardUntilNewline = false;
+      lineStart = lineEnd + 1;
+      lineEnd = data.indexOf(0x0a, lineStart);
+    }
+    const incompleteLine = data.subarray(lineStart);
+    if (!fileCache.discardUntilNewline && incompleteLine.length <= MAX_TRANSCRIPT_LINE_BYTES) {
+      fileCache.pendingLine = Buffer.from(incompleteLine);
+    } else if (incompleteLine.length > 0) {
+      fileCache.pendingLine = Buffer.alloc(0);
+      fileCache.discardUntilNewline = true;
+    }
+  }
+
+  // 半行单独有界缓存，文件 offset 始终前进，避免大行反复读取同一字节区间。
+  fileCache.offset += bytesToRead;
+  fileCache.mtimeMs = transcriptStats.mtimeMs;
+  fileCache.size = transcriptStats.size;
+  cache.files.set(transcriptPath, fileCache);
+  return bytesToRead;
+}
+
+function mergeTranscriptSkills(
+  cache: TranscriptThreadCache,
+): ReadonlyMap<string, readonly string[]> {
+  const merged = new Map<string, Set<string>>();
+  for (const fileCache of cache.files.values()) {
+    for (const [turnId, skillNames] of fileCache.skillNamesByTurnId) {
+      const mergedNames = merged.get(turnId) ?? new Set<string>();
+      for (const skillName of skillNames) {
+        mergedNames.add(skillName);
+      }
+      merged.set(turnId, mergedNames);
+    }
+  }
+  return new Map([...merged].map(([turnId, skillNames]) => [turnId, [...skillNames]]));
+}
+
+async function readCachedCodexTranscriptTurnSkills(
+  cache: TranscriptThreadCache,
+  transcriptPattern: string,
+): Promise<ReadonlyMap<string, readonly string[]>> {
+  try {
+    await discoverTranscriptPaths(cache, transcriptPattern);
+    let remainingBytes = MAX_TRANSCRIPT_BYTES_PER_READ;
+    for (const transcriptPath of cache.transcriptPaths) {
+      if (remainingBytes <= 0) {
+        break;
+      }
+      try {
+        remainingBytes -= await parseTranscriptFileIncrementally(
+          transcriptPath,
+          cache,
+          remainingBytes,
+        );
+      } catch (error) {
+        // 瞬时 stat/read 失败不应清空此前已恢复的 Skill。
+        if (isRecord(error) && error["code"] === "ENOENT") {
+          cache.files.delete(transcriptPath);
+          cache.transcriptPaths = cache.transcriptPaths.filter((path) => path !== transcriptPath);
+          cache.lastDiscoveryAt = 0;
+        }
+      }
+    }
+  } catch {
+    // Transcript 恢复是补充信息，扫描失败时保留上次成功结果。
+  }
+  return mergeTranscriptSkills(cache);
+}
+
 export async function readCodexTranscriptTurnSkills(
   threadId: string,
   codexHome = process.env["CODEX_HOME"] ?? join(homedir(), ".codex"),
@@ -80,23 +285,20 @@ export async function readCodexTranscriptTurnSkills(
     return new Map();
   }
 
-  const skillNamesByTurnId = new Map<string, Set<string>>();
   const transcriptPattern = join(codexHome, "sessions", "**", `rollout-*-${threadId}.jsonl`);
-
-  try {
-    for await (const transcriptPath of glob(transcriptPattern)) {
-      const transcriptLines = createInterface({
-        crlfDelay: Number.POSITIVE_INFINITY,
-        input: createReadStream(transcriptPath, { encoding: "utf8" }),
-      });
-      for await (const line of transcriptLines) {
-        // App Server 会过滤内部 Skill 消息，只在 Codex transcript 中恢复其名称。
-        collectTranscriptLineSkills(line, skillNamesByTurnId);
-      }
-    }
-  } catch {
-    return new Map();
+  const cacheKey = `${codexHome}\0${threadId}`;
+  const cache = getTranscriptThreadCache(cacheKey);
+  if (cache.pendingRead !== undefined) {
+    return cache.pendingRead;
   }
 
-  return new Map([...skillNamesByTurnId].map(([turnId, skillNames]) => [turnId, [...skillNames]]));
+  const pendingRead = readCachedCodexTranscriptTurnSkills(cache, transcriptPattern);
+  cache.pendingRead = pendingRead;
+  try {
+    return await pendingRead;
+  } finally {
+    if (cache.pendingRead === pendingRead) {
+      cache.pendingRead = undefined;
+    }
+  }
 }
