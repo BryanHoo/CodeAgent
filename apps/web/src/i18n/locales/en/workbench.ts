@@ -52,6 +52,7 @@ export const workbench = {
     attachmentReadFailed: "Unable to read attachment",
     attachmentUploadFailed: "Unable to upload attachment",
     baseBranchReview: "Review against a base branch",
+    cancelPlanMode: "Cancel plan mode",
     cancelQueued: "Cancel queued message: {{summary}}",
     cancelQueuedTooltip: "Cancel queued message",
     commandGroup: "Commands",
@@ -69,6 +70,7 @@ export const workbench = {
     noModels: "No models available",
     operationFailed: "Operation failed. Please retry.",
     placeholder: "Tell CodeAgent what you want to accomplish",
+    planMode: "Plan",
     projectPath: "Project path",
     queueMessage: "Queue message",
     queuedMessages: "Queued messages",
@@ -110,6 +112,10 @@ export const workbench = {
     initialize: {
       description: "Create an AGENTS.md file with Codex guidance",
       label: "Initialize",
+    },
+    plan: {
+      description: "Analyze the task and propose an implementation plan first",
+      label: "Plan",
     },
     review: {
       description: "Review uncommitted changes or compare against a branch",

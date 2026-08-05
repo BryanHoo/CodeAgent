@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { changeAppLanguage } from "../../../i18n/i18n.js";
 import {
   applyApprovalMode,
+  createComposerTurnOptions,
   deriveComposerActions,
   deriveComposerInputAvailability,
   deriveComposerState,
@@ -63,6 +64,20 @@ describe("WorkbenchComposer", () => {
   it("uses concise placeholders for new and existing tasks", () => {
     expect(resolveComposerPlaceholder(undefined)).toBe("告诉 CodeAgent 你想完成什么");
     expect(resolveComposerPlaceholder("task-1")).toBe("输入后续要求");
+  });
+
+  it("adds plan mode only to the active Turn options", () => {
+    expect(createComposerTurnOptions(task.settings, model.id, "high", true)).toEqual({
+      ...task.settings,
+      collaborationMode: "plan",
+      model: model.id,
+      reasoningEffort: "high",
+    });
+    expect(createComposerTurnOptions(task.settings, model.id, "high", false)).toEqual({
+      ...task.settings,
+      model: model.id,
+      reasoningEffort: "high",
+    });
   });
 
   it("resolves Composer placeholders in English", async () => {

@@ -22,6 +22,7 @@ import {
   AgentTaskSchema,
   AgentTaskSettingsResponseSchema,
   AgentTaskSettingsSchema,
+  AgentTurnOptionsSchema,
   AddProjectRequestSchema,
   AddProjectResponseSchema,
   ArchiveAgentTaskRequestSchema,
@@ -1078,6 +1079,16 @@ describe("project protocol", () => {
     expect(Value.Check(AgentAttachmentSchema, attachment)).toBe(true);
     expect(Value.Check(AgentAttachmentUploadResponseSchema, { attachment })).toBe(true);
     expect(Value.Check(AgentPromptInputSchema, prompt)).toBe(true);
+    const planTurnOptions = {
+      approvalPolicy: "on-request",
+      approvalsReviewer: "user",
+      collaborationMode: "plan",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "workspace-write",
+    };
+    expect(Value.Check(AgentTurnOptionsSchema, planTurnOptions)).toBe(true);
+    expect(Value.Check(AgentTaskSettingsSchema, planTurnOptions)).toBe(false);
     expect(
       Value.Check(AgentPromptInputSchema, {
         attachments: [{ id: attachment.id }],

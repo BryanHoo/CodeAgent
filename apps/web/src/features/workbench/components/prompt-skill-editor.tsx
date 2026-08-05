@@ -109,6 +109,15 @@ export function insertPromptSkill(
   ]);
 }
 
+export function removePromptSlashCommand(
+  content: PromptSkillContent,
+  slashCommand: Pick<PromptSlashCommand, "end" | "start">,
+): PromptSkillContent {
+  const [before] = splitPromptSkillContent(content, slashCommand.start);
+  const [, after] = splitPromptSkillContent(content, slashCommand.end);
+  return normalizePromptSkillContent([...before, ...after]);
+}
+
 export function removePromptSkill(
   content: PromptSkillContent,
   skillId: string,

@@ -155,7 +155,7 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   const commandMenu = page.getByRole("listbox", { name: "输入命令" });
   await expect(commandMenu).toBeVisible();
   expect(await commandMenu.evaluate((menu) => menu.closest("form") === null)).toBe(true);
-  await expect(commandMenu.getByRole("option")).toHaveCount(6);
+  await expect(commandMenu.getByRole("option")).toHaveCount(7);
   await expect(commandMenu.getByRole("option", { name: /代码审查/u })).toHaveAttribute(
     "data-active",
     "true",
@@ -184,12 +184,12 @@ test("runs official task actions from the slash command menu", async ({ page }) 
       }),
     )
     .toEqual(["hidden", "ellipsis", "nowrap"]);
-  for (const label of ["初始化", "压缩", "复制"]) {
+  for (const label of ["初始化", "压缩", "复制", "计划"]) {
     await expect(commandMenu.getByRole("option", { name: new RegExp(label, "u") })).toBeVisible();
   }
   await expect(commandMenu.getByRole("option", { name: /副任务|反馈/u })).toHaveCount(0);
 
-  for (let movementIndex = 0; movementIndex < 5; movementIndex += 1) {
+  for (let movementIndex = 0; movementIndex < 6; movementIndex += 1) {
     await prompt.press("ArrowDown");
   }
   await expect(commandMenu.getByRole("option", { name: /Documentation writer/u })).toHaveAttribute(
@@ -836,6 +836,25 @@ test("submits host attachments, approval policy, model, and reasoning effort thr
   await expect.poll(() => previewRequests).toHaveLength(1);
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   const commandMenu = page.getByRole("listbox", { name: "输入命令" });
+  await prompt.fill("/plan");
+  await expect(commandMenu.getByRole("option", { name: /计划/u })).toBeVisible();
+  await prompt.press("Enter");
+  const planModeTag = page.getByRole("button", { name: "取消计划模式" });
+  await expect(planModeTag).toBeVisible();
+  await expect
+    .poll(() =>
+      sandboxSelect.evaluate(
+        (element) => element.nextElementSibling?.hasAttribute("data-plan-mode") ?? false,
+      ),
+    )
+    .toBe(true);
+  await planModeTag.hover();
+  await expect(planModeTag.locator("svg").last()).toHaveCSS("opacity", "1");
+  await planModeTag.click();
+  await expect(planModeTag).toHaveCount(0);
+  await prompt.fill("/plan");
+  await prompt.press("Enter");
+  await expect(page.getByRole("button", { name: "取消计划模式" })).toBeVisible();
   await prompt.fill("/security");
   await expect(commandMenu.getByRole("option", { name: /Security review/u })).toBeVisible();
   await prompt.press("Enter");
@@ -870,6 +889,7 @@ test("submits host attachments, approval policy, model, and reasoning effort thr
     options: {
       approvalPolicy: "on-request",
       approvalsReviewer: "auto_review",
+      collaborationMode: "plan",
       model: "gpt-5.6-terra",
       reasoningEffort: "low",
       sandboxMode: "danger-full-access",

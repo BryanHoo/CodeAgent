@@ -463,6 +463,18 @@ export class CodexAgentProvider implements AgentProvider {
       await this.#client.request("turn/start", {
         approvalPolicy: options.approvalPolicy,
         approvalsReviewer: options.approvalsReviewer,
+        ...(options.collaborationMode === "plan"
+          ? {
+              collaborationMode: {
+                mode: "plan",
+                settings: {
+                  developer_instructions: null,
+                  model: options.model,
+                  reasoning_effort: options.reasoningEffort,
+                },
+              },
+            }
+          : {}),
         effort: options.reasoningEffort,
         input: codexInput,
         model: options.model,

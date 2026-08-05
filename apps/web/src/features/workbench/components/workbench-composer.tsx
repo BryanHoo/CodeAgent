@@ -44,6 +44,7 @@ import { HostAttachmentPickerDialog } from "./host-attachment-picker-dialog.js";
 import {
   insertPromptSkill,
   isPromptSkillContentEmpty,
+  removePromptSlashCommand,
   toPromptSkillSubmission,
   type PromptSkillContent,
   type PromptSkillEditorHandle,
@@ -93,6 +94,21 @@ import {
   startTaskReview,
   steerPromptTurn,
 } from "../composer-state.js";
+
+export function createComposerTurnOptions(
+  settings: AgentTaskSettings,
+  model: string,
+  reasoningEffort: string | undefined,
+  planModeEnabled: boolean,
+): AgentTurnOptions {
+  return {
+    ...settings,
+    ...(planModeEnabled ? { collaborationMode: "plan" as const } : {}),
+    model,
+    reasoningEffort: reasoningEffort ?? settings.reasoningEffort,
+  };
+}
+
 type WorkbenchComposerProps = Readonly<{
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentMutationClient;
@@ -183,6 +199,7 @@ export function WorkbenchComposer({
   const [promptContent, setPromptContent] = useState<PromptSkillContent>(
     initialComposerDraft.content,
   );
+  const [planModeState, setPlanModeState] = useState<Readonly<{ scope: string }>>();
   const [queuedPrompts, setQueuedPrompts] = useState<readonly QueuedComposerPrompt[]>(
     initialComposerDraft.queuedPrompts,
   );
@@ -231,6 +248,7 @@ export function WorkbenchComposer({
   const promptSubmission = toPromptSkillSubmission(promptContent);
   const activeSettings =
     settingsOverride?.scope === routeScope ? settingsOverride.settings : settings;
+  const planModeEnabled = planModeState?.scope === routeScope;
   const selectedModel =
     models.find((model) => model.id === activeSettings.model) ??
     models.find((model) => model.isDefault) ??
@@ -531,11 +549,12 @@ export function WorkbenchComposer({
       }
     }
 
-    const turnOptions: AgentTurnOptions = {
-      ...activeSettings,
-      model: selectedModel.id,
-      reasoningEffort: selectedReasoningEffort,
-    };
+    const turnOptions = createComposerTurnOptions(
+      activeSettings,
+      selectedModel.id,
+      selectedReasoningEffort,
+      planModeEnabled,
+    );
     const turnAttempt = resolveIdempotencyAttempt(
       startTurnAttempt.current,
       JSON.stringify({ input, options: turnOptions }),
@@ -671,6 +690,23 @@ export function WorkbenchComposer({
     if (!getCommandAvailability(command).available) {
       return;
     }
+    if (command.action === "plan") {
+      const slashCommand = commandSlashCommand;
+      if (slashCommand === undefined) {
+        return;
+      }
+      const currentContent = skillEditorRef.current?.getContent() ?? promptContent;
+      replacePromptContent(
+        removePromptSlashCommand(currentContent, slashCommand),
+        slashCommand.start,
+      );
+      setPlanModeState({ scope: routeScope });
+      closeCommandMenu();
+      setCommandNotice(undefined);
+      focusEditor(slashCommand.start);
+      return;
+    }
+
     setCommandQuery("");
     setCommandSlashCommand(undefined);
     setCommandNotice(undefined);
@@ -914,6 +950,9 @@ export function WorkbenchComposer({
       modelsError={modelsError}
       modelsPending={modelsPending}
       mutationError={mutationError}
+      onPlanModeRemove={() => {
+        setPlanModeState(undefined);
+      }}
       onAttachmentsChange={handleAttachmentsChange}
       onExecuteCommand={(command) => {
         void executePromptCommand(command);
@@ -959,6 +998,7 @@ export function WorkbenchComposer({
         setMutationError(error);
       }}
       projectPath={projectPath}
+      planModeEnabled={planModeEnabled}
       promptContent={promptContent}
       promptSubmissionText={promptSubmission.text}
       queuedPrompts={queuedPrompts}

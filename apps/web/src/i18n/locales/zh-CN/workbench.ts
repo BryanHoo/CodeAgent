@@ -51,6 +51,7 @@ export const workbench = {
     attachmentReadFailed: "附件读取失败",
     attachmentUploadFailed: "附件上传失败",
     baseBranchReview: "基于基础分支进行审查",
+    cancelPlanMode: "取消计划模式",
     cancelQueued: "取消排队：{{summary}}",
     cancelQueuedTooltip: "取消排队",
     commandGroup: "命令",
@@ -68,6 +69,7 @@ export const workbench = {
     noModels: "暂无可用模型",
     operationFailed: "操作失败，请重试",
     placeholder: "告诉 CodeAgent 你想完成什么",
+    planMode: "计划",
     projectPath: "项目路径",
     queueMessage: "排队消息",
     queuedMessages: "已排队消息",
@@ -109,6 +111,10 @@ export const workbench = {
     initialize: {
       description: "创建包含 Codex 说明的 AGENTS.md 文件",
       label: "初始化",
+    },
+    plan: {
+      description: "先分析任务并制定实施计划",
+      label: "计划",
     },
     review: {
       description: "审查未暂存的更改，或与某个分支进行比较",

@@ -1728,6 +1728,7 @@ describe("CodexAgentProvider", () => {
         {
           approvalPolicy: "on-request",
           approvalsReviewer: "user",
+          collaborationMode: "plan",
           model: "gpt-5.6-sol",
           reasoningEffort: "high",
           sandboxMode: "workspace-write",
@@ -1746,6 +1747,14 @@ describe("CodexAgentProvider", () => {
         params: {
           approvalPolicy: "on-request",
           approvalsReviewer: "user",
+          collaborationMode: {
+            mode: "plan",
+            settings: {
+              developer_instructions: null,
+              model: "gpt-5.6-sol",
+              reasoning_effort: "high",
+            },
+          },
           effort: "high",
           input: [
             {

@@ -1049,6 +1049,9 @@ export const AgentTaskSettingsSchema = Type.Union([
 
 export type AgentTaskSettings = Readonly<Static<typeof AgentTaskSettingsSchema>>;
 
+export const AgentCollaborationModeSchema = Type.Literal("plan");
+export type AgentCollaborationMode = Readonly<Static<typeof AgentCollaborationModeSchema>>;
+
 const AgentGlobalSettingProperties = {
   commitMessageModel: Type.String({ minLength: 1 }),
   commitMessagePrompt: Type.String({ maxLength: 4_000 }),
@@ -1119,7 +1122,30 @@ export const AgentTaskSettingsResponseSchema = Type.Object(
 
 export type AgentTaskSettingsResponse = Readonly<Static<typeof AgentTaskSettingsResponseSchema>>;
 
-export const AgentTurnOptionsSchema = AgentTaskSettingsSchema;
+const AgentTurnOptionProperties = {
+  collaborationMode: Type.Optional(AgentCollaborationModeSchema),
+  ...AgentTaskSettingProperties,
+};
+
+// Collaboration mode only controls Turn execution and must not enter persisted Task settings.
+export const AgentTurnOptionsSchema = Type.Union([
+  Type.Object(
+    {
+      approvalPolicy: AgentApprovalPolicySchema,
+      approvalsReviewer: Type.Literal("user"),
+      ...AgentTurnOptionProperties,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      approvalPolicy: Type.Literal("on-request"),
+      approvalsReviewer: Type.Literal("auto_review"),
+      ...AgentTurnOptionProperties,
+    },
+    { additionalProperties: false },
+  ),
+]);
 export type AgentTurnOptions = Readonly<Static<typeof AgentTurnOptionsSchema>>;
 
 export const AgentReasoningEffortOptionSchema = Type.Object(

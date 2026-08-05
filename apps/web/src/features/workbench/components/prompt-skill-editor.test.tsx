@@ -7,6 +7,7 @@ import {
   createPromptSkillContent,
   insertPromptSkill,
   PromptSkillEditor,
+  removePromptSlashCommand,
   removePromptSkill,
   serializePromptSkillContent,
   toPromptSkillSubmission,
@@ -71,5 +72,17 @@ describe("prompt skill editor model", () => {
     expect(
       serializePromptSkillContent(removePromptSkill(withDocumentation, securitySkill.id)),
     ).toBe(" 说明 $documentation-writer");
+  });
+
+  it("removes only the selected Slash command while preserving Skill tokens", () => {
+    const initial = insertPromptSkill(
+      createPromptSkillContent("保留 /security 后执行 /plan 尾部"),
+      { end: 12, start: 3 },
+      securitySkill,
+    );
+
+    expect(
+      serializePromptSkillContent(removePromptSlashCommand(initial, { end: 29, start: 23 })),
+    ).toBe("保留 $review-security 后执行 尾部");
   });
 });

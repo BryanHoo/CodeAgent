@@ -2,7 +2,7 @@ import type { AgentCapabilities, AgentSkill } from "@code-agent/protocol";
 
 import { i18n } from "../../../i18n/i18n.js";
 
-export type PromptCommandAction = "compact" | "fork" | "initialize" | "review";
+export type PromptCommandAction = "compact" | "fork" | "initialize" | "plan" | "review";
 
 export type PromptCommandItem = Readonly<{
   action: PromptCommandAction;
@@ -43,6 +43,13 @@ export function getPromptCommandItems(): readonly PromptCommandItem[] {
       keywords: ["fork", "copy", "复制", "任务"],
       label: translate("promptCommand.fork.label"),
     },
+    {
+      action: "plan",
+      description: translate("promptCommand.plan.description"),
+      id: "plan",
+      keywords: ["plan", "planning", "计划", "规划"],
+      label: translate("promptCommand.plan.label"),
+    },
   ];
 }
 
@@ -57,7 +64,12 @@ export function getPromptCommandAvailability(
       reason: i18n.t("promptCommand.availability.notReady", { ns: "workbench" }),
     };
   }
-  if (item.action !== "initialize" && item.action !== "review" && !hasTask) {
+  if (
+    item.action !== "initialize" &&
+    item.action !== "plan" &&
+    item.action !== "review" &&
+    !hasTask
+  ) {
     return {
       available: false,
       reason: i18n.t("promptCommand.availability.noTask", { ns: "workbench" }),
@@ -71,7 +83,9 @@ export function getPromptCommandAvailability(
         ? capabilities.turns.review && (hasTask || capabilities.tasks.start)
         : item.action === "compact"
           ? capabilities.turns.compact
-          : capabilities.tasks.fork;
+          : item.action === "plan"
+            ? capabilities.turns.start
+            : capabilities.tasks.fork;
   return available
     ? { available: true }
     : {

@@ -21,6 +21,7 @@ import {
   Folder,
   GitBranch,
   GitFork,
+  Lightbulb,
   SendHorizontal,
   Sparkles,
   X,
@@ -42,6 +43,7 @@ import {
   PromptInput,
   PromptInputActionAddAttachments,
   PromptInputBody,
+  PromptInputButton,
   PromptInputCommand,
   PromptInputCommandEmpty,
   PromptInputCommandGroup,
@@ -94,7 +96,37 @@ function PromptCommandIcon({ action }: Readonly<{ action: PromptCommandAction }>
       return <CircleGauge aria-hidden="true" className={className} />;
     case "fork":
       return <GitFork aria-hidden="true" className={className} />;
+    case "plan":
+      return <Lightbulb aria-hidden="true" className={className} />;
   }
+}
+
+export function PlanModeTag({
+  disabled,
+  onRemove,
+}: Readonly<{ disabled: boolean; onRemove: () => void }>) {
+  const { t } = useTranslation("workbench");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <PromptInputButton
+          aria-label={t("composer.cancelPlanMode")}
+          className="group/plan-mode gap-1 px-1.5 text-foreground max-workbench:gap-0.5"
+          data-plan-mode=""
+          disabled={disabled}
+          onClick={onRemove}
+        >
+          <Lightbulb aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+          <span className="max-workbench:hidden">{t("composer.planMode")}</span>
+          <X
+            aria-hidden="true"
+            className="size-3 shrink-0 opacity-0 transition-opacity group-hover/plan-mode:opacity-100 group-focus-visible/plan-mode:opacity-100"
+          />
+        </PromptInputButton>
+      </TooltipTrigger>
+      <TooltipContent>{t("composer.cancelPlanMode")}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 function ComposerAttachments() {
@@ -160,6 +192,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   onExecuteReview: (target: AgentReviewTarget) => void;
   onInterrupt: () => void;
   onOpenReviewBranches: () => void;
+  onPlanModeRemove: () => void;
   onPromptChange: (
     content: PromptSkillContent,
     serializedText: string,
@@ -172,6 +205,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   onSubmit: (message: PromptInputMessage) => void;
   onViewError: (error: Error) => void;
   projectPath: string;
+  planModeEnabled: boolean;
   promptContent: PromptSkillContent;
   promptSubmissionText: string;
   queuedPrompts: readonly QueuedComposerPrompt[];
@@ -496,6 +530,12 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                 <option value="workspace-write">{t("settings:sandbox.workspaceWrite")}</option>
                 <option value="danger-full-access">{t("settings:sandbox.dangerFullAccess")}</option>
               </PromptInputSelect>
+              {props.planModeEnabled ? (
+                <PlanModeTag
+                  disabled={props.turnControlsDisabled}
+                  onRemove={props.onPlanModeRemove}
+                />
+              ) : null}
             </PromptInputTools>
             {/* 移动端压缩选择器的展示宽度，保持所有常用操作始终位于同一行。 */}
             <div className="flex min-w-0 items-center gap-1 max-workbench:shrink-0 max-workbench:gap-0.5">
