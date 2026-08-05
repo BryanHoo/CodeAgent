@@ -317,7 +317,11 @@ describe("TaskTimeline", () => {
     expect(markup).toContain("size-12");
     expect(markup).toContain("text-xl");
     expect(markup).toContain("mt-5");
+    expect(markup).toContain("flex-wrap");
+    expect(markup).toContain("items-center");
+    expect(markup).toContain("justify-center");
     expect(markup).toContain("underline-offset-4");
+    expect(markup).not.toContain("align-middle");
     expect(markup).not.toContain("选择一个任务查看历史。");
     expect(markup).not.toContain("lucide-folder-git-2");
     expect(markup).not.toContain("lucide-cloud");

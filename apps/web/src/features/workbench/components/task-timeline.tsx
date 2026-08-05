@@ -168,10 +168,10 @@ function EmptyTimeline({
           className="mx-auto size-12 text-muted-foreground/55"
           strokeWidth={1.35}
         />
-        <h2 className="mt-5 text-balance text-xl font-normal leading-tight text-foreground">
+        <h2 className="mt-5 flex flex-wrap items-center justify-center text-balance text-xl font-normal leading-tight text-foreground">
           {i18n.t("timeline.emptyBefore", { ns: "conversation" })}
-          <span className="group relative mx-1 inline-block max-w-full rounded-control align-baseline focus-within:shadow-focus">
-            {/* 普通文本保持标题基线；透明原生选择器覆盖其上，保留完整点击与键盘交互。 */}
+          <span className="group relative mx-1 inline-block max-w-full rounded-control focus-within:shadow-focus">
+            {/* 三段标题由父级居中对齐；透明原生选择器覆盖名称，保留完整交互。 */}
             <span
               aria-hidden="true"
               className="block max-w-full truncate whitespace-pre font-sans font-normal text-foreground underline decoration-current/35 underline-offset-4 transition-colors group-hover:decoration-current"

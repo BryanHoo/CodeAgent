@@ -470,27 +470,29 @@ test("sizes and vertically aligns the empty-chat project selector", async ({ pag
       !(wrapper instanceof HTMLElement) ||
       !(heading instanceof HTMLHeadingElement)
     ) {
-      throw new Error("项目选择器缺少用于基线对齐的可见标签");
+      throw new Error("项目选择器缺少用于垂直居中的可见标签");
     }
     const headingStyle = getComputedStyle(heading);
     const labelStyle = getComputedStyle(label);
     const labelBounds = label.getBoundingClientRect();
     return {
+      headingAlignItems: headingStyle.alignItems,
+      headingDisplay: headingStyle.display,
       headingLineHeight: headingStyle.lineHeight,
       labelLineHeight: labelStyle.lineHeight,
       labelVisibility: labelStyle.visibility,
       labelWidth: labelBounds.width,
       selectOpacity: getComputedStyle(select).opacity,
       selectWidth: select.getBoundingClientRect().width,
-      wrapperVerticalAlign: getComputedStyle(wrapper).verticalAlign,
     };
   });
 
+  expect(geometry.headingDisplay).toBe("flex");
+  expect(geometry.headingAlignItems).toBe("center");
   expect(Math.abs(geometry.selectWidth - geometry.labelWidth)).toBeLessThanOrEqual(1);
   expect(geometry.labelVisibility).toBe("visible");
   expect(geometry.selectOpacity).toBe("0");
   expect(geometry.labelLineHeight).toBe(geometry.headingLineHeight);
-  expect(geometry.wrapperVerticalAlign).toBe("baseline");
 });
 
 test("toggles project tasks from the project name without navigation", async ({ page }) => {
