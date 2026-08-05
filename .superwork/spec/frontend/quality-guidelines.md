@@ -14,6 +14,7 @@
 - 检查键盘操作、焦点、可访问名称、空状态、错误状态与慢连接状态。
 - 移动工作台 E2E 至少覆盖 `320px` 最窄竖屏和手机横屏；页面 viewport 必须禁用用户缩放并使用 `viewport-fit=cover`，根容器必须使用 `dvh` 并承接 `safe-area-inset-*`；文档及 Composer 等内部控件不得横向或纵向溢出动态视口，Composer 常用控件在手机宽度下必须保持单行，主要移动操作的触控目标不得小于 `44px`。
 - 流式输出和长历史变更检查渲染次数、DOM 规模及布局稳定性。
+- Agent 与命令终端输出只允许把 ANSI SGR 转换为 React 文本样式节点，不得自动识别链接或注入解析器生成的 HTML；回归测试必须覆盖 ANSI 样式保留以及 URL、`mailto:` 按普通文本渲染。
 - `pnpm test:performance` 必须以固定 10,000 Item 历史验证归一化、虚拟挂载规模与渲染预算，以固定高频 Delta 验证 Item 级通知合并，并通过显式 GC 验证重复 Store 生命周期 Heap；规模与阈值只维护在 `tests/performance-budgets.json`。
 - Web 语法高亮必须使用 `shiki/core`、JavaScript Regex Engine、项目语言白名单和 `github-light`/`github-dark` 两个主题；高亮器、源码查看器与 Diff Viewer 只在对应内容或交互出现后动态加载，生产构建不得重新引入完整 `shiki`、全量主题或 Oniguruma WASM。
 - 测试断言用户可观察行为，不复制实现细节。

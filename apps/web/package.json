@@ -15,7 +15,7 @@
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-virtual": "catalog:",
-    "ansi-to-react": "catalog:",
+    "anser": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "i18next": "catalog:",
@@ -23,7 +23,6 @@
     "radix-ui": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "shadcn": "catalog:",
     "react-i18next": "catalog:",
     "shiki": "catalog:",
     "sonner": "catalog:",
@@ -38,6 +37,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "shadcn": "catalog:",
     "tailwindcss": "catalog:",
     "vite": "catalog:"
   }

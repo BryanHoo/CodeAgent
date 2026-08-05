@@ -961,10 +961,10 @@ export async function createCodeAgentServer(
     await app.register(fastifyStatic, {
       cacheControl: false,
       root: staticRoot,
-      setHeaders: (response, filePath) => {
+      setHeaders: (reply, filePath) => {
         const [topLevelDirectory] = relative(staticRoot, filePath).split(sep);
         // Vite 的 assets 目录使用内容哈希命名，可安全长期缓存；HTML 等入口继续重新验证。
-        response.setHeader(
+        reply.header(
           "Cache-Control",
           topLevelDirectory === "assets"
             ? "public, max-age=31536000, immutable"

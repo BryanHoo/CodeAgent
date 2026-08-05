@@ -1,4 +1,4 @@
-import * as AnsiModule from "ansi-to-react";
+import Anser from "anser";
 import { Check, Copy } from "lucide-react";
 import {
   createContext,
@@ -8,17 +8,12 @@ import {
   useRef,
   useState,
   type ButtonHTMLAttributes,
-  type ComponentType,
+  type CSSProperties,
   type HTMLAttributes,
 } from "react";
 
 import { useTranslation } from "../../i18n/i18n.js";
 import { Button } from "../ui/button.js";
-
-type AnsiComponent = ComponentType<Readonly<{ children?: string; className?: string }>>;
-
-const ansiDefault = AnsiModule.default as AnsiComponent | { default: AnsiComponent };
-const Ansi = typeof ansiDefault === "function" ? ansiDefault : ansiDefault.default;
 
 type TerminalContextValue = Readonly<{
   autoScroll: boolean;
@@ -27,6 +22,49 @@ type TerminalContextValue = Readonly<{
 }>;
 
 const TerminalContext = createContext<TerminalContextValue | null>(null);
+
+function toAnsiStyle(entry: Anser.AnserJsonEntry): CSSProperties {
+  const decorations = new Set(entry.decorations);
+  const foreground = entry.fg_truecolor || entry.fg;
+  const background = entry.bg_truecolor || entry.bg;
+  const reversed = decorations.has("reverse");
+  const effectiveForeground = reversed ? background : foreground;
+  const effectiveBackground = reversed ? foreground : background;
+  const textDecorations = [
+    decorations.has("underline") ? "underline" : null,
+    decorations.has("strikethrough") ? "line-through" : null,
+  ].filter((value): value is string => value !== null);
+
+  return {
+    ...(effectiveBackground ? { backgroundColor: `rgb(${effectiveBackground})` } : {}),
+    ...(effectiveForeground ? { color: `rgb(${effectiveForeground})` } : {}),
+    ...(decorations.has("bold") ? { fontWeight: 700 } : {}),
+    ...(decorations.has("dim") ? { opacity: 0.5 } : {}),
+    ...(decorations.has("hidden") ? { visibility: "hidden" } : {}),
+    ...(decorations.has("italic") ? { fontStyle: "italic" } : {}),
+    ...(textDecorations.length > 0 ? { textDecorationLine: textDecorations.join(" ") } : {}),
+  };
+}
+
+function AnsiOutput({ output }: Readonly<{ output: string }>) {
+  const entries = useMemo(() => Anser.ansiToJson(output, { remove_empty: true }), [output]);
+
+  return (
+    <span className="block whitespace-pre-wrap break-words">
+      {entries.map((entry, index) => {
+        // 只把 ANSI SGR 转成 React 样式节点，绝不调用解析器的 linkify/HTML 接口。
+        const style = toAnsiStyle(entry);
+        return Object.keys(style).length === 0 ? (
+          entry.content
+        ) : (
+          <span key={`${index.toString()}:${entry.content.length.toString()}`} style={style}>
+            {entry.content}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
 
 function useTerminalContext(): TerminalContextValue {
   const context = useContext(TerminalContext);
@@ -187,7 +225,7 @@ export function TerminalContent({ children, className = "", ...props }: Terminal
       ref={contentRef}
       {...props}
     >
-      <Ansi className="block whitespace-pre-wrap break-words">{output}</Ansi>
+      <AnsiOutput output={output} />
       {isStreaming ? (
         <span
           aria-label={t("aiElements.streamingOutput")}
