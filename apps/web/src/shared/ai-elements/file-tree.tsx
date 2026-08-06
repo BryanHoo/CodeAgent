@@ -216,6 +216,9 @@ export function FileTreeFile({
       className={`group/file-tree-node flex min-h-7 cursor-pointer items-center gap-1.5 rounded-control px-1.5 transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none ${isSelected ? "bg-control" : ""} ${className}`}
       onClick={selectFile}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) {
+          return;
+        }
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           selectFile();

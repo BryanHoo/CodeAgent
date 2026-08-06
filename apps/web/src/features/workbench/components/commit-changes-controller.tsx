@@ -2,6 +2,7 @@ import type { CommitProjectChangesResponse, ProjectGitStatus } from "@code-agent
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 
+import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 import {
   projectCommitChangesMutationOptions,
@@ -15,6 +16,7 @@ type CommitChangesControllerProps = Readonly<{
   client: CodeAgentWorkbenchClient;
   gitStatus: ProjectGitStatus;
   onClose: () => void;
+  onOpenFileDiff: (change: AgentFileChange) => void;
   onSuccess: (message: string) => void;
   projectId: string;
 }>;
@@ -30,6 +32,7 @@ export function CommitChangesController({
   client,
   gitStatus,
   onClose,
+  onOpenFileDiff,
   onSuccess,
   projectId,
 }: CommitChangesControllerProps) {
@@ -64,6 +67,7 @@ export function CommitChangesController({
 
   return (
     <CommitChangesDialog
+      client={client}
       error={repositoryStatusQuery.error ?? commitMutation.error ?? messageMutation.error}
       gitStatus={activeGitStatus}
       isCommitting={commitMutation.isPending}
@@ -75,6 +79,9 @@ export function CommitChangesController({
         const response = await commitMutation.mutateAsync(request);
         void queryClient.invalidateQueries({
           queryKey: ["projects", projectId, "git-status"],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["projects", projectId, "git-history"],
         });
         const successMessageKey = getCommitSuccessMessageKey(response);
         if (successMessageKey !== null) {
@@ -89,12 +96,14 @@ export function CommitChangesController({
         const response = await messageMutation.mutateAsync(request);
         return response.message;
       }}
+      onOpenFileDiff={onOpenFileDiff}
       onSelectRepository={(repository) => {
         setResult(null);
         messageMutation.reset();
         commitMutation.reset();
         setSelectedRepository(repository);
       }}
+      projectId={projectId}
       repositories={repositories}
       result={result}
       selectedRepository={effectiveRepository}

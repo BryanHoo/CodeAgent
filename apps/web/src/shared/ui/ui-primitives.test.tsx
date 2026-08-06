@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { Button } from "./button.js";
 import { ButtonGroup } from "./button-group.js";
+import { Checkbox } from "./checkbox.js";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./collapsible.js";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -21,6 +23,8 @@ import {
   DropdownMenuTrigger,
 } from "./dropdown-menu.js";
 import { Input } from "./input.js";
+import { InputGroup, InputGroupAddon, InputGroupTextarea } from "./input-group.js";
+import { Sheet, SheetContent, SheetTitle } from "./sheet.js";
 import { Tooltip, TooltipProvider, TooltipTrigger } from "./tooltip.js";
 
 describe("shadcn UI primitives", () => {
@@ -59,6 +63,22 @@ describe("shadcn UI primitives", () => {
     expect(/<input class="([^"]+)"/u.exec(markup)?.[1]).toBe("size-4 shrink-0");
   });
 
+  it("composes a one-row multiline input with an inline action", () => {
+    const markup = renderToStaticMarkup(
+      <InputGroup>
+        <InputGroupTextarea aria-label="提交信息" rows={1} value={"标题\n正文"} readOnly />
+        <InputGroupAddon align="inline-end">
+          <Button type="button">生成</Button>
+        </InputGroupAddon>
+      </InputGroup>,
+    );
+
+    expect(markup).toContain('data-slot="input-group"');
+    expect(markup).toContain('data-slot="input-group-control"');
+    expect(markup).toContain('data-slot="input-group-addon"');
+    expect(markup).toContain("标题\n正文");
+  });
+
   it("composes tooltip and dialog triggers without replacing their button DOM", () => {
     const tooltipMarkup = renderToStaticMarkup(
       <TooltipProvider>
@@ -94,6 +114,41 @@ describe("shadcn UI primitives", () => {
 
     expect(markup).toContain("min-w-0");
     expect(markup).toContain("w-[calc(100%-2rem)]");
+  });
+
+  it("renders the project sheet and controlled checkbox primitives", () => {
+    const markup = renderToStaticMarkup(
+      <Sheet open>
+        <SheetContent aria-labelledby="sheet-title" side="right">
+          <SheetTitle id="sheet-title">提交变更</SheetTitle>
+          <Checkbox aria-label="选择文件" checked />
+          <Checkbox aria-label="部分选择" checked="indeterminate" />
+        </SheetContent>
+      </Sheet>,
+    );
+
+    expect(markup).toContain('data-slot="sheet-content"');
+    expect(markup).toContain("inset-y-0 right-0");
+    expect(markup).toContain('data-slot="checkbox"');
+    expect(markup).toContain('aria-label="选择文件"');
+    expect(markup).toContain('data-state="checked"');
+    expect(markup).toContain('aria-checked="mixed"');
+    expect(markup).toContain("data-[state=indeterminate]:bg-primary");
+  });
+
+  it("renders the project collapsible primitive with trigger and content slots", () => {
+    const markup = renderToStaticMarkup(
+      <Collapsible defaultOpen>
+        <CollapsibleTrigger>变更</CollapsibleTrigger>
+        <CollapsibleContent>文件列表</CollapsibleContent>
+      </Collapsible>,
+    );
+
+    expect(markup).toContain('data-slot="collapsible"');
+    expect(markup).toContain('data-slot="collapsible-trigger"');
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain('data-slot="collapsible-content"');
+    expect(markup).toContain("文件列表");
   });
 
   it("composes a portalled dropdown menu without replacing the trigger button", () => {

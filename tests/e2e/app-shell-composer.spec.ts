@@ -123,7 +123,7 @@ test("opens current-branch Git history beside the composer branch", async ({ pag
   await expect(dialog.getByText("apps/web commit 1", { exact: true })).toBeAttached();
   await expect(dialog.getByText("apps/web commit 1", { exact: true })).toBeHidden();
   releaseServerHistory?.();
-  await expect(dialog.getByText("packages/server commit 20")).toBeVisible();
+  await expect(dialog.getByText("packages/server commit 20", { exact: true })).toBeVisible();
   await expect(dialog.getByText("当前分支：release/server")).toBeVisible();
   const loadedDialogBox = await dialog.boundingBox();
   expect(loadedDialogBox?.height).toBe(initialDialogBox?.height);
@@ -1542,25 +1542,81 @@ test("generates a message and commits only selected files", async ({ page }) => 
       status: 201,
     });
   });
+  await page.route("**/v1/projects/code-agent/git/history*", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        branch: "feat/review-targets",
+        commits: [
+          {
+            authoredAt: "2026-08-06T08:30:00+08:00",
+            authorEmail: "developer@example.com",
+            authorName: "Developer",
+            sha: "f".repeat(40),
+            title: "feat(git): 展示提交抽屉历史",
+          },
+        ],
+        nextCursor: null,
+        repositories: [],
+        repository: null,
+        repositoryMode: "root",
+      },
+    });
+  });
 
   await page.goto("/p/code-agent/t/task-1");
   await page.getByRole("button", { name: "提交 17 个未提交变更" }).click();
   const dialog = page.getByRole("dialog", { name: "提交变更" });
   await expect(dialog).toBeVisible();
-  const fileDisclosure = dialog.getByRole("button", {
-    name: "选择文件，已选择 17/17 个文件",
-  });
-  await expect(fileDisclosure).toHaveAttribute("aria-expanded", "false");
-  await expect(dialog.getByRole("checkbox")).toHaveCount(0);
-  await fileDisclosure.click();
-  await expect(fileDisclosure).toHaveAttribute("aria-expanded", "true");
-
-  const fileList = dialog.locator('[data-commit-file-list=""]');
-  const allFilesCheckbox = fileList.getByRole("checkbox", { name: "全选文件" });
+  await expect(dialog).toHaveClass(/right-0/u);
+  const unstagedTree = dialog.getByRole("tree", { name: "未暂存" });
+  const allFilesCheckbox = dialog.getByRole("checkbox", { name: "未暂存", exact: true });
+  const generateMessageButton = dialog.getByRole("button", { name: "生成 message 信息" });
   await expect(allFilesCheckbox).toBeChecked();
+  await expect(generateMessageButton).toHaveCSS("height", "28px");
+  await expect(generateMessageButton).toHaveCSS("width", "28px");
+  await expect(generateMessageButton).toHaveText("");
+  const inputGroup = dialog.locator('[data-slot="input-group"]');
+  const generateIcon = generateMessageButton.locator("svg");
+  const [inputGroupBox, generateButtonBox, generateIconBox] = await Promise.all([
+    inputGroup.boundingBox(),
+    generateMessageButton.boundingBox(),
+    generateIcon.boundingBox(),
+  ]);
+  expect(
+    Math.abs(
+      (inputGroupBox?.x ?? 0) +
+        (inputGroupBox?.width ?? 0) -
+        (generateButtonBox?.x ?? 0) -
+        (generateButtonBox?.width ?? 0),
+    ),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(
+      (generateButtonBox?.x ?? 0) +
+        (generateButtonBox?.width ?? 0) / 2 -
+        (generateIconBox?.x ?? 0) -
+        (generateIconBox?.width ?? 0) / 2,
+    ),
+  ).toBeLessThanOrEqual(1);
+  await generateMessageButton.hover();
+  await expect(page.getByRole("tooltip")).toHaveText("生成 message 信息");
   const messageInput = dialog.getByRole("textbox", { name: "提交信息" });
-  const messageBoxBeforeScroll = await messageInput.boundingBox();
-  const scrollMetrics = await fileList.evaluate((element) => {
+  await expect(messageInput).toHaveJSProperty("tagName", "TEXTAREA");
+  const sheetBody = dialog.locator('[data-slot="commit-sheet-body"]');
+  const changesScroll = dialog.locator('[data-slot="commit-changes-scroll"]');
+  const historyScroll = dialog.locator('[data-slot="git-history-content"]');
+  const sheetMetrics = await dialog.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    overflowY: getComputedStyle(element).overflowY,
+    scrollHeight: element.scrollHeight,
+  }));
+  const bodyMetrics = await sheetBody.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    overflowY: getComputedStyle(element).overflowY,
+    scrollHeight: element.scrollHeight,
+  }));
+  const changesScrollMetrics = await changesScroll.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
     return {
       clientHeight: element.clientHeight,
@@ -1569,23 +1625,78 @@ test("generates a message and commits only selected files", async ({ page }) => 
       scrollTop: element.scrollTop,
     };
   });
-  const messageBoxAfterScroll = await messageInput.boundingBox();
-  expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
-  expect(scrollMetrics.overflowY).toBe("auto");
-  expect(scrollMetrics.scrollTop).toBeGreaterThan(0);
+  expect(sheetMetrics.scrollHeight).toBeLessThanOrEqual(sheetMetrics.clientHeight);
+  expect(sheetMetrics.overflowY).toBe("hidden");
+  expect(bodyMetrics.scrollHeight).toBeLessThanOrEqual(bodyMetrics.clientHeight);
+  expect(bodyMetrics.overflowY).toBe("hidden");
+  expect(changesScrollMetrics.scrollHeight).toBeGreaterThan(changesScrollMetrics.clientHeight);
+  expect(changesScrollMetrics.overflowY).toBe("auto");
+  expect(changesScrollMetrics.scrollTop).toBeGreaterThan(0);
+  await expect(historyScroll).toHaveCSS("overflow-y", "auto");
   expect(await dialog.evaluate((element) => element.scrollTop)).toBe(0);
-  expect(messageBoxAfterScroll?.y).toBe(messageBoxBeforeScroll?.y);
+  await expect(dialog.locator("header")).not.toContainText("feat/review-targets");
+  await expect(messageInput.locator("xpath=ancestor::section")).not.toContainText(
+    "feat/review-targets",
+  );
+  await expect(dialog.getByRole("button", { name: "当前分支历史" })).toContainText(
+    "feat/review-targets",
+  );
+  await expect(dialog.getByText("当前分支：feat/review-targets")).toHaveCount(0);
+  await expect(dialog.getByText("feat(git): 展示提交抽屉历史")).toBeVisible();
+  await changesScroll.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+
+  const changesTrigger = dialog.getByRole("button", { name: /变更/u });
+  const historyTrigger = dialog.getByRole("button", { name: "当前分支历史" });
+  await expect(changesTrigger).toHaveAttribute("aria-expanded", "true");
+  await changesTrigger.click();
+  await expect(changesTrigger).toHaveAttribute("aria-expanded", "false");
+  await expect(unstagedTree).not.toBeAttached();
+  await changesTrigger.click();
+  await expect(unstagedTree).toBeVisible();
+  await historyTrigger.click();
+  await expect(historyTrigger).toHaveAttribute("aria-expanded", "false");
+  await expect(historyScroll).not.toBeAttached();
+  await historyTrigger.click();
+  await expect(historyScroll).toBeVisible();
+
+  const packageFile = unstagedTree.getByRole("treeitem", { name: "package.json" });
+  await packageFile.click();
+  const fileDiffDialog = page.getByRole("dialog", { name: "package.json" });
+  await expect(fileDiffDialog).toBeVisible();
+  await expect(fileDiffDialog.locator(".file-diff-renderer")).toContainText("pnpm run dev");
+  await fileDiffDialog.getByRole("button", { name: "关闭文件 Diff" }).click();
+  await expect(fileDiffDialog).not.toBeAttached();
+  await expect(allFilesCheckbox).toBeChecked();
 
   await allFilesCheckbox.uncheck();
-  await expect(dialog.getByText("已选择 0 个文件")).toBeVisible();
-  const packageCheckbox = fileList.getByRole("checkbox", { name: /package\.json/u });
+  const packageCheckbox = unstagedTree.getByRole("checkbox", {
+    name: "未暂存: package.json",
+  });
   await expect(packageCheckbox).not.toBeChecked();
   await packageCheckbox.check();
-  await expect(dialog.getByText("已选择 1 个文件")).toBeVisible();
-  await dialog.getByRole("button", { name: "生成 message" }).click();
+  await generateMessageButton.click();
   await expect(messageInput).toHaveValue("feat(git): 生成选中文件提交");
+  await messageInput.fill("feat(git): 提交选中文件\n\n保留提交正文");
+  const messageMetrics = await messageInput.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    overflowY: getComputedStyle(element).overflowY,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(messageMetrics.scrollHeight).toBeGreaterThan(messageMetrics.clientHeight);
+  expect(messageMetrics.overflowY).toBe("auto");
   await messageInput.fill("feat(git): 提交选中文件");
-  await dialog.getByRole("button", { name: "提交并推送" }).click();
+  await expect(dialog.getByRole("button", { name: "提交", exact: true }).locator("svg")).toHaveCSS(
+    "width",
+    "14px",
+  );
+  await dialog.getByRole("button", { name: "选择提交方式" }).click();
+  await expect(page.getByRole("menuitem", { name: "提交并推送" }).locator("svg")).toHaveCSS(
+    "width",
+    "14px",
+  );
+  await page.getByRole("menuitem", { name: "提交并推送" }).click();
 
   await expect(dialog.getByText("提交已完成，但推送失败")).toBeVisible();
   expect(messageRequest).toEqual({ expectedSnapshot: snapshot, paths: ["package.json"] });
@@ -1596,6 +1707,9 @@ test("generates a message and commits only selected files", async ({ page }) => 
     paths: ["package.json"],
   });
   expect(commitIdempotencyKey).toBeTruthy();
+
+  await page.setViewportSize({ width: 320, height: 568 });
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
 
 for (const scenario of [
@@ -1619,12 +1733,30 @@ for (const scenario of [
         status: 201,
       });
     });
+    await page.route("**/v1/projects/code-agent/git/history*", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          branch: "feat/review-targets",
+          commits: [],
+          nextCursor: null,
+          repositories: [],
+          repository: null,
+          repositoryMode: "root",
+        },
+      });
+    });
 
     await page.goto("/p/code-agent/t/task-1");
     await page.getByRole("button", { name: /提交 \d+ 个未提交变更/u }).click();
     const dialog = page.getByRole("dialog", { name: "提交变更" });
     await dialog.getByRole("textbox", { name: "提交信息" }).fill("fix(git): 验证提交成功反馈");
-    await dialog.getByRole("button", { name: scenario.actionName, exact: true }).click();
+    if (scenario.actionName === "提交并推送") {
+      await dialog.getByRole("button", { name: "选择提交方式" }).click();
+      await page.getByRole("menuitem", { name: "提交并推送" }).click();
+    } else {
+      await dialog.getByRole("button", { name: scenario.actionName, exact: true }).click();
+    }
 
     await expect(dialog).not.toBeAttached();
     const toaster = page.locator("[data-sonner-toaster]");

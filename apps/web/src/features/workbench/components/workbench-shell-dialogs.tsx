@@ -52,6 +52,7 @@ export function WorkbenchShellDialogs({
     globalSettingsQuery,
     models,
     modelsQuery,
+    openFileDiff,
     projectOpenCapabilitiesQuery,
     projectRuntime,
     queryClient,
@@ -97,6 +98,7 @@ export function WorkbenchShellDialogs({
         <CommitChangesLauncher
           client={client}
           gitStatus={gitStatusQuery.data}
+          onOpenFileDiff={openFileDiff}
           projectId={projectId}
           ref={commitChangesLauncherRef}
         />

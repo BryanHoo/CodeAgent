@@ -11,6 +11,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 
 const LazyCommitChangesController = lazy(() =>
@@ -26,6 +27,7 @@ export type CommitChangesLauncherHandle = Readonly<{
 type CommitChangesLauncherProps = Readonly<{
   client: CodeAgentWorkbenchClient;
   gitStatus: ProjectGitStatus;
+  onOpenFileDiff: (change: AgentFileChange) => void;
   projectId: string;
 }>;
 

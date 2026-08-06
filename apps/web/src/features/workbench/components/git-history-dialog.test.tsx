@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { GitHistoryDialog } from "./git-history-dialog.js";
+import { GitHistoryContent } from "./git-history-list.js";
 
 function renderDialog(page: {
   branch: string | null;
@@ -35,6 +36,54 @@ function renderDialog(page: {
 }
 
 describe("GitHistoryDialog", () => {
+  it("renders reusable history content without a dialog shell", () => {
+    const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+    const markup = renderToStaticMarkup(
+      <GitHistoryContent
+        active
+        dateFormatter={dateFormatter}
+        panelId="embedded-history"
+        query={{
+          data: {
+            pages: [
+              {
+                branch: "main",
+                commits: [
+                  {
+                    authoredAt: "2026-08-06T08:30:00+08:00",
+                    authorEmail: "developer@example.com",
+                    authorName: "Developer",
+                    sha: "d".repeat(40),
+                    title: "refactor(git): 复用历史列表",
+                  },
+                ],
+                nextCursor: null,
+                repositories: [],
+                repository: null,
+                repositoryMode: "root",
+              },
+            ],
+          },
+          error: null,
+          fetchNextPage: () => undefined,
+          hasNextPage: false,
+          isFetchingNextPage: false,
+          isPending: false,
+          refetch: () => undefined,
+        }}
+      />,
+    );
+
+    expect(markup).toContain('id="embedded-history"');
+    expect(markup).toContain("refactor(git): 复用历史列表");
+    expect(markup).toContain("dddddddddddd");
+    expect(markup).toContain("已加载全部提交");
+    expect(markup).not.toContain('data-slot="dialog-content"');
+  });
+
   it("shows child repositories and keeps pagination inside the history content", () => {
     const markup = renderDialog({
       branch: "feat/apps-web",
