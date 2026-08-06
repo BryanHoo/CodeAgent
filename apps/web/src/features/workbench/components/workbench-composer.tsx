@@ -11,6 +11,7 @@ import {
 import { HostAttachmentPickerDialog } from "./host-attachment-picker-dialog.js";
 import { resolvePromptSlashCommand } from "./prompt-command.js";
 import { isPromptSkillContentEmpty } from "./prompt-skill-editor.js";
+import { useWorkbenchBranchSwitch } from "../hooks/use-workbench-branch-switch.js";
 import { createComposerCommands } from "./workbench-composer-commands.js";
 import type { WorkbenchComposerProps } from "./workbench-composer-contracts.js";
 import { useComposerSession } from "./workbench-composer-session.js";
@@ -153,6 +154,14 @@ export function WorkbenchComposer({
       }
     });
   };
+  const { branchSwitchError, switchBranch, switchingBranch } = useWorkbenchBranchSwitch({
+    client,
+    failureMessage: t("composer.branchSwitchFailed"),
+    gitStatus,
+    isCurrentScope,
+    projectId,
+    routeScope,
+  });
 
   useEffect(() => {
     if (turnControlsDisabled) {
@@ -358,6 +367,7 @@ export function WorkbenchComposer({
       attachments={attachments}
       attachmentsDisabled={attachmentsDisabled}
       baseBranches={baseBranches}
+      branchSwitchError={branchSwitchError}
       canInterrupt={canInterrupt}
       canSteer={canSteer}
       canSubmit={canSubmit}
@@ -384,6 +394,9 @@ export function WorkbenchComposer({
         setComposerModeState(undefined);
       }}
       onAttachmentsChange={handleAttachmentsChange}
+      onBranchChange={(branch) => {
+        void switchBranch(branch);
+      }}
       onExecuteCommand={(command) => {
         void executePromptCommand(command);
       }}
@@ -442,6 +455,7 @@ export function WorkbenchComposer({
         void steerQueuedPrompt(queuedPrompt);
       }}
       submitAction={submitAction}
+      switchingBranch={switchingBranch}
       taskId={taskId}
       turnControlsDisabled={turnControlsDisabled}
     />

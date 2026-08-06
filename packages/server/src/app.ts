@@ -16,6 +16,7 @@ import { AgentEventStream } from "./agent-event-stream.js";
 import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js";
 import { commitSelectedProjectChanges } from "./git-commit.js";
 import { buildCommitMessagePrompt } from "./git-commit-message.js";
+import { switchProjectBranch as switchGitProjectBranch } from "./git-branch.js";
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
 import { readHostFileDirectory, resolveHostAttachment } from "./host-file-browser.js";
 import { readProjectFileTree } from "./project-file-tree.js";
@@ -98,6 +99,7 @@ export async function createCodeAgentServer(
     }
   });
   const readProjectGitStatus = options.readProjectGitStatus ?? readGitWorkingTreeStatus;
+  const switchProjectBranch = options.switchProjectBranch ?? switchGitProjectBranch;
   const commitProjectChanges = options.commitProjectChanges ?? commitSelectedProjectChanges;
   const readFileTree = options.readProjectFileTree ?? readProjectFileTree;
   const readImageFile = options.readProjectImageFile ?? readProjectImageFile;
@@ -470,6 +472,7 @@ export async function createCodeAgentServer(
     settingsRepository: options.settingsRepository,
     taskFromSnapshot,
     taskStartRecoveries,
+    switchProjectBranch,
     toGitCommitHttpError,
     toPendingRequestHttpError,
   };

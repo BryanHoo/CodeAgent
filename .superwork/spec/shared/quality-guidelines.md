@@ -15,8 +15,9 @@
 - `Project.rootPath` 由本地 Runtime 校验后随 Project 契约返回，用于当前工作台展示，并由 `ProjectSchema` 校验为非空字符串。
 - Project 目录浏览必须使用严格的 `ProjectDirectoryQuery` 与 `ProjectDirectoryListing` Schema，返回规范化的当前绝对路径、可空父路径和直接子目录；路径契约必须覆盖 POSIX、Windows Drive 与 UNC 绝对路径，并拒绝 NUL 和换行控制字符。Project 注册只接受显式 `AddProjectRequest.rootPath`，Client、Server 与 Web 不得保留原生目录选择器或空请求体分支。
 - Project 重命名只允许更新本地 `projects.name` 展示名，必须保持 `id`、`rootPath`、`createdAt` 和磁盘目录不变；Project 删除只移除 CodeAgent 注册及级联的本地设置/元数据，并释放对应 Web/Server Runtime，不得删除磁盘文件或归档 Provider Task。两种操作均使用独立严格 Mutation Schema 和 `Idempotency-Key`。
-- `ProjectGitStatus` 必须同时返回可空的当前 `branch`、无重复的 `baseBranches`、`repositoryMode`、稳定 `snapshot`、`staged` 和 `unstaged`；其中 Git 状态和提交选择只允许 Project 相对路径，但 Provider Task 历史中的 `AgentFileChange` 仍可保留绝对路径。Client 与 Fastify 响应边界必须使用同一严格 Schema 校验，Web 不得硬编码分支名称。
+- `ProjectGitStatus` 必须同时返回可空的当前 `branch`、当前分支优先且无重复的本地 `branches`、无重复的 `baseBranches`、`repositoryMode`、稳定 `snapshot`、`staged` 和 `unstaged`；其中 Git 状态和提交选择只允许 Project 相对路径，但 Provider Task 历史中的 `AgentFileChange` 仍可保留绝对路径。Client 与 Fastify 响应边界必须使用同一严格 Schema 校验，Web 不得硬编码分支名称。
 - Git message 生成、commit 和 commit+push 使用独立严格 Mutation Schema 与 `Idempotency-Key`，请求携带同一 `expectedSnapshot` 和无重复的 Project 相对路径；响应必须区分未请求、已推送、推送失败和未配置 upstream，不能把 commit 后 push 失败归一化为整体失败。
+- Git 分支切换使用严格 `SwitchProjectBranchRequest` 与 `Idempotency-Key`，请求只携带本地分支精确名称和 `expectedSnapshot`，响应返回完整 `ProjectGitStatus`。Server 必须区分当前分支、分支不存在、状态冲突、只读仓库和执行失败，不得接受命令、远端引用或隐式创建分支。
 - `ProjectFileTree` 必须返回目标 Project 相对目录 `path` 及其直接目录/文件条目，不包含 `truncated` 或条目数量上限；可选目录查询必须拒绝绝对路径、点路径、反斜杠和额外字段。Server 必须沿已注册 Project 根目录逐层应用任意层级的 `.gitignore`，不依赖根目录是否为 Git 仓库或是否存在根级规则；同时跳过符号链接、`.git`、`node_modules`、构建与覆盖率目录，并将目录深度限制为 `20` 层，Client 与 Fastify 必须使用同一严格 Schema。
 - Project 排序使用携带 `Idempotency-Key` 的 `PUT /v1/projects/order`，请求必须包含无重复的完整 Project ID 集合；Server 校验集合后在 SQLite 事务中原子替换顺序，新注册 Project 追加到末尾。
 - Agent Event 保持版本字段、单调 `sequence` 和可判别事件类型。

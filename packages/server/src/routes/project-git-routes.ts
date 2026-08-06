@@ -5,15 +5,33 @@ import {
   GenerateCommitMessageResponseSchema,
   AgentMutationErrorSchema,
   ProjectGitStatusSchema,
+  SwitchProjectBranchRequestSchema,
   type AgentTaskSettings,
   type CommitProjectChangesRequest,
   type GenerateCommitMessageRequest,
+  type SwitchProjectBranchRequest,
 } from "@code-agent/protocol";
+import { GitBranchError } from "../git-branch.js";
 import { GitCommitError } from "../git-commit.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import { ErrorResponseSchema, IdempotencyHeadersSchema, ProjectParamsSchema } from "./schemas.js";
 
 import type { FastifyInstance } from "fastify";
+
+function toGitBranchHttpError(error: GitBranchError): MutationHttpError {
+  switch (error.code) {
+    case "SNAPSHOT_MISMATCH":
+      return new MutationHttpError("GIT_STATUS_CHANGED", "Git working tree changed", 409, true);
+    case "ALREADY_ACTIVE":
+      return new MutationHttpError("GIT_BRANCH_ALREADY_ACTIVE", error.message, 409, true);
+    case "BRANCH_NOT_FOUND":
+      return new MutationHttpError("GIT_BRANCH_NOT_FOUND", error.message, 409, true);
+    case "REPOSITORY_READ_ONLY":
+      return new MutationHttpError("GIT_REPOSITORY_READ_ONLY", error.message, 409, true);
+    case "SWITCH_FAILED":
+      return new MutationHttpError("GIT_BRANCH_SWITCH_FAILED", error.message, 502, true);
+  }
+}
 
 export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRouteContext): void {
   const {
@@ -26,8 +44,20 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     readEffectiveGlobalSettings,
     readProjectGitStatus,
     runIdempotent,
+    switchProjectBranch,
     toGitCommitHttpError,
   } = context;
+
+  const assertGitMutationAvailable = (projectId: string) => {
+    if (activeGitMutations.has(projectId)) {
+      throw new MutationHttpError(
+        "GIT_MUTATION_IN_PROGRESS",
+        "Another Git mutation is already in progress",
+        409,
+        true,
+      );
+    }
+  };
 
   app.get<{ Params: { projectId: string } }>(
     "/v1/projects/:projectId/git/status",
@@ -55,6 +85,58 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
           message: "Git working tree status is unavailable",
         });
       }
+    },
+  );
+
+  app.post<{
+    Body: SwitchProjectBranchRequest;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string };
+  }>(
+    "/v1/projects/:projectId/git/branch",
+    {
+      schema: {
+        body: SwitchProjectBranchRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectParamsSchema,
+        response: {
+          200: ProjectGitStatusSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) => {
+      const projectContext = await getProjectContext(request.params.projectId);
+      if (projectContext === undefined) {
+        throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+      }
+      return runIdempotent(
+        ["switch-project-branch", request.params.projectId],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          assertGitMutationAvailable(request.params.projectId);
+          activeGitMutations.add(request.params.projectId);
+          try {
+            return await switchProjectBranch(projectContext.project.rootPath, request.body);
+          } catch (error) {
+            if (error instanceof GitBranchError) {
+              throw toGitBranchHttpError(error);
+            }
+            throw new MutationHttpError(
+              "GIT_BRANCH_SWITCH_FAILED",
+              "Git branch switch failed",
+              502,
+              true,
+            );
+          } finally {
+            activeGitMutations.delete(request.params.projectId);
+          }
+        },
+      );
     },
   );
 
@@ -145,14 +227,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         request.headers["idempotency-key"],
         request.body,
         async () => {
-          if (activeGitMutations.has(request.params.projectId)) {
-            throw new MutationHttpError(
-              "GIT_MUTATION_IN_PROGRESS",
-              "Another Git mutation is already in progress",
-              409,
-              true,
-            );
-          }
+          assertGitMutationAvailable(request.params.projectId);
           activeGitMutations.add(request.params.projectId);
           try {
             return await commitProjectChanges(context.project.rootPath, request.body);

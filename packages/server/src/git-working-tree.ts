@@ -117,9 +117,14 @@ async function readOptionalGit(
 async function readRepositoryBranches(
   repositoryRoot: string,
   gitCommandExecutor: GitCommandExecutor,
-): Promise<Pick<ProjectGitStatus, "baseBranches" | "branch">> {
-  const [branchOutput, refsOutput, remoteHeadOutput] = await Promise.all([
+): Promise<Pick<ProjectGitStatus, "baseBranches" | "branch" | "branches">> {
+  const [branchOutput, localRefsOutput, refsOutput, remoteHeadOutput] = await Promise.all([
     readOptionalGit(repositoryRoot, ["branch", "--show-current"], gitCommandExecutor),
+    readOptionalGit(
+      repositoryRoot,
+      ["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+      gitCommandExecutor,
+    ),
     readOptionalGit(
       repositoryRoot,
       ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"],
@@ -132,6 +137,13 @@ async function readRepositoryBranches(
     ),
   ]);
   const branch = branchOutput.trim() || null;
+  const localBranches = [...new Set(localRefsOutput.split("\n").map((ref) => ref.trim()))]
+    .filter((ref) => ref !== "")
+    .toSorted((left, right) => left.localeCompare(right));
+  if (branch !== null && localBranches.includes(branch)) {
+    localBranches.splice(localBranches.indexOf(branch), 1);
+    localBranches.unshift(branch);
+  }
   const branches = [...new Set(refsOutput.split("\n").map((ref) => ref.trim()))]
     .filter((ref) => ref !== "" && !ref.endsWith("/HEAD") && ref !== branch)
     .toSorted((left, right) => left.localeCompare(right));
@@ -148,7 +160,7 @@ async function readRepositoryBranches(
     branches.splice(branches.indexOf(preferredBranch), 1);
     branches.unshift(preferredBranch);
   }
-  return { baseBranches: branches, branch };
+  return { baseBranches: branches, branch, branches: localBranches };
 }
 
 function prefixRepositoryPath(repositoryName: string, change: GitFileChange): GitFileChange {
@@ -227,9 +239,10 @@ export async function readGitWorkingTreeStatus(
   const limitedGitCommandExecutor: GitCommandExecutor = (repositoryRoot, arguments_) =>
     limitGitCommand(() => gitCommandExecutor(repositoryRoot, arguments_));
   let status: GitWorkingTreeChanges;
-  let repositoryBranches: Pick<ProjectGitStatus, "baseBranches" | "branch"> = {
+  let repositoryBranches: Pick<ProjectGitStatus, "baseBranches" | "branch" | "branches"> = {
     baseBranches: [],
     branch: null,
+    branches: [],
   };
   let repositoryMode: ProjectGitStatus["repositoryMode"] = "root";
   if (await hasGitMetadata(resolvedProjectRoot)) {

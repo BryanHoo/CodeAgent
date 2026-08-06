@@ -29,6 +29,7 @@ import type {
   ProjectFileTree,
   ProjectGitStatus,
   ProjectSourceFile,
+  SwitchProjectBranchRequest,
 } from "@code-agent/protocol";
 
 import type { AgentEventStream } from "../agent-event-stream.js";
@@ -141,6 +142,10 @@ export interface ServerRouteContext {
   readonly readProjectDirectory: (path?: string) => Promise<ProjectDirectoryListing>;
   readonly readImageFile: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
   readonly readProjectGitStatus: (projectRoot: string) => Promise<ProjectGitStatus>;
+  readonly switchProjectBranch: (
+    projectRoot: string,
+    request: SwitchProjectBranchRequest,
+  ) => Promise<ProjectGitStatus>;
   readonly readSourceFile: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
   readonly releaseProjectContext: (projectId: string) => Promise<void>;
   readonly resolveProviderTurnInput: (

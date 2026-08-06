@@ -35,6 +35,7 @@ import {
   type ProjectOpenCapabilitiesResponse,
   type ProjectPage,
   type ProjectSourceFile,
+  type SwitchProjectBranchRequest,
   type RemoveProjectResponse,
   type RenameProjectResponse,
   type ReorderProjectsResponse,
@@ -189,6 +190,19 @@ export class ProjectHttpClient extends CodeAgentTransport {
   ): Promise<ProjectGitStatus> {
     return this.read(
       `/v1/projects/${encodeURIComponent(projectId)}/git/status`,
+      ProjectGitStatusSchema,
+      options,
+    );
+  }
+
+  public async switchProjectBranch(
+    projectId: string,
+    request: SwitchProjectBranchRequest,
+    options: MutationOptions = {},
+  ): Promise<ProjectGitStatus> {
+    return this.mutation(
+      `${projectPath(projectId)}/git/branch`,
+      request,
       ProjectGitStatusSchema,
       options,
     );

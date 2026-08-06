@@ -27,6 +27,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createCodeAgentServer } from "./app.js";
 import { AgentEventStream } from "./agent-event-stream.js";
+import { GitBranchError } from "./git-branch.js";
 
 const project = {
   createdAt: "2026-07-23T00:00:00.000Z",
@@ -1210,6 +1211,7 @@ describe("CodeAgent Server", () => {
       Promise.resolve({
         baseBranches: ["origin/main", "main"],
         branch: "feat/review",
+        branches: ["feat/review", "main"],
         repositoryMode: "root" as const,
         snapshot: "c".repeat(64),
         staged: [
@@ -1246,6 +1248,84 @@ describe("CodeAgent Server", () => {
     expect(readProjectGitStatus).toHaveBeenCalledWith(project.rootPath);
     expect(missingProjectResponse.statusCode).toBe(404);
     expect(readProjectGitStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("switches a local project branch idempotently through the fixed Git mutation", async () => {
+    const { provider } = createProvider();
+    const expectedSnapshot = "c".repeat(64);
+    const switchedStatus = {
+      baseBranches: ["origin/main", "feat/review"],
+      branch: "main",
+      branches: ["main", "feat/review"],
+      repositoryMode: "root" as const,
+      snapshot: "d".repeat(64),
+      staged: [],
+      unstaged: [],
+    };
+    const switchProjectBranch = vi.fn(() => Promise.resolve(switchedStatus));
+    const app = await createCodeAgentServer(createServerOptions(provider, { switchProjectBranch }));
+    closeCallbacks.push(() => app.close());
+    const request = { branch: "main", expectedSnapshot };
+
+    const first = await app.inject({
+      headers: { "idempotency-key": "switch-main" },
+      method: "POST",
+      payload: request,
+      url: "/v1/projects/code-agent/git/branch",
+    });
+    const repeated = await app.inject({
+      headers: { "idempotency-key": "switch-main" },
+      method: "POST",
+      payload: request,
+      url: "/v1/projects/code-agent/git/branch",
+    });
+    const invalid = await app.inject({
+      headers: { "idempotency-key": "switch-invalid" },
+      method: "POST",
+      payload: { ...request, branch: "" },
+      url: "/v1/projects/code-agent/git/branch",
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toEqual(switchedStatus);
+    expect(repeated.json()).toEqual(switchedStatus);
+    expect(invalid.statusCode).toBe(400);
+    expect(switchProjectBranch).toHaveBeenCalledOnce();
+    expect(switchProjectBranch).toHaveBeenCalledWith(project.rootPath, request);
+  });
+
+  it("maps branch-switch conflicts and command failures to bounded mutation errors", async () => {
+    const { provider } = createProvider();
+    const switchProjectBranch = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new GitBranchError("SNAPSHOT_MISMATCH", "Git working tree snapshot changed"),
+      )
+      .mockRejectedValueOnce(new GitBranchError("SWITCH_FAILED", "Git branch switch failed"));
+    const app = await createCodeAgentServer(createServerOptions(provider, { switchProjectBranch }));
+    closeCallbacks.push(() => app.close());
+
+    const stale = await app.inject({
+      headers: { "idempotency-key": "switch-stale" },
+      method: "POST",
+      payload: { branch: "main", expectedSnapshot: "a".repeat(64) },
+      url: "/v1/projects/code-agent/git/branch",
+    });
+    const failed = await app.inject({
+      headers: { "idempotency-key": "switch-failed" },
+      method: "POST",
+      payload: { branch: "main", expectedSnapshot: "b".repeat(64) },
+      url: "/v1/projects/code-agent/git/branch",
+    });
+
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({ code: "GIT_STATUS_CHANGED" });
+    expect(failed.statusCode).toBe(502);
+    expect(failed.json()).toEqual({
+      code: "GIT_BRANCH_SWITCH_FAILED",
+      message: "Git branch switch failed",
+      retryable: true,
+    });
   });
 
   it("generates a selected-file commit message through an ephemeral read-only turn", async () => {
@@ -1285,6 +1365,7 @@ describe("CodeAgent Server", () => {
       Promise.resolve({
         baseBranches: ["main"],
         branch: "feat/commit",
+        branches: ["feat/commit", "main"],
         repositoryMode: "root" as const,
         snapshot,
         staged: [],
@@ -1384,6 +1465,7 @@ describe("CodeAgent Server", () => {
       Promise.resolve({
         baseBranches: ["main"],
         branch: "feat/commit",
+        branches: ["feat/commit", "main"],
         repositoryMode: "root" as const,
         snapshot: "d".repeat(64),
         staged: [],
@@ -1431,6 +1513,7 @@ describe("CodeAgent Server", () => {
       Promise.resolve({
         baseBranches: ["main"],
         branch: "feat/commit",
+        branches: ["feat/commit", "main"],
         repositoryMode: "root" as const,
         snapshot,
         staged: [],

@@ -43,6 +43,7 @@
 - Composer 只使用 `idle`、`submitting`、`running`、`reconnecting`、`failed` 五种状态；运行态来自活动 Turn，重连态暂停网络 Mutation，失败态保留草稿。
 - 同一次用户动作在结果尚未确定前重试时必须复用原 `Idempotency-Key`；输入或目标变化后生成新 Key。
 - Git 提交弹窗的文件选择、可编辑 message 和部分成功结果属于瞬时 UI 状态；打开时按路径合并 staged/unstaged 记录并默认全选。生成与提交必须携带当前 Git `snapshot` 和所选路径；提交成功后失效 `['projects', projectId, 'git-status']`，push 失败或未配置 upstream 时保留 commit 成功结果，不得把它展示为整体失败。聚合子仓库模式必须禁用提交入口。
+- 中栏 Composer 底部的分支切换入口只消费共享 Git 状态中的本地 `branches` 候选；当前分支必须选中且不可重复提交，聚合子仓库、detached HEAD 或没有其他本地分支时只显示静态状态。切换使用同步单飞锁并携带当前 `snapshot`；Mutation 前先取消同 Project 的在途 Git 状态读取，成功后以 Server 返回的完整状态原子更新 `['projects', projectId, 'git-status']`，失败后失效该 Query 重新校准。
 - 创建 Task 后启动首个 Turn；若 Turn 启动失败，保留已创建 Task ID 和原始草稿，重试不得重复创建 Task。只有 Turn 启动成功后才清空草稿。
 - `startTask` 返回的 Task 必须立即 upsert 到对应 Project Task Query 并在 Sidebar 选中，不能依赖可能早于 Provider materialize 的抢跑列表刷新；此时保持 Project Composer 和项目级草稿以支持首轮失败重试，首次 `startTurn` 成功后再导航到 Task 路由，并将返回 Turn 作为跨路由短生命周期启动快照。任何 `startTurn` 成功后，若返回 Turn 或后续运行中 Snapshot 尚未包含 User Item，Timeline 必须使用本次提交补齐用户消息，并严格先展示用户消息、再展示“正在思考”；权威 User Item 到达后再无重复地接管展示。
 - 首个 Assistant 消息出现时，无论 Task 是否仍为当前路由，都必须立即读取对应 Task Snapshot，并以 Provider 标题或用户消息首行（无文本时使用 Skill、附件名或运行态文案）替换“新聊天”；实时 Delta 已证明 Assistant 开始时，不得因 HTTP Snapshot 暂未包含 Assistant Item 而放弃更新。同一 Turn 的流式 Delta 只触发一次，不能按 Token 重复请求；同一 Task 的流式与终态元数据读取必须串行，不能让终态校准复用尚未结束的旧 Snapshot 请求。任意前台或后台 Task 的 Turn 进入终态后都必须再次刷新对应 Project Task 列表与 Snapshot，以校准 Provider 生成的正式标题，不能依赖用户重新进入该 Task。中栏标题优先使用 Task Query 或活动 Snapshot，不能向用户暴露原生 Task ID。

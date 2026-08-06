@@ -375,6 +375,7 @@ describe("CodeAgentClient", () => {
     const gitStatus = {
       baseBranches: ["origin/main", "main"],
       branch: "feat/review",
+      branches: ["feat/review", "main"],
       repositoryMode: "root",
       snapshot: "a".repeat(64),
       staged: [],
@@ -395,6 +396,35 @@ describe("CodeAgentClient", () => {
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ staged: [], unstaged: [] }));
     await expect(client.getProjectGitStatus("project one")).rejects.toThrow(
+      "CodeAgent response does not match the protocol schema",
+    );
+  });
+
+  it("switches a project branch with a validated idempotent mutation", async () => {
+    const gitStatus = {
+      baseBranches: ["origin/main", "feat/review"],
+      branch: "main",
+      branches: ["main", "feat/review"],
+      repositoryMode: "root",
+      snapshot: "b".repeat(64),
+      staged: [],
+      unstaged: [],
+    };
+    const request = { branch: "main", expectedSnapshot: "a".repeat(64) };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse(gitStatus));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(
+      client.switchProjectBranch("project one", request, { idempotencyKey: "switch-key" }),
+    ).resolves.toEqual(gitStatus);
+    const switchCall = fetchMock.mock.calls[0];
+    expect(switchCall?.[0]).toBe("/v1/projects/project%20one/git/branch");
+    expect(switchCall?.[1]).toMatchObject({ body: JSON.stringify(request), method: "POST" });
+    expect(new Headers(switchCall?.[1]?.headers).get("idempotency-key")).toBe("switch-key");
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ branch: "main" }));
+    await expect(client.switchProjectBranch("project one", request)).rejects.toThrow(
       "CodeAgent response does not match the protocol schema",
     );
   });

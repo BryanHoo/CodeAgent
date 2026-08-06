@@ -188,6 +188,7 @@ describe("project queries", () => {
       Promise.resolve({
         baseBranches: ["origin/main"],
         branch: "main",
+        branches: ["main"],
         repositoryMode: "root",
         snapshot: "a".repeat(64),
         staged: [],
@@ -202,6 +203,7 @@ describe("project queries", () => {
     await expect(queryClient.fetchQuery(options)).resolves.toEqual({
       baseBranches: ["origin/main"],
       branch: "main",
+      branches: ["main"],
       repositoryMode: "root",
       snapshot: "a".repeat(64),
       staged: [],

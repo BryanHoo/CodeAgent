@@ -12,6 +12,7 @@ import {
 const gitStatus: ProjectGitStatus = {
   baseBranches: ["origin/main"],
   branch: "main",
+  branches: ["main"],
   repositoryMode: "root",
   snapshot: "a".repeat(64),
   staged: [],

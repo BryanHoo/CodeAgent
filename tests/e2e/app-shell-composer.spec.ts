@@ -12,6 +12,41 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
+test("switches branches from the composer footer", async ({ page }) => {
+  let switchRequest: Record<string, unknown> | undefined;
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() === "POST" && url.pathname === "/v1/projects/code-agent/git/branch") {
+      switchRequest = parseRequestRecord(request.postData());
+    }
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const trigger = page.getByRole("button", {
+    name: "切换分支，当前分支 feat/review-targets",
+  });
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  const currentBranch = page.getByRole("menuitemradio", { name: "feat/review-targets" });
+  const mainBranch = page.getByRole("menuitemradio", { name: "main", exact: true });
+  await expect(currentBranch).toBeDisabled();
+  await expect(currentBranch).toHaveAttribute("data-state", "checked");
+  await mainBranch.click();
+
+  await expect(page.getByRole("button", { name: "切换分支，当前分支 main" })).toBeVisible();
+  expect(switchRequest).toEqual({
+    branch: "main",
+    expectedSnapshot: projectGitStatus.snapshot,
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const viewportMetrics = await page.evaluate(() => ({
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  }));
+  expect(viewportMetrics.documentWidth).toBeLessThanOrEqual(viewportMetrics.viewportWidth);
+});
+
 test("keeps composer attachment icons aligned with the compact toolbar", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 

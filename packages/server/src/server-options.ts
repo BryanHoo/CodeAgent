@@ -14,6 +14,7 @@ import type {
   ProjectFileTree,
   ProjectGitStatus,
   ProjectSourceFile,
+  SwitchProjectBranchRequest,
 } from "@code-agent/protocol";
 
 import type { CodeAgentAccessOptions } from "./access-control.js";
@@ -44,6 +45,10 @@ export interface CreateCodeAgentServerOptions {
     request: CommitProjectChangesRequest,
   ) => Promise<CommitProjectChangesResponse>;
   readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
+  switchProjectBranch?: (
+    projectRoot: string,
+    request: SwitchProjectBranchRequest,
+  ) => Promise<ProjectGitStatus>;
   readHostFileDirectory?: (kind: HostFileKind, path?: string) => Promise<HostFileListing>;
   readProjectFileTree?: (projectRoot: string, directoryPath?: string) => Promise<ProjectFileTree>;
   readProjectDirectory?: (path?: string) => Promise<ProjectDirectoryListing>;

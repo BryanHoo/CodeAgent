@@ -8,7 +8,8 @@ import {
   MAX_AGENT_IMAGE_TOTAL_BYTES,
   type AgentSandboxMode,
 } from "@code-agent/protocol";
-import { Folder, GitBranch, SendHorizontal, X } from "lucide-react";
+import type { ProjectGitStatus } from "@code-agent/protocol";
+import { ChevronsUpDown, Folder, GitBranch, LoaderCircle, SendHorizontal, X } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Context, ContextTrigger } from "../../../shared/ai-elements/context.js";
@@ -24,6 +25,15 @@ import {
   isPromptInputNewlineShortcut,
 } from "../../../shared/ai-elements/prompt-input.js";
 import { Button } from "../../../shared/ui/button.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "../../../shared/ui/dropdown-menu.js";
 import { Input } from "../../../shared/ui/input.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import {
@@ -46,6 +56,86 @@ import {
 
 export { ComposerModeTag } from "./workbench-composer-toolbar.js";
 export * from "./workbench-composer-view-contracts.js";
+
+type ComposerBranchSwitcherProps = Readonly<{
+  gitStatus: ProjectGitStatus | undefined;
+  onBranchChange: (branch: string) => void;
+  switchingBranch: string | undefined;
+}>;
+
+export function ComposerBranchSwitcher({
+  gitStatus,
+  onBranchChange,
+  switchingBranch,
+}: ComposerBranchSwitcherProps) {
+  const { t } = useTranslation("workbench");
+  const currentBranch = gitStatus?.branch;
+  const switchable =
+    gitStatus?.repositoryMode === "root" &&
+    currentBranch !== null &&
+    currentBranch !== undefined &&
+    gitStatus.branches.length > 1;
+  const label = currentBranch ?? t("composer.gitBranchMissing");
+
+  if (!switchable) {
+    return (
+      <span className="inline-flex min-w-0 shrink items-center gap-1">
+        <GitBranch aria-hidden="true" className="size-3 shrink-0" />
+        <span className="truncate">{label}</span>
+      </span>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          aria-label={t("composer.branchSwitcherLabel", { branch: currentBranch })}
+          className="inline-flex h-6 max-w-28 min-w-0 items-center gap-1 rounded-control px-1 text-caption text-muted-foreground hover:bg-control-hover hover:text-foreground sm:max-w-40"
+          disabled={switchingBranch !== undefined}
+          type="button"
+          variant="ghost"
+        >
+          {switchingBranch === undefined ? (
+            <GitBranch aria-hidden="true" className="size-3 shrink-0" data-icon="inline-start" />
+          ) : (
+            <LoaderCircle
+              aria-hidden="true"
+              className="size-3 shrink-0 animate-spin"
+              data-icon="inline-start"
+            />
+          )}
+          <span className="truncate">{label}</span>
+          <ChevronsUpDown aria-hidden="true" className="size-3 shrink-0" data-icon="inline-end" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-72 w-56 overflow-y-auto" side="top">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t("composer.branchSwitcherMenu")}</DropdownMenuLabel>
+        </DropdownMenuGroup>
+        <DropdownMenuRadioGroup
+          onValueChange={(branch) => {
+            if (branch !== currentBranch) {
+              onBranchChange(branch);
+            }
+          }}
+          value={currentBranch}
+        >
+          {gitStatus.branches.map((branch) => (
+            <DropdownMenuRadioItem
+              disabled={branch === currentBranch || switchingBranch !== undefined}
+              key={branch}
+              title={branch}
+              value={branch}
+            >
+              <span className="truncate">{branch}</span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
   const { t } = useTranslation(["workbench", "settings"]);
@@ -339,10 +429,11 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
         </p>
       )}
       <div className="mx-auto mt-1.5 flex w-full max-w-content min-w-0 items-center gap-3 px-1 text-caption text-muted-foreground">
-        <span className="inline-flex shrink-0 items-center gap-1">
-          <GitBranch className="size-3" aria-hidden="true" />{" "}
-          {props.gitStatus?.branch ?? t("composer.gitBranchMissing")}
-        </span>
+        <ComposerBranchSwitcher
+          gitStatus={props.gitStatus}
+          onBranchChange={props.onBranchChange}
+          switchingBranch={props.switchingBranch}
+        />
         <span
           aria-label={t("composer.projectPath")}
           className="inline-flex min-w-0 flex-1 items-center gap-1"
@@ -359,6 +450,11 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
           <ContextTrigger />
         </Context>
       </div>
+      {props.branchSwitchError === undefined ? null : (
+        <p className="mx-auto mt-1 w-full max-w-content px-1 text-caption text-danger" role="alert">
+          {props.branchSwitchError}
+        </p>
+      )}
     </section>
   );
 }

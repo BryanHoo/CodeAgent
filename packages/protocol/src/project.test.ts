@@ -55,6 +55,7 @@ import {
   ProjectDirectoryQuerySchema,
   ProjectFileTreeQuerySchema,
   ProjectGitStatusSchema,
+  SwitchProjectBranchRequestSchema,
   ProjectFileTreeSchema,
   ProjectOpenAppSchema,
   ProjectOpenCapabilitiesResponseSchema,
@@ -341,6 +342,36 @@ describe("project protocol", () => {
     ).toBe(false);
   });
 
+  it("strictly validates branch-switch mutations", () => {
+    const expectedSnapshot = "a".repeat(64);
+
+    expect(
+      Value.Check(SwitchProjectBranchRequestSchema, {
+        branch: "feat/branch-switching",
+        expectedSnapshot,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(SwitchProjectBranchRequestSchema, {
+        branch: "",
+        expectedSnapshot,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(SwitchProjectBranchRequestSchema, {
+        branch: "main",
+        command: "reset --hard",
+        expectedSnapshot,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(SwitchProjectBranchRequestSchema, {
+        branch: "main",
+        expectedSnapshot: "stale",
+      }),
+    ).toBe(false);
+  });
+
   it("scopes every task to a project and records its pinned state", () => {
     expect(AgentTaskSchema).toMatchObject({
       additionalProperties: false,
@@ -479,6 +510,7 @@ describe("project protocol", () => {
       Value.Check(ProjectGitStatusSchema, {
         baseBranches: ["origin/main", "main"],
         branch: "feat/review",
+        branches: ["feat/review", "main"],
         repositoryMode: "root",
         snapshot: "a".repeat(64),
         staged: [fileChange],
@@ -495,6 +527,7 @@ describe("project protocol", () => {
       Value.Check(ProjectGitStatusSchema, {
         baseBranches: ["origin/main", "origin/main"],
         branch: null,
+        branches: [],
         repositoryMode: "children",
         snapshot: "a".repeat(64),
         staged: [],
@@ -505,6 +538,7 @@ describe("project protocol", () => {
       Value.Check(ProjectGitStatusSchema, {
         baseBranches: ["main"],
         branch: "feat/review",
+        branches: ["feat/review", "main"],
         repositoryMode: "root",
         snapshot: "a".repeat(64),
         staged: [{ ...fileChange, path: "/workspace/CodeAgent/src/index.ts" }],

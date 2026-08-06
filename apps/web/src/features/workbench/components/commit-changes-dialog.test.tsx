@@ -12,6 +12,7 @@ function renderCommitDialog(children: ReactNode): string {
 const gitStatus = {
   baseBranches: ["origin/main"],
   branch: "feat/commit",
+  branches: ["feat/commit", "main"],
   repositoryMode: "root" as const,
   snapshot: "a".repeat(64),
   staged: [{ diff: "+staged", kind: "update" as const, path: "src/app.ts" }],

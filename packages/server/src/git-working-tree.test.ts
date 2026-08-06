@@ -25,6 +25,7 @@ describe("readGitWorkingTreeStatus", () => {
     expect(status.branch === null || typeof status.branch === "string").toBe(true);
     // actions/checkout 的标签检出可能不包含任何远端分支引用。
     expect(Array.isArray(status.baseBranches)).toBe(true);
+    expect(Array.isArray(status.branches)).toBe(true);
     expect(status.repositoryMode).toBe("root");
     expect(status.snapshot).toMatch(/^[a-f0-9]{64}$/u);
     expect(Array.isArray(status.staged)).toBe(true);
@@ -44,6 +45,9 @@ describe("readGitWorkingTreeStatus", () => {
         if (arguments_[0] === "branch") {
           return Promise.resolve("feat/review\n");
         }
+        if (arguments_[0] === "for-each-ref" && !arguments_.includes("refs/remotes")) {
+          return Promise.resolve("feat/review\nmain\nrelease\n");
+        }
         if (arguments_[0] === "for-each-ref") {
           return Promise.resolve(
             "main\nfeat/review\norigin/HEAD\norigin/main\norigin/release\nrelease\n",
@@ -58,6 +62,7 @@ describe("readGitWorkingTreeStatus", () => {
       await expect(readGitWorkingTreeStatus(projectRoot, executeGit)).resolves.toMatchObject({
         baseBranches: ["origin/main", "main", "origin/release", "release"],
         branch: "feat/review",
+        branches: ["feat/review", "main", "release"],
       });
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
@@ -194,6 +199,7 @@ describe("readGitWorkingTreeStatus", () => {
       expect(status.staged.map((change) => change.path)).toEqual(["backend/src/server.ts"]);
       expect(status.unstaged.map((change) => change.path)).toEqual(["frontend/src/app.ts"]);
       expect(status.repositoryMode).toBe("children");
+      expect(status.branches).toEqual([]);
       expect(status.snapshot).toMatch(/^[a-f0-9]{64}$/u);
       expect(visitedStatusRoots.toSorted()).toEqual([backendRoot, frontendRoot].toSorted());
       expect(visitedStatusRoots).not.toContain(projectRoot);

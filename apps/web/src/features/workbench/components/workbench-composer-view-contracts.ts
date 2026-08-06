@@ -29,6 +29,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   attachments: readonly PromptInputAttachment[];
   attachmentsDisabled: boolean;
   baseBranches: readonly string[];
+  branchSwitchError: string | undefined;
   canInterrupt: boolean;
   canSteer: boolean;
   canSubmit: boolean;
@@ -52,6 +53,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   modelsPending: boolean;
   mutationError: Error | null;
   onAttachmentsChange: (files: readonly PromptInputAttachment[]) => void;
+  onBranchChange: (branch: string) => void;
   onExecuteCommand: (command: PromptCommandItem) => void;
   onExecuteReview: (target: AgentReviewTarget) => void;
   onInterrupt: () => void;
@@ -81,6 +83,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   state: ComposerState;
   steerQueuedPrompt: (queuedPrompt: QueuedComposerPrompt) => void;
   submitAction: ComposerSubmitAction;
+  switchingBranch: string | undefined;
   taskId: string | undefined;
   turnControlsDisabled: boolean;
 }>;

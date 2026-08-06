@@ -20,6 +20,7 @@ import type {
 } from "../../../shared/ai-elements/prompt-input.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
+import type { CodeAgentGitMutationClient } from "../../projects/project-query-contracts.js";
 
 export type ComposerMode = "goal" | "plan";
 
@@ -45,7 +46,7 @@ export type WorkbenchComposerHandle = Readonly<{
 export type WorkbenchComposerProps = Readonly<{
   buildPlanRef?: Ref<WorkbenchComposerHandle>;
   capabilities: AgentCapabilities | undefined;
-  client: CodeAgentMutationClient;
+  client: CodeAgentMutationClient & Pick<CodeAgentGitMutationClient, "switchProjectBranch">;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
   models: readonly AgentModel[];
   modelsError: Error | null;

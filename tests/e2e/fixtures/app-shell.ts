@@ -341,6 +341,7 @@ export const packageJsonDiff = [
 export const projectGitStatus = {
   baseBranches: ["origin/main", "main", "release"],
   branch: "feat/review-targets",
+  branches: ["feat/review-targets", "main", "release"],
   repositoryMode: "root",
   snapshot: "a".repeat(64),
   staged: [],
@@ -470,6 +471,7 @@ export const architectureSourcePreview = Array.from({ length: 720 }, (_, lineInd
 test.beforeEach(async ({ page }) => {
   let routedProjects = [...projects];
   let routedTasks = tasks.map((task) => ({ ...task }));
+  let routedProjectGitStatus = { ...projectGitStatus };
   const projectDefaults = new Map(
     projects.map((project) => [
       project.id,
@@ -677,8 +679,36 @@ test.beforeEach(async ({ page }) => {
         path: "docs/architecture-design.md",
         truncated: true,
       };
+    } else if (
+      url.pathname === "/v1/projects/code-agent/git/branch" &&
+      route.request().method() === "POST"
+    ) {
+      const request = parseRequestRecord(route.request().postData());
+      const branch = request["branch"];
+      if (
+        typeof branch !== "string" ||
+        request["expectedSnapshot"] !== routedProjectGitStatus.snapshot ||
+        !routedProjectGitStatus.branches.includes(branch)
+      ) {
+        throw new Error("Invalid branch switch request");
+      }
+      const previousBranch = routedProjectGitStatus.branch;
+      routedProjectGitStatus = {
+        ...routedProjectGitStatus,
+        baseBranches: [
+          ...routedProjectGitStatus.baseBranches.filter((candidate) => candidate !== branch),
+          previousBranch,
+        ],
+        branch,
+        branches: [
+          branch,
+          ...routedProjectGitStatus.branches.filter((candidate) => candidate !== branch),
+        ],
+        snapshot: "b".repeat(64),
+      };
+      body = routedProjectGitStatus;
     } else if (url.pathname === "/v1/projects/code-agent/git/status") {
-      body = projectGitStatus;
+      body = routedProjectGitStatus;
     } else if (defaultsMatch !== null) {
       const projectId = defaultsMatch[1] ?? "";
       if (route.request().method() === "PUT") {

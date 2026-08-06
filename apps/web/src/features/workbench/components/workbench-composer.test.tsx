@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { QueryClient } from "@tanstack/react-query";
 
 import { changeAppLanguage } from "../../../i18n/i18n.js";
 import {
@@ -21,6 +22,7 @@ import {
   startTaskReview,
   steerPromptTurn,
 } from "./workbench-composer.js";
+import { switchComposerBranch } from "../hooks/use-workbench-branch-switch.js";
 
 const task = {
   contextUsage: null,
@@ -427,5 +429,63 @@ describe("WorkbenchComposer", () => {
     expect(client.steerTurn).toHaveBeenCalledWith("code-agent", task.id, turn.id, input, {
       idempotencyKey: "steer-key",
     });
+  });
+
+  it("switches a local branch and replaces the shared Git status cache", async () => {
+    const queryClient = new QueryClient();
+    const currentStatus = {
+      baseBranches: ["origin/main", "main"],
+      branch: "feat/review",
+      branches: ["feat/review", "main"],
+      repositoryMode: "root" as const,
+      snapshot: "a".repeat(64),
+      staged: [],
+      unstaged: [],
+    };
+    const nextStatus = {
+      ...currentStatus,
+      baseBranches: ["origin/main", "feat/review"],
+      branch: "main",
+      branches: ["main", "feat/review"],
+      snapshot: "b".repeat(64),
+    };
+    const client = { switchProjectBranch: vi.fn(() => Promise.resolve(nextStatus)) };
+    const cancelQueries = vi.spyOn(queryClient, "cancelQueries");
+
+    await expect(
+      switchComposerBranch(client, queryClient, "code-agent", currentStatus, "main"),
+    ).resolves.toBe(true);
+
+    expect(client.switchProjectBranch).toHaveBeenCalledWith("code-agent", {
+      branch: "main",
+      expectedSnapshot: currentStatus.snapshot,
+    });
+    expect(cancelQueries).toHaveBeenCalledWith({
+      exact: true,
+      queryKey: ["projects", "code-agent", "git-status"],
+    });
+    expect(queryClient.getQueryData(["projects", "code-agent", "git-status"])).toEqual(nextStatus);
+  });
+
+  it("does not switch unavailable or already active branches", async () => {
+    const queryClient = new QueryClient();
+    const client = { switchProjectBranch: vi.fn() };
+    const status = {
+      baseBranches: ["origin/main"],
+      branch: "main",
+      branches: ["main"],
+      repositoryMode: "root" as const,
+      snapshot: "a".repeat(64),
+      staged: [],
+      unstaged: [],
+    };
+
+    await expect(
+      switchComposerBranch(client, queryClient, "code-agent", status, "main"),
+    ).resolves.toBe(false);
+    await expect(
+      switchComposerBranch(client, queryClient, "code-agent", status, "missing"),
+    ).resolves.toBe(false);
+    expect(client.switchProjectBranch).not.toHaveBeenCalled();
   });
 });

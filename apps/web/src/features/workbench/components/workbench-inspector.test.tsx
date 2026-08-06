@@ -12,6 +12,7 @@ function renderInspectorMarkup(children: ReactNode): string {
 const gitStatus = {
   baseBranches: ["origin/main"],
   branch: "feat/review",
+  branches: ["feat/review", "main"],
   repositoryMode: "root" as const,
   snapshot: "a".repeat(64),
   staged: [
@@ -33,6 +34,7 @@ const gitStatus = {
 const nestedGitStatus = {
   baseBranches: ["origin/main"],
   branch: "feat/tree-status",
+  branches: ["feat/tree-status", "main"],
   repositoryMode: "root" as const,
   snapshot: "b".repeat(64),
   staged: [],
