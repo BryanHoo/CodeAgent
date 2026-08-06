@@ -74,6 +74,15 @@ describe("Project task pagination", () => {
     expect(
       getProjectTaskPaginationControl({
         error: null,
+        hasHiddenLoadedTasks: true,
+        hasNextPage: true,
+        isExpanded: false,
+        isFetchingNextPage: false,
+      }),
+    ).toEqual({ action: "expand-and-load", disabled: false, label: "显示更多" });
+    expect(
+      getProjectTaskPaginationControl({
+        error: null,
         hasHiddenLoadedTasks: false,
         hasNextPage: true,
         isExpanded: true,

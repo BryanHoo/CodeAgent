@@ -41,16 +41,17 @@ export function getProjectTaskPaginationControl({
   isFetchingNextPage,
 }: ProjectTaskPaginationControlInput) {
   if (!isExpanded) {
-    if (hasHiddenLoadedTasks) {
+    // 新建 Task 可能让本地列表超过首屏上限，但不能因此跳过服务端下一页。
+    if (hasNextPage) {
       return {
-        action: "expand",
+        action: "expand-and-load",
         disabled: false,
         label: i18n.t("sidebar.expand", { ns: "workbench" }),
       } as const;
     }
-    return hasNextPage
+    return hasHiddenLoadedTasks
       ? ({
-          action: "expand-and-load",
+          action: "expand",
           disabled: false,
           label: i18n.t("sidebar.expand", { ns: "workbench" }),
         } as const)
