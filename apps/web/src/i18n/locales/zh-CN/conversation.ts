@@ -85,8 +85,6 @@ export const conversation = {
     refreshFolder: "重新读取文件夹 {{name}}",
     refreshGit: "手动刷新 Git 变更",
     refreshProjectFiles: "重新读取项目文件",
-    review: "审核",
-    reviewChanges: "审核 {{count}} 个未提交变更",
     commitChanges: "提交 {{count}} 个未提交变更",
     source: "来源",
     sourceRole: {

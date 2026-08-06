@@ -85,8 +85,6 @@ export const conversation = {
     refreshFolder: "Reload folder {{name}}",
     refreshGit: "Refresh Git changes",
     refreshProjectFiles: "Reload project files",
-    review: "Review",
-    reviewChanges: "Review {{count}} uncommitted changes",
     commitChanges: "Commit {{count}} uncommitted changes",
     source: "Sources",
     sourceRole: {

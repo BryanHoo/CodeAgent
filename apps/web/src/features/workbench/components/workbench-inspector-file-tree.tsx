@@ -292,17 +292,22 @@ export function ProjectFileTreeNodes({
       getProjectOpenAppsForTarget(projectOpenApps, entry.type).length === 0 ? (
         (changeIndicator ?? undefined)
       ) : (
-        <FileTreeActions>
-          {changeIndicator}
-          <ProjectOpenDropdownMenu
-            apps={projectOpenApps}
-            isPending={projectOpenPending}
-            onOpen={() => {
-              onContextMenuOpen(entry.path);
-            }}
-            onSelect={onOpenProjectPath}
-            target={{ path: entry.path, type: entry.type }}
-          />
+        <FileTreeActions className="relative">
+          <span className="transition-opacity group-hover/file-tree-node:opacity-0 group-focus-within/file-tree-node:opacity-0">
+            {changeIndicator}
+          </span>
+          {/* 菜单覆盖统计的行尾位置，避免透明按钮仍占宽度并挤压变更数字。 */}
+          <span className="absolute right-0 top-1/2 -translate-y-1/2">
+            <ProjectOpenDropdownMenu
+              apps={projectOpenApps}
+              isPending={projectOpenPending}
+              onOpen={() => {
+                onContextMenuOpen(entry.path);
+              }}
+              onSelect={onOpenProjectPath}
+              target={{ path: entry.path, type: entry.type }}
+            />
+          </span>
         </FileTreeActions>
       );
     return entry.type === "directory" ? (

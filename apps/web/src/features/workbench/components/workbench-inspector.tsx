@@ -68,7 +68,6 @@ type WorkbenchInspectorProps = Readonly<{
   onRefreshGitStatus?: () => void;
   onCommitChanges?: () => void;
   onClose?: () => void;
-  onReviewChanges?: (changes: readonly AgentFileChange[]) => void;
   onTerminateBackgroundTerminal?: (terminalId: string) => Promise<void>;
   onTabChange?: (tab: WorkbenchInspectorTab) => void;
   projectName: string;
@@ -109,7 +108,6 @@ export function WorkbenchInspector({
   onRefreshGitStatus = () => undefined,
   onCommitChanges = () => undefined,
   onClose,
-  onReviewChanges = () => undefined,
   onTerminateBackgroundTerminal = () => Promise.resolve(),
   onTabChange = () => undefined,
   projectName,
@@ -294,21 +292,6 @@ export function WorkbenchInspector({
                   className="flex shrink-0 items-center justify-end gap-1.5"
                   role="group"
                 >
-                  <Button
-                    variant="ghost"
-                    aria-haspopup="dialog"
-                    aria-label={i18n.t("inspector.reviewChanges", {
-                      count: allChanges.length,
-                      ns: "conversation",
-                    })}
-                    className="h-7 shrink-0 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none"
-                    onClick={() => {
-                      onReviewChanges(allChanges);
-                    }}
-                    type="button"
-                  >
-                    {i18n.t("inspector.review", { ns: "conversation" })}
-                  </Button>
                   <Button
                     variant="ghost"
                     aria-haspopup="dialog"

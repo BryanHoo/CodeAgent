@@ -109,7 +109,6 @@ describe("WorkbenchInspector", () => {
             itemId: "command-1",
           },
         ]}
-        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
       />,
@@ -120,12 +119,11 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain("pnpm dev");
   });
 
-  it("integrates inline change stats with neutral review and commit actions", () => {
+  it("integrates inline change stats with the commit action", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
         onOpenProjectFile={() => undefined}
-        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         gitStatus={gitStatus}
@@ -136,15 +134,14 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain('aria-label="未提交变更摘要"');
     expect(markup).toContain('aria-label="变更统计"');
     expect(markup).toContain('aria-label="变更操作"');
-    expect(markup).toContain('aria-label="审核 2 个未提交变更"');
+    expect(markup).not.toContain('aria-label="审核 2 个未提交变更"');
     expect(markup).toContain('aria-label="提交 2 个未提交变更"');
     expect(markup).toContain('aria-haspopup="dialog"');
-    expect(markup).toContain(">审核</button>");
+    expect(markup).not.toContain(">审核</button>");
     expect(markup).toContain(">提交</button>");
     expect(markup).toMatch(
       /aria-label="变更统计"[^>]*><span>2 个变更<\/span><span[^>]*>\+3<\/span><span[^>]*>-1<\/span>/u,
     );
-    expect(markup).toMatch(/<button[^>]*bg-control[^>]*aria-label="审核 2 个未提交变更"/u);
     expect(markup).toMatch(/<button[^>]*bg-control[^>]*aria-label="提交 2 个未提交变更"/u);
     expect(markup).not.toContain("bg-primary");
     expect(markup).toContain('aria-label="运行环境"');
@@ -169,7 +166,6 @@ describe("WorkbenchInspector", () => {
       <WorkbenchInspector
         expandedFileTreePaths={new Set(["src"])}
         fileTreeDirectories={fileTreeDirectories}
-        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
       />,
@@ -178,7 +174,6 @@ describe("WorkbenchInspector", () => {
       <WorkbenchInspector
         expandedFileTreePaths={new Set(["src", "src/components"])}
         fileTreeDirectories={fileTreeDirectories}
-        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
       />,
@@ -193,6 +188,7 @@ describe("WorkbenchInspector", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
+        gitStatus={nestedGitStatus}
         projectName="CodeAgent"
         projectOpenApps={[
           { id: "zed", kind: "editor", name: "Zed" },
@@ -208,6 +204,10 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain('aria-label="打开 src 的方式"');
     expect(markup).toContain('aria-label="打开 README.md 的方式"');
     expect(markup).toContain("group-hover/file-tree-node:opacity-100");
+    expect(markup).toContain(
+      "group-hover/file-tree-node:opacity-0 group-focus-within/file-tree-node:opacity-0",
+    );
+    expect(markup).toContain("absolute right-0 top-1/2 -translate-y-1/2");
     expect(markup).toContain('role="treeitem"');
     expect(markup).toContain('aria-label="收起文件夹 CodeAgent"');
     expect(markup).toContain("README.md");
@@ -221,7 +221,6 @@ describe("WorkbenchInspector", () => {
           expandedFileTreePaths={expandedFileTreePaths}
           fileTreeDirectories={fileTreeDirectories}
           gitStatus={nestedGitStatus}
-          onReviewChanges={() => undefined}
           projectName="CodeAgent"
           projectPath="/workspace/CodeAgent"
         />,
@@ -259,7 +258,6 @@ describe("WorkbenchInspector", () => {
             },
           ],
         }}
-        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
       />,
@@ -275,7 +273,6 @@ describe("WorkbenchInspector", () => {
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
         onOpenProjectFile={() => undefined}
-        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
       />,
@@ -300,7 +297,6 @@ describe("WorkbenchInspector", () => {
         gitStatus={gitStatus}
         gitStatusError={new Error("not a git repository")}
         onOpenProjectFile={() => undefined}
-        onReviewChanges={() => undefined}
         onRefreshGitStatus={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
@@ -318,7 +314,6 @@ describe("WorkbenchInspector", () => {
       <WorkbenchInspector
         fileTreeDirectories={[{ error: null, isFetching: true, isPending: true, path: null }]}
         onOpenProjectFile={() => undefined}
-        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
       />,
@@ -335,7 +330,6 @@ describe("WorkbenchInspector", () => {
         ]}
         onOpenProjectFile={() => undefined}
         onRefreshFileTreeDirectory={() => undefined}
-        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
       />,
@@ -349,7 +343,6 @@ describe("WorkbenchInspector", () => {
   it("lists every subagent in context and exposes output dialog triggers", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
-        onReviewChanges={() => undefined}
         onOpenSubagent={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
@@ -398,7 +391,6 @@ describe("WorkbenchInspector", () => {
         ]}
         gitStatus={gitStatus}
         mcpServers={[{ name: "fast-context" }, { name: "chrome-devtools" }]}
-        onReviewChanges={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         skills={[
@@ -481,7 +473,6 @@ describe("WorkbenchInspector", () => {
               itemId: "command-1",
             },
           ]}
-          onReviewChanges={() => undefined}
           projectName="CodeAgent"
           projectPath="/workspace/CodeAgent"
           tab="context"

@@ -421,7 +421,6 @@ export function WorkbenchShellLayout({
               const directoryIndex = fileTreeDirectoryPaths.indexOf(directoryPath);
               void fileTreeQueries[directoryIndex]?.refetch();
             }}
-            onReviewChanges={openFileReview}
             onTerminateBackgroundTerminal={backgroundTerminals.terminateTerminal}
             onTabChange={setInspectorTab}
             onOpenSubagent={(selection) => {

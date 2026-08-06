@@ -906,8 +906,10 @@ test("keeps mobile diff dialogs inside the viewport without squeezing review con
   );
   await page.getByRole("button", { name: "关闭文件 Diff" }).click();
 
-  await page.getByRole("button", { name: "展开上下文面板" }).click();
-  await page.getByRole("button", { name: /审核 \d+ 个未提交变更/u }).click();
+  await page
+    .getByRole("region", { name: /本次修改了 \d+ 个文件/u })
+    .getByRole("button", { name: "审核", exact: true })
+    .click();
   const reviewDialog = page.getByRole("dialog");
   const reviewContent = reviewDialog.getByRole("region", { name: "审核文件内容" });
   const reviewNavigation = reviewDialog.getByRole("complementary", { name: "变更文件导航" });

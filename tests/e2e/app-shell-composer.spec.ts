@@ -1382,23 +1382,42 @@ test("selects and submits a host file as an attachment", async ({ page }) => {
   });
 });
 
-test("opens file diffs from the timeline and uncommitted review button", async ({ page }) => {
+test("opens file diffs and review from the timeline while keeping Inspector commit-only", async ({
+  page,
+}) => {
   const consoleErrors: string[] = [];
   const failedResources: string[] = [];
+  const reviewListChange = {
+    diff: "export const reviewList = true;",
+    kind: "create" as const,
+    path: "apps/web/src/review-list.tsx",
+  };
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: {
+          ...taskSnapshot,
+          turns: taskSnapshot.turns.map((turn) => ({
+            ...turn,
+            items: turn.items.map((item) =>
+              item.type === "file_change"
+                ? { ...item, changes: [...(item.changes ?? []), reviewListChange] }
+                : item,
+            ),
+          })),
+        },
+      },
+    });
+  });
   await page.route("**/v1/projects/code-agent/git/status", async (route) => {
     // 此用例使用两个不同目录的文件，覆盖紧凑树路径与四方向导航，避免改变全局 Fixture。
     await route.fulfill({
       contentType: "application/json",
       json: {
         ...projectGitStatus,
-        unstaged: [
-          ...projectGitStatus.unstaged,
-          {
-            diff: "export const reviewList = true;",
-            kind: "create",
-            path: "apps/web/src/review-list.tsx",
-          },
-        ],
+        unstaged: [...projectGitStatus.unstaged, reviewListChange],
       },
     });
   });
@@ -1414,7 +1433,7 @@ test("opens file diffs from the timeline and uncommitted review button", async (
   });
   await page.goto("/p/code-agent/t/task-1");
 
-  await expect(page.getByRole("region", { name: "本次修改了 1 个文件" })).toHaveCSS(
+  await expect(page.getByRole("region", { name: "本次修改了 2 个文件" })).toHaveCSS(
     "margin-top",
     "16px",
   );
@@ -1426,23 +1445,19 @@ test("opens file diffs from the timeline and uncommitted review button", async (
   await page.getByRole("button", { name: "关闭文件 Diff" }).click();
   await expect(dialog).not.toBeAttached();
 
-  const reviewButton = page.getByRole("button", { name: "审核 2 个未提交变更" });
+  const changedFiles = page.getByRole("region", { name: "本次修改了 2 个文件" });
+  const timelineReviewButton = changedFiles.getByRole("button", { name: "审核", exact: true });
   const commitButton = page.getByRole("button", { name: "提交 2 个未提交变更" });
   const changeStats = page.getByLabel("变更统计");
-  await expect(reviewButton).toHaveText("审核");
+  await expect(page.getByRole("button", { name: "审核 2 个未提交变更" })).toHaveCount(0);
   await expect(commitButton).toHaveText("提交");
   await expect(changeStats).toHaveText("2 个变更+2-1");
-  const [statsBox, reviewBox, commitBox, reviewBackground, commitBackground] = await Promise.all([
+  const [statsBox, commitBox] = await Promise.all([
     changeStats.boundingBox(),
-    reviewButton.boundingBox(),
     commitButton.boundingBox(),
-    reviewButton.evaluate((element) => getComputedStyle(element).backgroundColor),
-    commitButton.evaluate((element) => getComputedStyle(element).backgroundColor),
   ]);
-  expect(statsBox?.x).toBeLessThan(reviewBox?.x ?? 0);
-  expect(reviewBox?.y).toBe(commitBox?.y);
-  expect(commitBackground).toBe(reviewBackground);
-  await reviewButton.click();
+  expect(statsBox?.x).toBeLessThan(commitBox?.x ?? 0);
+  await timelineReviewButton.click();
   const reviewDialog = page.getByRole("dialog");
   const reviewContent = reviewDialog.getByRole("region", { name: "审核文件内容" });
   const reviewNavigation = reviewDialog.getByRole("complementary", { name: "变更文件导航" });
