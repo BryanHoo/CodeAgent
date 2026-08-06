@@ -332,24 +332,27 @@ export async function generateCommitMessageWithCodex(
   let unsubscribeEvents: (() => void) | undefined;
   try {
     const completedTurn = new Promise<AgentTurn>((resolve, reject) => {
-      unsubscribeEvents = provider.subscribeEvents((event: AgentProviderEvent) => {
-        if (event.taskId !== task.id) {
-          return;
-        }
-        if (
-          event.type === "item.completed" &&
-          event.payload.item.type === "message" &&
-          event.payload.item.role === "assistant"
-        ) {
-          // App Server 先交付最终 Message Item，终态 Turn 不保证重复携带完整 items。
-          completedAssistantMessages.set(event.turnId, event.payload.item.text);
-        } else if (event.type === "turn.completed") {
-          turnFinished = true;
-          resolve(event.payload.turn);
-        } else if (event.type === "provider.error" && !event.payload.willRetry) {
-          reject(new Error(event.payload.message));
-        }
-      });
+      unsubscribeEvents = provider.subscribeEvents(
+        (event: AgentProviderEvent) => {
+          if (event.taskId !== task.id) {
+            return;
+          }
+          if (
+            event.type === "item.completed" &&
+            event.payload.item.type === "message" &&
+            event.payload.item.role === "assistant"
+          ) {
+            // App Server 先交付最终 Message Item，终态 Turn 不保证重复携带完整 items。
+            completedAssistantMessages.set(event.turnId, event.payload.item.text);
+          } else if (event.type === "turn.completed") {
+            turnFinished = true;
+            resolve(event.payload.turn);
+          } else if (event.type === "provider.error" && !event.payload.willRetry) {
+            reject(new Error(event.payload.message));
+          }
+        },
+        { includeEphemeral: true },
+      );
       timeout = setTimeout(() => {
         reject(new Error("Commit message generation timed out"));
       }, COMMIT_MESSAGE_TIMEOUT_MS);

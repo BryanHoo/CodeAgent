@@ -6,6 +6,7 @@ export {
   type AgentTaskUnsubscribeStatus,
   type AgentProviderEvent,
   type AgentProviderEventListener,
+  type AgentProviderEventSubscriptionOptions,
   type AgentProviderTaskSnapshot,
   type AgentProviderTurnInput,
   type ListAgentTasksInput,

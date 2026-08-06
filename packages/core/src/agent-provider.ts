@@ -67,6 +67,11 @@ export type AgentProviderEvent = AgentEvent extends infer Event
 
 export type AgentProviderEventListener = (event: AgentProviderEvent) => void;
 
+export type AgentProviderEventSubscriptionOptions = Readonly<{
+  // 临时 Task 仅供 Server 内部流程消费，默认不能进入浏览器事件流。
+  includeEphemeral?: boolean;
+}>;
+
 // Provider Snapshot 不包含本地设置，Server 在交付 HTTP Snapshot 时统一合并持久化结果。
 export type AgentProviderTaskSnapshot = Omit<AgentTaskSnapshot, "settings">;
 
@@ -118,7 +123,10 @@ export interface AgentProvider {
   ): Promise<AgentTurn>;
   steerTurn(taskId: string, turnId: string, input: AgentProviderTurnInput): Promise<void>;
   interruptTurn(taskId: string, turnId: string): Promise<void>;
-  subscribeEvents(listener: AgentProviderEventListener): () => void;
+  subscribeEvents(
+    listener: AgentProviderEventListener,
+    options?: AgentProviderEventSubscriptionOptions,
+  ): () => void;
   terminateBackgroundTerminal(taskId: string, terminalId: string): Promise<boolean>;
   unsubscribeTask(taskId: string): Promise<AgentTaskUnsubscribeStatus>;
   uploadFeedback(taskId: string, input: UploadAgentFeedbackRequest): Promise<void>;

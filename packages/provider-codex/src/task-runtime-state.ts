@@ -13,6 +13,7 @@ export class TaskRuntimeState {
   public readonly reviewWorkerTurnIds = new Map<string, string>();
   public readonly reviewWorkerParentTaskIds = new Map<string, string>();
   public readonly contextUsage = new Map<string, AgentContextUsage>();
+  public readonly ephemeralTaskIds = new Set<string>();
   public readonly pendingTaskEvents = new Map<string, AgentProviderEvent[]>();
   public readonly pendingTaskReads = new Map<string, number>();
   public readonly pendingTaskServerRequests = new Map<string, PendingCodexRequest[]>();
@@ -46,6 +47,7 @@ export class TaskRuntimeState {
       }
     }
     this.contextUsage.delete(taskId);
+    this.ephemeralTaskIds.delete(taskId);
     this.pendingTaskEvents.delete(taskId);
     this.pendingTaskReads.delete(taskId);
     this.pendingTaskServerRequests.delete(taskId);
@@ -65,6 +67,7 @@ export class TaskRuntimeState {
     this.reviewWorkerTurnIds.clear();
     this.reviewWorkerParentTaskIds.clear();
     this.contextUsage.clear();
+    this.ephemeralTaskIds.clear();
     this.pendingTaskEvents.clear();
     this.pendingTaskReads.clear();
     this.pendingTaskServerRequests.clear();

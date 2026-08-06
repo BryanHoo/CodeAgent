@@ -64,8 +64,10 @@ export abstract class CodexAgentProviderTurns extends CodexAgentProviderBase {
     // 新建 Task 必须立即接收后续 Turn 通知，不能等待下一次列表刷新。
     this.runtime.projectTaskIds.add(task.id);
     this.runtime.resumedTaskIds.add(task.id);
-    // 临时 Task 只服务 Server 内部操作，不能进入用户可见的列表回退。
-    if (options.ephemeral !== true) {
+    if (options.ephemeral === true) {
+      // 临时 Task 保留内部事件路由，但不能进入默认事件订阅或用户可见列表。
+      this.runtime.ephemeralTaskIds.add(task.id);
+    } else {
       this.runtime.unmaterializedTasks.set(task.id, task);
     }
     return task;

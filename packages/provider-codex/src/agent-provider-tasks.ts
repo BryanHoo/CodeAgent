@@ -1,6 +1,7 @@
 import type {
   AgentProviderAttachment,
   AgentProviderEventListener,
+  AgentProviderEventSubscriptionOptions,
   AgentProviderTaskSnapshot,
   AgentTaskUnsubscribeStatus,
   ResolvePendingRequestInput,
@@ -195,10 +196,17 @@ export abstract class CodexAgentProviderTasks extends CodexAgentProviderTurns {
     return this.pendingLifecycle.resolve(input);
   }
 
-  public subscribeEvents(listener: AgentProviderEventListener): () => void {
-    this.eventListeners.add(listener);
+  public subscribeEvents(
+    listener: AgentProviderEventListener,
+    options: AgentProviderEventSubscriptionOptions = {},
+  ): () => void {
+    const listeners =
+      options.includeEphemeral === true
+        ? this.eventListenersIncludingEphemeral
+        : this.eventListeners;
+    listeners.add(listener);
     return () => {
-      this.eventListeners.delete(listener);
+      listeners.delete(listener);
     };
   }
 

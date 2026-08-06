@@ -345,11 +345,23 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
   }
 
   protected publishEvent(event: AgentProviderEvent): void {
-    for (const listener of this.eventListeners) {
+    // 内部订阅接收所有事件；普通订阅只接收用户可导航的持久 Task 事件。
+    const notify = (listener: (event: AgentProviderEvent) => void): void => {
       try {
         listener(event);
       } catch {
         // 一个订阅者失败不能阻塞其他交付边界。
+      }
+    };
+    const isEphemeral = this.runtime.ephemeralTaskIds.has(event.taskId);
+    if (!isEphemeral) {
+      for (const listener of this.eventListeners) {
+        notify(listener);
+      }
+    }
+    for (const listener of this.eventListenersIncludingEphemeral) {
+      if (isEphemeral || !this.eventListeners.has(listener)) {
+        notify(listener);
       }
     }
   }

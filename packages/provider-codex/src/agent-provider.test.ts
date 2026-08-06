@@ -604,6 +604,33 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
+  it("publishes ephemeral task events only to explicit internal subscribers", async () => {
+    const rpc = new FakeRpcClient([{ thread: nativeThread({ ephemeral: true }) }]);
+    const provider = createCodexRuntimeProvider({ client: rpc }).forProject(project);
+    const visibleEvents: AgentProviderEvent[] = [];
+    const internalEvents: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => visibleEvents.push(event));
+    provider.subscribeEvents((event) => internalEvents.push(event), { includeEphemeral: true });
+    await provider.startTask({ ephemeral: true });
+
+    rpc.emitNotification("item/agentMessage/delta", {
+      delta: "hidden commit message",
+      itemId: "message-1",
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    expect(visibleEvents).toEqual([]);
+    expect(internalEvents).toMatchObject([
+      {
+        itemId: "message-1",
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "message.delta",
+      },
+    ]);
+  });
+
   it("shares one RPC subscription across multiple project providers", async () => {
     const otherProject = {
       ...project,

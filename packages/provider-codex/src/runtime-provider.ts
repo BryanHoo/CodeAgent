@@ -3,6 +3,7 @@ import type {
   AgentProvider,
   AgentProviderAttachment,
   AgentProviderEventListener,
+  AgentProviderEventSubscriptionOptions,
   AgentProviderTaskSnapshot,
   AgentProviderTurnInput,
   AgentRuntimeProvider,
@@ -194,8 +195,11 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     return this.#delegate.steerTurn(taskId, turnId, input);
   }
 
-  public subscribeEvents(listener: AgentProviderEventListener): () => void {
-    return this.#delegate.subscribeEvents(listener);
+  public subscribeEvents(
+    listener: AgentProviderEventListener,
+    options?: AgentProviderEventSubscriptionOptions,
+  ): () => void {
+    return this.#delegate.subscribeEvents(listener, options);
   }
 
   public uploadFeedback(taskId: string, input: UploadAgentFeedbackRequest): Promise<void> {

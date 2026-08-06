@@ -148,6 +148,7 @@ export async function mapAgentTask(
 
 export abstract class CodexAgentProviderBase {
   protected readonly client: CodexRpcClient;
+  protected readonly eventListenersIncludingEphemeral = new Set<AgentProviderEventListener>();
   protected readonly eventListeners = new Set<AgentProviderEventListener>();
   protected readonly historicalAttachments = new CodexHistoricalAttachmentStore();
   protected readonly logger: CodexProviderLogger;
@@ -220,6 +221,7 @@ export abstract class CodexAgentProviderBase {
 
   public releaseProject(): void {
     // Project 销毁后同步切断所有本地状态，避免定时器和监听器继续持有 Provider。
+    this.eventListenersIncludingEphemeral.clear();
     this.eventListeners.clear();
     this.historicalAttachments.clear();
     this.pendingLifecycle.clear();
