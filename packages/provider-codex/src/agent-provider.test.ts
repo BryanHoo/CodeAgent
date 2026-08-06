@@ -2950,6 +2950,60 @@ describe("CodexAgentProvider", () => {
     expect(events).toHaveLength(10);
   });
 
+  it("publishes generated images as readable realtime attachment metadata", async () => {
+    const imageContent = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const encodedImage = imageContent.toString("base64");
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+    await provider.listTasks();
+
+    rpc.emitNotification("item/completed", {
+      item: {
+        id: "generated-image-live",
+        result: encodedImage,
+        revisedPrompt: null,
+        status: "completed",
+        type: "imageGeneration",
+      },
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    const event = events[0];
+    const item = event?.type === "item.completed" ? event.payload.item : undefined;
+    const attachmentId = item?.type === "message" ? item.attachments?.[0]?.id : undefined;
+    expect(event).toEqual({
+      itemId: "generated-image-live",
+      payload: {
+        item: {
+          attachments: [
+            {
+              id: attachmentId,
+              kind: "image",
+              mediaType: "image/png",
+              name: "生成图片-1.png",
+              size: imageContent.byteLength,
+            },
+          ],
+          id: "generated-image-live",
+          role: "assistant",
+          text: "",
+          type: "message",
+        },
+      },
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "item.completed",
+    });
+    expect(JSON.stringify(event)).not.toContain(encodedImage);
+    await expect(provider.readTaskAttachment("task-1", attachmentId ?? "")).resolves.toMatchObject({
+      content: imageContent,
+      mediaType: "image/png",
+    });
+  });
+
   it("publishes structured item starts for live operation status", async () => {
     const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
     const provider = createCodexAgentProvider({ client: rpc, project });
@@ -3702,6 +3756,66 @@ describe("CodexAgentProvider", () => {
     } finally {
       rmSync(temporaryDirectory, { force: true, recursive: true });
     }
+  });
+
+  it("maps generated images to assistant attachment metadata without exposing Base64", async () => {
+    const imageContent = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const encodedImage = imageContent.toString("base64");
+    const rpc = new FakeRpcClient([
+      {
+        thread: nativeThread({
+          turns: [
+            {
+              completedAt: 1_753_232_400,
+              error: null,
+              id: "turn-generated-image",
+              items: [
+                {
+                  id: "generated-image-1",
+                  result: encodedImage,
+                  revisedPrompt: "一张架构图",
+                  status: "completed",
+                  type: "imageGeneration",
+                },
+              ],
+              startedAt: 1_753_228_800,
+              status: "completed",
+            },
+          ],
+        }),
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    const snapshot = await provider.readTask("task-1");
+    const item = snapshot?.turns[0]?.items[0];
+    const attachmentId = item?.type === "message" ? item.attachments?.[0]?.id : undefined;
+    if (attachmentId === undefined) {
+      throw new Error("Expected generated image attachment metadata");
+    }
+
+    expect(item).toEqual({
+      attachments: [
+        {
+          id: attachmentId,
+          kind: "image",
+          mediaType: "image/png",
+          name: "生成图片-1.png",
+          size: imageContent.byteLength,
+        },
+      ],
+      id: "generated-image-1",
+      role: "assistant",
+      text: "",
+      type: "message",
+    });
+    expect(JSON.stringify(snapshot)).not.toContain(encodedImage);
+    await expect(provider.readTaskAttachment("task-1", attachmentId)).resolves.toMatchObject({
+      content: imageContent,
+      mediaType: "image/png",
+      name: "生成图片-1.png",
+      size: imageContent.byteLength,
+    });
   });
 
   it("maps Codex text elements to attachments instead of exposing pasted content", async () => {

@@ -827,6 +827,45 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain('target="_blank"');
   });
 
+  it("renders generated assistant image attachments without an empty text bubble", () => {
+    const imageSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              attachments: [
+                {
+                  id: "history/generated-image-1",
+                  kind: "image",
+                  mediaType: "image/png",
+                  name: "生成图片-1.png",
+                  size: 68,
+                },
+              ],
+              id: "message-assistant-image",
+              role: "assistant",
+              text: "",
+              type: "message",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={imageSnapshot} />);
+
+    expect(markup).toContain('aria-label="消息附件"');
+    expect(markup).toContain('aria-label="查看图片 生成图片-1.png"');
+    expect(markup).toContain(
+      'src="/v1/projects/code-agent/tasks/task-1/attachments/history%2Fgenerated-image-1"',
+    );
+    expect(markup).toContain('data-message-attachment="image"');
+    expect(markup).not.toContain('data-message-text="true"');
+    expect(markup).not.toContain("data:image");
+  });
+
   it("renders pasted text as a file attachment instead of a text bubble", () => {
     const pastedTextSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,

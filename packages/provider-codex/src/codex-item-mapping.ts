@@ -228,19 +228,21 @@ export function mapAgentItem(
         status: "completed",
         type: "tool",
       };
-    case "imageGeneration":
-      return {
-        id,
-        name: "image_generation",
-        output: {
-          result: optionalString(item["result"]) ?? "",
-          ...(optionalString(item["savedPath"]) === undefined
-            ? {}
-            : { savedPath: optionalString(item["savedPath"]) }),
-        },
-        status: mapItemStatus(item["status"]),
-        type: "tool",
-      };
+    case "imageGeneration": {
+      const status = mapItemStatus(item["status"]);
+      const attachment = status === "completed" ? mapImage(item, 0) : undefined;
+      if (attachment !== undefined) {
+        // 图片正文留在受控附件存储，Timeline 和事件只传递固定大小的授权元数据。
+        return {
+          attachments: [attachment],
+          id,
+          role: "assistant",
+          text: "",
+          type: "message",
+        };
+      }
+      return { id, name: "image_generation", status, type: "tool" };
+    }
     case "plan":
       return { id, text: expectString(item["text"], "Codex plan text"), type: "plan" };
     case "hookPrompt":

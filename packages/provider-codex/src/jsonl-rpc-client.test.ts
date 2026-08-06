@@ -79,6 +79,28 @@ describe("JsonlRpcClient", () => {
     client.close();
   });
 
+  it("accepts bounded image generation notifications larger than 16 MiB", () => {
+    const { client, serverOutput } = createHarness();
+    const onNotification = vi.fn();
+    client.onNotification(onNotification);
+    const result = "A".repeat(17 * 1_024 * 1_024);
+
+    serverOutput.write(
+      `${JSON.stringify({
+        method: "item/completed",
+        params: {
+          item: { id: "image-1", result, status: "completed", type: "imageGeneration" },
+          threadId: "task-1",
+          turnId: "turn-1",
+        },
+      })}\n`,
+    );
+
+    expect(onNotification).toHaveBeenCalledOnce();
+    expect(client.closed).toBe(false);
+    client.close();
+  });
+
   it("closes when a complete JSONL frame exceeds the UTF-8 byte limit", () => {
     const frame = JSON.stringify({ method: "message/delta", params: { text: "你好" } });
     const frameBytes = Buffer.byteLength(frame, "utf8");

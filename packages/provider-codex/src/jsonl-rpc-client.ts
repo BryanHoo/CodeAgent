@@ -1,6 +1,7 @@
 import type { Readable, Writable } from "node:stream";
 
-const DEFAULT_MAX_JSONL_BYTES = 16 * 1_024 * 1_024;
+// 原生 imageGeneration 会把图片 Base64 放进单个 JSONL 帧，64 MiB 可覆盖最大图片并保留协议边界。
+const DEFAULT_MAX_JSONL_BYTES = 64 * 1_024 * 1_024;
 const EMPTY_BUFFER = Buffer.alloc(0);
 
 export interface JsonlRpcClientOptions {

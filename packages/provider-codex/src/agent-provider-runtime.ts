@@ -359,6 +359,23 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
     part: Record<string, unknown>,
     imageIndex: number,
   ): AgentMessageAttachment | undefined {
+    if (part["type"] === "imageGeneration") {
+      const savedPath = optionalString(part["savedPath"]);
+      if (savedPath !== undefined) {
+        const savedAttachment = this.historicalAttachments.addLocalImage(
+          taskId,
+          savedPath,
+          imageIndex,
+        );
+        if (savedAttachment !== undefined) {
+          return savedAttachment;
+        }
+      }
+      const encoded = optionalString(part["result"]);
+      return encoded === undefined
+        ? undefined
+        : this.historicalAttachments.addBase64Image(taskId, { encoded }, imageIndex);
+    }
     if (part["type"] === "image") {
       const url = optionalString(part["url"]);
       if (url === undefined) {

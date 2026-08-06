@@ -53,6 +53,13 @@ const imageMediaTypesByExtension: Readonly<Record<string, AgentImageMediaType>> 
   ".webp": "image/webp",
 };
 
+const imageExtensionsByMediaType: Readonly<Record<AgentImageMediaType, string>> = {
+  "image/gif": ".gif",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+};
+
 function detectImageMediaType(content: Uint8Array): AgentImageMediaType | undefined {
   const header = Buffer.from(content.buffer, content.byteOffset, content.byteLength);
   if (header.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
@@ -145,21 +152,46 @@ export class CodexHistoricalAttachmentStore {
     ) {
       return undefined;
     }
-    const content = Buffer.from(encoded, "base64");
-    if (
-      content.byteLength === 0 ||
-      content.byteLength > this.#maxBytes ||
-      content.toString("base64").replace(/=+$/u, "") !== encoded.replace(/=+$/u, "") ||
-      detectImageMediaType(content) !== declaredMediaType
-    ) {
+    const content = this.#decodeBase64Image(encoded);
+    if (content === undefined || detectImageMediaType(content) !== declaredMediaType) {
       return undefined;
     }
     const name = normalizeAttachmentName(input.name, `图片-${String(imageIndex + 1)}`);
+    return this.#addInlineImage(taskId, content, declaredMediaType, name);
+  }
+
+  public addBase64Image(
+    taskId: string,
+    input: Readonly<{ encoded: string; name?: string }>,
+    imageIndex: number,
+  ): AgentMessageAttachment | undefined {
+    this.#pruneExpired();
+    const content = this.#decodeBase64Image(input.encoded);
+    if (content === undefined) {
+      return undefined;
+    }
+    const mediaType = detectImageMediaType(content);
+    if (mediaType === undefined) {
+      return undefined;
+    }
+    const name = normalizeAttachmentName(
+      input.name,
+      `生成图片-${String(imageIndex + 1)}${imageExtensionsByMediaType[mediaType]}`,
+    );
+    return this.#addInlineImage(taskId, content, mediaType, name);
+  }
+
+  #addInlineImage(
+    taskId: string,
+    content: Buffer,
+    mediaType: AgentImageMediaType,
+    name: string,
+  ): AgentMessageAttachment | undefined {
     for (const entry of this.#entries.values()) {
       if (
         entry.source === "inline" &&
         entry.projectTaskId === taskId &&
-        entry.attachment.mediaType === declaredMediaType &&
+        entry.attachment.mediaType === mediaType &&
         entry.attachment.name === name &&
         entry.content.equals(content)
       ) {
@@ -167,7 +199,7 @@ export class CodexHistoricalAttachmentStore {
         return this.#refresh(entry);
       }
     }
-    const attachment = this.#createAttachment("image", declaredMediaType, name, content.byteLength);
+    const attachment = this.#createAttachment("image", mediaType, name, content.byteLength);
     if (attachment === undefined) {
       return undefined;
     }
@@ -180,6 +212,18 @@ export class CodexHistoricalAttachmentStore {
     });
     this.#totalBytes += attachment.size;
     return attachment;
+  }
+
+  #decodeBase64Image(encoded: string): Buffer | undefined {
+    if (encoded.length === 0 || encoded.length > Math.ceil((this.#maxBytes * 4) / 3) + 4) {
+      return undefined;
+    }
+    const content = Buffer.from(encoded, "base64");
+    return content.byteLength === 0 ||
+      content.byteLength > this.#maxBytes ||
+      content.toString("base64").replace(/=+$/u, "") !== encoded.replace(/=+$/u, "")
+      ? undefined
+      : content;
   }
 
   public addLocalImage(

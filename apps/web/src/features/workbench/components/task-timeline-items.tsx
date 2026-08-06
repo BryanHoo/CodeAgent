@@ -82,7 +82,7 @@ export function TimelineItemContent({
 }>) {
   switch (item.type) {
     case "message": {
-      const attachments = item.role === "user" ? (item.attachments ?? []) : [];
+      const attachments = item.attachments ?? [];
       const skills = item.role === "user" ? (item.skills ?? []) : [];
       const responseRendering = resolveMessageResponseRendering({
         isLastTurnItem,
@@ -119,54 +119,63 @@ export function TimelineItemContent({
           )}
         </div>
       ) : null;
+      const attachmentBody =
+        attachments.length === 0 ? null : (
+          <Attachments
+            className={`${item.role === "user" ? "justify-end" : "justify-start"} gap-2 px-0 pb-0`}
+            aria-label={i18n.t("timeline.attachments", { ns: "conversation" })}
+          >
+            {attachments.map((attachment) => {
+              const attachmentUrl = buildTaskAttachmentUrl("", projectId, taskId, attachment.id);
+              if (attachment.kind === "image") {
+                return (
+                  <MessageImageAttachment
+                    key={attachment.id}
+                    name={attachment.name}
+                    url={attachmentUrl}
+                  />
+                );
+              }
+              return (
+                <a
+                  aria-label={i18n.t("timeline.downloadAttachment", {
+                    name: attachment.name,
+                    ns: "conversation",
+                  })}
+                  className="block max-w-full rounded-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
+                  data-message-attachment={attachment.kind}
+                  download={attachment.name}
+                  href={attachmentUrl}
+                  key={attachment.id}
+                >
+                  <Attachment
+                    className="h-12 max-w-64 pe-3 shadow-control"
+                    data={{ ...attachment, previewUrl: attachmentUrl }}
+                  >
+                    <AttachmentPreview />
+                    <AttachmentInfo />
+                  </Attachment>
+                </a>
+              );
+            })}
+          </Attachments>
+        );
 
       if (item.role === "assistant") {
-        return <MessageContent className="w-full">{messageBody}</MessageContent>;
+        return (
+          <MessageContent className="w-full">
+            <div className="flex w-full flex-col items-start gap-2">
+              {attachmentBody}
+              {messageBody}
+            </div>
+          </MessageContent>
+        );
       }
 
       return (
         // 确定横向可用空间，避免用户气泡在嵌套收缩容器中提前换行或截断。
         <div className="flex w-full flex-col items-end gap-2">
-          {attachments.length === 0 ? null : (
-            <Attachments
-              className="justify-end gap-2 px-0 pb-0"
-              aria-label={i18n.t("timeline.attachments", { ns: "conversation" })}
-            >
-              {attachments.map((attachment) => {
-                const attachmentUrl = buildTaskAttachmentUrl("", projectId, taskId, attachment.id);
-                if (attachment.kind === "image") {
-                  return (
-                    <MessageImageAttachment
-                      key={attachment.id}
-                      name={attachment.name}
-                      url={attachmentUrl}
-                    />
-                  );
-                }
-                return (
-                  <a
-                    aria-label={i18n.t("timeline.downloadAttachment", {
-                      name: attachment.name,
-                      ns: "conversation",
-                    })}
-                    className="block max-w-full rounded-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
-                    data-message-attachment={attachment.kind}
-                    download={attachment.name}
-                    href={attachmentUrl}
-                    key={attachment.id}
-                  >
-                    <Attachment
-                      className="h-12 max-w-64 pe-3 shadow-control"
-                      data={{ ...attachment, previewUrl: attachmentUrl }}
-                    >
-                      <AttachmentPreview />
-                      <AttachmentInfo />
-                    </Attachment>
-                  </a>
-                );
-              })}
-            </Attachments>
-          )}
+          {attachmentBody}
           {messageBody === null ? null : (
             <MessageContent data-message-text="true">{messageBody}</MessageContent>
           )}
