@@ -1,3 +1,6 @@
+import { readFileSync, realpathSync } from "node:fs";
+import { createRequire } from "node:module";
+
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -50,6 +53,23 @@ import { TooltipProvider } from "../ui/tooltip.js";
 
 function renderWithTooltipProvider(children: ReactNode) {
   return renderToStaticMarkup(<TooltipProvider>{children}</TooltipProvider>);
+}
+
+function resolveStreamdownMermaidVersion(): string {
+  // 从 streamdown 的真实安装位置解析生产依赖，避免测试误读根目录中的其他 Mermaid 版本。
+  const streamdownPackagePath = realpathSync(
+    new URL("../../../node_modules/streamdown/package.json", import.meta.url),
+  );
+  const requireFromStreamdown = createRequire(streamdownPackagePath);
+  const mermaidPackage = JSON.parse(
+    readFileSync(requireFromStreamdown.resolve("mermaid/package.json"), "utf8"),
+  ) as { version?: unknown };
+
+  if (typeof mermaidPackage.version !== "string") {
+    throw new TypeError("streamdown Mermaid package version is missing");
+  }
+
+  return mermaidPackage.version;
 }
 
 describe("AI Elements primitives", () => {
@@ -275,6 +295,53 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('data-streamdown="strong">Markdown</span>');
     expect(markup).toContain('data-streamdown="inline-code">code</code>');
     expect(markup).not.toContain("## 结果");
+  });
+
+  it("uses the patched Mermaid release for untrusted Agent Markdown", () => {
+    expect(resolveStreamdownMermaidVersion()).toBe("11.16.1");
+  });
+
+  it.each([
+    [
+      "CSS sibling injection",
+      `---
+config:
+  themeCSS: |-
+    & + * { background:red !important; position:fixed !important; inset:0 !important; }
+---
+info`,
+    ],
+    [
+      "architecture prototype pollution",
+      `architecture-beta
+  group mermaidPrototypePollutionMarker(cloud)[Marker]
+  service a(server)[A] in __proto__
+  service b(server)[B] in mermaidPrototypePollutionMarker
+  a:R -- L:b`,
+    ],
+    [
+      "XY chart infinite loop",
+      `xychart
+  x-axis 1 --> 1
+  line [1, 2]`,
+    ],
+    [
+      "radar chart resource exhaustion",
+      `radar-beta
+  axis a, b
+  curve c {1, 1}
+  ticks 1000000000`,
+    ],
+  ])("keeps malicious Mermaid input inert: %s", (_name, diagram) => {
+    const markup = renderToStaticMarkup(
+      <MessageResponse>{`\`\`\`mermaid\n${diagram}\n\`\`\``}</MessageResponse>,
+    );
+
+    // Agent 产出的 Mermaid 未配置受信任插件时只能作为代码显示，不能进入图表执行路径。
+    expect(markup).toContain('data-streamdown="code-block"');
+    expect(markup).toContain('data-language="mermaid"');
+    expect(markup).not.toContain('data-streamdown="mermaid-block"');
+    expect(markup).not.toContain("<style");
   });
 
   it("opens safe external links in a new tab and rejects dangerous protocols", () => {
