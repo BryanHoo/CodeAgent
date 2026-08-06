@@ -81,6 +81,7 @@ export function WorkbenchShellLayout({
     runtime,
     setFileTreeExpansion,
     setGlobalSettingsOpen,
+    setGitHistoryOpen,
     setInspectorOpen,
     setInspectorTab,
     setInspectorWidth,
@@ -267,6 +268,9 @@ export function WorkbenchShellLayout({
                 globalSettingsQuery.isPending
               }
               onSettingsChange={updateDraftSettings}
+              onOpenGitHistory={() => {
+                setGitHistoryOpen(true);
+              }}
               onRequestNotificationPermission={requestNotificationPermission}
               onDirectSubmission={beginNewChatSubmission}
               onSubmissionStateChange={handleNewChatSubmissionStateChange}
@@ -289,6 +293,9 @@ export function WorkbenchShellLayout({
             modelsError={modelsQuery.error}
             modelsPending={modelsQuery.isPending}
             onRequestNotificationPermission={requestNotificationPermission}
+            onOpenGitHistory={() => {
+              setGitHistoryOpen(true);
+            }}
             onTaskStarted={handleTaskStarted}
             projectId={projectId}
             projectPath={projectPath}

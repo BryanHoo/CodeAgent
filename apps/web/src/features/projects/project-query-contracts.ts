@@ -8,6 +8,7 @@ export type CodeAgentAccessClient = Pick<
   "getAccessStatus" | "logoutAccess" | "pairAccess" | "subscribeUnauthorized"
 >;
 export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
+export type CodeAgentGitHistoryClient = Pick<CodeAgentClient, "getProjectGitHistory">;
 export type CodeAgentGitMutationClient = Pick<
   CodeAgentClient,
   "commitProjectChanges" | "generateCommitMessage" | "switchProjectBranch"
@@ -69,6 +70,7 @@ export type CodeAgentPendingRequestClient = Pick<CodeAgentClient, "resolvePendin
 export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentBackgroundTerminalClient &
   CodeAgentGitStatusClient &
+  CodeAgentGitHistoryClient &
   CodeAgentGitMutationClient &
   CodeAgentFileTreeClient &
   CodeAgentProjectDirectoryClient &

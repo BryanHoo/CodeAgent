@@ -9,7 +9,15 @@ import {
   type AgentSandboxMode,
 } from "@code-agent/protocol";
 import type { ProjectGitStatus } from "@code-agent/protocol";
-import { ChevronsUpDown, Folder, GitBranch, LoaderCircle, SendHorizontal, X } from "lucide-react";
+import {
+  ChevronsUpDown,
+  Folder,
+  GitBranch,
+  History,
+  LoaderCircle,
+  SendHorizontal,
+  X,
+} from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Context, ContextTrigger } from "../../../shared/ai-elements/context.js";
@@ -134,6 +142,28 @@ export function ComposerBranchSwitcher({
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+export function ComposerGitHistoryButton({ onOpen }: Readonly<{ onOpen: () => void }>) {
+  const { t } = useTranslation("conversation");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          aria-haspopup="dialog"
+          aria-label={t("inspector.openGitHistory")}
+          className="inline-grid size-6 shrink-0 place-items-center rounded-control text-muted-foreground hover:bg-control-hover hover:text-foreground"
+          id="workbench-git-history"
+          onClick={onOpen}
+          type="button"
+          variant="ghost"
+        >
+          <History aria-hidden="true" className="size-3" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{t("inspector.openGitHistory")}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -429,11 +459,14 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
         </p>
       )}
       <div className="mx-auto mt-1.5 flex w-full max-w-content min-w-0 items-center gap-3 px-1 text-caption text-muted-foreground">
-        <ComposerBranchSwitcher
-          gitStatus={props.gitStatus}
-          onBranchChange={props.onBranchChange}
-          switchingBranch={props.switchingBranch}
-        />
+        <div className="flex min-w-0 shrink items-center gap-0.5">
+          <ComposerBranchSwitcher
+            gitStatus={props.gitStatus}
+            onBranchChange={props.onBranchChange}
+            switchingBranch={props.switchingBranch}
+          />
+          <ComposerGitHistoryButton onOpen={props.onOpenGitHistory} />
+        </div>
         <span
           aria-label={t("composer.projectPath")}
           className="inline-flex min-w-0 flex-1 items-center gap-1"

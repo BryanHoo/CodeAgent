@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { TooltipProvider } from "../../../shared/ui/tooltip.js";
 import {
   ComposerBranchSwitcher,
+  ComposerGitHistoryButton,
   ComposerModeTag,
   resolveQueuedPromptSummary,
 } from "./workbench-composer-view.js";
@@ -103,5 +104,18 @@ describe("WorkbenchComposerView", () => {
 
     expect(markup).toContain("未检出分支");
     expect(markup).not.toContain("<button");
+  });
+
+  it("在当前分支旁渲染同尺寸的 Git 历史入口", () => {
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <ComposerGitHistoryButton onOpen={() => undefined} />
+      </TooltipProvider>,
+    );
+
+    expect(markup).toContain('aria-label="查看 Git 历史"');
+    expect(markup).toContain('id="workbench-git-history"');
+    expect(markup).toContain("size-6");
+    expect(markup).toContain("size-3");
   });
 });

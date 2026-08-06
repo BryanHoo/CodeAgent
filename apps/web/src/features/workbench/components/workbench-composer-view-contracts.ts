@@ -57,6 +57,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   onExecuteCommand: (command: PromptCommandItem) => void;
   onExecuteReview: (target: AgentReviewTarget) => void;
   onInterrupt: () => void;
+  onOpenGitHistory: () => void;
   onOpenReviewBranches: () => void;
   onComposerModeRemove: () => void;
   onPromptChange: (

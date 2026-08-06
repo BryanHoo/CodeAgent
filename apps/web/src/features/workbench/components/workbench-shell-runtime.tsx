@@ -68,6 +68,10 @@ export function loadFileReviewDialog() {
   return import("../../diff/file-review-dialog.js");
 }
 
+export function loadGitHistoryDialog() {
+  return import("./git-history-dialog.js");
+}
+
 export function taskLaunchQueryKey(projectId: string, taskId: string) {
   return ["projects", projectId, "tasks", taskId, "launch"] as const;
 }
@@ -274,6 +278,7 @@ export function useWorkbenchShellRuntime({ projectId, taskId }: WorkbenchShellPr
   const [taskRenameOpen, setTaskRenameOpen] = useState(false);
   const [taskRenameError, setTaskRenameError] = useState<string | null>(null);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+  const [gitHistoryOpen, setGitHistoryOpen] = useState(false);
   const [fileDiffSelection, setFileDiffSelection] = useState<{
     change: AgentFileChange;
     projectId: string;
@@ -353,6 +358,7 @@ export function useWorkbenchShellRuntime({ projectId, taskId }: WorkbenchShellPr
     fileTreeQueries,
     getNewChatSubmissionStartedAt,
     gitStatusQuery,
+    gitHistoryOpen,
     globalSettingsMutation,
     globalSettingsOpen,
     globalSettingsQuery,
@@ -393,6 +399,7 @@ export function useWorkbenchShellRuntime({ projectId, taskId }: WorkbenchShellPr
     setFileReviewSelection,
     setFileTreeExpansion,
     setGlobalSettingsOpen,
+    setGitHistoryOpen,
     setInspectorOpen,
     setInspectorTab,
     setInspectorWidth,

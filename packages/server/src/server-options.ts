@@ -12,6 +12,8 @@ import type {
   InstallAppUpdateResponse,
   ProjectDirectoryListing,
   ProjectFileTree,
+  ProjectGitHistoryPage,
+  ProjectGitHistoryQuery,
   ProjectGitStatus,
   ProjectSourceFile,
   SwitchProjectBranchRequest,
@@ -45,6 +47,10 @@ export interface CreateCodeAgentServerOptions {
     request: CommitProjectChangesRequest,
   ) => Promise<CommitProjectChangesResponse>;
   readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
+  readProjectGitHistory?: (
+    projectRoot: string,
+    query: ProjectGitHistoryQuery,
+  ) => Promise<ProjectGitHistoryPage>;
   switchProjectBranch?: (
     projectRoot: string,
     request: SwitchProjectBranchRequest,

@@ -6,6 +6,7 @@ import { TooltipProvider } from "../../shared/ui/tooltip.js";
 import { TaskSnapshotTimeline } from "../workbench/components/task-timeline.js";
 import {
   capabilitiesQueryOptions,
+  type CodeAgentGitHistoryClient,
   type CodeAgentGitStatusClient,
   type CodeAgentFileTreeClient,
   type CodeAgentReadClient,
@@ -14,6 +15,7 @@ import {
   modelsQueryOptions,
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
+  projectGitHistoryInfiniteQueryOptions,
   projectGitStatusQueryOptions,
   projectCommitChangesMutationOptions,
   projectCommitMessageMutationOptions,
@@ -213,6 +215,60 @@ describe("project queries", () => {
     expect(options.refetchInterval).toBeUndefined();
     expect(getProjectGitStatus.mock.calls[0]?.[0]).toBe("code-agent");
     expect(getProjectGitStatus.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("loads Git history twenty commits at a time for one repository tab", async () => {
+    const commit = {
+      authoredAt: "2026-08-06T08:30:00+08:00",
+      authorEmail: "developer@example.com",
+      authorName: "Developer",
+      sha: "a".repeat(40),
+      title: "feat(git): 添加历史记录",
+    };
+    const getProjectGitHistory = vi
+      .fn<CodeAgentGitHistoryClient["getProjectGitHistory"]>()
+      .mockResolvedValueOnce({
+        branch: "release/server",
+        commits: [commit],
+        nextCursor: "20",
+        repositories: ["apps/web", "packages/server"],
+        repository: "packages/server",
+        repositoryMode: "children",
+      })
+      .mockResolvedValueOnce({
+        branch: "release/server",
+        commits: [{ ...commit, sha: "b".repeat(40) }],
+        nextCursor: null,
+        repositories: ["apps/web", "packages/server"],
+        repository: "packages/server",
+        repositoryMode: "children",
+      });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const options = projectGitHistoryInfiniteQueryOptions("code-agent", "packages/server", true, {
+      getProjectGitHistory,
+    });
+    const observer = new InfiniteQueryObserver(queryClient, options);
+    const unsubscribe = observer.subscribe(() => undefined);
+
+    await observer.refetch();
+    await observer.fetchNextPage();
+
+    expect(options.queryKey).toEqual(["projects", "code-agent", "git-history", "packages/server"]);
+    expect(getProjectGitHistory.mock.calls[0]?.slice(0, 2)).toEqual([
+      "code-agent",
+      { repository: "packages/server" },
+    ]);
+    expect(getProjectGitHistory.mock.calls[1]?.slice(0, 2)).toEqual([
+      "code-agent",
+      { cursor: "20", repository: "packages/server" },
+    ]);
+    expect(getProjectGitHistory.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
+    expect(
+      projectGitHistoryInfiniteQueryOptions("code-agent", undefined, false, {
+        getProjectGitHistory,
+      }).enabled,
+    ).toBe(false);
+    unsubscribe();
   });
 
   it("loads a project-scoped file tree directory with query cancellation", async () => {

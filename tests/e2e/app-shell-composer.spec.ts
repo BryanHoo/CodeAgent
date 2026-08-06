@@ -47,6 +47,154 @@ test("switches branches from the composer footer", async ({ page }) => {
   expect(viewportMetrics.documentWidth).toBeLessThanOrEqual(viewportMetrics.viewportWidth);
 });
 
+test("opens current-branch Git history beside the composer branch", async ({ page }) => {
+  const historyRequests: string[] = [];
+  let releaseServerHistory: (() => void) | undefined;
+  await page.route("**/v1/projects/code-agent/git/history*", async (route) => {
+    const url = new URL(route.request().url());
+    const cursor = url.searchParams.get("cursor");
+    const repository = url.searchParams.get("repository");
+    historyRequests.push(url.search);
+    const count = cursor === "20" ? 1 : 20;
+    const start = cursor === "20" ? 20 : 0;
+    if (repository === "packages/server") {
+      await new Promise<void>((resolve) => {
+        releaseServerHistory = resolve;
+      });
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        branch: repository === "packages/server" ? "release/server" : "feat/apps-web",
+        commits: Array.from({ length: count }, (_, index) => ({
+          authoredAt: "2026-08-06T08:30:00+08:00",
+          authorEmail: "developer@example.com",
+          authorName: "Developer",
+          sha: (start + index).toString(16).padStart(40, "0"),
+          title: `${repository ?? "apps/web"} commit ${String(start + index + 1)}`,
+        })),
+        nextCursor: cursor === null && repository !== "packages/server" ? "20" : null,
+        repositories: ["apps/web", "packages/server"],
+        repository: repository ?? "apps/web",
+        repositoryMode: "children",
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const branchTrigger = page.getByRole("button", { name: /切换分支，当前分支/u });
+  const historyTrigger = page.getByRole("button", { name: "查看 Git 历史" });
+  await expect(historyTrigger).toBeVisible();
+  const branchBox = await branchTrigger.boundingBox();
+  const historyBox = await historyTrigger.boundingBox();
+  expect(historyBox?.x).toBeGreaterThan(branchBox?.x ?? 0);
+  expect(historyBox?.y).toBe(branchBox?.y);
+  expect(
+    (historyBox?.x ?? 0) - ((branchBox?.x ?? 0) + (branchBox?.width ?? 0)),
+  ).toBeLessThanOrEqual(4);
+  await expect(historyTrigger).toHaveCSS("height", "24px");
+  await expect(historyTrigger.locator("svg")).toHaveCSS("width", "12px");
+  await expect(branchTrigger.locator("svg").first()).toHaveCSS("width", "12px");
+  expect(historyRequests).toEqual([]);
+  await historyTrigger.click();
+
+  const dialog = page.getByRole("dialog", { name: "Git 历史" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("当前分支：feat/apps-web")).toBeVisible();
+  await expect(dialog.locator("header svg").first()).toHaveCSS("width", "16px");
+  await expect(dialog.locator("header svg").first()).toHaveCSS("height", "16px");
+  await expect(dialog.getByRole("listitem")).toHaveCount(20);
+  await expect(dialog.getByRole("tab", { name: "apps/web" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await dialog.evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+  });
+  const initialDialogBox = await dialog.boundingBox();
+  expect(historyRequests).toEqual([""]);
+
+  await dialog.getByRole("tab", { name: "packages/server" }).click();
+  await expect(dialog.getByText("正在读取 Git 历史...")).toBeVisible();
+  await expect(dialog.getByText("当前分支：读取中...")).toBeVisible();
+  const pendingDialogBox = await dialog.boundingBox();
+  expect(pendingDialogBox?.height).toBe(initialDialogBox?.height);
+  expect(pendingDialogBox?.y).toBe(initialDialogBox?.y);
+  await expect(dialog.getByText("apps/web commit 1", { exact: true })).toBeAttached();
+  await expect(dialog.getByText("apps/web commit 1", { exact: true })).toBeHidden();
+  releaseServerHistory?.();
+  await expect(dialog.getByText("packages/server commit 20")).toBeVisible();
+  await expect(dialog.getByText("当前分支：release/server")).toBeVisible();
+  const loadedDialogBox = await dialog.boundingBox();
+  expect(loadedDialogBox?.height).toBe(initialDialogBox?.height);
+  expect(loadedDialogBox?.y).toBe(initialDialogBox?.y);
+  expect(historyRequests).toEqual(["", "?repository=packages%2Fserver"]);
+
+  await dialog.getByRole("tab", { name: "apps/web" }).click();
+  await expect(dialog.getByRole("listitem")).toHaveCount(20);
+  await expect(dialog.getByText("当前分支：feat/apps-web")).toBeVisible();
+  expect(historyRequests).toEqual(["", "?repository=packages%2Fserver"]);
+
+  await dialog.getByRole("button", { name: "关闭 Git 历史" }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(historyTrigger).toBeFocused();
+
+  await page.setViewportSize({ width: 320, height: 568 });
+  await historyTrigger.click();
+  await expect(dialog).toBeVisible();
+  await page.waitForTimeout(200);
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  const touchControls = [
+    dialog.getByRole("button", { name: "关闭 Git 历史" }),
+    dialog.getByRole("tab", { name: "apps/web" }),
+    dialog.getByRole("tab", { name: "packages/server" }),
+    dialog.getByRole("button", { name: "加载更多" }),
+  ];
+  const touchBoxes = await Promise.all(touchControls.map((control) => control.boundingBox()));
+  for (const box of touchBoxes) expect(box?.height).toBeGreaterThanOrEqual(44);
+  await dialog.getByRole("button", { name: "加载更多" }).click();
+  await expect(dialog.getByRole("listitem")).toHaveCount(21);
+  expect(historyRequests).toEqual(["", "?repository=packages%2Fserver", "", "?cursor=20"]);
+});
+
+test("paginates a single repository inside the history content", async ({ page }) => {
+  await page.route("**/v1/projects/code-agent/git/history*", async (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    const start = cursor === "20" ? 20 : 0;
+    const count = cursor === "20" ? 1 : 20;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        branch: "main",
+        commits: Array.from({ length: count }, (_, index) => ({
+          authoredAt: "2026-08-06T08:30:00+08:00",
+          authorEmail: "developer@example.com",
+          authorName: "Developer",
+          sha: (start + index).toString(16).padStart(40, "0"),
+          title: `root commit ${String(start + index + 1)}`,
+        })),
+        nextCursor: cursor === null ? "20" : null,
+        repositories: [],
+        repository: null,
+        repositoryMode: "root",
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+  await page.getByRole("button", { name: "查看 Git 历史" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Git 历史" });
+  const content = dialog.locator('[data-slot="git-history-content"]');
+  const loadMore = content.getByRole("button", { name: "加载更多" });
+  await expect(dialog.getByRole("tab")).toHaveCount(0);
+  await expect(loadMore).toBeVisible();
+  await expect(dialog.locator("footer")).toHaveCount(0);
+
+  await loadMore.click();
+  await expect(dialog.getByRole("listitem")).toHaveCount(21);
+  await expect(content.getByText("已加载全部提交")).toBeVisible();
+});
+
 test("keeps composer attachment icons aligned with the compact toolbar", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 

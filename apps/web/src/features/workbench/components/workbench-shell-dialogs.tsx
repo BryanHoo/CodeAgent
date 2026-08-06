@@ -8,6 +8,7 @@ import type { useWorkbenchShellController } from "./workbench-shell-controller.j
 import {
   loadFileDiffDialog,
   loadFileReviewDialog,
+  loadGitHistoryDialog,
   loadProjectSourceDialog,
 } from "./workbench-shell-runtime.js";
 
@@ -19,6 +20,9 @@ const LazyFileReviewDialog = lazy(() =>
 );
 const LazyGlobalSettingsDialog = lazy(() =>
   loadGlobalSettingsDialog().then((module) => ({ default: module.GlobalSettingsDialog })),
+);
+const LazyGitHistoryDialog = lazy(() =>
+  loadGitHistoryDialog().then((module) => ({ default: module.GitHistoryDialog })),
 );
 
 const LazyProjectSourceDialog = lazy(() =>
@@ -42,6 +46,7 @@ export function WorkbenchShellDialogs({
     closeTaskRenameDialog,
     commitChangesLauncherRef,
     gitStatusQuery,
+    gitHistoryOpen,
     globalSettingsMutation,
     globalSettingsOpen,
     globalSettingsQuery,
@@ -49,6 +54,7 @@ export function WorkbenchShellDialogs({
     modelsQuery,
     projectOpenCapabilitiesQuery,
     projectRuntime,
+    queryClient,
     renameActiveTask,
     renameMutation,
     selectedFileChange,
@@ -58,6 +64,7 @@ export function WorkbenchShellDialogs({
     setFileDiffSelection,
     setFileReviewSelection,
     setGlobalSettingsOpen,
+    setGitHistoryOpen,
     setSourceFileSelection,
     setSubagentDialogSelection,
     taskRenameError,
@@ -94,6 +101,25 @@ export function WorkbenchShellDialogs({
           ref={commitChangesLauncherRef}
         />
       )}
+      {gitHistoryOpen ? (
+        <Suspense fallback={null}>
+          <LazyGitHistoryDialog
+            client={client}
+            onClose={() => {
+              setGitHistoryOpen(false);
+              // 下次打开必须重新读取当前检出的 HEAD，避免分支切换后短暂显示旧历史。
+              queryClient.removeQueries({
+                exact: false,
+                queryKey: ["projects", projectId, "git-history"],
+              });
+              requestAnimationFrame(() => {
+                document.querySelector<HTMLButtonElement>("#workbench-git-history")?.focus();
+              });
+            }}
+            projectId={projectId}
+          />
+        </Suspense>
+      ) : null}
       {selectedSourceFile === null ? null : (
         <Suspense fallback={null}>
           <LazyProjectSourceDialog

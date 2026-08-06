@@ -1250,6 +1250,54 @@ describe("CodeAgent Server", () => {
     expect(readProjectGitStatus).toHaveBeenCalledTimes(1);
   });
 
+  it("serves paginated Git history for the selected repository tab", async () => {
+    const { provider } = createProvider();
+    const historyPage = {
+      branch: "release/server",
+      commits: [
+        {
+          authoredAt: "2026-08-06T08:30:00+08:00",
+          authorEmail: "developer@example.com",
+          authorName: "Developer",
+          sha: "a".repeat(40),
+          title: "feat(git): 添加历史记录",
+        },
+      ],
+      nextCursor: "40",
+      repositories: ["apps/web", "packages/server"],
+      repository: "packages/server",
+      repositoryMode: "children" as const,
+    };
+    const readProjectGitHistory = vi.fn(() => Promise.resolve(historyPage));
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, { readProjectGitHistory }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/git/history?repository=packages%2Fserver&cursor=20",
+    });
+    const missingProjectResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/other/git/history",
+    });
+    const invalidQueryResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/git/history?cursor=sha",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(historyPage);
+    expect(readProjectGitHistory).toHaveBeenCalledWith(project.rootPath, {
+      cursor: "20",
+      repository: "packages/server",
+    });
+    expect(missingProjectResponse.statusCode).toBe(404);
+    expect(invalidQueryResponse.statusCode).toBe(400);
+    expect(readProjectGitHistory).toHaveBeenCalledTimes(1);
+  });
+
   it("switches a local project branch idempotently through the fixed Git mutation", async () => {
     const { provider } = createProvider();
     const expectedSnapshot = "c".repeat(64);

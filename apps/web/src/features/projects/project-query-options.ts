@@ -6,6 +6,7 @@ import type {
   AgentTaskSettings,
   CommitProjectChangesRequest,
   GenerateCommitMessageRequest,
+  ProjectGitHistoryPage,
 } from "@code-agent/protocol";
 import { infiniteQueryOptions, mutationOptions, queryOptions } from "@tanstack/react-query";
 
@@ -23,6 +24,7 @@ import {
   type CodeAgentMcpServersClient,
   type CodeAgentReadClient,
   type CodeAgentGitStatusClient,
+  type CodeAgentGitHistoryClient,
   type CodeAgentFileTreeClient,
   type CodeAgentProjectOpenClient,
 } from "./project-query-contracts.js";
@@ -234,6 +236,38 @@ export function projectGitStatusQueryOptions(
     queryKey: ["projects", projectId, "git-status"] as const,
     // Project 级协调器负责刷新生命周期，Query 只维护共享服务端状态。
     retry: 1,
+  });
+}
+
+export function projectGitHistoryInfiniteQueryOptions(
+  projectId: string,
+  repository: string | undefined,
+  enabled: boolean,
+  client: CodeAgentGitHistoryClient = codeAgentClient,
+) {
+  return infiniteQueryOptions<
+    ProjectGitHistoryPage,
+    Error,
+    { pageParams: (string | undefined)[]; pages: ProjectGitHistoryPage[] },
+    readonly ["projects", string, "git-history", string | null],
+    string | undefined
+  >({
+    enabled,
+    getNextPageParam: (lastPage, _pages, lastPageParam) =>
+      lastPage.nextCursor === null || lastPage.nextCursor === lastPageParam
+        ? undefined
+        : lastPage.nextCursor,
+    initialPageParam: undefined,
+    queryFn: ({ pageParam, signal }) =>
+      client.getProjectGitHistory(
+        projectId,
+        {
+          ...(pageParam === undefined ? {} : { cursor: pageParam }),
+          ...(repository === undefined ? {} : { repository }),
+        },
+        { signal },
+      ),
+    queryKey: ["projects", projectId, "git-history", repository ?? null] as const,
   });
 }
 

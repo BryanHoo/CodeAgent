@@ -38,6 +38,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   modelsError,
   modelsPending,
   onRequestNotificationPermission,
+  onOpenGitHistory,
   onTaskStarted,
   projectId,
   projectPath,
@@ -59,6 +60,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   modelsError: Error | null;
   modelsPending: boolean;
   onRequestNotificationPermission: () => void;
+  onOpenGitHistory: () => void;
   onTaskStarted: (
     task: AgentTask,
     turn?: AgentTurn,
@@ -190,6 +192,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
           beginSubmission();
           setTimelineScrollToBottomSignal((current) => current + 1);
         }}
+        onOpenGitHistory={onOpenGitHistory}
         onRequestNotificationPermission={onRequestNotificationPermission}
         onSettingsChange={(settings) =>
           settingsMutation.mutateAsync(settings).then(() => undefined)

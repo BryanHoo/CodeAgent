@@ -271,6 +271,8 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain(">CodeAgent</span>");
     expect(markup).toContain("README.md");
     expect(markup).not.toContain("workbench-shell.tsx");
+    expect(markup).not.toContain('id="workbench-git-history"');
+    expect(markup).not.toContain('aria-label="查看 Git 历史"');
   });
 
   it("shows a non-blocking retry status and offers a manual refresh after Git detection fails", () => {

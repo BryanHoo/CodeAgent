@@ -4,15 +4,19 @@ import {
   GenerateCommitMessageRequestSchema,
   GenerateCommitMessageResponseSchema,
   AgentMutationErrorSchema,
+  ProjectGitHistoryPageSchema,
+  ProjectGitHistoryQuerySchema,
   ProjectGitStatusSchema,
   SwitchProjectBranchRequestSchema,
   type AgentTaskSettings,
   type CommitProjectChangesRequest,
   type GenerateCommitMessageRequest,
+  type ProjectGitHistoryQuery,
   type SwitchProjectBranchRequest,
 } from "@code-agent/protocol";
 import { GitBranchError } from "../git-branch.js";
 import { GitCommitError } from "../git-commit.js";
+import { GitHistoryError } from "../git-history.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import { ErrorResponseSchema, IdempotencyHeadersSchema, ProjectParamsSchema } from "./schemas.js";
 
@@ -42,6 +46,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     generateCommitMessageWithCodex,
     getProjectContext,
     readEffectiveGlobalSettings,
+    readProjectGitHistory,
     readProjectGitStatus,
     runIdempotent,
     switchProjectBranch,
@@ -83,6 +88,43 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         return reply.code(500).send({
           code: "GIT_STATUS_UNAVAILABLE",
           message: "Git working tree status is unavailable",
+        });
+      }
+    },
+  );
+
+  app.get<{ Params: { projectId: string }; Querystring: ProjectGitHistoryQuery }>(
+    "/v1/projects/:projectId/git/history",
+    {
+      schema: {
+        params: ProjectParamsSchema,
+        querystring: ProjectGitHistoryQuerySchema,
+        response: {
+          200: ProjectGitHistoryPageSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const projectContext = await getProjectContext(request.params.projectId);
+      if (projectContext === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      try {
+        return await readProjectGitHistory(projectContext.project.rootPath, request.query);
+      } catch (error) {
+        if (error instanceof GitHistoryError && error.code === "INVALID_CURSOR") {
+          return reply.code(400).send({ code: "INVALID_REQUEST", message: error.message });
+        }
+        if (error instanceof GitHistoryError && error.code === "REPOSITORY_NOT_FOUND") {
+          return reply.code(404).send({ code: "GIT_REPOSITORY_NOT_FOUND", message: error.message });
+        }
+        // Git 与文件系统错误在边界统一收敛，不能回传宿主绝对路径。
+        return reply.code(500).send({
+          code: "GIT_HISTORY_UNAVAILABLE",
+          message: "Git history is unavailable",
         });
       }
     },

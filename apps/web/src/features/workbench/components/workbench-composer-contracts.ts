@@ -56,6 +56,7 @@ export type WorkbenchComposerProps = Readonly<{
     field: keyof AgentTaskSettings,
   ) => Promise<void> | void;
   onRequestNotificationPermission: () => void;
+  onOpenGitHistory: () => void;
   onDirectSubmission?: () => void;
   onSubmissionStateChange?: (submitting: boolean) => void;
   onTaskCreated?: (task: AgentTask) => void;

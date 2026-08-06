@@ -54,6 +54,8 @@ import {
   ProjectDirectoryListingSchema,
   ProjectDirectoryQuerySchema,
   ProjectFileTreeQuerySchema,
+  ProjectGitHistoryPageSchema,
+  ProjectGitHistoryQuerySchema,
   ProjectGitStatusSchema,
   SwitchProjectBranchRequestSchema,
   ProjectFileTreeSchema,
@@ -543,6 +545,98 @@ describe("project protocol", () => {
         snapshot: "a".repeat(64),
         staged: [{ ...fileChange, path: "/workspace/CodeAgent/src/index.ts" }],
         unstaged: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("strictly validates paginated Git history contracts", () => {
+    const commit = {
+      authoredAt: "2026-08-06T08:30:00+08:00",
+      authorEmail: "developer@example.com",
+      authorName: "Developer",
+      sha: "a".repeat(40),
+      title: "feat(git): 添加历史记录",
+    };
+
+    expect(Value.Check(ProjectGitHistoryQuerySchema, {})).toBe(true);
+    expect(
+      Value.Check(ProjectGitHistoryQuerySchema, {
+        cursor: "20",
+        repository: "packages/server",
+      }),
+    ).toBe(true);
+    expect(Value.Check(ProjectGitHistoryQuerySchema, { cursor: "sha-20" })).toBe(false);
+    expect(Value.Check(ProjectGitHistoryQuerySchema, { repository: "../server" })).toBe(false);
+    expect(
+      Value.Check(ProjectGitHistoryPageSchema, {
+        branch: "feat/apps-web",
+        commits: [commit, { ...commit, sha: "b".repeat(64) }],
+        nextCursor: "20",
+        repositories: ["apps/web", "packages/server"],
+        repository: "apps/web",
+        repositoryMode: "children",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ProjectGitHistoryPageSchema, {
+        branch: "main",
+        commits: [{ ...commit, sha: "not-a-sha" }],
+        nextCursor: null,
+        repositories: [],
+        repository: null,
+        repositoryMode: "root",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ProjectGitHistoryPageSchema, {
+        branch: "main",
+        commits: [{ ...commit, authoredAt: "yesterday" }],
+        nextCursor: null,
+        repositories: [],
+        repository: null,
+        repositoryMode: "root",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ProjectGitHistoryPageSchema, {
+        branch: "release/server",
+        commits: [commit],
+        nextCursor: "next",
+        repositories: ["packages/server"],
+        repository: "packages/server",
+        repositoryMode: "children",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ProjectGitHistoryPageSchema, {
+        branch: null,
+        commits: [{ ...commit, body: "unexpected" }],
+        nextCursor: null,
+        repositories: [],
+        repository: null,
+        repositoryMode: "root",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ProjectGitHistoryPageSchema, {
+        branch: "main",
+        commits: Array.from({ length: 21 }, (_, index) => ({
+          ...commit,
+          sha: index.toString(16).padStart(40, "0"),
+        })),
+        nextCursor: "20",
+        repositories: [],
+        repository: null,
+        repositoryMode: "root",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ProjectGitHistoryPageSchema, {
+        commits: [commit],
+        nextCursor: null,
+        repositories: [],
+        repository: null,
+        repositoryMode: "root",
       }),
     ).toBe(false);
   });

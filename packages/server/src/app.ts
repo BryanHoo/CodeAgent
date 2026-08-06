@@ -17,6 +17,7 @@ import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js"
 import { commitSelectedProjectChanges } from "./git-commit.js";
 import { buildCommitMessagePrompt } from "./git-commit-message.js";
 import { switchProjectBranch as switchGitProjectBranch } from "./git-branch.js";
+import { readProjectGitHistory } from "./git-history.js";
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
 import { readHostFileDirectory, resolveHostAttachment } from "./host-file-browser.js";
 import { readProjectFileTree } from "./project-file-tree.js";
@@ -38,7 +39,6 @@ import { registerProjectRoutes } from "./routes/project-routes.js";
 import { registerRuntimeRoutes } from "./routes/runtime-routes.js";
 import { registerTaskRoutes } from "./routes/task-routes.js";
 import { registerTurnRoutes } from "./routes/turn-routes.js";
-
 import { configureServerDelivery } from "./server-delivery.js";
 import type { CreateCodeAgentServerOptions } from "./server-options.js";
 import {
@@ -462,6 +462,7 @@ export async function createCodeAgentServer(
     readProjectDirectory: options.readProjectDirectory ?? readProjectDirectory,
     readImageFile,
     readInheritedTaskSettings,
+    readProjectGitHistory: options.readProjectGitHistory ?? readProjectGitHistory,
     readProjectGitStatus,
     readSourceFile,
     releaseProjectContext,

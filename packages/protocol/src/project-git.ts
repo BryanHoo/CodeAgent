@@ -44,6 +44,45 @@ export const ProjectGitStatusSchema = Type.Object(
 
 export type ProjectGitStatus = Readonly<Static<typeof ProjectGitStatusSchema>>;
 
+export const ProjectGitCommitSchema = Type.Object(
+  {
+    authoredAt: Type.String({ format: "date-time" }),
+    authorEmail: Type.String({ maxLength: 320, minLength: 1 }),
+    authorName: Type.String({ maxLength: 512, minLength: 1, pattern: "\\S" }),
+    sha: Type.String({ maxLength: 64, minLength: 40, pattern: "^[a-f0-9]+$" }),
+    title: Type.String({ maxLength: 10_000, minLength: 1, pattern: "\\S" }),
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectGitCommit = Readonly<Static<typeof ProjectGitCommitSchema>>;
+
+const GitHistoryCursorSchema = Type.String({ maxLength: 20, minLength: 1, pattern: "^[0-9]+$" });
+
+export const ProjectGitHistoryQuerySchema = Type.Object(
+  {
+    cursor: Type.Optional(GitHistoryCursorSchema),
+    repository: Type.Optional(ProjectRelativePathSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectGitHistoryQuery = Readonly<Static<typeof ProjectGitHistoryQuerySchema>>;
+
+export const ProjectGitHistoryPageSchema = Type.Object(
+  {
+    branch: Type.Union([GitBranchNameSchema, Type.Null()]),
+    commits: Type.Array(ProjectGitCommitSchema, { maxItems: 20 }),
+    nextCursor: Type.Union([GitHistoryCursorSchema, Type.Null()]),
+    repositories: Type.Array(ProjectRelativePathSchema, { maxItems: 256, uniqueItems: true }),
+    repository: Type.Union([ProjectRelativePathSchema, Type.Null()]),
+    repositoryMode: Type.Union([Type.Literal("root"), Type.Literal("children")]),
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectGitHistoryPage = Readonly<Static<typeof ProjectGitHistoryPageSchema>>;
+
 export const SwitchProjectBranchRequestSchema = Type.Object(
   {
     branch: GitBranchNameSchema,

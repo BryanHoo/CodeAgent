@@ -9,6 +9,7 @@ import {
   OpenProjectResponseSchema,
   ProjectDirectoryListingSchema,
   ProjectFileTreeSchema,
+  ProjectGitHistoryPageSchema,
   ProjectGitStatusSchema,
   ProjectOpenCapabilitiesResponseSchema,
   ProjectPageSchema,
@@ -31,6 +32,8 @@ import {
   type OpenProjectResponse,
   type ProjectDirectoryListing,
   type ProjectFileTree,
+  type ProjectGitHistoryPage,
+  type ProjectGitHistoryQuery,
   type ProjectGitStatus,
   type ProjectOpenCapabilitiesResponse,
   type ProjectPage,
@@ -191,6 +194,21 @@ export class ProjectHttpClient extends CodeAgentTransport {
     return this.read(
       `/v1/projects/${encodeURIComponent(projectId)}/git/status`,
       ProjectGitStatusSchema,
+      options,
+    );
+  }
+
+  public async getProjectGitHistory(
+    projectId: string,
+    query: ProjectGitHistoryQuery = {},
+    options: ReadOptions = {},
+  ): Promise<ProjectGitHistoryPage> {
+    return this.read(
+      appendQuery(`${projectPath(projectId)}/git/history`, {
+        cursor: query.cursor,
+        repository: query.repository,
+      }),
+      ProjectGitHistoryPageSchema,
       options,
     );
   }

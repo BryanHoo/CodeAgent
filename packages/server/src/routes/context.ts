@@ -27,6 +27,8 @@ import type {
   Project,
   ProjectDirectoryListing,
   ProjectFileTree,
+  ProjectGitHistoryPage,
+  ProjectGitHistoryQuery,
   ProjectGitStatus,
   ProjectSourceFile,
   SwitchProjectBranchRequest,
@@ -142,6 +144,10 @@ export interface ServerRouteContext {
   readonly readProjectDirectory: (path?: string) => Promise<ProjectDirectoryListing>;
   readonly readImageFile: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
   readonly readProjectGitStatus: (projectRoot: string) => Promise<ProjectGitStatus>;
+  readonly readProjectGitHistory: (
+    projectRoot: string,
+    query: ProjectGitHistoryQuery,
+  ) => Promise<ProjectGitHistoryPage>;
   readonly switchProjectBranch: (
     projectRoot: string,
     request: SwitchProjectBranchRequest,

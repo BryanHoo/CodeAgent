@@ -400,6 +400,43 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("reads and validates a paginated project Git history tab", async () => {
+    const historyPage = {
+      branch: "release/server",
+      commits: [
+        {
+          authoredAt: "2026-08-06T08:30:00+08:00",
+          authorEmail: "developer@example.com",
+          authorName: "Developer",
+          sha: "a".repeat(40),
+          title: "feat(git): 添加历史记录",
+        },
+      ],
+      nextCursor: "40",
+      repositories: ["apps/web", "packages/server"],
+      repository: "packages/server",
+      repositoryMode: "children",
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse(historyPage));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(
+      client.getProjectGitHistory("project one", {
+        cursor: "20",
+        repository: "packages/server",
+      }),
+    ).resolves.toEqual(historyPage);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/projects/project%20one/git/history?cursor=20&repository=packages%2Fserver",
+    );
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ...historyPage, commits: [{}] }));
+    await expect(client.getProjectGitHistory("project one")).rejects.toThrow(
+      "CodeAgent response does not match the protocol schema",
+    );
+  });
+
   it("switches a project branch with a validated idempotent mutation", async () => {
     const gitStatus = {
       baseBranches: ["origin/main", "feat/review"],

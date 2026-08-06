@@ -183,7 +183,7 @@ export function WorkbenchInspector({
                 type="button"
                 variant="ghost"
               >
-                <PanelRightClose aria-hidden="true" className="size-3.5" />
+                <PanelRightClose aria-hidden="true" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{i18n.t("shell.closeInspector", { ns: "workbench" })}</TooltipContent>
