@@ -180,6 +180,7 @@ export const conversation = {
     attachments: "Message attachments",
     changedFiles: "This response changed {{count}} files",
     collapseFiles: "Collapse file list",
+    collapseProcess: "Collapse process",
     closeImagePreview: "Close image preview",
     commandPending: "Running command",
     conversation: "Conversation",
@@ -188,6 +189,7 @@ export const conversation = {
     downloadAttachment: "Download attachment {{name}}",
     emptyAfter: "?",
     emptyBefore: "What should we do in",
+    expandProcess: "Expand process",
     fileChange:
       "{{operation}} {{name}}, {{additions}} additions, {{removals}} deletions, open Diff",
     fileOperation: {

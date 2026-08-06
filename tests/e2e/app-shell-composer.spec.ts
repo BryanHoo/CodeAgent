@@ -113,6 +113,74 @@ test("shows processing state while an existing task turn is still starting", asy
   await expect(page.getByText("继续处理当前任务", { exact: true })).toBeVisible();
 });
 
+test("toggles the completed execution process from the processing time", async ({ page }) => {
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: {
+          ...taskSnapshot,
+          turns: [
+            {
+              completedAt: "2026-08-06T00:00:08.000Z",
+              error: null,
+              id: "turn-collapsed-process",
+              items: [
+                {
+                  id: "message-process-commentary",
+                  phase: "commentary",
+                  role: "assistant",
+                  text: "正在读取项目配置。",
+                  type: "message",
+                },
+                {
+                  command: "pnpm check",
+                  cwd: "/workspace/CodeAgent",
+                  exitCode: 0,
+                  id: "command-process-check",
+                  output: "Checks passed",
+                  outputTruncated: false,
+                  status: "completed",
+                  type: "command",
+                },
+                {
+                  id: "message-process-final",
+                  phase: "final_answer",
+                  role: "assistant",
+                  text: "实现与检查已完成。",
+                  type: "message",
+                },
+              ],
+              startedAt: "2026-08-06T00:00:00.000Z",
+              status: "completed",
+            },
+          ],
+          updatedAt: "2026-08-06T00:00:08.000Z",
+        },
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  await expect(page.getByText("实现与检查已完成。", { exact: true })).toBeVisible();
+  await expect(page.getByText("正在读取项目配置。", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("pnpm check", { exact: true })).toHaveCount(0);
+
+  const expandProcess = page.getByRole("button", { name: "展开执行过程" });
+  await expect(expandProcess).toHaveAttribute("aria-expanded", "false");
+  await expandProcess.click();
+
+  await expect(page.getByText("正在读取项目配置。", { exact: true })).toBeVisible();
+  await expect(page.getByText("pnpm check", { exact: true })).toBeVisible();
+  const collapseProcess = page.getByRole("button", { name: "收起执行过程" });
+  await expect(collapseProcess).toHaveAttribute("aria-expanded", "true");
+  await collapseProcess.click();
+
+  await expect(page.getByText("正在读取项目配置。", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("pnpm check", { exact: true })).toHaveCount(0);
+});
+
 test("runs official task actions from the slash command menu", async ({ page }) => {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   const commandRequests: { body: string | null; path: string }[] = [];

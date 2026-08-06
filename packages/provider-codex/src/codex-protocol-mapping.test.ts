@@ -36,6 +36,59 @@ describe("Codex protocol mapping", () => {
     expect(mapAgentModel({ hidden: true })).toBeUndefined();
   });
 
+  it("preserves documented agent message phases and omits a null legacy phase", () => {
+    expect(
+      mapAgentTurn({
+        completedAt: 1_753_228_830,
+        error: null,
+        id: "message-phase-turn",
+        items: [
+          {
+            id: "commentary-message",
+            phase: "commentary",
+            text: "正在检查。",
+            type: "agentMessage",
+          },
+          {
+            id: "final-message",
+            phase: "final_answer",
+            text: "检查完成。",
+            type: "agentMessage",
+          },
+          {
+            id: "legacy-message",
+            phase: null,
+            text: "旧版消息。",
+            type: "agentMessage",
+          },
+        ],
+        startedAt: 1_753_228_800,
+        status: "completed",
+      }).items,
+    ).toEqual([
+      {
+        id: "commentary-message",
+        phase: "commentary",
+        role: "assistant",
+        text: "正在检查。",
+        type: "message",
+      },
+      {
+        id: "final-message",
+        phase: "final_answer",
+        role: "assistant",
+        text: "检查完成。",
+        type: "message",
+      },
+      {
+        id: "legacy-message",
+        role: "assistant",
+        text: "旧版消息。",
+        type: "message",
+      },
+    ]);
+  });
+
   it("projects a completed Codex review to one request and one authoritative result", () => {
     expect(
       mapAgentTurn({

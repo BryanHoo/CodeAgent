@@ -7,6 +7,7 @@ import { TooltipProvider } from "../../../shared/ui/tooltip.js";
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import { createTaskStore } from "../../conversation/runtime/task-store.js";
 import {
+  resolveCompletedTurnProcessItemIds,
   resolveMessageResponseRendering,
   TaskSnapshotTimeline,
   TaskTimeline,
@@ -985,6 +986,95 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("核对消息分组");
     expect(markup).not.toContain("正在核对时间线的分组逻辑。");
     expect(markup).not.toContain("data-ai-chain-of-thought");
+  });
+
+  it("collapses completed commentary and operations behind the processing time", () => {
+    const completedProcessSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              id: "message-assistant-commentary",
+              phase: "commentary",
+              role: "assistant",
+              text: "正在读取项目配置。",
+              type: "message",
+            },
+            {
+              command: "pnpm check",
+              cwd: "/workspace",
+              exitCode: 0,
+              id: "command-check",
+              output: "检查过程输出",
+              outputTruncated: false,
+              status: "completed",
+              type: "command",
+            },
+            {
+              id: "message-assistant-final",
+              phase: "final_answer",
+              role: "assistant",
+              text: "检查完成。",
+              type: "message",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      <TaskSnapshotTimeline snapshot={completedProcessSnapshot} />,
+    );
+
+    expect(markup).not.toContain("正在读取项目配置。");
+    expect(markup).not.toContain("检查过程输出");
+    expect(markup).toContain("检查完成。");
+    expect(markup).toContain('data-turn-processing-time=""');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('aria-label="展开执行过程"');
+  });
+
+  it("only classifies documented commentary and pre-final operations as process items", () => {
+    const items: RuntimeTaskSnapshot["turns"][number]["items"] = [
+      {
+        id: "legacy-assistant-message",
+        role: "assistant",
+        text: "旧版可见消息。",
+        type: "message",
+      },
+      {
+        id: "commentary-message",
+        phase: "commentary",
+        role: "assistant",
+        text: "中间过程。",
+        type: "message",
+      },
+      {
+        id: "process-activity",
+        label: "读取文件",
+        type: "activity",
+      },
+      {
+        id: "final-message",
+        phase: "final_answer",
+        role: "assistant",
+        text: "最终结果。",
+        type: "message",
+      },
+      {
+        id: "post-final-activity",
+        label: "最终回复之后的事件",
+        type: "activity",
+      },
+    ];
+
+    expect(resolveCompletedTurnProcessItemIds(items, "completed")).toEqual([
+      "commentary-message",
+      "process-activity",
+    ]);
+    expect(resolveCompletedTurnProcessItemIds(items, "running")).toEqual([]);
   });
 
   it("does not render assistant actions while its turn is still running", () => {

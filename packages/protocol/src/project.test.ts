@@ -408,6 +408,36 @@ describe("project protocol", () => {
     ).toBe(false);
   });
 
+  it("accepts only documented phases on assistant messages", () => {
+    expect(
+      Value.Check(AgentMessageItemSchema, {
+        id: "message-commentary",
+        phase: "commentary",
+        role: "assistant",
+        text: "正在检查。",
+        type: "message",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentMessageItemSchema, {
+        id: "message-final",
+        phase: "final_answer",
+        role: "assistant",
+        text: "检查完成。",
+        type: "message",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentMessageItemSchema, {
+        id: "message-invalid",
+        phase: "analysis",
+        role: "assistant",
+        text: "不可见阶段。",
+        type: "message",
+      }),
+    ).toBe(false);
+  });
+
   it("validates paginated projects and tasks", () => {
     expect(
       Value.Check(ProjectPageSchema, {

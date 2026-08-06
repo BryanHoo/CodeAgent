@@ -1,4 +1,5 @@
-import type { PendingRequest } from "@code-agent/protocol";
+import type { AgentItem, AgentTurn, PendingRequest } from "@code-agent/protocol";
+import { useState } from "react";
 import { useStore } from "zustand";
 
 import { i18n } from "../../../i18n/i18n.js";
@@ -31,6 +32,31 @@ import {
 
 const getTurnIdKey = (turnId: string) => turnId;
 
+export function resolveCompletedTurnProcessItemIds(
+  items: readonly AgentItem[],
+  turnStatus: AgentTurn["status"],
+): string[] {
+  if (turnStatus === "running") {
+    return [];
+  }
+  const finalAnswerIndex = items.findLastIndex(
+    (item) => item.type === "message" && item.role === "assistant" && item.phase === "final_answer",
+  );
+  if (finalAnswerIndex < 0) {
+    return [];
+  }
+
+  return items.slice(0, finalAnswerIndex).flatMap((item) => {
+    if (item.type === "message") {
+      return item.role === "assistant" && item.phase === "commentary" ? [item.id] : [];
+    }
+    // Reasoning 永不渲染，File Change 继续由最终回复后的摘要统一展示。
+    return item.type === "reasoning" || item.type === "file_change" || item.type === "review"
+      ? []
+      : [item.id];
+  });
+}
+
 export function StoredAssistantGroup({
   itemIds,
   lastTurnItemId,
@@ -40,6 +66,10 @@ export function StoredAssistantGroup({
   onBuildPlan,
   onOpenSourceFile,
   onReviewFileChanges,
+  onToggleProcess,
+  processExpanded,
+  processItemIds,
+  processToggleAvailable,
   projectId,
   showProcessingTime,
   showRunningShimmer,
@@ -55,6 +85,10 @@ export function StoredAssistantGroup({
   onBuildPlan?: BuildPlanAction;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
+  onToggleProcess: () => void;
+  processExpanded: boolean;
+  processItemIds: ReadonlySet<string>;
+  processToggleAvailable: boolean;
   projectId: string;
   showProcessingTime: boolean;
   showRunningShimmer: boolean;
@@ -66,8 +100,12 @@ export function StoredAssistantGroup({
   const itemStoresById = store.getState().itemStoresById;
   const assistantTextParts: string[] = [];
   const responseFileChanges: AgentFileChange[] = [];
+  const visibleItemIds =
+    turn.status === "running" || processExpanded
+      ? itemIds
+      : itemIds.filter((itemId) => !processItemIds.has(itemId));
   if (turn.status !== "running") {
-    for (const itemId of itemIds) {
+    for (const itemId of visibleItemIds) {
       const item = itemStoresById.get(itemId)?.read();
       if (item?.type === "message" && item.role === "assistant") {
         assistantTextParts.push(item.text);
@@ -81,24 +119,32 @@ export function StoredAssistantGroup({
   return (
     <Message from="assistant">
       {showProcessingTime ? (
-        <TurnProcessingTime completedAt={turn.completedAt} startedAt={turn.startedAt} />
+        <TurnProcessingTime
+          completedAt={turn.completedAt}
+          startedAt={turn.startedAt}
+          {...(processToggleAvailable
+            ? { expanded: processExpanded, onToggle: onToggleProcess }
+            : {})}
+        />
       ) : null}
-      <div className="w-full space-y-4">
-        {itemIds.map((itemId) => (
-          <StoredTimelineItemContent
-            isLastTurnItem={itemId === lastTurnItemId}
-            itemId={itemId}
-            key={itemId}
-            {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
-            onOpenSourceFile={onOpenSourceFile}
-            projectId={projectId}
-            store={store}
-            taskId={taskId}
-            turnStatus={turn.status}
-          />
-        ))}
-        {showRunningShimmer ? <StoredRunningReplyStatus itemIds={itemIds} store={store} /> : null}
-      </div>
+      {visibleItemIds.length > 0 || showRunningShimmer ? (
+        <div className="w-full space-y-4">
+          {visibleItemIds.map((itemId) => (
+            <StoredTimelineItemContent
+              isLastTurnItem={itemId === lastTurnItemId}
+              itemId={itemId}
+              key={itemId}
+              {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
+              onOpenSourceFile={onOpenSourceFile}
+              projectId={projectId}
+              store={store}
+              taskId={taskId}
+              turnStatus={turn.status}
+            />
+          ))}
+          {showRunningShimmer ? <StoredRunningReplyStatus itemIds={itemIds} store={store} /> : null}
+        </div>
+      ) : null}
       {turn.status !== "running" && responseFileChanges.length > 0 ? (
         <ChangedFilesCard
           changes={responseFileChanges}
@@ -144,11 +190,23 @@ export function StoreTurnTimelineSection({
 }>) {
   const turn = useStore(store, (state) => state.turnsById[turnId]);
   const itemIds = useStore(store, (state) => state.itemIdsByTurnId[turnId] ?? []);
+  const [processExpanded, setProcessExpanded] = useState(false);
   if (turn === undefined) {
     return null;
   }
   const latestSnapshotTimestamp = store.getState().snapshotMetadata?.updatedAt ?? "";
-  const timelineGroups = groupStoredTurnTimelineItems(itemIds, store.getState().itemStoresById);
+  const itemStoresById = store.getState().itemStoresById;
+  const timelineGroups = groupStoredTurnTimelineItems(itemIds, itemStoresById);
+  const processItemIds = new Set(
+    resolveCompletedTurnProcessItemIds(
+      itemIds.flatMap((itemId) => {
+        const item = itemStoresById.get(itemId)?.peek();
+        return item === undefined ? [] : [item];
+      }),
+      turn.status,
+    ),
+  );
+  const processToggleAvailable = processItemIds.size > 0;
   const firstAssistantGroupIndex = timelineGroups.findIndex((group) => group.type === "assistant");
   const hasAssistantItems = firstAssistantGroupIndex >= 0;
   const latestAssistantGroupIndex = timelineGroups.findLastIndex(
@@ -182,6 +240,9 @@ export function StoreTurnTimelineSection({
             latestSnapshotTimestamp={latestSnapshotTimestamp}
             {...(turn.status === "completed" && onBuildPlan !== undefined ? { onBuildPlan } : {})}
             onOpenFileDiff={onOpenFileDiff}
+            onToggleProcess={() => {
+              setProcessExpanded((expanded) => !expanded);
+            }}
             {...(turn.status === "completed" &&
             groupIndex === latestAssistantGroupIndex &&
             onForkTask !== undefined
@@ -190,6 +251,9 @@ export function StoreTurnTimelineSection({
             onOpenSourceFile={onOpenSourceFile}
             onReviewFileChanges={onReviewFileChanges}
             projectId={projectId}
+            processExpanded={processExpanded}
+            processItemIds={processItemIds}
+            processToggleAvailable={processToggleAvailable}
             showProcessingTime={groupIndex === firstAssistantGroupIndex}
             showRunningShimmer={
               turn.status === "running" && groupIndex === timelineGroups.length - 1

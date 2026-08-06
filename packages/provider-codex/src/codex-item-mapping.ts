@@ -150,9 +150,15 @@ export function mapAgentItem(
     }
     case "agentMessage": {
       const text = expectString(item["text"], "Codex agent message text");
-      // Commentary 与最终回复都是面向用户的输出，统一走普通消息的流式渲染路径。
-      mapCodexMessagePhase(item["phase"]);
-      return { id, role: "assistant", text, type: "message" };
+      // 保留官方消息阶段，供客户端区分可折叠过程和最终回复。
+      const phase = mapCodexMessagePhase(item["phase"]);
+      return {
+        id,
+        ...(phase === undefined ? {} : { phase }),
+        role: "assistant",
+        text,
+        type: "message",
+      };
     }
     case "reasoning":
       return {

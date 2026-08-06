@@ -3104,6 +3104,7 @@ describe("CodexAgentProvider", () => {
         payload: {
           item: {
             id: "commentary-1",
+            phase: "commentary",
             role: "assistant",
             text: "正在扫描项目结构。",
             type: "message",
@@ -3123,7 +3124,13 @@ describe("CodexAgentProvider", () => {
       {
         itemId: "answer-1",
         payload: {
-          item: { id: "answer-1", role: "assistant", text: "项目已理解。", type: "message" },
+          item: {
+            id: "answer-1",
+            phase: "final_answer",
+            role: "assistant",
+            text: "项目已理解。",
+            type: "message",
+          },
         },
         taskId: "task-1",
         turnId: "turn-1",
@@ -3138,12 +3145,14 @@ describe("CodexAgentProvider", () => {
             items: [
               {
                 id: "commentary-1",
+                phase: "commentary",
                 role: "assistant",
                 text: "正在扫描项目结构。",
                 type: "message",
               },
               {
                 id: "answer-1",
+                phase: "final_answer",
                 role: "assistant",
                 text: "项目已理解。",
                 type: "message",

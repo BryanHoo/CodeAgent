@@ -286,12 +286,20 @@ export const AgentMessageAttachmentSchema = Type.Object(
 
 export type AgentMessageAttachment = Readonly<Static<typeof AgentMessageAttachmentSchema>>;
 
+export const AgentMessagePhaseSchema = Type.Union([
+  Type.Literal("commentary"),
+  Type.Literal("final_answer"),
+]);
+
+export type AgentMessagePhase = Readonly<Static<typeof AgentMessagePhaseSchema>>;
+
 export const AgentMessageItemSchema = Type.Object(
   {
     attachments: Type.Optional(
       Type.Array(AgentMessageAttachmentSchema, { maxItems: MAX_AGENT_HISTORY_IMAGES }),
     ),
     id: Type.String({ minLength: 1 }),
+    phase: Type.Optional(AgentMessagePhaseSchema),
     role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
     skills: Type.Optional(Type.Array(AgentMessageSkillSchema)),
     text: Type.String(),

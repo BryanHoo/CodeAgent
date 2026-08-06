@@ -180,6 +180,7 @@ export const conversation = {
     attachments: "消息附件",
     changedFiles: "本次修改了 {{count}} 个文件",
     collapseFiles: "收起文件列表",
+    collapseProcess: "收起执行过程",
     closeImagePreview: "关闭图片预览",
     commandPending: "正在执行命令",
     conversation: "会话内容",
@@ -188,6 +189,7 @@ export const conversation = {
     downloadAttachment: "下载附件 {{name}}",
     emptyAfter: "中做些什么？",
     emptyBefore: "我们应该在",
+    expandProcess: "展开执行过程",
     fileChange: "{{operation}} {{name}}，新增 {{additions}} 行，删除 {{removals}} 行，打开 Diff",
     fileOperation: {
       create: "已创建",

@@ -1,5 +1,5 @@
 import type { AgentItem, AgentItemStatus, AgentTurn, Project } from "@code-agent/protocol";
-import { Check, Copy, GitFork, MessageSquareCode } from "lucide-react";
+import { Check, ChevronRight, Copy, GitFork, MessageSquareCode } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { v4 as createUuid } from "uuid";
 
@@ -166,8 +166,11 @@ export function formatTurnProcessingDuration(totalSeconds: number): Readonly<{
 
 export function TurnProcessingTime({
   completedAt,
+  expanded,
+  onToggle,
   startedAt,
-}: Pick<AgentTurn, "completedAt" | "startedAt">) {
+}: Pick<AgentTurn, "completedAt" | "startedAt"> &
+  Readonly<{ expanded?: boolean; onToggle?: () => void }>) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -195,14 +198,36 @@ export function TurnProcessingTime({
   const totalSeconds = Math.max(0, Math.floor((endedAtMs - startedAtMs) / 1_000));
   const duration = formatTurnProcessingDuration(totalSeconds);
 
-  return (
-    <div
-      className="mb-4 flex w-full items-center border-b border-separator pb-2.5 text-label font-medium text-muted-foreground"
-      data-turn-processing-time=""
-    >
+  const content = (
+    <>
       <span>{i18n.t("timeline.processing", { ns: "conversation" })}&nbsp;</span>
       <time dateTime={duration.dateTime}>{duration.label}</time>
+    </>
+  );
+  const className =
+    "mb-4 flex w-full items-center border-b border-separator pb-2.5 text-label font-medium text-muted-foreground";
+
+  return onToggle === undefined ? (
+    <div className={className} data-turn-processing-time="">
+      {content}
     </div>
+  ) : (
+    <button
+      aria-expanded={expanded ?? false}
+      aria-label={i18n.t(expanded ? "timeline.collapseProcess" : "timeline.expandProcess", {
+        ns: "conversation",
+      })}
+      className={`${className} cursor-pointer text-left transition-colors hover:text-foreground focus-visible:shadow-focus`}
+      data-turn-processing-time=""
+      onClick={onToggle}
+      type="button"
+    >
+      {content}
+      <ChevronRight
+        aria-hidden="true"
+        className={`ms-auto size-3.5 transition-transform ${expanded ? "rotate-90" : ""}`}
+      />
+    </button>
   );
 }
 
