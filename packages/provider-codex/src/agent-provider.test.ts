@@ -2034,6 +2034,44 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
+  it("resumes a persisted task before listing its MCP servers", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      { thread: nativeThread() },
+      { data: [], nextCursor: null },
+    ]);
+    const provider = createCodexRuntimeProvider({ client: rpc }).forProject(project);
+
+    await provider.readTask("task-1");
+    await expect(provider.listMcpServers("task-1")).resolves.toEqual({ data: [] });
+
+    expect(rpc.calls.map(({ method }) => method)).toEqual([
+      "thread/read",
+      "thread/resume",
+      "mcpServerStatus/list",
+    ]);
+  });
+
+  it("resumes a persisted task before reloading its MCP servers", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      { thread: nativeThread() },
+      {},
+      { data: [], nextCursor: null },
+    ]);
+    const provider = createCodexRuntimeProvider({ client: rpc }).forProject(project);
+
+    await provider.readTask("task-1");
+    await expect(provider.reloadMcpServers("task-1")).resolves.toEqual({ data: [] });
+
+    expect(rpc.calls.map(({ method }) => method)).toEqual([
+      "thread/read",
+      "thread/resume",
+      "config/mcpServer/reload",
+      "mcpServerStatus/list",
+    ]);
+  });
+
   it("merges MCP startup failures, redacts diagnostics, and reloads known task servers", async () => {
     const rpc = new FakeRpcClient([
       { thread: nativeThread() },

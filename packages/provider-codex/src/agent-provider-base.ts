@@ -299,11 +299,14 @@ export abstract class CodexAgentProviderBase {
 
   public async listMcpServers(taskId: string): Promise<AgentMcpServerPage> {
     this.assertKnownProjectTask(taskId);
+    // MCP 状态绑定已加载的 Thread，历史 Task 必须先恢复再读取任务级服务。
+    await this.resumeTask(taskId);
     return listCodexMcpServers(this.client, this.runtime, taskId);
   }
 
   public async reloadMcpServers(taskId: string): Promise<AgentMcpServerPage> {
     this.assertKnownProjectTask(taskId);
+    await this.resumeTask(taskId);
     return reloadCodexMcpServers(this.client, this.runtime, taskId);
   }
 
