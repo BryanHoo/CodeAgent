@@ -187,15 +187,15 @@ describe("runCli", () => {
       explicitPath: "/custom/codex",
     });
     expect(harness.dependencies.checkCodexVersion).toHaveBeenCalledWith("/fake/codex");
-    expect(harness.stdout.join("")).toContain("[ok] Node.js 24.1.0");
-    expect(harness.stdout.join("")).toContain("[ok] Codex 0.146.0 (/fake/codex)");
+    expect(harness.stdout.join("")).toContain("[成功] Node.js 24.1.0");
+    expect(harness.stdout.join("")).toContain("[成功] Codex 0.146.0 (/fake/codex)");
     expect(harness.dependencies.createStateRepository).toHaveBeenCalledWith(
       join("/custom/home", "code-agent", "state.sqlite3"),
     );
-    expect(harness.stdout.join("")).toContain("[ok] SQLite writable");
-    expect(harness.stdout.join("")).toContain("[ok] SQLite migration 4");
-    expect(harness.stdout.join("")).toContain("[ok] SQLite integrity_check ok");
-    expect(harness.stdout.join("")).toContain("[ok] SQLite journal_mode wal");
+    expect(harness.stdout.join("")).toContain("[成功] SQLite 可写");
+    expect(harness.stdout.join("")).toContain("[成功] SQLite migration 4");
+    expect(harness.stdout.join("")).toContain("[成功] SQLite integrity_check ok");
+    expect(harness.stdout.join("")).toContain("[成功] SQLite journal_mode wal");
     expect(harness.databaseClose).toHaveBeenCalledOnce();
   });
 
@@ -203,7 +203,7 @@ describe("runCli", () => {
     const harness = createHarness({ nodeVersion: "22.0.0" });
 
     await expect(runCli(["doctor"], harness.options)).resolves.toBe(1);
-    expect(harness.stderr.join("")).toContain("Node.js 24 or newer is required");
+    expect(harness.stderr.join("")).toContain("需要 Node.js 24 或更高版本");
     expect(harness.dependencies.locateCodexBinary).not.toHaveBeenCalled();
   });
 
@@ -252,7 +252,8 @@ describe("runCli", () => {
     );
     expect(harness.serverListen).toHaveBeenCalledWith({ host: "127.0.0.1", port: 3210 });
     expect(harness.dependencies.openBrowser).toHaveBeenCalledWith("http://127.0.0.1:3210");
-    expect(harness.stdout).toEqual([]);
+    expect(harness.stdout.join("")).toContain("[成功] CodeAgent 已启动");
+    expect(harness.stdout.join("")).toContain("访问地址: http://127.0.0.1:3210");
 
     controller.abort();
 
@@ -297,7 +298,7 @@ describe("runCli", () => {
       runCli(["start"], { ...harness.options, signal: controller.signal }),
     ).resolves.toBe(1);
     expect(harness.stderr.join("")).toContain(
-      "Codex App Server exited before shutdown with code 23",
+      "Codex App Server 在 CodeAgent 关闭前意外退出，退出码 23",
     );
   });
 
@@ -373,6 +374,31 @@ describe("runCli", () => {
 
     await expect(run).resolves.toBe(0);
     expect(harness.stderr.join("")).toContain("browser unavailable");
+    expect(harness.stderr.join("")).toContain("[警告] 无法自动打开浏览器");
+  });
+
+  it("uses distinct colors for information, success, warning, and error output", async () => {
+    const successHarness = createHarness();
+    await expect(runCli(["doctor"], { ...successHarness.options, color: true })).resolves.toBe(0);
+    expect(successHarness.stdout.join("")).toContain("\u001B[32m[成功]\u001B[0m");
+
+    const warningHarness = createHarness();
+    const controller = new AbortController();
+    const run = runCli(["start", "--lan"], {
+      ...warningHarness.options,
+      color: true,
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => {
+      expect(warningHarness.stderr.join("")).toContain("\u001B[33m[警告]\u001B[0m");
+      expect(warningHarness.stdout.join("")).toContain("\u001B[36m[信息]\u001B[0m");
+    });
+    controller.abort();
+    await expect(run).resolves.toBe(0);
+
+    const errorHarness = createHarness();
+    await expect(runCli(["unknown"], { ...errorHarness.options, color: true })).resolves.toBe(1);
+    expect(errorHarness.stderr.join("")).toContain("\u001B[31m[错误]\u001B[0m");
   });
 
   it("closes SQLite and Codex when HTTP Server creation fails", async () => {
@@ -425,8 +451,9 @@ describe("runCli", () => {
     await expect(runCli(["doctor", "--codex-bin"], invalidHarness.options)).resolves.toBe(1);
 
     expect(helpHarness.stdout.join("")).toContain("code-agent start");
-    expect(unknownHarness.stderr.join("")).toContain("Unknown command: unknown");
-    expect(invalidHarness.stderr.join("")).toContain("Missing value for --codex-bin");
+    expect(helpHarness.stdout.join("")).toContain("用法: code-agent <命令> [选项]");
+    expect(unknownHarness.stderr.join("")).toContain("未知命令: unknown");
+    expect(invalidHarness.stderr.join("")).toContain("选项缺少值: --codex-bin");
   });
 
   it("rejects the removed --project option", async () => {
@@ -435,7 +462,7 @@ describe("runCli", () => {
     await expect(
       runCli(["start", "--project", "/workspace/project"], harness.options),
     ).resolves.toBe(1);
-    expect(harness.stderr.join("")).toContain("Unknown option: --project");
+    expect(harness.stderr.join("")).toContain("未知选项: --project");
     expect(harness.dependencies.startCodexAppServer).not.toHaveBeenCalled();
   });
 });

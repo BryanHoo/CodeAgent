@@ -29,6 +29,7 @@ import {
 import packageManifest from "../package.json" with { type: "json" };
 import { createAppUpdateService } from "./app-update.js";
 import { openSystemBrowser } from "./system-browser.js";
+import { createTerminalOutput, type TerminalOutput } from "./terminal-output.js";
 import {
   DEFAULT_LAN_SESSION_TTL,
   generateLanPairingCode,
@@ -86,6 +87,7 @@ export interface CliDependencies {
 }
 
 export interface RunCliOptions {
+  color?: boolean;
   dependencies?: CliDependencies;
   signal?: AbortSignal;
   stderr?: (message: string) => void;
@@ -149,9 +151,9 @@ const defaultDependencies: CliDependencies = {
 
 const BROWSER_CONNECTION_WAIT_MS = 1_250;
 
-const HELP = `Usage: code-agent <command> [options]
+const HELP = `用法: code-agent <命令> [选项]
 
-Commands:
+命令:
   code-agent start [--lan] [--session-ttl <duration>] [--codex-bin <path>] [--codex-home <path>]
   code-agent doctor [--codex-bin <path>] [--codex-home <path>]
   code-agent version
@@ -168,10 +170,10 @@ function parseCommandOptions(
   for (let index = 0; index < args.length; index += 1) {
     const option = args[index];
     if (!option || (!valueOptions.has(option) && !flagOptions.has(option))) {
-      throw new Error(`Unknown option: ${option ?? "<empty>"}`);
+      throw new Error(`未知选项: ${option ?? "<empty>"}`);
     }
     if (seen.has(option)) {
-      throw new Error(`Duplicate option: ${option}`);
+      throw new Error(`选项重复: ${option}`);
     }
     seen.add(option);
     if (flagOptions.has(option)) {
@@ -182,7 +184,7 @@ function parseCommandOptions(
     }
     const value = args[index + 1];
     if (!value || value.startsWith("--")) {
-      throw new Error(`Missing value for ${option}`);
+      throw new Error(`选项缺少值: ${option}`);
     }
 
     if (option === "--codex-bin") {
@@ -201,7 +203,7 @@ function parseCommandOptions(
 function assertSupportedNodeVersion(version: string): void {
   const major = Number.parseInt(version.split(".")[0] ?? "", 10);
   if (!Number.isInteger(major) || major < 24) {
-    throw new Error(`Node.js 24 or newer is required; found ${version}`);
+    throw new Error(`需要 Node.js 24 或更高版本，当前版本为 ${version}`);
   }
 }
 
@@ -266,17 +268,17 @@ async function waitForAbort(signal: AbortSignal): Promise<void> {
 async function runDoctor(
   args: readonly string[],
   dependencies: CliDependencies,
-  stdout: (message: string) => void,
+  output: TerminalOutput,
 ): Promise<number> {
   const options = parseCommandOptions(args, new Set(["--codex-bin", "--codex-home"]));
   assertSupportedNodeVersion(dependencies.nodeVersion);
-  stdout(`[ok] Node.js ${dependencies.nodeVersion}\n`);
+  output.success(`Node.js ${dependencies.nodeVersion}`);
 
   const binary = await dependencies.locateCodexBinary(
     options.codexBin ? { explicitPath: options.codexBin } : {},
   );
   const version = await dependencies.checkCodexVersion(binary.path);
-  stdout(`[ok] Codex ${version.version} (${binary.path})\n`);
+  output.success(`Codex ${version.version} (${binary.path})`);
   const codexHome = resolveCodexHome(options);
   const stateRepository = await dependencies.createStateRepository(
     join(codexHome, "code-agent", "state.sqlite3"),
@@ -284,12 +286,12 @@ async function runDoctor(
   try {
     const diagnostics = await stateRepository.diagnose();
     assertDatabaseDiagnostics(diagnostics);
-    stdout(`[ok] SQLite writable (${join(codexHome, "code-agent", "state.sqlite3")})\n`);
-    stdout(`[ok] SQLite migration ${String(diagnostics.migrationVersion)}\n`);
-    stdout(`[ok] SQLite integrity_check ${diagnostics.integrityCheck}\n`);
-    stdout(`[ok] SQLite journal_mode ${diagnostics.journalMode}\n`);
-    stdout(
-      `[ok] SQLite PRAGMA foreign_keys=ON synchronous=NORMAL busy_timeout=${String(diagnostics.busyTimeout)}\n`,
+    output.success(`SQLite 可写 (${join(codexHome, "code-agent", "state.sqlite3")})`);
+    output.success(`SQLite migration ${String(diagnostics.migrationVersion)}`);
+    output.success(`SQLite integrity_check ${diagnostics.integrityCheck}`);
+    output.success(`SQLite journal_mode ${diagnostics.journalMode}`);
+    output.success(
+      `SQLite PRAGMA foreign_keys=ON synchronous=NORMAL busy_timeout=${String(diagnostics.busyTimeout)}`,
     );
   } finally {
     await stateRepository.close();
@@ -301,8 +303,7 @@ async function runStart(
   args: readonly string[],
   dependencies: CliDependencies,
   signal: AbortSignal | undefined,
-  stderr: (message: string) => void,
-  stdout: (message: string) => void,
+  output: TerminalOutput,
 ): Promise<number> {
   const options = parseCommandOptions(
     args,
@@ -310,7 +311,7 @@ async function runStart(
     new Set(["--lan"]),
   );
   if (options.sessionTtl !== undefined && options.lan !== true) {
-    throw new Error("--session-ttl can only be used with --lan");
+    throw new Error("--session-ttl 只能与 --lan 一起使用");
   }
   const sessionTtlText = options.sessionTtl ?? DEFAULT_LAN_SESSION_TTL;
   const sessionTtlMs = options.lan === true ? parseSessionTtl(sessionTtlText) : undefined;
@@ -362,18 +363,21 @@ async function runStart(
       staticRoot: dependencies.webRoot,
     });
     await server.listen({ host: options.lan === true ? "0.0.0.0" : "127.0.0.1", port: 3210 });
+    output.success("CodeAgent 已启动");
 
     if (access !== undefined) {
       const urls = dependencies.listLanAccessUrls(3210);
-      stdout("[warn] Trusted LAN HTTP access is unencrypted.\n");
+      output.warning("局域网模式使用未加密的 HTTP，请仅在可信网络中使用。");
       if (urls.length === 0) {
-        stderr("[warn] No external IPv4 LAN address was found; the server is still running.\n");
+        output.warning("未找到可用的局域网 IPv4 地址，服务仍在运行。");
       } else {
-        stdout(`LAN URLs:\n${urls.map((url) => `  ${url}`).join("\n")}\n`);
+        output.info(`局域网访问地址:\n${urls.map((url) => `  ${url}`).join("\n")}`);
       }
-      stdout(`Pairing code: ${access.pairingCode}\n`);
-      stdout(`Session lifetime: ${sessionTtlText} (absolute, no renewal)\n`);
-      stdout("Restarting CodeAgent invalidates this code and all LAN sessions.\n");
+      output.info(`配对码: ${access.pairingCode}`);
+      output.info(`会话有效期: ${sessionTtlText}（固定期限，不自动续期）`);
+      output.info("重启 CodeAgent 后，当前配对码和所有局域网会话将失效。");
+    } else {
+      output.info("访问地址: http://127.0.0.1:3210");
     }
 
     if (options.lan !== true) {
@@ -385,7 +389,7 @@ async function runStart(
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        stderr(`[warn] Failed to open browser: ${message}\n`);
+        output.warning(`无法自动打开浏览器，请手动访问上述地址。原因: ${message}`);
       }
     }
 
@@ -396,9 +400,9 @@ async function runStart(
     ]);
     if (outcome.type === "process-exit") {
       const reason = outcome.exit.signal
-        ? `signal ${outcome.exit.signal}`
-        : `code ${String(outcome.exit.code)}`;
-      throw new Error(`Codex App Server exited before shutdown with ${reason}`);
+        ? `信号 ${outcome.exit.signal}`
+        : `退出码 ${String(outcome.exit.code)}`;
+      throw new Error(`Codex App Server 在 CodeAgent 关闭前意外退出，${reason}`);
     }
     return 0;
   } finally {
@@ -426,32 +430,35 @@ export async function runCli(
   const dependencies = options.dependencies ?? defaultDependencies;
   const stdout = options.stdout ?? ((message: string) => process.stdout.write(message));
   const stderr = options.stderr ?? ((message: string) => process.stderr.write(message));
+  const colorEnabled =
+    options.color ?? (process.stdout.isTTY && process.env["NO_COLOR"] === undefined);
+  const output = createTerminalOutput(stdout, stderr, colorEnabled);
   const [command, ...rawArgs] = argv;
   // `pnpm run <script> -- ...` 会把分隔符传给脚本；只剥离命令后的首个分隔符。
   const args = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
 
   try {
     if (!command || command === "--help" || command === "-h") {
-      stdout(HELP);
+      output.plain(HELP);
       return 0;
     }
     if (command === "version") {
       if (args.length > 0) {
-        throw new Error(`Unknown option: ${args[0] ?? "<empty>"}`);
+        throw new Error(`未知选项: ${args[0] ?? "<empty>"}`);
       }
-      stdout(`code-agent ${dependencies.appVersion}\n`);
+      output.plain(`code-agent ${dependencies.appVersion}\n`);
       return 0;
     }
     if (command === "doctor") {
-      return await runDoctor(args, dependencies, stdout);
+      return await runDoctor(args, dependencies, output);
     }
     if (command === "start") {
-      return await runStart(args, dependencies, options.signal, stderr, stdout);
+      return await runStart(args, dependencies, options.signal, output);
     }
-    throw new Error(`Unknown command: ${command}`);
+    throw new Error(`未知命令: ${command}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    stderr(`[error] ${message}\n`);
+    output.error(message);
     return 1;
   }
 }

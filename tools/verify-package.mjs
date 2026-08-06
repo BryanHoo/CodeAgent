@@ -35,7 +35,7 @@ if (packageManifest.bin?.["code-agent"] !== "dist/cli.js") {
   throw new Error(`Unexpected code-agent bin path: ${packageManifest.bin?.["code-agent"]}`);
 }
 
-if (cliResult.status !== 0 || !cliResult.stdout.includes("Usage: code-agent")) {
+if (cliResult.status !== 0 || !cliResult.stdout.includes("用法: code-agent")) {
   process.stderr.write(cliResult.stderr);
   throw new Error("Built CLI is not executable");
 }

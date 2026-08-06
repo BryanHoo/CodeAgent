@@ -16,6 +16,7 @@
 
 - 使用结构化字段记录请求和生命周期，不记录 Prompt 全文、完整命令输出、文件内容或 Secret。
 - Fastify 创建时默认启用 JSON Pino，CLI 与 Provider 的默认日志级别固定为 `warn`；正常启动和正常请求不写终端日志，服务端 `5xx` 请求完成日志固定记录 `requestId`、method、route、statusCode 与 `durationMs`。所有日志脱敏 Authorization、Cookie、API Key 和 Set-Cookie 字段；测试可在创建阶段显式关闭 Logger，运行时不得从 Null Logger 切换。
+- CLI 用户提示统一使用中文 `信息`、`成功`、`警告`、`错误` 标签，并分别使用青、绿、黄、红色；仅在交互式终端且未设置 `NO_COLOR` 时输出 ANSI 颜色，重定向输出不得包含控制符。警告和错误写入 stderr，普通信息和成功状态写入 stdout。
 - 实时事件链路必须提供可按 Project 读取的非负累计计数，至少覆盖 Provider 输入、合并、发布、保留淘汰、软背压和慢客户端断开；指标 Schema 拒绝额外字段和负数。
 - 未知或字段映射失败的 Provider 事件记录结构化告警；只允许包含诊断代码、原生方法、固定 Provider 版本、Project ID 和可提取的 Task ID，不得记录原始参数正文。Approval、Error 和 Terminal State 不得丢弃。
 - 错误在所属边界翻译，保留可诊断原因但不向 Web 暴露内部敏感数据。
