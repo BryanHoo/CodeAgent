@@ -56,6 +56,7 @@ import {
   ProjectFileTreeQuerySchema,
   ProjectGitHistoryPageSchema,
   ProjectGitHistoryQuerySchema,
+  ProjectGitStatusQuerySchema,
   ProjectGitStatusSchema,
   SwitchProjectBranchRequestSchema,
   ProjectFileTreeSchema,
@@ -287,7 +288,11 @@ describe("project protocol", () => {
     const paths = ["packages/server/src/app.ts", "apps/web/src/app.tsx"];
 
     expect(
-      Value.Check(GenerateCommitMessageRequestSchema, { expectedSnapshot: snapshot, paths }),
+      Value.Check(GenerateCommitMessageRequestSchema, {
+        expectedSnapshot: snapshot,
+        paths,
+        repository: "frontend",
+      }),
     ).toBe(true);
     expect(
       Value.Check(GenerateCommitMessageResponseSchema, {
@@ -301,6 +306,7 @@ describe("project protocol", () => {
         expectedSnapshot: snapshot,
         message: "feat(git): 添加选择文件提交",
         paths,
+        repository: "frontend",
       }),
     ).toBe(true);
     expect(
@@ -340,6 +346,20 @@ describe("project protocol", () => {
         commitSha: "not-a-sha",
         message: "fix(git): 修复提交",
         pushStatus: "unknown",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(GenerateCommitMessageRequestSchema, {
+        expectedSnapshot: snapshot,
+        paths,
+        repository: "../server",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(GenerateCommitMessageRequestSchema, {
+        expectedSnapshot: snapshot,
+        paths,
+        repository: "packages/server",
       }),
     ).toBe(false);
   });
@@ -547,6 +567,13 @@ describe("project protocol", () => {
         unstaged: [],
       }),
     ).toBe(false);
+  });
+
+  it("validates an optional repository for Git status reads", () => {
+    expect(Value.Check(ProjectGitStatusQuerySchema, {})).toBe(true);
+    expect(Value.Check(ProjectGitStatusQuerySchema, { repository: "frontend" })).toBe(true);
+    expect(Value.Check(ProjectGitStatusQuerySchema, { repository: "packages/server" })).toBe(false);
+    expect(Value.Check(ProjectGitStatusQuerySchema, { repository: "../server" })).toBe(false);
   });
 
   it("strictly validates paginated Git history contracts", () => {

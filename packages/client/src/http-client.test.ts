@@ -391,8 +391,12 @@ describe("CodeAgentClient", () => {
     fetchMock.mockResolvedValue(jsonResponse(gitStatus));
     const client = new CodeAgentClient({ fetch: fetchMock });
 
-    await expect(client.getProjectGitStatus("project one")).resolves.toEqual(gitStatus);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects/project%20one/git/status");
+    await expect(
+      client.getProjectGitStatus("project one", { repository: "frontend" }),
+    ).resolves.toEqual(gitStatus);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/projects/project%20one/git/status?repository=frontend",
+    );
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ staged: [], unstaged: [] }));
     await expect(client.getProjectGitStatus("project one")).rejects.toThrow(
@@ -414,7 +418,7 @@ describe("CodeAgentClient", () => {
       ],
       nextCursor: "40",
       repositories: ["apps/web", "packages/server"],
-      repository: "packages/server",
+      repository: "frontend",
       repositoryMode: "children",
     };
     const fetchMock = vi.fn<typeof fetch>();
@@ -470,13 +474,15 @@ describe("CodeAgentClient", () => {
     const snapshot = "a".repeat(64);
     const generationRequest = {
       expectedSnapshot: snapshot,
-      paths: ["packages/server/src/app.ts"],
+      paths: ["src/app.ts"],
+      repository: "packages/server",
     };
     const commitRequest = {
       action: "commit_and_push" as const,
       expectedSnapshot: snapshot,
       message: "feat(git): 添加选择文件提交",
       paths: generationRequest.paths,
+      repository: generationRequest.repository,
     };
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock

@@ -18,7 +18,7 @@ import { commitSelectedProjectChanges } from "./git-commit.js";
 import { buildCommitMessagePrompt } from "./git-commit-message.js";
 import { switchProjectBranch as switchGitProjectBranch } from "./git-branch.js";
 import { readProjectGitHistory } from "./git-history.js";
-import { readGitWorkingTreeStatus } from "./git-working-tree.js";
+import { readProjectGitStatus as readGitProjectStatus } from "./git-working-tree.js";
 import { readHostFileDirectory, resolveHostAttachment } from "./host-file-browser.js";
 import { readProjectFileTree } from "./project-file-tree.js";
 import { readProjectImageFile } from "./project-image-file.js";
@@ -98,7 +98,7 @@ export async function createCodeAgentServer(
       routeOptions.handlerTimeout ??= handlerTimeoutMs;
     }
   });
-  const readProjectGitStatus = options.readProjectGitStatus ?? readGitWorkingTreeStatus;
+  const readProjectGitStatus = options.readProjectGitStatus ?? readGitProjectStatus;
   const switchProjectBranch = options.switchProjectBranch ?? switchGitProjectBranch;
   const commitProjectChanges = options.commitProjectChanges ?? commitSelectedProjectChanges;
   const readFileTree = options.readProjectFileTree ?? readProjectFileTree;

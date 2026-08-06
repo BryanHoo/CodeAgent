@@ -1231,7 +1231,7 @@ describe("CodeAgent Server", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/git/status",
+      url: "/v1/projects/code-agent/git/status?repository=frontend",
     });
     const missingProjectResponse = await app.inject({
       method: "GET",
@@ -1245,7 +1245,9 @@ describe("CodeAgent Server", () => {
       staged: [{ path: "staged.ts" }],
       unstaged: [],
     });
-    expect(readProjectGitStatus).toHaveBeenCalledWith(project.rootPath);
+    expect(readProjectGitStatus).toHaveBeenCalledWith(project.rootPath, {
+      repository: "frontend",
+    });
     expect(missingProjectResponse.statusCode).toBe(404);
     expect(readProjectGitStatus).toHaveBeenCalledTimes(1);
   });
@@ -1437,7 +1439,11 @@ describe("CodeAgent Server", () => {
     const responsePromise = app.inject({
       headers: { "idempotency-key": "generate-message" },
       method: "POST",
-      payload: { expectedSnapshot: snapshot, paths: ["src/app.ts"] },
+      payload: {
+        expectedSnapshot: snapshot,
+        paths: ["src/app.ts"],
+        repository: "frontend",
+      },
       url: "/v1/projects/code-agent/git/commit-message",
     });
     await vi.waitFor(() => {
@@ -1476,6 +1482,9 @@ describe("CodeAgent Server", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ message: "feat(git): 生成提交信息", snapshot });
+    expect(readProjectGitStatus).toHaveBeenCalledWith(project.rootPath, {
+      repository: "frontend",
+    });
     expect(providerHarness.startTask).toHaveBeenCalledWith({ ephemeral: true });
     const startTurnCall = providerHarness.startTurn.mock.calls[0];
     expect(startTurnCall?.[0]).toBe("task-1");

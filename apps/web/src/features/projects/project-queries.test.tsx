@@ -17,6 +17,7 @@ import {
   projectDefaultsQueryOptions,
   projectGitHistoryInfiniteQueryOptions,
   projectGitStatusQueryOptions,
+  projectGitRepositoryStatusQueryOptions,
   projectCommitChangesMutationOptions,
   projectCommitMessageMutationOptions,
   projectFileTreeQueryOptions,
@@ -214,7 +215,33 @@ describe("project queries", () => {
     expect(options.queryKey).toEqual(["projects", "code-agent", "git-status"]);
     expect(options.refetchInterval).toBeUndefined();
     expect(getProjectGitStatus.mock.calls[0]?.[0]).toBe("code-agent");
-    expect(getProjectGitStatus.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    expect(getProjectGitStatus.mock.calls[0]?.[1]).toEqual({});
+    expect(getProjectGitStatus.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("loads a selected child repository status into an isolated query", async () => {
+    const getProjectGitStatus = vi.fn<CodeAgentGitStatusClient["getProjectGitStatus"]>(() =>
+      Promise.resolve({
+        baseBranches: ["main"],
+        branch: "feat/frontend",
+        branches: ["feat/frontend", "main"],
+        repositoryMode: "root",
+        snapshot: "b".repeat(64),
+        staged: [],
+        unstaged: [],
+      }),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const options = projectGitRepositoryStatusQueryOptions("code-agent", "frontend", true, {
+      getProjectGitStatus,
+    });
+
+    await queryClient.fetchQuery(options);
+
+    expect(options.queryKey).toEqual(["projects", "code-agent", "git-status", "frontend"]);
+    expect(getProjectGitStatus.mock.calls[0]?.[0]).toBe("code-agent");
+    expect(getProjectGitStatus.mock.calls[0]?.[1]).toEqual({ repository: "frontend" });
+    expect(getProjectGitStatus.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("loads Git history twenty commits at a time for one repository tab", async () => {

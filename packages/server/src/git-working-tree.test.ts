@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { readGitWorkingTreeStatus } from "./git-working-tree.js";
+import { readGitWorkingTreeStatus, readProjectGitStatus } from "./git-working-tree.js";
 
 function createGitDiffOutput(paths: readonly string[], replacement: string): string {
   const rawChanges = paths.map((path) => `:100644 100644 1111111 2222222 M\0${path}\0`).join("");
@@ -204,6 +204,45 @@ describe("readGitWorkingTreeStatus", () => {
       expect(visitedStatusRoots.toSorted()).toEqual([backendRoot, frontendRoot].toSorted());
       expect(visitedStatusRoots).not.toContain(projectRoot);
       expect(visitedStatusRoots).not.toContain(nestedRepositoryRoot);
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("reads one selected immediate child repository with repository-relative paths", async () => {
+    const projectRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "code-agent-git-status-test-")),
+    );
+    const frontendRoot = join(projectRoot, "frontend");
+    try {
+      await mkdir(join(frontendRoot, ".git"), { recursive: true });
+      const visitedRoots: string[] = [];
+      const executeGit = (root: string, arguments_: readonly string[]) => {
+        if (arguments_[0] === "status") {
+          visitedRoots.push(root);
+          return Promise.resolve(" M src/app.ts\0");
+        }
+        if (arguments_[0] === "branch") {
+          return Promise.resolve("feat/frontend\n");
+        }
+        if (arguments_[0] === "for-each-ref" || arguments_[0] === "symbolic-ref") {
+          return Promise.resolve("");
+        }
+        return Promise.resolve(createGitDiffOutput(["src/app.ts"], "new"));
+      };
+
+      const status = await readProjectGitStatus(
+        projectRoot,
+        { repository: "frontend" },
+        executeGit,
+      );
+
+      expect(status).toMatchObject({ branch: "feat/frontend", repositoryMode: "root" });
+      expect(status.unstaged.map((change) => change.path)).toEqual(["src/app.ts"]);
+      expect(visitedRoots).toEqual([frontendRoot]);
+      await expect(
+        readProjectGitStatus(projectRoot, { repository: "workspace/nested" }, executeGit),
+      ).rejects.toMatchObject({ code: "REPOSITORY_NOT_FOUND" });
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }

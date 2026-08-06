@@ -35,6 +35,7 @@ import {
   type ProjectGitHistoryPage,
   type ProjectGitHistoryQuery,
   type ProjectGitStatus,
+  type ProjectGitStatusQuery,
   type ProjectOpenCapabilitiesResponse,
   type ProjectPage,
   type ProjectSourceFile,
@@ -189,10 +190,13 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async getProjectGitStatus(
     projectId: string,
+    query: ProjectGitStatusQuery = {},
     options: ReadOptions = {},
   ): Promise<ProjectGitStatus> {
     return this.read(
-      `/v1/projects/${encodeURIComponent(projectId)}/git/status`,
+      appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/git/status`, {
+        repository: query.repository,
+      }),
       ProjectGitStatusSchema,
       options,
     );

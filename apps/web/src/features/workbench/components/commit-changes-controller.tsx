@@ -1,13 +1,14 @@
 import type { CommitProjectChangesResponse, ProjectGitStatus } from "@code-agent/protocol";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
 
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 import {
   projectCommitChangesMutationOptions,
   projectCommitMessageMutationOptions,
+  projectGitRepositoryStatusQueryOptions,
 } from "../../projects/project-queries.js";
-import { CommitChangesDialog } from "./commit-changes-dialog.js";
+import { CommitChangesDialog, collectCommitRepositories } from "./commit-changes-dialog.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 
 type CommitChangesControllerProps = Readonly<{
@@ -37,6 +38,22 @@ export function CommitChangesController({
   const messageMutation = useMutation(projectCommitMessageMutationOptions(projectId, client));
   const commitMutation = useMutation(projectCommitChangesMutationOptions(projectId, client));
   const [result, setResult] = useState<CommitProjectChangesResponse | null>(null);
+  const [selectedRepository, setSelectedRepository] = useState<string | null>(null);
+  const repositories = useMemo(() => collectCommitRepositories(gitStatus), [gitStatus]);
+  const effectiveRepository =
+    selectedRepository !== null && repositories.includes(selectedRepository)
+      ? selectedRepository
+      : null;
+  const repositoryStatusQuery = useQuery(
+    projectGitRepositoryStatusQueryOptions(
+      projectId,
+      effectiveRepository,
+      gitStatus.repositoryMode === "children",
+      client,
+    ),
+  );
+  const activeGitStatus =
+    gitStatus.repositoryMode === "root" ? gitStatus : (repositoryStatusQuery.data ?? gitStatus);
 
   const close = useCallback(() => {
     setResult(null);
@@ -47,16 +64,16 @@ export function CommitChangesController({
 
   return (
     <CommitChangesDialog
-      error={commitMutation.error ?? messageMutation.error}
-      gitStatus={gitStatus}
+      error={repositoryStatusQuery.error ?? commitMutation.error ?? messageMutation.error}
+      gitStatus={activeGitStatus}
       isCommitting={commitMutation.isPending}
       isGenerating={messageMutation.isPending}
-      key={`${projectId}:${gitStatus.snapshot}`}
+      isRepositoryLoading={repositoryStatusQuery.isFetching}
+      key={`${projectId}:${effectiveRepository ?? "root"}:${activeGitStatus.snapshot}`}
       onClose={close}
       onCommit={async (request) => {
         const response = await commitMutation.mutateAsync(request);
         void queryClient.invalidateQueries({
-          exact: true,
           queryKey: ["projects", projectId, "git-status"],
         });
         const successMessageKey = getCommitSuccessMessageKey(response);
@@ -72,7 +89,15 @@ export function CommitChangesController({
         const response = await messageMutation.mutateAsync(request);
         return response.message;
       }}
+      onSelectRepository={(repository) => {
+        setResult(null);
+        messageMutation.reset();
+        commitMutation.reset();
+        setSelectedRepository(repository);
+      }}
+      repositories={repositories}
       result={result}
+      selectedRepository={effectiveRepository}
     />
   );
 }

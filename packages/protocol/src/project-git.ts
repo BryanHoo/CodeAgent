@@ -14,6 +14,11 @@ export const AgentFileChangeSchema = Type.Object(
 
 const GitSnapshotSchema = Type.String({ maxLength: 64, minLength: 64, pattern: "^[a-f0-9]{64}$" });
 const GitBranchNameSchema = Type.String({ maxLength: 1_024, minLength: 1, pattern: "\\S" });
+const GitChildRepositorySchema = Type.String({
+  maxLength: 1_024,
+  minLength: 1,
+  pattern: "^(?!\\.{1,2}$)(?!.*[\\u0000\\r\\n])[^/\\\\]+$",
+});
 const SelectedGitPathsSchema = Type.Array(ProjectRelativePathSchema, {
   maxItems: 500,
   minItems: 1,
@@ -43,6 +48,13 @@ export const ProjectGitStatusSchema = Type.Object(
 );
 
 export type ProjectGitStatus = Readonly<Static<typeof ProjectGitStatusSchema>>;
+
+export const ProjectGitStatusQuerySchema = Type.Object(
+  { repository: Type.Optional(GitChildRepositorySchema) },
+  { additionalProperties: false },
+);
+
+export type ProjectGitStatusQuery = Readonly<Static<typeof ProjectGitStatusQuerySchema>>;
 
 export const ProjectGitCommitSchema = Type.Object(
   {
@@ -93,7 +105,11 @@ export const SwitchProjectBranchRequestSchema = Type.Object(
 export type SwitchProjectBranchRequest = Readonly<Static<typeof SwitchProjectBranchRequestSchema>>;
 
 export const GenerateCommitMessageRequestSchema = Type.Object(
-  { expectedSnapshot: GitSnapshotSchema, paths: SelectedGitPathsSchema },
+  {
+    expectedSnapshot: GitSnapshotSchema,
+    paths: SelectedGitPathsSchema,
+    repository: Type.Optional(GitChildRepositorySchema),
+  },
   { additionalProperties: false },
 );
 export type GenerateCommitMessageRequest = Readonly<
@@ -114,6 +130,7 @@ export const CommitProjectChangesRequestSchema = Type.Object(
     expectedSnapshot: GitSnapshotSchema,
     message: CommitMessageSchema,
     paths: SelectedGitPathsSchema,
+    repository: Type.Optional(GitChildRepositorySchema),
   },
   { additionalProperties: false },
 );

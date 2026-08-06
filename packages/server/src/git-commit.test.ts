@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -110,5 +110,30 @@ describe("commitSelectedProjectChanges", () => {
     await expect(runGit(root, "log", "-1", "--pretty=%s")).resolves.toMatchObject({
       stdout: "fix(git): 修复提交\n",
     });
+  });
+
+  it("commits only inside the selected immediate child repository", async () => {
+    const repositoryRoot = await createRepository();
+    const projectRoot = await mkdtemp(join(tmpdir(), "code-agent-git-project-test-"));
+    temporaryRoots.push(projectRoot);
+    const selectedRepositoryRoot = join(projectRoot, "frontend");
+    await rename(repositoryRoot, selectedRepositoryRoot);
+    await writeFile(join(selectedRepositoryRoot, "selected.txt"), "selected current\n");
+    const status = await readGitWorkingTreeStatus(selectedRepositoryRoot);
+
+    await expect(
+      commitSelectedProjectChanges(projectRoot, {
+        action: "commit",
+        expectedSnapshot: status.snapshot,
+        message: "feat(git): 提交子仓库变更",
+        paths: ["selected.txt"],
+        repository: "frontend",
+      }),
+    ).resolves.toMatchObject({ branch: "main", pushStatus: "not_requested" });
+    await expect(runGit(selectedRepositoryRoot, "log", "-1", "--pretty=%s")).resolves.toMatchObject(
+      {
+        stdout: "feat(git): 提交子仓库变更\n",
+      },
+    );
   });
 });

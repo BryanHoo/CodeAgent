@@ -147,6 +147,35 @@ describe("TaskTimeline", () => {
     }
   });
 
+  it("preserves soft line breaks only in user messages", () => {
+    const multilineSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              id: "message-user-multiline",
+              role: "user",
+              text: "Epic：物资管理平台\n├── Feature：物资分类数据模型\n│   └── Story：创建数据库表",
+              type: "message",
+            },
+            {
+              id: "message-assistant-multiline",
+              role: "assistant",
+              text: "第一段回复\n第二段回复",
+              type: "message",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={multilineSnapshot} />);
+
+    expect(markup.match(/whitespace-pre-wrap!/g)).toHaveLength(1);
+  });
+
   it("uses streaming Markdown only for the active assistant tail item", () => {
     expect(
       resolveMessageResponseRendering({

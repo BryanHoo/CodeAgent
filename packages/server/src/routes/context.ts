@@ -30,6 +30,7 @@ import type {
   ProjectGitHistoryPage,
   ProjectGitHistoryQuery,
   ProjectGitStatus,
+  ProjectGitStatusQuery,
   ProjectSourceFile,
   SwitchProjectBranchRequest,
 } from "@code-agent/protocol";
@@ -143,7 +144,10 @@ export interface ServerRouteContext {
   readonly readHostFileDirectory: (kind: HostFileKind, path?: string) => Promise<HostFileListing>;
   readonly readProjectDirectory: (path?: string) => Promise<ProjectDirectoryListing>;
   readonly readImageFile: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
-  readonly readProjectGitStatus: (projectRoot: string) => Promise<ProjectGitStatus>;
+  readonly readProjectGitStatus: (
+    projectRoot: string,
+    query?: ProjectGitStatusQuery,
+  ) => Promise<ProjectGitStatus>;
   readonly readProjectGitHistory: (
     projectRoot: string,
     query: ProjectGitHistoryQuery,

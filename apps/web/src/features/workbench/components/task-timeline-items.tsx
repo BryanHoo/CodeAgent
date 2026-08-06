@@ -10,6 +10,7 @@ import {
   AttachmentPreview,
   Attachments,
 } from "../../../shared/ai-elements/attachments.js";
+import { cn } from "../../../shared/lib/utils.js";
 import { Button } from "../../../shared/ui/button.js";
 
 import {
@@ -63,6 +64,9 @@ import {
   toToolState,
 } from "./task-timeline-status.js";
 
+// 覆盖 Streamdown 的 whitespace-normal，保留用户原文中的单换行和缩进。
+const preservedUserMessageClassName = "whitespace-pre-wrap!";
+
 export function TimelineItemContent({
   isLastTurnItem,
   item,
@@ -110,7 +114,10 @@ export function TimelineItemContent({
           )}
           {item.text.length === 0 ? null : (
             <MessageResponse
-              className={skills.length === 0 ? "" : "inline [&>p:first-child]:inline"}
+              className={cn(
+                skills.length > 0 && "inline [&>p:first-child]:inline",
+                item.role === "user" && preservedUserMessageClassName,
+              )}
               {...responseRendering}
               onOpenFileReference={onOpenSourceFile}
             >

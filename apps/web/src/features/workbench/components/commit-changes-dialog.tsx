@@ -11,6 +11,14 @@ import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.j
 import { Button } from "../../../shared/ui/button.js";
 import { Dialog, DialogContent, DialogTitle } from "../../../shared/ui/dialog.js";
 import { Input } from "../../../shared/ui/input.js";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../shared/ui/select.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 
@@ -25,10 +33,14 @@ type CommitChangesDialogProps = Readonly<{
   gitStatus: ProjectGitStatus;
   isCommitting?: boolean;
   isGenerating?: boolean;
+  isRepositoryLoading?: boolean;
   onClose: () => void;
   onCommit: (request: CommitProjectChangesRequest) => Promise<void>;
   onGenerateMessage: (request: GenerateCommitMessageRequest) => Promise<string>;
+  onSelectRepository?: (repository: string) => void;
+  repositories?: readonly string[];
   result?: CommitProjectChangesResponse | null;
+  selectedRepository?: string | null;
 }>;
 
 export function collectCommitFileEntries(status: ProjectGitStatus): readonly CommitFileEntry[] {
@@ -47,6 +59,20 @@ export function collectCommitFileEntries(status: ProjectGitStatus): readonly Com
   return [...entries.values()].sort((left, right) => left.path.localeCompare(right.path, "en"));
 }
 
+export function collectCommitRepositories(status: ProjectGitStatus): readonly string[] {
+  if (status.repositoryMode !== "children") {
+    return [];
+  }
+  const repositories = new Set<string>();
+  for (const change of [...status.staged, ...status.unstaged]) {
+    const separator = change.path.indexOf("/");
+    if (separator > 0) {
+      repositories.add(change.path.slice(0, separator));
+    }
+  }
+  return [...repositories].toSorted((left, right) => left.localeCompare(right, "en"));
+}
+
 function commitResultMessageKey(result: CommitProjectChangesResponse): string {
   if (result.pushStatus === "failed") {
     return "commit.commitCompletePushFailed";
@@ -62,10 +88,14 @@ export function CommitChangesDialog({
   gitStatus,
   isCommitting = false,
   isGenerating = false,
+  isRepositoryLoading = false,
   onClose,
   onCommit,
   onGenerateMessage,
+  onSelectRepository = () => undefined,
+  repositories = [],
   result = null,
+  selectedRepository = null,
 }: CommitChangesDialogProps) {
   const { t } = useTranslation("workbench");
   const entries = useMemo(() => collectCommitFileEntries(gitStatus), [gitStatus]);
@@ -76,10 +106,12 @@ export function CommitChangesDialog({
   const [message, setMessage] = useState("");
   const commitActionLockRef = useRef(createAsyncActionLock());
   const isPending = isGenerating || isCommitting;
-  const repositoryAvailable = gitStatus.repositoryMode === "root";
+  const requiresRepository = repositories.length > 0 || gitStatus.repositoryMode === "children";
+  const repositoryReady =
+    !requiresRepository ||
+    (selectedRepository !== null && !isRepositoryLoading && gitStatus.repositoryMode === "root");
   const allSelected = entries.length > 0 && selectedPaths.size === entries.length;
-  const canGenerate =
-    repositoryAvailable && selectedPaths.size > 0 && !isPending && result === null;
+  const canGenerate = repositoryReady && selectedPaths.size > 0 && !isPending && result === null;
   const canCommit = canGenerate && message.trim().length > 0;
 
   const generateMessage = () =>
@@ -87,6 +119,7 @@ export function CommitChangesDialog({
       const generated = await onGenerateMessage({
         expectedSnapshot: gitStatus.snapshot,
         paths: [...selectedPaths],
+        ...(selectedRepository === null ? {} : { repository: selectedRepository }),
       });
       setMessage(generated);
     });
@@ -98,6 +131,7 @@ export function CommitChangesDialog({
         expectedSnapshot: gitStatus.snapshot,
         message,
         paths: [...selectedPaths],
+        ...(selectedRepository === null ? {} : { repository: selectedRepository }),
       }),
     );
 
@@ -127,7 +161,11 @@ export function CommitChangesDialog({
                 {t("commit.title")}
               </DialogTitle>
               <p className="truncate text-caption text-muted-foreground">
-                {gitStatus.branch ?? "detached HEAD"}
+                {selectedRepository === null
+                  ? requiresRepository
+                    ? t("commit.selectRepository")
+                    : (gitStatus.branch ?? "detached HEAD")
+                  : `${selectedRepository} · ${gitStatus.branch ?? "detached HEAD"}`}
               </p>
             </div>
             <Tooltip>
@@ -148,143 +186,175 @@ export function CommitChangesDialog({
           </header>
 
           <div className="min-h-0 px-4 py-3">
-            {repositoryAvailable ? null : (
-              <p
-                className="mb-3 rounded-control bg-control px-3 py-2 text-label text-danger"
-                role="alert"
-              >
-                {t("commit.multipleRepositories")}
-              </p>
-            )}
-
-            <Button
-              variant="ghost"
-              aria-controls="commit-file-list"
-              aria-expanded={filesExpanded}
-              aria-label={t("commit.selectionLabel", {
-                selected: selectedPaths.size,
-                total: entries.length,
-              })}
-              className={`flex h-9 w-full items-center gap-2 border border-separator bg-panel px-3 text-left text-label hover:bg-control-hover ${filesExpanded ? "rounded-t-control" : "rounded-control"}`}
-              onClick={() => {
-                setFilesExpanded((current) => !current);
-              }}
-              type="button"
-            >
-              <span className="font-medium">{t("commit.selectFiles")}</span>
-              <span className="ml-auto whitespace-nowrap text-muted-foreground">
-                {t("commit.selectedFiles", { count: selectedPaths.size })}
-              </span>
-              <span className="whitespace-nowrap text-caption text-muted-foreground">
-                {t("commit.totalFiles", { count: entries.length })}
-              </span>
-              <ChevronDown
-                aria-hidden="true"
-                className={`size-4 shrink-0 transition-transform ${filesExpanded ? "rotate-180" : ""}`}
-              />
-            </Button>
-
-            {filesExpanded ? (
-              <div
-                className="max-h-[min(24dvh,14rem)] divide-y divide-separator overflow-y-auto overscroll-contain rounded-b-control border-x border-b border-separator"
-                data-commit-file-list=""
-                id="commit-file-list"
-              >
-                {/* 全选控制跟随文件列表滚动，避免占用 message 区域。 */}
-                <label className="flex min-h-9 items-center gap-2 bg-control px-3 py-2 text-label font-medium">
-                  <Input
-                    aria-label={t("commit.selectAllFiles")}
-                    checked={allSelected}
-                    disabled={!repositoryAvailable || isPending || result !== null}
-                    onChange={(event) => {
-                      setSelectedPaths(
-                        event.currentTarget.checked
-                          ? new Set(entries.map((entry) => entry.path))
-                          : new Set(),
-                      );
-                    }}
-                    type="checkbox"
-                  />
-                  <span>{t("commit.allFiles")}</span>
+            {requiresRepository ? (
+              <div className={repositoryReady ? "mb-4" : ""}>
+                <label className="text-label font-medium" id="commit-repository-label">
+                  {t("commit.repository")}
                 </label>
-                {entries.map((entry) => (
-                  <label
-                    className="flex min-h-9 items-center gap-2 px-3 py-2 text-label"
-                    key={entry.path}
-                  >
-                    <Input
-                      checked={selectedPaths.has(entry.path)}
-                      disabled={!repositoryAvailable || isPending || result !== null}
-                      onChange={(event) => {
-                        const checked = event.currentTarget.checked;
-                        setSelectedPaths((current) => {
-                          const next = new Set(current);
-                          if (checked) {
-                            next.add(entry.path);
-                          } else {
-                            next.delete(entry.path);
-                          }
-                          return next;
-                        });
-                      }}
-                      type="checkbox"
-                    />
-                    <span className="min-w-0 flex-1 break-all">{entry.path}</span>
-                    <span className="flex shrink-0 gap-1 text-meta text-muted-foreground">
-                      {entry.staged ? <span>{t("commit.staged")}</span> : null}
-                      {entry.unstaged ? <span>{t("commit.unstaged")}</span> : null}
-                    </span>
-                  </label>
-                ))}
+                <Select
+                  disabled={isPending || result !== null}
+                  onValueChange={onSelectRepository}
+                  {...(selectedRepository === null ? {} : { value: selectedRepository })}
+                >
+                  <SelectTrigger aria-labelledby="commit-repository-label" className="mt-2 w-full">
+                    <SelectValue placeholder={t("commit.selectRepository")} />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectGroup>
+                      {repositories.map((repository) => (
+                        <SelectItem key={repository} value={repository}>
+                          {repository}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                {isRepositoryLoading ? (
+                  <p className="mt-2 text-label text-muted-foreground" role="status">
+                    {t("commit.repositoryLoading")}
+                  </p>
+                ) : null}
+                {repositories.length === 0 ? (
+                  <p className="mt-2 text-label text-danger" role="alert">
+                    {t("commit.repositoryUnavailable")}
+                  </p>
+                ) : null}
               </div>
             ) : null}
-
-            <div className="mt-4">
-              <div className="flex items-center justify-between gap-3">
-                <label className="text-label font-medium" htmlFor="commit-message">
-                  {t("commit.commitMessage")}
-                </label>
-                <Button
-                  variant="ghost"
-                  className="inline-flex h-7 items-center gap-1.5 rounded-control bg-control px-2.5 text-label font-medium hover:bg-control-hover disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={!canGenerate}
-                  onClick={() => {
-                    void generateMessage().catch(() => undefined);
-                  }}
-                  type="button"
-                >
-                  {isGenerating ? (
-                    <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles aria-hidden="true" className="size-3.5" />
-                  )}
-                  {t("commit.generateMessage")}
-                </Button>
-              </div>
-              <textarea
-                className="mt-2 h-24 w-full resize-none rounded-control border border-separator-strong bg-panel px-3 py-2 text-body-small outline-none focus:border-primary focus:shadow-focus disabled:opacity-60"
-                disabled={!repositoryAvailable || isPending || result !== null}
-                id="commit-message"
-                onChange={(event) => {
-                  setMessage(event.currentTarget.value);
-                }}
-                value={message}
-              />
-            </div>
 
             {error === null ? null : (
               <p className="mt-3 text-label text-danger" role="alert">
                 {error.message}
               </p>
             )}
-            {result === null ? null : (
-              <div className="mt-3" role="status">
-                <p className="text-label font-medium">{t(commitResultMessageKey(result))}</p>
-                <p className="mt-1 font-mono text-caption text-muted-foreground">
-                  {result.commitSha.slice(0, 7)}
-                </p>
-              </div>
-            )}
+
+            {repositoryReady ? (
+              <>
+                <Button
+                  variant="ghost"
+                  aria-controls="commit-file-list"
+                  aria-expanded={filesExpanded}
+                  aria-label={t("commit.selectionLabel", {
+                    selected: selectedPaths.size,
+                    total: entries.length,
+                  })}
+                  className={`flex h-9 w-full items-center gap-2 border border-separator bg-panel px-3 text-left text-label hover:bg-control-hover ${filesExpanded ? "rounded-t-control" : "rounded-control"}`}
+                  onClick={() => {
+                    setFilesExpanded((current) => !current);
+                  }}
+                  type="button"
+                >
+                  <span className="font-medium">{t("commit.selectFiles")}</span>
+                  <span className="ml-auto whitespace-nowrap text-muted-foreground">
+                    {t("commit.selectedFiles", { count: selectedPaths.size })}
+                  </span>
+                  <span className="whitespace-nowrap text-caption text-muted-foreground">
+                    {t("commit.totalFiles", { count: entries.length })}
+                  </span>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className={`size-4 shrink-0 transition-transform ${filesExpanded ? "rotate-180" : ""}`}
+                  />
+                </Button>
+
+                {filesExpanded ? (
+                  <div
+                    className="max-h-[min(24dvh,14rem)] divide-y divide-separator overflow-y-auto overscroll-contain rounded-b-control border-x border-b border-separator"
+                    data-commit-file-list=""
+                    id="commit-file-list"
+                  >
+                    {/* 全选控制跟随文件列表滚动，避免占用 message 区域。 */}
+                    <label className="flex min-h-9 items-center gap-2 bg-control px-3 py-2 text-label font-medium">
+                      <Input
+                        aria-label={t("commit.selectAllFiles")}
+                        checked={allSelected}
+                        disabled={isPending || result !== null}
+                        onChange={(event) => {
+                          setSelectedPaths(
+                            event.currentTarget.checked
+                              ? new Set(entries.map((entry) => entry.path))
+                              : new Set(),
+                          );
+                        }}
+                        type="checkbox"
+                      />
+                      <span>{t("commit.allFiles")}</span>
+                    </label>
+                    {entries.map((entry) => (
+                      <label
+                        className="flex min-h-9 items-center gap-2 px-3 py-2 text-label"
+                        key={entry.path}
+                      >
+                        <Input
+                          checked={selectedPaths.has(entry.path)}
+                          disabled={isPending || result !== null}
+                          onChange={(event) => {
+                            const checked = event.currentTarget.checked;
+                            setSelectedPaths((current) => {
+                              const next = new Set(current);
+                              if (checked) {
+                                next.add(entry.path);
+                              } else {
+                                next.delete(entry.path);
+                              }
+                              return next;
+                            });
+                          }}
+                          type="checkbox"
+                        />
+                        <span className="min-w-0 flex-1 break-all">{entry.path}</span>
+                        <span className="flex shrink-0 gap-1 text-meta text-muted-foreground">
+                          {entry.staged ? <span>{t("commit.staged")}</span> : null}
+                          {entry.unstaged ? <span>{t("commit.unstaged")}</span> : null}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="text-label font-medium" htmlFor="commit-message">
+                      {t("commit.commitMessage")}
+                    </label>
+                    <Button
+                      variant="ghost"
+                      className="inline-flex h-7 items-center gap-1.5 rounded-control bg-control px-2.5 text-label font-medium hover:bg-control-hover disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!canGenerate}
+                      onClick={() => {
+                        void generateMessage().catch(() => undefined);
+                      }}
+                      type="button"
+                    >
+                      {isGenerating ? (
+                        <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles aria-hidden="true" className="size-3.5" />
+                      )}
+                      {t("commit.generateMessage")}
+                    </Button>
+                  </div>
+                  <textarea
+                    className="mt-2 h-24 w-full resize-none rounded-control border border-separator-strong bg-panel px-3 py-2 text-body-small outline-none focus:border-primary focus:shadow-focus disabled:opacity-60"
+                    disabled={isPending || result !== null}
+                    id="commit-message"
+                    onChange={(event) => {
+                      setMessage(event.currentTarget.value);
+                    }}
+                    value={message}
+                  />
+                </div>
+
+                {result === null ? null : (
+                  <div className="mt-3" role="status">
+                    <p className="text-label font-medium">{t(commitResultMessageKey(result))}</p>
+                    <p className="mt-1 font-mono text-caption text-muted-foreground">
+                      {result.commitSha.slice(0, 7)}
+                    </p>
+                  </div>
+                )}
+              </>
+            ) : null}
           </div>
 
           <footer className="flex flex-wrap justify-end gap-2 border-t border-separator px-4 py-3">
@@ -297,7 +367,7 @@ export function CommitChangesDialog({
             >
               {result === null ? t("actions.cancel") : t("actions.close")}
             </Button>
-            {result === null ? (
+            {result === null && repositoryReady ? (
               <>
                 <Button
                   variant="ghost"

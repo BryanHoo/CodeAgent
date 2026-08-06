@@ -7,16 +7,19 @@ import {
   ProjectGitHistoryPageSchema,
   ProjectGitHistoryQuerySchema,
   ProjectGitStatusSchema,
+  ProjectGitStatusQuerySchema,
   SwitchProjectBranchRequestSchema,
   type AgentTaskSettings,
   type CommitProjectChangesRequest,
   type GenerateCommitMessageRequest,
   type ProjectGitHistoryQuery,
+  type ProjectGitStatusQuery,
   type SwitchProjectBranchRequest,
 } from "@code-agent/protocol";
 import { GitBranchError } from "../git-branch.js";
 import { GitCommitError } from "../git-commit.js";
 import { GitHistoryError } from "../git-history.js";
+import { GitRepositorySelectionError } from "../git-working-tree.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import { ErrorResponseSchema, IdempotencyHeadersSchema, ProjectParamsSchema } from "./schemas.js";
 
@@ -64,13 +67,15 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     }
   };
 
-  app.get<{ Params: { projectId: string } }>(
+  app.get<{ Params: { projectId: string }; Querystring: ProjectGitStatusQuery }>(
     "/v1/projects/:projectId/git/status",
     {
       schema: {
         params: ProjectParamsSchema,
+        querystring: ProjectGitStatusQuerySchema,
         response: {
           200: ProjectGitStatusSchema,
+          400: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -82,8 +87,14 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       try {
-        return await readProjectGitStatus(context.project.rootPath);
-      } catch {
+        return await readProjectGitStatus(context.project.rootPath, request.query);
+      } catch (error) {
+        if (error instanceof GitRepositorySelectionError) {
+          return reply.code(404).send({
+            code: "GIT_REPOSITORY_NOT_FOUND",
+            message: error.message,
+          });
+        }
         // Git 和文件系统错误在 HTTP 边界统一收敛，避免向页面泄露本机路径细节。
         return reply.code(500).send({
           code: "GIT_STATUS_UNAVAILABLE",
@@ -212,7 +223,11 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         request.headers["idempotency-key"],
         request.body,
         async () => {
-          const status = await readProjectGitStatus(context.project.rootPath).catch(() => {
+          const status = await readProjectGitStatus(context.project.rootPath, {
+            ...(request.body.repository === undefined
+              ? {}
+              : { repository: request.body.repository }),
+          }).catch(() => {
             throw new MutationHttpError(
               "GIT_REPOSITORY_UNAVAILABLE",
               "Git repository is unavailable",

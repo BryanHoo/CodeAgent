@@ -15,6 +15,7 @@ import type {
   ProjectGitHistoryPage,
   ProjectGitHistoryQuery,
   ProjectGitStatus,
+  ProjectGitStatusQuery,
   ProjectSourceFile,
   SwitchProjectBranchRequest,
 } from "@code-agent/protocol";
@@ -46,7 +47,10 @@ export interface CreateCodeAgentServerOptions {
     projectRoot: string,
     request: CommitProjectChangesRequest,
   ) => Promise<CommitProjectChangesResponse>;
-  readProjectGitStatus?: (projectRoot: string) => Promise<ProjectGitStatus>;
+  readProjectGitStatus?: (
+    projectRoot: string,
+    query?: ProjectGitStatusQuery,
+  ) => Promise<ProjectGitStatus>;
   readProjectGitHistory?: (
     projectRoot: string,
     query: ProjectGitHistoryQuery,

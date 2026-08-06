@@ -232,9 +232,26 @@ export function projectGitStatusQueryOptions(
   client: CodeAgentGitStatusClient = codeAgentClient,
 ) {
   return queryOptions({
-    queryFn: ({ signal }) => client.getProjectGitStatus(projectId, { signal }),
+    queryFn: ({ signal }) => client.getProjectGitStatus(projectId, {}, { signal }),
     queryKey: ["projects", projectId, "git-status"] as const,
     // Project 级协调器负责刷新生命周期，Query 只维护共享服务端状态。
+    retry: 1,
+  });
+}
+
+export function projectGitRepositoryStatusQueryOptions(
+  projectId: string,
+  repository: string | null,
+  enabled: boolean,
+  client: CodeAgentGitStatusClient = codeAgentClient,
+) {
+  return queryOptions({
+    enabled: enabled && repository !== null,
+    queryFn: ({ signal }) =>
+      repository === null
+        ? Promise.reject(new Error("Git repository is not selected"))
+        : client.getProjectGitStatus(projectId, { repository }, { signal }),
+    queryKey: ["projects", projectId, "git-status", repository] as const,
     retry: 1,
   });
 }

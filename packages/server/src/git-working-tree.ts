@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { lstat, readdir, realpath } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 
-import type { ProjectGitStatus } from "@code-agent/protocol";
+import type { ProjectGitStatus, ProjectGitStatusQuery } from "@code-agent/protocol";
 
 import { executeGit, type GitCommandExecutor } from "./git-command.js";
 import {
@@ -30,6 +30,57 @@ async function hasGitMetadata(repositoryRoot: string): Promise<boolean> {
       return false;
     }
     throw error;
+  }
+}
+
+export class GitRepositorySelectionError extends Error {
+  public readonly code = "REPOSITORY_NOT_FOUND";
+
+  public constructor() {
+    super("Git repository was not found");
+    this.name = "GitRepositorySelectionError";
+  }
+}
+
+export async function resolveProjectGitRepositoryRoot(
+  projectRoot: string,
+  repository?: string,
+): Promise<string> {
+  if (!isAbsolute(projectRoot)) {
+    throw new TypeError("Project root must be absolute");
+  }
+  const resolvedProjectRoot = await realpath(projectRoot);
+  if (repository === undefined) {
+    return resolvedProjectRoot;
+  }
+
+  // 子仓库必须是 Project 的真实直属目录；白名单解析禁止嵌套路径和符号链接跳转。
+  if (
+    repository.includes("/") ||
+    repository.includes("\\") ||
+    (await hasGitMetadata(resolvedProjectRoot))
+  ) {
+    throw new GitRepositorySelectionError();
+  }
+  const candidate = join(resolvedProjectRoot, repository);
+  try {
+    const candidateStat = await lstat(candidate);
+    if (!candidateStat.isDirectory()) {
+      throw new GitRepositorySelectionError();
+    }
+    const resolvedCandidate = await realpath(candidate);
+    if (
+      dirname(resolvedCandidate) !== resolvedProjectRoot ||
+      !(await hasGitMetadata(resolvedCandidate))
+    ) {
+      throw new GitRepositorySelectionError();
+    }
+    return resolvedCandidate;
+  } catch (error) {
+    if (error instanceof GitRepositorySelectionError) {
+      throw error;
+    }
+    throw new GitRepositorySelectionError();
   }
 }
 
@@ -284,4 +335,13 @@ export async function readGitWorkingTreeStatus(
     staged,
     unstaged,
   };
+}
+
+export async function readProjectGitStatus(
+  projectRoot: string,
+  query: ProjectGitStatusQuery = {},
+  gitCommandExecutor: GitCommandExecutor = executeGit,
+): Promise<ProjectGitStatus> {
+  const repositoryRoot = await resolveProjectGitRepositoryRoot(projectRoot, query.repository);
+  return readGitWorkingTreeStatus(repositoryRoot, gitCommandExecutor);
 }

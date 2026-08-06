@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import { lstat, realpath } from "node:fs/promises";
-import { join } from "node:path";
 
 import type {
   AgentMutationError,
@@ -8,7 +6,7 @@ import type {
   CommitProjectChangesResponse,
 } from "@code-agent/protocol";
 
-import { readGitWorkingTreeStatus } from "./git-working-tree.js";
+import { readGitWorkingTreeStatus, resolveProjectGitRepositoryRoot } from "./git-working-tree.js";
 
 const MAX_GIT_OUTPUT_BYTES = 10 * 1024 * 1024;
 const GIT_COMMAND_TIMEOUT_MS = 55_000;
@@ -110,31 +108,23 @@ async function executeGit(
   });
 }
 
-async function assertRootRepository(projectRoot: string): Promise<string> {
-  const repositoryRoot = await realpath(projectRoot);
-  try {
-    await lstat(join(repositoryRoot, ".git"));
-  } catch {
-    throw new GitCommitError(
-      "GIT_REPOSITORY_UNAVAILABLE",
-      "Git commits require the project root to be a repository",
-    );
-  }
-  return repositoryRoot;
-}
-
 export async function commitSelectedProjectChanges(
   projectRoot: string,
   request: CommitProjectChangesRequest,
 ): Promise<CommitProjectChangesResponse> {
-  const repositoryRoot = await assertRootRepository(projectRoot);
+  const repositoryRoot = await resolveProjectGitRepositoryRoot(
+    projectRoot,
+    request.repository,
+  ).catch(() => {
+    throw new GitCommitError("GIT_REPOSITORY_UNAVAILABLE", "Git repository is unavailable");
+  });
   const status = await readGitWorkingTreeStatus(repositoryRoot).catch(() => {
     throw new GitCommitError("GIT_REPOSITORY_UNAVAILABLE", "Git repository is unavailable");
   });
   if (status.repositoryMode !== "root") {
     throw new GitCommitError(
       "GIT_REPOSITORY_UNAVAILABLE",
-      "Git commits are unavailable for aggregated child repositories",
+      "Git commits require a selected repository",
     );
   }
   if (status.snapshot !== request.expectedSnapshot) {
