@@ -4,9 +4,32 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-06
+
 ### 新增
 
 - 添加 CodeAgent 在线更新能力，在工作台侧栏和“设置 > 关于”中展示 CodeAgent、Codex 版本及更新状态。
+- 添加可取消的 Plan 模式和 Goal 模式，支持将计划构建为普通开发回合并展示自动审批审查生命周期。
+- 按任务展示可读取的 MCP 服务并提供文件操作入口，补充用户输入回答和任务信息展示。
+- 支持复用已打开的浏览器页面，并在 CodeAgent 服务重启后自动恢复连接。
+
+### 优化
+
+- 重构工作台运行环境面板、审查状态投影与界面模块，明确运行时和视图职责边界。
+- 缓存并增量解析 Codex transcript Skill，异步读取历史附件，降低历史恢复的阻塞与重复工作。
+- 延迟加载非首屏功能并加入 Bundle 预算门禁，控制 Web 首屏资源规模。
+- 精简 Composer 命令和 Turn 操作，移除副任务、反馈与撤销旧流程。
+
+### 修复
+
+- 修复 Provider 历史同步前无法读取已提交附件，以及快照恢复控制器重复和项目重试覆盖不足的问题。
+- 修复 Inspector 页签被运行时状态切换、空时间线项目选择器对齐及项目打开菜单图标尺寸问题。
+- 修复 Git 状态刷新瞬时失败，并限制并发附件上传的条目数和总字节容量。
+- 原样展示 Turn 错误信息，避免错误详情在时间线中被改写或丢失。
+
+### 工程
+
+- 修复生产依赖漏洞并将生产依赖审计纳入统一质量门禁。
 
 ## [1.3.0] - 2026-08-05
 
@@ -155,7 +178,8 @@ CodeAgent 首个稳定版本，集中发布本地 Coding Agent 工作台的完�
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/BryanHoo/CodeAgent/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.1.0...v1.2.0
