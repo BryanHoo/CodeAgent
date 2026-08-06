@@ -1,7 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { buildProjectTaskCollections, useProjectData } from "./project-context.js";
+import { TEMPORARY_TASK_SCOPE_ID } from "@code-agent/protocol";
+import type { AgentTask } from "@code-agent/protocol";
+
+import {
+  buildTaskScopeCollections,
+  useProjectData,
+  type ProjectTaskQueryResult,
+} from "./project-context.js";
 
 const projects = [
   {
@@ -27,7 +34,7 @@ describe("Project Context", () => {
       title: "拆分 Context",
       updatedAt: "2026-08-02T00:01:00.000Z",
     } as const;
-    const projectTaskResults = new Map([
+    const projectTaskResults = new Map<string, ProjectTaskQueryResult>([
       [
         "project-1",
         {
@@ -43,9 +50,28 @@ describe("Project Context", () => {
       ],
     ]);
 
-    const result = buildProjectTaskCollections(projects, projectTaskResults);
+    const temporaryTask: AgentTask = {
+      ...task,
+      id: "temporary-task",
+      projectId: TEMPORARY_TASK_SCOPE_ID,
+    };
+    projectTaskResults.set(TEMPORARY_TASK_SCOPE_ID, {
+      controller: { fetchNextPage: vi.fn(() => Promise.resolve()) },
+      state: {
+        error: null,
+        hasNextPage: false,
+        isFetchingNextPage: false,
+        isPending: false,
+      },
+      tasks: [temporaryTask],
+    });
 
-    expect(result.tasks).toEqual([task]);
+    const result = buildTaskScopeCollections(
+      [...projects.map((project) => project.id), TEMPORARY_TASK_SCOPE_ID],
+      projectTaskResults,
+    );
+
+    expect(result.tasks).toEqual([task, temporaryTask]);
     expect(result.projectTaskStates.get("project-1")).toEqual(
       projectTaskResults.get("project-1")?.state,
     );
@@ -55,6 +81,7 @@ describe("Project Context", () => {
       isFetchingNextPage: false,
       isPending: true,
     });
+    expect(result.projectTaskStates.get(TEMPORARY_TASK_SCOPE_ID)?.isPending).toBe(false);
   });
 
   it("requires the dedicated data provider", () => {

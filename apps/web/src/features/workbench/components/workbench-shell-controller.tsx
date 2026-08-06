@@ -1,11 +1,12 @@
-import type {
-  AgentMessageAttachment,
-  AgentPromptInput,
-  AgentTask,
-  AgentTaskSettings,
-  AgentTurn,
+import {
+  TEMPORARY_TASK_SANDBOX_MODE,
+  type AgentMessageAttachment,
+  type AgentPromptInput,
+  type AgentTask,
+  type AgentTaskSettings,
+  type AgentTurn,
 } from "@code-agent/protocol";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { classifyProjectFileReference } from "../project-file-reference.js";
 
 import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
@@ -27,11 +28,15 @@ import {
 const sidebarOverlayQuery = "(max-width: 760px)";
 const inspectorOverlayQuery = "(max-width: 1100px)";
 
-type WorkbenchShellControllerOptions = Readonly<{ projectId: string; taskId?: string }>;
+type WorkbenchShellControllerOptions = Readonly<{
+  projectId: string;
+  taskId?: string;
+  temporary?: boolean;
+}>;
 
 export function useWorkbenchShellController(
   shell: ReturnType<typeof useWorkbenchShellRuntime>,
-  { projectId, taskId }: WorkbenchShellControllerOptions,
+  { projectId, taskId, temporary = false }: WorkbenchShellControllerOptions,
 ) {
   const {
     activeTaskRenameLockRef,
@@ -163,8 +168,12 @@ export function useWorkbenchShellController(
       }
       setPendingTaskSelection(undefined);
       void navigate({
-        params: { projectId, taskId: startedTask.id },
-        to: "/p/$projectId/t/$taskId",
+        ...(temporary
+          ? { params: { taskId: startedTask.id }, to: "/temporary/t/$taskId" as const }
+          : {
+              params: { projectId, taskId: startedTask.id },
+              to: "/p/$projectId/t/$taskId" as const,
+            }),
       });
     },
     [
@@ -175,16 +184,18 @@ export function useWorkbenchShellController(
       projectId,
       queryClient,
       setPendingTaskSelection,
+      temporary,
     ],
   );
   const models = modelsQuery.data?.data ?? [];
+  const globalSettings = globalSettingsQuery.data?.settings;
+  const draftDefaults = temporary ? globalSettings : projectDefaultsQuery.data?.settings;
   const defaultModel =
-    models.find((model) => model.id === projectDefaultsQuery.data?.settings.model) ??
+    models.find((model) => model.id === draftDefaults?.model) ??
     models.find((model) => model.isDefault) ??
     models[0];
-  const globalSettings = globalSettingsQuery.data?.settings;
-  // 新聊天尚无 Task 设置：审批继承 Global，其余字段使用 Project effective defaults。
-  const draftSettings = useMemo<AgentTaskSettings>(
+  // 临时草稿直接继承 Global；普通 Project 草稿继续使用 Project effective defaults。
+  const inheritedDraftSettings = useMemo<AgentTaskSettings>(
     () => ({
       ...(globalSettings?.approvalsReviewer === "auto_review"
         ? { approvalPolicy: "on-request" as const, approvalsReviewer: "auto_review" as const }
@@ -192,19 +203,26 @@ export function useWorkbenchShellController(
             approvalPolicy: globalSettings?.approvalPolicy ?? "on-request",
             approvalsReviewer: "user" as const,
           }),
-      model: defaultModel?.id ?? projectDefaultsQuery.data?.settings.model ?? "",
-      reasoningEffort:
-        projectDefaultsQuery.data?.settings.reasoningEffort ??
-        defaultModel?.defaultReasoningEffort ??
-        "",
-      sandboxMode: projectDefaultsQuery.data?.settings.sandboxMode ?? "workspace-write",
+      model: defaultModel?.id ?? draftDefaults?.model ?? "",
+      reasoningEffort: draftDefaults?.reasoningEffort ?? defaultModel?.defaultReasoningEffort ?? "",
+      sandboxMode: temporary
+        ? TEMPORARY_TASK_SANDBOX_MODE
+        : (draftDefaults?.sandboxMode ?? "workspace-write"),
     }),
-    [defaultModel, globalSettings, projectDefaultsQuery.data?.settings],
+    [defaultModel, draftDefaults, globalSettings, temporary],
   );
+  const [temporaryDraftSettings, setTemporaryDraftSettings] = useState<AgentTaskSettings>();
+  const draftSettings = temporary
+    ? (temporaryDraftSettings ?? inheritedDraftSettings)
+    : inheritedDraftSettings;
   const updateDraftSettings = async (
     settings: AgentTaskSettings,
     field: keyof AgentTaskSettings,
   ) => {
+    if (temporary) {
+      setTemporaryDraftSettings(settings);
+      return;
+    }
     if (field === "approvalPolicy") {
       return;
     }

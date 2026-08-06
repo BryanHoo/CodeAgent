@@ -80,6 +80,24 @@ const fileTreeDirectories: readonly ProjectFileTreeDirectoryState[] = [
 ];
 
 describe("WorkbenchInspector", () => {
+  it("renders temporary task context directly without tabs or Project sources", () => {
+    const markup = renderInspectorMarkup(
+      <WorkbenchInspector
+        contextOnly
+        mcpServers={[{ name: "fast-context" }]}
+        projectName="临时任务"
+        projectPath=""
+      />,
+    );
+
+    expect(markup).not.toContain('role="tablist"');
+    expect(markup).not.toContain('role="tab"');
+    expect(markup).not.toContain("项目目录");
+    expect(markup).toContain('aria-label="MCP"');
+    expect(markup).toContain("fast-context");
+    expect(markup).toContain('aria-label="上下文来源"');
+  });
+
   it("keeps the user-controlled project tab selected while terminals are running", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector

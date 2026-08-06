@@ -1,7 +1,7 @@
 # 项目结构与工程约束
 
 > 状态：Accepted  
-> 更新日期：2026-07-26
+> 更新日期：2026-08-06
 
 ## 1. 目标
 
@@ -76,3 +76,10 @@ Playwright 独立执行浏览器装配冒烟测试，后续业务 E2E 不与单�
 - Project 与 Agent 设置的 Repository 端口定义在 Core；`better-sqlite3` 的所有同步调用只在独立数据库 Worker 中执行。
 - App Server RPC、子进程、数据库和 WebSocket 都必须拥有明确生命周期与超时。
 - 业务代码到来后再提高覆盖率阈值，避免空架构使用虚假测试制造通过率。
+
+## 8. 临时 Task 边界
+
+- `protocol` 只声明稳定的 temporary scope 与公开 API 前缀；`client` 根据 scope 选择 `/v1/temporary`，不得拼出隐藏 Project 路由。
+- `server` 将公开 temporary 白名单映射到固定内部 Project，完整保留普通 Task 的审批、Sandbox、Skill、MCP 与后台终端能力；Git、文件、Project defaults、目录打开和其他 Project Mutation 不得进入该边界。
+- `root CLI` 负责安全创建 `${CODEX_HOME}/code-agent/temporary-workspace`；`server` 的 SQLite Worker 负责幂等维护 `kind = temporary` 记录并从用户 Project 查询和 Mutation 中隔离。
+- `web` 复用 Task Runtime 和 Query Cache，但不把 temporary scope 加入 `projects`；路由、侧栏分组和工作台能力必须显式识别该 scope。

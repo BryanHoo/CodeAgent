@@ -31,6 +31,18 @@ describe("createAppQueryClient", () => {
     navigate.mockRestore();
   });
 
+  it("routes temporary notification clicks without a Project parameter", () => {
+    const navigate = vi.spyOn(router, "navigate").mockResolvedValue();
+
+    navigateToTaskFromNotification("temporary", "task / 1");
+
+    expect(navigate).toHaveBeenCalledWith({
+      params: { taskId: "task / 1" },
+      to: "/temporary/t/$taskId",
+    });
+    navigate.mockRestore();
+  });
+
   it("does not render the business provider subtree before authentication", () => {
     const unauthenticated = renderToStaticMarkup(
       <AccessControlledContent

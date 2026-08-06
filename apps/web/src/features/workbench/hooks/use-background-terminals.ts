@@ -30,13 +30,14 @@ export function useBackgroundTerminals(
   projectId: string,
   taskId: string | undefined,
   isTaskRunning: boolean,
+  enabled = true,
 ): BackgroundTerminalView {
   const previousTaskRunningRef = useRef(isTaskRunning);
   const idempotencyKeysRef = useRef(new Map<string, string>());
   const terminateLockRef = useRef(createAsyncActionLock());
   const [terminalError, setTerminalError] = useState<Error | null>(null);
   const terminalsQuery = useQuery({
-    enabled: taskId !== undefined,
+    enabled: enabled && taskId !== undefined,
     queryFn: ({ signal }) => {
       if (taskId === undefined) {
         throw new Error("Background terminal query requires a task");

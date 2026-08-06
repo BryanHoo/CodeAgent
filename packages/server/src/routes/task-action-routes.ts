@@ -24,6 +24,7 @@ import {
 } from "./schemas.js";
 
 import type { FastifyInstance } from "fastify";
+import { enforceTemporaryTaskSandboxMode } from "../temporary-task-routing.js";
 
 export function registerTaskActionRoutes(app: FastifyInstance, context: ServerRouteContext): void {
   const {
@@ -92,12 +93,13 @@ export function registerTaskActionRoutes(app: FastifyInstance, context: ServerRo
           if (task?.projectId !== context.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
-          assertValidProjectDefaults(await listModels(), request.body);
+          const settings = enforceTemporaryTaskSandboxMode(request.params.projectId, request.body);
+          assertValidProjectDefaults(await listModels(), settings);
           return {
             settings: await settingsRepository.writeTaskSettings(
               request.params.projectId,
               request.params.taskId,
-              request.body,
+              settings,
             ),
           };
         },

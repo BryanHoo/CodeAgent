@@ -15,6 +15,10 @@ import {
   type AgentModel,
 } from "./project-settings.js";
 
+export const TEMPORARY_TASK_SCOPE_ID = "temporary";
+export const TEMPORARY_TASK_API_PATH = "/v1/temporary";
+export const TEMPORARY_TASK_SANDBOX_MODE = "danger-full-access";
+
 export const PendingRequestStatusSchema = Type.Union([
   Type.Literal("pending"),
   Type.Literal("resolved"),

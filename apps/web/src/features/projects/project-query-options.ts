@@ -142,8 +142,10 @@ export function globalSettingsMutationOptions(client: CodeAgentSettingsClient = 
 export function projectOpenCapabilitiesQueryOptions(
   projectId: string,
   client: CodeAgentProjectOpenClient = codeAgentClient,
+  enabled = true,
 ) {
   return queryOptions({
+    enabled,
     queryFn: ({ signal }) => client.getProjectOpenCapabilities(projectId, { signal }),
     queryKey: ["projects", projectId, "open-capabilities"] as const,
     staleTime: 60_000,
@@ -153,8 +155,10 @@ export function projectOpenCapabilitiesQueryOptions(
 export function skillsQueryOptions(
   projectId: string,
   client: CodeAgentSkillsClient = codeAgentClient,
+  enabled = true,
 ) {
   return queryOptions({
+    enabled,
     queryFn: ({ signal }) => client.listSkills(projectId, { signal }),
     queryKey: ["projects", projectId, "skills"] as const,
   });
@@ -164,9 +168,10 @@ export function mcpServersQueryOptions(
   projectId: string,
   taskId: string | undefined,
   client: CodeAgentMcpServersClient = codeAgentClient,
+  enabled = true,
 ) {
   return queryOptions({
-    enabled: taskId !== undefined,
+    enabled: enabled && taskId !== undefined,
     queryFn: ({ signal }) =>
       taskId === undefined
         ? Promise.resolve({ data: [] })
@@ -178,8 +183,10 @@ export function mcpServersQueryOptions(
 export function projectDefaultsQueryOptions(
   projectId: string,
   client: Pick<CodeAgentClient, "getProjectDefaults"> = codeAgentClient,
+  enabled = true,
 ) {
   return queryOptions({
+    enabled,
     queryFn: ({ signal }) => client.getProjectDefaults(projectId, { signal }),
     queryKey: ["projects", projectId, "defaults"] as const,
   });
@@ -230,8 +237,10 @@ export function projectReorderMutationOptions(
 export function projectGitStatusQueryOptions(
   projectId: string,
   client: CodeAgentGitStatusClient = codeAgentClient,
+  enabled = true,
 ) {
   return queryOptions({
+    enabled,
     queryFn: ({ signal }) => client.getProjectGitStatus(projectId, {}, { signal }),
     queryKey: ["projects", projectId, "git-status"] as const,
     // Project 级协调器负责刷新生命周期，Query 只维护共享服务端状态。
@@ -316,8 +325,10 @@ export function projectFileTreeQueryOptions(
   projectId: string,
   directoryPath: string | null,
   client: CodeAgentFileTreeClient = codeAgentClient,
+  enabled = true,
 ) {
   return queryOptions({
+    enabled,
     queryFn: ({ signal }) => client.listProjectFiles(projectId, directoryPath, { signal }),
     queryKey: ["projects", projectId, "file-tree", directoryPath] as const,
     staleTime: 30_000,

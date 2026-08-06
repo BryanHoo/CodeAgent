@@ -32,10 +32,12 @@ const LazyProjectSourceDialog = lazy(() =>
 export function WorkbenchShellDialogs({
   context,
   projectId,
+  projectToolsEnabled,
   taskId,
 }: Readonly<{
   context: ReturnType<typeof useWorkbenchShellController>;
   projectId: string;
+  projectToolsEnabled: boolean;
   taskId?: string;
 }>) {
   const {
@@ -74,7 +76,7 @@ export function WorkbenchShellDialogs({
   } = context;
   return (
     <>
-      {selectedFileChange === null ? null : (
+      {!projectToolsEnabled || selectedFileChange === null ? null : (
         <Suspense fallback={null}>
           <LazyFileDiffDialog
             change={selectedFileChange}
@@ -84,7 +86,7 @@ export function WorkbenchShellDialogs({
           />
         </Suspense>
       )}
-      {selectedFileReview === null ? null : (
+      {!projectToolsEnabled || selectedFileReview === null ? null : (
         <Suspense fallback={null}>
           <LazyFileReviewDialog
             changes={selectedFileReview}
@@ -94,7 +96,7 @@ export function WorkbenchShellDialogs({
           />
         </Suspense>
       )}
-      {gitStatusQuery.data === undefined ? null : (
+      {!projectToolsEnabled || gitStatusQuery.data === undefined ? null : (
         <CommitChangesLauncher
           client={client}
           gitStatus={gitStatusQuery.data}
@@ -103,7 +105,7 @@ export function WorkbenchShellDialogs({
           ref={commitChangesLauncherRef}
         />
       )}
-      {gitHistoryOpen ? (
+      {projectToolsEnabled && gitHistoryOpen ? (
         <Suspense fallback={null}>
           <LazyGitHistoryDialog
             client={client}
@@ -122,7 +124,7 @@ export function WorkbenchShellDialogs({
           />
         </Suspense>
       ) : null}
-      {selectedSourceFile === null ? null : (
+      {!projectToolsEnabled || selectedSourceFile === null ? null : (
         <Suspense fallback={null}>
           <LazyProjectSourceDialog
             client={client}
@@ -159,14 +161,16 @@ export function WorkbenchShellDialogs({
             {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
             {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
             appInfoError={appInfoQuery.error}
-            apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
+            apps={projectToolsEnabled ? (projectOpenCapabilitiesQuery.data?.apps ?? []) : []}
             error={
-              globalSettingsQuery.error ?? modelsQuery.error ?? projectOpenCapabilitiesQuery.error
+              globalSettingsQuery.error ??
+              modelsQuery.error ??
+              (projectToolsEnabled ? projectOpenCapabilitiesQuery.error : null)
             }
             isPending={
               globalSettingsQuery.isPending ||
               modelsQuery.isPending ||
-              projectOpenCapabilitiesQuery.isPending
+              (projectToolsEnabled && projectOpenCapabilitiesQuery.isPending)
             }
             initialSection="about"
             isAppInfoPending={appInfoQuery.isPending}
@@ -183,7 +187,7 @@ export function WorkbenchShellDialogs({
               Promise.all([
                 globalSettingsQuery.refetch(),
                 modelsQuery.refetch(),
-                projectOpenCapabilitiesQuery.refetch(),
+                ...(projectToolsEnabled ? [projectOpenCapabilitiesQuery.refetch()] : []),
               ])
             }
             onRetryAppInfo={() => appInfoQuery.refetch()}

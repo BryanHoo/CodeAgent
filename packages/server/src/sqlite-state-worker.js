@@ -121,15 +121,21 @@ function hasTable(database, tableName) {
 function createOperations(database) {
   const statements = hasTable(database, "projects")
     ? {
+        ensureTemporaryProject: database.prepare(
+          `INSERT OR IGNORE INTO projects (id, name, root_path, created_at, sort_order, kind)
+           VALUES (?, ?, ?, ?, 0, 'temporary')`,
+        ),
         insertProject: database.prepare(
-          `INSERT OR IGNORE INTO projects (id, name, root_path, created_at, sort_order)
-           VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order) + 1, 0) FROM projects))`,
+          `INSERT OR IGNORE INTO projects (id, name, root_path, created_at, sort_order, kind)
+           VALUES (?, ?, ?, ?, (
+             SELECT COALESCE(MAX(sort_order) + 1, 0) FROM projects WHERE kind = 'user'
+           ), 'user')`,
         ),
         listProjects: database.prepare(
-          "SELECT id, name, root_path, created_at FROM projects ORDER BY sort_order, created_at, id",
+          "SELECT id, name, root_path, created_at FROM projects WHERE kind = 'user' ORDER BY sort_order, created_at, id",
         ),
         listProjectIds: database.prepare(
-          "SELECT id FROM projects ORDER BY sort_order, created_at, id",
+          "SELECT id FROM projects WHERE kind = 'user' ORDER BY sort_order, created_at, id",
         ),
         readProject: database.prepare(
           "SELECT id, name, root_path, created_at FROM projects WHERE id = ?",
@@ -137,9 +143,13 @@ function createOperations(database) {
         readProjectByRoot: database.prepare(
           "SELECT id, name, root_path, created_at FROM projects WHERE root_path = ?",
         ),
-        removeProject: database.prepare("DELETE FROM projects WHERE id = ?"),
-        renameProject: database.prepare("UPDATE projects SET name = ? WHERE id = ?"),
-        writeProjectSortOrder: database.prepare("UPDATE projects SET sort_order = ? WHERE id = ?"),
+        removeProject: database.prepare("DELETE FROM projects WHERE id = ? AND kind = 'user'"),
+        renameProject: database.prepare(
+          "UPDATE projects SET name = ? WHERE id = ? AND kind = 'user'",
+        ),
+        writeProjectSortOrder: database.prepare(
+          "UPDATE projects SET sort_order = ? WHERE id = ? AND kind = 'user'",
+        ),
         readProjectDefaults: database.prepare(
           "SELECT model, reasoning_effort, sandbox_mode FROM project_defaults WHERE project_id = ?",
         ),
@@ -248,6 +258,21 @@ function createOperations(database) {
     },
     listProjects() {
       return requireStatements().listProjects.all().map(projectFromRow);
+    },
+    ensureTemporaryProject(payload) {
+      const stateStatements = requireStatements();
+      const project = payload.project;
+      stateStatements.ensureTemporaryProject.run(
+        project.id,
+        project.name,
+        project.rootPath,
+        project.createdAt,
+      );
+      const stored = projectFromRow(stateStatements.readProject.get(project.id));
+      if (stored === undefined || stored.rootPath !== project.rootPath) {
+        throw new Error("Temporary project identity conflicts with another root path");
+      }
+      return stored;
     },
     readProject(payload) {
       return projectFromRow(requireStatements().readProject.get(payload.projectId));

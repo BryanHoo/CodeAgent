@@ -4,9 +4,9 @@ import { useWorkbenchShellRuntime, type WorkbenchShellProps } from "./workbench-
 
 export { loadProjectSourceDialog } from "./workbench-shell-runtime.js";
 
-export function WorkbenchShell({ projectId, taskId }: WorkbenchShellProps) {
+export function WorkbenchShell({ projectId, taskId, temporary = false }: WorkbenchShellProps) {
   const taskScope = taskId === undefined ? { projectId } : { projectId, taskId };
-  const shell = useWorkbenchShellRuntime(taskScope);
-  const context = useWorkbenchShellController(shell, taskScope);
-  return <WorkbenchShellLayout context={context} {...taskScope} />;
+  const shell = useWorkbenchShellRuntime({ ...taskScope, temporary });
+  const context = useWorkbenchShellController(shell, { ...taskScope, temporary });
+  return <WorkbenchShellLayout context={context} {...taskScope} temporary={temporary} />;
 }

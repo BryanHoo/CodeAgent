@@ -68,7 +68,7 @@ export class TaskHttpClient extends ProjectHttpClient {
     options: ListTasksOptions = {},
     requestOptions: ReadOptions = {},
   ): Promise<AgentTaskPage> {
-    const path = appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/tasks`, options);
+    const path = appendQuery(`${projectPath(projectId)}/tasks`, options);
     return this.read(path, AgentTaskPageSchema, requestOptions);
   }
 
@@ -142,7 +142,7 @@ export class TaskHttpClient extends ProjectHttpClient {
     options: MutationOptions = {},
   ): Promise<StartAgentTaskResponse> {
     return this.mutation(
-      `/v1/projects/${encodeURIComponent(projectId)}/tasks`,
+      `${projectPath(projectId)}/tasks`,
       {},
       StartAgentTaskResponseSchema,
       options,

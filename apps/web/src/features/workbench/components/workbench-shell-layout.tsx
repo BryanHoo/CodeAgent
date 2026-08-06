@@ -1,3 +1,4 @@
+import { TEMPORARY_TASK_SANDBOX_MODE } from "@code-agent/protocol";
 import { PanelLeft, PanelRight, Pencil } from "lucide-react";
 import { lazy, Suspense, type CSSProperties } from "react";
 
@@ -28,10 +29,12 @@ export function WorkbenchShellLayout({
   context,
   projectId,
   taskId,
+  temporary,
 }: Readonly<{
   context: ReturnType<typeof useWorkbenchShellController>;
   projectId: string;
   taskId?: string;
+  temporary: boolean;
 }>) {
   const {
     appInfoQuery,
@@ -243,28 +246,40 @@ export function WorkbenchShellLayout({
         (projectTaskState?.error ?? null) !== null ||
         modelsQuery.error !== null ||
         skillsQuery.error !== null ||
-        projectDefaultsQuery.error !== null ||
+        (!temporary && projectDefaultsQuery.error !== null) ||
         (taskId === undefined && globalSettingsQuery.error !== null) ? (
           <RuntimeUnavailable onRetry={() => void retry()} />
         ) : taskId === undefined ? (
           <>
-            <TaskTimeline
-              onProjectChange={handleNewTaskProjectChange}
-              projectId={projectId}
-              projects={projects}
-              {...(newChatSubmissionStartedAt === undefined
-                ? {}
-                : { submissionStartedAt: newChatSubmissionStartedAt })}
-            />
+            {temporary ? (
+              <TaskTimeline
+                projectId={projectId}
+                scopeName={t("shell.temporaryTask")}
+                temporary
+                {...(newChatSubmissionStartedAt === undefined
+                  ? {}
+                  : { submissionStartedAt: newChatSubmissionStartedAt })}
+              />
+            ) : (
+              <TaskTimeline
+                onProjectChange={handleNewTaskProjectChange}
+                projectId={projectId}
+                projects={projects}
+                {...(newChatSubmissionStartedAt === undefined
+                  ? {}
+                  : { submissionStartedAt: newChatSubmissionStartedAt })}
+              />
+            )}
             <WorkbenchComposer
               capabilities={capabilities}
               client={client}
+              {...(temporary ? { fixedSandboxMode: TEMPORARY_TASK_SANDBOX_MODE } : {})}
               followUpBehavior={globalSettings?.followUpBehavior ?? "queue"}
               models={models}
               modelsError={null}
               modelsPending={
                 modelsQuery.isPending ||
-                projectDefaultsQuery.isPending ||
+                (!temporary && projectDefaultsQuery.isPending) ||
                 globalSettingsQuery.isPending
               }
               onSettingsChange={updateDraftSettings}
@@ -278,6 +293,7 @@ export function WorkbenchShellLayout({
               onTaskStarted={handleTaskStarted}
               projectId={projectId}
               projectPath={projectPath}
+              projectToolsEnabled={!temporary}
               {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
               settings={draftSettings}
               skills={skillsQuery.data?.data ?? []}
@@ -288,6 +304,7 @@ export function WorkbenchShellLayout({
             capabilities={capabilities}
             client={client}
             fallbackSettings={draftSettings}
+            {...(temporary ? { fixedSandboxMode: TEMPORARY_TASK_SANDBOX_MODE } : {})}
             followUpBehavior={globalSettings?.followUpBehavior ?? "queue"}
             models={models}
             modelsError={modelsQuery.error}
@@ -299,6 +316,7 @@ export function WorkbenchShellLayout({
             onTaskStarted={handleTaskStarted}
             projectId={projectId}
             projectPath={projectPath}
+            projectToolsEnabled={!temporary}
             {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
             runtime={runtime}
             skills={skillsQuery.data?.data ?? []}
@@ -352,6 +370,7 @@ export function WorkbenchShellLayout({
             backgroundTerminals={backgroundTerminals.terminals}
             backgroundTerminalsError={backgroundTerminals.error}
             backgroundTerminalsPending={backgroundTerminals.isPending}
+            contextOnly={temporary}
             expandedFileTreePaths={expandedFileTreePaths}
             fileTreeDirectories={fileTreeDirectories}
             gitStatusError={gitStatusQuery.error}
@@ -417,7 +436,7 @@ export function WorkbenchShellLayout({
             projectPath={projectPath}
             skills={skillsQuery.data?.data ?? []}
             subagents={subagents}
-            tab={inspectorTab}
+            tab={temporary ? "context" : inspectorTab}
             terminalMutationError={backgroundTerminals.terminalError}
             terminatingTerminalId={backgroundTerminals.terminatingTerminalId}
             {...(inspectorTask === undefined ? {} : { task: inspectorTask })}
@@ -428,6 +447,7 @@ export function WorkbenchShellLayout({
       <WorkbenchShellDialogs
         context={context}
         projectId={projectId}
+        projectToolsEnabled={!temporary}
         {...(taskId === undefined ? {} : { taskId })}
       />
     </div>

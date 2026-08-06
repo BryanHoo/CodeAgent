@@ -1,7 +1,7 @@
 # CodeAgent 架构设计
 
 > 状态：Draft  
-> 更新日期：2026-07-29
+> 更新日期：2026-08-06
 > 目标版本：MVP  
 > 文档类型：架构说明（Explanation）
 
@@ -134,6 +134,14 @@ pnpm publish
 ```
 
 根 `package.json` 必须通过 `packageManager` 固定 pnpm 版本，并提交唯一的 `pnpm-lock.yaml`。仓库不保留 `package-lock.json`、`npm-shrinkwrap.json` 或 `yarn.lock`，CI 使用 `pnpm install --frozen-lockfile` 保证依赖解析一致。
+
+### 3.6 临时 Task 使用隐藏持久作用域
+
+用户临时聊天复用 Codex 原生持久 Thread，但不向用户伪装或展示普通 Project。CLI 启动时幂等创建 `${CODEX_HOME}/code-agent/temporary-workspace`，并在 SQLite 中维护固定 `kind = temporary` 的内部 Project；普通 Project 列表、排序、重命名和删除均排除该记录。
+
+Server 只通过 `/v1/temporary/**` 暴露 Task、Turn、Event、Attachment、Skill 与 Task 上下文能力，并拒绝经 `/v1/projects/temporary/**` 直接访问。临时 Task 创建调用不带 `ephemeral` 的 `thread/start`，固定使用内部 Workspace 的精确 `cwd`，因此可在页面刷新及进程重启后通过 Codex 历史恢复。审批、模型、思考量、Skill、MCP 与后台终端遵循普通 Task 契约；Sandbox 固定为 `danger-full-access`，Web 隐藏选择器且 Server 强制覆盖其他输入。Web 仍不加载内部 Project 的文件、Git、目录打开和 Project defaults，也不展示其真实路径。
+
+Git 提交信息生成仍使用独立的 `thread/start { ephemeral: true }`；该内部一次性 Thread 与用户临时聊天不是同一能力。
 
 ## 4. 总体架构
 
@@ -781,7 +789,7 @@ Runtime 因凭证或其他 Provider 原因不可用时，Server 返回统一 Pro
 
 ### 12.1 数据来源
 
-Codex 已经持久化原生 Thread、Session 历史和 Task 固定状态。CodeAgent 不重复保存这些数据，只保存 Project 及其用户排序、全局 Agent 与提交消息设置、Project 新 Task 默认模型设置和 Task 完整设置。浅色/深色模式仅由浏览器本地保存，不进入 Server 数据库。
+Codex 已经持久化原生 Thread、Session 历史和 Task 固定状态。CodeAgent 不重复保存这些数据，只保存用户 Project 及其排序、隐藏 temporary Project、全局 Agent 与提交消息设置、Project 新 Task 默认模型设置和 Task 完整设置。浅色/深色模式仅由浏览器本地保存，不进入 Server 数据库。
 
 ### 12.2 表结构
 
@@ -795,7 +803,7 @@ project_defaults
 task_settings
 ```
 
-所有业务表使用 `STRICT`。`projects.sort_order` 保存 Sidebar 用户顺序；`global_settings` 保存全局审批、Agent 模型组合、提交消息模型组合、提交提示词、沙盒模式和默认打开应用；`project_defaults` 保存 `model`、`reasoning_effort` 和 `sandbox_mode`；`task_settings` 保存 `approval_policy`、`approvals_reviewer`、`model`、`reasoning_effort` 和 `sandbox_mode`。Project 与 Task 设置以 Project 外键隔离，Task 固定状态由 Codex Thread 持久化。
+所有业务表使用 `STRICT`。`projects.kind` 只允许 `user | temporary`，`projects.sort_order` 仅保存用户 Project 的 Sidebar 顺序；`global_settings` 保存全局审批、Agent 模型组合、提交消息模型组合、提交提示词、沙盒模式和默认打开应用；`project_defaults` 保存 `model`、`reasoning_effort` 和 `sandbox_mode`；`task_settings` 保存 `approval_policy`、`approvals_reviewer`、`model`、`reasoning_effort` 和 `sandbox_mode`。Project 与 Task 设置以 Project 外键隔离，Task 固定状态由 Codex Thread 持久化。
 
 ### 12.3 写入规则
 

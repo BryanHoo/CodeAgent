@@ -1,5 +1,5 @@
-import type { AgentTask, Project } from "@code-agent/protocol";
-import { Folder, Pin, Plus } from "lucide-react";
+import { TEMPORARY_TASK_SCOPE_ID, type AgentTask, type Project } from "@code-agent/protocol";
+import { Folder, MessageSquareText, Pin, Plus } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
@@ -28,6 +28,7 @@ type ProjectSidebarTaskListProps = Readonly<{
   isProjectActionPending: boolean;
   isProjectAddPending: boolean;
   normalizedQuery: string;
+  onOpenTemporaryDraft: () => void;
   onOpenProjectDraft: (projectId: string) => Promise<void>;
   onOpenProjectPicker: () => void;
   onRemoveProject: (project: Project) => void;
@@ -64,6 +65,7 @@ export function ProjectSidebarTaskList({
   isProjectActionPending,
   isProjectAddPending,
   normalizedQuery,
+  onOpenTemporaryDraft,
   onOpenProjectDraft: openProjectDraft,
   onOpenProjectPicker,
   onRemoveProject,
@@ -87,6 +89,17 @@ export function ProjectSidebarTaskList({
   toggleProject,
 }: ProjectSidebarTaskListProps) {
   const { t } = useTranslation("workbench");
+  const temporaryTasks = tasksByProjectId.get(TEMPORARY_TASK_SCOPE_ID) ?? EMPTY_PROJECT_TASKS;
+  const temporaryTaskState = projectTaskStates.get(TEMPORARY_TASK_SCOPE_ID);
+  const showAllTemporaryTasks = expandedTaskProjects.has(TEMPORARY_TASK_SCOPE_ID);
+  const temporaryTaskPreview = getProjectTaskPreview(temporaryTasks, showAllTemporaryTasks);
+  const temporaryPaginationControl = getProjectTaskPaginationControl({
+    error: temporaryTaskState?.error ?? null,
+    hasHiddenLoadedTasks: temporaryTasks.length > PROJECT_TASK_PREVIEW_LIMIT,
+    hasNextPage: normalizedQuery.length === 0 ? (temporaryTaskState?.hasNextPage ?? false) : false,
+    isExpanded: showAllTemporaryTasks,
+    isFetchingNextPage: temporaryTaskState?.isFetchingNextPage ?? false,
+  });
   return (
     <>
       {/* 限制项目区的固有宽度，长 Task 标题不能把右侧操作按钮推出 Sidebar。 */}
@@ -173,6 +186,75 @@ export function ProjectSidebarTaskList({
             className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-3"
             data-testid="project-tree-scroll"
           >
+            <section className="mb-3 min-w-0" aria-labelledby="temporary-tasks-title">
+              <TemporaryTasksHeading onCreate={onOpenTemporaryDraft} />
+              <div className="min-w-0 space-y-0.5 pl-5">
+                {temporaryTaskPreview.tasks.map((task) => {
+                  const activity = getTaskActivity(taskActivity, task.projectId, task.id);
+                  return (
+                    <TaskLink
+                      active={projectId === TEMPORARY_TASK_SCOPE_ID && task.id === taskId}
+                      attention={activity.attention}
+                      isActionPending={taskActionPending}
+                      isRunning={activity.isRunning}
+                      key={`${task.projectId}:${task.id}`}
+                      onArchive={(task) => void archiveTask(task)}
+                      onPin={(task) => void pinTask(task)}
+                      onRename={setRenamingTask}
+                      task={task}
+                    />
+                  );
+                })}
+                {temporaryPaginationControl === null ? null : (
+                  <Button
+                    variant="ghost"
+                    aria-expanded={showAllTemporaryTasks}
+                    className="flex h-7 w-full items-center rounded-control px-2 text-left text-meta font-medium text-subtle-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+                    disabled={temporaryPaginationControl.disabled}
+                    onClick={() => {
+                      if (
+                        temporaryPaginationControl.action === "expand" ||
+                        temporaryPaginationControl.action === "expand-and-load"
+                      ) {
+                        setExpandedTaskProjects((current) =>
+                          new Set(current).add(TEMPORARY_TASK_SCOPE_ID),
+                        );
+                      } else if (temporaryPaginationControl.action === "collapse") {
+                        setExpandedTaskProjects((current) => {
+                          const next = new Set(current);
+                          next.delete(TEMPORARY_TASK_SCOPE_ID);
+                          return next;
+                        });
+                      }
+                      if (
+                        temporaryPaginationControl.action === "expand-and-load" ||
+                        temporaryPaginationControl.action === "load"
+                      ) {
+                        void fetchNextProjectTaskPage(TEMPORARY_TASK_SCOPE_ID).catch(
+                          () => undefined,
+                        );
+                      }
+                    }}
+                    type="button"
+                  >
+                    {temporaryPaginationControl.label}
+                  </Button>
+                )}
+                {temporaryTasks.length === 0 && normalizedQuery.length === 0 ? (
+                  <p className="px-2 py-1.5 text-meta text-subtle-foreground">
+                    {t("sidebar.noTemporaryTasks")}
+                  </p>
+                ) : null}
+                {temporaryTasks.length === 0 &&
+                normalizedQuery.length > 0 &&
+                !taskSearch.isPending &&
+                taskSearch.error === null ? (
+                  <p className="px-2 py-1.5 text-meta text-subtle-foreground">
+                    {t("sidebar.noMatchingTasks")}
+                  </p>
+                ) : null}
+              </div>
+            </section>
             {orderedProjects.map((project) => {
               const projectTasks = tasksByProjectId.get(project.id) ?? EMPTY_PROJECT_TASKS;
               const expanded = expandedProjects.has(project.id);
@@ -320,5 +402,34 @@ export function ProjectSidebarTaskList({
         </section>
       </div>
     </>
+  );
+}
+
+export function TemporaryTasksHeading({ onCreate }: Readonly<{ onCreate: () => void }>) {
+  const { t } = useTranslation("workbench");
+  return (
+    <div className="flex h-8 items-center gap-1 pl-2 text-muted-foreground">
+      <h3
+        className="flex min-w-0 flex-1 items-center gap-2 text-body-small font-medium"
+        id="temporary-tasks-title"
+      >
+        <MessageSquareText className="size-4 shrink-0" aria-hidden="true" />
+        <span className="truncate">{t("sidebar.temporaryTasks")}</span>
+      </h3>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            aria-label={t("sidebar.newTask")}
+            onClick={onCreate}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{t("sidebar.newTask")}</TooltipContent>
+      </Tooltip>
+    </div>
   );
 }

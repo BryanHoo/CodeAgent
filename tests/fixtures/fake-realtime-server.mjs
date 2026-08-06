@@ -42,6 +42,12 @@ const project = {
   name: "CodeAgent",
   rootPath: projectRoot,
 };
+const temporaryProject = {
+  createdAt: "2026-08-06T00:00:00.000Z",
+  id: "temporary",
+  name: "Temporary",
+  rootPath: "/workspace/.code-agent/temporary-workspace",
+};
 const provider = createCodexRuntimeProvider({ client: runtime.client });
 let globalSettings;
 const projectDefaults = new Map();
@@ -54,7 +60,14 @@ const server = await createCodeAgentServer({
   eventSessionId: "e2e-session",
   projectRepository: {
     list: () => Promise.resolve([project]),
-    read: (projectId) => Promise.resolve(projectId === project.id ? project : undefined),
+    read: (projectId) =>
+      Promise.resolve(
+        projectId === project.id
+          ? project
+          : projectId === temporaryProject.id
+            ? temporaryProject
+            : undefined,
+      ),
     register: () => Promise.resolve(project),
     remove: () => Promise.resolve(false),
     rename: () => Promise.resolve(undefined),

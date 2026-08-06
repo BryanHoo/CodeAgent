@@ -1,4 +1,9 @@
-import type { AgentTask, Project, ProjectPage } from "@code-agent/protocol";
+import {
+  TEMPORARY_TASK_SCOPE_ID,
+  type AgentTask,
+  type Project,
+  type ProjectPage,
+} from "@code-agent/protocol";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useCallback,
@@ -19,7 +24,7 @@ import {
   ProjectActivityContext,
   ProjectDataContext,
   ProjectTaskQuery,
-  buildProjectTaskCollections,
+  buildTaskScopeCollections,
   requestNextProjectTaskPage,
   type ProjectActionsContextValue,
   type ProjectActivityContextValue,
@@ -66,7 +71,9 @@ export function ProjectProvider({
     return createProjectRuntimeManager(client, {
       ...(taskNotifier === undefined ? {} : { taskNotifier }),
       onProjectGitActivity(projectId, taskId, reason) {
-        gitStatusCoordinator.handleActivity(projectId, taskId, reason);
+        if (projectId !== TEMPORARY_TASK_SCOPE_ID) {
+          gitStatusCoordinator.handleActivity(projectId, taskId, reason);
+        }
       },
       onTaskMetadataChanged(projectId, taskId, reason) {
         const syncTaskMetadata = async () => {
@@ -168,6 +175,10 @@ export function ProjectProvider({
     () => projects.filter((project) => queriedProjectIds.has(project.id)),
     [projects, queriedProjectIds],
   );
+  const queriedTaskScopeIds = useMemo(
+    () => [TEMPORARY_TASK_SCOPE_ID, ...queriedProjects.map((project) => project.id)],
+    [queriedProjects],
+  );
   const projectTaskResultsRef = useRef(projectTaskResults);
   projectTaskResultsRef.current = projectTaskResults;
   const updateProjectTaskResult = useCallback(
@@ -203,8 +214,8 @@ export function ProjectProvider({
   }, []);
   // 派生集合只在查询范围或结果变化时重建，保持 Context value 的引用稳定。
   const { projectTaskStates, tasks } = useMemo(
-    () => buildProjectTaskCollections(queriedProjects, projectTaskResults),
-    [projectTaskResults, queriedProjects],
+    () => buildTaskScopeCollections(queriedTaskScopeIds, projectTaskResults),
+    [projectTaskResults, queriedTaskScopeIds],
   );
   const fetchNextProjectTaskPage = useCallback(async (projectId: string) => {
     const controllers = new Map(
@@ -451,6 +462,13 @@ export function ProjectProvider({
 
   return (
     <>
+      <ProjectTaskQuery
+        client={client}
+        key={TEMPORARY_TASK_SCOPE_ID}
+        onRemove={removeProjectTaskResult}
+        onUpdate={updateProjectTaskResult}
+        projectId={TEMPORARY_TASK_SCOPE_ID}
+      />
       {queriedProjects.map((project) => (
         <ProjectTaskQuery
           client={client}

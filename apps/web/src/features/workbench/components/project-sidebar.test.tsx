@@ -15,12 +15,37 @@ import {
   ProjectPickerButton,
   SidebarSettingsButton,
   TaskStatusIndicator,
+  getTaskRoute,
   TaskActionMenu,
 } from "./project-sidebar.js";
 import { ProjectRemoveDialog } from "./project-remove-dialog.js";
 import { ProjectRenameDialog } from "./project-rename-dialog.js";
+import { TemporaryTasksHeading } from "./project-sidebar-task-list.js";
 
 describe("Project task pagination", () => {
+  it("offers a new task icon beside temporary tasks", () => {
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <TemporaryTasksHeading onCreate={vi.fn()} />
+      </TooltipProvider>,
+    );
+
+    expect(markup).toContain("临时任务");
+    expect(markup).toContain('aria-label="新建任务"');
+    expect(markup).toContain("lucide-plus");
+  });
+
+  it("keeps temporary task navigation outside Project routes", () => {
+    expect(getTaskRoute("temporary", "task-1")).toEqual({
+      params: { taskId: "task-1" },
+      to: "/temporary/t/$taskId",
+    });
+    expect(getTaskRoute("project-1", "task-1")).toEqual({
+      params: { projectId: "project-1", taskId: "task-1" },
+      to: "/p/$projectId/t/$taskId",
+    });
+  });
+
   it("groups a large task list by Project while preserving task order", () => {
     const tasks = Array.from({ length: 300 }, (_, index) => ({
       id: `task-${String(index)}`,

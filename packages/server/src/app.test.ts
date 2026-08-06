@@ -36,6 +36,13 @@ const project = {
   rootPath: "/workspace/CodeAgent",
 } as const;
 
+const temporaryProject = {
+  createdAt: "2026-08-06T00:00:00.000Z",
+  id: "temporary",
+  name: "Temporary",
+  rootPath: "/code-agent/temporary-workspace",
+} as const;
+
 const pixelDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const pastedTextDataUrl = "data:text/plain;base64,5L2g5aW9IENvZGVBZ2VudA==";
@@ -337,9 +344,16 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
     installAppUpdate: vi.fn(() => Promise.reject(new Error("No update available"))),
     loggerEnabled: false,
     projectRepository: {
+      ensureTemporaryProject: vi.fn(() => Promise.resolve(temporaryProject)),
       list: vi.fn(() => Promise.resolve(orderedProjects)),
       read: vi.fn((projectId: string) =>
-        Promise.resolve(projectId === project.id ? project : undefined),
+        Promise.resolve(
+          projectId === project.id
+            ? project
+            : projectId === temporaryProject.id
+              ? temporaryProject
+              : undefined,
+        ),
       ),
       register: vi.fn(() => Promise.resolve(project)),
       remove: vi.fn((projectId: string) => {
@@ -508,6 +522,81 @@ describe("server diagnostics", () => {
 });
 
 describe("CodeAgent Server", () => {
+  it("serves temporary conversations without exposing the internal Project", async () => {
+    const providerHarness = createProvider();
+    const temporaryTask = { ...task, projectId: temporaryProject.id, title: "临时任务" };
+    const temporarySnapshot = { ...snapshot, ...temporaryTask };
+    const startTemporaryTask = vi.fn(() => Promise.resolve(temporaryTask));
+    const temporaryProvider: AgentProvider = {
+      ...providerHarness.provider,
+      listTasks: vi.fn(() => Promise.resolve({ data: [temporaryTask], nextCursor: null })),
+      readTask: vi.fn(() => Promise.resolve(temporarySnapshot)),
+      startTask: startTemporaryTask,
+    };
+    const settings = createSettingsRepository();
+    const app = await createCodeAgentServer(
+      createServerOptions(temporaryProvider, { settingsRepository: settings.repository }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const listed = await app.inject({ method: "GET", url: "/v1/temporary/tasks?limit=25" });
+    const created = await app.inject({
+      headers: { "idempotency-key": "temporary-task" },
+      method: "POST",
+      payload: {},
+      url: "/v1/temporary/tasks",
+    });
+    const turn = await app.inject({
+      headers: { "idempotency-key": "temporary-turn" },
+      method: "POST",
+      payload: turnRequest("解释这段代码"),
+      url: "/v1/temporary/tasks/task-1/turns",
+    });
+    const settingsUpdate = await app.inject({
+      headers: { "idempotency-key": "temporary-settings" },
+      method: "PUT",
+      payload: turnOptions,
+      url: "/v1/temporary/tasks/task-1/settings",
+    });
+    const internalProject = await app.inject({
+      method: "GET",
+      url: "/v1/projects/temporary/tasks",
+    });
+    const projectTool = await app.inject({ method: "GET", url: "/v1/temporary/git/status" });
+    const skills = await app.inject({ method: "GET", url: "/v1/temporary/skills" });
+
+    expect(listed.statusCode).toBe(200);
+    expect(created.statusCode).toBe(201);
+    expect(turn.statusCode).toBe(201);
+    expect(settingsUpdate.statusCode).toBe(200);
+    expect(internalProject.statusCode).toBe(404);
+    expect(projectTool.statusCode).toBe(404);
+    expect(skills.statusCode).toBe(200);
+    expect(skills.json()).toMatchObject({ data: [{ name: "review-security" }] });
+    expect(startTemporaryTask).toHaveBeenCalledWith();
+    const temporaryTurnOptions = {
+      ...turnOptions,
+      sandboxMode: "danger-full-access",
+    };
+    expect(settingsUpdate.json()).toEqual({ settings: temporaryTurnOptions });
+    expect(settings.writeTaskSettings).toHaveBeenNthCalledWith(
+      1,
+      temporaryProject.id,
+      temporaryTask.id,
+      temporaryTurnOptions,
+    );
+    expect(settings.writeTaskSettings).toHaveBeenLastCalledWith(
+      temporaryProject.id,
+      temporaryTask.id,
+      temporaryTurnOptions,
+    );
+    expect(providerHarness.startTurn).toHaveBeenCalledWith(
+      temporaryTask.id,
+      expect.any(Object),
+      temporaryTurnOptions,
+    );
+  });
+
   it("reports a stable browser session and observes browser connections", async () => {
     const onBrowserConnection = vi.fn();
     const app = await createCodeAgentServer(
@@ -2632,6 +2721,7 @@ describe("CodeAgent Server", () => {
     const app = await createCodeAgentServer({
       installAppUpdate: vi.fn(() => Promise.reject(new Error("No update available"))),
       projectRepository: {
+        ensureTemporaryProject: () => Promise.resolve(temporaryProject),
         list: () => Promise.resolve([project, otherProject]),
         read: (projectId) =>
           Promise.resolve([project, otherProject].find((item) => item.id === projectId)),

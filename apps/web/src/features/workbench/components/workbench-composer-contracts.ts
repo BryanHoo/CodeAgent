@@ -5,6 +5,7 @@ import type {
   AgentMessageAttachment,
   AgentModel,
   AgentPromptInput,
+  AgentSandboxMode,
   AgentSkill,
   AgentTask,
   AgentTaskSettings,
@@ -47,6 +48,7 @@ export type WorkbenchComposerProps = Readonly<{
   buildPlanRef?: Ref<WorkbenchComposerHandle>;
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentMutationClient & Pick<CodeAgentGitMutationClient, "switchProjectBranch">;
+  fixedSandboxMode?: AgentSandboxMode;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
   models: readonly AgentModel[];
   modelsError: Error | null;
@@ -74,6 +76,7 @@ export type WorkbenchComposerProps = Readonly<{
   ) => void;
   projectId: string;
   projectPath: string;
+  projectToolsEnabled?: boolean;
   gitStatus?: ProjectGitStatus;
   runtime?: TaskRuntimeView;
   settings: AgentTaskSettings;

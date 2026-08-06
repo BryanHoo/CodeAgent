@@ -93,6 +93,21 @@ afterEach(() => {
 });
 
 describe("CodeAgentClient realtime events", () => {
+  it("connects temporary tasks through the public temporary event route", () => {
+    const { client, sockets } = createHarness();
+
+    const unsubscribe = client.subscribeEvents({
+      afterSequence: 0,
+      projectId: "temporary",
+      onEvent: vi.fn(),
+      onResyncRequired: vi.fn(),
+      sessionId: "runtime-1",
+    });
+
+    expect(sockets[0]?.url).toBe("ws://127.0.0.1:3210/v1/temporary/events?afterSequence=0");
+    unsubscribe();
+  });
+
   it("validates frames, ignores duplicates, and delivers consecutive events", () => {
     const { client, sockets } = createHarness();
     const events: AgentEvent[] = [];

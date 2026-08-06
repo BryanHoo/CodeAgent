@@ -501,8 +501,9 @@ test("项目文件夹操作支持重命名和删除且不修改磁盘目录", as
     .click();
   await removeLastProjectRequest;
 
-  await expect(page).toHaveURL(/\/$/u);
-  await expect(page.getByText("尚未添加项目", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/temporary$/u);
+  await expect(sidebar.getByRole("button", { name: /^切换项目 /u })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "任务输入" })).toBeEnabled();
 });
 
 test("removes the legacy workspace routes", async ({ page }) => {

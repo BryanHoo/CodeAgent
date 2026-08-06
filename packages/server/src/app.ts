@@ -4,7 +4,6 @@ import {
   MAX_AGENT_FILE_TOTAL_BYTES,
   MAX_AGENT_IMAGES,
   MAX_AGENT_IMAGE_TOTAL_BYTES,
-  BrowserSessionResponseSchema,
   type AgentGlobalSettings,
   type AgentModel,
   type AgentPromptInput,
@@ -35,12 +34,17 @@ import {
 } from "./routes/context.js";
 import { registerEventRoutes } from "./routes/event-routes.js";
 import { registerAccessRoutes } from "./routes/access-routes.js";
+import { registerBrowserSessionRoute } from "./routes/browser-session-route.js";
 import { registerProjectRoutes } from "./routes/project-routes.js";
 import { registerRuntimeRoutes } from "./routes/runtime-routes.js";
 import { registerTaskRoutes } from "./routes/task-routes.js";
 import { registerTurnRoutes } from "./routes/turn-routes.js";
 import { configureServerDelivery } from "./server-delivery.js";
 import type { CreateCodeAgentServerOptions } from "./server-options.js";
+import {
+  enforceTemporaryTaskSandboxMode,
+  rewriteTemporaryTaskUrl,
+} from "./temporary-task-routing.js";
 import {
   DEFAULT_HANDLER_TIMEOUT_MS,
   DEFAULT_IDEMPOTENCY_CACHE_SIZE,
@@ -61,7 +65,6 @@ import {
   toPendingRequestHttpError,
   type IdempotencyEntry,
 } from "./server-runtime.js";
-
 export type { CreateCodeAgentServerOptions } from "./server-options.js";
 
 export async function createCodeAgentServer(
@@ -91,6 +94,7 @@ export async function createCodeAgentServer(
     handlerTimeout: 0,
     logController: new CodeAgentLogController(),
     logger,
+    rewriteUrl: (request) => rewriteTemporaryTaskUrl(request.url ?? "/"),
   });
   app.addHook("onRoute", (routeOptions) => {
     // WebSocket 是显式长连接；普通 HTTP 路由使用 Fastify 原生 request.signal 协作取消。
@@ -301,17 +305,19 @@ export async function createCodeAgentServer(
     const catalog = models ?? (await listModels());
     const globalSettings = await readEffectiveGlobalSettings(catalog);
     const projectDefaults = await readEffectiveProjectDefaults(projectId, catalog, globalSettings);
-    return globalSettings.approvalsReviewer === "auto_review"
-      ? {
-          approvalPolicy: "on-request",
-          approvalsReviewer: "auto_review",
-          ...projectDefaults,
-        }
-      : {
-          approvalPolicy: globalSettings.approvalPolicy,
-          approvalsReviewer: "user",
-          ...projectDefaults,
-        };
+    const settings: AgentTaskSettings =
+      globalSettings.approvalsReviewer === "auto_review"
+        ? {
+            approvalPolicy: "on-request",
+            approvalsReviewer: "auto_review",
+            ...projectDefaults,
+          }
+        : {
+            approvalPolicy: globalSettings.approvalPolicy,
+            approvalsReviewer: "user",
+            ...projectDefaults,
+          };
+    return enforceTemporaryTaskSandboxMode(projectId, settings);
   };
   const readEffectiveTaskSettings = async (
     projectId: string,
@@ -336,7 +342,7 @@ export async function createCodeAgentServer(
             approvalsReviewer: "user",
             ...effectiveModel,
           };
-    return effective;
+    return enforceTemporaryTaskSandboxMode(projectId, effective);
   };
   // 启动时只为已持久化 Project 建立事件流；后续新增项目在首次注册时懒创建。
   for (const project of await options.projectRepository.list()) {
@@ -481,15 +487,7 @@ export async function createCodeAgentServer(
     ...(options.access === undefined ? {} : { access: options.access }),
     ...(accessService === undefined ? {} : { service: accessService }),
   });
-  app.get(
-    "/v1/browser-session",
-    { schema: { response: { 200: BrowserSessionResponseSchema } } },
-    () => {
-      // 页面轮询既用于报告旧标签存在，也用于识别服务是否已重新启动。
-      options.onBrowserConnection?.();
-      return { instanceId: browserSessionId, version: 1 as const };
-    },
-  );
+  registerBrowserSessionRoute(app, browserSessionId, options.onBrowserConnection);
   await app.register(registerRuntimeRoutes, routeContext);
   await app.register(registerProjectRoutes, routeContext);
   await app.register(registerTaskRoutes, routeContext);

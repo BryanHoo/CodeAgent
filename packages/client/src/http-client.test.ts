@@ -342,6 +342,21 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("uses the public temporary scope without exposing an internal Project route", async () => {
+    const temporaryTask = { ...task, projectId: "temporary" };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: [temporaryTask], nextCursor: null }))
+      .mockResolvedValueOnce(jsonResponse({ task: temporaryTask }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await client.listTasks("temporary");
+    await client.startTask("temporary", { idempotencyKey: "temporary-task" });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/temporary/tasks");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/v1/temporary/tasks");
+  });
+
   it("reads the provider model catalog", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock.mockResolvedValue(jsonResponse(modelPage));

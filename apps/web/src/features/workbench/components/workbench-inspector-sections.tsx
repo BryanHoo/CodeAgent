@@ -39,9 +39,11 @@ export function collectInspectorSources(
   turns: readonly AgentTurn[],
   skills: readonly AgentSkill[],
 ): InspectorSource[] {
-  const sources: InspectorSource[] = [
-    { detail: projectPath, id: `project:${projectPath}`, kind: "project", name: projectName },
-  ];
+  // 临时 Task 的真实工作区属于内部实现，空路径表示不向上下文来源暴露该 Project。
+  const sources: InspectorSource[] =
+    projectPath === ""
+      ? []
+      : [{ detail: projectPath, id: `project:${projectPath}`, kind: "project", name: projectName }];
   const skillsByName = new Map(skills.map((skill) => [skill.name, skill]));
   const seenSkills = new Set<string>();
   const seenAttachments = new Set<string>();

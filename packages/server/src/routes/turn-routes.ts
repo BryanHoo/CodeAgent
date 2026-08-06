@@ -16,6 +16,7 @@ import {
   type SteerAgentTurnRequest,
 } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
+import { enforceTemporaryTaskSandboxMode } from "../temporary-task-routing.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import {
   IdempotencyHeadersSchema,
@@ -156,17 +157,21 @@ export const registerTurnRoutes: FastifyPluginCallback<ServerRouteContext> = (
             request.params.projectId,
             request.body.input,
           );
-          assertValidProjectDefaults(await listModels(), request.body.options);
+          const turnOptions = enforceTemporaryTaskSandboxMode(
+            request.params.projectId,
+            request.body.options,
+          );
+          assertValidProjectDefaults(await listModels(), turnOptions);
           // Turn 设置先落库，Provider 成功或进程退出后都能恢复用户最后一次完整选择。
           await settingsRepository.writeTaskSettings(
             request.params.projectId,
             request.params.taskId,
-            request.body.options,
+            turnOptions,
           );
           const turn = await context.provider.startTurn(
             request.params.taskId,
             providerInput,
-            request.body.options,
+            turnOptions,
           );
           // 只有 Provider 确认启动成功后才消费附件，网络失败仍允许原请求重试。
           await attachmentStore.consume(

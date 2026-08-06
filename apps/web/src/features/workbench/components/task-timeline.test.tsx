@@ -52,6 +52,18 @@ const snapshot: RuntimeTaskSnapshot = {
   updatedAt: "2026-07-24T00:01:00.000Z",
 };
 
+describe("temporary task timeline", () => {
+  it("renders a fixed scope name without a Project selector", () => {
+    const markup = renderToStaticMarkup(
+      <TaskTimeline projectId="temporary" scopeName="临时任务" temporary />,
+    );
+
+    expect(markup).toContain("临时任务");
+    expect(markup).not.toContain("<select");
+    expect(markup).not.toContain('value="temporary"');
+  });
+});
+
 describe("TaskTimeline", () => {
   it("renders automatic approval review results in the assistant timeline", () => {
     const approvalReviewSnapshot: RuntimeTaskSnapshot = {

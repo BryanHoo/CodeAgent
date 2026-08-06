@@ -1,4 +1,4 @@
-import type { AgentTask } from "@code-agent/protocol";
+import { TEMPORARY_TASK_SCOPE_ID, type AgentTask } from "@code-agent/protocol";
 import {
   Archive,
   CircleAlert,
@@ -35,6 +35,12 @@ type TaskLinkProps = Readonly<{
   task: AgentTask;
 }>;
 
+export function getTaskRoute(projectId: string, taskId: string) {
+  return projectId === TEMPORARY_TASK_SCOPE_ID
+    ? { params: { taskId }, to: "/temporary/t/$taskId" as const }
+    : { params: { projectId, taskId }, to: "/p/$projectId/t/$taskId" as const };
+}
+
 export function TaskLink({
   active,
   attention,
@@ -47,6 +53,7 @@ export function TaskLink({
   task,
 }: TaskLinkProps) {
   const { t } = useTranslation("workbench");
+  const taskRoute = getTaskRoute(task.projectId, task.id);
 
   return (
     <div className="group relative min-w-0">
@@ -57,8 +64,7 @@ export function TaskLink({
             ? "bg-control-active font-medium text-foreground"
             : "text-muted-foreground hover:bg-control-hover hover:text-foreground"
         }`}
-        params={{ projectId: task.projectId, taskId: task.id }}
-        to="/p/$projectId/t/$taskId"
+        {...taskRoute}
       >
         {icon === undefined ? null : (
           <span className="shrink-0 text-subtle-foreground">{icon}</span>

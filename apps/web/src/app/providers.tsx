@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { TEMPORARY_TASK_SCOPE_ID } from "@code-agent/protocol";
 import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 
@@ -39,10 +40,9 @@ const queryClient = createAppQueryClient();
 
 export function navigateToTaskFromNotification(projectId: string, taskId: string): void {
   // 交给 Router 完成应用内导航，避免整页刷新丢失瞬时弹窗状态。
-  void router.navigate({
-    params: { projectId, taskId },
-    to: "/p/$projectId/t/$taskId",
-  });
+  void (projectId === TEMPORARY_TASK_SCOPE_ID
+    ? router.navigate({ params: { taskId }, to: "/temporary/t/$taskId" })
+    : router.navigate({ params: { projectId, taskId }, to: "/p/$projectId/t/$taskId" }));
 }
 
 const taskNotifier = createBrowserTaskNotifier({

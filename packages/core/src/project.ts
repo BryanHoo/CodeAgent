@@ -12,6 +12,7 @@ export type RegisterProjectInput = Readonly<{
 }>;
 
 export interface ProjectRepository {
+  ensureTemporaryProject(rootPath: string): Promise<Project>;
   list(): Promise<readonly Project[]>;
   read(projectId: string): Promise<Project | undefined>;
   register(input: RegisterProjectInput): Promise<Project>;

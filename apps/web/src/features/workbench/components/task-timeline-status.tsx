@@ -21,12 +21,23 @@ export function EmptyTimeline({
   onProjectChange,
   projectId,
   projects,
-}: Readonly<{
-  onProjectChange: (projectId: string) => void;
-  projectId: string;
-  projects: readonly Project[];
-}>) {
-  const selectedProjectName = projects.find((project) => project.id === projectId)?.name ?? "";
+  scopeName,
+}: Readonly<
+  | {
+      onProjectChange: (projectId: string) => void;
+      projectId: string;
+      projects: readonly Project[];
+      scopeName?: undefined;
+    }
+  | {
+      onProjectChange?: undefined;
+      projectId?: undefined;
+      projects?: undefined;
+      scopeName: string;
+    }
+>) {
+  const selectedProjectName =
+    scopeName ?? projects.find((project) => project.id === projectId)?.name ?? "";
 
   return (
     <section
@@ -49,23 +60,25 @@ export function EmptyTimeline({
             >
               {selectedProjectName}
             </span>
-            <select
-              aria-label={i18n.t("timeline.selectProject", { ns: "conversation" })}
-              className="absolute inset-0 size-full min-w-0 cursor-pointer appearance-none opacity-0 outline-none"
-              onChange={(event) => {
-                const nextProjectId = event.currentTarget.value;
-                if (nextProjectId !== projectId) {
-                  onProjectChange(nextProjectId);
-                }
-              }}
-              value={projectId}
-            >
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
+            {scopeName === undefined ? (
+              <select
+                aria-label={i18n.t("timeline.selectProject", { ns: "conversation" })}
+                className="absolute inset-0 size-full min-w-0 cursor-pointer appearance-none opacity-0 outline-none"
+                onChange={(event) => {
+                  const nextProjectId = event.currentTarget.value;
+                  if (nextProjectId !== projectId) {
+                    onProjectChange(nextProjectId);
+                  }
+                }}
+                value={projectId}
+              >
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
           </span>
           {i18n.t("timeline.emptyAfter", { ns: "conversation" })}
         </h2>

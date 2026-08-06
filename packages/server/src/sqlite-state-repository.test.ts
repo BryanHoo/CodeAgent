@@ -42,7 +42,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 9,
+      migrationVersion: 10,
       synchronous: "normal",
       writable: true,
     });
@@ -82,6 +82,26 @@ describe("SqliteStateRepository", () => {
 
     expect(duplicate.id).toBe(registered.id);
     await expect(repository.list()).resolves.toHaveLength(1);
+  });
+
+  it("persists one hidden temporary project without exposing project mutations", async () => {
+    const root = await createWorkspace();
+    const temporaryRoot = join(root, "temporary-workspace");
+    const userRoot = join(root, "user-workspace");
+    await Promise.all([mkdir(temporaryRoot), mkdir(userRoot)]);
+    const repository = await openRepository(root);
+
+    const temporary = await repository.ensureTemporaryProject(temporaryRoot);
+    const duplicate = await repository.ensureTemporaryProject(temporaryRoot);
+    const userProject = await repository.register({ name: "User", rootPath: userRoot });
+
+    expect(duplicate).toEqual(temporary);
+    await expect(repository.read(temporary.id)).resolves.toEqual(temporary);
+    await expect(repository.list()).resolves.toEqual([userProject]);
+    await expect(repository.rename(temporary.id, "Visible")).resolves.toBeUndefined();
+    await expect(repository.remove(temporary.id)).resolves.toBe(false);
+    await expect(repository.reorder([userProject.id])).resolves.toEqual([userProject]);
+    await expect(repository.read(temporary.id)).resolves.toEqual(temporary);
   });
 
   it("persists complete project ordering and appends newly registered projects", async () => {

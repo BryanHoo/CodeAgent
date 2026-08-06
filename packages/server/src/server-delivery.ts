@@ -1,6 +1,6 @@
 import { relative, sep } from "node:path";
 
-import { MAX_AGENT_FILE_BYTES } from "@code-agent/protocol";
+import { MAX_AGENT_FILE_BYTES, TEMPORARY_TASK_SCOPE_ID } from "@code-agent/protocol";
 import fastifyCompress from "@fastify/compress";
 import fastifyCookie from "@fastify/cookie";
 import fastifyMultipart from "@fastify/multipart";
@@ -11,6 +11,19 @@ import type { FastifyInstance } from "fastify";
 import { AccessSessionService, type CodeAgentAccessOptions } from "./access-control.js";
 import { ACCESS_SESSION_COOKIE } from "./routes/access-routes.js";
 import { MutationHttpError } from "./routes/context.js";
+
+function isInternalTemporaryProjectPath(pathname: string): boolean {
+  const prefix = "/v1/projects/";
+  if (!pathname.startsWith(prefix)) {
+    return false;
+  }
+  const encodedProjectId = pathname.slice(prefix.length).split("/", 1)[0];
+  try {
+    return decodeURIComponent(encodedProjectId ?? "") === TEMPORARY_TASK_SCOPE_ID;
+  } catch {
+    return false;
+  }
+}
 
 export interface ConfigureServerDeliveryOptions {
   access?: CodeAgentAccessOptions;
@@ -27,7 +40,10 @@ export async function configureServerDelivery(
   const accessService =
     options.access === undefined ? undefined : new AccessSessionService(options.access);
   app.addHook("onRequest", async (request, reply) => {
-    const pathname = request.url.split("?", 1)[0] ?? request.url;
+    const pathname = request.originalUrl.split("?", 1)[0] ?? request.originalUrl;
+    if (isInternalTemporaryProjectPath(pathname)) {
+      return reply.code(404).send({ code: "NOT_FOUND", message: "Route not found" });
+    }
     const websocket = request.headers.upgrade?.toLowerCase() === "websocket";
     const sessionId = request.cookies[ACCESS_SESSION_COOKIE];
     const authenticated =

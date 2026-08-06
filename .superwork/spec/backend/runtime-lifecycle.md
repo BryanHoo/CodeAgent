@@ -15,7 +15,7 @@
 - JSONL 响应只有在底层写入回调确认后才算成功，所有写入都使用有界超时；异步写入失败必须关闭连接且不能提前发布请求终态。
 - 过载错误使用带 jitter 的有上限指数退避，不做同步密集重试。
 - Task/Turn 写入只通过 `thread/start`、`turn/start`、`turn/steer`、`turn/interrupt` 和稳定 Goal API 映射；文本输入必须转换为当前 Codex Schema 要求的 `UserInput[]`，Provider 不向上泄漏原生字段。
-- Goal 模式只允许作为当前首次提交的 `AgentTurnOptions.goalMode: true`。Provider 必须先通过 `thread/settings/update` 应用当前审批、沙盒、模型和思考量，再调用 `thread/goal/set` 写入 Trim 后的 1 至 4,000 字符 objective，并等待 Codex 自动发布 `turn/started`；不得额外调用 `turn/start`。`thread/goal/updated` 与 `thread/goal/cleared` 只更新 Codex 内部 Goal 生命周期，不生成未知通知告警；自动 Turn 的 Message、Tool 和终态继续使用统一事件映射。临时 Thread 不支持 Goal。
+- Goal 模式只允许作为当前首次提交的 `AgentTurnOptions.goalMode: true`。Provider 必须先通过 `thread/settings/update` 应用当前审批、沙盒、模型和思考量，再调用 `thread/goal/set` 写入 Trim 后的 1 至 4,000 字符 objective，并等待 Codex 自动发布 `turn/started`；不得额外调用 `turn/start`。`thread/goal/updated` 与 `thread/goal/cleared` 只更新 Codex 内部 Goal 生命周期，不生成未知通知告警；自动 Turn 的 Message、Tool 和终态继续使用统一事件映射。Git 提交信息使用的 ephemeral Thread 不支持 Goal。
 - `turn/steer` 只允许写入当前 Task 的活动 Turn，必须传递 `expectedTurnId` 且不能携带模型、思考量或审批等 Turn 设置覆盖；Provider 必须校验响应 `turnId` 与预期 Turn 一致。
 - Server 内部生成 Git commit message 时，必须通过 `thread/start { ephemeral: true }` 启动一次隐藏的结构化 Turn。选中变更的完整 Git diff 不超过 `64 KiB` 时，默认 Prompt 必须直接提供带 staged/unstaged 标识的精确 diff；超过预算时必须改为最多 `20 KiB` 的逐文件 staged/unstaged、类型、行数和 diff 字节摘要，并从整个选择范围等距抽取最多 16 个变更，提供合计最多 `36 KiB` 的首尾 diff 片段。两种输入都必须禁止 Codex 读取文件或运行命令，避免文件数量放大工具调用和延迟。发送给 Codex 的固定默认指令必须使用英语，用户配置的全局提交提示词必须原样嵌入且不得翻译。默认 Prompt 不得预设 Conventional Commits 或提交信息语言；没有全局提交提示词时只补充祈使语气、简洁标题和正文说明动机的通用质量规则，全局提交提示词负责定义客户级格式和语言，但不能覆盖 diff 不可信边界，以及唯一结果只能写入结构化输出 `message` 字段的约束。同时固定使用 `read-only`、`never` 和 `{ message }` `outputSchema`。最终 assistant message 必须从独立 `item.completed` 事件收集，`turn.completed` 只作为终态信号，不能假设其重复携带完整 items。Provider 默认事件订阅必须排除临时 Task，只有执行该内部流程的订阅可显式接收临时事件，避免浏览器通知或导航暴露隐藏 Task。Codex 不执行 Git Mutation；Turn 完成、失败或超时都必须移除监听器，并 best-effort 中断和取消订阅临时 Thread，不得归档或写入用户 Task 历史。
 - App Server 重启后，从 `thread/list` 或 `thread/read` 重新发现的持久化 Task 在首次 `turn/start` 前必须调用一次 `thread/resume`；同一进程内由 `thread/start` 或 `thread/fork` 创建的已加载 Task 不得重复恢复，并发续写必须复用同一个恢复 Promise。
@@ -49,6 +49,8 @@
 - Fastify 资源通过插件封装，并在 `onClose` 中释放。
 - 普通 HTTP 路由使用 Fastify 原生 60 秒 `handlerTimeout` 和 `request.signal` 执行协作取消；Event Stream WebSocket 是显式长连接，不继承 Handler 截止时间，其有界性由队列、背压和连接关闭生命周期保证。
 - Project 列表默认空，通过宿主系统目录选择器注册，并持久化到 `CODEX_HOME/code-agent/state.sqlite3`；重复真实路径幂等返回已有 Project。
+- CLI 启动时必须以 `0700` 幂等创建 `${CODEX_HOME}/code-agent/temporary-workspace`，拒绝最终目标为符号链接，并在 SQLite 中确保固定 ID、`kind = temporary` 的内部 Project。Project 列表、排序、重命名、删除及 Project defaults 只能操作 `kind = user`。
+- 用户临时聊天必须通过 `/v1/temporary/**` 访问内部作用域，`/v1/projects/temporary/**` 即使经过 URL 编码也必须返回资源不存在。创建必须调用不带 `ephemeral` 的 `thread/start`；Snapshot、设置更新和 Turn 参数必须完整保留普通 `AgentTaskSettings`，不得覆写审批、Sandbox、模型或思考量。temporary API 允许 Task、Turn、Attachment、Event、Skill、MCP 和后台终端能力；Web 不得借该作用域请求 Git、文件、目录打开、Project defaults 或其他 Project Mutation，也不得展示内部路径。
 - 已激活的 Project Runtime Context 必须先从进程内缓存解析，只有缓存未命中时才读取 Project Repository。Project 重命名成功后同步刷新缓存中的展示信息；Project 删除成功后必须释放事件订阅和 Context 缓存，后续访问重新读取 Repository 并返回资源不存在，不能复用已删除 Runtime。
 - Project 删除和 Server 关闭必须通过 Runtime 的显式 `releaseProject` 端口统一释放 Project Provider、原始 Provider、Task Owner、Pending Request 定时器、Task 运行状态和历史附件授权；Server 同时清理该 Project 未消费或 Turn 占用中的上传附件，且不得影响其他 Project。
 - Project 与 Codex Thread 的 `cwd` 归属必须按真实路径比较；Windows 路径忽略大小写，Linux 符号链接解析到同一实体，不能仅比较原始路径字符串。

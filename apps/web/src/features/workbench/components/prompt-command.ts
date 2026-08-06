@@ -12,9 +12,11 @@ export type PromptCommandItem = Readonly<{
   label: string;
 }>;
 
-export function getPromptCommandItems(): readonly PromptCommandItem[] {
+export function getPromptCommandItems({
+  projectToolsEnabled = true,
+}: Readonly<{ projectToolsEnabled?: boolean }> = {}): readonly PromptCommandItem[] {
   const translate = (key: string) => i18n.t(key, { ns: "workbench" });
-  return [
+  const items: readonly PromptCommandItem[] = [
     {
       action: "review",
       description: translate("promptCommand.review.description"),
@@ -58,6 +60,9 @@ export function getPromptCommandItems(): readonly PromptCommandItem[] {
       label: translate("promptCommand.goal.label"),
     },
   ];
+  return projectToolsEnabled
+    ? items
+    : items.filter((item) => item.action !== "review" && item.action !== "initialize");
 }
 
 export function getPromptCommandAvailability(

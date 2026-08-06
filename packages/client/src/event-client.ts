@@ -1,5 +1,7 @@
 import {
   EventStreamMessageSchema,
+  TEMPORARY_TASK_API_PATH,
+  TEMPORARY_TASK_SCOPE_ID,
   type AgentEvent,
   type EventStreamMessage,
   type ResyncRequired,
@@ -34,7 +36,10 @@ export class CodeAgentEventError extends Error {
 }
 
 function createEventUrl(baseUrl: string, projectId: string, afterSequence: number): string {
-  const path = `/v1/projects/${encodeURIComponent(projectId)}/events`;
+  const path =
+    projectId === TEMPORARY_TASK_SCOPE_ID
+      ? `${TEMPORARY_TASK_API_PATH}/events`
+      : `/v1/projects/${encodeURIComponent(projectId)}/events`;
   const httpUrl = baseUrl ? new URL(`${baseUrl}${path}`) : new URL(path, globalThis.location.href);
   httpUrl.protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
   httpUrl.searchParams.set("afterSequence", String(afterSequence));

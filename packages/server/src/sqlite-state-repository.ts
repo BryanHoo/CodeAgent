@@ -169,6 +169,15 @@ const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     sql: "DROP TABLE task_metadata;",
     version: 9,
   },
+  {
+    name: "add_project_kind",
+    sql: `
+      ALTER TABLE projects
+        ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'
+        CHECK (kind IN ('user', 'temporary'));
+    `,
+    version: 10,
+  },
 ];
 
 type WorkerResponse =
@@ -322,6 +331,21 @@ export class SqliteStateRepository implements ProjectRepository, AgentSettingsRe
 
   public diagnose(): Promise<SqliteDatabaseDiagnostics> {
     return this.#call("diagnose");
+  }
+
+  public async ensureTemporaryProject(rootPathInput: string): Promise<Project> {
+    const rootPath = await realpath(resolve(rootPathInput));
+    if (!(await stat(rootPath)).isDirectory()) {
+      throw new Error(`Temporary project path is not a directory: ${rootPath}`);
+    }
+    return this.#call("ensureTemporaryProject", {
+      project: {
+        createdAt: this.#now().toISOString(),
+        id: "temporary",
+        name: "Temporary",
+        rootPath,
+      },
+    });
   }
 
   public list(): Promise<readonly Project[]> {

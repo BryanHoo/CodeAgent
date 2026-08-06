@@ -46,6 +46,7 @@ export function WorkbenchComposer({
   buildPlanRef,
   capabilities,
   client,
+  fixedSandboxMode,
   followUpBehavior,
   models,
   modelsError,
@@ -60,6 +61,7 @@ export function WorkbenchComposer({
   onTurnStarted,
   projectId,
   projectPath,
+  projectToolsEnabled = true,
   gitStatus,
   runtime,
   settings,
@@ -67,14 +69,19 @@ export function WorkbenchComposer({
   taskId,
 }: WorkbenchComposerProps) {
   const { t } = useTranslation(["workbench", "settings"]);
+  const effectiveSettings =
+    fixedSandboxMode === undefined || settings.sandboxMode === fixedSandboxMode
+      ? settings
+      : { ...settings, sandboxMode: fixedSandboxMode };
   const session = useComposerSession({
     capabilities,
     gitStatus,
     models,
     onSubmissionStateChange,
     projectId,
+    projectToolsEnabled,
     runtime,
-    settings,
+    settings: effectiveSettings,
     skills,
     taskId,
   });
@@ -443,11 +450,13 @@ export function WorkbenchComposer({
         setMutationError(error);
       }}
       projectPath={projectPath}
+      projectToolsEnabled={projectToolsEnabled}
       promptContent={promptContent}
       promptSubmissionText={promptSubmission.text}
       queuedPrompts={queuedPrompts}
       removeQueuedPrompt={removeQueuedPrompt}
       reviewMenuMode={reviewMenuMode}
+      sandboxModeSelectable={fixedSandboxMode === undefined}
       selectedModel={selectedModel}
       selectedReasoningEffort={selectedReasoningEffort}
       setActiveCommandIndex={setActiveCommandIndex}

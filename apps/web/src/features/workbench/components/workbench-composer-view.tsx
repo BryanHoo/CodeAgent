@@ -64,7 +64,6 @@ import {
 
 export { ComposerModeTag } from "./workbench-composer-toolbar.js";
 export * from "./workbench-composer-view-contracts.js";
-
 type ComposerBranchSwitcherProps = Readonly<{
   gitStatus: ProjectGitStatus | undefined;
   onBranchChange: (branch: string) => void;
@@ -328,25 +327,29 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                 <option value="auto-review">{t("settings:approval.autoReview")}</option>
                 <option value="never">{t("settings:approval.never")}</option>
               </PromptInputSelect>
-              <PromptInputSelect
-                aria-label={t("composer.sandboxMode")}
-                className="max-workbench:w-11 max-workbench:max-w-11 max-workbench:px-1 max-workbench:[field-sizing:fixed]"
-                disabled={props.turnControlsDisabled}
-                onChange={(event) => {
-                  props.onSettingsChange(
-                    {
-                      ...props.activeSettings,
-                      sandboxMode: event.currentTarget.value as AgentSandboxMode,
-                    },
-                    "sandboxMode",
-                  );
-                }}
-                value={props.activeSettings.sandboxMode}
-              >
-                <option value="read-only">{t("settings:sandbox.readOnly")}</option>
-                <option value="workspace-write">{t("settings:sandbox.workspaceWrite")}</option>
-                <option value="danger-full-access">{t("settings:sandbox.dangerFullAccess")}</option>
-              </PromptInputSelect>
+              {props.sandboxModeSelectable ? (
+                <PromptInputSelect
+                  aria-label={t("composer.sandboxMode")}
+                  className="max-workbench:w-11 max-workbench:max-w-11 max-workbench:px-1 max-workbench:[field-sizing:fixed]"
+                  disabled={props.turnControlsDisabled}
+                  onChange={(event) => {
+                    props.onSettingsChange(
+                      {
+                        ...props.activeSettings,
+                        sandboxMode: event.currentTarget.value as AgentSandboxMode,
+                      },
+                      "sandboxMode",
+                    );
+                  }}
+                  value={props.activeSettings.sandboxMode}
+                >
+                  <option value="read-only">{t("settings:sandbox.readOnly")}</option>
+                  <option value="workspace-write">{t("settings:sandbox.workspaceWrite")}</option>
+                  <option value="danger-full-access">
+                    {t("settings:sandbox.dangerFullAccess")}
+                  </option>
+                </PromptInputSelect>
+              ) : null}
               {props.composerMode === undefined ? null : (
                 <ComposerModeTag
                   disabled={props.turnControlsDisabled}
@@ -459,22 +462,26 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
         </p>
       )}
       <div className="mx-auto mt-1.5 flex w-full max-w-content min-w-0 items-center gap-3 px-1 text-caption text-muted-foreground">
-        <div className="flex min-w-0 shrink items-center gap-0.5">
-          <ComposerBranchSwitcher
-            gitStatus={props.gitStatus}
-            onBranchChange={props.onBranchChange}
-            switchingBranch={props.switchingBranch}
-          />
-          <ComposerGitHistoryButton onOpen={props.onOpenGitHistory} />
-        </div>
-        <span
-          aria-label={t("composer.projectPath")}
-          className="inline-flex min-w-0 flex-1 items-center gap-1"
-          title={props.projectPath}
-        >
-          <Folder className="size-3 shrink-0" aria-hidden="true" />
-          <span className="truncate">{props.projectPath}</span>
-        </span>
+        {props.projectToolsEnabled ? (
+          <>
+            <div className="flex min-w-0 shrink items-center gap-0.5">
+              <ComposerBranchSwitcher
+                gitStatus={props.gitStatus}
+                onBranchChange={props.onBranchChange}
+                switchingBranch={props.switchingBranch}
+              />
+              <ComposerGitHistoryButton onOpen={props.onOpenGitHistory} />
+            </div>
+            <span
+              aria-label={t("composer.projectPath")}
+              className="inline-flex min-w-0 flex-1 items-center gap-1"
+              title={props.projectPath}
+            >
+              <Folder className="size-3 shrink-0" aria-hidden="true" />
+              <span className="truncate">{props.projectPath}</span>
+            </span>
+          </>
+        ) : null}
         <Context
           className="ml-auto"
           maxTokens={props.contextUsage?.contextWindow}

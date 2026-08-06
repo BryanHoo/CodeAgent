@@ -225,6 +225,7 @@ export const workbench = {
     resizeInspector: "Resize context panel",
     resizeSidebar: "Resize project sidebar",
     timeline: "Task timeline",
+    temporaryTask: "Temporary task",
   },
   skillEditor: {
     tokenLabel: "Skill {{name}}, serialized text {{text}}",
@@ -258,6 +259,7 @@ export const workbench = {
     landmark: "Project sidebar",
     noMatchingTasks: "No matching tasks",
     noTasks: "No tasks yet",
+    noTemporaryTasks: "No temporary tasks yet",
     openProjectActions: "Open actions for {{project}}",
     openTaskActions: "Open actions for {{task}}",
     pin: "Pin",
@@ -276,6 +278,7 @@ export const workbench = {
     taskIncomplete: "AI response incomplete",
     taskLoading: "Loading tasks",
     taskRunning: "Task running",
+    temporaryTasks: "Temporary tasks",
     toggleProject: "Toggle project {{project}}",
     unpin: "Unpin",
   },

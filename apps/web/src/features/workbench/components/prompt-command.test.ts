@@ -10,6 +10,7 @@ import {
 } from "./prompt-command.js";
 
 const promptCommandItems = getPromptCommandItems();
+const temporaryPromptCommandItems = getPromptCommandItems({ projectToolsEnabled: false });
 
 const commandItems = [
   {
@@ -101,6 +102,15 @@ describe("prompt slash command", () => {
       "目标",
     ]);
     expect(promptCommandItems.every((item) => item.description.length > 0)).toBe(true);
+  });
+
+  it("omits project-only commands for temporary tasks", () => {
+    expect(temporaryPromptCommandItems.map((item) => item.label)).toEqual([
+      "压缩",
+      "复制",
+      "计划",
+      "目标",
+    ]);
   });
 
   it("derives task command availability from task context and capabilities", () => {

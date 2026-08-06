@@ -1,6 +1,11 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { AgentEventConnectionState } from "@code-agent/client";
-import type { AgentTask, AppInfoResponse, Project } from "@code-agent/protocol";
+import {
+  TEMPORARY_TASK_SCOPE_ID,
+  type AgentTask,
+  type AppInfoResponse,
+  type Project,
+} from "@code-agent/protocol";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PanelLeftClose, Search, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -134,12 +139,11 @@ export function ProjectSidebar({
     onReorder: reorderProjects,
     projects,
   });
-  const firstProject = orderedProjects[0];
-
   useEffect(() => {
     if (
       isPending ||
       projectId === undefined ||
+      projectId === TEMPORARY_TASK_SCOPE_ID ||
       projects.some((project) => project.id === projectId)
     ) {
       return;
@@ -279,7 +283,9 @@ export function ProjectSidebar({
         });
         forgetTask(task.projectId, task.id);
         if (task.projectId === projectId && task.id === taskId) {
-          await navigate({ params: { projectId: task.projectId }, to: "/p/$projectId" });
+          await (task.projectId === TEMPORARY_TASK_SCOPE_ID
+            ? navigate({ to: "/temporary" })
+            : navigate({ params: { projectId: task.projectId }, to: "/p/$projectId" }));
         }
         removeRetainedTaskRuntime(task.projectId, task.id);
         // 归档后的 Runtime 清理由 Provider 判定安全性，失败不回滚已成功的归档。
@@ -363,19 +369,10 @@ export function ProjectSidebar({
             value={query}
           />
         </div>
-        {firstProject === undefined ? null : (
-          <Link
-            className={primaryActionClassName}
-            onClick={() => {
-              updateExpandedProjects((current) => new Set(current).add(firstProject.id));
-            }}
-            params={{ projectId: firstProject.id }}
-            to="/p/$projectId"
-          >
-            <Send className={primaryActionIconClassName} aria-hidden="true" />
-            {t("sidebar.newTask")}
-          </Link>
-        )}
+        <Link className={primaryActionClassName} to="/temporary">
+          <Send className={primaryActionIconClassName} aria-hidden="true" />
+          {t("sidebar.newTask")}
+        </Link>
       </nav>
 
       <ProjectSidebarTaskList
@@ -391,6 +388,9 @@ export function ProjectSidebar({
         isProjectActionPending={isProjectActionPending}
         isProjectAddPending={isProjectAddPending}
         normalizedQuery={normalizedQuery}
+        onOpenTemporaryDraft={() => {
+          void navigate({ to: "/temporary" });
+        }}
         onOpenProjectDraft={openProjectDraft}
         onOpenProjectPicker={() => {
           setHasSubmittedAddProject(false);

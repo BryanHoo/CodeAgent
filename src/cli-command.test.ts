@@ -1,8 +1,18 @@
+import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { runCli, type CliDependencies } from "./cli-command.js";
+import { ensureTemporaryWorkspace, runCli, type CliDependencies } from "./cli-command.js";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories.splice(0).map((path) => rm(path, { force: true, recursive: true })),
+  );
+});
 
 function createHarness(overrides: Partial<CliDependencies> = {}) {
   const lifecycle: string[] = [];
@@ -87,6 +97,14 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
         writable: true,
       }),
     ),
+    ensureTemporaryProject: vi.fn(() =>
+      Promise.resolve({
+        createdAt: "2026-07-23T00:00:00.000Z",
+        id: "temporary",
+        name: "Temporary",
+        rootPath: "/custom/home/code-agent/temporary-workspace",
+      }),
+    ),
     list: vi.fn(() => Promise.resolve([])),
     readGlobalSettings: vi.fn(() => Promise.resolve(undefined)),
     readProjectDefaults: vi.fn(() => Promise.resolve(undefined)),
@@ -110,6 +128,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
       lifecycle.push("provider.create");
       return runtimeProvider;
     }),
+    ensureTemporaryWorkspace: vi.fn((path: string) => Promise.resolve(path)),
     generateLanPairingCode: vi.fn(() => "fixed-test-pairing-code"),
     listLanAccessUrls: vi.fn(() => ["http://192.168.1.20:3210"]),
     createServer: vi.fn(() =>
@@ -166,6 +185,22 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
 }
 
 describe("runCli", () => {
+  it("creates a private temporary workspace and rejects a symbolic-link target", async () => {
+    const root = await mkdtemp(join(tmpdir(), "code-agent-cli-"));
+    temporaryDirectories.push(root);
+    const workspace = join(root, "temporary-workspace");
+
+    const createdWorkspace = await ensureTemporaryWorkspace(workspace);
+    await expect(realpath(workspace)).resolves.toBe(createdWorkspace);
+    await expect(ensureTemporaryWorkspace(workspace)).resolves.toBe(createdWorkspace);
+
+    const target = join(root, "target");
+    const alias = join(root, "alias");
+    await mkdir(target);
+    await symlink(target, alias);
+    await expect(ensureTemporaryWorkspace(alias)).rejects.toThrow(/symbolic link/u);
+  });
+
   it("prints the CodeAgent version", async () => {
     const harness = createHarness();
 
@@ -249,6 +284,12 @@ describe("runCli", () => {
     expect(typeof serverOptions?.readAppInfo).toBe("function");
     expect(harness.dependencies.createStateRepository).toHaveBeenCalledWith(
       join("/custom/home", "code-agent", "state.sqlite3"),
+    );
+    expect(harness.dependencies.ensureTemporaryWorkspace).toHaveBeenCalledWith(
+      join("/custom/home", "code-agent", "temporary-workspace"),
+    );
+    expect(harness.stateRepository.ensureTemporaryProject).toHaveBeenCalledWith(
+      join("/custom/home", "code-agent", "temporary-workspace"),
     );
     expect(harness.serverListen).toHaveBeenCalledWith({ host: "127.0.0.1", port: 3210 });
     expect(harness.dependencies.openBrowser).toHaveBeenCalledWith("http://127.0.0.1:3210");

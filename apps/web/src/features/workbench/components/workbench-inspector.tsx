@@ -49,6 +49,7 @@ type WorkbenchInspectorProps = Readonly<{
   backgroundTerminals?: readonly AgentBackgroundTerminal[];
   backgroundTerminalsError?: Error | null;
   backgroundTerminalsPending?: boolean;
+  contextOnly?: boolean;
   expandedFileTreePaths?: Set<string>;
   fileTreeDirectories?: readonly ProjectFileTreeDirectoryState[];
   gitStatus?: ProjectGitStatus;
@@ -89,6 +90,7 @@ export function WorkbenchInspector({
   backgroundTerminals = [],
   backgroundTerminalsError = null,
   backgroundTerminalsPending = false,
+  contextOnly = false,
   expandedFileTreePaths = emptyExpandedFileTreePaths,
   fileTreeDirectories = [],
   gitStatus,
@@ -163,10 +165,50 @@ export function WorkbenchInspector({
       ),
     [fileTreeDirectories],
   );
+  const activeTab = contextOnly ? "context" : tab;
+  const contextContent = (
+    <div className="h-full space-y-5 overflow-y-auto p-2.5">
+      {backgroundTerminals.length > 0 ||
+      backgroundTerminalsPending ||
+      backgroundTerminalsError !== null ? (
+        <BackgroundTerminalSection
+          error={backgroundTerminalsError}
+          isPending={backgroundTerminalsPending}
+          mutationError={terminalMutationError}
+          onTerminate={onTerminateBackgroundTerminal}
+          terminals={backgroundTerminals}
+          terminatingTerminalId={terminatingTerminalId}
+        />
+      ) : null}
+      {subagents.length > 0 ? (
+        <SubagentSection onOpenSubagent={onOpenSubagent} subagents={subagents} />
+      ) : null}
+      <McpServerSection
+        error={mcpServersError}
+        isPending={mcpServersPending}
+        servers={mcpServers}
+      />
+      <InspectorSection
+        icon={<FolderRoot className="size-3.5" />}
+        title={i18n.t("inspector.source", { ns: "conversation" })}
+      >
+        <div
+          aria-label={i18n.t("inspector.contextSources", { ns: "conversation" })}
+          className="space-y-0.5"
+        >
+          {sources.map((source) => (
+            <InspectorSourceRow key={source.id} source={source} />
+          ))}
+        </div>
+      </InspectorSection>
+    </div>
+  );
   return (
     <aside
       aria-label={i18n.t("inspector.title", { ns: "conversation" })}
-      className="workbench-inspector relative z-30 grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-panel shadow-divider-reverse"
+      className={`workbench-inspector relative z-30 grid min-h-0 bg-panel shadow-divider-reverse ${
+        contextOnly ? "grid-rows-[auto_minmax(0,1fr)]" : "grid-rows-[auto_auto_minmax(0,1fr)]"
+      }`}
     >
       <div className="flex h-workbench-header items-center justify-between gap-2 px-3">
         <h2 className="min-w-0 flex-1 truncate text-body-small font-semibold text-foreground">
@@ -191,34 +233,36 @@ export function WorkbenchInspector({
         )}
       </div>
 
-      <div className="px-2.5 pb-1.5">
-        <div className="grid grid-cols-2 rounded-control bg-control p-0.5" role="tablist">
-          {(["changes", "context"] as const).map((value) => (
-            <Button
-              variant="ghost"
-              aria-selected={tab === value}
-              className={`h-7 rounded-control text-label font-medium transition-colors ${
-                tab === value
-                  ? "bg-raised text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              key={value}
-              onClick={() => {
-                onTabChange(value);
-              }}
-              role="tab"
-              type="button"
-            >
-              {value === "changes"
-                ? i18n.t("inspector.changes", { ns: "conversation" })
-                : i18n.t("inspector.context", { ns: "conversation" })}
-            </Button>
-          ))}
+      {contextOnly ? null : (
+        <div className="px-2.5 pb-1.5">
+          <div className="grid grid-cols-2 rounded-control bg-control p-0.5" role="tablist">
+            {(["changes", "context"] as const).map((value) => (
+              <Button
+                variant="ghost"
+                aria-selected={activeTab === value}
+                className={`h-7 rounded-control text-label font-medium transition-colors ${
+                  activeTab === value
+                    ? "bg-raised text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                key={value}
+                onClick={() => {
+                  onTabChange(value);
+                }}
+                role="tab"
+                type="button"
+              >
+                {value === "changes"
+                  ? i18n.t("inspector.changes", { ns: "conversation" })
+                  : i18n.t("inspector.context", { ns: "conversation" })}
+              </Button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="min-h-0 overflow-hidden" role="tabpanel">
-        {tab === "changes" ? (
+      <div className="min-h-0 overflow-hidden" role={contextOnly ? undefined : "tabpanel"}>
+        {activeTab === "changes" ? (
           <div className="flex h-full min-h-0 flex-col">
             {/* 工作区干净时省略整个摘要模块，把空间完整留给项目文件。 */}
             {allChanges.length > 0 ? (
@@ -436,41 +480,7 @@ export function WorkbenchInspector({
             </div>
           </div>
         ) : (
-          <div className="h-full space-y-5 overflow-y-auto p-2.5">
-            {backgroundTerminals.length > 0 ||
-            backgroundTerminalsPending ||
-            backgroundTerminalsError !== null ? (
-              <BackgroundTerminalSection
-                error={backgroundTerminalsError}
-                isPending={backgroundTerminalsPending}
-                mutationError={terminalMutationError}
-                onTerminate={onTerminateBackgroundTerminal}
-                terminals={backgroundTerminals}
-                terminatingTerminalId={terminatingTerminalId}
-              />
-            ) : null}
-            {subagents.length > 0 ? (
-              <SubagentSection onOpenSubagent={onOpenSubagent} subagents={subagents} />
-            ) : null}
-            <McpServerSection
-              error={mcpServersError}
-              isPending={mcpServersPending}
-              servers={mcpServers}
-            />
-            <InspectorSection
-              icon={<FolderRoot className="size-3.5" />}
-              title={i18n.t("inspector.source", { ns: "conversation" })}
-            >
-              <div
-                aria-label={i18n.t("inspector.contextSources", { ns: "conversation" })}
-                className="space-y-0.5"
-              >
-                {sources.map((source) => (
-                  <InspectorSourceRow key={source.id} source={source} />
-                ))}
-              </div>
-            </InspectorSection>
-          </div>
+          contextContent
         )}
       </div>
       {projectOpenError === null ? null : (

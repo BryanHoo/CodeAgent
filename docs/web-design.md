@@ -230,6 +230,8 @@ apps/web/src/shared/ai-elements/
 /
 /p/:projectId
 /p/:projectId/t/:taskId
+/temporary
+/temporary/t/:taskId
 ```
 
 路由职责：
@@ -239,8 +241,12 @@ apps/web/src/shared/ai-elements/
 | `/`                       | 检查 Runtime 和最近 Project，并进入工作台 |
 | `/p/:projectId`           | 唯一工作台的 Project 空任务状态           |
 | `/p/:projectId/t/:taskId` | 唯一工作台，显示选中 Task 和 Composer     |
+| `/temporary`              | 临时聊天的新 Task 草稿                    |
+| `/temporary/t/:taskId`    | 可恢复的临时 Task Timeline                |
 
 Project 和 Task ID 必须来自 Server，URL 只表示导航意图，不能代替权限校验。
+
+`/temporary` 使用固定逻辑 scope，不携带或展示内部 Project ID、名称与路径。Sidebar 顶部常驻“新建任务”并默认进入该路由，临时任务分组标题右侧也提供同名加号入口；历史记录以独立平铺分组展示，支持搜索、固定、重命名和归档，没有用户 Project 时首页直接进入该路由。临时工作台复用 Timeline、Composer、全局 Agent 设置和 Task Runtime，开放审批、模型、思考量、Skill、MCP 与后台终端；命令菜单隐藏依赖普通 Project 的代码审查和初始化，保留其余通用命令。Sandbox 固定为完全访问且不显示工作区选择器。右侧 Inspector 直接显示上下文内容且不渲染 Tab。内部 Project 的选择器、文件、Git、目录打开、Project defaults 和真实路径继续隐藏。
 
 Project 不使用独立页面。用户在工作台左栏打开 shadcn Dialog，通过 AI Elements `FileTree` 浏览运行 CodeAgent 的设备上的目录；初始位置为 Server 用户主目录，目录展开时按需读取直接子目录，并可向上导航。确认后以所选绝对路径注册 Project，文件夹名作为 Project 名称；Server 规范化并校验真实目录后持久化，Web 只通过 Client API 读取和注册 Project，不直接访问文件系统或数据库。该链路同时服务本地与已配对 LAN 浏览器，不调用 Server 宿主 GUI。
 
@@ -267,6 +273,7 @@ Project 名称行短按继续展开或收起 Task；指针移动超过点击容�
 - Sidebar 默认宽度为 `264px`，支持折叠。
 - Timeline 占据剩余空间，宽度使用合理上限保证 Markdown 可读性。
 - Inspector 在宽屏工作台默认显示，窄窗口关闭并按需作为抽屉打开。
+- 临时 Task 的 Inspector 仅渲染上下文内容，不显示“变更/上下文”Tab，也不把内部 Project 目录加入来源。
 - Inspector 的“变更”页签固定保留只读的未提交变更摘要：左侧在标题下方同行展示变更总数和增删统计，最右侧并排展示相同中性背景的“审核”与“提交”按钮。“审核”打开统一文件审核 Dialog；“提交”打开提交 Dialog，根仓库直接进入文件与 message 流程，聚合直属子仓库时必须先选择 Git 项目，再基于该仓库的独立状态生成 message、提交或推送。摘要下方使用 AI Elements `FileTree` 展示受限 Project 文件树，目录默认折叠并在用户展开时按需加载直接子项。存在 Git 变更的文件选择打开 Diff；其余文件复用 AI Markdown 文件引用分流，在项目内预览源码、文档和图片，并将不可预览格式交给系统默认应用。文件或目录节点右键后进入选中高亮态，并显示中栏 Project 打开控件的同一宿主应用列表；菜单顶部标识“打开方式”和当前目标路径，选择后立即用对应应用打开该目标，但不改写中栏默认应用偏好。
 - Composer 底部在当前分支控件旁常驻同尺寸、同交互态的 Git 历史图标，Inspector 不重复展示入口。点击后懒加载当前检出 `HEAD` 的 Git 历史 Dialog，标题区跟随活动仓库 Tab 展示其自身当前分支，无分支时显示 `detached HEAD`，首次加载时显示读取状态；关闭时清理历史缓存并恢复入口焦点。根仓库直接展示提交列表，包含多个直属子仓库时使用横向 Tab 分开展示，各 Tab 在单次打开期间独立缓存分支、分页结果并保留已访问面板，避免切换时重建列表。弹窗外框使用受视口约束的稳定高度，首次加载未缓存 Tab 时不随加载内容缩放或重新居中。默认读取最近 20 条；加载更多按钮或“已加载全部提交”提示紧跟在滚动内容末尾，不占用 Dialog footer。弹窗固定头部和独立滚动列表，并在窄屏保持 44px 弹窗触控目标与无横向溢出。
 - Composer 固定在 Timeline 底部，但不能覆盖滚动内容。
@@ -277,6 +284,7 @@ Project 名称行短按继续展开或收起 Task；指针移动超过点击容�
 - 用户消息通过统一消息字段按顺序携带已使用的多个 Skill 名称，并在 Timeline 中复用编辑器的 `accent` 主色 Token 模块；该行为同时覆盖提交后的实时 Turn、首轮乐观消息和重新打开 Task 后由 Codex `userMessage.content` 恢复的历史消息。Codex 返回的 Skill 路径在 Provider 映射后丢弃，不进入 Web。
 - 窗口较窄时 Inspector 变为抽屉，Sidebar 变为可关闭侧栏。
 - Sidebar 的 `Projects` 标题固定在项目树滚动区外，Project 行连续排列并支持持久化重排；每个 Project 使用独立 Cursor Infinite Query，首屏只请求并显示 5 个 Task。“显示更多”每次只加载该 Project 的一个下一页，失败时保留已有列表并可重试，全部加载后允许收起。归档后先移除缓存任务，再重新校准活动 Cursor 页面并自动补足最近 5 项。非空搜索使用独立的按 Project 全量搜索源：Project 之间并行、单个 Project 内追踪全部 Cursor，完整加载后再过滤标题，不能只搜索当前渲染项。新建、固定、重命名和归档同步维护普通 Infinite Query 与已存在的搜索缓存。Task 行 hover/focus 时以省略号替换时间，并通过菜单执行固定、重命名和归档。
+- Temporary Task 使用与 Project Task 相同的 Cursor、缓存同步和 Runtime 释放规则，但其 Query scope 不进入 Project 数组，也不触发 Git 状态刷新。
 
 页面不使用营销式 Hero、大量装饰卡片或卡片嵌套。视觉重点是可扫描信息、稳定布局和重复操作效率。
 

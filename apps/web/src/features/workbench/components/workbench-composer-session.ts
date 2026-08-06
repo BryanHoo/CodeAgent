@@ -43,6 +43,7 @@ type ComposerSessionOptions = Readonly<{
   models: readonly AgentModel[];
   onSubmissionStateChange: WorkbenchComposerProps["onSubmissionStateChange"];
   projectId: string;
+  projectToolsEnabled: boolean;
   runtime: TaskRuntimeView | undefined;
   settings: AgentTaskSettings;
   skills: readonly AgentSkill[];
@@ -55,6 +56,7 @@ export function useComposerSession({
   models,
   onSubmissionStateChange,
   projectId,
+  projectToolsEnabled,
   runtime,
   settings,
   skills,
@@ -140,7 +142,10 @@ export function useComposerSession({
     capabilities?.skills.use === true ? skills : [],
     commandQuery,
   );
-  const filteredCommands = filterPromptCommandItems(getPromptCommandItems(), commandQuery);
+  const filteredCommands = filterPromptCommandItems(
+    getPromptCommandItems({ projectToolsEnabled }),
+    commandQuery,
+  );
   const baseBranches = gitStatus?.baseBranches ?? [];
   const menuItemCount =
     reviewMenuMode === "scopes"

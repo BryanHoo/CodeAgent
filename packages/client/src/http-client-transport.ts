@@ -8,6 +8,8 @@ import {
   BrowserSessionResponseSchema,
   HealthResponseSchema,
   InstallAppUpdateResponseSchema,
+  TEMPORARY_TASK_API_PATH,
+  TEMPORARY_TASK_SCOPE_ID,
   type AccessStatusResponse,
   type AgentAttachmentKind,
   type AgentCapabilities,
@@ -118,6 +120,9 @@ export function appendQuery(
 }
 
 export function projectPath(projectId: string): string {
+  if (projectId === TEMPORARY_TASK_SCOPE_ID) {
+    return TEMPORARY_TASK_API_PATH;
+  }
   return `/v1/projects/${encodeURIComponent(projectId)}`;
 }
 

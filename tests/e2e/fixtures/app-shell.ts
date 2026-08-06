@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { expect, test as base, type Page } from "@playwright/test";
+import { expect, test as base, type Page, type Route } from "@playwright/test";
 
 export { expect };
 
@@ -468,9 +468,11 @@ export const architectureSourcePreview = Array.from({ length: 720 }, (_, lineInd
   lineIndex === 715 ? "### 11.7 外部登录边界" : `line ${String(lineIndex + 1)}`,
 ).join("\n");
 
-test.beforeEach(async ({ page }) => {
+export async function mockAppShellApi(page: Page): Promise<void> {
   let routedProjects = [...projects];
   let routedTasks = tasks.map((task) => ({ ...task }));
+  let temporaryTasks: (typeof tasks)[number][] = [];
+  const temporaryTurns = new Map<string, (typeof taskSnapshot.turns)[number][]>();
   let routedProjectGitStatus = { ...projectGitStatus };
   const projectDefaults = new Map(
     projects.map((project) => [
@@ -494,13 +496,21 @@ test.beforeEach(async ({ page }) => {
     reasoningEffort: "high",
     sandboxMode: "workspace-write",
   };
-  await page.route("**/v1/**", async (route) => {
+  const handleApiRoute = async (route: Route) => {
     const url = new URL(route.request().url());
     const defaultsMatch = /^\/v1\/projects\/([^/]+)\/defaults$/u.exec(url.pathname);
     const settingsMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/settings$/u.exec(url.pathname);
     const pinMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/pin$/u.exec(url.pathname);
     const renameMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/rename$/u.exec(url.pathname);
     const archiveMatch = /^\/v1\/projects\/([^/]+)\/tasks\/([^/]+)\/archive$/u.exec(url.pathname);
+    const temporarySettingsMatch = /^\/v1\/temporary\/tasks\/([^/]+)\/settings$/u.exec(
+      url.pathname,
+    );
+    const temporaryPinMatch = /^\/v1\/temporary\/tasks\/([^/]+)\/pin$/u.exec(url.pathname);
+    const temporaryRenameMatch = /^\/v1\/temporary\/tasks\/([^/]+)\/rename$/u.exec(url.pathname);
+    const temporaryArchiveMatch = /^\/v1\/temporary\/tasks\/([^/]+)\/archive$/u.exec(url.pathname);
+    const temporaryTaskMatch = /^\/v1\/temporary\/tasks\/([^/]+)$/u.exec(url.pathname);
+    const temporaryTurnMatch = /^\/v1\/temporary\/tasks\/([^/]+)\/turns$/u.exec(url.pathname);
     const projectRenameMatch = /^\/v1\/projects\/([^/]+)\/rename$/u.exec(url.pathname);
     const projectRemoveMatch = /^\/v1\/projects\/([^/]+)\/remove$/u.exec(url.pathname);
     if (url.pathname === "/v1/projects/code-agent/files/image") {
@@ -514,7 +524,8 @@ test.beforeEach(async ({ page }) => {
       return;
     }
     if (
-      /^\/v1\/projects\/[^/]+\/attachments\/[^/]+$/u.test(url.pathname) &&
+      (/^\/v1\/projects\/[^/]+\/attachments\/[^/]+$/u.test(url.pathname) ||
+        /^\/v1\/temporary\/attachments\/[^/]+$/u.test(url.pathname)) &&
       route.request().method() === "GET"
     ) {
       await route.fulfill({
@@ -564,6 +575,133 @@ test.beforeEach(async ({ page }) => {
         globalSettings = parseGlobalSettingsRequest(route.request().postData());
       }
       body = { settings: globalSettings };
+    } else if (url.pathname === "/v1/temporary/tasks" && route.request().method() === "POST") {
+      const task = {
+        id: `temporary-task-${String(temporaryTasks.length + 1)}`,
+        pinned: false,
+        projectId: "temporary",
+        title: "临时任务会话",
+        updatedAt: "2026-08-06T08:00:00.000Z",
+      };
+      temporaryTasks = [task, ...temporaryTasks];
+      temporaryTurns.set(task.id, []);
+      taskSettings.set(`temporary:${task.id}`, {
+        approvalPolicy:
+          globalSettings.approvalsReviewer === "auto_review"
+            ? "on-request"
+            : globalSettings.approvalPolicy,
+        approvalsReviewer: globalSettings.approvalsReviewer,
+        model: globalSettings.model,
+        reasoningEffort: globalSettings.reasoningEffort,
+        sandboxMode: globalSettings.sandboxMode,
+      });
+      body = { task };
+    } else if (url.pathname === "/v1/temporary/tasks") {
+      const pageLimit = Number(url.searchParams.get("limit") ?? "5");
+      const pageOffset = Number(url.searchParams.get("cursor") ?? "0");
+      const nextOffset = pageOffset + pageLimit;
+      body = {
+        data: temporaryTasks.slice(pageOffset, nextOffset),
+        nextCursor: nextOffset < temporaryTasks.length ? String(nextOffset) : null,
+      };
+    } else if (temporarySettingsMatch !== null) {
+      const taskId = temporarySettingsMatch[1] ?? "";
+      const key = `temporary:${taskId}`;
+      if (route.request().method() === "PUT") {
+        taskSettings.set(key, parseTaskSettingsRequest(route.request().postData()));
+      }
+      body = { settings: taskSettings.get(key) ?? taskSnapshot.settings };
+    } else if (temporaryPinMatch !== null) {
+      const taskId = temporaryPinMatch[1] ?? "";
+      const request = parseRequestRecord(route.request().postData());
+      const pinned = request["pinned"];
+      const task = temporaryTasks.find((item) => item.id === taskId);
+      if (task === undefined || typeof pinned !== "boolean") {
+        throw new Error("Invalid temporary pin request");
+      }
+      task.pinned = pinned;
+      body = { task };
+    } else if (temporaryRenameMatch !== null) {
+      const taskId = temporaryRenameMatch[1] ?? "";
+      const request = parseRequestRecord(route.request().postData());
+      const title = request["title"];
+      const task = temporaryTasks.find((item) => item.id === taskId);
+      if (task === undefined || typeof title !== "string") {
+        throw new Error("Invalid temporary rename request");
+      }
+      task.title = title;
+      body = { task };
+    } else if (temporaryArchiveMatch !== null) {
+      const taskId = temporaryArchiveMatch[1] ?? "";
+      temporaryTasks = temporaryTasks.filter((item) => item.id !== taskId);
+      temporaryTurns.delete(taskId);
+      body = { status: "archived", taskId };
+    } else if (temporaryTurnMatch !== null && route.request().method() === "POST") {
+      const taskId = temporaryTurnMatch[1] ?? "";
+      const task = temporaryTasks.find((item) => item.id === taskId);
+      const request = parseRequestRecord(route.request().postData());
+      const input = request["input"];
+      const options = request["options"];
+      if (
+        task === undefined ||
+        !isRequestRecord(input) ||
+        typeof input["text"] !== "string" ||
+        !isRequestRecord(options)
+      ) {
+        throw new Error("Invalid temporary turn request");
+      }
+      // 真实 Server 会在启动 Turn 前保存完整设置，刷新后的 Snapshot 必须复现该行为。
+      taskSettings.set(`temporary:${taskId}`, parseTaskSettingsRequest(JSON.stringify(options)));
+      const turnNumber = (temporaryTurns.get(taskId)?.length ?? 0) + 1;
+      const turn = {
+        completedAt: `2026-08-06T08:0${String(turnNumber)}:30.000Z`,
+        error: null,
+        id: `temporary-turn-${String(turnNumber)}`,
+        items: [
+          {
+            id: `temporary-user-${String(turnNumber)}`,
+            role: "user" as const,
+            text: input["text"],
+            type: "message" as const,
+          },
+          {
+            id: `temporary-assistant-${String(turnNumber)}`,
+            role: "assistant" as const,
+            text: `临时回复：${input["text"]}`,
+            type: "message" as const,
+          },
+        ],
+        startedAt: `2026-08-06T08:0${String(turnNumber)}:00.000Z`,
+        status: "completed" as const,
+      };
+      temporaryTurns.set(taskId, [...(temporaryTurns.get(taskId) ?? []), turn]);
+      body = { taskId, turn };
+    } else if (temporaryTaskMatch !== null) {
+      const taskId = temporaryTaskMatch[1] ?? "";
+      const task = temporaryTasks.find((item) => item.id === taskId);
+      if (task === undefined) {
+        await route.fulfill({
+          contentType: "application/json",
+          json: { message: "Not found" },
+          status: 404,
+        });
+        return;
+      }
+      body = {
+        checkpoint: { sequence: 0, sessionId: "e2e-session" },
+        snapshot: {
+          ...task,
+          contextUsage: { contextWindow: 200_000, usedTokens: 1_000 },
+          pendingRequests: [],
+          settings: taskSettings.get(`temporary:${taskId}`) ?? taskSnapshot.settings,
+          status: "idle",
+          turns: temporaryTurns.get(taskId) ?? [],
+        },
+      };
+    } else if (url.pathname === "/v1/temporary/skills") {
+      body = { data: skills, nextCursor: null };
+    } else if (/^\/v1\/temporary\/tasks\/[^/]+\/mcp-servers$/u.test(url.pathname)) {
+      body = { data: mcpServers };
     } else if (/^\/v1\/projects\/[^/]+\/skills$/u.test(url.pathname)) {
       body = { data: skills, nextCursor: null };
     } else if (/^\/v1\/projects\/[^/]+\/tasks\/[^/]+\/mcp-servers$/u.test(url.pathname)) {
@@ -812,5 +950,12 @@ test.beforeEach(async ({ page }) => {
     }
 
     await route.fulfill({ contentType: "application/json", json: body });
-  });
+  };
+  await page.route("**/v1/**", handleApiRoute);
+  // 部分真实 Runtime 用例会解除通用 API mock；temporary 契约仍需保持测试内隔离。
+  await page.route("**/v1/temporary/**", handleApiRoute);
+}
+
+test.beforeEach(async ({ page }) => {
+  await mockAppShellApi(page);
 });

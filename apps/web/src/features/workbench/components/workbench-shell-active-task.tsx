@@ -4,6 +4,7 @@ import type {
   AgentMessageAttachment,
   AgentModel,
   AgentPromptInput,
+  AgentSandboxMode,
   AgentSkill,
   AgentTask,
   AgentTaskSettings,
@@ -33,6 +34,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   capabilities,
   client,
   fallbackSettings,
+  fixedSandboxMode,
   followUpBehavior,
   models,
   modelsError,
@@ -42,6 +44,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   onTaskStarted,
   projectId,
   projectPath,
+  projectToolsEnabled,
   gitStatus,
   runtime,
   skills,
@@ -55,6 +58,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentWorkbenchClient;
   fallbackSettings: AgentTaskSettings;
+  fixedSandboxMode?: AgentSandboxMode;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
   models: readonly AgentModel[];
   modelsError: Error | null;
@@ -70,6 +74,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   ) => void;
   projectId: string;
   projectPath: string;
+  projectToolsEnabled: boolean;
   gitStatus?: ProjectGitStatus;
   runtime: TaskRuntimeView;
   skills: readonly AgentSkill[];
@@ -163,9 +168,9 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
       <TaskTimeline
         onBuildPlan={() => composerRef.current?.buildPlan() ?? Promise.resolve(false)}
         {...(capabilities?.tasks.fork === true ? { onForkTask: forkTask } : {})}
-        onOpenFileDiff={onOpenFileDiff}
-        onOpenSourceFile={onOpenSourceFile}
-        onReviewFileChanges={onReviewFileChanges}
+        {...(projectToolsEnabled ? { onOpenFileDiff } : {})}
+        {...(projectToolsEnabled ? { onOpenSourceFile } : {})}
+        {...(projectToolsEnabled ? { onReviewFileChanges } : {})}
         onResolvePendingRequest={resolvePendingRequest}
         projectId={projectId}
         key={taskScope}
@@ -184,6 +189,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         buildPlanRef={composerRef}
         capabilities={capabilities}
         client={client}
+        {...(fixedSandboxMode === undefined ? {} : { fixedSandboxMode })}
         followUpBehavior={followUpBehavior}
         models={models}
         modelsError={modelsError}
@@ -213,6 +219,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         }}
         projectId={projectId}
         projectPath={projectPath}
+        projectToolsEnabled={projectToolsEnabled}
         {...(gitStatus === undefined ? {} : { gitStatus })}
         runtime={visibleRuntime}
         settings={visibleSnapshot?.settings ?? startingSnapshot?.settings ?? fallbackSettings}

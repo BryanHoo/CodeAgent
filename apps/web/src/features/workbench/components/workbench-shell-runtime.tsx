@@ -95,6 +95,7 @@ export type SubmittedPromptState = Readonly<{
 export type WorkbenchShellProps = Readonly<{
   projectId: string;
   taskId?: string;
+  temporary?: boolean;
 }>;
 
 function shouldOpenDesktopPanel(query: string) {
@@ -125,7 +126,11 @@ export function useSubmissionStartedAt() {
   return { beginSubmission, getStartedAt, handleSubmissionStateChange, startedAt } as const;
 }
 
-export function useWorkbenchShellRuntime({ projectId, taskId }: WorkbenchShellProps) {
+export function useWorkbenchShellRuntime({
+  projectId,
+  taskId,
+  temporary = false,
+}: WorkbenchShellProps) {
   const { t } = useTranslation("workbench");
   const access = useAccess();
   const { capabilities, client, error, isPending, projects, projectTaskStates, tasks } =
@@ -151,7 +156,7 @@ export function useWorkbenchShellRuntime({ projectId, taskId }: WorkbenchShellPr
   const mcpServersQuery = useQuery(mcpServersQueryOptions(projectId, taskId, client));
   const globalSettingsQuery = useQuery(globalSettingsQueryOptions(client));
   const projectOpenCapabilitiesQuery = useQuery(
-    projectOpenCapabilitiesQueryOptions(projectId, client),
+    projectOpenCapabilitiesQueryOptions(projectId, client, !temporary),
   );
   const projectPathOpenMutation = useMutation({
     mutationFn: ({
@@ -167,7 +172,7 @@ export function useWorkbenchShellRuntime({ projectId, taskId }: WorkbenchShellPr
     ...skillsQueryOptions(projectId, client),
     enabled: capabilities?.skills.list === true,
   });
-  const projectDefaultsQuery = useQuery(projectDefaultsQueryOptions(projectId, client));
+  const projectDefaultsQuery = useQuery(projectDefaultsQueryOptions(projectId, client, !temporary));
   const projectDefaultsMutation = useMutation({
     ...projectDefaultsMutationOptions(projectId, client),
     onSuccess(response) {
@@ -224,7 +229,7 @@ export function useWorkbenchShellRuntime({ projectId, taskId }: WorkbenchShellPr
   const isTaskRunning =
     runtime.snapshot?.status === "running" || startingSnapshot?.status === "running";
   const backgroundTerminals = useBackgroundTerminals(client, projectId, taskId, isTaskRunning);
-  const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, client));
+  const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, client, !temporary));
   const [fileTreeExpansion, setFileTreeExpansion] = useState(() => ({
     paths: new Set<string>(),
     projectId,
@@ -239,7 +244,7 @@ export function useWorkbenchShellRuntime({ projectId, taskId }: WorkbenchShellPr
   );
   const fileTreeQueries = useQueries({
     queries: fileTreeDirectoryPaths.map((directoryPath) =>
-      projectFileTreeQueryOptions(projectId, directoryPath, client),
+      projectFileTreeQueryOptions(projectId, directoryPath, client, !temporary),
     ),
   });
   const fileTreeDirectories: readonly ProjectFileTreeDirectoryState[] = fileTreeDirectoryPaths.map(
@@ -303,8 +308,8 @@ export function useWorkbenchShellRuntime({ projectId, taskId }: WorkbenchShellPr
     viewTask(projectId, taskId);
   }, [projectId, taskId, viewTask]);
   const project = projects.find((item) => item.id === projectId);
-  const projectName = project?.name ?? projectId;
-  const projectPath = project?.rootPath ?? projectId;
+  const projectName = temporary ? t("shell.temporaryTask") : (project?.name ?? projectId);
+  const projectPath = temporary ? "" : (project?.rootPath ?? projectId);
   const title =
     tasks.find((task) => task.projectId === projectId && task.id === taskId)?.title ??
     runtime.snapshot?.title ??
@@ -417,6 +422,7 @@ export function useWorkbenchShellRuntime({ projectId, taskId }: WorkbenchShellPr
     startingSnapshot,
     subagents,
     taskLaunchState,
+    temporary,
     taskRenameError,
     taskRenameOpen,
     tasks,

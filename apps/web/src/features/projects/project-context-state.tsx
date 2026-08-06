@@ -1,4 +1,10 @@
-import type { AgentCapabilities, AgentTask, AgentTaskPage, Project } from "@code-agent/protocol";
+import {
+  TEMPORARY_TASK_SCOPE_ID,
+  type AgentCapabilities,
+  type AgentTask,
+  type AgentTaskPage,
+  type Project,
+} from "@code-agent/protocol";
 import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo } from "react";
 
@@ -138,17 +144,17 @@ export function ProjectTaskQuery({ client, onRemove, onUpdate, projectId }: Proj
   return null;
 }
 
-export function buildProjectTaskCollections(
-  queriedProjects: readonly Project[],
+export function buildTaskScopeCollections(
+  queriedTaskScopeIds: readonly string[],
   projectTaskResults: ReadonlyMap<string, ProjectTaskQueryResult>,
 ) {
-  const tasks = queriedProjects.flatMap(
-    (project) => projectTaskResults.get(project.id)?.tasks ?? emptyTasks,
+  const tasks = queriedTaskScopeIds.flatMap(
+    (projectId) => projectTaskResults.get(projectId)?.tasks ?? emptyTasks,
   );
   const projectTaskStates = new Map(
-    queriedProjects.map((project) => [
-      project.id,
-      projectTaskResults.get(project.id)?.state ?? pendingProjectTaskState,
+    queriedTaskScopeIds.map((projectId) => [
+      projectId,
+      projectTaskResults.get(projectId)?.state ?? pendingProjectTaskState,
     ]),
   );
 
@@ -181,9 +187,10 @@ export function useProjectActivity() {
 export function useProjectTaskSearch(normalizedQuery: string) {
   const { client, projects } = useProjectData();
   const isSearchEnabled = normalizedQuery.length > 0;
+  const taskScopeIds = [TEMPORARY_TASK_SCOPE_ID, ...projects.map((project) => project.id)];
   const searchQueries = useQueries({
-    queries: projects.map((project) =>
-      projectTaskSearchSourceQueryOptions(project.id, isSearchEnabled, client),
+    queries: taskScopeIds.map((projectId) =>
+      projectTaskSearchSourceQueryOptions(projectId, isSearchEnabled, client),
     ),
   });
   const isPending = isSearchEnabled && searchQueries.some((query) => query.isPending);

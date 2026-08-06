@@ -225,6 +225,7 @@ export const workbench = {
     resizeInspector: "调整上下文面板宽度",
     resizeSidebar: "调整项目侧栏宽度",
     timeline: "任务时间线",
+    temporaryTask: "临时任务",
   },
   skillEditor: {
     tokenLabel: "Skill {{name}}，实际文本 {{text}}",
@@ -257,6 +258,7 @@ export const workbench = {
     landmark: "项目侧栏",
     noMatchingTasks: "未找到匹配任务",
     noTasks: "暂无任务",
+    noTemporaryTasks: "暂无临时任务",
     openProjectActions: "打开 {{project}} 的项目操作菜单",
     openTaskActions: "打开 {{task}} 的操作菜单",
     pin: "固定",
@@ -275,6 +277,7 @@ export const workbench = {
     taskIncomplete: "AI 回复未完成",
     taskLoading: "正在加载任务",
     taskRunning: "任务运行中",
+    temporaryTasks: "临时任务",
     toggleProject: "切换项目 {{project}}",
     unpin: "取消固定",
   },

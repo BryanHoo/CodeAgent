@@ -70,8 +70,12 @@ function IndexPage() {
         replace: true,
         to: "/p/$projectId",
       });
+      return;
     }
-  }, [initialProjectId, navigate]);
+    if (!isPending && projects.length === 0) {
+      void navigate({ replace: true, to: "/temporary" });
+    }
+  }, [initialProjectId, isPending, navigate, projects.length]);
 
   if (error !== null) {
     return (
@@ -80,7 +84,7 @@ function IndexPage() {
       </main>
     );
   }
-  if (isPending || initialProjectId !== undefined) {
+  if (isPending || initialProjectId !== undefined || projects.length === 0) {
     return (
       <main className="grid h-full place-items-center text-sm text-muted-foreground">
         {t("app.loadingProjects")}

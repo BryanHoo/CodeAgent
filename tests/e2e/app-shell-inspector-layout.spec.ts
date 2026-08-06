@@ -69,10 +69,30 @@ test("preserves the original sidebar control typography and dimensions", async (
   const addTaskIcon = sidebar
     .getByRole("button", { name: "在 CodeAgent 中新建任务" })
     .locator("svg");
+  const temporaryAddTask = sidebar
+    .getByRole("region", { name: "临时任务" })
+    .getByRole("button", { name: "新建任务" });
+  const projectAddTask = sidebar.getByRole("button", { name: "在 CodeAgent 中新建任务" });
   await expect(addProjectIcon).toHaveCSS("height", "14px");
   await expect(addProjectIcon).toHaveCSS("width", "14px");
   await expect(addTaskIcon).toHaveCSS("height", "14px");
   await expect(addTaskIcon).toHaveCSS("width", "14px");
+  const [temporaryAddTaskBox, projectAddTaskBox] = await Promise.all([
+    temporaryAddTask.boundingBox(),
+    projectAddTask.boundingBox(),
+  ]);
+  expect(temporaryAddTaskBox).not.toBeNull();
+  expect(projectAddTaskBox).not.toBeNull();
+  if (temporaryAddTaskBox === null || projectAddTaskBox === null) {
+    throw new Error("Sidebar 新建任务按钮缺失");
+  }
+  expect(
+    Math.abs(
+      temporaryAddTaskBox.x +
+        temporaryAddTaskBox.width -
+        (projectAddTaskBox.x + projectAddTaskBox.width),
+    ),
+  ).toBeLessThanOrEqual(1);
   await expect(sidebar.getByRole("textbox", { name: "搜索任务" })).toHaveCSS("height", "36px");
 });
 
@@ -282,12 +302,12 @@ test("opens and reuses project new chats without creating empty Codex tasks", as
   await page.goto("/p/superwork/t/plan-check");
 
   const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
-  await sidebar.getByRole("link", { name: "新建任务" }).click();
+  await sidebar.getByRole("button", { name: "在 CodeAgent 中新建任务" }).click();
   await expect(page).toHaveURL(/\/p\/code-agent$/);
   await expect(sidebar.getByRole("link", { name: "新聊天" })).toHaveCount(0);
 
   // 已经位于首个项目的新聊天时继续复用当前草稿，不创建空 Codex Task。
-  await sidebar.getByRole("link", { name: "新建任务" }).click();
+  await sidebar.getByRole("button", { name: "在 CodeAgent 中新建任务" }).click();
   await expect(page).toHaveURL(/\/p\/code-agent$/);
   await sidebar.getByRole("button", { name: "在 superwork 中新建任务" }).click();
   await expect(page).toHaveURL(/\/p\/superwork$/);

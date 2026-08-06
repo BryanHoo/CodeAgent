@@ -72,11 +72,13 @@ export type WorkbenchComposerViewProps = Readonly<{
   onSubmit: (message: PromptInputMessage) => void;
   onViewError: (error: Error) => void;
   projectPath: string;
+  projectToolsEnabled: boolean;
   promptContent: PromptSkillContent;
   promptSubmissionText: string;
   queuedPrompts: readonly QueuedComposerPrompt[];
   removeQueuedPrompt: (queuedPromptId: string) => void;
   reviewMenuMode: "branches" | "scopes" | null;
+  sandboxModeSelectable: boolean;
   selectedModel: AgentModel | undefined;
   selectedReasoningEffort: string | undefined;
   setActiveCommandIndex: Dispatch<SetStateAction<number>>;

@@ -1,3 +1,4 @@
+import { chmod, lstat, mkdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -77,6 +78,7 @@ export interface CliDependencies {
     input: CreateRuntimeProviderInput,
   ) => AgentRuntimeProvider | Promise<AgentRuntimeProvider>;
   createServer: (input: CreateServerInput) => Promise<CliManagedServer>;
+  ensureTemporaryWorkspace: (path: string) => Promise<string>;
   generateLanPairingCode: () => string;
   listLanAccessUrls: (port: number) => readonly string[];
   locateCodexBinary: (options?: LocateCodexBinaryOptions) => Promise<CodexBinary>;
@@ -140,6 +142,7 @@ const defaultDependencies: CliDependencies = {
       },
     };
   },
+  ensureTemporaryWorkspace,
   generateLanPairingCode,
   listLanAccessUrls,
   locateCodexBinary,
@@ -150,6 +153,20 @@ const defaultDependencies: CliDependencies = {
 };
 
 const BROWSER_CONNECTION_WAIT_MS = 1_250;
+
+export async function ensureTemporaryWorkspace(path: string): Promise<string> {
+  await mkdir(path, { mode: 0o700, recursive: true });
+  const metadata = await lstat(path);
+  if (metadata.isSymbolicLink()) {
+    throw new Error("Temporary workspace must not be a symbolic link");
+  }
+  if (!metadata.isDirectory()) {
+    throw new Error("Temporary workspace path must be a directory");
+  }
+  // 共享隐藏目录只承载只读临时聊天，限制其他本机账号访问其运行时元数据。
+  await chmod(path, 0o700);
+  return realpath(path);
+}
 
 const HELP = `用法: code-agent <命令> [选项]
 
@@ -341,6 +358,10 @@ async function runStart(
     stateRepository = await dependencies.createStateRepository(
       join(codexHome, "code-agent", "state.sqlite3"),
     );
+    const temporaryWorkspace = await dependencies.ensureTemporaryWorkspace(
+      join(codexHome, "code-agent", "temporary-workspace"),
+    );
+    await stateRepository.ensureTemporaryProject(temporaryWorkspace);
     runtime = await dependencies.startCodexAppServer({
       appVersion: dependencies.appVersion,
       env,
