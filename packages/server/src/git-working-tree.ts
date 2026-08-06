@@ -4,6 +4,7 @@ import { isAbsolute, join } from "node:path";
 
 import type { ProjectGitStatus } from "@code-agent/protocol";
 
+import { executeGit, type GitCommandExecutor } from "./git-command.js";
 import {
   MAX_FILE_IO_CONCURRENCY,
   MAX_GIT_COMMAND_CONCURRENCY,
@@ -12,11 +13,9 @@ import {
   applyDiffBudget,
   createConcurrencyLimiter,
   createUntrackedFileDiff,
-  executeGit,
   mapWithConcurrency,
   parsePorcelainStatus,
   readTrackedFileChanges,
-  type GitCommandExecutor,
   type GitFileChange,
   type GitWorkingTreeChanges,
   type WorkingTreeEntry,

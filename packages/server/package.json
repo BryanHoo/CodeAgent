@@ -22,6 +22,7 @@
     "better-sqlite3": "catalog:",
     "fastify": "catalog:",
     "ignore": "catalog:",
+    "simple-git": "catalog:",
     "ws": "catalog:"
   },
   "devDependencies": {

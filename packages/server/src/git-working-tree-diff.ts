@@ -1,9 +1,9 @@
-import { execFile } from "node:child_process";
 import { lstat, open, readlink } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import { promisify } from "node:util";
 
 import type { AgentItem, ProjectGitStatus } from "@code-agent/protocol";
+
+import type { GitCommandExecutor } from "./git-command.js";
 
 export type GitFileChange = Extract<AgentItem, { type: "file_change" }>["changes"][number];
 export type GitWorkingTreeChanges = Pick<ProjectGitStatus, "staged" | "unstaged">;
@@ -14,14 +14,11 @@ export type WorkingTreeEntry = Readonly<{
   workingTreeStatus: string;
 }>;
 
-const executeFile = promisify(execFile);
-const MAX_GIT_OUTPUT_BYTES = 10 * 1024 * 1024;
 export const MAX_GIT_COMMAND_CONCURRENCY = 4;
 export const MAX_FILE_IO_CONCURRENCY = 8;
 const MAX_WORKING_TREE_DIFF_BYTES = 10 * 1024 * 1024;
 export const MAX_WORKING_TREE_FILES = 1_000;
 const MAX_UNTRACKED_DIFF_BYTES = 5 * 1024 * 1024;
-const GIT_COMMAND_TIMEOUT_MS = 10_000;
 
 type AsyncLimiter = <Result>(operation: () => Promise<Result>) => Promise<Result>;
 
@@ -108,26 +105,6 @@ export class WorkingTreeReadBudget {
     return this.#remainingFiles > 0;
   }
 }
-
-export async function executeGit(
-  projectRoot: string,
-  arguments_: readonly string[],
-): Promise<string> {
-  const result = await executeFile("git", ["-C", projectRoot, ...arguments_], {
-    encoding: "utf8",
-    // 后台状态读取不需要刷新索引，避免与用户发起的 Git 写操作争用可选锁。
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
-    maxBuffer: MAX_GIT_OUTPUT_BYTES,
-    timeout: GIT_COMMAND_TIMEOUT_MS,
-    windowsHide: true,
-  });
-  return result.stdout;
-}
-
-export type GitCommandExecutor = (
-  projectRoot: string,
-  arguments_: readonly string[],
-) => Promise<string>;
 
 export function parsePorcelainStatus(
   output: string,

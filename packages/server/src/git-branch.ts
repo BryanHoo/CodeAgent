@@ -3,7 +3,7 @@ import { isAbsolute } from "node:path";
 
 import type { ProjectGitStatus, SwitchProjectBranchRequest } from "@code-agent/protocol";
 
-import { executeGit, type GitCommandExecutor } from "./git-working-tree-diff.js";
+import { executeGit, type GitCommandExecutor } from "./git-command.js";
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
 
 export type GitBranchErrorCode =
