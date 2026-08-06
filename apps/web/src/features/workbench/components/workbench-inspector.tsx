@@ -59,11 +59,16 @@ type WorkbenchInspectorProps = Readonly<{
   mcpServers?: readonly AgentMcpServer[];
   mcpServersError?: Error | null;
   mcpServersPending?: boolean;
+  mcpServersRetryAvailable?: boolean;
+  mcpServersRefreshing?: boolean;
+  mcpServersRetryError?: Error | null;
+  mcpServersRetrying?: boolean;
   onFileTreeExpandedChange?: (expandedPaths: Set<string>) => void;
   onOpenFileDiff?: (change: AgentFileChange) => void;
   onOpenProjectPath?: (appId: ProjectOpenAppId, path?: string) => void;
   onOpenProjectFile?: (path: string) => void;
   onOpenSubagent?: (selection: SubagentSelection) => void;
+  onReloadMcpServers?: () => void;
   onRefreshFileTreeDirectory?: (directoryPath: string | null) => void;
   onRefreshGitStatus?: () => void;
   onCommitChanges?: () => void;
@@ -99,11 +104,16 @@ export function WorkbenchInspector({
   mcpServers = [],
   mcpServersError = null,
   mcpServersPending = false,
+  mcpServersRetryAvailable = true,
+  mcpServersRefreshing = false,
+  mcpServersRetryError = null,
+  mcpServersRetrying = false,
   onFileTreeExpandedChange = () => undefined,
   onOpenFileDiff = () => undefined,
   onOpenProjectPath = () => undefined,
   onOpenProjectFile = () => undefined,
   onOpenSubagent = () => undefined,
+  onReloadMcpServers = () => undefined,
   onRefreshFileTreeDirectory = () => undefined,
   onRefreshGitStatus = () => undefined,
   onCommitChanges = () => undefined,
@@ -182,8 +192,13 @@ export function WorkbenchInspector({
         <SubagentSection onOpenSubagent={onOpenSubagent} subagents={subagents} />
       ) : null}
       <McpServerSection
+        canRetry={mcpServersRetryAvailable}
         error={mcpServersError}
         isPending={mcpServersPending}
+        isRefreshing={mcpServersRefreshing}
+        isRetrying={mcpServersRetrying}
+        onRetry={onReloadMcpServers}
+        retryError={mcpServersRetryError}
         servers={mcpServers}
       />
       <InspectorSection

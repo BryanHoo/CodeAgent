@@ -36,6 +36,7 @@ export type CodeAgentCapabilitiesClient = Pick<CodeAgentClient, "getCapabilities
 export type CodeAgentModelsClient = Pick<CodeAgentClient, "listModels">;
 export type CodeAgentAppUpdateClient = Pick<CodeAgentClient, "getAppInfo" | "installAppUpdate">;
 export type CodeAgentMcpServersClient = Pick<CodeAgentClient, "listMcpServers">;
+export type CodeAgentMcpServersMutationClient = Pick<CodeAgentClient, "retryMcpServers">;
 export type CodeAgentSkillsClient = Pick<CodeAgentClient, "listSkills">;
 export type CodeAgentSettingsClient = Pick<
   CodeAgentClient,
@@ -82,6 +83,7 @@ export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentModelsClient &
   CodeAgentAppUpdateClient &
   CodeAgentMcpServersClient &
+  CodeAgentMcpServersMutationClient &
   CodeAgentSkillsClient &
   CodeAgentSettingsClient &
   CodeAgentSourceFileClient;

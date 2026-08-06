@@ -6,10 +6,16 @@ import type {
 } from "@code-agent/protocol";
 import {
   Bot,
+  CheckCircle2,
+  ChevronRight,
+  CircleAlert,
+  CircleOff,
+  CircleX,
   FolderRoot,
   LoaderCircle,
   Paperclip,
   Plug,
+  RefreshCw,
   Sparkles,
   Square,
   SquareTerminal,
@@ -19,6 +25,11 @@ import type { ReactNode } from "react";
 import { i18n } from "../../../i18n/i18n.js";
 import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
 import { Button } from "../../../shared/ui/button.js";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "../../../shared/ui/collapsible.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import {
   formatSubagentModel,
@@ -242,24 +253,64 @@ export function SubagentSection({
 }
 
 export function McpServerSection({
+  canRetry,
   error,
   isPending,
+  isRefreshing,
+  isRetrying,
+  onRetry,
+  retryError,
   servers,
 }: Readonly<{
+  canRetry: boolean;
   error: Error | null;
   isPending: boolean;
+  isRefreshing: boolean;
+  isRetrying: boolean;
+  onRetry: () => void;
+  retryError: Error | null;
   servers: readonly AgentMcpServer[];
 }>) {
+  const reloadLabel = i18n.t(isRetrying ? "inspector.mcpReloading" : "inspector.mcpReload", {
+    ns: "conversation",
+  });
+  const requestError = retryError ?? error;
+  const requestErrorTitleKey =
+    retryError === null ? "inspector.mcpError" : "inspector.mcpRetryError";
   return (
-    <InspectorSection icon={<Plug className="size-3.5" />} title="MCP">
+    <InspectorSection
+      action={
+        canRetry ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={reloadLabel}
+                disabled={isRefreshing || isRetrying}
+                onClick={onRetry}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <RefreshCw
+                  aria-hidden="true"
+                  className={isRefreshing || isRetrying ? "animate-spin" : undefined}
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{reloadLabel}</TooltipContent>
+          </Tooltip>
+        ) : null
+      }
+      icon={<Plug className="size-3.5" />}
+      title="MCP"
+    >
       {isPending && servers.length === 0 ? (
-        <p className="px-2 py-2 text-caption text-muted-foreground">
+        <p className="flex min-h-9 items-center gap-2 px-2 py-2 text-caption text-muted-foreground">
+          <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
           {i18n.t("inspector.mcpLoading", { ns: "conversation" })}
         </p>
-      ) : error !== null && servers.length === 0 ? (
-        <p className="px-2 py-2 text-caption text-diff-removed">
-          {i18n.t("inspector.mcpError", { ns: "conversation" })}
-        </p>
+      ) : requestError !== null && servers.length === 0 ? (
+        <McpRequestErrorState error={requestError} titleKey={requestErrorTitleKey} />
       ) : servers.length === 0 ? (
         <p className="px-2 py-2 text-caption text-muted-foreground">
           {i18n.t("inspector.mcpEmpty", { ns: "conversation" })}
@@ -270,32 +321,139 @@ export function McpServerSection({
           className="space-y-0.5"
         >
           {servers.map((server) => (
-            <div
-              className="flex min-h-7 items-center rounded-control px-2 text-label font-medium text-foreground"
-              key={server.name}
-              title={server.name}
-            >
-              <span className="min-w-0 truncate">{server.name}</span>
-            </div>
+            <McpServerRow key={server.name} server={server} />
           ))}
         </div>
+      )}
+      {retryError === null || servers.length === 0 ? null : (
+        <McpRequestErrorState error={retryError} titleKey="inspector.mcpRetryError" />
       )}
     </InspectorSection>
   );
 }
 
+function formatMcpErrorMetadata(error: Error): string | null {
+  const details: string[] = [];
+  if ("code" in error && typeof error.code === "string") {
+    details.push(error.code);
+  }
+  if ("status" in error && typeof error.status === "number") {
+    details.push(`HTTP ${String(error.status)}`);
+  }
+  return details.length === 0 ? null : details.join(" · ");
+}
+
+function McpErrorLog({ error }: Readonly<{ error: string }>) {
+  return (
+    <Collapsible>
+      <CollapsibleTrigger asChild>
+        <Button className="group h-7 justify-start px-0 text-caption" type="button" variant="link">
+          <ChevronRight
+            aria-hidden="true"
+            className="transition-transform group-data-[state=open]:rotate-90"
+            data-icon="inline-start"
+          />
+          {i18n.t("inspector.mcpErrorLog", { ns: "conversation" })}
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="data-[state=closed]:hidden" forceMount>
+        <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-control bg-control px-2 py-1.5 font-mono text-meta leading-5 text-foreground">
+          {error}
+        </pre>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function McpRequestErrorState({
+  error,
+  titleKey,
+}: Readonly<{ error: Error; titleKey: "inspector.mcpError" | "inspector.mcpRetryError" }>) {
+  const metadata = formatMcpErrorMetadata(error);
+  return (
+    <div className="flex items-start gap-2 px-2 py-1.5" role="alert">
+      <CircleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-danger" />
+      <div className="min-w-0 flex-1">
+        <p className="text-label font-medium text-danger">
+          {i18n.t(titleKey, { ns: "conversation" })}
+        </p>
+        <pre className="mt-1 max-h-44 overflow-auto whitespace-pre-wrap break-words font-mono text-meta leading-5 text-foreground">
+          {error.message}
+        </pre>
+        {metadata === null ? null : (
+          <p className="mt-1 text-meta text-muted-foreground">{metadata}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function McpServerRow({ server }: Readonly<{ server: AgentMcpServer }>) {
+  const metadata = [
+    i18n.t(`inspector.mcpStatus.${server.status}`, { ns: "conversation" }),
+    ...(server.status === "ready"
+      ? [i18n.t("inspector.mcpToolCount", { count: server.toolCount, ns: "conversation" })]
+      : []),
+    ...(server.authStatus === null
+      ? []
+      : [i18n.t(`inspector.mcpAuth.${server.authStatus}`, { ns: "conversation" })]),
+    ...(server.version === null
+      ? []
+      : [i18n.t("inspector.mcpVersion", { ns: "conversation", version: server.version })]),
+  ];
+  const statusIcon =
+    server.status === "ready" ? (
+      <CheckCircle2 aria-hidden="true" className="size-3.5 text-accent" />
+    ) : server.status === "starting" ? (
+      <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin text-muted-foreground" />
+    ) : server.status === "failed" ? (
+      <CircleX aria-hidden="true" className="size-3.5 text-danger" />
+    ) : (
+      <CircleOff aria-hidden="true" className="size-3.5 text-warning" />
+    );
+
+  return (
+    <div className="flex min-h-10 items-start gap-2 rounded-control px-2 py-1.5">
+      <span className="mt-0.5 shrink-0">{statusIcon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-label font-medium text-foreground" title={server.name}>
+          {server.name}
+        </p>
+        <p className="text-caption text-muted-foreground">{metadata.join(" · ")}</p>
+        {server.failureReason === null ? null : (
+          <p className="text-caption text-danger">
+            {i18n.t(`inspector.mcpFailureReason.${server.failureReason}`, {
+              ns: "conversation",
+            })}
+          </p>
+        )}
+        {server.description === null ? null : (
+          <p className="mt-0.5 text-caption leading-5 text-muted-foreground">
+            {server.description}
+          </p>
+        )}
+        {server.error === null ? null : <McpErrorLog error={server.error} />}
+      </div>
+    </div>
+  );
+}
+
 type InspectorSectionProps = Readonly<{
+  action?: ReactNode;
   children: ReactNode;
   icon: ReactNode;
   title: string;
 }>;
 
-export function InspectorSection({ children, icon, title }: InspectorSectionProps) {
+export function InspectorSection({ action, children, icon, title }: InspectorSectionProps) {
   return (
     <section aria-label={title}>
-      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-foreground">
-        <span className="text-muted-foreground">{icon}</span>
-        {title}
+      <div className="mb-2 flex min-h-7 items-center justify-between gap-2 text-xs font-medium text-foreground">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="text-muted-foreground">{icon}</span>
+          {title}
+        </div>
+        {action}
       </div>
       <div className="space-y-0.5">{children}</div>
     </section>

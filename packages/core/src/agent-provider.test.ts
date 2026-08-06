@@ -60,7 +60,21 @@ describe("AgentProvider", () => {
       },
       listMcpServers(taskId) {
         expect(taskId).toBe("task-1");
-        return Promise.resolve({ data: [{ name: "fast-context" }] });
+        return Promise.resolve({
+          data: [
+            {
+              authStatus: "unsupported",
+              description: null,
+              error: null,
+              failureReason: null,
+              name: "fast-context",
+              status: "ready",
+              title: null,
+              toolCount: 2,
+              version: "1.0.0",
+            },
+          ],
+        });
       },
       listSkills() {
         return Promise.resolve({
@@ -101,6 +115,10 @@ describe("AgentProvider", () => {
       },
       readTask() {
         return Promise.resolve(undefined);
+      },
+      reloadMcpServers(taskId) {
+        expect(taskId).toBe("task-1");
+        return this.listMcpServers(taskId);
       },
       renameTask() {
         return Promise.resolve();
@@ -221,7 +239,16 @@ describe("AgentProvider", () => {
       data: [{ id: "gpt-5.6-sol", isDefault: true }],
     });
     await expect(provider.listMcpServers("task-1")).resolves.toEqual({
-      data: [{ name: "fast-context" }],
+      data: [
+        expect.objectContaining({
+          name: "fast-context",
+          status: "ready",
+          toolCount: 2,
+        }),
+      ],
+    });
+    await expect(provider.reloadMcpServers("task-1")).resolves.toMatchObject({
+      data: [{ name: "fast-context", status: "ready" }],
     });
     await expect(provider.listSkills()).resolves.toMatchObject({
       data: [{ id: "skill-security", name: "review-security" }],

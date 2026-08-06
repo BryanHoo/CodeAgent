@@ -293,8 +293,9 @@ export class CodeAgentTransport {
     path: string,
     schema: T,
     options: ReadOptions,
+    errorSchema?: TSchema,
   ): Promise<Static<T>> {
-    return this.request(path, schema, {}, undefined, {
+    return this.request(path, schema, {}, errorSchema, {
       ...(options.signal === undefined ? {} : { signal: options.signal }),
       timeoutMs:
         options.signal === undefined ? this.requestTimeouts.readMs : this.requestTimeouts.queryMs,

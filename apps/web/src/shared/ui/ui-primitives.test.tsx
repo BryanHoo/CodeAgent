@@ -43,7 +43,7 @@ describe("shadcn UI primitives", () => {
     expect(markup).toContain("保存");
   });
 
-  it("keeps application-owned visual classes unchanged", () => {
+  it("keeps application-owned visual classes while applying shared icon constraints", () => {
     const markup = renderToStaticMarkup(
       <>
         <Button
@@ -57,9 +57,11 @@ describe("shadcn UI primitives", () => {
       </>,
     );
 
-    expect(/<button class="([^"]+)"/u.exec(markup)?.[1]).toBe(
-      "flex h-7 text-body-small font-normal text-muted-foreground",
-    );
+    const buttonClasses = /<button class="([^"]+)"/u.exec(markup)?.[1];
+    expect(buttonClasses).toContain("[&amp;_svg]:pointer-events-none");
+    expect(buttonClasses).toContain("[&amp;_svg]:shrink-0");
+    expect(buttonClasses).toContain("[&amp;_svg:not([class*=&#x27;size-&#x27;])]:size-4");
+    expect(buttonClasses).toContain("flex h-7 text-body-small font-normal text-muted-foreground");
     expect(/<input class="([^"]+)"/u.exec(markup)?.[1]).toBe("size-4 shrink-0");
   });
 

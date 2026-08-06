@@ -214,8 +214,42 @@ export const AgentSkillSchema = Type.Object(
 
 export type AgentSkill = Readonly<Static<typeof AgentSkillSchema>>;
 
+export const AgentMcpServerStatusSchema = Type.Union([
+  Type.Literal("starting"),
+  Type.Literal("ready"),
+  Type.Literal("failed"),
+  Type.Literal("cancelled"),
+]);
+
+export type AgentMcpServerStatus = Readonly<Static<typeof AgentMcpServerStatusSchema>>;
+
+export const AgentMcpAuthStatusSchema = Type.Union([
+  Type.Literal("unsupported"),
+  Type.Literal("notLoggedIn"),
+  Type.Literal("bearerToken"),
+  Type.Literal("oAuth"),
+]);
+
+export type AgentMcpAuthStatus = Readonly<Static<typeof AgentMcpAuthStatusSchema>>;
+
+export const AgentMcpServerFailureReasonSchema = Type.Literal("reauthenticationRequired");
+
+export type AgentMcpServerFailureReason = Readonly<
+  Static<typeof AgentMcpServerFailureReasonSchema>
+>;
+
 export const AgentMcpServerSchema = Type.Object(
-  { name: Type.String({ minLength: 1 }) },
+  {
+    authStatus: Type.Union([AgentMcpAuthStatusSchema, Type.Null()]),
+    description: Type.Union([Type.String(), Type.Null()]),
+    error: Type.Union([Type.String({ maxLength: 8_192 }), Type.Null()]),
+    failureReason: Type.Union([AgentMcpServerFailureReasonSchema, Type.Null()]),
+    name: Type.String({ minLength: 1 }),
+    status: AgentMcpServerStatusSchema,
+    title: Type.Union([Type.String(), Type.Null()]),
+    toolCount: Type.Integer({ minimum: 0 }),
+    version: Type.Union([Type.String(), Type.Null()]),
+  },
   { additionalProperties: false },
 );
 

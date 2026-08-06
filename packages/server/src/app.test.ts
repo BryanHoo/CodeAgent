@@ -163,7 +163,36 @@ function createProvider() {
   const listTasks = vi.fn(() => Promise.resolve({ data: [task], nextCursor: "next" }));
   const listModels = vi.fn(() => Promise.resolve(modelPage));
   const listMcpServers = vi.fn(() =>
-    Promise.resolve({ data: [{ name: "fast-context" }, { name: "chrome-devtools" }] }),
+    Promise.resolve({
+      data: ["fast-context", "chrome-devtools"].map((name) => ({
+        authStatus: "unsupported" as const,
+        description: null,
+        error: null,
+        failureReason: null,
+        name,
+        status: "ready" as const,
+        title: null,
+        toolCount: 2,
+        version: "1.0.0",
+      })),
+    }),
+  );
+  const reloadMcpServers = vi.fn(() =>
+    Promise.resolve({
+      data: [
+        {
+          authStatus: null,
+          description: null,
+          error: null,
+          failureReason: null,
+          name: "fast-context",
+          status: "starting" as const,
+          title: null,
+          toolCount: 0,
+          version: null,
+        },
+      ],
+    }),
   );
   const listSkills = vi.fn(() =>
     Promise.resolve({
@@ -249,6 +278,7 @@ function createProvider() {
     readSandboxMode,
     readTask,
     readTaskAttachment,
+    reloadMcpServers,
     renameTask,
     resolvePendingRequest,
     startTask,
@@ -286,6 +316,7 @@ function createProvider() {
     readSandboxMode,
     readTask,
     readTaskAttachment,
+    reloadMcpServers,
     renameTask,
     resolvePendingRequest,
     startTask,
@@ -419,6 +450,7 @@ async function createHarness(
     provider,
     readTask,
     readTaskAttachment,
+    reloadMcpServers,
     renameTask,
     resolvePendingRequest,
     startTask,
@@ -453,6 +485,7 @@ async function createHarness(
     pinTask,
     readTask,
     readTaskAttachment,
+    reloadMcpServers,
     renameTask,
     resolvePendingRequest,
     startTask,
@@ -1907,12 +1940,25 @@ describe("CodeAgent Server", () => {
   });
 
   it("serves models and resolves uploaded attachments before starting a turn", async () => {
-    const { app, listMcpServers, listModels, listSkills, startTurn, writeTaskSettings } =
-      await createHarness();
+    const {
+      app,
+      listMcpServers,
+      listModels,
+      listSkills,
+      reloadMcpServers,
+      startTurn,
+      writeTaskSettings,
+    } = await createHarness();
     const models = await app.inject({ method: "GET", url: "/v1/models" });
     const mcpServers = await app.inject({
       method: "GET",
       url: "/v1/projects/code-agent/tasks/task-1/mcp-servers",
+    });
+    const reloadedMcpServers = await app.inject({
+      headers: { "idempotency-key": "reload-task-mcp" },
+      method: "POST",
+      payload: {},
+      url: "/v1/projects/code-agent/tasks/task-1/mcp-servers/retry",
     });
     const skills = await app.inject({ method: "GET", url: "/v1/projects/code-agent/skills" });
     const uploadRequest = await multipartAttachment(
@@ -1957,10 +2003,18 @@ describe("CodeAgent Server", () => {
     expect(models.json()).toMatchObject({ data: [{ id: "gpt-5.6-sol", isDefault: true }] });
     expect(mcpServers.statusCode).toBe(200);
     expect(mcpServers.json()).toEqual({
-      data: [{ name: "fast-context" }, { name: "chrome-devtools" }],
+      data: [
+        expect.objectContaining({ name: "fast-context", status: "ready", toolCount: 2 }),
+        expect.objectContaining({ name: "chrome-devtools", status: "ready", toolCount: 2 }),
+      ],
     });
     expect(listMcpServers).toHaveBeenCalledOnce();
     expect(listMcpServers).toHaveBeenCalledWith("task-1");
+    expect(reloadedMcpServers.statusCode).toBe(200);
+    expect(reloadedMcpServers.json()).toMatchObject({
+      data: [{ name: "fast-context", status: "starting" }],
+    });
+    expect(reloadMcpServers).toHaveBeenCalledWith("task-1");
     expect(skills.statusCode).toBe(200);
     expect(skills.json()).toMatchObject({ data: [{ name: "review-security" }] });
     expect(listSkills).toHaveBeenCalledOnce();
@@ -1987,6 +2041,40 @@ describe("CodeAgent Server", () => {
     );
     expect(consumed.statusCode).toBe(404);
     expect(consumed.json()).toMatchObject({ code: "ATTACHMENT_NOT_FOUND" });
+  });
+
+  it("preserves original Codex MCP errors for reads and reloads", async () => {
+    const { app, listMcpServers, reloadMcpServers } = await createHarness();
+    listMcpServers.mockRejectedValueOnce(
+      new Error("mcpServerStatus/list failed: MCP server `docs` executable was not found"),
+    );
+    reloadMcpServers.mockRejectedValueOnce(
+      new Error("config/mcpServer/reload failed: transport channel closed"),
+    );
+
+    const readResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/task-1/mcp-servers",
+    });
+    const reloadResponse = await app.inject({
+      headers: { "idempotency-key": "reload-task-mcp-error" },
+      method: "POST",
+      payload: {},
+      url: "/v1/projects/code-agent/tasks/task-1/mcp-servers/retry",
+    });
+
+    expect(readResponse.statusCode).toBe(502);
+    expect(readResponse.json()).toEqual({
+      code: "PROVIDER_ERROR",
+      message: "mcpServerStatus/list failed: MCP server `docs` executable was not found",
+      retryable: true,
+    });
+    expect(reloadResponse.statusCode).toBe(502);
+    expect(reloadResponse.json()).toEqual({
+      code: "PROVIDER_ERROR",
+      message: "config/mcpServer/reload failed: transport channel closed",
+      retryable: true,
+    });
   });
 
   it("rejects oversized or non-multipart attachments before parsing file data", async () => {

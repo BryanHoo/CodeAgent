@@ -23,6 +23,7 @@ import {
 } from "./jsonl-rpc-client.js";
 import { CodexHistoricalAttachmentStore } from "./historical-attachment-store.js";
 import { PendingRequestLifecycle } from "./pending-request-lifecycle.js";
+import { listCodexMcpServers, reloadCodexMcpServers } from "./agent-provider-mcp.js";
 import { TaskRuntimeState } from "./task-runtime-state.js";
 import { normalizedPathIdentity } from "./runtime-owner-registry.js";
 import {
@@ -298,50 +299,12 @@ export abstract class CodexAgentProviderBase {
 
   public async listMcpServers(taskId: string): Promise<AgentMcpServerPage> {
     this.assertKnownProjectTask(taskId);
-    const names = new Set<string>();
-    const visitedCursors = new Set<string>();
-    let cursor: string | undefined;
+    return listCodexMcpServers(this.client, this.runtime, taskId);
+  }
 
-    for (;;) {
-      const response = expectRecord(
-        await this.client.request("mcpServerStatus/list", {
-          ...(cursor === undefined ? {} : { cursor }),
-          detail: "toolsAndAuthOnly",
-          threadId: taskId,
-        }),
-        "mcpServerStatus/list response",
-      );
-      const page = response["data"];
-      if (!Array.isArray(page)) {
-        throw new CodexProtocolMappingError("mcpServerStatus/list data must be an array");
-      }
-      // 状态详情可能包含工具和认证信息，Provider 边界仅保留当前 Task 可见的服务名称。
-      for (const entry of page) {
-        const server = expectRecord(entry, "mcpServerStatus/list server");
-        const name = expectString(server["name"], "mcpServerStatus/list server name");
-        if (name.length === 0) {
-          throw new CodexProtocolMappingError("mcpServerStatus/list server name is invalid");
-        }
-        names.add(name);
-      }
-
-      const nextCursor = response["nextCursor"];
-      if (nextCursor !== null && nextCursor !== undefined && typeof nextCursor !== "string") {
-        throw new CodexProtocolMappingError(
-          "mcpServerStatus/list nextCursor must be a string or null",
-        );
-      }
-      if (nextCursor === null || nextCursor === undefined) {
-        break;
-      }
-      if (visitedCursors.has(nextCursor)) {
-        throw new CodexProtocolMappingError("mcpServerStatus/list returned a repeated cursor");
-      }
-      visitedCursors.add(nextCursor);
-      cursor = nextCursor;
-    }
-
-    return { data: [...names].toSorted().map((name) => ({ name })) };
+  public async reloadMcpServers(taskId: string): Promise<AgentMcpServerPage> {
+    this.assertKnownProjectTask(taskId);
+    return reloadCodexMcpServers(this.client, this.runtime, taskId);
   }
 
   public async listModels(): Promise<AgentModelPage> {

@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import type { AgentMcpServer } from "@code-agent/protocol";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
@@ -79,12 +80,24 @@ const fileTreeDirectories: readonly ProjectFileTreeDirectoryState[] = [
   },
 ];
 
+const readyMcpServer = {
+  authStatus: "oAuth",
+  description: "Semantic repository search",
+  error: null,
+  failureReason: null,
+  name: "fast-context",
+  status: "ready",
+  title: "Fast Context",
+  toolCount: 2,
+  version: "1.2.0",
+} as const satisfies AgentMcpServer;
+
 describe("WorkbenchInspector", () => {
   it("renders temporary task context directly without tabs or Project sources", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
         contextOnly
-        mcpServers={[{ name: "fast-context" }]}
+        mcpServers={[readyMcpServer]}
         projectName="临时任务"
         projectPath=""
       />,
@@ -390,7 +403,10 @@ describe("WorkbenchInspector", () => {
           },
         ]}
         gitStatus={gitStatus}
-        mcpServers={[{ name: "fast-context" }, { name: "chrome-devtools" }]}
+        mcpServers={[
+          readyMcpServer,
+          { ...readyMcpServer, authStatus: "unsupported", name: "chrome-devtools" },
+        ]}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         skills={[
@@ -438,6 +454,11 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain('aria-label="MCP"');
     expect(markup).toContain("fast-context");
     expect(markup).toContain("chrome-devtools");
+    expect(markup).toContain("已就绪");
+    expect(markup).toContain("2 个工具");
+    expect(markup).toContain("OAuth");
+    expect(markup).toContain("版本 1.2.0");
+    expect(markup).toContain('aria-label="重新加载 MCP"');
     expect(markup).not.toContain("gpt-5.6-sol");
     expect(markup).not.toContain("自动审批");
     expect(markup).not.toContain("工作区可写");
@@ -458,7 +479,7 @@ describe("WorkbenchInspector", () => {
   it("renders MCP loading, error, and empty states inside the context tab", () => {
     const renderState = (
       props: Readonly<{
-        mcpServers?: readonly Readonly<{ name: string }>[];
+        mcpServers?: readonly AgentMcpServer[];
         mcpServersError?: Error;
         mcpServersPending?: boolean;
       }>,
@@ -481,9 +502,41 @@ describe("WorkbenchInspector", () => {
       );
 
     expect(renderState({ mcpServersPending: true })).toContain("正在读取 MCP...");
-    expect(renderState({ mcpServersError: new Error("MCP unavailable") })).toContain(
-      "无法读取 MCP",
+    const errorMarkup = renderState({ mcpServersError: new Error("MCP unavailable") });
+    expect(errorMarkup).toContain("无法读取 MCP");
+    expect(errorMarkup).toContain("MCP unavailable");
+    expect(errorMarkup).not.toContain("查看错误日志");
+    const retryErrorMarkup = renderInspectorMarkup(
+      <WorkbenchInspector
+        mcpServersError={new Error("mcpServerStatus/list failed")}
+        mcpServersRetryError={new Error("config/mcpServer/reload failed")}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        tab="context"
+      />,
     );
+    expect(retryErrorMarkup.match(/重新加载 MCP 失败/gu)).toHaveLength(1);
+    expect(retryErrorMarkup).toContain("config/mcpServer/reload failed");
+    expect(retryErrorMarkup).not.toContain("mcpServerStatus/list failed");
+    const failedMarkup = renderState({
+      mcpServers: [
+        {
+          authStatus: null,
+          description: null,
+          error: "MCP startup timed out after 10s\nProcess exited with code 1",
+          failureReason: "reauthenticationRequired",
+          name: "docs",
+          status: "failed",
+          title: null,
+          toolCount: 0,
+          version: null,
+        },
+      ],
+    });
+    expect(failedMarkup).toContain("启动失败");
+    expect(failedMarkup).toContain("需要重新认证");
+    expect(failedMarkup).toContain("查看错误日志");
+    expect(failedMarkup).toContain("MCP startup timed out after 10s");
     expect(renderState({ mcpServers: [] })).toContain("当前任务没有可读取的 MCP");
   });
 });

@@ -8,15 +8,18 @@ import {
   AgentTaskSettingsSchema,
   ReviewAgentTaskRequestSchema,
   ReviewAgentTaskResponseSchema,
+  ReloadAgentMcpServersRequestSchema,
+  ReloadAgentMcpServersResponseSchema,
   UploadAgentFeedbackRequestSchema,
   UploadAgentFeedbackResponseSchema,
   type AgentTaskSettings,
   type CompactAgentTaskRequest,
   type ForkAgentTaskRequest,
   type ReviewAgentTaskRequest,
+  type ReloadAgentMcpServersRequest,
   type UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
-import { MutationHttpError, type ServerRouteContext } from "./context.js";
+import { MutationHttpError, toMcpProviderHttpError, type ServerRouteContext } from "./context.js";
 import {
   ErrorResponseSchema,
   IdempotencyHeadersSchema,
@@ -102,6 +105,49 @@ export function registerTaskActionRoutes(app: FastifyInstance, context: ServerRo
               settings,
             ),
           };
+        },
+      ),
+  );
+
+  app.post<{
+    Body: ReloadAgentMcpServersRequest;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string; taskId: string };
+  }>(
+    "/v1/projects/:projectId/tasks/:taskId/mcp-servers/retry",
+    {
+      schema: {
+        body: ReloadAgentMcpServersRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectTaskParamsSchema,
+        response: {
+          200: ReloadAgentMcpServersResponseSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) =>
+      runIdempotent(
+        ["reload-task-mcp-servers", request.params.projectId, request.params.taskId],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          const projectContext = await getProjectContext(request.params.projectId);
+          if (projectContext === undefined) {
+            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+          }
+          const task = await projectContext.provider.readTask(request.params.taskId);
+          if (task?.projectId !== projectContext.project.id) {
+            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
+          }
+          try {
+            return await projectContext.provider.reloadMcpServers(request.params.taskId);
+          } catch (error) {
+            throw toMcpProviderHttpError(error);
+          }
         },
       ),
   );

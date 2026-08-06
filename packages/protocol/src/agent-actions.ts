@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 import { AgentReviewTargetSchema, AgentTaskSchema } from "./agent-attachments.js";
-import { AgentPromptInputSchema, AgentTurnSchema } from "./agent-task.js";
+import { AgentMcpServerPageSchema, AgentPromptInputSchema, AgentTurnSchema } from "./agent-task.js";
 import { AgentTurnOptionsSchema } from "./project-settings.js";
 
 export const StartAgentTaskRequestSchema = Type.Object({}, { additionalProperties: false });
@@ -91,6 +91,16 @@ export const ForkAgentTaskResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 export type ForkAgentTaskResponse = Readonly<Static<typeof ForkAgentTaskResponseSchema>>;
+
+export const ReloadAgentMcpServersRequestSchema = Type.Object({}, { additionalProperties: false });
+export type ReloadAgentMcpServersRequest = Readonly<
+  Static<typeof ReloadAgentMcpServersRequestSchema>
+>;
+
+export const ReloadAgentMcpServersResponseSchema = AgentMcpServerPageSchema;
+export type ReloadAgentMcpServersResponse = Readonly<
+  Static<typeof ReloadAgentMcpServersResponseSchema>
+>;
 
 export const UploadAgentFeedbackRequestSchema = Type.Object(
   {

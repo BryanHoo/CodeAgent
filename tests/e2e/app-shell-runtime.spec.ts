@@ -814,6 +814,111 @@ test("streams Fake App Server notifications into the Timeline", async ({ page })
   await expect(page.getByText("agent/spawn", { exact: true })).toHaveCount(0);
 });
 
+test("shows MCP startup diagnostics and manually retries the current task", async ({ page }) => {
+  let retries = 0;
+  await page.route("**/v1/projects/code-agent/tasks/task-1/mcp-servers", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        data: [
+          {
+            authStatus: null,
+            description: null,
+            error: "MCP startup timed out after 10s\nProcess exited with code 1",
+            failureReason: "reauthenticationRequired",
+            name: "docs",
+            status: "failed",
+            title: null,
+            toolCount: 0,
+            version: null,
+          },
+        ],
+      },
+    });
+  });
+  await page.route("**/v1/projects/code-agent/tasks/task-1/mcp-servers/retry", async (route) => {
+    retries += 1;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        data: [
+          {
+            authStatus: null,
+            description: null,
+            error: null,
+            failureReason: null,
+            name: "docs",
+            status: "starting",
+            title: null,
+            toolCount: 0,
+            version: null,
+          },
+        ],
+      },
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+  await page.getByRole("tab", { name: "上下文" }).click();
+  const mcp = page.getByRole("region", { name: "MCP" });
+  const reloadIcon = mcp.getByRole("button", { name: "重新加载 MCP" }).locator("svg");
+  await expect
+    .poll(() => reloadIcon.evaluate((icon) => icon.getBoundingClientRect().width))
+    .toBeLessThanOrEqual(16);
+  await expect(mcp.getByText("启动失败", { exact: true })).toBeVisible();
+  await expect(mcp.getByText("需要重新认证", { exact: true })).toBeVisible();
+  const logButton = mcp.getByRole("button", { name: "查看错误日志" });
+  await expect(logButton).toHaveCSS("display", "inline-flex");
+  await expect
+    .poll(() => logButton.locator("svg").evaluate((icon) => icon.getBoundingClientRect().width))
+    .toBeLessThanOrEqual(16);
+  await logButton.click();
+  await expect(mcp.getByText("MCP startup timed out after 10s", { exact: false })).toBeVisible();
+  await mcp.getByRole("button", { name: "重新加载 MCP" }).click();
+  await expect.poll(() => retries).toBe(1);
+});
+
+test("shows original Codex MCP request errors once", async ({ page }) => {
+  await page.route("**/v1/projects/code-agent/tasks/task-1/mcp-servers", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        code: "PROVIDER_ERROR",
+        message: "mcpServerStatus/list failed: MCP server `docs` executable was not found",
+        retryable: true,
+      },
+      status: 502,
+    });
+  });
+  await page.route("**/v1/projects/code-agent/tasks/task-1/mcp-servers/retry", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        code: "PROVIDER_ERROR",
+        message: "config/mcpServer/reload failed: transport channel closed",
+        retryable: true,
+      },
+      status: 502,
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+  await page.getByRole("tab", { name: "上下文" }).click();
+  const mcp = page.getByRole("region", { name: "MCP" });
+  await expect(
+    mcp.getByText("mcpServerStatus/list failed: MCP server `docs` executable was not found"),
+  ).toBeVisible();
+  await expect(mcp.getByText("PROVIDER_ERROR · HTTP 502")).toBeVisible();
+  await expect(mcp.getByRole("button", { name: "查看错误日志" })).toHaveCount(0);
+
+  await mcp.getByRole("button", { name: "重新加载 MCP" }).click();
+  await expect(
+    mcp.getByText("config/mcpServer/reload failed: transport channel closed"),
+  ).toBeVisible();
+  await expect(mcp.getByText("mcpServerStatus/list failed", { exact: false })).toHaveCount(0);
+  await expect(mcp.getByText("重新加载 MCP 失败", { exact: true })).toHaveCount(1);
+});
+
 test("queues follow-up messages and can steer or cancel them during an active turn", async ({
   page,
 }) => {

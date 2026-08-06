@@ -799,9 +799,12 @@ Error Boundary 至少分为：
 
 单个未知或损坏 Item 不得导致整个 Task 无法使用。
 
+Inspector 的 MCP 区域必须逐项展示 Server 启动状态。`starting` 显示非阻塞加载反馈；`ready` 显示工具数量、认证状态和版本；`failed` 与 `cancelled` 显示失败原因，并允许展开经过脱敏和截断的详细错误日志。列表请求失败时保留独立错误详情。手动重试调用当前 Task 的 MCP reload 操作，提交期间禁用重试按钮，成功后立即显示 `starting` 状态并以短间隔轮询，直到所有 Server 进入终态。
+
 ## 21. 可访问性与键盘交互
 
 - 所有图标按钮提供可访问名称和 Tooltip。
+- 紧凑工作台图标遵循稳定尺寸层级：`icon-sm` Button 内图标为 `14px`，普通 Button 内图标为 `16px`；移动端只扩大点击区域，不放大图标。Button 内图标尺寸由共享组件统一提供，业务代码不得依赖图标库默认尺寸。
 - Button、Dialog、Menu、Tabs、Radio 和 Checkbox 使用语义化 Primitive。
 - Approval 打开时移动焦点，但不无条件使用阻塞 Modal 打断正在查看的内容。
 - Dialog 关闭后焦点返回触发控件。

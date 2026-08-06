@@ -15,6 +15,11 @@ describe("TaskRuntimeState", () => {
     state.reviewWorkerTurnIds.set("task-1", "reviewer-turn");
     state.reviewWorkerParentTaskIds.set("reviewer-thread", "task-1");
     state.contextUsage.set("task-1", { contextWindow: 100, usedTokens: 10 });
+    state.mcpServerStatuses.set(
+      "task-1",
+      new Map([["fast-context", { error: null, failureReason: null, status: "ready" }]]),
+    );
+    state.mcpServerNames.set("task-1", new Set(["fast-context"]));
     state.unmaterializedTasks.set("task-1", {
       id: "task-1",
       pinned: false,
@@ -35,6 +40,8 @@ describe("TaskRuntimeState", () => {
     expect(state.reviewWorkerTurnIds.has("task-1")).toBe(false);
     expect(state.reviewWorkerParentTaskIds.has("reviewer-thread")).toBe(false);
     expect(state.contextUsage.has("task-1")).toBe(false);
+    expect(state.mcpServerStatuses.has("task-1")).toBe(false);
+    expect(state.mcpServerNames.has("task-1")).toBe(false);
     expect(state.unmaterializedTasks.has("task-1")).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import type { CodeAgentClient } from "@code-agent/client";
 import type {
   AgentGlobalSettings,
+  AgentMcpServerPage,
   AgentProjectDefaults,
   AgentTaskPage,
   AgentTaskSettings,
@@ -22,6 +23,7 @@ import {
   type CodeAgentSettingsClient,
   type CodeAgentSkillsClient,
   type CodeAgentMcpServersClient,
+  type CodeAgentMcpServersMutationClient,
   type CodeAgentReadClient,
   type CodeAgentGitStatusClient,
   type CodeAgentGitHistoryClient,
@@ -170,13 +172,36 @@ export function mcpServersQueryOptions(
   client: CodeAgentMcpServersClient = codeAgentClient,
   enabled = true,
 ) {
-  return queryOptions({
+  return queryOptions<AgentMcpServerPage>({
     enabled: enabled && taskId !== undefined,
-    queryFn: ({ signal }) =>
-      taskId === undefined
-        ? Promise.resolve({ data: [] })
-        : client.listMcpServers(projectId, taskId, { signal }),
+    refetchInterval: (query) =>
+      query.state.data?.data.some((server) => server.status === "starting") === true
+        ? 1_000
+        : false,
+    queryFn: async ({ signal }): Promise<AgentMcpServerPage> => {
+      if (taskId === undefined) {
+        return { data: [] };
+      }
+      return client.listMcpServers(projectId, taskId, { signal });
+    },
     queryKey: ["projects", projectId, "tasks", taskId ?? null, "mcp-servers"] as const,
+  });
+}
+
+export function mcpServersReloadMutationOptions(
+  projectId: string,
+  taskId: string | undefined,
+  client: CodeAgentMcpServersMutationClient = codeAgentClient,
+) {
+  return mutationOptions({
+    mutationFn: async (): Promise<AgentMcpServerPage> => {
+      if (taskId === undefined) {
+        throw new Error("Cannot reload MCP servers without a task");
+      }
+      return client.retryMcpServers(projectId, taskId);
+    },
+    mutationKey: ["projects", projectId, "tasks", taskId ?? null, "mcp-servers", "reload"] as const,
+    scope: { id: `task-mcp:${projectId}:${taskId ?? "none"}` },
   });
 }
 

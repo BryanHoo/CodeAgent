@@ -55,6 +55,14 @@ export class MutationHttpError extends Error {
   }
 }
 
+export function toMcpProviderHttpError(error: unknown): MutationHttpError {
+  const message =
+    error instanceof Error && error.message.trim().length > 0
+      ? error.message
+      : "MCP provider request failed";
+  return new MutationHttpError("PROVIDER_ERROR", message, 502, true);
+}
+
 export type ProjectRuntimeContext = Readonly<{
   eventStream: AgentEventStream;
   project: Project;

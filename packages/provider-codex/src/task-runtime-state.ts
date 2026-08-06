@@ -1,7 +1,19 @@
 import type { AgentProviderEvent } from "@code-agent/core";
-import type { AgentContextUsage, AgentReviewTarget, AgentTask } from "@code-agent/protocol";
+import type {
+  AgentContextUsage,
+  AgentMcpServerFailureReason,
+  AgentMcpServerStatus,
+  AgentReviewTarget,
+  AgentTask,
+} from "@code-agent/protocol";
 
 import type { PendingCodexRequest } from "./codex-protocol-mapping.js";
+
+export type CodexMcpServerStartupStatus = Readonly<{
+  error: string | null;
+  failureReason: AgentMcpServerFailureReason | null;
+  status: AgentMcpServerStatus;
+}>;
 
 /** 集中拥有所有 Task 级运行状态，确保释放时不会遗漏只增不减的 Map。 */
 export class TaskRuntimeState {
@@ -13,6 +25,8 @@ export class TaskRuntimeState {
   public readonly reviewWorkerTurnIds = new Map<string, string>();
   public readonly reviewWorkerParentTaskIds = new Map<string, string>();
   public readonly contextUsage = new Map<string, AgentContextUsage>();
+  public readonly mcpServerNames = new Map<string, Set<string>>();
+  public readonly mcpServerStatuses = new Map<string, Map<string, CodexMcpServerStartupStatus>>();
   public readonly ephemeralTaskIds = new Set<string>();
   public readonly pendingTaskEvents = new Map<string, AgentProviderEvent[]>();
   public readonly pendingTaskReads = new Map<string, number>();
@@ -47,6 +61,8 @@ export class TaskRuntimeState {
       }
     }
     this.contextUsage.delete(taskId);
+    this.mcpServerNames.delete(taskId);
+    this.mcpServerStatuses.delete(taskId);
     this.ephemeralTaskIds.delete(taskId);
     this.pendingTaskEvents.delete(taskId);
     this.pendingTaskReads.delete(taskId);
@@ -67,6 +83,8 @@ export class TaskRuntimeState {
     this.reviewWorkerTurnIds.clear();
     this.reviewWorkerParentTaskIds.clear();
     this.contextUsage.clear();
+    this.mcpServerNames.clear();
+    this.mcpServerStatuses.clear();
     this.ephemeralTaskIds.clear();
     this.pendingTaskEvents.clear();
     this.pendingTaskReads.clear();

@@ -63,6 +63,7 @@ export function WorkbenchShellLayout({
     inspectorTask,
     inspectorWidth,
     mcpServersQuery,
+    mcpServersReloadMutation,
     models,
     modelsQuery,
     newChatSubmissionStartedAt,
@@ -379,6 +380,10 @@ export function WorkbenchShellLayout({
             mcpServers={mcpServersQuery.data?.data ?? []}
             mcpServersError={mcpServersQuery.error}
             mcpServersPending={taskId !== undefined && mcpServersQuery.isPending}
+            mcpServersRetryAvailable={taskId !== undefined}
+            mcpServersRefreshing={mcpServersQuery.isFetching && !mcpServersQuery.isPending}
+            mcpServersRetryError={mcpServersReloadMutation.error}
+            mcpServersRetrying={mcpServersReloadMutation.isPending}
             key={`${projectId}:${taskId ?? "draft"}`}
             onClose={closeInspector}
             onFileTreeExpandedChange={(nextExpandedPaths) => {
@@ -400,6 +405,9 @@ export function WorkbenchShellLayout({
                   projectId,
                 };
               });
+            }}
+            onReloadMcpServers={() => {
+              mcpServersReloadMutation.mutate();
             }}
             onOpenFileDiff={openFileDiff}
             onOpenProjectPath={(appId, path) => {

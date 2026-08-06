@@ -267,7 +267,17 @@ export const skills = [
   },
 ];
 
-export const mcpServers = [{ name: "fast-context" }, { name: "chrome-devtools" }];
+export const mcpServers = ["fast-context", "chrome-devtools"].map((name) => ({
+  authStatus: "unsupported" as const,
+  description: null,
+  error: null,
+  failureReason: null,
+  name,
+  status: "ready" as const,
+  title: null,
+  toolCount: 2,
+  version: "1.0.0",
+}));
 
 export const tasks = [
   {
@@ -700,6 +710,21 @@ export async function mockAppShellApi(page: Page): Promise<void> {
       };
     } else if (url.pathname === "/v1/temporary/skills") {
       body = { data: skills, nextCursor: null };
+    } else if (
+      /^\/v1\/(?:temporary|projects\/[^/]+)\/tasks\/[^/]+\/mcp-servers\/retry$/u.test(
+        url.pathname,
+      ) &&
+      route.request().method() === "POST"
+    ) {
+      body = {
+        data: mcpServers.map((server) => ({
+          ...server,
+          authStatus: null,
+          status: "starting",
+          toolCount: 0,
+          version: null,
+        })),
+      };
     } else if (/^\/v1\/temporary\/tasks\/[^/]+\/mcp-servers$/u.test(url.pathname)) {
       body = { data: mcpServers };
     } else if (/^\/v1\/projects\/[^/]+\/skills$/u.test(url.pathname)) {

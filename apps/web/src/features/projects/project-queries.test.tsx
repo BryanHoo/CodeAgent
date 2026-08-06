@@ -12,6 +12,7 @@ import {
   type CodeAgentReadClient,
   type CodeAgentMcpServersClient,
   mcpServersQueryOptions,
+  mcpServersReloadMutationOptions,
   modelsQueryOptions,
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
@@ -319,19 +320,59 @@ describe("project queries", () => {
   });
 
   it("loads readable MCP servers with a task-scoped query key", async () => {
+    const server = {
+      authStatus: "unsupported" as const,
+      description: null,
+      error: null,
+      failureReason: null,
+      name: "fast-context",
+      status: "ready" as const,
+      title: null,
+      toolCount: 2,
+      version: "1.0.0",
+    };
     const listMcpServers = vi.fn<CodeAgentMcpServersClient["listMcpServers"]>(() =>
-      Promise.resolve({ data: [{ name: "fast-context" }] }),
+      Promise.resolve({ data: [server] }),
     );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const options = mcpServersQueryOptions("code-agent", "task-1", { listMcpServers });
 
     await expect(queryClient.fetchQuery(options)).resolves.toEqual({
-      data: [{ name: "fast-context" }],
+      data: [server],
     });
     expect(options.queryKey).toEqual(["projects", "code-agent", "tasks", "task-1", "mcp-servers"]);
     expect(listMcpServers.mock.calls[0]?.[0]).toBe("code-agent");
     expect(listMcpServers.mock.calls[0]?.[1]).toBe("task-1");
     expect(listMcpServers.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("reloads MCP servers through a task-scoped serialized mutation", async () => {
+    const response = {
+      data: [
+        {
+          authStatus: null,
+          description: null,
+          error: null,
+          failureReason: null,
+          name: "fast-context",
+          status: "starting" as const,
+          title: null,
+          toolCount: 0,
+          version: null,
+        },
+      ],
+    };
+    const retryMcpServers = vi.fn(() => Promise.resolve(response));
+    const queryClient = new QueryClient();
+    const options = mcpServersReloadMutationOptions("code-agent", "task-1", {
+      retryMcpServers,
+    });
+
+    await expect(
+      queryClient.getMutationCache().build(queryClient, options).execute(undefined),
+    ).resolves.toEqual(response);
+    expect(retryMcpServers).toHaveBeenCalledWith("code-agent", "task-1");
+    expect(options.scope).toEqual({ id: "task-mcp:code-agent:task-1" });
   });
 
   it("disables the MCP query when no task is selected", () => {

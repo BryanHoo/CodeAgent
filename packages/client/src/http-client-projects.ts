@@ -1,6 +1,7 @@
 import {
   AddProjectResponseSchema,
   AgentMcpServerPageSchema,
+  AgentMutationErrorSchema,
   AgentProjectDefaultsResponseSchema,
   AgentSkillPageSchema,
   CommitProjectChangesResponseSchema,
@@ -15,6 +16,7 @@ import {
   ProjectPageSchema,
   ProjectSourceFileSchema,
   RemoveProjectResponseSchema,
+  ReloadAgentMcpServersResponseSchema,
   RenameProjectResponseSchema,
   ReorderProjectsResponseSchema,
   type AddProjectResponse,
@@ -42,6 +44,7 @@ import {
   type SwitchProjectBranchRequest,
   type RemoveProjectResponse,
   type RenameProjectResponse,
+  type ReloadAgentMcpServersResponse,
   type ReorderProjectsResponse,
 } from "@code-agent/protocol";
 
@@ -67,6 +70,20 @@ export class ProjectHttpClient extends CodeAgentTransport {
     return this.read(
       `${taskPath(projectId, taskId)}/mcp-servers`,
       AgentMcpServerPageSchema,
+      options,
+      AgentMutationErrorSchema,
+    );
+  }
+
+  public async retryMcpServers(
+    projectId: string,
+    taskId: string,
+    options: MutationOptions = {},
+  ): Promise<ReloadAgentMcpServersResponse> {
+    return this.mutation(
+      `${taskPath(projectId, taskId)}/mcp-servers/retry`,
+      {},
+      ReloadAgentMcpServersResponseSchema,
       options,
     );
   }

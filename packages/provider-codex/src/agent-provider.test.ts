@@ -1996,7 +1996,30 @@ describe("CodexAgentProvider", () => {
 
     await provider.startTask();
     await expect(provider.listMcpServers("task-1")).resolves.toEqual({
-      data: [{ name: "fast-context" }, { name: "playwright" }],
+      data: [
+        {
+          authStatus: "notLoggedIn",
+          description: null,
+          error: null,
+          failureReason: null,
+          name: "fast-context",
+          status: "ready",
+          title: null,
+          toolCount: 0,
+          version: null,
+        },
+        {
+          authStatus: "unsupported",
+          description: null,
+          error: null,
+          failureReason: null,
+          name: "playwright",
+          status: "ready",
+          title: null,
+          toolCount: 1,
+          version: null,
+        },
+      ],
     });
     expect(rpc.calls).toEqual([
       { method: "thread/start", params: { cwd: project.rootPath } },
@@ -2009,6 +2032,140 @@ describe("CodexAgentProvider", () => {
         params: { cursor: "page-2", detail: "toolsAndAuthOnly", threadId: "task-1" },
       },
     ]);
+  });
+
+  it("merges MCP startup failures, redacts diagnostics, and reloads known task servers", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      {
+        data: [
+          {
+            authStatus: "oAuth",
+            name: "fast-context",
+            resourceTemplates: [],
+            resources: [],
+            serverInfo: {
+              description: "Semantic repository search at https://internal.example.com/docs",
+              icons: null,
+              name: "fast-context",
+              title: "Fast Context",
+              version: "1.2.0",
+              websiteUrl: "https://example.com",
+            },
+            tools: {
+              search: { description: "search", inputSchema: {}, name: "search" },
+              trace: { description: "trace", inputSchema: {}, name: "trace" },
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+      {},
+      {
+        data: [
+          {
+            authStatus: "oAuth",
+            name: "fast-context",
+            resourceTemplates: [],
+            resources: [],
+            serverInfo: {
+              description: "Semantic repository search",
+              icons: null,
+              name: "fast-context",
+              title: "Fast Context",
+              version: "1.2.0",
+              websiteUrl: "https://example.com",
+            },
+            tools: {
+              search: { description: "search", inputSchema: {}, name: "search" },
+              trace: { description: "trace", inputSchema: {}, name: "trace" },
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await provider.startTask();
+    provider.receiveNotification("mcpServer/startupStatus/updated", {
+      error:
+        "OAuth request to https://auth.example.com/callback failed: API_TOKEN=top-secret-value",
+      failureReason: "reauthenticationRequired",
+      name: "docs",
+      status: "failed",
+      threadId: "task-1",
+    });
+
+    await expect(provider.listMcpServers("task-1")).resolves.toEqual({
+      data: [
+        {
+          authStatus: null,
+          description: null,
+          error: "OAuth request to [URL redacted] failed: API_TOKEN=[REDACTED]",
+          failureReason: "reauthenticationRequired",
+          name: "docs",
+          status: "failed",
+          title: null,
+          toolCount: 0,
+          version: null,
+        },
+        {
+          authStatus: "oAuth",
+          description: "Semantic repository search at [URL redacted]",
+          error: null,
+          failureReason: null,
+          name: "fast-context",
+          status: "ready",
+          title: "Fast Context",
+          toolCount: 2,
+          version: "1.2.0",
+        },
+      ],
+    });
+    await expect(provider.reloadMcpServers("task-1")).resolves.toMatchObject({
+      data: [
+        { error: null, name: "docs", status: "starting" },
+        { error: null, name: "fast-context", status: "starting" },
+      ],
+    });
+    expect(rpc.calls.slice(-2)).toEqual([
+      { method: "config/mcpServer/reload", params: undefined },
+      {
+        method: "mcpServerStatus/list",
+        params: { detail: "toolsAndAuthOnly", threadId: "task-1" },
+      },
+    ]);
+  });
+
+  it("restores MCP startup states when the reload RPC fails", async () => {
+    const readyServerPage = {
+      data: [
+        {
+          authStatus: "unsupported",
+          name: "playwright",
+          resourceTemplates: [],
+          resources: [],
+          serverInfo: null,
+          tools: {},
+        },
+      ],
+      nextCursor: null,
+    };
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      readyServerPage,
+      new Error("reload unavailable"),
+      readyServerPage,
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+
+    await provider.startTask();
+    await provider.listMcpServers("task-1");
+    await expect(provider.reloadMcpServers("task-1")).rejects.toThrow("reload unavailable");
+    await expect(provider.listMcpServers("task-1")).resolves.toMatchObject({
+      data: [{ name: "playwright", status: "ready" }],
+    });
   });
 
   it("rejects repeated MCP status cursors for a task", async () => {

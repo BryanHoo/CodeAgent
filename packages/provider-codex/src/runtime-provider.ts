@@ -111,6 +111,11 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     return this.#delegate.listMcpServers(taskId);
   }
 
+  public async reloadMcpServers(taskId: string): Promise<AgentMcpServerPage> {
+    await this.#ensureTaskOwner(taskId);
+    return this.#delegate.reloadMcpServers(taskId);
+  }
+
   public listSkills(): Promise<AgentSkillPage> {
     return this.#delegate.listSkills();
   }

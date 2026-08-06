@@ -725,7 +725,7 @@ Server 内部生成提交消息时调用 `startTask({ ephemeral: true })`。Serv
 
 Task 列表和 Snapshot 直接将 Codex `Thread.isPinned` 映射为统一 `pinned`。固定或取消固定调用 `thread/metadata/update`，Provider 校验响应 Thread ID、Project `cwd` 与目标状态后返回权威 Task；Server 不覆盖该值，也不保存本地副本。
 
-MCP Inspector 使用 `mcpServerStatus/list { threadId, detail: "toolsAndAuthOnly" }` 分页获取当前 Task 可读取的 MCP 服务，并只交付去重后的名称。Server 通过 Task 级资源路径校验 Project 归属，Web Query 键同时包含 Project ID 与 Task ID；没有当前 Task 时不发起请求。无 `threadId` 的进程级结果和 `config/read mcp_servers` 都不能表达当前 Task 的实际可读清单，因此不得作为回退。
+MCP Inspector 使用 `mcpServerStatus/list { threadId, detail: "toolsAndAuthOnly" }` 分页获取当前 Task 可读取的 MCP 服务，并合并 `mcpServer/startupStatus/updated` 的 `starting | ready | failed | cancelled` 状态与有界错误日志。统一协议只交付去重名称、工具数量、认证方式和无 URL 的展示元数据，不交付工具定义、资源、command、args、env、URL 或 Secret。Server 通过 Task 级资源路径校验 Project 归属，Web Query 键同时包含 Project ID 与 Task ID；没有当前 Task 时不发起请求。无 `threadId` 的进程级结果和 `config/read mcp_servers` 都不能表达当前 Task 的实际可读清单，因此不得作为回退。手动重试通过幂等 Mutation 调用官方 `config/mcpServer/reload`，失败结果允许使用同一 Key 重试。
 
 ### 11.5 事件映射
 

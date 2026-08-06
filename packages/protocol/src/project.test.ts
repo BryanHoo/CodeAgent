@@ -89,6 +89,8 @@ import {
   UploadAgentFeedbackResponseSchema,
   ResolvePendingRequestRequestSchema,
   ResolvePendingRequestResponseSchema,
+  ReloadAgentMcpServersRequestSchema,
+  ReloadAgentMcpServersResponseSchema,
 } from "./project.js";
 
 describe("project protocol", () => {
@@ -1231,12 +1233,83 @@ describe("project protocol", () => {
     ).toBe(true);
     expect(
       Value.Check(AgentMcpServerPageSchema, {
-        data: [{ name: "fast-context" }, { name: "chrome-devtools" }],
+        data: [
+          {
+            authStatus: "oAuth",
+            description: "Search the current repository",
+            error: null,
+            failureReason: null,
+            name: "fast-context",
+            status: "ready",
+            title: "Fast Context",
+            toolCount: 3,
+            version: "1.2.0",
+          },
+          {
+            authStatus: null,
+            description: null,
+            error: "MCP startup timed out after 10s",
+            failureReason: null,
+            name: "chrome-devtools",
+            status: "failed",
+            title: null,
+            toolCount: 0,
+            version: null,
+          },
+        ],
       }),
     ).toBe(true);
     expect(
       Value.Check(AgentMcpServerPageSchema, {
-        data: [{ command: "npx", name: "fast-context" }],
+        data: [
+          {
+            authStatus: "unsupported",
+            command: "npx",
+            description: null,
+            error: null,
+            failureReason: null,
+            name: "fast-context",
+            status: "ready",
+            title: null,
+            toolCount: 1,
+            version: null,
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(Value.Check(ReloadAgentMcpServersRequestSchema, {})).toBe(true);
+    expect(
+      Value.Check(ReloadAgentMcpServersResponseSchema, {
+        data: [
+          {
+            authStatus: null,
+            description: null,
+            error: null,
+            failureReason: null,
+            name: "fast-context",
+            status: "starting",
+            title: null,
+            toolCount: 0,
+            version: null,
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentMcpServerPageSchema, {
+        data: [
+          {
+            authStatus: null,
+            description: null,
+            error: null,
+            failureReason: null,
+            name: "fast-context",
+            status: "unknown",
+            title: null,
+            toolCount: 0,
+            version: null,
+          },
+        ],
       }),
     ).toBe(false);
 

@@ -19,7 +19,7 @@ import {
 } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
 import { AttachmentNotFoundError } from "../attachment-store.js";
-import { MutationHttpError, type ServerRouteContext } from "./context.js";
+import { MutationHttpError, toMcpProviderHttpError, type ServerRouteContext } from "./context.js";
 import {
   ErrorResponseSchema,
   IdempotencyHeadersSchema,
@@ -121,7 +121,11 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
     {
       schema: {
         params: ProjectTaskParamsSchema,
-        response: { 200: AgentMcpServerPageSchema, 404: ErrorResponseSchema },
+        response: {
+          200: AgentMcpServerPageSchema,
+          404: ErrorResponseSchema,
+          502: AgentMutationErrorSchema,
+        },
       },
     },
     async (request, reply) => {
@@ -129,7 +133,11 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
       if (projectContext === undefined) {
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
-      return projectContext.provider.listMcpServers(request.params.taskId);
+      try {
+        return await projectContext.provider.listMcpServers(request.params.taskId);
+      } catch (error) {
+        throw toMcpProviderHttpError(error);
+      }
     },
   );
 

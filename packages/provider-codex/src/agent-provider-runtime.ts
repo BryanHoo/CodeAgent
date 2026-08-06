@@ -22,6 +22,7 @@ import {
   isReviewerFailureFallback,
   readNotificationItemType,
   readNotificationTurnId,
+  readMcpServerStartupStatus,
   readReviewWorkerThread,
   readTaskId,
 } from "./agent-provider-notifications.js";
@@ -36,6 +37,23 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
   }
 
   protected handleNotification(method: string, params: unknown): void {
+    if (method === "mcpServer/startupStatus/updated") {
+      try {
+        const update = readMcpServerStartupStatus(params);
+        if (
+          this.runtime.projectTaskIds.has(update.taskId) ||
+          this.runtime.pendingTaskReads.has(update.taskId)
+        ) {
+          const currentStatuses = this.runtime.mcpServerStatuses.get(update.taskId);
+          const statuses = new Map<string, typeof update.status>(currentStatuses);
+          statuses.set(update.name, update.status);
+          this.runtime.mcpServerStatuses.set(update.taskId, statuses);
+        }
+      } catch {
+        this.warnDroppedNotification("invalid_notification", method, params);
+      }
+      return;
+    }
     if (method === "serverRequest/resolved") {
       this.handleServerRequestResolved(params);
       return;

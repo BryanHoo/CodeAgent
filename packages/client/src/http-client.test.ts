@@ -63,7 +63,17 @@ const skillPage = {
   nextCursor: null,
 };
 const mcpServerPage = {
-  data: [{ name: "fast-context" }, { name: "chrome-devtools" }],
+  data: ["fast-context", "chrome-devtools"].map((name) => ({
+    authStatus: "unsupported" as const,
+    description: null,
+    error: null,
+    failureReason: null,
+    name,
+    status: "ready" as const,
+    title: null,
+    toolCount: 2,
+    version: "1.0.0",
+  })),
 };
 const pixelBytes = Uint8Array.from(
   globalThis.atob(
@@ -384,6 +394,47 @@ describe("CodeAgentClient", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       "/v1/projects/project%20one/tasks/task%20one/mcp-servers",
     );
+  });
+
+  it("preserves structured Codex errors while reading MCP servers", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        {
+          code: "PROVIDER_ERROR",
+          message: "mcpServerStatus/list failed: MCP server `docs` executable was not found",
+          retryable: true,
+        },
+        { status: 502, statusText: "Bad Gateway" },
+      ),
+    );
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.listMcpServers("project one", "task one")).rejects.toMatchObject({
+      code: "PROVIDER_ERROR",
+      message: "mcpServerStatus/list failed: MCP server `docs` executable was not found",
+      retryable: true,
+      status: 502,
+    });
+  });
+
+  it("manually reloads task MCP servers through an idempotent mutation", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse(mcpServerPage));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(
+      client.retryMcpServers("project one", "task one", { idempotencyKey: "mcp-retry-1" }),
+    ).resolves.toEqual(mcpServerPage);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/projects/project%20one/tasks/task%20one/mcp-servers/retry",
+    );
+    const request = fetchMock.mock.calls[0]?.[1];
+    expect(request).toMatchObject({
+      body: "{}",
+      method: "POST",
+    });
+    expect(new Headers(request?.headers).get("idempotency-key")).toBe("mcp-retry-1");
   });
 
   it("reads and validates a project's staged and unstaged Git changes", async () => {

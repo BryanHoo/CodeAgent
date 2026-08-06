@@ -27,6 +27,7 @@ import {
   globalSettingsMutationOptions,
   globalSettingsQueryOptions,
   mcpServersQueryOptions,
+  mcpServersReloadMutationOptions,
   modelsQueryOptions,
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
@@ -154,6 +155,15 @@ export function useWorkbenchShellRuntime({
   });
   const modelsQuery = useQuery(modelsQueryOptions(client));
   const mcpServersQuery = useQuery(mcpServersQueryOptions(projectId, taskId, client));
+  const mcpServersReloadMutation = useMutation({
+    ...mcpServersReloadMutationOptions(projectId, taskId, client),
+    onSuccess(response) {
+      queryClient.setQueryData(
+        ["projects", projectId, "tasks", taskId ?? null, "mcp-servers"],
+        response,
+      );
+    },
+  });
   const globalSettingsQuery = useQuery(globalSettingsQueryOptions(client));
   const projectOpenCapabilitiesQuery = useQuery(
     projectOpenCapabilitiesQueryOptions(projectId, client, !temporary),
@@ -375,6 +385,7 @@ export function useWorkbenchShellRuntime({
     isPending,
     markTaskRunning,
     mcpServersQuery,
+    mcpServersReloadMutation,
     modelsQuery,
     navigate,
     newChatSubmissionStartedAt,
