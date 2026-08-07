@@ -40,7 +40,7 @@ pnpm check
 pnpm test:e2e
 ```
 
-`package:check` 会检查真实 tarball 的 `package.json`；发布必须使用 `pnpm publish`，确保 `catalog:` 和 `workspace:` 被转换为 npm 可安装的版本。
+`package:check` 会检查真实 tarball 的 `package.json`。工作流先使用 `pnpm pack` 将 `catalog:` 和 `workspace:` 转换为 npm 可安装版本，再通过 `npm publish <tarball>` 完成 Trusted Publisher OIDC 认证与发布。
 
 4. 提交发布准备并创建与包版本一致的标签：
 
@@ -54,8 +54,10 @@ git push origin v1.5.0
 
 1. 校验标签 `v1.5.0` 与 `package.json` 的 `1.5.0` 一致。
 2. 安装锁定依赖并运行 `pnpm check`。
-3. 发布带 provenance 的公开 npm 包。
+3. 使用 pnpm 生成协议已转换的 tarball，并通过 npm CLI 发布带 provenance 的公开 npm 包。
 4. 根据提交记录创建 GitHub Release。
+
+已推送标签的发布失败时，可从 GitHub Actions 手动运行 `Release` workflow，并将 `tag` 设置为现有发布标签。工作流会精确检出并校验该标签，不会从 `main` 直接发布未标记提交。
 
 GitHub Release 只会在 npm 发布成功后创建，避免 npm 失败时产生已完成发布的错误信号。
 
@@ -65,6 +67,7 @@ GitHub Release 只会在 npm 发布成功后创建，避免 npm 失败时产生�
 - `ENEEDAUTH`：检查 npm Publisher 的仓库、`release.yml`、`npm` Environment 是否完全匹配，并确认工作流具有 `id-token: write`。
 - npm 发布成功但 GitHub Release 创建失败：不要修改版本；重新运行失败 Job，工作流会跳过已经存在的 npm 版本并继续创建 GitHub Release。
 - npm 拒绝重复版本：提升 `package.json` 版本并重新更新 `CHANGELOG.md`，然后创建新标签。
-- `EUNSUPPORTEDPROTOCOL`：确认工作流使用 `pnpm publish`，并检查 `package:check` 已验证 tarball 内没有 `catalog:` 或 `workspace:`。
+- `EUNSUPPORTEDPROTOCOL`：确认工作流使用 `pnpm pack` 生成发布 tarball，并检查 `package:check` 已验证 tarball 内没有 `catalog:` 或 `workspace:`。
+- OIDC token exchange 失败：确认 Trusted Publisher 的仓库、`release.yml`、`npm` Environment 和 `npm publish` 权限完全匹配；发布 tarball 必须由 npm CLI 执行。
 
 发布记录以 [npm 的 @bryanhu/code-agent 页面](https://www.npmjs.com/package/@bryanhu/code-agent)和 [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases) 为准。
