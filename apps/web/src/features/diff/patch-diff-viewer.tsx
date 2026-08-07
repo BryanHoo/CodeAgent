@@ -1,5 +1,6 @@
 import { setCustomExtension } from "@pierre/diffs";
 import { PatchDiff, type PatchDiffProps } from "@pierre/diffs/react";
+import type { WheelEvent } from "react";
 
 import {
   projectLanguageByExtension,
@@ -31,13 +32,44 @@ for (const [fileName, language] of Object.entries(projectLanguageByFileName)) {
 setCustomExtension("Dockerfile", "dockerfile");
 setCustomExtension("Makefile", "makefile");
 
+function findDiffHorizontalScroller(event: WheelEvent<HTMLDivElement>): HTMLElement | null {
+  const pathScroller = event.nativeEvent
+    .composedPath()
+    .find(
+      (target): target is HTMLElement =>
+        target instanceof HTMLElement && target.hasAttribute("data-code"),
+    );
+  if (pathScroller !== undefined) {
+    return pathScroller;
+  }
+
+  const renderer = event.currentTarget.querySelector<HTMLElement>(".file-diff-renderer");
+  return renderer?.shadowRoot?.querySelector<HTMLElement>("[data-code]") ?? null;
+}
+
+function handleDiffWheel(event: WheelEvent<HTMLDivElement>) {
+  // 触控板直接提供 deltaX；普通鼠标使用 Shift + Wheel 进行横向移动。
+  const delta = event.deltaX !== 0 ? event.deltaX : event.shiftKey ? event.deltaY : 0;
+  if (delta === 0) {
+    return;
+  }
+
+  const scroller = findDiffHorizontalScroller(event);
+  if (scroller === null) {
+    return;
+  }
+  scroller.scrollLeft += delta;
+}
+
 export default function PatchDiffViewer({ change }: Readonly<{ change: AgentFileChange }>) {
   return (
-    <PatchDiff
-      className="file-diff-renderer"
-      disableWorkerPool
-      options={diffOptions}
-      patch={normalizeFileChangePatch(change)}
-    />
+    <div className="min-w-0" onWheel={handleDiffWheel}>
+      <PatchDiff
+        className="file-diff-renderer"
+        disableWorkerPool
+        options={diffOptions}
+        patch={normalizeFileChangePatch(change)}
+      />
+    </div>
   );
 }

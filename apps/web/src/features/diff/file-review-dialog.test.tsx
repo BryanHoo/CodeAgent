@@ -18,11 +18,11 @@ describe("file review navigation", () => {
     expect(resolveReviewIndex(0, "next", 0)).toBe(0);
   });
 
-  it("maps vertical and horizontal arrow keys to file navigation", () => {
+  it("reserves horizontal arrow keys for moving through wide diffs", () => {
     expect(getReviewNavigationDirection("ArrowUp")).toBe("previous");
-    expect(getReviewNavigationDirection("ArrowLeft")).toBe("previous");
     expect(getReviewNavigationDirection("ArrowDown")).toBe("next");
-    expect(getReviewNavigationDirection("ArrowRight")).toBe("next");
+    expect(getReviewNavigationDirection("ArrowLeft")).toBeNull();
+    expect(getReviewNavigationDirection("ArrowRight")).toBeNull();
     expect(getReviewNavigationDirection("Enter")).toBeNull();
   });
 

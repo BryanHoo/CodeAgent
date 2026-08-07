@@ -1388,7 +1388,7 @@ test("opens file diffs and review from the timeline while keeping Inspector comm
   const consoleErrors: string[] = [];
   const failedResources: string[] = [];
   const reviewListChange = {
-    diff: "export const reviewList = true;",
+    diff: `+export const reviewList = "${"wide-diff-content-".repeat(40)}";`,
     kind: "create" as const,
     path: "apps/web/src/review-list.tsx",
   };
@@ -1499,14 +1499,21 @@ test("opens file diffs and review from the timeline while keeping Inspector comm
   await expect.poll(() => reviewContent.evaluate((element) => element.scrollTop)).toBe(0);
   await packageFileTreeItem.click();
   await expect(reviewDialog).toHaveAccessibleName("package.json");
-  await page.keyboard.press("ArrowRight");
-  await expect(reviewDialog).toHaveAccessibleName("review-list.tsx");
-  await page.keyboard.press("ArrowLeft");
-  await expect(reviewDialog).toHaveAccessibleName("package.json");
   await page.keyboard.press("ArrowDown");
   await expect(reviewDialog).toHaveAccessibleName("review-list.tsx");
+  const horizontalDiffScroller = reviewContent.locator("[data-code]");
+  await expect
+    .poll(() =>
+      horizontalDiffScroller.evaluate((element) => element.scrollWidth > element.clientWidth),
+    )
+    .toBe(true);
+  await horizontalDiffScroller.hover();
+  await page.mouse.wheel(240, 0);
+  await expect
+    .poll(() => horizontalDiffScroller.evaluate((element) => element.scrollLeft))
+    .toBeGreaterThan(0);
   await expect(reviewContent.locator(".file-diff-renderer")).toContainText(
-    "export const reviewList = true;",
+    "export const reviewList",
   );
   await expect(reviewFileTreeItem).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("ArrowUp");

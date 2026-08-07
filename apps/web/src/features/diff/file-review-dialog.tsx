@@ -203,10 +203,11 @@ export function ReviewFileTreeNavigation({
 }
 
 export function getReviewNavigationDirection(key: string): "next" | "previous" | null {
-  if (key === "ArrowUp" || key === "ArrowLeft") {
+  // 左右方向键保留给宽 Diff 的原生横向滚动，只用上下方向键切换文件。
+  if (key === "ArrowUp") {
     return "previous";
   }
-  if (key === "ArrowDown" || key === "ArrowRight") {
+  if (key === "ArrowDown") {
     return "next";
   }
   return null;
@@ -259,7 +260,7 @@ export function FileReviewDialog({ changes, onClose }: FileReviewDialogProps) {
     if (changes === null) {
       return;
     }
-    // 切换后原焦点按钮可能变为 disabled；窗口级监听保证四个方向键不因焦点丢失而中断。
+    // 切换后原焦点按钮可能变为 disabled；窗口级监听保证上下方向键不因焦点丢失而中断。
     const handleReviewKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) {
         return;
