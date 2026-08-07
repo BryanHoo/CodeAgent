@@ -827,7 +827,7 @@ test("keeps the compact mobile workbench inside the dynamic viewport", async ({ 
 
   await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
     "content",
-    /maximum-scale=1.*user-scalable=no.*viewport-fit=cover/,
+    "width=device-width, initial-scale=1, viewport-fit=cover",
   );
 
   const composer = page.getByRole("region", { name: "消息编辑器" });
