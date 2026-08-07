@@ -4,6 +4,33 @@
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-07
+
+### 新增
+
+- 添加可持久化的临时 Task 入口，完整支持审批、Skill、MCP、后台终端和历史恢复，同时隔离 Project 文件与 Git 能力。
+- 添加 Git 分支切换、分页提交历史和直属子仓库选择，支持在聚合目录中按仓库生成提交信息、提交并推送变更。
+- 完善任务级 MCP 状态诊断与手动重载，并支持恢复历史 Task 后读取 MCP 服务。
+- 支持展示 Codex 生成图片附件，并为纯 Skill Turn 写入可恢复索引、合并重复用户消息。
+
+### 优化
+
+- 重构提交变更抽屉、变更文件树和 Git 历史列表，将变更审核入口统一移至 Timeline。
+- 折叠已完成 Turn 的中间执行过程，优化长会话浏览，并统一 CLI 中文终端输出和彩色提示。
+- 优化浏览器会话监控与首屏加载，复用 Bundle 预算报告并减少非首屏模块的初始开销。
+- 为 Codex RPC 过载添加有界抖动重试，保持原始总超时并避免不可重试错误被重复执行。
+
+### 修复
+
+- 修复移动端页面无法缩放的问题，恢复浏览器原生可访问性操作。
+- 升级 Mermaid 并限制不可信图表配置，避免恶意内容改变安全级别。
+- 修复侧边栏 Task 分页展开与历史 Task MCP 恢复流程中的状态错误。
+
+### 工程
+
+- 添加 Codex App Server Schema 漂移校验与锁定版本基线，并纳入本地和 CI 质量门禁。
+- 扩展 Chromium、Firefox 和 WebKit 核心流程测试，更新 macOS 冒烟校验并加强跨平台覆盖。
+
 ## [1.4.0] - 2026-08-06
 
 ### 新增
@@ -178,7 +205,8 @@ CodeAgent 首个稳定版本，集中发布本地 Coding Agent 工作台的完�
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/BryanHoo/CodeAgent/compare/v1.2.0...v1.2.1
