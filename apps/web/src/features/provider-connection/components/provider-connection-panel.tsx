@@ -178,7 +178,6 @@ export function ProviderConnectionPanelView({
               <Input
                 autoCapitalize="none"
                 autoComplete="url"
-                className="h-11 rounded-control border border-separator-strong bg-panel px-3 text-body-small outline-none focus:border-primary focus:shadow-focus sm:h-9"
                 disabled={isBusy}
                 inputMode="url"
                 maxLength={2_048}
@@ -189,6 +188,7 @@ export function ProviderConnectionPanelView({
                 spellCheck={false}
                 type="url"
                 value={baseUrl}
+                variant="outline"
               />
             </label>
             <label className="grid gap-1.5 text-body-small font-medium text-foreground">
@@ -200,7 +200,7 @@ export function ProviderConnectionPanelView({
                 />
                 <Input
                   autoComplete="new-password"
-                  className="h-11 w-full rounded-control border border-separator-strong bg-panel pl-9 pr-3 text-body-small outline-none focus:border-primary focus:shadow-focus sm:h-9"
+                  className="pl-9"
                   disabled={isBusy}
                   maxLength={16_384}
                   onChange={(event) => {
@@ -209,6 +209,7 @@ export function ProviderConnectionPanelView({
                   spellCheck={false}
                   type="password"
                   value={apiKey}
+                  variant="outline"
                 />
               </div>
             </label>

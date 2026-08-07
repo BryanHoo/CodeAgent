@@ -21,6 +21,7 @@ describe("PairingGate", () => {
     expect(markup).toContain("CodeAgent");
     expect(markup).toContain('autoComplete="one-time-code"');
     expect(markup).toContain('aria-label="配对码"');
+    expect(markup).toContain('data-variant="embedded"');
     expect(markup).toContain("无法完成配对，请检查配对码后重试");
     expect(markup).not.toContain("PAIRING_FAILED");
   });

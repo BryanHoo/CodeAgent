@@ -875,6 +875,17 @@ test("project file tree context menu opens files and folders with a selected app
     return body["appId"] === "finder" && body["path"] === "docs";
   });
   const docsTreeItem = fileTree.getByRole("treeitem", { name: "docs" });
+  const docsExpandButton = docsTreeItem.getByRole("button", { name: "展开文件夹 docs" });
+  const docsNameButton = docsTreeItem.getByRole("button", { exact: true, name: "docs" });
+  const [docsExpandBox, docsNameBox] = await Promise.all([
+    docsExpandButton.boundingBox(),
+    docsNameButton.boundingBox(),
+  ]);
+  expect(docsExpandBox).not.toBeNull();
+  expect(docsNameBox).not.toBeNull();
+  expect((docsNameBox?.x ?? 0) - ((docsExpandBox?.x ?? 0) + (docsExpandBox?.width ?? 0))).toBe(4);
+  await expect(docsNameButton).toHaveCSS("padding-left", "0px");
+  await expect(docsNameButton).toHaveCSS("padding-right", "0px");
   await docsTreeItem.click({ button: "right" });
   const folderMenu = page.getByRole("menu", { name: "打开 docs 的方式" });
   await expect(folderMenu).toBeVisible();
@@ -897,6 +908,14 @@ test("project file tree context menu opens files and folders with a selected app
   const folderAction = docsTreeItem.getByRole("button", { name: "打开 docs 的方式" });
   await expect(folderAction).toHaveClass(/opacity-0/u);
   await docsTreeItem.hover();
+  await expect(docsTreeItem.locator(":scope > div").first()).toHaveCSS(
+    "background-color",
+    "rgba(23, 23, 23, 0.075)",
+  );
+  await expect(docsNameButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(docsNameButton).toHaveCSS("box-shadow", "none");
+  await expect(folderAction).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(folderAction).toHaveCSS("box-shadow", "none");
   await expect(folderAction).toHaveCSS("opacity", "1");
   await folderAction.click();
   const folderActionMenu = page.getByRole("menu", { name: "打开 docs 的方式" });

@@ -68,7 +68,6 @@ export function ProjectRenameDialog({
           <Input
             aria-label={t("projectDialog.name")}
             autoFocus
-            className="h-9 w-full rounded-control bg-control px-3 text-body text-foreground outline-none focus:shadow-focus"
             disabled={isPending}
             maxLength={200}
             onChange={(event) => {
@@ -82,13 +81,7 @@ export function ProjectRenameDialog({
             </p>
           )}
           <DialogFooter>
-            <Button
-              className="h-8 rounded-control px-3 text-body-small text-muted-foreground hover:bg-control-hover hover:text-foreground"
-              disabled={isPending}
-              onClick={onClose}
-              type="button"
-              variant="ghost"
-            >
+            <Button disabled={isPending} onClick={onClose} type="button" variant="ghost">
               {t("actions.cancel")}
             </Button>
             <Button

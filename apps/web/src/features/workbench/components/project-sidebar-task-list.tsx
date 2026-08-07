@@ -210,6 +210,7 @@ export function ProjectSidebarTaskList({
                     variant="ghost"
                     aria-expanded={showAllTemporaryTasks}
                     className="flex h-7 w-full items-center rounded-control px-2 text-left text-meta font-medium text-subtle-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+                    contentAlign="start"
                     disabled={temporaryPaginationControl.disabled}
                     onClick={() => {
                       if (
@@ -288,6 +289,7 @@ export function ProjectSidebarTaskList({
                           ? "cursor-grabbing bg-control-active text-foreground shadow-sm"
                           : "cursor-grab text-muted-foreground"
                       }`}
+                      contentAlign="start"
                       onClick={() => {
                         toggleProject(project.id);
                       }}
@@ -350,6 +352,7 @@ export function ProjectSidebarTaskList({
                           variant="ghost"
                           aria-expanded={showAllTasks}
                           className="flex h-7 w-full items-center rounded-control px-2 text-left text-meta font-medium text-subtle-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+                          contentAlign="start"
                           disabled={taskPaginationControl.disabled}
                           onClick={() => {
                             if (

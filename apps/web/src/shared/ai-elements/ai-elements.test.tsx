@@ -90,6 +90,17 @@ describe("AI Elements primitives", () => {
     expect(markup).toContain('aria-selected="true"');
     expect(markup).not.toContain("main.tsx");
     expect(markup).toContain("README.md");
+
+    const folderButtonClasses = [...markup.matchAll(/<button class="([^"]+)"/gu)].map(
+      (match) => match[1],
+    );
+    expect(folderButtonClasses).toHaveLength(2);
+    for (const classes of folderButtonClasses) {
+      expect(classes).toContain("p-0");
+      expect(classes).not.toContain("px-3");
+      expect(classes).not.toContain("hover:bg-accent");
+    }
+    expect(folderButtonClasses[1]).not.toContain("h-8");
   });
 
   it("renders a code block with line numbers and a highlighted line", () => {

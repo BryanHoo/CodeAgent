@@ -47,12 +47,7 @@ export function PairingGate({
         ) : error === "load" ? (
           <div className="space-y-4" role="alert">
             <p className="text-body-small text-danger">{t("access.loadError")}</p>
-            <Button
-              variant="ghost"
-              className="inline-flex h-9 items-center gap-2 rounded-control bg-control px-3 text-body-small font-medium hover:bg-control-hover focus-visible:shadow-focus"
-              onClick={onRetry}
-              type="button"
-            >
+            <Button onClick={onRetry} size="lg" type="button" variant="secondary">
               <RotateCw aria-hidden="true" className="size-4" />
               {t("actions.retry")}
             </Button>
@@ -81,14 +76,15 @@ export function PairingGate({
                 spellCheck={false}
                 type="password"
                 value={code}
+                variant="embedded"
               />
               <Button
                 aria-label={t("access.pair")}
-                className="mr-1 inline-grid size-8 place-items-center rounded-control bg-accent text-white hover:bg-accent-strong focus-visible:shadow-focus disabled:opacity-50"
+                className="mr-1"
                 disabled={pairing || code.trim().length === 0}
                 title={t("access.pair")}
                 type="submit"
-                variant="ghost"
+                size="icon-compact"
               >
                 <ArrowRight aria-hidden="true" className="size-4" />
               </Button>

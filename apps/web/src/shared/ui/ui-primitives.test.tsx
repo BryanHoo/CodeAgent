@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -25,9 +27,18 @@ import {
 import { Input } from "./input.js";
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from "./input-group.js";
 import { Sheet, SheetContent, SheetTitle } from "./sheet.js";
+import { Textarea } from "./textarea.js";
 import { Tooltip, TooltipProvider, TooltipTrigger } from "./tooltip.js";
 
 describe("shadcn UI primitives", () => {
+  it("keeps brand actions separate from neutral shadcn accent states", () => {
+    const css = readFileSync(new URL("../styles/globals.css", import.meta.url), "utf8");
+
+    expect(css).toContain("--color-primary: var(--primary);");
+    expect(css).toContain("--color-accent: var(--accent);");
+    expect(css).toContain("--color-brand: var(--ui-color-accent);");
+  });
+
   it("renders project button and input slots with native attributes", () => {
     const markup = renderToStaticMarkup(
       <form>
@@ -43,26 +54,39 @@ describe("shadcn UI primitives", () => {
     expect(markup).toContain("保存");
   });
 
-  it("keeps application-owned visual classes while applying shared icon constraints", () => {
+  it("owns complete project visuals for buttons and text controls", () => {
     const markup = renderToStaticMarkup(
       <>
-        <Button
-          className="flex h-7 text-body-small font-normal text-muted-foreground"
-          type="button"
-          variant="ghost"
-        >
+        <Button type="button">保存</Button>
+        <Button type="button" variant="ghost">
           更多
         </Button>
-        <Input aria-label="选择文件" className="size-4 shrink-0" type="checkbox" />
+        <Button contentAlign="start" type="button" variant="ghost">
+          导航
+        </Button>
+        <Input aria-label="名称" />
+        <Input aria-label="配对码" variant="embedded" />
+        <Textarea aria-label="说明" />
       </>,
     );
 
-    const buttonClasses = /<button class="([^"]+)"/u.exec(markup)?.[1];
-    expect(buttonClasses).toContain("[&amp;_svg]:pointer-events-none");
-    expect(buttonClasses).toContain("[&amp;_svg]:shrink-0");
-    expect(buttonClasses).toContain("[&amp;_svg:not([class*=&#x27;size-&#x27;])]:size-4");
-    expect(buttonClasses).toContain("flex h-7 text-body-small font-normal text-muted-foreground");
-    expect(/<input class="([^"]+)"/u.exec(markup)?.[1]).toBe("size-4 shrink-0");
+    const buttonClasses = [...markup.matchAll(/<button class="([^"]+)"/gu)].map(
+      (match) => match[1],
+    );
+    const inputClasses = [...markup.matchAll(/<input class="([^"]+)"/gu)].map((match) => match[1]);
+
+    expect(buttonClasses[0]).toContain("inline-flex");
+    expect(buttonClasses[0]).toContain("h-8");
+    expect(buttonClasses[0]).toContain("bg-primary");
+    expect(buttonClasses[1]).toContain("bg-transparent");
+    expect(buttonClasses[1]).toContain("hover:bg-accent");
+    expect(buttonClasses[2]).toContain("justify-start");
+    expect(buttonClasses[2]).not.toContain("justify-center");
+    expect(inputClasses[0]).toContain("h-9");
+    expect(inputClasses[0]).toContain("bg-control");
+    expect(inputClasses[1]).toContain("bg-transparent");
+    expect(inputClasses[1]).not.toContain("bg-control");
+    expect(/<textarea class="([^"]+)"/u.exec(markup)?.[1]).toContain("min-h-20");
   });
 
   it("composes a one-row multiline input with an inline action", () => {
@@ -78,6 +102,7 @@ describe("shadcn UI primitives", () => {
     expect(markup).toContain('data-slot="input-group"');
     expect(markup).toContain('data-slot="input-group-control"');
     expect(markup).toContain('data-slot="input-group-addon"');
+    expect(markup).toContain("bg-transparent");
     expect(markup).toContain("标题\n正文");
   });
 

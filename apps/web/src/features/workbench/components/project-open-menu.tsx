@@ -133,8 +133,9 @@ export function ProjectOpenDropdownMenu({
             <Button
               aria-label={targetLabel}
               className="pointer-events-none size-5 shrink-0 opacity-0 transition-opacity group-hover/file-tree-node:pointer-events-auto group-hover/file-tree-node:opacity-100 group-focus-within/file-tree-node:pointer-events-auto group-focus-within/file-tree-node:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100"
+              size="embedded"
               type="button"
-              variant="ghost"
+              variant="embedded"
             >
               <Ellipsis aria-hidden="true" className="size-3.5" />
             </Button>

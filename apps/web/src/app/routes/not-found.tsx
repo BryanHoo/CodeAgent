@@ -19,7 +19,7 @@ export function NotFound() {
           {t("errors.notFoundDescription")}
         </p>
         <Link
-          className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-accent-strong"
+          className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-brand-strong"
           to="/"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />

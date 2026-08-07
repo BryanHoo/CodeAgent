@@ -142,20 +142,15 @@ export function ConfirmationAction({
   type = "button",
   ...props
 }: ConfirmationActionProps) {
-  // 保留既有 Confirmation 视觉，仅由 shadcn Button 承担原生属性和 ref 透传。
-  const toneClass =
-    tone === "danger"
-      ? "bg-danger text-white hover:opacity-90"
-      : tone === "primary"
-        ? "bg-accent text-white hover:bg-accent-strong"
-        : "bg-raised text-foreground hover:bg-control-hover";
+  const variant = tone === "danger" ? "destructive" : tone === "primary" ? "default" : "secondary";
 
   return (
     <Button
-      className={`inline-flex h-8 items-center justify-center rounded-control px-3 text-label font-medium shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${toneClass} ${className}`}
+      className={className}
       ref={ref}
+      size="compact"
       type={type}
-      variant="ghost"
+      variant={variant}
       {...props}
     />
   );

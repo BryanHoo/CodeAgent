@@ -5,42 +5,42 @@ import type { ComponentProps } from "react";
 import { cn } from "../lib/utils.js";
 
 const buttonVariants = cva(
-  "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control text-body-small outline-none transition-colors focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
-    compoundVariants: [
-      {
-        className:
-          "bg-transparent text-muted-foreground hover:bg-control-hover hover:text-foreground",
-        size: ["icon", "icon-sm", "icon-lg"],
-        variant: "ghost",
-      },
-    ],
     defaultVariants: {
+      contentAlign: "center",
       size: "default",
       variant: "default",
     },
     variants: {
+      contentAlign: {
+        center: "justify-center",
+        start: "justify-start text-left",
+      },
       size: {
-        default: "",
-        sm: "",
-        lg: "",
-        icon: "inline-grid size-9 place-items-center rounded-control transition-colors disabled:cursor-not-allowed disabled:opacity-45 max-workbench:size-11",
+        compact: "h-8 px-3 text-label",
+        default: "h-8 px-3",
+        embedded: "h-auto p-0",
+        sm: "h-7 px-2 text-label max-workbench:h-11",
+        lg: "h-9 px-4 text-body",
+        icon: "inline-grid size-9 place-items-center px-0 max-workbench:size-11",
+        "icon-compact": "inline-grid size-8 place-items-center px-0 max-workbench:size-11",
         "icon-sm":
-          "inline-grid size-7 place-items-center rounded-control transition-colors disabled:cursor-not-allowed disabled:opacity-45 max-workbench:size-11 [&_svg:not([class*='size-'])]:size-3.5",
-        "icon-lg":
-          "inline-grid size-10 place-items-center rounded-control transition-colors disabled:cursor-not-allowed disabled:opacity-45 max-workbench:size-11",
+          "inline-grid size-7 place-items-center px-0 max-workbench:size-11 [&_svg:not([class*='size-'])]:size-3.5",
+        "icon-lg": "inline-grid size-10 place-items-center px-0 max-workbench:size-11",
       },
       variant: {
-        default:
-          "inline-flex h-8 items-center justify-center gap-1.5 rounded-control bg-accent px-3 text-body-small font-medium text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-50",
-        destructive:
-          "inline-flex h-8 items-center justify-center gap-1.5 rounded-control bg-danger px-3 text-body-small font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
-        ghost: "",
-        link: "inline-flex items-center gap-1.5 text-accent underline-offset-4 hover:underline [&_svg:not([class*='size-'])]:size-3.5",
+        default: "bg-primary font-medium text-white hover:bg-brand-strong",
+        destructive: "bg-danger font-medium text-white hover:opacity-90",
+        embedded:
+          "rounded-none bg-transparent text-inherit hover:bg-transparent hover:text-inherit focus-visible:shadow-none",
+        ghost: "bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+        inverse:
+          "rounded-pill bg-foreground text-raised hover:bg-brand-strong disabled:bg-control-active disabled:text-muted-foreground",
+        link: "h-auto px-0 text-primary underline-offset-4 hover:text-brand-strong hover:underline [&_svg:not([class*='size-'])]:size-3.5",
         outline:
-          "inline-flex h-8 items-center justify-center gap-1.5 rounded-control border border-separator-strong bg-panel px-3 text-body-small text-foreground hover:bg-control-hover",
-        secondary:
-          "inline-flex h-8 items-center justify-center gap-1.5 rounded-control bg-raised px-3 text-body-small text-foreground shadow-sm transition-colors hover:bg-control-hover",
+          "border border-separator-strong bg-panel text-foreground hover:bg-accent hover:text-accent-foreground",
+        secondary: "bg-raised text-foreground shadow-sm hover:bg-accent",
       },
     },
   },
@@ -54,16 +54,18 @@ type ButtonProps = ComponentProps<"button"> &
 function Button({
   asChild = false,
   className,
+  contentAlign = "center",
   size = "default",
   variant = "default",
   ...props
 }: ButtonProps) {
   const Component = asChild ? Slot : "button";
 
-  // 普通业务按钮由调用方持有视觉样式，基础层只为显式 variant/size 提供项目既有契约。
+  // 共享层持有完整视觉契约，业务调用方只需选择语义变体和尺寸。
   return (
     <Component
-      className={cn(buttonVariants({ className, size, variant }))}
+      className={cn(buttonVariants({ className, contentAlign, size, variant }))}
+      data-content-align={contentAlign}
       data-size={size}
       data-slot="button"
       data-variant={variant}

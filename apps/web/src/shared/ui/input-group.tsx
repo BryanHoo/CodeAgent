@@ -34,6 +34,7 @@ function InputGroupTextarea({ className, ...props }: ComponentProps<"textarea">)
     <Textarea
       className={cn("min-w-0 flex-1", className)}
       data-slot="input-group-control"
+      variant="embedded"
       {...props}
     />
   );

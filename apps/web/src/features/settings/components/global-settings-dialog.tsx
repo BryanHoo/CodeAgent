@@ -196,6 +196,7 @@ export function GlobalSettingsDialog({
                         aria-controls={`settings-panel-${section.id}`}
                         aria-current={selected ? "page" : undefined}
                         className={`flex h-9 shrink-0 items-center gap-2 rounded-control px-2.5 text-left text-body-small font-medium transition-colors focus-visible:shadow-focus sm:w-full ${selected ? "bg-primary text-primary-foreground shadow-control" : "text-muted-foreground hover:bg-control-hover hover:text-foreground"}`}
+                        contentAlign="start"
                         key={section.id}
                         onClick={() => {
                           setActiveSection(section.id);
@@ -209,7 +210,6 @@ export function GlobalSettingsDialog({
                   })}
               </nav>
             </aside>
-
             <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
               <GlobalSettingsAbout
                 activeSection={activeSection}

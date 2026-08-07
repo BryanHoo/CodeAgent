@@ -1,17 +1,39 @@
+import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 
 import { cn } from "../lib/utils.js";
 
-function Input({ className, type, ...props }: ComponentProps<"input">) {
+const inputVariants = cva(
+  "min-w-0 text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+  {
+    defaultVariants: {
+      variant: "default",
+    },
+    variants: {
+      variant: {
+        compact:
+          "h-8 w-full rounded-control bg-raised px-2.5 text-label shadow-sm focus-visible:shadow-focus",
+        default: "h-9 w-full rounded-control bg-control px-3 text-body focus-visible:shadow-focus",
+        embedded: "flex-1 bg-transparent",
+        outline:
+          "h-11 w-full rounded-control border border-separator-strong bg-panel px-3 text-body-small focus-visible:border-primary focus-visible:shadow-focus sm:h-9",
+      },
+    },
+  },
+);
+
+type InputProps = ComponentProps<"input"> & VariantProps<typeof inputVariants>;
+
+function Input({ className, type, variant = "default", ...props }: InputProps) {
   return (
     <input
-      // Input 只统一结构与属性透传，避免默认尺寸影响 checkbox、hidden 和既有表单布局。
-      className={cn(className)}
+      className={cn(inputVariants({ className, variant }))}
       data-slot="input"
+      data-variant={variant}
       type={type}
       {...props}
     />
   );
 }
 
-export { Input };
+export { Input, inputVariants, type InputProps };

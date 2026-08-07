@@ -57,6 +57,10 @@ test("edits global defaults in a dialog without overriding task settings", async
   const dialog = page.getByRole("dialog", { name: "全局设置" });
   await expect(dialog).toBeVisible();
   await expect(page).toHaveURL(workbenchUrl);
+  await expect(dialog.getByRole("button", { name: "外观" })).toHaveCSS(
+    "justify-content",
+    "flex-start",
+  );
 
   await dialog.getByRole("button", { name: "外观" }).click();
   await dialog.getByRole("button", { name: "深色模式" }).click();
@@ -317,6 +321,9 @@ test("provides reusable design tokens for light and dark themes", async ({ page 
         mutedInk: resolveColor("--ui-color-text-muted"),
         panel: resolveColor("--ui-color-panel"),
         sidebar: resolveColor("--ui-color-sidebar"),
+        semanticAccent: resolveColor("--color-accent"),
+        semanticBrand: resolveColor("--color-brand"),
+        semanticPrimary: resolveColor("--color-primary"),
         spaceUnit: styles.getPropertyValue("--ui-space-unit").trim(),
         subtleInk: resolveColor("--ui-color-text-subtle"),
         surface: styles.backgroundColor,
@@ -336,6 +343,9 @@ test("provides reusable design tokens for light and dark themes", async ({ page 
     mutedInk: "rgba(17, 17, 17, 0.72)",
     panel: "rgb(255, 255, 255)",
     sidebar: "rgb(255, 255, 255)",
+    semanticAccent: "rgba(23, 23, 23, 0.075)",
+    semanticBrand: "rgb(0, 106, 255)",
+    semanticPrimary: "rgb(0, 106, 255)",
     spaceUnit: expect.stringMatching(/^0?\.25rem$/),
     subtleInk: "rgba(17, 17, 17, 0.52)",
     surface: "rgb(255, 255, 255)",
@@ -354,6 +364,9 @@ test("provides reusable design tokens for light and dark themes", async ({ page 
     mutedInk: "rgba(255, 255, 255, 0.68)",
     panel: "rgb(24, 24, 24)",
     sidebar: "rgb(24, 24, 24)",
+    semanticAccent: "rgba(255, 255, 255, 0.1)",
+    semanticBrand: "rgb(51, 156, 255)",
+    semanticPrimary: "rgb(51, 156, 255)",
     spaceUnit: expect.stringMatching(/^0?\.25rem$/),
     subtleInk: "rgba(255, 255, 255, 0.5)",
     surface: "rgb(24, 24, 24)",

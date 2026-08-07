@@ -68,6 +68,7 @@ describe("ProviderConnectionPanelView", () => {
     expect(markup).toContain('type="url"');
     expect(markup).toContain('type="password"');
     expect(markup).toContain('autoComplete="new-password"');
+    expect(markup.match(/data-variant="outline"/gu)).toHaveLength(2);
     expect(markup).toContain("重新连接");
     expect(markup).toContain("已连接");
   });

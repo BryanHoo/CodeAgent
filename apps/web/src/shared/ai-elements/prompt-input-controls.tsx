@@ -259,9 +259,10 @@ export function PromptInputButton({
 }: PromptInputButtonProps) {
   return (
     <Button
-      variant="ghost"
-      className={`inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-label text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 max-workbench:h-11 max-workbench:min-w-11 ${className}`}
+      className={`max-workbench:min-w-11 ${className}`}
+      size="sm"
       type={type}
+      variant="ghost"
       {...props}
     >
       {children ?? <Plus className="size-3.5" aria-hidden="true" />}
@@ -294,12 +295,7 @@ export function PromptInputSubmit({
   const pending = status === "reconnecting" || status === "submitting";
 
   return (
-    <Button
-      variant="ghost"
-      className={`grid size-8 shrink-0 place-items-center rounded-pill bg-foreground text-raised transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:bg-control-active disabled:text-muted-foreground max-workbench:size-11 ${className}`}
-      type={type}
-      {...props}
-    >
+    <Button className={className} size="icon-compact" type={type} variant="inverse" {...props}>
       {children ??
         (status === "running" ? (
           <Square className="size-3.5 fill-current" aria-hidden="true" />

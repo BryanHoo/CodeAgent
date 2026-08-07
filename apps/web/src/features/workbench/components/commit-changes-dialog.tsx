@@ -261,7 +261,7 @@ export function CommitChangesDialog({
                 <InputGroup className="h-8 gap-1 rounded-surface border border-separator-strong bg-panel shadow-sm focus-within:border-primary focus-within:shadow-focus max-workbench:h-11">
                   <InputGroupTextarea
                     aria-label={t("commit.commitMessage")}
-                    className="h-full min-h-0 resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-label leading-5 outline-none disabled:opacity-60 max-workbench:py-3"
+                    className="h-full min-h-0 overflow-y-auto px-2 py-1.5 text-label leading-5 max-workbench:py-3"
                     disabled={isPending || result !== null}
                     id="commit-message"
                     onChange={(event) => {

@@ -403,7 +403,7 @@ function McpServerRow({ server }: Readonly<{ server: AgentMcpServer }>) {
   ];
   const statusIcon =
     server.status === "ready" ? (
-      <CheckCircle2 aria-hidden="true" className="size-3.5 text-accent" />
+      <CheckCircle2 aria-hidden="true" className="size-3.5 text-primary" />
     ) : server.status === "starting" ? (
       <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin text-muted-foreground" />
     ) : server.status === "failed" ? (

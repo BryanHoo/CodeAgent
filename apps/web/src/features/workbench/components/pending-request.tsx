@@ -252,7 +252,8 @@ function UserInputRequestCard({
                     htmlFor={`${question.id}-option-${String(optionIndex)}`}
                     key={option.label}
                   >
-                    <Input
+                    <input
+                      className="mt-0.5 size-4 shrink-0 accent-primary"
                       checked={answers[question.id] === option.label}
                       disabled={controlsDisabled}
                       id={`${question.id}-option-${String(optionIndex)}`}
@@ -272,7 +273,6 @@ function UserInputRequestCard({
                 {question.isOther ? (
                   <Input
                     aria-label={t("pending.otherAnswer", { header: question.header })}
-                    className="h-8 w-full rounded-control bg-raised px-2.5 text-label text-foreground shadow-sm outline-none"
                     disabled={controlsDisabled}
                     onChange={(event) => {
                       setAnswers((value) => ({ ...value, [question.id]: event.target.value }));
@@ -284,6 +284,7 @@ function UserInputRequestCard({
                         ? ""
                         : (answers[question.id] ?? "")
                     }
+                    variant="compact"
                   />
                 ) : null}
               </div>
@@ -308,13 +309,14 @@ function UserInputRequestCard({
             ) : (
               <Input
                 aria-label={question.prompt}
-                className="mt-2 h-8 w-full rounded-control bg-raised px-2.5 text-label text-foreground shadow-sm outline-none"
+                className="mt-2"
                 disabled={controlsDisabled}
                 onChange={(event) => {
                   setAnswers((value) => ({ ...value, [question.id]: event.target.value }));
                 }}
                 type={question.isSecret ? "password" : "text"}
                 value={answers[question.id] ?? ""}
+                variant="compact"
               />
             )}
           </fieldset>
@@ -329,11 +331,7 @@ function UserInputRequestCard({
         </p>
       )}
       <div className="mt-3 flex justify-end">
-        <Button
-          className="h-8 rounded-control px-3 text-label font-medium"
-          disabled={!canSubmit}
-          type="submit"
-        >
+        <Button disabled={!canSubmit} size="compact" type="submit">
           {t("pending.submitAnswers")}
         </Button>
       </div>

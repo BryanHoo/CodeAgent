@@ -146,7 +146,6 @@ export function FileTreeFolder({
         className={`group/file-tree-node flex min-h-7 w-full items-center gap-1 rounded-control px-1.5 text-left transition-colors hover:bg-control-hover ${isSelected ? "bg-control" : ""}`}
       >
         <Button
-          variant="ghost"
           aria-label={t(isExpanded ? "aiElements.folderCollapse" : "aiElements.folderExpand", {
             name,
           })}
@@ -154,7 +153,9 @@ export function FileTreeFolder({
           onClick={() => {
             togglePath(path);
           }}
+          size="embedded"
           type="button"
+          variant="embedded"
         >
           <ChevronRight
             aria-hidden="true"
@@ -162,10 +163,12 @@ export function FileTreeFolder({
           />
         </Button>
         <Button
-          variant="ghost"
           className="flex min-w-0 flex-1 items-center gap-1.5 text-left focus-visible:outline-none"
+          contentAlign="start"
           onClick={selectFolder}
+          size="embedded"
           type="button"
+          variant="embedded"
         >
           <FileTreeIcon>
             {isExpanded ? (

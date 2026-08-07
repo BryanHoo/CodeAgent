@@ -52,16 +52,29 @@ test("preserves the original sidebar control typography and dimensions", async (
         fontSize: style.fontSize,
         fontWeight: style.fontWeight,
         height: style.height,
+        justifyContent: style.justifyContent,
         width: style.width,
       };
     });
 
   await expect
     .poll(() => readControlStyle(sidebar.getByRole("button", { name: "切换项目 CodeAgent" })))
-    .toMatchObject({ display: "flex", fontSize: "13px", fontWeight: "550", height: "32px" });
+    .toMatchObject({
+      display: "flex",
+      fontSize: "13px",
+      fontWeight: "550",
+      height: "32px",
+      justifyContent: "flex-start",
+    });
   await expect
     .poll(() => readControlStyle(page.locator("#global-settings-trigger")))
-    .toMatchObject({ display: "flex", fontSize: "13px", fontWeight: "450", height: "36px" });
+    .toMatchObject({
+      display: "flex",
+      fontSize: "13px",
+      fontWeight: "450",
+      height: "36px",
+      justifyContent: "flex-start",
+    });
   await expect
     .poll(() => readControlStyle(sidebar.getByRole("button", { name: "添加项目" })))
     .toMatchObject({ display: "grid", height: "28px", width: "28px" });
@@ -838,11 +851,13 @@ test("keeps the compact mobile workbench inside the dynamic viewport", async ({ 
     page.getByRole("combobox", { name: "选择模型" }),
     page.getByRole("button", { name: "提交", exact: true }),
   ];
-  const touchControls = [
+  const touchButtons = [
     page.getByRole("button", { name: "展开项目侧栏" }),
     page.getByRole("button", { name: "展开上下文面板" }),
-    ...composerControls,
+    page.getByRole("button", { name: "添加图片或文件" }),
+    page.getByRole("button", { name: "提交", exact: true }),
   ];
+  const touchControls = [...touchButtons, ...composerControls.slice(1, 3)];
 
   // 最窄支持宽度必须同时保证页面边界、Composer 内部布局和触控尺寸。
   const composerOverflow = await composerFooter.evaluate(
@@ -855,6 +870,10 @@ test("keeps the compact mobile workbench inside the dynamic viewport", async ({ 
   for (const box of controlBoxes) {
     expect(box).not.toBeNull();
     expect(box?.height).toBeGreaterThanOrEqual(44);
+  }
+  for (const control of touchButtons) {
+    await expect(control).toHaveAttribute("data-size", /.+/u);
+    await expect(control).toHaveAttribute("data-variant", /.+/u);
   }
   const composerControlBoxes = await Promise.all(
     composerControls.map((control) => control.boundingBox()),

@@ -131,7 +131,7 @@ export function CodeBlockContent({
               <span
                 className={`block min-h-6 px-3 ${
                   showLineNumbers ? "grid grid-cols-[4rem_minmax(0,1fr)]" : ""
-                } ${highlighted ? "bg-accent-soft text-accent-strong" : ""}`}
+                } ${highlighted ? "bg-brand-soft text-brand-strong" : ""}`}
                 data-code-line={lineNumber}
                 data-highlighted={highlighted ? "true" : undefined}
                 key={lineNumber}

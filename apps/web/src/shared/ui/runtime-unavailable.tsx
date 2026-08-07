@@ -26,12 +26,7 @@ export function RuntimeUnavailable({ onRetry }: RuntimeUnavailableProps) {
             ns="common"
           />
         </p>
-        <Button
-          className="mx-auto mt-5 inline-flex h-9 items-center gap-2 rounded-control bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
-          onClick={onRetry}
-          type="button"
-          variant="ghost"
-        >
+        <Button className="mx-auto mt-5" onClick={onRetry} size="lg" type="button">
           <RefreshCw className="size-4" aria-hidden="true" />
           {t("actions.retry")}
         </Button>

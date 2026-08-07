@@ -42,7 +42,6 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "../../../shared/ui/dropdown-menu.js";
-import { Input } from "../../../shared/ui/input.js";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
 import {
   LARGE_PASTE_CHARACTER_THRESHOLD,
@@ -256,7 +255,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
         >
           <ComposerAttachments />
           <PromptInputBody>
-            <Input name="message" type="hidden" value={props.promptSubmissionText} />
+            <input name="message" type="hidden" value={props.promptSubmissionText} />
             <PromptSkillEditor
               aria-activedescendant={props.activeCommandItemId}
               aria-controls={props.commandMenuOpen ? props.commandMenuId : undefined}

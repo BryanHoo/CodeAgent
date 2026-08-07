@@ -193,9 +193,10 @@
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
   --color-subtle-foreground: var(--ui-color-text-subtle);
-  --color-accent: var(--ui-color-accent);
-  --color-accent-strong: var(--ui-color-accent-strong);
-  --color-accent-soft: var(--ui-color-accent-soft);
+  --color-accent: var(--accent);
+  --color-brand: var(--ui-color-accent);
+  --color-brand-strong: var(--ui-color-accent-strong);
+  --color-brand-soft: var(--ui-color-accent-soft);
   --color-diff-added: var(--ui-color-diff-added);
   --color-diff-removed: var(--ui-color-diff-removed);
   --color-warning: var(--ui-color-warning);

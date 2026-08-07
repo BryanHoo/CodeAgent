@@ -52,7 +52,7 @@ describe("PendingRequestCard", () => {
     expect(active).toContain("允许");
     expect(active).toContain("拒绝");
     expect(active).toMatch(/class="[^"]*bg-danger[^"]*"[^>]*>拒绝<\/button>/);
-    expect(active).toMatch(/class="[^"]*bg-accent[^"]*"[^>]*>允许<\/button>/);
+    expect(active).toMatch(/class="[^"]*bg-primary[^"]*"[^>]*>允许<\/button>/);
     expect(queued).toContain("等待处理前一项");
     expect(queued.match(/disabled/g)?.length).toBeGreaterThanOrEqual(2);
   });
@@ -123,10 +123,12 @@ describe("PendingRequestCard", () => {
     );
 
     expect(markup).toContain('type="radio"');
+    expect(markup).not.toMatch(/data-slot="input"[^>]*type="radio"/u);
     expect(markup).toContain('aria-pressed="false"');
     expect(markup).toContain('type="text"');
+    expect(markup).toContain('data-variant="compact"');
     expect(markup).toContain("提交回答");
-    expect(markup).toMatch(/class="[^"]*bg-accent[^"]*"[^>]*>提交回答<\/button>/);
+    expect(markup).toMatch(/class="[^"]*bg-primary[^"]*"[^>]*>提交回答<\/button>/);
   });
 
   it("keeps expired requests visible without interactive controls", () => {

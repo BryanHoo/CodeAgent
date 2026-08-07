@@ -148,6 +148,7 @@ export function SidebarSettingsButton({
         version: appVersion,
       })}
       className="flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+      contentAlign="start"
       id="global-settings-trigger"
       onClick={onOpen}
       type="button"

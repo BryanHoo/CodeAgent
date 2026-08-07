@@ -109,7 +109,7 @@ function MarkdownLink({ children, className = "", href, node, ...props }: Markdo
       return (
         <Button
           variant="ghost"
-          className={`markdown-file-reference cursor-pointer text-primary underline decoration-transparent underline-offset-2 transition-colors hover:text-accent-strong hover:decoration-current ${className}`}
+          className={`markdown-file-reference cursor-pointer text-primary underline decoration-transparent underline-offset-2 transition-colors hover:text-brand-strong hover:decoration-current ${className}`}
           data-file-reference="true"
           onClick={() => {
             onOpenFileReference({
@@ -139,7 +139,7 @@ function MarkdownLink({ children, className = "", href, node, ...props }: Markdo
 
   return (
     <a
-      className={`font-medium text-primary underline decoration-current/35 underline-offset-2 transition-colors hover:text-accent-strong ${className}`}
+      className={`font-medium text-primary underline decoration-current/35 underline-offset-2 transition-colors hover:text-brand-strong ${className}`}
       href={href}
       rel="noopener noreferrer"
       target="_blank"
