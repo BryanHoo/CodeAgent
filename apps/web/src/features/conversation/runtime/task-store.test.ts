@@ -1106,6 +1106,72 @@ describe("task store", () => {
     expect(store.getState().getItem(submittedUserItemId)).toBeUndefined();
   });
 
+  it("merges a realtime expanded skill into the provider user message", () => {
+    const submittedUserItemId = "submitted-user-turn-running";
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({
+        turns: [
+          {
+            completedAt: null,
+            error: null,
+            id: "turn-running",
+            items: [
+              {
+                id: submittedUserItemId,
+                role: "user",
+                skills: [{ name: "superwork:superwork-init" }],
+                text: "",
+                type: "message",
+              },
+            ],
+            startedAt: timestamp,
+            status: "running",
+          },
+        ],
+      }),
+    );
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        itemId: "provider-user-item",
+        payload: {
+          item: {
+            id: "provider-user-item",
+            role: "user",
+            text: "$superwork:superwork-init",
+            type: "message",
+          },
+        },
+        turnId: "turn-running",
+        type: "item.completed",
+      },
+      {
+        ...eventEnvelope(12),
+        itemId: "provider-skill-item",
+        payload: {
+          item: {
+            id: "provider-skill-item",
+            role: "user",
+            skills: [{ name: "superwork:superwork-init" }],
+            text: "",
+            type: "message",
+          },
+        },
+        turnId: "turn-running",
+        type: "item.completed",
+      },
+    ]);
+
+    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual(["provider-user-item"]);
+    expect(store.getState().getItem("provider-user-item")).toMatchObject({
+      skills: [{ name: "superwork:superwork-init" }],
+      text: "",
+    });
+    expect(store.getState().getItem("provider-skill-item")).toBeUndefined();
+  });
+
   it("tracks usage and pending request lifecycle without reordering requests", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
     const pendingRequest = createPendingRequest();

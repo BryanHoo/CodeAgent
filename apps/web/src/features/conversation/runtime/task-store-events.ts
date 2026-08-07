@@ -64,6 +64,37 @@ function createDeltaItem(event: Extract<AgentEvent, { itemId: string }>): AgentI
   }
 }
 
+function mergeRealtimeExpandedSkill(
+  previousItem: AgentItem | undefined,
+  expandedItem: AgentItem,
+): AgentItem | undefined {
+  if (
+    previousItem?.type !== "message" ||
+    previousItem.role !== "user" ||
+    expandedItem.type !== "message" ||
+    expandedItem.role !== "user" ||
+    expandedItem.text.length > 0 ||
+    (expandedItem.skills?.length ?? 0) === 0
+  ) {
+    return undefined;
+  }
+
+  const skillNames = new Set((previousItem.skills ?? []).map((skill) => skill.name));
+  const skills = [...(previousItem.skills ?? [])];
+  for (const skill of expandedItem.skills ?? []) {
+    if (!skillNames.has(skill.name)) {
+      skillNames.add(skill.name);
+      skills.push(skill);
+    }
+  }
+  const skillIndexText = skills.map((skill) => `$${skill.name}`).join(" ");
+  return {
+    ...previousItem,
+    skills,
+    text: previousItem.text.trim() === skillIndexText ? "" : previousItem.text,
+  };
+}
+
 function replaceTurnItems(
   state: TaskStoreState,
   turnId: string,
@@ -254,6 +285,22 @@ export function applyAcceptedEvent(
         throw new Error(`Agent item ${event.itemId} belongs to another turn`);
       }
       const currentItemIds = state.itemIdsByTurnId[event.turnId] ?? [];
+      const previousItemId = currentItemIds.at(-1);
+      const previousItemStore =
+        previousItemId === undefined ? undefined : state.itemStoresById.get(previousItemId);
+      const mergedExpandedSkill = mergeRealtimeExpandedSkill(
+        previousItemStore?.read(),
+        event.payload.item,
+      );
+      if (mergedExpandedSkill !== undefined && previousItemStore !== undefined) {
+        // Codex 将 Skill 展开为紧邻用户项；实时链路原位合并，避免产生第二个用户气泡。
+        previousItemStore.replace(mergedExpandedSkill);
+        changedItemStores.add(previousItemStore);
+        return {
+          checkpoint,
+          snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
+        };
+      }
       const submittedUserItemId = `submitted-user-${event.turnId}`;
       const replacesSubmittedUserItem =
         event.payload.item.type === "message" &&

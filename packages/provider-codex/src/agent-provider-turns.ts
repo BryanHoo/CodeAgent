@@ -211,7 +211,15 @@ export abstract class CodexAgentProviderTurns extends CodexAgentProviderBase {
       ],
       type: "text" as const,
     }));
+    const skillIndexText =
+      input.text.length === 0 && skills.length > 0
+        ? skills.map((skill) => `$${skill.name}`).join(" ")
+        : undefined;
     const codexInput = [
+      // Codex 只会索引文本输入；为纯 Skill Turn 补充可恢复的命令文本，展示层会与 Skill 合并。
+      ...(skillIndexText === undefined
+        ? []
+        : [{ text: skillIndexText, text_elements: [], type: "text" as const }]),
       ...skills,
       ...(input.text.length === 0
         ? []

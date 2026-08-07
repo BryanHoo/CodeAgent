@@ -1877,6 +1877,11 @@ describe("CodexAgentProvider", () => {
           effort: "high",
           input: [
             {
+              text: "$review-security $documentation-writer",
+              text_elements: [],
+              type: "text",
+            },
+            {
               name: "review-security",
               path: "/Users/test/.codex/skills/review-security/SKILL.md",
               type: "skill",
@@ -3759,10 +3764,7 @@ describe("CodexAgentProvider", () => {
                 {
                   content: [
                     {
-                      text: [
-                        "[$review-security](/Users/test/.codex/skills/review-security/SKILL.md)",
-                        "读取历史",
-                      ].join(" "),
+                      text: "$review-security",
                       type: "text",
                     },
                   ],
@@ -3861,7 +3863,7 @@ describe("CodexAgentProvider", () => {
               id: "i1",
               role: "user",
               skills: [{ name: "review-security" }],
-              text: "读取历史",
+              text: "",
               type: "message",
             },
             { id: "i2", role: "assistant", text: "已读取", type: "message" },

@@ -172,9 +172,12 @@ export function mergeExpandedSkillMessages(items: readonly AgentItem[]): AgentIt
           mergedSkills.push(skill);
         }
       }
+      const skillIndexText = mergedSkills.map((skill) => `$${skill.name}`).join(" ");
       mergedItems[mergedItems.length - 1] = {
         ...previousItem,
         skills: mergedSkills,
+        // Provider 为 Skill-only Turn 写入索引文本；恢复历史时只保留结构化 Skill 展示。
+        text: previousItem.text.trim() === skillIndexText ? "" : previousItem.text,
       };
       continue;
     }
