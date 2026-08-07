@@ -21,6 +21,7 @@
 
 - 所有改动运行 `pnpm check`。
 - `pnpm check` 必须执行 `pnpm audit --prod --audit-level moderate`，阻止中危及以上的已知生产依赖漏洞进入 CI 与发布流程。
+- `pnpm check` 和 CI 必须执行 `pnpm run codex:schema:check`，使用锁定的 `@openai/codex` 及 `--experimental` 生成 TypeScript 与 JSON Schema，并与 `schemas/codex-app-server/<version>.schema-baseline.json` 比较；升级 Codex 必须显式运行 `pnpm run codex:schema:update` 并审查差异。
 - 涉及浏览器装配或用户流程时运行 `pnpm test:e2e`。
 - 涉及发布结构时确认 `pnpm run package:check` 通过。
 - CI 在 Ubuntu 与 Windows 完整门禁之外，必须保留 macOS 轻量 smoke，覆盖 Web 目录浏览、浏览器与宿主应用打开以及 Darwin Codex 二进制解析。

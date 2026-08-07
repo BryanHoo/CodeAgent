@@ -33,6 +33,9 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      # 显式展示 Codex 协议漂移；pnpm check 继续保留同一门禁作为本地统一入口。
+      - name: Verify Codex Schema baseline
+        run: pnpm run codex:schema:check
       - name: Run quality gates
         run: pnpm check
       # 复用质量门禁生成的 production 产物，单独展示 Bundle 预算结果且不重复构建。

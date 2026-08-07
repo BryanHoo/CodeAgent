@@ -56,9 +56,12 @@ protocol <- core <- provider-codex <- server <- root CLI
 4. Vitest 单元测试。
 5. TypeScript Project References 类型检查。
 6. Node 与 Web 生产构建。
-7. npm 发布内容校验。
+7. Codex App Server TypeScript 与 JSON Schema 漂移校验。
+8. npm 发布内容校验。
 
 Playwright 独立执行浏览器装配冒烟测试，后续业务 E2E 不与单元测试混跑。
+
+Codex Schema 基线按锁定版本保存在 `schemas/codex-app-server/<version>.schema-baseline.json`。`pnpm run codex:schema:check` 使用当前 `@openai/codex` 和 `--experimental` 重新生成两类协议产物并比较路径与内容摘要；升级 Codex 时必须运行 `pnpm run codex:schema:update`，审查基线差异并同步 Adapter 契约测试。
 
 ## 6. 配置来源
 
