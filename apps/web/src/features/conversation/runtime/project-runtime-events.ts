@@ -1,6 +1,7 @@
 import type { AgentEventConnectionState } from "@code-agent/client";
 import type { AgentEvent, AgentTaskSnapshotResponse, EventCheckpoint } from "@code-agent/protocol";
 import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
+import { notifyBrowserSessionWebSocketDisconnected } from "../../../shared/browser-session-events.js";
 import { hasActiveProjectTask, type TaskActivityMap } from "./task-activity.js";
 import type { TaskStore } from "./task-store.js";
 
@@ -194,6 +195,8 @@ export class ProjectEventRuntime {
         this.#connectionState = state;
         if (state === "reconnecting") {
           this.#snapshotRecoveryRequired = true;
+          // 长连接异常通常先于重连失败暴露服务重启，立即核对当前浏览器会话。
+          notifyBrowserSessionWebSocketDisconnected();
         }
         const visibleState =
           state === "closed" && this.#snapshotRecoveryRequired ? "reconnecting" : state;
