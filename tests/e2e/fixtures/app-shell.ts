@@ -267,7 +267,7 @@ export const skills = [
   },
 ];
 
-export const mcpServers = ["fast-context", "chrome-devtools"].map((name) => ({
+export const mcpServers = ["context7", "chrome-devtools"].map((name) => ({
   authStatus: "unsupported" as const,
   description: null,
   error: null,

@@ -768,7 +768,7 @@ test("renders task-readable MCP servers and sources in inspector", async ({ page
   const mcp = inspector.getByRole("region", { name: "MCP" });
   const sources = inspector.getByRole("region", { name: "来源" });
 
-  await expect(mcp.getByText("fast-context", { exact: true })).toBeVisible();
+  await expect(mcp.getByText("context7", { exact: true })).toBeVisible();
   await expect(mcp.getByText("chrome-devtools", { exact: true })).toBeVisible();
   await expect(inspector.getByRole("region", { name: "环境" })).toHaveCount(0);
   await expect(inspector.getByText("gpt-5.6-sol", { exact: true })).toHaveCount(0);

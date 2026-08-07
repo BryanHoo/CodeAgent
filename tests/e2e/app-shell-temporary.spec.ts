@@ -46,7 +46,7 @@ test("creates and restores a temporary task without exposing its internal projec
   const inspector = page.getByRole("complementary", { name: "运行环境" });
   await expect(inspector).toBeVisible();
   await expect(inspector.getByRole("tablist")).toHaveCount(0);
-  await expect(inspector.getByRole("region", { name: "MCP" })).toContainText("fast-context");
+  await expect(inspector.getByRole("region", { name: "MCP" })).toContainText("context7");
   await expect(page.getByText("temporary-workspace")).toHaveCount(0);
 
   await page.reload();

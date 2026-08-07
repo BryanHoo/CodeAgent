@@ -284,13 +284,13 @@ function scheduleOperationStatusTurn(threadId, turnId) {
     type: "commandExecution",
   };
   const runningTool = {
-    arguments: { query: "live shimmer continuity" },
+    arguments: { libraryId: "/openai/codex", query: "live shimmer continuity" },
     error: null,
     id: `${turnId}-status-tool`,
     result: null,
-    server: "fast-context",
+    server: "context7",
     status: "inProgress",
-    tool: "search",
+    tool: "query-docs",
     type: "mcpToolCall",
   };
 
@@ -691,6 +691,26 @@ input.on("line", (line) => {
     return;
   }
 
+  if (message.method === "thread/resume") {
+    const threadId = message.params?.threadId;
+    // 共享桩按真实协议恢复已持久化 Thread，供后续任务级 RPC 继续使用。
+    const thread =
+      realtimeScenario && threadId === "task-realtime"
+        ? parentRealtimeThread
+        : realtimeScenario && threadId === "frontend-analysis"
+          ? subagentThread
+          : actionThreads.get(threadId);
+    if (thread === undefined) {
+      send({
+        error: { code: -32600, message: `thread not loaded: ${String(threadId)}` },
+        id: message.id,
+      });
+      return;
+    }
+    send({ id: message.id, result: { thread } });
+    return;
+  }
+
   if (message.method === "mcpServerStatus/list") {
     send({
       id: message.id,
@@ -698,11 +718,11 @@ input.on("line", (line) => {
         data: [
           {
             authStatus: "notLoggedIn",
-            name: "fast-context",
+            name: "context7",
             resourceTemplates: [],
             resources: [],
             serverInfo: null,
-            tools: {},
+            tools: { "query-docs": {}, "resolve-library-id": {} },
           },
         ],
         nextCursor: null,

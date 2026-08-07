@@ -794,7 +794,7 @@ test("streams Fake App Server notifications into the Timeline", async ({ page })
   await expect(page.getByRole("tab", { name: "项目" })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("tab", { name: "上下文" }).click();
   await expect(
-    page.getByRole("region", { name: "MCP" }).getByText("fast-context", { exact: true }),
+    page.getByRole("region", { name: "MCP" }).getByText("context7", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "查看子代理 frontend_analysis 的输出" }),
@@ -1031,7 +1031,7 @@ test("shows the latest raw Codex operation throughout a running turn", async ({ 
     startTime: Number(node.getAnimations()[0]?.startTime ?? 0),
   }));
 
-  await expect(page.getByText("正在运行 fast-context/search", { exact: true })).toBeVisible();
+  await expect(page.getByText("正在运行 context7/query-docs", { exact: true })).toBeVisible();
   const retainedShimmer = await runningShimmer.evaluate(
     (node, initialNode) => node === initialNode,
     initialShimmer,
