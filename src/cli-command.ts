@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import type {
   AgentRuntimeProvider,
+  AgentProviderConnectionRepository,
   AgentSettingsRepository,
   ProjectRepository,
 } from "@code-agent/core";
@@ -51,7 +52,8 @@ interface CliManagedServer {
   waitForBrowserConnection: (timeoutMs: number) => Promise<boolean>;
 }
 
-interface CliManagedStateRepository extends ProjectRepository, AgentSettingsRepository {
+interface CliManagedStateRepository
+  extends ProjectRepository, AgentSettingsRepository, AgentProviderConnectionRepository {
   close: () => Promise<void>;
   diagnose: () => Promise<SqliteDatabaseDiagnostics>;
 }
@@ -64,6 +66,7 @@ interface CreateServerInput {
   access?: CodeAgentAccessOptions;
   installAppUpdate: ReturnType<typeof createAppUpdateService>["install"];
   projectRepository: ProjectRepository;
+  providerConnectionRepository: AgentProviderConnectionRepository;
   provider: AgentRuntimeProvider;
   readAppInfo: ReturnType<typeof createAppUpdateService>["read"];
   settingsRepository: AgentSettingsRepository;
@@ -377,6 +380,7 @@ async function runStart(
     server = await dependencies.createServer({
       ...(access === undefined ? {} : { access }),
       projectRepository: stateRepository,
+      providerConnectionRepository: stateRepository,
       provider,
       installAppUpdate: appUpdateService.install,
       readAppInfo: appUpdateService.read,

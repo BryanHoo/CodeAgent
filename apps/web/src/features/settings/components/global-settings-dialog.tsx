@@ -38,6 +38,7 @@ import {
 } from "./global-settings-model.js";
 import { GlobalSettingsAbout } from "./global-settings-about.js";
 import { GlobalSettingsAccess } from "./global-settings-access.js";
+import { ProviderConnectionPanel } from "../../provider-connection/components/provider-connection-panel.js";
 
 export { resolveGlobalSettingsModel } from "./global-settings-model.js";
 
@@ -221,7 +222,12 @@ export function GlobalSettingsDialog({
                 updateError={updateError}
               />
 
-              {activeSection === "about" ? null : error !== null ? (
+              {activeSection === "provider" ? (
+                <section id="settings-panel-provider">
+                  <h3 className="mb-4 text-heading font-semibold">{t("sections.provider")}</h3>
+                  <ProviderConnectionPanel />
+                </section>
+              ) : activeSection === "about" ? null : error !== null ? (
                 <div
                   className="flex min-h-40 flex-col items-center justify-center gap-3"
                   role="alert"
@@ -475,15 +481,17 @@ export function GlobalSettingsDialog({
               onClick={close}
               type="button"
             >
-              {t("actions.cancel")}
+              {activeSection === "provider" ? t("actions.close") : t("actions.cancel")}
             </Button>
-            <Button
-              disabled={isPending || isSaving || settings === undefined}
-              type="submit"
-              variant="default"
-            >
-              {isSaving ? t("actions.saving") : t("actions.save")}
-            </Button>
+            {activeSection === "provider" ? null : (
+              <Button
+                disabled={isPending || isSaving || settings === undefined}
+                type="submit"
+                variant="default"
+              >
+                {isSaving ? t("actions.saving") : t("actions.save")}
+              </Button>
+            )}
           </footer>
         </form>
       </DialogContent>

@@ -12,7 +12,8 @@ CodeAgent 运行在你的电脑上，既可以本机使用，也可以在可信�
 - 按项目管理任务，支持搜索、固定、重命名和归档
 - 无需添加项目即可使用临时任务
 - 添加图片或文件作为上下文，并使用已配置的 Skills 和 MCP
-- 选择模型、思考量、审批方式和文件访问范围
+- 使用 ChatGPT 官方登录或连接自定义 OpenAI-compatible API
+- 读取当前服务的模型列表，并选择模型、思考量、审批方式和文件访问范围
 - 查看项目文件、代码变更、当前分支和 Git 历史
 - 发起代码审查，生成提交信息，并完成提交或推送
 - 在手机、平板或其他电脑上通过可信局域网访问
@@ -24,12 +25,6 @@ CodeAgent 运行在你的电脑上，既可以本机使用，也可以在可信�
 - Node.js 24 或更高版本
 - 官方 Codex CLI
 - Chrome/Chromium 116+、Firefox 124+ 或 Safari 17.4+
-
-首次使用前，在终端登录 Codex：
-
-```bash
-codex login
-```
 
 ## 快速开始
 
@@ -46,6 +41,8 @@ http://127.0.0.1:3210
 ```
 
 运行 CodeAgent 的终端需要保持打开。完成使用后，在终端按 `Ctrl+C` 停止。
+
+首次打开时，在页面中选择 ChatGPT 官方登录，或填写自定义 API 的 Base URL 和可选 API key。自定义服务必须兼容 OpenAI Responses API，并在 `<base-url>/models` 提供模型列表。API key 由 Codex 凭证系统管理，CodeAgent 的本地数据库只保存连接模式、Base URL 和已验证的模型目录。
 
 ### 全局安装
 
@@ -118,13 +115,7 @@ npm install --global @bryanhu/code-agent@latest
 
 ### 提示 Codex 不可用或需要登录
 
-在运行 CodeAgent 的电脑上执行：
-
-```bash
-codex login
-```
-
-完成登录后回到浏览器重试。如果使用了自定义 Codex 配置目录，请确保 Codex CLI 与 CodeAgent 使用同一个目录。
+回到页面中的模型服务连接界面重新登录，或在“设置 > 模型服务”检查自定义 API。自定义服务需要支持 Responses API 和 `GET /models`；确认 Base URL 已包含正确的 API 版本路径。
 
 ### 页面没有自动打开
 

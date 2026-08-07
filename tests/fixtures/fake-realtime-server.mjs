@@ -50,9 +50,34 @@ const temporaryProject = {
 };
 const provider = createCodexRuntimeProvider({ client: runtime.client });
 let globalSettings;
+let providerConnection;
 const projectDefaults = new Map();
 const taskSettings = new Map();
 const pairingCode = process.env["CODE_AGENT_E2E_PAIRING_CODE"];
+const stateRepository = {
+  // E2E 只持久化进程内非敏感状态，凭证仍由 Fake App Server Account API 持有。
+  readGlobalSettings: () => Promise.resolve(globalSettings),
+  readProjectDefaults: (projectId) => Promise.resolve(projectDefaults.get(projectId)),
+  readProviderConnection: () => Promise.resolve(providerConnection),
+  readTaskSettings: (projectId, taskId) =>
+    Promise.resolve(taskSettings.get(`${projectId}:${taskId}`)),
+  writeProjectDefaults: (projectId, settings) => {
+    projectDefaults.set(projectId, settings);
+    return Promise.resolve(settings);
+  },
+  writeGlobalSettings: (settings) => {
+    globalSettings = settings;
+    return Promise.resolve(settings);
+  },
+  writeProviderConnection: (record) => {
+    providerConnection = record;
+    return Promise.resolve(record);
+  },
+  writeTaskSettings: (projectId, taskId, settings) => {
+    taskSettings.set(`${projectId}:${taskId}`, settings);
+    return Promise.resolve(settings);
+  },
+};
 const server = await createCodeAgentServer({
   ...(pairingCode === undefined
     ? {}
@@ -73,26 +98,9 @@ const server = await createCodeAgentServer({
     rename: () => Promise.resolve(undefined),
     reorder: () => Promise.resolve([project]),
   },
+  providerConnectionRepository: stateRepository,
   provider,
-  settingsRepository: {
-    // 保持真实服务的全局设置读写契约，确保运行时回退链可正常执行。
-    readGlobalSettings: () => Promise.resolve(globalSettings),
-    readProjectDefaults: (projectId) => Promise.resolve(projectDefaults.get(projectId)),
-    readTaskSettings: (projectId, taskId) =>
-      Promise.resolve(taskSettings.get(`${projectId}:${taskId}`)),
-    writeProjectDefaults: (projectId, settings) => {
-      projectDefaults.set(projectId, settings);
-      return Promise.resolve(settings);
-    },
-    writeGlobalSettings: (settings) => {
-      globalSettings = settings;
-      return Promise.resolve(settings);
-    },
-    writeTaskSettings: (projectId, taskId, settings) => {
-      taskSettings.set(`${projectId}:${taskId}`, settings);
-      return Promise.resolve(settings);
-    },
-  },
+  settingsRepository: stateRepository,
   staticRoot,
 });
 

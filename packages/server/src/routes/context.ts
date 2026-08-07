@@ -1,5 +1,6 @@
 import type {
   AgentProvider,
+  AgentProviderConnectionRepository,
   AgentProviderTurnInput,
   AgentRuntimeProvider,
   AgentSettingsRepository,
@@ -124,12 +125,16 @@ export interface ServerRouteContext {
   readonly installAppUpdate: (version: string) => Promise<InstallAppUpdateResponse>;
   readonly listModels: () => Promise<readonly AgentModel[]>;
   readonly maximumAttachmentBytes: (kind: AgentAttachmentKind) => number;
-  readonly modelCatalogCache: Readonly<{ read: () => Promise<AgentModelPage> }>;
+  readonly modelCatalogCache: Readonly<{
+    clear: () => void;
+    read: () => Promise<AgentModelPage>;
+  }>;
   readonly multipartEnvelopeBytes: number;
   readonly projectOpenService: ProjectOpenService;
   readonly projectContexts: Map<string, ProjectRuntimeContext>;
   readonly projectRepository: ProjectRepository;
   readonly provider: AgentRuntimeProvider;
+  readonly providerConnectionRepository: AgentProviderConnectionRepository;
   readonly readEffectiveGlobalSettings: (
     models?: readonly AgentModel[],
   ) => Promise<AgentGlobalSettings>;

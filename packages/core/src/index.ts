@@ -16,6 +16,7 @@ export {
   type StartAgentTaskOptions,
 } from "./agent-provider.js";
 export {
+  type AgentProviderConnectionRepository,
   type AgentSettingsRepository,
   type ProjectRepository,
   type RegisterProjectInput,

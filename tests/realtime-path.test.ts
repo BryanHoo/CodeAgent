@@ -6,6 +6,7 @@ import { CodeAgentClient } from "@code-agent/client";
 import type {
   AgentEvent,
   AgentGlobalSettings,
+  AgentProviderConnectionRecord,
   AgentProjectDefaults,
   AgentTaskSettings,
 } from "@code-agent/protocol";
@@ -82,8 +83,38 @@ async function startFakeAppServer(scenario: string): Promise<CodexAppServerProce
 
 function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvider>) {
   let globalSettings: AgentGlobalSettings | undefined;
+  let providerConnection: AgentProviderConnectionRecord | undefined;
   const projectDefaults = new Map<string, AgentProjectDefaults>();
   const taskSettings = new Map<string, AgentTaskSettings>();
+
+  const stateRepository = {
+    readGlobalSettings: () => Promise.resolve(globalSettings),
+    readProjectDefaults: (projectId: string) => Promise.resolve(projectDefaults.get(projectId)),
+    readProviderConnection: () => Promise.resolve(providerConnection),
+    readTaskSettings: (projectId: string, taskId: string) =>
+      Promise.resolve(taskSettings.get(`${projectId}:${taskId}`)),
+    writeGlobalSettings: (settings: AgentGlobalSettings) => {
+      globalSettings = settings;
+      return Promise.resolve(settings);
+    },
+    writeProjectDefaults: (projectId: string, settings: AgentProjectDefaults) => {
+      const defaults = {
+        model: settings.model,
+        reasoningEffort: settings.reasoningEffort,
+        sandboxMode: settings.sandboxMode,
+      };
+      projectDefaults.set(projectId, defaults);
+      return Promise.resolve(defaults);
+    },
+    writeProviderConnection: (record: AgentProviderConnectionRecord) => {
+      providerConnection = record;
+      return Promise.resolve(record);
+    },
+    writeTaskSettings: (projectId: string, taskId: string, settings: AgentTaskSettings) => {
+      taskSettings.set(`${projectId}:${taskId}`, settings);
+      return Promise.resolve(settings);
+    },
+  };
 
   return {
     installAppUpdate: () => Promise.reject(new Error("No update available")),
@@ -96,6 +127,7 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
       rename: () => Promise.resolve(undefined),
       reorder: () => Promise.resolve([project]),
     },
+    providerConnectionRepository: stateRepository,
     provider,
     readAppInfo: () =>
       Promise.resolve({
@@ -105,29 +137,7 @@ function createServerOptions(provider: ReturnType<typeof createCodexRuntimeProvi
         status: "current" as const,
         updateAvailable: false,
       }),
-    settingsRepository: {
-      readGlobalSettings: () => Promise.resolve(globalSettings),
-      readProjectDefaults: (projectId: string) => Promise.resolve(projectDefaults.get(projectId)),
-      readTaskSettings: (projectId: string, taskId: string) =>
-        Promise.resolve(taskSettings.get(`${projectId}:${taskId}`)),
-      writeGlobalSettings: (settings: AgentGlobalSettings) => {
-        globalSettings = settings;
-        return Promise.resolve(settings);
-      },
-      writeProjectDefaults: (projectId: string, settings: AgentProjectDefaults) => {
-        const defaults = {
-          model: settings.model,
-          reasoningEffort: settings.reasoningEffort,
-          sandboxMode: settings.sandboxMode,
-        };
-        projectDefaults.set(projectId, defaults);
-        return Promise.resolve(defaults);
-      },
-      writeTaskSettings: (projectId: string, taskId: string, settings: AgentTaskSettings) => {
-        taskSettings.set(`${projectId}:${taskId}`, settings);
-        return Promise.resolve(settings);
-      },
-    },
+    settingsRepository: stateRepository,
   };
 }
 

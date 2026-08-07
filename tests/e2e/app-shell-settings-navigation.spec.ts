@@ -1,5 +1,6 @@
 import {
   expect,
+  mockAppShellApi,
   parseProjectOrderRequest,
   parseRequestRecord,
   taskSnapshot,
@@ -8,6 +9,33 @@ import {
 } from "./fixtures/app-shell.js";
 
 test.describe.configure({ mode: "serial" });
+
+test("connects a custom API from the provider gate and reuses it in settings", async ({ page }) => {
+  await mockAppShellApi(page, { providerConnected: false });
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { exact: true, name: "CodeAgent" })).toBeVisible();
+  const officialModeButton = page.getByRole("button", { name: "官方登录" });
+  const customModeButton = page.getByRole("button", { name: "自定义 API" });
+  await expect(officialModeButton).toHaveCSS("align-items", "center");
+  await expect(officialModeButton).toHaveCSS("justify-content", "center");
+  await expect(customModeButton).toHaveCSS("align-items", "center");
+  await expect(customModeButton).toHaveCSS("justify-content", "center");
+  await customModeButton.click();
+  await page.getByRole("textbox", { name: "API Base URL" }).fill("https://api.example.com/v1/");
+  await page.getByLabel("API Key（可选）").fill("e2e-secret");
+  await page.getByRole("button", { exact: true, name: "连接" }).click();
+
+  await expect(page).toHaveURL(/\/p\/code-agent$/u);
+  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  const dialog = page.getByRole("dialog", { name: "全局设置" });
+  await dialog.getByRole("button", { name: "模型服务" }).click();
+  await expect(dialog.getByRole("textbox", { name: "API Base URL" })).toHaveValue(
+    "https://api.example.com/v1",
+  );
+  await expect(dialog.getByLabel("API Key（可选）")).toHaveValue("");
+  await expect(dialog.getByText("已连接", { exact: true })).toBeVisible();
+});
 
 test("redirects the root route to the default project workbench @smoke", async ({ page }) => {
   await page.goto("/");

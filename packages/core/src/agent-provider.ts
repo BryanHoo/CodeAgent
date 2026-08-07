@@ -6,6 +6,8 @@ import type {
   AgentImageMediaType,
   AgentMcpServerPage,
   AgentModelPage,
+  AgentProviderConnectionMutationResponse,
+  AgentProviderConnectionStatus,
   AgentSkillPage,
   AgentSkillReference,
   AgentTask,
@@ -17,6 +19,9 @@ import type {
   AgentSandboxMode,
   PendingRequest,
   ResolvePendingRequestRequest,
+  ConfigureCustomProviderRequest,
+  ConfigureCustomProviderResponse,
+  StartOfficialProviderLoginResponse,
   UploadAgentFeedbackRequest,
   Project,
 } from "@code-agent/protocol";
@@ -135,8 +140,15 @@ export interface AgentProvider {
 
 // Runtime 负责全局资源和订阅，Project Adapter 只暴露已校验的项目作用域能力。
 export interface AgentRuntimeProvider {
+  cancelProviderLogin(loginId: string): Promise<AgentProviderConnectionMutationResponse>;
+  configureCustomProvider(
+    input: ConfigureCustomProviderRequest,
+  ): Promise<ConfigureCustomProviderResponse>;
   forProject(project: Project): AgentProvider;
   getCapabilities(): Promise<AgentCapabilities>;
   listModels(): Promise<AgentModelPage>;
+  logoutProvider(): Promise<AgentProviderConnectionMutationResponse>;
+  readProviderConnection(): Promise<AgentProviderConnectionStatus>;
   releaseProject(projectId: string): Promise<void>;
+  startOfficialProviderLogin(): Promise<StartOfficialProviderLoginResponse>;
 }

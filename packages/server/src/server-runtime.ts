@@ -1,8 +1,10 @@
 import { Buffer } from "node:buffer";
 import type {
-  PendingRequestResolutionError,
   AgentProvider,
   AgentProviderEvent,
+  AgentProviderConnectionRepository,
+  AgentRuntimeProvider,
+  PendingRequestResolutionError,
 } from "@code-agent/core";
 import {
   MAX_AGENT_FILE_BYTES,
@@ -109,6 +111,34 @@ type ModelCatalogCacheEntry = Readonly<{
   expiresAt: number;
   page: AgentModelPage;
 }>;
+
+export function createModelCatalogLoader(
+  provider: Pick<AgentRuntimeProvider, "listModels" | "readProviderConnection">,
+  repository: Pick<AgentProviderConnectionRepository, "readProviderConnection">,
+): () => Promise<AgentModelPage> {
+  return async () => {
+    const [activeConnection, storedConnection] = await Promise.all([
+      provider.readProviderConnection(),
+      repository.readProviderConnection(),
+    ]);
+    if (
+      activeConnection.mode !== "custom" ||
+      storedConnection?.mode !== "custom" ||
+      storedConnection.customBaseUrl !== activeConnection.customBaseUrl
+    ) {
+      return provider.listModels();
+    }
+    if (storedConnection.customModels === null) {
+      throw new MutationHttpError(
+        "PROVIDER_ERROR",
+        "Custom provider model catalog is unavailable",
+        502,
+        true,
+      );
+    }
+    return storedConnection.customModels;
+  };
+}
 
 export class ModelCatalogCache {
   readonly #load: () => Promise<AgentModelPage>;

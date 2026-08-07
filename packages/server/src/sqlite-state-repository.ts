@@ -1,19 +1,28 @@
-import { createHash } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { basename, isAbsolute, resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 
 import type {
+  AgentProviderConnectionRepository,
   AgentSettingsRepository,
   ProjectRepository,
   RegisterProjectInput,
 } from "@code-agent/core";
 import type {
+  AgentProviderConnectionRecord,
   AgentGlobalSettings,
   AgentProjectDefaults,
   AgentTaskSettings,
   Project,
 } from "@code-agent/protocol";
+
+import {
+  PROVIDER_CONNECTION_MIGRATION,
+  parseProviderConnectionRow,
+  serializeProviderConnectionRecord,
+  type ProviderConnectionRow,
+} from "./provider-connection-persistence.js";
+import { createProjectId, deserializeWorkerError } from "./sqlite-state-helpers.js";
 
 export type SqliteMigration = Readonly<{
   name: string;
@@ -39,7 +48,6 @@ export interface SqliteStateRepositoryOptions {
 }
 
 const DEFAULT_SQLITE_REQUEST_TIMEOUT_MS = 10_000;
-
 const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
   {
     name: "create_local_state",
@@ -178,6 +186,7 @@ const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     `,
     version: 10,
   },
+  PROVIDER_CONNECTION_MIGRATION,
 ];
 
 type WorkerResponse =
@@ -192,24 +201,9 @@ type PendingRequest = Readonly<{
   timeout: ReturnType<typeof setTimeout>;
 }>;
 
-function createProjectId(name: string, rootPath: string): string {
-  const slug = name
-    .normalize("NFKD")
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-+|-+$/gu, "")
-    .slice(0, 48);
-  const hash = createHash("sha256").update(rootPath).digest("hex").slice(0, 12);
-  return `${slug || "project"}-${hash}`;
-}
-
-function deserializeError(error: Readonly<{ message: string; name: string }>): Error {
-  const result = new Error(error.message);
-  result.name = error.name;
-  return result;
-}
-
-export class SqliteStateRepository implements ProjectRepository, AgentSettingsRepository {
+export class SqliteStateRepository
+  implements ProjectRepository, AgentSettingsRepository, AgentProviderConnectionRepository
+{
   readonly #now: () => Date;
   readonly #pending = new Map<number, PendingRequest>();
   readonly #ready: Promise<void>;
@@ -267,7 +261,7 @@ export class SqliteStateRepository implements ProjectRepository, AgentSettingsRe
           return;
         }
         if (message.type === "fatal") {
-          settleReadyError(deserializeError(message.error));
+          settleReadyError(deserializeWorkerError(message.error));
           return;
         }
         const pending = this.#pending.get(message.id);
@@ -277,7 +271,7 @@ export class SqliteStateRepository implements ProjectRepository, AgentSettingsRe
         this.#pending.delete(message.id);
         clearTimeout(pending.timeout);
         if ("error" in message) {
-          pending.reject(deserializeError(message.error));
+          pending.reject(deserializeWorkerError(message.error));
         } else {
           pending.resolve(message.result);
         }
@@ -393,6 +387,12 @@ export class SqliteStateRepository implements ProjectRepository, AgentSettingsRe
     return this.#call("readProjectDefaults", { projectId });
   }
 
+  public async readProviderConnection(): Promise<AgentProviderConnectionRecord | undefined> {
+    const row = await this.#call<ProviderConnectionRow | undefined>("readProviderConnection");
+    // Worker 只负责数据库访问，所有持久化 JSON 在类型边界统一校验。
+    return parseProviderConnectionRow(row);
+  }
+
   public readGlobalSettings(): Promise<AgentGlobalSettings | undefined> {
     return this.#call("readGlobalSettings");
   }
@@ -413,6 +413,19 @@ export class SqliteStateRepository implements ProjectRepository, AgentSettingsRe
       settings,
       updatedAt: this.#now().toISOString(),
     });
+  }
+
+  public async writeProviderConnection(
+    record: AgentProviderConnectionRecord,
+  ): Promise<AgentProviderConnectionRecord> {
+    const customModelsJson = serializeProviderConnectionRecord(record);
+    await this.#call("writeProviderConnection", {
+      customBaseUrl: record.customBaseUrl,
+      customModelsJson,
+      mode: record.mode,
+      updatedAt: record.updatedAt,
+    });
+    return record;
   }
 
   public writeGlobalSettings(settings: AgentGlobalSettings): Promise<AgentGlobalSettings> {

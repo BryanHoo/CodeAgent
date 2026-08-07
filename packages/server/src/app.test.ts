@@ -10,6 +10,9 @@ import type {
   AgentBackgroundTerminalPage,
   AgentGlobalSettings,
   AgentModelPage,
+  AgentProviderConnectionRecord,
+  AgentProviderConnectionStatus,
+  ConfigureCustomProviderResponse,
   AgentProjectDefaults,
   AgentTaskSettings,
   AgentTurn,
@@ -330,6 +333,7 @@ function createProvider() {
 }
 
 function createSettingsRepository() {
+  let providerConnection: AgentProviderConnectionRecord | undefined;
   const readGlobalSettings = vi.fn(() =>
     Promise.resolve<AgentGlobalSettings | undefined>(undefined),
   );
@@ -344,32 +348,67 @@ function createSettingsRepository() {
   const writeTaskSettings = vi.fn(
     (_projectId: string, _taskId: string, settings: AgentTaskSettings) => Promise.resolve(settings),
   );
+  const readProviderConnection = vi.fn(() => Promise.resolve(providerConnection));
+  const writeProviderConnection = vi.fn((record: AgentProviderConnectionRecord) => {
+    providerConnection = record;
+    return Promise.resolve(record);
+  });
   return {
+    readProviderConnection,
     readGlobalSettings,
     readProjectDefaults,
     readTaskSettings,
     repository: {
+      readProviderConnection,
       readGlobalSettings,
       readProjectDefaults,
       readTaskSettings,
       writeGlobalSettings,
+      writeProviderConnection,
       writeProjectDefaults,
       writeTaskSettings,
     },
     writeGlobalSettings,
+    writeProviderConnection,
     writeProjectDefaults,
     writeTaskSettings,
+  };
+}
+
+function createRuntimeConnectionMethods(): Pick<
+  AgentRuntimeProvider,
+  | "cancelProviderLogin"
+  | "configureCustomProvider"
+  | "logoutProvider"
+  | "readProviderConnection"
+  | "startOfficialProviderLogin"
+> {
+  const status: AgentProviderConnectionStatus = {
+    account: null,
+    customBaseUrl: null,
+    mode: "official",
+    pendingLogin: null,
+    state: "disconnected",
+  };
+  return {
+    cancelProviderLogin: vi.fn(() => Promise.resolve({ status })),
+    configureCustomProvider: vi.fn(() => Promise.reject(new Error("Not configured"))),
+    logoutProvider: vi.fn(() => Promise.resolve({ status })),
+    readProviderConnection: vi.fn(() => Promise.resolve(status)),
+    startOfficialProviderLogin: vi.fn(() => Promise.reject(new Error("Not configured"))),
   };
 }
 
 function createServerOptions(provider: AgentProvider, overrides: Record<string, unknown> = {}) {
   const orderedProjects: Project[] = [project];
   const runtimeProvider: AgentRuntimeProvider = {
+    ...createRuntimeConnectionMethods(),
     forProject: () => provider,
     getCapabilities: () => provider.getCapabilities(),
     listModels: () => provider.listModels(),
     releaseProject: () => Promise.resolve(),
   };
+  const stateRepository = createSettingsRepository().repository;
   return {
     handlerTimeoutMs: 0,
     installAppUpdate: vi.fn(() => Promise.reject(new Error("No update available"))),
@@ -412,6 +451,7 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
         return Promise.resolve(reordered.filter((item) => item !== undefined));
       }),
     },
+    providerConnectionRepository: stateRepository,
     provider: runtimeProvider,
     readAppInfo: vi.fn(() =>
       Promise.resolve({
@@ -422,7 +462,7 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
         updateAvailable: false,
       }),
     ),
-    settingsRepository: createSettingsRepository().repository,
+    settingsRepository: stateRepository,
     ...overrides,
   };
 }
@@ -555,6 +595,120 @@ describe("server diagnostics", () => {
 });
 
 describe("CodeAgent Server", () => {
+  it("switches provider modes without persisting the custom API key", async () => {
+    const providerHarness = createProvider();
+    const state = createSettingsRepository();
+    const customModels: ConfigureCustomProviderResponse["models"] = {
+      data: [
+        {
+          defaultReasoningEffort: "medium",
+          description: "",
+          displayName: "custom-model",
+          id: "custom-model",
+          isDefault: true,
+          supportedReasoningEfforts: [{ description: "", id: "medium" }],
+        },
+      ],
+      nextCursor: null,
+    };
+    const customStatus: AgentProviderConnectionStatus = {
+      account: { type: "apiKey" as const },
+      customBaseUrl: "https://api.example.com/v1",
+      mode: "custom" as const,
+      pendingLogin: null,
+      state: "connected" as const,
+    };
+    const configureCustomProvider = vi.fn(() =>
+      Promise.resolve({ models: customModels, status: customStatus }),
+    );
+    const cancelProviderLogin = vi.fn(() =>
+      Promise.resolve({
+        status: { ...customStatus, pendingLogin: null, state: "connected" as const },
+      }),
+    );
+    const startOfficialProviderLogin = vi.fn(() =>
+      Promise.resolve({
+        authUrl: "https://auth.openai.com/authorize",
+        loginId: "login-1",
+        status: {
+          account: null,
+          customBaseUrl: null,
+          mode: "official" as const,
+          pendingLogin: { error: null, loginId: "login-1", state: "pending" as const },
+          state: "pending" as const,
+        },
+      }),
+    );
+    const runtimeProvider: AgentRuntimeProvider = {
+      ...createRuntimeConnectionMethods(),
+      cancelProviderLogin,
+      configureCustomProvider,
+      forProject: () => providerHarness.provider,
+      getCapabilities: () => providerHarness.provider.getCapabilities(),
+      listModels: () => providerHarness.provider.listModels(),
+      readProviderConnection: vi.fn(() => Promise.resolve(customStatus)),
+      releaseProject: () => Promise.resolve(),
+      startOfficialProviderLogin,
+    };
+    const app = await createCodeAgentServer(
+      createServerOptions(providerHarness.provider, {
+        provider: runtimeProvider,
+        providerConnectionRepository: state.repository,
+        settingsRepository: state.repository,
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const customResponse = await app.inject({
+      headers: { "idempotency-key": "custom-provider" },
+      method: "PUT",
+      payload: { apiKey: "custom-secret", baseUrl: "https://api.example.com/v1" },
+      url: "/v1/provider-connection/custom",
+    });
+    const modelsResponse = await app.inject({ method: "GET", url: "/v1/models" });
+    configureCustomProvider.mockRejectedValueOnce(new Error("custom endpoint unavailable"));
+    const failedCustomResponse = await app.inject({
+      headers: { "idempotency-key": "failed-custom-provider" },
+      method: "PUT",
+      payload: { apiKey: "another-secret", baseUrl: "https://invalid.example.com/v1" },
+      url: "/v1/provider-connection/custom",
+    });
+    const officialResponse = await app.inject({
+      headers: { "idempotency-key": "official-login" },
+      method: "POST",
+      payload: {},
+      url: "/v1/provider-connection/official-login",
+    });
+    const repeatedOfficialResponse = await app.inject({
+      headers: { "idempotency-key": "official-login" },
+      method: "POST",
+      payload: {},
+      url: "/v1/provider-connection/official-login",
+    });
+    const cancelResponse = await app.inject({
+      headers: { "idempotency-key": "cancel-login" },
+      method: "POST",
+      payload: { loginId: "login-1" },
+      url: "/v1/provider-connection/official-login/cancel",
+    });
+
+    expect(customResponse.statusCode, customResponse.body).toBe(200);
+    expect(modelsResponse.json()).toEqual(customModels);
+    expect(failedCustomResponse.statusCode).toBe(502);
+    // 自定义失败不覆盖旧目录；第二次写入来自随后成功切换的官方模式。
+    expect(state.writeProviderConnection).toHaveBeenCalledTimes(2);
+    expect(configureCustomProvider).toHaveBeenCalledWith({
+      apiKey: "custom-secret",
+      baseUrl: "https://api.example.com/v1",
+    });
+    expect(JSON.stringify(state.writeProviderConnection.mock.calls)).not.toContain("custom-secret");
+    expect(officialResponse.statusCode, officialResponse.body).toBe(200);
+    expect(repeatedOfficialResponse.json()).toEqual(officialResponse.json());
+    expect(cancelResponse.statusCode, cancelResponse.body).toBe(200);
+    expect(startOfficialProviderLogin).toHaveBeenCalledOnce();
+    expect(cancelProviderLogin).toHaveBeenCalledWith("login-1");
+  });
+
   it("serves temporary conversations without exposing the internal Project", async () => {
     const providerHarness = createProvider();
     const temporaryTask = { ...task, projectId: temporaryProject.id, title: "临时任务" };
@@ -1265,6 +1419,7 @@ describe("CodeAgent Server", () => {
     let storedProject: Project | undefined = project;
     const releaseProject = vi.fn(() => Promise.resolve());
     const runtimeProvider: AgentRuntimeProvider = {
+      ...createRuntimeConnectionMethods(),
       forProject: () => providerHarness.provider,
       getCapabilities: () => providerHarness.provider.getCapabilities(),
       listModels: () => providerHarness.provider.listModels(),
@@ -2800,12 +2955,14 @@ describe("CodeAgent Server", () => {
       status: "running",
     });
     const runtimeProvider: AgentRuntimeProvider = {
+      ...createRuntimeConnectionMethods(),
       forProject: (activeProject) =>
         activeProject.id === otherProject.id ? secondary.provider : primary.provider,
       getCapabilities: () => primary.provider.getCapabilities(),
       listModels: () => primary.provider.listModels(),
       releaseProject: () => Promise.resolve(),
     };
+    const stateRepository = createSettingsRepository().repository;
     const app = await createCodeAgentServer({
       installAppUpdate: vi.fn(() => Promise.reject(new Error("No update available"))),
       projectRepository: {
@@ -2818,6 +2975,7 @@ describe("CodeAgent Server", () => {
         rename: () => Promise.resolve(undefined),
         reorder: () => Promise.resolve([project, otherProject]),
       },
+      providerConnectionRepository: stateRepository,
       provider: runtimeProvider,
       readAppInfo: vi.fn(() =>
         Promise.resolve({
@@ -2828,7 +2986,7 @@ describe("CodeAgent Server", () => {
           updateAvailable: false,
         }),
       ),
-      settingsRepository: createSettingsRepository().repository,
+      settingsRepository: stateRepository,
     });
     closeCallbacks.push(() => app.close());
     const request = {

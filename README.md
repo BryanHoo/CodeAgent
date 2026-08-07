@@ -12,7 +12,8 @@ CodeAgent runs on your computer. You can use it locally or access it from anothe
 - Organize tasks by project, with search, pin, rename, and archive actions
 - Start temporary tasks without adding a project
 - Attach images or files as context and use your configured Skills and MCP servers
-- Choose the model, reasoning effort, approval behavior, and file access level
+- Sign in with ChatGPT or connect a custom OpenAI-compatible API
+- Load models from the active service and choose the model, reasoning effort, approval behavior, and file access level
 - Browse project files, inspect code changes, switch branches, and view Git history
 - Start code reviews, generate commit messages, and commit or push changes
 - Connect from a phone, tablet, or another computer on a trusted local network
@@ -24,12 +25,6 @@ Before you begin, make sure you have:
 - Node.js 24 or later
 - The official Codex CLI
 - Chrome/Chromium 116+, Firefox 124+, or Safari 17.4+
-
-Sign in to Codex from your terminal before your first use:
-
-```bash
-codex login
-```
 
 ## Quick Start
 
@@ -46,6 +41,8 @@ http://127.0.0.1:3210
 ```
 
 Keep the terminal running while you use CodeAgent. Press `Ctrl+C` in the terminal when you want to stop it.
+
+On first launch, sign in with ChatGPT in the browser or enter a custom API base URL and optional API key. A custom service must support the OpenAI Responses API and expose its model catalog at `<base-url>/models`. Codex manages API credentials; CodeAgent stores only the connection mode, base URL, and validated model catalog in its local database.
 
 ### Install Globally
 
@@ -118,13 +115,7 @@ If you use `npx`, run the Quick Start command again to use the latest version.
 
 ### Codex Is Unavailable or Requires Sign-In
 
-Run this command on the computer hosting CodeAgent:
-
-```bash
-codex login
-```
-
-After signing in, return to the browser and retry. If you use a custom Codex configuration directory, make sure the Codex CLI and CodeAgent use the same directory.
+Return to the model service connection screen and sign in again, or inspect the custom API under **Settings > Model service**. Custom services must support the Responses API and `GET /models`; make sure the base URL includes the correct API version path.
 
 ### The Browser Does Not Open
 

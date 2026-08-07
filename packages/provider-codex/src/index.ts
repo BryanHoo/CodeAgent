@@ -17,6 +17,11 @@ export {
   type StartCodexAppServerOptions,
 } from "./app-server-process.js";
 export {
+  CodexProviderConnectionError,
+  CodexProviderConnectionService,
+  type CodexProviderConnectionServiceOptions,
+} from "./provider-connection.js";
+export {
   SUPPORTED_CODEX_VERSION,
   checkCodexVersion,
   locateCodexBinary,

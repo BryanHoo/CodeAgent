@@ -1,5 +1,6 @@
 import type {
   AgentRuntimeProvider,
+  AgentProviderConnectionRepository,
   AgentSettingsRepository,
   ProjectRepository,
 } from "@code-agent/core";
@@ -39,6 +40,7 @@ export interface CreateCodeAgentServerOptions {
   modelCatalogCacheTtlMs?: number;
   onBrowserConnection?: () => void;
   projectRepository: ProjectRepository;
+  providerConnectionRepository: AgentProviderConnectionRepository;
   projectOpenService?: ProjectOpenService;
   provider: AgentRuntimeProvider;
   readAppInfo: () => Promise<AppInfoResponse>;

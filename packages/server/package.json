@@ -19,6 +19,7 @@
     "@fastify/multipart": "catalog:",
     "@fastify/static": "catalog:",
     "@fastify/websocket": "catalog:",
+    "@sinclair/typebox": "catalog:",
     "better-sqlite3": "catalog:",
     "fastify": "catalog:",
     "ignore": "catalog:",

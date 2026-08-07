@@ -1,5 +1,6 @@
 import type {
   AgentGlobalSettings,
+  AgentProviderConnectionRecord,
   AgentProjectDefaults,
   AgentTask,
   AgentTaskSettings,
@@ -36,6 +37,14 @@ export interface AgentSettingsRepository {
     taskId: string,
     settings: AgentTaskSettings,
   ): Promise<AgentTaskSettings>;
+}
+
+// Provider 连接记录只持久化模式和模型目录，Secret 始终由具体 Provider 的凭证存储管理。
+export interface AgentProviderConnectionRepository {
+  readProviderConnection(): Promise<AgentProviderConnectionRecord | undefined>;
+  writeProviderConnection(
+    record: AgentProviderConnectionRecord,
+  ): Promise<AgentProviderConnectionRecord>;
 }
 
 export interface TaskRepository {

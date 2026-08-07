@@ -36,6 +36,7 @@ import { registerEventRoutes } from "./routes/event-routes.js";
 import { registerAccessRoutes } from "./routes/access-routes.js";
 import { registerBrowserSessionRoute } from "./routes/browser-session-route.js";
 import { registerProjectRoutes } from "./routes/project-routes.js";
+import { registerProviderConnectionRoutes } from "./routes/provider-connection-routes.js";
 import { registerRuntimeRoutes } from "./routes/runtime-routes.js";
 import { registerTaskRoutes } from "./routes/task-routes.js";
 import { registerTurnRoutes } from "./routes/turn-routes.js";
@@ -56,6 +57,7 @@ import {
   ModelCatalogCache,
   assertCommitSelection,
   assertValidProjectDefaults,
+  createModelCatalogLoader,
   fingerprintPayload,
   generateCommitMessageWithCodex,
   maximumAttachmentBytes,
@@ -66,7 +68,6 @@ import {
   type IdempotencyEntry,
 } from "./server-runtime.js";
 export type { CreateCodeAgentServerOptions } from "./server-options.js";
-
 export async function createCodeAgentServer(
   options: CreateCodeAgentServerOptions,
 ): Promise<FastifyInstance> {
@@ -189,10 +190,10 @@ export async function createCodeAgentServer(
   if (!Number.isFinite(modelCatalogCacheTtlMs) || modelCatalogCacheTtlMs <= 0) {
     throw new RangeError("Model catalog cache TTL must be a positive number");
   }
-  const modelCatalogCache = new ModelCatalogCache(() => options.provider.listModels(), {
-    maxBytes: modelCatalogCacheMaxBytes,
-    ttlMs: modelCatalogCacheTtlMs,
-  });
+  const modelCatalogCache = new ModelCatalogCache(
+    createModelCatalogLoader(options.provider, options.providerConnectionRepository),
+    { maxBytes: modelCatalogCacheMaxBytes, ttlMs: modelCatalogCacheTtlMs },
+  );
   const projectContexts = new Map<string, ProjectRuntimeContext>();
   const getProjectContext: ProjectContextResolver = async (projectId) => {
     const existing = projectContexts.get(projectId);
@@ -344,7 +345,6 @@ export async function createCodeAgentServer(
           };
     return enforceTemporaryTaskSandboxMode(projectId, effective);
   };
-  // 启动时只为已持久化 Project 建立事件流；后续新增项目在首次注册时懒创建。
   for (const project of await options.projectRepository.list()) {
     await getProjectContext(project.id);
   }
@@ -459,6 +459,7 @@ export async function createCodeAgentServer(
     projectOpenService,
     projectRepository: options.projectRepository,
     provider: options.provider,
+    providerConnectionRepository: options.providerConnectionRepository,
     readAppInfo: options.readAppInfo,
     readEffectiveGlobalSettings,
     readEffectiveProjectDefaults,
@@ -489,6 +490,7 @@ export async function createCodeAgentServer(
   });
   registerBrowserSessionRoute(app, browserSessionId, options.onBrowserConnection);
   await app.register(registerRuntimeRoutes, routeContext);
+  await app.register(registerProviderConnectionRoutes, routeContext);
   await app.register(registerProjectRoutes, routeContext);
   await app.register(registerTaskRoutes, routeContext);
   await app.register(registerTurnRoutes, routeContext);

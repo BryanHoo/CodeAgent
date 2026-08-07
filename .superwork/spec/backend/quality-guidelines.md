@@ -7,6 +7,7 @@
 - 配对码至少 128 bit 熵，Session ID 至少 256 bit；二者不得进入 URL、环境变量、日志或持久层。Session 与按 IP 配对失败窗口必须有界，关闭时清空；失败每分钟最多 5 次且响应不得泄漏匹配细节。
 - LAN Cookie 使用 `HttpOnly; SameSite=Strict; Path=/` 和固定绝对 `Max-Age`，明文 HTTP 不设置 `Secure`。所有 `/v1/*` 使用 `no-store`，应用响应设置 CSP、Frame、MIME、Referrer 与 Permissions 安全头，不为 HTTP 设置 HSTS。
 - Fastify 使用 JSON Schema 验证输入并序列化输出。
+- 自定义 Provider Base URL 只允许 `http:` 或 `https:`，禁止 userinfo、query、fragment 和重定向；`GET /models` 必须限制超时、响应字节和模型数量。API key 只能进入当前请求 Body、Provider 内存和 App Server Account API，禁止进入配置、SQLite、URL、日志或响应。
 - 生产静态资源必须协商 Brotli 或 Gzip 响应压缩；`/assets/*` 内容哈希资源固定返回一年 `immutable` 公共缓存，HTML 与 SPA 回退入口保持 `max-age=0` 重新验证。
 - Project 相对路径每次操作都执行绝对路径、`realpath` 和允许根目录包含关系校验；AI 回复中的显式绝对文件引用允许访问 Project 外目标，但必须通过认证并校验 `realpath`、可读性、目标类型和预览上限。
 - Approval 同时校验用户、Runtime、Task、Turn、Request 身份与状态。
@@ -30,6 +31,7 @@
 - Project 宿主打开测试必须覆盖 Windows Explorer 成功转交后不误报失败，以及 Windows Terminal 强制在目标目录打开独立新窗口。
 - 子进程关闭测试覆盖发送 `SIGKILL` 后仍未退出的路径，并验证关闭 Promise 在截止时间内失败。
 - Provider 集成使用 Fake App Server，不依赖真实账号完成默认 CI。
+- Provider 连接测试必须覆盖官方登录完成通知、自定义模型发现、无 key、本机 HTTP、重定向、超时、超限、Secret 不落盘和模式模型缓存失效。
 - Fastify 路由优先使用 `inject`；完整浏览器链路使用 Playwright。
 - 附件上传路由测试必须覆盖 `multipart/form-data` 流式成功路径、旧 JSON 请求拒绝、按类型执行单文件限制，以及声明长度明显超限时在解析文件数据前返回 `413`。
 - 静态资源 `inject` 测试必须覆盖 Brotli/Gzip 解压后的正文、哈希资源长期缓存头和 SPA HTML 重新验证头。

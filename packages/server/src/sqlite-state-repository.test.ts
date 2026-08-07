@@ -42,7 +42,7 @@ describe("SqliteStateRepository", () => {
       foreignKeys: true,
       integrityCheck: "ok",
       journalMode: "wal",
-      migrationVersion: 10,
+      migrationVersion: 11,
       synchronous: "normal",
       writable: true,
     });
@@ -281,6 +281,79 @@ describe("SqliteStateRepository", () => {
 
     const reopened = await openRepository(root);
     await expect(reopened.readGlobalSettings()).resolves.toEqual(settings);
+  });
+
+  it("persists non-sensitive provider connection metadata across repository restarts", async () => {
+    const root = await createWorkspace();
+    const databasePath = join(root, "state.sqlite3");
+    const repository = await openRepository(root);
+    const record = {
+      customBaseUrl: "https://api.example.com/v1",
+      customModels: {
+        data: [
+          {
+            defaultReasoningEffort: "medium",
+            description: "Custom model",
+            displayName: "custom-model",
+            id: "custom-model",
+            isDefault: true,
+            supportedReasoningEfforts: [{ description: "Medium", id: "medium" }],
+          },
+        ],
+        nextCursor: null,
+      },
+      mode: "custom" as const,
+      updatedAt: "2026-08-07T10:00:00.000Z",
+    };
+
+    await expect(repository.readProviderConnection()).resolves.toBeUndefined();
+    await expect(repository.writeProviderConnection(record)).resolves.toEqual(record);
+    await repository.close();
+    repositories.splice(repositories.indexOf(repository), 1);
+
+    const database = new Database(databasePath, { readonly: true });
+    try {
+      const columnNames = database
+        .prepare("PRAGMA table_info(provider_connection)")
+        .all()
+        .map((column) => (column as { name: string }).name);
+      expect(columnNames).toEqual([
+        "id",
+        "mode",
+        "custom_base_url",
+        "custom_models_json",
+        "updated_at",
+      ]);
+    } finally {
+      database.close();
+    }
+
+    const reopened = await openRepository(root);
+    await expect(reopened.readProviderConnection()).resolves.toEqual(record);
+  });
+
+  it("rejects corrupted provider model JSON at the repository boundary", async () => {
+    const root = await createWorkspace();
+    const databasePath = join(root, "state.sqlite3");
+    const repository = await openRepository(root);
+    await repository.close();
+    repositories.splice(repositories.indexOf(repository), 1);
+
+    const database = new Database(databasePath);
+    try {
+      database
+        .prepare(
+          `INSERT INTO provider_connection (
+             id, mode, custom_base_url, custom_models_json, updated_at
+           ) VALUES (1, 'custom', 'https://api.example.com/v1', '{broken', ?)`,
+        )
+        .run("2026-08-07T10:00:00.000Z");
+    } finally {
+      database.close();
+    }
+
+    const reopened = await openRepository(root);
+    await expect(reopened.readProviderConnection()).rejects.toThrow(/model JSON/u);
   });
 
   it("removes obsolete task metadata after migration", async () => {

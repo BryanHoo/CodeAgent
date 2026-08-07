@@ -4,10 +4,14 @@ import {
   AgentGlobalSettingsResponseSchema,
   AgentModelPageSchema,
   AgentMutationErrorSchema,
+  AgentProviderConnectionMutationResponseSchema,
+  AgentProviderConnectionStatusSchema,
   AppInfoResponseSchema,
   BrowserSessionResponseSchema,
   HealthResponseSchema,
   InstallAppUpdateResponseSchema,
+  ConfigureCustomProviderResponseSchema,
+  StartOfficialProviderLoginResponseSchema,
   TEMPORARY_TASK_API_PATH,
   TEMPORARY_TASK_SCOPE_ID,
   type AccessStatusResponse,
@@ -17,12 +21,17 @@ import {
   type AgentGlobalSettingsResponse,
   type AgentModelPage,
   type AgentMutationError,
+  type AgentProviderConnectionMutationResponse,
+  type AgentProviderConnectionStatus,
   type AppInfoResponse,
   type BrowserSessionResponse,
   type HealthResponse,
   type InstallAppUpdateResponse,
+  type ConfigureCustomProviderRequest,
+  type ConfigureCustomProviderResponse,
   type PendingRequest,
   type ResolvePendingRequestRequest,
+  type StartOfficialProviderLoginResponse,
 } from "@code-agent/protocol";
 import type { Static, TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
@@ -235,6 +244,59 @@ export class CodeAgentTransport {
 
   public async listModels(options: ReadOptions = {}): Promise<AgentModelPage> {
     return this.read("/v1/models", AgentModelPageSchema, options);
+  }
+
+  public async getProviderConnection(
+    options: ReadOptions = {},
+  ): Promise<AgentProviderConnectionStatus> {
+    return this.read("/v1/provider-connection", AgentProviderConnectionStatusSchema, options);
+  }
+
+  public async startOfficialProviderLogin(
+    options: MutationOptions = {},
+  ): Promise<StartOfficialProviderLoginResponse> {
+    return this.mutation(
+      "/v1/provider-connection/official-login",
+      {},
+      StartOfficialProviderLoginResponseSchema,
+      options,
+    );
+  }
+
+  public async cancelProviderLogin(
+    loginId: string,
+    options: MutationOptions = {},
+  ): Promise<AgentProviderConnectionMutationResponse> {
+    return this.mutation(
+      "/v1/provider-connection/official-login/cancel",
+      { loginId },
+      AgentProviderConnectionMutationResponseSchema,
+      options,
+    );
+  }
+
+  public async configureCustomProvider(
+    input: ConfigureCustomProviderRequest,
+    options: MutationOptions = {},
+  ): Promise<ConfigureCustomProviderResponse> {
+    return this.mutation(
+      "/v1/provider-connection/custom",
+      input,
+      ConfigureCustomProviderResponseSchema,
+      options,
+      "PUT",
+    );
+  }
+
+  public async logoutProvider(
+    options: MutationOptions = {},
+  ): Promise<AgentProviderConnectionMutationResponse> {
+    return this.mutation(
+      "/v1/provider-connection/logout",
+      {},
+      AgentProviderConnectionMutationResponseSchema,
+      options,
+    );
   }
 
   public async getGlobalSettings(options: ReadOptions = {}): Promise<AgentGlobalSettingsResponse> {

@@ -250,6 +250,17 @@ export const models = [
   },
 ];
 
+export const customModels = [
+  {
+    defaultReasoningEffort: "medium",
+    description: "",
+    displayName: "custom-coder",
+    id: "custom-coder",
+    isDefault: true,
+    supportedReasoningEfforts: [{ description: "", id: "medium" }],
+  },
+];
+
 export const skills = [
   {
     description: "审查认证、授权和敏感数据边界",
@@ -478,7 +489,10 @@ export const architectureSourcePreview = Array.from({ length: 720 }, (_, lineInd
   lineIndex === 715 ? "### 11.7 外部登录边界" : `line ${String(lineIndex + 1)}`,
 ).join("\n");
 
-export async function mockAppShellApi(page: Page): Promise<void> {
+export async function mockAppShellApi(
+  page: Page,
+  options: Readonly<{ providerConnected?: boolean }> = {},
+): Promise<void> {
   let routedProjects = [...projects];
   let routedTasks = tasks.map((task) => ({ ...task }));
   let temporaryTasks: (typeof tasks)[number][] = [];
@@ -506,6 +520,19 @@ export async function mockAppShellApi(page: Page): Promise<void> {
     reasoningEffort: "high",
     sandboxMode: "workspace-write",
   };
+  let providerStatus = {
+    account: options.providerConnected === false ? null : ({ type: "apiKey" } as const),
+    customBaseUrl: null as string | null,
+    mode: "official" as "custom" | "official",
+    pendingLogin: null as null | {
+      error: string | null;
+      loginId: string;
+      state: "failed" | "pending";
+    },
+    state: (options.providerConnected === false ? "disconnected" : "connected") as
+      "connected" | "disconnected" | "failed" | "pending",
+  };
+  let routedModels = models;
   const handleApiRoute = async (route: Route) => {
     const url = new URL(route.request().url());
     const defaultsMatch = /^\/v1\/projects\/([^/]+)\/defaults$/u.exec(url.pathname);
@@ -578,8 +605,53 @@ export async function mockAppShellApi(page: Page): Promise<void> {
           steer: true,
         },
       };
+    } else if (url.pathname === "/v1/provider-connection") {
+      body = providerStatus;
+    } else if (
+      url.pathname === "/v1/provider-connection/custom" &&
+      route.request().method() === "PUT"
+    ) {
+      const input = parseRequestRecord(route.request().postData());
+      const baseUrl = input["baseUrl"];
+      if (typeof baseUrl !== "string") {
+        throw new Error("Invalid custom provider request");
+      }
+      routedModels = customModels;
+      providerStatus = {
+        account: input["apiKey"] === undefined ? null : { type: "apiKey" },
+        customBaseUrl: baseUrl.replace(/\/+$/u, ""),
+        mode: "custom",
+        pendingLogin: null,
+        state: "connected",
+      };
+      body = { models: { data: routedModels, nextCursor: null }, status: providerStatus };
+    } else if (url.pathname === "/v1/provider-connection/official-login") {
+      providerStatus = {
+        account: null,
+        customBaseUrl: null,
+        mode: "official",
+        pendingLogin: { error: null, loginId: "e2e-login", state: "pending" },
+        state: "pending",
+      };
+      body = {
+        authUrl: "https://auth.openai.com/authorize",
+        loginId: "e2e-login",
+        status: providerStatus,
+      };
+    } else if (url.pathname === "/v1/provider-connection/official-login/cancel") {
+      providerStatus = {
+        account: null,
+        customBaseUrl: null,
+        mode: "official",
+        pendingLogin: null,
+        state: "disconnected",
+      };
+      body = { status: providerStatus };
+    } else if (url.pathname === "/v1/provider-connection/logout") {
+      providerStatus = { ...providerStatus, account: null, state: "disconnected" };
+      body = { status: providerStatus };
     } else if (url.pathname === "/v1/models") {
-      body = { data: models, nextCursor: null };
+      body = { data: routedModels, nextCursor: null };
     } else if (url.pathname === "/v1/settings") {
       if (route.request().method() === "PUT") {
         globalSettings = parseGlobalSettingsRequest(route.request().postData());

@@ -7,6 +7,7 @@ import {
   MonitorCog,
   Network,
   Palette,
+  ServerCog,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode, SelectHTMLAttributes } from "react";
@@ -16,13 +17,14 @@ import { PromptInputSelect } from "../../../shared/ai-elements/prompt-input.js";
 import { Button } from "../../../shared/ui/button.js";
 
 export type SettingsSectionId =
-  "about" | "access" | "agent" | "appearance" | "commit" | "integration";
+  "about" | "access" | "agent" | "appearance" | "commit" | "integration" | "provider";
 
 export const settingsSections: readonly Readonly<{
   icon: LucideIcon;
   id: SettingsSectionId;
 }>[] = [
   { icon: Palette, id: "appearance" },
+  { icon: ServerCog, id: "provider" },
   { icon: Bot, id: "agent" },
   { icon: GitCommitHorizontal, id: "commit" },
   { icon: MonitorCog, id: "integration" },

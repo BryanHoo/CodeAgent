@@ -12,6 +12,7 @@ import {
 import { PairingGate } from "../features/access/pairing-gate.js";
 import { codeAgentClient } from "../features/projects/project-queries.js";
 import { createBrowserTaskNotifier } from "../features/notifications/browser-task-notifier.js";
+import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
 import { TooltipProvider } from "../shared/ui/tooltip.js";
@@ -77,9 +78,11 @@ function AppProviderContent({ children }: AppProvidersProps) {
   return (
     <>
       <AccessControlledContent access={access}>
-        <ProjectProvider taskNotifier={taskNotifier}>
-          <ComposerDraftProvider>{children}</ComposerDraftProvider>
-        </ProjectProvider>
+        <ProviderConnectionGate>
+          <ProjectProvider taskNotifier={taskNotifier}>
+            <ComposerDraftProvider>{children}</ComposerDraftProvider>
+          </ProjectProvider>
+        </ProviderConnectionGate>
       </AccessControlledContent>
       <Toaster
         containerAriaLabel={t("app.notificationRegion")}

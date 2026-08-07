@@ -52,6 +52,7 @@ export interface CodexRpcClient {
 
 export interface CreateCodexRuntimeProviderOptions {
   client: CodexRpcClient;
+  fetch?: typeof globalThis.fetch;
   logger?: CodexProviderLogger;
 }
 

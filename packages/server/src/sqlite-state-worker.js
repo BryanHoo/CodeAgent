@@ -65,6 +65,18 @@ function globalSettingsFromRow(row) {
   };
 }
 
+function providerConnectionFromRow(row) {
+  if (row === undefined) {
+    return undefined;
+  }
+  return {
+    customBaseUrl: row.custom_base_url,
+    customModelsJson: row.custom_models_json,
+    mode: row.mode,
+    updatedAt: row.updated_at,
+  };
+}
+
 function configureDatabase(database) {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
@@ -159,6 +171,10 @@ function createOperations(database) {
                   reasoning_effort, sandbox_mode, default_open_app_id, follow_up_behavior
            FROM global_settings WHERE id = 1`,
         ),
+        readProviderConnection: database.prepare(
+          `SELECT mode, custom_base_url, custom_models_json, updated_at
+           FROM provider_connection WHERE id = 1`,
+        ),
         readTaskSettings: database.prepare(
           "SELECT approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode FROM task_settings WHERE project_id = ? AND task_id = ?",
         ),
@@ -188,6 +204,16 @@ function createOperations(database) {
         sandbox_mode = excluded.sandbox_mode,
         default_open_app_id = excluded.default_open_app_id,
         follow_up_behavior = excluded.follow_up_behavior,
+        updated_at = excluded.updated_at
+    `),
+        writeProviderConnection: database.prepare(`
+      INSERT INTO provider_connection (
+        id, mode, custom_base_url, custom_models_json, updated_at
+      ) VALUES (1, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        mode = excluded.mode,
+        custom_base_url = excluded.custom_base_url,
+        custom_models_json = excluded.custom_models_json,
         updated_at = excluded.updated_at
     `),
         writeTaskSettings: database.prepare(`
@@ -297,6 +323,9 @@ function createOperations(database) {
     readGlobalSettings() {
       return globalSettingsFromRow(requireStatements().readGlobalSettings.get());
     },
+    readProviderConnection() {
+      return providerConnectionFromRow(requireStatements().readProviderConnection.get());
+    },
     readTaskSettings(payload) {
       return taskSettingsFromRow(
         requireStatements().readTaskSettings.get(payload.projectId, payload.taskId),
@@ -344,6 +373,15 @@ function createOperations(database) {
         payload.updatedAt,
       );
       return settings;
+    },
+    writeProviderConnection(payload) {
+      requireStatements().writeProviderConnection.run(
+        payload.mode,
+        payload.customBaseUrl,
+        payload.customModelsJson,
+        payload.updatedAt,
+      );
+      return null;
     },
     writeTaskSettings(payload) {
       const settings = payload.settings;

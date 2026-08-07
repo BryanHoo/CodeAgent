@@ -15,6 +15,8 @@ import type {
 import type {
   AgentCapabilities,
   AgentBackgroundTerminalPage,
+  AgentProviderConnectionMutationResponse,
+  AgentProviderConnectionStatus,
   AgentMcpServerPage,
   AgentTask,
   AgentTaskPage,
@@ -24,8 +26,11 @@ import type {
   AgentReviewTarget,
   AgentSandboxMode,
   AgentSkillPage,
+  ConfigureCustomProviderRequest,
+  ConfigureCustomProviderResponse,
   PendingRequest,
   Project,
+  StartOfficialProviderLoginResponse,
   UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
 import { RuntimeOwnerRegistry, isSameResolvedPath } from "./runtime-owner-registry.js";
@@ -39,6 +44,7 @@ import {
   type CreateCodexRuntimeProviderOptions,
 } from "./agent-provider-base.js";
 import { readReviewWorkerThread, readTaskId } from "./agent-provider-notifications.js";
+import { CodexProviderConnectionService } from "./provider-connection.js";
 
 class CodexRuntimeProjectProvider implements AgentProvider {
   readonly #delegate: CodexAgentProvider;
@@ -226,6 +232,7 @@ class CodexRuntimeProjectProvider implements AgentProvider {
 export class CodexRuntimeProvider implements AgentRuntimeProvider {
   readonly #client: CodexRpcClient;
   readonly #logger: CodexProviderLogger;
+  readonly #providerConnection: CodexProviderConnectionService;
   readonly #owners = new RuntimeOwnerRegistry();
   readonly #projects = new Map<string, Project>();
   readonly #projectProviders = new Map<string, CodexRuntimeProjectProvider>();
@@ -238,10 +245,13 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
   public constructor(
     client: CodexRpcClient,
     logger: CodexProviderLogger = DEFAULT_PROVIDER_LOGGER,
+    options: Readonly<{ fetch?: typeof globalThis.fetch }> = {},
   ) {
     this.#client = client;
     this.#logger = logger;
+    this.#providerConnection = new CodexProviderConnectionService(client, options);
     client.onNotification((notification) => {
+      this.#providerConnection.receiveNotification(notification.method, notification.params);
       const taskId = readTaskId(notification.params);
       if (taskId === undefined) {
         return;
@@ -291,6 +301,16 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
         })
         .catch(() => undefined);
     });
+  }
+
+  public cancelProviderLogin(loginId: string): Promise<AgentProviderConnectionMutationResponse> {
+    return this.#providerConnection.cancelLogin(loginId);
+  }
+
+  public configureCustomProvider(
+    input: ConfigureCustomProviderRequest,
+  ): Promise<ConfigureCustomProviderResponse> {
+    return this.#providerConnection.configureCustom(input);
   }
 
   public forProject(project: Project): AgentProvider {
@@ -349,6 +369,14 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
     }).listModels();
   }
 
+  public logoutProvider(): Promise<AgentProviderConnectionMutationResponse> {
+    return this.#providerConnection.logout();
+  }
+
+  public readProviderConnection(): Promise<AgentProviderConnectionStatus> {
+    return this.#providerConnection.readStatus();
+  }
+
   public releaseProject(projectId: string): Promise<void> {
     const provider = this.#rawProviders.get(projectId);
     // 先移除路由和 Owner，再清空 Provider 内部状态，后续 RPC 无法回流到已删除 Project。
@@ -363,6 +391,10 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
     }
     provider?.releaseProject();
     return Promise.resolve();
+  }
+
+  public startOfficialProviderLogin(): Promise<StartOfficialProviderLoginResponse> {
+    return this.#providerConnection.startOfficialLogin();
   }
 
   public beginTaskRead(project: Project, taskId: string): boolean {
@@ -398,5 +430,7 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
 export function createCodexRuntimeProvider(
   options: CreateCodexRuntimeProviderOptions,
 ): CodexRuntimeProvider {
-  return new CodexRuntimeProvider(options.client, options.logger);
+  return new CodexRuntimeProvider(options.client, options.logger, {
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+  });
 }

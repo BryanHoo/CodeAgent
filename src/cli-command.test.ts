@@ -74,10 +74,43 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     uploadFeedback: vi.fn(),
   };
   const runtimeProvider = {
+    cancelProviderLogin: vi.fn(() =>
+      Promise.resolve({
+        status: {
+          account: null,
+          customBaseUrl: null,
+          mode: "official" as const,
+          pendingLogin: null,
+          state: "disconnected" as const,
+        },
+      }),
+    ),
+    configureCustomProvider: vi.fn(() => Promise.reject(new Error("Not configured"))),
     forProject: vi.fn(() => provider),
     getCapabilities: provider.getCapabilities,
     listModels: provider.listModels,
+    logoutProvider: vi.fn(() =>
+      Promise.resolve({
+        status: {
+          account: null,
+          customBaseUrl: null,
+          mode: "official" as const,
+          pendingLogin: null,
+          state: "disconnected" as const,
+        },
+      }),
+    ),
+    readProviderConnection: vi.fn(() =>
+      Promise.resolve({
+        account: null,
+        customBaseUrl: null,
+        mode: "official" as const,
+        pendingLogin: null,
+        state: "disconnected" as const,
+      }),
+    ),
     releaseProject: vi.fn(() => Promise.resolve()),
+    startOfficialProviderLogin: vi.fn(() => Promise.reject(new Error("Not configured"))),
   };
   const project = {
     createdAt: "2026-07-23T00:00:00.000Z",
@@ -108,6 +141,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     ),
     list: vi.fn(() => Promise.resolve([])),
     readGlobalSettings: vi.fn(() => Promise.resolve(undefined)),
+    readProviderConnection: vi.fn(() => Promise.resolve(undefined)),
     readProjectDefaults: vi.fn(() => Promise.resolve(undefined)),
     readTaskSettings: vi.fn(() => Promise.resolve(undefined)),
     read: vi.fn(() => Promise.resolve(undefined)),
@@ -116,6 +150,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     rename: vi.fn(() => Promise.resolve(undefined)),
     reorder: vi.fn(() => Promise.resolve([])),
     writeGlobalSettings: vi.fn((settings) => Promise.resolve(settings)),
+    writeProviderConnection: vi.fn((record) => Promise.resolve(record)),
     writeProjectDefaults: vi.fn((_projectId, settings) => Promise.resolve(settings)),
     writeTaskSettings: vi.fn((_projectId, _taskId, settings) => Promise.resolve(settings)),
   };
@@ -277,6 +312,7 @@ describe("runCli", () => {
     const [serverOptions] = vi.mocked(harness.dependencies.createServer).mock.calls[0] ?? [];
     expect(serverOptions).toMatchObject({
       projectRepository: harness.stateRepository,
+      providerConnectionRepository: harness.stateRepository,
       provider: harness.runtimeProvider,
       settingsRepository: harness.stateRepository,
       staticRoot: "/package/dist/web",
