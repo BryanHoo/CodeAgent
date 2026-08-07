@@ -1,5 +1,14 @@
 import type { Readable, Writable } from "node:stream";
 
+import {
+  createRpcOverloadRetryPolicy,
+  isExplicitlyUnqueuedOverload,
+  type RpcOverloadRetryOptions,
+  type RpcOverloadRetryPolicy,
+  validatePositiveSafeInteger,
+} from "./rpc-overload-retry.js";
+import { RpcPendingRequest } from "./rpc-pending-request.js";
+
 // 原生 imageGeneration 会把图片 Base64 放进单个 JSONL 帧，64 MiB 可覆盖最大图片并保留协议边界。
 const DEFAULT_MAX_JSONL_BYTES = 64 * 1_024 * 1_024;
 const EMPTY_BUFFER = Buffer.alloc(0);
@@ -11,12 +20,7 @@ export interface JsonlRpcClientOptions {
   closeOnInputEnd?: boolean;
   maxFrameBytes?: number;
   maxBufferBytes?: number;
-}
-
-interface PendingRequest {
-  reject: (error: Error) => void;
-  resolve: (result: unknown) => void;
-  timer: NodeJS.Timeout;
+  overloadRetry?: RpcOverloadRetryOptions;
 }
 
 export interface RpcNotification {
@@ -101,13 +105,6 @@ function parseRpcError(value: unknown): RpcErrorPayload | null {
   return { code: value["code"], data: value["data"], message: value["message"] };
 }
 
-function validateByteLimit(value: number, optionName: string): number {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${optionName} must be a positive safe integer`);
-  }
-  return value;
-}
-
 export class JsonlRpcClient {
   readonly #defaultTimeoutMs: number;
   readonly #closeOnInputEnd: boolean;
@@ -117,7 +114,8 @@ export class JsonlRpcClient {
   readonly #maxFrameBytes: number;
   readonly #notificationListeners = new Set<NotificationListener>();
   readonly #output: Writable;
-  readonly #pending = new Map<number, PendingRequest>();
+  readonly #overloadRetryPolicy: RpcOverloadRetryPolicy;
+  readonly #pending = new Map<number, RpcPendingRequest>();
   readonly #serverRequestListeners = new Set<ServerRequestListener>();
   #buffer = EMPTY_BUFFER;
   #closed = false;
@@ -128,14 +126,15 @@ export class JsonlRpcClient {
     this.#output = options.output;
     this.#defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
     this.#closeOnInputEnd = options.closeOnInputEnd ?? true;
-    this.#maxFrameBytes = validateByteLimit(
+    this.#maxFrameBytes = validatePositiveSafeInteger(
       options.maxFrameBytes ?? DEFAULT_MAX_JSONL_BYTES,
       "maxFrameBytes",
     );
-    this.#maxBufferBytes = validateByteLimit(
+    this.#maxBufferBytes = validatePositiveSafeInteger(
       options.maxBufferBytes ?? DEFAULT_MAX_JSONL_BYTES,
       "maxBufferBytes",
     );
+    this.#overloadRetryPolicy = createRpcOverloadRetryPolicy(options.overloadRetry);
 
     this.#input.on("data", this.#handleData);
     this.#input.on("end", this.#handleInputEnd);
@@ -161,13 +160,18 @@ export class JsonlRpcClient {
     const request = params === undefined ? { id, method } : { id, method, params };
 
     return new Promise<unknown>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        if (this.#pending.delete(id)) {
-          reject(new RpcTimeoutError(id, method, timeoutMs));
-        }
-      }, timeoutMs);
-      timer.unref();
-      this.#pending.set(id, { reject, resolve, timer });
+      const pending = new RpcPendingRequest({
+        onTimeout: () => {
+          if (this.#removePending(id, pending)) {
+            pending.reject(new RpcTimeoutError(id, method, timeoutMs));
+          }
+        },
+        reject,
+        request,
+        resolve,
+        timeoutMs,
+      });
+      this.#pending.set(id, pending);
 
       try {
         void this.#sendMessage(request).catch(() => undefined);
@@ -246,7 +250,6 @@ export class JsonlRpcClient {
     this.#output.off("error", this.#handleStreamError);
 
     for (const pending of this.#pending.values()) {
-      clearTimeout(pending.timer);
       pending.reject(reason);
     }
     this.#pending.clear();
@@ -409,17 +412,40 @@ export class JsonlRpcClient {
       if (!error) {
         throw new RpcProtocolError("RPC error response has an invalid error payload");
       }
-      this.#pending.delete(id);
-      clearTimeout(pending.timer);
+      if (isExplicitlyUnqueuedOverload(error)) {
+        // 只有服务端明确声明请求未入队时，才允许安全重发同一逻辑请求。
+        const scheduled = pending.scheduleOverloadRetry(this.#overloadRetryPolicy, () => {
+          if (this.#pending.get(id) !== pending) {
+            return;
+          }
+          try {
+            void this.#sendMessage(pending.request).catch(() => undefined);
+          } catch {
+            // #sendMessage 已关闭连接并拒绝当前 Pending RPC。
+          }
+        });
+        if (scheduled) {
+          return;
+        }
+      }
+      this.#removePending(id, pending);
       pending.reject(new RpcResponseError(error));
       return;
     }
     if (!("result" in message)) {
       throw new RpcProtocolError("RPC response is missing result or error");
     }
-    this.#pending.delete(id);
-    clearTimeout(pending.timer);
+    this.#removePending(id, pending);
     pending.resolve(message["result"]);
+  }
+
+  #removePending(id: number, pending: RpcPendingRequest): boolean {
+    if (this.#pending.get(id) !== pending) {
+      return false;
+    }
+    this.#pending.delete(id);
+    pending.clearTimers();
+    return true;
   }
 
   #writeMessage(message: unknown): Promise<void> {

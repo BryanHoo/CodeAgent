@@ -37,3 +37,4 @@ export {
   type RpcRequestId,
   type RpcServerRequest,
 } from "./jsonl-rpc-client.js";
+export type { RpcOverloadRetryOptions } from "./rpc-overload-retry.js";

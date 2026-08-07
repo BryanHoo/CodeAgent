@@ -13,7 +13,7 @@
 - JSONL 中同时包含 `id` 与 `method` 的合法帧按服务端请求分发，并使用原 `id` 返回结果；未支持的方法返回 `-32601`，非法参数返回 `-32602`，不得让 Codex 无限等待。
 - Provider 丢弃未知 Notification 或隔离单条字段映射失败时必须通过 Pino 告警，固定记录 `diagnosticCode`、method、Codex version、Project ID 和可提取的 Task ID；禁止记录原始 params、Prompt、命令输出或文件正文。
 - JSONL 响应只有在底层写入回调确认后才算成功，所有写入都使用有界超时；异步写入失败必须关闭连接且不能提前发布请求终态。
-- 过载错误使用带 jitter 的有上限指数退避，不做同步密集重试。
+- 只有 `code = -32001` 且 `data.retry = true`、明确表示请求未入队的过载错误才允许重试；Adapter 使用带正负 `20%` jitter 的有上限指数退避，默认最多重试 `4` 次、累计退避不超过 `5s`、单次不超过 `2s`，并保留首次请求的总超时。连接关闭或请求超时必须取消待执行重试，其他错误直接透传。
 - Task/Turn 写入只通过 `thread/start`、`turn/start`、`turn/steer`、`turn/interrupt` 和稳定 Goal API 映射；文本输入必须转换为当前 Codex Schema 要求的 `UserInput[]`，Provider 不向上泄漏原生字段。
 - Goal 模式只允许作为当前首次提交的 `AgentTurnOptions.goalMode: true`。Provider 必须先通过 `thread/settings/update` 应用当前审批、沙盒、模型和思考量，再调用 `thread/goal/set` 写入 Trim 后的 1 至 4,000 字符 objective，并等待 Codex 自动发布 `turn/started`；不得额外调用 `turn/start`。`thread/goal/updated` 与 `thread/goal/cleared` 只更新 Codex 内部 Goal 生命周期，不生成未知通知告警；自动 Turn 的 Message、Tool 和终态继续使用统一事件映射。Git 提交信息使用的 ephemeral Thread 不支持 Goal。
 - `turn/steer` 只允许写入当前 Task 的活动 Turn，必须传递 `expectedTurnId` 且不能携带模型、思考量或审批等 Turn 设置覆盖；Provider 必须校验响应 `turnId` 与预期 Turn 一致。
