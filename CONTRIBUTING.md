@@ -18,7 +18,7 @@ pnpm test:e2e
 
 ## 变更约束
 
-- 遵守 [docs/project-structure.md](docs/project-structure.md) 中的依赖方向。
+- 遵守 [.superwork/spec/guides/index.md](.superwork/spec/guides/index.md) 及相关分层规范中的依赖方向。
 - 只在实际使用依赖的 Workspace 包中声明依赖。
 - 公共协议变更必须同步更新 Schema、契约测试和版本说明。
 - 不提交构建产物、覆盖率报告、本地配置或 Secret。

@@ -14,7 +14,7 @@
 
 ## 开发前检查
 
-- 读取 `.superwork/spec/guides/index.md`、本目录相关指南和 `docs/architecture-design.md`。
+- 读取 `.superwork/spec/guides/index.md` 和本目录相关指南。
 - 确认逻辑属于 Core 端口、Codex Adapter、Server 交付层还是根 CLI 装配。
 - 确认所有外部输入、路径、审批和进程边界的校验位置。
 - 完成后运行 `pnpm check`；涉及完整浏览器链路时运行 `pnpm test:e2e`。

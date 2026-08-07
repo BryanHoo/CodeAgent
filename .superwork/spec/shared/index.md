@@ -14,5 +14,5 @@
 ## Pre-Development Checklist
 
 - 读取 `.superwork/spec/guides/index.md` 和本层全部指南。
-- 对照 `docs/project-structure.md` 确认依赖方向。
+- 对照本目录的 [目录与依赖](./directory-structure.md) 确认依赖方向。
 - 修改公开协议前列出所有调用方、持久化影响和事件恢复影响。

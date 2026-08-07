@@ -1,83 +1,154 @@
 # CodeAgent
 
-CodeAgent 是一个通过 Web 操作本地 Coding Agent 的应用。`code-agent start` 会启动 Codex App Server、本地 HTTP API 和静态 Web 工作台。
+English | [简体中文](README.zh-CN.md)
 
-## 安装与启动
+CodeAgent is a local AI coding workspace for using Codex in your browser. It lets you create multiple tasks for your projects, follow Codex responses and actions, inspect files, review code, and manage Git changes.
 
-直接运行最新版本：
+CodeAgent runs on your computer. You can use it locally or access it from another device on a trusted local network.
+
+## Features
+
+- Work with Codex in your browser and follow responses, commands, and file changes in real time
+- Organize tasks by project, with search, pin, rename, and archive actions
+- Start temporary tasks without adding a project
+- Attach images or files as context and use your configured Skills and MCP servers
+- Choose the model, reasoning effort, approval behavior, and file access level
+- Browse project files, inspect code changes, switch branches, and view Git history
+- Start code reviews, generate commit messages, and commit or push changes
+- Connect from a phone, tablet, or another computer on a trusted local network
+
+## Requirements
+
+Before you begin, make sure you have:
+
+- Node.js 24 or later
+- The official Codex CLI
+- Chrome/Chromium 116+, Firefox 124+, or Safari 17.4+
+
+Sign in to Codex from your terminal before your first use:
+
+```bash
+codex login
+```
+
+## Quick Start
+
+Run the latest version without installing it:
 
 ```bash
 npx --package @bryanhu/code-agent@latest code-agent start
 ```
 
-也可以全局安装：
+CodeAgent opens in your browser after it starts. If the browser does not open automatically, visit:
+
+```text
+http://127.0.0.1:3210
+```
+
+Keep the terminal running while you use CodeAgent. Press `Ctrl+C` in the terminal when you want to stop it.
+
+### Install Globally
+
+If you use CodeAgent regularly, install it globally:
 
 ```bash
 npm install --global @bryanhu/code-agent
 code-agent start
 ```
 
-工作台左栏会显示当前 CodeAgent 版本和连接状态。设置的“关于”模块同时展示 CodeAgent 与 Codex 版本，并从 npm `latest` 标签检查新版；点击更新会执行全局 npm 安装，完成后需要重启 CodeAgent。
+## Basic Usage
 
-运行前需要：
+### Start a Temporary Task
 
-- Node.js 24 或更高版本
-- 已使用官方 Codex CLI 在相同 `CODEX_HOME` 中完成 `codex login`
+Open CodeAgent, select **New task** in the sidebar, enter your request, and submit it. Temporary tasks are useful for questions, analysis, or work that does not depend on a specific project directory.
 
-CodeAgent 不提供登录、退出或凭证管理，也不会读取或修改 `auth.json`。Runtime 不可用时，请先在官方 Codex CLI 完成登录，再回到 Web 工作台重试。
+### Work in a Project
 
-支持 Windows 10/11 和主流 Linux 桌面发行版的 x64、arm64 环境。Linux 目录选择依次尝试 `zenity`、`kdialog`；无桌面会话时可在终端输入绝对路径。系统浏览器或外部应用启动失败时，CLI 会输出本地访问地址供手动打开。
+1. Select the `+` button next to Projects.
+2. Find and add your project folder in the directory picker.
+3. Select the `+` button next to the project to create a task.
+4. Enter the work you want completed, optionally add images, files, or a Skill, and submit it.
+5. Follow Codex responses, tool activity, and approval requests while it works.
 
-Web 工作台支持 Chrome/Chromium 116+、Firefox 124+ 和 Safari 17.4+。生产构建按这些最低版本转译语法，但不为 `AbortSignal.timeout()`、`AbortSignal.any()`、`toSorted()` 或 `toSpliced()` 注入运行时 polyfill；更早版本不在支持范围内。CI 使用 Chromium 执行全量 E2E，并使用 Firefox 与 WebKit 执行核心流程 smoke。
+Project folders come from the computer running CodeAgent. When you connect from another device, the directory picker still shows files from the host computer.
 
-## 本地开发
+### Adjust Task Settings
 
-开发环境使用 pnpm 11.15.1：
+Before submitting a message, use the controls below the composer to choose the model, reasoning effort, approval behavior, and file access level. Select Plan mode when you want to prepare an implementation plan, or Goal mode when you want Codex to continue working toward an objective.
+
+Type `/` at the beginning of the composer to access actions such as code review, context compaction, and continuing in a new task. Available actions depend on the current task.
+
+### Review and Commit Changes
+
+When a project has Git changes, use the inspector on the right to review the change summary and file diffs. You can also switch branches or view the commit history of the current branch.
+
+Select **Commit**, choose the files to include, review or edit the commit message, and complete the commit. If the branch already has an upstream, you can also select **Commit and push**. Review the selected files and diffs before committing.
+
+## Local Network Access
+
+To connect from a phone, tablet, or another computer on the same local network, run this command on the host computer:
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm dev
-pnpm check
-pnpm test:e2e
+code-agent start --lan
 ```
 
-`pnpm check` 依次执行格式、静态检查、架构依赖检查、单元测试、类型检查、构建和 npm 包内容校验。
+The terminal displays a local network address and a one-time pairing code. Open the address on the other device and enter the pairing code.
 
-需要从源码启动 LAN 模式时，使用 pnpm 的参数分隔符传递 CLI 选项：
+Sessions are valid for 24 hours by default. You can set a fixed duration from `1m` to `30d`, for example:
 
 ```bash
-pnpm run start -- --lan --session-ttl 12h
+code-agent start --lan --session-ttl 12h
 ```
 
-## CLI 命令
+Local network mode uses unencrypted HTTP. Use it only on a network you trust, and never expose the address to the internet. Restarting CodeAgent invalidates the pairing code and all existing sessions.
+
+## Update CodeAgent
+
+CodeAgent checks for new versions on the **About** page in Settings. Select the update action, wait for installation to finish, then stop and restart CodeAgent.
+
+If you installed CodeAgent globally, you can also update it from the terminal:
 
 ```bash
-code-agent start
+npm install --global @bryanhu/code-agent@latest
+```
+
+If you use `npx`, run the Quick Start command again to use the latest version.
+
+## Troubleshooting
+
+### Codex Is Unavailable or Requires Sign-In
+
+Run this command on the computer hosting CodeAgent:
+
+```bash
+codex login
+```
+
+After signing in, return to the browser and retry. If you use a custom Codex configuration directory, make sure the Codex CLI and CodeAgent use the same directory.
+
+### The Browser Does Not Open
+
+Confirm that the terminal shows `CodeAgent 已启动`, then open `http://127.0.0.1:3210` manually.
+
+### Startup or Local Data Checks Fail
+
+Run the diagnostic command:
+
+```bash
 code-agent doctor
-code-agent version
 ```
 
-`start` 支持 `--codex-bin` 和 `--codex-home`。默认只监听 `127.0.0.1:3210`，本地模式启动后浏览器会打开 `http://127.0.0.1:3210`。首次启动项目列表为空，通过 Projects 标题右侧的 `+` 在 Web 目录树中选择运行 CodeAgent 的设备上的文件夹；Project、Project 新 Task 默认模型设置和 Task 完整设置写入 `CODEX_HOME/code-agent/state.sqlite3`。收到 `SIGINT` 或 `SIGTERM` 后会依次关闭 HTTP Server、数据库 Worker 和全局长驻 Codex App Server。
+Use the failed checks shown in the terminal to resolve issues with Node.js, Codex, or local data.
 
-可信局域网内可显式运行 `code-agent start --lan [--session-ttl <duration>]`。LAN 模式监听 `0.0.0.0:3210` 且不会自动打开浏览器，终端只显示物理网络接口上的私有 IPv4 URL 和本次启动的配对码；配对码不会进入 URL 或持久化存储。Session 默认绝对有效 `24h` 且请求不会续期，可设置 `1m` 至 `30d` 的整数分钟、小时或天数，例如 `30m`、`12h`、`7d`。该模式使用明文 HTTP，只适用于可信局域网，不提供传输加密或互联网暴露保护；进程重启后配对码和全部 Session 立即失效。
+### Port `3210` Is Already in Use
 
-`doctor` 会检查数据库可写性、Migration 版本、`PRAGMA integrity_check`、WAL 和运行所需的 SQLite PRAGMA。
+Stop the existing CodeAgent process or the other application using the port, then run the start command again.
 
-在 Composer 起始位置输入 `/`，可执行代码审查、初始化、副任务、上下文压缩、反馈、在新任务中继续，以及选择 Plan 或 Goal 模式。代码审查、压缩、反馈与续接直接调用 Codex App Server 对应能力；Goal 使用官方 `thread/goal/set` 协议，初始化和副任务通过正常 Turn 提交。
+## Help
 
-## 仓库结构
+- [Report an issue](https://github.com/BryanHoo/CodeAgent/issues)
+- [Changelog](CHANGELOG.md)
 
-```text
-apps/web/                 React + Vite 浏览器应用
-packages/protocol/        统一协议、Schema 和 API 描述
-packages/core/            领域模型、用例和 Provider 端口
-packages/provider-codex/  Codex App Server 适配器
-packages/server/          Fastify、WebSocket、持久化和 Worker
-packages/client/          Web 使用的 HTTP/WebSocket 客户端
-src/cli.ts                唯一公开 npm 包的 CLI 入口
-tools/                    构建与发布校验脚本
-```
+## License
 
-内部 Workspace 包均为 `private: true`。发布产物只来自根包的 `dist/`，用户只安装 `@bryanhu/code-agent`。
-
-架构决策见 [docs/architecture-design.md](docs/architecture-design.md)，工程约束见 [docs/project-structure.md](docs/project-structure.md)，维护者发布步骤见 [docs/releasing.md](docs/releasing.md)。版本变化记录在 [CHANGELOG.md](CHANGELOG.md)。
+[MIT](LICENSE)

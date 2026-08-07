@@ -13,7 +13,7 @@
 ## Pre-Development Checklist
 
 - 读取 `.superwork/config.json` 和相关层的 `index.md`。
-- 读取 `docs/architecture-design.md` 与 `docs/project-structure.md` 中相关章节。
+- 读取变更所属层的 `index.md` 及其链接的具体规范。
 - 用 `rg` 搜索已有入口、类型与实现，确认改动所属包。
 - 检查 `dependency-cruiser.config.cjs`，避免反向依赖或跨包深层导入。
 
