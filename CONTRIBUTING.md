@@ -23,6 +23,13 @@ pnpm test:e2e
 - 公共协议变更必须同步更新 Schema、契约测试和版本说明。
 - 不提交构建产物、覆盖率报告、本地配置或 Secret。
 
+## 文档维护
+
+- `README.md` 与 `README.zh-CN.md` 面向用户，功能、命令和限制必须同步。
+- 本文件维护贡献流程，`docs/releasing.md` 只维护当前发布流程。
+- `.superwork/spec/**` 维护当前工程约束；带日期的 PRD 与计划保留当时的设计和执行记录，不作为当前实现的唯一依据。
+- 优先链接已有事实来源，不在多个文档中复制实现细节、版本号或完整检查清单。
+
 ## Commit Message
 
 使用 Conventional Commits，格式为：

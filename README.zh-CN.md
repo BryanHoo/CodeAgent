@@ -147,6 +147,8 @@ code-agent doctor
 ## 获取帮助
 
 - [问题反馈](https://github.com/BryanHoo/CodeAgent/issues)
+- [贡献指南](CONTRIBUTING.md)
+- [安全策略](SECURITY.md)
 - [版本记录](CHANGELOG.md)
 
 ## 许可证

@@ -147,6 +147,8 @@ Stop the existing CodeAgent process or the other application using the port, the
 ## Help
 
 - [Report an issue](https://github.com/BryanHoo/CodeAgent/issues)
+- [Contributing guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 
 ## License

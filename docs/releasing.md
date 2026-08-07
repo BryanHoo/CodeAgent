@@ -4,20 +4,7 @@
 
 ## 发布前配置
 
-### 首次发布
-
-npm Trusted Publisher 需要先进入一个已存在包的 Settings 页面配置，因此新包 `@bryanhu/code-agent` 的 `0.0.3` 使用一次性 npm Token 完成初始化。
-
-1. 在 npm 创建允许发布公开包并可绕过发布 2FA 的 Granular Access Token。
-2. 在 GitHub 仓库的 `Settings > Environments` 中创建 `npm` Environment。
-3. 在该 Environment 中添加名为 `NPM_TOKEN` 的 Secret。
-4. 确认 npm 账号已启用发布所需的双重认证策略。
-
-Token 只用于首个版本，禁止写入仓库、`.npmrc` 或工作流文件。
-
-### 后续发布
-
-`0.0.3` 发布成功后，在 npm 的 `@bryanhu/code-agent > Settings > Trusted Publisher` 中添加 GitHub Actions Publisher：
+在 npm 的 `@bryanhu/code-agent > Settings > Trusted Publisher` 中配置 GitHub Actions Publisher：
 
 | 配置项               | 值            |
 | -------------------- | ------------- |
@@ -27,7 +14,7 @@ Token 只用于首个版本，禁止写入仓库、`.npmrc` 或工作流文件�
 | Environment name     | `npm`         |
 | Allowed actions      | `npm publish` |
 
-保存后删除 GitHub `npm` Environment 中的 `NPM_TOKEN`。后续工作流通过 OIDC 获取短期凭证，并自动生成 npm provenance。
+GitHub 仓库必须存在名为 `npm` 的 Environment。发布工作流通过 OIDC 获取短期凭证并生成 npm provenance，不使用长期 npm Token；禁止在仓库、Environment、`.npmrc` 或工作流中保存发布 Token。
 
 ## 发布版本
 
@@ -42,17 +29,18 @@ pnpm test:e2e
 
 `package:check` 会检查真实 tarball 的 `package.json`。工作流先使用 `pnpm pack` 将 `catalog:` 和 `workspace:` 转换为 npm 可安装版本，再通过 `npm publish <tarball>` 完成 Trusted Publisher OIDC 认证与发布。
 
-4. 提交发布准备并创建与包版本一致的标签：
+4. 提交发布准备，并用实际版本号创建匹配的标签：
 
 ```bash
-git tag -a v1.5.0 -m "发布 v1.5.0"
+RELEASE_VERSION=x.y.z
+git tag -a "v${RELEASE_VERSION}" -m "发布 v${RELEASE_VERSION}"
 git push origin main
-git push origin v1.5.0
+git push origin "v${RELEASE_VERSION}"
 ```
 
 `.github/workflows/release.yml` 会依次执行以下操作：
 
-1. 校验标签 `v1.5.0` 与 `package.json` 的 `1.5.0` 一致。
+1. 校验 `v<version>` 标签与 `package.json` 中的版本一致。
 2. 安装锁定依赖并运行 `pnpm check`。
 3. 使用 pnpm 生成协议已转换的 tarball，并通过 npm CLI 发布带 provenance 的公开 npm 包。
 4. 根据提交记录创建 GitHub Release。
@@ -63,7 +51,7 @@ GitHub Release 只会在 npm 发布成功后创建，避免 npm 失败时产生�
 
 ## 处理失败
 
-- 版本校验失败：删除错误的远端标签，修正版本后创建新标签。不得复用已经发布的 npm 版本。
+- 版本校验失败：确认标签对应版本尚未发布，再修正 `package.json` 或错误标签；不得复用已经发布的 npm 版本。
 - `ENEEDAUTH`：检查 npm Publisher 的仓库、`release.yml`、`npm` Environment 是否完全匹配，并确认工作流具有 `id-token: write`。
 - npm 发布成功但 GitHub Release 创建失败：不要修改版本；重新运行失败 Job，工作流会跳过已经存在的 npm 版本并继续创建 GitHub Release。
 - npm 拒绝重复版本：提升 `package.json` 版本并重新更新 `CHANGELOG.md`，然后创建新标签。
