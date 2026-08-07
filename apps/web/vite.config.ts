@@ -15,19 +15,19 @@ export default defineConfig({
       {
         find: /^shiki$/u,
         replacement: fileURLToPath(
-          new URL("./src/shared/ai-elements/shiki-bundle.ts", import.meta.url),
+          new URL("./src/shared/components/agent/shiki-bundle.ts", import.meta.url),
         ),
       },
       {
         find: /^shiki\/wasm$/u,
         replacement: fileURLToPath(
-          new URL("./src/shared/ai-elements/shiki-bundle.ts", import.meta.url),
+          new URL("./src/shared/components/agent/shiki-bundle.ts", import.meta.url),
         ),
       },
       {
         find: /^@pierre\/theming\/themes$/u,
         replacement: fileURLToPath(
-          new URL("./src/shared/ai-elements/pierre-themes.ts", import.meta.url),
+          new URL("./src/shared/components/agent/pierre-themes.ts", import.meta.url),
         ),
       },
     ],

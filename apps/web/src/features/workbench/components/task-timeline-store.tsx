@@ -8,8 +8,8 @@ import {
   Conversation,
   ConversationScrollButton,
   ConversationVirtualList,
-} from "../../../shared/ai-elements/conversation.js";
-import { Message, type MessageFileReference } from "../../../shared/ai-elements/message.js";
+} from "../../../shared/components/agent/conversation.js";
+import { Message, type MessageFileReference } from "../../../shared/components/agent/message.js";
 import type { NormalizedAgentTurn, TaskStore } from "../../conversation/runtime/task-store.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { PendingRequestCard, type PendingRequestResolution } from "./pending-request.js";

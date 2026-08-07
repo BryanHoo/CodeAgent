@@ -18,7 +18,7 @@ import type { Ref } from "react";
 import type {
   BrowserPromptInputAttachment,
   PromptInputAttachment,
-} from "../../../shared/ai-elements/prompt-input.js";
+} from "../../../shared/components/agent/prompt-input.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
 import type { CodeAgentGitMutationClient } from "../../projects/project-query-contracts.js";

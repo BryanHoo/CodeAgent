@@ -2,7 +2,7 @@
 import { useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Button } from "../../../shared/ui/button.js";
+import { Button } from "../../../shared/components/core/button.js";
 import {
   Dialog,
   DialogContent,
@@ -10,8 +10,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../../../shared/ui/dialog.js";
-import { Input } from "../../../shared/ui/input.js";
+} from "../../../shared/components/core/dialog.js";
+import { Input } from "../../../shared/components/core/input.js";
 
 type ProjectRenameDialogProps = Readonly<{
   error?: string | null;

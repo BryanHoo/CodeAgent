@@ -6,9 +6,9 @@ import {
   MAX_AGENT_IMAGES,
   MAX_AGENT_IMAGE_BYTES,
   MAX_AGENT_IMAGE_TOTAL_BYTES,
+  type ProjectGitStatus,
   type AgentSandboxMode,
 } from "@code-agent/protocol";
-import type { ProjectGitStatus } from "@code-agent/protocol";
 import {
   ChevronsUpDown,
   Folder,
@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Context, ContextTrigger } from "../../../shared/ai-elements/context.js";
+import { Context, ContextTrigger } from "../../../shared/components/agent/context.js";
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -31,8 +31,8 @@ import {
   PromptInputTools,
   isPromptInputComposing,
   isPromptInputNewlineShortcut,
-} from "../../../shared/ai-elements/prompt-input.js";
-import { Button } from "../../../shared/ui/button.js";
+} from "../../../shared/components/agent/prompt-input.js";
+import { Button } from "../../../shared/components/core/button.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,8 +41,10 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "../../../shared/ui/dropdown-menu.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+} from "../../../shared/components/core/dropdown-menu.js";
+import { Tooltip } from "../../../shared/components/core/tooltip.js";
+import { TooltipContent } from "../../../shared/components/core/tooltip.js";
+import { TooltipTrigger } from "../../../shared/components/core/tooltip.js";
 import {
   LARGE_PASTE_CHARACTER_THRESHOLD,
   PASTED_TEXT_ATTACHMENT_NAME,
@@ -60,7 +62,6 @@ import {
   resolveQueuedPromptSummary,
   type WorkbenchComposerViewProps,
 } from "./workbench-composer-view-contracts.js";
-
 export { ComposerModeTag } from "./workbench-composer-toolbar.js";
 export * from "./workbench-composer-view-contracts.js";
 type ComposerBranchSwitcherProps = Readonly<{
@@ -191,7 +192,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                     <TooltipTrigger asChild>
                       <Button
                         aria-label={t("composer.steerNow", { summary })}
-                        className="hover:text-primary"
+                        className="hover:text-brand"
                         disabled={
                           !props.canSteer || props.activeTurnId === undefined || props.isSubmitting
                         }

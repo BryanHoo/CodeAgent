@@ -12,14 +12,18 @@ import {
 } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Button } from "../../../shared/ui/button.js";
+import { Button } from "../../../shared/components/core/button.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../../../shared/ui/dropdown-menu.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+} from "../../../shared/components/core/dropdown-menu.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 import { getProjectSidebarConnectionStatus } from "./project-sidebar-state.js";
 
 export function ProjectPickerButton({

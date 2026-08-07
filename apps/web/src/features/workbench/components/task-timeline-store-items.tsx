@@ -3,7 +3,7 @@ import { useStore } from "zustand";
 
 import { i18n } from "../../../i18n/i18n.js";
 
-import { Message, type MessageFileReference } from "../../../shared/ai-elements/message.js";
+import { Message, type MessageFileReference } from "../../../shared/components/agent/message.js";
 import type {
   NormalizedAgentTurn,
   TaskItemStore,

@@ -5,7 +5,7 @@ import type { WheelEvent } from "react";
 import {
   projectLanguageByExtension,
   projectLanguageByFileName,
-} from "../../shared/ai-elements/code-languages.js";
+} from "../../shared/components/agent/code-languages.js";
 import type { AgentFileChange } from "./file-change.js";
 import { normalizeFileChangePatch } from "./file-change.js";
 

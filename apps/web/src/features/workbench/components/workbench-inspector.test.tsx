@@ -3,7 +3,7 @@ import type { AgentMcpServer } from "@code-agent/protocol";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
-import { TooltipProvider } from "../../../shared/ui/tooltip.js";
+import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { WorkbenchInspector, type ProjectFileTreeDirectoryState } from "./workbench-inspector.js";
 
 function renderInspectorMarkup(children: ReactNode): string {
@@ -156,7 +156,7 @@ describe("WorkbenchInspector", () => {
       /aria-label="变更统计"[^>]*><span>2 个变更<\/span><span[^>]*>\+3<\/span><span[^>]*>-1<\/span>/u,
     );
     expect(markup).toMatch(/<button[^>]*bg-control[^>]*aria-label="提交 2 个未提交变更"/u);
-    expect(markup).not.toContain("bg-primary");
+    expect(markup).not.toContain("bg-brand");
     expect(markup).toContain('aria-label="运行环境"');
     expect(markup).toMatch(/role="tab"[^>]*>项目<\/button>/u);
     expect(markup).toContain('aria-label="项目文件"');
@@ -471,7 +471,7 @@ describe("WorkbenchInspector", () => {
     expect(markup.match(/lucide-sparkles/gu)).toHaveLength(1);
     expect(markup).toContain("layout.png");
     expect(markup).not.toContain("This Mac");
-    expect(markup).not.toContain("AI Elements");
+    expect(markup).not.toContain("项目 Agent 组件");
     expect(markup).not.toContain("Web Design");
     expect(markup).not.toContain("添加来源");
   });

@@ -16,6 +16,6 @@
 - `features/projects` 负责 Project 集合、目录选择和 Task 归属；Project 选择整合进工作台，不创建独立 Project 索引页。
 - 仅被单个功能使用的组件、Hook 和状态留在该功能目录。
 - 跨功能 UI 经过复用验证后放入 `src/shared`；API 类型仍来自 `@code-agent/protocol`。
-- shadcn 基础组件固定放入 `src/shared/ui`，CLI 别名由 `apps/web/components.json` 指向该目录；Feature 和 `shared/ai-elements` 不得复制同类交互原语。
-- 跨路由复用的 Runtime 不可用提示放入 `src/shared/ui`，由页面传入重试行为。
+- 项目自有组件库分为 `src/shared/components/core` 与 `src/shared/components/agent`：前者维护通用交互原语，后者维护 Agent 工作台复合组件；Feature 不得复制同类能力，也不得直接依赖外部组件 registry 或生成配置。
+- 跨路由复用的 Runtime 不可用提示放入 `src/shared/components/core`，由页面传入重试行为。
 - 禁止从 Web 导入 `core`、`provider-codex` 或 `server`。

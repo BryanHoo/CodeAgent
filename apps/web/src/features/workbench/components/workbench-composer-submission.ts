@@ -13,7 +13,7 @@ import { v4 as createUuid } from "uuid";
 import type {
   PromptInputAttachment,
   PromptInputMessage,
-} from "../../../shared/ai-elements/prompt-input.js";
+} from "../../../shared/components/agent/prompt-input.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
 import type { QueuedComposerPrompt, useComposerDraftStore } from "../composer-draft-context.js";
 import {

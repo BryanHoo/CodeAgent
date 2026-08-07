@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { TooltipProvider } from "../../../shared/ui/tooltip.js";
+import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import {
   ComposerBranchSwitcher,
   ComposerGitHistoryButton,

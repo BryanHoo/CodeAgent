@@ -569,7 +569,7 @@ test("从最新 AI 回复复制任务", async ({ page }) => {
 
   const latestReply = page
     .locator('article[data-role="assistant"]')
-    .filter({ hasText: "工作台界面已按统一的 AI Elements 结构重新组织。" });
+    .filter({ hasText: "工作台界面已按统一的 项目 Agent 组件 结构重新组织。" });
   const copyMessageButton = latestReply.getByRole("button", { name: "复制消息" });
   await expect(copyMessageButton).toBeVisible();
   await expect(latestReply.getByRole("button", { name: "复制任务" })).toBeVisible();
@@ -2000,7 +2000,7 @@ test("scrolls the conversation area to the bottom whenever the active task chang
   });
   await page.getByRole("link", { name: /优化输入框交互/u }).click();
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/input-design$/u);
-  await expect(conversation).toContainText("工作台界面已按统一的 AI Elements 结构重新组织。");
+  await expect(conversation).toContainText("工作台界面已按统一的 项目 Agent 组件 结构重新组织。");
 
   await page.evaluate(() => {
     const observer = new MutationObserver(() => {

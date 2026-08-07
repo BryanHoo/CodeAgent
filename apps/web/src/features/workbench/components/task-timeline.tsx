@@ -3,8 +3,11 @@ import { useMemo } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
 
-import { Conversation, ConversationContent } from "../../../shared/ai-elements/conversation.js";
-import { Message, type MessageFileReference } from "../../../shared/ai-elements/message.js";
+import {
+  Conversation,
+  ConversationContent,
+} from "../../../shared/components/agent/conversation.js";
+import { Message, type MessageFileReference } from "../../../shared/components/agent/message.js";
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import { createTaskStore } from "../../conversation/runtime/task-store.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";

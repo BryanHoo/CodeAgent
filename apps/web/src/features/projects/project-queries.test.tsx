@@ -2,7 +2,7 @@ import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { TooltipProvider } from "../../shared/ui/tooltip.js";
+import { TooltipProvider } from "../../shared/components/core/tooltip.js";
 import { TaskSnapshotTimeline } from "../workbench/components/task-timeline.js";
 import {
   capabilitiesQueryOptions,

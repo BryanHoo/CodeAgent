@@ -23,14 +23,18 @@ import {
 import type { ReactNode } from "react";
 
 import { i18n } from "../../../i18n/i18n.js";
-import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
-import { Button } from "../../../shared/ui/button.js";
+import { Task, TaskTrigger } from "../../../shared/components/agent/task.js";
+import { Button } from "../../../shared/components/core/button.js";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "../../../shared/ui/collapsible.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+} from "../../../shared/components/core/collapsible.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 import {
   formatSubagentModel,
   toSubagentTaskStatus,
@@ -403,7 +407,7 @@ function McpServerRow({ server }: Readonly<{ server: AgentMcpServer }>) {
   ];
   const statusIcon =
     server.status === "ready" ? (
-      <CheckCircle2 aria-hidden="true" className="size-3.5 text-primary" />
+      <CheckCircle2 aria-hidden="true" className="size-3.5 text-brand" />
     ) : server.status === "starting" ? (
       <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin text-muted-foreground" />
     ) : server.status === "failed" ? (
@@ -465,7 +469,7 @@ export function InspectorSourceRow({ source }: Readonly<{ source: InspectorSourc
     source.kind === "project" ? (
       <FolderRoot aria-hidden="true" className="size-3.5" />
     ) : source.kind === "skill" ? (
-      <Sparkles aria-hidden="true" className="size-3.5 text-primary" />
+      <Sparkles aria-hidden="true" className="size-3.5 text-brand" />
     ) : (
       <Paperclip aria-hidden="true" className="size-3.5" />
     );

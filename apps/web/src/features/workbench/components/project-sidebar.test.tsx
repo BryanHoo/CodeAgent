@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { changeAppLanguage } from "../../../i18n/i18n.js";
-import { DropdownMenu } from "../../../shared/ui/dropdown-menu.js";
-import { TooltipProvider } from "../../../shared/ui/tooltip.js";
+import { DropdownMenu } from "../../../shared/components/core/dropdown-menu.js";
+import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { requestNextProjectTaskPage } from "../../projects/project-context.js";
 import {
   deriveProjectSidebarConnectionState,
@@ -406,7 +406,7 @@ describe("TaskStatusIndicator", () => {
     );
 
     expect(markup).toContain('aria-label="任务等待审批"');
-    expect(markup).toContain("text-primary");
+    expect(markup).toContain("text-brand");
     expect(markup).toContain("lucide-shield-question-mark");
     expect(markup).not.toContain("animate-spin");
     expect(markup).not.toContain("task-age");

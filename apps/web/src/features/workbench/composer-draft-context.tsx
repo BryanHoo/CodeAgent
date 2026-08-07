@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import type { AgentSkill } from "@code-agent/protocol";
 
-import type { PromptInputAttachment } from "../../shared/ai-elements/prompt-input.js";
+import type { PromptInputAttachment } from "../../shared/components/agent/prompt-input.js";
 import type { PromptSkillContent } from "./components/prompt-skill-editor.js";
 
 export type QueuedComposerPrompt = Readonly<{

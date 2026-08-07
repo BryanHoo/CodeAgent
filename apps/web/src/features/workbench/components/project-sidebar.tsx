@@ -11,9 +11,13 @@ import { PanelLeftClose, Search, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
-import { Button } from "../../../shared/ui/button.js";
-import { Input } from "../../../shared/ui/input.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+import { Button } from "../../../shared/components/core/button.js";
+import { Input } from "../../../shared/components/core/input.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 import { getPinnedTasks } from "../../projects/project-data.js";
 import {

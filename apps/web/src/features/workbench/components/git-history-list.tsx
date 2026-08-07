@@ -5,7 +5,7 @@ import { useEffect, useMemo } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import { cn } from "../../../shared/lib/utils.js";
-import { Button } from "../../../shared/ui/button.js";
+import { Button } from "../../../shared/components/core/button.js";
 import type { CodeAgentGitHistoryClient } from "../../projects/project-queries.js";
 import { projectGitHistoryInfiniteQueryOptions } from "../../projects/project-queries.js";
 
@@ -82,7 +82,7 @@ export function GitHistoryContent({
                   {index < commits.length - 1 ? (
                     <span className="absolute bottom-[-0.625rem] top-3 w-px bg-separator-strong" />
                   ) : null}
-                  <GitCommitHorizontal className="relative mt-0.5 size-3.5 text-primary" />
+                  <GitCommitHorizontal className="relative mt-0.5 size-3.5 text-brand" />
                 </div>
                 <div className="min-w-0">
                   <p

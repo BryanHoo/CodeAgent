@@ -13,8 +13,8 @@ import {
 import type { ReactNode, SelectHTMLAttributes } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { PromptInputSelect } from "../../../shared/ai-elements/prompt-input.js";
-import { Button } from "../../../shared/ui/button.js";
+import { PromptInputSelect } from "../../../shared/components/agent/prompt-input.js";
+import { Button } from "../../../shared/components/core/button.js";
 
 export type SettingsSectionId =
   "about" | "access" | "agent" | "appearance" | "commit" | "integration" | "provider";

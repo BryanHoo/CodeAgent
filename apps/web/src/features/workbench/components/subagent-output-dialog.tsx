@@ -2,13 +2,13 @@ import { X } from "lucide-react";
 
 import type { ProjectRuntimeManager } from "../../conversation/runtime/project-runtime.js";
 import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
-import { Task, TaskTrigger } from "../../../shared/ai-elements/task.js";
+import { Task, TaskTrigger } from "../../../shared/components/agent/task.js";
 import type { SubagentSelection } from "./subagent.js";
 import { toSubagentTaskStatus } from "./subagent.js";
 import { TaskTimeline } from "./task-timeline.js";
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Button } from "../../../shared/ui/button.js";
-import { Dialog, DialogContent, DialogTitle } from "../../../shared/ui/dialog.js";
+import { Button } from "../../../shared/components/core/button.js";
+import { Dialog, DialogContent, DialogTitle } from "../../../shared/components/core/dialog.js";
 
 type SubagentOutputDialogProps = Readonly<{
   onClose: () => void;

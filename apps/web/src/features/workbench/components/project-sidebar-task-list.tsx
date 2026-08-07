@@ -3,8 +3,12 @@ import { Folder, MessageSquareText, Pin, Plus } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Button } from "../../../shared/ui/button.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+import { Button } from "../../../shared/components/core/button.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 import { getTaskActivity, type TaskActivityMap } from "../../conversation/runtime/task-activity.js";
 import { getProjectTaskPreview, PROJECT_TASK_PREVIEW_LIMIT } from "../../projects/project-data.js";
 import type { ProjectTaskListState } from "../../projects/project-context.js";

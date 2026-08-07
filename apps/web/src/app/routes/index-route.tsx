@@ -13,7 +13,7 @@ import {
 import { loadGlobalSettingsDialog } from "../../features/settings/components/global-settings-lazy.js";
 import { useTranslation } from "../../i18n/i18n.js";
 import { useAccess } from "../../features/access/access-context.js";
-import { RuntimeUnavailable } from "../../shared/ui/runtime-unavailable.js";
+import { RuntimeUnavailable } from "../../shared/components/core/runtime-unavailable.js";
 import { ProjectSidebar } from "../../features/workbench/components/project-sidebar.js";
 import {
   getProjectSidebarPreferenceStorage,

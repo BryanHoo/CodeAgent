@@ -135,7 +135,7 @@ test("keeps retrying Snapshot recovery and applies later realtime events", async
   await page.goto("/p/code-agent/t/task-1");
 
   await expect.poll(() => snapshotRequestCount).toBeGreaterThanOrEqual(3);
-  await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+  await expect(page.getByText("工作台界面已按统一的 项目 Agent 组件 结构重新组织。")).toBeVisible();
   await expect(page.getByText("实时连接恢复中")).toBeVisible();
 
   await expect.poll(() => snapshotRequestCount).toBeGreaterThanOrEqual(4);
@@ -321,7 +321,7 @@ test("clears transient realtime errors after the WebSocket reconnects", async ({
   });
 
   await page.goto("/p/code-agent/t/task-1");
-  await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+  await expect(page.getByText("工作台界面已按统一的 项目 Agent 组件 结构重新组织。")).toBeVisible();
   await expect.poll(() => page.evaluate(() => WebSocket.name)).toBe("ReconnectingWebSocket");
   await expect
     .poll(() => page.evaluate(() => sessionStorage.getItem("__testWebSocketFailed")))
@@ -331,7 +331,7 @@ test("clears transient realtime errors after the WebSocket reconnects", async ({
 
   // Snapshot 刷新失败属于非阻塞恢复错误，已渲染 Timeline 不能被替换。
   await expect(page.getByRole("alert", { name: "会话内容" })).toHaveCount(0);
-  await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+  await expect(page.getByText("工作台界面已按统一的 项目 Agent 组件 结构重新组织。")).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => Number(sessionStorage.getItem("__testWebSocketConnections") ?? "0")),
@@ -1011,7 +1011,7 @@ test("shows the latest raw Codex operation throughout a running turn", async ({ 
   await page.getByRole("button", { exact: true, name: "提交" }).click();
 
   await expect(page.getByText("正在运行 rg --files", { exact: true })).toBeVisible();
-  const runningShimmer = page.locator('[data-ai-shimmer][aria-label^="AI 回复正在运行"]');
+  const runningShimmer = page.locator('[data-agent-shimmer][aria-label^="AI 回复正在运行"]');
   const initialShimmer = await runningShimmer.elementHandle();
   if (initialShimmer === null) {
     throw new Error("未找到运行态 Shimmer");

@@ -6,9 +6,9 @@ import { v4 as createUuid } from "uuid";
 import { getCurrentLanguage, i18n } from "../../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 
-import { MessageAction, MessageActions } from "../../../shared/ai-elements/message.js";
-import { Task, TaskTrigger, type TaskStatus } from "../../../shared/ai-elements/task.js";
-import type { ToolState } from "../../../shared/ai-elements/tool.js";
+import { MessageAction, MessageActions } from "../../../shared/components/agent/message.js";
+import { Task, TaskTrigger, type TaskStatus } from "../../../shared/components/agent/task.js";
+import type { ToolState } from "../../../shared/components/agent/tool.js";
 import type { ForkTaskAction } from "./task-timeline-contracts.js";
 import {
   formatSubagentOperationSummary,
@@ -120,7 +120,7 @@ export function toToolState(status: AgentItemStatus): ToolState {
 }
 
 export function toTaskStatus(status: AgentItemStatus): TaskStatus {
-  // Activity 使用 AI Elements 的四态模型，协议中的拒绝与中断都属于失败终态。
+  // Activity 使用 项目 Agent 组件 的四态模型，协议中的拒绝与中断都属于失败终态。
   if (status === "pending") {
     return "pending";
   }

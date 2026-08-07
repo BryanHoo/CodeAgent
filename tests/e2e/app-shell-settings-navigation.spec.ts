@@ -139,7 +139,7 @@ test("switches the interface language and restores it after reload", async ({ pa
   // Modal 会把背景移出可访问性树；这里仅验证服务端动态内容保持原文。
   await expect(page.locator("h1").filter({ hasText: "构建 macOS 工作台" })).toBeVisible();
   await expect(
-    page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。", { exact: false }),
+    page.getByText("工作台界面已按统一的 项目 Agent 组件 结构重新组织。", { exact: false }),
   ).toBeVisible();
 
   await englishDialog.getByRole("button", { name: "Close global settings" }).click();
@@ -321,9 +321,8 @@ test("provides reusable design tokens for light and dark themes", async ({ page 
         mutedInk: resolveColor("--ui-color-text-muted"),
         panel: resolveColor("--ui-color-panel"),
         sidebar: resolveColor("--ui-color-sidebar"),
-        semanticAccent: resolveColor("--color-accent"),
+        semanticControlHover: resolveColor("--color-control-hover"),
         semanticBrand: resolveColor("--color-brand"),
-        semanticPrimary: resolveColor("--color-primary"),
         spaceUnit: styles.getPropertyValue("--ui-space-unit").trim(),
         subtleInk: resolveColor("--ui-color-text-subtle"),
         surface: styles.backgroundColor,
@@ -343,9 +342,8 @@ test("provides reusable design tokens for light and dark themes", async ({ page 
     mutedInk: "rgba(17, 17, 17, 0.72)",
     panel: "rgb(255, 255, 255)",
     sidebar: "rgb(255, 255, 255)",
-    semanticAccent: "rgba(23, 23, 23, 0.075)",
+    semanticControlHover: "rgba(23, 23, 23, 0.075)",
     semanticBrand: "rgb(0, 106, 255)",
-    semanticPrimary: "rgb(0, 106, 255)",
     spaceUnit: expect.stringMatching(/^0?\.25rem$/),
     subtleInk: "rgba(17, 17, 17, 0.52)",
     surface: "rgb(255, 255, 255)",
@@ -364,9 +362,8 @@ test("provides reusable design tokens for light and dark themes", async ({ page 
     mutedInk: "rgba(255, 255, 255, 0.68)",
     panel: "rgb(24, 24, 24)",
     sidebar: "rgb(24, 24, 24)",
-    semanticAccent: "rgba(255, 255, 255, 0.1)",
+    semanticControlHover: "rgba(255, 255, 255, 0.1)",
     semanticBrand: "rgb(51, 156, 255)",
-    semanticPrimary: "rgb(51, 156, 255)",
     spaceUnit: expect.stringMatching(/^0?\.25rem$/),
     subtleInk: "rgba(255, 255, 255, 0.5)",
     surface: "rgb(24, 24, 24)",
@@ -798,7 +795,7 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(contextUsageTooltip).toContainText("13% 上下文已使用");
   await expect(contextUsageTooltip).toContainText("25K / 200K tokens");
   await expect(inspector.getByRole("button", { name: "关闭上下文面板" })).toBeHidden();
-  await expect(page.getByText("工作台界面已按统一的 AI Elements 结构重新组织。")).toBeVisible();
+  await expect(page.getByText("工作台界面已按统一的 项目 Agent 组件 结构重新组织。")).toBeVisible();
 });
 
 test("renders task-readable MCP servers and sources in inspector", async ({ page }) => {
@@ -818,7 +815,7 @@ test("renders task-readable MCP servers and sources in inspector", async ({ page
   await expect(sources.getByText("Security review", { exact: true })).toBeVisible();
   await expect(sources.getByText("项目目录", { exact: true })).toBeVisible();
   await expect(inspector.getByText("This Mac", { exact: true })).toHaveCount(0);
-  await expect(inspector.getByText("AI Elements", { exact: true })).toHaveCount(0);
+  await expect(inspector.getByText("项目 Agent 组件", { exact: true })).toHaveCount(0);
   await expect(inspector.getByRole("button", { name: "添加来源" })).toHaveCount(0);
 });
 

@@ -9,12 +9,15 @@ import {
   AttachmentInfo,
   AttachmentPreview,
   Attachments,
-} from "../../../shared/ai-elements/attachments.js";
+} from "../../../shared/components/agent/attachments.js";
 import { cn } from "../../../shared/lib/utils.js";
-import { Button } from "../../../shared/ui/button.js";
+import { Button } from "../../../shared/components/core/button.js";
 
-import { LazyMessageResponse } from "../../../shared/ai-elements/lazy-message-response.js";
-import { MessageContent, type MessageFileReference } from "../../../shared/ai-elements/message.js";
+import { LazyMessageResponse } from "../../../shared/components/agent/lazy-message-response.js";
+import {
+  MessageContent,
+  type MessageFileReference,
+} from "../../../shared/components/agent/message.js";
 import {
   Plan,
   PlanAction,
@@ -24,8 +27,8 @@ import {
   PlanHeader,
   PlanTitle,
   PlanTrigger,
-} from "../../../shared/ai-elements/plan.js";
-import { Task, TaskContent, TaskItem, TaskTrigger } from "../../../shared/ai-elements/task.js";
+} from "../../../shared/components/agent/plan.js";
+import { Task, TaskContent, TaskItem, TaskTrigger } from "../../../shared/components/agent/task.js";
 import {
   Terminal,
   TerminalActions,
@@ -33,7 +36,7 @@ import {
   TerminalCopyButton,
   TerminalHeader,
   TerminalTitle,
-} from "../../../shared/ai-elements/terminal.js";
+} from "../../../shared/components/agent/terminal.js";
 import {
   Tool,
   ToolBody,
@@ -41,7 +44,7 @@ import {
   ToolHeader,
   ToolInput,
   ToolOutput,
-} from "../../../shared/ai-elements/tool.js";
+} from "../../../shared/components/agent/tool.js";
 import { RETAINED_COMMAND_OUTPUT_MARKER } from "../../conversation/runtime/task-store.js";
 import { MessageImageAttachment } from "./message-image-attachment.js";
 import { SkillToken } from "./skill-token.js";

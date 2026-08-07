@@ -11,16 +11,20 @@ import {
   CodeBlockFilename,
   CodeBlockHeader,
   CodeBlockTitle,
-} from "../../../shared/ai-elements/code-block.js";
-import { LazyMessageResponse } from "../../../shared/ai-elements/lazy-message-response.js";
-import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
-import { getCodeLanguage } from "../../../shared/ai-elements/code-languages.js";
-import { Button } from "../../../shared/ui/button.js";
-import { Dialog, DialogContent, DialogTitle } from "../../../shared/ui/dialog.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+} from "../../../shared/components/agent/code-block.js";
+import { LazyMessageResponse } from "../../../shared/components/agent/lazy-message-response.js";
+import type { MessageFileReference } from "../../../shared/components/agent/message.js";
+import { getCodeLanguage } from "../../../shared/components/agent/code-languages.js";
+import { Button } from "../../../shared/components/core/button.js";
+import { Dialog, DialogContent, DialogTitle } from "../../../shared/components/core/dialog.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 
-export { getCodeLanguage } from "../../../shared/ai-elements/code-languages.js";
+export { getCodeLanguage } from "../../../shared/components/agent/code-languages.js";
 
 type ProjectSourceDialogProps = Readonly<{
   client: CodeAgentWorkbenchClient;

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import { changeAppLanguage } from "../../../i18n/i18n.js";
-import { TooltipProvider } from "../../../shared/ui/tooltip.js";
+import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { GlobalSettingsDialog, resolveGlobalSettingsModel } from "./global-settings-dialog.js";
 import { GlobalSettingsAbout } from "./global-settings-about.js";
 
@@ -39,7 +39,7 @@ describe("GlobalSettingsDialog", () => {
     await changeAppLanguage("zh-CN");
   });
 
-  it("renders all global defaults with accessible AI Elements selects", () => {
+  it("renders all global defaults with accessible 项目 Agent 组件 selects", () => {
     const markup = renderSettingsDialog(
       <GlobalSettingsDialog
         apps={[

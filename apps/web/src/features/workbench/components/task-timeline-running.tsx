@@ -3,14 +3,14 @@ import { SquareTerminal } from "lucide-react";
 
 import { i18n } from "../../../i18n/i18n.js";
 
-import { Shimmer } from "../../../shared/ai-elements/shimmer.js";
+import { Shimmer } from "../../../shared/components/agent/shimmer.js";
 import {
   Task,
   TaskContent,
   TaskItem,
   TaskTrigger,
   type TaskStatus,
-} from "../../../shared/ai-elements/task.js";
+} from "../../../shared/components/agent/task.js";
 import { PENDING_COMMAND_LABEL } from "../../conversation/runtime/task-store.js";
 
 export type IndexedAgentItem = Readonly<{

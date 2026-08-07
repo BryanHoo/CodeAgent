@@ -15,7 +15,7 @@ import {
 import {
   isPromptInputComposing,
   isPromptInputNewlineShortcut,
-} from "../../../shared/ai-elements/prompt-input.js";
+} from "../../../shared/components/agent/prompt-input.js";
 import {
   removePromptSkill,
   serializePromptSkillContent,

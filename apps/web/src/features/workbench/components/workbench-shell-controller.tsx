@@ -9,7 +9,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { classifyProjectFileReference } from "../project-file-reference.js";
 
-import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
+import type { MessageFileReference } from "../../../shared/components/agent/message.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import {
   PROJECT_TASK_SEARCH_SOURCE_KEY,

@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { changeAppLanguage } from "../../../i18n/i18n.js";
-import { TooltipProvider } from "../../../shared/ui/tooltip.js";
+import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import {
   ProjectDirectoryPickerDialog,
   ProjectDirectoryTree,

@@ -13,13 +13,13 @@ import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Button } from "../../../shared/ui/button.js";
+import { Button } from "../../../shared/components/core/button.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../../../shared/ui/dropdown-menu.js";
+} from "../../../shared/components/core/dropdown-menu.js";
 import { formatTaskAge } from "../../projects/project-data.js";
 import type { TaskAttention } from "../../conversation/runtime/task-activity.js";
 
@@ -118,7 +118,7 @@ export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskSta
     return (
       <span
         aria-label={t("sidebar.taskApproval")}
-        className="task-status ml-auto inline-flex shrink-0 text-primary"
+        className="task-status ml-auto inline-flex shrink-0 text-brand"
         role="status"
       >
         <ShieldQuestion className="size-3.5" aria-hidden="true" />

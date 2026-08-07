@@ -3,7 +3,7 @@ import { Download, LoaderCircle, RefreshCw } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Button } from "../../../shared/ui/button.js";
+import { Button } from "../../../shared/components/core/button.js";
 import { cn } from "../../../shared/lib/utils.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { SettingsField, SettingsPanel, type SettingsSectionId } from "./global-settings-fields.js";

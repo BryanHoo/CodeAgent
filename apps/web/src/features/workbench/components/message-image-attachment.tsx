@@ -2,9 +2,18 @@ import { X } from "lucide-react";
 import { useId, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Button } from "../../../shared/ui/button.js";
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "../../../shared/ui/dialog.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+import { Button } from "../../../shared/components/core/button.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "../../../shared/components/core/dialog.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 
 type MessageImageAttachmentProps = Readonly<{
   name: string;

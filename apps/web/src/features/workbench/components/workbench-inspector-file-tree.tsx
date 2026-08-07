@@ -11,9 +11,13 @@ import {
   FileTreeActions,
   FileTreeFile,
   FileTreeFolder,
-} from "../../../shared/ai-elements/file-tree.js";
-import { Button } from "../../../shared/ui/button.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+} from "../../../shared/components/agent/file-tree.js";
+import { Button } from "../../../shared/components/core/button.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 import { countFileChangeLines, type AgentFileChange } from "../../diff/file-change.js";
 import {
   getProjectOpenAppsForTarget,

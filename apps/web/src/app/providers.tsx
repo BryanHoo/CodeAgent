@@ -15,7 +15,7 @@ import { createBrowserTaskNotifier } from "../features/notifications/browser-tas
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
-import { TooltipProvider } from "../shared/ui/tooltip.js";
+import { TooltipProvider } from "../shared/components/core/tooltip.js";
 import { useTranslation } from "../i18n/i18n.js";
 import { installInactiveSnapshotMemoryLimit } from "./snapshot-memory.js";
 import { router } from "./router.js";

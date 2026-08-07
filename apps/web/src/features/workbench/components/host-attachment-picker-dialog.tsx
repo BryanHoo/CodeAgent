@@ -5,9 +5,13 @@ import { ArrowUp, FilePlus2, ImagePlus, LoaderCircle, RotateCcw } from "lucide-r
 import { useMemo, useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { FileTree, FileTreeFile, FileTreeFolder } from "../../../shared/ai-elements/file-tree.js";
-import type { PromptInputAttachment } from "../../../shared/ai-elements/prompt-input.js";
-import { Button } from "../../../shared/ui/button.js";
+import {
+  FileTree,
+  FileTreeFile,
+  FileTreeFolder,
+} from "../../../shared/components/agent/file-tree.js";
+import type { PromptInputAttachment } from "../../../shared/components/agent/prompt-input.js";
+import { Button } from "../../../shared/components/core/button.js";
 import {
   Dialog,
   DialogContent,
@@ -15,8 +19,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../../../shared/ui/dialog.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+} from "../../../shared/components/core/dialog.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 import type { CodeAgentHostAttachmentClient } from "../../projects/project-queries.js";
 import { resolveIdempotencyAttempt, type IdempotencyAttempt } from "../composer-state.js";
 

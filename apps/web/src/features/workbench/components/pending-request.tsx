@@ -14,10 +14,10 @@ import {
   ConfirmationRequest,
   ConfirmationTitle,
   type ConfirmationState,
-} from "../../../shared/ai-elements/confirmation.js";
+} from "../../../shared/components/agent/confirmation.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
-import { Button } from "../../../shared/ui/button.js";
-import { Input } from "../../../shared/ui/input.js";
+import { Button } from "../../../shared/components/core/button.js";
+import { Input } from "../../../shared/components/core/input.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 
 export type PendingRequestResolution = ResolvePendingRequestRequest["resolution"];

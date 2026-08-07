@@ -1,7 +1,7 @@
 import type { AgentItem, AgentItemStatus } from "@code-agent/protocol";
 
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
-import type { TaskStatus } from "../../../shared/ai-elements/task.js";
+import type { TaskStatus } from "../../../shared/components/agent/task.js";
 import { i18n } from "../../../i18n/i18n.js";
 
 export type SubagentOperationName =

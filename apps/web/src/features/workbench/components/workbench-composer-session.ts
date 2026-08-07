@@ -8,7 +8,7 @@ import type {
 } from "@code-agent/protocol";
 import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 
-import type { PromptInputAttachment } from "../../../shared/ai-elements/prompt-input.js";
+import type { PromptInputAttachment } from "../../../shared/components/agent/prompt-input.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import {
   createComposerDraftScope,

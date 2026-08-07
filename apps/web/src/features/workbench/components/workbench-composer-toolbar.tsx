@@ -9,16 +9,20 @@ import {
   AttachmentPreview,
   AttachmentRemove,
   Attachments,
-} from "../../../shared/ai-elements/attachments.js";
+} from "../../../shared/components/agent/attachments.js";
 import {
   PromptInputButton,
   PromptInputHeader,
   usePromptInputAttachments,
-} from "../../../shared/ai-elements/prompt-input.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+} from "../../../shared/components/agent/prompt-input.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 
 export function PromptCommandIcon({ action }: Readonly<{ action: PromptCommandAction }>) {
-  const className = "size-4 shrink-0 text-primary";
+  const className = "size-4 shrink-0 text-brand";
   switch (action) {
     case "review":
       return <Bug aria-hidden="true" className={className} />;
@@ -55,7 +59,7 @@ export function ComposerModeTag({
           disabled={disabled}
           onClick={onRemove}
         >
-          <ModeIcon aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+          <ModeIcon aria-hidden="true" className="size-3.5 shrink-0 text-brand" />
           <span className="max-workbench:hidden">{label}</span>
           <X
             aria-hidden="true"

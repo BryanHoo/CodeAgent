@@ -2,7 +2,7 @@ import { FilePenLine, Files } from "lucide-react";
 import { useState } from "react";
 
 import { i18n } from "../../../i18n/i18n.js";
-import { Button } from "../../../shared/ui/button.js";
+import { Button } from "../../../shared/components/core/button.js";
 
 import {
   countFileChangeLines,

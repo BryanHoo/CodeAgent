@@ -1,5 +1,5 @@
 export const conversation = {
-  aiElements: {
+  agentComponents: {
     addFile: "Add file",
     addImage: "Add image",
     addImageOrFile: "Add image or file",

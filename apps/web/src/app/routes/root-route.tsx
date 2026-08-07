@@ -1,7 +1,7 @@
 import { Link, Outlet, createRootRoute } from "@tanstack/react-router";
 
 import { useTranslation } from "../../i18n/i18n.js";
-import { Button } from "../../shared/ui/button.js";
+import { Button } from "../../shared/components/core/button.js";
 import { NotFound } from "./not-found.js";
 
 export const rootRoute = createRootRoute({

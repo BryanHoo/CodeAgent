@@ -1,7 +1,7 @@
 import type { Project } from "@code-agent/protocol";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Button } from "../../../shared/ui/button.js";
+import { Button } from "../../../shared/components/core/button.js";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../../../shared/ui/dialog.js";
+} from "../../../shared/components/core/dialog.js";
 
 type ProjectRemoveDialogProps = Readonly<{
   error?: string | null;

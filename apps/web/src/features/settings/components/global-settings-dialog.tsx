@@ -8,9 +8,11 @@ import type {
 import { Moon, Settings, Sun, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { Button } from "../../../shared/ui/button.js";
-import { Dialog, DialogContent, DialogTitle } from "../../../shared/ui/dialog.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+import { Button } from "../../../shared/components/core/button.js";
+import { Dialog, DialogContent, DialogTitle } from "../../../shared/components/core/dialog.js";
+import { Tooltip } from "../../../shared/components/core/tooltip.js";
+import { TooltipContent } from "../../../shared/components/core/tooltip.js";
+import { TooltipTrigger } from "../../../shared/components/core/tooltip.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { changeAppLanguage, getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
 import {
@@ -39,9 +41,7 @@ import {
 import { GlobalSettingsAbout } from "./global-settings-about.js";
 import { GlobalSettingsAccess } from "./global-settings-access.js";
 import { ProviderConnectionPanel } from "../../provider-connection/components/provider-connection-panel.js";
-
 export { resolveGlobalSettingsModel } from "./global-settings-model.js";
-
 type GlobalSettingsDialogProps = Readonly<{
   accessMode?: AccessMode;
   appInfo?: AppInfoResponse;
@@ -155,7 +155,7 @@ export function GlobalSettingsDialog({
           }}
         >
           <header className="flex h-12 items-center gap-2.5 px-4 shadow-toolbar">
-            <Settings className="size-4 text-primary" aria-hidden="true" />
+            <Settings className="size-4 text-brand" aria-hidden="true" />
             <DialogTitle
               className="min-w-0 flex-1 truncate text-heading font-semibold"
               id="global-settings-title"
@@ -195,7 +195,7 @@ export function GlobalSettingsDialog({
                         variant="ghost"
                         aria-controls={`settings-panel-${section.id}`}
                         aria-current={selected ? "page" : undefined}
-                        className={`flex h-9 shrink-0 items-center gap-2 rounded-control px-2.5 text-left text-body-small font-medium transition-colors focus-visible:shadow-focus sm:w-full ${selected ? "bg-primary text-primary-foreground shadow-control" : "text-muted-foreground hover:bg-control-hover hover:text-foreground"}`}
+                        className={`flex h-9 shrink-0 items-center gap-2 rounded-control px-2.5 text-left text-body-small font-medium transition-colors focus-visible:shadow-focus sm:w-full ${selected ? "bg-brand text-brand-contrast shadow-control" : "text-muted-foreground hover:bg-control-hover hover:text-foreground"}`}
                         contentAlign="start"
                         key={section.id}
                         onClick={() => {
@@ -419,7 +419,7 @@ export function GlobalSettingsDialog({
                     <SettingsField alignStart label={t("fields.prompt")}>
                       <textarea
                         aria-label={t("fields.commitMessagePrompt")}
-                        className="h-28 w-full resize-none rounded-control border border-separator-strong bg-panel px-3 py-2 text-body-small text-foreground outline-none focus:border-primary focus:shadow-focus disabled:opacity-50"
+                        className="h-28 w-full resize-none rounded-control border border-separator-strong bg-panel px-3 py-2 text-body-small text-foreground outline-none focus:border-brand focus:shadow-focus disabled:opacity-50"
                         disabled={isSaving}
                         maxLength={4_000}
                         onChange={(event) => {

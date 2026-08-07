@@ -17,24 +17,28 @@ import {
 import { useMemo, useRef, useState } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
-import { PromptInputButton } from "../../../shared/ai-elements/prompt-input-controls.js";
+import { PromptInputButton } from "../../../shared/components/agent/prompt-input-controls.js";
 import { cn } from "../../../shared/lib/utils.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
-import { Button } from "../../../shared/ui/button.js";
-import { ButtonGroup } from "../../../shared/ui/button-group.js";
+import { Button } from "../../../shared/components/core/button.js";
+import { ButtonGroup } from "../../../shared/components/core/button-group.js";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "../../../shared/ui/collapsible.js";
+} from "../../../shared/components/core/collapsible.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../../../shared/ui/dropdown-menu.js";
-import { InputGroup, InputGroupAddon, InputGroupTextarea } from "../../../shared/ui/input-group.js";
+} from "../../../shared/components/core/dropdown-menu.js";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupTextarea,
+} from "../../../shared/components/core/input-group.js";
 import {
   Select,
   SelectContent,
@@ -42,9 +46,13 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../../../shared/ui/select.js";
-import { Sheet, SheetContent, SheetTitle } from "../../../shared/ui/sheet.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+} from "../../../shared/components/core/select.js";
+import { Sheet, SheetContent, SheetTitle } from "../../../shared/components/core/sheet.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentGitHistoryClient } from "../../projects/project-queries.js";
 import { CommitChangesTreeSection } from "./commit-changes-tree.js";
@@ -195,7 +203,7 @@ export function CommitChangesDialog({
       >
         <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-separator px-4">
           <div className="flex min-w-0 items-center gap-2">
-            <GitCommitHorizontal aria-hidden="true" className="size-4 shrink-0 text-primary" />
+            <GitCommitHorizontal aria-hidden="true" className="size-4 shrink-0 text-brand" />
             <SheetTitle className="truncate text-body-small" id="commit-changes-title">
               {t("commit.title")}
             </SheetTitle>
@@ -258,7 +266,7 @@ export function CommitChangesDialog({
           {repositoryReady ? (
             <>
               <section className="shrink-0 px-3 py-2">
-                <InputGroup className="h-8 gap-1 rounded-surface border border-separator-strong bg-panel shadow-sm focus-within:border-primary focus-within:shadow-focus max-workbench:h-11">
+                <InputGroup className="h-8 gap-1 rounded-surface border border-separator-strong bg-panel shadow-sm focus-within:border-brand focus-within:shadow-focus max-workbench:h-11">
                   <InputGroupTextarea
                     aria-label={t("commit.commitMessage")}
                     className="h-full min-h-0 overflow-y-auto px-2 py-1.5 text-label leading-5 max-workbench:py-3"
@@ -320,7 +328,7 @@ export function CommitChangesDialog({
                       <DropdownMenuTrigger asChild>
                         <Button
                           aria-label={t("commit.commitActions")}
-                          className="w-10 rounded-l-none border-l border-primary-foreground/30 px-0"
+                          className="w-10 rounded-l-none border-l border-brand-contrast/30 px-0"
                           disabled={!canCommit}
                           type="button"
                         >

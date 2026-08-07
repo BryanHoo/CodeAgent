@@ -2,9 +2,13 @@ import { TEMPORARY_TASK_SANDBOX_MODE } from "@code-agent/protocol";
 import { PanelLeft, PanelRight, Pencil } from "lucide-react";
 import { lazy, Suspense, type CSSProperties } from "react";
 
-import { Button } from "../../../shared/ui/button.js";
-import { RuntimeUnavailable } from "../../../shared/ui/runtime-unavailable.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+import { Button } from "../../../shared/components/core/button.js";
+import { RuntimeUnavailable } from "../../../shared/components/core/runtime-unavailable.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 import { ProjectSidebar } from "./project-sidebar.js";
 import { TaskTimeline } from "./task-timeline.js";
 import { WorkbenchComposer } from "./workbench-composer.js";

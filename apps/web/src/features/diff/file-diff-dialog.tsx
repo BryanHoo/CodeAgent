@@ -1,9 +1,9 @@
 import { FileCode2, X } from "lucide-react";
 import { lazy, Suspense } from "react";
 
-import { Button } from "../../shared/ui/button.js";
-import { Dialog, DialogContent, DialogTitle } from "../../shared/ui/dialog.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../shared/ui/tooltip.js";
+import { Button } from "../../shared/components/core/button.js";
+import { Dialog, DialogContent, DialogTitle } from "../../shared/components/core/dialog.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../shared/components/core/tooltip.js";
 import { useTranslation } from "../../i18n/i18n.js";
 import type { AgentFileChange } from "./file-change.js";
 import { countFileChangeLines, getFileName } from "./file-change.js";

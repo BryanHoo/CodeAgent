@@ -8,9 +8,9 @@ import {
   FileTreeFolder,
   FileTreeIcon,
   FileTreeName,
-} from "../../../shared/ai-elements/file-tree.js";
+} from "../../../shared/components/agent/file-tree.js";
 import { cn } from "../../../shared/lib/utils.js";
-import { Checkbox } from "../../../shared/ui/checkbox.js";
+import { Checkbox } from "../../../shared/components/core/checkbox.js";
 
 type CommitChange = ProjectGitStatus["staged"][number];
 

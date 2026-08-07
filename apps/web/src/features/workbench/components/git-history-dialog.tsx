@@ -4,8 +4,8 @@ import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import { cn } from "../../../shared/lib/utils.js";
-import { Button } from "../../../shared/ui/button.js";
-import { Dialog, DialogContent, DialogTitle } from "../../../shared/ui/dialog.js";
+import { Button } from "../../../shared/components/core/button.js";
+import { Dialog, DialogContent, DialogTitle } from "../../../shared/components/core/dialog.js";
 import type { CodeAgentGitHistoryClient } from "../../projects/project-queries.js";
 import { projectGitHistoryInfiniteQueryOptions } from "../../projects/project-queries.js";
 import { GitHistoryContent, GitHistoryList } from "./git-history-list.js";

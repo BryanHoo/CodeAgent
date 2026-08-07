@@ -2,8 +2,8 @@ import { ArrowRight, KeyRound, RotateCw } from "lucide-react";
 import { useState, type SubmitEvent } from "react";
 
 import { useTranslation } from "../../i18n/i18n.js";
-import { Button } from "../../shared/ui/button.js";
-import { Input } from "../../shared/ui/input.js";
+import { Button } from "../../shared/components/core/button.js";
+import { Input } from "../../shared/components/core/input.js";
 import type { AccessError } from "./access-context.js";
 
 export function PairingGate({
@@ -63,7 +63,7 @@ export function PairingGate({
             <label className="block text-body-small font-medium" htmlFor="access-pairing-code">
               {t("access.codeLabel")}
             </label>
-            <div className="flex h-10 items-center rounded-control border border-separator-strong bg-panel focus-within:border-primary focus-within:shadow-focus">
+            <div className="flex h-10 items-center rounded-control border border-separator-strong bg-panel focus-within:border-brand focus-within:shadow-focus">
               <KeyRound aria-hidden="true" className="ml-3 size-4 shrink-0 text-muted-foreground" />
               <Input
                 aria-label={t("access.codeLabel")}

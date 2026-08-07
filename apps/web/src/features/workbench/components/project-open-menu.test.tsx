@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { ContextMenu } from "../../../shared/ui/context-menu.js";
+import { ContextMenu } from "../../../shared/components/core/context-menu.js";
 import { getProjectOpenAppsForTarget, ProjectOpenContextMenuItems } from "./project-open-menu.js";
 
 describe("ProjectOpenContextMenuItems", () => {

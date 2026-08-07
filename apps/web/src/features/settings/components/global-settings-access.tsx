@@ -2,7 +2,7 @@ import { LogOut } from "lucide-react";
 import { useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Button } from "../../../shared/ui/button.js";
+import { Button } from "../../../shared/components/core/button.js";
 import { SettingsField, SettingsPanel, type SettingsSectionId } from "./global-settings-fields.js";
 
 export function GlobalSettingsAccess({

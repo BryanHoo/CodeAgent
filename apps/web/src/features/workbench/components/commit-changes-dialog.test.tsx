@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
-import { TooltipProvider } from "../../../shared/ui/tooltip.js";
+import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import {
   CommitChangesDialog,
   collectCommitFileEntries,

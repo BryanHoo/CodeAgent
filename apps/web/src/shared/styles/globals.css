@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is([data-theme="dark"] *));
 
@@ -31,27 +30,6 @@
   --ui-color-danger: var(--ui-color-diff-removed);
   --ui-color-focus: var(--ui-color-accent);
   --ui-color-scrim: light-dark(rgb(23 23 23 / 0.16), rgb(0 0 0 / 0.52));
-
-  /* shadcn 使用语义 Token；值继续由 CodeAgent 视觉变量驱动，避免引入默认主题。 */
-  --background: var(--ui-color-window);
-  --foreground: var(--ui-color-text);
-  --card: var(--ui-color-panel);
-  --card-foreground: var(--ui-color-text);
-  --popover: var(--ui-color-raised);
-  --popover-foreground: var(--ui-color-text);
-  --primary: var(--ui-color-accent);
-  --primary-foreground: light-dark(#ffffff, #071a2b);
-  --secondary: var(--ui-color-control);
-  --secondary-foreground: var(--ui-color-text);
-  --muted: var(--ui-color-control);
-  --muted-foreground: var(--ui-color-text-muted);
-  --accent: var(--ui-color-control-hover);
-  --accent-foreground: var(--ui-color-text);
-  --destructive: var(--ui-color-danger);
-  --border: var(--ui-color-separator-strong);
-  --input: var(--ui-color-separator-strong);
-  --ring: var(--ui-color-focus);
-  --radius: var(--ui-radius-surface);
 
   /* 固定栏使用单像素低对比分隔，保留原生应用的结构感而不形成重边框。 */
   --ui-shadow-divider: 1px 0 0 var(--ui-color-separator);
@@ -129,7 +107,7 @@
 }
 
 /* Shimmer 只用于持续生成状态，并尊重系统的减弱动态效果设置。 */
-.ai-shimmer {
+.agent-shimmer {
   color: transparent;
   background-image:
     linear-gradient(
@@ -147,10 +125,10 @@
     250% 100%,
     auto;
   background-clip: text;
-  animation: ai-shimmer var(--ui-shimmer-duration) linear infinite;
+  animation: agent-shimmer var(--ui-shimmer-duration) linear infinite;
 }
 
-@keyframes ai-shimmer {
+@keyframes agent-shimmer {
   to {
     background-position:
       0% center,
@@ -159,27 +137,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ai-shimmer {
+  .agent-shimmer {
     animation: none;
   }
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
+  /* 组件只暴露 CodeAgent 自有语义，不经过外部设计系统 Token 中转。 */
+  --color-background: var(--ui-color-window);
   --color-window: var(--ui-color-window);
   --color-content: var(--ui-color-content);
   --color-sidebar: var(--ui-color-sidebar);
@@ -190,13 +155,13 @@
   --color-control-active: var(--ui-color-control-active);
   --color-separator: var(--ui-color-separator);
   --color-separator-strong: var(--ui-color-separator-strong);
-  --color-foreground: var(--foreground);
-  --color-muted-foreground: var(--muted-foreground);
+  --color-foreground: var(--ui-color-text);
+  --color-muted-foreground: var(--ui-color-text-muted);
   --color-subtle-foreground: var(--ui-color-text-subtle);
-  --color-accent: var(--accent);
   --color-brand: var(--ui-color-accent);
   --color-brand-strong: var(--ui-color-accent-strong);
   --color-brand-soft: var(--ui-color-accent-soft);
+  --color-brand-contrast: light-dark(#ffffff, #071a2b);
   --color-diff-added: var(--ui-color-diff-added);
   --color-diff-removed: var(--ui-color-diff-removed);
   --color-warning: var(--ui-color-warning);

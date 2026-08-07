@@ -16,7 +16,7 @@ import type {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { memo, useEffect, useRef, useState } from "react";
 
-import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
+import type { MessageFileReference } from "../../../shared/components/agent/message.js";
 import {
   mergeSubmittedPromptIntoSnapshot,
   type RuntimeTaskSnapshot,

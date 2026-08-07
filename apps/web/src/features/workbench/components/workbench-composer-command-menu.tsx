@@ -7,7 +7,7 @@ import {
   PromptInputCommandGroup,
   PromptInputCommandItem,
   PromptInputCommandList,
-} from "../../../shared/ai-elements/prompt-input.js";
+} from "../../../shared/components/agent/prompt-input.js";
 import { PromptCommandIcon } from "./workbench-composer-toolbar.js";
 import type { WorkbenchComposerViewProps } from "./workbench-composer-view-contracts.js";
 
@@ -29,7 +29,7 @@ export function ComposerCommandMenu({ props }: Readonly<{ props: WorkbenchCompos
                 props.onExecuteReview({ type: "uncommitted_changes" });
               }}
             >
-              <Bug aria-hidden="true" className="size-4 shrink-0 text-primary" />
+              <Bug aria-hidden="true" className="size-4 shrink-0 text-brand" />
               <span className="font-medium">{t("composer.reviewUncommitted")}</span>
             </PromptInputCommandItem>
             <PromptInputCommandItem
@@ -41,7 +41,7 @@ export function ComposerCommandMenu({ props }: Readonly<{ props: WorkbenchCompos
               id={`${props.commandMenuId}-item-1`}
               onClick={props.onOpenReviewBranches}
             >
-              <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
+              <GitBranch aria-hidden="true" className="size-4 shrink-0 text-brand" />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="font-medium">{t("composer.baseBranchReview")}</span>
                 <span className="truncate text-caption text-muted-foreground">
@@ -61,7 +61,7 @@ export function ComposerCommandMenu({ props }: Readonly<{ props: WorkbenchCompos
                   props.onExecuteReview({ branch, type: "base_branch" });
                 }}
               >
-                <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                <GitBranch aria-hidden="true" className="size-4 shrink-0 text-brand" />
                 <span className="truncate font-medium">{branch}</span>
               </PromptInputCommandItem>
             ))}
@@ -106,9 +106,9 @@ export function ComposerCommandMenu({ props }: Readonly<{ props: WorkbenchCompos
                         props.onSelectSkill(skill);
                       }}
                     >
-                      <Sparkles aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                      <Sparkles aria-hidden="true" className="size-4 shrink-0 text-brand" />
                       <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="font-medium text-primary">{skill.displayName}</span>
+                        <span className="font-medium text-brand">{skill.displayName}</span>
                         <span className="block max-w-full truncate text-caption text-muted-foreground">
                           /{skill.name} · {skill.description}
                         </span>

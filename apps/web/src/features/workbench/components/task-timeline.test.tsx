@@ -3,7 +3,7 @@ import { renderToStaticMarkup as renderReactToStaticMarkup } from "react-dom/ser
 import { describe, expect, it, vi } from "vitest";
 
 import { changeAppLanguage } from "../../../i18n/i18n.js";
-import { TooltipProvider } from "../../../shared/ui/tooltip.js";
+import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import { createTaskStore } from "../../conversation/runtime/task-store.js";
 import {
@@ -236,7 +236,7 @@ describe("TaskTimeline", () => {
       />,
     );
 
-    expect(markup).toContain('data-ai-shimmer=""');
+    expect(markup).toContain('data-agent-shimmer=""');
     expect(markup).toContain('aria-label="AI 回复正在运行"');
     expect(markup).toContain("正在运行");
   });
@@ -1192,12 +1192,12 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain('aria-label="复制消息"');
     expect(markup).not.toContain('aria-label="复制任务"');
     expect(markup).toContain('data-turn-processing-time=""');
-    expect(markup).toContain('data-ai-shimmer=""');
+    expect(markup).toContain('data-agent-shimmer=""');
     expect(markup).toContain("正在运行");
     expect(markup.indexOf("正在处理。")).toBeLessThan(markup.indexOf("正在运行"));
   });
 
-  it("shows the user message before the AI Elements running shimmer", () => {
+  it("shows the user message before the 项目 Agent 组件 running shimmer", () => {
     const waitingForAssistantSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       status: "running",
@@ -1222,7 +1222,7 @@ describe("TaskSnapshotTimeline", () => {
       <TaskSnapshotTimeline snapshot={waitingForAssistantSnapshot} />,
     );
 
-    expect(markup).toContain('data-ai-shimmer=""');
+    expect(markup).toContain('data-agent-shimmer=""');
     expect(markup).toContain("正在运行");
     expect(markup.indexOf("你好")).toBeLessThan(markup.indexOf("正在运行"));
   });
@@ -1402,7 +1402,7 @@ describe("TaskSnapshotTimeline", () => {
 
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningSnapshot} />);
 
-    expect(markup).toContain('data-ai-shimmer=""');
+    expect(markup).toContain('data-agent-shimmer=""');
     expect(markup).toContain('aria-label="AI 回复正在运行：sed -n &#x27;1,240p&#x27; SKILL.md"');
     expect(markup).toContain("正在运行 sed -n &#x27;1,240p&#x27; SKILL.md");
     expect(markup).not.toContain("已运行");
@@ -1504,7 +1504,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("lucide-wrench");
   });
 
-  it("renders a completed plan as an actionable AI Elements card", () => {
+  it("renders a completed plan as an actionable 项目 Agent 组件 card", () => {
     const planText = "# 实施计划\n\n- 保留 `Protocol`";
     const completedPlanSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
@@ -1534,7 +1534,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("lucide-wrench");
   });
 
-  it("renders activity items with compact and expandable AI Elements Tasks", () => {
+  it("renders activity items with compact and expandable 项目 Agent 组件 Tasks", () => {
     const activitySnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: [
@@ -1571,7 +1571,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("lucide-wrench");
   });
 
-  it("maps failed and pending activity statuses to AI Elements Task statuses", () => {
+  it("maps failed and pending activity statuses to 项目 Agent 组件 Task statuses", () => {
     const activitySnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: [

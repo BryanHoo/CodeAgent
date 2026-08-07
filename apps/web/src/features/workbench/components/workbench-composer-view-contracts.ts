@@ -12,7 +12,7 @@ import type {
   PromptInputAttachment,
   PromptInputAttachmentKind,
   PromptInputMessage,
-} from "../../../shared/ai-elements/prompt-input.js";
+} from "../../../shared/components/agent/prompt-input.js";
 import type { QueuedComposerPrompt } from "../composer-draft-context.js";
 import type { ComposerState, ComposerSubmitAction } from "../composer-state.js";
 import type { PromptCommandItem } from "./prompt-command.js";

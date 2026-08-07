@@ -4,8 +4,8 @@ import { ArrowUp, FolderPlus, LoaderCircle, RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { FileTree, FileTreeFolder } from "../../../shared/ai-elements/file-tree.js";
-import { Button } from "../../../shared/ui/button.js";
+import { FileTree, FileTreeFolder } from "../../../shared/components/agent/file-tree.js";
+import { Button } from "../../../shared/components/core/button.js";
 import {
   Dialog,
   DialogContent,
@@ -13,8 +13,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../../../shared/ui/dialog.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+} from "../../../shared/components/core/dialog.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 import type { CodeAgentProjectDirectoryClient } from "../project-queries.js";
 
 export type ProjectDirectoryState = Readonly<{

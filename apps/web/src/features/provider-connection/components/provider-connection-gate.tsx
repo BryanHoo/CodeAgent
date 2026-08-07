@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Button } from "../../../shared/ui/button.js";
+import { Button } from "../../../shared/components/core/button.js";
 import { ProviderConnectionPanel } from "./provider-connection-panel.js";
 import { providerConnectionQueryOptions } from "../provider-connection-queries.js";
 

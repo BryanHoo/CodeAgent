@@ -11,7 +11,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
+import type { MessageFileReference } from "../../../shared/components/agent/message.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { useAccess } from "../../access/access-context.js";
 import {

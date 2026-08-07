@@ -9,7 +9,7 @@ import {
   ContextMenuLabel,
   ContextMenuSeparator,
   ContextMenuTrigger,
-} from "../../../shared/ui/context-menu.js";
+} from "../../../shared/components/core/context-menu.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,9 +18,13 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../../../shared/ui/dropdown-menu.js";
-import { Button } from "../../../shared/ui/button.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../shared/ui/tooltip.js";
+} from "../../../shared/components/core/dropdown-menu.js";
+import { Button } from "../../../shared/components/core/button.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../shared/components/core/tooltip.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 
 const appKindIcons = {

@@ -14,8 +14,8 @@ import { useEffect, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { cn } from "../../../shared/lib/utils.js";
-import { Button } from "../../../shared/ui/button.js";
-import { Input } from "../../../shared/ui/input.js";
+import { Button } from "../../../shared/components/core/button.js";
+import { Input } from "../../../shared/components/core/input.js";
 import {
   cancelProviderLoginMutationOptions,
   configureCustomProvider,
@@ -111,11 +111,11 @@ export function ProviderConnectionPanelView({
           <div className="grid gap-4">
             <div className="flex min-h-12 items-center gap-3 border-b border-separator pb-4">
               {currentModeConnected ? (
-                <CheckCircle2 aria-hidden="true" className="size-5 shrink-0 text-primary" />
+                <CheckCircle2 aria-hidden="true" className="size-5 shrink-0 text-brand" />
               ) : pendingOfficial ? (
                 <LoaderCircle
                   aria-hidden="true"
-                  className="size-5 shrink-0 animate-spin text-primary"
+                  className="size-5 shrink-0 animate-spin text-brand"
                 />
               ) : (
                 <LogIn aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
@@ -214,7 +214,7 @@ export function ProviderConnectionPanelView({
               </div>
             </label>
             {currentModeConnected ? (
-              <div className="flex items-center gap-2 text-body-small text-primary">
+              <div className="flex items-center gap-2 text-body-small text-brand">
                 <CheckCircle2 aria-hidden="true" className="size-4" />
                 <span>{t("provider.connected")}</span>
               </div>
