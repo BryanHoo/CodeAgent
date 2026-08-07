@@ -209,7 +209,7 @@ test("keeps composer attachment icons aligned with the compact toolbar", async (
   await expect(imageMenuIcon).toHaveCSS("height", "16px");
 });
 
-test("does not submit or select a command when Safari confirms an IME candidate", async ({
+test("does not submit or select a command when Safari confirms an IME candidate @smoke", async ({
   page,
 }) => {
   const turnRequests: string[] = [];

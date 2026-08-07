@@ -28,7 +28,7 @@ CodeAgent 不提供登录、退出或凭证管理，也不会读取或修改 `au
 
 支持 Windows 10/11 和主流 Linux 桌面发行版的 x64、arm64 环境。Linux 目录选择依次尝试 `zenity`、`kdialog`；无桌面会话时可在终端输入绝对路径。系统浏览器或外部应用启动失败时，CLI 会输出本地访问地址供手动打开。
 
-Web 工作台支持 Chrome/Chromium 116+、Firefox 124+ 和 Safari 17.4+。生产构建按这些最低版本转译语法，但不为 `AbortSignal.timeout()`、`AbortSignal.any()`、`toSorted()` 或 `toSpliced()` 注入运行时 polyfill；更早版本不在支持范围内。
+Web 工作台支持 Chrome/Chromium 116+、Firefox 124+ 和 Safari 17.4+。生产构建按这些最低版本转译语法，但不为 `AbortSignal.timeout()`、`AbortSignal.any()`、`toSorted()` 或 `toSpliced()` 注入运行时 polyfill；更早版本不在支持范围内。CI 使用 Chromium 执行全量 E2E，并使用 Firefox 与 WebKit 执行核心流程 smoke。
 
 ## 本地开发
 

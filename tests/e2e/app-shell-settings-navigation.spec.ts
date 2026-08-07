@@ -9,7 +9,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test("redirects the root route to the default project workbench", async ({ page }) => {
+test("redirects the root route to the default project workbench @smoke", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByTestId("app-root")).toBeAttached();

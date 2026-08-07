@@ -780,7 +780,7 @@ test("disables user input controls while an answer is being submitted", async ({
   await expect(stopAnswer).toBeDisabled();
 });
 
-test("streams Fake App Server notifications into the Timeline", async ({ page }) => {
+test("streams Fake App Server notifications into the Timeline @smoke", async ({ page }) => {
   await page.unroute("**/v1/**");
   await page.goto("/p/code-agent/t/task-realtime");
 

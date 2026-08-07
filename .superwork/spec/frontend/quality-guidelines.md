@@ -8,7 +8,7 @@
 
 - 组件与状态逻辑使用 Vitest；关键用户流程使用 `tests/e2e` 下的 Playwright 测试。
 - 页面行为变化运行 `pnpm test:e2e`，基础门禁运行 `pnpm check`。
-- Web 支持 Chrome/Chromium 116+、Firefox 124+ 和 Safari 17.4+；`apps/web/vite.config.ts` 的 `build.target` 必须保持相同最低版本。Vite 不为运行时 API 注入 polyfill，使用新的浏览器 API 前必须验证该版本矩阵；Chromium E2E 只作为关键流程门禁，不代表完整跨浏览器覆盖。
+- Web 支持 Chrome/Chromium 116+、Firefox 124+ 和 Safari 17.4+；`apps/web/vite.config.ts` 的 `build.target` 必须保持相同最低版本。Vite 不为运行时 API 注入 polyfill，使用新的浏览器 API 前必须验证该版本矩阵；Chromium 执行全量 E2E，Firefox 与 WebKit 至少执行带 `@smoke` 标记的工作台加载、实时事件和 IME 核心流程。
 - 浏览器侧 UUID 统一使用 `uuid` 的 `v4()`，不得直接依赖仅在安全上下文提供的 `crypto.randomUUID()`；回归测试必须覆盖局域网 HTTP 环境中仅有 `crypto.getRandomValues()` 的情况。
 - Web ESLint 必须启用 `react-hooks/rules-of-hooks`、`react-hooks/exhaustive-deps` 和 `eslint-plugin-jsx-a11y` 推荐规则；原生 Dialog、ARIA 复合控件等已验证语义只能使用带原因的局部例外，禁止全局降级规则。
 - 检查键盘操作、焦点、可访问名称、空状态、错误状态与慢连接状态。

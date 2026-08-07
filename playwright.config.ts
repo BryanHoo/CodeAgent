@@ -8,15 +8,28 @@ export default defineConfig({
   reporter: process.env["CI"] ? "github" : "list",
   use: {
     // baseURL 由 worker fixture 注入，确保每个 worker 使用独立 Fake Server。
-    // CI 中的无头 Chromium 默认禁止读取剪贴板，复制相关用例需要显式授权。
     locale: "zh-CN",
-    permissions: ["clipboard-read", "clipboard-write"],
     trace: "on-first-retry",
   },
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        // CI 中的无头 Chromium 默认禁止读取剪贴板，复制相关用例需要显式授权。
+        permissions: ["clipboard-read", "clipboard-write"],
+      },
+    },
+    {
+      // Firefox 与 WebKit 只执行核心流程，Chromium 继续承担全量回归。
+      grep: /@smoke/u,
+      name: "firefox",
+      use: { ...devices["Desktop Firefox"] },
+    },
+    {
+      grep: /@smoke/u,
+      name: "webkit",
+      use: { ...devices["Desktop Safari"] },
     },
   ],
 });
