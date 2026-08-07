@@ -770,7 +770,7 @@ describe("project queries", () => {
       "pnpm check",
       "src/index.ts",
       "filesystem/read_file",
-      "定义协议</li>",
+      "1. 定义协议",
       "上下文压缩",
     ]) {
       expect(markup).toContain(text);

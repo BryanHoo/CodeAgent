@@ -1,9 +1,11 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 
 const initialGzipBudgetBytes = 240 * 1024;
 const maxAsyncGzipBudgetBytes = 200 * 1024;
+const reportSchemaVersion = 1;
+const topContributorCount = 5;
 
 function formatKiB(bytes) {
   return `${(bytes / 1024).toFixed(2)} KiB`;
@@ -51,14 +53,20 @@ function collectStaticGraph(manifest, roots, excluded = new Set()) {
 
 function measureGraph(root, manifest, graph) {
   let gzipBytes = 0;
-  const files = [];
+  const contributors = [];
   for (const key of graph) {
     const { file } = readChunk(manifest, key);
     if (!file.endsWith(".js")) continue;
-    gzipBytes += gzipSync(readFileSync(resolve(root, file))).byteLength;
-    files.push(file);
+    const fileGzipBytes = gzipSync(readFileSync(resolve(root, file))).byteLength;
+    gzipBytes += fileGzipBytes;
+    contributors.push({ file, gzipBytes: fileGzipBytes });
   }
-  return { files: files.toSorted(), gzipBytes };
+  return {
+    contributors: contributors.toSorted(
+      (left, right) => right.gzipBytes - left.gzipBytes || left.file.localeCompare(right.file),
+    ),
+    gzipBytes,
+  };
 }
 
 function analyzeBundle(root, manifest) {
@@ -78,37 +86,128 @@ function analyzeBundle(root, manifest) {
     }))
     .toSorted((left, right) => right.gzipBytes - left.gzipBytes);
 
-  return { initial, largestAsync: asyncGroups[0] ?? null };
+  return { asyncGroups, initial };
 }
 
-function assertBudgets(analysis) {
-  const errors = [];
+function createReport(analysis) {
+  const violations = [];
   if (analysis.initial.gzipBytes > initialGzipBudgetBytes) {
-    errors.push(
-      `initial gzip budget exceeded: ${formatKiB(analysis.initial.gzipBytes)} > ${formatKiB(initialGzipBudgetBytes)}`,
-    );
+    violations.push({
+      actualGzipBytes: analysis.initial.gzipBytes,
+      budgetGzipBytes: initialGzipBudgetBytes,
+      kind: "initial",
+    });
   }
-  if (analysis.largestAsync !== null && analysis.largestAsync.gzipBytes > maxAsyncGzipBudgetBytes) {
-    errors.push(
-      `async gzip budget exceeded: ${formatKiB(analysis.largestAsync.gzipBytes)} > ${formatKiB(maxAsyncGzipBudgetBytes)} (${analysis.largestAsync.key})`,
-    );
+  const largestAsync = analysis.asyncGroups[0] ?? null;
+  if (largestAsync !== null && largestAsync.gzipBytes > maxAsyncGzipBudgetBytes) {
+    violations.push({
+      actualGzipBytes: largestAsync.gzipBytes,
+      budgetGzipBytes: maxAsyncGzipBudgetBytes,
+      key: largestAsync.key,
+      kind: "async",
+    });
   }
-  if (errors.length > 0) {
-    throw new Error(`Web Bundle budget failed\n- ${errors.join("\n- ")}`);
+
+  return {
+    asyncGroups: analysis.asyncGroups,
+    budgets: {
+      initialGzipBytes: initialGzipBudgetBytes,
+      maxAsyncGzipBytes: maxAsyncGzipBudgetBytes,
+    },
+    initial: analysis.initial,
+    passed: violations.length === 0,
+    schemaVersion: reportSchemaVersion,
+    violations,
+  };
+}
+
+function assertReport(report) {
+  if (report.violations.length === 0) return;
+
+  const errors = report.violations.map((violation) => {
+    if (violation.kind === "initial") {
+      return `initial gzip budget exceeded: ${formatKiB(violation.actualGzipBytes)} > ${formatKiB(violation.budgetGzipBytes)}`;
+    }
+    return `async gzip budget exceeded: ${formatKiB(violation.actualGzipBytes)} > ${formatKiB(violation.budgetGzipBytes)} (${violation.key})`;
+  });
+  throw new Error(`Web Bundle budget failed\n- ${errors.join("\n- ")}`);
+}
+
+function writeReport(path, report) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(report, null, 2)}\n`);
+}
+
+function readReport(path) {
+  const report = JSON.parse(readFileSync(path, "utf8"));
+  if (
+    report === null ||
+    typeof report !== "object" ||
+    Array.isArray(report) ||
+    report.schemaVersion !== reportSchemaVersion ||
+    !Array.isArray(report.asyncGroups) ||
+    !Array.isArray(report.initial?.contributors) ||
+    !Array.isArray(report.violations)
+  ) {
+    throw new Error("invalid Web Bundle report");
   }
+  return report;
+}
+
+function printReport(report) {
+  const largestAsync = report.asyncGroups[0] ?? null;
+  const asyncSummary =
+    largestAsync === null ? "none" : `${formatKiB(largestAsync.gzipBytes)} (${largestAsync.key})`;
+  console.log(
+    `Web Bundle budget ${report.passed ? "passed" : "failed"}: initial ${formatKiB(report.initial.gzipBytes)} / ${formatKiB(report.budgets.initialGzipBytes)}; max async ${asyncSummary} / ${formatKiB(report.budgets.maxAsyncGzipBytes)}`,
+  );
+  console.log("Initial Top Contributors:");
+  const topContributors = report.initial.contributors.slice(0, topContributorCount);
+  if (topContributors.length === 0) {
+    console.log("- none");
+    return;
+  }
+  for (const contributor of topContributors) {
+    console.log(`- ${contributor.file}: ${formatKiB(contributor.gzipBytes)}`);
+  }
+}
+
+function parseArguments(args) {
+  let readReportPath = null;
+  let reportPath = null;
+  let root = "dist/web";
+  let rootProvided = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--report" || argument === "--read-report") {
+      const value = args[index + 1];
+      if (value === undefined) throw new Error(`missing value for ${argument}`);
+      if (argument === "--report") reportPath = resolve(value);
+      else readReportPath = resolve(value);
+      index += 1;
+      continue;
+    }
+    if (argument?.startsWith("--") === true) throw new Error(`unknown argument: ${argument}`);
+    if (rootProvided) throw new Error(`unexpected argument: ${argument}`);
+    root = argument;
+    rootProvided = true;
+  }
+  if (readReportPath !== null && (reportPath !== null || rootProvided)) {
+    throw new Error("--read-report cannot be combined with a bundle root or --report");
+  }
+  return { readReportPath, reportPath, root: resolve(root) };
 }
 
 function main() {
-  const root = resolve(process.argv[2] ?? "dist/web");
-  const analysis = analyzeBundle(root, readManifest(root));
-  assertBudgets(analysis);
-  const asyncSummary =
-    analysis.largestAsync === null
-      ? "none"
-      : `${formatKiB(analysis.largestAsync.gzipBytes)} (${analysis.largestAsync.key})`;
-  console.log(
-    `Web Bundle budget passed: initial ${formatKiB(analysis.initial.gzipBytes)} / ${formatKiB(initialGzipBudgetBytes)}; max async ${asyncSummary} / ${formatKiB(maxAsyncGzipBudgetBytes)}`,
-  );
+  const options = parseArguments(process.argv.slice(2));
+  const report =
+    options.readReportPath === null
+      ? createReport(analyzeBundle(options.root, readManifest(options.root)))
+      : readReport(options.readReportPath);
+  if (options.reportPath !== null) writeReport(options.reportPath, report);
+  printReport(report);
+  assertReport(report);
 }
 
 try {

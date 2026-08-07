@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -41,8 +41,8 @@ function createBundle(options: Readonly<{ asyncBytes?: number; initialBytes?: nu
   return root;
 }
 
-function runChecker(root: string) {
-  return spawnSync(process.execPath, [checkerPath, root], { encoding: "utf8" });
+function runChecker(root: string, args: readonly string[] = []) {
+  return spawnSync(process.execPath, [checkerPath, root, ...args], { encoding: "utf8" });
 }
 
 afterEach(() => {
@@ -52,18 +52,82 @@ afterEach(() => {
 });
 
 describe("Web Bundle 预算门禁", () => {
+  it("让统一门禁生成报告并由 CI 只读展示", () => {
+    const packageJson = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    const workflow = readFileSync(join(process.cwd(), ".github/workflows/ci.yml"), "utf8");
+
+    expect(packageJson.scripts["bundle:check"]).toContain(
+      "--report .artifacts/web-bundle-report.json",
+    );
+    expect(packageJson.scripts["bundle:report"]).toContain(
+      "--read-report .artifacts/web-bundle-report.json",
+    );
+    expect(workflow).toContain("run: pnpm run bundle:report");
+    expect(workflow).not.toContain("run: pnpm run bundle:check");
+  });
+
   it("接受低于首屏和异步预算的生产产物", () => {
     const result = runChecker(createBundle());
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Web Bundle budget passed");
+    expect(result.stdout).toContain("Initial Top Contributors");
+    expect(result.stdout).toContain("assets/index.js");
+  });
+
+  it("写入可供后续步骤复用的机器报告", () => {
+    const root = createBundle();
+    const reportPath = join(root, "bundle-report.json");
+    const result = runChecker(root, ["--report", reportPath]);
+
+    expect(result.status).toBe(0);
+    const report = JSON.parse(readFileSync(reportPath, "utf8")) as {
+      asyncGroups: { contributors: { file: string; gzipBytes: number }[] }[];
+      budgets: { initialGzipBytes: number; maxAsyncGzipBytes: number };
+      initial: { contributors: { file: string; gzipBytes: number }[]; gzipBytes: number };
+      passed: boolean;
+      schemaVersion: number;
+      violations: unknown[];
+    };
+    expect(report).toMatchObject({
+      budgets: {
+        initialGzipBytes: 240 * 1024,
+        maxAsyncGzipBytes: 200 * 1024,
+      },
+      passed: true,
+      schemaVersion: 1,
+      violations: [],
+    });
+    expect(report.initial.contributors.map((contributor) => contributor.file)).toEqual([
+      "assets/index.js",
+      "assets/shared.js",
+    ]);
+    expect(report.initial.gzipBytes).toBeGreaterThan(0);
+    expect(report.asyncGroups[0]?.contributors[0]?.file).toBe("assets/lazy.js");
+
+    rmSync(join(root, ".vite"), { force: true, recursive: true });
+    rmSync(join(root, "assets"), { force: true, recursive: true });
+    const displayResult = spawnSync(process.execPath, [checkerPath, "--read-report", reportPath], {
+      encoding: "utf8",
+    });
+    expect(displayResult.status).toBe(0);
+    expect(displayResult.stdout).toContain("Web Bundle budget passed");
+    expect(displayResult.stdout).toContain("Initial Top Contributors");
   });
 
   it("拒绝超过首屏 gzip 预算的产物", () => {
-    const result = runChecker(createBundle({ initialBytes: 260 * 1024 }));
+    const root = createBundle({ initialBytes: 260 * 1024 });
+    const reportPath = join(root, "bundle-report.json");
+    const result = runChecker(root, ["--report", reportPath]);
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("initial gzip budget exceeded");
+    expect(JSON.parse(readFileSync(reportPath, "utf8"))).toMatchObject({
+      passed: false,
+      violations: [{ kind: "initial" }],
+    });
   });
 
   it("拒绝超过单个异步加载组 gzip 预算的产物", () => {

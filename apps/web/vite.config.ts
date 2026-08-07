@@ -36,6 +36,26 @@ export default defineConfig({
     emptyOutDir: false,
     manifest: true,
     outDir: "../../dist/web",
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              // 宏与专用支持 Grammar 同组，避免它们回指主 C++ Chunk；共享 SQL 继续独立复用。
+              includeDependenciesRecursively: false,
+              name: "grammar-cpp-support",
+              test: /@shikijs[\\/]langs[\\/]dist[\\/](?:cpp-macro|regexp|glsl)\.mjs$/u,
+            },
+            {
+              // React、React DOM 与 Scheduler 组成自包含运行时，避免只拆单包造成依赖回指。
+              includeDependenciesRecursively: false,
+              name: "react-runtime",
+              test: /node_modules[\\/](?:react|react-dom|scheduler)[\\/]/u,
+            },
+          ],
+        },
+      },
+    },
     sourcemap: false,
     target: [...supportedBrowserTargets],
   },

@@ -12,7 +12,8 @@ import {
   CodeBlockHeader,
   CodeBlockTitle,
 } from "../../../shared/ai-elements/code-block.js";
-import { MessageResponse, type MessageFileReference } from "../../../shared/ai-elements/message.js";
+import { LazyMessageResponse } from "../../../shared/ai-elements/lazy-message-response.js";
+import type { MessageFileReference } from "../../../shared/ai-elements/message.js";
 import { getCodeLanguage } from "../../../shared/ai-elements/code-languages.js";
 import { Button } from "../../../shared/ui/button.js";
 import { Dialog, DialogContent, DialogTitle } from "../../../shared/ui/dialog.js";
@@ -270,9 +271,9 @@ export function ProjectSourceDialog({
                 }
               />
               <div className="min-h-0 overflow-auto px-5 py-4 sm:px-8 sm:py-6">
-                <MessageResponse className="mx-auto max-w-4xl">
+                <LazyMessageResponse className="mx-auto max-w-4xl">
                   {sourceQuery.data.content}
-                </MessageResponse>
+                </LazyMessageResponse>
               </div>
             </div>
           ) : (

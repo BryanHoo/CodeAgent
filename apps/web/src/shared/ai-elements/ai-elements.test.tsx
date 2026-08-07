@@ -30,7 +30,8 @@ import {
 } from "./code-block.js";
 import { Context, ContextTrigger, formatContextUsage } from "./context.js";
 import { FileTree, FileTreeFile, FileTreeFolder } from "./file-tree.js";
-import { Message, MessageAction, MessageContent, MessageResponse } from "./message.js";
+import { Message, MessageAction, MessageContent } from "./message.js";
+import { MessageResponse } from "./message-response.js";
 import {
   PromptInput,
   PromptInputActionAddAttachments,

@@ -1498,9 +1498,8 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain('data-streaming="true"');
     expect(markup).toMatch(/<details[^>]* open/);
     expect(markup).toContain("正在生成计划");
-    expect(markup).toContain('data-streamdown="ordered-list"');
-    expect(markup).toContain("保留原始文本</li>");
-    expect(markup).toContain("接入 Plan 组件</li>");
+    expect(markup).not.toContain('data-streamdown="ordered-list"');
+    expect(markup).toContain("1. 保留原始文本\n2. 接入 Plan 组件");
     expect(markup).not.toContain(">构建<");
     expect(markup).not.toContain("lucide-wrench");
   });
@@ -1528,8 +1527,9 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).toContain('data-ai-plan-card=""');
     expect(markup).toContain('data-streaming="false"');
     expect(markup).toContain("计划已生成，可开始构建");
-    expect(markup).toContain("<h1");
-    expect(markup).toContain("实施计划</h1>");
+    expect(markup).not.toContain("<h1");
+    expect(markup).toContain("# 实施计划");
+    expect(markup).toContain("- 保留 `Protocol`");
     expect(markup).toContain(">构建<");
     expect(markup).not.toContain("lucide-wrench");
   });

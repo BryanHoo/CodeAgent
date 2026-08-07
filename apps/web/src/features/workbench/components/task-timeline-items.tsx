@@ -13,11 +13,8 @@ import {
 import { cn } from "../../../shared/lib/utils.js";
 import { Button } from "../../../shared/ui/button.js";
 
-import {
-  MessageContent,
-  MessageResponse,
-  type MessageFileReference,
-} from "../../../shared/ai-elements/message.js";
+import { LazyMessageResponse } from "../../../shared/ai-elements/lazy-message-response.js";
+import { MessageContent, type MessageFileReference } from "../../../shared/ai-elements/message.js";
 import {
   Plan,
   PlanAction,
@@ -113,7 +110,7 @@ export function TimelineItemContent({
             </span>
           )}
           {item.text.length === 0 ? null : (
-            <MessageResponse
+            <LazyMessageResponse
               className={cn(
                 skills.length > 0 && "inline [&>p:first-child]:inline",
                 item.role === "user" && preservedUserMessageClassName,
@@ -122,7 +119,7 @@ export function TimelineItemContent({
               onOpenFileReference={onOpenSourceFile}
             >
               {item.text}
-            </MessageResponse>
+            </LazyMessageResponse>
           )}
         </div>
       ) : null;
@@ -275,9 +272,9 @@ export function TimelineItemContent({
             <PlanTrigger />
           </PlanHeader>
           <PlanContent>
-            <MessageResponse mode={isStreamingPlan ? "streaming" : "static"}>
+            <LazyMessageResponse mode={isStreamingPlan ? "streaming" : "static"}>
               {item.text}
-            </MessageResponse>
+            </LazyMessageResponse>
           </PlanContent>
           {isStreamingPlan || onBuildPlan === undefined ? null : (
             <PlanFooter className="justify-end">

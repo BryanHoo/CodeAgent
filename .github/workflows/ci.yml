@@ -38,9 +38,9 @@ jobs:
         run: pnpm run codex:schema:check
       - name: Run quality gates
         run: pnpm check
-      # 复用质量门禁生成的 production 产物，单独展示 Bundle 预算结果且不重复构建。
-      - name: Verify Web Bundle budget
-        run: pnpm run bundle:check
+      # 只读展示质量门禁生成的机器报告，不再次分析 production 产物。
+      - name: Show Web Bundle report
+        run: pnpm run bundle:report
 
   macos-smoke:
     name: macOS smoke
