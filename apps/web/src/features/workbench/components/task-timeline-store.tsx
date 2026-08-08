@@ -1,4 +1,5 @@
 import type { AgentItem, AgentTurn, PendingRequest } from "@code-agent/protocol";
+import { AlertTriangle, Info } from "lucide-react";
 import { useState } from "react";
 import { useStore } from "zustand";
 
@@ -10,7 +11,12 @@ import {
   ConversationVirtualList,
 } from "../../../shared/components/agent/conversation.js";
 import { Message, type MessageFileReference } from "../../../shared/components/agent/message.js";
-import type { NormalizedAgentTurn, TaskStore } from "../../conversation/runtime/task-store.js";
+import { Task, TaskContent, TaskItem, TaskTrigger } from "../../../shared/components/agent/task.js";
+import type {
+  NormalizedAgentTurn,
+  TaskNotice,
+  TaskStore,
+} from "../../conversation/runtime/task-store.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { PendingRequestCard, type PendingRequestResolution } from "./pending-request.js";
 
@@ -50,10 +56,8 @@ export function resolveCompletedTurnProcessItemIds(
     if (item.type === "message") {
       return item.role === "assistant" && item.phase === "commentary" ? [item.id] : [];
     }
-    // Reasoning 永不渲染，File Change 继续由最终回复后的摘要统一展示。
-    return item.type === "reasoning" || item.type === "file_change" || item.type === "review"
-      ? []
-      : [item.id];
+    // Reasoning 摘要与运行操作都属于可折叠过程；File Change 继续由最终摘要统一展示。
+    return item.type === "file_change" || item.type === "review" ? [] : [item.id];
   });
 }
 
@@ -190,6 +194,7 @@ export function StoreTurnTimelineSection({
 }>) {
   const turn = useStore(store, (state) => state.turnsById[turnId]);
   const itemIds = useStore(store, (state) => state.itemIdsByTurnId[turnId] ?? []);
+  const turnDiff = useStore(store, (state) => state.turnDiffsById[turnId]);
   const [processExpanded, setProcessExpanded] = useState(false);
   if (turn === undefined) {
     return null;
@@ -270,6 +275,16 @@ export function StoreTurnTimelineSection({
           <RunningReplyStatus />
         </Message>
       ) : null}
+      {turn.status === "running" && turnDiff !== undefined && turnDiff.trim().length > 0 ? (
+        <Task defaultOpen={false} status="in_progress">
+          <TaskTrigger title={i18n.t("timeline.liveDiff", { ns: "conversation" })} />
+          <TaskContent>
+            <TaskItem className="max-h-64 overflow-auto whitespace-pre font-mono">
+              {turnDiff}
+            </TaskItem>
+          </TaskContent>
+        </Task>
+      ) : null}
       {turn.error === null ? null : (
         <div
           className="rounded-surface bg-control px-3 py-2 text-label leading-5 text-danger"
@@ -280,6 +295,41 @@ export function StoreTurnTimelineSection({
       )}
     </section>
   );
+}
+
+function TaskNoticeRow({ notice }: Readonly<{ notice: TaskNotice }>) {
+  const isWarning = notice.payload.level === "warning";
+  const message =
+    notice.payload.code === "model_verification"
+      ? i18n.t("timeline.notice.modelVerification", { ns: "conversation" })
+      : notice.payload.message;
+  const title = i18n.t(`timeline.notice.${notice.payload.code}`, { ns: "conversation" });
+
+  return (
+    <div
+      className={`flex items-start gap-2 border-l-2 px-3 py-2 text-label leading-5 ${
+        isWarning ? "border-warning text-warning" : "border-separator-strong text-muted-foreground"
+      }`}
+      role={isWarning ? "alert" : "status"}
+    >
+      {isWarning ? (
+        <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+      ) : (
+        <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+      )}
+      <div className="min-w-0">
+        <p className="font-medium text-foreground">{title}</p>
+        <p className="break-words">{message}</p>
+      </div>
+    </div>
+  );
+}
+
+export function StoreTaskNoticeList({ store }: Readonly<{ store: TaskStore }>) {
+  const notices = useStore(store, (state) => state.notices);
+  return notices.map((notice) => (
+    <TaskNoticeRow key={`${notice.sessionId}:${String(notice.sequence)}`} notice={notice} />
+  ));
 }
 
 export function StorePendingRequestList({
@@ -349,6 +399,7 @@ export function TaskStoreTimeline({
   const turnIds = useStore(store, (state) => state.turnIds);
   const pendingRequestIds = useStore(store, (state) => state.pendingRequestIds);
   const pendingRequestsById = useStore(store, (state) => state.pendingRequestsById);
+  const notices = useStore(store, (state) => state.notices);
   const hasVisiblePendingRequest = pendingRequestIds.some(
     (requestId) => pendingRequestsById[requestId]?.status !== "resolved",
   );
@@ -376,7 +427,8 @@ export function TaskStoreTimeline({
   const showPendingSubmission =
     submissionStartedAt !== undefined &&
     (submissionHandoffState === "awaiting-turn" || submissionHandoffState === "awaiting-assistant");
-  if (turnIds.length === 0 && !hasVisiblePendingRequest && !showPendingSubmission) {
+  const hasNotices = notices.length > 0;
+  if (turnIds.length === 0 && !hasVisiblePendingRequest && !showPendingSubmission && !hasNotices) {
     return (
       <TimelineState message={i18n.t("timeline.noHistory", { ns: "conversation" })} role="status" />
     );
@@ -390,10 +442,11 @@ export function TaskStoreTimeline({
       {...(scrollToBottomSignal === undefined ? {} : { scrollToBottomSignal })}
     >
       <ConversationVirtualList
-        {...(hasVisiblePendingRequest || showPendingSubmission
+        {...(hasVisiblePendingRequest || showPendingSubmission || hasNotices
           ? {
               footer: (
                 <>
+                  {hasNotices ? <StoreTaskNoticeList store={store} /> : null}
                   {hasVisiblePendingRequest ? (
                     <StorePendingRequestList
                       connected={connected}

@@ -798,7 +798,9 @@ describe("CodexAgentProvider", () => {
       turnId: "review-worker-turn",
     });
 
-    expect(events.map((event) => [event.type, event.taskId, event.turnId])).toEqual([
+    expect(
+      events.map((event) => [event.type, event.taskId, "turnId" in event ? event.turnId : null]),
+    ).toEqual([
       ["item.started", "task-1", "review-outer-turn"],
       ["turn.started", "task-1", "review-outer-turn"],
       ["item.started", "task-1", "review-outer-turn"],
@@ -2774,7 +2776,7 @@ describe("CodexAgentProvider", () => {
       },
     });
 
-    expect(events.map((event) => [event.type, event.turnId])).toEqual([
+    expect(events.map((event) => [event.type, "turnId" in event ? event.turnId : null])).toEqual([
       ["item.started", "review-outer-turn"],
       ["turn.started", "review-outer-turn"],
       ["item.completed", "review-outer-turn"],
@@ -3160,7 +3162,7 @@ describe("CodexAgentProvider", () => {
       },
       {
         itemId: "item-2",
-        payload: { delta: "分析", field: "summary" },
+        payload: { delta: "分析", field: "summary", sectionIndex: 0 },
         taskId: "task-1",
         turnId: "turn-1",
         type: "reasoning.delta",

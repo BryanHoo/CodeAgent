@@ -12,6 +12,7 @@
 - JSONL 字节流必须跨 Buffer 分片保留 UTF-8 解码状态，不得逐块独立转码；完整帧和未完成 Buffer 必须按原始 UTF-8 字节分别执行 `64 MiB` 有界限制，以接收原生 `imageGeneration` 的单帧 Base64 结果，超限立即关闭连接；协议错误只能记录帧长度、类型或安全摘要，禁止携带原始帧内容。
 - JSONL 中同时包含 `id` 与 `method` 的合法帧按服务端请求分发，并使用原 `id` 返回结果；未支持的方法返回 `-32601`，非法参数返回 `-32602`，不得让 Codex 无限等待。
 - Provider 丢弃未知 Notification 或隔离单条字段映射失败时必须通过 Pino 告警，固定记录 `diagnosticCode`、method、Codex version、Project ID 和可提取的 Task ID；禁止记录原始 params、Prompt、命令输出或文件正文。
+- Codex 锁定版本生成的 `ServerNotification` Union 必须逐项归入 mapped、special 或 ignored 且只能归入一类；Schema 漂移测试必须验证分类全集与官方方法全集一致，新增 Notification 不得静默进入兼容分支。
 - JSONL 响应只有在底层写入回调确认后才算成功，所有写入都使用有界超时；异步写入失败必须关闭连接且不能提前发布请求终态。
 - 只有 `code = -32001` 且 `data.retry = true`、明确表示请求未入队的过载错误才允许重试；Adapter 使用带正负 `20%` jitter 的有上限指数退避，默认最多重试 `4` 次、累计退避不超过 `5s`、单次不超过 `2s`，并保留首次请求的总超时。连接关闭或请求超时必须取消待执行重试，其他错误直接透传。
 - Task/Turn 写入只通过 `thread/start`、`turn/start`、`turn/steer`、`turn/interrupt` 和稳定 Goal API 映射；文本输入必须转换为当前 Codex Schema 要求的 `UserInput[]`，Provider 不向上泄漏原生字段。
@@ -19,8 +20,9 @@
 - `turn/steer` 只允许写入当前 Task 的活动 Turn，必须传递 `expectedTurnId` 且不能携带模型、思考量或审批等 Turn 设置覆盖；Provider 必须校验响应 `turnId` 与预期 Turn 一致。
 - Server 内部生成 Git commit message 时，必须通过 `thread/start { ephemeral: true }` 启动一次隐藏的结构化 Turn。选中变更的完整 Git diff 不超过 `64 KiB` 时，默认 Prompt 必须直接提供带 staged/unstaged 标识的精确 diff；超过预算时必须改为最多 `20 KiB` 的逐文件 staged/unstaged、类型、行数和 diff 字节摘要，并从整个选择范围等距抽取最多 16 个变更，提供合计最多 `36 KiB` 的首尾 diff 片段。两种输入都必须禁止 Codex 读取文件或运行命令，避免文件数量放大工具调用和延迟。发送给 Codex 的固定指令必须使用英语，用户配置的全局提交提示词必须原样嵌入且不得翻译。固定 Prompt 不得预设 Conventional Commits、提交信息语言、标题、正文或其他格式偏好；全局提交提示词负责定义全部客户级格式和语言，但不能覆盖 diff 不可信边界，以及唯一结果只能写入结构化输出 `message` 字段的约束。同时固定使用 `read-only`、`never` 和 `{ message }` `outputSchema`。最终 assistant message 必须从独立 `item.completed` 事件收集，`turn.completed` 只作为终态信号，不能假设其重复携带完整 items。Provider 默认事件订阅必须排除临时 Task，只有执行该内部流程的订阅可显式接收临时事件，避免浏览器通知或导航暴露隐藏 Task。Codex 不执行 Git Mutation；Turn 完成、失败或超时都必须移除监听器，并 best-effort 中断和取消订阅临时 Thread，不得归档或写入用户 Task 历史。
 - App Server 重启后，从 `thread/list` 或 `thread/read` 重新发现的持久化 Task 在首次 `turn/start` 前必须调用一次 `thread/resume`；同一进程内由 `thread/start` 或 `thread/fork` 创建的已加载 Task 不得重复恢复，并发续写必须复用同一个恢复 Promise。
-- `agentMessage.phase` 中的 `commentary` 与 `final_answer` 都必须映射为 Assistant Message、原样保留有效阶段，并通过 `message.delta` 实时交付；缺失或 `null` 阶段保持无阶段，非法阶段必须拒绝映射。原生 `reasoning` Item 仍映射为统一 Reasoning Item，但 Web 不展示其内容。
+- `agentMessage.phase` 中的 `commentary` 与 `final_answer` 都必须映射为 Assistant Message、原样保留有效阶段，并通过 `message.delta` 实时交付；缺失或 `null` 阶段保持无阶段，非法阶段必须拒绝映射。原生 `reasoning` Item 仍映射为统一 Reasoning Item；Web 只允许展示 `summary`，原始 `content` 永不进入展示组件或 DOM。
 - Codex `turn/plan/updated` 必须映射为 Provider 无关的 `plan.updated` 完整计划事件，按原始顺序保留步骤，并将 `inProgress` 归一化为 `in_progress`。Provider 必须按 Task 缓存最近计划并写入可空的 `AgentTaskSnapshot.plan`，使浏览器重连和 Snapshot 重读能够恢复同一计划；释放 Task 时同步清理缓存。
+- Codex `item/plan/delta`、Reasoning Summary 分段、MCP Progress、File Patch、Turn Diff、Hook、Safety Buffer、Model Reroute、Model Verification、Guardian Warning 与结构化 Error 必须映射为 Provider 无关事件或 Item。高频文本事件按 Item 追加，状态快照按 Item 或 Turn 替换；`item.completed` 和 `turn.completed` 仍是最终权威实体。
 - Codex 协作 Item 的 `item/started` 必须映射为统一 `item.started` 实时事件，不能丢弃长时间运行的子代理操作；协作 Item 必须保留子代理任务、模型、思考量和代理状态，并使用 Provider 无关的 `agent/*` Tool 名称。普通消息和命令继续使用专用 Delta，不重复交付空的 Started Item。
 - 子代理使用独立 Codex Thread。Web 按需读取父协作 Item 的 receiver Task ID 时，Runtime 必须先以 Project 归属暂存该 Thread，`thread/read` 验证 `cwd` 后同时确认 Runtime Owner 与 Project Provider Task 集合，再交付读取期间暂存的通知；这样弹窗关闭后可以停止浏览器订阅，再次打开时从最新 Snapshot checkpoint 继续，未知 Project 的子线程事件仍必须丢弃。
 - `thread/start` 返回的新 Task 在首条用户消息前可能尚未 materialize；此时 `thread/read(includeTurns: true)` 的明确未 materialize 错误必须映射为该已知 Task 的空闲空快照，未知 Task 和其他 RPC 错误不得被吞掉。

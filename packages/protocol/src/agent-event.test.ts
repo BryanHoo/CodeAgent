@@ -85,6 +85,51 @@ describe("Agent Event v2 protocol", () => {
       },
       {
         ...baseEvent,
+        itemId: "plan-1",
+        payload: { delta: "## 实施计划" },
+        turnId: "turn-1",
+        type: "plan.delta",
+      },
+      {
+        ...baseEvent,
+        itemId: "reasoning-1",
+        payload: { delta: "核对协议", field: "summary", sectionIndex: 1 },
+        turnId: "turn-1",
+        type: "reasoning.delta",
+      },
+      {
+        ...baseEvent,
+        itemId: "mcp-1",
+        payload: { message: "正在读取资源" },
+        turnId: "turn-1",
+        type: "tool.progress",
+      },
+      {
+        ...baseEvent,
+        itemId: "patch-1",
+        payload: {
+          changes: [{ diff: "+const ready = true;", kind: "update", path: "src/app.ts" }],
+        },
+        turnId: "turn-1",
+        type: "file_change.updated",
+      },
+      {
+        ...baseEvent,
+        payload: { diff: "diff --git a/src/app.ts b/src/app.ts" },
+        turnId: "turn-1",
+        type: "turn.diff_updated",
+      },
+      {
+        ...baseEvent,
+        payload: {
+          code: "model_verification",
+          level: "warning",
+          message: "需要完成模型访问验证",
+        },
+        type: "task.notice",
+      },
+      {
+        ...baseEvent,
         itemId: "item-1",
         payload: { item: messageItem },
         turnId: "turn-1",
@@ -126,7 +171,12 @@ describe("Agent Event v2 protocol", () => {
       },
       {
         ...baseEvent,
-        payload: { message: "模型服务不可用", willRetry: false },
+        payload: {
+          code: "usage_limit_exceeded",
+          httpStatusCode: 429,
+          message: "模型服务不可用",
+          willRetry: false,
+        },
         turnId: "turn-1",
         type: "provider.error",
       },
@@ -154,6 +204,68 @@ describe("Agent Event v2 protocol", () => {
     ];
 
     expect(events.every((event) => Value.Check(AgentEventSchema, event))).toBe(true);
+  });
+
+  it("validates structured runtime status items", () => {
+    const events = [
+      {
+        ...baseEvent,
+        itemId: "runtime-safety-turn-1",
+        payload: {
+          item: {
+            fasterModel: "gpt-5.6-mini",
+            id: "runtime-safety-turn-1",
+            kind: "safety_buffering",
+            model: "gpt-5.6-sol",
+            status: "running",
+            type: "runtime_status",
+          },
+        },
+        turnId: "turn-1",
+        type: "item.started",
+      },
+      {
+        ...baseEvent,
+        itemId: "runtime-reroute-turn-1",
+        payload: {
+          item: {
+            fromModel: "gpt-5.6-sol",
+            id: "runtime-reroute-turn-1",
+            kind: "model_rerouted",
+            status: "completed",
+            toModel: "gpt-5.6-mini",
+            type: "runtime_status",
+          },
+        },
+        turnId: "turn-1",
+        type: "item.completed",
+      },
+      {
+        ...baseEvent,
+        itemId: "hook-hook-1",
+        payload: {
+          item: {
+            detail: "检查未通过",
+            durationMs: 120,
+            eventName: "afterToolUse",
+            id: "hook-hook-1",
+            kind: "hook",
+            status: "failed",
+            type: "runtime_status",
+          },
+        },
+        turnId: "turn-1",
+        type: "item.completed",
+      },
+    ];
+
+    expect(events.every((event) => Value.Check(AgentEventSchema, event))).toBe(true);
+    expect(
+      Value.Check(AgentEventSchema, {
+        ...events[0],
+        payload: { item: { ...events[0]?.payload.item, sourcePath: "/Users/example/hook.ts" } },
+      }),
+    ).toBe(false);
   });
 
   it("validates connection control frames and snapshot checkpoints", () => {

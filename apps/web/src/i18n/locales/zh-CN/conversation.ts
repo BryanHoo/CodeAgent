@@ -277,5 +277,23 @@ export const conversation = {
     showImage: "查看图片 {{name}}",
     skillsUsed: "使用的 Skills",
     editedFiles: "已编辑 {{count}} 个文件",
+    editingFiles: "正在编辑 {{count}} 个文件",
+    liveDiff: "实时 Turn Diff",
+    notice: {
+      guardian_warning: "安全警告",
+      hook_status: "Hook 状态",
+      model_verification: "模型验证",
+      modelVerification: "正在验证模型可用性",
+      runtime_warning: "运行时警告",
+    },
+    reasoning: "推理摘要",
+    reasoningStreaming: "正在推理",
+    runtimeStatus: {
+      duration: "耗时 {{duration}} 毫秒",
+      fasterModel: "可使用更快的模型：{{model}}",
+      hook: "正在运行 Hook {{eventName}}",
+      modelRerouted: "模型已从 {{fromModel}} 切换到 {{toModel}}",
+      safetyBuffering: "正在使用安全缓冲模型 {{model}}",
+    },
   },
 } as const;

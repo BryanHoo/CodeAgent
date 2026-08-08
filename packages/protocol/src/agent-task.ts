@@ -28,11 +28,55 @@ export const AgentToolItemSchema = Type.Object(
     input: Type.Optional(Type.Unknown()),
     name: Type.String({ minLength: 1 }),
     output: Type.Optional(Type.Unknown()),
+    progress: Type.Optional(Type.String({ maxLength: 8_192 })),
     status: AgentItemStatusSchema,
     type: Type.Literal("tool"),
   },
   { additionalProperties: false },
 );
+
+const AgentSafetyBufferingItemSchema = Type.Object(
+  {
+    fasterModel: Type.Optional(Type.String({ minLength: 1 })),
+    id: Type.String({ minLength: 1 }),
+    kind: Type.Literal("safety_buffering"),
+    model: Type.String({ minLength: 1 }),
+    status: AgentItemStatusSchema,
+    type: Type.Literal("runtime_status"),
+  },
+  { additionalProperties: false },
+);
+
+const AgentModelReroutedItemSchema = Type.Object(
+  {
+    fromModel: Type.String({ minLength: 1 }),
+    id: Type.String({ minLength: 1 }),
+    kind: Type.Literal("model_rerouted"),
+    status: Type.Literal("completed"),
+    toModel: Type.String({ minLength: 1 }),
+    type: Type.Literal("runtime_status"),
+  },
+  { additionalProperties: false },
+);
+
+const AgentHookStatusItemSchema = Type.Object(
+  {
+    detail: Type.Optional(Type.String({ maxLength: 8_192 })),
+    durationMs: Type.Optional(Type.Integer({ minimum: 0 })),
+    eventName: Type.String({ minLength: 1 }),
+    id: Type.String({ minLength: 1 }),
+    kind: Type.Literal("hook"),
+    status: AgentItemStatusSchema,
+    type: Type.Literal("runtime_status"),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentRuntimeStatusItemSchema = Type.Union([
+  AgentSafetyBufferingItemSchema,
+  AgentModelReroutedItemSchema,
+  AgentHookStatusItemSchema,
+]);
 
 export const AgentPlanItemSchema = Type.Object(
   {
@@ -147,6 +191,7 @@ export const AgentItemSchema = Type.Union([
   AgentActivityItemSchema,
   AgentApprovalReviewItemSchema,
   AgentReviewItemSchema,
+  AgentRuntimeStatusItemSchema,
 ]);
 
 export type AgentItem = Readonly<Static<typeof AgentItemSchema>>;

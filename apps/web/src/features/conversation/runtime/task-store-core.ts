@@ -14,6 +14,7 @@ const MAX_COMMAND_OUTPUT_LINES = 10_000;
 export const MAX_TASK_COMMAND_OUTPUT_BYTES = 8 * 1_048_576;
 export const MAX_RETAINED_TASK_RUNTIME_BYTES = 64 * 1_048_576;
 export const MAX_RETAINED_TERMINAL_REQUESTS = 20;
+export const MAX_RETAINED_TASK_NOTICES = 20;
 export const PENDING_COMMAND_LABEL = "__CODE_AGENT_PENDING_COMMAND__";
 export const RETAINED_COMMAND_OUTPUT_MARKER = "__CODE_AGENT_RETAINED_COMMAND_OUTPUT__";
 const textDecoder = new TextDecoder();
@@ -23,6 +24,7 @@ const retainedCommandOutputMarkerBytes = textEncoder.encode(
 ).byteLength;
 
 export type NormalizedAgentTurn = Omit<AgentTurn, "items">;
+export type TaskNotice = Extract<AgentEvent, { type: "task.notice" }>;
 export type TaskSnapshotMetadata = Omit<AgentTaskSnapshot, "pendingRequests" | "turns">;
 export type ReconstructedTaskSnapshot = Omit<AgentTaskSnapshot, "pendingRequests"> &
   Readonly<{ pendingRequests: readonly PendingRequest[] }>;
@@ -51,6 +53,7 @@ export interface TaskStoreState {
   itemStructureRevision: number;
   itemTurnIdsById: Readonly<Record<string, string>>;
   getItem: (itemId: string) => AgentItem | undefined;
+  notices: readonly TaskNotice[];
   pendingRequestIds: readonly string[];
   pendingRequestsById: Readonly<Record<string, PendingRequest>>;
   projectId: string;
@@ -62,6 +65,7 @@ export interface TaskStoreState {
   taskId: string;
   turnIds: readonly string[];
   turnsById: Readonly<Record<string, NormalizedAgentTurn>>;
+  turnDiffsById: Readonly<Record<string, string>>;
 }
 
 export type TaskStore = StoreApi<TaskStoreState>;
@@ -72,7 +76,7 @@ export interface TaskItemStoreState {
 
 type DeltaEvent = Extract<
   AgentEvent,
-  { type: "command.output_delta" | "message.delta" | "reasoning.delta" }
+  { type: "command.output_delta" | "message.delta" | "plan.delta" | "reasoning.delta" }
 >;
 
 export interface TaskItemStore extends StoreApi<TaskItemStoreState> {
@@ -83,7 +87,7 @@ export interface TaskItemStore extends StoreApi<TaskItemStoreState> {
   replace: (item: AgentItem) => void;
 }
 
-type StreamedTextField = "content" | "output" | "summary" | "text";
+type StreamedTextField = "content" | "output" | "plan" | "summary" | "text";
 
 export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
   let baseItem = initialItem;
@@ -92,6 +96,7 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
   let contentGeneration = 0;
   let materializedGeneration = 0;
   let materializedItem = initialItem;
+  let summarySectionIndex: number | undefined;
   const store = createStore<TaskItemStoreState>()(() => ({ revision: 0 }));
 
   function appendChunk(field: StreamedTextField, delta: string): void {
@@ -117,7 +122,28 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
         if (baseItem.type !== "reasoning") {
           return false;
         }
+        if (event.payload.field === "summary" && event.payload.sectionIndex !== undefined) {
+          const currentSummary = [baseItem.summary, ...(chunksByField.get("summary") ?? [])].join(
+            "",
+          );
+          const startsNewSection =
+            summarySectionIndex === undefined
+              ? event.payload.sectionIndex > 0
+              : event.payload.sectionIndex !== summarySectionIndex;
+          if (startsNewSection && currentSummary.length > 0) {
+            // Codex 只传分段索引；用空行保留摘要段落边界，避免不同主题粘连。
+            appendChunk("summary", "\n\n");
+          }
+          summarySectionIndex = event.payload.sectionIndex;
+        }
         appendChunk(event.payload.field, event.payload.delta);
+        return true;
+      }
+      if (event.type === "plan.delta") {
+        if (baseItem.type !== "plan") {
+          return false;
+        }
+        appendChunk("plan", event.payload.delta);
         return true;
       }
       if (baseItem.type !== "command") {
@@ -161,6 +187,11 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
         if (chunks !== undefined) {
           nextItem = { ...baseItem, output: [baseItem.output ?? "", ...chunks].join("") };
         }
+      } else if (baseItem.type === "plan") {
+        const chunks = chunksByField.get("plan");
+        if (chunks !== undefined) {
+          nextItem = { ...baseItem, text: [baseItem.text, ...chunks].join("") };
+        }
       }
       materializedItem = nextItem;
       materializedGeneration = contentGeneration;
@@ -169,6 +200,7 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
     replace(item: AgentItem): void {
       baseItem = item;
       chunksByField.clear();
+      summarySectionIndex = undefined;
       contentGeneration += 1;
     },
   });
@@ -185,10 +217,12 @@ type NormalizedTaskData = Pick<
   | "itemStoresById"
   | "itemStructureRevision"
   | "itemTurnIdsById"
+  | "notices"
   | "pendingRequestIds"
   | "pendingRequestsById"
   | "snapshotMetadata"
   | "turnIds"
+  | "turnDiffsById"
   | "turnsById"
 >;
 
@@ -285,9 +319,11 @@ export function normalizeSnapshot(response: TaskStoreHydrationResponse): Normali
     itemStoresById,
     itemStructureRevision: 0,
     itemTurnIdsById,
+    notices: [],
     ...pendingRequestState,
     snapshotMetadata,
     turnIds,
+    turnDiffsById: {},
     turnsById,
   };
 }

@@ -28,6 +28,11 @@ import {
   PlanTitle,
   PlanTrigger,
 } from "../../../shared/components/agent/plan.js";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "../../../shared/components/agent/reasoning.js";
 import { Task, TaskContent, TaskItem, TaskTrigger } from "../../../shared/components/agent/task.js";
 import {
   Terminal,
@@ -196,8 +201,25 @@ export function TimelineItemContent({
         </MessageContent>
       );
     case "reasoning":
-      // 原生 Reasoning 仅用于运行时状态同步，避免在界面暴露模型思维链。
-      return null;
+      if (item.summary.trim().length === 0) {
+        return null;
+      }
+      return (
+        <Reasoning isStreaming={turnStatus === "running"}>
+          <ReasoningTrigger
+            title={i18n.t(
+              turnStatus === "running" ? "timeline.reasoningStreaming" : "timeline.reasoning",
+              { ns: "conversation" },
+            )}
+          />
+          <ReasoningContent>
+            {/* 仅渲染 Provider 明确提供的摘要，原始 content 永不进入展示组件。 */}
+            <LazyMessageResponse mode={turnStatus === "running" ? "streaming" : "static"}>
+              {item.summary}
+            </LazyMessageResponse>
+          </ReasoningContent>
+        </Reasoning>
+      );
     case "approval_review":
       return <ApprovalReviewItem item={item} />;
     case "command": {
@@ -231,8 +253,29 @@ export function TimelineItemContent({
       );
     }
     case "file_change":
-      // 文件变更统一在回复末尾聚合，避免工具流中重复展示同一组文件。
-      return null;
+      if (item.status !== "pending" && item.status !== "running") {
+        // 终态文件变更仍由回复末尾聚合，运行中则立即反馈当前文件集合。
+        return null;
+      }
+      return (
+        <Task collapsible={item.changes.length > 0} status="in_progress">
+          <TaskTrigger
+            title={i18n.t("timeline.editingFiles", {
+              count: item.changes.length,
+              ns: "conversation",
+            })}
+          />
+          {item.changes.length === 0 ? null : (
+            <TaskContent>
+              {item.changes.map((change) => (
+                <TaskItem className="break-all font-mono" key={change.path}>
+                  {change.path}
+                </TaskItem>
+              ))}
+            </TaskContent>
+          )}
+        </Task>
+      );
     case "tool": {
       const subagentOperation = parseSubagentOperation(item);
       if (subagentOperation !== null) {
@@ -247,8 +290,16 @@ export function TimelineItemContent({
 
       return (
         <Tool>
-          <ToolHeader state={toToolState(item.status)} title={item.name} />
+          <ToolHeader
+            state={toToolState(item.status)}
+            title={item.progress === undefined ? item.name : `${item.name} · ${item.progress}`}
+          />
           <ToolContent>
+            {item.progress === undefined ? null : (
+              <p className="text-label leading-5 text-muted-foreground" role="status">
+                {item.progress}
+              </p>
+            )}
             {item.input === undefined ? null : <ToolInput input={item.input} />}
             <ToolOutput errorText={errorText} output={hasErrorOutput ? undefined : item.output} />
           </ToolContent>
@@ -303,6 +354,70 @@ export function TimelineItemContent({
           )}
         </Task>
       );
+    case "runtime_status": {
+      const status = toTaskStatus(item.status);
+      if (item.kind === "safety_buffering") {
+        return (
+          <Task collapsible={item.fasterModel !== undefined} status={status}>
+            <TaskTrigger
+              title={i18n.t("timeline.runtimeStatus.safetyBuffering", {
+                model: item.model,
+                ns: "conversation",
+              })}
+            />
+            {item.fasterModel === undefined ? null : (
+              <TaskContent>
+                <TaskItem>
+                  {i18n.t("timeline.runtimeStatus.fasterModel", {
+                    model: item.fasterModel,
+                    ns: "conversation",
+                  })}
+                </TaskItem>
+              </TaskContent>
+            )}
+          </Task>
+        );
+      }
+      if (item.kind === "model_rerouted") {
+        return (
+          <Task collapsible={false} status={status}>
+            <TaskTrigger
+              title={i18n.t("timeline.runtimeStatus.modelRerouted", {
+                fromModel: item.fromModel,
+                ns: "conversation",
+                toModel: item.toModel,
+              })}
+            />
+          </Task>
+        );
+      }
+      return (
+        <Task
+          collapsible={item.detail !== undefined || item.durationMs !== undefined}
+          status={status}
+        >
+          <TaskTrigger
+            title={i18n.t("timeline.runtimeStatus.hook", {
+              eventName: item.eventName,
+              ns: "conversation",
+            })}
+          />
+          {item.detail === undefined && item.durationMs === undefined ? null : (
+            <TaskContent>
+              {item.detail === undefined ? null : <TaskItem>{item.detail}</TaskItem>}
+              {item.durationMs === undefined ? null : (
+                <TaskItem>
+                  {i18n.t("timeline.runtimeStatus.duration", {
+                    duration: item.durationMs,
+                    ns: "conversation",
+                  })}
+                </TaskItem>
+              )}
+            </TaskContent>
+          )}
+        </Task>
+      );
+    }
   }
 }
 

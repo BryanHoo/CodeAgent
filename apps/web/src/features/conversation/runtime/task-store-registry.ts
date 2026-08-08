@@ -123,10 +123,12 @@ export function estimateTaskStoreRetainedBytes(store: TaskStore): number {
     itemIdsByTurnId: state.itemIdsByTurnId,
     itemTurnIdsById: state.itemTurnIdsById,
     items: [...state.itemStoresById.values()].map((itemStore) => itemStore.read()),
+    notices: state.notices,
     pendingRequestIds: state.pendingRequestIds,
     pendingRequestsById: state.pendingRequestsById,
     snapshotMetadata: state.snapshotMetadata,
     turnIds: state.turnIds,
+    turnDiffsById: state.turnDiffsById,
     turnsById: state.turnsById,
   });
 }

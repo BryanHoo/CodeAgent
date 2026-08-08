@@ -18,22 +18,92 @@ export class CodexProtocolMappingError extends Error {
 
 export const MAX_COMMAND_OUTPUT_BYTES = 1_048_576;
 export const MAX_COMMAND_OUTPUT_LINES = 10_000;
-export const CODEX_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
+export const CODEX_MAPPED_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
   "error",
+  "guardianWarning",
+  "hook/completed",
+  "hook/started",
   "item/agentMessage/delta",
   "item/autoApprovalReview/completed",
   "item/autoApprovalReview/started",
   "item/commandExecution/outputDelta",
   "item/completed",
+  "item/fileChange/patchUpdated",
+  "item/mcpToolCall/progress",
+  "item/plan/delta",
+  "item/reasoning/summaryPartAdded",
   "item/reasoning/summaryTextDelta",
   "item/reasoning/textDelta",
   "item/started",
-  "thread/goal/cleared",
-  "thread/goal/updated",
+  "model/rerouted",
+  "model/safetyBuffering/updated",
+  "model/verification",
   "thread/tokenUsage/updated",
   "turn/completed",
+  "turn/diff/updated",
   "turn/plan/updated",
   "turn/started",
+  "warning",
+]);
+
+export const CODEX_SPECIAL_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
+  "account/login/completed",
+  "account/updated",
+  "mcpServer/startupStatus/updated",
+  "serverRequest/resolved",
+  "thread/goal/cleared",
+  "thread/goal/updated",
+  "thread/started",
+]);
+
+export const CODEX_IGNORED_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
+  "account/rateLimits/updated",
+  "app/list/updated",
+  "command/exec/outputDelta",
+  "configWarning",
+  "deprecationNotice",
+  "externalAgentConfig/import/completed",
+  "externalAgentConfig/import/progress",
+  "fs/changed",
+  "fuzzyFileSearch/sessionCompleted",
+  "fuzzyFileSearch/sessionUpdated",
+  "item/commandExecution/terminalInteraction",
+  "item/fileChange/outputDelta",
+  "mcpServer/oauthLogin/completed",
+  "process/exited",
+  "process/outputDelta",
+  "rawResponse/completed",
+  "rawResponseItem/completed",
+  "remoteControl/status/changed",
+  "skills/changed",
+  "thread/archived",
+  "thread/closed",
+  "thread/compacted",
+  "thread/deleted",
+  "thread/environment/connected",
+  "thread/environment/disconnected",
+  "thread/name/updated",
+  "thread/realtime/closed",
+  "thread/realtime/error",
+  "thread/realtime/itemAdded",
+  "thread/realtime/outputAudio/delta",
+  "thread/realtime/sdp",
+  "thread/realtime/started",
+  "thread/realtime/transcript/delta",
+  "thread/realtime/transcript/done",
+  "thread/settings/updated",
+  "thread/status/changed",
+  "thread/unarchived",
+  "turn/moderationMetadata",
+  "windows/worldWritableWarning",
+  "windowsSandbox/setupCompleted",
+]);
+
+// 每个官方 Notification 必须明确映射、专门消费或主动忽略，禁止静默遗漏。
+export const CODEX_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
+  ...CODEX_MAPPED_NOTIFICATION_METHODS,
+  ...CODEX_SPECIAL_NOTIFICATION_METHODS,
+  ...CODEX_IGNORED_NOTIFICATION_METHODS,
 ]);
 
 export interface PendingCodexRequest {

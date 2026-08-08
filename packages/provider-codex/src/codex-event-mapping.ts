@@ -1,5 +1,6 @@
 import type { AgentProviderEvent } from "@code-agent/core";
 import type {
+  AgentItem,
   AgentMessageAttachment,
   AgentPlan,
   AgentPlanStepStatus,
@@ -7,10 +8,13 @@ import type {
 } from "@code-agent/protocol";
 
 import {
-  CODEX_NOTIFICATION_METHODS,
+  CODEX_MAPPED_NOTIFICATION_METHODS,
   CodexProtocolMappingError,
   expectRecord,
   expectString,
+  isRecord,
+  optionalInteger,
+  optionalString,
 } from "./codex-mapping-common.js";
 import { mapAgentItem, mapApprovalReviewItem } from "./codex-item-mapping.js";
 import { mapContextUsage, mapAgentTurn } from "./codex-task-mapping.js";
@@ -19,7 +23,81 @@ import {
   inferReviewTargetFromPrompt,
   mapReviewHint,
   markStartedItemRunning,
+  mapFileChangeKind,
 } from "./codex-tool-mapping.js";
+
+const MAX_STATUS_TEXT_LENGTH = 8_192;
+
+function boundStatusText(value: string): string {
+  return value.slice(0, MAX_STATUS_TEXT_LENGTH);
+}
+
+function expectNonNegativeInteger(value: unknown, context: string): number {
+  const parsed = optionalInteger(value);
+  if (parsed === undefined || parsed < 0) {
+    throw new CodexProtocolMappingError(`${context} must be a non-negative integer`);
+  }
+  return parsed;
+}
+
+function mapFileChanges(value: unknown) {
+  if (!Array.isArray(value)) {
+    throw new CodexProtocolMappingError("Codex file change update must be an array");
+  }
+  return value.map((entry) => {
+    const change = expectRecord(entry, "Codex file change update");
+    return {
+      diff: expectString(change["diff"], "Codex file change diff"),
+      kind: mapFileChangeKind(change["kind"]),
+      path: expectString(change["path"], "Codex file change path"),
+    };
+  });
+}
+
+function mapHookStatus(value: unknown): Extract<AgentItem, { type: "runtime_status" }>["status"] {
+  if (value === "running" || value === "completed" || value === "failed") return value;
+  if (value === "blocked") return "failed";
+  if (value === "stopped") return "interrupted";
+  throw new CodexProtocolMappingError("Codex hook status is invalid");
+}
+
+type ProviderErrorCode = NonNullable<
+  Extract<AgentProviderEvent, { type: "provider.error" }>["payload"]["code"]
+>;
+
+function mapProviderErrorInfo(value: unknown): Readonly<{
+  code?: ProviderErrorCode;
+  httpStatusCode?: number;
+}> {
+  if (value === null || value === undefined) return {};
+  const scalarCodes: Readonly<Record<string, ProviderErrorCode>> = {
+    badRequest: "bad_request",
+    contextWindowExceeded: "context_window_exceeded",
+    cyberPolicy: "policy_blocked",
+    internalServerError: "internal_error",
+    other: "other",
+    sandboxError: "sandbox_error",
+    serverOverloaded: "server_overloaded",
+    sessionBudgetExceeded: "session_budget_exceeded",
+    unauthorized: "unauthorized",
+    usageLimitExceeded: "usage_limit_exceeded",
+  };
+  if (typeof value === "string") {
+    return { code: scalarCodes[value] ?? "other" };
+  }
+  const info = expectRecord(value, "Codex error info");
+  const connection =
+    info["httpConnectionFailed"] ??
+    info["responseStreamConnectionFailed"] ??
+    info["responseStreamDisconnected"] ??
+    info["responseTooManyFailedAttempts"];
+  if (!isRecord(connection)) return { code: "other" };
+  const httpStatusCode = optionalInteger(connection["httpStatusCode"]);
+  return {
+    code: "connection_failed",
+    ...(httpStatusCode === undefined ? {} : { httpStatusCode }),
+  };
+}
 
 function mapPlanStepStatus(value: unknown): AgentPlanStepStatus {
   if (value === "pending" || value === "completed") {
@@ -71,12 +149,40 @@ export function mapCodexNotification(
   suppressReviewResult = false,
   explicitTaskId?: string,
 ): AgentProviderEvent | undefined {
-  if (!CODEX_NOTIFICATION_METHODS.has(method)) {
+  if (!CODEX_MAPPED_NOTIFICATION_METHODS.has(method)) {
     return undefined;
   }
 
   const params = expectRecord(value, `Codex ${method} params`);
+  if (method === "warning" && params["threadId"] === null && explicitTaskId === undefined) {
+    // 进程级 Warning 没有可验证的 Task 归属，不能伪造路由到当前页面。
+    return undefined;
+  }
   const taskId = explicitTaskId ?? expectString(params["threadId"], `Codex ${method} threadId`);
+
+  if (method === "warning" || method === "guardianWarning") {
+    return {
+      payload: {
+        code: method === "guardianWarning" ? "guardian_warning" : "runtime_warning",
+        level: "warning",
+        message: boundStatusText(expectString(params["message"], `Codex ${method} message`)),
+      },
+      taskId,
+      type: "task.notice",
+    };
+  }
+
+  if (method === "model/verification") {
+    return {
+      payload: {
+        code: "model_verification",
+        level: "warning",
+        message: "Model access verification is required.",
+      },
+      taskId,
+      type: "task.notice",
+    };
+  }
 
   if (method === "thread/tokenUsage/updated") {
     return {
@@ -114,20 +220,152 @@ export function mapCodexNotification(
     };
   }
 
+  if (method === "hook/started" || method === "hook/completed") {
+    const run = expectRecord(params["run"], "Codex hook run");
+    const nativeDuration = optionalInteger(run["durationMs"]);
+    const detail = optionalString(run["statusMessage"]);
+    const item: Extract<AgentItem, { type: "runtime_status" }> = {
+      ...(detail === undefined ? {} : { detail: boundStatusText(detail) }),
+      ...(nativeDuration === undefined ? {} : { durationMs: nativeDuration }),
+      eventName: expectString(run["eventName"], "Codex hook event name"),
+      id: `hook-${expectString(run["id"], "Codex hook run id")}`,
+      kind: "hook",
+      status: method === "hook/started" ? "running" : mapHookStatus(run["status"]),
+      type: "runtime_status",
+    };
+    const hookTurnId = explicitTurnId ?? optionalString(params["turnId"]);
+    if (hookTurnId === undefined) {
+      return {
+        payload: {
+          code: "hook_status",
+          level: item.status === "failed" ? "warning" : "info",
+          message: item.detail ?? item.eventName,
+        },
+        taskId,
+        type: "task.notice",
+      };
+    }
+    return {
+      itemId: item.id,
+      payload: { item },
+      taskId,
+      turnId: hookTurnId,
+      type: method === "hook/started" ? "item.started" : "item.completed",
+    };
+  }
+
   const turnId = explicitTurnId ?? expectString(params["turnId"], `Codex ${method} turnId`);
   if (method === "error") {
     const error = expectRecord(params["error"], "Codex error notification error");
     if (typeof params["willRetry"] !== "boolean") {
       throw new CodexProtocolMappingError("Codex error notification willRetry must be a boolean");
     }
+    const errorInfo = mapProviderErrorInfo(error["codexErrorInfo"]);
     return {
       payload: {
+        ...errorInfo,
         message: expectString(error["message"], "Codex error notification message"),
         willRetry: params["willRetry"],
       },
       taskId,
       turnId,
       type: "provider.error",
+    };
+  }
+
+  if (method === "item/plan/delta") {
+    return {
+      itemId: expectString(params["itemId"], "Codex plan delta itemId"),
+      payload: { delta: expectString(params["delta"], "Codex plan delta") },
+      taskId,
+      turnId,
+      type: "plan.delta",
+    };
+  }
+
+  if (method === "item/mcpToolCall/progress") {
+    return {
+      itemId: expectString(params["itemId"], "Codex MCP progress itemId"),
+      payload: {
+        message: boundStatusText(expectString(params["message"], "Codex MCP progress message")),
+      },
+      taskId,
+      turnId,
+      type: "tool.progress",
+    };
+  }
+
+  if (method === "item/fileChange/patchUpdated") {
+    return {
+      itemId: expectString(params["itemId"], "Codex file change itemId"),
+      payload: { changes: mapFileChanges(params["changes"]) },
+      taskId,
+      turnId,
+      type: "file_change.updated",
+    };
+  }
+
+  if (method === "turn/diff/updated") {
+    return {
+      payload: { diff: expectString(params["diff"], "Codex turn diff") },
+      taskId,
+      turnId,
+      type: "turn.diff_updated",
+    };
+  }
+
+  if (method === "item/reasoning/summaryPartAdded") {
+    return {
+      itemId: expectString(params["itemId"], "Codex reasoning itemId"),
+      payload: {
+        delta: "",
+        field: "summary",
+        sectionIndex: expectNonNegativeInteger(params["summaryIndex"], "Codex summary index"),
+      },
+      taskId,
+      turnId,
+      type: "reasoning.delta",
+    };
+  }
+
+  if (method === "model/safetyBuffering/updated") {
+    const model = expectString(params["model"], "Codex safety buffering model");
+    const fasterModel = optionalString(params["fasterModel"]);
+    if (typeof params["showBufferingUi"] !== "boolean") {
+      throw new CodexProtocolMappingError("Codex safety buffering UI state is invalid");
+    }
+    const item: Extract<AgentItem, { kind: "safety_buffering" }> = {
+      ...(fasterModel === undefined ? {} : { fasterModel }),
+      id: `runtime-safety-${turnId}`,
+      kind: "safety_buffering",
+      model,
+      status: params["showBufferingUi"] ? "running" : "completed",
+      type: "runtime_status",
+    };
+    return {
+      itemId: item.id,
+      payload: { item },
+      taskId,
+      turnId,
+      type: params["showBufferingUi"] ? "item.started" : "item.completed",
+    };
+  }
+
+  if (method === "model/rerouted") {
+    const item: Extract<AgentItem, { kind: "model_rerouted" }> = {
+      fromModel: expectString(params["fromModel"], "Codex previous model"),
+      id: `runtime-reroute-${turnId}`,
+      kind: "model_rerouted",
+      status: "completed",
+      toModel: expectString(params["toModel"], "Codex routed model"),
+      type: "runtime_status",
+    };
+    return {
+      itemId: item.id,
+      payload: { item },
+      taskId,
+      turnId,
+      type: "item.completed",
     };
   }
 
@@ -215,6 +453,11 @@ export function mapCodexNotification(
     payload: {
       delta,
       field: method === "item/reasoning/summaryTextDelta" ? "summary" : "content",
+      ...(method === "item/reasoning/summaryTextDelta"
+        ? {
+            sectionIndex: expectNonNegativeInteger(params["summaryIndex"], "Codex summary index"),
+          }
+        : {}),
     },
     taskId,
     turnId,

@@ -4,8 +4,10 @@ import type { AgentProviderEvent } from "@code-agent/core";
 import type { AgentEvent, EventCheckpoint } from "@code-agent/protocol";
 
 type AgentEventListener = (event: AgentEvent) => void;
-type DeltaEventType = "command.output_delta" | "message.delta" | "reasoning.delta";
-type DeltaProviderEvent = Extract<AgentProviderEvent, Readonly<{ type: DeltaEventType }>>;
+type AppendEventType = "command.output_delta" | "message.delta" | "plan.delta" | "reasoning.delta";
+type ReplaceEventType = "file_change.updated" | "tool.progress" | "turn.diff_updated";
+type CoalescedEventType = AppendEventType | ReplaceEventType;
+type CoalescedProviderEvent = Extract<AgentProviderEvent, Readonly<{ type: CoalescedEventType }>>;
 type RetainedAgentEvent = Readonly<{ event: AgentEvent; retainedBytes: number }>;
 
 export type AgentEventReplay =
@@ -42,24 +44,46 @@ const DEFAULT_MAX_EVENT_BYTES = 1_048_576;
 const DEFAULT_MAX_RETAINED_BYTES = 4 * 1_048_576;
 const DEFAULT_PRESSURE_COALESCING_WINDOW_MS = 32;
 
-function isDeltaEvent(event: AgentProviderEvent): event is DeltaProviderEvent {
+function isCoalescedEvent(event: AgentProviderEvent): event is CoalescedProviderEvent {
   return (
     event.type === "command.output_delta" ||
+    event.type === "file_change.updated" ||
     event.type === "message.delta" ||
-    event.type === "reasoning.delta"
+    event.type === "plan.delta" ||
+    event.type === "reasoning.delta" ||
+    event.type === "tool.progress" ||
+    event.type === "turn.diff_updated"
   );
 }
 
-function deltaKey(event: DeltaProviderEvent): string {
-  const field = event.type === "reasoning.delta" ? event.payload.field : "delta";
+function coalescingKey(event: CoalescedProviderEvent): string {
+  if (event.type === "turn.diff_updated") {
+    return JSON.stringify([event.taskId, event.turnId, event.type]);
+  }
+  const field =
+    event.type === "reasoning.delta"
+      ? `${event.payload.field}:${String(event.payload.sectionIndex ?? -1)}`
+      : "value";
   return JSON.stringify([event.taskId, event.turnId, event.itemId, event.type, field]);
 }
 
-function mergeDelta(left: DeltaProviderEvent, right: DeltaProviderEvent): DeltaProviderEvent {
-  return {
-    ...left,
-    payload: { ...left.payload, delta: left.payload.delta + right.payload.delta },
-  } as DeltaProviderEvent;
+function mergeCoalescedEvent(
+  left: CoalescedProviderEvent,
+  right: CoalescedProviderEvent,
+): CoalescedProviderEvent {
+  if (
+    (left.type === "command.output_delta" && right.type === "command.output_delta") ||
+    (left.type === "message.delta" && right.type === "message.delta") ||
+    (left.type === "plan.delta" && right.type === "plan.delta") ||
+    (left.type === "reasoning.delta" && right.type === "reasoning.delta")
+  ) {
+    return {
+      ...left,
+      payload: { ...left.payload, delta: left.payload.delta + right.payload.delta },
+    } as CoalescedProviderEvent;
+  }
+  // 进度、文件集合和 Turn diff 都是状态快照，只保留窗口内的最新值。
+  return right;
 }
 
 export class AgentEventStream {
@@ -70,7 +94,7 @@ export class AgentEventStream {
   readonly #maxEventBytes: number;
   readonly #maxRetainedBytes: number;
   readonly #now: () => Date;
-  readonly #pendingDeltas: DeltaProviderEvent[] = [];
+  readonly #pendingDeltas: CoalescedProviderEvent[] = [];
   readonly #pressureCoalescingWindowMs: number;
   readonly #provider: string;
   readonly #sessionId: string;
@@ -149,7 +173,7 @@ export class AgentEventStream {
       return;
     }
     this.#providerEventsReceived += 1;
-    if (!isDeltaEvent(event)) {
+    if (!isCoalescedEvent(event)) {
       // 关键状态必须排在所有更早 Delta 之后，不能等待定时窗口。
       this.#flush();
       this.#publishNow(event);
@@ -158,11 +182,11 @@ export class AgentEventStream {
 
     const previousIndex = this.#pendingDeltas.length - 1;
     const previous = this.#pendingDeltas[previousIndex];
-    if (previous === undefined || deltaKey(previous) !== deltaKey(event)) {
+    if (previous === undefined || coalescingKey(previous) !== coalescingKey(event)) {
       this.#pendingDeltas.push(event);
     } else {
       // 只合并队尾的同 Key Delta，保留 A-B-A 交错事件的原始顺序。
-      this.#pendingDeltas[previousIndex] = mergeDelta(previous, event);
+      this.#pendingDeltas[previousIndex] = mergeCoalescedEvent(previous, event);
       this.#coalescedEvents += 1;
     }
     this.#scheduleFlush();

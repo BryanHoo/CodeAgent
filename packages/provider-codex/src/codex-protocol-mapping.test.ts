@@ -2,13 +2,158 @@ import { describe, expect, it } from "vitest";
 
 import {
   CodexProtocolMappingError,
+  mapCodexNotification,
   mapAgentTurn,
   mapAgentTurns,
   mapAgentModel,
   mapSandboxMode,
 } from "./codex-protocol-mapping.js";
 
+const mapNotification = (method: string, params: unknown) =>
+  mapCodexNotification(
+    method,
+    params,
+    () => undefined,
+    () => undefined,
+  );
+
 describe("Codex protocol mapping", () => {
+  it("maps streaming plan, tool, file, and reasoning notifications", () => {
+    expect(
+      mapNotification("item/plan/delta", {
+        delta: "## 计划",
+        itemId: "plan-1",
+        threadId: "task-1",
+        turnId: "turn-1",
+      }),
+    ).toMatchObject({ itemId: "plan-1", payload: { delta: "## 计划" }, type: "plan.delta" });
+    expect(
+      mapNotification("item/mcpToolCall/progress", {
+        itemId: "mcp-1",
+        message: "正在读取资源",
+        threadId: "task-1",
+        turnId: "turn-1",
+      }),
+    ).toMatchObject({ payload: { message: "正在读取资源" }, type: "tool.progress" });
+    expect(
+      mapNotification("item/fileChange/patchUpdated", {
+        changes: [{ diff: "+const ready = true;", kind: { type: "update" }, path: "src/app.ts" }],
+        itemId: "patch-1",
+        threadId: "task-1",
+        turnId: "turn-1",
+      }),
+    ).toMatchObject({
+      payload: {
+        changes: [{ diff: "+const ready = true;", kind: "update", path: "src/app.ts" }],
+      },
+      type: "file_change.updated",
+    });
+    expect(
+      mapNotification("turn/diff/updated", {
+        diff: "diff --git a/src/app.ts b/src/app.ts",
+        threadId: "task-1",
+        turnId: "turn-1",
+      }),
+    ).toMatchObject({ type: "turn.diff_updated" });
+    expect(
+      mapNotification("item/reasoning/summaryPartAdded", {
+        itemId: "reasoning-1",
+        summaryIndex: 2,
+        threadId: "task-1",
+        turnId: "turn-1",
+      }),
+    ).toMatchObject({
+      payload: { delta: "", field: "summary", sectionIndex: 2 },
+      type: "reasoning.delta",
+    });
+  });
+
+  it("maps hooks, model status, warnings, and structured errors", () => {
+    expect(
+      mapNotification("hook/started", {
+        run: {
+          eventName: "afterToolUse",
+          id: "hook-1",
+          status: "running",
+        },
+        threadId: "task-1",
+        turnId: "turn-1",
+      }),
+    ).toMatchObject({
+      itemId: "hook-hook-1",
+      payload: { item: { eventName: "afterToolUse", kind: "hook", status: "running" } },
+      type: "item.started",
+    });
+    expect(
+      mapNotification("hook/completed", {
+        run: {
+          eventName: "sessionStart",
+          id: "hook-thread",
+          status: "completed",
+          statusMessage: "Thread Hook 已完成",
+        },
+        threadId: "task-1",
+        turnId: null,
+      }),
+    ).toMatchObject({
+      payload: { code: "hook_status", level: "info", message: "Thread Hook 已完成" },
+      type: "task.notice",
+    });
+    expect(
+      mapNotification("warning", {
+        message: "Process warning",
+        threadId: null,
+      }),
+    ).toBeUndefined();
+    expect(
+      mapNotification("model/safetyBuffering/updated", {
+        fasterModel: "gpt-mini",
+        model: "gpt-main",
+        reasons: [],
+        showBufferingUi: true,
+        threadId: "task-1",
+        turnId: "turn-1",
+        useCases: [],
+      }),
+    ).toMatchObject({
+      payload: { item: { kind: "safety_buffering", status: "running" } },
+      type: "item.started",
+    });
+    expect(
+      mapNotification("model/rerouted", {
+        fromModel: "gpt-main",
+        reason: "highRiskCyberActivity",
+        threadId: "task-1",
+        toModel: "gpt-safe",
+        turnId: "turn-1",
+      }),
+    ).toMatchObject({
+      payload: { item: { fromModel: "gpt-main", kind: "model_rerouted", toModel: "gpt-safe" } },
+      type: "item.completed",
+    });
+    expect(
+      mapNotification("warning", { message: "配置即将失效", threadId: "task-1" }),
+    ).toMatchObject({
+      payload: { code: "runtime_warning", level: "warning" },
+      type: "task.notice",
+    });
+    expect(
+      mapNotification("error", {
+        error: {
+          additionalDetails: null,
+          codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: 502 } },
+          message: "连接中断",
+        },
+        threadId: "task-1",
+        turnId: "turn-1",
+        willRetry: true,
+      }),
+    ).toMatchObject({
+      payload: { code: "connection_failed", httpStatusCode: 502, willRetry: true },
+      type: "provider.error",
+    });
+  });
+
   it("maps supported sandbox modes and rejects unknown values", () => {
     expect(mapSandboxMode("read-only")).toBe("read-only");
     expect(mapSandboxMode("workspace-write")).toBe("workspace-write");

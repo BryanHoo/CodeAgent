@@ -98,24 +98,28 @@ function isDeltaEvent(
   event: AgentEvent,
 ): event is Extract<
   AgentEvent,
-  { type: "command.output_delta" | "message.delta" | "reasoning.delta" }
+  { type: "command.output_delta" | "message.delta" | "plan.delta" | "reasoning.delta" }
 > {
   return (
     event.type === "message.delta" ||
+    event.type === "plan.delta" ||
     event.type === "reasoning.delta" ||
     event.type === "command.output_delta"
   );
 }
 
 function deltaKey(event: Extract<AgentEvent, { itemId: string }>): string {
-  const field = event.type === "reasoning.delta" ? event.payload.field : "value";
+  const field =
+    event.type === "reasoning.delta"
+      ? `${event.payload.field}:${String(event.payload.sectionIndex ?? -1)}`
+      : "value";
   return `${event.taskId}:${event.turnId}:${event.itemId}:${event.type}:${field}`;
 }
 
 type BufferedDeltaEvent = Readonly<{
   event: Extract<
     AgentEvent,
-    { type: "command.output_delta" | "message.delta" | "reasoning.delta" }
+    { type: "command.output_delta" | "message.delta" | "plan.delta" | "reasoning.delta" }
   >;
   retainedBytes: number;
 }>;

@@ -92,6 +92,70 @@ describe("AgentEventStream", () => {
     expect(stream.metrics).toMatchObject({ coalescedEvents: 0, pendingDeltas: 0 });
   });
 
+  it("coalesces plan text by appending and turn diffs by replacing", () => {
+    vi.useFakeTimers();
+    const stream = new AgentEventStream({ provider: "codex", sessionId: "runtime-1" });
+    const listener = vi.fn<(event: AgentEvent) => void>();
+    stream.subscribe(listener);
+
+    stream.publish({
+      ...deltaEvent,
+      itemId: "plan-1",
+      payload: { delta: "第一" },
+      type: "plan.delta",
+    });
+    stream.publish({
+      ...deltaEvent,
+      itemId: "plan-1",
+      payload: { delta: "第二" },
+      type: "plan.delta",
+    });
+    stream.publish({
+      payload: { diff: "old diff" },
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "turn.diff_updated",
+    });
+    stream.publish({
+      payload: { diff: "latest diff" },
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "turn.diff_updated",
+    });
+    vi.advanceTimersByTime(16);
+
+    expect(listener.mock.calls.map(([event]) => event)).toMatchObject([
+      { payload: { delta: "第一第二" }, sequence: 1, type: "plan.delta" },
+      { payload: { diff: "latest diff" }, sequence: 2, type: "turn.diff_updated" },
+    ]);
+  });
+
+  it("keeps reasoning summary sections in separate ordered events", () => {
+    vi.useFakeTimers();
+    const stream = new AgentEventStream({ provider: "codex", sessionId: "runtime-1" });
+    const listener = vi.fn<(event: AgentEvent) => void>();
+    stream.subscribe(listener);
+
+    stream.publish({
+      ...deltaEvent,
+      itemId: "reasoning-1",
+      payload: { delta: "第一段", field: "summary", sectionIndex: 0 },
+      type: "reasoning.delta",
+    });
+    stream.publish({
+      ...deltaEvent,
+      itemId: "reasoning-1",
+      payload: { delta: "第二段", field: "summary", sectionIndex: 1 },
+      type: "reasoning.delta",
+    });
+    vi.advanceTimersByTime(16);
+
+    expect(listener.mock.calls.map(([event]) => event)).toMatchObject([
+      { payload: { delta: "第一段", sectionIndex: 0 }, sequence: 1 },
+      { payload: { delta: "第二段", sectionIndex: 1 }, sequence: 2 },
+    ]);
+  });
+
   it("uses the pressure window for the next delta batch", () => {
     vi.useFakeTimers();
     const stream = new AgentEventStream({ provider: "codex", sessionId: "runtime-1" });

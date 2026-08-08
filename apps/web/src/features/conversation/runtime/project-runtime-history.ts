@@ -118,6 +118,7 @@ export class ProjectEventHistory {
 export function isDeltaEvent(event: AgentEvent): boolean {
   return (
     event.type === "message.delta" ||
+    event.type === "plan.delta" ||
     event.type === "reasoning.delta" ||
     event.type === "command.output_delta"
   );

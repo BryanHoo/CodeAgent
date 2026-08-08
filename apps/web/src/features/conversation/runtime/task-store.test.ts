@@ -103,6 +103,132 @@ function createPendingRequest<Status extends PendingRequest["status"] = "pending
 }
 
 describe("task store", () => {
+  it("applies streamed plan, reasoning sections, tool progress, file changes, and turn diff", () => {
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({
+        turns: [
+          {
+            completedAt: null,
+            error: null,
+            id: "turn-running",
+            items: [
+              { id: "plan-1", text: "", type: "plan" },
+              { id: "reasoning-1", content: "raw", summary: "", type: "reasoning" },
+              { id: "mcp-1", name: "docs/search", status: "running", type: "tool" },
+              { changes: [], id: "patch-1", status: "running", type: "file_change" },
+            ],
+            startedAt: timestamp,
+            status: "running",
+          },
+        ],
+      }),
+    );
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        itemId: "plan-1",
+        payload: { delta: "## 计划" },
+        turnId: "turn-running",
+        type: "plan.delta",
+      },
+      {
+        ...eventEnvelope(12),
+        itemId: "reasoning-1",
+        payload: { delta: "核对协议", field: "summary", sectionIndex: 0 },
+        turnId: "turn-running",
+        type: "reasoning.delta",
+      },
+      {
+        ...eventEnvelope(13),
+        itemId: "reasoning-1",
+        payload: { delta: "检查界面", field: "summary", sectionIndex: 1 },
+        turnId: "turn-running",
+        type: "reasoning.delta",
+      },
+      {
+        ...eventEnvelope(14),
+        itemId: "mcp-1",
+        payload: { message: "正在读取资源" },
+        turnId: "turn-running",
+        type: "tool.progress",
+      },
+      {
+        ...eventEnvelope(15),
+        itemId: "patch-1",
+        payload: {
+          changes: [{ diff: "+const ready = true;", kind: "update", path: "src/app.ts" }],
+        },
+        turnId: "turn-running",
+        type: "file_change.updated",
+      },
+      {
+        ...eventEnvelope(16),
+        payload: { diff: "latest diff" },
+        turnId: "turn-running",
+        type: "turn.diff_updated",
+      },
+    ]);
+
+    expect(store.getState().getItem("plan-1")).toMatchObject({ text: "## 计划" });
+    expect(store.getState().getItem("reasoning-1")).toMatchObject({
+      content: "raw",
+      summary: "核对协议\n\n检查界面",
+    });
+    expect(store.getState().getItem("mcp-1")).toMatchObject({ progress: "正在读取资源" });
+    expect(store.getState().getItem("patch-1")).toMatchObject({
+      changes: [{ path: "src/app.ts" }],
+      status: "running",
+    });
+    expect(store.getState().turnDiffsById["turn-running"]).toBe("latest diff");
+
+    const terminalItems = (store.getState().itemIdsByTurnId["turn-running"] ?? []).flatMap(
+      (itemId) => {
+        const item = store.getState().getItem(itemId);
+        return item === undefined ? [] : [item];
+      },
+    );
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(17),
+        payload: {
+          turn: {
+            completedAt: timestamp,
+            error: null,
+            id: "turn-running",
+            items: terminalItems,
+            startedAt: timestamp,
+            status: "completed",
+          },
+        },
+        turnId: "turn-running",
+        type: "turn.completed",
+      },
+    ]);
+
+    expect(store.getState().turnDiffsById["turn-running"]).toBeUndefined();
+  });
+
+  it("retains only the latest task notices", () => {
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
+    store.getState().applyEvents(
+      Array.from({ length: 25 }, (_, index) => ({
+        ...eventEnvelope(11 + index),
+        payload: {
+          code: "runtime_warning" as const,
+          level: "warning" as const,
+          message: `警告 ${String(index)}`,
+        },
+        type: "task.notice" as const,
+      })),
+    );
+
+    expect(store.getState().notices).toHaveLength(20);
+    expect(store.getState().notices[0]?.payload.message).toBe("警告 5");
+    expect(store.getState().notices.at(-1)?.payload.message).toBe("警告 24");
+  });
+
   it("replaces the latest plan without rebuilding timeline item state", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
     const previousItemIdsByTurnId = store.getState().itemIdsByTurnId;

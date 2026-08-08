@@ -824,7 +824,7 @@ describe("project queries", () => {
     ).toBeUndefined();
   });
 
-  it("renders user-visible structured items without exposing reasoning", () => {
+  it("renders structured items and reasoning summaries without exposing raw reasoning", () => {
     const markup = renderToStaticMarkup(
       <TooltipProvider>
         <TaskSnapshotTimeline snapshot={snapshot} />
@@ -839,12 +839,12 @@ describe("project queries", () => {
       "filesystem/read_file",
       "1. 定义协议",
       "上下文压缩",
+      "分析协议",
     ]) {
       expect(markup).toContain(text);
     }
     expect(markup).not.toContain("Turn 执行失败");
     expect(markup).not.toContain("输出已截断");
-    expect(markup).not.toContain("分析协议");
     expect(markup).not.toContain("按统一边界实现");
   });
 });

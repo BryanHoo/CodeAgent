@@ -626,6 +626,128 @@ describe("TaskTimeline", () => {
 
     expect(markup).toContain("执行失败");
   });
+
+  it("renders live summaries, progress, file updates, runtime status, diff, and notices", () => {
+    const runningSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          completedAt: null,
+          error: null,
+          id: "turn-live",
+          items: [
+            {
+              content: "不可展示的原始推理",
+              id: "reasoning-live",
+              summary: "正在核对事件覆盖",
+              type: "reasoning",
+            },
+            {
+              id: "tool-live",
+              name: "mcp__docs__search",
+              status: "running",
+              type: "tool",
+            },
+            {
+              changes: [],
+              id: "file-live",
+              status: "running",
+              type: "file_change",
+            },
+            {
+              id: "safety-live",
+              kind: "safety_buffering",
+              model: "gpt-5.6-sol",
+              status: "running",
+              type: "runtime_status",
+            },
+          ],
+          startedAt: snapshot.updatedAt,
+          status: "running",
+        },
+      ],
+    };
+    const store = createTaskStore(
+      { projectId: snapshot.projectId, taskId: snapshot.id },
+      {
+        checkpoint: { sequence: 1, sessionId: "runtime-live" },
+        snapshot: runningSnapshot,
+      },
+    );
+    const eventBase = {
+      provider: "codex",
+      sessionId: "runtime-live",
+      taskId: snapshot.id,
+      timestamp: snapshot.updatedAt,
+      version: 2 as const,
+    };
+    store.getState().applyEvents([
+      {
+        ...eventBase,
+        itemId: "tool-live",
+        payload: { message: "正在读取官方 Schema" },
+        sequence: 2,
+        turnId: "turn-live",
+        type: "tool.progress",
+      },
+      {
+        ...eventBase,
+        itemId: "file-live",
+        payload: {
+          changes: [{ diff: "+export const live = true;", kind: "update", path: "src/live.ts" }],
+        },
+        sequence: 3,
+        turnId: "turn-live",
+        type: "file_change.updated",
+      },
+      {
+        ...eventBase,
+        payload: { diff: "diff --git a/src/live.ts b/src/live.ts" },
+        sequence: 4,
+        turnId: "turn-live",
+        type: "turn.diff_updated",
+      },
+      {
+        ...eventBase,
+        payload: {
+          code: "model_verification",
+          level: "info",
+          message: "provider text should be localized",
+        },
+        sequence: 5,
+        type: "task.notice",
+      },
+    ]);
+    // Zustand 的 SSR 快照固定为建 Store 时的状态；同步瞬时字段以覆盖静态标记输出。
+    Object.assign(store.getInitialState(), {
+      notices: store.getState().notices,
+      turnDiffsById: store.getState().turnDiffsById,
+    });
+
+    const markup = renderToStaticMarkup(
+      <TaskTimeline
+        projectId={snapshot.projectId}
+        runtime={{
+          connectionState: "connected",
+          error: null,
+          isPending: false,
+          snapshot: runningSnapshot,
+          store,
+        }}
+        taskId={snapshot.id}
+      />,
+    );
+
+    expect(markup).toContain("正在核对事件覆盖");
+    expect(markup).not.toContain("不可展示的原始推理");
+    expect(markup).toContain("正在读取官方 Schema");
+    expect(markup).toContain("src/live.ts");
+    expect(markup).toContain("diff --git a/src/live.ts b/src/live.ts");
+    expect(markup).toContain("正在使用安全缓冲模型 gpt-5.6-sol");
+    expect(markup).toContain("正在验证模型可用性");
+    expect(markup).not.toContain("provider text should be localized");
+  });
 });
 
 describe("TaskSnapshotTimeline", () => {
@@ -1080,7 +1202,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("SKILL.md");
   });
 
-  it("hides reasoning while keeping normal assistant text in one completed response", () => {
+  it("renders reasoning summaries without exposing raw reasoning content", () => {
     const multiItemResponseSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: [
@@ -1114,15 +1236,15 @@ describe("TaskSnapshotTimeline", () => {
       <TaskSnapshotTimeline snapshot={multiItemResponseSnapshot} />,
     );
 
-    // 原生 Reasoning 不向用户暴露，普通回复仍按同一 Turn 合并展示。
+    // 只展示 Codex 提供的摘要，不把原始 reasoning content 传入 DOM。
     expect(markup.match(/data-role="assistant"/g)).toHaveLength(1);
     expect(markup.match(/aria-label="复制消息"/g)).toHaveLength(1);
     expect(markup.match(/dateTime="2026-07-24T00:01:00.000Z"/g)).toHaveLength(1);
     expect(markup).toContain("我先检查消息判定。");
     expect(markup).toContain("已修正消息判定。");
-    expect(markup).not.toContain("核对消息分组");
+    expect(markup).toContain("核对消息分组");
     expect(markup).not.toContain("正在核对时间线的分组逻辑。");
-    expect(markup).not.toContain("data-ai-chain-of-thought");
+    expect(markup).toContain("data-ai-reasoning");
   });
 
   it("collapses completed commentary and operations behind the processing time", () => {
@@ -1284,13 +1406,12 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup.indexOf("你好")).toBeLessThan(markup.indexOf("正在运行"));
   });
 
-  it("does not expose completed reasoning content", () => {
+  it("shows completed reasoning summaries without exposing raw content", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={snapshot} />);
 
-    expect(markup).not.toContain("data-ai-chain-of-thought");
-    expect(markup).not.toContain("Preparing final build and test verification");
-    expect(markup).not.toContain("Preparing implementation");
-    expect(markup).not.toContain("思考过程");
+    expect(markup).toContain("data-ai-reasoning");
+    expect(markup).toContain("Preparing final build and test verification");
+    expect(markup).toContain("Preparing implementation");
   });
 
   it("keeps tools and commands visible without wrapping them in Chain of Thought", () => {
@@ -1338,9 +1459,8 @@ describe("TaskSnapshotTimeline", () => {
       <TaskSnapshotTimeline snapshot={continuousReasoningSnapshot} />,
     );
 
-    expect(markup).not.toContain("data-ai-chain-of-thought");
-    expect(markup).not.toContain("准备检查项目");
-    expect(markup).not.toContain("整理项目结论");
+    expect(markup).toContain("准备检查项目");
+    expect(markup).toContain("整理项目结论");
     expect(markup).toContain("read_file");
     expect(markup).toContain("pnpm check");
     expect(markup.indexOf("read_file")).toBeLessThan(markup.indexOf("pnpm check"));
@@ -1360,6 +1480,7 @@ describe("TaskSnapshotTimeline", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={emptyReasoningSnapshot} />);
 
     expect(markup).not.toContain('data-ai-chain-of-thought=""');
+    expect(markup).not.toContain('data-ai-reasoning=""');
     expect(markup).not.toContain(">推理<");
   });
 

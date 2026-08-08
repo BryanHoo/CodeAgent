@@ -1,6 +1,7 @@
 import type { AgentEvent, AgentItem } from "@code-agent/protocol";
 
 import {
+  MAX_RETAINED_TASK_NOTICES,
   PENDING_COMMAND_LABEL,
   createTaskItemStore,
   readTaskItem,
@@ -8,7 +9,6 @@ import {
   type TaskItemStore,
   type TaskStoreState,
 } from "./task-store-core.js";
-
 export function getTouchedCommandOutputItemIds(
   previousState: TaskStoreState,
   nextState: TaskStoreState,
@@ -31,7 +31,6 @@ export function getTouchedCommandOutputItemIds(
   }
   return undefined;
 }
-
 function createDeltaItem(event: Extract<AgentEvent, { itemId: string }>): AgentItem | undefined {
   switch (event.type) {
     case "message.delta":
@@ -48,6 +47,12 @@ function createDeltaItem(event: Extract<AgentEvent, { itemId: string }>): AgentI
         summary: "",
         type: "reasoning",
       };
+    case "plan.delta":
+      return {
+        id: event.itemId,
+        text: "",
+        type: "plan",
+      };
     case "command.output_delta": {
       return {
         command: PENDING_COMMAND_LABEL,
@@ -63,7 +68,6 @@ function createDeltaItem(event: Extract<AgentEvent, { itemId: string }>): AgentI
       return undefined;
   }
 }
-
 function mergeRealtimeExpandedSkill(
   previousItem: AgentItem | undefined,
   expandedItem: AgentItem,
@@ -78,7 +82,6 @@ function mergeRealtimeExpandedSkill(
   ) {
     return undefined;
   }
-
   const skillNames = new Set((previousItem.skills ?? []).map((skill) => skill.name));
   const skills = [...(previousItem.skills ?? [])];
   for (const skill of expandedItem.skills ?? []) {
@@ -94,7 +97,6 @@ function mergeRealtimeExpandedSkill(
     text: previousItem.text.trim() === skillIndexText ? "" : previousItem.text,
   };
 }
-
 function replaceTurnItems(
   state: TaskStoreState,
   turnId: string,
@@ -142,7 +144,6 @@ function replaceTurnItems(
     itemTurnIdsById,
   };
 }
-
 function mergeTerminalTurnItems(
   state: TaskStoreState,
   turnId: string,
@@ -223,6 +224,7 @@ export function applyAcceptedEvent(
       };
     }
     case "message.delta":
+    case "plan.delta":
     case "reasoning.delta":
     case "command.output_delta": {
       const currentTurn = state.turnsById[event.turnId];
@@ -271,6 +273,80 @@ export function applyAcceptedEvent(
         turnsById,
       };
     }
+    case "tool.progress": {
+      const currentItemStore = state.itemStoresById.get(event.itemId);
+      if (currentItemStore === undefined || state.itemTurnIdsById[event.itemId] !== event.turnId) {
+        return {
+          checkpoint,
+          snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
+        };
+      }
+      const currentItem = currentItemStore.read();
+      if (currentItem.type !== "tool") {
+        return { checkpoint };
+      }
+      currentItemStore.replace({ ...currentItem, progress: event.payload.message });
+      changedItemStores.add(currentItemStore);
+      return {
+        checkpoint,
+        snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
+      };
+    }
+    case "file_change.updated": {
+      const currentItemStore = state.itemStoresById.get(event.itemId);
+      if (currentItemStore !== undefined) {
+        if (state.itemTurnIdsById[event.itemId] !== event.turnId) {
+          throw new Error(`Agent item ${event.itemId} belongs to another turn`);
+        }
+        const currentItem = currentItemStore.read();
+        if (currentItem.type !== "file_change") {
+          return { checkpoint };
+        }
+        currentItemStore.replace({
+          ...currentItem,
+          changes: event.payload.changes,
+          status: "running",
+        });
+        changedItemStores.add(currentItemStore);
+        return {
+          checkpoint,
+          snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
+        };
+      }
+      if (state.turnsById[event.turnId] === undefined) {
+        return { checkpoint };
+      }
+      const createdItemStore = createTaskItemStore({
+        changes: event.payload.changes,
+        id: event.itemId,
+        status: "running",
+        type: "file_change",
+      });
+      state.itemStoresById.set(event.itemId, createdItemStore);
+      changedItemStores.add(createdItemStore);
+      return {
+        checkpoint,
+        itemIdsByTurnId: {
+          ...state.itemIdsByTurnId,
+          [event.turnId]: [...(state.itemIdsByTurnId[event.turnId] ?? []), event.itemId],
+        },
+        itemStructureRevision: state.itemStructureRevision + 1,
+        itemTurnIdsById: { ...state.itemTurnIdsById, [event.itemId]: event.turnId },
+        snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
+      };
+    }
+    case "turn.diff_updated":
+      return {
+        checkpoint,
+        snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
+        turnDiffsById: { ...state.turnDiffsById, [event.turnId]: event.payload.diff },
+      };
+    case "task.notice":
+      return {
+        checkpoint,
+        notices: [...state.notices, event].slice(-MAX_RETAINED_TASK_NOTICES),
+        snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
+      };
     case "item.started":
     case "item.completed": {
       if (state.turnsById[event.turnId] === undefined) {
@@ -362,6 +438,9 @@ export function applyAcceptedEvent(
           updatedAt: event.timestamp,
         },
         itemStructureRevision: state.itemStructureRevision + 1,
+        turnDiffsById: Object.fromEntries(
+          Object.entries(state.turnDiffsById).filter(([turnId]) => turnId !== event.turnId),
+        ),
         turnsById:
           currentTurn === undefined
             ? state.turnsById

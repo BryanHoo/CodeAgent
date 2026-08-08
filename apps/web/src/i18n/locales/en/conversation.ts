@@ -278,5 +278,23 @@ export const conversation = {
     showImage: "View image {{name}}",
     skillsUsed: "Skills used",
     editedFiles: "Edited {{count}} files",
+    editingFiles: "Editing {{count}} files",
+    liveDiff: "Live turn diff",
+    notice: {
+      guardian_warning: "Safety warning",
+      hook_status: "Hook status",
+      model_verification: "Model verification",
+      modelVerification: "Verifying model availability",
+      runtime_warning: "Runtime warning",
+    },
+    reasoning: "Reasoning summary",
+    reasoningStreaming: "Reasoning",
+    runtimeStatus: {
+      duration: "Completed in {{duration}} ms",
+      fasterModel: "A faster model is available: {{model}}",
+      hook: "Running hook {{eventName}}",
+      modelRerouted: "Rerouted from {{fromModel}} to {{toModel}}",
+      safetyBuffering: "Using safety buffering model {{model}}",
+    },
   },
 } as const;

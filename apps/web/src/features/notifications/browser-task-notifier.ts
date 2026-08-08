@@ -54,7 +54,7 @@ function createDefaultNotificationApi(): BrowserNotificationApi | undefined {
   };
 }
 
-function createTurnKey(event: AgentEvent): string {
+function createTurnKey(event: Extract<AgentEvent, { turnId: string }>): string {
   return `${event.taskId}:${event.turnId}`;
 }
 
@@ -125,8 +125,8 @@ class BrowserTaskNotifier implements TaskNotifier {
       return;
     }
 
-    const turnKey = createTurnKey(event);
     if (event.type === "provider.error" && !event.payload.willRetry) {
+      const turnKey = createTurnKey(event);
       if (this.#failedTurnKeys.has(turnKey)) {
         return;
       }
@@ -137,7 +137,10 @@ class BrowserTaskNotifier implements TaskNotifier {
         }
       }
       this.#failedTurnKeys.add(turnKey);
-    } else if (event.type === "turn.completed" && this.#failedTurnKeys.delete(turnKey)) {
+    } else if (
+      event.type === "turn.completed" &&
+      this.#failedTurnKeys.delete(createTurnKey(event))
+    ) {
       // 不可恢复错误已立即提醒；随后同 Turn 的终态只负责清理去重记录。
       return;
     }

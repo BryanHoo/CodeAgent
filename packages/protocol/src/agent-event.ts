@@ -3,6 +3,7 @@ import { Type, type Static, type TProperties, type TSchema } from "@sinclair/typ
 import {
   ActivePendingRequestSchema,
   AgentContextUsageSchema,
+  AgentFileChangeSchema,
   AgentItemSchema,
   AgentPlanSchema,
   AgentTaskSnapshotSchema,
@@ -50,11 +51,62 @@ export const ReasoningDeltaEventSchema = createEventSchema({
     {
       delta: Type.String(),
       field: Type.Union([Type.Literal("content"), Type.Literal("summary")]),
+      sectionIndex: Type.Optional(Type.Integer({ minimum: 0 })),
     },
     { additionalProperties: false },
   ),
   turnId: Type.String({ minLength: 1 }),
   type: Type.Literal("reasoning.delta"),
+});
+
+export const PlanDeltaEventSchema = createEventSchema({
+  itemId: Type.String({ minLength: 1 }),
+  payload: Type.Object({ delta: Type.String() }, { additionalProperties: false }),
+  turnId: Type.String({ minLength: 1 }),
+  type: Type.Literal("plan.delta"),
+});
+
+export const ToolProgressEventSchema = createEventSchema({
+  itemId: Type.String({ minLength: 1 }),
+  payload: Type.Object(
+    { message: Type.String({ maxLength: 8_192 }) },
+    { additionalProperties: false },
+  ),
+  turnId: Type.String({ minLength: 1 }),
+  type: Type.Literal("tool.progress"),
+});
+
+export const FileChangeUpdatedEventSchema = createEventSchema({
+  itemId: Type.String({ minLength: 1 }),
+  payload: Type.Object(
+    { changes: Type.Array(AgentFileChangeSchema) },
+    { additionalProperties: false },
+  ),
+  turnId: Type.String({ minLength: 1 }),
+  type: Type.Literal("file_change.updated"),
+});
+
+export const TurnDiffUpdatedEventSchema = createEventSchema({
+  payload: Type.Object({ diff: Type.String() }, { additionalProperties: false }),
+  turnId: Type.String({ minLength: 1 }),
+  type: Type.Literal("turn.diff_updated"),
+});
+
+export const TaskNoticeEventSchema = createEventSchema({
+  payload: Type.Object(
+    {
+      code: Type.Union([
+        Type.Literal("runtime_warning"),
+        Type.Literal("guardian_warning"),
+        Type.Literal("model_verification"),
+        Type.Literal("hook_status"),
+      ]),
+      level: Type.Union([Type.Literal("info"), Type.Literal("warning")]),
+      message: Type.String({ maxLength: 8_192, minLength: 1 }),
+    },
+    { additionalProperties: false },
+  ),
+  type: Type.Literal("task.notice"),
 });
 
 export const CommandOutputDeltaEventSchema = createEventSchema({
@@ -86,7 +138,26 @@ export const TurnCompletedEventSchema = createEventSchema({
 
 export const ProviderErrorEventSchema = createEventSchema({
   payload: Type.Object(
-    { message: Type.String({ minLength: 1 }), willRetry: Type.Boolean() },
+    {
+      code: Type.Optional(
+        Type.Union([
+          Type.Literal("context_window_exceeded"),
+          Type.Literal("session_budget_exceeded"),
+          Type.Literal("usage_limit_exceeded"),
+          Type.Literal("server_overloaded"),
+          Type.Literal("policy_blocked"),
+          Type.Literal("connection_failed"),
+          Type.Literal("internal_error"),
+          Type.Literal("unauthorized"),
+          Type.Literal("bad_request"),
+          Type.Literal("sandbox_error"),
+          Type.Literal("other"),
+        ]),
+      ),
+      httpStatusCode: Type.Optional(Type.Integer({ maximum: 599, minimum: 100 })),
+      message: Type.String({ minLength: 1 }),
+      willRetry: Type.Boolean(),
+    },
     { additionalProperties: false },
   ),
   turnId: Type.String({ minLength: 1 }),
@@ -135,12 +206,17 @@ export const AgentEventSchema = Type.Union([
   MessageDeltaEventSchema,
   ReasoningDeltaEventSchema,
   CommandOutputDeltaEventSchema,
+  PlanDeltaEventSchema,
+  ToolProgressEventSchema,
+  FileChangeUpdatedEventSchema,
+  TurnDiffUpdatedEventSchema,
   ItemStartedEventSchema,
   ItemCompletedEventSchema,
   TurnCompletedEventSchema,
   UsageUpdatedEventSchema,
   PlanUpdatedEventSchema,
   ProviderErrorEventSchema,
+  TaskNoticeEventSchema,
   PendingRequestCreatedEventSchema,
   PendingRequestResolvedEventSchema,
   PendingRequestExpiredEventSchema,

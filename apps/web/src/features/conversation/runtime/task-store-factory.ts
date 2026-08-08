@@ -29,10 +29,12 @@ export function createTaskStore(
           itemStoresById: new Map<string, TaskItemStore>(),
           itemStructureRevision: 0,
           itemTurnIdsById: {},
+          notices: [],
           pendingRequestIds: [],
           pendingRequestsById: {},
           snapshotMetadata: null,
           turnIds: [],
+          turnDiffsById: {},
           turnsById: {},
         }
       : normalizeSnapshot(initialResponse);

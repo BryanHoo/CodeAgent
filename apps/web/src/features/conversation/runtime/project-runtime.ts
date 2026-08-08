@@ -177,7 +177,6 @@ export class ProjectRuntimeManager {
       {
         getTaskActivity: () => this.#taskActivity,
         onActivityEvent: (eventProjectId, event) => {
-          const turnKey = createProjectTurnKey(eventProjectId, event.taskId, event.turnId);
           if (event.type === "turn.started") {
             this.#onProjectGitActivity(eventProjectId, event.taskId, "turn_started");
           } else if (
@@ -188,18 +187,22 @@ export class ProjectRuntimeManager {
             // 文件 Item 是高价值失效信号，避免等待下一个周期才更新 Inspector。
             this.#onProjectGitActivity(eventProjectId, event.taskId, "file_changed");
           }
-          if (event.type === "message.delta" && !this.#titleRefreshedRunningTurns.has(turnKey)) {
-            // 首个 Assistant Delta 出现时刷新一次，避免流式 Token 持续触发 HTTP 请求。
-            this.#titleRefreshedRunningTurns.add(turnKey);
-            if (this.#titleRefreshedRunningTurns.size > MAX_TASK_TITLES) {
-              const oldestTurnKey = this.#titleRefreshedRunningTurns.values().next().value;
-              if (oldestTurnKey !== undefined) {
-                this.#titleRefreshedRunningTurns.delete(oldestTurnKey);
+          if (event.type === "message.delta") {
+            const turnKey = createProjectTurnKey(eventProjectId, event.taskId, event.turnId);
+            if (!this.#titleRefreshedRunningTurns.has(turnKey)) {
+              // 首个 Assistant Delta 出现时刷新一次，避免流式 Token 持续触发 HTTP 请求。
+              this.#titleRefreshedRunningTurns.add(turnKey);
+              if (this.#titleRefreshedRunningTurns.size > MAX_TASK_TITLES) {
+                const oldestTurnKey = this.#titleRefreshedRunningTurns.values().next().value;
+                if (oldestTurnKey !== undefined) {
+                  this.#titleRefreshedRunningTurns.delete(oldestTurnKey);
+                }
               }
+              this.#onTaskMetadataChanged(eventProjectId, event.taskId, "assistant_reply_started");
             }
-            this.#onTaskMetadataChanged(eventProjectId, event.taskId, "assistant_reply_started");
           }
           if (event.type === "turn.completed") {
+            const turnKey = createProjectTurnKey(eventProjectId, event.taskId, event.turnId);
             this.#titleRefreshedRunningTurns.delete(turnKey);
             this.#onProjectGitActivity(eventProjectId, event.taskId, "turn_completed");
             // 标题由 Provider 在 Turn 结束时生成，后台 Task 也必须通知列表读取最新元数据。
