@@ -144,12 +144,38 @@ export async function ensureTemporaryWorkspace(path: string): Promise<string> {
   return realpath(path);
 }
 
-const HELP = `用法: code-agent <命令> [选项]
+const HELP = `Usage: code-agent [command] [options]
 
-命令:
-  code-agent start [--port <port>] [--lan] [--session-ttl <duration>] [--codex-bin <path>] [--codex-home <path>]
-  code-agent doctor [--codex-bin <path>] [--codex-home <path>]
+Commands:
+  start    Start the CodeAgent server and open the Web interface.
+  doctor   Check whether the local CodeAgent runtime is ready.
+  version  Print the installed CodeAgent version.
+
+Start options:
+  --port <port>              Listen on the specified TCP port. Defaults to 3210.
+  --lan                      Listen on all network interfaces for trusted LAN access.
+                             This disables automatic browser opening.
+  --session-ttl <duration>   Set the fixed LAN session lifetime using ms, s, m, h, or d.
+                             Defaults to ${DEFAULT_LAN_SESSION_TTL}. Requires --lan.
+  --codex-bin <path>         Use the Codex executable at the specified path.
+  --codex-home <path>        Use a custom Codex home directory instead of CODEX_HOME
+                             or the default ~/.codex directory.
+
+Doctor options:
+  --codex-bin <path>         Check the Codex executable at the specified path.
+  --codex-home <path>        Check the state database in the specified Codex home.
+
+Global options:
+  -h, --help                 Display all commands, options, and usage details.
+
+Examples:
+  code-agent
+  code-agent start --port 4567
+  code-agent start --lan --session-ttl 12h
+  code-agent doctor --codex-bin /path/to/codex
   code-agent version
+
+Running code-agent without a command is equivalent to code-agent start.
 `;
 
 function parseCommandOptions(
@@ -437,12 +463,14 @@ export async function runCli(
   const colorEnabled =
     options.color ?? (process.stdout.isTTY && process.env["NO_COLOR"] === undefined);
   const output = createTerminalOutput(stdout, stderr, colorEnabled);
-  const [command, ...rawArgs] = argv;
+  const [requestedCommand, ...rawArgs] = argv;
+  // 空参数使用主启动流程，使直接执行 `code-agent` 与显式 `code-agent start` 完全一致。
+  const command = requestedCommand ?? "start";
   // `pnpm run <script> -- ...` 会把分隔符传给脚本；只剥离命令后的首个分隔符。
   const args = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
 
   try {
-    if (!command || command === "--help" || command === "-h") {
+    if (command === "--help" || command === "-h") {
       output.plain(HELP);
       return 0;
     }

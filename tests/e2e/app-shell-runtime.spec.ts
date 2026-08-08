@@ -344,6 +344,133 @@ test("clears transient realtime errors after the WebSocket reconnects", async ({
   await expect(page.getByRole("alert", { name: "会话内容" })).toHaveCount(0);
 });
 
+test("opens a completed file change diff while the turn is still running", async ({ page }) => {
+  const liveChange = {
+    diff: "@@ -1 +1 @@\n-export const live = false;\n+export const live = true;",
+    kind: "update" as const,
+    path: "src/live.ts",
+  };
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        checkpoint: { sequence: 0, sessionId: "e2e-session" },
+        snapshot: {
+          ...taskSnapshot,
+          status: "running",
+          turns: [
+            {
+              completedAt: null,
+              error: null,
+              id: "turn-live-file",
+              items: [
+                {
+                  id: "message-live-file",
+                  role: "user",
+                  text: "更新实时文件",
+                  type: "message",
+                },
+              ],
+              startedAt: "2026-08-09T00:00:00.000Z",
+              status: "running",
+            },
+          ],
+        },
+      },
+    });
+  });
+  await page.addInitScript(() => {
+    type FileChangeEventWindow = Window & {
+      __emitFileChangeEvent?: (event: unknown) => void;
+    };
+
+    class FileChangeWebSocket extends EventTarget {
+      public readonly bufferedAmount = 0;
+      public readyState = 0;
+
+      public constructor() {
+        super();
+        (window as FileChangeEventWindow).__emitFileChangeEvent = (event) => {
+          this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(event) }));
+        };
+        queueMicrotask(() => {
+          this.readyState = 1;
+          this.dispatchEvent(new Event("open"));
+          this.dispatchEvent(
+            new MessageEvent("message", {
+              data: JSON.stringify({
+                latestSequence: 0,
+                sessionId: "e2e-session",
+                type: "connection.ready",
+                version: 2,
+              }),
+            }),
+          );
+        });
+      }
+
+      public close(code = 1000, reason = ""): void {
+        this.readyState = 3;
+        this.dispatchEvent(new CloseEvent("close", { code, reason }));
+      }
+
+      public send(): void {
+        return undefined;
+      }
+    }
+
+    Object.defineProperty(window, "WebSocket", {
+      configurable: true,
+      value: FileChangeWebSocket,
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          typeof (window as Window & { __emitFileChangeEvent?: (event: unknown) => void })
+            .__emitFileChangeEvent,
+      ),
+    )
+    .toBe("function");
+  await page.evaluate((change) => {
+    const emit = (window as Window & { __emitFileChangeEvent?: (event: unknown) => void })
+      .__emitFileChangeEvent;
+    if (emit === undefined) throw new Error("File change event emitter is unavailable");
+    emit({
+      itemId: "file-live",
+      payload: {
+        item: {
+          changes: [change],
+          id: "file-live",
+          status: "completed",
+          type: "file_change",
+        },
+      },
+      provider: "codex",
+      sequence: 1,
+      sessionId: "e2e-session",
+      taskId: "task-1",
+      timestamp: "2026-08-09T00:00:01.000Z",
+      turnId: "turn-live-file",
+      type: "item.completed",
+      version: 2,
+    });
+  }, liveChange);
+
+  const fileButton = page.getByRole("button", {
+    name: "已编辑 live.ts，新增 1 行，删除 1 行，打开 Diff",
+  });
+  await expect(fileButton).toBeVisible();
+  await fileButton.click();
+
+  const dialog = page.getByRole("dialog", { name: "live.ts" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".file-diff-renderer")).toContainText("export const live = true;");
+});
+
 test("updates a running background task title and clears attention after entering", async ({
   page,
 }) => {

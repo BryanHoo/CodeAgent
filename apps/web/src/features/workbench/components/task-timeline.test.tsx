@@ -705,12 +705,27 @@ describe("TaskTimeline", () => {
       },
       {
         ...eventBase,
+        itemId: "file-live",
+        payload: {
+          item: {
+            changes: [{ diff: "+export const live = true;", kind: "update", path: "src/live.ts" }],
+            id: "file-live",
+            status: "completed",
+            type: "file_change",
+          },
+        },
+        sequence: 4,
+        turnId: "turn-live",
+        type: "item.completed",
+      },
+      {
+        ...eventBase,
         payload: {
           diff: "diff --git a/src/live.ts b/src/live.ts",
           originalByteLength: 38,
           truncated: false,
         },
-        sequence: 4,
+        sequence: 5,
         turnId: "turn-live",
         type: "turn.diff_updated",
       },
@@ -721,7 +736,7 @@ describe("TaskTimeline", () => {
           level: "info",
           message: "provider text should be localized",
         },
-        sequence: 5,
+        sequence: 6,
         type: "task.notice",
       },
     ]);
@@ -748,7 +763,9 @@ describe("TaskTimeline", () => {
     expect(markup).toContain("正在核对事件覆盖");
     expect(markup).not.toContain("不可展示的原始推理");
     expect(markup).toContain("正在读取官方 Schema");
-    expect(markup).toContain("src/live.ts");
+    expect(markup).toContain("已编辑 live.ts，新增 1 行，删除 0 行，打开 Diff");
+    expect(markup).toContain("+1");
+    expect(markup).toContain("-0");
     expect(markup).toContain("diff --git a/src/live.ts b/src/live.ts");
     expect(markup).toContain("正在使用安全缓冲模型 gpt-5.6-sol");
     expect(markup).toContain("正在验证模型可用性");

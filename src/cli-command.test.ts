@@ -344,6 +344,21 @@ describe("runCli", () => {
     ]);
   });
 
+  it("defaults to start when no command is provided", async () => {
+    const harness = createHarness();
+    const controller = new AbortController();
+    const run = runCli([], { ...harness.options, signal: controller.signal });
+
+    await vi.waitFor(() => {
+      expect(harness.serverListen).toHaveBeenCalledWith({ host: "127.0.0.1", port: 3210 });
+    });
+    expect(harness.dependencies.startCodexAppServer).toHaveBeenCalledOnce();
+    expect(harness.dependencies.openBrowser).toHaveBeenCalledWith("http://127.0.0.1:3210");
+
+    controller.abort();
+    await expect(run).resolves.toBe(0);
+  });
+
   it("starts on a custom port and uses it for the browser URL", async () => {
     const harness = createHarness();
     const controller = new AbortController();
@@ -541,7 +556,7 @@ describe("runCli", () => {
     expect(harness.stderr.join("")).toContain("server close failed");
   });
 
-  it("prints help and rejects unknown commands or missing option values", async () => {
+  it("prints complete English help and rejects unknown commands or missing option values", async () => {
     const helpHarness = createHarness();
     const unknownHarness = createHarness();
     const invalidHarness = createHarness();
@@ -550,8 +565,22 @@ describe("runCli", () => {
     await expect(runCli(["unknown"], unknownHarness.options)).resolves.toBe(1);
     await expect(runCli(["doctor", "--codex-bin"], invalidHarness.options)).resolves.toBe(1);
 
-    expect(helpHarness.stdout.join("")).toContain("code-agent start");
-    expect(helpHarness.stdout.join("")).toContain("用法: code-agent <命令> [选项]");
+    const help = helpHarness.stdout.join("");
+    expect(help).toContain("Usage: code-agent [command] [options]");
+    expect(help).toContain("start    Start the CodeAgent server and open the Web interface.");
+    expect(help).toContain("doctor   Check whether the local CodeAgent runtime is ready.");
+    expect(help).toContain("version  Print the installed CodeAgent version.");
+    expect(help).toContain("--port <port>");
+    expect(help).toContain("--lan");
+    expect(help).toContain("--session-ttl <duration>");
+    expect(help).toContain("--codex-bin <path>");
+    expect(help).toContain("--codex-home <path>");
+    expect(help).toContain("-h, --help");
+    expect(help).toContain("Defaults to 3210.");
+    expect(help).toContain("Requires --lan.");
+    expect(help).toContain(
+      "Running code-agent without a command is equivalent to code-agent start.",
+    );
     expect(unknownHarness.stderr.join("")).toContain("未知命令: unknown");
     expect(invalidHarness.stderr.join("")).toContain("选项缺少值: --codex-bin");
   });

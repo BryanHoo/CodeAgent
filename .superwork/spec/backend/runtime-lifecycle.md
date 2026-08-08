@@ -47,6 +47,7 @@
 
 ## Server 与持久化
 
+- CLI 未提供子命令时必须与显式 `code-agent start` 执行同一启动流程；根级 `-h`、`--help` 必须使用英文完整列出 `start`、`doctor`、`version` 及其全部参数、默认值、约束和示例。
 - CLI 必须把根发布包版本和已启动 Codex Binary 的实际版本注入 Server；`GET /v1/app-info` 读取 npm registry `latest` 并在失败时保留本地版本。`POST /v1/app-update` 必须携带 `Idempotency-Key`，重新确认目标版本等于严格校验的 `latest` 且高于当前版本后，使用参数数组和 `shell: false` 执行全局 npm 安装；安装成功只返回需要重启状态，不得在 HTTP 请求中替换或重启当前进程。
 - CLI 默认监听 `127.0.0.1:3210`，每次监听成功后直接打开新的浏览器页面，不检测或复用已打开页面；`--port` 可将本地或 LAN 监听端口覆盖为 `1` 至 `65535` 的整数。只有 `--lan` 才生成启动期配对码、传入进程内 Access 配置并监听 `0.0.0.0:<port>`；LAN 模式不得自动打开浏览器，终端只列出物理网络接口上的私有 IPv4 URL，不把 VPN、虚拟网桥或 `0.0.0.0` 当作访问地址。
 - LAN 配对码、Session、失败窗口和清理定时器只属于当前 Fastify 实例；关闭时必须清空，重启不得恢复。Session 使用签发时固定的绝对期限，请求不得续期。

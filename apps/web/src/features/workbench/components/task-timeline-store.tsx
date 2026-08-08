@@ -139,6 +139,7 @@ export function StoredAssistantGroup({
               itemId={itemId}
               key={itemId}
               {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
+              onOpenFileDiff={onOpenFileDiff}
               onOpenSourceFile={onOpenSourceFile}
               projectId={projectId}
               store={store}
@@ -231,6 +232,7 @@ export function StoreTurnTimelineSection({
             itemId={group.itemId}
             key={group.itemId}
             latestSnapshotTimestamp={latestSnapshotTimestamp}
+            onOpenFileDiff={onOpenFileDiff}
             onOpenSourceFile={onOpenSourceFile}
             projectId={projectId}
             store={store}

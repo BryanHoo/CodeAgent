@@ -51,11 +51,13 @@ import {
   ToolOutput,
 } from "../../../shared/components/agent/tool.js";
 import { RETAINED_COMMAND_OUTPUT_MARKER } from "../../conversation/runtime/task-store.js";
+import type { AgentFileChange } from "../../diff/file-change.js";
 import { MessageImageAttachment } from "./message-image-attachment.js";
 import { SkillToken } from "./skill-token.js";
 import { parseSubagentOperation } from "./subagent.js";
 
 import type { BuildPlanAction } from "./task-timeline-contracts.js";
+import { FileChangeButton } from "./task-timeline-file-changes.js";
 import {
   ApprovalReviewItem,
   getCommandLabel,
@@ -76,6 +78,7 @@ export function TimelineItemContent({
   isLastTurnItem,
   item,
   onBuildPlan,
+  onOpenFileDiff,
   onOpenSourceFile,
   projectId,
   taskId,
@@ -84,6 +87,7 @@ export function TimelineItemContent({
   isLastTurnItem: boolean;
   item: AgentItem;
   onBuildPlan?: BuildPlanAction;
+  onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   projectId: string;
   taskId: string;
@@ -252,11 +256,18 @@ export function TimelineItemContent({
         </Tool>
       );
     }
-    case "file_change":
-      if (item.status !== "pending" && item.status !== "running") {
-        // 终态文件变更仍由回复末尾聚合，运行中则立即反馈当前文件集合。
-        return null;
+    case "file_change": {
+      if (item.status === "completed") {
+        // Turn 结束前立即展示已完成修改；Turn 终态继续由回复末尾统一聚合。
+        return turnStatus === "running" ? (
+          <div className="space-y-1">
+            {item.changes.map((change) => (
+              <FileChangeButton change={change} key={change.path} onOpen={onOpenFileDiff} />
+            ))}
+          </div>
+        ) : null;
       }
+      if (item.status !== "pending" && item.status !== "running") return null;
       return (
         <Task collapsible={item.changes.length > 0} status="in_progress">
           <TaskTrigger
@@ -276,6 +287,7 @@ export function TimelineItemContent({
           )}
         </Task>
       );
+    }
     case "tool": {
       const subagentOperation = parseSubagentOperation(item);
       if (subagentOperation !== null) {

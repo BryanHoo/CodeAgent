@@ -9,6 +9,7 @@ import type {
   TaskItemStore,
   TaskStore,
 } from "../../conversation/runtime/task-store.js";
+import type { AgentFileChange } from "../../diff/file-change.js";
 
 import { TimelineItemContent } from "./task-timeline-items.js";
 import type { BuildPlanAction } from "./task-timeline-contracts.js";
@@ -62,6 +63,7 @@ export function StoredTimelineItemContentValue({
   isLastTurnItem,
   itemStore,
   onBuildPlan,
+  onOpenFileDiff,
   onOpenSourceFile,
   projectId,
   taskId,
@@ -70,6 +72,7 @@ export function StoredTimelineItemContentValue({
   isLastTurnItem: boolean;
   itemStore: TaskItemStore;
   onBuildPlan?: BuildPlanAction;
+  onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   projectId: string;
   taskId: string;
@@ -81,6 +84,7 @@ export function StoredTimelineItemContentValue({
       isLastTurnItem={isLastTurnItem}
       item={item}
       {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
+      onOpenFileDiff={onOpenFileDiff}
       onOpenSourceFile={onOpenSourceFile}
       projectId={projectId}
       taskId={taskId}
@@ -93,6 +97,7 @@ export function StoredTimelineItemContent({
   isLastTurnItem,
   itemId,
   onBuildPlan,
+  onOpenFileDiff,
   onOpenSourceFile,
   projectId,
   store,
@@ -102,6 +107,7 @@ export function StoredTimelineItemContent({
   isLastTurnItem: boolean;
   itemId: string;
   onBuildPlan?: BuildPlanAction;
+  onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   projectId: string;
   store: TaskStore;
@@ -114,6 +120,7 @@ export function StoredTimelineItemContent({
       isLastTurnItem={isLastTurnItem}
       itemStore={itemStore}
       {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
+      onOpenFileDiff={onOpenFileDiff}
       onOpenSourceFile={onOpenSourceFile}
       projectId={projectId}
       taskId={taskId}
@@ -125,6 +132,7 @@ export function StoredTimelineItemContent({
 export function StoredUserMessageValue({
   itemStore,
   latestSnapshotTimestamp,
+  onOpenFileDiff,
   onOpenSourceFile,
   projectId,
   taskId,
@@ -132,6 +140,7 @@ export function StoredUserMessageValue({
 }: Readonly<{
   itemStore: TaskItemStore;
   latestSnapshotTimestamp: string;
+  onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   projectId: string;
   taskId: string;
@@ -162,6 +171,7 @@ export function StoredUserMessageValue({
       <TimelineItemContent
         isLastTurnItem={false}
         item={item}
+        onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
         projectId={projectId}
         taskId={taskId}
@@ -180,6 +190,7 @@ export function StoredUserMessageValue({
 export function StoredUserMessage({
   itemId,
   latestSnapshotTimestamp,
+  onOpenFileDiff,
   onOpenSourceFile,
   projectId,
   store,
@@ -188,6 +199,7 @@ export function StoredUserMessage({
 }: Readonly<{
   itemId: string;
   latestSnapshotTimestamp: string;
+  onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
   projectId: string;
   store: TaskStore;
@@ -199,6 +211,7 @@ export function StoredUserMessage({
     <StoredUserMessageValue
       itemStore={itemStore}
       latestSnapshotTimestamp={latestSnapshotTimestamp}
+      onOpenFileDiff={onOpenFileDiff}
       onOpenSourceFile={onOpenSourceFile}
       projectId={projectId}
       taskId={taskId}
