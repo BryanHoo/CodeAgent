@@ -45,7 +45,9 @@ function renderCommitDialog(children: ReactNode): string {
 
 const historyProps = {
   client: { getProjectGitHistory: () => Promise.reject(new Error("unexpected history fetch")) },
+  commitReviewOpen: false,
   onOpenFileDiff: () => undefined,
+  onSelectCommit: () => undefined,
   projectId: "code-agent",
 } as const;
 

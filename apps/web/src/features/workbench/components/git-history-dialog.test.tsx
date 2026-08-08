@@ -87,6 +87,8 @@ describe("GitHistoryDialog", () => {
     expect(markup).toContain("dddddddddddd");
     expect(markup).toContain("已加载全部提交");
     expect(markup).toContain('type="button"');
+    expect(markup).toContain('data-variant="ghost"');
+    expect(markup).toContain("hover:bg-control-hover");
     expect(markup).not.toContain('data-slot="dialog-content"');
   });
 

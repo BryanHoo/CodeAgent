@@ -147,7 +147,7 @@ export function GitHistoryContent({
                       onSelectCommit(commit);
                     }}
                     type="button"
-                    variant="embedded"
+                    variant="ghost"
                   >
                     <GitCommitSummary
                       commit={commit}

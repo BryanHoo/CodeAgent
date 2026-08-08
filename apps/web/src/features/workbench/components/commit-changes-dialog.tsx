@@ -2,6 +2,7 @@ import type {
   CommitProjectChangesRequest,
   CommitProjectChangesResponse,
   GenerateCommitMessageRequest,
+  ProjectGitCommit,
   ProjectGitStatus,
 } from "@code-agent/protocol";
 import {
@@ -66,6 +67,7 @@ type CommitFileEntry = Readonly<{
 
 type CommitChangesDialogProps = Readonly<{
   client: CodeAgentGitHistoryClient;
+  commitReviewOpen: boolean;
   error?: Error | null;
   gitStatus: ProjectGitStatus;
   isCommitting?: boolean;
@@ -75,6 +77,7 @@ type CommitChangesDialogProps = Readonly<{
   onCommit: (request: CommitProjectChangesRequest) => Promise<void>;
   onGenerateMessage: (request: GenerateCommitMessageRequest) => Promise<string>;
   onOpenFileDiff: (change: AgentFileChange) => void;
+  onSelectCommit: (commit: ProjectGitCommit) => void;
   onSelectRepository?: (repository: string) => void;
   projectId: string;
   repositories?: readonly string[];
@@ -130,6 +133,7 @@ function createCommitContentState(identity: string, entries: readonly CommitFile
 
 export function CommitChangesDialog({
   client,
+  commitReviewOpen,
   error = null,
   gitStatus,
   isCommitting = false,
@@ -139,6 +143,7 @@ export function CommitChangesDialog({
   onCommit,
   onGenerateMessage,
   onOpenFileDiff,
+  onSelectCommit,
   onSelectRepository = () => undefined,
   projectId,
   repositories = [],
@@ -198,7 +203,7 @@ export function CommitChangesDialog({
   return (
     <Sheet
       onOpenChange={(open) => {
-        if (!open && !isPending) onClose();
+        if (!open && !isPending && !commitReviewOpen) onClose();
       }}
       open
     >
@@ -206,10 +211,10 @@ export function CommitChangesDialog({
         aria-labelledby="commit-changes-title"
         className="sm:max-w-[36rem]"
         onEscapeKeyDown={(event) => {
-          if (isPending) event.preventDefault();
+          if (isPending || commitReviewOpen) event.preventDefault();
         }}
         onInteractOutside={(event) => {
-          if (isPending) event.preventDefault();
+          if (isPending || commitReviewOpen) event.preventDefault();
         }}
         showCloseButton={false}
         side="right"
@@ -477,6 +482,7 @@ export function CommitChangesDialog({
                         client={client}
                         compact
                         dateFormatter={dateFormatter}
+                        onSelectCommit={onSelectCommit}
                         panelId="commit-git-history"
                         projectId={projectId}
                         {...(selectedRepository === null ? {} : { repository: selectedRepository })}

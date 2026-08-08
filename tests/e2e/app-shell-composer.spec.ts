@@ -1688,6 +1688,24 @@ test("generates a message and commits only selected files", async ({ page }) => 
       },
     });
   });
+  await page.route("**/v1/projects/code-agent/git/commit-files*", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        files: [{ kind: "update", path: "src/history-review.ts" }],
+        nextCursor: null,
+      },
+    });
+  });
+  await page.route("**/v1/projects/code-agent/git/commit-diff*", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        diff: "diff --git a/src/history-review.ts b/src/history-review.ts\n--- a/src/history-review.ts\n+++ b/src/history-review.ts\n@@ -1 +1 @@\n-old\n+new\n",
+        truncated: false,
+      },
+    });
+  });
 
   await page.goto("/p/code-agent/t/task-1");
   await page.getByRole("button", { name: "提交 17 个未提交变更" }).click();
@@ -1768,6 +1786,30 @@ test("generates a message and commits only selected files", async ({ page }) => 
   );
   await expect(dialog.getByText("当前分支：feat/review-targets")).toHaveCount(0);
   await expect(dialog.getByText("feat(git): 展示提交抽屉历史")).toBeVisible();
+  await messageInput.fill("feat(git): 保留提交表单");
+  const historyCommitButton = dialog.getByRole("button", {
+    name: /feat\(git\): 展示提交抽屉历史/u,
+  });
+  const historyCommitBackground = await historyCommitButton.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await historyCommitButton.hover();
+  await expect
+    .poll(() =>
+      historyCommitButton.evaluate((element) => getComputedStyle(element).backgroundColor),
+    )
+    .not.toBe(historyCommitBackground);
+  await historyCommitButton.click();
+  const commitReviewDialog = page.getByRole("dialog", {
+    name: "feat(git): 展示提交抽屉历史",
+  });
+  await expect(commitReviewDialog).toBeVisible();
+  await expect(commitReviewDialog.locator(".file-diff-renderer")).toContainText("new");
+  await expect(page.locator('[data-slot="sheet-content"]')).toBeAttached();
+  await commitReviewDialog.getByRole("button", { name: "关闭文件审核" }).click();
+  await expect(commitReviewDialog).not.toBeAttached();
+  await expect(dialog).toBeVisible();
+  await expect(messageInput).toHaveValue("feat(git): 保留提交表单");
   await changesScroll.evaluate((element) => {
     element.scrollTop = 0;
   });
