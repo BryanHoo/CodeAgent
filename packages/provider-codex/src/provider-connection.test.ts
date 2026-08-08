@@ -166,11 +166,19 @@ describe("CodexProviderConnectionService", () => {
     const service = new CodexProviderConnectionService(client, { fetch: fetchMock });
 
     await expect(
-      service.configureCustom({ apiKey: "custom-secret", baseUrl: "https://api.example.com/v1/" }),
+      service.configureCustom({
+        apiKey: "custom-secret",
+        baseUrl: "https://api.example.com/v1/",
+        models: [
+          { id: "manual-model", name: "Manual Model" },
+          { id: " alpha ", name: "Alpha Custom" },
+        ],
+      }),
     ).resolves.toMatchObject({
       models: {
         data: [
-          { id: "alpha", isDefault: true },
+          { displayName: "Alpha Custom", id: "alpha", isDefault: true },
+          { displayName: "Manual Model", id: "manual-model", isDefault: false },
           { id: "zeta", isDefault: false },
         ],
       },
@@ -206,6 +214,41 @@ describe("CodexProviderConnectionService", () => {
           },
         ],
       },
+    });
+  });
+
+  it("uses manually configured models when the custom model endpoint is unavailable", async () => {
+    const client = new FakeRpcClient();
+    client.enqueue("config/batchWrite", {});
+    client.enqueue("config/read", {
+      config: {
+        model_provider: "code_agent_custom",
+        model_providers: {
+          code_agent_custom: { base_url: "http://localhost:11434/v1" },
+        },
+      },
+    });
+    client.enqueue("account/read", { account: null, requiresOpenaiAuth: false });
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error("not supported"));
+    const service = new CodexProviderConnectionService(client, { fetch: fetchMock });
+
+    await expect(
+      service.configureCustom({
+        baseUrl: "http://localhost:11434/v1",
+        models: [
+          { id: " local-model ", name: "Local Model" },
+          { id: "local-model", name: "Local Model Override" },
+          { id: "other-model", name: "Other Model" },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      models: {
+        data: [
+          { displayName: "Local Model Override", id: "local-model", isDefault: true },
+          { displayName: "Other Model", id: "other-model", isDefault: false },
+        ],
+      },
+      status: { mode: "custom", state: "connected" },
     });
   });
 

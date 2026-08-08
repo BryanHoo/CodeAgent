@@ -1,4 +1,7 @@
-import type { AgentProviderConnectionStatus } from "@code-agent/protocol";
+import type {
+  AgentProviderConnectionStatus,
+  ConfigureCustomProviderRequest,
+} from "@code-agent/protocol";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
@@ -10,7 +13,7 @@ import {
   Server,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { cn } from "../../../shared/lib/utils.js";
@@ -23,6 +26,7 @@ import {
   providerConnectionQueryOptions,
   startOfficialProviderLoginMutationOptions,
 } from "../provider-connection-queries.js";
+import { CustomModelEditor, type CustomModelDraft } from "./custom-model-editor.js";
 
 type ConnectionMode = "custom" | "official";
 
@@ -32,13 +36,17 @@ type ProviderConnectionPanelViewProps = Readonly<{
   error: string | null;
   isBusy: boolean;
   mode: ConnectionMode;
+  models: readonly CustomModelDraft[];
+  onAddModel: () => void;
   onApiKeyChange: (value: string) => void;
   onBaseUrlChange: (value: string) => void;
   onCancelLogin: () => void;
   onConfigureCustom: () => void;
   onLogout: () => void;
+  onModelChange: (key: string, field: "id" | "name", value: string) => void;
   onModeChange: (mode: ConnectionMode) => void;
   onRetry: () => void;
+  onRemoveModel: (key: string) => void;
   onStartOfficialLogin: () => void;
   status: AgentProviderConnectionStatus | undefined;
 }>;
@@ -49,13 +57,17 @@ export function ProviderConnectionPanelView({
   error,
   isBusy,
   mode,
+  models,
+  onAddModel,
   onApiKeyChange,
   onBaseUrlChange,
   onCancelLogin,
   onConfigureCustom,
   onLogout,
+  onModelChange,
   onModeChange,
   onRetry,
+  onRemoveModel,
   onStartOfficialLogin,
   status,
 }: ProviderConnectionPanelViewProps) {
@@ -213,6 +225,16 @@ export function ProviderConnectionPanelView({
                 />
               </div>
             </label>
+            <div className="grid gap-1.5 text-body-small font-medium text-foreground">
+              <span>{t("provider.models")}</span>
+              <CustomModelEditor
+                disabled={isBusy}
+                models={models}
+                onAdd={onAddModel}
+                onChange={onModelChange}
+                onRemove={onRemoveModel}
+              />
+            </div>
             {currentModeConnected ? (
               <div className="flex items-center gap-2 text-body-small text-brand">
                 <CheckCircle2 aria-hidden="true" className="size-4" />
@@ -221,7 +243,7 @@ export function ProviderConnectionPanelView({
             ) : null}
             <Button
               className="h-11 justify-self-start sm:h-9"
-              disabled={isBusy || baseUrl.trim().length === 0}
+              disabled={isBusy || baseUrl.trim().length === 0 || hasIncompleteCustomModels(models)}
               onClick={onConfigureCustom}
               type="button"
             >
@@ -255,6 +277,27 @@ export function ProviderConnectionPanelView({
   );
 }
 
+export function hasIncompleteCustomModels(models: readonly CustomModelDraft[]): boolean {
+  return models.some((model) => model.id.trim().length === 0 || model.name.trim().length === 0);
+}
+
+export function createCustomProviderInput({
+  apiKey,
+  baseUrl,
+  models,
+}: Readonly<{
+  apiKey: string;
+  baseUrl: string;
+  models: readonly CustomModelDraft[];
+}>): ConfigureCustomProviderRequest {
+  const customModels = models.map(({ id, name }) => ({ id: id.trim(), name: name.trim() }));
+  return {
+    ...(apiKey.length === 0 ? {} : { apiKey }),
+    baseUrl: baseUrl.trim(),
+    ...(customModels.length === 0 ? {} : { models: customModels }),
+  };
+}
+
 function openOfficialAuthUrl(authUrl: string): void {
   const url = new URL(authUrl);
   if (url.protocol !== "https:") {
@@ -273,6 +316,8 @@ export function ProviderConnectionPanel() {
   const [mode, setMode] = useState<ConnectionMode>("official");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [models, setModels] = useState<readonly CustomModelDraft[]>([]);
+  const nextModelKey = useRef(1);
   const [customPending, setCustomPending] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const status = connectionQuery.data;
@@ -297,6 +342,12 @@ export function ProviderConnectionPanel() {
       error={requestError}
       isBusy={isBusy}
       mode={mode}
+      models={models}
+      onAddModel={() => {
+        const key = `custom-model-${String(nextModelKey.current)}`;
+        nextModelKey.current += 1;
+        setModels((current) => [...current, { id: "", key, name: "" }]);
+      }}
       onApiKeyChange={setApiKey}
       onBaseUrlChange={setBaseUrl}
       onCancelLogin={() => {
@@ -306,10 +357,7 @@ export function ProviderConnectionPanel() {
       onConfigureCustom={() => {
         setLocalError(null);
         setCustomPending(true);
-        const input = {
-          ...(apiKey.length === 0 ? {} : { apiKey }),
-          baseUrl: baseUrl.trim(),
-        };
+        const input = createCustomProviderInput({ apiKey, baseUrl, models });
         void configureCustomProvider(input, queryClient)
           .then(() => {
             setApiKey("");
@@ -325,12 +373,20 @@ export function ProviderConnectionPanel() {
       onLogout={() => {
         void logout.mutateAsync();
       }}
+      onModelChange={(key, field, value) => {
+        setModels((current) =>
+          current.map((model) => (model.key === key ? { ...model, [field]: value } : model)),
+        );
+      }}
       onModeChange={(nextMode) => {
         setLocalError(null);
         setMode(nextMode);
       }}
       onRetry={() => {
         void connectionQuery.refetch();
+      }}
+      onRemoveModel={(key) => {
+        setModels((current) => current.filter((model) => model.key !== key));
       }}
       onStartOfficialLogin={() => {
         setLocalError(null);

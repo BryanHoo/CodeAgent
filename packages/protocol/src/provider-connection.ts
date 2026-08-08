@@ -65,6 +65,18 @@ export const ConfigureCustomProviderRequestSchema = Type.Object(
   {
     apiKey: Type.Optional(Type.String({ maxLength: 16_384, minLength: 1 })),
     baseUrl: Type.String({ maxLength: 2_048, minLength: 1 }),
+    models: Type.Optional(
+      Type.Array(
+        Type.Object(
+          {
+            id: Type.String({ maxLength: 256, minLength: 1, pattern: ".*\\S.*" }),
+            name: Type.String({ maxLength: 256, minLength: 1, pattern: ".*\\S.*" }),
+          },
+          { additionalProperties: false },
+        ),
+        { maxItems: 1_000 },
+      ),
+    ),
   },
   { additionalProperties: false },
 );

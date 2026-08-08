@@ -17,6 +17,8 @@ const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 10_000;
 const DEFAULT_MODEL_RESPONSE_MAX_BYTES = 1 * 1_024 * 1_024;
 const DEFAULT_MODEL_COUNT_LIMIT = 1_000;
 
+type CustomModelDefinition = NonNullable<ConfigureCustomProviderRequest["models"]>[number];
+
 type PendingLogin = Readonly<{
   error: string | null;
   loginId: string;
@@ -97,10 +99,7 @@ async function readBoundedBody(response: Response, maximumBytes: number): Promis
   return Buffer.concat(chunks, total);
 }
 
-function mapCustomModels(
-  value: unknown,
-  countLimit: number,
-): ConfigureCustomProviderResponse["models"] {
+function readDiscoveredModels(value: unknown, countLimit: number): CustomModelDefinition[] {
   if (!isRecord(value) || !Array.isArray(value["data"])) {
     throw new CodexProviderConnectionError("Custom model endpoint returned an invalid response");
   }
@@ -108,20 +107,57 @@ function mapCustomModels(
     throw new CodexProviderConnectionError("Custom model endpoint returned too many models");
   }
 
-  const ids = new Set<string>();
+  const models: CustomModelDefinition[] = [];
   for (const item of value["data"]) {
     if (!isRecord(item) || typeof item["id"] !== "string") continue;
     const id = item["id"].trim();
-    if (id.length > 0 && id.length <= 256) ids.add(id);
+    if (id.length === 0 || id.length > 256) continue;
+    const candidateName = typeof item["name"] === "string" ? item["name"].trim() : "";
+    models.push({
+      id,
+      name: candidateName.length > 0 && candidateName.length <= 256 ? candidateName : id,
+    });
   }
-  const orderedIds = [...ids].sort((left, right) => left.localeCompare(right, "en"));
-  if (orderedIds.length === 0) {
-    throw new CodexProviderConnectionError("Custom model endpoint returned no usable models");
+  return models;
+}
+
+function normalizeManualModels(
+  values: readonly CustomModelDefinition[],
+  countLimit: number,
+): CustomModelDefinition[] {
+  const models = new Map<string, CustomModelDefinition>();
+  for (const value of values) {
+    const id = value.id.trim();
+    const name = value.name.trim();
+    if (id.length === 0 || name.length === 0 || id.length > 256 || name.length > 256) {
+      throw new CodexProviderConnectionError("Custom model id or name is invalid");
+    }
+    models.set(id, { id, name });
   }
-  const data: AgentModel[] = orderedIds.map((id, index) => ({
+  if (models.size > countLimit) {
+    throw new CodexProviderConnectionError("Custom provider returned too many models");
+  }
+  return [...models.values()];
+}
+
+function mapCustomModels(
+  values: readonly CustomModelDefinition[],
+  countLimit: number,
+): ConfigureCustomProviderResponse["models"] {
+  const modelsById = new Map(values.map((model) => [model.id, model]));
+  const orderedModels = [...modelsById.values()].sort((left, right) =>
+    left.id.localeCompare(right.id, "en"),
+  );
+  if (orderedModels.length > countLimit) {
+    throw new CodexProviderConnectionError("Custom provider returned too many models");
+  }
+  if (orderedModels.length === 0) {
+    throw new CodexProviderConnectionError("Custom provider returned no usable models");
+  }
+  const data: AgentModel[] = orderedModels.map(({ id, name }, index) => ({
     defaultReasoningEffort: "medium",
     description: "",
-    displayName: id,
+    displayName: name,
     id,
     isDefault: index === 0,
     supportedReasoningEfforts: [{ description: "", id: "medium" }],
@@ -281,7 +317,17 @@ export class CodexProviderConnectionService {
     if (apiKey?.trim().length === 0) {
       throw new CodexProviderConnectionError("Custom API key cannot be blank");
     }
-    const models = await this.#discoverModels(baseUrl, apiKey);
+    const manualModels = normalizeManualModels(input.models ?? [], this.#modelCountLimit);
+    let discoveredModels: CustomModelDefinition[];
+    try {
+      discoveredModels = await this.#discoverModels(baseUrl, apiKey);
+    } catch (error) {
+      if (manualModels.length === 0) throw error;
+      // 部分兼容 API 不提供模型目录；显式模型仍可用于 Responses API Turn。
+      discoveredModels = [];
+    }
+    // 手动条目位于后侧，同 ID 时覆盖远端缺省名称。
+    const models = mapCustomModels([...discoveredModels, ...manualModels], this.#modelCountLimit);
     if (apiKey !== undefined) {
       await this.#client.request("account/login/start", { apiKey, type: "apiKey" });
     }
@@ -307,7 +353,7 @@ export class CodexProviderConnectionService {
   async #discoverModels(
     baseUrl: string,
     apiKey: string | undefined,
-  ): Promise<ConfigureCustomProviderResponse["models"]> {
+  ): Promise<CustomModelDefinition[]> {
     const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
@@ -343,6 +389,6 @@ export class CodexProviderConnectionService {
     } catch {
       throw new CodexProviderConnectionError("Custom model endpoint returned invalid JSON");
     }
-    return mapCustomModels(parsed, this.#modelCountLimit);
+    return readDiscoveredModels(parsed, this.#modelCountLimit);
   }
 }

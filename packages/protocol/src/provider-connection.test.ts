@@ -82,8 +82,27 @@ describe("Provider connection protocol", () => {
       Value.Check(ConfigureCustomProviderRequestSchema, {
         apiKey: "custom-key",
         baseUrl: "https://api.example.com/v1",
+        models: [
+          { id: "custom-model", name: "Custom Model" },
+          { id: "another-model", name: "Another Model" },
+        ],
       }),
     ).toBe(true);
+    expect(
+      Value.Check(ConfigureCustomProviderRequestSchema, {
+        baseUrl: "https://api.example.com/v1",
+        models: [{ id: "custom-model", name: "" }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ConfigureCustomProviderRequestSchema, {
+        baseUrl: "https://api.example.com/v1",
+        models: Array.from({ length: 1_001 }, (_, index) => ({
+          id: `model-${String(index)}`,
+          name: `Model ${String(index)}`,
+        })),
+      }),
+    ).toBe(false);
     expect(
       Value.Check(ConfigureCustomProviderRequestSchema, {
         apiKey: "x".repeat(16_385),
