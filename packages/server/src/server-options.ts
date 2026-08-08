@@ -43,7 +43,6 @@ export interface CreateCodeAgentServerOptions {
   logDestination?: Readonly<{ write: (message: string) => void }>;
   modelCatalogCacheMaxBytes?: number;
   modelCatalogCacheTtlMs?: number;
-  onBrowserConnection?: () => void;
   projectRepository: ProjectRepository;
   providerConnectionRepository: AgentProviderConnectionRepository;
   projectOpenService?: ProjectOpenService;

@@ -7,7 +7,6 @@ import {
   AgentProviderConnectionMutationResponseSchema,
   AgentProviderConnectionStatusSchema,
   AppInfoResponseSchema,
-  BrowserSessionResponseSchema,
   HealthResponseSchema,
   InstallAppUpdateResponseSchema,
   ConfigureCustomProviderResponseSchema,
@@ -24,7 +23,6 @@ import {
   type AgentProviderConnectionMutationResponse,
   type AgentProviderConnectionStatus,
   type AppInfoResponse,
-  type BrowserSessionResponse,
   type HealthResponse,
   type InstallAppUpdateResponse,
   type ConfigureCustomProviderRequest,
@@ -199,10 +197,6 @@ export class CodeAgentTransport {
       "POST",
       APP_UPDATE_REQUEST_TIMEOUT_MS,
     );
-  }
-
-  public async getBrowserSession(options: ReadOptions = {}): Promise<BrowserSessionResponse> {
-    return this.read("/v1/browser-session", BrowserSessionResponseSchema, options);
   }
 
   public async getAccessStatus(options: ReadOptions = {}): Promise<AccessStatusResponse> {

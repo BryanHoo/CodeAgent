@@ -35,7 +35,6 @@ import {
 } from "./routes/context.js";
 import { registerEventRoutes } from "./routes/event-routes.js";
 import { registerAccessRoutes } from "./routes/access-routes.js";
-import { registerBrowserSessionRoute } from "./routes/browser-session-route.js";
 import { registerProjectRoutes } from "./routes/project-routes.js";
 import { registerProviderConnectionRoutes } from "./routes/provider-connection-routes.js";
 import { registerRuntimeRoutes } from "./routes/runtime-routes.js";
@@ -72,7 +71,6 @@ export type { CreateCodeAgentServerOptions } from "./server-options.js";
 export async function createCodeAgentServer(
   options: CreateCodeAgentServerOptions,
 ): Promise<FastifyInstance> {
-  const browserSessionId = randomUUID();
   const handlerTimeoutMs = options.handlerTimeoutMs ?? DEFAULT_HANDLER_TIMEOUT_MS;
   const logger =
     options.loggerEnabled === false
@@ -488,7 +486,6 @@ export async function createCodeAgentServer(
     ...(options.access === undefined ? {} : { access: options.access }),
     ...(accessService === undefined ? {} : { service: accessService }),
   });
-  registerBrowserSessionRoute(app, browserSessionId, options.onBrowserConnection);
   await app.register(registerRuntimeRoutes, routeContext);
   await app.register(registerProviderConnectionRoutes, routeContext);
   await app.register(registerProjectRoutes, routeContext);

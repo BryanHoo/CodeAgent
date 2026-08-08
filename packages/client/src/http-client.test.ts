@@ -1301,21 +1301,6 @@ describe("CodeAgentClient", () => {
     });
   });
 
-  it("validates the browser session response", async () => {
-    const fetchMock = vi.fn<typeof fetch>();
-    fetchMock.mockResolvedValueOnce(jsonResponse({ instanceId: "runtime-1", version: 1 }));
-    const client = new CodeAgentClient({ fetch: fetchMock });
-
-    await expect(client.getBrowserSession()).resolves.toEqual({
-      instanceId: "runtime-1",
-      version: 1,
-    });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/v1/browser-session",
-      expect.objectContaining({ credentials: "same-origin" }),
-    );
-  });
-
   it("notifies unauthorized subscribers without swallowing the request error", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock.mockResolvedValueOnce(

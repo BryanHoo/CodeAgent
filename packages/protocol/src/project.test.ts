@@ -46,7 +46,6 @@ import {
   TEMPORARY_TASK_API_PATH,
   TEMPORARY_TASK_SANDBOX_MODE,
   TEMPORARY_TASK_SCOPE_ID,
-  BrowserSessionResponseSchema,
   HealthResponseSchema,
   CreateProjectBranchRequestSchema,
   GenerateCommitMessageRequestSchema,
@@ -1178,16 +1177,6 @@ describe("project protocol", () => {
 
   it("validates health and capability responses", () => {
     expect(Value.Check(HealthResponseSchema, { status: "ok", version: 1 })).toBe(true);
-    expect(Value.Check(BrowserSessionResponseSchema, { instanceId: "runtime-1", version: 1 })).toBe(
-      true,
-    );
-    expect(
-      Value.Check(BrowserSessionResponseSchema, {
-        instanceId: "runtime-1",
-        legacy: true,
-        version: 1,
-      }),
-    ).toBe(false);
     expect(
       Value.Check(AgentCapabilitiesSchema, {
         feedback: { upload: true },

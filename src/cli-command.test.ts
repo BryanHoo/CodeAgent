@@ -37,7 +37,6 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     lifecycle.push("server.listen");
     return Promise.resolve("http://127.0.0.1:3210");
   });
-  const waitForBrowserConnection = vi.fn(() => Promise.resolve(false));
   const client = {
     notify: vi.fn(),
     onNotification: vi.fn(() => () => undefined),
@@ -166,10 +165,8 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     }),
     ensureTemporaryWorkspace: vi.fn((path: string) => Promise.resolve(path)),
     generateLanPairingCode: vi.fn(() => "fixed-test-pairing-code"),
-    listLanAccessUrls: vi.fn(() => ["http://192.168.1.20:3210"]),
-    createServer: vi.fn(() =>
-      Promise.resolve({ close: serverClose, listen: serverListen, waitForBrowserConnection }),
-    ),
+    listLanAccessUrls: vi.fn((port: number) => [`http://192.168.1.20:${String(port)}`]),
+    createServer: vi.fn(() => Promise.resolve({ close: serverClose, listen: serverListen })),
     locateCodexBinary: vi.fn(() =>
       Promise.resolve({ path: "/fake/codex", source: "explicit" as const }),
     ),
@@ -216,7 +213,6 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
     serverClose,
     serverListen,
     stdout,
-    waitForBrowserConnection,
   };
 }
 
@@ -348,6 +344,24 @@ describe("runCli", () => {
     ]);
   });
 
+  it("starts on a custom port and uses it for the browser URL", async () => {
+    const harness = createHarness();
+    const controller = new AbortController();
+    const run = runCli(["start", "--port", "4567"], {
+      ...harness.options,
+      signal: controller.signal,
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.serverListen).toHaveBeenCalledWith({ host: "127.0.0.1", port: 4567 });
+    });
+    expect(harness.dependencies.openBrowser).toHaveBeenCalledWith("http://127.0.0.1:4567");
+    expect(harness.stdout.join("")).toContain("访问地址: http://127.0.0.1:4567");
+
+    controller.abort();
+    await expect(run).resolves.toBe(0);
+  });
+
   it("returns a non-zero code when App Server exits before shutdown", async () => {
     const harness = createHarness({
       startCodexAppServer: vi.fn(() =>
@@ -380,17 +394,14 @@ describe("runCli", () => {
     );
   });
 
-  it("keeps an existing browser page instead of opening a new one", async () => {
+  it("opens a new browser page without waiting for an existing page", async () => {
     const harness = createHarness();
-    harness.waitForBrowserConnection.mockResolvedValue(true);
     const controller = new AbortController();
     const run = runCli(["start"], { ...harness.options, signal: controller.signal });
 
     await vi.waitFor(() => {
-      expect(harness.waitForBrowserConnection).toHaveBeenCalledOnce();
+      expect(harness.dependencies.openBrowser).toHaveBeenCalledOnce();
     });
-    expect(harness.dependencies.openBrowser).not.toHaveBeenCalled();
-
     controller.abort();
     await expect(run).resolves.toBe(0);
   });
@@ -398,7 +409,7 @@ describe("runCli", () => {
   it("starts explicit LAN access without opening a browser", async () => {
     const harness = createHarness();
     const controller = new AbortController();
-    const run = runCli(["start", "--", "--lan", "--session-ttl", "12h"], {
+    const run = runCli(["start", "--", "--lan", "--port", "4567", "--session-ttl", "12h"], {
       ...harness.options,
       signal: controller.signal,
     });
@@ -411,11 +422,12 @@ describe("runCli", () => {
         access: { pairingCode: "fixed-test-pairing-code", sessionTtlMs: 43_200_000 },
       }),
     );
-    expect(harness.serverListen).toHaveBeenCalledWith({ host: "0.0.0.0", port: 3210 });
+    expect(harness.serverListen).toHaveBeenCalledWith({ host: "0.0.0.0", port: 4567 });
     expect(harness.dependencies.openBrowser).not.toHaveBeenCalled();
-    expect(harness.stdout.join("\n")).toContain("http://192.168.1.20:3210");
+    expect(harness.dependencies.listLanAccessUrls).toHaveBeenCalledWith(4567);
+    expect(harness.stdout.join("\n")).toContain("http://192.168.1.20:4567");
     expect(harness.stdout.join("\n")).toContain("fixed-test-pairing-code");
-    expect(harness.stdout.join("\n")).not.toContain("http://0.0.0.0:3210");
+    expect(harness.stdout.join("\n")).not.toContain("http://0.0.0.0:4567");
 
     controller.abort();
     await expect(run).resolves.toBe(0);
@@ -432,6 +444,17 @@ describe("runCli", () => {
       await expect(runCli(args, harness.options)).resolves.toBe(1);
       expect(harness.dependencies.createStateRepository).not.toHaveBeenCalled();
       expect(harness.dependencies.startCodexAppServer).not.toHaveBeenCalled();
+    }
+  });
+
+  it("rejects invalid ports before starting runtime resources", async () => {
+    for (const port of ["0", "65536", "1.5", "invalid"]) {
+      const harness = createHarness();
+
+      await expect(runCli(["start", "--port", port], harness.options)).resolves.toBe(1);
+      expect(harness.dependencies.createStateRepository).not.toHaveBeenCalled();
+      expect(harness.dependencies.startCodexAppServer).not.toHaveBeenCalled();
+      expect(harness.stderr.join("")).toContain("--port");
     }
   });
 
@@ -500,7 +523,6 @@ describe("runCli", () => {
         Promise.resolve({
           close: serverClose,
           listen: serverListen,
-          waitForBrowserConnection: vi.fn(() => Promise.resolve(false)),
         }),
       ),
     });

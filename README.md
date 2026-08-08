@@ -83,6 +83,12 @@ Select **Commit**, choose the files to include, review or edit the commit messag
 
 ## Local Network Access
 
+The default port is `3210`. Use `--port` to choose another port for local or LAN access:
+
+```bash
+code-agent start --port 4567
+```
+
 To connect from a phone, tablet, or another computer on the same local network, run this command on the host computer:
 
 ```bash
@@ -133,7 +139,7 @@ Use the failed checks shown in the terminal to resolve issues with Node.js, Code
 
 ### Port `3210` Is Already in Use
 
-Stop the existing CodeAgent process or the other application using the port, then run the start command again.
+Stop the existing CodeAgent process or the other application using the port, or run `code-agent start --port 4567` to use another port.
 
 ## Help
 

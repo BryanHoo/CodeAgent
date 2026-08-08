@@ -49,7 +49,6 @@ interface CliManagedRuntime {
 interface CliManagedServer {
   close: () => Promise<void>;
   listen: (options: { host: string; port: number }) => Promise<string>;
-  waitForBrowserConnection: (timeoutMs: number) => Promise<boolean>;
 }
 
 interface CliManagedStateRepository
@@ -103,6 +102,7 @@ interface ParsedCommandOptions {
   codexBin?: string;
   codexHome?: string;
   lan?: boolean;
+  port?: number;
   sessionTtl?: string;
 }
 
@@ -112,37 +112,12 @@ const defaultDependencies: CliDependencies = {
   createStateRepository: (databasePath) => SqliteStateRepository.open(databasePath),
   createRuntimeProvider: createCodexRuntimeProvider,
   createServer: async (input) => {
-    let browserConnected = false;
-    const connectionResolvers = new Set<() => void>();
     const server = await createCodeAgentServer({
       ...input,
-      onBrowserConnection: () => {
-        browserConnected = true;
-        for (const resolve of connectionResolvers) {
-          resolve();
-        }
-        connectionResolvers.clear();
-      },
     });
     return {
       close: () => server.close(),
       listen: (options) => server.listen(options),
-      waitForBrowserConnection: (timeoutMs) => {
-        if (browserConnected) {
-          return Promise.resolve(true);
-        }
-        return new Promise<boolean>((resolve) => {
-          const onConnection = () => {
-            clearTimeout(timeout);
-            resolve(true);
-          };
-          const timeout = setTimeout(() => {
-            connectionResolvers.delete(onConnection);
-            resolve(false);
-          }, timeoutMs);
-          connectionResolvers.add(onConnection);
-        });
-      },
     };
   },
   ensureTemporaryWorkspace,
@@ -154,8 +129,6 @@ const defaultDependencies: CliDependencies = {
   startCodexAppServer,
   webRoot: fileURLToPath(new URL("../dist/web", import.meta.url)),
 };
-
-const BROWSER_CONNECTION_WAIT_MS = 1_250;
 
 export async function ensureTemporaryWorkspace(path: string): Promise<string> {
   await mkdir(path, { mode: 0o700, recursive: true });
@@ -174,7 +147,7 @@ export async function ensureTemporaryWorkspace(path: string): Promise<string> {
 const HELP = `用法: code-agent <命令> [选项]
 
 命令:
-  code-agent start [--lan] [--session-ttl <duration>] [--codex-bin <path>] [--codex-home <path>]
+  code-agent start [--port <port>] [--lan] [--session-ttl <duration>] [--codex-bin <path>] [--codex-home <path>]
   code-agent doctor [--codex-bin <path>] [--codex-home <path>]
   code-agent version
 `;
@@ -211,6 +184,15 @@ function parseCommandOptions(
       parsed.codexBin = value;
     } else if (option === "--codex-home") {
       parsed.codexHome = value;
+    } else if (option === "--port") {
+      if (!/^\d+$/u.test(value)) {
+        throw new Error("--port 必须是 1 到 65535 之间的整数");
+      }
+      const port = Number(value);
+      if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+        throw new Error("--port 必须是 1 到 65535 之间的整数");
+      }
+      parsed.port = port;
     } else if (option === "--session-ttl") {
       parsed.sessionTtl = value;
     }
@@ -327,13 +309,14 @@ async function runStart(
 ): Promise<number> {
   const options = parseCommandOptions(
     args,
-    new Set(["--codex-bin", "--codex-home", "--session-ttl"]),
+    new Set(["--codex-bin", "--codex-home", "--port", "--session-ttl"]),
     new Set(["--lan"]),
   );
   if (options.sessionTtl !== undefined && options.lan !== true) {
     throw new Error("--session-ttl 只能与 --lan 一起使用");
   }
   const sessionTtlText = options.sessionTtl ?? DEFAULT_LAN_SESSION_TTL;
+  const port = options.port ?? 3210;
   const sessionTtlMs = options.lan === true ? parseSessionTtl(sessionTtlText) : undefined;
   const access =
     sessionTtlMs === undefined
@@ -387,11 +370,11 @@ async function runStart(
       settingsRepository: stateRepository,
       staticRoot: dependencies.webRoot,
     });
-    await server.listen({ host: options.lan === true ? "0.0.0.0" : "127.0.0.1", port: 3210 });
+    await server.listen({ host: options.lan === true ? "0.0.0.0" : "127.0.0.1", port });
     output.success("CodeAgent 已启动");
 
     if (access !== undefined) {
-      const urls = dependencies.listLanAccessUrls(3210);
+      const urls = dependencies.listLanAccessUrls(port);
       output.warning("局域网模式使用未加密的 HTTP，请仅在可信网络中使用。");
       if (urls.length === 0) {
         output.warning("未找到可用的局域网 IPv4 地址，服务仍在运行。");
@@ -402,16 +385,12 @@ async function runStart(
       output.info(`会话有效期: ${sessionTtlText}（固定期限，不自动续期）`);
       output.info("重启 CodeAgent 后，当前配对码和所有局域网会话将失效。");
     } else {
-      output.info("访问地址: http://127.0.0.1:3210");
+      output.info(`访问地址: http://127.0.0.1:${String(port)}`);
     }
 
     if (options.lan !== true) {
       try {
-        // 旧页面会在服务恢复后主动刷新；只有未收到页面握手时才打开新标签。
-        const browserConnected = await server.waitForBrowserConnection(BROWSER_CONNECTION_WAIT_MS);
-        if (!browserConnected) {
-          await dependencies.openBrowser("http://127.0.0.1:3210");
-        }
+        await dependencies.openBrowser(`http://127.0.0.1:${String(port)}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         output.warning(`无法自动打开浏览器，请手动访问上述地址。原因: ${message}`);
