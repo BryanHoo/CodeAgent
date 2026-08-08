@@ -8,6 +8,7 @@ import type {
   CommitProjectChangesRequest,
   GenerateCommitMessageRequest,
   ProjectGitHistoryPage,
+  ProjectGitCommitFilesPage,
 } from "@code-agent/protocol";
 import { infiniteQueryOptions, mutationOptions, queryOptions } from "@tanstack/react-query";
 
@@ -27,6 +28,7 @@ import {
   type CodeAgentReadClient,
   type CodeAgentGitStatusClient,
   type CodeAgentGitHistoryClient,
+  type CodeAgentGitCommitReviewClient,
   type CodeAgentFileTreeClient,
   type CodeAgentProjectOpenClient,
 } from "./project-query-contracts.js";
@@ -319,6 +321,66 @@ export function projectGitHistoryInfiniteQueryOptions(
         { signal },
       ),
     queryKey: ["projects", projectId, "git-history", repository ?? null] as const,
+  });
+}
+
+export function projectGitCommitFilesInfiniteQueryOptions(
+  projectId: string,
+  repository: string | undefined,
+  sha: string,
+  enabled: boolean,
+  client: CodeAgentGitCommitReviewClient = codeAgentClient,
+) {
+  return infiniteQueryOptions<
+    ProjectGitCommitFilesPage,
+    Error,
+    { pageParams: (string | undefined)[]; pages: ProjectGitCommitFilesPage[] },
+    readonly ["projects", string, "git-commit-files", string | null, string],
+    string | undefined
+  >({
+    enabled,
+    getNextPageParam: (lastPage, _pages, lastPageParam) =>
+      lastPage.nextCursor === null || lastPage.nextCursor === lastPageParam
+        ? undefined
+        : lastPage.nextCursor,
+    initialPageParam: undefined,
+    queryFn: ({ pageParam, signal }) =>
+      client.getProjectGitCommitFiles(
+        projectId,
+        {
+          ...(pageParam === undefined ? {} : { cursor: pageParam }),
+          ...(repository === undefined ? {} : { repository }),
+          sha,
+        },
+        { signal },
+      ),
+    queryKey: ["projects", projectId, "git-commit-files", repository ?? null, sha] as const,
+  });
+}
+
+export function projectGitCommitFileDiffQueryOptions(
+  projectId: string,
+  repository: string | undefined,
+  sha: string,
+  path: string,
+  enabled: boolean,
+  client: CodeAgentGitCommitReviewClient = codeAgentClient,
+) {
+  return queryOptions({
+    enabled,
+    gcTime: 30_000,
+    queryFn: ({ signal }) =>
+      client.getProjectGitCommitFileDiff(
+        projectId,
+        {
+          path,
+          ...(repository === undefined ? {} : { repository }),
+          sha,
+        },
+        { signal },
+      ),
+    queryKey: ["projects", projectId, "git-commit-diff", repository ?? null, sha, path] as const,
+    staleTime: Number.POSITIVE_INFINITY,
   });
 }
 

@@ -1577,6 +1577,64 @@ describe("CodeAgent Server", () => {
     expect(readProjectGitHistory).toHaveBeenCalledTimes(1);
   });
 
+  it("serves bounded commit files and a selected file diff", async () => {
+    const { provider } = createProvider();
+    const readProjectGitCommitFiles = vi.fn(() =>
+      Promise.resolve({
+        files: [{ kind: "update" as const, path: "src/index.ts" }],
+        nextCursor: "100",
+      }),
+    );
+    const readProjectGitCommitFileDiff = vi.fn(() =>
+      Promise.resolve({ diff: "@@ -1 +1 @@\n-old\n+new\n", truncated: false }),
+    );
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, {
+        readProjectGitCommitFileDiff,
+        readProjectGitCommitFiles,
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+    const sha = "a".repeat(40);
+
+    const filesResponse = await app.inject({
+      method: "GET",
+      url: `/v1/projects/code-agent/git/commit-files?sha=${sha}&repository=packages%2Fserver&cursor=100`,
+    });
+    const diffResponse = await app.inject({
+      method: "GET",
+      url: `/v1/projects/code-agent/git/commit-diff?sha=${sha}&path=src%2Findex.ts&repository=packages%2Fserver`,
+    });
+    const invalidResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/git/commit-files?sha=HEAD",
+    });
+    const missingProjectResponse = await app.inject({
+      method: "GET",
+      url: `/v1/projects/missing/git/commit-files?sha=${sha}`,
+    });
+
+    expect(filesResponse.statusCode).toBe(200);
+    expect(filesResponse.json()).toEqual({
+      files: [{ kind: "update", path: "src/index.ts" }],
+      nextCursor: "100",
+    });
+    expect(diffResponse.statusCode).toBe(200);
+    expect(diffResponse.json()).toMatchObject({ truncated: false });
+    expect(invalidResponse.statusCode).toBe(400);
+    expect(missingProjectResponse.statusCode).toBe(404);
+    expect(readProjectGitCommitFiles).toHaveBeenCalledWith(project.rootPath, {
+      cursor: "100",
+      repository: "packages/server",
+      sha,
+    });
+    expect(readProjectGitCommitFileDiff).toHaveBeenCalledWith(project.rootPath, {
+      path: "src/index.ts",
+      repository: "packages/server",
+      sha,
+    });
+  });
+
   it("switches a local project branch idempotently through the fixed Git mutation", async () => {
     const { provider } = createProvider();
     const expectedSnapshot = "c".repeat(64);

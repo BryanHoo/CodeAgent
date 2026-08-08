@@ -14,6 +14,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { AgentEventStream } from "./agent-event-stream.js";
 import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js";
 import { commitSelectedProjectChanges } from "./git-commit.js";
+import { readProjectGitCommitFileDiff, readProjectGitCommitFiles } from "./git-commit-review.js";
 import { buildCommitMessagePrompt } from "./git-commit-message.js";
 import * as gitBranch from "./git-branch.js";
 import { readProjectGitHistory } from "./git-history.js";
@@ -358,7 +359,6 @@ export async function createCodeAgentServer(
   if (!Number.isFinite(idempotencyTtlMs) || idempotencyTtlMs <= 0) {
     throw new RangeError("Idempotency TTL must be a positive number");
   }
-
   const pruneIdempotencyEntries = () => {
     const now = Date.now();
     for (const [entryKey, entry] of idempotencyEntries) {
@@ -376,7 +376,6 @@ export async function createCodeAgentServer(
       }
     }
   };
-
   const runIdempotent: RunIdempotent = async <T>(
     scope: readonly string[],
     key: string,
@@ -398,7 +397,6 @@ export async function createCodeAgentServer(
       }
       return existing.promise as Promise<T>;
     }
-
     const promise = Promise.resolve()
       .then(action)
       .catch((error: unknown) => {
@@ -422,7 +420,6 @@ export async function createCodeAgentServer(
       throw error;
     }
   };
-
   const accessService = await configureServerDelivery(app, {
     ...(options.access === undefined ? {} : { access: options.access }),
     releaseResources: async () => {
@@ -470,6 +467,9 @@ export async function createCodeAgentServer(
     readImageFile,
     readInheritedTaskSettings,
     readProjectGitHistory: options.readProjectGitHistory ?? readProjectGitHistory,
+    readProjectGitCommitFiles: options.readProjectGitCommitFiles ?? readProjectGitCommitFiles,
+    readProjectGitCommitFileDiff:
+      options.readProjectGitCommitFileDiff ?? readProjectGitCommitFileDiff,
     readProjectGitStatus,
     readSourceFile,
     releaseProjectContext,

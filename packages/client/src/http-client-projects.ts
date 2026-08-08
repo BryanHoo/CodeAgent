@@ -12,6 +12,8 @@ import {
   ProjectDirectoryListingSchema,
   ProjectFileTreeSchema,
   ProjectGitHistoryPageSchema,
+  ProjectGitCommitFileDiffSchema,
+  ProjectGitCommitFilesPageSchema,
   ProjectGitStatusSchema,
   ProjectOpenCapabilitiesResponseSchema,
   ProjectPageSchema,
@@ -37,6 +39,10 @@ import {
   type ProjectFileTree,
   type ProjectGitHistoryPage,
   type ProjectGitHistoryQuery,
+  type ProjectGitCommitFileDiff,
+  type ProjectGitCommitFileDiffQuery,
+  type ProjectGitCommitFilesPage,
+  type ProjectGitCommitFilesQuery,
   type ProjectGitStatus,
   type ProjectGitStatusQuery,
   type ProjectOpenCapabilitiesResponse,
@@ -231,6 +237,38 @@ export class ProjectHttpClient extends CodeAgentTransport {
         repository: query.repository,
       }),
       ProjectGitHistoryPageSchema,
+      options,
+    );
+  }
+
+  public async getProjectGitCommitFiles(
+    projectId: string,
+    query: ProjectGitCommitFilesQuery,
+    options: ReadOptions = {},
+  ): Promise<ProjectGitCommitFilesPage> {
+    return this.read(
+      appendQuery(`${projectPath(projectId)}/git/commit-files`, {
+        cursor: query.cursor,
+        repository: query.repository,
+        sha: query.sha,
+      }),
+      ProjectGitCommitFilesPageSchema,
+      options,
+    );
+  }
+
+  public async getProjectGitCommitFileDiff(
+    projectId: string,
+    query: ProjectGitCommitFileDiffQuery,
+    options: ReadOptions = {},
+  ): Promise<ProjectGitCommitFileDiff> {
+    return this.read(
+      appendQuery(`${projectPath(projectId)}/git/commit-diff`, {
+        path: query.path,
+        repository: query.repository,
+        sha: query.sha,
+      }),
+      ProjectGitCommitFileDiffSchema,
       options,
     );
   }

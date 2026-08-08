@@ -8,6 +8,11 @@ export { createCodeAgentServer, type CreateCodeAgentServerOptions } from "./app.
 export { AccessSessionService, type CodeAgentAccessOptions } from "./access-control.js";
 export { commitSelectedProjectChanges, GitCommitError } from "./git-commit.js";
 export {
+  GitCommitReviewError,
+  readProjectGitCommitFileDiff,
+  readProjectGitCommitFiles,
+} from "./git-commit-review.js";
+export {
   SqliteStateRepository,
   type SqliteDatabaseDiagnostics,
   type SqliteMigration,

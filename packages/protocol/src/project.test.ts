@@ -60,6 +60,10 @@ import {
   ProjectFileTreeQuerySchema,
   ProjectGitHistoryPageSchema,
   ProjectGitHistoryQuerySchema,
+  ProjectGitCommitFileDiffQuerySchema,
+  ProjectGitCommitFileDiffSchema,
+  ProjectGitCommitFilesPageSchema,
+  ProjectGitCommitFilesQuerySchema,
   ProjectGitStatusQuerySchema,
   ProjectGitStatusSchema,
   SwitchProjectBranchRequestSchema,
@@ -702,6 +706,54 @@ describe("project protocol", () => {
         repositoryMode: "root",
       }),
     ).toBe(false);
+  });
+
+  it("strictly validates bounded Git commit review contracts", () => {
+    const sha = "a".repeat(40);
+    expect(
+      Value.Check(ProjectGitCommitFilesQuerySchema, {
+        cursor: "100",
+        repository: "packages/server",
+        sha,
+      }),
+    ).toBe(true);
+    expect(Value.Check(ProjectGitCommitFilesQuerySchema, { sha: "HEAD" })).toBe(false);
+    expect(
+      Value.Check(ProjectGitCommitFileDiffQuerySchema, {
+        path: "src/index.ts",
+        sha,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ProjectGitCommitFileDiffQuerySchema, {
+        path: "../secret.txt",
+        sha,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ProjectGitCommitFilesPageSchema, {
+        files: Array.from({ length: 100 }, (_, index) => ({
+          kind: "update",
+          path: `src/file-${String(index)}.ts`,
+        })),
+        nextCursor: "100",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ProjectGitCommitFilesPageSchema, {
+        files: Array.from({ length: 101 }, (_, index) => ({
+          kind: "update",
+          path: `src/file-${String(index)}.ts`,
+        })),
+        nextCursor: null,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ProjectGitCommitFileDiffSchema, {
+        diff: "@@ -1 +1 @@\n-old\n+new\n",
+        truncated: true,
+      }),
+    ).toBe(true);
   });
 
   it("describes a bounded project source file preview", () => {

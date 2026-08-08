@@ -579,6 +579,46 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("reads and validates paginated commit files and one bounded diff", async () => {
+    const filesPage = {
+      files: [{ kind: "update", path: "src/index.ts" }],
+      nextCursor: "100",
+    };
+    const diff = { diff: "@@ -1 +1 @@\n-old\n+new\n", truncated: false };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValueOnce(jsonResponse(filesPage));
+    fetchMock.mockResolvedValueOnce(jsonResponse(diff));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+    const sha = "a".repeat(40);
+
+    await expect(
+      client.getProjectGitCommitFiles("project one", {
+        cursor: "100",
+        repository: "packages/server",
+        sha,
+      }),
+    ).resolves.toEqual(filesPage);
+    await expect(
+      client.getProjectGitCommitFileDiff("project one", {
+        path: "src/index.ts",
+        repository: "packages/server",
+        sha,
+      }),
+    ).resolves.toEqual(diff);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `/v1/projects/project%20one/git/commit-files?cursor=100&repository=packages%2Fserver&sha=${sha}`,
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      `/v1/projects/project%20one/git/commit-diff?path=src%2Findex.ts&repository=packages%2Fserver&sha=${sha}`,
+    );
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ files: [{ path: "src/index.ts" }] }));
+    await expect(client.getProjectGitCommitFiles("project one", { sha })).rejects.toThrow(
+      "CodeAgent response does not match the protocol schema",
+    );
+  });
+
   it("switches a project branch with a validated idempotent mutation", async () => {
     const gitStatus = {
       baseBranches: ["origin/main", "feat/review"],

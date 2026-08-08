@@ -95,6 +95,62 @@ export const ProjectGitHistoryPageSchema = Type.Object(
 
 export type ProjectGitHistoryPage = Readonly<Static<typeof ProjectGitHistoryPageSchema>>;
 
+const GitCommitShaSchema = Type.String({ maxLength: 64, minLength: 40, pattern: "^[a-f0-9]+$" });
+const GitCommitFilesCursorSchema = Type.String({
+  maxLength: 20,
+  minLength: 1,
+  pattern: "^[0-9]+$",
+});
+
+export const ProjectGitCommitFilesQuerySchema = Type.Object(
+  {
+    cursor: Type.Optional(GitCommitFilesCursorSchema),
+    repository: Type.Optional(ProjectRelativePathSchema),
+    sha: GitCommitShaSchema,
+  },
+  { additionalProperties: false },
+);
+export type ProjectGitCommitFilesQuery = Readonly<Static<typeof ProjectGitCommitFilesQuerySchema>>;
+
+export const ProjectGitCommitFileSchema = Type.Object(
+  {
+    kind: Type.Union([Type.Literal("create"), Type.Literal("update"), Type.Literal("delete")]),
+    path: ProjectRelativePathSchema,
+  },
+  { additionalProperties: false },
+);
+export type ProjectGitCommitFile = Readonly<Static<typeof ProjectGitCommitFileSchema>>;
+
+export const ProjectGitCommitFilesPageSchema = Type.Object(
+  {
+    files: Type.Array(ProjectGitCommitFileSchema, { maxItems: 100 }),
+    nextCursor: Type.Union([GitCommitFilesCursorSchema, Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+export type ProjectGitCommitFilesPage = Readonly<Static<typeof ProjectGitCommitFilesPageSchema>>;
+
+export const ProjectGitCommitFileDiffQuerySchema = Type.Object(
+  {
+    path: ProjectRelativePathSchema,
+    repository: Type.Optional(ProjectRelativePathSchema),
+    sha: GitCommitShaSchema,
+  },
+  { additionalProperties: false },
+);
+export type ProjectGitCommitFileDiffQuery = Readonly<
+  Static<typeof ProjectGitCommitFileDiffQuerySchema>
+>;
+
+export const ProjectGitCommitFileDiffSchema = Type.Object(
+  {
+    diff: Type.String({ maxLength: 512 * 1024 }),
+    truncated: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+export type ProjectGitCommitFileDiff = Readonly<Static<typeof ProjectGitCommitFileDiffSchema>>;
+
 export const SwitchProjectBranchRequestSchema = Type.Object(
   {
     branch: GitBranchNameSchema,

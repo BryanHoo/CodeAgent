@@ -116,6 +116,14 @@ export function WorkbenchShellDialogs({
                 exact: false,
                 queryKey: ["projects", projectId, "git-history"],
               });
+              queryClient.removeQueries({
+                exact: false,
+                queryKey: ["projects", projectId, "git-commit-files"],
+              });
+              queryClient.removeQueries({
+                exact: false,
+                queryKey: ["projects", projectId, "git-commit-diff"],
+              });
               requestAnimationFrame(() => {
                 document.querySelector<HTMLButtonElement>("#workbench-git-history")?.focus();
               });

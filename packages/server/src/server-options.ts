@@ -16,6 +16,10 @@ import type {
   ProjectFileTree,
   ProjectGitHistoryPage,
   ProjectGitHistoryQuery,
+  ProjectGitCommitFileDiff,
+  ProjectGitCommitFileDiffQuery,
+  ProjectGitCommitFilesPage,
+  ProjectGitCommitFilesQuery,
   ProjectGitStatus,
   ProjectGitStatusQuery,
   ProjectSourceFile,
@@ -62,6 +66,14 @@ export interface CreateCodeAgentServerOptions {
     projectRoot: string,
     query: ProjectGitHistoryQuery,
   ) => Promise<ProjectGitHistoryPage>;
+  readProjectGitCommitFiles?: (
+    projectRoot: string,
+    query: ProjectGitCommitFilesQuery,
+  ) => Promise<ProjectGitCommitFilesPage>;
+  readProjectGitCommitFileDiff?: (
+    projectRoot: string,
+    query: ProjectGitCommitFileDiffQuery,
+  ) => Promise<ProjectGitCommitFileDiff>;
   switchProjectBranch?: (
     projectRoot: string,
     request: SwitchProjectBranchRequest,

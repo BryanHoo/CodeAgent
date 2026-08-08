@@ -31,6 +31,10 @@ import type {
   ProjectFileTree,
   ProjectGitHistoryPage,
   ProjectGitHistoryQuery,
+  ProjectGitCommitFileDiff,
+  ProjectGitCommitFileDiffQuery,
+  ProjectGitCommitFilesPage,
+  ProjectGitCommitFilesQuery,
   ProjectGitStatus,
   ProjectGitStatusQuery,
   ProjectSourceFile,
@@ -170,6 +174,14 @@ export interface ServerRouteContext {
     projectRoot: string,
     query: ProjectGitHistoryQuery,
   ) => Promise<ProjectGitHistoryPage>;
+  readonly readProjectGitCommitFiles: (
+    projectRoot: string,
+    query: ProjectGitCommitFilesQuery,
+  ) => Promise<ProjectGitCommitFilesPage>;
+  readonly readProjectGitCommitFileDiff: (
+    projectRoot: string,
+    query: ProjectGitCommitFileDiffQuery,
+  ) => Promise<ProjectGitCommitFileDiff>;
   readonly switchProjectBranch: (
     projectRoot: string,
     request: SwitchProjectBranchRequest,

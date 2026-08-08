@@ -27,7 +27,11 @@ function renderDialog(page: {
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
       <GitHistoryDialog
-        client={{ getProjectGitHistory: vi.fn() }}
+        client={{
+          getProjectGitCommitFileDiff: vi.fn(),
+          getProjectGitCommitFiles: vi.fn(),
+          getProjectGitHistory: vi.fn(),
+        }}
         onClose={() => undefined}
         projectId="code-agent"
       />
@@ -46,6 +50,7 @@ describe("GitHistoryDialog", () => {
         active
         dateFormatter={dateFormatter}
         panelId="embedded-history"
+        onSelectCommit={() => undefined}
         query={{
           data: {
             pages: [
@@ -81,6 +86,7 @@ describe("GitHistoryDialog", () => {
     expect(markup).toContain("refactor(git): 复用历史列表");
     expect(markup).toContain("dddddddddddd");
     expect(markup).toContain("已加载全部提交");
+    expect(markup).toContain('type="button"');
     expect(markup).not.toContain('data-slot="dialog-content"');
   });
 
@@ -103,6 +109,8 @@ describe("GitHistoryDialog", () => {
     });
 
     expect(markup).toContain('aria-labelledby="git-history-title"');
+    expect(markup).toContain('data-slot="sheet-content"');
+    expect(markup).not.toContain('data-slot="dialog-content"');
     expect(markup).toContain("当前分支：feat/apps-web");
     expect(markup).toContain('aria-label="子仓库"');
     expect(markup).toMatch(/aria-selected="true"[^>]*role="tab"[^>]*>apps\/web<\/button>/u);

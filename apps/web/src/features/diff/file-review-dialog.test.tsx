@@ -2,11 +2,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
-  ReviewFileTreeNavigation,
-  buildReviewFileTree,
+  FileReviewWorkspace,
   getReviewNavigationDirection,
   resolveReviewIndex,
 } from "./file-review-dialog.js";
+import { ReviewFileTreeNavigation, buildReviewFileTree } from "./file-review-tree.js";
+import { TooltipProvider } from "../../shared/components/core/tooltip.js";
 
 describe("file review navigation", () => {
   it("moves between files without crossing review boundaries", () => {
@@ -137,5 +138,31 @@ describe("file review navigation", () => {
     expect(markup).toContain("main.tsx");
     expect(markup).toContain("+2");
     expect(markup).toContain("-1");
+  });
+
+  it("renders a reusable review workspace without a dialog shell", () => {
+    const changes = [
+      { diff: "", kind: "update" as const, path: "src/index.ts" },
+      { diff: "", kind: "create" as const, path: "src/new.ts" },
+    ];
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <FileReviewWorkspace
+          changes={changes}
+          currentIndex={0}
+          onClose={() => undefined}
+          onCurrentIndexChange={() => undefined}
+          renderContent={(change) => <p>{`按需读取 ${change.path}`}</p>}
+          showStats={false}
+          titleId="embedded-review-title"
+        />
+      </TooltipProvider>,
+    );
+
+    expect(markup).toContain('id="embedded-review-title"');
+    expect(markup).toContain("按需读取 src/index.ts");
+    expect(markup).toContain("src/index.ts");
+    expect(markup).not.toContain('data-slot="dialog-content"');
+    expect(markup).not.toContain("+0");
   });
 });

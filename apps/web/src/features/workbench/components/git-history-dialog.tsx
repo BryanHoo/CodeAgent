@@ -1,3 +1,4 @@
+import type { ProjectGitCommit } from "@code-agent/protocol";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { History, X } from "lucide-react";
 import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
@@ -5,22 +6,25 @@ import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import { cn } from "../../../shared/lib/utils.js";
 import { Button } from "../../../shared/components/core/button.js";
-import { Dialog, DialogContent, DialogTitle } from "../../../shared/components/core/dialog.js";
+import { Sheet, SheetContent, SheetTitle } from "../../../shared/components/core/sheet.js";
 import type { CodeAgentGitHistoryClient } from "../../projects/project-queries.js";
+import type { CodeAgentGitCommitReviewClient } from "../../projects/project-queries.js";
 import { projectGitHistoryInfiniteQueryOptions } from "../../projects/project-queries.js";
 import { GitHistoryContent, GitHistoryList } from "./git-history-list.js";
+import { GitCommitReview } from "./git-commit-review.js";
 
 type GitHistoryDialogProps = Readonly<{
-  client: CodeAgentGitHistoryClient;
+  client: CodeAgentGitHistoryClient & CodeAgentGitCommitReviewClient;
   onClose: () => void;
   projectId: string;
 }>;
 
 type QueriedGitHistoryPanelProps = Readonly<{
   active: boolean;
-  client: CodeAgentGitHistoryClient;
+  client: CodeAgentGitHistoryClient & CodeAgentGitCommitReviewClient;
   dateFormatter: Intl.DateTimeFormat;
   onBranchLoaded: (repository: string, branch: string | null) => void;
+  onSelectCommit: (commit: ProjectGitCommit, repository: string) => void;
   panelId: string;
   projectId: string;
   repository: string;
@@ -31,6 +35,7 @@ function QueriedGitHistoryPanel({
   client,
   dateFormatter,
   onBranchLoaded,
+  onSelectCommit,
   panelId,
   projectId,
   repository,
@@ -41,6 +46,9 @@ function QueriedGitHistoryPanel({
       client={client}
       dateFormatter={dateFormatter}
       onBranchLoaded={onBranchLoaded}
+      onSelectCommit={(commit) => {
+        onSelectCommit(commit, repository);
+      }}
       panelId={panelId}
       projectId={projectId}
       repository={repository}
@@ -59,6 +67,8 @@ export function GitHistoryDialog({ client, onClose, projectId }: GitHistoryDialo
   const [repositoryBranches, setRepositoryBranches] = useState<ReadonlyMap<string, string | null>>(
     () => new Map(),
   );
+  const [selectedCommit, setSelectedCommit] =
+    useState<Readonly<{ commit: ProjectGitCommit; repository?: string }>>();
   const initialQuery = useInfiniteQuery(
     projectGitHistoryInfiniteQueryOptions(projectId, undefined, true, client),
   );
@@ -122,25 +132,26 @@ export function GitHistoryDialog({ client, onClose, projectId }: GitHistoryDialo
   };
 
   return (
-    <Dialog
+    <Sheet
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
       open
     >
-      <DialogContent
+      <SheetContent
         aria-labelledby="git-history-title"
-        className="h-[min(88dvh,44rem)] max-w-[46rem] overflow-hidden p-0"
+        className="h-dvh w-full overflow-hidden p-0 sm:max-w-[min(36rem,92vw)]"
+        closeLabel={i18n.t("gitHistory.close", { ns: "conversation" })}
+        showCloseButton={false}
       >
-        {/* 固定外层高度，避免首次切换 Tab 时短加载态触发 Dialog 缩放和重新居中。 */}
         <div className="flex h-full min-h-0 flex-col">
           <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-separator px-4">
             <div className="flex min-w-0 items-center gap-2">
               <History aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0">
-                <DialogTitle className="truncate text-body-small" id="git-history-title">
+                <SheetTitle className="truncate text-body-small" id="git-history-title">
                   {i18n.t("gitHistory.title", { ns: "conversation" })}
-                </DialogTitle>
+                </SheetTitle>
                 <p
                   className="truncate text-caption text-muted-foreground"
                   title={displayBranch ?? undefined}
@@ -208,6 +219,12 @@ export function GitHistoryDialog({ client, onClose, projectId }: GitHistoryDialo
               active={selectedRepository === undefined}
               dateFormatter={dateFormatter}
               panelId={initialPanelId}
+              onSelectCommit={(commit) => {
+                setSelectedCommit({
+                  commit,
+                  ...(activeRepository === null ? {} : { repository: activeRepository }),
+                });
+              }}
               query={initialQuery}
             />
             {visitedRepositories.map((repository) => {
@@ -222,6 +239,9 @@ export function GitHistoryDialog({ client, onClose, projectId }: GitHistoryDialo
                   dateFormatter={dateFormatter}
                   key={repository}
                   onBranchLoaded={rememberRepositoryBranch}
+                  onSelectCommit={(commit, repository) => {
+                    setSelectedCommit({ commit, repository });
+                  }}
                   panelId={getPanelId(repositoryIndex)}
                   projectId={projectId}
                   repository={repository}
@@ -230,7 +250,21 @@ export function GitHistoryDialog({ client, onClose, projectId }: GitHistoryDialo
             })}
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+        {selectedCommit === undefined ? null : (
+          // 审核使用独立弹窗，历史抽屉保持挂载以保留仓库 Tab、分页和滚动状态。
+          <GitCommitReview
+            client={client}
+            commit={selectedCommit.commit}
+            onClose={() => {
+              setSelectedCommit(undefined);
+            }}
+            projectId={projectId}
+            {...(selectedCommit.repository === undefined
+              ? {}
+              : { repository: selectedCommit.repository })}
+          />
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -7,6 +7,10 @@ import {
   AgentMutationErrorSchema,
   ProjectGitHistoryPageSchema,
   ProjectGitHistoryQuerySchema,
+  ProjectGitCommitFileDiffQuerySchema,
+  ProjectGitCommitFileDiffSchema,
+  ProjectGitCommitFilesPageSchema,
+  ProjectGitCommitFilesQuerySchema,
   ProjectGitStatusSchema,
   ProjectGitStatusQuerySchema,
   SwitchProjectBranchRequestSchema,
@@ -15,17 +19,20 @@ import {
   type CreateProjectBranchRequest,
   type GenerateCommitMessageRequest,
   type ProjectGitHistoryQuery,
+  type ProjectGitCommitFileDiffQuery,
+  type ProjectGitCommitFilesQuery,
   type ProjectGitStatusQuery,
   type SwitchProjectBranchRequest,
 } from "@code-agent/protocol";
 import { GitBranchError } from "../git-branch.js";
 import { GitCommitError } from "../git-commit.js";
 import { GitHistoryError } from "../git-history.js";
+import { GitCommitReviewError } from "../git-commit-review.js";
 import { GitRepositorySelectionError } from "../git-working-tree.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import { ErrorResponseSchema, IdempotencyHeadersSchema, ProjectParamsSchema } from "./schemas.js";
 
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 
 function toGitBranchHttpError(error: GitBranchError): MutationHttpError {
   switch (error.code) {
@@ -59,6 +66,8 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     getProjectContext,
     readEffectiveGlobalSettings,
     readProjectGitHistory,
+    readProjectGitCommitFiles,
+    readProjectGitCommitFileDiff,
     readProjectGitStatus,
     runIdempotent,
     switchProjectBranch,
@@ -146,6 +155,73 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
           code: "GIT_HISTORY_UNAVAILABLE",
           message: "Git history is unavailable",
         });
+      }
+    },
+  );
+
+  const sendCommitReviewError = (error: unknown, reply: FastifyReply) => {
+    if (error instanceof GitCommitReviewError && error.code === "INVALID_CURSOR") {
+      return reply.code(400).send({ code: "INVALID_REQUEST", message: error.message });
+    }
+    if (error instanceof GitCommitReviewError && error.code === "REPOSITORY_NOT_FOUND") {
+      return reply.code(404).send({ code: "GIT_REPOSITORY_NOT_FOUND", message: error.message });
+    }
+    return reply.code(500).send({
+      code: "GIT_COMMIT_REVIEW_UNAVAILABLE",
+      message: "Git commit review is unavailable",
+    });
+  };
+
+  app.get<{ Params: { projectId: string }; Querystring: ProjectGitCommitFilesQuery }>(
+    "/v1/projects/:projectId/git/commit-files",
+    {
+      schema: {
+        params: ProjectParamsSchema,
+        querystring: ProjectGitCommitFilesQuerySchema,
+        response: {
+          200: ProjectGitCommitFilesPageSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const projectContext = await getProjectContext(request.params.projectId);
+      if (projectContext === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      try {
+        return await readProjectGitCommitFiles(projectContext.project.rootPath, request.query);
+      } catch (error) {
+        return sendCommitReviewError(error, reply);
+      }
+    },
+  );
+
+  app.get<{ Params: { projectId: string }; Querystring: ProjectGitCommitFileDiffQuery }>(
+    "/v1/projects/:projectId/git/commit-diff",
+    {
+      schema: {
+        params: ProjectParamsSchema,
+        querystring: ProjectGitCommitFileDiffQuerySchema,
+        response: {
+          200: ProjectGitCommitFileDiffSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const projectContext = await getProjectContext(request.params.projectId);
+      if (projectContext === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      try {
+        return await readProjectGitCommitFileDiff(projectContext.project.rootPath, request.query);
+      } catch (error) {
+        return sendCommitReviewError(error, reply);
       }
     },
   );

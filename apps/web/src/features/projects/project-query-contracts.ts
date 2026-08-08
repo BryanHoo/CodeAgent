@@ -9,6 +9,10 @@ export type CodeAgentAccessClient = Pick<
 >;
 export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatus">;
 export type CodeAgentGitHistoryClient = Pick<CodeAgentClient, "getProjectGitHistory">;
+export type CodeAgentGitCommitReviewClient = Pick<
+  CodeAgentClient,
+  "getProjectGitCommitFileDiff" | "getProjectGitCommitFiles"
+>;
 export type CodeAgentGitMutationClient = Pick<
   CodeAgentClient,
   "commitProjectChanges" | "createProjectBranch" | "generateCommitMessage" | "switchProjectBranch"
@@ -72,6 +76,7 @@ export type CodeAgentWorkbenchClient = CodeAgentReadClient &
   CodeAgentBackgroundTerminalClient &
   CodeAgentGitStatusClient &
   CodeAgentGitHistoryClient &
+  CodeAgentGitCommitReviewClient &
   CodeAgentGitMutationClient &
   CodeAgentFileTreeClient &
   CodeAgentProjectDirectoryClient &

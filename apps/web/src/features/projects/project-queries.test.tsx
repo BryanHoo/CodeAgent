@@ -7,6 +7,7 @@ import { TaskSnapshotTimeline } from "../workbench/components/task-timeline.js";
 import {
   capabilitiesQueryOptions,
   type CodeAgentGitHistoryClient,
+  type CodeAgentGitCommitReviewClient,
   type CodeAgentGitStatusClient,
   type CodeAgentFileTreeClient,
   type CodeAgentReadClient,
@@ -17,6 +18,8 @@ import {
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
   projectGitHistoryInfiniteQueryOptions,
+  projectGitCommitFileDiffQueryOptions,
+  projectGitCommitFilesInfiniteQueryOptions,
   projectGitStatusQueryOptions,
   projectGitRepositoryStatusQueryOptions,
   projectCommitChangesMutationOptions,
@@ -296,6 +299,69 @@ describe("project queries", () => {
         getProjectGitHistory,
       }).enabled,
     ).toBe(false);
+    unsubscribe();
+  });
+
+  it("isolates paginated commit files and selected file Diff queries", async () => {
+    const sha = "a".repeat(40);
+    const getProjectGitCommitFiles = vi
+      .fn<CodeAgentGitCommitReviewClient["getProjectGitCommitFiles"]>()
+      .mockResolvedValueOnce({
+        files: [{ kind: "update", path: "src/index.ts" }],
+        nextCursor: "100",
+      })
+      .mockResolvedValueOnce({
+        files: [{ kind: "create", path: "src/new.ts" }],
+        nextCursor: null,
+      });
+    const getProjectGitCommitFileDiff = vi
+      .fn<CodeAgentGitCommitReviewClient["getProjectGitCommitFileDiff"]>()
+      .mockResolvedValue({ diff: "@@ -1 +1 @@", truncated: false });
+    const client = { getProjectGitCommitFileDiff, getProjectGitCommitFiles };
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const filesOptions = projectGitCommitFilesInfiniteQueryOptions(
+      "code-agent",
+      "packages/server",
+      sha,
+      true,
+      client,
+    );
+    const observer = new InfiniteQueryObserver(queryClient, filesOptions);
+    const unsubscribe = observer.subscribe(() => undefined);
+
+    await observer.refetch();
+    await observer.fetchNextPage();
+    const diffOptions = projectGitCommitFileDiffQueryOptions(
+      "code-agent",
+      "packages/server",
+      sha,
+      "src/index.ts",
+      true,
+      client,
+    );
+    await queryClient.fetchQuery(diffOptions);
+
+    expect(filesOptions.queryKey).toEqual([
+      "projects",
+      "code-agent",
+      "git-commit-files",
+      "packages/server",
+      sha,
+    ]);
+    expect(getProjectGitCommitFiles.mock.calls[1]?.[1]).toEqual({
+      cursor: "100",
+      repository: "packages/server",
+      sha,
+    });
+    expect(diffOptions.queryKey).toEqual([
+      "projects",
+      "code-agent",
+      "git-commit-diff",
+      "packages/server",
+      sha,
+      "src/index.ts",
+    ]);
+    expect(getProjectGitCommitFileDiff.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
     unsubscribe();
   });
 

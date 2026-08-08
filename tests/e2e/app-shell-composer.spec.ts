@@ -79,6 +79,8 @@ test("creates and switches to a branch from the composer footer", async ({ page 
 
 test("opens current-branch Git history beside the composer branch", async ({ page }) => {
   const historyRequests: string[] = [];
+  const commitFileRequests: string[] = [];
+  const commitDiffRequests: string[] = [];
   let releaseServerHistory: (() => void) | undefined;
   await page.route("**/v1/projects/code-agent/git/history*", async (route) => {
     const url = new URL(route.request().url());
@@ -110,6 +112,35 @@ test("opens current-branch Git history beside the composer branch", async ({ pag
       },
     });
   });
+  await page.route("**/v1/projects/code-agent/git/commit-files*", async (route) => {
+    const url = new URL(route.request().url());
+    const cursor = url.searchParams.get("cursor");
+    commitFileRequests.push(url.search);
+    const start = cursor === "100" ? 100 : 0;
+    const count = cursor === "100" ? 1 : 100;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        files: Array.from({ length: count }, (_, index) => ({
+          kind: index === 0 ? "update" : "create",
+          path: `src/review-${String(start + index)}.ts`,
+        })),
+        nextCursor: cursor === null ? "100" : null,
+      },
+    });
+  });
+  await page.route("**/v1/projects/code-agent/git/commit-diff*", async (route) => {
+    const url = new URL(route.request().url());
+    commitDiffRequests.push(url.search);
+    const path = url.searchParams.get("path") ?? "src/review-0.ts";
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        diff: `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-old\n+new\n`,
+        truncated: true,
+      },
+    });
+  });
   await page.goto("/p/code-agent/t/task-1");
 
   const branchTrigger = page.getByRole("button", { name: /切换分支，当前分支/u });
@@ -128,8 +159,10 @@ test("opens current-branch Git history beside the composer branch", async ({ pag
   expect(historyRequests).toEqual([]);
   await historyTrigger.click();
 
-  const dialog = page.getByRole("dialog", { name: "Git 历史" });
+  const dialog = page.locator('[data-slot="sheet-content"]');
   await expect(dialog).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Git 历史" })).toBeVisible();
+  await expect(dialog).toHaveClass(/right-0/u);
   await expect(dialog.getByText("当前分支：feat/apps-web")).toBeVisible();
   await expect(dialog.locator("header svg").first()).toHaveCSS("width", "16px");
   await expect(dialog.locator("header svg").first()).toHaveCSS("height", "16px");
@@ -143,6 +176,27 @@ test("opens current-branch Git history beside the composer branch", async ({ pag
   });
   const initialDialogBox = await dialog.boundingBox();
   expect(historyRequests).toEqual([""]);
+
+  await dialog.getByRole("button", { name: /^apps\/web commit 1 /u }).click();
+  const reviewDialog = page.locator('[data-slot="dialog-content"]');
+  await expect(page.getByRole("dialog", { name: "apps/web commit 1" })).toBeVisible();
+  await expect(dialog.getByText("apps/web commit 1", { exact: true })).toBeVisible();
+  await expect(reviewDialog.getByText("Diff 过长，仅展示前 512 KiB")).toBeVisible();
+  await expect(reviewDialog.locator(".file-diff-renderer")).toContainText("new");
+  expect(commitFileRequests).toEqual([`?repository=apps%2Fweb&sha=${"0".repeat(40)}`]);
+  expect(commitDiffRequests).toEqual([
+    `?path=src%2Freview-0.ts&repository=apps%2Fweb&sha=${"0".repeat(40)}`,
+  ]);
+  await reviewDialog.getByRole("button", { name: "加载更多文件" }).click();
+  await expect(reviewDialog.getByText("review-100.ts")).toBeVisible();
+  expect(commitFileRequests).toEqual([
+    `?repository=apps%2Fweb&sha=${"0".repeat(40)}`,
+    `?cursor=100&repository=apps%2Fweb&sha=${"0".repeat(40)}`,
+  ]);
+  expect(commitDiffRequests).toHaveLength(1);
+  await reviewDialog.getByRole("button", { name: "关闭文件审核" }).click();
+  await expect(reviewDialog).not.toBeVisible();
+  await expect(dialog.getByText("apps/web commit 1", { exact: true })).toBeVisible();
 
   await dialog.getByRole("tab", { name: "packages/server" }).click();
   await expect(dialog.getByText("正在读取 Git 历史...")).toBeVisible();
