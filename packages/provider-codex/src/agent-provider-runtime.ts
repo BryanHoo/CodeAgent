@@ -160,14 +160,7 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
       }
       return;
     }
-    if (
-      event.type === "usage.updated" &&
-      (this.runtime.projectTaskIds.has(event.taskId) ||
-        this.runtime.pendingTaskReads.has(event.taskId))
-    ) {
-      // 快照和实时事件共享同一份最近一轮上下文用量。
-      this.runtime.contextUsage.set(event.taskId, event.payload.usage);
-    }
+    this.runtime.retainSnapshotEvent(event);
     if (event.type === "turn.started") {
       this.runtime.runningTaskIds.add(event.taskId);
     }

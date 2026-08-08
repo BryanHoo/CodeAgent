@@ -93,6 +93,36 @@ const readyMcpServer = {
 } as const satisfies AgentMcpServer;
 
 describe("WorkbenchInspector", () => {
+  it("renders the latest task plan as a status-aware queue at the top of context", () => {
+    const markup = renderInspectorMarkup(
+      <WorkbenchInspector
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        tab="context"
+        task={{
+          plan: {
+            explanation: "先打通数据链路，再完成界面验证。",
+            steps: [
+              { status: "completed", text: "定义计划协议" },
+              { status: "in_progress", text: "接入右栏上下文" },
+              { status: "pending", text: "执行完整验证" },
+            ],
+          },
+          turns: [],
+        }}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="计划"');
+    expect(markup).toContain('data-ai-queue=""');
+    expect(markup).toContain("先打通数据链路，再完成界面验证。");
+    expect(markup).toMatch(/data-status="completed"[^>]*>.*定义计划协议/su);
+    expect(markup).toMatch(/data-status="in_progress"[^>]*>.*接入右栏上下文/su);
+    expect(markup).toMatch(/data-status="pending"[^>]*>.*执行完整验证/su);
+    expect(markup).toContain('aria-label="已完成"');
+    expect(markup.indexOf('aria-label="计划"')).toBeLessThan(markup.indexOf('aria-label="MCP"'));
+  });
+
   it("renders temporary task context directly without tabs or Project sources", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector

@@ -5,6 +5,7 @@ import { AgentEventBuffer, mergeSubmittedPromptIntoSnapshot } from "./task-runti
 
 const snapshot: AgentTaskSnapshotResponse["snapshot"] = {
   contextUsage: null,
+  plan: null,
   id: "task-1",
   pendingRequests: [],
   pinned: false,

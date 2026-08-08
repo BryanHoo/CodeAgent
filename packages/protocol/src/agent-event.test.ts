@@ -111,6 +111,21 @@ describe("Agent Event v2 protocol", () => {
       },
       {
         ...baseEvent,
+        payload: {
+          plan: {
+            explanation: "先打通协议，再完成界面。",
+            steps: [
+              { status: "completed", text: "定义协议" },
+              { status: "in_progress", text: "接入右栏" },
+              { status: "pending", text: "完成验证" },
+            ],
+          },
+        },
+        turnId: "turn-1",
+        type: "plan.updated",
+      },
+      {
+        ...baseEvent,
         payload: { message: "模型服务不可用", willRetry: false },
         turnId: "turn-1",
         type: "provider.error",
@@ -160,6 +175,10 @@ describe("Agent Event v2 protocol", () => {
       snapshot: {
         contextUsage: { contextWindow: 200_000, usedTokens: 25_000 },
         id: "task-1",
+        plan: {
+          explanation: null,
+          steps: [{ status: "completed", text: "定义协议" }],
+        },
         pinned: false,
         pendingRequests: [pendingRequest],
         projectId: "code-agent",

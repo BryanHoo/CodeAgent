@@ -219,6 +219,7 @@ export function useWorkbenchShellRuntime({
             {
               ...taskLaunchState.task,
               contextUsage: null,
+              plan: null,
               pendingRequests: [],
               settings: taskLaunchState.settings,
               status: "running",
@@ -274,8 +275,10 @@ export function useWorkbenchShellRuntime({
   const [inspectorOpen, setInspectorOpen] = useState(() =>
     shouldOpenDesktopPanel(inspectorOverlayQuery),
   );
-  // 右栏页签只响应用户点击，运行态数据更新不能改变当前选择。
-  const [inspectorTab, setInspectorTab] = useState<WorkbenchInspectorTab>("changes");
+  const [inspectorTabState, setInspectorTabState] = useState<{
+    planTaskKey: string | null;
+    tab: WorkbenchInspectorTab;
+  }>({ planTaskKey: null, tab: "changes" });
   const [sidebarWidth, setSidebarWidth] = useState<number>(sidebarWidthLimits.default);
   const [inspectorWidth, setInspectorWidth] = useState<number>(inspectorWidthLimits.default);
   const workbenchShellRef = useRef<HTMLDivElement>(null);
@@ -312,6 +315,20 @@ export function useWorkbenchShellRuntime({
     projectId: string;
     selection: SubagentSelection;
   } | null>(null);
+
+  const activePlan = runtime.snapshot?.plan ?? startingSnapshot?.plan ?? null;
+  const planTaskKey = taskId === undefined || activePlan === null ? null : `${projectId}:${taskId}`;
+  // 首次出现计划时同步派生上下文 Tab；用户点击后记录当前 Task，后续步骤更新不再抢占选择。
+  const inspectorTab =
+    planTaskKey !== null && inspectorTabState.planTaskKey !== planTaskKey
+      ? "context"
+      : inspectorTabState.tab;
+  const setInspectorTab = useCallback(
+    (tab: WorkbenchInspectorTab) => {
+      setInspectorTabState({ planTaskKey, tab });
+    },
+    [planTaskKey],
+  );
 
   useLayoutEffect(() => {
     // 路由提交后、页面绘制前消费提醒，避免实时终态与被动 Effect 形成竞态。

@@ -128,6 +128,7 @@ export function createUnmaterializedTaskSnapshot(task: AgentTask): AgentProvider
   return {
     ...task,
     contextUsage: null,
+    plan: null,
     pendingRequests: [],
     status: "idle",
     turns: [],

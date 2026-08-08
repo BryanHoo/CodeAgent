@@ -2,7 +2,7 @@ import type {
   AgentBackgroundTerminal,
   AgentMcpServer,
   AgentSkill,
-  AgentTurn,
+  AgentTaskSnapshot,
   ProjectGitStatus,
   ProjectOpenApp,
   ProjectOpenAppId,
@@ -44,6 +44,7 @@ import {
   SubagentSection,
   collectInspectorSources,
 } from "./workbench-inspector-sections.js";
+import { PlanSection } from "./workbench-inspector-plan.js";
 
 export type { ProjectFileTreeDirectoryState } from "./workbench-inspector-file-tree.js";
 
@@ -87,7 +88,7 @@ type WorkbenchInspectorProps = Readonly<{
   skills?: readonly AgentSkill[];
   subagents?: readonly SubagentContextEntry[];
   tab?: WorkbenchInspectorTab;
-  task?: Readonly<{ turns: readonly AgentTurn[] }>;
+  task?: Pick<AgentTaskSnapshot, "turns"> & Partial<Pick<AgentTaskSnapshot, "plan">>;
   terminalMutationError?: Error | null;
   terminatingTerminalId?: string | null;
 }>;
@@ -180,6 +181,7 @@ export function WorkbenchInspector({
   const activeTab = contextOnly ? "context" : tab;
   const contextContent = (
     <div className="h-full space-y-5 overflow-y-auto p-2.5">
+      {task?.plan === null || task?.plan === undefined ? null : <PlanSection plan={task.plan} />}
       {backgroundTerminals.length > 0 ||
       backgroundTerminalsPending ||
       backgroundTerminalsError !== null ? (

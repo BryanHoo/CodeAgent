@@ -3,6 +3,7 @@ import type {
   AgentContextUsage,
   AgentMcpServerFailureReason,
   AgentMcpServerStatus,
+  AgentPlan,
   AgentReviewTarget,
   AgentTask,
 } from "@code-agent/protocol";
@@ -25,6 +26,7 @@ export class TaskRuntimeState {
   public readonly reviewWorkerTurnIds = new Map<string, string>();
   public readonly reviewWorkerParentTaskIds = new Map<string, string>();
   public readonly contextUsage = new Map<string, AgentContextUsage>();
+  public readonly plans = new Map<string, AgentPlan>();
   public readonly mcpServerNames = new Map<string, Set<string>>();
   public readonly mcpServerStatuses = new Map<string, Map<string, CodexMcpServerStartupStatus>>();
   public readonly ephemeralTaskIds = new Set<string>();
@@ -36,6 +38,18 @@ export class TaskRuntimeState {
   public readonly resumePromises = new Map<string, Promise<void>>();
   public readonly runningTaskIds = new Set<string>();
   public readonly unmaterializedTasks = new Map<string, AgentTask>();
+
+  public retainSnapshotEvent(event: AgentProviderEvent): void {
+    if (!this.projectTaskIds.has(event.taskId) && !this.pendingTaskReads.has(event.taskId)) {
+      return;
+    }
+    if (event.type === "usage.updated") {
+      this.contextUsage.set(event.taskId, event.payload.usage);
+    } else if (event.type === "plan.updated") {
+      // 两类最新值都在后续 Snapshot 读取时恢复，不进入 Timeline Item 容器。
+      this.plans.set(event.taskId, event.payload.plan);
+    }
+  }
 
   public hasLifecycleObligations(taskId: string, hasPendingRequest: boolean): boolean {
     return (
@@ -61,6 +75,7 @@ export class TaskRuntimeState {
       }
     }
     this.contextUsage.delete(taskId);
+    this.plans.delete(taskId);
     this.mcpServerNames.delete(taskId);
     this.mcpServerStatuses.delete(taskId);
     this.ephemeralTaskIds.delete(taskId);
@@ -83,6 +98,7 @@ export class TaskRuntimeState {
     this.reviewWorkerTurnIds.clear();
     this.reviewWorkerParentTaskIds.clear();
     this.contextUsage.clear();
+    this.plans.clear();
     this.mcpServerNames.clear();
     this.mcpServerStatuses.clear();
     this.ephemeralTaskIds.clear();

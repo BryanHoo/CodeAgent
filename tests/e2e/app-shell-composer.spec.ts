@@ -720,6 +720,7 @@ test("starts code review from a new chat with one fixed review message", async (
             ...reviewTask,
             contextUsage: null,
             pendingRequests: [],
+            plan: null,
             settings: taskSnapshot.settings,
             status: "running",
             turns: [reviewTurn],

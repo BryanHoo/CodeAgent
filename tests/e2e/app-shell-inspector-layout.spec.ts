@@ -10,6 +10,46 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
+test("selects context automatically and keeps the latest plan visible", async ({ page }) => {
+  let snapshotRequestCount = 0;
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    snapshotRequestCount += 1;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        checkpoint: { sequence: 0, sessionId: "e2e-session" },
+        snapshot: {
+          ...taskSnapshot,
+          plan: {
+            explanation: "先完成协议，再验证右栏交互。",
+            steps: [
+              { status: "completed", text: "定义计划协议" },
+              { status: "in_progress", text: "接入上下文 Queue" },
+              { status: "pending", text: "执行回归验证" },
+            ],
+          },
+        },
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+  await expect.poll(() => snapshotRequestCount).toBeGreaterThan(0);
+
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
+  await expect(inspector.getByRole("tab", { name: "上下文" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  const plan = inspector.getByRole("region", { name: "计划" });
+  await expect(plan).toBeVisible();
+  await expect(plan.getByText("定义计划协议")).toBeVisible();
+  await expect(plan.getByText("接入上下文 Queue")).toBeVisible();
+  await expect(plan.getByText("执行回归验证")).toBeVisible();
+  await expect(plan.locator('[data-status="completed"]')).toHaveCount(1);
+  await expect(plan.locator('[data-status="in_progress"]')).toHaveCount(1);
+  await expect(plan.locator('[data-status="pending"]')).toHaveCount(1);
+});
+
 test("orders persistent search, task actions, pinned tasks and projects in the sidebar", async ({
   page,
 }) => {

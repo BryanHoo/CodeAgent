@@ -48,6 +48,7 @@ export function useTaskRuntime(
     subscribedStore,
     (state) => state.snapshotMetadata?.contextUsage,
   );
+  const taskPlan = useStore(subscribedStore, (state) => state.snapshotMetadata?.plan);
   const taskPinned = useStore(subscribedStore, (state) => state.snapshotMetadata?.pinned);
   const itemStructureRevision = useStore(subscribedStore, (state) => state.itemStructureRevision);
 
@@ -99,6 +100,7 @@ export function useTaskRuntime(
     void itemStructureRevision;
     void taskContextUsage;
     void taskPinned;
+    void taskPlan;
     void taskSettings;
     void taskStatus;
     void taskTitle;
@@ -108,6 +110,7 @@ export function useTaskRuntime(
     itemStructureRevision,
     taskContextUsage,
     taskPinned,
+    taskPlan,
     taskSettings,
     taskStatus,
     taskTitle,

@@ -47,6 +47,7 @@ function createSnapshotResponse(
     checkpoint: { sequence: options.sequence ?? 0, sessionId: options.sessionId ?? "runtime-1" },
     snapshot: {
       contextUsage: null,
+      plan: null,
       id: taskId,
       pendingRequests: options.pendingRequests ?? [],
       pinned: false,

@@ -4,6 +4,7 @@ import {
   ActivePendingRequestSchema,
   AgentContextUsageSchema,
   AgentItemSchema,
+  AgentPlanSchema,
   AgentTaskSnapshotSchema,
   AgentTurnSchema,
   ExpiredPendingRequestSchema,
@@ -98,6 +99,12 @@ export const UsageUpdatedEventSchema = createEventSchema({
   type: Type.Literal("usage.updated"),
 });
 
+export const PlanUpdatedEventSchema = createEventSchema({
+  payload: Type.Object({ plan: AgentPlanSchema }, { additionalProperties: false }),
+  turnId: Type.String({ minLength: 1 }),
+  type: Type.Literal("plan.updated"),
+});
+
 function createPendingRequestEventSchema<TType extends string, TRequestSchema extends TSchema>(
   type: TType,
   requestSchema: TRequestSchema,
@@ -132,6 +139,7 @@ export const AgentEventSchema = Type.Union([
   ItemCompletedEventSchema,
   TurnCompletedEventSchema,
   UsageUpdatedEventSchema,
+  PlanUpdatedEventSchema,
   ProviderErrorEventSchema,
   PendingRequestCreatedEventSchema,
   PendingRequestResolvedEventSchema,

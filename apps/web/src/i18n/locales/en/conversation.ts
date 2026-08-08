@@ -96,6 +96,12 @@ export const conversation = {
     mcpVersion: "Version {{version}}",
     openFailed: "The selected application could not open the target",
     openGitHistory: "View Git history",
+    plan: "Plan",
+    planStatus: {
+      completed: "Completed",
+      in_progress: "In progress",
+      pending: "Pending",
+    },
     projectDirectory: "Project directory",
     projectFilesEmpty: "This project has no files to display",
     projectFilesError: "Failed to load project files",

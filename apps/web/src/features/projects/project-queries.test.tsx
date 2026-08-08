@@ -59,6 +59,7 @@ const task = {
 const snapshot = {
   ...task,
   contextUsage: null,
+  plan: null,
   pendingRequests: [],
   settings: {
     approvalPolicy: "never" as const,

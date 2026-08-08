@@ -795,6 +795,7 @@ describe("CodeAgentClient", () => {
             ...task,
             contextUsage: null,
             pendingRequests: [],
+            plan: null,
             settings: taskSettings,
             status: "idle",
             turns: [],

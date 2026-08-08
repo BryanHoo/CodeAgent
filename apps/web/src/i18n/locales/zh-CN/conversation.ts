@@ -96,6 +96,12 @@ export const conversation = {
     mcpVersion: "版本 {{version}}",
     openFailed: "无法使用所选应用打开目标",
     openGitHistory: "查看 Git 历史",
+    plan: "计划",
+    planStatus: {
+      completed: "已完成",
+      in_progress: "进行中",
+      pending: "待处理",
+    },
     projectDirectory: "项目目录",
     projectFilesEmpty: "当前项目没有可显示的文件",
     projectFilesError: "无法读取项目文件",

@@ -235,10 +235,37 @@ export type ResolvePendingRequestResponse = Readonly<
   Static<typeof ResolvePendingRequestResponseSchema>
 >;
 
+export const AgentPlanStepStatusSchema = Type.Union([
+  Type.Literal("pending"),
+  Type.Literal("in_progress"),
+  Type.Literal("completed"),
+]);
+
+export const AgentPlanStepSchema = Type.Object(
+  {
+    status: AgentPlanStepStatusSchema,
+    text: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentPlanSchema = Type.Object(
+  {
+    explanation: Type.Union([Type.String(), Type.Null()]),
+    steps: Type.Array(AgentPlanStepSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type AgentPlanStepStatus = Readonly<Static<typeof AgentPlanStepStatusSchema>>;
+export type AgentPlanStep = Readonly<Static<typeof AgentPlanStepSchema>>;
+export type AgentPlan = Readonly<Static<typeof AgentPlanSchema>>;
+
 export const AgentTaskSnapshotSchema = Type.Object(
   {
     contextUsage: Type.Union([AgentContextUsageSchema, Type.Null()]),
     id: Type.String({ minLength: 1 }),
+    plan: Type.Union([AgentPlanSchema, Type.Null()]),
     pendingRequests: Type.Array(ActivePendingRequestSchema),
     pinned: Type.Boolean(),
     projectId: Type.String({ minLength: 1 }),

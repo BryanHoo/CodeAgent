@@ -145,6 +145,56 @@ function nativeThread(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CodexAgentProvider", () => {
+  it("publishes plan updates and restores the latest plan in task snapshots", async () => {
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      { thread: nativeThread({ status: { type: "active" }, turns: [] }) },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+    await provider.listTasks();
+
+    rpc.emitNotification("turn/plan/updated", {
+      explanation: "先补齐数据链路，再接入界面。",
+      plan: [
+        { status: "completed", step: "定义协议" },
+        { status: "inProgress", step: "接入右栏" },
+        { status: "pending", step: "完成验证" },
+      ],
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    expect(events).toEqual([
+      {
+        payload: {
+          plan: {
+            explanation: "先补齐数据链路，再接入界面。",
+            steps: [
+              { status: "completed", text: "定义协议" },
+              { status: "in_progress", text: "接入右栏" },
+              { status: "pending", text: "完成验证" },
+            ],
+          },
+        },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "plan.updated",
+      },
+    ]);
+    await expect(provider.readTask("task-1")).resolves.toMatchObject({
+      plan: {
+        explanation: "先补齐数据链路，再接入界面。",
+        steps: [
+          { status: "completed", text: "定义协议" },
+          { status: "in_progress", text: "接入右栏" },
+          { status: "pending", text: "完成验证" },
+        ],
+      },
+    });
+  });
+
   it("warns with safe identity fields when dropping unknown or invalid notifications", async () => {
     const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
     const warn = vi.fn<CodexProviderLogger["warn"]>();

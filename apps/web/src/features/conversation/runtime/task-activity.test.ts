@@ -24,6 +24,7 @@ function createSnapshot(
 ): AgentTaskSnapshot {
   return {
     contextUsage: null,
+    plan: null,
     id: taskId,
     pendingRequests,
     pinned: false,

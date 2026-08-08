@@ -32,6 +32,7 @@ export const CODEX_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
   "thread/goal/updated",
   "thread/tokenUsage/updated",
   "turn/completed",
+  "turn/plan/updated",
   "turn/started",
 ]);
 

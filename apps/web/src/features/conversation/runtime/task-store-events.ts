@@ -368,6 +368,15 @@ export function applyAcceptedEvent(
             : { ...state.turnsById, [event.turnId]: normalizedTurn },
       };
     }
+    case "plan.updated":
+      return {
+        checkpoint,
+        snapshotMetadata: {
+          ...snapshotMetadata,
+          plan: event.payload.plan,
+          updatedAt: event.timestamp,
+        },
+      };
     case "usage.updated":
       return {
         checkpoint,

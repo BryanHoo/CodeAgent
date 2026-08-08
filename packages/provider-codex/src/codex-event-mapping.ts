@@ -1,5 +1,10 @@
 import type { AgentProviderEvent } from "@code-agent/core";
-import type { AgentMessageAttachment, AgentReviewTarget } from "@code-agent/protocol";
+import type {
+  AgentMessageAttachment,
+  AgentPlan,
+  AgentPlanStepStatus,
+  AgentReviewTarget,
+} from "@code-agent/protocol";
 
 import {
   CODEX_NOTIFICATION_METHODS,
@@ -15,6 +20,37 @@ import {
   mapReviewHint,
   markStartedItemRunning,
 } from "./codex-tool-mapping.js";
+
+function mapPlanStepStatus(value: unknown): AgentPlanStepStatus {
+  if (value === "pending" || value === "completed") {
+    return value;
+  }
+  if (value === "inProgress") {
+    return "in_progress";
+  }
+  throw new CodexProtocolMappingError("Codex plan step status is invalid");
+}
+
+function mapPlan(value: Record<string, unknown>): AgentPlan {
+  const explanation = value["explanation"];
+  if (explanation !== null && typeof explanation !== "string") {
+    throw new CodexProtocolMappingError("Codex plan explanation must be a string or null");
+  }
+  const nativeSteps = value["plan"];
+  if (!Array.isArray(nativeSteps)) {
+    throw new CodexProtocolMappingError("Codex plan must be an array");
+  }
+  return {
+    explanation,
+    steps: nativeSteps.map((value) => {
+      const step = expectRecord(value, "Codex plan step");
+      return {
+        status: mapPlanStepStatus(step["status"]),
+        text: expectString(step["step"], "Codex plan step text"),
+      };
+    }),
+  };
+}
 
 export function mapCodexNotification(
   method: string,
@@ -48,6 +84,15 @@ export function mapCodexNotification(
       taskId,
       turnId: explicitTurnId ?? expectString(params["turnId"], "Codex token usage turnId"),
       type: "usage.updated",
+    };
+  }
+
+  if (method === "turn/plan/updated") {
+    return {
+      payload: { plan: mapPlan(params) },
+      taskId,
+      turnId: explicitTurnId ?? expectString(params["turnId"], "Codex plan turnId"),
+      type: "plan.updated",
     };
   }
 

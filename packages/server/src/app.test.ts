@@ -115,6 +115,7 @@ const task = {
 const snapshot = {
   ...task,
   contextUsage: null,
+  plan: null,
   pendingRequests: [],
   status: "idle" as const,
   turns: [],

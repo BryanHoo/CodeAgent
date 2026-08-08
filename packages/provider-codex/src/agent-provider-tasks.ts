@@ -93,6 +93,7 @@ export abstract class CodexAgentProviderTasks extends CodexAgentProviderTurns {
       const snapshot: AgentProviderTaskSnapshot = {
         ...task,
         contextUsage: this.runtime.contextUsage.get(taskId) ?? null,
+        plan: this.runtime.plans.get(taskId) ?? null,
         pendingRequests: this.pendingLifecycle.pendingForTask(taskId),
         status,
         turns,

@@ -5,6 +5,7 @@ import { collectSubagents } from "./subagent.js";
 
 const snapshot: RuntimeTaskSnapshot = {
   contextUsage: null,
+  plan: null,
   id: "parent-task",
   pendingRequests: [],
   pinned: false,

@@ -19,6 +19,7 @@ function createResponse(
     snapshot: {
       contextUsage: null,
       id: "task-1",
+      plan: null,
       pendingRequests: [],
       pinned: false,
       projectId: "project-1",
@@ -102,6 +103,57 @@ function createPendingRequest<Status extends PendingRequest["status"] = "pending
 }
 
 describe("task store", () => {
+  it("replaces the latest plan without rebuilding timeline item state", () => {
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
+    const previousItemIdsByTurnId = store.getState().itemIdsByTurnId;
+    const previousItemStoresById = store.getState().itemStoresById;
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        payload: {
+          plan: {
+            explanation: "先完成运行态，再接入界面。",
+            steps: [
+              { status: "completed", text: "定义协议" },
+              { status: "in_progress", text: "合并运行态" },
+              { status: "pending", text: "接入界面" },
+            ],
+          },
+        },
+        turnId: "turn-running",
+        type: "plan.updated",
+      },
+      {
+        ...eventEnvelope(12),
+        payload: {
+          plan: {
+            explanation: null,
+            steps: [
+              { status: "completed", text: "定义协议" },
+              { status: "completed", text: "合并运行态" },
+              { status: "in_progress", text: "接入界面" },
+            ],
+          },
+        },
+        turnId: "turn-running",
+        type: "plan.updated",
+      },
+    ]);
+
+    expect(store.getState().reconstructSnapshot()?.plan).toEqual({
+      explanation: null,
+      steps: [
+        { status: "completed", text: "定义协议" },
+        { status: "completed", text: "合并运行态" },
+        { status: "in_progress", text: "接入界面" },
+      ],
+    });
+    expect(store.getState().itemIdsByTurnId).toBe(previousItemIdsByTurnId);
+    expect(store.getState().itemStoresById).toBe(previousItemStoresById);
+    expect(store.getState().checkpoint?.sequence).toBe(12);
+  });
+
   it("normalizes hydration and reconstructs a compatibility snapshot", () => {
     const pendingRequest = createPendingRequest();
     const response = createResponse({ pendingRequests: [pendingRequest] });

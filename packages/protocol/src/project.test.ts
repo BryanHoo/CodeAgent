@@ -812,6 +812,14 @@ describe("project protocol", () => {
     const snapshot = {
       contextUsage: null,
       id: "task-1",
+      plan: {
+        explanation: "按顺序执行并同步状态。",
+        steps: [
+          { status: "completed", text: "定义协议" },
+          { status: "in_progress", text: "接入界面" },
+          { status: "pending", text: "验证行为" },
+        ],
+      },
       pinned: false,
       pendingRequests: [],
       projectId: "code-agent",

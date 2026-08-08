@@ -420,6 +420,7 @@ export const projectDirectoryListings = new Map<string | null, object>([
 export const taskSnapshot = {
   ...tasks[0],
   contextUsage: { contextWindow: 200_000, usedTokens: 25_000 },
+  plan: null,
   pendingRequests: [],
   settings: {
     approvalPolicy: "on-request",
@@ -772,6 +773,7 @@ export async function mockAppShellApi(
         snapshot: {
           ...task,
           contextUsage: { contextWindow: 200_000, usedTokens: 1_000 },
+          plan: null,
           pendingRequests: [],
           settings: taskSettings.get(`temporary:${taskId}`) ?? taskSnapshot.settings,
           status: "idle",
