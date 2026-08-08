@@ -19,7 +19,6 @@ import {
   type ProjectTaskInfiniteData,
 } from "../../projects/project-queries.js";
 import {
-  loadProjectSourceDialog,
   taskLaunchQueryKey,
   type TaskLaunchState,
   type useWorkbenchShellRuntime,
@@ -84,7 +83,6 @@ export function useWorkbenchShellController(
         return;
       }
 
-      void loadProjectSourceDialog();
       setSourceFileSelection({ kind, projectId, reference });
     },
     [projectId, projectPathOpenLockRef, projectPathOpenMutationRef, setSourceFileSelection],

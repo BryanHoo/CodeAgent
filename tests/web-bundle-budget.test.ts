@@ -9,7 +9,14 @@ import { afterEach, describe, expect, it } from "vitest";
 const checkerPath = join(process.cwd(), "tools/verify-web-bundle.mjs");
 const temporaryRoots: string[] = [];
 
-function createBundle(options: Readonly<{ asyncBytes?: number; initialBytes?: number }> = {}) {
+function createBundle(
+  options: Readonly<{
+    asyncBytes?: number;
+    initialBytes?: number;
+    workbenchBytes?: number;
+    workbenchDependencyCount?: number;
+  }> = {},
+) {
   const root = mkdtempSync(join(tmpdir(), "code-agent-bundle-"));
   temporaryRoots.push(root);
   mkdirSync(join(root, ".vite"), { recursive: true });
@@ -20,11 +27,27 @@ function createBundle(options: Readonly<{ asyncBytes?: number; initialBytes?: nu
   writeFileSync(join(root, "assets/shared.js"), "export const shared = true;");
   writeFileSync(join(root, "assets/lazy.js"), randomBytes(options.asyncBytes ?? 128));
   writeFileSync(join(root, "assets/lazy-shared.js"), "export const lazyShared = true;");
+  writeFileSync(join(root, "assets/workbench.js"), randomBytes(options.workbenchBytes ?? 128));
+  writeFileSync(join(root, "assets/workbench-shared.js"), "export const workbenchShared = true;");
+  const workbenchDependencies = Array.from(
+    { length: options.workbenchDependencyCount ?? 0 },
+    (_, index) => `_workbench-dependency-${String(index)}.js`,
+  );
+  for (const [index, key] of workbenchDependencies.entries()) {
+    writeFileSync(
+      join(root, "assets", key.slice(1)),
+      `export const dependency${String(index)} = true;`,
+    );
+  }
   writeFileSync(
     join(root, ".vite/manifest.json"),
     JSON.stringify({
       "_lazy-shared.js": { file: "assets/lazy-shared.js" },
       "_shared.js": { file: "assets/shared.js" },
+      "_workbench-shared.js": { file: "assets/workbench-shared.js" },
+      ...Object.fromEntries(
+        workbenchDependencies.map((key) => [key, { file: `assets/${key.slice(1)}` }]),
+      ),
       "index.html": {
         dynamicImports: ["src/lazy.ts"],
         file: "assets/index.js",
@@ -34,6 +57,11 @@ function createBundle(options: Readonly<{ asyncBytes?: number; initialBytes?: nu
       "src/lazy.ts": {
         file: "assets/lazy.js",
         imports: ["_lazy-shared.js"],
+        isDynamicEntry: true,
+      },
+      "src/features/workbench/components/workbench-shell.tsx": {
+        file: "assets/workbench.js",
+        imports: ["_workbench-shared.js", ...workbenchDependencies],
         isDynamicEntry: true,
       },
     }),
@@ -74,6 +102,7 @@ describe("Web Bundle 预算门禁", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Web Bundle budget passed");
     expect(result.stdout).toContain("Initial Top Contributors");
+    expect(result.stdout).toContain("Workbench Ready Top Contributors");
     expect(result.stdout).toContain("assets/index.js");
   });
 
@@ -85,19 +114,31 @@ describe("Web Bundle 预算门禁", () => {
     expect(result.status).toBe(0);
     const report = JSON.parse(readFileSync(reportPath, "utf8")) as {
       asyncGroups: { contributors: { file: string; gzipBytes: number }[] }[];
-      budgets: { initialGzipBytes: number; maxAsyncGzipBytes: number };
+      budgets: {
+        initialGzipBytes: number;
+        maxAsyncGzipBytes: number;
+        workbenchReadyGzipBytes: number;
+        workbenchReadyRequestCount: number;
+      };
       initial: { contributors: { file: string; gzipBytes: number }[]; gzipBytes: number };
       passed: boolean;
       schemaVersion: number;
       violations: unknown[];
+      workbenchReady: {
+        contributors: { file: string; gzipBytes: number }[];
+        gzipBytes: number;
+        requestCount: number;
+      };
     };
     expect(report).toMatchObject({
       budgets: {
         initialGzipBytes: 240 * 1024,
         maxAsyncGzipBytes: 200 * 1024,
+        workbenchReadyGzipBytes: 340 * 1024,
+        workbenchReadyRequestCount: 16,
       },
       passed: true,
-      schemaVersion: 1,
+      schemaVersion: 2,
       violations: [],
     });
     expect(report.initial.contributors.map((contributor) => contributor.file)).toEqual([
@@ -105,7 +146,11 @@ describe("Web Bundle 预算门禁", () => {
       "assets/shared.js",
     ]);
     expect(report.initial.gzipBytes).toBeGreaterThan(0);
-    expect(report.asyncGroups[0]?.contributors[0]?.file).toBe("assets/lazy.js");
+    expect(report.workbenchReady.gzipBytes).toBeGreaterThan(report.initial.gzipBytes);
+    expect(report.workbenchReady.requestCount).toBe(4);
+    expect(
+      report.asyncGroups.some((group) => group.contributors[0]?.file === "assets/lazy.js"),
+    ).toBe(true);
 
     rmSync(join(root, ".vite"), { force: true, recursive: true });
     rmSync(join(root, "assets"), { force: true, recursive: true });
@@ -115,6 +160,7 @@ describe("Web Bundle 预算门禁", () => {
     expect(displayResult.status).toBe(0);
     expect(displayResult.stdout).toContain("Web Bundle budget passed");
     expect(displayResult.stdout).toContain("Initial Top Contributors");
+    expect(displayResult.stdout).toContain("Workbench Ready Top Contributors");
   });
 
   it("拒绝超过首屏 gzip 预算的产物", () => {
@@ -135,6 +181,22 @@ describe("Web Bundle 预算门禁", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("async gzip budget exceeded");
+  });
+
+  it("拒绝超过工作台就绪 gzip 预算的产物", () => {
+    const result = runChecker(
+      createBundle({ initialBytes: 230 * 1024, workbenchBytes: 120 * 1024 }),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("workbench-ready gzip budget exceeded");
+  });
+
+  it("拒绝超过工作台就绪请求数预算的产物", () => {
+    const result = runChecker(createBundle({ workbenchDependencyCount: 16 }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("workbench-ready request budget exceeded");
   });
 
   it("拒绝引用缺失 Chunk 的无效 manifest", () => {

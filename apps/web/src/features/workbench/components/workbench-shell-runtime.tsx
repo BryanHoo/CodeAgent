@@ -52,27 +52,6 @@ const sidebarWidthLimits = { default: 288, maximum: 400, minimum: 220 } as const
 const inspectorWidthLimits = { default: 288, maximum: 480, minimum: 260 } as const;
 const emptyExpandedFileTreePaths = new Set<string>();
 
-export function loadProjectSourceDialog() {
-  return import("./project-source-dialog.js");
-}
-
-// 非首屏工具统一保留独立动态入口，避免 UI 装配文件重新引入静态依赖。
-export function loadWorkbenchInspector() {
-  return import("./workbench-inspector.js");
-}
-
-export function loadFileDiffDialog() {
-  return import("../../diff/file-diff-dialog.js");
-}
-
-export function loadFileReviewDialog() {
-  return import("../../diff/file-review-dialog.js");
-}
-
-export function loadGitHistoryDialog() {
-  return import("./git-history-dialog.js");
-}
-
 export function taskLaunchQueryKey(projectId: string, taskId: string) {
   return ["projects", projectId, "tasks", taskId, "launch"] as const;
 }

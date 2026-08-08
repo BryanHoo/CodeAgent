@@ -9,7 +9,7 @@
 - `src/main.tsx` 只创建 React Root 并装配应用级 Provider。
 - `src/App.tsx` 只承担应用外壳和顶层导航结构。
 - `src/app/routes` 只定义业务页面与路由级状态，不提供登录页面或认证回调路由。
-- Project 与 Task 路由只同步保留路径匹配等关键配置；工作台组件使用 TanStack Router `Route.lazy()` 与 `createLazyRoute()` 按需加载，避免 Markdown、终端和 Inspector 依赖进入首屏入口。
+- Project、Task 与临时路由只保留路径匹配和参数映射，并复用单一 React Suspense 边界动态加载 `WorkbenchShell`；不得为各路径重复创建微型懒加载路由模块。工作台内常用 UI 进入同一静态闭包，Markdown、Patch Diff Viewer、Shiki Engine 和语言 Grammar 继续由内容级边界按需加载。
 - 功能代码按真实用户能力放入 `src/features/<feature>`，不要按技术类型堆放全局目录。
 - `features/access` 负责顶层访问状态、LAN 配对门禁和认证失效清理，不得依赖 Project 或工作台 Runtime。
 - `features/projects` 负责 Project 集合、目录选择和 Task 归属；Project 选择整合进工作台，不创建独立 Project 索引页。

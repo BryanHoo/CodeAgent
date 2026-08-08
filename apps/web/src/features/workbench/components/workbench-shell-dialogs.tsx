@@ -1,33 +1,12 @@
-import { lazy, Suspense } from "react";
-
-import { loadGlobalSettingsDialog } from "../../settings/components/global-settings-lazy.js";
+import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
+import { FileReviewDialog } from "../../diff/file-review-dialog.js";
+import { GlobalSettingsDialog } from "../../settings/components/global-settings-dialog.js";
 import { CommitChangesLauncher } from "./commit-changes-launcher.js";
+import { GitHistoryDialog } from "./git-history-dialog.js";
+import { ProjectSourceDialog } from "./project-source-dialog.js";
 import { SubagentOutputDialog } from "./subagent-output-dialog.js";
 import { TaskRenameDialog } from "./task-rename-dialog.js";
 import type { useWorkbenchShellController } from "./workbench-shell-controller.js";
-import {
-  loadFileDiffDialog,
-  loadFileReviewDialog,
-  loadGitHistoryDialog,
-  loadProjectSourceDialog,
-} from "./workbench-shell-runtime.js";
-
-const LazyFileDiffDialog = lazy(() =>
-  loadFileDiffDialog().then((module) => ({ default: module.FileDiffDialog })),
-);
-const LazyFileReviewDialog = lazy(() =>
-  loadFileReviewDialog().then((module) => ({ default: module.FileReviewDialog })),
-);
-const LazyGlobalSettingsDialog = lazy(() =>
-  loadGlobalSettingsDialog().then((module) => ({ default: module.GlobalSettingsDialog })),
-);
-const LazyGitHistoryDialog = lazy(() =>
-  loadGitHistoryDialog().then((module) => ({ default: module.GitHistoryDialog })),
-);
-
-const LazyProjectSourceDialog = lazy(() =>
-  loadProjectSourceDialog().then((module) => ({ default: module.ProjectSourceDialog })),
-);
 
 export function WorkbenchShellDialogs({
   context,
@@ -77,24 +56,20 @@ export function WorkbenchShellDialogs({
   return (
     <>
       {!projectToolsEnabled || selectedFileChange === null ? null : (
-        <Suspense fallback={null}>
-          <LazyFileDiffDialog
-            change={selectedFileChange}
-            onClose={() => {
-              setFileDiffSelection(null);
-            }}
-          />
-        </Suspense>
+        <FileDiffDialog
+          change={selectedFileChange}
+          onClose={() => {
+            setFileDiffSelection(null);
+          }}
+        />
       )}
       {!projectToolsEnabled || selectedFileReview === null ? null : (
-        <Suspense fallback={null}>
-          <LazyFileReviewDialog
-            changes={selectedFileReview}
-            onClose={() => {
-              setFileReviewSelection(null);
-            }}
-          />
-        </Suspense>
+        <FileReviewDialog
+          changes={selectedFileReview}
+          onClose={() => {
+            setFileReviewSelection(null);
+          }}
+        />
       )}
       {!projectToolsEnabled || gitStatusQuery.data === undefined ? null : (
         <CommitChangesLauncher
@@ -106,44 +81,40 @@ export function WorkbenchShellDialogs({
         />
       )}
       {projectToolsEnabled && gitHistoryOpen ? (
-        <Suspense fallback={null}>
-          <LazyGitHistoryDialog
-            client={client}
-            onClose={() => {
-              setGitHistoryOpen(false);
-              // 下次打开必须重新读取当前检出的 HEAD，避免分支切换后短暂显示旧历史。
-              queryClient.removeQueries({
-                exact: false,
-                queryKey: ["projects", projectId, "git-history"],
-              });
-              queryClient.removeQueries({
-                exact: false,
-                queryKey: ["projects", projectId, "git-commit-files"],
-              });
-              queryClient.removeQueries({
-                exact: false,
-                queryKey: ["projects", projectId, "git-commit-diff"],
-              });
-              requestAnimationFrame(() => {
-                document.querySelector<HTMLButtonElement>("#workbench-git-history")?.focus();
-              });
-            }}
-            projectId={projectId}
-          />
-        </Suspense>
+        <GitHistoryDialog
+          client={client}
+          onClose={() => {
+            setGitHistoryOpen(false);
+            // 下次打开必须重新读取当前检出的 HEAD，避免分支切换后短暂显示旧历史。
+            queryClient.removeQueries({
+              exact: false,
+              queryKey: ["projects", projectId, "git-history"],
+            });
+            queryClient.removeQueries({
+              exact: false,
+              queryKey: ["projects", projectId, "git-commit-files"],
+            });
+            queryClient.removeQueries({
+              exact: false,
+              queryKey: ["projects", projectId, "git-commit-diff"],
+            });
+            requestAnimationFrame(() => {
+              document.querySelector<HTMLButtonElement>("#workbench-git-history")?.focus();
+            });
+          }}
+          projectId={projectId}
+        />
       ) : null}
       {!projectToolsEnabled || selectedSourceFile === null ? null : (
-        <Suspense fallback={null}>
-          <LazyProjectSourceDialog
-            client={client}
-            onClose={() => {
-              setSourceFileSelection(null);
-            }}
-            projectId={projectId}
-            previewKind={selectedSourceFile.kind}
-            reference={selectedSourceFile.reference}
-          />
-        </Suspense>
+        <ProjectSourceDialog
+          client={client}
+          onClose={() => {
+            setSourceFileSelection(null);
+          }}
+          projectId={projectId}
+          previewKind={selectedSourceFile.kind}
+          reference={selectedSourceFile.reference}
+        />
       )}
       <SubagentOutputDialog
         onClose={() => {
@@ -164,51 +135,47 @@ export function WorkbenchShellDialogs({
         />
       ) : null}
       {globalSettingsOpen ? (
-        <Suspense fallback={null}>
-          <LazyGlobalSettingsDialog
-            {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
-            {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
-            appInfoError={appInfoQuery.error}
-            apps={projectToolsEnabled ? (projectOpenCapabilitiesQuery.data?.apps ?? []) : []}
-            error={
-              globalSettingsQuery.error ??
-              modelsQuery.error ??
-              (projectToolsEnabled ? projectOpenCapabilitiesQuery.error : null)
-            }
-            isPending={
-              globalSettingsQuery.isPending ||
-              modelsQuery.isPending ||
-              (projectToolsEnabled && projectOpenCapabilitiesQuery.isPending)
-            }
-            initialSection="about"
-            isAppInfoPending={appInfoQuery.isPending}
-            isAppUpdatePending={appUpdateMutation.isPending}
-            models={models}
-            onClose={() => {
-              setGlobalSettingsOpen(false);
-              requestAnimationFrame(() => {
-                document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
-              });
-            }}
-            onLogoutAccess={access.logout}
-            onRetry={() =>
-              Promise.all([
-                globalSettingsQuery.refetch(),
-                modelsQuery.refetch(),
-                ...(projectToolsEnabled ? [projectOpenCapabilitiesQuery.refetch()] : []),
-              ])
-            }
-            onRetryAppInfo={() => appInfoQuery.refetch()}
-            onSave={(settings) =>
-              globalSettingsMutation.mutateAsync(settings).then(() => undefined)
-            }
-            onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
-            updateError={appUpdateMutation.error}
-            {...(globalSettingsQuery.data === undefined
-              ? {}
-              : { settings: globalSettingsQuery.data.settings })}
-          />
-        </Suspense>
+        <GlobalSettingsDialog
+          {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
+          {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
+          appInfoError={appInfoQuery.error}
+          apps={projectToolsEnabled ? (projectOpenCapabilitiesQuery.data?.apps ?? []) : []}
+          error={
+            globalSettingsQuery.error ??
+            modelsQuery.error ??
+            (projectToolsEnabled ? projectOpenCapabilitiesQuery.error : null)
+          }
+          isPending={
+            globalSettingsQuery.isPending ||
+            modelsQuery.isPending ||
+            (projectToolsEnabled && projectOpenCapabilitiesQuery.isPending)
+          }
+          initialSection="about"
+          isAppInfoPending={appInfoQuery.isPending}
+          isAppUpdatePending={appUpdateMutation.isPending}
+          models={models}
+          onClose={() => {
+            setGlobalSettingsOpen(false);
+            requestAnimationFrame(() => {
+              document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
+            });
+          }}
+          onLogoutAccess={access.logout}
+          onRetry={() =>
+            Promise.all([
+              globalSettingsQuery.refetch(),
+              modelsQuery.refetch(),
+              ...(projectToolsEnabled ? [projectOpenCapabilitiesQuery.refetch()] : []),
+            ])
+          }
+          onRetryAppInfo={() => appInfoQuery.refetch()}
+          onSave={(settings) => globalSettingsMutation.mutateAsync(settings).then(() => undefined)}
+          onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
+          updateError={appUpdateMutation.error}
+          {...(globalSettingsQuery.data === undefined
+            ? {}
+            : { settings: globalSettingsQuery.data.settings })}
+        />
       ) : null}
     </>
   );

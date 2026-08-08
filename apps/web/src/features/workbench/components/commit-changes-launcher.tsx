@@ -1,24 +1,10 @@
 import type { ProjectGitStatus } from "@code-agent/protocol";
-import {
-  forwardRef,
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
-
-const LazyCommitChangesController = lazy(() =>
-  import("./commit-changes-controller.js").then((module) => ({
-    default: module.CommitChangesController,
-  })),
-);
+import { CommitChangesController } from "./commit-changes-controller.js";
 
 export type CommitChangesLauncherHandle = Readonly<{
   open: () => void;
@@ -60,8 +46,6 @@ export const CommitChangesLauncher = forwardRef<
   }, [isOpen]);
 
   return isOpen ? (
-    <Suspense fallback={null}>
-      <LazyCommitChangesController {...props} onClose={close} onSuccess={showSuccessToast} />
-    </Suspense>
+    <CommitChangesController {...props} onClose={close} onSuccess={showSuccessToast} />
   ) : null;
 });

@@ -4,7 +4,10 @@ import { gzipSync } from "node:zlib";
 
 const initialGzipBudgetBytes = 240 * 1024;
 const maxAsyncGzipBudgetBytes = 200 * 1024;
-const reportSchemaVersion = 1;
+const workbenchReadyGzipBudgetBytes = 340 * 1024;
+const workbenchReadyRequestBudget = 16;
+const workbenchEntryKey = "src/features/workbench/components/workbench-shell.tsx";
+const reportSchemaVersion = 2;
 const topContributorCount = 5;
 
 function formatKiB(bytes) {
@@ -66,6 +69,7 @@ function measureGraph(root, manifest, graph) {
       (left, right) => right.gzipBytes - left.gzipBytes || left.file.localeCompare(right.file),
     ),
     gzipBytes,
+    requestCount: contributors.length,
   };
 }
 
@@ -78,6 +82,11 @@ function analyzeBundle(root, manifest) {
   // 首屏统计入口及其全部静态依赖；异步组只统计首屏尚未下载的静态闭包。
   const initialGraph = collectStaticGraph(manifest, entries);
   const initial = measureGraph(root, manifest, initialGraph);
+  const workbenchReady = measureGraph(
+    root,
+    manifest,
+    collectStaticGraph(manifest, [...entries, workbenchEntryKey]),
+  );
   const asyncGroups = Object.keys(manifest)
     .filter((key) => readChunk(manifest, key).isDynamicEntry === true)
     .map((key) => ({
@@ -86,7 +95,7 @@ function analyzeBundle(root, manifest) {
     }))
     .toSorted((left, right) => right.gzipBytes - left.gzipBytes);
 
-  return { asyncGroups, initial };
+  return { asyncGroups, initial, workbenchReady };
 }
 
 function createReport(analysis) {
@@ -96,6 +105,20 @@ function createReport(analysis) {
       actualGzipBytes: analysis.initial.gzipBytes,
       budgetGzipBytes: initialGzipBudgetBytes,
       kind: "initial",
+    });
+  }
+  if (analysis.workbenchReady.gzipBytes > workbenchReadyGzipBudgetBytes) {
+    violations.push({
+      actualGzipBytes: analysis.workbenchReady.gzipBytes,
+      budgetGzipBytes: workbenchReadyGzipBudgetBytes,
+      kind: "workbench-ready-gzip",
+    });
+  }
+  if (analysis.workbenchReady.requestCount > workbenchReadyRequestBudget) {
+    violations.push({
+      actualRequestCount: analysis.workbenchReady.requestCount,
+      budgetRequestCount: workbenchReadyRequestBudget,
+      kind: "workbench-ready-requests",
     });
   }
   const largestAsync = analysis.asyncGroups[0] ?? null;
@@ -113,11 +136,14 @@ function createReport(analysis) {
     budgets: {
       initialGzipBytes: initialGzipBudgetBytes,
       maxAsyncGzipBytes: maxAsyncGzipBudgetBytes,
+      workbenchReadyGzipBytes: workbenchReadyGzipBudgetBytes,
+      workbenchReadyRequestCount: workbenchReadyRequestBudget,
     },
     initial: analysis.initial,
     passed: violations.length === 0,
     schemaVersion: reportSchemaVersion,
     violations,
+    workbenchReady: analysis.workbenchReady,
   };
 }
 
@@ -127,6 +153,12 @@ function assertReport(report) {
   const errors = report.violations.map((violation) => {
     if (violation.kind === "initial") {
       return `initial gzip budget exceeded: ${formatKiB(violation.actualGzipBytes)} > ${formatKiB(violation.budgetGzipBytes)}`;
+    }
+    if (violation.kind === "workbench-ready-gzip") {
+      return `workbench-ready gzip budget exceeded: ${formatKiB(violation.actualGzipBytes)} > ${formatKiB(violation.budgetGzipBytes)}`;
+    }
+    if (violation.kind === "workbench-ready-requests") {
+      return `workbench-ready request budget exceeded: ${String(violation.actualRequestCount)} > ${String(violation.budgetRequestCount)}`;
     }
     return `async gzip budget exceeded: ${formatKiB(violation.actualGzipBytes)} > ${formatKiB(violation.budgetGzipBytes)} (${violation.key})`;
   });
@@ -147,6 +179,8 @@ function readReport(path) {
     report.schemaVersion !== reportSchemaVersion ||
     !Array.isArray(report.asyncGroups) ||
     !Array.isArray(report.initial?.contributors) ||
+    !Array.isArray(report.workbenchReady?.contributors) ||
+    typeof report.workbenchReady?.requestCount !== "number" ||
     !Array.isArray(report.violations)
   ) {
     throw new Error("invalid Web Bundle report");
@@ -159,10 +193,15 @@ function printReport(report) {
   const asyncSummary =
     largestAsync === null ? "none" : `${formatKiB(largestAsync.gzipBytes)} (${largestAsync.key})`;
   console.log(
-    `Web Bundle budget ${report.passed ? "passed" : "failed"}: initial ${formatKiB(report.initial.gzipBytes)} / ${formatKiB(report.budgets.initialGzipBytes)}; max async ${asyncSummary} / ${formatKiB(report.budgets.maxAsyncGzipBytes)}`,
+    `Web Bundle budget ${report.passed ? "passed" : "failed"}: initial ${formatKiB(report.initial.gzipBytes)} / ${formatKiB(report.budgets.initialGzipBytes)}; workbench ready ${formatKiB(report.workbenchReady.gzipBytes)} / ${formatKiB(report.budgets.workbenchReadyGzipBytes)} in ${String(report.workbenchReady.requestCount)} / ${String(report.budgets.workbenchReadyRequestCount)} requests; max async ${asyncSummary} / ${formatKiB(report.budgets.maxAsyncGzipBytes)}`,
   );
-  console.log("Initial Top Contributors:");
-  const topContributors = report.initial.contributors.slice(0, topContributorCount);
+  printContributors("Initial Top Contributors", report.initial.contributors);
+  printContributors("Workbench Ready Top Contributors", report.workbenchReady.contributors);
+}
+
+function printContributors(title, contributors) {
+  console.log(`${title}:`);
+  const topContributors = contributors.slice(0, topContributorCount);
   if (topContributors.length === 0) {
     console.log("- none");
     return;
