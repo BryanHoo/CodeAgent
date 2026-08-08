@@ -69,7 +69,13 @@ export function AttachmentPreview({ className = "", ...props }: HTMLAttributes<H
       {...props}
     >
       {data.mediaType.startsWith("image/") ? (
-        <img alt="" className="size-full object-cover" src={data.previewUrl} />
+        <img
+          alt=""
+          className="size-full object-cover"
+          height={28}
+          src={data.previewUrl}
+          width={28}
+        />
       ) : (
         <FileText className="size-4 text-muted-foreground" aria-hidden="true" />
       )}

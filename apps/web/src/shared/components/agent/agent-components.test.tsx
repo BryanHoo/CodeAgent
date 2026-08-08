@@ -678,6 +678,8 @@ info`,
 
     expect(markup).toContain("screen.png");
     expect(markup).toContain('src="data:image/png;base64,aW1hZ2U="');
+    expect(markup).toContain('width="28"');
+    expect(markup).toContain('height="28"');
     expect(markup).toContain('aria-label="移除 screen.png"');
   });
 
