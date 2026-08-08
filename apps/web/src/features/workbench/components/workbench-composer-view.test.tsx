@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
+import { ComposerBranchSwitcher } from "./composer-branch-switcher.js";
 import {
-  ComposerBranchSwitcher,
   ComposerGitHistoryButton,
   ComposerModeTag,
   resolveQueuedPromptSummary,
@@ -66,6 +66,8 @@ describe("WorkbenchComposerView", () => {
     const markup = renderToStaticMarkup(
       <TooltipProvider>
         <ComposerBranchSwitcher
+          branchCreateError={undefined}
+          creatingBranch={undefined}
           gitStatus={{
             baseBranches: ["origin/main", "main"],
             branch: "feat/review",
@@ -76,6 +78,7 @@ describe("WorkbenchComposerView", () => {
             unstaged: [],
           }}
           onBranchChange={() => undefined}
+          onBranchCreate={() => Promise.resolve(true)}
           switchingBranch={undefined}
         />
       </TooltipProvider>,
@@ -88,6 +91,8 @@ describe("WorkbenchComposerView", () => {
   it("聚合仓库模式只展示分支状态，不提供切换按钮", () => {
     const markup = renderToStaticMarkup(
       <ComposerBranchSwitcher
+        branchCreateError={undefined}
+        creatingBranch={undefined}
         gitStatus={{
           baseBranches: [],
           branch: null,
@@ -98,6 +103,7 @@ describe("WorkbenchComposerView", () => {
           unstaged: [],
         }}
         onBranchChange={() => undefined}
+        onBranchCreate={() => Promise.resolve(true)}
         switchingBranch={undefined}
       />,
     );

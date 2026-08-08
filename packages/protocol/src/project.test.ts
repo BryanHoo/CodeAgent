@@ -48,6 +48,7 @@ import {
   TEMPORARY_TASK_SCOPE_ID,
   BrowserSessionResponseSchema,
   HealthResponseSchema,
+  CreateProjectBranchRequestSchema,
   GenerateCommitMessageRequestSchema,
   GenerateCommitMessageResponseSchema,
   HostFileListingSchema,
@@ -401,6 +402,30 @@ describe("project protocol", () => {
       Value.Check(SwitchProjectBranchRequestSchema, {
         branch: "main",
         expectedSnapshot: "stale",
+      }),
+    ).toBe(false);
+  });
+
+  it("strictly validates branch-creation mutations", () => {
+    const expectedSnapshot = "a".repeat(64);
+
+    expect(
+      Value.Check(CreateProjectBranchRequestSchema, {
+        branch: "feat/create-branch",
+        expectedSnapshot,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(CreateProjectBranchRequestSchema, {
+        branch: "",
+        expectedSnapshot,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CreateProjectBranchRequestSchema, {
+        branch: "feat/create-branch",
+        command: "checkout -B main",
+        expectedSnapshot,
       }),
     ).toBe(false);
   });

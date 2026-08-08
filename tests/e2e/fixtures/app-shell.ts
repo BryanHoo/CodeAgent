@@ -942,6 +942,28 @@ export async function mockAppShellApi(
         snapshot: "b".repeat(64),
       };
       body = routedProjectGitStatus;
+    } else if (
+      url.pathname === "/v1/projects/code-agent/git/branches" &&
+      route.request().method() === "POST"
+    ) {
+      const request = parseRequestRecord(route.request().postData());
+      const branch = request["branch"];
+      if (
+        typeof branch !== "string" ||
+        request["expectedSnapshot"] !== routedProjectGitStatus.snapshot ||
+        routedProjectGitStatus.branches.includes(branch)
+      ) {
+        throw new Error("Invalid branch creation request");
+      }
+      const previousBranch = routedProjectGitStatus.branch;
+      routedProjectGitStatus = {
+        ...routedProjectGitStatus,
+        baseBranches: [...routedProjectGitStatus.baseBranches, previousBranch],
+        branch,
+        branches: [branch, ...routedProjectGitStatus.branches],
+        snapshot: "c".repeat(64),
+      };
+      body = routedProjectGitStatus;
     } else if (url.pathname === "/v1/projects/code-agent/git/status") {
       body = routedProjectGitStatus;
     } else if (defaultsMatch !== null) {

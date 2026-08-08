@@ -18,7 +18,6 @@ import { useComposerSession } from "./workbench-composer-session.js";
 import { createComposerSubmission } from "./workbench-composer-submission.js";
 import { WorkbenchComposerView } from "./workbench-composer-view.js";
 export * from "./workbench-composer-contracts.js";
-
 export {
   applyApprovalMode,
   deriveApprovalMode,
@@ -162,7 +161,7 @@ export function WorkbenchComposer({
       }
     });
   };
-  const { branchSwitchError, switchBranch, switchingBranch } = useWorkbenchBranchSwitch({
+  const branchMutation = useWorkbenchBranchSwitch({
     client,
     failureMessage: t("composer.branchSwitchFailed"),
     gitStatus,
@@ -375,7 +374,8 @@ export function WorkbenchComposer({
       attachments={attachments}
       attachmentsDisabled={attachmentsDisabled}
       baseBranches={baseBranches}
-      branchSwitchError={branchSwitchError}
+      branchCreateError={branchMutation.branchCreateError}
+      branchSwitchError={branchMutation.branchSwitchError}
       canInterrupt={canInterrupt}
       canSteer={canSteer}
       canSubmit={canSubmit}
@@ -386,6 +386,7 @@ export function WorkbenchComposer({
       composerMode={composerMode}
       composerScope={composerScope}
       contextUsage={contextUsage}
+      creatingBranch={branchMutation.creatingBranch}
       draftInputDisabled={draftInputDisabled}
       filteredCommands={filteredCommands}
       filteredSkills={filteredSkills}
@@ -402,8 +403,9 @@ export function WorkbenchComposer({
         setComposerModeState(undefined);
       }}
       onAttachmentsChange={handleAttachmentsChange}
+      onBranchCreate={branchMutation.createBranch}
       onBranchChange={(branch) => {
-        void switchBranch(branch);
+        void branchMutation.switchBranch(branch);
       }}
       onExecuteCommand={(command) => {
         void executePromptCommand(command);
@@ -466,7 +468,7 @@ export function WorkbenchComposer({
         void steerQueuedPrompt(queuedPrompt);
       }}
       submitAction={submitAction}
-      switchingBranch={switchingBranch}
+      switchingBranch={branchMutation.switchingBranch}
       taskId={taskId}
       turnControlsDisabled={turnControlsDisabled}
     />

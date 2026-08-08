@@ -47,6 +47,36 @@ test("switches branches from the composer footer", async ({ page }) => {
   expect(viewportMetrics.documentWidth).toBeLessThanOrEqual(viewportMetrics.viewportWidth);
 });
 
+test("creates and switches to a branch from the composer footer", async ({ page }) => {
+  let createRequest: Record<string, unknown> | undefined;
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() === "POST" && url.pathname === "/v1/projects/code-agent/git/branches") {
+      createRequest = parseRequestRecord(request.postData());
+    }
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  await page.getByRole("button", { name: "切换分支，当前分支 feat/review-targets" }).click();
+  const createBranchItem = page.getByRole("menuitem", { name: "新建分支" });
+  await expect(createBranchItem.locator("svg")).toHaveClass(/size-3\.5/u);
+  await createBranchItem.click();
+  const dialog = page.getByRole("dialog", { name: "新建分支" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("基于当前分支创建并立即切换");
+  await dialog.getByRole("textbox", { name: "分支名称" }).fill("feat/composer-create");
+  await dialog.getByRole("button", { name: "创建并切换" }).click();
+
+  await expect(
+    page.getByRole("button", { name: "切换分支，当前分支 feat/composer-create" }),
+  ).toBeVisible();
+  await expect(dialog).toBeHidden();
+  expect(createRequest).toEqual({
+    branch: "feat/composer-create",
+    expectedSnapshot: projectGitStatus.snapshot,
+  });
+});
+
 test("opens current-branch Git history beside the composer branch", async ({ page }) => {
   const historyRequests: string[] = [];
   let releaseServerHistory: (() => void) | undefined;

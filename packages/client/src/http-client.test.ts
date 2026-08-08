@@ -608,6 +608,35 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("creates a project branch with a validated idempotent mutation", async () => {
+    const gitStatus = {
+      baseBranches: ["origin/main", "main"],
+      branch: "feat/new-branch",
+      branches: ["feat/new-branch", "main"],
+      repositoryMode: "root",
+      snapshot: "b".repeat(64),
+      staged: [],
+      unstaged: [],
+    };
+    const request = { branch: "feat/new-branch", expectedSnapshot: "a".repeat(64) };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse(gitStatus));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(
+      client.createProjectBranch("project one", request, { idempotencyKey: "create-key" }),
+    ).resolves.toEqual(gitStatus);
+    const createCall = fetchMock.mock.calls[0];
+    expect(createCall?.[0]).toBe("/v1/projects/project%20one/git/branches");
+    expect(createCall?.[1]).toMatchObject({ body: JSON.stringify(request), method: "POST" });
+    expect(new Headers(createCall?.[1]?.headers).get("idempotency-key")).toBe("create-key");
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ branch: "feat/new-branch" }));
+    await expect(client.createProjectBranch("project one", request)).rejects.toThrow(
+      "CodeAgent response does not match the protocol schema",
+    );
+  });
+
   it("generates a commit message and commits selected files with idempotency", async () => {
     const snapshot = "a".repeat(64);
     const generationRequest = {

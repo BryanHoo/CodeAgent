@@ -47,7 +47,8 @@ export type WorkbenchComposerHandle = Readonly<{
 export type WorkbenchComposerProps = Readonly<{
   buildPlanRef?: Ref<WorkbenchComposerHandle>;
   capabilities: AgentCapabilities | undefined;
-  client: CodeAgentMutationClient & Pick<CodeAgentGitMutationClient, "switchProjectBranch">;
+  client: CodeAgentMutationClient &
+    Pick<CodeAgentGitMutationClient, "createProjectBranch" | "switchProjectBranch">;
   fixedSandboxMode?: AgentSandboxMode;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
   models: readonly AgentModel[];

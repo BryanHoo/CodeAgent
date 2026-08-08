@@ -1655,6 +1655,43 @@ describe("CodeAgent Server", () => {
     });
   });
 
+  it("creates and switches to a local branch idempotently", async () => {
+    const { provider } = createProvider();
+    const expectedSnapshot = "a".repeat(64);
+    const createdStatus = {
+      baseBranches: ["origin/main", "main"],
+      branch: "feat/new-branch",
+      branches: ["feat/new-branch", "main"],
+      repositoryMode: "root" as const,
+      snapshot: "b".repeat(64),
+      staged: [],
+      unstaged: [],
+    };
+    const createProjectBranch = vi.fn(() => Promise.resolve(createdStatus));
+    const app = await createCodeAgentServer(createServerOptions(provider, { createProjectBranch }));
+    closeCallbacks.push(() => app.close());
+    const request = { branch: "feat/new-branch", expectedSnapshot };
+
+    const first = await app.inject({
+      headers: { "idempotency-key": "create-new-branch" },
+      method: "POST",
+      payload: request,
+      url: "/v1/projects/code-agent/git/branches",
+    });
+    const repeated = await app.inject({
+      headers: { "idempotency-key": "create-new-branch" },
+      method: "POST",
+      payload: request,
+      url: "/v1/projects/code-agent/git/branches",
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toEqual(createdStatus);
+    expect(repeated.json()).toEqual(createdStatus);
+    expect(createProjectBranch).toHaveBeenCalledOnce();
+    expect(createProjectBranch).toHaveBeenCalledWith(project.rootPath, request);
+  });
+
   it("generates a selected-file commit message through an ephemeral read-only turn", async () => {
     const providerHarness = createProvider();
     const settings = createSettingsRepository();

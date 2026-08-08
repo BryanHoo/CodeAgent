@@ -5,6 +5,7 @@ import {
   AgentProjectDefaultsResponseSchema,
   AgentSkillPageSchema,
   CommitProjectChangesResponseSchema,
+  type CreateProjectBranchRequest,
   GenerateCommitMessageResponseSchema,
   HostFileListingSchema,
   OpenProjectResponseSchema,
@@ -241,6 +242,19 @@ export class ProjectHttpClient extends CodeAgentTransport {
   ): Promise<ProjectGitStatus> {
     return this.mutation(
       `${projectPath(projectId)}/git/branch`,
+      request,
+      ProjectGitStatusSchema,
+      options,
+    );
+  }
+
+  public async createProjectBranch(
+    projectId: string,
+    request: CreateProjectBranchRequest,
+    options: MutationOptions = {},
+  ): Promise<ProjectGitStatus> {
+    return this.mutation(
+      `${projectPath(projectId)}/git/branches`,
       request,
       ProjectGitStatusSchema,
       options,

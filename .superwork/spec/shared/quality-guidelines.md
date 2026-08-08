@@ -20,6 +20,7 @@
 - Project Git 历史使用严格 `ProjectGitHistoryQuery` 与 `ProjectGitHistoryPage` Schema；每页必须返回所选仓库可空的当前 `branch`、当前 `HEAD` 的最近 `20` 条提交，并通过可空 `nextCursor` 请求下一页。根仓库模式不得接受 `repository`，聚合模式只允许选择 Server 最新枚举的直属 Git 子目录，响应返回无重复且有界的 `repositories`，不同仓库的分支和提交不得混合。Client 与 Fastify 必须校验同一响应 Schema，浏览器不得提交命令、分支引用或宿主绝对路径。
 - Git message 生成、commit 和 commit+push 使用独立严格 Mutation Schema 与 `Idempotency-Key`，请求携带同一 `expectedSnapshot` 和无重复的 Project 相对路径；响应必须区分未请求、已推送、推送失败和未配置 upstream，不能把 commit 后 push 失败归一化为整体失败。
 - Git 分支切换使用严格 `SwitchProjectBranchRequest` 与 `Idempotency-Key`，请求只携带本地分支精确名称和 `expectedSnapshot`，响应返回完整 `ProjectGitStatus`。Server 必须区分当前分支、分支不存在、状态冲突、只读仓库和执行失败，不得接受命令、远端引用或隐式创建分支。
+- Git 分支创建使用独立严格 `CreateProjectBranchRequest` 与 `Idempotency-Key`，请求只携带待创建的本地分支精确名称和 `expectedSnapshot`，响应返回创建后已切换分支的完整 `ProjectGitStatus`。Server 必须区分名称无效、分支已存在、状态冲突、只读仓库和执行失败，使用 Git 原生分支名规则终检，不得接受命令、路径或远端引用。
 - `ProjectFileTree` 必须返回目标 Project 相对目录 `path` 及其直接目录/文件条目，不包含 `truncated` 或条目数量上限；可选目录查询必须拒绝绝对路径、点路径、反斜杠和额外字段。Server 必须沿已注册 Project 根目录逐层应用任意层级的 `.gitignore`，不依赖根目录是否为 Git 仓库或是否存在根级规则；同时跳过符号链接、`.git`、`node_modules`、构建与覆盖率目录，并将目录深度限制为 `20` 层，Client 与 Fastify 必须使用同一严格 Schema。
 - Project 排序使用携带 `Idempotency-Key` 的 `PUT /v1/projects/order`，请求必须包含无重复的完整 Project ID 集合；Server 校验集合后在 SQLite 事务中原子替换顺序，新注册 Project 追加到末尾。
 - Agent Event 保持版本字段、单调 `sequence` 和可判别事件类型。

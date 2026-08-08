@@ -21,6 +21,7 @@ import type {
   AgentTaskSettings,
   CommitProjectChangesRequest,
   CommitProjectChangesResponse,
+  CreateProjectBranchRequest,
   GenerateCommitMessageRequest,
   HostFileKind,
   HostFileListing,
@@ -160,6 +161,10 @@ export interface ServerRouteContext {
   readonly readProjectGitStatus: (
     projectRoot: string,
     query?: ProjectGitStatusQuery,
+  ) => Promise<ProjectGitStatus>;
+  readonly createProjectBranch: (
+    projectRoot: string,
+    request: CreateProjectBranchRequest,
   ) => Promise<ProjectGitStatus>;
   readonly readProjectGitHistory: (
     projectRoot: string,

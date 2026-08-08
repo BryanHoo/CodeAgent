@@ -11,7 +11,7 @@ export type CodeAgentGitStatusClient = Pick<CodeAgentClient, "getProjectGitStatu
 export type CodeAgentGitHistoryClient = Pick<CodeAgentClient, "getProjectGitHistory">;
 export type CodeAgentGitMutationClient = Pick<
   CodeAgentClient,
-  "commitProjectChanges" | "generateCommitMessage" | "switchProjectBranch"
+  "commitProjectChanges" | "createProjectBranch" | "generateCommitMessage" | "switchProjectBranch"
 >;
 export type CodeAgentFileTreeClient = Pick<CodeAgentClient, "listProjectFiles">;
 export type CodeAgentProjectDirectoryClient = Pick<CodeAgentClient, "listProjectDirectories">;

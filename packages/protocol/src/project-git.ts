@@ -104,6 +104,15 @@ export const SwitchProjectBranchRequestSchema = Type.Object(
 );
 export type SwitchProjectBranchRequest = Readonly<Static<typeof SwitchProjectBranchRequestSchema>>;
 
+export const CreateProjectBranchRequestSchema = Type.Object(
+  {
+    branch: GitBranchNameSchema,
+    expectedSnapshot: GitSnapshotSchema,
+  },
+  { additionalProperties: false },
+);
+export type CreateProjectBranchRequest = Readonly<Static<typeof CreateProjectBranchRequestSchema>>;
+
 export const GenerateCommitMessageRequestSchema = Type.Object(
   {
     expectedSnapshot: GitSnapshotSchema,

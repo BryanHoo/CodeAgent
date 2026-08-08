@@ -1,6 +1,7 @@
 import {
   CommitProjectChangesRequestSchema,
   CommitProjectChangesResponseSchema,
+  CreateProjectBranchRequestSchema,
   GenerateCommitMessageRequestSchema,
   GenerateCommitMessageResponseSchema,
   AgentMutationErrorSchema,
@@ -11,6 +12,7 @@ import {
   SwitchProjectBranchRequestSchema,
   type AgentTaskSettings,
   type CommitProjectChangesRequest,
+  type CreateProjectBranchRequest,
   type GenerateCommitMessageRequest,
   type ProjectGitHistoryQuery,
   type ProjectGitStatusQuery,
@@ -31,12 +33,18 @@ function toGitBranchHttpError(error: GitBranchError): MutationHttpError {
       return new MutationHttpError("GIT_STATUS_CHANGED", "Git working tree changed", 409, true);
     case "ALREADY_ACTIVE":
       return new MutationHttpError("GIT_BRANCH_ALREADY_ACTIVE", error.message, 409, true);
+    case "BRANCH_ALREADY_EXISTS":
+      return new MutationHttpError("GIT_BRANCH_ALREADY_EXISTS", error.message, 409, true);
     case "BRANCH_NOT_FOUND":
       return new MutationHttpError("GIT_BRANCH_NOT_FOUND", error.message, 409, true);
+    case "INVALID_BRANCH_NAME":
+      return new MutationHttpError("GIT_BRANCH_INVALID", error.message, 400, false);
     case "REPOSITORY_READ_ONLY":
       return new MutationHttpError("GIT_REPOSITORY_READ_ONLY", error.message, 409, true);
     case "SWITCH_FAILED":
       return new MutationHttpError("GIT_BRANCH_SWITCH_FAILED", error.message, 502, true);
+    case "CREATE_FAILED":
+      return new MutationHttpError("GIT_BRANCH_CREATE_FAILED", error.message, 502, true);
   }
 }
 
@@ -46,6 +54,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     assertCommitSelection,
     buildCommitMessagePrompt,
     commitProjectChanges,
+    createProjectBranch,
     generateCommitMessageWithCodex,
     getProjectContext,
     readEffectiveGlobalSettings,
@@ -182,6 +191,58 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
             throw new MutationHttpError(
               "GIT_BRANCH_SWITCH_FAILED",
               "Git branch switch failed",
+              502,
+              true,
+            );
+          } finally {
+            activeGitMutations.delete(request.params.projectId);
+          }
+        },
+      );
+    },
+  );
+
+  app.post<{
+    Body: CreateProjectBranchRequest;
+    Headers: { "idempotency-key": string };
+    Params: { projectId: string };
+  }>(
+    "/v1/projects/:projectId/git/branches",
+    {
+      schema: {
+        body: CreateProjectBranchRequestSchema,
+        headers: IdempotencyHeadersSchema,
+        params: ProjectParamsSchema,
+        response: {
+          200: ProjectGitStatusSchema,
+          400: AgentMutationErrorSchema,
+          404: AgentMutationErrorSchema,
+          409: AgentMutationErrorSchema,
+          502: AgentMutationErrorSchema,
+        },
+      },
+    },
+    async (request) => {
+      const projectContext = await getProjectContext(request.params.projectId);
+      if (projectContext === undefined) {
+        throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
+      }
+      return runIdempotent(
+        ["create-project-branch", request.params.projectId],
+        request.headers["idempotency-key"],
+        request.body,
+        async () => {
+          assertGitMutationAvailable(request.params.projectId);
+          activeGitMutations.add(request.params.projectId);
+          try {
+            return await createProjectBranch(projectContext.project.rootPath, request.body);
+          } catch (error) {
+            if (error instanceof GitBranchError) {
+              throw toGitBranchHttpError(error);
+            }
+            throw new MutationHttpError(
+              "GIT_BRANCH_CREATE_FAILED",
+              "Git branch creation failed",
               502,
               true,
             );

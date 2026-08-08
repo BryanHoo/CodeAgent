@@ -22,7 +22,10 @@ import {
   startTaskReview,
   steerPromptTurn,
 } from "./workbench-composer.js";
-import { switchComposerBranch } from "../hooks/use-workbench-branch-switch.js";
+import {
+  createComposerBranch,
+  switchComposerBranch,
+} from "../hooks/use-workbench-branch-switch.js";
 
 const task = {
   contextUsage: null,
@@ -487,5 +490,71 @@ describe("WorkbenchComposer", () => {
       switchComposerBranch(client, queryClient, "code-agent", status, "missing"),
     ).resolves.toBe(false);
     expect(client.switchProjectBranch).not.toHaveBeenCalled();
+  });
+
+  it("creates a local branch and replaces the shared Git status cache", async () => {
+    const queryClient = new QueryClient();
+    const currentStatus = {
+      baseBranches: ["origin/main", "main"],
+      branch: "main",
+      branches: ["main"],
+      repositoryMode: "root" as const,
+      snapshot: "a".repeat(64),
+      staged: [],
+      unstaged: [],
+    };
+    const nextStatus = {
+      ...currentStatus,
+      branch: "feat/new-branch",
+      branches: ["feat/new-branch", "main"],
+      snapshot: "b".repeat(64),
+    };
+    const client = { createProjectBranch: vi.fn(() => Promise.resolve(nextStatus)) };
+    const cancelQueries = vi.spyOn(queryClient, "cancelQueries");
+
+    await expect(
+      createComposerBranch(client, queryClient, "code-agent", currentStatus, "feat/new-branch"),
+    ).resolves.toBe(true);
+
+    expect(client.createProjectBranch).toHaveBeenCalledWith("code-agent", {
+      branch: "feat/new-branch",
+      expectedSnapshot: currentStatus.snapshot,
+    });
+    expect(cancelQueries).toHaveBeenCalledWith({
+      exact: true,
+      queryKey: ["projects", "code-agent", "git-status"],
+    });
+    expect(queryClient.getQueryData(["projects", "code-agent", "git-status"])).toEqual(nextStatus);
+  });
+
+  it("does not create empty, duplicate, or read-only branches", async () => {
+    const queryClient = new QueryClient();
+    const client = { createProjectBranch: vi.fn() };
+    const status = {
+      baseBranches: ["origin/main"],
+      branch: "main",
+      branches: ["main"],
+      repositoryMode: "root" as const,
+      snapshot: "a".repeat(64),
+      staged: [],
+      unstaged: [],
+    };
+
+    await expect(createComposerBranch(client, queryClient, "code-agent", status, "")).resolves.toBe(
+      false,
+    );
+    await expect(
+      createComposerBranch(client, queryClient, "code-agent", status, "main"),
+    ).resolves.toBe(false);
+    await expect(
+      createComposerBranch(
+        client,
+        queryClient,
+        "code-agent",
+        { ...status, repositoryMode: "children" },
+        "feat/new",
+      ),
+    ).resolves.toBe(false);
+    expect(client.createProjectBranch).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,7 @@ import type {
   AppInfoResponse,
   CommitProjectChangesRequest,
   CommitProjectChangesResponse,
+  CreateProjectBranchRequest,
   HostFileKind,
   HostFileListing,
   InstallAppUpdateResponse,
@@ -49,6 +50,10 @@ export interface CreateCodeAgentServerOptions {
     projectRoot: string,
     request: CommitProjectChangesRequest,
   ) => Promise<CommitProjectChangesResponse>;
+  createProjectBranch?: (
+    projectRoot: string,
+    request: CreateProjectBranchRequest,
+  ) => Promise<ProjectGitStatus>;
   readProjectGitStatus?: (
     projectRoot: string,
     query?: ProjectGitStatusQuery,
