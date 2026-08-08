@@ -1,5 +1,6 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
 
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
@@ -71,6 +72,26 @@ function resolveStreamdownMermaidVersion(): string {
   }
 
   return mermaidPackage.version;
+}
+
+function resolveStreamdownDompurifyVersion(): string {
+  // 沿生产依赖链解析 DOMPurify，确保安全断言覆盖 Streamdown 实际使用的版本。
+  const streamdownPackagePath = realpathSync(
+    new URL("../../../../node_modules/streamdown/package.json", import.meta.url),
+  );
+  const requireFromStreamdown = createRequire(streamdownPackagePath);
+  const mermaidPackagePath = requireFromStreamdown.resolve("mermaid/package.json");
+  const requireFromMermaid = createRequire(mermaidPackagePath);
+  const dompurifyEntryPath = requireFromMermaid.resolve("dompurify");
+  const dompurifyPackage = JSON.parse(
+    readFileSync(resolve(dirname(dompurifyEntryPath), "../package.json"), "utf8"),
+  ) as { version?: unknown };
+
+  if (typeof dompurifyPackage.version !== "string") {
+    throw new TypeError("streamdown DOMPurify package version is missing");
+  }
+
+  return dompurifyPackage.version;
 }
 
 describe("项目 Agent 组件", () => {
@@ -321,6 +342,10 @@ describe("项目 Agent 组件", () => {
 
   it("uses the patched Mermaid release for untrusted Agent Markdown", () => {
     expect(resolveStreamdownMermaidVersion()).toBe("11.16.1");
+  });
+
+  it("uses the patched DOMPurify release for untrusted Agent Markdown", () => {
+    expect(resolveStreamdownDompurifyVersion()).toBe("3.4.13");
   });
 
   it.each([

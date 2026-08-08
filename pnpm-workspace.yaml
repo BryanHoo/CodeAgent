@@ -80,6 +80,7 @@ minimumReleaseAgeExclude:
 overrides:
   # 上游兼容范围尚未刷新锁文件时，强制选择公告已修复的补丁版本。
   "brace-expansion@>=4.0.0 <5.0.9": 5.0.9
+  "dompurify@<=3.4.12": 3.4.13
   "fast-uri@>=3.0.0 <3.1.5": 3.1.5
   "fast-uri@>=4.0.0 <4.1.2": 4.1.2
   "find-my-way@>=9.0.0 <9.6.1": 9.7.0
