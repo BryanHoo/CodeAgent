@@ -2,9 +2,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createGitCommandExecutor } from "./git-command.js";
+import { createGitCommandExecutor, createGitEnvironment } from "./git-command.js";
 
 const temporaryRoots: string[] = [];
 
@@ -31,12 +31,33 @@ if (command === "inspect") {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     temporaryRoots.splice(0).map((root) => rm(root, { force: true, recursive: true })),
   );
 });
 
 describe("createGitCommandExecutor", () => {
+  it("filters inherited environment variables that can alter Git execution", () => {
+    const unsafeEnvironment = {
+      GIT_ASKPASS: "malicious-askpass",
+      GIT_CONFIG_COUNT: "1",
+      GIT_EXEC_PATH: "malicious-exec-path",
+      GIT_EXTERNAL_DIFF: "malicious-diff",
+      GIT_SSH_COMMAND: "malicious-ssh",
+    };
+    for (const [key, value] of Object.entries(unsafeEnvironment)) {
+      vi.stubEnv(key, value);
+    }
+
+    const environment = createGitEnvironment();
+
+    expect(environment).toMatchObject({ GIT_OPTIONAL_LOCKS: "0" });
+    for (const key of Object.keys(unsafeEnvironment)) {
+      expect(environment[key]).toBeUndefined();
+    }
+  });
+
   it("preserves argument boundaries, the Git read environment, and trailing NUL output", async () => {
     const { root, scriptPath } = await createFakeGitRoot();
     const executeGit = createGitCommandExecutor({ binary: [process.execPath, scriptPath] });

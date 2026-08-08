@@ -6,6 +6,7 @@ import type {
   CommitProjectChangesResponse,
 } from "@code-agent/protocol";
 
+import { createGitEnvironment } from "./git-command.js";
 import { readGitWorkingTreeStatus, resolveProjectGitRepositoryRoot } from "./git-working-tree.js";
 
 const MAX_GIT_OUTPUT_BYTES = 10 * 1024 * 1024;
@@ -49,7 +50,7 @@ async function executeGit(
 ): Promise<GitCommandResult> {
   return new Promise((resolve, reject) => {
     const child = spawn("git", ["-C", repositoryRoot, ...arguments_], {
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      env: { ...createGitEnvironment(), GIT_TERMINAL_PROMPT: "0" },
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { commitSelectedProjectChanges } from "./git-commit.js";
 import type { GitCommitError } from "./git-commit.js";
@@ -33,6 +33,7 @@ async function createRepository() {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     temporaryRoots.splice(0).map((root) => rm(root, { force: true, recursive: true })),
   );
@@ -69,6 +70,27 @@ describe("commitSelectedProjectChanges", () => {
       pushStatus: "not_requested",
     });
     expect(result.commitSha).toMatch(/^[a-f0-9]{40}$/u);
+  });
+
+  it("ignores inherited Git configuration that could alter commit execution", async () => {
+    const root = await createRepository();
+    await writeFile(join(root, "selected.txt"), "changed\n");
+    const status = await readGitWorkingTreeStatus(root);
+
+    vi.stubEnv("GIT_CONFIG_COUNT", "1");
+    vi.stubEnv("GIT_CONFIG_KEY_0", "user.name");
+    vi.stubEnv("GIT_CONFIG_VALUE_0", "Injected Name");
+    await commitSelectedProjectChanges(root, {
+      action: "commit",
+      expectedSnapshot: status.snapshot,
+      message: "fix(git): 隔离提交环境",
+      paths: ["selected.txt"],
+    });
+    vi.unstubAllEnvs();
+
+    await expect(runGit(root, "log", "-1", "--pretty=%an")).resolves.toMatchObject({
+      stdout: "CodeAgent Test\n",
+    });
   });
 
   it("rejects stale snapshots and paths outside the current changes", async () => {

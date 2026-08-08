@@ -41,7 +41,7 @@ function chunkByteLength(chunk: unknown): number {
   return Buffer.byteLength(String(chunk));
 }
 
-function createGitEnvironment(): NodeJS.ProcessEnv {
+export function createGitEnvironment(): NodeJS.ProcessEnv {
   // 保留 PATH、HOME、Locale 与 SSH Agent 等常规环境，拒绝能改写 Git 执行链的变量。
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(
