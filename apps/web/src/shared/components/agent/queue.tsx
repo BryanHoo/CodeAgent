@@ -8,16 +8,7 @@ export type QueueStatus = "pending" | "in_progress" | "completed";
 export type QueueProps = ComponentProps<"div">;
 
 export function Queue({ className = "", ...props }: QueueProps) {
-  return (
-    <div
-      className={cn(
-        "rounded-surface border border-separator bg-panel px-2 py-2 shadow-sm",
-        className,
-      )}
-      data-ai-queue=""
-      {...props}
-    />
-  );
+  return <div className={cn(className)} data-ai-queue="" {...props} />;
 }
 
 export type QueueListProps = ComponentProps<"ul">;

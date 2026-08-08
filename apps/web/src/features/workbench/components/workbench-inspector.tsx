@@ -181,7 +181,6 @@ export function WorkbenchInspector({
   const activeTab = contextOnly ? "context" : tab;
   const contextContent = (
     <div className="h-full space-y-5 overflow-y-auto p-2.5">
-      {task?.plan === null || task?.plan === undefined ? null : <PlanSection plan={task.plan} />}
       {backgroundTerminals.length > 0 ||
       backgroundTerminalsPending ||
       backgroundTerminalsError !== null ? (
@@ -220,6 +219,7 @@ export function WorkbenchInspector({
           ))}
         </div>
       </InspectorSection>
+      {task?.plan === null || task?.plan === undefined ? null : <PlanSection plan={task.plan} />}
     </div>
   );
   return (
