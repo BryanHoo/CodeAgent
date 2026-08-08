@@ -114,6 +114,7 @@ export {
   AgentSkillReferenceSchema,
   AgentSkillSchema,
   AgentSkillScopeSchema,
+  stripLeadingAgentSkillReferences,
   CompactAgentTaskRequestSchema,
   CompactAgentTaskResponseSchema,
   CommitProjectChangesRequestSchema,

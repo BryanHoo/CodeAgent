@@ -272,6 +272,35 @@ export const AgentMessageSkillSchema = Type.Object(
 
 export type AgentMessageSkill = Readonly<Static<typeof AgentMessageSkillSchema>>;
 
+export function stripLeadingAgentSkillReferences(
+  text: string,
+  skills: readonly Pick<AgentMessageSkill, "name">[],
+): string {
+  const skillNames = new Set(skills.map((skill) => skill.name));
+  let remainingText = text;
+
+  while (remainingText.length > 0) {
+    const lineBreakIndex = remainingText.indexOf("\n");
+    const firstLine = (
+      lineBreakIndex < 0 ? remainingText : remainingText.slice(0, lineBreakIndex)
+    ).trim();
+    const references = firstLine.split(/\s+/u);
+    const isSkillReferenceLine =
+      firstLine.length > 0 &&
+      references.every(
+        (reference) => reference.startsWith("$") && skillNames.has(reference.slice(1)),
+      );
+    if (!isSkillReferenceLine) {
+      break;
+    }
+
+    // 复制消息会把结构化 Skill 写成独立 `$name` 行；归一化时只保留 Skill 和真实正文。
+    remainingText = lineBreakIndex < 0 ? "" : remainingText.slice(lineBreakIndex + 1);
+  }
+
+  return remainingText;
+}
+
 // Snapshot 只保存可授权读取的附件元数据，避免历史二进制随消息缓存复制。
 export const AgentMessageAttachmentSchema = Type.Object(
   {

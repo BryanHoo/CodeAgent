@@ -21,6 +21,59 @@ const mapNotification = (method: string, params: unknown) =>
   );
 
 describe("Codex protocol mapping", () => {
+  it("removes repeated copied skill references when merging expanded skill history", () => {
+    const turn = mapAgentTurn(
+      {
+        completedAt: 1_753_232_400,
+        id: "turn-copied-skill",
+        items: [
+          {
+            content: [
+              {
+                text: [
+                  "$superwork:superwork-start",
+                  "$superwork:superwork-start",
+                  "根据项目需求继续实现。",
+                ].join("\n"),
+                type: "text",
+              },
+            ],
+            id: "user-copied-skill",
+            type: "userMessage",
+          },
+          {
+            content: [
+              {
+                text: [
+                  "<skill>",
+                  "<name>superwork:superwork-start</name>",
+                  "<path>/Users/test/.codex/skills/superwork-start/SKILL.md</path>",
+                  "执行 Superwork 流程。",
+                  "</skill>",
+                ].join("\n"),
+                type: "text",
+              },
+            ],
+            id: "expanded-copied-skill",
+            type: "userMessage",
+          },
+        ],
+        startedAt: 1_753_228_800,
+        status: "completed",
+      },
+      () => undefined,
+      () => undefined,
+    );
+
+    expect(turn.items).toContainEqual({
+      id: "user-copied-skill",
+      role: "user",
+      skills: [{ name: "superwork:superwork-start" }],
+      text: "根据项目需求继续实现。",
+      type: "message",
+    });
+  });
+
   it("maps streaming plan, tool, file, and reasoning notifications", () => {
     expect(
       mapNotification("item/plan/delta", {

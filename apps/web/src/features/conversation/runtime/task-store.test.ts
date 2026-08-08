@@ -1320,7 +1320,9 @@ describe("task store", () => {
           item: {
             id: "provider-user-item",
             role: "user",
-            text: "$superwork:superwork-init",
+            text: ["$superwork:superwork-init", "$superwork:superwork-init", "继续执行检查"].join(
+              "\n",
+            ),
             type: "message",
           },
         },
@@ -1347,7 +1349,7 @@ describe("task store", () => {
     expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual(["provider-user-item"]);
     expect(store.getState().getItem("provider-user-item")).toMatchObject({
       skills: [{ name: "superwork:superwork-init" }],
-      text: "",
+      text: "继续执行检查",
     });
     expect(store.getState().getItem("provider-skill-item")).toBeUndefined();
   });
