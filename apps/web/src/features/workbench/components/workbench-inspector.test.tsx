@@ -174,6 +174,20 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain(">项目文件</span>");
   });
 
+  it("allows opening the commit dialog for immediate child Git repositories", () => {
+    const markup = renderInspectorMarkup(
+      <WorkbenchInspector
+        gitStatus={{ ...gitStatus, repositoryMode: "children" }}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+      />,
+    );
+    const commitButton = /<button[^>]*id="workbench-commit-changes"[^>]*>/u.exec(markup)?.[0];
+
+    expect(commitButton).toBeDefined();
+    expect(commitButton).not.toContain(' disabled=""');
+  });
+
   it("renders loaded directory children only while their folders are expanded", () => {
     const srcExpandedMarkup = renderInspectorMarkup(
       <WorkbenchInspector

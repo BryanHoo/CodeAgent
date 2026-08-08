@@ -40,13 +40,13 @@ export function CommitChangesController({
   const queryClient = useQueryClient();
   const messageMutation = useMutation(projectCommitMessageMutationOptions(projectId, client));
   const commitMutation = useMutation(projectCommitChangesMutationOptions(projectId, client));
+  const repositories = useMemo(() => collectCommitRepositories(gitStatus), [gitStatus]);
   const [result, setResult] = useState<CommitProjectChangesResponse | null>(null);
   const [selectedRepository, setSelectedRepository] = useState<string | null>(null);
-  const repositories = useMemo(() => collectCommitRepositories(gitStatus), [gitStatus]);
   const effectiveRepository =
     selectedRepository !== null && repositories.includes(selectedRepository)
       ? selectedRepository
-      : null;
+      : (repositories[0] ?? null);
   const repositoryStatusQuery = useQuery(
     projectGitRepositoryStatusQueryOptions(
       projectId,
@@ -73,7 +73,6 @@ export function CommitChangesController({
       isCommitting={commitMutation.isPending}
       isGenerating={messageMutation.isPending}
       isRepositoryLoading={repositoryStatusQuery.isFetching}
-      key={`${projectId}:${effectiveRepository ?? "root"}:${activeGitStatus.snapshot}`}
       onClose={close}
       onCommit={async (request) => {
         const response = await commitMutation.mutateAsync(request);

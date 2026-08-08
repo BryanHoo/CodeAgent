@@ -1783,6 +1783,83 @@ test("generates a message and commits only selected files", async ({ page }) => 
   expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
 
+test("defaults to the first child repository and keeps the commit sheet mounted when switching", async ({
+  page,
+}) => {
+  const aggregateSnapshot = "a".repeat(64);
+  const backendSnapshot = "b".repeat(64);
+  const frontendSnapshot = "c".repeat(64);
+  const requestedRepositories: string[] = [];
+  await page.route("**/v1/projects/code-agent/git/status*", async (route) => {
+    const repository = new URL(route.request().url()).searchParams.get("repository");
+    if (repository !== null) requestedRepositories.push(repository);
+    const status =
+      repository === "backend"
+        ? {
+            ...projectGitStatus,
+            branch: "feat/backend",
+            snapshot: backendSnapshot,
+            staged: [],
+            unstaged: [{ diff: "+backend", kind: "update", path: "src/server.ts" }],
+          }
+        : repository === "frontend"
+          ? {
+              ...projectGitStatus,
+              branch: "feat/frontend",
+              snapshot: frontendSnapshot,
+              staged: [],
+              unstaged: [{ diff: "+frontend", kind: "update", path: "src/app.tsx" }],
+            }
+          : {
+              baseBranches: [],
+              branch: null,
+              branches: [],
+              repositoryMode: "children",
+              snapshot: aggregateSnapshot,
+              staged: [],
+              unstaged: [
+                { diff: "+backend", kind: "update", path: "backend/src/server.ts" },
+                { diff: "+frontend", kind: "update", path: "frontend/src/app.tsx" },
+              ],
+            };
+    await route.fulfill({ contentType: "application/json", json: status });
+  });
+  await page.route("**/v1/projects/code-agent/git/history*", async (route) => {
+    const repository = new URL(route.request().url()).searchParams.get("repository");
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        branch: repository === "frontend" ? "feat/frontend" : "feat/backend",
+        commits: [],
+        nextCursor: null,
+        repositories: [],
+        repository,
+        repositoryMode: "root",
+      },
+    });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+  await page.getByRole("button", { name: "提交 2 个未提交变更" }).click();
+  const dialog = page.getByRole("dialog", { name: "提交变更" });
+  const repositorySelect = dialog.getByRole("combobox", { name: "Git 项目" });
+  await expect(repositorySelect).toContainText("backend");
+  await expect(dialog.getByRole("treeitem", { name: "src/server.ts" })).toBeVisible();
+  await dialog.getByRole("textbox", { name: "提交信息" }).fill("fix(backend): 更新服务");
+  await dialog.evaluate((element) => {
+    element.dataset["mountMarker"] = "stable";
+  });
+
+  await repositorySelect.click();
+  await page.getByRole("option", { name: "frontend" }).click();
+
+  await expect(repositorySelect).toContainText("frontend");
+  await expect(dialog).toHaveAttribute("data-mount-marker", "stable");
+  await expect(dialog.getByRole("treeitem", { name: "src/app.tsx" })).toBeVisible();
+  await expect(dialog.getByRole("textbox", { name: "提交信息" })).toHaveValue("");
+  expect(requestedRepositories).toEqual(["backend", "frontend"]);
+});
+
 for (const scenario of [
   { actionName: "提交", pushStatus: "not_requested", toastMessage: "提交成功" },
   { actionName: "提交并推送", pushStatus: "pushed", toastMessage: "提交并推送成功" },

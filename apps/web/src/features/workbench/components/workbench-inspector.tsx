@@ -319,7 +319,6 @@ export function WorkbenchInspector({
                       ns: "conversation",
                     })}
                     className="h-7 shrink-0 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-control"
-                    disabled={gitStatus?.repositoryMode === "children"}
                     id="workbench-commit-changes"
                     onClick={onCommitChanges}
                     type="button"

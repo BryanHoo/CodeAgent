@@ -118,6 +118,16 @@ function commitResultMessageKey(result: CommitProjectChangesResponse): string {
   return result.pushStatus === "pushed" ? "commit.commitAndPushComplete" : "commit.commitComplete";
 }
 
+function createCommitContentState(identity: string, entries: readonly CommitFileEntry[]) {
+  return {
+    changesOpen: true,
+    historyOpen: true,
+    identity,
+    message: "",
+    selectedPaths: new Set(entries.map((entry) => entry.path)),
+  };
+}
+
 export function CommitChangesDialog({
   client,
   error = null,
@@ -137,12 +147,10 @@ export function CommitChangesDialog({
 }: CommitChangesDialogProps) {
   const { t } = useTranslation("workbench");
   const entries = useMemo(() => collectCommitFileEntries(gitStatus), [gitStatus]);
-  const [selectedPaths, setSelectedPaths] = useState(
-    () => new Set(entries.map((entry) => entry.path)),
+  const contentIdentity = `${selectedRepository ?? "root"}:${gitStatus.snapshot}`;
+  const [contentState, setContentState] = useState(() =>
+    createCommitContentState(contentIdentity, entries),
   );
-  const [message, setMessage] = useState("");
-  const [changesOpen, setChangesOpen] = useState(true);
-  const [historyOpen, setHistoryOpen] = useState(true);
   const dateFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat(i18n.resolvedLanguage === "en" ? "en" : "zh-CN", {
@@ -152,6 +160,11 @@ export function CommitChangesDialog({
     [],
   );
   const commitActionLockRef = useRef(createAsyncActionLock());
+  if (contentState.identity !== contentIdentity) {
+    // 仓库切换只重置下方提交内容，保持 Sheet 与仓库选择器持续挂载。
+    setContentState(createCommitContentState(contentIdentity, entries));
+  }
+  const { changesOpen, historyOpen, message, selectedPaths } = contentState;
   const isPending = isGenerating || isCommitting;
   const requiresRepository = repositories.length > 0 || gitStatus.repositoryMode === "children";
   const repositoryReady =
@@ -168,7 +181,7 @@ export function CommitChangesDialog({
         paths: [...selectedPaths],
         ...(selectedRepository === null ? {} : { repository: selectedRepository }),
       });
-      setMessage(generated);
+      setContentState((current) => ({ ...current, message: generated }));
     });
 
   const commit = (action: CommitProjectChangesRequest["action"]) =>
@@ -273,7 +286,11 @@ export function CommitChangesDialog({
                     disabled={isPending || result !== null}
                     id="commit-message"
                     onChange={(event) => {
-                      setMessage(event.currentTarget.value);
+                      const nextMessage = event.currentTarget.value;
+                      setContentState((current) => ({
+                        ...current,
+                        message: nextMessage,
+                      }));
                     }}
                     placeholder={t("commit.messagePlaceholder")}
                     rows={1}
@@ -374,7 +391,9 @@ export function CommitChangesDialog({
                     "flex min-h-0 flex-col border-t border-separator",
                     changesOpen ? "flex-[3_1_0%]" : "shrink-0",
                   )}
-                  onOpenChange={setChangesOpen}
+                  onOpenChange={(open) => {
+                    setContentState((current) => ({ ...current, changesOpen: open }));
+                  }}
                   open={changesOpen}
                 >
                   <CollapsibleTrigger asChild>
@@ -403,7 +422,9 @@ export function CommitChangesDialog({
                         disabled={isPending || result !== null}
                         label={t("commit.staged")}
                         onOpenFileDiff={onOpenFileDiff}
-                        onSelectedPathsChange={setSelectedPaths}
+                        onSelectedPathsChange={(paths) => {
+                          setContentState((current) => ({ ...current, selectedPaths: paths }));
+                        }}
                         selectedPaths={selectedPaths}
                       />
                       <CommitChangesTreeSection
@@ -411,7 +432,9 @@ export function CommitChangesDialog({
                         disabled={isPending || result !== null}
                         label={t("commit.unstaged")}
                         onOpenFileDiff={onOpenFileDiff}
-                        onSelectedPathsChange={setSelectedPaths}
+                        onSelectedPathsChange={(paths) => {
+                          setContentState((current) => ({ ...current, selectedPaths: paths }));
+                        }}
                         selectedPaths={selectedPaths}
                       />
                     </div>
@@ -423,7 +446,9 @@ export function CommitChangesDialog({
                     "flex min-h-0 flex-col border-t border-separator",
                     historyOpen ? "flex-[2_1_0%]" : "shrink-0",
                   )}
-                  onOpenChange={setHistoryOpen}
+                  onOpenChange={(open) => {
+                    setContentState((current) => ({ ...current, historyOpen: open }));
+                  }}
                   open={historyOpen}
                 >
                   <CollapsibleTrigger asChild>
