@@ -16,6 +16,14 @@ const SessionIdSchema = Type.String({ minLength: 1 });
 const SequenceSchema = Type.Integer({ minimum: 0 });
 const DateTimeSchema = Type.String({ format: "date-time" });
 
+export const MAX_REALTIME_DIFF_BYTES = 512 * 1_024;
+export const MAX_REALTIME_FILE_CHANGES = 100;
+
+const realtimeDiffMetadataProperties = {
+  originalByteLength: Type.Integer({ minimum: 0 }),
+  truncated: Type.Boolean(),
+};
+
 const eventEnvelopeProperties = {
   provider: Type.String({ minLength: 1 }),
   sequence: SequenceSchema,
@@ -79,7 +87,10 @@ export const ToolProgressEventSchema = createEventSchema({
 export const FileChangeUpdatedEventSchema = createEventSchema({
   itemId: Type.String({ minLength: 1 }),
   payload: Type.Object(
-    { changes: Type.Array(AgentFileChangeSchema) },
+    {
+      changes: Type.Array(AgentFileChangeSchema, { maxItems: MAX_REALTIME_FILE_CHANGES }),
+      ...realtimeDiffMetadataProperties,
+    },
     { additionalProperties: false },
   ),
   turnId: Type.String({ minLength: 1 }),
@@ -87,7 +98,13 @@ export const FileChangeUpdatedEventSchema = createEventSchema({
 });
 
 export const TurnDiffUpdatedEventSchema = createEventSchema({
-  payload: Type.Object({ diff: Type.String() }, { additionalProperties: false }),
+  payload: Type.Object(
+    {
+      diff: Type.String({ maxLength: MAX_REALTIME_DIFF_BYTES }),
+      ...realtimeDiffMetadataProperties,
+    },
+    { additionalProperties: false },
+  ),
   turnId: Type.String({ minLength: 1 }),
   type: Type.Literal("turn.diff_updated"),
 });

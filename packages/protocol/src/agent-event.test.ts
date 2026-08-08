@@ -109,13 +109,19 @@ describe("Agent Event v2 protocol", () => {
         itemId: "patch-1",
         payload: {
           changes: [{ diff: "+const ready = true;", kind: "update", path: "src/app.ts" }],
+          originalByteLength: 20,
+          truncated: false,
         },
         turnId: "turn-1",
         type: "file_change.updated",
       },
       {
         ...baseEvent,
-        payload: { diff: "diff --git a/src/app.ts b/src/app.ts" },
+        payload: {
+          diff: "diff --git a/src/app.ts b/src/app.ts",
+          originalByteLength: 36,
+          truncated: false,
+        },
         turnId: "turn-1",
         type: "turn.diff_updated",
       },
@@ -204,6 +210,54 @@ describe("Agent Event v2 protocol", () => {
     ];
 
     expect(events.every((event) => Value.Check(AgentEventSchema, event))).toBe(true);
+  });
+
+  it("requires bounded realtime diff metadata and limits file change counts", () => {
+    const fileChangeEvent = {
+      ...baseEvent,
+      itemId: "patch-1",
+      payload: {
+        changes: [{ diff: "+updated", kind: "update", path: "src/app.ts" }],
+        originalByteLength: 8,
+        truncated: false,
+      },
+      turnId: "turn-1",
+      type: "file_change.updated",
+    };
+    const turnDiffEvent = {
+      ...baseEvent,
+      payload: { diff: "+updated", originalByteLength: 8, truncated: false },
+      turnId: "turn-1",
+      type: "turn.diff_updated",
+    };
+
+    expect(Value.Check(AgentEventSchema, fileChangeEvent)).toBe(true);
+    expect(Value.Check(AgentEventSchema, turnDiffEvent)).toBe(true);
+    expect(
+      Value.Check(AgentEventSchema, {
+        ...fileChangeEvent,
+        payload: { changes: fileChangeEvent.payload.changes },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentEventSchema, {
+        ...turnDiffEvent,
+        payload: { diff: turnDiffEvent.payload.diff },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentEventSchema, {
+        ...fileChangeEvent,
+        payload: {
+          ...fileChangeEvent.payload,
+          changes: Array.from({ length: 101 }, (_, index) => ({
+            diff: `+${String(index)}`,
+            kind: "update",
+            path: `src/${String(index)}.ts`,
+          })),
+        },
+      }),
+    ).toBe(false);
   });
 
   it("validates structured runtime status items", () => {

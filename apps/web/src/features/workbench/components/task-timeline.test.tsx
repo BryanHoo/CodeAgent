@@ -696,6 +696,8 @@ describe("TaskTimeline", () => {
         itemId: "file-live",
         payload: {
           changes: [{ diff: "+export const live = true;", kind: "update", path: "src/live.ts" }],
+          originalByteLength: 26,
+          truncated: false,
         },
         sequence: 3,
         turnId: "turn-live",
@@ -703,7 +705,11 @@ describe("TaskTimeline", () => {
       },
       {
         ...eventBase,
-        payload: { diff: "diff --git a/src/live.ts b/src/live.ts" },
+        payload: {
+          diff: "diff --git a/src/live.ts b/src/live.ts",
+          originalByteLength: 38,
+          truncated: false,
+        },
         sequence: 4,
         turnId: "turn-live",
         type: "turn.diff_updated",

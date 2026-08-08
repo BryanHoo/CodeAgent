@@ -1,3 +1,6 @@
+import { Buffer } from "node:buffer";
+
+import { MAX_REALTIME_DIFF_BYTES, MAX_REALTIME_FILE_CHANGES } from "@code-agent/protocol";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -45,6 +48,8 @@ describe("Codex protocol mapping", () => {
     ).toMatchObject({
       payload: {
         changes: [{ diff: "+const ready = true;", kind: "update", path: "src/app.ts" }],
+        originalByteLength: 20,
+        truncated: false,
       },
       type: "file_change.updated",
     });
@@ -54,7 +59,10 @@ describe("Codex protocol mapping", () => {
         threadId: "task-1",
         turnId: "turn-1",
       }),
-    ).toMatchObject({ type: "turn.diff_updated" });
+    ).toMatchObject({
+      payload: { originalByteLength: 36, truncated: false },
+      type: "turn.diff_updated",
+    });
     expect(
       mapNotification("item/reasoning/summaryPartAdded", {
         itemId: "reasoning-1",
@@ -65,6 +73,82 @@ describe("Codex protocol mapping", () => {
     ).toMatchObject({
       payload: { delta: "", field: "summary", sectionIndex: 2 },
       type: "reasoning.delta",
+    });
+  });
+
+  it("bounds realtime file patches by aggregate UTF-8 bytes and change count", () => {
+    const leadingDiff = "a".repeat(MAX_REALTIME_DIFF_BYTES - 1);
+    const nativeChanges = [
+      { diff: leadingDiff, kind: { type: "update" }, path: "src/first.ts" },
+      { diff: "汉字", kind: { type: "add" }, path: "src/second.ts" },
+      ...Array.from({ length: MAX_REALTIME_FILE_CHANGES - 1 }, (_, index) => ({
+        diff: "+x",
+        kind: { type: "update" },
+        path: `src/extra-${String(index)}.ts`,
+      })),
+    ];
+
+    const event = mapNotification("item/fileChange/patchUpdated", {
+      changes: nativeChanges,
+      itemId: "patch-large",
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    expect(event?.type).toBe("file_change.updated");
+    if (event?.type !== "file_change.updated") return;
+    expect(event.payload.changes).toHaveLength(MAX_REALTIME_FILE_CHANGES);
+    expect(event.payload.changes[1]?.diff).toBe("");
+    expect(
+      event.payload.changes.reduce(
+        (bytes, change) => bytes + Buffer.byteLength(change.diff, "utf8"),
+        0,
+      ),
+    ).toBe(MAX_REALTIME_DIFF_BYTES);
+    expect(event.payload).toMatchObject({
+      originalByteLength: nativeChanges.reduce(
+        (bytes, change) => bytes + Buffer.byteLength(change.diff, "utf8"),
+        0,
+      ),
+      truncated: true,
+    });
+  });
+
+  it("truncates turn diffs on a valid UTF-8 boundary", () => {
+    const diff = "汉".repeat(Math.ceil((MAX_REALTIME_DIFF_BYTES + 1) / 3));
+    const surrogateDiff = `${"a".repeat(MAX_REALTIME_DIFF_BYTES - 1)}😀`;
+
+    const event = mapNotification("turn/diff/updated", {
+      diff,
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    expect(event?.type).toBe("turn.diff_updated");
+    if (event?.type !== "turn.diff_updated") return;
+    expect(Buffer.byteLength(event.payload.diff, "utf8")).toBeLessThanOrEqual(
+      MAX_REALTIME_DIFF_BYTES,
+    );
+    expect(event.payload.diff).not.toContain("�");
+    expect(event.payload).toMatchObject({
+      originalByteLength: Buffer.byteLength(diff, "utf8"),
+      truncated: true,
+    });
+
+    const surrogateEvent = mapNotification("turn/diff/updated", {
+      diff: surrogateDiff,
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    expect(surrogateEvent?.type).toBe("turn.diff_updated");
+    if (surrogateEvent?.type !== "turn.diff_updated") return;
+    expect(Buffer.byteLength(surrogateEvent.payload.diff, "utf8")).toBe(
+      MAX_REALTIME_DIFF_BYTES - 1,
+    );
+    expect(surrogateEvent.payload.diff).not.toContain("�");
+    expect(surrogateEvent.payload).toMatchObject({
+      originalByteLength: Buffer.byteLength(surrogateDiff, "utf8"),
+      truncated: true,
     });
   });
 

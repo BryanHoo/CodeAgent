@@ -25,6 +25,7 @@
 - `ProjectFileTree` 必须返回目标 Project 相对目录 `path` 及其直接目录/文件条目，不包含 `truncated` 或条目数量上限；可选目录查询必须拒绝绝对路径、点路径、反斜杠和额外字段。Server 必须沿已注册 Project 根目录逐层应用任意层级的 `.gitignore`，不依赖根目录是否为 Git 仓库或是否存在根级规则；同时跳过符号链接、`.git`、`node_modules`、构建与覆盖率目录，并将目录深度限制为 `20` 层，Client 与 Fastify 必须使用同一严格 Schema。
 - Project 排序使用携带 `Idempotency-Key` 的 `PUT /v1/projects/order`，请求必须包含无重复的完整 Project ID 集合；Server 校验集合后在 SQLite 事务中原子替换顺序，新注册 Project 追加到末尾。
 - Agent Event 保持版本字段、单调 `sequence` 和可判别事件类型。
+- `file_change.updated` 与 `turn.diff_updated` 必须携带 `truncated` 和非负 `originalByteLength`；前者最多包含 `100` 个变更，两类事件的 diff 均由 Provider 按单事件 `512 KiB` UTF-8 聚合预算截断。Client 与 Web 不得重新读取或长期保存被 Provider 省略的原始载荷。
 - `EventStreamMetricsResponse` 使用版本化严格 Schema，按 Project 只返回非负累计计数和当前活动量；字段覆盖 Provider 输入、合并、发布、pending Delta、保留淘汰、软背压、活动客户端与慢客户端断开，不得携带 Prompt、命令输出、文件内容或额外字段。
 - Provider 只发布不含 `sessionId`、`sequence`、`timestamp` 和 `version` 的统一事件；Server Event Stream 统一分配这些传输字段。结构化 Item 的开始与完成分别使用 `item.started` 和 `item.completed`，并携带同一统一 Item 载荷供客户端按 ID 替换。
 - Project 级 Provider 只发布已通过 Project 归属验证的 Task 事件，未知或其他目录的 `threadId` 不得进入 Event Stream。

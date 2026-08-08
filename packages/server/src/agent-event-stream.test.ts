@@ -111,13 +111,13 @@ describe("AgentEventStream", () => {
       type: "plan.delta",
     });
     stream.publish({
-      payload: { diff: "old diff" },
+      payload: { diff: "old diff", originalByteLength: 8, truncated: false },
       taskId: "task-1",
       turnId: "turn-1",
       type: "turn.diff_updated",
     });
     stream.publish({
-      payload: { diff: "latest diff" },
+      payload: { diff: "latest diff", originalByteLength: 11, truncated: false },
       taskId: "task-1",
       turnId: "turn-1",
       type: "turn.diff_updated",

@@ -16,6 +16,7 @@ import {
   optionalInteger,
   optionalString,
 } from "./codex-mapping-common.js";
+import { boundRealtimeDiff, mapRealtimeFileChanges } from "./codex-diff-mapping.js";
 import { mapAgentItem, mapApprovalReviewItem } from "./codex-item-mapping.js";
 import { mapContextUsage, mapAgentTurn } from "./codex-task-mapping.js";
 import {
@@ -23,7 +24,6 @@ import {
   inferReviewTargetFromPrompt,
   mapReviewHint,
   markStartedItemRunning,
-  mapFileChangeKind,
 } from "./codex-tool-mapping.js";
 
 const MAX_STATUS_TEXT_LENGTH = 8_192;
@@ -38,20 +38,6 @@ function expectNonNegativeInteger(value: unknown, context: string): number {
     throw new CodexProtocolMappingError(`${context} must be a non-negative integer`);
   }
   return parsed;
-}
-
-function mapFileChanges(value: unknown) {
-  if (!Array.isArray(value)) {
-    throw new CodexProtocolMappingError("Codex file change update must be an array");
-  }
-  return value.map((entry) => {
-    const change = expectRecord(entry, "Codex file change update");
-    return {
-      diff: expectString(change["diff"], "Codex file change diff"),
-      kind: mapFileChangeKind(change["kind"]),
-      path: expectString(change["path"], "Codex file change path"),
-    };
-  });
 }
 
 function mapHookStatus(value: unknown): Extract<AgentItem, { type: "runtime_status" }>["status"] {
@@ -298,7 +284,7 @@ export function mapCodexNotification(
   if (method === "item/fileChange/patchUpdated") {
     return {
       itemId: expectString(params["itemId"], "Codex file change itemId"),
-      payload: { changes: mapFileChanges(params["changes"]) },
+      payload: mapRealtimeFileChanges(params["changes"]),
       taskId,
       turnId,
       type: "file_change.updated",
@@ -307,7 +293,7 @@ export function mapCodexNotification(
 
   if (method === "turn/diff/updated") {
     return {
-      payload: { diff: expectString(params["diff"], "Codex turn diff") },
+      payload: boundRealtimeDiff(expectString(params["diff"], "Codex turn diff")),
       taskId,
       turnId,
       type: "turn.diff_updated",

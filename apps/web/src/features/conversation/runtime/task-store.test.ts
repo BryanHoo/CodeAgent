@@ -159,13 +159,15 @@ describe("task store", () => {
         itemId: "patch-1",
         payload: {
           changes: [{ diff: "+const ready = true;", kind: "update", path: "src/app.ts" }],
+          originalByteLength: 20,
+          truncated: false,
         },
         turnId: "turn-running",
         type: "file_change.updated",
       },
       {
         ...eventEnvelope(16),
-        payload: { diff: "latest diff" },
+        payload: { diff: "latest diff", originalByteLength: 11, truncated: false },
         turnId: "turn-running",
         type: "turn.diff_updated",
       },
