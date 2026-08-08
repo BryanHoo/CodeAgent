@@ -360,15 +360,16 @@ export function TaskStoreTimeline({
     if (turn === undefined) {
       return "awaiting-turn";
     }
-    if (turn.status !== "running") {
-      return "finished";
-    }
     const groups = groupStoredTurnTimelineItems(
       state.itemIdsByTurnId[submissionTurnId] ?? [],
       state.itemStoresById,
     );
-    return groups.some((group) => group.type === "assistant")
-      ? "assistant-started"
+    if (groups.some((group) => group.type === "assistant")) {
+      return "assistant-started";
+    }
+    // completed Snapshot 可能先于 Assistant Item 落盘，只有失败或中断才能提前结束本地提交态。
+    return turn.status === "failed" || turn.status === "interrupted"
+      ? "finished"
       : "awaiting-assistant";
   });
   // HTTP 返回不代表回复已经可见；首个 Assistant Item 到达前由稳定尾部持续承载运行态。

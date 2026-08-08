@@ -299,6 +299,62 @@ describe("TaskTimeline", () => {
     }
   });
 
+  it("keeps the local submission timer when a completed Snapshot has no assistant item yet", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-24T00:01:05.000Z"));
+    try {
+      const intermediateSnapshot: RuntimeTaskSnapshot = {
+        ...snapshot,
+        turns: [
+          ...snapshot.turns,
+          {
+            completedAt: "2026-07-24T00:01:01.000Z",
+            error: null,
+            id: "turn-completed-without-output",
+            items: [
+              {
+                id: "submitted-user-turn-completed-without-output",
+                role: "user",
+                text: "继续排查运行提示",
+                type: "message",
+              },
+            ],
+            startedAt: "2026-07-24T00:01:00.000Z",
+            status: "completed",
+          },
+        ],
+      };
+      const store = createTaskStore(
+        { projectId: snapshot.projectId, taskId: snapshot.id },
+        {
+          checkpoint: { sequence: 2, sessionId: "runtime-1" },
+          snapshot: intermediateSnapshot,
+        },
+      );
+
+      const markup = renderToStaticMarkup(
+        <TaskTimeline
+          projectId={snapshot.projectId}
+          runtime={{
+            connectionState: "connected",
+            error: null,
+            isPending: false,
+            snapshot: intermediateSnapshot,
+            store,
+          }}
+          submissionStartedAt="2026-07-24T00:01:00.000Z"
+          submissionTurnId="turn-completed-without-output"
+          taskId={snapshot.id}
+        />,
+      );
+
+      expect(markup).toContain("5s");
+      expect(markup.match(/aria-label="AI 回复正在运行"/gu)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("hands the timer to the Turn after its first assistant item arrives", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-24T00:01:05.000Z"));
