@@ -2371,8 +2371,11 @@ test("scrolls direct user submissions to the bottom without scrolling queued mes
     .toBeGreaterThan(100);
 });
 
-test("copies the current code from a streaming assistant reply", async ({ context, page }) => {
-  const streamedCode = "const streamed = true;";
+test("keeps a streaming code block within the conversation and copies its code", async ({
+  context,
+  page,
+}) => {
+  const streamedCode = `const streamed = "${"x".repeat(2_000)}";`;
   const historicalTurn = taskSnapshot.turns[0];
   if (historicalTurn === undefined) {
     throw new Error("Expected the task fixture to contain a turn");
@@ -2411,6 +2414,10 @@ test("copies the current code from a streaming assistant reply", async ({ contex
   const copyButton = page.locator('[data-streamdown="code-block-copy-button"]');
   await expect(copyButton).toBeVisible();
   await expect(copyButton).toBeEnabled();
+  const conversation = page.getByRole("log", { name: "会话内容" });
+  expect(await conversation.evaluate((element) => element.scrollWidth)).toBe(
+    await conversation.evaluate((element) => element.clientWidth),
+  );
   await copyButton.click();
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))

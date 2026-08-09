@@ -180,7 +180,7 @@ export function TimelineItemContent({
       if (item.role === "assistant") {
         return (
           <MessageContent className="w-full">
-            <div className="flex w-full flex-col items-start gap-2">
+            <div className="flex min-w-0 w-full flex-col gap-2">
               {attachmentBody}
               {messageBody}
             </div>
