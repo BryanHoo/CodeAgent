@@ -30,11 +30,7 @@ describe("Codex protocol mapping", () => {
           {
             content: [
               {
-                text: [
-                  "$superwork:superwork-start",
-                  "$superwork:superwork-start",
-                  "根据项目需求继续实现。",
-                ].join("\n"),
+                text: "$superwork:superwork-start $superwork:superwork-start 根据项目需求继续实现。",
                 type: "text",
               },
             ],

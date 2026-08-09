@@ -278,27 +278,21 @@ export function stripLeadingAgentSkillReferences(
 ): string {
   const skillNames = new Set(skills.map((skill) => skill.name));
   let remainingText = text;
+  let removedReference = false;
 
   while (remainingText.length > 0) {
-    const lineBreakIndex = remainingText.indexOf("\n");
-    const firstLine = (
-      lineBreakIndex < 0 ? remainingText : remainingText.slice(0, lineBreakIndex)
-    ).trim();
-    const references = firstLine.split(/\s+/u);
-    const isSkillReferenceLine =
-      firstLine.length > 0 &&
-      references.every(
-        (reference) => reference.startsWith("$") && skillNames.has(reference.slice(1)),
-      );
-    if (!isSkillReferenceLine) {
+    const reference = /^\s*\$([^\s$]+)/u.exec(remainingText);
+    const skillName = reference?.[1];
+    if (reference === null || skillName === undefined || !skillNames.has(skillName)) {
       break;
     }
 
-    // 复制消息会把结构化 Skill 写成独立 `$name` 行；归一化时只保留 Skill 和真实正文。
-    remainingText = lineBreakIndex < 0 ? "" : remainingText.slice(lineBreakIndex + 1);
+    // Codex 可能把结构化 Skill 复制成开头的 `$name` 文本；逐个移除后只保留真实正文。
+    remainingText = remainingText.slice(reference[0].length);
+    removedReference = true;
   }
 
-  return remainingText;
+  return removedReference ? remainingText.trimStart() : text;
 }
 
 // Snapshot 只保存可授权读取的附件元数据，避免历史二进制随消息缓存复制。

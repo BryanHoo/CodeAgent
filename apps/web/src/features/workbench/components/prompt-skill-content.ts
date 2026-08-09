@@ -93,6 +93,51 @@ export function insertPromptSkill(
   ]);
 }
 
+export function recognizePromptSkillReferences(
+  content: PromptSkillContent,
+  availableSkills: readonly AgentSkill[],
+): PromptSkillContent {
+  const skillsByName = new Map(availableSkills.map((skill) => [skill.name, skill]));
+  const selectedSkillIds = new Set(
+    content.flatMap((part) => (part.type === "skill" ? [part.skill.id] : [])),
+  );
+  const recognized: PromptSkillContentPart[] = [];
+  let changed = false;
+
+  for (const part of content) {
+    if (part.type === "skill") {
+      recognized.push(part);
+      continue;
+    }
+
+    let textOffset = 0;
+    for (const match of part.text.matchAll(/\$([^\s$]+)/gu)) {
+      const referenceStart = match.index;
+      const skillName = match[1];
+      const precedingCharacter = part.text[referenceStart - 1];
+      const skill = skillName === undefined ? undefined : skillsByName.get(skillName);
+      if (
+        skill === undefined ||
+        (precedingCharacter !== undefined && !/\s/u.test(precedingCharacter))
+      ) {
+        continue;
+      }
+
+      const referenceEnd = referenceStart + match[0].length;
+      recognized.push({ text: part.text.slice(textOffset, referenceStart), type: "text" });
+      if (!selectedSkillIds.has(skill.id)) {
+        recognized.push({ skill, type: "skill" });
+        selectedSkillIds.add(skill.id);
+      }
+      textOffset = referenceEnd;
+      changed = true;
+    }
+    recognized.push({ text: part.text.slice(textOffset), type: "text" });
+  }
+
+  return changed ? normalizePromptSkillContent(recognized) : content;
+}
+
 export function removePromptSlashCommand(
   content: PromptSkillContent,
   slashCommand: Pick<PromptSlashCommand, "end" | "start">,

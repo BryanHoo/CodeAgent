@@ -192,6 +192,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
               }}
               placeholder={resolveComposerPlaceholder(props.taskId)}
               ref={props.skillEditorRef}
+              skills={props.skills}
               scope={props.composerScope}
             />
             {props.mutationError === null ? null : (

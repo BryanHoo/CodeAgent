@@ -7,6 +7,7 @@ import {
   createPromptSkillContent,
   insertPromptSkill,
   PromptSkillEditor,
+  recognizePromptSkillReferences,
   removePromptSlashCommand,
   removePromptSkill,
   serializePromptSkillContent,
@@ -36,6 +37,7 @@ describe("prompt skill editor model", () => {
         content={[]}
         onChange={() => undefined}
         placeholder="告诉 CodeAgent 你想完成什么"
+        skills={[securitySkill, documentationSkill]}
         scope="project-1:new"
       />,
     );
@@ -56,6 +58,24 @@ describe("prompt skill editor model", () => {
       skills: [securitySkill, documentationSkill],
       text: "之后",
     });
+  });
+
+  it("recognizes typed Codex skill references and removes them from submission text", () => {
+    const recognized = recognizePromptSkillReferences(
+      createPromptSkillContent("$review-security 其他需求"),
+      [securitySkill, documentationSkill],
+    );
+
+    expect(serializePromptSkillContent(recognized)).toBe("$review-security 其他需求");
+    expect(toPromptSkillSubmission(recognized)).toEqual({
+      skills: [securitySkill],
+      text: "其他需求",
+    });
+    expect(
+      recognizePromptSkillReferences(createPromptSkillContent("前缀$review-security $unknown"), [
+        securitySkill,
+      ]),
+    ).toEqual(createPromptSkillContent("前缀$review-security $unknown"));
   });
 
   it("deduplicates the same skill and removes only the selected token", () => {

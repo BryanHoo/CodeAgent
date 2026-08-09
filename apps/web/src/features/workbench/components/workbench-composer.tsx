@@ -462,6 +462,7 @@ export function WorkbenchComposer({
       selectedModel={selectedModel}
       selectedReasoningEffort={selectedReasoningEffort}
       setActiveCommandIndex={setActiveCommandIndex}
+      skills={skills}
       skillEditorRef={skillEditorRef}
       state={state}
       steerQueuedPrompt={(queuedPrompt) => {

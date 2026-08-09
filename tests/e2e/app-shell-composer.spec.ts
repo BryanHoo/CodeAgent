@@ -641,6 +641,47 @@ test("runs official task actions from the slash command menu", async ({ page }) 
     .toContain("/v1/projects/code-agent/tasks/task-1/fork");
 });
 
+test("recognizes typed Codex skill references before submission", async ({ page }) => {
+  let turnRequest: Record<string, unknown> | undefined;
+  await page.route("**/v1/projects/code-agent/tasks/task-1/turns", async (route) => {
+    turnRequest = parseRequestRecord(route.request().postData());
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        taskId: "task-1",
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "typed-skill-turn",
+          items: [],
+          startedAt: "2026-08-09T00:00:00.000Z",
+          status: "running",
+        },
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.fill("/");
+  await expect(page.getByRole("option", { name: /Security review/u })).toBeVisible();
+  await prompt.fill("");
+  await prompt.fill("$review-security 其他需求");
+  await expect(prompt.locator('[data-prompt-skill-id="skill-security"]')).toContainText(
+    "Security review",
+  );
+  await expect(prompt).toHaveAttribute("data-serialized-value", "$review-security 其他需求");
+  await prompt.press("Enter");
+
+  await expect.poll(() => turnRequest).toBeDefined();
+  expect(turnRequest?.["input"]).toEqual({
+    attachments: [],
+    skills: [{ id: "skill-security", name: "review-security" }],
+    text: "其他需求",
+    type: "prompt",
+  });
+});
+
 test("从最新 AI 回复复制任务", async ({ page }) => {
   const forkRequests: string[] = [];
   page.on("request", (request) => {

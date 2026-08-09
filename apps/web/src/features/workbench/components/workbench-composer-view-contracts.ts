@@ -85,6 +85,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   selectedModel: AgentModel | undefined;
   selectedReasoningEffort: string | undefined;
   setActiveCommandIndex: Dispatch<SetStateAction<number>>;
+  skills: readonly AgentSkill[];
   skillEditorRef: RefObject<PromptSkillEditorHandle | null>;
   state: ComposerState;
   steerQueuedPrompt: (queuedPrompt: QueuedComposerPrompt) => void;

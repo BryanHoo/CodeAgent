@@ -18,6 +18,7 @@ import {
 } from "../../../shared/components/agent/prompt-input.js";
 import {
   removePromptSkill,
+  recognizePromptSkillReferences,
   serializePromptSkillContent,
   skillPlainText,
   type PromptSkillContent,
@@ -51,6 +52,7 @@ type PromptSkillEditorProps = Omit<
     disabled?: boolean;
     onChange: (content: PromptSkillContent, serializedText: string, cursorOffset: number) => void;
     placeholder: string;
+    skills: readonly AgentSkill[];
     scope: string;
   }>;
 
@@ -65,6 +67,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       onKeyDown,
       onPaste,
       placeholder,
+      skills,
       scope,
       ...props
     },
@@ -73,6 +76,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
     const rootRef = useRef<HTMLDivElement>(null);
     const iconTemplateRef = useRef<SVGSVGElement>(null);
     const contentRef = useRef(content);
+    const availableSkillsRef = useRef(skills);
     const skillsByIdRef = useRef(new Map<string, AgentSkill>());
     const previousScopeRef = useRef<string | undefined>(undefined);
 
@@ -83,6 +87,10 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
         }
       }
     }, []);
+    availableSkillsRef.current = skills;
+    for (const skill of skills) {
+      skillsByIdRef.current.set(skill.id, skill);
+    }
     rememberSkills(content);
 
     const emitChange = () => {
@@ -90,7 +98,14 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       if (root === null) {
         return;
       }
-      const nextContent = readEditorContent(root, skillsByIdRef.current);
+      const editorContent = readEditorContent(root, skillsByIdRef.current);
+      const nextContent = recognizePromptSkillReferences(editorContent, availableSkillsRef.current);
+      const cursorOffset = selectionOffset(root);
+      if (nextContent !== editorContent) {
+        // 手输的 Codex `$name` 引用立即转换为现有 Token，同时保持序列化光标位置。
+        renderEditorContent(root, nextContent, iconTemplateRef.current);
+        placeCaret(root, Math.min(cursorOffset, serializePromptSkillContent(nextContent).length));
+      }
       contentRef.current = nextContent;
       root.dataset["empty"] = String(nextContent.length === 0);
       const serializedText = serializePromptSkillContent(nextContent);
@@ -142,6 +157,29 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       previousScopeRef.current = scope;
       replace(content);
     }, [content, replace, scope]);
+
+    useLayoutEffect(() => {
+      const root = rootRef.current;
+      if (root === null || skills.length === 0) {
+        return;
+      }
+      const editorContent = readEditorContent(root, skillsByIdRef.current);
+      const nextContent = recognizePromptSkillReferences(editorContent, skills);
+      if (nextContent === editorContent) {
+        return;
+      }
+
+      const cursorOffset = selectionOffset(root);
+      renderEditorContent(root, nextContent, iconTemplateRef.current);
+      if (document.activeElement === root) {
+        placeCaret(root, Math.min(cursorOffset, serializePromptSkillContent(nextContent).length));
+      }
+      contentRef.current = nextContent;
+      const serializedText = serializePromptSkillContent(nextContent);
+      root.dataset["serializedValue"] = serializedText;
+      // Skill 目录异步返回时重新解析现有草稿，用户无需再次输入即可看到 Token。
+      onChange(nextContent, serializedText, selectionOffset(root));
+    }, [onChange, skills]);
 
     const removeSkillNode = (root: HTMLDivElement, token: HTMLElement, skillId: string) => {
       const tokenOffset = [...root.childNodes]
