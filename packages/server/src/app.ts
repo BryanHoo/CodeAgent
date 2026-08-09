@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { AgentProviderTurnInput } from "@code-agent/core";
 import {
   MAX_AGENT_FILE_TOTAL_BYTES,
@@ -11,7 +10,6 @@ import {
   type AgentTaskSettings,
 } from "@code-agent/protocol";
 import Fastify, { type FastifyInstance } from "fastify";
-import { AgentEventStream } from "./agent-event-stream.js";
 import { AttachmentNotFoundError, AttachmentStore } from "./attachment-store.js";
 import { commitSelectedProjectChanges } from "./git-commit.js";
 import { readProjectGitCommitFileDiff, readProjectGitCommitFiles } from "./git-commit-review.js";
@@ -24,6 +22,7 @@ import { readProjectFileTree } from "./project-file-tree.js";
 import { readProjectImageFile } from "./project-image-file.js";
 import { readProjectSourceFile } from "./project-source-file.js";
 import { createProjectOpenService } from "./project-open.js";
+import { createProjectRuntimeContext } from "./project-runtime-context.js";
 import { readProjectDirectory, resolveProjectDirectory } from "./project-directory-browser.js";
 import {
   MutationHttpError,
@@ -42,6 +41,7 @@ import { registerTaskRoutes } from "./routes/task-routes.js";
 import { registerTurnRoutes } from "./routes/turn-routes.js";
 import { configureServerDelivery } from "./server-delivery.js";
 import type { CreateCodeAgentServerOptions } from "./server-options.js";
+import { runSingleFlight } from "./single-flight.js";
 import {
   enforceTemporaryTaskSandboxMode,
   rewriteTemporaryTaskUrl,
@@ -193,40 +193,41 @@ export async function createCodeAgentServer(
     { maxBytes: modelCatalogCacheMaxBytes, ttlMs: modelCatalogCacheTtlMs },
   );
   const projectContexts = new Map<string, ProjectRuntimeContext>();
+  const projectContextInitializations = new Map<
+    string,
+    Promise<ProjectRuntimeContext | undefined>
+  >();
   const getProjectContext: ProjectContextResolver = async (projectId) => {
     const existing = projectContexts.get(projectId);
     if (existing !== undefined) {
       return existing;
     }
-    // 已激活 Runtime 的身份由创建时校验；仅缓存未命中时访问持久层。
-    const project = await options.projectRepository.read(projectId);
-    if (project === undefined) {
-      return undefined;
-    }
-    const provider = options.provider.forProject(project);
-    const eventStream = new AgentEventStream({
-      ...(options.eventBufferSize === undefined ? {} : { capacity: options.eventBufferSize }),
-      provider: capabilities.provider,
-      sessionId: options.eventSessionId ?? randomUUID(),
+    return runSingleFlight(projectContextInitializations, projectId, async () => {
+      // 已激活 Runtime 的身份由创建时校验；仅缓存未命中时访问持久层。
+      const project = await options.projectRepository.read(projectId);
+      const concurrentContext = projectContexts.get(projectId);
+      if (concurrentContext !== undefined) {
+        return concurrentContext;
+      }
+      if (project === undefined) {
+        return undefined;
+      }
+      const context = createProjectRuntimeContext({
+        attachmentStore,
+        ...(options.eventBufferSize === undefined
+          ? {}
+          : { eventBufferSize: options.eventBufferSize }),
+        eventProvider: capabilities.provider,
+        ...(options.eventSessionId === undefined ? {} : { eventSessionId: options.eventSessionId }),
+        onAttachmentReleaseError: (error) => {
+          app.log.warn({ error }, "Failed to release turn attachments");
+        },
+        project,
+        provider: options.provider.forProject(project),
+      });
+      projectContexts.set(projectId, context);
+      return context;
     });
-    const context = {
-      eventStream,
-      project,
-      provider,
-      transportMetrics: { activeClients: 0, slowClientDisconnects: 0 },
-      unsubscribe: provider.subscribeEvents((event) => {
-        if (event.type === "turn.completed") {
-          void attachmentStore
-            .releaseTurn(projectId, event.payload.turn.id)
-            .catch((error: unknown) => {
-              app.log.warn({ error }, "Failed to release turn attachments");
-            });
-        }
-        eventStream.publish(event);
-      }),
-    };
-    projectContexts.set(projectId, context);
-    return context;
   };
   const releaseProjectContext = async (projectId: string): Promise<void> => {
     const context = projectContexts.get(projectId);

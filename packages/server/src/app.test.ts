@@ -2455,6 +2455,46 @@ describe("CodeAgent Server", () => {
     expect(listTasks).toHaveBeenCalledWith({ cursor: "cursor", limit: 25 });
   });
 
+  it("initializes one project runtime for concurrent first requests", async () => {
+    const providerHarness = createProvider();
+    let releaseProjectRead!: () => void;
+    const projectReadGate = new Promise<void>((resolve) => {
+      releaseProjectRead = resolve;
+    });
+    const read = vi.fn(async (projectId: string) => {
+      // 同时阻塞首次读取，确保两个请求都经过 Runtime 缓存未命中路径。
+      await projectReadGate;
+      return projectId === project.id ? project : undefined;
+    });
+    const subscribeEvents = vi.spyOn(providerHarness.provider, "subscribeEvents");
+    const app = await createCodeAgentServer(
+      createServerOptions(providerHarness.provider, {
+        projectRepository: {
+          list: () => Promise.resolve([]),
+          read,
+          register: () => Promise.resolve(project),
+        },
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+    await app.ready();
+
+    const requests = [
+      app.inject({ method: "GET", url: "/v1/projects/code-agent/tasks" }),
+      app.inject({ method: "GET", url: "/v1/projects/code-agent/tasks" }),
+    ];
+    await vi.waitFor(() => {
+      expect(read).toHaveBeenCalled();
+    });
+    releaseProjectRead();
+
+    const responses = await Promise.all(requests);
+    expect(responses.map((response) => response.statusCode)).toEqual([200, 200]);
+    expect(read).toHaveBeenCalledOnce();
+    expect(subscribeEvents).toHaveBeenCalledOnce();
+    expect(providerHarness.eventListeners.size).toBe(1);
+  });
+
   it("reads a structured task snapshot", async () => {
     const { app } = await createHarness();
     const response = await app.inject({
