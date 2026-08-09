@@ -7,6 +7,7 @@
 - CodeAgent 只通过 App Server `account/read`、`account/login/start`、`account/login/cancel`、`account/logout` 管理官方登录或 API key 凭证；禁止读取、修改或复制 `auth.json`。CodeAgent 创建的自定义 Provider 固定使用 `code_agent_custom`，通过 `config/batchWrite` 写入无 Secret 的 Responses API 配置。连接状态必须同时读取有效 `config/read`：只要 `model_provider` 不是内置 `openai`，或配置了 `openai_base_url`，就按用户现有 Codex CLI 自定义 API 处理，并返回所选 Provider 的 `base_url`。
 - 包内 Codex 必须解析平台可选依赖中的原生 `codex`/`codex.exe`，不得把会再次派生子进程的 JS launcher 作为受管 App Server 进程。
 - 使用参数数组、`shell: false` 和经过控制的环境变量；Secret 不进入参数或日志。
+- 子进程不消费输入时必须将 stdin 配置为 `ignore`；确需 `pipe` 写入时必须监听写端错误，避免进程提前退出产生未处理的 `EPIPE`。
 - 所有 RPC 设置超时；子进程退出时统一 Reject Pending RPC，并清理 Listener。
 - App Server 初始化必须启用 experimental API；后台终端只通过 `thread/backgroundTerminals/list` 获取，并在 Provider 边界把原生 `processId` 映射为不透明 Terminal ID。停止单个终端固定调用 `thread/backgroundTerminals/terminate`，不能用 `turn/interrupt` 代替。
 - JSONL 字节流必须跨 Buffer 分片保留 UTF-8 解码状态，不得逐块独立转码；完整帧和未完成 Buffer 必须按原始 UTF-8 字节分别执行 `64 MiB` 有界限制，以接收原生 `imageGeneration` 的单帧 Base64 结果，超限立即关闭连接；协议错误只能记录帧长度、类型或安全摘要，禁止携带原始帧内容。
