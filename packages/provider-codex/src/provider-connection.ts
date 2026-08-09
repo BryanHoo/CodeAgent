@@ -359,36 +359,37 @@ export class CodexProviderConnectionService {
       controller.abort();
     }, this.#modelRequestTimeoutMs);
     timeout.unref();
-    let response: Response;
     try {
-      response = await this.#fetch(`${baseUrl}/models`, {
+      const response = await this.#fetch(`${baseUrl}/models`, {
         headers: apiKey === undefined ? {} : { authorization: `Bearer ${apiKey}` },
         redirect: "manual",
         signal: controller.signal,
       });
-    } catch {
+      if (response.status >= 300 && response.status < 400) {
+        throw new CodexProviderConnectionError("Custom model endpoint redirect is not allowed");
+      }
+      if (!response.ok) {
+        throw new CodexProviderConnectionError(
+          `Custom model endpoint returned HTTP ${String(response.status)}`,
+        );
+      }
+      // 定时器持续覆盖响应正文读取，避免远端仅返回响应头后永久挂起。
+      const body = await readBoundedBody(response, this.#modelResponseMaxBytes);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body.toString("utf8"));
+      } catch {
+        throw new CodexProviderConnectionError("Custom model endpoint returned invalid JSON");
+      }
+      return readDiscoveredModels(parsed, this.#modelCountLimit);
+    } catch (error) {
       if (controller.signal.aborted) {
         throw new CodexProviderConnectionError("Custom model request timed out");
       }
+      if (error instanceof CodexProviderConnectionError) throw error;
       throw new CodexProviderConnectionError("Custom model request failed");
     } finally {
       clearTimeout(timeout);
     }
-    if (response.status >= 300 && response.status < 400) {
-      throw new CodexProviderConnectionError("Custom model endpoint redirect is not allowed");
-    }
-    if (!response.ok) {
-      throw new CodexProviderConnectionError(
-        `Custom model endpoint returned HTTP ${String(response.status)}`,
-      );
-    }
-    const body = await readBoundedBody(response, this.#modelResponseMaxBytes);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(body.toString("utf8"));
-    } catch {
-      throw new CodexProviderConnectionError("Custom model endpoint returned invalid JSON");
-    }
-    return readDiscoveredModels(parsed, this.#modelCountLimit);
   }
 }
