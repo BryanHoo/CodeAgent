@@ -20,7 +20,9 @@ describe("LAN access helpers", () => {
   });
 
   it("accepts only high-strength custom LAN passwords", () => {
-    expect(() => validateLanPassword("Strong-Lan_Pass9!")).not.toThrow();
+    expect(() => {
+      validateLanPassword("Strong-Lan_Pass9!");
+    }).not.toThrow();
 
     for (const invalid of [
       "Short1!a",
@@ -30,7 +32,9 @@ describe("LAN access helpers", () => {
       "Password-Without-Digit!",
       "PasswordWithoutSymbol9",
     ]) {
-      expect(() => validateLanPassword(invalid)).toThrow(/LAN password/u);
+      expect(() => {
+        validateLanPassword(invalid);
+      }).toThrow(/LAN password/u);
     }
   });
 

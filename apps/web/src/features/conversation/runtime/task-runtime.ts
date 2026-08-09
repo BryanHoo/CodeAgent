@@ -1,10 +1,12 @@
-import type {
-  AgentEvent,
-  AgentMessageAttachment,
-  AgentPromptInput,
-  AgentTaskSnapshot,
-  AgentTurn,
-  PendingRequest,
+import {
+  stripLeadingAgentSkillReferences,
+  type AgentEvent,
+  type AgentItem,
+  type AgentMessageAttachment,
+  type AgentPromptInput,
+  type AgentTaskSnapshot,
+  type AgentTurn,
+  type PendingRequest,
 } from "@code-agent/protocol";
 
 const MAX_BUFFERED_DELTA_BYTES = 1_048_576;
@@ -15,13 +17,30 @@ const textEncoder = new TextEncoder();
 export type RuntimeTaskSnapshot = Omit<AgentTaskSnapshot, "pendingRequests"> &
   Readonly<{ pendingRequests: readonly PendingRequest[] }>;
 
+function normalizeSubmittedSkillText(turn: AgentTurn): AgentTurn {
+  const items = turn.items.map((item): AgentItem => {
+    if (item.type !== "message" || item.role !== "user" || (item.skills?.length ?? 0) === 0) {
+      return item;
+    }
+    const text = stripLeadingAgentSkillReferences(item.text, item.skills ?? []);
+    if (text === item.text) {
+      return item;
+    }
+    return { ...item, text };
+  });
+
+  // turn/start 可能先返回已结构化的 Skill，同时仍保留同名 `$name` 正文。
+  return items.some((item, index) => item !== turn.items[index]) ? { ...turn, items } : turn;
+}
+
 export function mergeSubmittedPromptIntoSnapshot(
   snapshot: RuntimeTaskSnapshot,
   submittedTurn: AgentTurn,
   input: Pick<AgentPromptInput, "attachments" | "skills" | "text"> &
     Readonly<{ messageAttachments?: readonly AgentMessageAttachment[] }>,
 ): RuntimeTaskSnapshot {
-  const submittedUserMessage = submittedTurn.items.find(
+  const normalizedSubmittedTurn = normalizeSubmittedSkillText(submittedTurn);
+  const submittedUserMessage = normalizedSubmittedTurn.items.find(
     (item) => item.type === "message" && item.role === "user",
   );
   if (
@@ -32,8 +51,9 @@ export function mergeSubmittedPromptIntoSnapshot(
   ) {
     return snapshot;
   }
-  const turnIndex = snapshot.turns.findIndex((turn) => turn.id === submittedTurn.id);
-  const currentTurn = snapshot.turns[turnIndex] ?? submittedTurn;
+  const turnIndex = snapshot.turns.findIndex((turn) => turn.id === normalizedSubmittedTurn.id);
+  const snapshotTurn = snapshot.turns[turnIndex];
+  const currentTurn = normalizeSubmittedSkillText(snapshotTurn ?? normalizedSubmittedTurn);
   const currentUserMessageIndex = currentTurn.items.findIndex(
     (item) => item.type === "message" && item.role === "user",
   );
@@ -44,7 +64,12 @@ export function mergeSubmittedPromptIntoSnapshot(
       (currentUserMessage.attachments?.length ?? 0) > 0 ||
       (input.messageAttachments?.length ?? 0) === 0
     ) {
-      return snapshot;
+      if (currentTurn === snapshotTurn) {
+        return snapshot;
+      }
+      const turns = [...snapshot.turns];
+      turns[turnIndex] = currentTurn;
+      return { ...snapshot, turns };
     }
     // Runtime 可能先创建空用户 Item；在权威附件到达前补齐本地上传元数据。
     const turns = [...snapshot.turns];

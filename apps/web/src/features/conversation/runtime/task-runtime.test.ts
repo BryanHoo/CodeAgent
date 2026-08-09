@@ -72,6 +72,45 @@ describe("submitted prompt merge", () => {
     ]);
   });
 
+  it("removes duplicated skill reference text from the submitted turn", () => {
+    const submittedTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-skill-only",
+      items: [
+        {
+          id: "provider-user-skill-only",
+          role: "user" as const,
+          skills: [{ name: "superwork:superwork-init" }],
+          text: "$superwork:superwork-init",
+          type: "message" as const,
+        },
+      ],
+      startedAt: snapshot.updatedAt,
+      status: "running" as const,
+    };
+
+    const mergedSnapshot = mergeSubmittedPromptIntoSnapshot(
+      { ...snapshot, turns: [submittedTurn] },
+      submittedTurn,
+      {
+        attachments: [],
+        skills: [{ id: "skill-superwork-init", name: "superwork:superwork-init" }],
+        text: "",
+      },
+    );
+
+    expect(mergedSnapshot.turns[0]?.items).toEqual([
+      {
+        id: "provider-user-skill-only",
+        role: "user",
+        skills: [{ name: "superwork:superwork-init" }],
+        text: "",
+        type: "message",
+      },
+    ]);
+  });
+
   it("uses the provider image item for an image-only submitted turn", () => {
     const submittedTurn = {
       completedAt: null,
