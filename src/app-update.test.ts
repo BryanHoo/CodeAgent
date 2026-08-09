@@ -32,14 +32,14 @@ describe("app update service", () => {
     const runNpmInstall = vi.fn(() => Promise.resolve());
     const service = createAppUpdateService({
       appVersion: "1.3.0",
-      codexVersion: "0.146.0",
+      codexVersion: "0.147.0",
       fetchLatestVersion,
       runNpmInstall,
     });
 
     await expect(service.read()).resolves.toEqual({
       appVersion: "1.3.0",
-      codexVersion: "0.146.0",
+      codexVersion: "0.147.0",
       latestVersion: "1.4.0",
       status: "available",
       updateAvailable: true,
@@ -50,14 +50,14 @@ describe("app update service", () => {
   it("returns version information when the registry check fails", async () => {
     const service = createAppUpdateService({
       appVersion: "1.3.0",
-      codexVersion: "0.146.0",
+      codexVersion: "0.147.0",
       fetchLatestVersion: vi.fn(() => Promise.reject(new Error("offline"))),
       runNpmInstall: vi.fn(),
     });
 
     await expect(service.read()).resolves.toEqual({
       appVersion: "1.3.0",
-      codexVersion: "0.146.0",
+      codexVersion: "0.147.0",
       latestVersion: null,
       status: "check-failed",
       updateAvailable: false,
@@ -68,14 +68,14 @@ describe("app update service", () => {
     const runNpmInstall = vi.fn(() => Promise.resolve());
     const service = createAppUpdateService({
       appVersion: "1.3.0",
-      codexVersion: "0.146.0",
+      codexVersion: "0.147.0",
       fetchLatestVersion: vi.fn(() => Promise.resolve("1.4.0")),
       runNpmInstall,
     });
 
     await expect(service.install("1.4.0")).resolves.toEqual({
       appVersion: "1.3.0",
-      codexVersion: "0.146.0",
+      codexVersion: "0.147.0",
       latestVersion: "1.4.0",
       status: "restart-required",
       updateAvailable: false,

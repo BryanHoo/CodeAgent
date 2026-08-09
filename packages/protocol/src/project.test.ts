@@ -1309,7 +1309,7 @@ describe("project protocol", () => {
       Value.Check(AgentMcpServerPageSchema, {
         data: [
           {
-            authStatus: "oAuth",
+            authStatus: "unknown",
             description: "Search the current repository",
             error: null,
             failureReason: null,

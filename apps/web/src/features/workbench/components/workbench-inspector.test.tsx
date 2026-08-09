@@ -455,6 +455,7 @@ describe("WorkbenchInspector", () => {
         mcpServers={[
           readyMcpServer,
           { ...readyMcpServer, authStatus: "unsupported", name: "chrome-devtools" },
+          { ...readyMcpServer, authStatus: "unknown", name: "remote-context" },
         ]}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
@@ -503,9 +504,11 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain('aria-label="MCP"');
     expect(markup).toContain("fast-context");
     expect(markup).toContain("chrome-devtools");
+    expect(markup).toContain("remote-context");
     expect(markup).toContain("已就绪");
     expect(markup).toContain("2 个工具");
     expect(markup).toContain("OAuth");
+    expect(markup).toContain("认证状态未知");
     expect(markup).toContain("版本 1.2.0");
     expect(markup).toContain('aria-label="重新加载 MCP"');
     expect(markup).not.toContain("gpt-5.6-sol");

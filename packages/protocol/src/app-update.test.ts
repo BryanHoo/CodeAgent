@@ -12,7 +12,7 @@ describe("app update protocol", () => {
     expect(
       Value.Check(AppInfoResponseSchema, {
         appVersion: "1.3.0",
-        codexVersion: "0.146.0",
+        codexVersion: "0.147.0",
         latestVersion: "1.4.0",
         status: "available",
         updateAvailable: true,
@@ -21,7 +21,7 @@ describe("app update protocol", () => {
     expect(
       Value.Check(AppInfoResponseSchema, {
         appVersion: "1.3.0",
-        codexVersion: "0.146.0",
+        codexVersion: "0.147.0",
         latestVersion: null,
         status: "check-failed",
         updateAvailable: false,
@@ -30,7 +30,7 @@ describe("app update protocol", () => {
     expect(
       Value.Check(AppInfoResponseSchema, {
         appVersion: "1.3.0",
-        codexVersion: "0.146.0",
+        codexVersion: "0.147.0",
         extra: true,
         latestVersion: "1.4.0",
         status: "available",
@@ -46,7 +46,7 @@ describe("app update protocol", () => {
     expect(
       Value.Check(InstallAppUpdateResponseSchema, {
         appVersion: "1.3.0",
-        codexVersion: "0.146.0",
+        codexVersion: "0.147.0",
         latestVersion: "1.4.0",
         status: "restart-required",
         updateAvailable: false,

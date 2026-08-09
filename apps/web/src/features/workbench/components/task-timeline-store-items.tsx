@@ -4,6 +4,7 @@ import { useStore } from "zustand";
 import { i18n } from "../../../i18n/i18n.js";
 
 import { Message, type MessageFileReference } from "../../../shared/components/agent/message.js";
+import { Task, TaskContent, TaskItem, TaskTrigger } from "../../../shared/components/agent/task.js";
 import type {
   NormalizedAgentTurn,
   TaskItemStore,
@@ -24,6 +25,17 @@ import { MessageMetadata, getMessageTimestamp } from "./task-timeline-status.js"
 export type StoredTurnTimelineGroup =
   | Readonly<{ itemId: string; type: "user" }>
   | Readonly<{ itemIds: readonly string[]; key: string; type: "assistant" }>;
+
+export function LiveFileChanges({ diff }: Readonly<{ diff: string }>) {
+  return (
+    <Task defaultOpen={false} status="in_progress">
+      <TaskTrigger title={i18n.t("timeline.liveDiff", { ns: "conversation" })} />
+      <TaskContent>
+        <TaskItem className="max-h-64 overflow-auto whitespace-pre font-mono">{diff}</TaskItem>
+      </TaskContent>
+    </Task>
+  );
+}
 
 export function groupStoredTurnTimelineItems(
   itemIds: readonly string[],

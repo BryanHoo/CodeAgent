@@ -457,7 +457,7 @@ function createServerOptions(provider: AgentProvider, overrides: Record<string, 
     readAppInfo: vi.fn(() =>
       Promise.resolve({
         appVersion: "1.3.0",
-        codexVersion: "0.146.0",
+        codexVersion: "0.147.0",
         latestVersion: "1.3.0",
         status: "current" as const,
         updateAvailable: false,
@@ -1028,7 +1028,7 @@ describe("CodeAgent Server", () => {
     const readAppInfo = vi.fn(() =>
       Promise.resolve({
         appVersion: "1.3.0",
-        codexVersion: "0.146.0",
+        codexVersion: "0.147.0",
         latestVersion: "1.4.0",
         status: "available" as const,
         updateAvailable: true,
@@ -1038,7 +1038,7 @@ describe("CodeAgent Server", () => {
       await new Promise((resolve) => setTimeout(resolve, 25));
       return {
         appVersion: "1.3.0",
-        codexVersion: "0.146.0",
+        codexVersion: "0.147.0",
         latestVersion: "1.4.0",
         status: "restart-required" as const,
         updateAvailable: false,
@@ -1062,7 +1062,7 @@ describe("CodeAgent Server", () => {
     expect(infoResponse.statusCode).toBe(200);
     expect(infoResponse.json()).toEqual({
       appVersion: "1.3.0",
-      codexVersion: "0.146.0",
+      codexVersion: "0.147.0",
       latestVersion: "1.4.0",
       status: "available",
       updateAvailable: true,
@@ -3097,7 +3097,7 @@ describe("CodeAgent Server", () => {
       readAppInfo: vi.fn(() =>
         Promise.resolve({
           appVersion: "1.3.0",
-          codexVersion: "0.146.0",
+          codexVersion: "0.147.0",
           latestVersion: "1.3.0",
           status: "current" as const,
           updateAvailable: false,

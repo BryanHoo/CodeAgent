@@ -90,6 +90,7 @@ export const conversation = {
       bearerToken: "Bearer Token",
       notLoggedIn: "Not signed in",
       oAuth: "OAuth",
+      unknown: "Authentication status unknown",
       unsupported: "Authentication unsupported",
     },
     mcpToolCount: "{{count}} tools",
@@ -279,7 +280,7 @@ export const conversation = {
     skillsUsed: "Skills used",
     editedFiles: "Edited {{count}} files",
     editingFiles: "Editing {{count}} files",
-    liveDiff: "Live turn diff",
+    liveDiff: "Live file changes",
     notice: {
       guardian_warning: "Safety warning",
       hook_status: "Hook status",

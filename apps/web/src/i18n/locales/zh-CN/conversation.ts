@@ -90,6 +90,7 @@ export const conversation = {
       bearerToken: "Bearer Token",
       notLoggedIn: "未登录",
       oAuth: "OAuth",
+      unknown: "认证状态未知",
       unsupported: "不支持认证",
     },
     mcpToolCount: "{{count}} 个工具",
@@ -278,7 +279,7 @@ export const conversation = {
     skillsUsed: "使用的 Skills",
     editedFiles: "已编辑 {{count}} 个文件",
     editingFiles: "正在编辑 {{count}} 个文件",
-    liveDiff: "实时 Turn Diff",
+    liveDiff: "实时文件变更",
     notice: {
       guardian_warning: "安全警告",
       hook_status: "Hook 状态",

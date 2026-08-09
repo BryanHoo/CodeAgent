@@ -114,6 +114,11 @@ const project = {
   rootPath: "/workspace/CodeAgent",
 } as const;
 
+const PINNED_THREAD_SECTION = {
+  id: "01984de2-8f74-7c91-a3b2-5c5e937cf318",
+  name: "Pinned",
+} as const;
+
 function createCodexAgentProvider(options: {
   client: CodexRpcClient;
   logger?: CodexProviderLogger;
@@ -126,15 +131,16 @@ function createCodexAgentProvider(options: {
 
 function nativeThread(overrides: Record<string, unknown> = {}) {
   return {
-    cliVersion: "0.146.0",
+    cliVersion: "0.147.0",
     createdAt: 1_753_228_800,
     cwd: "/workspace/CodeAgent",
     ephemeral: false,
     id: "task-1",
-    isPinned: false,
     modelProvider: "openai",
     name: null,
     preview: "实现真实 Task 历史\n更多内容",
+    section: null,
+    sectionEnteredAt: null,
     sessionId: "native-session",
     source: "cli",
     status: { type: "notLoaded" },
@@ -232,7 +238,7 @@ describe("CodexAgentProvider", () => {
     expect(warn.mock.calls).toEqual([
       [
         {
-          codexVersion: "0.146.0",
+          codexVersion: "0.147.0",
           diagnosticCode: "unknown_notification",
           method: "future/notification",
           projectId: "code-agent",
@@ -242,7 +248,7 @@ describe("CodexAgentProvider", () => {
       ],
       [
         {
-          codexVersion: "0.146.0",
+          codexVersion: "0.147.0",
           diagnosticCode: "invalid_notification",
           method: "item/agentMessage/delta",
           projectId: "code-agent",
@@ -850,6 +856,7 @@ describe("CodexAgentProvider", () => {
       }
       rpc.emitServerRequest("timed-input", "item/tool/requestUserInput", {
         autoResolutionMs: 30_000,
+        isBlocking: false,
         itemId: "timed-input-item",
         questions: [
           {
@@ -1119,6 +1126,7 @@ describe("CodexAgentProvider", () => {
 
     rpc.emitServerRequest("empty-choice", "item/tool/requestUserInput", {
       autoResolutionMs: null,
+      isBlocking: true,
       itemId: "empty-choice-item",
       questions: [
         {
@@ -1144,6 +1152,44 @@ describe("CodexAgentProvider", () => {
           message: "Invalid params",
         },
         id: "empty-choice",
+      },
+    ]);
+  });
+
+  it("rejects user input requests without an explicit blocking state", async () => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
+    await provider.listTasks();
+
+    rpc.emitServerRequest("missing-blocking", "item/tool/requestUserInput", {
+      autoResolutionMs: null,
+      itemId: "missing-blocking-item",
+      questions: [
+        {
+          header: "确认",
+          id: "confirm",
+          isOther: false,
+          isSecret: false,
+          options: [{ description: "继续", label: "Yes" }],
+          question: "继续执行吗？",
+        },
+      ],
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    await Promise.resolve();
+
+    expect(events).toEqual([]);
+    expect(rpc.serverErrors).toEqual([
+      {
+        error: {
+          code: -32602,
+          data: { method: "item/tool/requestUserInput" },
+          message: "Invalid params",
+        },
+        id: "missing-blocking",
       },
     ]);
   });
@@ -1335,6 +1381,7 @@ describe("CodexAgentProvider", () => {
       await provider.listTasks();
       rpc.emitServerRequest("timed-input", "item/tool/requestUserInput", {
         autoResolutionMs: 1_000,
+        isBlocking: false,
         itemId: "timed-input-item",
         questions: [
           {
@@ -1387,6 +1434,7 @@ describe("CodexAgentProvider", () => {
       await provider.listTasks();
       rpc.emitServerRequest("expiry-race", "item/tool/requestUserInput", {
         autoResolutionMs: 1_000,
+        isBlocking: false,
         itemId: "expiry-race-item",
         questions: [
           {
@@ -1435,6 +1483,7 @@ describe("CodexAgentProvider", () => {
       await provider.listTasks();
       rpc.emitServerRequest("timed-input", "item/tool/requestUserInput", {
         autoResolutionMs: 1_000,
+        isBlocking: false,
         itemId: "timed-input-item",
         questions: [
           {
@@ -1501,6 +1550,7 @@ describe("CodexAgentProvider", () => {
     });
     rpc.emitServerRequest("input-1", "item/tool/requestUserInput", {
       autoResolutionMs: 30_000,
+      isBlocking: false,
       itemId: "input-item",
       questions: [
         {
@@ -1614,6 +1664,7 @@ describe("CodexAgentProvider", () => {
     await provider.listTasks();
 
     rpc.emitServerRequest("input-defaults", "item/tool/requestUserInput", {
+      isBlocking: true,
       itemId: "input-defaults-item",
       questions: [{ header: "说明", id: "note", question: "补充说明" }],
       threadId: "task-1",
@@ -1646,6 +1697,7 @@ describe("CodexAgentProvider", () => {
     await provider.listTasks();
     rpc.emitServerRequest("input-fixed", "item/tool/requestUserInput", {
       autoResolutionMs: null,
+      isBlocking: true,
       itemId: "input-fixed-item",
       questions: [
         {
@@ -2030,7 +2082,7 @@ describe("CodexAgentProvider", () => {
       {
         data: [
           {
-            authStatus: "notLoggedIn",
+            authStatus: "unknown",
             name: "fast-context",
             resourceTemplates: [],
             resources: [],
@@ -2055,7 +2107,7 @@ describe("CodexAgentProvider", () => {
     await expect(provider.listMcpServers("task-1")).resolves.toEqual({
       data: [
         {
-          authStatus: "notLoggedIn",
+          authStatus: "unknown",
           description: null,
           error: null,
           failureReason: null,
@@ -3727,7 +3779,7 @@ describe("CodexAgentProvider", () => {
 
   it("maps thread/list without repeating the runtime handshake", async () => {
     const rpc = new FakeRpcClient([
-      { data: [nativeThread({ isPinned: true })], nextCursor: "next-cursor" },
+      { data: [nativeThread({ section: PINNED_THREAD_SECTION })], nextCursor: "next-cursor" },
     ]);
     const provider = createCodexAgentProvider({ client: rpc, project });
 
@@ -3771,31 +3823,63 @@ describe("CodexAgentProvider", () => {
     expect(rpc.notifications).toEqual([]);
   });
 
-  it("updates and returns the native Codex pinned state", async () => {
+  it("does not treat a custom Codex section as pinned", async () => {
     const rpc = new FakeRpcClient([
-      { data: [nativeThread()], nextCursor: null },
-      { thread: nativeThread({ isPinned: true }) },
+      {
+        data: [
+          nativeThread({ section: { id: "01984de2-8f74-7c91-a3b2-5c5e937cf999", name: "Later" } }),
+        ],
+        nextCursor: null,
+      },
     ]);
     const provider = createCodexAgentProvider({ client: rpc, project });
-    await provider.listTasks();
 
-    await expect(provider.pinTask("task-1", true)).resolves.toMatchObject({
-      id: "task-1",
-      pinned: true,
-      projectId: "code-agent",
-    });
-    expect(rpc.calls.at(-1)).toEqual({
-      method: "thread/metadata/update",
-      params: { isPinned: true, threadId: "task-1" },
+    await expect(provider.listTasks()).resolves.toMatchObject({
+      data: [{ id: "task-1", pinned: false }],
     });
   });
 
   it.each([
-    ["another task", nativeThread({ id: "task-2", isPinned: true })],
-    ["another project", nativeThread({ cwd: "/workspace/Other", isPinned: true })],
-    ["another pinned state", nativeThread({ isPinned: false })],
-  ])("rejects pinned metadata returned for %s", async (_case, thread) => {
-    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }, { thread }]);
+    [true, null, PINNED_THREAD_SECTION],
+    [false, PINNED_THREAD_SECTION, null],
+  ])(
+    "moves a task into the native pinned section when pinned is %s",
+    async (pinned, before, after) => {
+      const rpc = new FakeRpcClient([
+        { data: [nativeThread({ section: before })], nextCursor: null },
+        {},
+        { thread: nativeThread({ section: after }) },
+      ]);
+      const provider = createCodexAgentProvider({ client: rpc, project });
+      await provider.listTasks();
+
+      await expect(provider.pinTask("task-1", pinned)).resolves.toMatchObject({
+        id: "task-1",
+        pinned,
+        projectId: "code-agent",
+      });
+      expect(rpc.calls.slice(-2)).toEqual([
+        {
+          method: "thread/section/move",
+          params: {
+            sectionId: pinned ? PINNED_THREAD_SECTION.id : null,
+            threadId: "task-1",
+          },
+        },
+        {
+          method: "thread/read",
+          params: { includeTurns: false, threadId: "task-1" },
+        },
+      ]);
+    },
+  );
+
+  it.each([
+    ["another task", nativeThread({ id: "task-2", section: PINNED_THREAD_SECTION })],
+    ["another project", nativeThread({ cwd: "/workspace/Other", section: PINNED_THREAD_SECTION })],
+    ["another pinned state", nativeThread({ section: null })],
+  ])("rejects pinned section state read for %s", async (_case, thread) => {
+    const rpc = new FakeRpcClient([{ data: [nativeThread()], nextCursor: null }, {}, { thread }]);
     const provider = createCodexAgentProvider({ client: rpc, project });
     await provider.listTasks();
 

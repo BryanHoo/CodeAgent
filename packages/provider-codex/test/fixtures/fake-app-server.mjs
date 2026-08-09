@@ -5,7 +5,7 @@ import { createInterface } from "node:readline";
 const args = process.argv.slice(2);
 
 if (args.includes("--version")) {
-  process.stdout.write("codex-cli 0.146.0\n");
+  process.stdout.write("codex-cli 0.147.0\n");
   process.exit(0);
 }
 
@@ -60,6 +60,7 @@ function pendingRequestParams(
   return {
     ...identity,
     autoResolutionMs: 30_000,
+    isBlocking: false,
     questions: [
       {
         header: "执行模式",
@@ -115,9 +116,10 @@ function realtimeThread(turns = []) {
     createdAt: 1_753_228_800,
     cwd: "/workspace/CodeAgent",
     id: "task-realtime",
-    isPinned: false,
     name: "Realtime Path",
     preview: "Realtime Path",
+    section: null,
+    sectionEnteredAt: null,
     status: { type: turns.some((turn) => turn.status === "inProgress") ? "active" : "notLoaded" },
     turns,
     updatedAt: 1_753_228_800 + turns.length,
@@ -131,9 +133,10 @@ function actionThread(id, turns = []) {
     createdAt: 1_753_228_800,
     cwd: "/workspace/CodeAgent",
     id,
-    isPinned: false,
     name: "Agent Action",
     preview: "Agent Action",
+    section: null,
+    sectionEnteredAt: null,
     status: { type: turns.some((turn) => turn.status === "inProgress") ? "active" : "notLoaded" },
     turns,
     updatedAt: 1_753_228_800 + turns.length,
@@ -766,9 +769,10 @@ input.on("line", (line) => {
             createdAt: 1_753_228_800,
             cwd: "/workspace/CodeAgent",
             id: "task-realtime",
-            isPinned: false,
             name: "Realtime Path",
             preview: "Realtime Path",
+            section: null,
+            sectionEnteredAt: null,
             status: { type: "active" },
             updatedAt: 1_753_228_800,
           },

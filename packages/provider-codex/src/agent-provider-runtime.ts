@@ -119,7 +119,7 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
       this.runtime.reviewWorkerOutputTaskIds.add(taskId);
     }
     if (isReviewWorker && reviewItemType === "userMessage") {
-      // Codex 0.146.0 会为 reviewer 写入两条相同 Prompt，均不属于用户对话。
+      // Codex 0.147.0 会为 reviewer 写入两条相同 Prompt，均不属于用户对话。
       return;
     }
     const hasReviewWorkerOutput = this.runtime.reviewWorkerOutputTaskIds.has(taskId);

@@ -269,6 +269,7 @@ export const AgentMcpServerStatusSchema = Type.Union([
 export type AgentMcpServerStatus = Readonly<Static<typeof AgentMcpServerStatusSchema>>;
 
 export const AgentMcpAuthStatusSchema = Type.Union([
+  Type.Literal("unknown"),
   Type.Literal("unsupported"),
   Type.Literal("notLoggedIn"),
   Type.Literal("bearerToken"),

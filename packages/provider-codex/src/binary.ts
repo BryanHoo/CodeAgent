@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-export const SUPPORTED_CODEX_VERSION = "0.146.0";
+export const SUPPORTED_CODEX_VERSION = "0.147.0";
 
 interface BundledCodexTarget {
   executableName: string;

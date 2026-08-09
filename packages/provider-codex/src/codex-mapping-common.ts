@@ -409,6 +409,8 @@ export function mapCodexServerRequest(
   const requestId = requestIdKey(serverRequest.id);
 
   if (serverRequest.method === "item/tool/requestUserInput") {
+    // 0.147.0 起阻塞语义必须显式声明，避免旧请求形状静默进入 Pending 生命周期。
+    expectBoolean(params["isBlocking"], "Codex user input isBlocking");
     const autoResolutionMs = params["autoResolutionMs"] ?? null;
     if (
       autoResolutionMs !== null &&

@@ -29,7 +29,6 @@ import { normalizedPathIdentity } from "./runtime-owner-registry.js";
 import {
   CodexProtocolMappingError,
   type CodexSkill,
-  expectBoolean,
   expectRecord,
   expectString,
   mapAgentModel,
@@ -63,6 +62,18 @@ export interface CodexProviderLogger {
 export const DEFAULT_PROVIDER_LOGGER: CodexProviderLogger = pino({ level: "warn" }).child({
   component: "provider-codex",
 });
+
+const CODEX_PINNED_THREAD_SECTION_ID = "01984de2-8f74-7c91-a3b2-5c5e937cf318";
+
+function isPinnedThreadSection(value: unknown): boolean {
+  if (value === null) {
+    return false;
+  }
+  const section = expectRecord(value, "Codex thread section");
+  const sectionId = expectString(section["id"], "Codex thread section id");
+  expectString(section["name"], "Codex thread section name");
+  return sectionId === CODEX_PINNED_THREAD_SECTION_ID;
+}
 
 export async function canonicalPathIdentity(path: string): Promise<string> {
   try {
@@ -142,7 +153,7 @@ export async function mapAgentTask(
   await assertProjectThread(thread, project);
   return {
     id: expectString(thread["id"], "Codex thread id"),
-    pinned: expectBoolean(thread["isPinned"], "Codex thread isPinned"),
+    pinned: isPinnedThreadSection(thread["section"]),
     projectId: project.id,
     title: normalizedTitle(thread),
     updatedAt: toDateTime(thread["updatedAt"], "Codex thread updatedAt"),
@@ -283,20 +294,28 @@ export abstract class CodexAgentProviderBase {
 
   public async pinTask(taskId: string, pinned: boolean): Promise<AgentTask> {
     this.assertKnownProjectTask(taskId);
-    const response = expectRecord(
-      await this.client.request("thread/metadata/update", { isPinned: pinned, threadId: taskId }),
-      "thread/metadata/update response",
+    expectRecord(
+      await this.client.request("thread/section/move", {
+        sectionId: pinned ? CODEX_PINNED_THREAD_SECTION_ID : null,
+        threadId: taskId,
+      }),
+      "thread/section/move response",
     );
-    const thread = expectRecord(response["thread"], "thread/metadata/update thread");
-    if (expectString(thread["id"], "thread/metadata/update thread id") !== taskId) {
-      throw new CodexProtocolMappingError("thread/metadata/update returned a different thread");
+    const response = expectRecord(
+      await this.client.request("thread/read", { includeTurns: false, threadId: taskId }),
+      "thread/read response",
+    );
+    const task = await mapAgentTask(
+      expectRecord(response["thread"], "thread/read thread"),
+      this.project,
+    );
+    if (task.id !== taskId) {
+      throw new CodexProtocolMappingError("thread/read returned a different thread");
     }
-    if (expectBoolean(thread["isPinned"], "thread/metadata/update isPinned") !== pinned) {
-      throw new CodexProtocolMappingError(
-        "thread/metadata/update returned a different pinned state",
-      );
+    if (task.pinned !== pinned) {
+      throw new CodexProtocolMappingError("thread/read returned a different pinned state");
     }
-    return mapAgentTask(thread, this.project);
+    return task;
   }
 
   public async listMcpServers(taskId: string): Promise<AgentMcpServerPage> {

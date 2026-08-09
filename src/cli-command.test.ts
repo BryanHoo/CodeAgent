@@ -156,7 +156,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
   const dependencies: CliDependencies = {
     appVersion: "1.2.3",
     checkCodexVersion: vi.fn(() =>
-      Promise.resolve({ raw: "codex-cli 0.146.0", version: "0.146.0" }),
+      Promise.resolve({ raw: "codex-cli 0.147.0", version: "0.147.0" }),
     ),
     createStateRepository: vi.fn(() => Promise.resolve(stateRepository)),
     createRuntimeProvider: vi.fn(() => {
@@ -180,7 +180,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
         client,
         close,
         pid: 4321,
-        version: { raw: "codex-cli 0.146.0", version: "0.146.0" },
+        version: { raw: "codex-cli 0.147.0", version: "0.147.0" },
         waitForExit: () => exit,
       }),
     ),
@@ -255,7 +255,7 @@ describe("runCli", () => {
     });
     expect(harness.dependencies.checkCodexVersion).toHaveBeenCalledWith("/fake/codex");
     expect(harness.stdout.join("")).toContain("[成功] Node.js 24.1.0");
-    expect(harness.stdout.join("")).toContain("[成功] Codex 0.146.0 (/fake/codex)");
+    expect(harness.stdout.join("")).toContain("[成功] Codex 0.147.0 (/fake/codex)");
     expect(harness.dependencies.createStateRepository).toHaveBeenCalledWith(
       join("/custom/home", "code-agent", "state.sqlite3"),
     );
@@ -391,7 +391,7 @@ describe("runCli", () => {
             respondToServerRequest: vi.fn(),
           },
           pid: 4321,
-          version: { raw: "codex-cli 0.146.0", version: "0.146.0" },
+          version: { raw: "codex-cli 0.147.0", version: "0.147.0" },
           waitForExit: () => Promise.resolve({ code: 23, signal: null }),
         }),
       ),

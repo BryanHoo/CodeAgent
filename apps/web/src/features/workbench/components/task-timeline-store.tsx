@@ -11,7 +11,6 @@ import {
   ConversationVirtualList,
 } from "../../../shared/components/agent/conversation.js";
 import { Message, type MessageFileReference } from "../../../shared/components/agent/message.js";
-import { Task, TaskContent, TaskItem, TaskTrigger } from "../../../shared/components/agent/task.js";
 import type {
   NormalizedAgentTurn,
   TaskNotice,
@@ -24,6 +23,7 @@ import type { BuildPlanAction, ForkTaskAction } from "./task-timeline-contracts.
 import { ChangedFilesCard } from "./task-timeline-file-changes.js";
 import { RunningReplyStatus } from "./task-timeline-running.js";
 import {
+  LiveFileChanges,
   StoredRunningReplyStatus,
   StoredTimelineItemContent,
   StoredUserMessage,
@@ -65,6 +65,7 @@ export function StoredAssistantGroup({
   itemIds,
   lastTurnItemId,
   latestSnapshotTimestamp,
+  liveFileChangesDiff,
   onOpenFileDiff,
   onForkTask,
   onBuildPlan,
@@ -84,6 +85,7 @@ export function StoredAssistantGroup({
   itemIds: readonly string[];
   lastTurnItemId: string | undefined;
   latestSnapshotTimestamp: string;
+  liveFileChangesDiff?: string;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onForkTask?: ForkTaskAction;
   onBuildPlan?: BuildPlanAction;
@@ -131,7 +133,7 @@ export function StoredAssistantGroup({
             : {})}
         />
       ) : null}
-      {visibleItemIds.length > 0 || showRunningShimmer ? (
+      {visibleItemIds.length > 0 || liveFileChangesDiff !== undefined || showRunningShimmer ? (
         <div className="w-full space-y-4">
           {visibleItemIds.map((itemId) => (
             <StoredTimelineItemContent
@@ -147,6 +149,10 @@ export function StoredAssistantGroup({
               turnStatus={turn.status}
             />
           ))}
+          {/* Turn 级 Diff 必须先于持续运行状态，确保 Shimmer 始终是回复最后一行。 */}
+          {liveFileChangesDiff === undefined ? null : (
+            <LiveFileChanges diff={liveFileChangesDiff} />
+          )}
           {showRunningShimmer ? <StoredRunningReplyStatus itemIds={itemIds} store={store} /> : null}
         </div>
       ) : null}
@@ -219,6 +225,7 @@ export function StoreTurnTimelineSection({
     (group) => group.type === "assistant",
   );
   const lastTurnItemId = itemIds.at(-1);
+  const liveDiff = turn.status === "running" && turnDiff?.trim() ? turnDiff : undefined;
 
   return (
     <section
@@ -245,6 +252,9 @@ export function StoreTurnTimelineSection({
             key={group.key}
             lastTurnItemId={lastTurnItemId}
             latestSnapshotTimestamp={latestSnapshotTimestamp}
+            {...(groupIndex === latestAssistantGroupIndex && liveDiff !== undefined
+              ? { liveFileChangesDiff: liveDiff }
+              : {})}
             {...(turn.status === "completed" && onBuildPlan !== undefined ? { onBuildPlan } : {})}
             onOpenFileDiff={onOpenFileDiff}
             onToggleProcess={() => {
@@ -274,18 +284,14 @@ export function StoreTurnTimelineSection({
       {turn.status === "running" && !hasAssistantItems && !suppressEmptyRunningStatus ? (
         <Message from="assistant">
           <TurnProcessingTime completedAt={turn.completedAt} startedAt={turn.startedAt} />
-          <RunningReplyStatus />
+          <div className="w-full space-y-4">
+            {liveDiff === undefined ? null : <LiveFileChanges diff={liveDiff} />}
+            <RunningReplyStatus />
+          </div>
         </Message>
       ) : null}
-      {turn.status === "running" && turnDiff !== undefined && turnDiff.trim().length > 0 ? (
-        <Task defaultOpen={false} status="in_progress">
-          <TaskTrigger title={i18n.t("timeline.liveDiff", { ns: "conversation" })} />
-          <TaskContent>
-            <TaskItem className="max-h-64 overflow-auto whitespace-pre font-mono">
-              {turnDiff}
-            </TaskItem>
-          </TaskContent>
-        </Task>
+      {!hasAssistantItems && suppressEmptyRunningStatus && liveDiff !== undefined ? (
+        <LiveFileChanges diff={liveDiff} />
       ) : null}
       {turn.error === null ? null : (
         <div

@@ -159,7 +159,7 @@ test("opens About from the sidebar and installs an available update", async ({ p
       contentType: "application/json",
       json: {
         appVersion: "1.3.0",
-        codexVersion: "0.146.0",
+        codexVersion: "0.147.0",
         latestVersion: "1.4.0",
         status: "available",
         updateAvailable: true,
@@ -172,7 +172,7 @@ test("opens About from the sidebar and installs an available update", async ({ p
       contentType: "application/json",
       json: {
         appVersion: "1.3.0",
-        codexVersion: "0.146.0",
+        codexVersion: "0.147.0",
         latestVersion: "1.4.0",
         status: "restart-required",
         updateAvailable: false,
@@ -193,7 +193,7 @@ test("opens About from the sidebar and installs an available update", async ({ p
     "page",
   );
   await expect(dialog.getByText("1.3.0", { exact: true })).toBeVisible();
-  await expect(dialog.getByText("0.146.0", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("0.147.0", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "更新到 1.4.0" }).click();
 
   await expect.poll(() => updateRequest).toEqual({ version: "1.4.0" });

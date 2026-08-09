@@ -15,7 +15,7 @@ catalog:
   "@fastify/multipart": 10.1.0
   "@fastify/static": 10.1.2
   "@fastify/websocket": 11.3.0
-  "@openai/codex": 0.146.0
+  "@openai/codex": 0.147.0
   "@playwright/test": 1.61.1
   "@sinclair/typebox": 0.34.52
   "@tailwindcss/vite": 4.3.3
@@ -73,7 +73,7 @@ linkWorkspacePackages: false
 # 显式设置最小发布时间，启用严格年龄校验，避免回退到新发布版本。
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
-  - "@openai/codex@0.146.0-darwin-arm64 || 0.146.0-darwin-x64 || 0.146.0-linux-arm64 || 0.146.0-linux-x64 || 0.146.0-win32-arm64 || 0.146.0-win32-x64 || 0.146.0"
+  - "@openai/codex@0.147.0-darwin-arm64 || 0.147.0-darwin-x64 || 0.147.0-linux-arm64 || 0.147.0-linux-x64 || 0.147.0-win32-arm64 || 0.147.0-win32-x64 || 0.147.0"
   - prettier@3.9.6
   - react-dom@19.2.8
   - react@19.2.8

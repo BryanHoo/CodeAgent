@@ -895,7 +895,7 @@ describe("CodeAgentClient", () => {
   it("reads application versions and installs a validated update", async () => {
     const available = {
       appVersion: "1.3.0",
-      codexVersion: "0.146.0",
+      codexVersion: "0.147.0",
       latestVersion: "1.4.0",
       status: "available" as const,
       updateAvailable: true,
@@ -930,7 +930,7 @@ describe("CodeAgentClient", () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
         appVersion: "1.3.0",
-        codexVersion: "0.146.0",
+        codexVersion: "0.147.0",
         latestVersion: "latest",
         status: "available",
         updateAvailable: true,

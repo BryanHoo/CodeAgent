@@ -11,6 +11,7 @@ type CodexMcpRpcClient = Readonly<{
 
 function mapMcpAuthStatus(value: unknown): AgentMcpAuthStatus {
   if (
+    value === "unknown" ||
     value === "unsupported" ||
     value === "notLoggedIn" ||
     value === "bearerToken" ||
