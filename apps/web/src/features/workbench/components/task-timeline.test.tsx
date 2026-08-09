@@ -789,13 +789,10 @@ describe("TaskTimeline", () => {
     expect(markup).toContain("已编辑 live.ts，新增 1 行，删除 0 行，打开 Diff");
     expect(markup).toContain("+1");
     expect(markup).toContain("-0");
-    expect(markup).toContain('aria-label="正在修改 live.ts，新增 1 行，删除 0 行"');
+    expect(markup).not.toContain('aria-label="正在修改 live.ts，新增 1 行，删除 0 行"');
     expect(markup).not.toContain("实时文件变更");
     expect(markup).not.toContain("Turn Diff");
-    expect(markup).toContain("diff --git a/src/live.ts b/src/live.ts");
-    expect(markup.indexOf("diff --git a/src/live.ts b/src/live.ts")).toBeLessThan(
-      markup.indexOf("正在运行 mcp__docs__search"),
-    );
+    expect(markup).not.toContain("diff --git a/src/live.ts b/src/live.ts");
     expect(markup).toContain("正在使用安全缓冲模型 gpt-5.6-sol");
     expect(markup).toContain("正在验证模型可用性");
     expect(markup).not.toContain("provider text should be localized");

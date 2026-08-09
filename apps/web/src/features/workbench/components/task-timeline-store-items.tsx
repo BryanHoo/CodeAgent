@@ -77,7 +77,10 @@ function StoredLiveFileChangesValue({
   itemStore,
 }: Readonly<{ diff: string; itemStore: TaskItemStore }>) {
   const item = useTaskItem(itemStore);
-  return <LiveFileChanges changes={item.type === "file_change" ? item.changes : []} diff={diff} />;
+  if (item.type !== "file_change" || (item.status !== "pending" && item.status !== "running")) {
+    return null;
+  }
+  return <LiveFileChanges changes={item.changes} diff={diff} />;
 }
 
 export function StoredLiveFileChanges({
