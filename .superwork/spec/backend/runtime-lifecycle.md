@@ -52,6 +52,7 @@
 - CLI 默认监听 `127.0.0.1:3210`，每次监听成功后直接打开新的浏览器页面，不检测或复用已打开页面；`--port` 可将本地或 LAN 监听端口覆盖为 `1` 至 `65535` 的整数。只有 `--lan` 才生成启动期配对码、传入进程内 Access 配置并监听 `0.0.0.0:<port>`；LAN 模式不得自动打开浏览器，终端只列出物理网络接口上的私有 IPv4 URL，不把 VPN、虚拟网桥或 `0.0.0.0` 当作访问地址。
 - LAN 配对码、Session、失败窗口和清理定时器只属于当前 Fastify 实例；关闭时必须清空，重启不得恢复。Session 使用签发时固定的绝对期限，请求不得续期。
 - Fastify 资源通过插件封装，并在 `onClose` 中释放。
+- 幂等 Mutation 的已完成结果缓存与进行中请求必须独立管理；`idempotencyCacheSize` 同时作为结果缓存容量和不同 Key 进行中请求的硬上限。同 Key 继续复用原请求，不同 Key 超限时返回可重试的 `503 IDEMPOTENCY_CAPACITY_EXCEEDED`，请求完成或失败后立即释放进行中名额。
 - 普通 HTTP 路由使用 Fastify 原生 60 秒 `handlerTimeout` 和 `request.signal` 执行协作取消；Event Stream WebSocket 是显式长连接，不继承 Handler 截止时间，其有界性由队列、背压和连接关闭生命周期保证。
 - Project 列表默认空，通过宿主系统目录选择器注册，并持久化到 `CODEX_HOME/code-agent/state.sqlite3`；重复真实路径幂等返回已有 Project。
 - CLI 启动时必须以 `0700` 幂等创建 `${CODEX_HOME}/code-agent/temporary-workspace`，拒绝最终目标为符号链接，并在 SQLite 中确保固定 ID、`kind = temporary` 的内部 Project。Project 列表、排序、重命名、删除及 Project defaults 只能操作 `kind = user`。

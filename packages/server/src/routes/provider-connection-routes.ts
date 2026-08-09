@@ -20,6 +20,7 @@ const mutationResponses = {
   400: AgentMutationErrorSchema,
   409: AgentMutationErrorSchema,
   502: AgentMutationErrorSchema,
+  503: AgentMutationErrorSchema,
 } as const;
 
 export const registerProviderConnectionRoutes: FastifyPluginCallback<ServerRouteContext> = (

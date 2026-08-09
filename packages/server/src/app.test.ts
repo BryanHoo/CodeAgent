@@ -3282,6 +3282,48 @@ describe("CodeAgent Server", () => {
     expect(startTask).toHaveBeenCalledTimes(3);
   });
 
+  it("rejects new idempotency keys when the in-flight limit is reached", async () => {
+    const { app, startTask } = await createHarness({ idempotencyCacheSize: 1 });
+    let resolveStartTask!: (value: typeof task) => void;
+    startTask.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveStartTask = resolve;
+        }),
+    );
+    const createTask = (key: string) =>
+      app.inject({
+        headers: { "idempotency-key": key },
+        method: "POST",
+        payload: {},
+        url: "/v1/projects/code-agent/tasks",
+      });
+
+    const firstResponsePromise = createTask("in-flight-task-1");
+    await vi.waitFor(() => {
+      expect(startTask).toHaveBeenCalledTimes(1);
+    });
+    const repeatedResponsePromise = createTask("in-flight-task-1");
+    const rejectedResponse = await createTask("in-flight-task-2");
+    resolveStartTask(task);
+    const [firstResponse, repeatedResponse] = await Promise.all([
+      firstResponsePromise,
+      repeatedResponsePromise,
+    ]);
+
+    expect(firstResponse.statusCode).toBe(201);
+    expect(repeatedResponse.json()).toEqual(firstResponse.json());
+    expect(rejectedResponse.statusCode).toBe(503);
+    expect(rejectedResponse.json()).toEqual({
+      code: "IDEMPOTENCY_CAPACITY_EXCEEDED",
+      message: "Too many idempotent requests are in progress",
+      retryable: true,
+    });
+    const nextResponse = await createTask("in-flight-task-2");
+    expect(nextResponse.statusCode).toBe(201);
+    expect(startTask).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects interruption for a terminal or unrelated turn", async () => {
     const { app, interruptTurn, readTask } = await createHarness();
     readTask.mockResolvedValueOnce({

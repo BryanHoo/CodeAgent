@@ -18,6 +18,7 @@ import * as gitBranch from "./git-branch.js";
 import { readProjectGitHistory } from "./git-history.js";
 import { readProjectGitStatus as readGitProjectStatus } from "./git-working-tree.js";
 import { readHostFileDirectory, resolveHostAttachment } from "./host-file-browser.js";
+import { createIdempotencyRunner } from "./idempotency-runner.js";
 import { readProjectFileTree } from "./project-file-tree.js";
 import { readProjectImageFile } from "./project-image-file.js";
 import { readProjectSourceFile } from "./project-source-file.js";
@@ -28,7 +29,6 @@ import {
   MutationHttpError,
   type ProjectContextResolver,
   type ProjectRuntimeContext,
-  type RunIdempotent,
   type ServerRouteContext,
   type TaskStartRecovery,
 } from "./routes/context.js";
@@ -65,7 +65,6 @@ import {
   taskFromSnapshot,
   toGitCommitHttpError,
   toPendingRequestHttpError,
-  type IdempotencyEntry,
 } from "./server-runtime.js";
 export type { CreateCodeAgentServerOptions } from "./server-options.js";
 export async function createCodeAgentServer(
@@ -347,85 +346,18 @@ export async function createCodeAgentServer(
   for (const project of await options.projectRepository.list()) {
     await getProjectContext(project.id);
   }
-  const idempotencyEntries = new Map<string, IdempotencyEntry>();
   const activeGitMutations = new Set<string>();
   const taskStartRecoveries = new Map<string, TaskStartRecovery>();
   const idempotencyCacheSize = options.idempotencyCacheSize ?? DEFAULT_IDEMPOTENCY_CACHE_SIZE;
   const idempotencyTtlMs = options.idempotencyTtlMs ?? DEFAULT_IDEMPOTENCY_TTL_MS;
-  if (!Number.isInteger(idempotencyCacheSize) || idempotencyCacheSize <= 0) {
-    throw new RangeError("Idempotency cache size must be a positive integer");
-  }
-  if (!Number.isFinite(idempotencyTtlMs) || idempotencyTtlMs <= 0) {
-    throw new RangeError("Idempotency TTL must be a positive number");
-  }
-  const pruneIdempotencyEntries = () => {
-    const now = Date.now();
-    for (const [entryKey, entry] of idempotencyEntries) {
-      if (entry.expiresAt !== undefined && entry.expiresAt <= now) {
-        idempotencyEntries.delete(entryKey);
-      }
-    }
-    // 进行中的请求不能淘汰；成功条目按插入顺序移除最旧记录。
-    for (const [entryKey, entry] of idempotencyEntries) {
-      if (idempotencyEntries.size <= idempotencyCacheSize) {
-        break;
-      }
-      if (entry.expiresAt !== undefined) {
-        idempotencyEntries.delete(entryKey);
-      }
-    }
-  };
-  const runIdempotent: RunIdempotent = async <T>(
-    scope: readonly string[],
-    key: string,
-    payload: unknown,
-    action: () => Promise<T> | T,
-  ): Promise<T> => {
-    pruneIdempotencyEntries();
-    // 结构化编码完整资源作用域，避免跨 Project 命中或分隔符碰撞。
-    const entryKey = JSON.stringify([...scope, key]);
-    const fingerprint = fingerprintPayload(payload);
-    const existing = idempotencyEntries.get(entryKey);
-    if (existing !== undefined) {
-      if (existing.fingerprint !== fingerprint) {
-        throw new MutationHttpError(
-          "IDEMPOTENCY_CONFLICT",
-          "Idempotency key was already used with another request",
-          409,
-        );
-      }
-      return existing.promise as Promise<T>;
-    }
-    const promise = Promise.resolve()
-      .then(action)
-      .catch((error: unknown) => {
-        if (error instanceof MutationHttpError) {
-          throw error;
-        }
-        throw new MutationHttpError("PROVIDER_ERROR", "Agent provider request failed", 502, true);
-      });
-    const entry: IdempotencyEntry = { fingerprint, promise };
-    idempotencyEntries.set(entryKey, entry);
-    try {
-      const result = await promise;
-      entry.expiresAt = Date.now() + idempotencyTtlMs;
-      pruneIdempotencyEntries();
-      return result;
-    } catch (error) {
-      // 失败结果不进入幂等缓存，允许调用方使用同一 Key 安全重试。
-      if (idempotencyEntries.get(entryKey) === entry) {
-        idempotencyEntries.delete(entryKey);
-      }
-      throw error;
-    }
-  };
+  const idempotencyRunner = createIdempotencyRunner(idempotencyCacheSize, idempotencyTtlMs);
   const accessService = await configureServerDelivery(app, {
     ...(options.access === undefined ? {} : { access: options.access }),
     releaseResources: async () => {
       await Promise.all([...projectContexts.keys()].map(releaseProjectContext));
       await attachmentStore.dispose();
       activeGitMutations.clear();
-      idempotencyEntries.clear();
+      idempotencyRunner.clear();
       modelCatalogCache.clear();
       taskStartRecoveries.clear();
     },
@@ -473,7 +405,7 @@ export async function createCodeAgentServer(
     readSourceFile,
     releaseProjectContext,
     resolveProviderTurnInput,
-    runIdempotent,
+    runIdempotent: idempotencyRunner.run,
     resolveProjectDirectory: options.resolveProjectDirectory ?? resolveProjectDirectory,
     resolveHostAttachment: options.resolveHostAttachment ?? resolveHostAttachment,
     settingsRepository: options.settingsRepository,

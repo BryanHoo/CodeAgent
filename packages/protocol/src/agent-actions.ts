@@ -174,6 +174,7 @@ export const AgentMutationErrorCodeSchema = Type.Union([
   Type.Literal("ACCESS_DENIED"),
   Type.Literal("IDEMPOTENCY_KEY_REQUIRED"),
   Type.Literal("IDEMPOTENCY_CONFLICT"),
+  Type.Literal("IDEMPOTENCY_CAPACITY_EXCEEDED"),
   Type.Literal("INVALID_REQUEST"),
   Type.Literal("PROJECT_NOT_FOUND"),
   Type.Literal("TASK_NOT_FOUND"),

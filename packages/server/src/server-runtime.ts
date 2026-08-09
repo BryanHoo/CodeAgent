@@ -101,12 +101,6 @@ export function taskFromSnapshot(
   };
 }
 
-export interface IdempotencyEntry {
-  expiresAt?: number;
-  fingerprint: string;
-  promise: Promise<unknown>;
-}
-
 type ModelCatalogCacheEntry = Readonly<{
   expiresAt: number;
   page: AgentModelPage;

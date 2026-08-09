@@ -1538,6 +1538,13 @@ describe("project protocol", () => {
         retryable: false,
       }),
     ).toBe(true);
+    expect(
+      Value.Check(AgentMutationErrorSchema, {
+        code: "IDEMPOTENCY_CAPACITY_EXCEEDED",
+        message: "Too many idempotent requests are in progress",
+        retryable: true,
+      }),
+    ).toBe(true);
     for (const code of ["ACCESS_DENIED", "PAIRING_FAILED", "PAIRING_RATE_LIMITED"]) {
       expect(
         Value.Check(AgentMutationErrorSchema, {
