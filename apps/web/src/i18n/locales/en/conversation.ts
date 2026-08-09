@@ -281,6 +281,7 @@ export const conversation = {
     editedFiles: "Edited {{count}} files",
     editingFiles: "Editing {{count}} files",
     liveDiff: "Live file changes",
+    liveFileChange: "Editing {{name}}, {{additions}} additions, {{removals}} deletions",
     notice: {
       guardian_warning: "Safety warning",
       hook_status: "Hook status",

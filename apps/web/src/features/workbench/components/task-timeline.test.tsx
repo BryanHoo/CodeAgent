@@ -12,6 +12,7 @@ import {
   TaskSnapshotTimeline,
   TaskTimeline,
 } from "./task-timeline.js";
+import { LiveFileChanges } from "./task-timeline-store-items.js";
 
 function renderToStaticMarkup(children: ReactNode) {
   return renderReactToStaticMarkup(<TooltipProvider>{children}</TooltipProvider>);
@@ -62,6 +63,28 @@ describe("temporary task timeline", () => {
     expect(markup).toContain("临时任务");
     expect(markup).not.toContain("<select");
     expect(markup).not.toContain('value="temporary"');
+  });
+});
+
+describe("LiveFileChanges", () => {
+  it("shows the current file name and line changes in the live indicator", () => {
+    const markup = renderToStaticMarkup(
+      <LiveFileChanges
+        changes={[
+          {
+            diff: "@@ -1 +1,2 @@\n-const ready = false;\n+const ready = true;\n+export { ready };",
+            kind: "update",
+            path: "src/live.ts",
+          },
+        ]}
+        diff="diff --git a/src/live.ts b/src/live.ts"
+      />,
+    );
+
+    expect(markup).toContain("live.ts");
+    expect(markup).toContain("+2");
+    expect(markup).toContain("-1");
+    expect(markup).not.toContain("实时文件变更");
   });
 });
 
@@ -766,7 +789,8 @@ describe("TaskTimeline", () => {
     expect(markup).toContain("已编辑 live.ts，新增 1 行，删除 0 行，打开 Diff");
     expect(markup).toContain("+1");
     expect(markup).toContain("-0");
-    expect(markup).toContain("实时文件变更");
+    expect(markup).toContain('aria-label="正在修改 live.ts，新增 1 行，删除 0 行"');
+    expect(markup).not.toContain("实时文件变更");
     expect(markup).not.toContain("Turn Diff");
     expect(markup).toContain("diff --git a/src/live.ts b/src/live.ts");
     expect(markup.indexOf("diff --git a/src/live.ts b/src/live.ts")).toBeLessThan(

@@ -23,7 +23,7 @@ import type { BuildPlanAction, ForkTaskAction } from "./task-timeline-contracts.
 import { ChangedFilesCard } from "./task-timeline-file-changes.js";
 import { RunningReplyStatus } from "./task-timeline-running.js";
 import {
-  LiveFileChanges,
+  StoredLiveFileChanges as LiveFileChanges,
   StoredRunningReplyStatus,
   StoredTimelineItemContent,
   StoredUserMessage,
@@ -37,7 +37,6 @@ import {
 } from "./task-timeline-status.js";
 
 const getTurnIdKey = (turnId: string) => turnId;
-
 export function resolveCompletedTurnProcessItemIds(
   items: readonly AgentItem[],
   turnStatus: AgentTurn["status"],
@@ -60,7 +59,6 @@ export function resolveCompletedTurnProcessItemIds(
     return item.type === "file_change" || item.type === "review" ? [] : [item.id];
   });
 }
-
 export function StoredAssistantGroup({
   itemIds,
   lastTurnItemId,
@@ -151,7 +149,7 @@ export function StoredAssistantGroup({
           ))}
           {/* Turn 级 Diff 必须先于持续运行状态，确保 Shimmer 始终是回复最后一行。 */}
           {liveFileChangesDiff === undefined ? null : (
-            <LiveFileChanges diff={liveFileChangesDiff} />
+            <LiveFileChanges diff={liveFileChangesDiff} itemIds={itemIds} store={store} />
           )}
           {showRunningShimmer ? <StoredRunningReplyStatus itemIds={itemIds} store={store} /> : null}
         </div>
@@ -285,13 +283,15 @@ export function StoreTurnTimelineSection({
         <Message from="assistant">
           <TurnProcessingTime completedAt={turn.completedAt} startedAt={turn.startedAt} />
           <div className="w-full space-y-4">
-            {liveDiff === undefined ? null : <LiveFileChanges diff={liveDiff} />}
+            {liveDiff === undefined ? null : (
+              <LiveFileChanges diff={liveDiff} itemIds={itemIds} store={store} />
+            )}
             <RunningReplyStatus />
           </div>
         </Message>
       ) : null}
       {!hasAssistantItems && suppressEmptyRunningStatus && liveDiff !== undefined ? (
-        <LiveFileChanges diff={liveDiff} />
+        <LiveFileChanges diff={liveDiff} itemIds={itemIds} store={store} />
       ) : null}
       {turn.error === null ? null : (
         <div

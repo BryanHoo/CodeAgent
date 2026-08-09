@@ -10,7 +10,12 @@ import type {
   TaskItemStore,
   TaskStore,
 } from "../../conversation/runtime/task-store.js";
-import type { AgentFileChange } from "../../diff/file-change.js";
+import {
+  countFileChangeLines,
+  getFileName,
+  summarizeFileChanges,
+  type AgentFileChange,
+} from "../../diff/file-change.js";
 
 import { TimelineItemContent } from "./task-timeline-items.js";
 import type { BuildPlanAction } from "./task-timeline-contracts.js";
@@ -26,14 +31,75 @@ export type StoredTurnTimelineGroup =
   | Readonly<{ itemId: string; type: "user" }>
   | Readonly<{ itemIds: readonly string[]; key: string; type: "assistant" }>;
 
-export function LiveFileChanges({ diff }: Readonly<{ diff: string }>) {
+export function LiveFileChanges({
+  changes,
+  diff,
+}: Readonly<{ changes: readonly AgentFileChange[]; diff: string }>) {
+  const currentChange = summarizeFileChanges(changes).changes.at(-1);
+  const statistics = currentChange === undefined ? undefined : countFileChangeLines(currentChange);
+  const title =
+    currentChange === undefined
+      ? i18n.t("timeline.liveDiff", { ns: "conversation" })
+      : getFileName(currentChange.path);
+  const accessibleLabel =
+    statistics === undefined
+      ? title
+      : i18n.t("timeline.liveFileChange", {
+          additions: statistics.additions,
+          name: title,
+          ns: "conversation",
+          removals: statistics.removals,
+        });
+
   return (
     <Task defaultOpen={false} status="in_progress">
-      <TaskTrigger title={i18n.t("timeline.liveDiff", { ns: "conversation" })} />
+      <TaskTrigger
+        aria-label={accessibleLabel}
+        suffix={
+          statistics === undefined ? null : (
+            <span className="flex shrink-0 items-center gap-2" aria-hidden="true">
+              <span className="text-diff-added">+{statistics.additions}</span>
+              <span className="text-diff-removed">-{statistics.removals}</span>
+            </span>
+          )
+        }
+        title={title}
+      />
       <TaskContent>
         <TaskItem className="max-h-64 overflow-auto whitespace-pre font-mono">{diff}</TaskItem>
       </TaskContent>
     </Task>
+  );
+}
+
+function StoredLiveFileChangesValue({
+  diff,
+  itemStore,
+}: Readonly<{ diff: string; itemStore: TaskItemStore }>) {
+  const item = useTaskItem(itemStore);
+  return <LiveFileChanges changes={item.type === "file_change" ? item.changes : []} diff={diff} />;
+}
+
+export function StoredLiveFileChanges({
+  diff,
+  itemIds,
+  store,
+}: Readonly<{ diff: string; itemIds: readonly string[]; store: TaskStore }>) {
+  const latestFileChangeStore = useStore(store, (state) => {
+    // 实时事件会原位更新 Item Store；选择最新文件操作并单独订阅，避免整段 Timeline 重渲染。
+    for (let index = itemIds.length - 1; index >= 0; index -= 1) {
+      const itemStore = state.itemStoresById.get(itemIds[index] ?? "");
+      if (itemStore?.peek().type === "file_change") {
+        return itemStore;
+      }
+    }
+    return undefined;
+  });
+
+  return latestFileChangeStore === undefined ? (
+    <LiveFileChanges changes={[]} diff={diff} />
+  ) : (
+    <StoredLiveFileChangesValue diff={diff} itemStore={latestFileChangeStore} />
   );
 }
 

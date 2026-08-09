@@ -70,10 +70,11 @@ const statusPresentation: Readonly<Record<TaskStatus, { icon: ReactNode; labelKe
 };
 
 type TaskTriggerProps = Omit<HTMLAttributes<HTMLElement>, "title"> & {
+  suffix?: ReactNode;
   title: string;
 };
 
-export function TaskTrigger({ className = "", title, ...props }: TaskTriggerProps) {
+export function TaskTrigger({ className = "", suffix, title, ...props }: TaskTriggerProps) {
   const context = useContext(TaskContext);
   const { t } = useTranslation("conversation");
   if (context === null) {
@@ -93,6 +94,7 @@ export function TaskTrigger({ className = "", title, ...props }: TaskTriggerProp
         <span className="sr-only">{t(presentation.labelKey)}</span>
       </span>
       <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
+      {suffix}
       {context.collapsible ? (
         <ChevronRight
           className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open/task:rotate-90"

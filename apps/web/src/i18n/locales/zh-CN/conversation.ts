@@ -280,6 +280,7 @@ export const conversation = {
     editedFiles: "已编辑 {{count}} 个文件",
     editingFiles: "正在编辑 {{count}} 个文件",
     liveDiff: "实时文件变更",
+    liveFileChange: "正在修改 {{name}}，新增 {{additions}} 行，删除 {{removals}} 行",
     notice: {
       guardian_warning: "安全警告",
       hook_status: "Hook 状态",
