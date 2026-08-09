@@ -49,10 +49,12 @@ async function executeGit(
   input = "",
 ): Promise<GitCommandResult> {
   return new Promise((resolve, reject) => {
+    const consumesInput = input !== "";
     const child = spawn("git", ["-C", repositoryRoot, ...arguments_], {
       env: { ...createGitEnvironment(), GIT_TERMINAL_PROMPT: "0" },
       shell: false,
-      stdio: ["pipe", "pipe", "pipe"],
+      // 无输入命令不创建 stdin pipe，避免短命令退出后写端异步触发 EPIPE。
+      stdio: [consumesInput ? "pipe" : "ignore", "pipe", "pipe"],
       windowsHide: true,
     });
     const stdout: Buffer[] = [];
@@ -85,13 +87,16 @@ async function executeGit(
       finish(new GitCommandError(null, "Git command timed out"));
     }, GIT_COMMAND_TIMEOUT_MS);
 
-    child.stdout.on("data", (chunk: Buffer) => {
+    child.stdout?.on("data", (chunk: Buffer) => {
       collect(stdout, chunk);
     });
-    child.stderr.on("data", (chunk: Buffer) => {
+    child.stderr?.on("data", (chunk: Buffer) => {
       collect(stderr, chunk);
     });
     child.on("error", (error) => {
+      finish(error);
+    });
+    child.stdin?.on("error", (error) => {
       finish(error);
     });
     child.on("close", (exitCode) => {
@@ -105,7 +110,9 @@ async function executeGit(
         finish(new GitCommandError(exitCode, result.stderr));
       }
     });
-    child.stdin.end(input);
+    if (consumesInput) {
+      child.stdin?.end(input);
+    }
   });
 }
 
