@@ -448,10 +448,37 @@ describe("runCli", () => {
     await expect(run).resolves.toBe(0);
   });
 
+  it("uses a strong custom LAN password without generating or printing a credential", async () => {
+    const harness = createHarness();
+    const controller = new AbortController();
+    const password = "Strong-Lan_Pass9!";
+    const run = runCli(["start", "--lan", "--lan-password", password, "--session-ttl", "180d"], {
+      ...harness.options,
+      signal: controller.signal,
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.serverListen).toHaveBeenCalledOnce();
+    });
+    expect(harness.dependencies.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        access: { pairingCode: password, sessionTtlMs: 15_552_000_000 },
+      }),
+    );
+    expect(harness.dependencies.generateLanPairingCode).not.toHaveBeenCalled();
+    expect(harness.stdout.join("\n")).toContain("已使用自定义访问密码");
+    expect(harness.stdout.join("\n")).not.toContain(password);
+
+    controller.abort();
+    await expect(run).resolves.toBe(0);
+  });
+
   it("rejects invalid LAN options before starting runtime resources", async () => {
     for (const args of [
       ["start", "--session-ttl", "12h"],
-      ["start", "--lan", "--session-ttl", "31d"],
+      ["start", "--lan-password", "Strong-Lan_Pass9!"],
+      ["start", "--lan", "--lan-password", "weak-password"],
+      ["start", "--lan", "--session-ttl", "181d"],
       ["start", "--lan", "--lan"],
       ["start", "--lan", "--codex-bin", "/first", "--codex-bin", "/second"],
     ]) {
@@ -572,6 +599,7 @@ describe("runCli", () => {
     expect(help).toContain("version  Print the installed CodeAgent version.");
     expect(help).toContain("--port <port>");
     expect(help).toContain("--lan");
+    expect(help).toContain("--lan-password <password>");
     expect(help).toContain("--session-ttl <duration>");
     expect(help).toContain("--codex-bin <path>");
     expect(help).toContain("--codex-home <path>");

@@ -95,15 +95,21 @@ To connect from a phone, tablet, or another computer on the same local network, 
 code-agent start --lan
 ```
 
-The terminal displays a local network address and a one-time pairing code. Open the address on the other device and enter the pairing code.
+By default, the terminal displays a local network address and a random access password. Open the address on the other device and enter that password.
 
-Sessions are valid for 24 hours by default. You can set a fixed duration from `1m` to `30d`, for example:
+You can provide your own strong password with `--lan-password`. It must contain 16 to 128 characters, including an uppercase letter, a lowercase letter, a number, and a symbol. Quote passwords that contain shell-special characters. CodeAgent validates the password before starting and does not print it back to the terminal:
+
+```bash
+code-agent start --lan --lan-password 'Strong-Lan_Pass9!'
+```
+
+Sessions are valid for 24 hours by default. You can set a fixed duration from `1m` to `180d`, for example:
 
 ```bash
 code-agent start --lan --session-ttl 12h
 ```
 
-Local network mode uses unencrypted HTTP. Use it only on a network you trust, and never expose the address to the internet. Restarting CodeAgent invalidates the pairing code and all existing sessions.
+The session expires at its fixed deadline and requests do not extend it. Local network mode uses unencrypted HTTP. Use it only on a network you trust, and never expose the address to the internet. Restarting CodeAgent invalidates the access password and all existing sessions.
 
 ## Update CodeAgent
 

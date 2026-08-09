@@ -49,8 +49,8 @@
 
 - CLI 未提供子命令时必须与显式 `code-agent start` 执行同一启动流程；根级 `-h`、`--help` 必须使用英文完整列出 `start`、`doctor`、`version` 及其全部参数、默认值、约束和示例。
 - CLI 必须把根发布包版本和已启动 Codex Binary 的实际版本注入 Server；`GET /v1/app-info` 读取 npm registry `latest` 并在失败时保留本地版本。`POST /v1/app-update` 必须携带 `Idempotency-Key`，重新确认目标版本等于严格校验的 `latest` 且高于当前版本后，使用参数数组和 `shell: false` 执行全局 npm 安装；安装成功只返回需要重启状态，不得在 HTTP 请求中替换或重启当前进程。
-- CLI 默认监听 `127.0.0.1:3210`，每次监听成功后直接打开新的浏览器页面，不检测或复用已打开页面；`--port` 可将本地或 LAN 监听端口覆盖为 `1` 至 `65535` 的整数。只有 `--lan` 才生成启动期配对码、传入进程内 Access 配置并监听 `0.0.0.0:<port>`；LAN 模式不得自动打开浏览器，终端只列出物理网络接口上的私有 IPv4 URL，不把 VPN、虚拟网桥或 `0.0.0.0` 当作访问地址。
-- LAN 配对码、Session、失败窗口和清理定时器只属于当前 Fastify 实例；关闭时必须清空，重启不得恢复。Session 使用签发时固定的绝对期限，请求不得续期。
+- CLI 默认监听 `127.0.0.1:3210`，每次监听成功后直接打开新的浏览器页面，不检测或复用已打开页面；`--port` 可将本地或 LAN 监听端口覆盖为 `1` 至 `65535` 的整数。只有 `--lan` 才建立启动期访问密码、传入进程内 Access 配置并监听 `0.0.0.0:<port>`；`--lan-password` 可提供 16 至 128 字符且同时包含大小写字母、数字和符号的自定义密码，缺省时生成至少 128 bit 熵的随机密码。LAN 模式不得自动打开浏览器，终端只列出物理网络接口上的私有 IPv4 URL，不把 VPN、虚拟网桥或 `0.0.0.0` 当作访问地址；自定义密码不得回显。
+- LAN 访问密码、Session、失败窗口和清理定时器只属于当前 Fastify 实例；关闭时必须清空，重启不得恢复。`--session-ttl` 接受 `1m` 至 `180d`；Session 使用签发时固定的绝对期限，请求不得续期。
 - Fastify 资源通过插件封装，并在 `onClose` 中释放。
 - 幂等 Mutation 的已完成结果缓存与进行中请求必须独立管理；`idempotencyCacheSize` 同时作为结果缓存容量和不同 Key 进行中请求的硬上限。同 Key 继续复用原请求，不同 Key 超限时返回可重试的 `503 IDEMPOTENCY_CAPACITY_EXCEEDED`，请求完成或失败后立即释放进行中名额。
 - 普通 HTTP 路由使用 Fastify 原生 60 秒 `handlerTimeout` 和 `request.signal` 执行协作取消；Event Stream WebSocket 是显式长连接，不继承 Handler 截止时间，其有界性由队列、背压和连接关闭生命周期保证。

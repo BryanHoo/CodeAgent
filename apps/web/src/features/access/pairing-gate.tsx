@@ -67,7 +67,7 @@ export function PairingGate({
               <KeyRound aria-hidden="true" className="ml-3 size-4 shrink-0 text-muted-foreground" />
               <Input
                 aria-label={t("access.codeLabel")}
-                autoComplete="one-time-code"
+                autoComplete="current-password"
                 className="access-code-input min-w-0 flex-1 bg-transparent px-3 font-mono text-body"
                 id="access-pairing-code"
                 onChange={(event) => {

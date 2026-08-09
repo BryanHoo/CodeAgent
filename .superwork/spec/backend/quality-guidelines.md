@@ -4,7 +4,7 @@
 
 - 默认启动只能监听 Loopback；LAN 监听必须由显式 `--lan` 启用，并使用可信局域网配对认证。该模式是明文 HTTP，禁止描述为加密或安全远程访问。
 - LAN 模式的匿名范围只能是静态 SPA、`GET /v1/health`、`GET /v1/access` 和 `POST /v1/access/pair`；其余 `/v1/*` 和 WebSocket Upgrade 必须由根级 Hook 认证。Cookie 写请求与所有 WebSocket 必须严格校验 `Origin` 和 `Host` 同源。
-- 配对码至少 128 bit 熵，Session ID 至少 256 bit；二者不得进入 URL、环境变量、日志或持久层。Session 与按 IP 配对失败窗口必须有界，关闭时清空；失败每分钟最多 5 次且响应不得泄漏匹配细节。
+- 自动生成的 LAN 访问密码至少 128 bit 熵；自定义密码必须为 16 至 128 字符并同时包含大小写字母、数字和符号。Session ID 至少 256 bit；访问密码和 Session ID 不得进入 URL、环境变量、日志或持久层，自定义密码也不得回显到终端。Session 与按 IP 配对失败窗口必须有界，关闭时清空；失败每分钟最多 5 次且响应不得泄漏匹配细节。
 - LAN Cookie 使用 `HttpOnly; SameSite=Strict; Path=/` 和固定绝对 `Max-Age`，明文 HTTP 不设置 `Secure`。所有 `/v1/*` 使用 `no-store`，应用响应设置 CSP、Frame、MIME、Referrer 与 Permissions 安全头，不为 HTTP 设置 HSTS。
 - Fastify 使用 JSON Schema 验证输入并序列化输出。
 - 自定义 Provider Base URL 只允许 `http:` 或 `https:`，禁止 userinfo、query、fragment 和重定向；`GET /models` 必须限制超时、响应字节和模型数量。API key 只能进入当前请求 Body、Provider 内存和 App Server Account API，禁止进入配置、SQLite、URL、日志或响应。

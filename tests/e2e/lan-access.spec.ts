@@ -19,7 +19,7 @@ test("pairs real browsers, persists the cookie, and invalidates it on logout", a
   expect(businessRequests).toEqual([]);
   expect(sockets).toEqual([]);
 
-  const codeInput = page.getByRole("textbox", { name: "配对码" });
+  const codeInput = page.getByRole("textbox", { name: "访问密码" });
   await expect(page.locator("#access-pairing-code")).toHaveCount(1);
   await codeInput.focus();
   await expect(codeInput).toHaveCSS("outline-style", "none");

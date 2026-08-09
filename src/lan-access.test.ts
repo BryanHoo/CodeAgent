@@ -2,15 +2,35 @@ import type { NetworkInterfaceInfo } from "node:os";
 
 import { describe, expect, it } from "vitest";
 
-import { generateLanPairingCode, listLanAccessUrls, parseSessionTtl } from "./lan-access.js";
+import {
+  generateLanPairingCode,
+  listLanAccessUrls,
+  parseSessionTtl,
+  validateLanPassword,
+} from "./lan-access.js";
 
 describe("LAN access helpers", () => {
   it("parses bounded minute, hour, and day durations", () => {
     expect(parseSessionTtl("1m")).toBe(60_000);
     expect(parseSessionTtl("12h")).toBe(43_200_000);
-    expect(parseSessionTtl("30d")).toBe(2_592_000_000);
-    for (const invalid of ["0m", "59s", "1.5h", "31d", "999999999999999999999d", " 1h"]) {
+    expect(parseSessionTtl("180d")).toBe(15_552_000_000);
+    for (const invalid of ["0m", "59s", "1.5h", "181d", "999999999999999999999d", " 1h"]) {
       expect(() => parseSessionTtl(invalid)).toThrow(/session TTL/u);
+    }
+  });
+
+  it("accepts only high-strength custom LAN passwords", () => {
+    expect(() => validateLanPassword("Strong-Lan_Pass9!")).not.toThrow();
+
+    for (const invalid of [
+      "Short1!a",
+      `${"A".repeat(125)}a1!x`,
+      "lowercase-password9!",
+      "UPPERCASE-PASSWORD9!",
+      "Password-Without-Digit!",
+      "PasswordWithoutSymbol9",
+    ]) {
+      expect(() => validateLanPassword(invalid)).toThrow(/LAN password/u);
     }
   });
 

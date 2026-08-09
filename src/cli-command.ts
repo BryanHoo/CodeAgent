@@ -37,6 +37,7 @@ import {
   generateLanPairingCode,
   listLanAccessUrls,
   parseSessionTtl,
+  validateLanPassword,
 } from "./lan-access.js";
 
 interface CliManagedRuntime {
@@ -102,6 +103,7 @@ interface ParsedCommandOptions {
   codexBin?: string;
   codexHome?: string;
   lan?: boolean;
+  lanPassword?: string;
   port?: number;
   sessionTtl?: string;
 }
@@ -155,6 +157,8 @@ Start options:
   --port <port>              Listen on the specified TCP port. Defaults to 3210.
   --lan                      Listen on all network interfaces for trusted LAN access.
                              This disables automatic browser opening.
+  --lan-password <password>  Use a custom strong LAN access password instead of a random one.
+                             Requires 16-128 characters and all character types. Requires --lan.
   --session-ttl <duration>   Set the fixed LAN session lifetime using ms, s, m, h, or d.
                              Defaults to ${DEFAULT_LAN_SESSION_TTL}. Requires --lan.
   --codex-bin <path>         Use the Codex executable at the specified path.
@@ -171,6 +175,7 @@ Global options:
 Examples:
   code-agent
   code-agent start --port 4567
+  code-agent start --lan --lan-password 'Strong-Lan_Pass9!'
   code-agent start --lan --session-ttl 12h
   code-agent doctor --codex-bin /path/to/codex
   code-agent version
@@ -210,6 +215,8 @@ function parseCommandOptions(
       parsed.codexBin = value;
     } else if (option === "--codex-home") {
       parsed.codexHome = value;
+    } else if (option === "--lan-password") {
+      parsed.lanPassword = value;
     } else if (option === "--port") {
       if (!/^\d+$/u.test(value)) {
         throw new Error("--port 必须是 1 到 65535 之间的整数");
@@ -335,11 +342,17 @@ async function runStart(
 ): Promise<number> {
   const options = parseCommandOptions(
     args,
-    new Set(["--codex-bin", "--codex-home", "--port", "--session-ttl"]),
+    new Set(["--codex-bin", "--codex-home", "--lan-password", "--port", "--session-ttl"]),
     new Set(["--lan"]),
   );
   if (options.sessionTtl !== undefined && options.lan !== true) {
     throw new Error("--session-ttl 只能与 --lan 一起使用");
+  }
+  if (options.lanPassword !== undefined && options.lan !== true) {
+    throw new Error("--lan-password 只能与 --lan 一起使用");
+  }
+  if (options.lanPassword !== undefined) {
+    validateLanPassword(options.lanPassword);
   }
   const sessionTtlText = options.sessionTtl ?? DEFAULT_LAN_SESSION_TTL;
   const port = options.port ?? 3210;
@@ -348,7 +361,7 @@ async function runStart(
     sessionTtlMs === undefined
       ? undefined
       : {
-          pairingCode: dependencies.generateLanPairingCode(),
+          pairingCode: options.lanPassword ?? dependencies.generateLanPairingCode(),
           sessionTtlMs,
         };
   const ownedShutdown = signal ? null : createProcessShutdownSignal();
@@ -407,7 +420,11 @@ async function runStart(
       } else {
         output.info(`局域网访问地址:\n${urls.map((url) => `  ${url}`).join("\n")}`);
       }
-      output.info(`配对码: ${access.pairingCode}`);
+      if (options.lanPassword === undefined) {
+        output.info(`配对码: ${access.pairingCode}`);
+      } else {
+        output.info("已使用自定义访问密码（不会在终端回显）。");
+      }
       output.info(`会话有效期: ${sessionTtlText}（固定期限，不自动续期）`);
       output.info("重启 CodeAgent 后，当前配对码和所有局域网会话将失效。");
     } else {
