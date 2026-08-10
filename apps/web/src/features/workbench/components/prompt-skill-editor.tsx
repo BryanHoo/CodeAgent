@@ -246,7 +246,6 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       }
       event.preventDefault();
       insertPlainTextAtSelection(event.currentTarget, event.clipboardData.getData("text/plain"));
-      emitChange();
     };
 
     const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {

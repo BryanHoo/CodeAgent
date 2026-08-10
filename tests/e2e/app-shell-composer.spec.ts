@@ -293,6 +293,22 @@ test("keeps composer attachment icons aligned with the compact toolbar", async (
   await expect(imageMenuIcon).toHaveCSS("height", "16px");
 });
 
+test("undoes text pasted into the composer", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.click();
+  await page.evaluate(async () => {
+    await navigator.clipboard.writeText("需要撤销的内容");
+  });
+  await prompt.press(process.platform === "darwin" ? "Meta+v" : "Control+v");
+  await expect(prompt).toHaveAttribute("data-serialized-value", "需要撤销的内容");
+
+  await prompt.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
+
+  await expect(prompt).toHaveAttribute("data-serialized-value", "");
+});
+
 test("does not submit or select a command when Safari confirms an IME candidate @smoke", async ({
   page,
 }) => {

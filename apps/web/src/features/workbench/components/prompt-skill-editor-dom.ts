@@ -262,20 +262,10 @@ export function placeCaret(root: HTMLDivElement, offset: number): void {
 }
 
 export function insertPlainTextAtSelection(root: HTMLDivElement, text: string): void {
-  const selection = document.getSelection();
-  const range = selection?.rangeCount === 0 ? undefined : selection?.getRangeAt(0);
-  if (range === undefined || !root.contains(range.commonAncestorContainer)) {
-    root.append(document.createTextNode(text));
-    placeCaret(root, serializedNodeLength(root));
-    return;
-  }
-  range.deleteContents();
-  const textNode = document.createTextNode(text);
-  range.insertNode(textNode);
-  range.setStartAfter(textNode);
-  range.collapse(true);
-  selection?.removeAllRanges();
-  selection?.addRange(range);
+  root.focus();
+  // 通过浏览器编辑命令插入纯文本，使粘贴操作进入 contentEditable 的原生撤销栈。
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- 标准 Selection API 无法生成原生撤销记录。
+  document.execCommand("insertText", false, text);
 }
 
 export function insertLineBreakAtSelection(root: HTMLDivElement): void {
