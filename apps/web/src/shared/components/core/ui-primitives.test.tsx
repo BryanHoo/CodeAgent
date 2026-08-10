@@ -22,6 +22,9 @@ import {
   DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "./dropdown-menu.js";
 import { Input } from "./input.js";
@@ -221,6 +224,31 @@ describe("项目核心组件", () => {
     expect(menuMarkup).toContain('data-slot="dropdown-menu-radio-group"');
     expect(menuMarkup).toContain('data-slot="dropdown-menu-radio-item"');
     expect(menuMarkup).toContain('role="menuitemradio"');
+  });
+
+  it("renders nested dropdown choices with a trailing check indicator", () => {
+    const markup = renderToStaticMarkup(
+      <DropdownMenu open>
+        <DropdownMenuContent aria-label="模型和思考量">
+          <DropdownMenuSub open>
+            <DropdownMenuSubTrigger>模型</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuRadioGroup value="gpt-5.6-sol">
+                <DropdownMenuRadioItem indicator="check" value="gpt-5.6-sol">
+                  GPT-5.6 Sol
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+
+    expect(markup).toContain('data-slot="dropdown-menu-sub-trigger"');
+    expect(markup).toContain('data-slot="dropdown-menu-sub-content"');
+    expect(markup).toContain('data-indicator="check"');
+    expect(markup).toContain('data-indicator-position="end"');
+    expect(markup).toContain('role="menuitemradio"');
   });
 
   it("composes a portalled context menu around its existing trigger DOM", () => {

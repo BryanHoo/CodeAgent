@@ -33,11 +33,11 @@ import {
   applyApprovalMode,
   deriveApprovalMode,
   resolveComposerPlaceholder,
-  resolveReasoningEffort,
   type ApprovalMode,
 } from "../composer-state.js";
 import { movePromptCommandSelection } from "./prompt-command.js";
 import { ComposerBranchSwitcher } from "./composer-branch-switcher.js";
+import { ComposerModelSelector } from "./composer-model-selector.js";
 import { PromptSkillEditor } from "./prompt-skill-editor.js";
 import { ComposerCommandMenu } from "./workbench-composer-command-menu.js";
 import { ComposerFileMenu } from "./workbench-composer-file-menu.js";
@@ -272,74 +272,15 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
             </PromptInputTools>
             {/* 移动端压缩选择器的展示宽度，保持所有常用操作始终位于同一行。 */}
             <div className="flex min-w-0 items-center gap-1 max-workbench:shrink-0 max-workbench:gap-0.5">
-              <PromptInputSelect
-                aria-label={t("composer.modelSelect")}
-                className="max-workbench:w-16 max-workbench:max-w-16 max-workbench:px-1 max-workbench:[field-sizing:fixed]"
-                disabled={
-                  props.turnControlsDisabled ||
-                  props.modelsPending ||
-                  props.selectedModel === undefined
-                }
-                onChange={(event) => {
-                  const nextModel = props.models.find(
-                    (model) => model.id === event.currentTarget.value,
-                  );
-                  const nextReasoningEffort = resolveReasoningEffort(
-                    nextModel,
-                    props.activeSettings.reasoningEffort,
-                  );
-                  if (nextModel !== undefined && nextReasoningEffort !== undefined) {
-                    props.onSettingsChange(
-                      {
-                        ...props.activeSettings,
-                        model: nextModel.id,
-                        reasoningEffort: nextReasoningEffort,
-                      },
-                      "model",
-                    );
-                  }
-                }}
-                value={props.selectedModel?.id ?? ""}
-              >
-                {props.models.length === 0 ? (
-                  <option value="">
-                    {props.modelsPending ? t("composer.modelLoading") : t("composer.noModels")}
-                  </option>
-                ) : (
-                  props.models.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.displayName}
-                    </option>
-                  ))
-                )}
-              </PromptInputSelect>
-              <PromptInputSelect
-                aria-label={t("composer.reasonEffortSelect")}
-                className="max-workbench:w-8 max-workbench:max-w-8 max-workbench:px-1 max-workbench:[field-sizing:fixed]"
-                disabled={
-                  props.turnControlsDisabled ||
-                  props.modelsPending ||
-                  props.selectedModel === undefined
-                }
-                onChange={(event) => {
-                  props.onSettingsChange(
-                    { ...props.activeSettings, reasoningEffort: event.currentTarget.value },
-                    "reasoningEffort",
-                  );
-                }}
-                title={
-                  props.selectedModel?.supportedReasoningEfforts.find(
-                    (option) => option.id === props.selectedReasoningEffort,
-                  )?.description
-                }
-                value={props.selectedReasoningEffort ?? ""}
-              >
-                {props.selectedModel?.supportedReasoningEfforts.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {t(`settings:effort.${option.id}`, { defaultValue: option.id })}
-                  </option>
-                ))}
-              </PromptInputSelect>
+              <ComposerModelSelector
+                activeSettings={props.activeSettings}
+                disabled={props.turnControlsDisabled}
+                models={props.models}
+                modelsPending={props.modelsPending}
+                onSettingsChange={props.onSettingsChange}
+                selectedModel={props.selectedModel}
+                selectedReasoningEffort={props.selectedReasoningEffort}
+              />
               <PromptInputSubmit
                 aria-label={
                   props.submitAction === "queue"

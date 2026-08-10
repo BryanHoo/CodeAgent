@@ -885,10 +885,11 @@ test("keeps the compact mobile workbench inside the dynamic viewport", async ({ 
 
   const composer = page.getByRole("region", { name: "消息编辑器" });
   const composerFooter = composer.locator("form > div:last-child");
+  const modelSelector = page.getByRole("button", { name: /^模型和思考量：/u });
   const composerControls = [
     page.getByRole("button", { name: "添加图片或文件" }),
     page.getByRole("combobox", { name: "批准模式" }),
-    page.getByRole("combobox", { name: "选择模型" }),
+    modelSelector,
     page.getByRole("button", { name: "提交", exact: true }),
   ];
   const touchButtons = [
@@ -920,6 +921,27 @@ test("keeps the compact mobile workbench inside the dynamic viewport", async ({ 
   );
   for (const box of composerControlBoxes) expect(box?.y).toBe(composerControlBoxes[0]?.y);
   expect((await composerFooter.boundingBox())?.height).toBeLessThanOrEqual(52);
+
+  await composerControls[2]?.click();
+  const mobileModelDialog = page.getByRole("dialog", { name: "模型和思考量" });
+  await expect(mobileModelDialog.getByRole("radio")).toHaveCount(4);
+  await expect(mobileModelDialog).not.toContainText("适合复杂编码任务");
+  const mobileModelDialogBox = await mobileModelDialog.boundingBox();
+  expect(mobileModelDialogBox).not.toBeNull();
+  expect(mobileModelDialogBox?.x ?? -1).toBeGreaterThanOrEqual(8);
+  expect((mobileModelDialogBox?.x ?? 0) + (mobileModelDialogBox?.width ?? 0)).toBeLessThanOrEqual(
+    312,
+  );
+  expect(mobileModelDialogBox?.y ?? -1).toBeGreaterThanOrEqual(8);
+  expect((mobileModelDialogBox?.y ?? 0) + (mobileModelDialogBox?.height ?? 0)).toBeLessThanOrEqual(
+    560,
+  );
+  expect(mobileModelDialogBox?.width).toBeLessThanOrEqual(304);
+  await mobileModelDialog.getByRole("radio", { name: "GPT-5.6 Terra" }).click();
+  await expect(mobileModelDialog).not.toBeVisible();
+  await expect(modelSelector).toHaveAccessibleName("模型和思考量：GPT-5.6 Terra，中");
+  await modelSelector.click();
+  await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "展开上下文面板" }).click();
   const inspectorClose = page

@@ -1,3 +1,5 @@
+import type { Page } from "@playwright/test";
+
 import {
   expect,
   mockAppShellApi,
@@ -9,6 +11,28 @@ import {
 } from "./fixtures/app-shell.js";
 
 test.describe.configure({ mode: "serial" });
+
+function getComposerModelSelector(page: Page) {
+  return page.getByRole("button", { name: /^模型和思考量：/u });
+}
+
+async function selectComposerModel(page: Page, modelName: string): Promise<void> {
+  await getComposerModelSelector(page).click();
+  await page.getByRole("menuitem", { name: "选择模型" }).click();
+  await page
+    .getByRole("menu", { name: "选择模型" })
+    .getByRole("menuitemradio", { name: new RegExp(modelName, "u") })
+    .click();
+}
+
+async function selectComposerReasoning(page: Page, effortName: string): Promise<void> {
+  await getComposerModelSelector(page).click();
+  await page.getByRole("menuitem", { name: "选择思考量" }).click();
+  await page
+    .getByRole("menu", { name: "选择思考量" })
+    .getByRole("menuitemradio", { name: new RegExp(`^${effortName}`, "u") })
+    .click();
+}
 
 test("connects a custom API from the provider gate and reuses it in settings", async ({ page }) => {
   await mockAppShellApi(page, { providerConnected: false });
@@ -48,9 +72,9 @@ test("redirects the root route to the default project workbench @smoke", async (
 test("edits global defaults in a dialog without overriding task settings", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
   const workbenchUrl = page.url();
-  const taskModel = page.getByRole("combobox", { name: "选择模型" });
+  const taskModel = getComposerModelSelector(page);
   const taskApproval = page.getByRole("combobox", { name: "批准模式" });
-  await expect(taskModel).toHaveValue("gpt-5.6-sol");
+  await expect(taskModel).toHaveAccessibleName("模型和思考量：GPT-5.6 Sol，高");
   await expect(taskApproval).toHaveValue("on-request");
 
   await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
@@ -81,7 +105,7 @@ test("edits global defaults in a dialog without overriding task settings", async
 
   await expect(dialog).toHaveCount(0);
   await expect(page).toHaveURL(workbenchUrl);
-  await expect(taskModel).toHaveValue("gpt-5.6-sol");
+  await expect(taskModel).toHaveAccessibleName("模型和思考量：GPT-5.6 Sol，高");
   await expect(taskApproval).toHaveValue("on-request");
 
   await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
@@ -237,8 +261,9 @@ test("uses global defaults throughout a new task composer", async ({ page }) => 
 
   await expect(page.getByRole("combobox", { name: "批准模式" })).toHaveValue("never");
   await expect(page.getByRole("combobox", { name: "沙盒模式" })).toHaveValue("danger-full-access");
-  await expect(page.getByRole("combobox", { name: "选择模型" })).toHaveValue("gpt-5.6-terra");
-  await expect(page.getByRole("combobox", { name: "选择思考量" })).toHaveValue("medium");
+  await expect(getComposerModelSelector(page)).toHaveAccessibleName(
+    "模型和思考量：GPT-5.6 Terra，中",
+  );
 });
 
 test("omits the project open module from the center toolbar", async ({ page }) => {
@@ -754,24 +779,21 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(page.getByRole("region", { name: "消息编辑器" })).toBeVisible();
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
-  const compactSelects = [
-    approvalSelect,
-    page.getByRole("combobox", { name: "选择模型" }),
-    page.getByRole("combobox", { name: "选择思考量" }),
-  ];
+  const modelSelector = getComposerModelSelector(page);
   await expect(prompt).toBeEnabled();
   await expect(approvalSelect).toHaveValue("on-request");
-  for (const select of compactSelects) {
-    await expect(select).toHaveCSS("appearance", "none");
-    await expect
-      .poll(() => select.evaluate((element) => getComputedStyle(element).fieldSizing))
-      .toBe("content");
-  }
+  await expect(approvalSelect).toHaveCSS("appearance", "none");
+  await expect
+    .poll(() => approvalSelect.evaluate((element) => getComputedStyle(element).fieldSizing))
+    .toBe("content");
+  await expect(modelSelector).toHaveAttribute("data-slot", "composer-model-selector");
+  await expect(modelSelector).toHaveAccessibleName("模型和思考量：GPT-5.6 Sol，高");
   const composerForm = page.getByRole("region", { name: "消息编辑器" }).locator("form");
   const composerControls = [
     prompt,
     page.getByRole("button", { name: "添加图片或文件" }),
-    ...compactSelects,
+    approvalSelect,
+    modelSelector,
   ];
   for (const control of composerControls) {
     await control.focus();
@@ -996,20 +1018,18 @@ test("renames the active task from the center title", async ({ page }) => {
 test("restores task settings after a page refresh", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  const modelSelect = page.getByRole("combobox", { name: "选择模型" });
-  const reasoningSelect = page.getByRole("combobox", { name: "选择思考量" });
   const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
   await Promise.all([
     page.waitForResponse(
       (response) => response.url().endsWith("/tasks/task-1/settings") && response.ok(),
     ),
-    modelSelect.selectOption("gpt-5.6-terra"),
+    selectComposerModel(page, "GPT-5.6 Terra"),
   ]);
   await Promise.all([
     page.waitForResponse(
       (response) => response.url().endsWith("/tasks/task-1/settings") && response.ok(),
     ),
-    reasoningSelect.selectOption("low"),
+    selectComposerReasoning(page, "低"),
   ]);
   await Promise.all([
     page.waitForResponse(
@@ -1020,30 +1040,30 @@ test("restores task settings after a page refresh", async ({ page }) => {
 
   await page.reload();
 
-  await expect(page.getByRole("combobox", { name: "选择模型" })).toHaveValue("gpt-5.6-terra");
-  await expect(page.getByRole("combobox", { name: "选择思考量" })).toHaveValue("low");
+  await expect(getComposerModelSelector(page)).toHaveAccessibleName(
+    "模型和思考量：GPT-5.6 Terra，低",
+  );
   await expect(page.getByRole("combobox", { name: "批准模式" })).toHaveValue("auto-review");
 });
 
 test("restores project defaults without inheriting task approval", async ({ page }) => {
   await page.goto("/p/code-agent");
 
-  const modelSelect = page.getByRole("combobox", { name: "选择模型" });
-  const reasoningSelect = page.getByRole("combobox", { name: "选择思考量" });
   const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
   await Promise.all([
     page.waitForResponse((response) => response.url().endsWith("/defaults") && response.ok()),
-    modelSelect.selectOption("gpt-5.6-terra"),
+    selectComposerModel(page, "GPT-5.6 Terra"),
   ]);
   await Promise.all([
     page.waitForResponse((response) => response.url().endsWith("/defaults") && response.ok()),
-    reasoningSelect.selectOption("low"),
+    selectComposerReasoning(page, "低"),
   ]);
   await approvalSelect.selectOption("never");
 
   await page.reload();
 
-  await expect(page.getByRole("combobox", { name: "选择模型" })).toHaveValue("gpt-5.6-terra");
-  await expect(page.getByRole("combobox", { name: "选择思考量" })).toHaveValue("low");
+  await expect(getComposerModelSelector(page)).toHaveAccessibleName(
+    "模型和思考量：GPT-5.6 Terra，低",
+  );
   await expect(page.getByRole("combobox", { name: "批准模式" })).toHaveValue("on-request");
 });

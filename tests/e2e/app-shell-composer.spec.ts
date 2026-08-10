@@ -1303,14 +1303,25 @@ test("submits host attachments, approval policy, model, and reasoning effort thr
   });
   await page.goto("/p/code-agent/t/task-1");
 
-  const modelSelect = page.getByRole("combobox", { name: "选择模型" });
-  await expect(modelSelect).toHaveValue("gpt-5.6-sol");
-  await expect(modelSelect.locator("option")).toHaveText(["GPT-5.6 Sol", "GPT-5.6 Terra"]);
-  await modelSelect.selectOption("gpt-5.6-terra");
-  const reasoningSelect = page.getByRole("combobox", { name: "选择思考量" });
-  await expect(reasoningSelect).toHaveValue("medium");
-  await expect(reasoningSelect.locator("option")).toHaveText(["低", "中"]);
-  await reasoningSelect.selectOption("low");
+  const modelSelector = page.getByRole("button", { name: /^模型和思考量：/u });
+  await expect(modelSelector).toHaveAccessibleName("模型和思考量：GPT-5.6 Sol，高");
+  await modelSelector.click();
+  await page.getByRole("menuitem", { name: "选择模型" }).click();
+  const modelMenu = page.getByRole("menu", { name: "选择模型" });
+  await expect(modelMenu.getByRole("menuitemradio")).toHaveCount(2);
+  await expect(modelMenu).not.toContainText("适合复杂编码任务");
+  expect((await modelMenu.boundingBox())?.width).toBeLessThanOrEqual(224);
+  await modelMenu.getByRole("menuitemradio", { name: /GPT-5\.6 Terra/u }).click();
+  await expect(modelSelector).toHaveAccessibleName("模型和思考量：GPT-5.6 Terra，中");
+
+  await modelSelector.click();
+  await page.getByRole("menuitem", { name: "选择思考量" }).click();
+  const reasoningMenu = page.getByRole("menu", { name: "选择思考量" });
+  await expect(reasoningMenu.getByRole("menuitemradio")).toHaveCount(2);
+  await expect(reasoningMenu.getByRole("menuitemradio")).toHaveText(["低", "中"]);
+  expect((await reasoningMenu.boundingBox())?.width).toBeLessThanOrEqual(192);
+  await reasoningMenu.getByRole("menuitemradio", { name: /低/u }).click();
+  await expect(modelSelector).toHaveAccessibleName("模型和思考量：GPT-5.6 Terra，低");
   const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
   const sandboxSelect = page.getByRole("combobox", { name: "沙盒模式" });
   await expect(approvalSelect.locator("xpath=following-sibling::select[1]")).toHaveAttribute(
