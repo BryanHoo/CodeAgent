@@ -17,7 +17,8 @@ Commands:
   version  Print the installed CodeAgent version.
 
 Start options:
-  --port <port>              Listen on the specified TCP port. Defaults to 3210.
+  --port <port>              Start from the specified TCP port. Defaults to 3210.
+                             Automatically increases the port when it is occupied.
   --lan                      Listen on all network interfaces for trusted LAN access.
                              This disables automatic browser opening.
   --lan-password <password>  Use a custom strong LAN access password instead of a random one.

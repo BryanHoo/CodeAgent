@@ -3,6 +3,7 @@
 ## 边界与安全
 
 - 默认启动只能监听 Loopback；LAN 监听必须由显式 `--lan` 启用，并使用可信局域网配对认证。该模式是明文 HTTP，禁止描述为加密或安全远程访问。
+- CLI 将默认端口 `3210` 或 `--port` 指定值作为起始端口；监听遇到 `EADDRINUSE` 时必须逐个递增至 `65535`，其他错误和 `65535` 占用必须直接失败。终端地址、LAN 地址与自动打开的浏览器 URL 必须统一使用实际监听端口。
 - LAN 模式的匿名范围只能是静态 SPA、`GET /v1/health`、`GET /v1/access` 和 `POST /v1/access/pair`；其余 `/v1/*` 和 WebSocket Upgrade 必须由根级 Hook 认证。Cookie 写请求与所有 WebSocket 必须严格校验 `Origin` 和 `Host` 同源。
 - 自动生成的 LAN 访问密码至少 128 bit 熵；自定义密码必须为 16 至 128 字符并同时包含大小写字母、数字和符号。Session ID 至少 256 bit；访问密码和 Session ID 不得进入 URL、环境变量、日志或持久层，自定义密码也不得回显到终端。Session 与按 IP 配对失败窗口必须有界，关闭时清空；失败每分钟最多 5 次且响应不得泄漏匹配细节。
 - LAN Cookie 使用 `HttpOnly; SameSite=Strict; Path=/` 和固定绝对 `Max-Age`，明文 HTTP 不设置 `Secure`。所有 `/v1/*` 使用 `no-store`，应用响应设置 CSP、Frame、MIME、Referrer 与 Permissions 安全头，不为 HTTP 设置 HSTS。
@@ -28,6 +29,7 @@
 - Binary 定位测试必须确认包内路径落到当前平台的原生可执行文件；Windows 只接受 `.exe`，不得把 `.cmd`、`.bat` 或 JS launcher 当作受管 App Server 进程。
 - Server 目录浏览测试必须覆盖 POSIX 路径规范化、Windows UTF-8 绝对路径契约、非目录与相对路径拒绝、符号链接省略和稳定排序；根 CLI 系统集成测试继续覆盖浏览器启动器的缺失回退。CI 质量门禁至少在 Ubuntu 与 Windows 上运行。
 - 根 CLI 参数测试必须覆盖 `pnpm run start -- ...` 转发的单个 `--` 分隔符；只忽略命令后的首个分隔符，后续未知或重复选项仍必须拒绝。
+- 根 CLI 端口测试必须覆盖连续占用后的递增、实际端口传播、非 `EADDRINUSE` 错误和 `65535` 上限。
 - Project 宿主打开测试必须覆盖 Windows Explorer 成功转交后不误报失败，以及 Windows Terminal 强制在目标目录打开独立新窗口。
 - 子进程关闭测试覆盖发送 `SIGKILL` 后仍未退出的路径，并验证关闭 Promise 在截止时间内失败。
 - Provider 集成使用 Fake App Server，不依赖真实账号完成默认 CI。

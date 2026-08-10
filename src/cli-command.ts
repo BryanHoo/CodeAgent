@@ -53,6 +53,8 @@ interface CliManagedServer {
   listen: (options: { host: string; port: number }) => Promise<string>;
 }
 
+const MAX_TCP_PORT = 65_535;
+
 interface CliManagedStateRepository
   extends ProjectRepository, AgentSettingsRepository, AgentProviderConnectionRepository {
   close: () => Promise<void>;
@@ -143,6 +145,34 @@ function assertSupportedNodeVersion(version: string): void {
   if (!Number.isInteger(major) || major < 24) {
     throw new Error(`需要 Node.js 24 或更高版本，当前版本为 ${version}`);
   }
+}
+
+function isAddressInUseError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "EADDRINUSE"
+  );
+}
+
+async function listenOnAvailablePort(
+  server: CliManagedServer,
+  host: string,
+  initialPort: number,
+): Promise<number> {
+  // 直接尝试监听可避免“先探测、后监听”之间被其他进程抢占端口的竞态。
+  for (let port = initialPort; port <= MAX_TCP_PORT; port += 1) {
+    try {
+      await server.listen({ host, port });
+      return port;
+    } catch (error) {
+      if (!isAddressInUseError(error) || port === MAX_TCP_PORT) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(`端口 ${String(initialPort)} 到 ${String(MAX_TCP_PORT)} 均不可用`);
 }
 
 function resolveCodexHome(options: ParsedCommandOptions): string {
@@ -312,11 +342,15 @@ async function runStart(
       settingsRepository: stateRepository,
       staticRoot: dependencies.webRoot,
     });
-    await server.listen({ host: options.lan === true ? "0.0.0.0" : "127.0.0.1", port });
+    const host = options.lan === true ? "0.0.0.0" : "127.0.0.1";
+    const activePort = await listenOnAvailablePort(server, host, port);
+    if (activePort !== port) {
+      output.warning(`端口 ${String(port)} 已被占用，已自动切换到端口 ${String(activePort)}。`);
+    }
     output.success("CodeAgent 已启动");
 
     if (access !== undefined) {
-      const urls = dependencies.listLanAccessUrls(port);
+      const urls = dependencies.listLanAccessUrls(activePort);
       output.warning("局域网模式使用未加密的 HTTP，请仅在可信网络中使用。");
       if (urls.length === 0) {
         output.warning("未找到可用的局域网 IPv4 地址，服务仍在运行。");
@@ -331,12 +365,12 @@ async function runStart(
       output.info(`会话有效期: ${sessionTtlText}（固定期限，不自动续期）`);
       output.info("重启 CodeAgent 后，当前配对码和所有局域网会话将失效。");
     } else {
-      output.info(`访问地址: http://127.0.0.1:${String(port)}`);
+      output.info(`访问地址: http://127.0.0.1:${String(activePort)}`);
     }
 
     if (options.lan !== true) {
       try {
-        await dependencies.openBrowser(`http://127.0.0.1:${String(port)}`);
+        await dependencies.openBrowser(`http://127.0.0.1:${String(activePort)}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         output.warning(`无法自动打开浏览器，请手动访问上述地址。原因: ${message}`);

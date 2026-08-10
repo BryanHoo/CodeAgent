@@ -256,7 +256,7 @@ export function ComposerModelSelector({
       <DropdownMenuContent
         align="end"
         aria-label={t("composer.modelAndReasoningMenu")}
-        className="w-48"
+        className="w-40"
         side="top"
       >
         <DropdownMenuSub>
@@ -266,7 +266,7 @@ export function ComposerModelSelector({
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent
             aria-label={t("composer.modelSelect")}
-            className="w-52 max-w-[calc(100vw-1rem)]"
+            className="w-40 max-w-[calc(100vw-1rem)]"
           >
             <DropdownMenuRadioGroup
               onValueChange={selectModel}
@@ -289,7 +289,7 @@ export function ComposerModelSelector({
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent
             aria-label={t("composer.reasonEffortSelect")}
-            className="w-40 max-w-[calc(100vw-1rem)]"
+            className="min-w-28 w-28 max-w-[calc(100vw-1rem)]"
           >
             <DropdownMenuRadioGroup
               onValueChange={selectReasoningEffort}

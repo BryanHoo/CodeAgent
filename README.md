@@ -83,7 +83,7 @@ Select **Commit**, choose the files to include, review or edit the commit messag
 
 ## Local Network Access
 
-The default port is `3210`. Use `--port` to choose another port for local or LAN access:
+The default starting port is `3210`. If it is occupied, CodeAgent automatically tries each following port until one is available. Use `--port` to choose another starting port for local or LAN access:
 
 ```bash
 code-agent start --port 4567
@@ -131,7 +131,7 @@ Return to the model service connection screen and sign in again, or inspect the 
 
 ### The Browser Does Not Open
 
-Confirm that the terminal shows `CodeAgent 已启动`, then open `http://127.0.0.1:3210` manually.
+Confirm that the terminal shows `CodeAgent 已启动`, then open the access URL printed in the terminal.
 
 ### Startup or Local Data Checks Fail
 
@@ -143,9 +143,9 @@ code-agent doctor
 
 Use the failed checks shown in the terminal to resolve issues with Node.js, Codex, or local data.
 
-### Port `3210` Is Already in Use
+### The Starting Port Is Already in Use
 
-Stop the existing CodeAgent process or the other application using the port, or run `code-agent start --port 4567` to use another port.
+CodeAgent automatically increments the port until it finds an available one and prints the selected address. Use `code-agent start --port 4567` to begin searching from a different port.
 
 ## Help
 

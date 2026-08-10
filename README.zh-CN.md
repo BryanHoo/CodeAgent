@@ -83,7 +83,7 @@ code-agent start
 
 ## 局域网访问
 
-默认端口为 `3210`。本机或局域网启动都可以通过 `--port` 指定其他端口：
+默认从端口 `3210` 启动。如果端口被占用，CodeAgent 会逐个尝试后续端口，直到找到可用端口。本机或局域网启动都可以通过 `--port` 指定其他起始端口：
 
 ```bash
 code-agent start --port 4567
@@ -131,7 +131,7 @@ npm install --global @bryanhu/code-agent@latest
 
 ### 页面没有自动打开
 
-确认终端中已显示“CodeAgent 已启动”，然后手动访问 `http://127.0.0.1:3210`。
+确认终端中已显示“CodeAgent 已启动”，然后手动打开终端输出的访问地址。
 
 ### 启动或数据检查失败
 
@@ -143,9 +143,9 @@ code-agent doctor
 
 根据终端中失败的检查项处理 Node.js、Codex 或本地数据问题。
 
-### 端口 `3210` 已被占用
+### 起始端口已被占用
 
-停止已经运行的 CodeAgent 或占用该端口的其他程序，或者执行 `code-agent start --port 4567` 使用其他端口。
+CodeAgent 会自动递增端口，找到可用端口后输出实际访问地址。可以执行 `code-agent start --port 4567` 从其他端口开始探测。
 
 ## 获取帮助
 
