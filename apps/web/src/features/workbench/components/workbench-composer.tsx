@@ -9,7 +9,6 @@ import {
   resolveIdempotencyAttempt,
 } from "../composer-state.js";
 import { HostAttachmentPickerDialog } from "./host-attachment-picker-dialog.js";
-import { resolvePromptSlashCommand } from "./prompt-command.js";
 import { isPromptSkillContentEmpty } from "./prompt-skill-editor.js";
 import { useWorkbenchBranchSwitch } from "../hooks/use-workbench-branch-switch.js";
 import { createComposerCommands } from "./workbench-composer-commands.js";
@@ -74,6 +73,7 @@ export function WorkbenchComposer({
       : { ...settings, sandboxMode: fixedSandboxMode };
   const session = useComposerSession({
     capabilities,
+    client,
     gitStatus,
     models,
     onSubmissionStateChange,
@@ -100,6 +100,7 @@ export function WorkbenchComposer({
     canSubmit,
     clearComposerInput,
     closeCommandMenu,
+    closeFileMenu,
     commandMenuId,
     commandMenuOpen,
     commandNotice,
@@ -113,7 +114,12 @@ export function WorkbenchComposer({
     draftInputDisabled,
     filteredCommands,
     filteredSkills,
+    fileMenuOpen,
+    fileSearchError,
+    fileSearchPending,
+    fileSearchResults,
     handleAttachmentsChange,
+    handlePromptChange,
     isSubmitting,
     menuItemCount,
     mutationError,
@@ -126,13 +132,10 @@ export function WorkbenchComposer({
     routeScope,
     selectedModel,
     selectedReasoningEffort,
+    selectFileReference,
     setActiveCommandIndex,
     setAttachmentPickerKind,
     setAttachments,
-    setCommandMenuOpen,
-    setCommandNotice,
-    setCommandQuery,
-    setCommandSlashCommand,
     setIsSubmitting,
     setMutationError,
     setComposerModeState,
@@ -173,17 +176,19 @@ export function WorkbenchComposer({
   useEffect(() => {
     if (turnControlsDisabled) {
       closeCommandMenu();
+      closeFileMenu();
     }
-  }, [closeCommandMenu, turnControlsDisabled]);
+  }, [closeCommandMenu, closeFileMenu, turnControlsDisabled]);
 
   useEffect(() => {
-    if (!commandMenuOpen) {
+    if (!commandMenuOpen && !fileMenuOpen) {
       return undefined;
     }
     const handleDocumentKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
         closeCommandMenu();
+        closeFileMenu();
       }
     };
     const handleDocumentPointerDown = (event: PointerEvent) => {
@@ -191,6 +196,7 @@ export function WorkbenchComposer({
       if (eventTarget instanceof Node && !commandSurfaceRef.current?.contains(eventTarget)) {
         // 输入框和命令弹层共享一个交互区域，只有点击区域外部才关闭弹层。
         closeCommandMenu();
+        closeFileMenu();
       }
     };
     document.addEventListener("keydown", handleDocumentKeyDown, true);
@@ -199,7 +205,7 @@ export function WorkbenchComposer({
       document.removeEventListener("keydown", handleDocumentKeyDown, true);
       document.removeEventListener("pointerdown", handleDocumentPointerDown, true);
     };
-  }, [closeCommandMenu, commandMenuOpen, commandSurfaceRef]);
+  }, [closeCommandMenu, closeFileMenu, commandMenuOpen, commandSurfaceRef, fileMenuOpen]);
 
   const submitPrompt = createComposerSubmission({
     activeSettings,
@@ -245,6 +251,7 @@ export function WorkbenchComposer({
       setComposerModeState(undefined);
       return submitPrompt({ files: [], text: t("composer.buildPlanPrompt") }, [], {
         composerMode: null,
+        fileReferences: [],
         forceAction: "start",
       });
     },
@@ -257,6 +264,7 @@ export function WorkbenchComposer({
         queuedPrompt.skills,
         {
           clearInputOnSuccess: false,
+          fileReferences: queuedPrompt.fileReferences,
           forceAction: "start",
           requestTimelineScroll: false,
         },
@@ -350,7 +358,12 @@ export function WorkbenchComposer({
     const sent = await submitPrompt(
       { files: queuedPrompt.files, text: queuedPrompt.text },
       queuedPrompt.skills,
-      { clearInputOnSuccess: false, forceAction: "steer", requestTimelineScroll: false },
+      {
+        clearInputOnSuccess: false,
+        fileReferences: queuedPrompt.fileReferences,
+        forceAction: "steer",
+        requestTimelineScroll: false,
+      },
     );
     if (sent && isCurrentScope(routeScope)) {
       removeQueuedPrompt(queuedPrompt.id);
@@ -390,6 +403,10 @@ export function WorkbenchComposer({
       draftInputDisabled={draftInputDisabled}
       filteredCommands={filteredCommands}
       filteredSkills={filteredSkills}
+      fileMenuOpen={fileMenuOpen}
+      fileSearchError={fileSearchError}
+      fileSearchPending={fileSearchPending}
+      fileSearchResults={fileSearchResults}
       getCommandAvailability={getCommandAvailability}
       gitStatus={gitStatus}
       hasComposerInput={hasComposerInput}
@@ -421,30 +438,10 @@ export function WorkbenchComposer({
         setActiveCommandIndex(0);
         setReviewMenuMode("branches");
       }}
-      onPromptChange={(nextContent, serializedText, cursorOffset) => {
-        setPromptContent(nextContent);
-        composerDraftStore.update(composerScope, (current) => ({
-          ...current,
-          content: nextContent,
-        }));
-        setCommandNotice(undefined);
-        const slashCommand = resolvePromptSlashCommand(serializedText, cursorOffset);
-        if (slashCommand === null) {
-          setCommandMenuOpen(false);
-          setReviewMenuMode(null);
-          setCommandQuery("");
-          setCommandSlashCommand(undefined);
-          return;
-        }
-        // 文本开头或空白后的 `/` 片段驱动过滤，连续正文中的斜杠保持普通字符。
-        setActiveCommandIndex(0);
-        setCommandMenuOpen(true);
-        setReviewMenuMode(null);
-        setCommandQuery(slashCommand.query);
-        setCommandSlashCommand(slashCommand);
-      }}
+      onPromptChange={handlePromptChange}
       onSelectActiveCommand={selectActiveCommandItem}
       onSelectAttachmentKind={setAttachmentPickerKind}
+      onSelectFileReference={selectFileReference}
       onSelectSkill={selectSkill}
       onSettingsChange={updateSettings}
       onSubmit={(message) => void submitPrompt(message)}

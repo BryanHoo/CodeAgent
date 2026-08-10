@@ -113,16 +113,19 @@ export type PromptSlashCommand = Readonly<{
   start: number;
 }>;
 
-export function resolvePromptSlashCommand(
+export type PromptFileMention = PromptSlashCommand;
+
+function resolvePromptTrigger(
   draft: string,
   cursorPosition: number,
+  trigger: "/" | "@",
 ): PromptSlashCommand | null {
   if (cursorPosition < 0 || cursorPosition > draft.length) {
     return null;
   }
 
   const draftBeforeCursor = draft.slice(0, cursorPosition);
-  const commandStart = draftBeforeCursor.lastIndexOf("/");
+  const commandStart = draftBeforeCursor.lastIndexOf(trigger);
   if (commandStart < 0) {
     return null;
   }
@@ -133,11 +136,21 @@ export function resolvePromptSlashCommand(
     return null;
   }
 
-  return {
-    end: cursorPosition,
-    query,
-    start: commandStart,
-  };
+  return { end: cursorPosition, query, start: commandStart };
+}
+
+export function resolvePromptSlashCommand(
+  draft: string,
+  cursorPosition: number,
+): PromptSlashCommand | null {
+  return resolvePromptTrigger(draft, cursorPosition, "/");
+}
+
+export function resolvePromptFileMention(
+  draft: string,
+  cursorPosition: number,
+): PromptFileMention | null {
+  return resolvePromptTrigger(draft, cursorPosition, "@");
 }
 
 export function filterPromptCommandItems<TItem extends PromptCommandItem>(

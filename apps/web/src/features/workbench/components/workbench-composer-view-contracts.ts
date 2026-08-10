@@ -4,6 +4,7 @@ import type {
   AgentReviewTarget,
   AgentSkill,
   AgentTaskSettings,
+  ProjectFileSearchEntry,
   ProjectGitStatus,
 } from "@code-agent/protocol";
 import type { Dispatch, RefObject, SetStateAction } from "react";
@@ -45,6 +46,10 @@ export type WorkbenchComposerViewProps = Readonly<{
   draftInputDisabled: boolean;
   filteredCommands: readonly PromptCommandItem[];
   filteredSkills: readonly AgentSkill[];
+  fileMenuOpen: boolean;
+  fileSearchError: Error | null;
+  fileSearchPending: boolean;
+  fileSearchResults: readonly ProjectFileSearchEntry[];
   getCommandAvailability: (command: PromptCommandItem) => CommandAvailability;
   gitStatus: ProjectGitStatus | undefined;
   hasComposerInput: boolean;
@@ -70,6 +75,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   ) => void;
   onSelectActiveCommand: () => void;
   onSelectAttachmentKind: (kind: PromptInputAttachmentKind) => void;
+  onSelectFileReference: (file: ProjectFileSearchEntry) => void;
   onSelectSkill: (skill: AgentSkill) => void;
   onSettingsChange: (settings: AgentTaskSettings, field: keyof AgentTaskSettings) => void;
   onSubmit: (message: PromptInputMessage) => void;
@@ -102,6 +108,7 @@ export function resolveQueuedPromptSummary(
   return (
     queuedPrompt.text ||
     queuedPrompt.skills.map((skill) => `$${skill.name}`).join(" ") ||
+    queuedPrompt.fileReferences.map((file) => `@${file.path}`).join(" ") ||
     attachmentSummary
   );
 }

@@ -4,10 +4,13 @@ import {
   ImportHostAttachmentRequestSchema,
   ProjectFileTreeQuerySchema,
   ProjectFileTreeSchema,
+  ProjectFileSearchPageSchema,
+  ProjectFileSearchQuerySchema,
   ProjectSourceFileSchema,
   type AgentAttachmentKind,
   type ImportHostAttachmentRequest,
   type ProjectFileTreeQuery,
+  type ProjectFileSearchQuery,
 } from "@code-agent/protocol";
 import { AttachmentNotFoundError, type StoredAttachmentUpload } from "../attachment-store.js";
 import { HostFileBrowserError } from "../host-file-browser.js";
@@ -31,6 +34,7 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
     maximumAttachmentBytes,
     multipartEnvelopeBytes,
     readFileTree,
+    readFileSearch,
     readImageFile,
     readSourceFile,
     runIdempotent,
@@ -62,6 +66,38 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
         return reply.code(500).send({
           code: "PROJECT_FILE_TREE_UNAVAILABLE",
           message: "Project file tree is unavailable",
+        });
+      }
+    },
+  );
+
+  app.get<{ Params: { projectId: string }; Querystring: ProjectFileSearchQuery }>(
+    "/v1/projects/:projectId/files/search",
+    {
+      schema: {
+        params: ProjectParamsSchema,
+        querystring: ProjectFileSearchQuerySchema,
+        response: {
+          200: ProjectFileSearchPageSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const context = await getProjectContext(request.params.projectId);
+      if (context === undefined) {
+        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+      }
+      try {
+        return await readFileSearch(context.project.rootPath, request.query.query, request.signal);
+      } catch (error) {
+        if (request.signal.aborted) {
+          throw error;
+        }
+        return reply.code(500).send({
+          code: "PROJECT_FILE_SEARCH_UNAVAILABLE",
+          message: "Project file search is unavailable",
         });
       }
     },

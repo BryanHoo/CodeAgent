@@ -6,6 +6,7 @@ import type {
   AgentSkill,
   AgentTask,
   AgentTaskSettings,
+  ProjectFileSearchEntry,
 } from "@code-agent/protocol";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { v4 as createUuid } from "uuid";
@@ -127,6 +128,7 @@ export function createComposerSubmission({
       clearInputOnSuccess?: boolean;
       forceAction?: "start" | "steer";
       composerMode?: ComposerMode | null;
+      fileReferences?: readonly ProjectFileSearchEntry[];
       requestTimelineScroll?: boolean;
     }> = {},
   ): Promise<boolean> => {
@@ -142,10 +144,13 @@ export function createComposerSubmission({
       );
       return false;
     }
-    const skills =
-      promptSkills ??
-      toPromptSkillSubmission(skillEditorRef.current?.getContent() ?? promptContent).skills;
-    const hasInput = text !== "" || message.files.length > 0 || skills.length > 0;
+    const promptSubmission = toPromptSkillSubmission(
+      skillEditorRef.current?.getContent() ?? promptContent,
+    );
+    const skills = promptSkills ?? promptSubmission.skills;
+    const fileReferences = options.fileReferences ?? promptSubmission.fileReferences;
+    const hasInput =
+      text !== "" || message.files.length > 0 || skills.length > 0 || fileReferences.length > 0;
     const action =
       options.forceAction ??
       resolveComposerSubmitAction(state, hasInput, followUpBehavior, canSteer);
@@ -165,6 +170,7 @@ export function createComposerSubmission({
 
     if (action === "queue") {
       const queuedPrompt: QueuedComposerPrompt = {
+        fileReferences,
         files: message.files,
         id: createUuid(),
         skills,
@@ -222,6 +228,9 @@ export function createComposerSubmission({
       );
       input = {
         attachments: messageAttachments.map((attachment) => ({ id: attachment.id })),
+        ...(fileReferences.length > 0
+          ? { fileReferences: fileReferences.map((file) => ({ path: file.path })) }
+          : {}),
         skills: skills.map((skill) => ({ id: skill.id, name: skill.name })),
         text,
         type: "prompt",
@@ -354,6 +363,7 @@ export function createComposerSubmission({
       clearInputOnSuccess?: boolean;
       forceAction?: "start" | "steer";
       composerMode?: ComposerMode | null;
+      fileReferences?: readonly ProjectFileSearchEntry[];
       requestTimelineScroll?: boolean;
     }> = {},
   ): Promise<boolean> =>

@@ -6,6 +6,7 @@ import {
   getPromptCommandItems,
   getPromptCommandAvailability,
   movePromptCommandSelection,
+  resolvePromptFileMention,
   resolvePromptSlashCommand,
 } from "./prompt-command.js";
 
@@ -55,6 +56,27 @@ function findCommand(action: (typeof promptCommandItems)[number]["action"]) {
 }
 
 describe("prompt slash command", () => {
+  it("resolves file mentions at the start or after whitespace", () => {
+    expect(resolvePromptFileMention("@", 1)).toEqual({ end: 1, query: "", start: 0 });
+    expect(resolvePromptFileMention("@index", 6)).toEqual({ end: 6, query: "index", start: 0 });
+    expect(resolvePromptFileMention("说明 @main.ts", 11)).toEqual({
+      end: 11,
+      query: "main.ts",
+      start: 3,
+    });
+    expect(resolvePromptFileMention("说明\n@src/", 8)).toEqual({
+      end: 8,
+      query: "src/",
+      start: 3,
+    });
+  });
+
+  it("rejects file mentions attached to text or containing whitespace", () => {
+    expect(resolvePromptFileMention("说明@index", 8)).toBeNull();
+    expect(resolvePromptFileMention("@index 后续", 9)).toBeNull();
+    expect(resolvePromptFileMention("说明 @index", 2)).toBeNull();
+  });
+
   it("resolves slash tokens at the start or after whitespace", () => {
     expect(resolvePromptSlashCommand("/", 1)).toEqual({ end: 1, query: "", start: 0 });
     expect(resolvePromptSlashCommand("/项目", 3)).toEqual({ end: 3, query: "项目", start: 0 });

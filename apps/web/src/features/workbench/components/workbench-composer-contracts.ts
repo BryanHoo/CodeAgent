@@ -21,7 +21,10 @@ import type {
 } from "../../../shared/components/agent/prompt-input.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
-import type { CodeAgentGitMutationClient } from "../../projects/project-query-contracts.js";
+import type {
+  CodeAgentGitMutationClient,
+  CodeAgentProjectFileSearchClient,
+} from "../../projects/project-query-contracts.js";
 
 export type ComposerMode = "goal" | "plan";
 
@@ -48,7 +51,8 @@ export type WorkbenchComposerProps = Readonly<{
   buildPlanRef?: Ref<WorkbenchComposerHandle>;
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentMutationClient &
-    Pick<CodeAgentGitMutationClient, "createProjectBranch" | "switchProjectBranch">;
+    Pick<CodeAgentGitMutationClient, "createProjectBranch" | "switchProjectBranch"> &
+    CodeAgentProjectFileSearchClient;
   fixedSandboxMode?: AgentSandboxMode;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
   models: readonly AgentModel[];

@@ -36,7 +36,7 @@ describe("WorkbenchComposerView", () => {
   });
 
   it("优先展示队列文本、Skill 和附件摘要", () => {
-    const basePrompt = { files: [], id: "queue-1", skills: [] } as const;
+    const basePrompt = { fileReferences: [], files: [], id: "queue-1", skills: [] } as const;
 
     expect(resolveQueuedPromptSummary({ ...basePrompt, text: "继续修复" }, "1 个附件")).toBe(
       "继续修复",
@@ -60,6 +60,21 @@ describe("WorkbenchComposerView", () => {
       ),
     ).toBe("$review");
     expect(resolveQueuedPromptSummary({ ...basePrompt, text: "" }, "1 个附件")).toBe("1 个附件");
+  });
+
+  it("在空文本队列中展示文件引用摘要", () => {
+    expect(
+      resolveQueuedPromptSummary(
+        {
+          fileReferences: [{ name: "main.tsx", path: "src/main.tsx" }],
+          files: [],
+          id: "queue-1",
+          skills: [],
+          text: "",
+        },
+        "1 个附件",
+      ),
+    ).toBe("@src/main.tsx");
   });
 
   it("将根仓库当前分支渲染为可访问的切换触发器", () => {

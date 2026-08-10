@@ -398,6 +398,12 @@ export const projectFileTreeByDirectory = new Map<string | null, object>([
   ],
 ]);
 
+export const projectFileSearchEntries = [
+  { name: "main.tsx", path: "src/main.tsx" },
+  { name: "main.test.tsx", path: "src/main.test.tsx" },
+  { name: "package.json", path: "package.json" },
+] as const;
+
 export const projectDirectoryListings = new Map<string | null, object>([
   [
     null,
@@ -904,6 +910,13 @@ export async function mockAppShellApi(
       body = { projectId, status: "removed" };
     } else if (url.pathname === "/v1/projects") {
       body = { data: routedProjects, nextCursor: null };
+    } else if (/^\/v1\/projects\/[^/]+\/files\/search$/u.test(url.pathname)) {
+      const query = (url.searchParams.get("query") ?? "").toLocaleLowerCase();
+      body = {
+        data: projectFileSearchEntries.filter((file) =>
+          file.name.toLocaleLowerCase().includes(query),
+        ),
+      };
     } else if (/^\/v1\/projects\/[^/]+\/files\/tree$/u.test(url.pathname)) {
       const directoryPath = url.searchParams.get("path");
       // 文件树接口只返回当前目录的直接子项，用于验证点击目录后才按需加载。

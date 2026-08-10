@@ -40,6 +40,7 @@ import { movePromptCommandSelection } from "./prompt-command.js";
 import { ComposerBranchSwitcher } from "./composer-branch-switcher.js";
 import { PromptSkillEditor } from "./prompt-skill-editor.js";
 import { ComposerCommandMenu } from "./workbench-composer-command-menu.js";
+import { ComposerFileMenu } from "./workbench-composer-file-menu.js";
 import { ComposerAttachments, ComposerModeTag } from "./workbench-composer-toolbar.js";
 import {
   resolveQueuedPromptSummary,
@@ -76,6 +77,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
     <section className="shrink-0 bg-content px-3 pb-2 sm:px-5" aria-label={t("composer.landmark")}>
       <div className="relative mx-auto w-full max-w-content" ref={props.commandSurfaceRef}>
         <ComposerCommandMenu props={props} />
+        <ComposerFileMenu props={props} />
         {props.queuedPrompts.length === 0 ? null : (
           <div aria-label={t("composer.queuedMessages")} className="mb-2 space-y-1.5" role="list">
             {props.queuedPrompts.map((queuedPrompt) => {
@@ -163,15 +165,20 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
             <input name="message" type="hidden" value={props.promptSubmissionText} />
             <PromptSkillEditor
               aria-activedescendant={props.activeCommandItemId}
-              aria-controls={props.commandMenuOpen ? props.commandMenuId : undefined}
-              aria-expanded={props.commandMenuOpen}
+              aria-controls={
+                props.commandMenuOpen || props.fileMenuOpen ? props.commandMenuId : undefined
+              }
+              aria-expanded={props.commandMenuOpen || props.fileMenuOpen}
               aria-haspopup="listbox"
               aria-label={t("composer.taskInput")}
               content={props.promptContent}
               disabled={props.draftInputDisabled}
               onChange={props.onPromptChange}
               onKeyDown={(event) => {
-                if (!props.commandMenuOpen || isPromptInputComposing(event.nativeEvent)) {
+                if (
+                  (!props.commandMenuOpen && !props.fileMenuOpen) ||
+                  isPromptInputComposing(event.nativeEvent)
+                ) {
                   return;
                 }
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {

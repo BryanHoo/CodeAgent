@@ -1,5 +1,5 @@
-import type { AgentSkill } from "@code-agent/protocol";
-import { Box } from "lucide-react";
+import type { AgentSkill, ProjectFileSearchEntry } from "@code-agent/protocol";
+import { Box, File } from "lucide-react";
 import {
   forwardRef,
   useCallback,
@@ -17,10 +17,11 @@ import {
   isPromptInputNewlineShortcut,
 } from "../../../shared/components/agent/prompt-input.js";
 import {
+  partLength,
+  removePromptFileReference,
   removePromptSkill,
   recognizePromptSkillReferences,
   serializePromptSkillContent,
-  skillPlainText,
   type PromptSkillContent,
 } from "./prompt-skill-content.js";
 import {
@@ -74,16 +75,20 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
     forwardedRef,
   ) {
     const rootRef = useRef<HTMLDivElement>(null);
-    const iconTemplateRef = useRef<SVGSVGElement>(null);
+    const skillIconTemplateRef = useRef<SVGSVGElement>(null);
+    const fileIconTemplateRef = useRef<SVGSVGElement>(null);
     const contentRef = useRef(content);
     const availableSkillsRef = useRef(skills);
     const skillsByIdRef = useRef(new Map<string, AgentSkill>());
+    const filesByPathRef = useRef(new Map<string, ProjectFileSearchEntry>());
     const previousScopeRef = useRef<string | undefined>(undefined);
 
-    const rememberSkills = useCallback((nextContent: PromptSkillContent) => {
+    const rememberReferences = useCallback((nextContent: PromptSkillContent) => {
       for (const part of nextContent) {
         if (part.type === "skill") {
           skillsByIdRef.current.set(part.skill.id, part.skill);
+        } else if (part.type === "file") {
+          filesByPathRef.current.set(part.file.path, part.file);
         }
       }
     }, []);
@@ -91,19 +96,24 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
     for (const skill of skills) {
       skillsByIdRef.current.set(skill.id, skill);
     }
-    rememberSkills(content);
+    rememberReferences(content);
 
     const emitChange = () => {
       const root = rootRef.current;
       if (root === null) {
         return;
       }
-      const editorContent = readEditorContent(root, skillsByIdRef.current);
+      const editorContent = readEditorContent(root, skillsByIdRef.current, filesByPathRef.current);
       const nextContent = recognizePromptSkillReferences(editorContent, availableSkillsRef.current);
       const cursorOffset = selectionOffset(root);
       if (nextContent !== editorContent) {
         // 手输的 Codex `$name` 引用立即转换为现有 Token，同时保持序列化光标位置。
-        renderEditorContent(root, nextContent, iconTemplateRef.current);
+        renderEditorContent(
+          root,
+          nextContent,
+          skillIconTemplateRef.current,
+          fileIconTemplateRef.current,
+        );
         placeCaret(root, Math.min(cursorOffset, serializePromptSkillContent(nextContent).length));
       }
       contentRef.current = nextContent;
@@ -119,14 +129,19 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
         if (root === null) {
           return;
         }
-        rememberSkills(nextContent);
+        rememberReferences(nextContent);
         contentRef.current = nextContent;
-        renderEditorContent(root, nextContent, iconTemplateRef.current);
+        renderEditorContent(
+          root,
+          nextContent,
+          skillIconTemplateRef.current,
+          fileIconTemplateRef.current,
+        );
         if (cursorOffset !== undefined) {
           placeCaret(root, cursorOffset);
         }
       },
-      [rememberSkills],
+      [rememberReferences],
     );
 
     useImperativeHandle(
@@ -143,7 +158,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
           const root = rootRef.current;
           return root === null
             ? contentRef.current
-            : readEditorContent(root, skillsByIdRef.current);
+            : readEditorContent(root, skillsByIdRef.current, filesByPathRef.current);
         },
         replace,
       }),
@@ -163,14 +178,19 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       if (root === null || skills.length === 0) {
         return;
       }
-      const editorContent = readEditorContent(root, skillsByIdRef.current);
+      const editorContent = readEditorContent(root, skillsByIdRef.current, filesByPathRef.current);
       const nextContent = recognizePromptSkillReferences(editorContent, skills);
       if (nextContent === editorContent) {
         return;
       }
 
       const cursorOffset = selectionOffset(root);
-      renderEditorContent(root, nextContent, iconTemplateRef.current);
+      renderEditorContent(
+        root,
+        nextContent,
+        skillIconTemplateRef.current,
+        fileIconTemplateRef.current,
+      );
       if (document.activeElement === root) {
         placeCaret(root, Math.min(cursorOffset, serializePromptSkillContent(nextContent).length));
       }
@@ -181,28 +201,37 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
       onChange(nextContent, serializedText, selectionOffset(root));
     }, [onChange, skills]);
 
-    const removeSkillNode = (root: HTMLDivElement, token: HTMLElement, skillId: string) => {
+    const removeTokenNode = (root: HTMLDivElement, token: HTMLElement) => {
       const tokenOffset = [...root.childNodes]
         .slice(0, [...root.childNodes].indexOf(token))
         .reduce((total, node) => total + serializedNodeLength(node), 0);
-      replace(removePromptSkill(contentRef.current, skillId), tokenOffset);
+      const skillId = token.dataset["promptSkillId"];
+      const filePath = token.dataset["promptFilePath"];
+      const nextContent =
+        skillId !== undefined
+          ? removePromptSkill(contentRef.current, skillId)
+          : filePath !== undefined
+            ? removePromptFileReference(contentRef.current, filePath)
+            : contentRef.current;
+      replace(nextContent, tokenOffset);
       emitChange();
     };
 
-    const removeSkillFromEvent = (event: MouseEvent<HTMLDivElement>) => {
+    const removeTokenFromEvent = (event: MouseEvent<HTMLDivElement>) => {
       const target = event.target;
       const token =
-        target instanceof Element ? target.closest<HTMLElement>("[data-prompt-skill-id]") : null;
-      const skillId = token?.dataset["promptSkillId"];
-      if (skillId === undefined) {
+        target instanceof Element
+          ? target.closest<HTMLElement>("[data-prompt-skill-id], [data-prompt-file-path]")
+          : null;
+      if (token === null) {
         return false;
       }
       event.preventDefault();
       const root = rootRef.current;
-      if (root === null || token === null) {
+      if (root === null) {
         return true;
       }
-      removeSkillNode(root, token, skillId);
+      removeTokenNode(root, token);
       return true;
     };
 
@@ -233,16 +262,16 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
         const selection = document.getSelection();
         const serializedText = serializePromptSkillContent(contentRef.current);
         const trailingPart = contentRef.current.at(-1);
-        const trailingSkillStart =
-          trailingPart?.type === "skill"
-            ? serializedText.length - skillPlainText(trailingPart.skill).length
+        const trailingTokenStart =
+          trailingPart !== undefined && trailingPart.type !== "text"
+            ? serializedText.length - partLength(trailingPart)
             : undefined;
         const cursorOffset = selectionOffset(root);
         if (
           selection?.isCollapsed === true &&
-          trailingSkillStart !== undefined &&
-          cursorOffset <= trailingSkillStart &&
-          serializedText.slice(cursorOffset, trailingSkillStart).trim() === ""
+          trailingTokenStart !== undefined &&
+          cursorOffset <= trailingTokenStart &&
+          serializedText.slice(cursorOffset, trailingTokenStart).trim() === ""
         ) {
           // 非编辑 Token 会截断 Chromium 的 End；只在末尾空白区补齐原生行尾语义。
           event.preventDefault();
@@ -255,18 +284,21 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
         const anchorNode = selection?.anchorNode;
         const caretAnchor = anchorNode?.parentElement;
         const token = caretAnchor?.previousElementSibling;
-        const skillId = token instanceof HTMLElement ? token.dataset["promptSkillId"] : undefined;
+        const isPromptToken =
+          token instanceof HTMLElement &&
+          (token.dataset["promptSkillId"] !== undefined ||
+            token.dataset["promptFilePath"] !== undefined);
         if (
           selection?.isCollapsed === true &&
           selection.anchorOffset === caretAnchorText.length &&
           caretAnchor?.dataset["promptCaretAnchor"] !== undefined &&
           anchorNode?.textContent?.startsWith(caretAnchorText) === true &&
           token instanceof HTMLElement &&
-          skillId !== undefined
+          isPromptToken
         ) {
           // 保留 Token 邻接删除语义，避免先删掉用于 Safari 绘制光标的零宽字符。
           event.preventDefault();
-          removeSkillNode(event.currentTarget, token, skillId);
+          removeTokenNode(event.currentTarget, token);
           return;
         }
       }
@@ -283,7 +315,8 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
 
     return (
       <>
-        <Box aria-hidden="true" className="hidden size-4 shrink-0" ref={iconTemplateRef} />
+        <Box aria-hidden="true" className="hidden size-4 shrink-0" ref={skillIconTemplateRef} />
+        <File aria-hidden="true" className="hidden size-4 shrink-0" ref={fileIconTemplateRef} />
         <div
           {...props}
           aria-disabled={disabled || undefined}
@@ -294,7 +327,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
           data-placeholder={placeholder}
           data-prompt-skill-editor=""
           onClick={(event) => {
-            if (!removeSkillFromEvent(event)) {
+            if (!removeTokenFromEvent(event)) {
               onClick?.(event);
             }
           }}
@@ -309,7 +342,7 @@ export const PromptSkillEditor = forwardRef<PromptSkillEditorHandle, PromptSkill
               return;
             }
             const serializedText = serializePromptSkillContent(
-              readEditorContent(root, skillsByIdRef.current),
+              readEditorContent(root, skillsByIdRef.current, filesByPathRef.current),
             );
             const start = serializedPointOffset(root, range.startContainer, range.startOffset);
             const end = serializedPointOffset(root, range.endContainer, range.endOffset);

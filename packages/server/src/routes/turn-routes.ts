@@ -157,6 +157,7 @@ export const registerTurnRoutes: FastifyPluginCallback<ServerRouteContext> = (
           }
           const { attachmentIds, providerInput } = await resolveProviderTurnInput(
             request.params.projectId,
+            context.project.rootPath,
             request.body.input,
           );
           const turnOptions = enforceTemporaryTaskSandboxMode(
@@ -236,6 +237,7 @@ export const registerTurnRoutes: FastifyPluginCallback<ServerRouteContext> = (
 
           const { attachmentIds, providerInput } = await resolveProviderTurnInput(
             request.params.projectId,
+            context.project.rootPath,
             request.body.input,
           );
           await context.provider.steerTurn(

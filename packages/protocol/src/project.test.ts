@@ -57,6 +57,8 @@ import {
   ProjectDirectoryListingSchema,
   ProjectDirectoryQuerySchema,
   ProjectFileTreeQuerySchema,
+  ProjectFileSearchPageSchema,
+  ProjectFileSearchQuerySchema,
   ProjectGitHistoryPageSchema,
   ProjectGitHistoryQuerySchema,
   ProjectGitCommitFileDiffQuerySchema,
@@ -808,6 +810,50 @@ describe("project protocol", () => {
     expect(Value.Check(ProjectFileTreeQuerySchema, { extra: true })).toBe(false);
   });
 
+  it("validates bounded project file searches and structured prompt references", () => {
+    expect(Value.Check(ProjectFileSearchQuerySchema, { query: "index" })).toBe(true);
+    expect(Value.Check(ProjectFileSearchQuerySchema, { query: "x".repeat(257) })).toBe(false);
+    expect(
+      Value.Check(ProjectFileSearchPageSchema, {
+        data: [{ name: "index.ts", path: "src/index.ts" }],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ProjectFileSearchPageSchema, {
+        data: [{ name: "outside.ts", path: "/tmp/outside.ts" }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentPromptInputSchema, {
+        attachments: [],
+        fileReferences: [{ path: "src/index.ts" }],
+        skills: [],
+        text: "",
+        type: "prompt",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentPromptInputSchema, {
+        attachments: [],
+        fileReferences: [{ path: "/tmp/outside.ts" }],
+        skills: [],
+        text: "",
+        type: "prompt",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(AgentPromptInputSchema, {
+        attachments: [],
+        fileReferences: Array.from({ length: 51 }, (_, index) => ({
+          path: `src/file-${String(index)}.ts`,
+        })),
+        skills: [],
+        text: "",
+        type: "prompt",
+      }),
+    ).toBe(false);
+  });
+
   it("validates a structured task snapshot", () => {
     const snapshot = {
       contextUsage: null,
@@ -1286,6 +1332,7 @@ describe("project protocol", () => {
     };
     const prompt = {
       attachments: [{ id: attachment.id }],
+      fileReferences: [],
       skills: [],
       text: "参考截图实现功能",
       type: "prompt",
@@ -1431,6 +1478,7 @@ describe("project protocol", () => {
     expect(
       Value.Check(AgentPromptInputSchema, {
         attachments: [{ id: attachment.id }],
+        fileReferences: [],
         skills: [],
         text: "",
         type: "prompt",
@@ -1439,6 +1487,7 @@ describe("project protocol", () => {
     expect(
       Value.Check(AgentPromptInputSchema, {
         attachments: [],
+        fileReferences: [],
         skills: [{ id: "skill_01J00000000000000000000000", name: "review-security" }],
         text: "",
         type: "prompt",
@@ -1447,6 +1496,7 @@ describe("project protocol", () => {
     expect(
       Value.Check(AgentPromptInputSchema, {
         attachments: [],
+        fileReferences: [],
         skills: [],
         text: "",
         type: "prompt",
@@ -1455,6 +1505,7 @@ describe("project protocol", () => {
     expect(
       Value.Check(AgentPromptInputSchema, {
         attachments: [],
+        fileReferences: [],
         skills: [
           { id: "skill-1", name: "first" },
           { id: "skill-2", name: "second" },
@@ -1466,6 +1517,7 @@ describe("project protocol", () => {
     expect(
       Value.Check(AgentPromptInputSchema, {
         attachments: [],
+        fileReferences: [],
         skills: [{ id: "skill-1", name: "first", path: "/private/skill" }],
         text: "run",
         type: "prompt",

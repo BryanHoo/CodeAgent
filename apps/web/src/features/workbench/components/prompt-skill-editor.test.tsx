@@ -55,6 +55,7 @@ describe("prompt skill editor model", () => {
       "$review-security 之后 $documentation-writer",
     );
     expect(toPromptSkillSubmission(withBoth)).toEqual({
+      fileReferences: [],
       skills: [securitySkill, documentationSkill],
       text: "之后",
     });
@@ -68,6 +69,7 @@ describe("prompt skill editor model", () => {
 
     expect(serializePromptSkillContent(recognized)).toBe("$review-security 其他需求");
     expect(toPromptSkillSubmission(recognized)).toEqual({
+      fileReferences: [],
       skills: [securitySkill],
       text: "其他需求",
     });

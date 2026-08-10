@@ -11,6 +11,7 @@ import {
   OpenProjectResponseSchema,
   ProjectDirectoryListingSchema,
   ProjectFileTreeSchema,
+  ProjectFileSearchPageSchema,
   ProjectGitHistoryPageSchema,
   ProjectGitCommitFileDiffSchema,
   ProjectGitCommitFilesPageSchema,
@@ -37,6 +38,7 @@ import {
   type OpenProjectResponse,
   type ProjectDirectoryListing,
   type ProjectFileTree,
+  type ProjectFileSearchPage,
   type ProjectGitHistoryPage,
   type ProjectGitHistoryQuery,
   type ProjectGitCommitFileDiff,
@@ -334,6 +336,17 @@ export class ProjectHttpClient extends CodeAgentTransport {
       path: directoryPath ?? undefined,
     });
     return this.read(requestPath, ProjectFileTreeSchema, options);
+  }
+
+  public async searchProjectFiles(
+    projectId: string,
+    query: string,
+    options: ReadOptions = {},
+  ): Promise<ProjectFileSearchPage> {
+    const requestPath = appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/files/search`, {
+      query,
+    });
+    return this.read(requestPath, ProjectFileSearchPageSchema, options);
   }
 
   public async readProjectSourceFile(

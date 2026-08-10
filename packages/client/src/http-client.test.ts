@@ -768,6 +768,24 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("searches and validates project file references", async () => {
+    const page = { data: [{ name: "index.ts", path: "src/index.ts" }] };
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(page));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.searchProjectFiles("project one", "index")).resolves.toEqual(page);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/projects/project%20one/files/search?query=index",
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ data: [{ name: "outside.ts", path: "/tmp/outside.ts" }] }),
+    );
+    await expect(client.searchProjectFiles("project one", "outside")).rejects.toThrow(
+      "CodeAgent response does not match the protocol schema",
+    );
+  });
+
   it("uses the configured base URL for all read methods", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock

@@ -1,8 +1,9 @@
-import type { AgentSkill } from "@code-agent/protocol";
+import type { AgentSkill, ProjectFileSearchEntry } from "@code-agent/protocol";
 
 import { i18n } from "../../../i18n/i18n.js";
 import {
   normalizePromptSkillContent,
+  fileReferencePlainText,
   serializePromptSkillContent,
   skillPlainText,
   type PromptSkillContent,
@@ -45,6 +46,30 @@ export function createEditorSkillNode(
   return token;
 }
 
+export function createEditorFileNode(
+  file: ProjectFileSearchEntry,
+  iconTemplate: SVGSVGElement | null,
+): HTMLElement {
+  const token = document.createElement("span");
+  token.className = `${skillTokenClassName} relative top-0.5 cursor-pointer select-none hover:bg-control-hover`;
+  token.contentEditable = "false";
+  token.dataset["promptFilePath"] = file.path;
+  token.dataset["serializedText"] = fileReferencePlainText(file);
+  token.setAttribute("aria-label", fileReferencePlainText(file));
+  token.setAttribute("role", "button");
+  token.tabIndex = -1;
+  if (iconTemplate !== null) {
+    const icon = iconTemplate.cloneNode(true) as SVGSVGElement;
+    icon.classList.remove("hidden");
+    token.append(icon);
+  }
+  const label = document.createElement("span");
+  label.className = "truncate";
+  label.textContent = file.name;
+  token.append(label);
+  return token;
+}
+
 export function createCaretAnchorNode(): HTMLSpanElement {
   const caretAnchor = document.createElement("span");
   caretAnchor.dataset["promptCaretAnchor"] = "";
@@ -55,14 +80,17 @@ export function createCaretAnchorNode(): HTMLSpanElement {
 export function renderEditorContent(
   root: HTMLDivElement,
   content: PromptSkillContent,
-  iconTemplate: SVGSVGElement | null,
+  skillIconTemplate: SVGSVGElement | null,
+  fileIconTemplate: SVGSVGElement | null,
 ): void {
   const nodes: Node[] = [];
   for (const part of content) {
     if (part.type === "text") {
       nodes.push(document.createTextNode(part.text));
+    } else if (part.type === "skill") {
+      nodes.push(createEditorSkillNode(part.skill, skillIconTemplate), createCaretAnchorNode());
     } else {
-      nodes.push(createEditorSkillNode(part.skill, iconTemplate), createCaretAnchorNode());
+      nodes.push(createEditorFileNode(part.file, fileIconTemplate), createCaretAnchorNode());
     }
   }
   root.replaceChildren(...nodes);
@@ -73,6 +101,7 @@ export function renderEditorContent(
 export function readEditorContent(
   root: HTMLDivElement,
   skillsById: ReadonlyMap<string, AgentSkill>,
+  filesByPath: ReadonlyMap<string, ProjectFileSearchEntry>,
 ): PromptSkillContent {
   const parts: PromptSkillContentPart[] = [];
   const appendText = (text: string) => {
@@ -93,6 +122,14 @@ export function readEditorContent(
       const skill = skillsById.get(skillId);
       if (skill !== undefined) {
         parts.push({ skill, type: "skill" });
+      }
+      return;
+    }
+    const filePath = node.dataset["promptFilePath"];
+    if (filePath !== undefined) {
+      const file = filesByPath.get(filePath);
+      if (file !== undefined) {
+        parts.push({ file, type: "file" });
       }
       return;
     }

@@ -2,10 +2,16 @@ import type { Dirent } from "node:fs";
 import { lstat, readdir, readFile, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import type { ProjectFileTree, ProjectFileTreeEntry } from "@code-agent/protocol";
+import type {
+  ProjectFileSearchEntry,
+  ProjectFileSearchPage,
+  ProjectFileTree,
+  ProjectFileTreeEntry,
+} from "@code-agent/protocol";
 import createIgnore from "ignore";
 
 export const MAX_PROJECT_FILE_TREE_DEPTH = 20;
+export const MAX_PROJECT_FILE_SEARCH_RESULTS = 50;
 
 type IgnoreMatcher = ReturnType<typeof createIgnore>;
 
@@ -165,4 +171,119 @@ export async function readProjectFileTree(
   }
 
   return { entries, path: directoryPath ?? null };
+}
+
+type RankedProjectFile = Readonly<{
+  entry: ProjectFileSearchEntry;
+  rank: number;
+}>;
+
+function compareSearchResults(left: RankedProjectFile, right: RankedProjectFile): number {
+  return (
+    left.rank - right.rank ||
+    left.entry.name.length - right.entry.name.length ||
+    left.entry.name.localeCompare(right.entry.name, "en") ||
+    left.entry.path.localeCompare(right.entry.path, "en")
+  );
+}
+
+function rankSearchResult(name: string, normalizedQuery: string): number {
+  const normalizedName = name.toLocaleLowerCase();
+  if (normalizedQuery === "" || normalizedName === normalizedQuery) {
+    return 0;
+  }
+  return normalizedName.startsWith(normalizedQuery) ? 1 : 2;
+}
+
+export async function readProjectFileSearch(
+  projectRoot: string,
+  query: string,
+  signal?: AbortSignal,
+): Promise<ProjectFileSearchPage> {
+  const normalizedQuery = query.toLocaleLowerCase();
+  const root = await resolveDirectoryContext(projectRoot, undefined);
+  const matches: RankedProjectFile[] = [];
+
+  const addMatch = (entry: ProjectFileSearchEntry) => {
+    matches.push({ entry, rank: rankSearchResult(entry.name, normalizedQuery) });
+    matches.sort(compareSearchResults);
+    if (matches.length > MAX_PROJECT_FILE_SEARCH_RESULTS) {
+      matches.pop();
+    }
+  };
+
+  const visit = async (
+    absoluteDirectory: string,
+    relativeDirectory: string,
+    ignoreScopes: readonly IgnoreScope[],
+    depth: number,
+  ): Promise<void> => {
+    signal?.throwIfAborted();
+    const children = (await readdir(absoluteDirectory, { withFileTypes: true })).sort(
+      compareEntries,
+    );
+    for (const child of children) {
+      signal?.throwIfAborted();
+      if (child.name === ".git" || child.isSymbolicLink()) {
+        continue;
+      }
+      const path = joinProjectPath(relativeDirectory, child.name);
+      if (child.isDirectory()) {
+        if (
+          depth >= MAX_PROJECT_FILE_TREE_DEPTH ||
+          ignoredDirectories.has(child.name) ||
+          isIgnoredByScopes(path, true, ignoreScopes)
+        ) {
+          continue;
+        }
+        const nextAbsoluteDirectory = resolve(absoluteDirectory, child.name);
+        const localIgnoreScope = await readIgnoreScope(nextAbsoluteDirectory, path);
+        await visit(
+          nextAbsoluteDirectory,
+          path,
+          localIgnoreScope === undefined ? ignoreScopes : [...ignoreScopes, localIgnoreScope],
+          depth + 1,
+        );
+        continue;
+      }
+      if (
+        !child.isFile() ||
+        isIgnoredByScopes(path, false, ignoreScopes) ||
+        !child.name.toLocaleLowerCase().includes(normalizedQuery)
+      ) {
+        continue;
+      }
+      addMatch({ name: child.name, path });
+    }
+  };
+
+  await visit(root.absoluteDirectory, root.relativeDirectory, root.ignoreScopes, 0);
+  return { data: matches.map((match) => match.entry) };
+}
+
+export async function resolveProjectFileReferences(
+  projectRoot: string,
+  paths: readonly string[],
+): Promise<readonly Readonly<{ name: string; path: string }>[]> {
+  return Promise.all(
+    paths.map(async (path) => {
+      const separatorIndex = path.lastIndexOf("/");
+      const directoryPath = separatorIndex < 0 ? undefined : path.slice(0, separatorIndex);
+      const name = path.slice(separatorIndex + 1);
+      if (name === "" || name === "." || name === "..") {
+        throw new TypeError("Project file reference is invalid");
+      }
+      const context = await resolveDirectoryContext(projectRoot, directoryPath);
+      const normalizedPath = joinProjectPath(context.relativeDirectory, name);
+      if (isIgnoredByScopes(normalizedPath, false, context.ignoreScopes)) {
+        throw new TypeError("Project file reference is not available");
+      }
+      const absolutePath = resolve(context.absoluteDirectory, name);
+      const stats = await lstat(absolutePath);
+      if (stats.isSymbolicLink() || !stats.isFile()) {
+        throw new TypeError("Project file reference must identify a regular file");
+      }
+      return { name, path: absolutePath };
+    }),
+  );
 }

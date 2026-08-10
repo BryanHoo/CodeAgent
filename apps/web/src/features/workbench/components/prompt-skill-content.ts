@@ -1,13 +1,16 @@
-import type { AgentSkill } from "@code-agent/protocol";
+import type { AgentSkill, ProjectFileSearchEntry } from "@code-agent/protocol";
 
 import type { PromptSlashCommand } from "./prompt-command.js";
 
 export type PromptSkillContentPart =
-  Readonly<{ text: string; type: "text" }> | Readonly<{ skill: AgentSkill; type: "skill" }>;
+  | Readonly<{ file: ProjectFileSearchEntry; type: "file" }>
+  | Readonly<{ skill: AgentSkill; type: "skill" }>
+  | Readonly<{ text: string; type: "text" }>;
 
 export type PromptSkillContent = readonly PromptSkillContentPart[];
 
 export type PromptSkillSubmission = Readonly<{
+  fileReferences: readonly ProjectFileSearchEntry[];
   skills: readonly AgentSkill[];
   text: string;
 }>;
@@ -45,8 +48,16 @@ export function skillPlainText(skill: Pick<AgentSkill, "name">): string {
   return `$${skill.name}`;
 }
 
+export function fileReferencePlainText(file: Pick<ProjectFileSearchEntry, "path">): string {
+  return `@${file.path}`;
+}
+
 export function partLength(part: PromptSkillContentPart): number {
-  return part.type === "text" ? part.text.length : skillPlainText(part.skill).length;
+  return part.type === "text"
+    ? part.text.length
+    : part.type === "skill"
+      ? skillPlainText(part.skill).length
+      : fileReferencePlainText(part.file).length;
 }
 
 export function splitPromptSkillContent(
@@ -76,6 +87,21 @@ export function splitPromptSkillContent(
   return [normalizePromptSkillContent(before), normalizePromptSkillContent(after)];
 }
 
+export function isPromptTextRange(
+  content: PromptSkillContent,
+  range: Readonly<{ end: number; start: number }>,
+): boolean {
+  let position = 0;
+  for (const part of content) {
+    const end = position + partLength(part);
+    if (range.start >= position && range.end <= end) {
+      return part.type === "text";
+    }
+    position = end;
+  }
+  return false;
+}
+
 export function insertPromptSkill(
   content: PromptSkillContent,
   slashCommand: Pick<PromptSlashCommand, "end" | "start">,
@@ -93,6 +119,23 @@ export function insertPromptSkill(
   ]);
 }
 
+export function insertPromptFileReference(
+  content: PromptSkillContent,
+  mention: Pick<PromptSlashCommand, "end" | "start">,
+  file: ProjectFileSearchEntry,
+): PromptSkillContent {
+  const [before] = splitPromptSkillContent(content, mention.start);
+  const [, after] = splitPromptSkillContent(content, mention.end);
+  const alreadySelected = content.some(
+    (part) => part.type === "file" && part.file.path === file.path,
+  );
+  return normalizePromptSkillContent([
+    ...before,
+    ...(alreadySelected ? [] : [{ file, type: "file" as const }]),
+    ...after,
+  ]);
+}
+
 export function recognizePromptSkillReferences(
   content: PromptSkillContent,
   availableSkills: readonly AgentSkill[],
@@ -105,7 +148,7 @@ export function recognizePromptSkillReferences(
   let changed = false;
 
   for (const part of content) {
-    if (part.type === "skill") {
+    if (part.type !== "text") {
       recognized.push(part);
       continue;
     }
@@ -156,26 +199,48 @@ export function removePromptSkill(
   );
 }
 
+export function removePromptFileReference(
+  content: PromptSkillContent,
+  path: string,
+): PromptSkillContent {
+  return normalizePromptSkillContent(
+    content.filter((part) => part.type !== "file" || part.file.path !== path),
+  );
+}
+
 export function serializePromptSkillContent(content: PromptSkillContent): string {
   return content
-    .map((part) => (part.type === "text" ? part.text : skillPlainText(part.skill)))
+    .map((part) =>
+      part.type === "text"
+        ? part.text
+        : part.type === "skill"
+          ? skillPlainText(part.skill)
+          : fileReferencePlainText(part.file),
+    )
     .join("");
 }
 
 export function toPromptSkillSubmission(content: PromptSkillContent): PromptSkillSubmission {
+  const fileReferences: ProjectFileSearchEntry[] = [];
   const skills: AgentSkill[] = [];
   let text = "";
   for (const part of content) {
     if (part.type === "skill") {
       skills.push(part.skill);
+    } else if (part.type === "file") {
+      fileReferences.push(part.file);
     } else {
       text += part.text;
     }
   }
-  return { skills, text: text.trim() };
+  return { fileReferences, skills, text: text.trim() };
 }
 
 export function isPromptSkillContentEmpty(content: PromptSkillContent): boolean {
   const submission = toPromptSkillSubmission(content);
-  return submission.text === "" && submission.skills.length === 0;
+  return (
+    submission.text === "" &&
+    submission.skills.length === 0 &&
+    submission.fileReferences.length === 0
+  );
 }

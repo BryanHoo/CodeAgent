@@ -682,6 +682,60 @@ test("recognizes typed Codex skill references before submission", async ({ page 
   });
 });
 
+test("selects and submits a project file reference from an inline @ mention", async ({ page }) => {
+  let turnRequest: Record<string, unknown> | undefined;
+  const fileSearchQueries: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/v1/projects/code-agent/files/search") {
+      fileSearchQueries.push(url.searchParams.get("query") ?? "");
+    }
+  });
+  await page.route("**/v1/projects/code-agent/tasks/task-1/turns", async (route) => {
+    turnRequest = parseRequestRecord(route.request().postData());
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        taskId: "task-1",
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "file-reference-turn",
+          items: [],
+          startedAt: "2026-08-10T00:00:00.000Z",
+          status: "running",
+        },
+      },
+      status: 201,
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.fill("请检查 ");
+  await page.keyboard.type("@main", { delay: 20 });
+  const fileMenu = page.getByRole("listbox", { name: "搜索项目文件" });
+  await expect(fileMenu).toBeVisible();
+  await expect(fileMenu.getByRole("option")).toHaveCount(2);
+  expect(fileSearchQueries).toEqual(["main"]);
+  await expect(fileMenu.getByRole("option").first()).toContainText("src");
+  await prompt.press("Enter");
+
+  const fileToken = prompt.locator('[data-prompt-file-path="src/main.tsx"]');
+  await expect(fileToken).toBeVisible();
+  await expect(prompt).toHaveAttribute("data-serialized-value", "请检查 @src/main.tsx");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+
+  await expect.poll(() => turnRequest).toBeDefined();
+  expect(turnRequest?.["input"]).toEqual({
+    attachments: [],
+    fileReferences: [{ path: "src/main.tsx" }],
+    skills: [],
+    text: "请检查",
+    type: "prompt",
+  });
+});
+
 test("从最新 AI 回复复制任务", async ({ page }) => {
   const forkRequests: string[] = [];
   page.on("request", (request) => {

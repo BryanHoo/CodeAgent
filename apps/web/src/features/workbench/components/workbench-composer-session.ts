@@ -5,6 +5,7 @@ import type {
   AgentTaskSettings,
   HostFileKind,
   ProjectGitStatus,
+  ProjectFileSearchEntry,
 } from "@code-agent/protocol";
 import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 
@@ -23,13 +24,20 @@ import {
   resolveReasoningEffort,
 } from "../composer-state.js";
 import { useWorkbenchComposerController } from "../hooks/use-workbench-composer-controller.js";
+import { useProjectFileSearch } from "../hooks/use-project-file-search.js";
 import {
   filterPromptCommandItems,
   filterPromptSkills,
   getPromptCommandItems,
+  resolvePromptFileMention,
+  resolvePromptSlashCommand,
+  type PromptFileMention,
   type PromptSlashCommand,
 } from "./prompt-command.js";
 import {
+  fileReferencePlainText,
+  insertPromptFileReference,
+  isPromptTextRange,
   toPromptSkillSubmission,
   type PromptSkillContent,
   type PromptSkillEditorHandle,
@@ -39,6 +47,7 @@ import type { ComposerMode } from "./workbench-composer-contracts.js";
 
 type ComposerSessionOptions = Readonly<{
   capabilities: AgentCapabilities | undefined;
+  client: WorkbenchComposerProps["client"];
   gitStatus: ProjectGitStatus | undefined;
   models: readonly AgentModel[];
   onSubmissionStateChange: WorkbenchComposerProps["onSubmissionStateChange"];
@@ -50,8 +59,11 @@ type ComposerSessionOptions = Readonly<{
   taskId: string | undefined;
 }>;
 
+const emptyProjectFileSearchResults: readonly ProjectFileSearchEntry[] = [];
+
 export function useComposerSession({
   capabilities,
+  client,
   gitStatus,
   models,
   onSubmissionStateChange,
@@ -76,6 +88,9 @@ export function useComposerSession({
   );
   const [attachmentPickerKind, setAttachmentPickerKind] = useState<HostFileKind>();
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const [fileMention, setFileMention] = useState<PromptFileMention>();
+  const [fileQuery, setFileQuery] = useState("");
   const [reviewMenuMode, setReviewMenuMode] = useState<"branches" | "scopes" | null>(null);
   const [commandNotice, setCommandNotice] = useState<string>();
   const [commandQuery, setCommandQuery] = useState("");
@@ -137,6 +152,13 @@ export function useComposerSession({
   const attachmentCount = attachments.length;
   const { attachmentsDisabled, draftInputDisabled, turnControlsDisabled } =
     deriveComposerInputAvailability(state);
+  const fileSearch = useProjectFileSearch(
+    client,
+    projectId,
+    fileQuery,
+    fileMenuOpen && projectToolsEnabled && !turnControlsDisabled,
+  );
+  const fileSearchResults = fileSearch.data?.data ?? emptyProjectFileSearchResults;
 
   const filteredSkills = filterPromptSkills(
     capabilities?.skills.use === true ? skills : [],
@@ -147,14 +169,15 @@ export function useComposerSession({
     commandQuery,
   );
   const baseBranches = gitStatus?.baseBranches ?? [];
-  const menuItemCount =
-    reviewMenuMode === "scopes"
+  const menuItemCount = fileMenuOpen
+    ? fileSearchResults.length
+    : reviewMenuMode === "scopes"
       ? 2
       : reviewMenuMode === "branches"
         ? baseBranches.length
         : filteredSkills.length + filteredCommands.length;
   const activeCommandItemId =
-    !commandMenuOpen || menuItemCount === 0
+    (!commandMenuOpen && !fileMenuOpen) || menuItemCount === 0
       ? undefined
       : `${commandMenuId}-item-${String(activeCommandIndex)}`;
   const handleAttachmentsChange = useCallback(
@@ -173,6 +196,11 @@ export function useComposerSession({
     setCommandSlashCommand(undefined);
     setReviewMenuMode(null);
   }, []);
+  const closeFileMenu = useCallback(() => {
+    setFileMenuOpen(false);
+    setFileMention(undefined);
+    setFileQuery("");
+  }, []);
   const replacePromptContent = useCallback(
     (nextContent: PromptSkillContent, cursorOffset?: number) => {
       setPromptContent(nextContent);
@@ -184,6 +212,74 @@ export function useComposerSession({
       skillEditorRef.current?.replace(nextContent, cursorOffset);
     },
     [composerDraftStore, composerScope],
+  );
+  const selectFileReference = useCallback(
+    (file: ProjectFileSearchEntry) => {
+      if (fileMention === undefined) {
+        return;
+      }
+      const currentContent = skillEditorRef.current?.getContent() ?? promptContent;
+      const nextContent = insertPromptFileReference(currentContent, fileMention, file);
+      const cursorPosition = fileMention.start + fileReferencePlainText(file).length;
+      replacePromptContent(nextContent, cursorPosition);
+      closeFileMenu();
+      requestAnimationFrame(() => {
+        skillEditorRef.current?.focus(cursorPosition);
+      });
+    },
+    [closeFileMenu, fileMention, promptContent, replacePromptContent],
+  );
+  const selectActiveFileReference = useCallback(() => {
+    if (!fileMenuOpen) {
+      return false;
+    }
+    const file = fileSearchResults[activeCommandIndex];
+    if (file !== undefined) {
+      selectFileReference(file);
+    }
+    return true;
+  }, [activeCommandIndex, fileMenuOpen, fileSearchResults, selectFileReference]);
+  const handlePromptChange = useCallback(
+    (nextContent: PromptSkillContent, serializedText: string, cursorOffset: number) => {
+      setPromptContent(nextContent);
+      composerDraftStore.update(composerScope, (current) => ({
+        ...current,
+        content: nextContent,
+      }));
+      setCommandNotice(undefined);
+      const nextFileMention = resolvePromptFileMention(serializedText, cursorOffset);
+      if (
+        projectToolsEnabled &&
+        nextFileMention !== null &&
+        isPromptTextRange(nextContent, nextFileMention)
+      ) {
+        setActiveCommandIndex(0);
+        setCommandMenuOpen(false);
+        setCommandQuery("");
+        setCommandSlashCommand(undefined);
+        setReviewMenuMode(null);
+        setFileMenuOpen(true);
+        setFileMention(nextFileMention);
+        setFileQuery(nextFileMention.query);
+        return;
+      }
+      closeFileMenu();
+      const slashCommand = resolvePromptSlashCommand(serializedText, cursorOffset);
+      if (slashCommand === null) {
+        setCommandMenuOpen(false);
+        setReviewMenuMode(null);
+        setCommandQuery("");
+        setCommandSlashCommand(undefined);
+        return;
+      }
+      // 文本开头或空白后的 `/` 片段驱动过滤，连续正文中的斜杠保持普通字符。
+      setActiveCommandIndex(0);
+      setCommandMenuOpen(true);
+      setReviewMenuMode(null);
+      setCommandQuery(slashCommand.query);
+      setCommandSlashCommand(slashCommand);
+    },
+    [closeFileMenu, composerDraftStore, composerScope, projectToolsEnabled],
   );
 
   const clearComposerInput = useCallback(() => {
@@ -227,6 +323,9 @@ export function useComposerSession({
       setComposerModeState(undefined);
       setActiveCommandIndex(0);
       setCommandMenuOpen(false);
+      setFileMenuOpen(false);
+      setFileMention(undefined);
+      setFileQuery("");
       setReviewMenuMode(null);
       setCommandNotice(undefined);
       setCommandQuery("");
@@ -252,6 +351,7 @@ export function useComposerSession({
     canSubmit,
     clearComposerInput,
     closeCommandMenu,
+    closeFileMenu,
     commandMenuId,
     commandMenuOpen,
     commandNotice,
@@ -265,7 +365,14 @@ export function useComposerSession({
     draftInputDisabled,
     filteredCommands,
     filteredSkills,
+    fileMenuOpen,
+    fileMention,
+    fileQuery,
+    fileSearchError: fileSearch.error,
+    fileSearchPending: fileSearch.isPending,
+    fileSearchResults,
     handleAttachmentsChange,
+    handlePromptChange,
     isSubmitting,
     menuItemCount,
     mutationError,
@@ -280,10 +387,15 @@ export function useComposerSession({
     routeScope,
     selectedModel,
     selectedReasoningEffort,
+    selectActiveFileReference,
+    selectFileReference,
     setActiveCommandIndex,
     setAttachmentPickerKind,
     setAttachments,
     setCommandMenuOpen,
+    setFileMenuOpen,
+    setFileMention,
+    setFileQuery,
     setCommandNotice,
     setCommandQuery,
     setCommandSlashCommand,

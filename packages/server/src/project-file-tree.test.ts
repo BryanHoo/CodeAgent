@@ -1,10 +1,14 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { readProjectFileTree } from "./project-file-tree.js";
+import {
+  readProjectFileSearch,
+  readProjectFileTree,
+  resolveProjectFileReferences,
+} from "./project-file-tree.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -125,5 +129,38 @@ describe("readProjectFileTree", () => {
 
     expect(tree.entries).toHaveLength(2_001);
     expect(tree.path).toBeNull();
+  });
+});
+
+describe("readProjectFileSearch", () => {
+  it("matches file names while preserving tree ignore and symlink boundaries", async () => {
+    const projectRoot = await createTemporaryProject();
+    const outsideRoot = await mkdtemp(join(tmpdir(), "code-agent-search-outside-"));
+    temporaryDirectories.push(outsideRoot);
+    await Promise.all([
+      mkdir(join(projectRoot, "node_modules")),
+      mkdir(join(projectRoot, "src", "generated"), { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(join(projectRoot, ".gitignore"), "src/generated/\n"),
+      writeFile(join(projectRoot, "node_modules", "index.ts"), "ignored\n"),
+      writeFile(join(projectRoot, "src", "generated", "index.ts"), "ignored\n"),
+      writeFile(join(projectRoot, "src", "index.ts"), "export {};\n"),
+      writeFile(join(projectRoot, "src", "index.test.ts"), "export {};\n"),
+      writeFile(join(outsideRoot, "index.ts"), "outside\n"),
+    ]);
+    await symlink(join(outsideRoot, "index.ts"), join(projectRoot, "linked-index.ts"));
+
+    await expect(readProjectFileSearch(projectRoot, "index")).resolves.toEqual({
+      data: [
+        { name: "index.ts", path: "src/index.ts" },
+        { name: "index.test.ts", path: "src/index.test.ts" },
+      ],
+    });
+    const resolvedRoot = await realpath(projectRoot);
+    await expect(resolveProjectFileReferences(projectRoot, ["src/index.ts"])).resolves.toEqual([
+      { name: "index.ts", path: join(resolvedRoot, "src", "index.ts") },
+    ]);
+    await expect(resolveProjectFileReferences(projectRoot, ["linked-index.ts"])).rejects.toThrow();
   });
 });

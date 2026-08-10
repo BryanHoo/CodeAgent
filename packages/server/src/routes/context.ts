@@ -28,6 +28,7 @@ import type {
   InstallAppUpdateResponse,
   Project,
   ProjectDirectoryListing,
+  ProjectFileSearchPage,
   ProjectFileTree,
   ProjectGitHistoryPage,
   ProjectGitHistoryQuery,
@@ -159,6 +160,11 @@ export interface ServerRouteContext {
     models?: readonly AgentModel[],
   ) => Promise<AgentTaskSettings>;
   readonly readFileTree: (projectRoot: string, directoryPath?: string) => Promise<ProjectFileTree>;
+  readonly readFileSearch: (
+    projectRoot: string,
+    query: string,
+    signal?: AbortSignal,
+  ) => Promise<ProjectFileSearchPage>;
   readonly readHostFileDirectory: (kind: HostFileKind, path?: string) => Promise<HostFileListing>;
   readonly readProjectDirectory: (path?: string) => Promise<ProjectDirectoryListing>;
   readonly readImageFile: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
@@ -190,6 +196,7 @@ export interface ServerRouteContext {
   readonly releaseProjectContext: (projectId: string) => Promise<void>;
   readonly resolveProviderTurnInput: (
     projectId: string,
+    projectRoot: string,
     input: AgentPromptInput,
   ) => Promise<
     Readonly<{ attachmentIds: readonly string[]; providerInput: AgentProviderTurnInput }>

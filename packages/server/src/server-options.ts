@@ -13,6 +13,7 @@ import type {
   HostFileListing,
   InstallAppUpdateResponse,
   ProjectDirectoryListing,
+  ProjectFileSearchPage,
   ProjectFileTree,
   ProjectGitHistoryPage,
   ProjectGitHistoryQuery,
@@ -79,10 +80,19 @@ export interface CreateCodeAgentServerOptions {
   ) => Promise<ProjectGitStatus>;
   readHostFileDirectory?: (kind: HostFileKind, path?: string) => Promise<HostFileListing>;
   readProjectFileTree?: (projectRoot: string, directoryPath?: string) => Promise<ProjectFileTree>;
+  readProjectFileSearch?: (
+    projectRoot: string,
+    query: string,
+    signal?: AbortSignal,
+  ) => Promise<ProjectFileSearchPage>;
   readProjectDirectory?: (path?: string) => Promise<ProjectDirectoryListing>;
   readProjectImageFile?: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
   readProjectSourceFile?: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
   resolveProjectDirectory?: (path: string) => Promise<string>;
+  resolveProjectFileReferences?: (
+    projectRoot: string,
+    paths: readonly string[],
+  ) => Promise<readonly Readonly<{ name: string; path: string }>[]>;
   resolveHostAttachment?: (kind: HostFileKind, path: string) => Promise<HostAttachmentSource>;
   staticRoot?: string;
 }

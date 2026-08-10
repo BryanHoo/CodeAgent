@@ -2171,6 +2171,63 @@ describe("CodeAgent Server", () => {
     expect(readProjectFileTree).toHaveBeenCalledTimes(1);
   });
 
+  it("searches project files and maps selected references into Provider mentions", async () => {
+    const { provider, startTurn } = createProvider();
+    const readProjectFileSearch = vi.fn(() =>
+      Promise.resolve({ data: [{ name: "main.tsx", path: "src/main.tsx" }] }),
+    );
+    const resolveProjectFileReferences = vi.fn(() =>
+      Promise.resolve([{ name: "main.tsx", path: "/workspace/CodeAgent/src/main.tsx" }]),
+    );
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, { readProjectFileSearch, resolveProjectFileReferences }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const search = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/files/search?query=main",
+    });
+    const turn = await app.inject({
+      headers: { "idempotency-key": "project-file-reference" },
+      method: "POST",
+      payload: {
+        input: {
+          attachments: [],
+          fileReferences: [{ path: "src/main.tsx" }],
+          skills: [],
+          text: "解释这个文件",
+          type: "prompt",
+        },
+        options: turnOptions,
+      },
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
+    });
+
+    expect(search.statusCode).toBe(200);
+    expect(search.json()).toEqual({ data: [{ name: "main.tsx", path: "src/main.tsx" }] });
+    expect(readProjectFileSearch.mock.calls[0]?.slice(0, 2)).toEqual([project.rootPath, "main"]);
+    expect(turn.statusCode).toBe(201);
+    expect(resolveProjectFileReferences).toHaveBeenCalledWith(project.rootPath, ["src/main.tsx"]);
+    expect(startTurn).toHaveBeenCalledWith(
+      "task-1",
+      {
+        files: [
+          {
+            mediaType: "application/octet-stream",
+            name: "main.tsx",
+            path: "/workspace/CodeAgent/src/main.tsx",
+          },
+        ],
+        images: [],
+        skills: [],
+        text: "解释这个文件",
+        textAttachments: [],
+      },
+      turnOptions,
+    );
+  });
+
   it("serves models and resolves uploaded attachments before starting a turn", async () => {
     const {
       app,

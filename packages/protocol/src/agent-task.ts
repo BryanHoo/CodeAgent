@@ -9,7 +9,7 @@ import {
   AgentReasoningItemSchema,
   MAX_AGENT_ATTACHMENT_BYTES,
 } from "./agent-attachments.js";
-import { NullableDateTimeSchema } from "./project-files.js";
+import { NullableDateTimeSchema, ProjectRelativePathSchema } from "./project-files.js";
 import { AgentFileChangeSchema } from "./project-git.js";
 
 export const AgentFileChangeItemSchema = Type.Object(
@@ -318,6 +318,13 @@ export const AgentSkillReferenceSchema = Type.Object(
 
 export type AgentSkillReference = Readonly<Static<typeof AgentSkillReferenceSchema>>;
 
+export const AgentFileReferenceSchema = Type.Object(
+  { path: ProjectRelativePathSchema },
+  { additionalProperties: false },
+);
+
+export type AgentFileReference = Readonly<Static<typeof AgentFileReferenceSchema>>;
+
 const AgentAttachmentReferenceSchema = Type.Object(
   { id: Type.String({ minLength: 1 }) },
   { additionalProperties: false },
@@ -325,6 +332,7 @@ const AgentAttachmentReferenceSchema = Type.Object(
 
 const AgentPromptInputProperties = {
   attachments: Type.Array(AgentAttachmentReferenceSchema),
+  fileReferences: Type.Optional(Type.Array(AgentFileReferenceSchema, { maxItems: 50 })),
   skills: Type.Array(AgentSkillReferenceSchema),
   text: Type.String({ maxLength: 100_000 }),
   type: Type.Literal("prompt"),
@@ -335,6 +343,13 @@ export const AgentPromptInputSchema = Type.Union([
     {
       ...AgentPromptInputProperties,
       text: Type.String({ maxLength: 100_000, minLength: 1 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...AgentPromptInputProperties,
+      fileReferences: Type.Array(AgentFileReferenceSchema, { maxItems: 50, minItems: 1 }),
     },
     { additionalProperties: false },
   ),

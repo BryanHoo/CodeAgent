@@ -10,11 +10,25 @@ describe("ComposerDraftStore", () => {
 
     store.update(firstScope, (draft) => ({
       ...draft,
-      queuedPrompts: [{ files: [], id: "queued-1", skills: [], text: "稍后执行测试" }],
+      queuedPrompts: [
+        {
+          fileReferences: [{ name: "main.tsx", path: "src/main.tsx" }],
+          files: [],
+          id: "queued-1",
+          skills: [],
+          text: "稍后执行测试",
+        },
+      ],
     }));
 
     expect(store.read(firstScope).queuedPrompts).toEqual([
-      { files: [], id: "queued-1", skills: [], text: "稍后执行测试" },
+      {
+        fileReferences: [{ name: "main.tsx", path: "src/main.tsx" }],
+        files: [],
+        id: "queued-1",
+        skills: [],
+        text: "稍后执行测试",
+      },
     ]);
     expect(store.read(secondScope).queuedPrompts).toEqual([]);
   });

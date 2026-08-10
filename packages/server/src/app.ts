@@ -19,7 +19,11 @@ import { readProjectGitHistory } from "./git-history.js";
 import { readProjectGitStatus as readGitProjectStatus } from "./git-working-tree.js";
 import { readHostFileDirectory, resolveHostAttachment } from "./host-file-browser.js";
 import { createIdempotencyRunner } from "./idempotency-runner.js";
-import { readProjectFileTree } from "./project-file-tree.js";
+import {
+  readProjectFileSearch,
+  readProjectFileTree,
+  resolveProjectFileReferences,
+} from "./project-file-tree.js";
 import { readProjectImageFile } from "./project-image-file.js";
 import { readProjectSourceFile } from "./project-source-file.js";
 import { createProjectOpenService } from "./project-open.js";
@@ -104,19 +108,31 @@ export async function createCodeAgentServer(
   const readProjectGitStatus = options.readProjectGitStatus ?? readGitProjectStatus;
   const commitProjectChanges = options.commitProjectChanges ?? commitSelectedProjectChanges;
   const readFileTree = options.readProjectFileTree ?? readProjectFileTree;
+  const readFileSearch = options.readProjectFileSearch ?? readProjectFileSearch;
+  const resolveFileReferences =
+    options.resolveProjectFileReferences ?? resolveProjectFileReferences;
   const readImageFile = options.readProjectImageFile ?? readProjectImageFile;
   const readSourceFile = options.readProjectSourceFile ?? readProjectSourceFile;
   const projectOpenService = options.projectOpenService ?? createProjectOpenService();
   const attachmentStore = new AttachmentStore();
   const resolveProviderTurnInput = async (
     projectId: string,
+    projectRoot: string,
     input: AgentPromptInput,
   ): Promise<
     Readonly<{ attachmentIds: readonly string[]; providerInput: AgentProviderTurnInput }>
   > => {
     const attachmentIds = input.attachments.map((attachment) => attachment.id);
+    const fileReferencePaths = (input.fileReferences ?? []).map((reference) => reference.path);
     if (new Set(attachmentIds).size !== attachmentIds.length) {
       throw new MutationHttpError("INVALID_REQUEST", "Duplicate attachments are not allowed", 400);
+    }
+    if (new Set(fileReferencePaths).size !== fileReferencePaths.length) {
+      throw new MutationHttpError(
+        "INVALID_REQUEST",
+        "Duplicate file references are not allowed",
+        400,
+      );
     }
     let resolvedAttachments;
     try {
@@ -131,7 +147,19 @@ export async function createCodeAgentServer(
       }
       throw error;
     }
-    // Start 与 steer 共用同一映射，保证附件校验和 Provider 输入语义一致。
+    let projectFiles;
+    try {
+      projectFiles = await resolveFileReferences(projectRoot, fileReferencePaths);
+    } catch (error) {
+      if (
+        error instanceof TypeError ||
+        (typeof error === "object" && error !== null && "code" in error)
+      ) {
+        throw new MutationHttpError("INVALID_REQUEST", "Project file reference is invalid", 400);
+      }
+      throw error;
+    }
+    // Start 与 steer 共用同一映射，保证附件和 Project 文件引用的校验语义一致。
     const imageBytes = resolvedAttachments.reduce(
       (total, attachment) => total + (attachment.kind === "image" ? attachment.size : 0),
       0,
@@ -152,17 +180,25 @@ export async function createCodeAgentServer(
     return {
       attachmentIds,
       providerInput: {
-        files: resolvedAttachments.flatMap((attachment) =>
-          attachment.kind === "file"
-            ? [
-                {
-                  mediaType: attachment.mediaType,
-                  name: attachment.name,
-                  path: attachment.path,
-                },
-              ]
-            : [],
-        ),
+        files: resolvedAttachments
+          .flatMap((attachment) =>
+            attachment.kind === "file"
+              ? [
+                  {
+                    mediaType: attachment.mediaType,
+                    name: attachment.name,
+                    path: attachment.path,
+                  },
+                ]
+              : [],
+          )
+          .concat(
+            projectFiles.map((file) => ({
+              mediaType: "application/octet-stream",
+              name: file.name,
+              path: file.path,
+            })),
+          ),
         images: resolvedAttachments.flatMap((attachment) =>
           attachment.kind === "image"
             ? [{ mediaType: attachment.mediaType, url: attachment.url }]
@@ -393,6 +429,7 @@ export async function createCodeAgentServer(
     readEffectiveProjectDefaults,
     readEffectiveTaskSettings,
     readFileTree,
+    readFileSearch,
     readHostFileDirectory: options.readHostFileDirectory ?? readHostFileDirectory,
     readProjectDirectory: options.readProjectDirectory ?? readProjectDirectory,
     readImageFile,

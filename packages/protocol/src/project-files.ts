@@ -15,6 +15,30 @@ export const ProjectRelativePathSchema = Type.String({
 
 export type ProjectRelativePath = Static<typeof ProjectRelativePathSchema>;
 
+export const ProjectFileSearchQuerySchema = Type.Object(
+  { query: Type.String({ maxLength: 256 }) },
+  { additionalProperties: false },
+);
+
+export type ProjectFileSearchQuery = Readonly<Static<typeof ProjectFileSearchQuerySchema>>;
+
+export const ProjectFileSearchEntrySchema = Type.Object(
+  {
+    name: Type.String({ minLength: 1 }),
+    path: ProjectRelativePathSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectFileSearchEntry = Readonly<Static<typeof ProjectFileSearchEntrySchema>>;
+
+export const ProjectFileSearchPageSchema = Type.Object(
+  { data: Type.Array(ProjectFileSearchEntrySchema, { maxItems: 50 }) },
+  { additionalProperties: false },
+);
+
+export type ProjectFileSearchPage = Readonly<Static<typeof ProjectFileSearchPageSchema>>;
+
 export const ProjectFileReferencePathSchema = Type.String({
   maxLength: 32_768,
   minLength: 1,

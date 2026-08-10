@@ -47,6 +47,7 @@ export function createComposerCommands({
     replacePromptContent,
     reviewMenuMode,
     routeScope,
+    selectActiveFileReference,
     setActiveCommandIndex,
     setCommandMenuOpen,
     setCommandNotice,
@@ -125,6 +126,7 @@ export function createComposerCommands({
           text: t("composer.initializingAgentsPrompt"),
         },
         [],
+        { fileReferences: [] },
       );
       return;
     }
@@ -237,6 +239,9 @@ export function createComposerCommands({
   };
 
   const selectActiveCommandItem = () => {
+    if (selectActiveFileReference()) {
+      return;
+    }
     if (reviewMenuMode === "scopes") {
       if (activeCommandIndex === 0) {
         void executeReviewTarget({ type: "uncommitted_changes" });
