@@ -231,6 +231,39 @@ describe("task store", () => {
     expect(store.getState().notices.at(-1)?.payload.message).toBe("警告 24");
   });
 
+  it("does not retain guardian warnings duplicated by approval review items", () => {
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        payload: {
+          code: "guardian_warning",
+          level: "warning",
+          message: "Automatic approval review approved",
+        },
+        type: "task.notice",
+      },
+      {
+        ...eventEnvelope(12),
+        payload: {
+          code: "runtime_warning",
+          level: "warning",
+          message: "Runtime remains unavailable",
+        },
+        type: "task.notice",
+      },
+    ]);
+
+    expect(store.getState().notices).toMatchObject([
+      {
+        payload: {
+          code: "runtime_warning",
+          message: "Runtime remains unavailable",
+        },
+      },
+    ]);
+  });
+
   it("replaces the latest plan without rebuilding timeline item state", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
     const previousItemIdsByTurnId = store.getState().itemIdsByTurnId;

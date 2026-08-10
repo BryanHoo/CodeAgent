@@ -313,12 +313,18 @@ export function applyAcceptedEvent(
         snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
         turnDiffsById: { ...state.turnDiffsById, [event.turnId]: event.payload.diff },
       };
-    case "task.notice":
+    case "task.notice": {
+      // 自动审批结果已由 approval_review Item 展示，避免 Guardian 摘要在底部永久重复出现。
+      const notices =
+        event.payload.code === "guardian_warning"
+          ? state.notices
+          : [...state.notices, event].slice(-MAX_RETAINED_TASK_NOTICES);
       return {
         checkpoint,
-        notices: [...state.notices, event].slice(-MAX_RETAINED_TASK_NOTICES),
+        notices,
         snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
       };
+    }
     case "item.started":
     case "item.completed": {
       if (state.turnsById[event.turnId] === undefined) {
