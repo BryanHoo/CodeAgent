@@ -123,6 +123,7 @@ export function WorkbenchComposer({
     isSubmitting,
     menuItemCount,
     mutationError,
+    navigatePromptHistory,
     pendingTask,
     promptContent,
     promptSubmission,
@@ -439,6 +440,7 @@ export function WorkbenchComposer({
         setReviewMenuMode("branches");
       }}
       onPromptChange={handlePromptChange}
+      onPromptHistoryNavigate={navigatePromptHistory}
       onSelectActiveCommand={selectActiveCommandItem}
       onSelectAttachmentKind={setAttachmentPickerKind}
       onSelectFileReference={selectFileReference}

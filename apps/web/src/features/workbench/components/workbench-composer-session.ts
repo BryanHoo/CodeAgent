@@ -7,7 +7,7 @@ import type {
   ProjectGitStatus,
   ProjectFileSearchEntry,
 } from "@code-agent/protocol";
-import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { PromptInputAttachment } from "../../../shared/components/agent/prompt-input.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
@@ -38,10 +38,16 @@ import {
   fileReferencePlainText,
   insertPromptFileReference,
   isPromptTextRange,
+  serializePromptSkillContent,
   toPromptSkillSubmission,
   type PromptSkillContent,
   type PromptSkillEditorHandle,
 } from "./prompt-skill-editor.js";
+import {
+  collectPromptHistoryEntries,
+  resolvePromptHistoryIndex,
+  type PromptHistoryDirection,
+} from "./prompt-history.js";
 import type { WorkbenchComposerProps } from "./workbench-composer-contracts.js";
 import type { ComposerMode } from "./workbench-composer-contracts.js";
 
@@ -98,6 +104,7 @@ export function useComposerSession({
   const [promptContent, setPromptContent] = useState<PromptSkillContent>(
     initialComposerDraft.content,
   );
+  const [promptHistoryIndex, setPromptHistoryIndex] = useState<number | null>(null);
   const [composerModeState, setComposerModeState] =
     useState<Readonly<{ mode: ComposerMode; scope: string }>>();
   const [queuedPrompts, setQueuedPrompts] = useState<readonly QueuedComposerPrompt[]>(
@@ -118,6 +125,7 @@ export function useComposerSession({
   const commandMenuId = useId();
   const commandSurfaceRef = useRef<HTMLDivElement>(null);
   const skillEditorRef = useRef<PromptSkillEditorHandle>(null);
+  const promptHistoryDraftRef = useRef<PromptSkillContent>(initialComposerDraft.content);
   const previousRouteScopeRef = useRef(routeScope);
   const previousComposerScopeRef = useRef(composerScope);
   const submittedTurnId =
@@ -149,6 +157,10 @@ export function useComposerSession({
     activeSettings.reasoningEffort,
   );
   const contextUsage = runtime?.snapshot?.contextUsage;
+  const promptHistoryEntries = useMemo(
+    () => collectPromptHistoryEntries(runtime?.snapshot?.turns ?? [], skills),
+    [runtime?.snapshot?.turns, skills],
+  );
   const attachmentCount = attachments.length;
   const { attachmentsDisabled, draftInputDisabled, turnControlsDisabled } =
     deriveComposerInputAvailability(state);
@@ -213,6 +225,31 @@ export function useComposerSession({
     },
     [composerDraftStore, composerScope],
   );
+  const navigatePromptHistory = useCallback(
+    (direction: PromptHistoryDirection) => {
+      const nextIndex = resolvePromptHistoryIndex(
+        promptHistoryIndex,
+        direction,
+        promptHistoryEntries.length,
+      );
+      if (nextIndex === null && promptHistoryIndex === null) {
+        return false;
+      }
+      if (promptHistoryIndex === null) {
+        // 首次进入历史时保留未提交草稿，向下越过最新记录时原样恢复。
+        promptHistoryDraftRef.current = skillEditorRef.current?.getContent() ?? promptContent;
+      }
+      const nextContent =
+        nextIndex === null ? promptHistoryDraftRef.current : promptHistoryEntries[nextIndex];
+      if (nextContent === undefined) {
+        return false;
+      }
+      setPromptHistoryIndex(nextIndex);
+      replacePromptContent(nextContent, serializePromptSkillContent(nextContent).length);
+      return true;
+    },
+    [promptContent, promptHistoryEntries, promptHistoryIndex, replacePromptContent],
+  );
   const selectFileReference = useCallback(
     (file: ProjectFileSearchEntry) => {
       if (fileMention === undefined) {
@@ -242,6 +279,7 @@ export function useComposerSession({
   const handlePromptChange = useCallback(
     (nextContent: PromptSkillContent, serializedText: string, cursorOffset: number) => {
       setPromptContent(nextContent);
+      setPromptHistoryIndex(null);
       composerDraftStore.update(composerScope, (current) => ({
         ...current,
         content: nextContent,
@@ -289,6 +327,8 @@ export function useComposerSession({
       content: [],
     }));
     setPromptContent([]);
+    setPromptHistoryIndex(null);
+    promptHistoryDraftRef.current = [];
     setAttachments([]);
     skillEditorRef.current?.replace([]);
   }, [composerDraftStore, composerScope]);
@@ -315,6 +355,8 @@ export function useComposerSession({
       const restoredDraft = composerDraftStore.read(composerScope);
       // 切换聊天时恢复对应草稿，同时保留编辑节点和焦点，避免重建原生 IME 会话。
       setPromptContent(restoredDraft.content);
+      setPromptHistoryIndex(null);
+      promptHistoryDraftRef.current = restoredDraft.content;
       setAttachments(restoredDraft.attachments);
       setAttachmentPickerKind(undefined);
       setQueuedPrompts(restoredDraft.queuedPrompts);
@@ -376,6 +418,7 @@ export function useComposerSession({
     isSubmitting,
     menuItemCount,
     mutationError,
+    navigatePromptHistory,
     pendingTask,
     composerMode,
     promptContent,

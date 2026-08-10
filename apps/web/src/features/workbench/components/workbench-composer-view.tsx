@@ -38,7 +38,9 @@ import {
 import { movePromptCommandSelection } from "./prompt-command.js";
 import { ComposerBranchSwitcher } from "./composer-branch-switcher.js";
 import { ComposerModelSelector } from "./composer-model-selector.js";
+import { shouldNavigatePromptHistory } from "./prompt-history.js";
 import { PromptSkillEditor } from "./prompt-skill-editor.js";
+import { selectionOffset } from "./prompt-skill-editor-dom.js";
 import { ComposerCommandMenu } from "./workbench-composer-command-menu.js";
 import { ComposerFileMenu } from "./workbench-composer-file-menu.js";
 import { ComposerAttachments, ComposerModeTag } from "./workbench-composer-toolbar.js";
@@ -175,26 +177,46 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
               disabled={props.draftInputDisabled}
               onChange={props.onPromptChange}
               onKeyDown={(event) => {
+                if (isPromptInputComposing(event.nativeEvent)) {
+                  return;
+                }
+                if (props.commandMenuOpen || props.fileMenuOpen) {
+                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                    event.preventDefault();
+                    props.setActiveCommandIndex((currentIndex) =>
+                      movePromptCommandSelection(
+                        currentIndex,
+                        event.key === "ArrowDown" ? 1 : -1,
+                        props.menuItemCount,
+                      ),
+                    );
+                    return;
+                  }
+                  if (event.key === "Enter" && !isPromptInputNewlineShortcut(event)) {
+                    event.preventDefault();
+                    props.onSelectActiveCommand();
+                  }
+                  return;
+                }
                 if (
-                  (!props.commandMenuOpen && !props.fileMenuOpen) ||
-                  isPromptInputComposing(event.nativeEvent)
+                  (event.key === "ArrowDown" || event.key === "ArrowUp") &&
+                  !(event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
                 ) {
-                  return;
-                }
-                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                  event.preventDefault();
-                  props.setActiveCommandIndex((currentIndex) =>
-                    movePromptCommandSelection(
-                      currentIndex,
-                      event.key === "ArrowDown" ? 1 : -1,
-                      props.menuItemCount,
-                    ),
-                  );
-                  return;
-                }
-                if (event.key === "Enter" && !isPromptInputNewlineShortcut(event)) {
-                  event.preventDefault();
-                  props.onSelectActiveCommand();
+                  const selection = document.getSelection();
+                  const direction = event.key === "ArrowUp" ? "previous" : "next";
+                  const serializedText = event.currentTarget.dataset["serializedValue"] ?? "";
+                  if (
+                    selection?.isCollapsed === true &&
+                    event.currentTarget.contains(selection.anchorNode) &&
+                    shouldNavigatePromptHistory(
+                      serializedText,
+                      selectionOffset(event.currentTarget),
+                      direction,
+                    ) &&
+                    props.onPromptHistoryNavigate(direction)
+                  ) {
+                    event.preventDefault();
+                  }
                 }
               }}
               placeholder={resolveComposerPlaceholder(props.taskId)}

@@ -309,6 +309,51 @@ test("undoes text pasted into the composer", async ({ page }) => {
   await expect(prompt).toHaveAttribute("data-serialized-value", "");
 });
 
+test("recalls submitted prompt history with arrow keys and restores the draft", async ({
+  page,
+}) => {
+  const latestTurn = {
+    completedAt: "2026-08-10T08:01:00.000Z",
+    error: null,
+    id: "turn-latest-history",
+    items: [
+      {
+        id: "message-latest-history",
+        role: "user" as const,
+        text: "最近一次输入",
+        type: "message" as const,
+      },
+    ],
+    startedAt: "2026-08-10T08:00:00.000Z",
+    status: "completed" as const,
+  };
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: { ...taskSnapshot, turns: [...taskSnapshot.turns, latestTurn] },
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await prompt.fill("尚未提交的草稿");
+
+  await prompt.press("ArrowUp");
+  await expect(prompt).toHaveAttribute("data-serialized-value", "最近一次输入");
+  await prompt.press("ArrowUp");
+  await expect(prompt).toHaveAttribute(
+    "data-serialized-value",
+    "$review-security 完成 macOS 原生风格的三栏工作台页面。",
+  );
+  await prompt.press("ArrowDown");
+  await expect(prompt).toHaveAttribute("data-serialized-value", "最近一次输入");
+  await prompt.press("ArrowDown");
+  await expect(prompt).toHaveAttribute("data-serialized-value", "尚未提交的草稿");
+});
+
 test("does not submit or select a command when Safari confirms an IME candidate @smoke", async ({
   page,
 }) => {

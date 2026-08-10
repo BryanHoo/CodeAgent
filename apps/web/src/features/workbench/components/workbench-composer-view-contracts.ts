@@ -73,6 +73,7 @@ export type WorkbenchComposerViewProps = Readonly<{
     serializedText: string,
     cursorOffset: number,
   ) => void;
+  onPromptHistoryNavigate: (direction: "next" | "previous") => boolean;
   onSelectActiveCommand: () => void;
   onSelectAttachmentKind: (kind: PromptInputAttachmentKind) => void;
   onSelectFileReference: (file: ProjectFileSearchEntry) => void;
