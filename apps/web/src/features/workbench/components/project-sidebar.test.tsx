@@ -215,6 +215,7 @@ describe("SidebarSettingsButton", () => {
     appVersion: "1.3.0",
     codexVersion: "0.147.0",
     latestVersion: "1.3.0",
+    releaseNotes: null,
     status: "current" as const,
     updateAvailable: false,
   };
@@ -276,6 +277,7 @@ describe("SidebarSettingsButton", () => {
         appInfo={{
           ...appInfo,
           latestVersion: "1.4.0",
+          releaseNotes: "### 新增\n\n- 添加更新日志。",
           status: "available",
           updateAvailable: true,
         }}
@@ -285,6 +287,7 @@ describe("SidebarSettingsButton", () => {
     );
 
     expect(markup).toContain("CodeAgent 1.3.0，有可用更新，终端连接状态：在线");
+    expect(markup).toContain("lucide-circle-arrow-up");
     expect(markup).toContain('class="text-warning"');
   });
 });

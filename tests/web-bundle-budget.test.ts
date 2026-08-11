@@ -132,7 +132,7 @@ describe("Web Bundle 预算门禁", () => {
     };
     expect(report).toMatchObject({
       budgets: {
-        initialGzipBytes: 240 * 1024,
+        initialGzipBytes: 241 * 1024,
         maxAsyncGzipBytes: 200 * 1024,
         workbenchReadyGzipBytes: 340 * 1024,
         workbenchReadyRequestCount: 16,

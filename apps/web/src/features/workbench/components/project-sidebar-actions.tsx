@@ -1,6 +1,7 @@
 import type { AgentEventConnectionState } from "@code-agent/client";
 import type { AppInfoResponse, Project } from "@code-agent/protocol";
 import {
+  CircleArrowUp,
   Ellipsis,
   LoaderCircle,
   Pencil,
@@ -142,13 +143,13 @@ export function SidebarSettingsButton({
   const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
   const connectionStatusLabel = t(connectionStatus.labelKey);
   const appVersion = appInfo?.appVersion ?? "…";
-  const updateLabel = appInfo?.updateAvailable === true ? t("sidebar.updateAvailableLabel") : "";
+  const updateAvailable = appInfo?.updateAvailable === true;
   return (
     <Button
       variant="ghost"
       aria-label={t("sidebar.connectionSettings", {
         status: connectionStatusLabel,
-        update: updateLabel,
+        update: updateAvailable ? t("sidebar.updateAvailableLabel") : "",
         version: appVersion,
       })}
       className="flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
@@ -160,9 +161,10 @@ export function SidebarSettingsButton({
       <Settings className="size-4" aria-hidden="true" />
       {t("sidebar.settings")}
       <span aria-live="polite" className="ml-auto inline-flex items-center gap-1 text-caption">
-        <span
-          className={appInfo?.updateAvailable === true ? "text-warning" : "text-muted-foreground"}
-        >
+        <span className={updateAvailable ? "text-warning" : "text-muted-foreground"}>
+          {updateAvailable ? (
+            <CircleArrowUp aria-hidden="true" className="mr-1 inline size-3" />
+          ) : null}
           v{appVersion}
         </span>
         <span aria-hidden="true" className="text-muted-foreground">

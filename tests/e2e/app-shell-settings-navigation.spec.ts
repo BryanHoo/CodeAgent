@@ -184,14 +184,17 @@ test("switches the interface language and restores it after reload", async ({ pa
 });
 
 test("opens About from the sidebar and installs an available update", async ({ page }) => {
+  let appInfoRequests = 0;
   let updateRequest: Record<string, unknown> | undefined;
   await page.route("**/v1/app-info", async (route) => {
+    appInfoRequests += 1;
     await route.fulfill({
       contentType: "application/json",
       json: {
         appVersion: "1.3.0",
         codexVersion: "0.147.0",
         latestVersion: "1.4.0",
+        releaseNotes: "### 新增\n\n- 添加更新日志查看入口。",
         status: "available",
         updateAvailable: true,
       },
@@ -205,6 +208,7 @@ test("opens About from the sidebar and installs an available update", async ({ p
         appVersion: "1.3.0",
         codexVersion: "0.147.0",
         latestVersion: "1.4.0",
+        releaseNotes: null,
         status: "restart-required",
         updateAvailable: false,
       },
@@ -215,7 +219,8 @@ test("opens About from the sidebar and installs an available update", async ({ p
   const settingsButton = page.getByRole("button", {
     name: /设置，CodeAgent 1\.3\.0，有可用更新，终端连接状态：在线/u,
   });
-  await expect(settingsButton.getByText("v1.3.0")).toHaveClass(/text-warning/u);
+  await expect(settingsButton.locator(".text-warning")).toContainText("v1.3.0");
+  await expect(settingsButton.locator(".lucide-circle-arrow-up")).toBeVisible();
   await settingsButton.click();
 
   const dialog = page.getByRole("dialog", { name: "全局设置" });
@@ -225,6 +230,51 @@ test("opens About from the sidebar and installs an available update", async ({ p
   );
   await expect(dialog.getByText("1.3.0", { exact: true })).toBeVisible();
   await expect(dialog.getByText("0.147.0", { exact: true })).toBeVisible();
+  const githubLink = dialog.getByRole("link", { name: "BryanHoo/CodeAgent" });
+  await expect(githubLink).toHaveAttribute("href", "https://github.com/BryanHoo/CodeAgent");
+  await expect(githubLink).toHaveAttribute("target", "_blank");
+
+  // GitHub 链接按内容宽度贴齐值列起点，不能在拉伸后的整列中居中。
+  const [versionBox, githubBox] = await Promise.all([
+    dialog.getByText("1.3.0", { exact: true }).boundingBox(),
+    githubLink.boundingBox(),
+  ]);
+  expect(versionBox).not.toBeNull();
+  expect(githubBox).not.toBeNull();
+  if (versionBox === null || githubBox === null) throw new Error("关于字段缺少布局边界");
+  expect(Math.abs(versionBox.x - githubBox.x)).toBeLessThanOrEqual(1);
+
+  // 更新状态和全部操作在桌面设置弹窗中共用同一横向操作行。
+  const updateControlCenters = await Promise.all(
+    [
+      dialog.getByText("发现新版本 1.4.0", { exact: true }),
+      dialog.getByRole("button", { name: "检查更新" }),
+      dialog.getByRole("button", { name: "更新日志" }),
+      dialog.getByRole("button", { name: "更新到 1.4.0" }),
+    ].map(async (control) => {
+      await expect(control).toBeVisible();
+      const box = await control.boundingBox();
+      expect(box).not.toBeNull();
+      if (box === null) throw new Error("更新操作控件缺少布局边界");
+      return box.y + box.height / 2;
+    }),
+  );
+  expect(Math.max(...updateControlCenters) - Math.min(...updateControlCenters)).toBeLessThanOrEqual(
+    1,
+  );
+
+  const initialAppInfoRequests = appInfoRequests;
+  await dialog.getByRole("button", { name: "检查更新" }).click();
+  await expect.poll(() => appInfoRequests).toBeGreaterThan(initialAppInfoRequests);
+
+  await dialog.getByRole("button", { name: "更新日志" }).click();
+  const releaseNotesDialog = page.getByRole("dialog", { name: "1.4.0 更新日志" });
+  await expect(
+    releaseNotesDialog.getByText("添加更新日志查看入口。", { exact: true }),
+  ).toBeVisible();
+  await releaseNotesDialog.getByRole("button", { name: "关闭更新日志" }).click();
+  await expect(releaseNotesDialog).toHaveCount(0);
+
   await dialog.getByRole("button", { name: "更新到 1.4.0" }).click();
 
   await expect.poll(() => updateRequest).toEqual({ version: "1.4.0" });

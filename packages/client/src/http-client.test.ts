@@ -915,11 +915,15 @@ describe("CodeAgentClient", () => {
       appVersion: "1.3.0",
       codexVersion: "0.147.0",
       latestVersion: "1.4.0",
+      releaseNotes: "### 新增\n\n- 添加在线更新。",
       status: "available" as const,
       updateAvailable: true,
     };
     const installed = {
-      ...available,
+      appVersion: available.appVersion,
+      codexVersion: available.codexVersion,
+      latestVersion: available.latestVersion,
+      releaseNotes: null,
       status: "restart-required" as const,
       updateAvailable: false as const,
     };
@@ -950,6 +954,7 @@ describe("CodeAgentClient", () => {
         appVersion: "1.3.0",
         codexVersion: "0.147.0",
         latestVersion: "latest",
+        releaseNotes: null,
         status: "available",
         updateAvailable: true,
       }),

@@ -7,6 +7,7 @@ import { changeAppLanguage } from "../../../i18n/i18n.js";
 import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { GlobalSettingsDialog, resolveGlobalSettingsModel } from "./global-settings-dialog.js";
 import { GlobalSettingsAbout } from "./global-settings-about.js";
+import { AppReleaseNotesDialog } from "./app-release-notes-dialog.js";
 
 function renderSettingsDialog(children: ReactNode): string {
   return renderToStaticMarkup(<TooltipProvider>{children}</TooltipProvider>);
@@ -132,6 +133,7 @@ describe("GlobalSettingsDialog", () => {
       appVersion: "1.3.0",
       codexVersion: "0.147.0",
       latestVersion: "1.4.0",
+      releaseNotes: "### 新增\n\n- 添加在线更新。",
       status: "available" as const,
       updateAvailable: true,
     };
@@ -171,7 +173,14 @@ describe("GlobalSettingsDialog", () => {
     expect(markup).toContain("Codex 版本");
     expect(markup).toContain("0.147.0");
     expect(markup).toContain("发现新版本 1.4.0");
+    expect(markup).toContain("检查更新");
+    expect(markup).toContain("更新日志");
     expect(markup).toContain("更新到 1.4.0");
+    expect(markup).toContain('class="flex min-w-0 flex-wrap items-center gap-2 py-2"');
+    expect(markup).not.toContain('class="flex min-w-0 flex-col items-start gap-2 py-2"');
+    expect(markup).toContain("https://github.com/BryanHoo/CodeAgent");
+    expect(markup).toContain('target="_blank"');
+    expect(markup).toContain("justify-self-start");
     expect(markup).toContain('<section id="settings-panel-about">');
   });
 
@@ -182,6 +191,7 @@ describe("GlobalSettingsDialog", () => {
           appVersion: "1.3.0",
           codexVersion: "0.147.0",
           latestVersion: "1.4.0",
+          releaseNotes: "### 新增\n\n- 添加在线更新。",
           status: "available",
           updateAvailable: true,
         }}
@@ -206,6 +216,7 @@ describe("GlobalSettingsDialog", () => {
       appVersion: "1.3.0",
       codexVersion: "0.147.0",
       latestVersion: "1.4.0",
+      releaseNotes: "### 新增\n\n- 添加在线更新。",
       status: "available",
       updateAvailable: true,
     };
@@ -253,7 +264,22 @@ describe("GlobalSettingsDialog", () => {
     expect(updating).toContain("正在更新");
     expect(restartRequired).toContain("更新完成，重启 CodeAgent 后生效");
     expect(checkFailed).toContain("无法检查更新");
-    expect(checkFailed).toContain("重新检查");
+    expect(checkFailed).toContain("检查更新");
+  });
+
+  it("renders detailed release notes in a dedicated dialog", () => {
+    const markup = renderSettingsDialog(
+      <AppReleaseNotesDialog
+        notes={"### 新增\n\n- 添加在线更新。"}
+        onClose={vi.fn()}
+        open
+        version="1.4.0"
+      />,
+    );
+
+    expect(markup).toContain('role="dialog"');
+    expect(markup).toContain("1.4.0 更新日志");
+    expect(markup).toContain("添加在线更新");
   });
 
   it("uses the selected model default when the previous effort is unavailable", () => {

@@ -4,7 +4,9 @@ import { win32 } from "node:path";
 import type { AppInfoResponse, InstallAppUpdateResponse } from "@code-agent/protocol";
 
 const PACKAGE_NAME = "@bryanhu/code-agent";
+const CHANGELOG_URL_PREFIX = "https://raw.githubusercontent.com/BryanHoo/CodeAgent/v";
 const REGISTRY_TIMEOUT_MS = 10_000;
+const MAX_RELEASE_NOTES_BYTES = 32 * 1024;
 const INSTALL_TIMEOUT_MS = 2 * 60_000;
 const SEMANTIC_VERSION_PATTERN =
   /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-((?:(?:0|[1-9][0-9]*)|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:(?:0|[1-9][0-9]*)|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
@@ -29,6 +31,7 @@ export interface AppUpdateService {
 export interface CreateAppUpdateServiceOptions {
   appVersion: string;
   codexVersion: string;
+  fetchChangelog?: (version: string) => Promise<string>;
   fetchLatestVersion?: () => Promise<string>;
   runNpmInstall?: (version: string) => Promise<void>;
 }
@@ -78,6 +81,27 @@ function comparePrerelease(left: readonly string[], right: readonly string[]): n
     return leftPart < rightPart ? -1 : 1;
   }
   return 0;
+}
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  const bytes = Buffer.from(value, "utf8");
+  if (bytes.byteLength <= maxBytes) return value;
+  return new TextDecoder("utf-8", { fatal: false }).decode(bytes.subarray(0, maxBytes)).trimEnd();
+}
+
+export function extractVersionReleaseNotes(changelog: string, version: string): string | undefined {
+  const lines = changelog.split(/\r?\n/u);
+  const start = lines.findIndex((line) => line.startsWith(`## [${version}]`));
+  if (start < 0) return undefined;
+  const nextVersionOffset = lines
+    .slice(start + 1)
+    .findIndex((line) => /^## \[[^\]]+\]/u.test(line));
+  const end = nextVersionOffset < 0 ? lines.length : start + 1 + nextVersionOffset;
+  const releaseNotes = lines
+    .slice(start + 1, end)
+    .join("\n")
+    .trim();
+  return releaseNotes === "" ? undefined : truncateUtf8(releaseNotes, MAX_RELEASE_NOTES_BYTES);
 }
 
 export function resolveNpmInstallInvocation(
@@ -138,6 +162,15 @@ async function fetchLatestPackageVersion(): Promise<string> {
   return payload.latest;
 }
 
+async function fetchTaggedChangelog(version: string): Promise<string> {
+  const response = await fetch(`${CHANGELOG_URL_PREFIX}${version}/CHANGELOG.md`, {
+    headers: { accept: "text/markdown" },
+    signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`GitHub returned ${String(response.status)}`);
+  return response.text();
+}
+
 async function installGlobalPackage(version: string): Promise<void> {
   const invocation = resolveNpmInstallInvocation(version);
   await new Promise<void>((resolve, reject) => {
@@ -155,6 +188,7 @@ async function installGlobalPackage(version: string): Promise<void> {
 }
 
 export function createAppUpdateService(options: CreateAppUpdateServiceOptions): AppUpdateService {
+  const fetchChangelog = options.fetchChangelog ?? fetchTaggedChangelog;
   const fetchLatestVersion = options.fetchLatestVersion ?? fetchLatestPackageVersion;
   const runNpmInstall = options.runNpmInstall ?? installGlobalPackage;
   let installedVersion: string | undefined;
@@ -185,6 +219,7 @@ export function createAppUpdateService(options: CreateAppUpdateServiceOptions): 
         appVersion: options.appVersion,
         codexVersion: options.codexVersion,
         latestVersion,
+        releaseNotes: null,
         status: "restart-required",
         updateAvailable: false,
       };
@@ -198,6 +233,7 @@ export function createAppUpdateService(options: CreateAppUpdateServiceOptions): 
           appVersion: options.appVersion,
           codexVersion: options.codexVersion,
           latestVersion: null,
+          releaseNotes: null,
           status: "check-failed",
           updateAvailable: false,
         };
@@ -207,15 +243,27 @@ export function createAppUpdateService(options: CreateAppUpdateServiceOptions): 
           appVersion: options.appVersion,
           codexVersion: options.codexVersion,
           latestVersion,
+          releaseNotes: null,
           status: "restart-required",
           updateAvailable: false,
         };
       }
       const updateAvailable = isNewerVersion(latestVersion, options.appVersion);
+      let releaseNotes: string | null = null;
+      if (updateAvailable) {
+        try {
+          // 更新日志是辅助信息，读取失败不能掩盖已确认的可用更新。
+          releaseNotes =
+            extractVersionReleaseNotes(await fetchChangelog(latestVersion), latestVersion) ?? null;
+        } catch {
+          releaseNotes = null;
+        }
+      }
       return {
         appVersion: options.appVersion,
         codexVersion: options.codexVersion,
         latestVersion,
+        releaseNotes,
         status: updateAvailable ? "available" : "current",
         updateAvailable,
       };
