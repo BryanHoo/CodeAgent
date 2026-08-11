@@ -233,7 +233,9 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
   await expect.poll(() => snapshotRequestCount).toBeGreaterThanOrEqual(2);
 });
 
-test("clears transient realtime errors after the WebSocket reconnects", async ({ page }) => {
+test("clears transient realtime errors after the WebSocket reconnects @cross-browser", async ({
+  page,
+}) => {
   let snapshotRequestCount = 0;
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     snapshotRequestCount += 1;
@@ -1130,7 +1132,7 @@ test("queues follow-up messages and can steer or cancel them during an active tu
   await expect(nextTurn).toHaveAttribute("data-status", "completed");
 });
 
-test("submits a prompt and streams the completed reply", async ({ page }) => {
+test("submits a prompt and streams the completed reply @cross-browser", async ({ page }) => {
   await page.unroute("**/v1/**");
   await page.goto("/p/code-agent");
 

@@ -473,7 +473,9 @@ test("keeps the current task open when the product logo is clicked", async ({ pa
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
 });
 
-test("drags project folders to reorder and restores the persisted order", async ({ page }) => {
+test("drags project folders to reorder and restores the persisted order @cross-browser", async ({
+  page,
+}) => {
   await page.goto("/p/code-agent");
   const codeAgentProject = page.getByRole("button", { name: "切换项目 CodeAgent" });
   const superworkProject = page.getByRole("button", { name: "切换项目 superwork" });
@@ -896,7 +898,7 @@ test("renders task-readable MCP servers and sources in inspector", async ({ page
   await expect(inspector.getByRole("button", { name: "添加来源" })).toHaveCount(0);
 });
 
-test("opens message images in a preview dialog", async ({ context, page }) => {
+test("opens message images in a preview dialog @cross-browser", async ({ context, page }) => {
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     await route.fulfill({
       contentType: "application/json",

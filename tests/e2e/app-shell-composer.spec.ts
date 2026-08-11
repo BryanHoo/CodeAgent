@@ -1267,7 +1267,9 @@ test("project file tree context menu and ellipsis share target actions", async (
   });
 });
 
-test("keeps pasted images in attachments instead of the text editor", async ({ page }) => {
+test("keeps pasted images in attachments instead of the text editor @cross-browser", async ({
+  page,
+}) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const prompt = page.getByRole("textbox", { name: "任务输入" });
@@ -1281,6 +1283,10 @@ test("keeps pasted images in attachments instead of the text editor", async ({ p
       cancelable: true,
       clipboardData,
     });
+    if (event.clipboardData !== clipboardData) {
+      // Firefox 忽略 ClipboardEventInit.clipboardData，测试需显式提供真实事件字段。
+      Object.defineProperty(event, "clipboardData", { value: clipboardData });
+    }
 
     return !element.dispatchEvent(event) && event.defaultPrevented;
   });

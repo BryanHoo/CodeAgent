@@ -1,6 +1,6 @@
 import { LAN_PAIRING_CODE, expect, test } from "./fixtures/lan-access.js";
 
-test("pairs real browsers, persists the cookie, and invalidates it on logout", async ({
+test("pairs real browsers, persists the cookie, and invalidates it on logout @cross-browser", async ({
   browser,
   lanServerUrl,
   page,

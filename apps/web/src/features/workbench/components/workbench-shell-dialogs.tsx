@@ -1,12 +1,18 @@
+import { lazy, Suspense } from "react";
+
 import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
 import { FileReviewDialog } from "../../diff/file-review-dialog.js";
-import { GlobalSettingsDialog } from "../../settings/components/global-settings-dialog.js";
+import { loadGlobalSettingsDialog } from "../../settings/components/global-settings-lazy.js";
 import { CommitChangesLauncher } from "./commit-changes-launcher.js";
 import { GitHistoryDialog } from "./git-history-dialog.js";
 import { ProjectSourceDialog } from "./project-source-dialog.js";
 import { SubagentOutputDialog } from "./subagent-output-dialog.js";
 import { TaskRenameDialog } from "./task-rename-dialog.js";
 import type { useWorkbenchShellController } from "./workbench-shell-controller.js";
+
+const LazyGlobalSettingsDialog = lazy(() =>
+  loadGlobalSettingsDialog().then((module) => ({ default: module.GlobalSettingsDialog })),
+);
 
 export function WorkbenchShellDialogs({
   context,
@@ -135,47 +141,51 @@ export function WorkbenchShellDialogs({
         />
       ) : null}
       {globalSettingsOpen ? (
-        <GlobalSettingsDialog
-          {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
-          {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
-          appInfoError={appInfoQuery.error}
-          apps={projectToolsEnabled ? (projectOpenCapabilitiesQuery.data?.apps ?? []) : []}
-          error={
-            globalSettingsQuery.error ??
-            modelsQuery.error ??
-            (projectToolsEnabled ? projectOpenCapabilitiesQuery.error : null)
-          }
-          isPending={
-            globalSettingsQuery.isPending ||
-            modelsQuery.isPending ||
-            (projectToolsEnabled && projectOpenCapabilitiesQuery.isPending)
-          }
-          initialSection="about"
-          isAppInfoPending={appInfoQuery.isPending}
-          isAppUpdatePending={appUpdateMutation.isPending}
-          models={models}
-          onClose={() => {
-            setGlobalSettingsOpen(false);
-            requestAnimationFrame(() => {
-              document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
-            });
-          }}
-          onLogoutAccess={access.logout}
-          onRetry={() =>
-            Promise.all([
-              globalSettingsQuery.refetch(),
-              modelsQuery.refetch(),
-              ...(projectToolsEnabled ? [projectOpenCapabilitiesQuery.refetch()] : []),
-            ])
-          }
-          onRetryAppInfo={() => appInfoQuery.refetch()}
-          onSave={(settings) => globalSettingsMutation.mutateAsync(settings).then(() => undefined)}
-          onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
-          updateError={appUpdateMutation.error}
-          {...(globalSettingsQuery.data === undefined
-            ? {}
-            : { settings: globalSettingsQuery.data.settings })}
-        />
+        <Suspense fallback={null}>
+          <LazyGlobalSettingsDialog
+            {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
+            {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
+            appInfoError={appInfoQuery.error}
+            apps={projectToolsEnabled ? (projectOpenCapabilitiesQuery.data?.apps ?? []) : []}
+            error={
+              globalSettingsQuery.error ??
+              modelsQuery.error ??
+              (projectToolsEnabled ? projectOpenCapabilitiesQuery.error : null)
+            }
+            isPending={
+              globalSettingsQuery.isPending ||
+              modelsQuery.isPending ||
+              (projectToolsEnabled && projectOpenCapabilitiesQuery.isPending)
+            }
+            initialSection="about"
+            isAppInfoPending={appInfoQuery.isPending}
+            isAppUpdatePending={appUpdateMutation.isPending}
+            models={models}
+            onClose={() => {
+              setGlobalSettingsOpen(false);
+              requestAnimationFrame(() => {
+                document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
+              });
+            }}
+            onLogoutAccess={access.logout}
+            onRetry={() =>
+              Promise.all([
+                globalSettingsQuery.refetch(),
+                modelsQuery.refetch(),
+                ...(projectToolsEnabled ? [projectOpenCapabilitiesQuery.refetch()] : []),
+              ])
+            }
+            onRetryAppInfo={() => appInfoQuery.refetch()}
+            onSave={(settings) =>
+              globalSettingsMutation.mutateAsync(settings).then(() => undefined)
+            }
+            onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
+            updateError={appUpdateMutation.error}
+            {...(globalSettingsQuery.data === undefined
+              ? {}
+              : { settings: globalSettingsQuery.data.settings })}
+          />
+        </Suspense>
       ) : null}
     </>
   );

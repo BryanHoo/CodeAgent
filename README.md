@@ -23,8 +23,9 @@ CodeAgent runs on your computer. You can use it locally or access it from anothe
 Before you begin, make sure you have:
 
 - Node.js 24 or later
-- The official Codex CLI
 - Chrome/Chromium 116+, Firefox 124+, or Safari 17.4+
+
+CodeAgent includes the supported Codex CLI binary through `@openai/codex`; a separate Codex CLI installation is not required. To use another executable for diagnostics or startup, pass `--codex-bin <path>` or set `CODE_AGENT_CODEX_BIN`.
 
 ## Quick Start
 

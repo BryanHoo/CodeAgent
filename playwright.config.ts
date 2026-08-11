@@ -21,13 +21,13 @@ export default defineConfig({
       },
     },
     {
-      // Firefox 与 WebKit 只执行核心流程，Chromium 继续承担全量回归。
-      grep: /@smoke/u,
+      // Firefox 与 WebKit 覆盖核心流程及浏览器敏感交互，Chromium 继续承担全量回归。
+      grep: /@(smoke|cross-browser)/u,
       name: "firefox",
       use: { ...devices["Desktop Firefox"] },
     },
     {
-      grep: /@smoke/u,
+      grep: /@(smoke|cross-browser)/u,
       name: "webkit",
       use: { ...devices["Desktop Safari"] },
     },

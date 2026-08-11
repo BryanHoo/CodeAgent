@@ -675,7 +675,9 @@ test("keeps project add buttons visible after opening a task", async ({ page }) 
   await expect(sidebar.getByRole("button", { name: "在 superwork 中新建任务" })).toBeVisible();
 });
 
-test("preserves provisional IME text across composer rerenders", async ({ page }) => {
+test("preserves provisional IME text across composer rerenders @cross-browser", async ({
+  page,
+}) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const prompt = page.getByRole("textbox", { name: "任务输入" });
@@ -874,7 +876,9 @@ test("keeps the narrow workbench layout stable", async ({ page }) => {
   expect(hasHorizontalOverflow).toBe(false);
 });
 
-test("keeps the compact mobile workbench inside the dynamic viewport", async ({ page }) => {
+test("keeps the compact mobile workbench inside the dynamic viewport @cross-browser", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/p/code-agent/t/task-1");
 
@@ -901,11 +905,22 @@ test("keeps the compact mobile workbench inside the dynamic viewport", async ({ 
   const touchControls = [...touchButtons, ...composerControls.slice(1, 3)];
 
   // 最窄支持宽度必须同时保证页面边界、Composer 内部布局和触控尺寸。
-  const composerOverflow = await composerFooter.evaluate(
-    (element) =>
-      element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight,
+  const composerMetrics = await composerFooter.evaluate((element) => ({
+    children: [...element.children].map((child) => ({
+      height: child.getBoundingClientRect().height,
+      width: child.getBoundingClientRect().width,
+    })),
+    clientHeight: element.clientHeight,
+    clientWidth: element.clientWidth,
+    scrollHeight: element.scrollHeight,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(composerMetrics.scrollWidth, JSON.stringify(composerMetrics)).toBeLessThanOrEqual(
+    composerMetrics.clientWidth,
   );
-  expect(composerOverflow).toBe(false);
+  expect(composerMetrics.scrollHeight, JSON.stringify(composerMetrics)).toBeLessThanOrEqual(
+    composerMetrics.clientHeight,
+  );
 
   const controlBoxes = await Promise.all(touchControls.map((control) => control.boundingBox()));
   for (const box of controlBoxes) {

@@ -106,6 +106,11 @@ export const test = base.extend<Record<never, never>, WorkerFixtures>({
   baseURL: async ({ e2eServerUrl }, use) => {
     await use(e2eServerUrl);
   },
+  page: async ({ page }, use) => {
+    // 共享模块 Hook 会受 worker 模块缓存影响；Page Fixture 保证每个测试都先安装 API mock。
+    await mockAppShellApi(page);
+    await use(page);
+  },
 });
 
 function isRequestRecord(value: unknown): value is Record<string, unknown> {
@@ -1105,7 +1110,3 @@ export async function mockAppShellApi(
   // 部分真实 Runtime 用例会解除通用 API mock；temporary 契约仍需保持测试内隔离。
   await page.route("**/v1/temporary/**", handleApiRoute);
 }
-
-test.beforeEach(async ({ page }) => {
-  await mockAppShellApi(page);
-});

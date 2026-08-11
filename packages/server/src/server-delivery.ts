@@ -1,4 +1,5 @@
 import { relative, sep } from "node:path";
+import { isIP } from "node:net";
 
 import { MAX_AGENT_FILE_BYTES, TEMPORARY_TASK_SCOPE_ID } from "@code-agent/protocol";
 import fastifyCompress from "@fastify/compress";
@@ -25,6 +26,39 @@ function isInternalTemporaryProjectPath(pathname: string): boolean {
   }
 }
 
+function parseRequestHost(host: string | undefined): URL | undefined {
+  if (host === undefined) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(`http://${host}`);
+    return parsed.username === "" &&
+      parsed.password === "" &&
+      parsed.pathname === "/" &&
+      parsed.search === "" &&
+      parsed.hash === ""
+      ? parsed
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isAllowedRequestHost(host: URL, lanAccess: boolean): boolean {
+  const hostname = host.hostname.toLowerCase();
+  const unwrappedHostname =
+    hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
+  if (
+    hostname === "localhost" ||
+    unwrappedHostname === "127.0.0.1" ||
+    unwrappedHostname === "::1"
+  ) {
+    return true;
+  }
+  // LAN 入口只发布数字 IP URL，拒绝可被外部 DNS 重新绑定的任意主机名。
+  return lanAccess && isIP(unwrappedHostname) !== 0;
+}
+
 export interface ConfigureServerDeliveryOptions {
   access?: CodeAgentAccessOptions;
   releaseResources: () => Promise<void>;
@@ -46,6 +80,15 @@ export async function configureServerDelivery(
     }
     const websocket = request.headers.upgrade?.toLowerCase() === "websocket";
     const sessionId = request.cookies[ACCESS_SESSION_COOKIE];
+    const requestHost = parseRequestHost(request.headers.host);
+    if (
+      requestHost === undefined ||
+      !isAllowedRequestHost(requestHost, options.access !== undefined)
+    ) {
+      return reply
+        .code(403)
+        .send({ code: "ACCESS_DENIED", message: "Access denied", retryable: false });
+    }
     const authenticated =
       options.access === undefined || accessService?.validate(sessionId) === true;
     const anonymous =
@@ -59,18 +102,19 @@ export async function configureServerDelivery(
         .send({ code: "ACCESS_DENIED", message: "Access denied", retryable: false });
     }
 
+    // Cookie 写请求必须携带 Origin；本地浏览器写请求只要携带 Origin 也必须验证，
+    // 同时保留无 Origin 的受控 CLI/API 客户端调用能力。
     const browserWrite =
-      !["GET", "HEAD", "OPTIONS"].includes(request.method) && sessionId !== undefined;
+      !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+      (sessionId !== undefined || request.headers.origin !== undefined);
     if (websocket || browserWrite) {
       const origin = request.headers.origin;
-      const host = request.headers.host;
       try {
         const parsedOrigin = origin === undefined ? undefined : new URL(origin);
         if (
           parsedOrigin === undefined ||
-          host === undefined ||
           (parsedOrigin.protocol !== "http:" && parsedOrigin.protocol !== "https:") ||
-          parsedOrigin.host !== host
+          parsedOrigin.host !== requestHost.host
         ) {
           throw new Error("Origin mismatch");
         }
@@ -121,7 +165,29 @@ export async function configureServerDelivery(
         retryable: false,
       });
     }
-    return reply.send(error);
+    const explicitStatusCode =
+      typeof error === "object" &&
+      error !== null &&
+      "statusCode" in error &&
+      typeof error.statusCode === "number" &&
+      Number.isInteger(error.statusCode) &&
+      error.statusCode >= 400 &&
+      error.statusCode <= 599
+        ? error.statusCode
+        : 500;
+    if (explicitStatusCode < 500) {
+      return reply.code(explicitStatusCode).send({
+        code: "INVALID_REQUEST",
+        message: explicitStatusCode === 413 ? "Request is too large" : "Request is invalid",
+        retryable: false,
+      });
+    }
+    // 未知异常只在服务端完成日志中保留诊断类型，禁止把路径或依赖错误透传给 Web。
+    return reply.code(explicitStatusCode).send({
+      code: "INTERNAL_ERROR",
+      message: "Internal server error",
+      retryable: false,
+    });
   });
   app.addHook("onClose", async () => {
     // Access 状态与运行时资源统一随 Fastify 实例失效。

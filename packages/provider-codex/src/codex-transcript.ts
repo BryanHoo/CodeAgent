@@ -9,11 +9,14 @@ const LINKED_SKILL_PATTERN = /\[\$(?<name>[^\]\s]+)\]\((?<path>[^)]+\/SKILL\.md)
 const SAFE_THREAD_ID_PATTERN = /^[a-zA-Z0-9_-]+$/u;
 const TRANSCRIPT_DISCOVERY_INTERVAL_MS = 5_000;
 const MAX_CACHED_THREADS = 256;
+const MAX_CACHED_TURNS_PER_FILE = 2_048;
+const MAX_CACHED_SKILL_NAME_BYTES_PER_FILE = 1024 * 1024;
 const MAX_TRANSCRIPT_FILES_PER_THREAD = 8;
 const MAX_TRANSCRIPT_BYTES_PER_READ = 8 * 1024 * 1024;
 const MAX_TRANSCRIPT_LINE_BYTES = 1024 * 1024;
 
 interface TranscriptFileCache {
+  cachedSkillNameBytes: number;
   discardUntilNewline: boolean;
   mtimeMs: number;
   offset: number;
@@ -25,6 +28,8 @@ interface TranscriptFileCache {
 interface TranscriptThreadCache {
   files: Map<string, TranscriptFileCache>;
   lastDiscoveryAt: number;
+  mergedSkills: ReadonlyMap<string, readonly string[]>;
+  mergedSkillsDirty: boolean;
   pendingRead: Promise<ReadonlyMap<string, readonly string[]>> | undefined;
   transcriptPaths: string[];
 }
@@ -58,10 +63,7 @@ export function extractCodexTextSkills(value: string): Readonly<{
   return { skills, text: text.trimStart() };
 }
 
-function collectTranscriptLineSkills(
-  line: string,
-  skillNamesByTurnId: Map<string, Set<string>>,
-): void {
+function collectTranscriptLineSkills(line: string, fileCache: TranscriptFileCache): void {
   let entry: unknown;
   try {
     entry = JSON.parse(line);
@@ -87,9 +89,35 @@ function collectTranscriptLineSkills(
     }
     const extracted = extractCodexTextSkills(contentPart["text"]);
     for (const skill of extracted.skills) {
-      const skillNames = skillNamesByTurnId.get(turnId) ?? new Set<string>();
+      const skillNameBytes = Buffer.byteLength(skill.name);
+      const existingNames = fileCache.skillNamesByTurnId.get(turnId);
+      if (
+        existingNames?.has(skill.name) === true ||
+        skillNameBytes > MAX_CACHED_SKILL_NAME_BYTES_PER_FILE
+      ) {
+        continue;
+      }
+      // 同时约束条目数和实际名称字节；Map 插入顺序用于淘汰最早记录。
+      while (
+        (existingNames === undefined &&
+          fileCache.skillNamesByTurnId.size >= MAX_CACHED_TURNS_PER_FILE) ||
+        fileCache.cachedSkillNameBytes + skillNameBytes > MAX_CACHED_SKILL_NAME_BYTES_PER_FILE
+      ) {
+        const oldestTurnId = fileCache.skillNamesByTurnId.keys().next().value;
+        if (oldestTurnId === undefined) {
+          break;
+        }
+        const evictedNames = fileCache.skillNamesByTurnId.get(oldestTurnId);
+        for (const evictedName of evictedNames ?? []) {
+          fileCache.cachedSkillNameBytes -= Buffer.byteLength(evictedName);
+        }
+        fileCache.skillNamesByTurnId.delete(oldestTurnId);
+      }
+      const skillNames = fileCache.skillNamesByTurnId.get(turnId) ?? new Set<string>();
       skillNames.add(skill.name);
-      skillNamesByTurnId.set(turnId, skillNames);
+      fileCache.skillNamesByTurnId.delete(turnId);
+      fileCache.skillNamesByTurnId.set(turnId, skillNames);
+      fileCache.cachedSkillNameBytes += skillNameBytes;
     }
   }
 }
@@ -106,6 +134,8 @@ function getTranscriptThreadCache(cacheKey: string): TranscriptThreadCache {
   const created: TranscriptThreadCache = {
     files: new Map(),
     lastDiscoveryAt: 0,
+    mergedSkills: new Map(),
+    mergedSkillsDirty: false,
     pendingRead: undefined,
     transcriptPaths: [],
   };
@@ -146,6 +176,7 @@ async function discoverTranscriptPaths(
   for (const cachedPath of cache.files.keys()) {
     if (!discoveredPaths.has(cachedPath)) {
       cache.files.delete(cachedPath);
+      cache.mergedSkillsDirty = true;
     }
   }
 }
@@ -173,6 +204,7 @@ async function parseTranscriptFileIncrementally(
   const fileCache: TranscriptFileCache = canContinue
     ? cachedFile
     : {
+        cachedSkillNameBytes: 0,
         discardUntilNewline: false,
         mtimeMs: 0,
         offset: 0,
@@ -180,6 +212,9 @@ async function parseTranscriptFileIncrementally(
         size: 0,
         skillNamesByTurnId: new Map(),
       };
+  if (cachedFile !== undefined && fileCache !== cachedFile) {
+    cache.mergedSkillsDirty = true;
+  }
   const availableBytes = transcriptStats.size - fileCache.offset;
   const bytesToRead = Math.min(availableBytes, remainingBytes);
   if (bytesToRead <= 0) {
@@ -203,10 +238,7 @@ async function parseTranscriptFileIncrementally(
       const line = data.subarray(lineStart, lineEnd);
       if (!fileCache.discardUntilNewline && line.length <= MAX_TRANSCRIPT_LINE_BYTES) {
         const contentEnd = line.at(-1) === 0x0d ? line.length - 1 : line.length;
-        collectTranscriptLineSkills(
-          line.subarray(0, contentEnd).toString("utf8"),
-          fileCache.skillNamesByTurnId,
-        );
+        collectTranscriptLineSkills(line.subarray(0, contentEnd).toString("utf8"), fileCache);
       }
       fileCache.discardUntilNewline = false;
       lineStart = lineEnd + 1;
@@ -226,12 +258,16 @@ async function parseTranscriptFileIncrementally(
   fileCache.mtimeMs = transcriptStats.mtimeMs;
   fileCache.size = transcriptStats.size;
   cache.files.set(transcriptPath, fileCache);
+  cache.mergedSkillsDirty = true;
   return bytesToRead;
 }
 
 function mergeTranscriptSkills(
   cache: TranscriptThreadCache,
 ): ReadonlyMap<string, readonly string[]> {
+  if (!cache.mergedSkillsDirty) {
+    return cache.mergedSkills;
+  }
   const merged = new Map<string, Set<string>>();
   for (const fileCache of cache.files.values()) {
     for (const [turnId, skillNames] of fileCache.skillNamesByTurnId) {
@@ -242,7 +278,11 @@ function mergeTranscriptSkills(
       merged.set(turnId, mergedNames);
     }
   }
-  return new Map([...merged].map(([turnId, skillNames]) => [turnId, [...skillNames]]));
+  cache.mergedSkills = new Map(
+    [...merged].map(([turnId, skillNames]) => [turnId, [...skillNames]]),
+  );
+  cache.mergedSkillsDirty = false;
+  return cache.mergedSkills;
 }
 
 async function readCachedCodexTranscriptTurnSkills(
@@ -266,6 +306,7 @@ async function readCachedCodexTranscriptTurnSkills(
         // 瞬时 stat/read 失败不应清空此前已恢复的 Skill。
         if (isRecord(error) && error["code"] === "ENOENT") {
           cache.files.delete(transcriptPath);
+          cache.mergedSkillsDirty = true;
           cache.transcriptPaths = cache.transcriptPaths.filter((path) => path !== transcriptPath);
           cache.lastDiscoveryAt = 0;
         }

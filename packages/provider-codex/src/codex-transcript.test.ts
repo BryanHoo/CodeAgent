@@ -90,6 +90,7 @@ describe("Codex transcript Skills", () => {
     const secondRead = await readCodexTranscriptTurnSkills(threadId, codexHome);
 
     expect(firstRead.get("turn-1")).toEqual(["superwork:superwork-start"]);
+    expect(secondRead).toBe(firstRead);
     expect(secondRead.get("turn-1")).toEqual(["superwork:superwork-start"]);
   });
 
@@ -126,16 +127,52 @@ describe("Codex transcript Skills", () => {
     expect(resumedRead.get("turn-1")).toEqual(["superwork:superwork-start"]);
     expect(resumedRead.get("turn-2")).toEqual(["superwork:superwork-start"]);
   });
+
+  it("bounds cached transcript turns per file", async () => {
+    const { codexHome, threadId, transcriptPath } = await createTranscriptFixture("turn-0");
+    const entries = Array.from({ length: 2_048 }, (_, index) =>
+      JSON.stringify(createTranscriptEntry(`turn-${String(index + 1)}`)),
+    );
+    await appendFile(transcriptPath, `${entries.join("\n")}\n`, "utf8");
+
+    const skillsByTurnId = await readCodexTranscriptTurnSkills(threadId, codexHome);
+
+    expect(skillsByTurnId).toHaveLength(2_048);
+    expect(skillsByTurnId.has("turn-0")).toBe(false);
+    expect(skillsByTurnId.get("turn-2048")).toEqual(["superwork:superwork-start"]);
+  });
+
+  it("bounds cached transcript Skill name bytes per file", async () => {
+    const skillName = "s".repeat(128 * 1_024);
+    const { codexHome, threadId, transcriptPath } = await createTranscriptFixture(
+      "turn-0",
+      skillName,
+    );
+    const entries = Array.from({ length: 8 }, (_, index) =>
+      JSON.stringify(createTranscriptEntry(`turn-${String(index + 1)}`, skillName)),
+    );
+    await appendFile(transcriptPath, `${entries.join("\n")}\n`, "utf8");
+
+    const skillsByTurnId = await readCodexTranscriptTurnSkills(threadId, codexHome);
+    const retainedSkillBytes = [...skillsByTurnId.values()].reduce(
+      (total, names) => total + names.reduce((sum, name) => sum + Buffer.byteLength(name), 0),
+      0,
+    );
+
+    expect(retainedSkillBytes).toBeLessThanOrEqual(1024 * 1024);
+    expect(skillsByTurnId.has("turn-0")).toBe(false);
+    expect(skillsByTurnId.get("turn-8")).toEqual([skillName]);
+  });
 });
 
-function createTranscriptEntry(turnId: string): object {
+function createTranscriptEntry(turnId: string, skillName = "superwork:superwork-start"): object {
   return {
     payload: {
       content: [
         {
           text: [
             "<skill>",
-            "<name>superwork:superwork-start</name>",
+            `<name>${skillName}</name>`,
             "<path>/Users/test/skills/superwork-start/SKILL.md</path>",
             "Skill instructions",
             "</skill>",
@@ -151,7 +188,10 @@ function createTranscriptEntry(turnId: string): object {
   };
 }
 
-async function createTranscriptFixture(turnId: string): Promise<{
+async function createTranscriptFixture(
+  turnId: string,
+  skillName = "superwork:superwork-start",
+): Promise<{
   codexHome: string;
   threadId: string;
   transcriptPath: string;
@@ -162,6 +202,10 @@ async function createTranscriptFixture(turnId: string): Promise<{
   await mkdir(sessionDirectory, { recursive: true });
   const threadId = crypto.randomUUID();
   const transcriptPath = join(sessionDirectory, `rollout-2026-07-27T17-00-29-${threadId}.jsonl`);
-  await writeFile(transcriptPath, `${JSON.stringify(createTranscriptEntry(turnId))}\n`, "utf8");
+  await writeFile(
+    transcriptPath,
+    `${JSON.stringify(createTranscriptEntry(turnId, skillName))}\n`,
+    "utf8",
+  );
   return { codexHome, threadId, transcriptPath };
 }

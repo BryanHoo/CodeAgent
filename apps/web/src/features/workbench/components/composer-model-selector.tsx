@@ -76,7 +76,7 @@ function ComposerModelSelectorTrigger({
     <Button
       {...triggerProps}
       aria-label={accessibleLabel}
-      className="min-w-0 max-w-44 max-workbench:w-24 max-workbench:max-w-24"
+      className="min-w-0 max-w-44 max-workbench:w-22 max-workbench:max-w-22"
       data-slot="composer-model-selector"
       disabled={disabled}
       size="sm"

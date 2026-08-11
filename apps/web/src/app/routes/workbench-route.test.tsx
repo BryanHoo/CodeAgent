@@ -41,15 +41,16 @@ describe("Workbench 加载边界", () => {
     }
   });
 
-  it("只让重型内容保留组件级动态加载", () => {
+  it("只让重型内容和按需设置保留组件级动态加载", () => {
     const layout = readWebSource("features/workbench/components/workbench-shell-layout.tsx");
     const dialogs = readWebSource("features/workbench/components/workbench-shell-dialogs.tsx");
     const commitLauncher = readWebSource(
       "features/workbench/components/commit-changes-launcher.tsx",
     );
     expect(layout).not.toContain("lazy(");
-    expect(dialogs).not.toContain("lazy(");
     expect(commitLauncher).not.toContain("lazy(");
+    expect(dialogs).toContain("const LazyGlobalSettingsDialog = lazy");
+    expect(dialogs).toContain("loadGlobalSettingsDialog()");
 
     expect(readWebSource("shared/components/agent/lazy-message-response.tsx")).toContain(
       'import("./message-response.js")',

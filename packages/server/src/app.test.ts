@@ -836,6 +836,65 @@ describe("CodeAgent Server", () => {
     expect(protectedResponse.headers["strict-transport-security"]).toBeUndefined();
   });
 
+  it("rejects DNS rebinding hosts and cross-origin local browser mutations", async () => {
+    const local = await createCodeAgentServer(createServerOptions(createProvider().provider));
+    closeCallbacks.push(() => local.close());
+    const lan = await createCodeAgentServer(
+      createServerOptions(createProvider().provider, {
+        access: { pairingCode: "test-pairing-code", sessionTtlMs: 86_400_000 },
+      }),
+    );
+    closeCallbacks.push(() => lan.close());
+
+    const reboundRead = await local.inject({
+      headers: { host: "attacker.example:3210", origin: "http://attacker.example:3210" },
+      method: "GET",
+      url: "/v1/projects",
+    });
+    const crossOriginWrite = await local.inject({
+      headers: { host: "127.0.0.1:3210", origin: "http://attacker.example:3210" },
+      method: "POST",
+      payload: {},
+      url: "/v1/projects/code-agent/tasks/task-1/unsubscribe",
+    });
+    const reboundPair = await lan.inject({
+      headers: { host: "attacker.example:3210", origin: "http://attacker.example:3210" },
+      method: "POST",
+      payload: { code: "test-pairing-code" },
+      url: "/v1/access/pair",
+    });
+
+    expect(reboundRead.statusCode).toBe(403);
+    expect(crossOriginWrite.statusCode).toBe(403);
+    expect(reboundPair.statusCode).toBe(403);
+    await expect(
+      local.injectWS("/v1/projects/code-agent/events?afterSequence=0", {
+        headers: { host: "attacker.example:3210", origin: "http://attacker.example:3210" },
+      }),
+    ).rejects.toThrow(/Unexpected server response: 403/u);
+  });
+
+  it("does not expose unknown server error details", async () => {
+    const app = await createCodeAgentServer(
+      createServerOptions(createProvider().provider, {
+        readProjectDirectory: vi.fn(() =>
+          Promise.reject(new Error("sensitive path /Users/example/private.txt")),
+        ),
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({ method: "GET", url: "/v1/project-directories" });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      code: "INTERNAL_ERROR",
+      message: "Internal server error",
+      retryable: false,
+    });
+    expect(response.body).not.toContain("/Users/example/private.txt");
+  });
+
   it("pairs browsers, enforces origin, and logs out the exact session", async () => {
     const app = await createCodeAgentServer(
       createServerOptions(createProvider().provider, {
@@ -884,14 +943,14 @@ describe("CodeAgent Server", () => {
     });
     const wrongOrigin = await app.inject({
       cookies: { codeagent_session: cookie?.value ?? "" },
-      headers: { host: "code-agent.local", origin: "http://attacker.local" },
+      headers: { host: "192.168.1.20", origin: "http://attacker.local" },
       method: "POST",
       payload: {},
       url: "/v1/access/logout",
     });
     const loggedOut = await app.inject({
       cookies: { codeagent_session: cookie?.value ?? "" },
-      headers: { host: "code-agent.local", origin: "http://code-agent.local" },
+      headers: { host: "192.168.1.20", origin: "http://192.168.1.20" },
       method: "POST",
       payload: {},
       url: "/v1/access/logout",
@@ -920,7 +979,7 @@ describe("CodeAgent Server", () => {
 
     await expect(
       app.injectWS("/v1/projects/code-agent/events?afterSequence=0", {
-        headers: { host: "code-agent.local", origin: "http://code-agent.local" },
+        headers: { host: "192.168.1.20", origin: "http://192.168.1.20" },
       }),
     ).rejects.toThrow(/Unexpected server response: 401/u);
   });
@@ -941,8 +1000,8 @@ describe("CodeAgent Server", () => {
     const socket = await app.injectWS("/v1/projects/code-agent/events?afterSequence=0", {
       headers: {
         cookie: `${cookie?.name ?? ""}=${cookie?.value ?? ""}`,
-        host: "code-agent.local",
-        origin: "http://code-agent.local",
+        host: "192.168.1.20",
+        origin: "http://192.168.1.20",
       },
     });
 
