@@ -70,9 +70,15 @@ export function resolveRunningOperation(
     };
   }
 
-  // 快速操作可能在一次浏览器绘制前完成，Turn 运行期间继续附加最近原始操作。
+  // 快速操作可能在一次浏览器绘制前完成，但后续 Assistant 文本表示执行阶段已经推进。
+  // 只回退到该消息之后完成的操作，避免把上下文压缩等历史状态重复显示为当前活动。
+  const latestAssistantMessageIndex =
+    items.findLast(({ item }) => item.type === "message" && item.role === "assistant")?.itemIndex ??
+    -1;
   const recentItem = items.findLast(
-    ({ item }) => item.type === "command" || item.type === "tool" || item.type === "activity",
+    ({ item, itemIndex }) =>
+      itemIndex > latestAssistantMessageIndex &&
+      (item.type === "command" || item.type === "tool" || item.type === "activity"),
   )?.item;
   if (recentItem?.type === "command") {
     return { label: getCommandLabel(recentItem.command), type: "command" };

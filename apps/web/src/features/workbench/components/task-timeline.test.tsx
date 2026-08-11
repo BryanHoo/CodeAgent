@@ -1663,6 +1663,40 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("已运行");
   });
 
+  it("does not replay completed context compaction after assistant streaming resumes", () => {
+    const runningSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          ...completedTurn,
+          completedAt: null,
+          items: [
+            {
+              id: "activity-context-compaction",
+              label: "上下文压缩",
+              status: "completed",
+              type: "activity",
+            },
+            {
+              id: "message-after-compaction",
+              role: "assistant",
+              text: "继续处理当前任务。",
+              type: "message",
+            },
+          ],
+          status: "running",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningSnapshot} />);
+
+    expect(markup).toContain("上下文压缩");
+    expect(markup).toContain('aria-label="AI 回复正在运行"');
+    expect(markup).not.toContain('aria-label="AI 回复正在运行：上下文压缩"');
+  });
+
   it("defers completed generic tool input and output until the tool is opened", () => {
     const toolSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
