@@ -60,6 +60,7 @@ export type CodeAgentMutationClient = Pick<
   | "interruptTurn"
   | "importHostAttachment"
   | "listHostFiles"
+  | "openTaskAttachment"
   | "pinTask"
   | "removeProject"
   | "renameProject"

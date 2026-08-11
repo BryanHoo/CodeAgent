@@ -320,6 +320,27 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("opens a task attachment with the host system application", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(
+      jsonResponse({ attachmentId: "attachment/file-1", status: "opened" }),
+    );
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(
+      client.openTaskAttachment("project one", "task/1", "attachment/file-1", {
+        idempotencyKey: "open-attachment-key",
+      }),
+    ).resolves.toEqual({ attachmentId: "attachment/file-1", status: "opened" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/projects/project%20one/tasks/task%2F1/attachments/attachment%2Ffile-1/open",
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ body: "{}", method: "POST" });
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("idempotency-key")).toBe(
+      "open-attachment-key",
+    );
+  });
+
   it("persists and validates a complete project order", async () => {
     const orderedProjects = [
       {

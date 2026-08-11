@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentMcpServer } from "@code-agent/protocol";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
@@ -7,7 +8,11 @@ import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { WorkbenchInspector, type ProjectFileTreeDirectoryState } from "./workbench-inspector.js";
 
 function renderInspectorMarkup(children: ReactNode): string {
-  return renderToStaticMarkup(<TooltipProvider>{children}</TooltipProvider>);
+  return renderToStaticMarkup(
+    <QueryClientProvider client={new QueryClient()}>
+      <TooltipProvider>{children}</TooltipProvider>
+    </QueryClientProvider>,
+  );
 }
 
 const gitStatus = {
@@ -547,6 +552,69 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain("项目 Agent 组件");
     expect(markup).not.toContain("Web Design");
     expect(markup).not.toContain("添加来源");
+  });
+
+  it("reuses timeline image preview and file download actions for attachment sources", () => {
+    const markup = renderInspectorMarkup(
+      <WorkbenchInspector
+        projectId="project one"
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        tab="context"
+        task={{
+          turns: [
+            {
+              completedAt: "2026-08-11T10:01:00.000Z",
+              error: null,
+              id: "turn-1",
+              items: [
+                {
+                  attachments: [
+                    {
+                      id: "image/1",
+                      kind: "image",
+                      mediaType: "image/png",
+                      name: "layout.png",
+                      size: 1024,
+                    },
+                    {
+                      id: "text/1",
+                      kind: "text",
+                      mediaType: "text/plain",
+                      name: "notes.txt",
+                      size: 128,
+                    },
+                    {
+                      id: "file/1",
+                      kind: "file",
+                      mediaType: "application/pdf",
+                      name: "report.pdf",
+                      size: 2048,
+                    },
+                  ],
+                  id: "message-1",
+                  role: "user",
+                  text: "检查附件",
+                  type: "message",
+                },
+              ],
+              startedAt: "2026-08-11T10:00:00.000Z",
+              status: "completed",
+            },
+          ],
+        }}
+        taskId="task/1"
+      />,
+    );
+
+    expect(markup).toContain('aria-label="查看图片 layout.png"');
+    expect(markup).toContain('data-message-attachment="image"');
+    expect(markup).toContain('aria-label="打开附件 notes.txt"');
+    expect(markup).toContain('data-attachment-open="source"');
+    expect(markup).toContain('aria-label="打开附件 report.pdf"');
+    expect(markup).toContain('data-attachment-open="system"');
+    expect(markup).not.toContain(" download=");
+    expect(markup).not.toContain('aria-label="下载附件');
   });
 
   it("renders MCP loading, error, and empty states inside the context tab", () => {

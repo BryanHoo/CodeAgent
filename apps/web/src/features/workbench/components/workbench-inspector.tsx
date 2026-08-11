@@ -8,7 +8,7 @@ import type {
   ProjectOpenApp,
   ProjectOpenAppId,
 } from "@code-agent/protocol";
-import { FolderRoot, PanelRightClose, RefreshCw } from "lucide-react";
+import { PanelRightClose, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
@@ -35,12 +35,10 @@ import {
 } from "./workbench-inspector-file-tree.js";
 import {
   BackgroundTerminalSection,
-  InspectorSection,
-  InspectorSourceRow,
   McpServerSection,
   SubagentSection,
-  collectInspectorSources,
 } from "./workbench-inspector-sections.js";
+import { InspectorSources } from "./workbench-inspector-sources.js";
 import { PlanSection } from "./workbench-inspector-plan.js";
 
 export type { ProjectFileTreeDirectoryState } from "./workbench-inspector-file-tree.js";
@@ -67,6 +65,7 @@ type WorkbenchInspectorProps = Readonly<{
   mcpServersRetrying?: boolean;
   onFileTreeExpandedChange?: (expandedPaths: Set<string>) => void;
   onOpenFileDiff?: (change: AgentFileChange) => void;
+  onOpenTaskAttachment?: (attachmentId: string) => void;
   onOpenProjectPath?: (appId: ProjectOpenAppId, path?: string) => void;
   onOpenProjectFile?: (path: string) => void;
   onReferenceProjectPath?: (entry: ProjectFileSearchEntry) => void;
@@ -79,6 +78,7 @@ type WorkbenchInspectorProps = Readonly<{
   onTerminateBackgroundTerminal?: (terminalId: string) => Promise<void>;
   onTabChange?: (tab: WorkbenchInspectorTab) => void;
   projectName: string;
+  projectId?: string;
   projectOpenApps?: readonly ProjectOpenApp[];
   projectOpenError?: Error | null;
   projectOpenPending?: boolean;
@@ -87,6 +87,7 @@ type WorkbenchInspectorProps = Readonly<{
   subagents?: readonly SubagentContextEntry[];
   tab?: WorkbenchInspectorTab;
   task?: Pick<AgentTaskSnapshot, "turns"> & Partial<Pick<AgentTaskSnapshot, "plan">>;
+  taskId?: string;
   terminalMutationError?: Error | null;
   terminatingTerminalId?: string | null;
 }>;
@@ -113,6 +114,7 @@ export function WorkbenchInspector({
   mcpServersRetrying = false,
   onFileTreeExpandedChange = () => undefined,
   onOpenFileDiff = () => undefined,
+  onOpenTaskAttachment = () => undefined,
   onOpenProjectPath = () => undefined,
   onOpenProjectFile = () => undefined,
   onReferenceProjectPath = () => undefined,
@@ -124,6 +126,7 @@ export function WorkbenchInspector({
   onClose,
   onTerminateBackgroundTerminal = () => Promise.resolve(),
   onTabChange = () => undefined,
+  projectId,
   projectName,
   projectOpenApps = [],
   projectOpenError = null,
@@ -133,6 +136,7 @@ export function WorkbenchInspector({
   subagents = [],
   tab = "changes",
   task,
+  taskId,
   terminalMutationError = null,
   terminatingTerminalId = null,
 }: WorkbenchInspectorProps) {
@@ -147,10 +151,6 @@ export function WorkbenchInspector({
   const [selectedTreePath, setSelectedTreePath] = useState<string>();
   const [projectRootExpanded, setProjectRootExpanded] = useState(true);
   const { additions, removals } = changeSummary;
-  const sources = useMemo(
-    () => collectInspectorSources(projectName, projectPath, task?.turns ?? [], skills),
-    [projectName, projectPath, skills, task?.turns],
-  );
   const fileTreeDirectoryStates = useMemo(
     () => new Map(fileTreeDirectories.map((state) => [state.path, state])),
     [fileTreeDirectories],
@@ -205,19 +205,15 @@ export function WorkbenchInspector({
         retryError={mcpServersRetryError}
         servers={mcpServers}
       />
-      <InspectorSection
-        icon={<FolderRoot className="size-3.5" />}
-        title={i18n.t("inspector.source", { ns: "conversation" })}
-      >
-        <div
-          aria-label={i18n.t("inspector.contextSources", { ns: "conversation" })}
-          className="space-y-0.5"
-        >
-          {sources.map((source) => (
-            <InspectorSourceRow key={source.id} source={source} />
-          ))}
-        </div>
-      </InspectorSection>
+      <InspectorSources
+        onOpenAttachment={onOpenTaskAttachment}
+        {...(projectId === undefined ? {} : { projectId })}
+        projectName={projectName}
+        projectPath={projectPath}
+        skills={skills}
+        {...(taskId === undefined ? {} : { taskId })}
+        turns={task?.turns ?? []}
+      />
       {task?.plan === null || task?.plan === undefined ? null : <PlanSection plan={task.plan} />}
     </div>
   );

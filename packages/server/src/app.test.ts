@@ -21,7 +21,7 @@ import type {
 } from "@code-agent/protocol";
 import { MAX_AGENT_IMAGE_BYTES } from "@code-agent/protocol";
 import { Buffer } from "node:buffer";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -31,6 +31,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCodeAgentServer } from "./app.js";
 import { AgentEventStream } from "./agent-event-stream.js";
 import { GitBranchError } from "./git-branch.js";
+import type { ProjectOpenService } from "./project-open.js";
 
 const project = {
   createdAt: "2026-07-23T00:00:00.000Z",
@@ -474,6 +475,7 @@ async function createHarness(
     idempotencyCacheSize?: number;
     modelCatalogCacheMaxBytes?: number;
     modelCatalogCacheTtlMs?: number;
+    projectOpenService?: ProjectOpenService;
   }> = {},
 ) {
   const {
@@ -2502,6 +2504,51 @@ describe("CodeAgent Server", () => {
     expect(preview.headers["x-content-type-options"]).toBe("nosniff");
     expect(preview.rawPayload).toEqual(imageContent);
     expect(readTaskAttachment).toHaveBeenCalledWith("task-1", attachment.id);
+  });
+
+  it("opens an authorized task file attachment with the system application", async () => {
+    const fileContent = Buffer.from("%PDF-1.7\nattachment\n", "utf8");
+    const open = vi.fn<ProjectOpenService["open"]>(async (_root, appId, path) => {
+      expect(appId).toBe("system-default");
+      expect(path).toBeDefined();
+      await expect(readFile(path ?? "")).resolves.toEqual(fileContent);
+    });
+    const { app } = await createHarness({
+      projectOpenService: {
+        getCapabilities: () => Promise.resolve({ apps: [], platform: "darwin" }),
+        open,
+      },
+    });
+    const uploaded = await app.inject(
+      await multipartAttachment(
+        "file",
+        "report.pdf",
+        "application/pdf",
+        fileContent,
+        "upload-open-file",
+      ),
+    );
+    const attachment = uploaded.json<{ attachment: { id: string } }>().attachment;
+    await app.inject({
+      headers: { "idempotency-key": "open-file-turn" },
+      method: "POST",
+      payload: {
+        input: { attachments: [{ id: attachment.id }], skills: [], text: "", type: "prompt" },
+        options: turnOptions,
+      },
+      url: "/v1/projects/code-agent/tasks/task-1/turns",
+    });
+
+    const response = await app.inject({
+      headers: { "idempotency-key": "open-task-attachment" },
+      method: "POST",
+      payload: {},
+      url: `/v1/projects/code-agent/tasks/task-1/attachments/${attachment.id}/open`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ attachmentId: attachment.id, status: "opened" });
+    expect(open).toHaveBeenCalledWith(project.rootPath, "system-default", expect.any(String));
   });
 
   it("lists project tasks with validated pagination", async () => {

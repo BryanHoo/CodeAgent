@@ -154,6 +154,10 @@ export function useWorkbenchShellRuntime({
     }: Readonly<{ appId: ProjectOpenAppId; path: string | undefined }>) =>
       client.openProject(projectId, path === undefined ? { appId } : { appId, path }),
   });
+  const taskAttachmentOpenMutation = useMutation({
+    mutationFn: ({ attachmentId, taskId }: Readonly<{ attachmentId: string; taskId: string }>) =>
+      client.openTaskAttachment(projectId, taskId, attachmentId),
+  });
   const projectPathOpenMutationRef = useRef(projectPathOpenMutation);
   projectPathOpenMutationRef.current = projectPathOpenMutation;
   const projectPathOpenLockRef = useRef(createAsyncActionLock());
@@ -394,6 +398,7 @@ export function useWorkbenchShellRuntime({
     projectPathOpenLockRef,
     projectPathOpenMutation,
     projectPathOpenMutationRef,
+    taskAttachmentOpenMutation,
     projectRuntime,
     projectTaskState,
     projects,

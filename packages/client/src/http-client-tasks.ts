@@ -9,6 +9,7 @@ import {
   CompactAgentTaskResponseSchema,
   ForkAgentTaskResponseSchema,
   InterruptAgentTurnResponseSchema,
+  OpenAgentTaskAttachmentResponseSchema,
   PinAgentTaskResponseSchema,
   RenameAgentTaskResponseSchema,
   ResolvePendingRequestResponseSchema,
@@ -32,6 +33,7 @@ import {
   type ForkAgentTaskResponse,
   type HostFileKind,
   type InterruptAgentTurnResponse,
+  type OpenAgentTaskAttachmentResponse,
   type PendingRequest,
   type PinAgentTaskResponse,
   type RenameAgentTaskResponse,
@@ -82,6 +84,20 @@ export class TaskHttpClient extends ProjectHttpClient {
 
   public getTaskAttachmentUrl(projectId: string, taskId: string, attachmentId: string): string {
     return buildTaskAttachmentUrl(this.baseUrl, projectId, taskId, attachmentId);
+  }
+
+  public async openTaskAttachment(
+    projectId: string,
+    taskId: string,
+    attachmentId: string,
+    options: MutationOptions = {},
+  ): Promise<OpenAgentTaskAttachmentResponse> {
+    return this.mutation(
+      `${taskPath(projectId, taskId)}/attachments/${encodeURIComponent(attachmentId)}/open`,
+      {},
+      OpenAgentTaskAttachmentResponseSchema,
+      options,
+    );
   }
 
   public async listBackgroundTerminals(

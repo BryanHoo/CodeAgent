@@ -4,12 +4,7 @@ import { FileText, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 
 import { i18n } from "../../../i18n/i18n.js";
-import {
-  Attachment,
-  AttachmentInfo,
-  AttachmentPreview,
-  Attachments,
-} from "../../../shared/components/agent/attachments.js";
+import { Attachments } from "../../../shared/components/agent/attachments.js";
 import { cn } from "../../../shared/lib/utils.js";
 import { Button } from "../../../shared/components/core/button.js";
 
@@ -52,6 +47,7 @@ import {
 } from "../../../shared/components/agent/tool.js";
 import { RETAINED_COMMAND_OUTPUT_MARKER } from "../../conversation/runtime/task-store.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
+import { MessageFileAttachment } from "./message-file-attachment.js";
 import { MessageImageAttachment } from "./message-image-attachment.js";
 import { SkillToken } from "./skill-token.js";
 import { parseSubagentOperation } from "./subagent.js";
@@ -153,25 +149,11 @@ export function TimelineItemContent({
                 );
               }
               return (
-                <a
-                  aria-label={i18n.t("timeline.downloadAttachment", {
-                    name: attachment.name,
-                    ns: "conversation",
-                  })}
-                  className="block max-w-full rounded-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
-                  data-message-attachment={attachment.kind}
-                  download={attachment.name}
-                  href={attachmentUrl}
+                <MessageFileAttachment
+                  attachment={attachment}
                   key={attachment.id}
-                >
-                  <Attachment
-                    className="h-12 max-w-64 pe-3 shadow-control"
-                    data={{ ...attachment, previewUrl: attachmentUrl }}
-                  >
-                    <AttachmentPreview />
-                    <AttachmentInfo />
-                  </Attachment>
-                </a>
+                  url={attachmentUrl}
+                />
               );
             })}
           </Attachments>

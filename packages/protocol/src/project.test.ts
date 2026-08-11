@@ -73,6 +73,8 @@ import {
   ProjectOpenCapabilitiesResponseSchema,
   OpenProjectRequestSchema,
   OpenProjectResponseSchema,
+  OpenAgentTaskAttachmentRequestSchema,
+  OpenAgentTaskAttachmentResponseSchema,
   ProjectSourceFileSchema,
   ProjectSchema,
   PinAgentTaskRequestSchema,
@@ -498,6 +500,26 @@ describe("project protocol", () => {
         role: "user",
         text: "",
         type: "message",
+      }),
+    ).toBe(false);
+  });
+
+  it("validates task attachment system-open requests without exposing host paths", () => {
+    expect(Value.Check(OpenAgentTaskAttachmentRequestSchema, {})).toBe(true);
+    expect(Value.Check(OpenAgentTaskAttachmentRequestSchema, { path: "/tmp/report.pdf" })).toBe(
+      false,
+    );
+    expect(
+      Value.Check(OpenAgentTaskAttachmentResponseSchema, {
+        attachmentId: "attachment-1",
+        status: "opened",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(OpenAgentTaskAttachmentResponseSchema, {
+        attachmentId: "attachment-1",
+        path: "/tmp/report.pdf",
+        status: "opened",
       }),
     ).toBe(false);
   });

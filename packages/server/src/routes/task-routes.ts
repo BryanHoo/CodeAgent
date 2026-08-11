@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer";
 import {
   AgentBackgroundTerminalPageSchema,
   AgentMcpServerPageSchema,
@@ -18,32 +17,25 @@ import {
   type RenameAgentTaskRequest,
 } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
-import { AttachmentNotFoundError } from "../attachment-store.js";
 import { MutationHttpError, toMcpProviderHttpError, type ServerRouteContext } from "./context.js";
 import {
   ErrorResponseSchema,
   IdempotencyHeadersSchema,
   ProjectParamsSchema,
-  ProjectTaskAttachmentParamsSchema,
   ProjectTaskParamsSchema,
   ProjectTaskTerminalParamsSchema,
   TaskPageQuerySchema,
 } from "./schemas.js";
 
 import { registerTaskActionRoutes } from "./task-action-routes.js";
+import { registerTaskAttachmentRoutes } from "./task-attachment-routes.js";
 
 export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
   app,
   context,
   done,
 ) => {
-  const {
-    attachmentStore,
-    getProjectContext,
-    readEffectiveTaskSettings,
-    runIdempotent,
-    taskFromSnapshot,
-  } = context;
+  const { getProjectContext, readEffectiveTaskSettings, runIdempotent, taskFromSnapshot } = context;
 
   app.get<{
     Params: { projectId: string };
@@ -138,53 +130,6 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
       } catch (error) {
         throw toMcpProviderHttpError(error);
       }
-    },
-  );
-
-  app.get<{ Params: { attachmentId: string; projectId: string; taskId: string } }>(
-    "/v1/projects/:projectId/tasks/:taskId/attachments/:attachmentId",
-    {
-      schema: {
-        params: ProjectTaskAttachmentParamsSchema,
-        response: { 404: ErrorResponseSchema },
-      },
-    },
-    async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
-      let attachment = await context.provider.readTaskAttachment(
-        request.params.taskId,
-        request.params.attachmentId,
-      );
-      if (attachment === undefined) {
-        const task = await context.provider.readTask(request.params.taskId);
-        if (task?.projectId !== context.project.id) {
-          return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
-        }
-        try {
-          // Provider 历史尚未同步时，继续交付本次 Turn 保留的上传内容。
-          const stored = await attachmentStore.readSubmitted(
-            request.params.projectId,
-            request.params.attachmentId,
-          );
-          attachment = { ...stored.attachment, content: stored.content };
-        } catch (error) {
-          if (error instanceof AttachmentNotFoundError) {
-            return reply
-              .code(404)
-              .send({ code: "ATTACHMENT_NOT_FOUND", message: "Attachment not found" });
-          }
-          throw error;
-        }
-      }
-      // 随机 ID 已绑定 Project/Task；响应只交付已复验的附件正文，不暴露本地路径。
-      return reply
-        .header("cache-control", "private, max-age=300")
-        .header("x-content-type-options", "nosniff")
-        .type(attachment.mediaType)
-        .send(Buffer.from(attachment.content));
     },
   );
 
@@ -386,5 +331,6 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
   );
 
   registerTaskActionRoutes(app, context);
+  registerTaskAttachmentRoutes(app, context);
   done();
 };

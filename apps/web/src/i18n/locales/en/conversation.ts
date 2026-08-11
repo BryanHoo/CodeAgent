@@ -52,7 +52,7 @@ export const conversation = {
     stopTerminal: "Failed to stop terminal",
   },
   inspector: {
-    attachmentDetail: "Image attachment",
+    attachmentDetail: "Attachment",
     changeActions: "Change actions",
     changeIndicator: "{{path}}, {{descendant}}{{additions}} additions, {{removals}} deletions",
     changeStats: "Change statistics",
@@ -237,6 +237,7 @@ export const conversation = {
     copied: "Copied",
     copyMessage: "Copy message",
     downloadAttachment: "Download attachment {{name}}",
+    openAttachment: "Open attachment {{name}}",
     emptyAfter: "?",
     emptyBefore: "What should we do in",
     expandProcess: "Expand process",

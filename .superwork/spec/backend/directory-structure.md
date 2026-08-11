@@ -21,6 +21,7 @@
 - Project 文件搜索必须复用文件树的 Project 根目录、分层 `.gitignore`、生成目录、符号链接和深度边界，只按文件名匹配并稳定返回最多 `50` 个 Project 相对普通文件。Turn 提交必须重新解析并授权每个引用，拒绝重复、越界、目录、符号链接和已忽略文件，再映射为 Provider 文件 `mention`；不得信任搜索结果或接收宿主绝对路径。
 - Composer 宿主附件选择只通过固定的 `GET /v1/host-files` 浏览 CodeAgent 运行设备；端点从宿主主目录或严格校验的绝对目录开始，仅列出真实直接子目录和当前 `file | image` 种类支持的普通文件，跳过符号链接。确认选择后由 `POST /v1/projects/:projectId/attachments/:kind/host` 重新解析文件并流式写入统一 `AttachmentStore`，待提交预览只允许通过 `GET /v1/projects/:projectId/attachments/:attachmentId` 和随机附件 ID 读取，不能向 Web 或 Turn 透传宿主绝对路径，也不能建立第二套存储。
 - Project 宿主打开能力只返回固定白名单中的具体应用 ID、名称与类别；普通打开菜单提交 Project 相对路径并拒绝符号链接和越界目标，AI 文件引用的显式绝对路径允许指向 Project 外的本机可读文件或目录。Server 按宿主实际可执行程序或应用包过滤目录，并使用参数数组和 `shell: false` 启动。文件交给编辑器或工具，文件管理器定位文件或打开其父目录，终端固定在文件父目录启动；`system-default` 只允许文件目标，并调用宿主系统的默认关联应用。
+- Task 历史附件的读取与系统打开统一放在独立附件路由模块；系统打开必须先验证 Project、Task、随机附件 ID 和 `file` 类型，再把受权内容复制到 Server 管理的临时文件并复用 Project `system-default` 打开服务，不能向浏览器返回或记录该路径。
 - Project 图片预览只允许 GIF、JPEG、PNG、WebP 的有效内容签名和有界普通文件；相对路径限制在 Project 内，显式绝对路径允许读取 Project 外目标。响应固定使用受检媒体类型与 `nosniff`，路径缺失、不可读、超限或签名不匹配统一返回不可用。
 - Core、Protocol 和 Server 公开使用 Project/Task；Codex 原生 Thread 命名只允许出现在 `provider-codex` 适配边界。
 - 基础设施通过 Core 端口接入，不让同步 SQLite 或子进程细节进入领域层。

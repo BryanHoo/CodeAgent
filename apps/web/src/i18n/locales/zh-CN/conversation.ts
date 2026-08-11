@@ -52,7 +52,7 @@ export const conversation = {
     stopTerminal: "停止终端失败",
   },
   inspector: {
-    attachmentDetail: "图片附件",
+    attachmentDetail: "附件",
     changeActions: "变更操作",
     changeIndicator: "{{path}}，{{descendant}}新增 {{additions}} 行，删除 {{removals}} 行",
     changeStats: "变更统计",
@@ -237,6 +237,7 @@ export const conversation = {
     copied: "已复制",
     copyMessage: "复制消息",
     downloadAttachment: "下载附件 {{name}}",
+    openAttachment: "打开附件 {{name}}",
     emptyAfter: "中做些什么？",
     emptyBefore: "我们应该在",
     expandProcess: "展开执行过程",

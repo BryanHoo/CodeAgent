@@ -1,9 +1,4 @@
-import type {
-  AgentBackgroundTerminal,
-  AgentMcpServer,
-  AgentSkill,
-  AgentTurn,
-} from "@code-agent/protocol";
+import type { AgentBackgroundTerminal, AgentMcpServer } from "@code-agent/protocol";
 import {
   Bot,
   CheckCircle2,
@@ -11,12 +6,9 @@ import {
   CircleAlert,
   CircleOff,
   CircleX,
-  FolderRoot,
   LoaderCircle,
-  Paperclip,
   Plug,
   RefreshCw,
-  Sparkles,
   Square,
   SquareTerminal,
 } from "lucide-react";
@@ -41,74 +33,6 @@ import {
   type SubagentContextEntry,
   type SubagentSelection,
 } from "./subagent.js";
-
-type InspectorSource = Readonly<{
-  detail: string;
-  id: string;
-  kind: "attachment" | "project" | "skill";
-  name: string;
-}>;
-export function collectInspectorSources(
-  projectName: string,
-  projectPath: string,
-  turns: readonly AgentTurn[],
-  skills: readonly AgentSkill[],
-): InspectorSource[] {
-  // 临时 Task 的真实工作区属于内部实现，空路径表示不向上下文来源暴露该 Project。
-  const sources: InspectorSource[] =
-    projectPath === ""
-      ? []
-      : [{ detail: projectPath, id: `project:${projectPath}`, kind: "project", name: projectName }];
-  const skillsByName = new Map(skills.map((skill) => [skill.name, skill]));
-  const seenSkills = new Set<string>();
-  const seenAttachments = new Set<string>();
-
-  // 同一来源可能在多个 Turn 中重复出现，Inspector 只保留首次使用位置的稳定条目。
-  for (const turn of turns) {
-    for (const item of turn.items) {
-      if (item.type !== "message" || item.role !== "user") {
-        continue;
-      }
-      for (const skillReference of item.skills ?? []) {
-        if (seenSkills.has(skillReference.name)) {
-          continue;
-        }
-        seenSkills.add(skillReference.name);
-        const skill = skillsByName.get(skillReference.name);
-        sources.push({
-          detail: skill === undefined ? "Skill" : `Skill · ${formatSkillScope(skill.scope)}`,
-          id: `skill:${skillReference.name}`,
-          kind: "skill",
-          name: skill?.displayName ?? skillReference.name,
-        });
-      }
-      for (const attachment of item.attachments ?? []) {
-        if (seenAttachments.has(attachment.id)) {
-          continue;
-        }
-        seenAttachments.add(attachment.id);
-        sources.push({
-          detail: i18n.t("inspector.attachmentDetail", { ns: "conversation" }),
-          id: `attachment:${attachment.id}`,
-          kind: "attachment",
-          name: attachment.name,
-        });
-      }
-    }
-  }
-  return sources;
-}
-
-export function formatSkillScope(scope: AgentSkill["scope"]) {
-  const labels: Readonly<Record<AgentSkill["scope"], string>> = {
-    admin: i18n.t("inspector.sourceRole.admin", { ns: "conversation" }),
-    repo: i18n.t("inspector.sourceRole.repo", { ns: "conversation" }),
-    system: i18n.t("inspector.sourceRole.system", { ns: "conversation" }),
-    user: i18n.t("inspector.sourceRole.user", { ns: "conversation" }),
-  };
-  return labels[scope];
-}
-
 export function BackgroundTerminalSection({
   error,
   isPending,
@@ -456,35 +380,5 @@ export function InspectorSection({ action, children, icon, title }: InspectorSec
       </div>
       <div className="space-y-0.5">{children}</div>
     </section>
-  );
-}
-
-export function InspectorSourceRow({ source }: Readonly<{ source: InspectorSource }>) {
-  const icon =
-    source.kind === "project" ? (
-      <FolderRoot aria-hidden="true" className="size-3.5" />
-    ) : source.kind === "skill" ? (
-      <Sparkles aria-hidden="true" className="size-3.5 text-brand" />
-    ) : (
-      <Paperclip aria-hidden="true" className="size-3.5" />
-    );
-  return (
-    <div className="flex min-h-10 items-center gap-2 rounded-control px-2 py-1.5">
-      <span className="shrink-0 text-muted-foreground">{icon}</span>
-      <div className="min-w-0">
-        <p className="truncate text-label font-medium text-foreground" title={source.name}>
-          {source.name}
-        </p>
-        {source.kind === "project" ? (
-          <p className="truncate text-caption text-muted-foreground" title={source.detail}>
-            <span>{i18n.t("inspector.projectDirectory", { ns: "conversation" })}</span>
-            <span aria-hidden="true"> · </span>
-            <span>{source.detail}</span>
-          </p>
-        ) : (
-          <p className="truncate text-caption text-muted-foreground">{source.detail}</p>
-        )}
-      </div>
-    </div>
   );
 }

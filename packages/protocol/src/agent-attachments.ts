@@ -309,6 +309,27 @@ export const AgentMessageAttachmentSchema = Type.Object(
 
 export type AgentMessageAttachment = Readonly<Static<typeof AgentMessageAttachmentSchema>>;
 
+export const OpenAgentTaskAttachmentRequestSchema = Type.Object(
+  {},
+  { additionalProperties: false },
+);
+
+export type OpenAgentTaskAttachmentRequest = Readonly<
+  Static<typeof OpenAgentTaskAttachmentRequestSchema>
+>;
+
+export const OpenAgentTaskAttachmentResponseSchema = Type.Object(
+  {
+    attachmentId: Type.String({ minLength: 1 }),
+    status: Type.Literal("opened"),
+  },
+  { additionalProperties: false },
+);
+
+export type OpenAgentTaskAttachmentResponse = Readonly<
+  Static<typeof OpenAgentTaskAttachmentResponseSchema>
+>;
+
 export const AgentMessagePhaseSchema = Type.Union([
   Type.Literal("commentary"),
   Type.Literal("final_answer"),

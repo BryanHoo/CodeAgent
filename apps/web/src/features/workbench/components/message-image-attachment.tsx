@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
@@ -17,10 +17,17 @@ import {
 
 type MessageImageAttachmentProps = Readonly<{
   name: string;
+  triggerChildren?: ReactNode;
+  triggerClassName?: string;
   url: string;
 }>;
 
-export function MessageImageAttachment({ name, url }: MessageImageAttachmentProps) {
+export function MessageImageAttachment({
+  name,
+  triggerChildren,
+  triggerClassName,
+  url,
+}: MessageImageAttachmentProps) {
   const { t } = useTranslation("conversation");
   const [isOpen, setIsOpen] = useState(false);
   const titleId = useId();
@@ -30,21 +37,26 @@ export function MessageImageAttachment({ name, url }: MessageImageAttachmentProp
       <DialogTrigger asChild>
         <Button
           aria-label={t("timeline.showImage", { name })}
-          className="block size-40 max-w-full cursor-zoom-in overflow-hidden rounded-surface bg-control p-0 shadow-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
+          className={
+            triggerClassName ??
+            "block size-40 max-w-full cursor-zoom-in overflow-hidden rounded-surface bg-control p-0 shadow-control transition-opacity hover:opacity-90 focus-visible:shadow-focus"
+          }
           data-message-attachment="image"
           type="button"
           variant="ghost"
         >
-          {/* 历史图片只在进入可视区时读取和解码。 */}
-          <img
-            alt={name}
-            className="size-full object-cover"
-            decoding="async"
-            height={160}
-            loading="lazy"
-            src={url}
-            width={160}
-          />
+          {triggerChildren ?? (
+            // 历史图片只在进入可视区时读取和解码。
+            <img
+              alt={name}
+              className="size-full object-cover"
+              decoding="async"
+              height={160}
+              loading="lazy"
+              src={url}
+              width={160}
+            />
+          )}
         </Button>
       </DialogTrigger>
       <DialogContent

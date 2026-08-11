@@ -78,6 +78,7 @@ export function WorkbenchShellLayout({
     projectPath,
     projectPathOpenLockRef,
     projectPathOpenMutation,
+    taskAttachmentOpenMutation,
     projectTaskState,
     projects,
     refreshProjectGitStatus,
@@ -419,6 +420,11 @@ export function WorkbenchShellLayout({
           onOpenProjectFile={(path) => {
             openMessageFileReference({ lineNumber: null, path });
           }}
+          onOpenTaskAttachment={(attachmentId) => {
+            if (taskId !== undefined) {
+              taskAttachmentOpenMutation.mutate({ attachmentId, taskId });
+            }
+          }}
           onReferenceProjectPath={(entry) => {
             composerRef.current?.referenceProjectPath(entry);
           }}
@@ -440,6 +446,7 @@ export function WorkbenchShellLayout({
             }
           }}
           projectName={projectName}
+          projectId={projectId}
           projectOpenApps={projectOpenCapabilitiesQuery.data?.apps ?? []}
           projectOpenError={projectPathOpenMutation.error}
           projectOpenPending={projectPathOpenMutation.isPending}
@@ -450,6 +457,7 @@ export function WorkbenchShellLayout({
           terminalMutationError={backgroundTerminals.terminalError}
           terminatingTerminalId={backgroundTerminals.terminatingTerminalId}
           {...(inspectorTask === undefined ? {} : { task: inspectorTask })}
+          {...(taskId === undefined ? {} : { taskId })}
           {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
         />
       ) : null}
