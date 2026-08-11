@@ -14,7 +14,7 @@ CodeAgent runs on your computer. You can use it locally or access it from anothe
 - Attach images or files, reference project files with `@`, and use configured Skills and MCP servers
 - Sign in with ChatGPT or connect a custom OpenAI-compatible API
 - Load models from the active service and choose the model, reasoning effort, approval behavior, and file access level
-- Browse project files, inspect code changes, switch branches, and view Git history
+- Browse and progressively preview project files, inspect code changes, switch branches, and view Git history
 - Start code reviews, generate commit messages, and commit or push changes
 - Connect from a phone, tablet, or another computer on a trusted local network
 
@@ -72,6 +72,8 @@ Project folders come from the computer running CodeAgent. When you connect from 
 
 Use a file tree item's `...` button or context menu to copy its name or project-relative path, open it with a supported application, or append it as a reference to the current composer draft.
 
+The inspector's **Sources** section collects attachments used in the current task. Images and source files open in CodeAgent, including on-demand loading for long text files; other files open with their system default application.
+
 ### Adjust Task Settings
 
 Before submitting a message, use the controls below the composer to choose the model, reasoning effort, approval behavior, and file access level. Select Plan mode when you want to prepare an implementation plan, or Goal mode when you want Codex to continue working toward an objective.
@@ -126,7 +128,9 @@ An explicitly configured session expires at its fixed deadline and requests do n
 
 ## Update CodeAgent
 
-CodeAgent indicates available updates in the sidebar. Open **Settings > About** to check again, view the target version's release notes, or install it. After installation finishes, stop and restart CodeAgent.
+When `code-agent start` runs in an interactive terminal, CodeAgent checks for a newer version before starting. Confirm the prompt to install it and automatically restart with the original arguments, or decline to continue with the current version.
+
+While CodeAgent is running, the sidebar indicates available updates. Open **Settings > About** to check again, view the target version's release notes, or install it. Updates installed from the browser take effect after you stop and restart CodeAgent.
 
 If you installed CodeAgent globally, you can also update it from the terminal:
 

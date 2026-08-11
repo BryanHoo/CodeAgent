@@ -4,6 +4,31 @@
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-08-11
+
+### 新增
+
+- 在 CLI 启动前检查可用更新，支持经终端确认后安装新版本，并使用原参数自动重新启动。
+- 在 Inspector 来源列表中集中展示消息附件，支持页内预览图片和源码，并通过系统默认应用打开其他文件。
+- 为长源码预览添加 UTF-8 字节游标分页和滚动加载，避免大文件被固定截断。
+- 添加反向代理精确域名白名单，并允许局域网会话在未配置 TTL 时保持到当前进程结束。
+
+### 优化
+
+- 首次初始化全局设置时按字段读取 Codex 用户配置，并对无效或缺失值使用 CodeAgent 默认值。
+- 优化后台终端轮询、长历史终态更新、Project Runtime 懒加载和 WebSocket 帧复用，并调整首屏包预算。
+- 将项目文件引用统一为提示词中的可见内联路径，保持提交、实时消息和历史恢复结果一致。
+
+### 修复
+
+- 修复文件引用的空白边界和消息 Token 渲染，并支持从历史消息直接打开对应源码。
+- 修复助手回复恢复后的重复操作状态、长执行详情撑开会话布局，以及复制用户消息时错误包含附件名称的问题。
+- 加固请求主机校验、错误响应和 Codex Transcript 缓存边界，避免内部异常泄露与缓存失效。
+
+### 工程
+
+- 固定 GitHub Actions 引用，扩展 Composer、跨浏览器和性能回归测试，并增加按文件覆盖率门禁。
+
 ## [1.8.0] - 2026-08-11
 
 ### 新增
@@ -257,7 +282,8 @@ CodeAgent 首个稳定版本，集中发布本地 Coding Agent 工作台的完�
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.5.0...v1.6.0
