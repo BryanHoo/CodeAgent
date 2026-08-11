@@ -12,7 +12,6 @@ describe("ComposerDraftStore", () => {
       ...draft,
       queuedPrompts: [
         {
-          fileReferences: [{ name: "main.tsx", path: "src/main.tsx" }],
           files: [],
           id: "queued-1",
           skills: [],
@@ -23,7 +22,6 @@ describe("ComposerDraftStore", () => {
 
     expect(store.read(firstScope).queuedPrompts).toEqual([
       {
-        fileReferences: [{ name: "main.tsx", path: "src/main.tsx" }],
         files: [],
         id: "queued-1",
         skills: [],

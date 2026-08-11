@@ -10,7 +10,6 @@ export type PromptSkillContentPart =
 export type PromptSkillContent = readonly PromptSkillContentPart[];
 
 export type PromptSkillSubmission = Readonly<{
-  fileReferences: readonly ProjectFileSearchEntry[];
   skills: readonly AgentSkill[];
   text: string;
 }>;
@@ -238,26 +237,21 @@ export function serializePromptSkillContent(content: PromptSkillContent): string
 }
 
 export function toPromptSkillSubmission(content: PromptSkillContent): PromptSkillSubmission {
-  const fileReferences: ProjectFileSearchEntry[] = [];
   const skills: AgentSkill[] = [];
   let text = "";
   for (const part of content) {
     if (part.type === "skill") {
       skills.push(part.skill);
     } else if (part.type === "file") {
-      fileReferences.push(part.file);
+      text += fileReferencePlainText(part.file);
     } else {
       text += part.text;
     }
   }
-  return { fileReferences, skills, text: text.trim() };
+  return { skills, text: text.trim() };
 }
 
 export function isPromptSkillContentEmpty(content: PromptSkillContent): boolean {
   const submission = toPromptSkillSubmission(content);
-  return (
-    submission.text === "" &&
-    submission.skills.length === 0 &&
-    submission.fileReferences.length === 0
-  );
+  return submission.text === "" && submission.skills.length === 0;
 }

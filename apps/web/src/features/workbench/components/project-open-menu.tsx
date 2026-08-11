@@ -94,6 +94,7 @@ export function ProjectOpenContextMenuItems({
   const { t } = useTranslation("workbench");
   const targetApps = getProjectOpenAppsForTarget(apps, target.type);
   const targetName = getProjectTargetName(target.path);
+  const reference = target.reference;
   return (
     <ContextMenuContent aria-label={ariaLabel} className="w-52">
       <ContextMenuItem
@@ -137,17 +138,16 @@ export function ProjectOpenContextMenuItems({
           })}
         </ContextMenuSubContent>
       </ContextMenuSub>
-      <ContextMenuItem
-        disabled={target.reference === undefined}
-        onSelect={() => {
-          if (target.reference !== undefined) {
-            onReference(target.reference);
-          }
-        }}
-      >
-        <AtSign aria-hidden="true" className="size-4 text-muted-foreground" />
-        <span>{t("openMenu.reference")}</span>
-      </ContextMenuItem>
+      {reference === undefined ? null : (
+        <ContextMenuItem
+          onSelect={() => {
+            onReference(reference);
+          }}
+        >
+          <AtSign aria-hidden="true" className="size-4 text-muted-foreground" />
+          <span>{t("openMenu.reference")}</span>
+        </ContextMenuItem>
+      )}
     </ContextMenuContent>
   );
 }
@@ -174,6 +174,7 @@ export function ProjectOpenDropdownMenu({
   const targetApps = getProjectOpenAppsForTarget(apps, target.type);
   const targetLabel = t("openMenu.targetLabel", { path: target.path });
   const targetName = getProjectTargetName(target.path);
+  const reference = target.reference;
 
   return (
     <DropdownMenu
@@ -243,17 +244,16 @@ export function ProjectOpenDropdownMenu({
             })}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        <DropdownMenuItem
-          disabled={target.reference === undefined}
-          onSelect={() => {
-            if (target.reference !== undefined) {
-              onReference(target.reference);
-            }
-          }}
-        >
-          <AtSign aria-hidden="true" className="size-4 text-muted-foreground" />
-          <span>{t("openMenu.reference")}</span>
-        </DropdownMenuItem>
+        {reference === undefined ? null : (
+          <DropdownMenuItem
+            onSelect={() => {
+              onReference(reference);
+            }}
+          >
+            <AtSign aria-hidden="true" className="size-4 text-muted-foreground" />
+            <span>{t("openMenu.reference")}</span>
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

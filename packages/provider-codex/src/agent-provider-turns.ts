@@ -197,9 +197,9 @@ export abstract class CodexAgentProviderTurns extends CodexAgentProviderBase {
       return { type: "image" as const, url: image.url };
     });
     const files = input.files.map((file) => ({
-      name: file.name,
-      path: file.path,
-      type: "mention" as const,
+      text: file.path,
+      text_elements: [],
+      type: "text" as const,
     }));
     const textAttachments = input.textAttachments.map((attachment) => ({
       text: attachment.text,

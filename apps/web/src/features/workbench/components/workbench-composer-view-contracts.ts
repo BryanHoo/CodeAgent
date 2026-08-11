@@ -109,7 +109,6 @@ export function resolveQueuedPromptSummary(
   return (
     queuedPrompt.text ||
     queuedPrompt.skills.map((skill) => `$${skill.name}`).join(" ") ||
-    queuedPrompt.fileReferences.map((file) => `@${file.path}`).join(" ") ||
     attachmentSummary
   );
 }

@@ -93,10 +93,6 @@ export interface CreateCodeAgentServerOptions {
     cursor?: number,
   ) => Promise<ProjectSourceFile>;
   resolveProjectDirectory?: (path: string) => Promise<string>;
-  resolveProjectFileReferences?: (
-    projectRoot: string,
-    paths: readonly string[],
-  ) => Promise<readonly Readonly<{ name: string; path: string }>[]>;
   resolveHostAttachment?: (kind: HostFileKind, path: string) => Promise<HostAttachmentSource>;
   staticRoot?: string;
 }

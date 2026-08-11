@@ -126,7 +126,6 @@ export function createComposerCommands({
           text: t("composer.initializingAgentsPrompt"),
         },
         [],
-        { fileReferences: [] },
       );
       return;
     }

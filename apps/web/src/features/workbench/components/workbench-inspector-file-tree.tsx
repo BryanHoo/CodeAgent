@@ -294,7 +294,14 @@ export function ProjectFileTreeNodes({
           stats={changeStats}
         />
       );
-    const reference = { name, path: entry.path };
+    const target =
+      entry.type === "file"
+        ? {
+            path: entry.path,
+            reference: { name, path: entry.path },
+            type: "file" as const,
+          }
+        : { path: entry.path, type: "directory" as const };
     const trailing = (
       <FileTreeActions className="relative">
         <span className="transition-opacity group-hover/file-tree-node:opacity-0 group-focus-within/file-tree-node:opacity-0">
@@ -310,7 +317,7 @@ export function ProjectFileTreeNodes({
             }}
             onReference={onReferenceProjectPath}
             onSelect={onOpenProjectPath}
-            target={{ path: entry.path, reference, type: entry.type }}
+            target={target}
           />
         </span>
       </FileTreeActions>
@@ -325,7 +332,7 @@ export function ProjectFileTreeNodes({
         }}
         onReference={onReferenceProjectPath}
         onSelect={onOpenProjectPath}
-        target={{ path: entry.path, reference, type: entry.type }}
+        target={target}
       >
         <FileTreeFolder name={name} path={entry.path} trailing={trailing}>
           <ProjectFileTreeDirectoryChildren
@@ -352,7 +359,7 @@ export function ProjectFileTreeNodes({
         }}
         onReference={onReferenceProjectPath}
         onSelect={onOpenProjectPath}
-        target={{ path: entry.path, reference, type: entry.type }}
+        target={target}
       >
         <FileTreeFile name={name} path={entry.path} trailing={trailing} />
       </ProjectOpenContextMenu>

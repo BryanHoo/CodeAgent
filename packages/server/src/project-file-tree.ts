@@ -260,30 +260,3 @@ export async function readProjectFileSearch(
   await visit(root.absoluteDirectory, root.relativeDirectory, root.ignoreScopes, 0);
   return { data: matches.map((match) => match.entry) };
 }
-
-export async function resolveProjectFileReferences(
-  projectRoot: string,
-  paths: readonly string[],
-): Promise<readonly Readonly<{ name: string; path: string }>[]> {
-  return Promise.all(
-    paths.map(async (path) => {
-      const separatorIndex = path.lastIndexOf("/");
-      const directoryPath = separatorIndex < 0 ? undefined : path.slice(0, separatorIndex);
-      const name = path.slice(separatorIndex + 1);
-      if (name === "" || name === "." || name === "..") {
-        throw new TypeError("Project file reference is invalid");
-      }
-      const context = await resolveDirectoryContext(projectRoot, directoryPath);
-      const normalizedPath = joinProjectPath(context.relativeDirectory, name);
-      if (isIgnoredByScopes(normalizedPath, false, context.ignoreScopes)) {
-        throw new TypeError("Project file reference is not available");
-      }
-      const absolutePath = resolve(context.absoluteDirectory, name);
-      const stats = await lstat(absolutePath);
-      if (stats.isSymbolicLink() || !stats.isFile()) {
-        throw new TypeError("Project file reference must identify a regular file");
-      }
-      return { name, path: absolutePath };
-    }),
-  );
-}

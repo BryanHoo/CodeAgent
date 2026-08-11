@@ -252,7 +252,6 @@ export function WorkbenchComposer({
       setComposerModeState(undefined); // 避免后续 Turn 再次请求生成计划。
       return submitPrompt({ files: [], text: t("composer.buildPlanPrompt") }, [], {
         composerMode: null,
-        fileReferences: [],
         forceAction: "start",
       });
     },
@@ -266,7 +265,6 @@ export function WorkbenchComposer({
         queuedPrompt.skills,
         {
           clearInputOnSuccess: false,
-          fileReferences: queuedPrompt.fileReferences,
           forceAction: "start",
           requestTimelineScroll: false,
         },
@@ -362,7 +360,6 @@ export function WorkbenchComposer({
       queuedPrompt.skills,
       {
         clearInputOnSuccess: false,
-        fileReferences: queuedPrompt.fileReferences,
         forceAction: "steer",
         requestTimelineScroll: false,
       },

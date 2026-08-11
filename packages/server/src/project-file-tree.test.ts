@@ -1,14 +1,10 @@
-import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  readProjectFileSearch,
-  readProjectFileTree,
-  resolveProjectFileReferences,
-} from "./project-file-tree.js";
+import { readProjectFileSearch, readProjectFileTree } from "./project-file-tree.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -157,10 +153,5 @@ describe("readProjectFileSearch", () => {
         { name: "index.test.ts", path: "src/index.test.ts" },
       ],
     });
-    const resolvedRoot = await realpath(projectRoot);
-    await expect(resolveProjectFileReferences(projectRoot, ["src/index.ts"])).resolves.toEqual([
-      { name: "index.ts", path: join(resolvedRoot, "src", "index.ts") },
-    ]);
-    await expect(resolveProjectFileReferences(projectRoot, ["linked-index.ts"])).rejects.toThrow();
   });
 });

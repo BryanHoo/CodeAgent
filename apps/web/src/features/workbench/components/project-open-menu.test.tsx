@@ -16,7 +16,11 @@ describe("ProjectOpenContextMenuItems", () => {
           isPending={false}
           onReference={vi.fn()}
           onSelect={vi.fn()}
-          target={{ path: "README.md", type: "file" }}
+          target={{
+            path: "README.md",
+            reference: { name: "README.md", path: "README.md" },
+            type: "file",
+          }}
         />
       </ContextMenu>,
     );
@@ -30,6 +34,23 @@ describe("ProjectOpenContextMenuItems", () => {
     expect(markup.match(/data-slot="context-menu-item"/gu)).toHaveLength(3);
     expect(markup).not.toContain("menuitemradio");
     expect(markup).not.toContain("aria-checked");
+  });
+
+  it("removes the reference command for directory targets", () => {
+    const markup = renderToStaticMarkup(
+      <ContextMenu open>
+        <ProjectOpenContextMenuItems
+          apps={[{ id: "zed", kind: "editor", name: "Zed" }]}
+          isPending={false}
+          onReference={vi.fn()}
+          onSelect={vi.fn()}
+          target={{ path: "src", type: "directory" }}
+        />
+      </ContextMenu>,
+    );
+
+    expect(markup).not.toContain("引用");
+    expect(markup.match(/data-slot="context-menu-item"/gu)).toHaveLength(2);
   });
 
   it("offers the system default application only for file targets", () => {

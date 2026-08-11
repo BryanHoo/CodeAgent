@@ -2503,9 +2503,9 @@ describe("CodexAgentProvider", () => {
               type: "text",
             },
             {
-              name: "specification.pdf",
-              path: "/tmp/specification.pdf",
-              type: "mention",
+              text: "/tmp/specification.pdf",
+              text_elements: [],
+              type: "text",
             },
             { type: "image", url: "data:image/png;base64,aW1hZ2U=" },
           ],

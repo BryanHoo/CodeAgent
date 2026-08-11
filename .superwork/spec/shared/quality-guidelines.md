@@ -23,7 +23,7 @@
 - Git 分支切换使用严格 `SwitchProjectBranchRequest` 与 `Idempotency-Key`，请求只携带本地分支精确名称和 `expectedSnapshot`，响应返回完整 `ProjectGitStatus`。Server 必须区分当前分支、分支不存在、状态冲突、只读仓库和执行失败，不得接受命令、远端引用或隐式创建分支。
 - Git 分支创建使用独立严格 `CreateProjectBranchRequest` 与 `Idempotency-Key`，请求只携带待创建的本地分支精确名称和 `expectedSnapshot`，响应返回创建后已切换分支的完整 `ProjectGitStatus`。Server 必须区分名称无效、分支已存在、状态冲突、只读仓库和执行失败，使用 Git 原生分支名规则终检，不得接受命令、路径或远端引用。
 - `ProjectFileTree` 必须返回目标 Project 相对目录 `path` 及其直接目录/文件条目，不包含 `truncated` 或条目数量上限；可选目录查询必须拒绝绝对路径、点路径、反斜杠和额外字段。Server 必须沿已注册 Project 根目录逐层应用任意层级的 `.gitignore`，不依赖根目录是否为 Git 仓库或是否存在根级规则；同时跳过符号链接、`.git`、`node_modules`、构建与覆盖率目录，并将目录深度限制为 `20` 层，Client 与 Fastify 必须使用同一严格 Schema。
-- Project 文件名搜索使用严格 `ProjectFileSearchQuery`、`ProjectFileSearchPage` 和最多 `50` 项的 Project 相对路径结果；Protocol、Client、Fastify 与 Web 必须同步校验。`AgentPromptInput.fileReferences` 只接收无重复的 Project 相对普通文件，Server 在 start 与 steer 边界重新验证真实路径、忽略规则和文件类型后映射为 Provider `mention`，不得由 Web 提交或展示宿主绝对路径。
+- Project 文件名搜索使用严格 `ProjectFileSearchQuery`、`ProjectFileSearchPage` 和最多 `50` 项的 Project 相对普通文件结果；Protocol、Client、Fastify 与 Web 必须同步校验。Composer 必须把选择结果序列化为普通正文中的 `@<project-relative-path>`，使 start、steer、实时用户消息与 Codex 接收同一可见路径文本；`AgentPromptInput` 不提供独立文件引用字段，也不接受文件夹引用。
 - Project 排序使用携带 `Idempotency-Key` 的 `PUT /v1/projects/order`，请求必须包含无重复的完整 Project ID 集合；Server 校验集合后在 SQLite 事务中原子替换顺序，新注册 Project 追加到末尾。
 - Agent Event 保持版本字段、单调 `sequence` 和可判别事件类型。
 - `file_change.updated` 与 `turn.diff_updated` 必须携带 `truncated` 和非负 `originalByteLength`；前者最多包含 `100` 个变更，两类事件的 diff 均由 Provider 按单事件 `512 KiB` UTF-8 聚合预算截断。Client 与 Web 不得重新读取或长期保存被 Provider 省略的原始载荷。

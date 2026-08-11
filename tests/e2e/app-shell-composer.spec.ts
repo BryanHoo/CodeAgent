@@ -790,11 +790,11 @@ test("selects and submits a project file reference from an inline @ mention", as
   await expect.poll(() => turnRequest).toBeDefined();
   expect(turnRequest?.["input"]).toEqual({
     attachments: [],
-    fileReferences: [{ path: "src/main.tsx" }],
     skills: [],
-    text: "请检查",
+    text: "请检查 @src/main.tsx",
     type: "prompt",
   });
+  await expect(page.locator('article[data-role="user"]').last()).toContainText("@src/main.tsx");
 });
 
 test("从最新 AI 回复复制任务", async ({ page }) => {
@@ -1086,6 +1086,25 @@ test("project file tree opens changed, source, image, and system files by shared
 });
 
 test("project file tree context menu and ellipsis share target actions", async ({ page }) => {
+  let turnRequest: Record<string, unknown> | undefined;
+  await page.route("**/v1/projects/code-agent/tasks/task-1/turns", async (route) => {
+    turnRequest = parseRequestRecord(route.request().postData());
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        taskId: "task-1",
+        turn: {
+          completedAt: null,
+          error: null,
+          id: "inspector-file-reference-turn",
+          items: [],
+          startedAt: "2026-08-11T00:00:00.000Z",
+          status: "running",
+        },
+      },
+      status: 201,
+    });
+  });
   await page.goto("/p/code-agent/t/task-1");
 
   const inspector = page.getByRole("complementary", { name: "运行环境" });
@@ -1113,7 +1132,7 @@ test("project file tree context menu and ellipsis share target actions", async (
   const rootMenu = page.getByRole("menu", { name: "~/Develop/person/CodeAgent 的操作" });
   await expect(rootMenu.getByRole("menuitem", { name: "复制名称" })).toBeVisible();
   await expect(rootMenu.getByRole("menuitem", { name: "复制路径" })).toBeVisible();
-  await expect(rootMenu.getByRole("menuitem", { name: "引用" })).toBeDisabled();
+  await expect(rootMenu.getByRole("menuitem", { name: "引用" })).toHaveCount(0);
   await rootMenu.getByRole("menuitem", { name: "复制名称" }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("CodeAgent");
   await rootTreeItem
@@ -1156,7 +1175,7 @@ test("project file tree context menu and ellipsis share target actions", async (
   await expect(folderMenu.getByRole("menuitem", { name: "复制名称" })).toBeVisible();
   await expect(folderMenu.getByRole("menuitem", { name: "复制路径" })).toBeVisible();
   await expect(folderMenu.getByRole("menuitem", { name: "打开" })).toBeVisible();
-  await expect(folderMenu.getByRole("menuitem", { name: "引用" })).toBeVisible();
+  await expect(folderMenu.getByRole("menuitem", { name: "引用" })).toHaveCount(0);
   await expect(docsTreeItem).toHaveAttribute("aria-selected", "true");
   await folderMenu.getByRole("menuitem", { name: "打开" }).click();
   await expect(page.getByRole("menuitem", { name: "系统默认应用" })).toHaveCount(0);
@@ -1227,11 +1246,19 @@ test("project file tree context menu and ellipsis share target actions", async (
 
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   await docsTreeItem.click({ button: "right" });
-  await folderMenu.getByRole("menuitem", { name: "引用" }).click();
-  await expect(prompt.getByRole("button", { name: "@docs" })).toBeVisible();
+  await expect(folderMenu.getByRole("menuitem", { name: "引用" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await packageTreeItem.click({ button: "right" });
   await fileMenu.getByRole("menuitem", { name: "引用" }).click();
   await expect(prompt.getByRole("button", { name: "@package.json" })).toBeVisible();
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await expect.poll(() => turnRequest).toBeDefined();
+  expect(turnRequest?.["input"]).toEqual({
+    attachments: [],
+    skills: [],
+    text: "@package.json",
+    type: "prompt",
+  });
 });
 
 test("keeps pasted images in attachments instead of the text editor", async ({ page }) => {

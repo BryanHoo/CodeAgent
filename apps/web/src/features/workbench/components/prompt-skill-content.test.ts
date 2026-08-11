@@ -48,9 +48,8 @@ describe("prompt file reference content", () => {
       "$review-security 请检查 @src/main.tsx 后续",
     );
     expect(toPromptSkillSubmission(withFile)).toEqual({
-      fileReferences: [sourceFile],
       skills: [skill],
-      text: "请检查  后续",
+      text: "请检查 @src/main.tsx 后续",
     });
   });
 

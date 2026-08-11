@@ -134,10 +134,6 @@ export function mapUserMessageContent(
       skills.push({ name });
       continue;
     }
-    if (part["type"] === "mention" && typeof part["name"] === "string") {
-      textParts.push(`@${part["name"]}`);
-      continue;
-    }
     if (part["type"] === "image" || part["type"] === "localImage") {
       const attachment = mapImage(part, imageIndex);
       imageIndex += 1;
