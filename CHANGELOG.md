@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-11
+
+### 新增
+
+- 支持在 Composer 中输入 `@` 搜索并引用项目文件，将受控的项目相对路径作为上下文提交给 Codex。
+- 支持使用方向键浏览历史输入，并在退出历史导航时恢复当前草稿。
+- 实时展示 MCP 服务启动状态和失败原因，移除需要手动刷新的重复状态入口。
+
+### 优化
+
+- 合并模型与思考量选择器，按当前模型展示可用思考量，并为自定义 API 模型提供完整选项和默认值。
+- 默认端口或 `--port` 指定端口被占用时自动递增，统一终端、浏览器和局域网实际访问地址。
+
+### 修复
+
+- 修复粘贴文本无法使用浏览器原生撤销的问题。
+- 修复自动审批警告在实时事件与完成快照之间重复显示的问题。
+
 ## [1.6.0] - 2026-08-09
 
 ### 新增
@@ -232,7 +250,9 @@ CodeAgent 首个稳定版本，集中发布本地 Coding Agent 工作台的完�
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.2.1...v1.3.0

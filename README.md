@@ -11,7 +11,7 @@ CodeAgent runs on your computer. You can use it locally or access it from anothe
 - Work with Codex in your browser and follow responses, commands, and file changes in real time
 - Organize tasks by project, with search, pin, rename, and archive actions
 - Start temporary tasks without adding a project
-- Attach images or files as context and use your configured Skills and MCP servers
+- Attach images or files, reference project files with `@`, and use configured Skills and MCP servers
 - Sign in with ChatGPT or connect a custom OpenAI-compatible API
 - Load models from the active service and choose the model, reasoning effort, approval behavior, and file access level
 - Browse project files, inspect code changes, switch branches, and view Git history
@@ -73,7 +73,9 @@ Project folders come from the computer running CodeAgent. When you connect from 
 
 Before submitting a message, use the controls below the composer to choose the model, reasoning effort, approval behavior, and file access level. Select Plan mode when you want to prepare an implementation plan, or Goal mode when you want Codex to continue working toward an objective.
 
-Type `/` at the beginning of the composer to access actions such as code review, context compaction, and continuing in a new task. Available actions depend on the current task.
+Type `@` to search for and reference a project file. CodeAgent sends the validated project-relative reference to Codex without exposing the host's absolute path. Use `Up` and `Down` at the first or last line to browse earlier prompts; returning past the newest entry restores your current draft.
+
+Type `/` at the beginning of the composer to access actions such as code review, context compaction, and continuing in a new task. Available actions depend on the current task. MCP status updates appear in real time while configured servers start or fail.
 
 ### Review and Commit Changes
 
