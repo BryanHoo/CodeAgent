@@ -31,6 +31,13 @@ import {
 import packageManifest from "../package.json" with { type: "json" };
 import { createAppUpdateService } from "./app-update.js";
 import { CLI_HELP, parseCommandOptions, type ParsedCommandOptions } from "./cli-command-options.js";
+import {
+  confirmTerminalAppUpdate,
+  createStartupAppUpdateOperations,
+  restartCliAfterUpdate,
+  STARTUP_UPDATE_APPLIED_ENV,
+  type StartupAppUpdateCheck,
+} from "./cli-startup-update.js";
 import { openSystemBrowser } from "./system-browser.js";
 import { createTerminalOutput, type TerminalOutput } from "./terminal-output.js";
 import {
@@ -78,7 +85,9 @@ interface CreateServerInput {
 
 export interface CliDependencies {
   appVersion: string;
+  checkAppUpdate: () => Promise<StartupAppUpdateCheck>;
   checkCodexVersion: (binaryPath: string) => Promise<CodexVersionInfo>;
+  confirmAppUpdate: (currentVersion: string, latestVersion: string) => Promise<boolean>;
   createStateRepository: (databasePath: string) => Promise<CliManagedStateRepository>;
   createRuntimeProvider: (
     input: CreateRuntimeProviderInput,
@@ -90,6 +99,8 @@ export interface CliDependencies {
   locateCodexBinary: (options?: LocateCodexBinaryOptions) => Promise<CodexBinary>;
   nodeVersion: string;
   openBrowser: (url: string) => Promise<void>;
+  installAppUpdate: (version: string) => Promise<void>;
+  restartAfterUpdate: (args: readonly string[]) => Promise<number>;
   startCodexAppServer: (options?: StartCodexAppServerOptions) => Promise<CliManagedRuntime>;
   webRoot: string;
 }
@@ -102,9 +113,13 @@ export interface RunCliOptions {
   stdout?: (message: string) => void;
 }
 
+const startupAppUpdate = createStartupAppUpdateOperations(packageManifest.version);
+
 const defaultDependencies: CliDependencies = {
   appVersion: packageManifest.version,
+  checkAppUpdate: startupAppUpdate.check,
   checkCodexVersion,
+  confirmAppUpdate: confirmTerminalAppUpdate,
   createStateRepository: (databasePath) => SqliteStateRepository.open(databasePath),
   createRuntimeProvider: createCodexRuntimeProvider,
   createServer: async (input) => {
@@ -122,6 +137,8 @@ const defaultDependencies: CliDependencies = {
   locateCodexBinary,
   nodeVersion: process.versions.node,
   openBrowser: openSystemBrowser,
+  installAppUpdate: startupAppUpdate.install,
+  restartAfterUpdate: restartCliAfterUpdate,
   startCodexAppServer,
   webRoot: fileURLToPath(new URL("../dist/web", import.meta.url)),
 };
@@ -297,6 +314,26 @@ async function runStart(
           pairingCode: options.lanPassword ?? dependencies.generateLanPairingCode(),
           sessionTtlMs,
         };
+
+  if (process.env[STARTUP_UPDATE_APPLIED_ENV] !== "1") {
+    const update = await dependencies.checkAppUpdate();
+    if (update.status === "check-failed") {
+      output.warning("无法检查 CodeAgent 更新，将继续启动当前版本。");
+    } else if (update.status === "available" && update.latestVersion !== null) {
+      const shouldUpdate = await dependencies.confirmAppUpdate(
+        dependencies.appVersion,
+        update.latestVersion,
+      );
+      if (shouldUpdate) {
+        output.info(`正在更新 CodeAgent 到 ${update.latestVersion}...`);
+        await dependencies.installAppUpdate(update.latestVersion);
+        output.success(`CodeAgent 已更新到 ${update.latestVersion}，正在重新启动。`);
+        return dependencies.restartAfterUpdate(["start", ...args]);
+      }
+      output.info("已跳过更新，继续启动当前版本。");
+    }
+  }
+
   const ownedShutdown = signal ? null : createProcessShutdownSignal();
   const shutdownSignal = signal ?? ownedShutdown?.signal;
   if (!shutdownSignal) {
