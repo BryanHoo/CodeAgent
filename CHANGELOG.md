@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-08-11
+
+### 新增
+
+- 在侧栏提示可用更新，并支持从“设置 > 关于”手动检查更新、查看目标版本日志和访问项目 GitHub。
+- 统一项目文件树的三点菜单与右键菜单，支持复制名称、复制路径、选择应用打开，以及将文件或目录引用追加到当前 Composer 草稿。
+
 ## [1.7.0] - 2026-08-11
 
 ### 新增
@@ -250,7 +257,8 @@ CodeAgent 首个稳定版本，集中发布本地 Coding Agent 工作台的完�
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.4.0...v1.5.0

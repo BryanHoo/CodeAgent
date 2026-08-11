@@ -69,6 +69,8 @@ Open CodeAgent, select **New task** in the sidebar, enter your request, and subm
 
 Project folders come from the computer running CodeAgent. When you connect from another device, the directory picker still shows files from the host computer.
 
+Use a file tree item's `...` button or context menu to copy its name or project-relative path, open it with a supported application, or append it as a reference to the current composer draft.
+
 ### Adjust Task Settings
 
 Before submitting a message, use the controls below the composer to choose the model, reasoning effort, approval behavior, and file access level. Select Plan mode when you want to prepare an implementation plan, or Goal mode when you want Codex to continue working toward an objective.
@@ -115,7 +117,7 @@ The session expires at its fixed deadline and requests do not extend it. Local n
 
 ## Update CodeAgent
 
-CodeAgent checks for new versions on the **About** page in Settings. Select the update action, wait for installation to finish, then stop and restart CodeAgent.
+CodeAgent indicates available updates in the sidebar. Open **Settings > About** to check again, view the target version's release notes, or install it. After installation finishes, stop and restart CodeAgent.
 
 If you installed CodeAgent globally, you can also update it from the terminal:
 
