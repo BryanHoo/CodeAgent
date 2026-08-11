@@ -126,7 +126,8 @@ export type TaskItemProps = HTMLAttributes<HTMLDivElement>;
 export function TaskItem({ className = "", ...props }: TaskItemProps) {
   return (
     <div
-      className={`border-l border-separator py-1 pl-3 text-meta leading-5 text-muted-foreground ${className}`}
+      // 执行详情可能包含连续编码串；anywhere 同时收紧 intrinsic width，避免撑开会话栏。
+      className={`min-w-0 [overflow-wrap:anywhere] border-l border-separator py-1 pl-3 text-meta leading-5 text-muted-foreground ${className}`}
       {...props}
     />
   );

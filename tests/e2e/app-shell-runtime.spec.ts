@@ -1239,6 +1239,55 @@ test("shows the complete truncated command title on hover and focus", async ({ p
   await expect(page.getByRole("tooltip")).toHaveText(command);
 });
 
+test("keeps long runtime activity details within the conversation", async ({ page }) => {
+  const historicalTurn = taskSnapshot.turns[0];
+  if (historicalTurn === undefined) {
+    throw new Error("Expected the task fixture to contain a turn");
+  }
+  const longDetail = encodeURIComponent(
+    JSON.stringify({
+      "effort-estimate.md": "有效输出路径与需求分析".repeat(300),
+    }),
+  );
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        ...taskSnapshotResponse,
+        snapshot: {
+          ...taskSnapshot,
+          status: "running",
+          turns: [
+            {
+              ...historicalTurn,
+              completedAt: null,
+              items: [
+                {
+                  detail: longDetail,
+                  id: "activity-long-detail",
+                  label: "长执行详情",
+                  status: "running",
+                  type: "activity",
+                },
+              ],
+              status: "running",
+            },
+          ],
+        },
+      },
+    });
+  });
+  await page.setViewportSize({ height: 720, width: 1_280 });
+  await page.goto("/p/code-agent/t/task-1");
+
+  await page.getByText("长执行详情", { exact: true }).click();
+  const conversation = page.getByRole("log", { name: "会话内容" });
+  await expect(page.getByText(longDetail, { exact: true })).toBeVisible();
+  expect(await conversation.evaluate((element) => element.scrollWidth)).toBe(
+    await conversation.evaluate((element) => element.clientWidth),
+  );
+});
+
 test("allows a command approval and completes the turn", async ({ page }) => {
   await page.unroute("**/v1/**");
   await page.goto("/p/code-agent");
