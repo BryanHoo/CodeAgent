@@ -110,6 +110,8 @@ describe("server performance acceptance", () => {
       type: "connection.ready",
       version: 2,
     } satisfies EventStreamMessage;
+    const stringify = vi.spyOn(JSON, "stringify");
+    const stringifyCallsBefore = stringify.mock.calls.length;
 
     const startedAt = performance.now();
     for (let index = 0; index < performanceBudgets.slowWebSocket.messages; index += 1) {
@@ -120,6 +122,7 @@ describe("server performance acceptance", () => {
     const durationMs = performance.now() - startedAt;
 
     expect(socket.send).toHaveBeenCalledTimes(performanceBudgets.slowWebSocket.messages);
+    expect(stringify.mock.calls.length - stringifyCallsBefore).toBe(1);
     expect(softBackpressure).toHaveBeenCalledTimes(performanceBudgets.slowWebSocket.messages);
     expect(slowClientDisconnect).not.toHaveBeenCalled();
     expect(durationMs).toBeLessThan(performanceBudgets.slowWebSocket.maxDispatchMs);

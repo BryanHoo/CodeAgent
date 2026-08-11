@@ -33,7 +33,8 @@
     "maxHydrationMs": 1500,
     "maxMarkupBytes": 131072,
     "maxMountedTurns": 8,
-    "maxRenderMs": 1000
+    "maxRenderMs": 1000,
+    "maxTurnCompletionMs": 250
   },
   "slowWebSocket": {
     "maxDispatchMs": 500,

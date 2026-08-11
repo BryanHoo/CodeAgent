@@ -58,7 +58,7 @@
 - Project 列表默认空，通过宿主系统目录选择器注册，并持久化到 `CODEX_HOME/code-agent/state.sqlite3`；重复真实路径幂等返回已有 Project。
 - CLI 启动时必须以 `0700` 幂等创建 `${CODEX_HOME}/code-agent/temporary-workspace`，拒绝最终目标为符号链接，并在 SQLite 中确保固定 ID、`kind = temporary` 的内部 Project。Project 列表、排序、重命名、删除及 Project defaults 只能操作 `kind = user`。
 - 用户临时聊天必须通过 `/v1/temporary/**` 访问内部作用域，`/v1/projects/temporary/**` 即使经过 URL 编码也必须返回资源不存在。创建必须调用不带 `ephemeral` 的 `thread/start`；Snapshot、设置更新和 Turn 参数必须完整保留普通 `AgentTaskSettings`，不得覆写审批、Sandbox、模型或思考量。temporary API 允许 Task、Turn、Attachment、Event、Skill、MCP 和后台终端能力；Web 不得借该作用域请求 Git、文件、目录打开、Project defaults 或其他 Project Mutation，也不得展示内部路径。
-- 已激活的 Project Runtime Context 必须先从进程内缓存解析，只有缓存未命中时才读取 Project Repository。Project 重命名成功后同步刷新缓存中的展示信息；Project 删除成功后必须释放事件订阅和 Context 缓存，后续访问重新读取 Repository 并返回资源不存在，不能复用已删除 Runtime。
+- Server 启动不得枚举项目并预建 Runtime；Project Runtime Context 只在首次 Project API 或 WebSocket 访问时激活。已激活 Context 必须先从进程内缓存解析，只有缓存未命中时才读取 Project Repository。Project 重命名成功后同步刷新缓存中的展示信息；Project 删除成功后必须释放事件订阅和 Context 缓存，后续访问重新读取 Repository 并返回资源不存在，不能复用已删除 Runtime。
 - 同一 Project 的首次 Runtime Context 初始化必须按 Project ID 复用进行中的 Promise；异步读取 Project Repository 返回后再次检查 Context 缓存，确保并发请求只创建一个 Event Stream 和一份 Provider 事件订阅。初始化成功、资源不存在或失败后都必须清理进行中条目，并使用并发 `inject` 测试覆盖该行为。
 - Project 删除和 Server 关闭必须通过 Runtime 的显式 `releaseProject` 端口统一释放 Project Provider、原始 Provider、Task Owner、Pending Request 定时器、Task 运行状态和历史附件授权；Server 同时清理该 Project 未消费或 Turn 占用中的上传附件，且不得影响其他 Project。
 - Project 与 Codex Thread 的 `cwd` 归属必须按真实路径比较；Windows 路径忽略大小写，Linux 符号链接解析到同一实体，不能仅比较原始路径字符串。
@@ -72,7 +72,7 @@
 - WebSocket 客户端使用独立有界队列，慢客户端不能阻塞 Provider；`bufferedAmount` 超过 `256 KiB` 时向 Event Stream 发出软背压信号，超过 `1 MiB` 时以 `1013` 关闭连接并要求刷新 Snapshot。
 - 每个 Project 创建独立 Event Stream Session，Provider 不分配传输序号。Server 在分配单调 `sequence` 前，按 `taskId + turnId + itemId + type + field` 合并 `message.delta`、`reasoning.delta` 和 `command.output_delta`：缓冲队列只能合并相邻同 Key 事件，不得跨其他 Item 重排 A-B-A 交错输入；普通窗口固定为 `16ms`，收到软背压信号后的下一窗口固定为 `32ms`。
 - 非 Delta 事件、Snapshot checkpoint、事件回放和 Runtime 关闭前必须立即冲刷所有更早 Delta；不同 key 按首次进入窗口的顺序分配连续 `sequence`，关键终态不得越过待发送 Delta。
-- Event Stream 使用固定数组环形缓冲区，每个 Project 最多保留 `1,000` 条、合计 `4 MiB` 的已发布事件，单事件最多保留 `1 MiB`；容量按序列化 UTF-8 字节计量并从最旧事件开始淘汰。回放必须按 `sequence` 升序返回，跨越已淘汰或因单事件超限而未保留的序列时发送 `resync.required`。
+- Event Stream 使用固定数组环形缓冲区，每个 Project 最多保留 `1,000` 条、合计 `4 MiB` 的已发布事件，单事件最多保留 `1 MiB`；容量按序列化 UTF-8 字节计量并从最旧事件开始淘汰。同一 Event 对象的 Frame 与字节长度必须只序列化一次，并通过弱引用结果供保留预算和全部 WebSocket 客户端复用。回放必须按 `sequence` 升序返回，跨越已淘汰或因单事件超限而未保留的序列时发送 `resync.required`。
 - `/v1/projects/:projectId/events` 首帧发送 `connection.ready`，只补发 `afterSequence` 之后仍在缓存窗口内的事件；过期或超前序号发送 `resync.required`。
 - `/v1/metrics/events` 只读暴露每个 Project 的 Provider 输入、发布、合并、pending Delta、保留淘汰、软背压、活动客户端和慢客户端断开计数，不得包含 Prompt、命令输出或文件内容。
 - Provider `readTask` Promise 完成前必须让返回 Snapshot 包含此前状态并同步交付对应通知；Task Snapshot 读取完成后再从当前 Event Stream 固定 checkpoint，避免丢失事件或重复补发已有内容；Task 归属确认后读取有效设置，固定状态直接保留 Provider Snapshot 的原生值。
@@ -81,7 +81,7 @@
 - 所有 Agent Mutation 必须校验非空 `Idempotency-Key`；同操作、同 Key、同 Payload 复用进行中或成功结果，不同 Payload 返回冲突，失败结果不缓存。
 - Git message 生成与 commit/commit+push 同样必须使用 `Idempotency-Key` 并复验 `expectedSnapshot`；每个 Project 同时只允许一个 Git Mutation，冲突请求返回稳定错误。用户 message 原样交给 Git，Codex 生成只提供可编辑候选。
 - Git Working Tree 状态、分支和 diff 等后台只读子进程必须继承受控环境并设置 `GIT_OPTIONAL_LOCKS=0`，避免周期读取刷新索引或争用可选锁；每次读取最多并发 4 个 Git 命令、处理 1,000 个变更文件并返回合计 10 MiB Diff，未跟踪文件读取最多并发 8 个；每个仓库的 staged 与 unstaged Diff 必须分别批量读取并按文件拆分，禁止按变更文件启动子进程；Git Mutation 不得复用该环境约束。
-- 后台终端读取必须先验证 Project/Task 归属；已持久化但未加载到当前 App Server 的历史 Task 将原生 `-32600 thread not found` 归一化为空终端列表，其他 Provider 错误继续上抛；单终端停止是幂等 Mutation，即使进程在请求到达前自然退出也返回已终止语义。
+- 后台终端读取必须先验证 Project/Task 归属；Project Provider 只在 Runtime Owner 缓存缺失时读取一次 Task，持续轮询不得重复映射完整历史。已持久化但未加载到当前 App Server 的历史 Task 将原生 `-32600 thread not found` 归一化为空终端列表，其他 Provider 错误继续上抛；单终端停止是幂等 Mutation，即使进程在请求到达前自然退出也返回已终止语义。
 - Task 创建在 Provider 成功但设置持久化失败时必须保留有界恢复状态；同 `Idempotency-Key` 重试只补齐持久化，不得再次调用 Provider 创建 Task。
 - 成功的幂等结果缓存必须同时设置容量上限和过期时间；进行中的请求不得淘汰，Runtime 关闭时清空全部条目。
 - 任何新增 Task Runtime、Snapshot、历史或终端缓存都必须同时声明按字节容量、Entry 次级上限和明确清理触发点；不得依赖框架默认 TTL 或无界模块级 Map。

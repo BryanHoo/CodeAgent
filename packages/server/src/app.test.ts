@@ -954,7 +954,8 @@ describe("CodeAgent Server", () => {
   });
 
   it("lists and idempotently terminates a running background terminal", async () => {
-    const { app, listBackgroundTerminals, terminateBackgroundTerminal } = await createHarness();
+    const { app, listBackgroundTerminals, readTask, terminateBackgroundTerminal } =
+      await createHarness();
     listBackgroundTerminals.mockResolvedValue({
       data: [
         {
@@ -970,6 +971,11 @@ describe("CodeAgent Server", () => {
       method: "GET",
       url: "/v1/projects/code-agent/tasks/task-1/background-terminals",
     });
+    const repeatedListResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks/task-1/background-terminals",
+    });
+    expect(readTask).not.toHaveBeenCalled();
     const terminateRequest = {
       headers: { "idempotency-key": "stop-terminal-1" },
       method: "POST" as const,
@@ -980,6 +986,7 @@ describe("CodeAgent Server", () => {
     const repeatedTerminateResponse = await app.inject(terminateRequest);
 
     expect(listResponse.statusCode).toBe(200);
+    expect(repeatedListResponse.statusCode).toBe(200);
     expect(listResponse.json()).toEqual({
       data: [
         {
@@ -997,6 +1004,7 @@ describe("CodeAgent Server", () => {
     });
     expect(terminateBackgroundTerminal).toHaveBeenCalledOnce();
     expect(terminateBackgroundTerminal).toHaveBeenCalledWith("task-1", "terminal-1");
+    expect(listBackgroundTerminals).toHaveBeenCalledTimes(2);
   });
 
   it("serves health, capabilities, and projects", async () => {
@@ -2603,6 +2611,35 @@ describe("CodeAgent Server", () => {
     expect(providerHarness.eventListeners.size).toBe(1);
   });
 
+  it("defers registered project runtimes until their first access", async () => {
+    const providerHarness = createProvider();
+    const forProject = vi.fn(() => providerHarness.provider);
+    const runtimeProvider: AgentRuntimeProvider = {
+      ...createRuntimeConnectionMethods(),
+      forProject,
+      getCapabilities: () => providerHarness.provider.getCapabilities(),
+      listModels: () => providerHarness.provider.listModels(),
+      releaseProject: () => Promise.resolve(),
+    };
+    const app = await createCodeAgentServer(
+      createServerOptions(providerHarness.provider, { provider: runtimeProvider }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    expect(forProject).not.toHaveBeenCalled();
+    const projectsResponse = await app.inject({ method: "GET", url: "/v1/projects" });
+    expect(projectsResponse.statusCode).toBe(200);
+    expect(forProject).not.toHaveBeenCalled();
+
+    const tasksResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks",
+    });
+    expect(tasksResponse.statusCode).toBe(200);
+    expect(forProject).toHaveBeenCalledOnce();
+    expect(forProject).toHaveBeenCalledWith(project);
+  });
+
   it("reads a structured task snapshot", async () => {
     const { app } = await createHarness();
     const response = await app.inject({
@@ -3697,6 +3734,12 @@ describe("CodeAgent Server", () => {
       createServerOptions(harness.provider, { eventBufferSize: 1 }),
     );
     closeCallbacks.push(() => app.close());
+    // 首次 Project 访问激活事件流；激活前状态由后续权威 Snapshot 恢复。
+    const activationResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks",
+    });
+    expect(activationResponse.statusCode).toBe(200);
     const event = {
       itemId: "item-1",
       payload: { delta: "1" },

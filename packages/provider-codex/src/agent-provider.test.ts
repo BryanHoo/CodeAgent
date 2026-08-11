@@ -745,6 +745,30 @@ describe("CodexAgentProvider", () => {
     );
   });
 
+  it("validates background terminal ownership only on the first query", async () => {
+    const rpc = new FakeRpcClient([
+      { thread: nativeThread() },
+      { data: [], nextCursor: null },
+      { data: [], nextCursor: null },
+    ]);
+    const provider = createCodexRuntimeProvider({ client: rpc }).forProject(project);
+
+    await expect(provider.listBackgroundTerminals("task-1")).resolves.toEqual({ data: [] });
+    await expect(provider.listBackgroundTerminals("task-1")).resolves.toEqual({ data: [] });
+
+    expect(rpc.calls).toEqual([
+      { method: "thread/read", params: { includeTurns: true, threadId: "task-1" } },
+      {
+        method: "thread/backgroundTerminals/list",
+        params: { limit: 100, threadId: "task-1" },
+      },
+      {
+        method: "thread/backgroundTerminals/list",
+        params: { limit: 100, threadId: "task-1" },
+      },
+    ]);
+  });
+
   it("routes a review child thread through its parent task owner", async () => {
     const outerTurn = {
       completedAt: null,

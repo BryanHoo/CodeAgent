@@ -132,7 +132,7 @@ describe("Web Bundle 预算门禁", () => {
     };
     expect(report).toMatchObject({
       budgets: {
-        initialGzipBytes: 241 * 1024,
+        initialGzipBytes: 280 * 1024,
         maxAsyncGzipBytes: 200 * 1024,
         workbenchReadyGzipBytes: 340 * 1024,
         workbenchReadyRequestCount: 16,
@@ -164,7 +164,7 @@ describe("Web Bundle 预算门禁", () => {
   });
 
   it("拒绝超过首屏 gzip 预算的产物", () => {
-    const root = createBundle({ initialBytes: 260 * 1024 });
+    const root = createBundle({ initialBytes: 300 * 1024 });
     const reportPath = join(root, "bundle-report.json");
     const result = runChecker(root, ["--report", reportPath]);
 

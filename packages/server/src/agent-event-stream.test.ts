@@ -4,6 +4,7 @@ import type { AgentEvent } from "@code-agent/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentEventStream } from "./agent-event-stream.js";
+import { sendEventStreamMessage, type EventStreamSocket } from "./event-socket-sender.js";
 
 const deltaEvent = {
   itemId: "item-1",
@@ -34,6 +35,29 @@ afterEach(() => {
 });
 
 describe("AgentEventStream", () => {
+  it("reuses one serialized frame when multiple sockets send the same event", () => {
+    const socket = {
+      bufferedAmount: 0,
+      close: vi.fn(),
+      readyState: 1,
+      send: vi.fn(),
+    } satisfies EventStreamSocket;
+    const stream = new AgentEventStream({ provider: "codex", sessionId: "runtime-1" });
+    const stringify = vi.spyOn(JSON, "stringify");
+    const callsBefore = stringify.mock.calls.length;
+    stream.subscribe((event) => {
+      sendEventStreamMessage(socket, event, vi.fn(), vi.fn());
+      sendEventStreamMessage(socket, event, vi.fn(), vi.fn());
+    });
+
+    stream.publish(deltaEvent);
+    expect(stream.checkpoint.sequence).toBe(1);
+
+    expect(stringify.mock.calls.length - callsBefore).toBe(1);
+    expect(socket.send).toHaveBeenCalledTimes(2);
+    stream.close();
+  });
+
   it("coalesces matching deltas before assigning a sequence", () => {
     vi.useFakeTimers();
     const stream = new AgentEventStream({

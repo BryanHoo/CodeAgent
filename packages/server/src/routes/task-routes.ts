@@ -146,10 +146,7 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
       if (context === undefined) {
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
-      const task = await context.provider.readTask(request.params.taskId);
-      if (task?.projectId !== context.project.id) {
-        return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
-      }
+      // Project Provider 在 Owner 缓存缺失时才读取一次 Task，轮询不重复映射完整历史。
       return context.provider.listBackgroundTerminals(request.params.taskId);
     },
   );

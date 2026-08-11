@@ -87,8 +87,8 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     return this.#delegate.interruptTurn(taskId, turnId);
   }
 
-  public listBackgroundTerminals(taskId: string): Promise<AgentBackgroundTerminalPage> {
-    this.#runtime.assertTaskOwner(this.#project, taskId);
+  public async listBackgroundTerminals(taskId: string): Promise<AgentBackgroundTerminalPage> {
+    await this.#ensureTaskOwner(taskId);
     return this.#delegate.listBackgroundTerminals(taskId);
   }
 

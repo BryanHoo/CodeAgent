@@ -76,30 +76,23 @@ function replaceTurnItems(
   changedItemStores: Set<TaskItemStore>,
 ): Pick<TaskStoreState, "itemIdsByTurnId" | "itemTurnIdsById"> {
   const previousItemIds = state.itemIdsByTurnId[turnId] ?? [];
-  const replacedItemIds = new Set(previousItemIds);
   const nextItemIds = new Set(items.map((item) => item.id));
-  const itemTurnIdsById: Record<string, string> = {};
-  for (const itemId of state.itemStoresById.keys()) {
-    if (!replacedItemIds.has(itemId)) {
-      const owningTurnId = state.itemTurnIdsById[itemId];
-      if (owningTurnId !== undefined) {
-        itemTurnIdsById[itemId] = owningTurnId;
-      }
-    }
-  }
   for (const item of items) {
-    const existingTurnId = itemTurnIdsById[item.id];
+    const existingTurnId = state.itemTurnIdsById[item.id];
     if (existingTurnId !== undefined && existingTurnId !== turnId) {
       throw new Error(`Agent item ${item.id} is shared by multiple turns`);
     }
-    itemTurnIdsById[item.id] = turnId;
   }
+  // 反向索引是 Store 内部可变容器；只更新目标 Turn，避免终态扫描完整历史。
+  const itemTurnIdsById = state.itemTurnIdsById as Record<string, string>;
   for (const itemId of previousItemIds) {
+    Reflect.deleteProperty(itemTurnIdsById, itemId);
     if (!nextItemIds.has(itemId)) {
       state.itemStoresById.delete(itemId);
     }
   }
   for (const item of items) {
+    itemTurnIdsById[item.id] = turnId;
     const itemStore = state.itemStoresById.get(item.id);
     if (itemStore === undefined) {
       state.itemStoresById.set(item.id, createTaskItemStore(item));

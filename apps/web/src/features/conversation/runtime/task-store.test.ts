@@ -212,6 +212,60 @@ describe("task store", () => {
     expect(store.getState().turnDiffsById["turn-running"]).toBeUndefined();
   });
 
+  it("completes one turn without scanning every historical item store", () => {
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({
+        turns: Array.from({ length: 100 }, (_, index) => ({
+          completedAt: index === 99 ? null : timestamp,
+          error: null,
+          id: `turn-${String(index)}`,
+          items: [
+            {
+              id: `message-${String(index)}`,
+              role: "assistant" as const,
+              text: `消息 ${String(index)}`,
+              type: "message" as const,
+            },
+          ],
+          startedAt: timestamp,
+          status: index === 99 ? ("running" as const) : ("completed" as const),
+        })),
+      }),
+    );
+    const keys = vi.spyOn(store.getState().itemStoresById, "keys").mockImplementation(() => {
+      throw new Error("turn completion must not scan all item stores");
+    });
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        payload: {
+          turn: {
+            completedAt: timestamp,
+            error: null,
+            id: "turn-99",
+            items: [
+              {
+                id: "message-99",
+                role: "assistant",
+                text: "完成",
+                type: "message",
+              },
+            ],
+            startedAt: timestamp,
+            status: "completed",
+          },
+        },
+        turnId: "turn-99",
+        type: "turn.completed",
+      },
+    ]);
+
+    expect(store.getState().getItem("message-99")).toMatchObject({ text: "完成" });
+    expect(keys).not.toHaveBeenCalled();
+  });
+
   it("retains only the latest task notices", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
     store.getState().applyEvents(

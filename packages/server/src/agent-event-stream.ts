@@ -1,7 +1,6 @@
-import { Buffer } from "node:buffer";
-
 import type { AgentProviderEvent } from "@code-agent/core";
 import type { AgentEvent, EventCheckpoint } from "@code-agent/protocol";
+import { serializeEventStreamMessage } from "./event-socket-sender.js";
 
 type AgentEventListener = (event: AgentEvent) => void;
 type AppendEventType = "command.output_delta" | "message.delta" | "plan.delta" | "reasoning.delta";
@@ -267,7 +266,7 @@ export class AgentEventStream {
   }
 
   #retain(event: AgentEvent): void {
-    const retainedBytes = Buffer.byteLength(JSON.stringify(event));
+    const retainedBytes = serializeEventStreamMessage(event).byteLength;
     if (retainedBytes > this.#maxEventBytes || retainedBytes > this.#maxRetainedBytes) {
       // 单事件无法安全保留时清空不可连续回放的旧窗口，旧 Checkpoint 必须重读 Snapshot。
       while (this.#eventCount > 0) {

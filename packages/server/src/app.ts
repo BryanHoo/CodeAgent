@@ -379,9 +379,6 @@ export async function createCodeAgentServer(
           };
     return enforceTemporaryTaskSandboxMode(projectId, effective);
   };
-  for (const project of await options.projectRepository.list()) {
-    await getProjectContext(project.id);
-  }
   const activeGitMutations = new Set<string>();
   const taskStartRecoveries = new Map<string, TaskStartRecovery>();
   const idempotencyCacheSize = options.idempotencyCacheSize ?? DEFAULT_IDEMPOTENCY_CACHE_SIZE;

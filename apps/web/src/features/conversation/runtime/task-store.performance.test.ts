@@ -66,6 +66,31 @@ function createDeltaEvents(taskId: string, count: number): AgentEvent[] {
   }));
 }
 
+function createLongHistoryResponse(): AgentTaskSnapshotResponse {
+  const { items, itemsPerTurn } = performanceBudgets.longHistory;
+  const turnCount = items / itemsPerTurn;
+  const response = createResponse("task-long-history");
+  return {
+    ...response,
+    snapshot: {
+      ...response.snapshot,
+      turns: Array.from({ length: turnCount }, (_, turnIndex) => ({
+        completedAt: turnIndex === turnCount - 1 ? null : timestamp,
+        error: null,
+        id: `turn-${String(turnIndex)}`,
+        items: Array.from({ length: itemsPerTurn }, (_, itemIndex) => ({
+          id: `message-${String(turnIndex)}-${String(itemIndex)}`,
+          role: "assistant" as const,
+          text: "历史消息",
+          type: "message" as const,
+        })),
+        startedAt: timestamp,
+        status: turnIndex === turnCount - 1 ? ("running" as const) : ("completed" as const),
+      })),
+    },
+  };
+}
+
 function collectHeap(): number {
   const gc = (globalThis as typeof globalThis & { gc?: () => void }).gc;
   if (gc === undefined) {
@@ -89,6 +114,43 @@ function exerciseStoreLifecycle(iteration: number, deltaCount: number): void {
 }
 
 describe("TaskStore performance", () => {
+  it("completes the active turn in a 10,000 Item history within budget", () => {
+    const response = createLongHistoryResponse();
+    const store = createTaskStore(
+      { projectId: response.snapshot.projectId, taskId: response.snapshot.id },
+      response,
+    );
+    const activeTurn = response.snapshot.turns.at(-1);
+    if (activeTurn === undefined) {
+      throw new Error("Expected a long-history active turn");
+    }
+    const startedAt = performance.now();
+
+    store.getState().applyEvents([
+      {
+        payload: {
+          turn: {
+            ...activeTurn,
+            completedAt: timestamp,
+            status: "completed",
+          },
+        },
+        provider: "codex",
+        sequence: 1,
+        sessionId: "session-performance",
+        taskId: response.snapshot.id,
+        timestamp,
+        turnId: activeTurn.id,
+        type: "turn.completed",
+        version: 2,
+      },
+    ]);
+    const durationMs = performance.now() - startedAt;
+
+    expect(store.getState().reconstructSnapshot()?.turns.at(-1)?.status).toBe("completed");
+    expect(durationMs).toBeLessThan(performanceBudgets.longHistory.maxTurnCompletionMs);
+  });
+
   it("replays 50,000 deltas with one Item notification within budget", () => {
     const response = createResponse();
     const store = createTaskStore(

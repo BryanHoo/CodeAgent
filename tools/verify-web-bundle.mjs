@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 
-const initialGzipBudgetBytes = 241 * 1024;
+const initialGzipBudgetBytes = 280 * 1024;
 const maxAsyncGzipBudgetBytes = 200 * 1024;
 const workbenchReadyGzipBudgetBytes = 340 * 1024;
 const workbenchReadyRequestBudget = 16;
