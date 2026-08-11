@@ -2087,6 +2087,60 @@ describe("CodexAgentProvider", () => {
     ]);
   });
 
+  it("reads supported user defaults from Codex config without project layers", async () => {
+    const rpc = new FakeRpcClient([
+      {
+        config: {
+          approval_policy: "never",
+          approvals_reviewer: "user",
+          model: "gpt-5.6-sol",
+          model_reasoning_effort: "high",
+          sandbox_mode: "read-only",
+        },
+        layers: null,
+        origins: {},
+      },
+      {
+        config: {
+          approval_policy: { granular: {} },
+          approvals_reviewer: "guardian_subagent",
+          model: null,
+          model_reasoning_effort: null,
+          sandbox_mode: null,
+        },
+        layers: null,
+        origins: {},
+      },
+      {
+        config: {
+          approval_policy: "never",
+          approvals_reviewer: "auto_review",
+        },
+        layers: null,
+        origins: {},
+      },
+    ]);
+    const runtime = createCodexRuntimeProvider({ client: rpc });
+
+    await expect(runtime.readDefaultSettings()).resolves.toEqual({
+      approvalPolicy: "never",
+      approvalsReviewer: "user",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      sandboxMode: "read-only",
+    });
+    await expect(runtime.readDefaultSettings()).resolves.toEqual({});
+    await expect(runtime.readDefaultSettings()).resolves.toEqual({
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+    });
+    expect(rpc.calls).toEqual([
+      { method: "config/read", params: { includeLayers: false } },
+      { method: "config/read", params: { includeLayers: false } },
+      { method: "config/read", params: { includeLayers: false } },
+    ]);
+  });
+
   it("lists only MCP servers readable by the current task across all pages", async () => {
     const rpc = new FakeRpcClient([
       { thread: nativeThread() },

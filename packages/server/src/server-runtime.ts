@@ -40,7 +40,7 @@ function orderById<T extends Readonly<{ id: string }>>(values: readonly T[]): re
 
 export function resolveProjectDefaults(
   models: readonly AgentModel[],
-  requested?: AgentProjectDefaults,
+  requested?: Partial<AgentProjectDefaults>,
   fallbackSandboxMode: AgentSandboxMode = "workspace-write",
 ): AgentProjectDefaults {
   const orderedModels = orderById(models);

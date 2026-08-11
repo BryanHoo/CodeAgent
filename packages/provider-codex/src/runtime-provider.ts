@@ -6,6 +6,7 @@ import type {
   AgentProviderEventSubscriptionOptions,
   AgentProviderTaskSnapshot,
   AgentProviderTurnInput,
+  AgentRuntimeDefaultSettings,
   AgentRuntimeProvider,
   AgentTaskUnsubscribeStatus,
   ListAgentTasksInput,
@@ -34,7 +35,7 @@ import type {
   UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
 import { RuntimeOwnerRegistry, isSameResolvedPath } from "./runtime-owner-registry.js";
-import { CodexProtocolMappingError } from "./codex-protocol-mapping.js";
+import { CodexProtocolMappingError, expectRecord } from "./codex-protocol-mapping.js";
 
 import { CodexAgentProvider } from "./agent-provider-runtime.js";
 import {
@@ -45,6 +46,20 @@ import {
 } from "./agent-provider-base.js";
 import { readReviewWorkerThread, readTaskId } from "./agent-provider-notifications.js";
 import { CodexProviderConnectionService } from "./provider-connection.js";
+
+function optionalNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function optionalApprovalPolicy(value: unknown): AgentRuntimeDefaultSettings["approvalPolicy"] {
+  return value === "untrusted" || value === "on-request" || value === "never" ? value : undefined;
+}
+
+function optionalSandboxMode(value: unknown): AgentRuntimeDefaultSettings["sandboxMode"] {
+  return value === "read-only" || value === "workspace-write" || value === "danger-full-access"
+    ? value
+    : undefined;
+}
 
 class CodexRuntimeProjectProvider implements AgentProvider {
   readonly #delegate: CodexAgentProvider;
@@ -371,6 +386,35 @@ export class CodexRuntimeProvider implements AgentRuntimeProvider {
 
   public logoutProvider(): Promise<AgentProviderConnectionMutationResponse> {
     return this.#providerConnection.logout();
+  }
+
+  public async readDefaultSettings(): Promise<AgentRuntimeDefaultSettings> {
+    const response = expectRecord(
+      await this.#client.request("config/read", { includeLayers: false }),
+      "config/read response",
+    );
+    const config = expectRecord(response["config"], "config/read config");
+    const approvalsReviewer = config["approvals_reviewer"];
+    const approvalPolicy = optionalApprovalPolicy(config["approval_policy"]);
+
+    // 自动审核在统一协议中固定搭配 on-request，其他新枚举留给项目默认值处理。
+    const approvalDefaults =
+      approvalsReviewer === "auto_review"
+        ? { approvalPolicy: "on-request" as const, approvalsReviewer: "auto_review" as const }
+        : {
+            ...(approvalPolicy === undefined ? {} : { approvalPolicy }),
+            ...(approvalsReviewer === "user" ? { approvalsReviewer: "user" as const } : {}),
+          };
+    const model = optionalNonEmptyString(config["model"]);
+    const reasoningEffort = optionalNonEmptyString(config["model_reasoning_effort"]);
+    const sandboxMode = optionalSandboxMode(config["sandbox_mode"]);
+
+    return {
+      ...approvalDefaults,
+      ...(model === undefined ? {} : { model }),
+      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+      ...(sandboxMode === undefined ? {} : { sandboxMode }),
+    };
   }
 
   public readProviderConnection(): Promise<AgentProviderConnectionStatus> {

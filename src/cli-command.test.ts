@@ -99,6 +99,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
         },
       }),
     ),
+    readDefaultSettings: vi.fn(() => Promise.resolve({})),
     readProviderConnection: vi.fn(() =>
       Promise.resolve({
         account: null,

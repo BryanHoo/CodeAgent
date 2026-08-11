@@ -9,6 +9,7 @@ export {
   type AgentProviderEventSubscriptionOptions,
   type AgentProviderTaskSnapshot,
   type AgentProviderTurnInput,
+  type AgentRuntimeDefaultSettings,
   type ListAgentTasksInput,
   PendingRequestResolutionError,
   type PendingRequestResolutionErrorCode,

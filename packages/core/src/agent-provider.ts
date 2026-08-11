@@ -1,4 +1,6 @@
 import type {
+  AgentApprovalPolicy,
+  AgentApprovalsReviewer,
   AgentCapabilities,
   AgentAttachmentMediaType,
   AgentBackgroundTerminalPage,
@@ -25,6 +27,14 @@ import type {
   UploadAgentFeedbackRequest,
   Project,
 } from "@code-agent/protocol";
+
+export type AgentRuntimeDefaultSettings = Readonly<{
+  approvalPolicy?: AgentApprovalPolicy;
+  approvalsReviewer?: AgentApprovalsReviewer;
+  model?: string;
+  reasoningEffort?: string;
+  sandboxMode?: AgentSandboxMode;
+}>;
 
 export type ListAgentTasksInput = Readonly<{
   cursor?: string;
@@ -148,6 +158,7 @@ export interface AgentRuntimeProvider {
   getCapabilities(): Promise<AgentCapabilities>;
   listModels(): Promise<AgentModelPage>;
   logoutProvider(): Promise<AgentProviderConnectionMutationResponse>;
+  readDefaultSettings(): Promise<AgentRuntimeDefaultSettings>;
   readProviderConnection(): Promise<AgentProviderConnectionStatus>;
   releaseProject(projectId: string): Promise<void>;
   startOfficialProviderLogin(): Promise<StartOfficialProviderLoginResponse>;

@@ -401,13 +401,18 @@ function createRuntimeConnectionMethods(): Pick<
   };
 }
 
-function createServerOptions(provider: AgentProvider, overrides: Record<string, unknown> = {}) {
+function createServerOptions(
+  provider: AgentProvider,
+  overrides: Record<string, unknown> = {},
+  readDefaultSettings = vi.fn(() => Promise.resolve({})),
+) {
   const orderedProjects: Project[] = [project];
   const runtimeProvider: AgentRuntimeProvider = {
     ...createRuntimeConnectionMethods(),
     forProject: () => provider,
     getCapabilities: () => provider.getCapabilities(),
     listModels: () => provider.listModels(),
+    readDefaultSettings,
     releaseProject: () => Promise.resolve(),
   };
   const stateRepository = createSettingsRepository().repository;
@@ -506,11 +511,16 @@ async function createHarness(
     uploadFeedback,
   } = createProvider();
   const settings = createSettingsRepository();
+  const readDefaultSettings = vi.fn(() => Promise.resolve({}));
   const app = await createCodeAgentServer(
-    createServerOptions(provider, {
-      ...options,
-      settingsRepository: settings.repository,
-    }),
+    createServerOptions(
+      provider,
+      {
+        ...options,
+        settingsRepository: settings.repository,
+      },
+      readDefaultSettings,
+    ),
   );
   closeCallbacks.push(() => app.close());
   return {
@@ -529,6 +539,7 @@ async function createHarness(
     pinTask,
     readTask,
     readTaskAttachment,
+    readDefaultSettings,
     reloadMcpServers,
     renameTask,
     resolvePendingRequest,
@@ -650,6 +661,7 @@ describe("CodeAgent Server", () => {
       forProject: () => providerHarness.provider,
       getCapabilities: () => providerHarness.provider.getCapabilities(),
       listModels: () => providerHarness.provider.listModels(),
+      readDefaultSettings: () => Promise.resolve({}),
       readProviderConnection: vi.fn(() => Promise.resolve(customStatus)),
       releaseProject: () => Promise.resolve(),
       startOfficialProviderLogin,
@@ -1419,6 +1431,7 @@ describe("CodeAgent Server", () => {
       forProject: () => providerHarness.provider,
       getCapabilities: () => providerHarness.provider.getCapabilities(),
       listModels: () => providerHarness.provider.listModels(),
+      readDefaultSettings: () => Promise.resolve({}),
       releaseProject,
     };
     const app = await createCodeAgentServer(
@@ -2619,6 +2632,7 @@ describe("CodeAgent Server", () => {
       forProject,
       getCapabilities: () => providerHarness.provider.getCapabilities(),
       listModels: () => providerHarness.provider.listModels(),
+      readDefaultSettings: () => Promise.resolve({}),
       releaseProject: () => Promise.resolve(),
     };
     const app = await createCodeAgentServer(
@@ -2874,6 +2888,7 @@ describe("CodeAgent Server", () => {
   it("uses global settings only when project and task settings are absent", async () => {
     const {
       app,
+      readDefaultSettings,
       readGlobalSettings,
       readProjectDefaults,
       readTaskSettings,
@@ -2934,8 +2949,94 @@ describe("CodeAgent Server", () => {
     });
     expect(updatedResponse.json()).toEqual({ settings: globalSettings });
     expect(writeGlobalSettings).toHaveBeenCalledWith(globalSettings);
+    expect(readDefaultSettings).not.toHaveBeenCalled();
     expect(writeProjectDefaults).not.toHaveBeenCalled();
     expect(writeTaskSettings).not.toHaveBeenCalled();
+  });
+
+  it("uses Codex user settings only while global settings are absent", async () => {
+    const { listModels, provider } = createProvider();
+    listModels.mockResolvedValue({
+      data: [
+        ...modelPage.data.map((model) => ({ ...model, isDefault: false })),
+        {
+          defaultReasoningEffort: "medium",
+          description: "用户模型",
+          displayName: "GPT-5.6 Terra",
+          id: "gpt-5.6-terra",
+          isDefault: true,
+          supportedReasoningEfforts: [
+            { description: "中", id: "medium" },
+            { description: "高", id: "high" },
+          ],
+        },
+      ],
+      nextCursor: null,
+    });
+    const settings = createSettingsRepository();
+    const serverOptions = createServerOptions(provider, {
+      settingsRepository: settings.repository,
+    });
+    const readDefaultSettings = vi.fn(() =>
+      Promise.resolve({
+        approvalPolicy: "never" as const,
+        approvalsReviewer: "user" as const,
+        model: "gpt-5.6-terra",
+        reasoningEffort: "high",
+        sandboxMode: "danger-full-access" as const,
+      }),
+    );
+    const app = await createCodeAgentServer({
+      ...serverOptions,
+      provider: { ...serverOptions.provider, readDefaultSettings },
+    });
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({ method: "GET", url: "/v1/settings" });
+
+    expect(response.json()).toEqual({
+      settings: {
+        approvalPolicy: "never",
+        approvalsReviewer: "user",
+        commitMessageModel: "gpt-5.6-terra",
+        commitMessagePrompt: "",
+        commitMessageReasoningEffort: "high",
+        defaultOpenAppId: null,
+        followUpBehavior: "queue",
+        model: "gpt-5.6-terra",
+        reasoningEffort: "high",
+        sandboxMode: "danger-full-access",
+      },
+    });
+    expect(readDefaultSettings).toHaveBeenCalledOnce();
+    expect(settings.writeGlobalSettings).not.toHaveBeenCalled();
+  });
+
+  it("fills missing Codex user settings from project defaults", async () => {
+    const { provider } = createProvider();
+    const settings = createSettingsRepository();
+    const serverOptions = createServerOptions(provider, {
+      settingsRepository: settings.repository,
+    });
+    const readDefaultSettings = vi.fn(() => Promise.resolve({ approvalPolicy: "never" as const }));
+    const app = await createCodeAgentServer({
+      ...serverOptions,
+      provider: { ...serverOptions.provider, readDefaultSettings },
+    });
+    closeCallbacks.push(() => app.close());
+
+    const response = await app.inject({ method: "GET", url: "/v1/settings" });
+
+    expect(response.json()).toMatchObject({
+      settings: {
+        approvalPolicy: "never",
+        approvalsReviewer: "user",
+        model: "gpt-5.6-sol",
+        reasoningEffort: "high",
+        sandboxMode: "workspace-write",
+      },
+    });
+    expect(readDefaultSettings).toHaveBeenCalledOnce();
   });
 
   it("starts new tasks with global approval and persists turn settings before Provider calls", async () => {
@@ -3222,6 +3323,7 @@ describe("CodeAgent Server", () => {
         activeProject.id === otherProject.id ? secondary.provider : primary.provider,
       getCapabilities: () => primary.provider.getCapabilities(),
       listModels: () => primary.provider.listModels(),
+      readDefaultSettings: () => Promise.resolve({}),
       releaseProject: () => Promise.resolve(),
     };
     const stateRepository = createSettingsRepository().repository;

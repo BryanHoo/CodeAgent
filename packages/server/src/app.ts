@@ -284,10 +284,14 @@ export async function createCodeAgentServer(
   ): Promise<AgentGlobalSettings> => {
     const catalog = models ?? (await listModels());
     const stored = await options.settingsRepository.readGlobalSettings();
+    // 仅在 CodeAgent 尚无全局记录时读取 Codex 用户配置，持久化后不再被外部变化覆盖。
+    const runtimeDefaults =
+      stored === undefined ? await options.provider.readDefaultSettings() : {};
+    const requestedDefaults = stored ?? runtimeDefaults;
     const effectiveModel = resolveProjectDefaults(
       catalog,
-      stored,
-      stored?.sandboxMode ?? "workspace-write",
+      requestedDefaults,
+      requestedDefaults.sandboxMode ?? "workspace-write",
     );
     const effectiveCommitModel = resolveProjectDefaults(
       catalog,
@@ -301,19 +305,19 @@ export async function createCodeAgentServer(
       "read-only",
     );
     // 全局记录缺失时只返回运行时默认值；读取不能隐式创建用户配置。
-    return stored?.approvalsReviewer === "auto_review"
+    return requestedDefaults.approvalsReviewer === "auto_review"
       ? {
           approvalPolicy: "on-request",
           approvalsReviewer: "auto_review",
           commitMessageModel: effectiveCommitModel.model,
-          commitMessagePrompt: stored.commitMessagePrompt,
+          commitMessagePrompt: stored?.commitMessagePrompt ?? "",
           commitMessageReasoningEffort: effectiveCommitModel.reasoningEffort,
-          defaultOpenAppId: stored.defaultOpenAppId,
-          followUpBehavior: stored.followUpBehavior,
+          defaultOpenAppId: stored?.defaultOpenAppId ?? null,
+          followUpBehavior: stored?.followUpBehavior ?? "queue",
           ...effectiveModel,
         }
       : {
-          approvalPolicy: stored?.approvalPolicy ?? "on-request",
+          approvalPolicy: requestedDefaults.approvalPolicy ?? "on-request",
           approvalsReviewer: "user",
           commitMessageModel: effectiveCommitModel.model,
           commitMessagePrompt: stored?.commitMessagePrompt ?? "",
