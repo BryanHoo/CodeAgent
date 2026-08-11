@@ -176,10 +176,6 @@ export function mcpServersQueryOptions(
 ) {
   return queryOptions<AgentMcpServerPage>({
     enabled: enabled && taskId !== undefined,
-    refetchInterval: (query) =>
-      query.state.data?.data.some((server) => server.status === "starting") === true
-        ? 1_000
-        : false,
     queryFn: async ({ signal }): Promise<AgentMcpServerPage> => {
       if (taskId === undefined) {
         return { data: [] };

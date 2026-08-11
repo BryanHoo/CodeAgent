@@ -431,11 +431,6 @@ function McpServerRow({ server }: Readonly<{ server: AgentMcpServer }>) {
             })}
           </p>
         )}
-        {server.description === null ? null : (
-          <p className="mt-0.5 text-caption leading-5 text-muted-foreground">
-            {server.description}
-          </p>
-        )}
         {server.error === null ? null : <McpErrorLog error={server.error} />}
       </div>
     </div>

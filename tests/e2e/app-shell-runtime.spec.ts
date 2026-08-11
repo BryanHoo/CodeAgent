@@ -959,6 +959,17 @@ test("shows MCP startup diagnostics and manually retries the current task", asyn
             toolCount: 0,
             version: null,
           },
+          {
+            authStatus: "unsupported",
+            description: "Provider-only MCP description",
+            error: null,
+            failureReason: null,
+            name: "context7",
+            status: "ready",
+            title: "Context7",
+            toolCount: 2,
+            version: "4.0.0",
+          },
         ],
       },
     });
@@ -993,6 +1004,8 @@ test("shows MCP startup diagnostics and manually retries the current task", asyn
     .poll(() => reloadIcon.evaluate((icon) => icon.getBoundingClientRect().width))
     .toBeLessThanOrEqual(16);
   await expect(mcp.getByText("启动失败", { exact: true })).toBeVisible();
+  await expect(mcp.getByText("已就绪", { exact: false })).toBeVisible();
+  await expect(mcp.getByText("Provider-only MCP description", { exact: true })).toHaveCount(0);
   await expect(mcp.getByText("需要重新认证", { exact: true })).toBeVisible();
   const logButton = mcp.getByRole("button", { name: "查看错误日志" });
   await expect(logButton).toHaveCSS("display", "inline-flex");
@@ -1003,6 +1016,7 @@ test("shows MCP startup diagnostics and manually retries the current task", asyn
   await expect(mcp.getByText("MCP startup timed out after 10s", { exact: false })).toBeVisible();
   await mcp.getByRole("button", { name: "重新加载 MCP" }).click();
   await expect.poll(() => retries).toBe(1);
+  await expect(mcp.getByText("正在启动", { exact: true })).toBeVisible();
 });
 
 test("shows original Codex MCP request errors once", async ({ page }) => {

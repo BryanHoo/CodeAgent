@@ -59,6 +59,13 @@ test("connects a custom API from the provider gate and reuses it in settings", a
   );
   await expect(dialog.getByLabel("API Key（可选）")).toHaveValue("");
   await expect(dialog.getByText("已连接", { exact: true })).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Agent 默认值" }).click();
+  await dialog.getByRole("combobox", { name: "模型" }).selectOption("custom-coder");
+  const reasoningSelect = dialog.getByRole("combobox", { name: "思考量" });
+  await expect(reasoningSelect.locator("option")).toHaveText(["最低", "低", "中", "高", "极高"]);
+  await reasoningSelect.selectOption("high");
+  await expect(reasoningSelect).toHaveValue("high");
 });
 
 test("redirects the root route to the default project workbench @smoke", async ({ page }) => {

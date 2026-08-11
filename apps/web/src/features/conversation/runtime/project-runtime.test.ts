@@ -130,6 +130,24 @@ function createFileChangeCompletedEvent(taskId: string, sequence: number): Agent
   };
 }
 
+function createMcpServerStatusUpdatedEvent(taskId: string, sequence: number): AgentEvent {
+  return {
+    payload: {
+      error: null,
+      failureReason: null,
+      name: "context7",
+      status: "ready",
+    },
+    provider: "codex",
+    sequence,
+    sessionId: "runtime-1",
+    taskId,
+    timestamp: "2026-07-28T00:00:01.000Z",
+    type: "mcp_server.status_updated",
+    version: 2,
+  };
+}
+
 function createClientHarness() {
   let subscription: Parameters<CodeAgentRuntimeClient["subscribeEvents"]>[0] | undefined;
   const closeConnection = vi.fn();
@@ -299,6 +317,19 @@ describe("project runtime manager", () => {
       ["project-1", "task-1", "file_changed"],
       ["project-1", "task-1", "turn_completed"],
     ]);
+    manager.dispose();
+  });
+
+  it("reports MCP status changes for only the event task", () => {
+    const harness = createClientHarness();
+    const onMcpServerStatusChanged = vi.fn();
+    const manager = createProjectRuntimeManager(harness.client, { onMcpServerStatusChanged });
+    manager.observeSnapshot(createSnapshotResponse("task-1"));
+
+    harness.emit(createMcpServerStatusUpdatedEvent("task-1", 1));
+
+    expect(onMcpServerStatusChanged).toHaveBeenCalledOnce();
+    expect(onMcpServerStatusChanged).toHaveBeenCalledWith("project-1", "task-1");
     manager.dispose();
   });
 

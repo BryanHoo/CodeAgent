@@ -24,6 +24,7 @@ export type ProjectRuntimeManagerOptions = Readonly<{
   idleTimeoutMs?: number;
   maxEventHistoryBytes?: number;
   maxEventHistoryEvents?: number;
+  onMcpServerStatusChanged?: (projectId: string, taskId: string) => void;
   onProjectGitActivity?: (
     projectId: string,
     taskId: string,

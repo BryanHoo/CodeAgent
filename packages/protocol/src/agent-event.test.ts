@@ -136,6 +136,16 @@ describe("Agent Event v2 protocol", () => {
       },
       {
         ...baseEvent,
+        payload: {
+          error: null,
+          failureReason: null,
+          name: "context7",
+          status: "starting",
+        },
+        type: "mcp_server.status_updated",
+      },
+      {
+        ...baseEvent,
         itemId: "item-1",
         payload: { item: messageItem },
         turnId: "turn-1",

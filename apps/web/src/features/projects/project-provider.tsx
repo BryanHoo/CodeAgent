@@ -70,6 +70,13 @@ export function ProjectProvider({
     const taskMetadataSyncs = new Map<string, Promise<void>>();
     return createProjectRuntimeManager(client, {
       ...(taskNotifier === undefined ? {} : { taskNotifier }),
+      onMcpServerStatusChanged(projectId, taskId) {
+        // 官方通知只携带启动状态，重新读取清单以补齐工具数、认证和版本元数据。
+        void queryClient.invalidateQueries({
+          exact: true,
+          queryKey: ["projects", projectId, "tasks", taskId, "mcp-servers"],
+        });
+      },
       onProjectGitActivity(projectId, taskId, reason) {
         if (projectId !== TEMPORARY_TASK_SCOPE_ID) {
           gitStatusCoordinator.handleActivity(projectId, taskId, reason);

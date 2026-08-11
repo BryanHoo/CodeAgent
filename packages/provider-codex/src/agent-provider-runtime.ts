@@ -48,6 +48,11 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
           const statuses = new Map<string, typeof update.status>(currentStatuses);
           statuses.set(update.name, update.status);
           this.runtime.mcpServerStatuses.set(update.taskId, statuses);
+          this.routeEvent({
+            payload: { name: update.name, ...update.status },
+            taskId: update.taskId,
+            type: "mcp_server.status_updated",
+          });
         }
       } catch {
         this.warnDroppedNotification("invalid_notification", method, params);

@@ -177,7 +177,18 @@ describe("CodexProviderConnectionService", () => {
     ).resolves.toMatchObject({
       models: {
         data: [
-          { displayName: "Alpha Custom", id: "alpha", isDefault: true },
+          {
+            displayName: "Alpha Custom",
+            id: "alpha",
+            isDefault: true,
+            supportedReasoningEfforts: [
+              { description: "", id: "minimal" },
+              { description: "", id: "low" },
+              { description: "", id: "medium" },
+              { description: "", id: "high" },
+              { description: "", id: "xhigh" },
+            ],
+          },
           { displayName: "Manual Model", id: "manual-model", isDefault: false },
           { id: "zeta", isDefault: false },
         ],

@@ -5,6 +5,8 @@ import {
   AgentContextUsageSchema,
   AgentFileChangeSchema,
   AgentItemSchema,
+  AgentMcpServerFailureReasonSchema,
+  AgentMcpServerStatusSchema,
   AgentPlanSchema,
   AgentTaskSnapshotSchema,
   AgentTurnSchema,
@@ -126,6 +128,19 @@ export const TaskNoticeEventSchema = createEventSchema({
   type: Type.Literal("task.notice"),
 });
 
+export const McpServerStatusUpdatedEventSchema = createEventSchema({
+  payload: Type.Object(
+    {
+      error: Type.Union([Type.String({ maxLength: 8_192 }), Type.Null()]),
+      failureReason: Type.Union([AgentMcpServerFailureReasonSchema, Type.Null()]),
+      name: Type.String({ minLength: 1 }),
+      status: AgentMcpServerStatusSchema,
+    },
+    { additionalProperties: false },
+  ),
+  type: Type.Literal("mcp_server.status_updated"),
+});
+
 export const CommandOutputDeltaEventSchema = createEventSchema({
   itemId: Type.String({ minLength: 1 }),
   payload: Type.Object({ delta: Type.String() }, { additionalProperties: false }),
@@ -234,6 +249,7 @@ export const AgentEventSchema = Type.Union([
   PlanUpdatedEventSchema,
   ProviderErrorEventSchema,
   TaskNoticeEventSchema,
+  McpServerStatusUpdatedEventSchema,
   PendingRequestCreatedEventSchema,
   PendingRequestResolvedEventSchema,
   PendingRequestExpiredEventSchema,

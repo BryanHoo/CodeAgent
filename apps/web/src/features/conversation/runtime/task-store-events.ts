@@ -325,6 +325,9 @@ export function applyAcceptedEvent(
         snapshotMetadata: { ...snapshotMetadata, updatedAt: event.timestamp },
       };
     }
+    case "mcp_server.status_updated":
+      // MCP 清单由独立 Query 持有；Task Store 只推进统一事件 checkpoint。
+      return { checkpoint };
     case "item.started":
     case "item.completed": {
       if (state.turnsById[event.turnId] === undefined) {

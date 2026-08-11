@@ -16,6 +16,13 @@ const CUSTOM_PROVIDER_ID = "code_agent_custom";
 const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 10_000;
 const DEFAULT_MODEL_RESPONSE_MAX_BYTES = 1 * 1_024 * 1_024;
 const DEFAULT_MODEL_COUNT_LIMIT = 1_000;
+const CUSTOM_MODEL_REASONING_EFFORTS: AgentModel["supportedReasoningEfforts"] = [
+  { description: "", id: "minimal" },
+  { description: "", id: "low" },
+  { description: "", id: "medium" },
+  { description: "", id: "high" },
+  { description: "", id: "xhigh" },
+];
 
 type CustomModelDefinition = NonNullable<ConfigureCustomProviderRequest["models"]>[number];
 
@@ -154,13 +161,14 @@ function mapCustomModels(
   if (orderedModels.length === 0) {
     throw new CodexProviderConnectionError("Custom provider returned no usable models");
   }
+  // OpenAI-compatible /models 通常不声明思考量能力；向自定义模型开放 Codex 可传递的现有五档选项。
   const data: AgentModel[] = orderedModels.map(({ id, name }, index) => ({
     defaultReasoningEffort: "medium",
     description: "",
     displayName: name,
     id,
     isDefault: index === 0,
-    supportedReasoningEfforts: [{ description: "", id: "medium" }],
+    supportedReasoningEfforts: CUSTOM_MODEL_REASONING_EFFORTS,
   }));
   return { data, nextCursor: null };
 }

@@ -408,6 +408,7 @@ describe("project queries", () => {
       data: [server],
     });
     expect(options.queryKey).toEqual(["projects", "code-agent", "tasks", "task-1", "mcp-servers"]);
+    expect(options.refetchInterval).toBeUndefined();
     expect(listMcpServers.mock.calls[0]?.[0]).toBe("code-agent");
     expect(listMcpServers.mock.calls[0]?.[1]).toBe("task-1");
     expect(listMcpServers.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);

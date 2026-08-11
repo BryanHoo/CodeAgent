@@ -257,7 +257,13 @@ export const customModels = [
     displayName: "custom-coder",
     id: "custom-coder",
     isDefault: true,
-    supportedReasoningEfforts: [{ description: "", id: "medium" }],
+    supportedReasoningEfforts: [
+      { description: "", id: "minimal" },
+      { description: "", id: "low" },
+      { description: "", id: "medium" },
+      { description: "", id: "high" },
+      { description: "", id: "xhigh" },
+    ],
   },
 ];
 

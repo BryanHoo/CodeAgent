@@ -143,7 +143,28 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain("项目目录");
     expect(markup).toContain('aria-label="MCP"');
     expect(markup).toContain("fast-context");
+    expect(markup).not.toContain("Semantic repository search");
     expect(markup).toContain('aria-label="上下文来源"');
+  });
+
+  it("renders per-server MCP loading and ready states without provider descriptions", () => {
+    const markup = renderInspectorMarkup(
+      <WorkbenchInspector
+        contextOnly
+        mcpServers={[
+          { ...readyMcpServer, name: "context7", status: "starting", toolCount: 0 },
+          readyMcpServer,
+        ]}
+        projectName="临时任务"
+        projectPath=""
+      />,
+    );
+
+    expect(markup).toContain("context7");
+    expect(markup).toContain("正在启动");
+    expect(markup).toContain("fast-context");
+    expect(markup).toContain("已就绪");
+    expect(markup).not.toContain("Semantic repository search");
   });
 
   it("keeps the user-controlled project tab selected while terminals are running", () => {

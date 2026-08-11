@@ -34,6 +34,9 @@ export class ProjectRuntimeManager {
   readonly #idleTimeoutMs: number;
   readonly #maxEventHistoryBytes: number;
   readonly #maxEventHistoryEvents: number;
+  readonly #onMcpServerStatusChanged: NonNullable<
+    ProjectRuntimeManagerOptions["onMcpServerStatusChanged"]
+  >;
   readonly #onProjectGitActivity: NonNullable<ProjectRuntimeManagerOptions["onProjectGitActivity"]>;
   readonly #onTaskMetadataChanged: NonNullable<
     ProjectRuntimeManagerOptions["onTaskMetadataChanged"]
@@ -52,6 +55,7 @@ export class ProjectRuntimeManager {
     this.#idleTimeoutMs = options.idleTimeoutMs ?? PROJECT_RUNTIME_IDLE_TIMEOUT_MS;
     this.#maxEventHistoryBytes = options.maxEventHistoryBytes ?? MAX_PROJECT_EVENT_HISTORY_BYTES;
     this.#maxEventHistoryEvents = options.maxEventHistoryEvents ?? MAX_PROJECT_EVENT_HISTORY_EVENTS;
+    this.#onMcpServerStatusChanged = options.onMcpServerStatusChanged ?? (() => undefined);
     this.#onProjectGitActivity = options.onProjectGitActivity ?? (() => undefined);
     this.#onTaskMetadataChanged = options.onTaskMetadataChanged ?? (() => undefined);
     this.#taskNotifier = options.taskNotifier ?? createBrowserTaskNotifier();
@@ -177,7 +181,9 @@ export class ProjectRuntimeManager {
       {
         getTaskActivity: () => this.#taskActivity,
         onActivityEvent: (eventProjectId, event) => {
-          if (event.type === "turn.started") {
+          if (event.type === "mcp_server.status_updated") {
+            this.#onMcpServerStatusChanged(eventProjectId, event.taskId);
+          } else if (event.type === "turn.started") {
             this.#onProjectGitActivity(eventProjectId, event.taskId, "turn_started");
           } else if (
             event.type === "item.completed" &&

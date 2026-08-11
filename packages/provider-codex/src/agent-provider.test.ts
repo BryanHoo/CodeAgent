@@ -2233,6 +2233,8 @@ describe("CodexAgentProvider", () => {
       },
     ]);
     const provider = createCodexAgentProvider({ client: rpc, project });
+    const events: AgentProviderEvent[] = [];
+    provider.subscribeEvents((event) => events.push(event));
 
     await provider.startTask();
     provider.receiveNotification("mcpServer/startupStatus/updated", {
@@ -2242,6 +2244,16 @@ describe("CodexAgentProvider", () => {
       name: "docs",
       status: "failed",
       threadId: "task-1",
+    });
+    expect(events).toContainEqual({
+      payload: {
+        error: "OAuth request to [URL redacted] failed: API_TOKEN=[REDACTED]",
+        failureReason: "reauthenticationRequired",
+        name: "docs",
+        status: "failed",
+      },
+      taskId: "task-1",
+      type: "mcp_server.status_updated",
     });
 
     await expect(provider.listMcpServers("task-1")).resolves.toEqual({
