@@ -6,11 +6,13 @@ import {
   ProjectFileTreeSchema,
   ProjectFileSearchPageSchema,
   ProjectFileSearchQuerySchema,
+  ProjectSourceFileQuerySchema,
   ProjectSourceFileSchema,
   type AgentAttachmentKind,
   type ImportHostAttachmentRequest,
   type ProjectFileTreeQuery,
   type ProjectFileSearchQuery,
+  type ProjectSourceFileQuery,
 } from "@code-agent/protocol";
 import { AttachmentNotFoundError, type StoredAttachmentUpload } from "../attachment-store.js";
 import { HostFileBrowserError } from "../host-file-browser.js";
@@ -134,12 +136,12 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
     },
   );
 
-  app.get<{ Params: { projectId: string }; Querystring: { path: string } }>(
+  app.get<{ Params: { projectId: string }; Querystring: ProjectSourceFileQuery }>(
     "/v1/projects/:projectId/files/source",
     {
       schema: {
         params: ProjectParamsSchema,
-        querystring: SourceFileQuerySchema,
+        querystring: ProjectSourceFileQuerySchema,
         response: {
           200: ProjectSourceFileSchema,
           404: ErrorResponseSchema,
@@ -152,7 +154,11 @@ export function registerProjectFileRoutes(app: FastifyInstance, context: ServerR
         return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
       }
       try {
-        return await readSourceFile(context.project.rootPath, request.query.path);
+        return await readSourceFile(
+          context.project.rootPath,
+          request.query.path,
+          request.query.cursor ?? 0,
+        );
       } catch {
         // 路径不可读、文件不存在和二进制内容统一隐藏为不可预览。
         return reply.code(404).send({

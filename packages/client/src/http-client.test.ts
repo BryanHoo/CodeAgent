@@ -744,11 +744,11 @@ describe("CodeAgentClient", () => {
     expect(new Headers(commitCall?.[1]?.headers).get("idempotency-key")).toBe("commit-key");
   });
 
-  it("reads and validates a bounded project source preview", async () => {
+  it("reads and validates a paginated project source preview", async () => {
     const sourceFile = {
       content: "### 11.7 认证\n",
+      nextCursor: 262_144,
       path: "docs/architecture-design.md",
-      truncated: true,
     };
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock.mockResolvedValue(jsonResponse(sourceFile));
@@ -758,10 +758,11 @@ describe("CodeAgentClient", () => {
       client.readProjectSourceFile(
         "project one",
         "/workspace/CodeAgent/docs/architecture-design.md",
+        131_072,
       ),
     ).resolves.toEqual(sourceFile);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "/v1/projects/project%20one/files/source?path=%2Fworkspace%2FCodeAgent%2Fdocs%2Farchitecture-design.md",
+      "/v1/projects/project%20one/files/source?cursor=131072&path=%2Fworkspace%2FCodeAgent%2Fdocs%2Farchitecture-design.md",
     );
   });
 

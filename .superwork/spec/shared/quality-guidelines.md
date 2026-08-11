@@ -34,7 +34,7 @@
 - WebSocket 控制帧使用 `connection.ready` 和 `resync.required`；恢复原因只使用 Protocol 定义的判别值。
 - Provider 专有数据只进入诊断字段或 `extensions`，未知事件记录告警但不破坏事件循环。
 - Task Snapshot 必须保留归一化的 Turn 与 Tool 错误；Command Output 最多保留最新 `10,000` 行或 `1 MiB`，并携带截断状态。
-- Project 源文件预览必须返回已解析的相对或绝对路径、文本内容和截断状态；相对路径限制在 Project 根目录内，显式绝对路径允许读取 Project 外的本机文件。Server 必须解析真实路径并拒绝不可读目标、目录和二进制文件，单次预览最多读取 `256 KiB`、最多返回 `4,000` 行。Project 图片预览允许相同的绝对路径范围，但只接受有界普通文件及 GIF、JPEG、PNG、WebP 的有效内容签名，响应必须设置受检媒体类型和 `nosniff`。
+- Project 源文件预览必须返回已解析的相对或绝对路径、当前文本分段和可空的下一页字节游标；相对路径限制在 Project 根目录内，显式绝对路径允许读取 Project 外的本机文件。Server 必须解析真实路径并拒绝不可读目标、目录、越界游标和二进制文件，每页最多读取 `256 KiB`、最多返回 `4,000` 行，分页不得切断 UTF-8 字符或丢失源文件字节。Client 与 Web 必须使用游标按需加载，查看器仅在滚动接近底部或目标引用行尚未加载时读取后续页，并阻止重复游标循环。Project 图片预览允许相同的绝对路径范围，但只接受有界普通文件及 GIF、JPEG、PNG、WebP 的有效内容签名，响应必须设置受检媒体类型和 `nosniff`。
 - `OpenProjectRequest.path` 同时承载普通菜单的 Project 相对路径和 AI 输出的本机绝对引用，只执行有界字符串 Schema 校验；Server 必须限制相对路径位于 Repository 根目录内，显式绝对路径则校验 `realpath`、可读性和目标类型，不能把 Protocol Schema 当作文件系统授权。
 - Agent 写入必须由 Protocol 提供结构化 `AgentPromptInput`、Task/Turn Mutation 请求响应、能力和错误 Schema；Client 与 Server 都必须执行运行时校验。
 - Task 固定、重命名和归档必须使用独立的严格 Mutation Schema 并携带 `Idempotency-Key`；Server 校验 `projectId + taskId` 归属后分别调用 Provider 端口，固定状态以 Provider 返回的原生 Task 为准，不得写入或覆盖本地元数据。

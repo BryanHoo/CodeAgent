@@ -192,7 +192,11 @@ export interface ServerRouteContext {
     projectRoot: string,
     request: SwitchProjectBranchRequest,
   ) => Promise<ProjectGitStatus>;
-  readonly readSourceFile: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
+  readonly readSourceFile: (
+    projectRoot: string,
+    path: string,
+    cursor?: number,
+  ) => Promise<ProjectSourceFile>;
   readonly releaseProjectContext: (projectId: string) => Promise<void>;
   readonly resolveProviderTurnInput: (
     projectId: string,

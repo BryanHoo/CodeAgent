@@ -250,11 +250,21 @@ export const ProjectFileTreeSchema = Type.Object(
 
 export type ProjectFileTree = Readonly<Static<typeof ProjectFileTreeSchema>>;
 
+export const ProjectSourceFileQuerySchema = Type.Object(
+  {
+    cursor: Type.Optional(Type.Integer({ minimum: 0 })),
+    path: ProjectFileReferencePathSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type ProjectSourceFileQuery = Readonly<Static<typeof ProjectSourceFileQuerySchema>>;
+
 export const ProjectSourceFileSchema = Type.Object(
   {
     content: Type.String(),
+    nextCursor: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
     path: ProjectFileReferencePathSchema,
-    truncated: Type.Boolean(),
   },
   { additionalProperties: false },
 );

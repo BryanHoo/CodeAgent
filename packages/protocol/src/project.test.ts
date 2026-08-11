@@ -69,6 +69,7 @@ import {
   ProjectGitStatusSchema,
   SwitchProjectBranchRequestSchema,
   ProjectFileTreeSchema,
+  ProjectSourceFileQuerySchema,
   ProjectOpenAppSchema,
   ProjectOpenCapabilitiesResponseSchema,
   OpenProjectRequestSchema,
@@ -779,21 +780,40 @@ describe("project protocol", () => {
     ).toBe(true);
   });
 
-  it("describes a bounded project source file preview", () => {
+  it("describes a paginated project source file preview", () => {
+    expect(
+      Value.Check(ProjectSourceFileQuerySchema, {
+        cursor: 262_144,
+        path: "docs/architecture-design.md",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ProjectSourceFileQuerySchema, {
+        cursor: -1,
+        path: "docs/architecture-design.md",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ProjectSourceFileSchema, {
+        content: "# Architecture\n",
+        nextCursor: 15,
+        path: "docs/architecture-design.md",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ProjectSourceFileSchema, {
+        content: "# Architecture\n",
+        nextCursor: null,
+        path: "/workspace/CodeAgent/docs/architecture-design.md",
+      }),
+    ).toBe(true);
     expect(
       Value.Check(ProjectSourceFileSchema, {
         content: "# Architecture\n",
         path: "docs/architecture-design.md",
         truncated: true,
       }),
-    ).toBe(true);
-    expect(
-      Value.Check(ProjectSourceFileSchema, {
-        content: "# Architecture\n",
-        path: "/workspace/CodeAgent/docs/architecture-design.md",
-        truncated: false,
-      }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("describes an unbounded project-relative directory listing", () => {

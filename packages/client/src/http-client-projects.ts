@@ -352,9 +352,11 @@ export class ProjectHttpClient extends CodeAgentTransport {
   public async readProjectSourceFile(
     projectId: string,
     path: string,
+    cursor?: number,
     options: ReadOptions = {},
   ): Promise<ProjectSourceFile> {
     const requestPath = appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/files/source`, {
+      cursor,
       path,
     });
     return this.read(requestPath, ProjectSourceFileSchema, options);

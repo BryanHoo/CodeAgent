@@ -87,7 +87,11 @@ export interface CreateCodeAgentServerOptions {
   ) => Promise<ProjectFileSearchPage>;
   readProjectDirectory?: (path?: string) => Promise<ProjectDirectoryListing>;
   readProjectImageFile?: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
-  readProjectSourceFile?: (projectRoot: string, path: string) => Promise<ProjectSourceFile>;
+  readProjectSourceFile?: (
+    projectRoot: string,
+    path: string,
+    cursor?: number,
+  ) => Promise<ProjectSourceFile>;
   resolveProjectDirectory?: (path: string) => Promise<string>;
   resolveProjectFileReferences?: (
     projectRoot: string,

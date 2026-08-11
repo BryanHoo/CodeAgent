@@ -2101,14 +2101,22 @@ describe("CodeAgent Server", () => {
     expect(commitProjectChanges).toHaveBeenCalledOnce();
   });
 
-  it("serves bounded local source previews for the configured project", async () => {
+  it("serves paginated local source previews for the configured project", async () => {
     const { provider } = createProvider();
-    const readProjectSourceFile = vi.fn(() =>
-      Promise.resolve({
-        content: "### 11.7 认证\n",
-        path: "/home/test/reports/architecture-design.md",
-        truncated: true,
-      }),
+    const readProjectSourceFile = vi.fn((_projectRoot: string, _path: string, cursor = 0) =>
+      Promise.resolve(
+        cursor === 0
+          ? {
+              content: "### 11.7 认证\n",
+              nextCursor: 24,
+              path: "/home/test/reports/architecture-design.md",
+            }
+          : {
+              content: "后续内容\n",
+              nextCursor: null,
+              path: "/home/test/reports/architecture-design.md",
+            },
+      ),
     );
     const app = await createCodeAgentServer(
       createServerOptions(provider, { readProjectSourceFile }),
@@ -2123,19 +2131,35 @@ describe("CodeAgent Server", () => {
       method: "GET",
       url: "/v1/projects/other/files/source?path=docs%2Farchitecture-design.md",
     });
+    const nextPageResponse = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/files/source?cursor=24&path=%2Fhome%2Ftest%2Freports%2Farchitecture-design.md",
+    });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       content: "### 11.7 认证\n",
+      nextCursor: 24,
       path: "/home/test/reports/architecture-design.md",
-      truncated: true,
     });
     expect(readProjectSourceFile).toHaveBeenCalledWith(
       project.rootPath,
       "/home/test/reports/architecture-design.md",
+      0,
     );
     expect(missingProjectResponse.statusCode).toBe(404);
-    expect(readProjectSourceFile).toHaveBeenCalledTimes(1);
+    expect(nextPageResponse.statusCode).toBe(200);
+    expect(nextPageResponse.json()).toEqual({
+      content: "后续内容\n",
+      nextCursor: null,
+      path: "/home/test/reports/architecture-design.md",
+    });
+    expect(readProjectSourceFile).toHaveBeenLastCalledWith(
+      project.rootPath,
+      "/home/test/reports/architecture-design.md",
+      24,
+    );
+    expect(readProjectSourceFile).toHaveBeenCalledTimes(2);
   });
 
   it("serves verified Project image previews without MIME sniffing", async () => {

@@ -178,7 +178,9 @@ export const workbench = {
     closeSource: "Close source file",
     delete: "Remove",
     loadImageError: "Unable to load image",
+    loadMoreSourceError: "Unable to load more content",
     loadSourceError: "Unable to load source file",
+    loadingMoreSource: "Loading more content",
     loadingSource: "Loading source file",
     name: "Project name",
     previewMarkdown: "Preview Markdown",
@@ -187,7 +189,7 @@ export const workbench = {
     rename: "Rename project",
     renameDescription: "This changes only the sidebar display name, not the folder name on disk.",
     showRawContent: "Show raw content",
-    sourceTruncated: "Content truncated",
+    sourcePartial: "Partial content",
   },
   projectPicker: {
     add: "Add this folder",

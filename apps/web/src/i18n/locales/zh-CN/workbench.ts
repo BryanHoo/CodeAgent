@@ -178,7 +178,9 @@ export const workbench = {
     closeSource: "关闭源文件",
     delete: "删除",
     loadImageError: "无法加载图片",
+    loadMoreSourceError: "加载更多内容失败",
     loadSourceError: "无法加载源文件",
+    loadingMoreSource: "正在加载更多内容",
     loadingSource: "正在加载源文件",
     name: "项目名称",
     previewMarkdown: "预览 Markdown",
@@ -187,7 +189,7 @@ export const workbench = {
     rename: "重命名项目",
     renameDescription: "只修改左栏显示名称，不会修改磁盘上的文件夹名称。",
     showRawContent: "显示原始内容",
-    sourceTruncated: "内容已截断",
+    sourcePartial: "部分内容",
   },
   projectPicker: {
     add: "添加此文件夹",

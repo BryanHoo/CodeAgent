@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { buildProjectImageFileUrl } from "@code-agent/client";
+import type { ProjectSourceFile } from "@code-agent/protocol";
 import { Code2, Eye, FileCode2, Image, X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from "react";
 
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 import {
@@ -45,7 +46,7 @@ type SourceHeaderProps = Readonly<{
   previewKind: "image" | "source";
   sourcePath: string;
   titleId: string;
-  truncated: boolean;
+  sourceStatus: "error" | "loading" | "partial" | null;
 }>;
 
 function SourceHeader({
@@ -55,7 +56,7 @@ function SourceHeader({
   previewKind,
   sourcePath,
   titleId,
-  truncated,
+  sourceStatus,
 }: SourceHeaderProps) {
   const { t } = useTranslation("workbench");
   return (
@@ -80,11 +81,20 @@ function SourceHeader({
           </p>
         </div>
       </CodeBlockTitle>
-      {truncated ? (
-        <span className="shrink-0 text-label text-warning">
-          {t("projectDialog.sourceTruncated")}
+      {sourceStatus === null ? null : (
+        <span
+          className={`shrink-0 text-label ${sourceStatus === "error" ? "text-danger" : "text-warning"}`}
+          role={sourceStatus === "error" ? "alert" : "status"}
+        >
+          {t(
+            sourceStatus === "loading"
+              ? "projectDialog.loadingMoreSource"
+              : sourceStatus === "error"
+                ? "projectDialog.loadMoreSourceError"
+                : "projectDialog.sourcePartial",
+          )}
         </span>
-      ) : null}
+      )}
       <CodeBlockActions>
         {actions}
         <Tooltip>
@@ -116,6 +126,42 @@ function SourceHeader({
   );
 }
 
+const SOURCE_LOAD_MORE_THRESHOLD_PX = 400;
+
+type SourceScrollMetrics = Readonly<{
+  clientHeight: number;
+  scrollHeight: number;
+  scrollTop: number;
+}>;
+
+export function shouldLoadNextSourcePage(metrics: SourceScrollMetrics): boolean {
+  return (
+    metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight <= SOURCE_LOAD_MORE_THRESHOLD_PX
+  );
+}
+
+export function getNextSourceCursor(
+  lastPage: ProjectSourceFile,
+  lastPageParam: number | undefined,
+): number | undefined {
+  return lastPage.nextCursor === null || lastPage.nextCursor === lastPageParam
+    ? undefined
+    : lastPage.nextCursor;
+}
+
+export function mergeProjectSourcePages(
+  pages: readonly ProjectSourceFile[],
+): ProjectSourceFile | undefined {
+  const firstPage = pages[0];
+  const lastPage = pages.at(-1);
+  if (firstPage === undefined || lastPage === undefined) return undefined;
+  return {
+    content: pages.map((page) => page.content).join(""),
+    nextCursor: lastPage.nextCursor,
+    path: firstPage.path,
+  };
+}
+
 export function ProjectSourceDialog({
   client,
   onClose,
@@ -128,17 +174,31 @@ export function ProjectSourceDialog({
   // 渲染状态绑定源文件路径，切换文件或关闭弹窗后必须回到原始内容。
   const [renderedMarkdownPath, setRenderedMarkdownPath] = useState<string | null>(null);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
-  const sourceQuery = useQuery({
+  const sourceQuery = useInfiniteQuery({
     enabled: reference !== null && previewKind === "source",
-    queryFn: ({ signal }) => {
+    getNextPageParam: (
+      lastPage: ProjectSourceFile,
+      _pages: ProjectSourceFile[],
+      lastPageParam: number | undefined,
+    ) => getNextSourceCursor(lastPage, lastPageParam),
+    initialPageParam: undefined as number | undefined,
+    queryFn: async ({ pageParam, signal }): Promise<ProjectSourceFile> => {
       if (reference === null) {
         throw new Error("Source file reference is required");
       }
-      return client.readProjectSourceFile(projectId, reference.path, { signal });
+      return client.readProjectSourceFile(projectId, reference.path, pageParam, { signal });
     },
     queryKey: ["projects", projectId, "source-file", reference?.path ?? null] as const,
     staleTime: 30_000,
   });
+  const sourcePages = sourceQuery.data?.pages;
+  const fetchNextSourcePage = sourceQuery.fetchNextPage;
+  const hasNextSourcePage = sourceQuery.hasNextPage;
+  const isFetchingNextSourcePage = sourceQuery.isFetchingNextPage;
+  const sourceData = useMemo(
+    () => (sourcePages === undefined ? undefined : mergeProjectSourcePages(sourcePages)),
+    [sourcePages],
+  );
 
   useEffect(() => {
     setImageLoadFailed(false);
@@ -147,42 +207,77 @@ export function ProjectSourceDialog({
   useEffect(() => {
     const lineNumber = reference?.lineNumber;
     if (
-      sourceQuery.data === undefined ||
+      sourceData === undefined ||
       lineNumber === null ||
       lineNumber === undefined ||
-      renderedMarkdownPath === sourceQuery.data.path
+      renderedMarkdownPath === sourceData.path
     ) {
       return;
     }
 
     // 行节点由共享 CodeBlock 提供，查询完成后让所有可滚动祖先共同定位目标行。
-    contentRef.current
-      ?.querySelector(`[data-code-line="${String(lineNumber)}"]`)
-      ?.scrollIntoView({ block: "center" });
-  }, [reference?.lineNumber, renderedMarkdownPath, sourceQuery.data]);
+    const targetLine = contentRef.current?.querySelector(
+      `[data-code-line="${String(lineNumber)}"]`,
+    );
+    if (targetLine !== null && targetLine !== undefined) {
+      targetLine.scrollIntoView({ block: "center" });
+      return;
+    }
+    // 文件引用可能指向首段之外；继续逐页读取，直到目标行出现或文件结束。
+    if (hasNextSourcePage && !isFetchingNextSourcePage) {
+      void fetchNextSourcePage();
+    }
+  }, [
+    fetchNextSourcePage,
+    hasNextSourcePage,
+    isFetchingNextSourcePage,
+    reference?.lineNumber,
+    renderedMarkdownPath,
+    sourceData,
+  ]);
 
   if (reference === null) {
     return null;
   }
 
-  const sourcePath = sourceQuery.data?.path ?? reference.path;
+  const sourcePath = sourceData?.path ?? reference.path;
+  const sourceContent = sourceData?.content ?? "";
   const fileName = getFileName(sourcePath);
   const imageUrl = buildProjectImageFileUrl("", projectId, reference.path);
   const sourceLanguage = getCodeLanguage(sourcePath);
-  const canRenderMarkdown = sourceLanguage === "markdown" || sourceLanguage === "mdx";
+  const isMarkdown = sourceLanguage === "markdown" || sourceLanguage === "mdx";
+  const canRenderMarkdown = isMarkdown && sourceData?.nextCursor === null;
   const showRenderedMarkdown = canRenderMarkdown && renderedMarkdownPath === sourcePath;
   const titleId = "project-source-dialog-title";
   const handleClose = () => {
     setRenderedMarkdownPath(null);
     onClose();
   };
+  const sourceStatus: SourceHeaderProps["sourceStatus"] =
+    sourceData === undefined
+      ? null
+      : isFetchingNextSourcePage
+        ? "loading"
+        : sourceQuery.isFetchNextPageError
+          ? "error"
+          : hasNextSourcePage
+            ? "partial"
+            : null;
   const headerProps = {
     lineNumber: reference.lineNumber,
     onClose: handleClose,
     previewKind,
     sourcePath,
     titleId,
-    truncated: sourceQuery.data?.truncated === true,
+    sourceStatus,
+  };
+  const handleSourceScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (previewKind !== "source" || !hasNextSourcePage || isFetchingNextSourcePage) {
+      return;
+    }
+    const scrollTarget = event.target;
+    if (!(scrollTarget instanceof HTMLElement) || !shouldLoadNextSourcePage(scrollTarget)) return;
+    void fetchNextSourcePage();
   };
 
   return (
@@ -207,6 +302,7 @@ export function ProjectSourceDialog({
             handleClose();
           }
         }}
+        onScrollCapture={handleSourceScroll}
         ref={contentRef}
       >
         <section className="h-full min-h-0 bg-raised">
@@ -231,7 +327,7 @@ export function ProjectSourceDialog({
                 )}
               </div>
             </div>
-          ) : sourceQuery.isPending ? (
+          ) : sourceData === undefined && sourceQuery.isPending ? (
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
               <SourceHeader {...headerProps} />
               <div
@@ -241,7 +337,7 @@ export function ProjectSourceDialog({
                 {t("projectDialog.loadingSource")}
               </div>
             </div>
-          ) : sourceQuery.error !== null ? (
+          ) : sourceData === undefined && sourceQuery.error !== null ? (
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
               <SourceHeader {...headerProps} />
               <div
@@ -276,14 +372,14 @@ export function ProjectSourceDialog({
               />
               <div className="min-h-0 overflow-auto px-5 py-4 sm:px-8 sm:py-6">
                 <LazyMessageResponse className="mx-auto max-w-4xl">
-                  {sourceQuery.data.content}
+                  {sourceContent}
                 </LazyMessageResponse>
               </div>
             </div>
           ) : (
             <CodeBlock
               className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] rounded-none bg-content shadow-none"
-              code={sourceQuery.data.content}
+              code={sourceContent}
               highlightedLine={reference.lineNumber}
               language={sourceLanguage}
               showLineNumbers

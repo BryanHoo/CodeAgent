@@ -943,23 +943,27 @@ test("selects a real base branch before starting code review", async ({ page }) 
     .toEqual([{ target: { branch: "release", type: "base_branch" } }]);
 });
 
-test("opens bounded source previews from assistant file references", async ({ context, page }) => {
+test("loads long source files while scrolling", async ({ context, page }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/p/code-agent/t/task-1");
 
   const sourceReference = page.getByRole("button", {
-    name: /architecture-design\.md\s+\(line 716\)/u,
+    name: /architecture-design\.md\s+\(line 100\)/u,
   });
   await sourceReference.click();
 
-  const dialog = page.getByRole("dialog", { name: "architecture-design.md (line 716)" });
+  const dialog = page.getByRole("dialog", { name: "architecture-design.md (line 100)" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("内容已截断")).toBeVisible();
+  await expect(dialog.getByText("部分内容")).toBeVisible();
   await expect(dialog.locator('[data-language="markdown"]')).toBeVisible();
-  const highlightedLine = dialog.locator('[data-code-line="716"]');
+  const highlightedLine = dialog.locator('[data-code-line="100"]');
   await expect(highlightedLine).toContainText("### 11.7 外部登录边界");
   await expect(highlightedLine).toHaveAttribute("data-highlighted", "true");
   await expect(highlightedLine).toBeInViewport();
+
+  await dialog.locator('[data-code-line="720"]').scrollIntoViewIfNeeded();
+  await expect(dialog.locator('[data-code-line="800"]')).toContainText("line 800");
+  await expect(dialog.getByText("部分内容")).toBeHidden();
 
   await dialog.getByRole("button", { name: "预览 Markdown" }).click();
   await expect(dialog.getByRole("heading", { name: "11.7 外部登录边界" })).toBeVisible();

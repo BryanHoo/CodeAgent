@@ -37,8 +37,8 @@ describe("readProjectSourceFile", () => {
       readProjectSourceFile(projectRoot, "docs/architecture-design.md"),
     ).resolves.toEqual({
       content: "# Architecture\n\nDetails\n",
+      nextCursor: null,
       path: "docs/architecture-design.md",
-      truncated: false,
     });
   });
 
@@ -52,33 +52,63 @@ describe("readProjectSourceFile", () => {
 
     await expect(readProjectSourceFile(projectRoot, sourcePath)).resolves.toEqual({
       content: "# Report\n\nDetails\n",
+      nextCursor: null,
       path: resolvedSourcePath,
-      truncated: false,
     });
   });
 
-  it("bounds large previews without reading their full contents", async () => {
+  it("paginates large UTF-8 files without losing or duplicating content", async () => {
     const projectRoot = await createTemporaryProject();
     const sourcePath = join(projectRoot, "docs", "large.md");
-    await writeFile(sourcePath, "x".repeat(MAX_SOURCE_FILE_PREVIEW_BYTES + 4_096));
+    const source = `${"认证边界".repeat(96)}\n`.repeat(MAX_SOURCE_FILE_PREVIEW_LINES + 500);
+    await writeFile(sourcePath, source);
 
-    const preview = await readProjectSourceFile(projectRoot, sourcePath);
+    const chunks: string[] = [];
+    let cursor: number | undefined;
+    for (;;) {
+      const page = await readProjectSourceFile(projectRoot, sourcePath, cursor);
+      chunks.push(page.content);
+      expect(Buffer.byteLength(page.content, "utf8")).toBeLessThanOrEqual(
+        MAX_SOURCE_FILE_PREVIEW_BYTES,
+      );
+      if (page.nextCursor === null) {
+        break;
+      }
+      expect(page.nextCursor).toBeGreaterThan(cursor ?? 0);
+      cursor = page.nextCursor;
+    }
 
-    expect(Buffer.byteLength(preview.content, "utf8")).toBeLessThanOrEqual(
-      MAX_SOURCE_FILE_PREVIEW_BYTES,
-    );
-    expect(preview.truncated).toBe(true);
+    expect(chunks.join("")).toBe(source);
+    expect(chunks.length).toBeGreaterThan(1);
   });
 
-  it("bounds previews with many short lines", async () => {
+  it("uses the line limit as a lossless page boundary", async () => {
     const projectRoot = await createTemporaryProject();
     const sourcePath = join(projectRoot, "docs", "many-lines.md");
-    await writeFile(sourcePath, "line\n".repeat(MAX_SOURCE_FILE_PREVIEW_LINES + 100));
+    const source = "line\n".repeat(MAX_SOURCE_FILE_PREVIEW_LINES + 100);
+    await writeFile(sourcePath, source);
 
-    const preview = await readProjectSourceFile(projectRoot, sourcePath);
+    const firstPage = await readProjectSourceFile(projectRoot, sourcePath);
+    expect(firstPage.content).toBe("line\n".repeat(MAX_SOURCE_FILE_PREVIEW_LINES));
+    expect(firstPage.nextCursor).not.toBeNull();
 
-    expect(preview.content.split("\n")).toHaveLength(MAX_SOURCE_FILE_PREVIEW_LINES);
-    expect(preview.truncated).toBe(true);
+    const secondPage = await readProjectSourceFile(
+      projectRoot,
+      sourcePath,
+      firstPage.nextCursor ?? undefined,
+    );
+    expect(firstPage.content + secondPage.content).toBe(source);
+    expect(secondPage.nextCursor).toBeNull();
+  });
+
+  it("rejects cursors beyond the file boundary", async () => {
+    const projectRoot = await createTemporaryProject();
+    const sourcePath = join(projectRoot, "docs", "short.md");
+    await writeFile(sourcePath, "short");
+
+    await expect(readProjectSourceFile(projectRoot, sourcePath, 6)).rejects.toThrow(
+      "Source cursor is outside the file",
+    );
   });
 
   it("rejects project-relative symbolic links outside the project root", async () => {

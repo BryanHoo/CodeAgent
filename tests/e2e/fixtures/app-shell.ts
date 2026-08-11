@@ -483,7 +483,7 @@ export const taskSnapshot = {
         {
           id: "message-2",
           role: "assistant",
-          text: "工作台界面已按统一的 项目 Agent 组件 结构重新组织。\n\n[architecture-design.md](/workspace/CodeAgent/docs/architecture-design.md:716)\n\n[result.png](/workspace/CodeAgent/design/result.png)\n\n[后续工作交接.pptx](/home/taoye/100%完成/AI 领航/%E5%90%8E%E7%BB%AD%E5%B7%A5%E4%BD%9C%E4%BA%A4%E6%8E%A5.pptx)\n\n[OpenAI](https://openai.com)",
+          text: "工作台界面已按统一的 项目 Agent 组件 结构重新组织。\n\n[architecture-design.md](/workspace/CodeAgent/docs/architecture-design.md:100)\n\n[result.png](/workspace/CodeAgent/design/result.png)\n\n[后续工作交接.pptx](/home/taoye/100%完成/AI 领航/%E5%90%8E%E7%BB%AD%E5%B7%A5%E4%BD%9C%E4%BA%A4%E6%8E%A5.pptx)\n\n[OpenAI](https://openai.com)",
           type: "message",
         },
       ],
@@ -498,9 +498,13 @@ export const taskSnapshotResponse = {
   snapshot: taskSnapshot,
 };
 
-export const architectureSourcePreview = Array.from({ length: 720 }, (_, lineIndex) =>
-  lineIndex === 715 ? "### 11.7 外部登录边界" : `line ${String(lineIndex + 1)}`,
-).join("\n");
+const architectureSourceLines = Array.from({ length: 1_440 }, (_, lineIndex) =>
+  lineIndex === 99 ? "### 11.7 外部登录边界" : `line ${String(lineIndex + 1)}`,
+);
+const architectureSourceFirstPage = `${architectureSourceLines.slice(0, 720).join("\n")}\n`;
+const architectureSourceSecondPage = architectureSourceLines.slice(720).join("\n");
+const architectureSourceNextCursor = 7_200;
+export const architectureSourcePreview = architectureSourceFirstPage + architectureSourceSecondPage;
 
 export async function mockAppShellApi(
   page: Page,
@@ -929,11 +933,18 @@ export async function mockAppShellApi(
       // 文件树接口只返回当前目录的直接子项，用于验证点击目录后才按需加载。
       body = projectFileTreeByDirectory.get(directoryPath) ?? { entries: [], path: directoryPath };
     } else if (url.pathname === "/v1/projects/code-agent/files/source") {
-      body = {
-        content: architectureSourcePreview,
-        path: "docs/architecture-design.md",
-        truncated: true,
-      };
+      body =
+        url.searchParams.get("cursor") === String(architectureSourceNextCursor)
+          ? {
+              content: architectureSourceSecondPage,
+              nextCursor: null,
+              path: "docs/architecture-design.md",
+            }
+          : {
+              content: architectureSourceFirstPage,
+              nextCursor: architectureSourceNextCursor,
+              path: "docs/architecture-design.md",
+            };
     } else if (
       url.pathname === "/v1/projects/code-agent/git/branch" &&
       route.request().method() === "POST"
