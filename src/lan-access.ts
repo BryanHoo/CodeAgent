@@ -2,26 +2,30 @@ import { randomBytes } from "node:crypto";
 import { isIP } from "node:net";
 import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 
-const MIN_SESSION_TTL_MS = 60_000;
-const MAX_SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1_000;
 const MIN_LAN_PASSWORD_LENGTH = 16;
 const MAX_LAN_PASSWORD_LENGTH = 128;
-const UNIT_MS = { d: 24 * 60 * 60 * 1_000, h: 60 * 60 * 1_000, m: 60_000 } as const;
+const UNIT_MS = {
+  d: 24 * 60 * 60 * 1_000,
+  h: 60 * 60 * 1_000,
+  m: 60_000,
+  ms: 1,
+  s: 1_000,
+} as const;
 const VIRTUAL_INTERFACE_PATTERN =
   /^(?:awdl|br|bridge|docker|ham|llw|lo|tap|tun|utun|vboxnet|veth|virbr|wg|zt)(?:\d|[-_.]|$)|(?:openvpn|tailscale|vethernet|virtualbox|vmnet|zerotier)/iu;
 
-export const DEFAULT_LAN_SESSION_TTL = "24h";
-
 export function parseSessionTtl(value: string): number {
-  const match = /^(\d+)([mhd])$/u.exec(value);
+  const match = /^(\d+)(ms|[smhd])$/u.exec(value);
   if (match === null) {
-    throw new Error("Invalid session TTL; use a positive integer followed by m, h, or d");
+    throw new Error("Invalid session TTL; use a positive integer followed by ms, s, m, h, or d");
   }
   const amount = BigInt(match[1] ?? "0");
   const unit = match[2] as keyof typeof UNIT_MS;
   const milliseconds = amount * BigInt(UNIT_MS[unit]);
-  if (milliseconds < BigInt(MIN_SESSION_TTL_MS) || milliseconds > BigInt(MAX_SESSION_TTL_MS)) {
-    throw new Error("Invalid session TTL; expected a duration from 1m through 180d");
+  if (milliseconds <= 0n || milliseconds > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error(
+      "Invalid session TTL; duration must be a positive safe integer in milliseconds",
+    );
   }
   return Number(milliseconds);
 }

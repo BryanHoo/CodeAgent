@@ -1,5 +1,6 @@
 import { relative, sep } from "node:path";
 import { isIP } from "node:net";
+import { domainToASCII } from "node:url";
 
 import { MAX_AGENT_FILE_BYTES, TEMPORARY_TASK_SCOPE_ID } from "@code-agent/protocol";
 import fastifyCompress from "@fastify/compress";
@@ -44,7 +45,30 @@ function parseRequestHost(host: string | undefined): URL | undefined {
   }
 }
 
-function isAllowedRequestHost(host: URL, lanAccess: boolean): boolean {
+const DOMAIN_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
+
+export function normalizeAllowedHost(value: string): string {
+  const normalized = domainToASCII(value).toLowerCase();
+  const labels = normalized.split(".");
+  if (
+    value === "" ||
+    value !== value.trim() ||
+    normalized.length > 253 ||
+    isIP(normalized) !== 0 ||
+    labels.some((label) => !DOMAIN_LABEL_PATTERN.test(label))
+  ) {
+    throw new Error(
+      "Invalid allowed Host; expected a domain name without scheme, port, or wildcard",
+    );
+  }
+  return normalized;
+}
+
+function isAllowedRequestHost(
+  host: URL,
+  lanAccess: boolean,
+  allowedHosts: ReadonlySet<string>,
+): boolean {
   const hostname = host.hostname.toLowerCase();
   const unwrappedHostname =
     hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
@@ -55,12 +79,16 @@ function isAllowedRequestHost(host: URL, lanAccess: boolean): boolean {
   ) {
     return true;
   }
+  if (allowedHosts.has(unwrappedHostname)) {
+    return true;
+  }
   // LAN 入口只发布数字 IP URL，拒绝可被外部 DNS 重新绑定的任意主机名。
   return lanAccess && isIP(unwrappedHostname) !== 0;
 }
 
 export interface ConfigureServerDeliveryOptions {
   access?: CodeAgentAccessOptions;
+  allowedHosts?: readonly string[];
   releaseResources: () => Promise<void>;
   staticRoot?: string;
 }
@@ -71,6 +99,8 @@ export async function configureServerDelivery(
 ): Promise<AccessSessionService | undefined> {
   await app.register(fastifyWebsocket, { options: { maxPayload: 64 * 1024 } });
   await app.register(fastifyCookie);
+  // 只构造精确域名集合，不读取代理头或提供通配回退。
+  const allowedHosts = new Set((options.allowedHosts ?? []).map(normalizeAllowedHost));
   const accessService =
     options.access === undefined ? undefined : new AccessSessionService(options.access);
   app.addHook("onRequest", async (request, reply) => {
@@ -83,7 +113,7 @@ export async function configureServerDelivery(
     const requestHost = parseRequestHost(request.headers.host);
     if (
       requestHost === undefined ||
-      !isAllowedRequestHost(requestHost, options.access !== undefined)
+      !isAllowedRequestHost(requestHost, options.access !== undefined, allowedHosts)
     ) {
       return reply
         .code(403)

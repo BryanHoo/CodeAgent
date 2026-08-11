@@ -55,9 +55,13 @@ export const registerAccessRoutes: FastifyPluginCallback<AccessRouteOptions> = (
         });
       }
       reply.setCookie(ACCESS_SESSION_COOKIE, result.sessionId, {
-        expires: new Date(result.expiresAt),
+        ...(result.expiresAt === null || access.sessionTtlMs === undefined
+          ? {}
+          : {
+              expires: new Date(result.expiresAt),
+              maxAge: Math.ceil(access.sessionTtlMs / 1_000),
+            }),
         httpOnly: true,
-        maxAge: Math.floor(access.sessionTtlMs / 1_000),
         path: "/",
         sameSite: "strict",
         secure: false,

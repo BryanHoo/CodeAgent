@@ -3,6 +3,21 @@ import { describe, expect, it, vi } from "vitest";
 import { AccessSessionService } from "./access-control.js";
 
 describe("AccessSessionService", () => {
+  it("keeps sessions valid for the server lifetime when no TTL is configured", () => {
+    let now = 1_000;
+    const service = new AccessSessionService(
+      { pairingCode: "correct-code" },
+      { now: () => now, randomBytes: () => Buffer.alloc(32, 1) },
+    );
+
+    const result = service.pair("correct-code", "192.168.1.10");
+
+    expect(result).toMatchObject({ expiresAt: null, status: "paired" });
+    now = Number.MAX_SAFE_INTEGER;
+    expect(result.status === "paired" && service.validate(result.sessionId)).toBe(true);
+    expect(result.status === "paired" && service.expiresAt(result.sessionId)).toBeNull();
+  });
+
   it("issues independent sessions with one fixed absolute expiry", () => {
     let now = 1_000;
     let sequence = 0;

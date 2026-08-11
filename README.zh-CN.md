@@ -108,13 +108,21 @@ code-agent start --lan
 code-agent start --lan --lan-password 'Strong-Lan_Pass9!'
 ```
 
-默认会话有效期为 24 小时。可以指定 `1m` 至 `180d` 的固定时长，例如：
+通过反向代理将外部域名转发到 CodeAgent 时，必须显式允许该精确域名。需要允许多个域名时，可重复传入 `--allowed-host`：
+
+```bash
+code-agent start --allowed-host code.example.com
+```
+
+参数值只能是域名，不能包含协议、端口或通配符。该选项只扩展精确 `Host` 白名单，不信任 `X-Forwarded-Host`，也不会改变监听地址或增加认证。
+
+未设置 TTL 时，会话在当前 CodeAgent Server 进程运行期间永不过期。`--session-ttl` 接受带 `ms`、`s`、`m`、`h` 或 `d` 单位的任意正整数时长，例如：
 
 ```bash
 code-agent start --lan --session-ttl 12h
 ```
 
-会话会在固定截止时间失效，请求不会延长有效期。局域网模式使用未加密的 HTTP，仅应在你信任的网络中使用。不要将访问地址暴露到互联网。重启 CodeAgent 后，原访问密码和已有会话都会失效。
+显式配置过期时间后，会话会在固定截止时间失效，请求不会延长有效期。局域网模式使用未加密的 HTTP，仅应在你信任的网络中使用。不要将访问地址暴露到互联网。重启 CodeAgent 后，原访问密码和已有会话都会失效，包括未配置 TTL 的会话。
 
 ## 更新 CodeAgent
 

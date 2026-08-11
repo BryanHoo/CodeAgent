@@ -65,7 +65,7 @@ export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
       let cleanedUp = false;
       let unsubscribe: () => void = () => undefined;
       const cancelSessionExpiry =
-        sessionExpiresAt === undefined
+        sessionExpiresAt === undefined || sessionExpiresAt === null
           ? () => undefined
           : scheduleSessionExpiry(socket, sessionExpiresAt);
       const cleanup = () => {

@@ -583,6 +583,46 @@ describe("runCli", () => {
     await expect(run).resolves.toBe(0);
   });
 
+  it("keeps LAN sessions unexpired by default", async () => {
+    const harness = createHarness();
+    const controller = new AbortController();
+    const run = runCli(["start", "--lan"], {
+      ...harness.options,
+      signal: controller.signal,
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.serverListen).toHaveBeenCalledOnce();
+    });
+    expect(harness.dependencies.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({ access: { pairingCode: "fixed-test-pairing-code" } }),
+    );
+    expect(harness.stdout.join("\n")).toContain("会话有效期: 永不过期");
+
+    controller.abort();
+    await expect(run).resolves.toBe(0);
+  });
+
+  it("passes repeatable exact reverse proxy domains without enabling LAN", async () => {
+    const harness = createHarness();
+    const controller = new AbortController();
+    const run = runCli(
+      ["start", "--allowed-host", "Code.Example.com", "--allowed-host", "admin.example.com"],
+      { ...harness.options, signal: controller.signal },
+    );
+
+    await vi.waitFor(() => {
+      expect(harness.serverListen).toHaveBeenCalledOnce();
+    });
+    expect(harness.dependencies.createServer).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedHosts: ["code.example.com", "admin.example.com"] }),
+    );
+    expect(harness.serverListen).toHaveBeenCalledWith({ host: "127.0.0.1", port: 3210 });
+
+    controller.abort();
+    await expect(run).resolves.toBe(0);
+  });
+
   it("uses a strong custom LAN password without generating or printing a credential", async () => {
     const harness = createHarness();
     const controller = new AbortController();
@@ -613,7 +653,9 @@ describe("runCli", () => {
       ["start", "--session-ttl", "12h"],
       ["start", "--lan-password", "Strong-Lan_Pass9!"],
       ["start", "--lan", "--lan-password", "weak-password"],
-      ["start", "--lan", "--session-ttl", "181d"],
+      ["start", "--allowed-host", "*.example.com"],
+      ["start", "--allowed-host", "https://code.example.com"],
+      ["start", "--allowed-host", "code.example.com:443"],
       ["start", "--lan", "--lan"],
       ["start", "--lan", "--codex-bin", "/first", "--codex-bin", "/second"],
     ]) {
@@ -735,6 +777,7 @@ describe("runCli", () => {
     expect(help).toContain("--port <port>");
     expect(help).toContain("--lan");
     expect(help).toContain("--lan-password <password>");
+    expect(help).toContain("--allowed-host <domain>");
     expect(help).toContain("--session-ttl <duration>");
     expect(help).toContain("--codex-bin <path>");
     expect(help).toContain("--codex-home <path>");

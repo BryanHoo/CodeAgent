@@ -108,13 +108,21 @@ You can provide your own strong password with `--lan-password`. It must contain 
 code-agent start --lan --lan-password 'Strong-Lan_Pass9!'
 ```
 
-Sessions are valid for 24 hours by default. You can set a fixed duration from `1m` to `180d`, for example:
+When a reverse proxy forwards an external domain to CodeAgent, allow that exact domain explicitly. Repeat `--allowed-host` for each domain:
+
+```bash
+code-agent start --allowed-host code.example.com
+```
+
+The value must be a domain without a scheme, port, or wildcard. This option only extends the exact `Host` allowlist; it does not trust `X-Forwarded-Host`, change the listening address, or add authentication.
+
+Sessions do not expire while the current CodeAgent server process is running unless you set a TTL. `--session-ttl` accepts any positive integer followed by `ms`, `s`, `m`, `h`, or `d`, for example:
 
 ```bash
 code-agent start --lan --session-ttl 12h
 ```
 
-The session expires at its fixed deadline and requests do not extend it. Local network mode uses unencrypted HTTP. Use it only on a network you trust, and never expose the address to the internet. Restarting CodeAgent invalidates the access password and all existing sessions.
+An explicitly configured session expires at its fixed deadline and requests do not extend it. Local network mode uses unencrypted HTTP. Use it only on a network you trust, and never expose the address to the internet. Restarting CodeAgent invalidates the access password and all existing sessions, including sessions without a TTL.
 
 ## Update CodeAgent
 

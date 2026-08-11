@@ -32,6 +32,7 @@ import { createCodeAgentServer } from "./app.js";
 import { AgentEventStream } from "./agent-event-stream.js";
 import { GitBranchError } from "./git-branch.js";
 import type { ProjectOpenService } from "./project-open.js";
+import { normalizeAllowedHost } from "./server-delivery.js";
 
 const project = {
   createdAt: "2026-07-23T00:00:00.000Z",
@@ -874,6 +875,53 @@ describe("CodeAgent Server", () => {
     ).rejects.toThrow(/Unexpected server response: 403/u);
   });
 
+  it("allows only explicitly configured reverse proxy domains", async () => {
+    const app = await createCodeAgentServer(
+      createServerOptions(createProvider().provider, {
+        allowedHosts: [normalizeAllowedHost("Code.Example.com")],
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const allowedRead = await app.inject({
+      headers: { host: "code.example.com" },
+      method: "GET",
+      url: "/v1/projects",
+    });
+    const allowedWrite = await app.inject({
+      headers: { host: "code.example.com", origin: "https://code.example.com" },
+      method: "POST",
+      url: "/v1/access/logout",
+    });
+    const unknownHost = await app.inject({
+      headers: { host: "other.example.com" },
+      method: "GET",
+      url: "/v1/projects",
+    });
+    const subdomain = await app.inject({
+      headers: { host: "child.code.example.com" },
+      method: "GET",
+      url: "/v1/projects",
+    });
+
+    expect(allowedRead.statusCode).toBe(200);
+    expect(allowedWrite.statusCode).toBe(200);
+    expect(unknownHost.statusCode).toBe(403);
+    expect(subdomain.statusCode).toBe(403);
+  });
+
+  it("rejects non-domain allowed Host values", () => {
+    for (const invalid of [
+      "*.example.com",
+      "https://code.example.com",
+      "code.example.com:443",
+      "127.0.0.1",
+      "bad..example.com",
+    ]) {
+      expect(() => normalizeAllowedHost(invalid)).toThrow(/allowed Host/u);
+    }
+  });
+
   it("does not expose unknown server error details", async () => {
     const app = await createCodeAgentServer(
       createServerOptions(createProvider().provider, {
@@ -967,6 +1015,26 @@ describe("CodeAgent Server", () => {
     expect(loggedOut.json()).toEqual({ authenticated: false, mode: "lan", version: 1 });
     expect(loggedOut.cookies[0]).toMatchObject({ name: "codeagent_session", value: "" });
     expect(afterLogout.statusCode).toBe(401);
+  });
+
+  it("uses a session Cookie without an expiry when no TTL is configured", async () => {
+    const app = await createCodeAgentServer(
+      createServerOptions(createProvider().provider, {
+        access: { pairingCode: "test-pairing-code" },
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const paired = await app.inject({
+      method: "POST",
+      payload: { code: "test-pairing-code" },
+      url: "/v1/access/pair",
+    });
+    const cookie = paired.cookies[0];
+
+    expect(paired.statusCode).toBe(200);
+    expect(cookie?.expires).toBeUndefined();
+    expect(cookie?.maxAge).toBeUndefined();
   });
 
   it("rejects unauthenticated and cross-origin LAN WebSockets", async () => {

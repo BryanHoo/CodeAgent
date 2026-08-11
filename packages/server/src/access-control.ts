@@ -2,7 +2,7 @@ import { createHash, randomBytes as cryptoRandomBytes, timingSafeEqual } from "n
 
 export interface CodeAgentAccessOptions {
   pairingCode: string;
-  sessionTtlMs: number;
+  sessionTtlMs?: number;
 }
 
 type AccessSessionServiceDependencies = Readonly<{
@@ -13,14 +13,14 @@ type AccessSessionServiceDependencies = Readonly<{
 }>;
 
 type PairAccessResult =
-  | Readonly<{ expiresAt: number; sessionId: string; status: "paired" }>
+  | Readonly<{ expiresAt: number | null; sessionId: string; status: "paired" }>
   | Readonly<{ status: "failed" | "rate_limited" }>;
 
 interface FailureWindow {
   count: number;
   startedAt: number;
 }
-type Session = Readonly<{ createdAt: number; expiresAt: number }>;
+type Session = Readonly<{ createdAt: number; expiresAt: number | null }>;
 
 const FAILURE_LIMIT = 5;
 const FAILURE_WINDOW_MS = 60_000;
@@ -40,7 +40,7 @@ export class AccessSessionService {
   readonly #now: () => number;
   readonly #pairingCode: string;
   readonly #randomBytes: (size: number) => Buffer;
-  readonly #sessionTtlMs: number;
+  readonly #sessionTtlMs: number | undefined;
   readonly #sessions = new Map<string, Session>();
   readonly #cleanupTimer: ReturnType<typeof setInterval>;
 
@@ -48,7 +48,10 @@ export class AccessSessionService {
     options: CodeAgentAccessOptions,
     dependencies: AccessSessionServiceDependencies = {},
   ) {
-    if (!Number.isSafeInteger(options.sessionTtlMs) || options.sessionTtlMs <= 0) {
+    if (
+      options.sessionTtlMs !== undefined &&
+      (!Number.isSafeInteger(options.sessionTtlMs) || options.sessionTtlMs <= 0)
+    ) {
       throw new Error("sessionTtlMs must be a positive safe integer");
     }
     this.#pairingCode = options.pairingCode;
@@ -61,7 +64,8 @@ export class AccessSessionService {
       () => {
         this.#pruneExpired(this.#now());
       },
-      Math.min(this.#sessionTtlMs, FAILURE_WINDOW_MS),
+      // 校验请求和 WebSocket 定时器负责即时失效；后台只需按失败窗口周期回收有界状态。
+      FAILURE_WINDOW_MS,
     );
     this.#cleanupTimer.unref();
   }
@@ -87,7 +91,8 @@ export class AccessSessionService {
 
     this.#ensureCapacity(this.#sessions, this.#maxSessions);
     const sessionId = this.#randomBytes(32).toString("base64url");
-    const expiresAt = now + this.#sessionTtlMs;
+    // 未配置 TTL 的 Session 只受当前 Server 生命周期约束，关闭时仍会统一清空。
+    const expiresAt = this.#sessionTtlMs === undefined ? null : now + this.#sessionTtlMs;
     this.#sessions.set(sessionId, { createdAt: now, expiresAt });
     return { expiresAt, sessionId, status: "paired" };
   }
@@ -96,7 +101,7 @@ export class AccessSessionService {
     return this.expiresAt(sessionId) !== undefined;
   }
 
-  public expiresAt(sessionId: string | undefined): number | undefined {
+  public expiresAt(sessionId: string | undefined): number | null | undefined {
     if (sessionId === undefined) {
       return undefined;
     }
@@ -105,7 +110,7 @@ export class AccessSessionService {
       return undefined;
     }
     // 认证只检查签发时固定的绝对期限，请求不得续期。
-    if (session.expiresAt <= this.#now()) {
+    if (session.expiresAt !== null && session.expiresAt <= this.#now()) {
       this.#sessions.delete(sessionId);
       return undefined;
     }
@@ -145,7 +150,7 @@ export class AccessSessionService {
       }
     }
     for (const [sessionId, session] of this.#sessions) {
-      if (session.expiresAt <= now) {
+      if (session.expiresAt !== null && session.expiresAt <= now) {
         this.#sessions.delete(sessionId);
       }
     }

@@ -355,6 +355,7 @@ export async function createCodeAgentServer(
   const idempotencyRunner = createIdempotencyRunner(idempotencyCacheSize, idempotencyTtlMs);
   const accessService = await configureServerDelivery(app, {
     ...(options.access === undefined ? {} : { access: options.access }),
+    ...(options.allowedHosts === undefined ? {} : { allowedHosts: options.allowedHosts }),
     releaseResources: async () => {
       await Promise.all([...projectContexts.keys()].map(releaseProjectContext));
       await attachmentStore.dispose();

@@ -23,6 +23,7 @@ import {
 } from "@code-agent/provider-codex";
 import {
   createCodeAgentServer,
+  normalizeAllowedHost,
   SqliteStateRepository,
   type CodeAgentAccessOptions,
   type SqliteDatabaseDiagnostics,
@@ -41,7 +42,6 @@ import {
 import { openSystemBrowser } from "./system-browser.js";
 import { createTerminalOutput, type TerminalOutput } from "./terminal-output.js";
 import {
-  DEFAULT_LAN_SESSION_TTL,
   generateLanPairingCode,
   listLanAccessUrls,
   parseSessionTtl,
@@ -74,6 +74,7 @@ interface CreateRuntimeProviderInput {
 
 interface CreateServerInput {
   access?: CodeAgentAccessOptions;
+  allowedHosts?: readonly string[];
   installAppUpdate: ReturnType<typeof createAppUpdateService>["install"];
   projectRepository: ProjectRepository;
   providerConnectionRepository: AgentProviderConnectionRepository;
@@ -292,7 +293,14 @@ async function runStart(
 ): Promise<number> {
   const options = parseCommandOptions(
     args,
-    new Set(["--codex-bin", "--codex-home", "--lan-password", "--port", "--session-ttl"]),
+    new Set([
+      "--allowed-host",
+      "--codex-bin",
+      "--codex-home",
+      "--lan-password",
+      "--port",
+      "--session-ttl",
+    ]),
     new Set(["--lan"]),
   );
   if (options.sessionTtl !== undefined && options.lan !== true) {
@@ -304,15 +312,15 @@ async function runStart(
   if (options.lanPassword !== undefined) {
     validateLanPassword(options.lanPassword);
   }
-  const sessionTtlText = options.sessionTtl ?? DEFAULT_LAN_SESSION_TTL;
+  const allowedHosts = options.allowedHosts?.map(normalizeAllowedHost);
   const port = options.port ?? 3210;
-  const sessionTtlMs = options.lan === true ? parseSessionTtl(sessionTtlText) : undefined;
+  const sessionTtlMs = options.sessionTtl ? parseSessionTtl(options.sessionTtl) : undefined;
   const access =
-    sessionTtlMs === undefined
+    options.lan !== true
       ? undefined
       : {
           pairingCode: options.lanPassword ?? dependencies.generateLanPairingCode(),
-          sessionTtlMs,
+          ...(sessionTtlMs === undefined ? {} : { sessionTtlMs }),
         };
 
   if (process.env[STARTUP_UPDATE_APPLIED_ENV] !== "1") {
@@ -371,6 +379,7 @@ async function runStart(
     });
     server = await dependencies.createServer({
       ...(access === undefined ? {} : { access }),
+      ...(allowedHosts === undefined ? {} : { allowedHosts }),
       projectRepository: stateRepository,
       providerConnectionRepository: stateRepository,
       provider,
@@ -399,7 +408,11 @@ async function runStart(
       } else {
         output.info("已使用自定义访问密码（不会在终端回显）。");
       }
-      output.info(`会话有效期: ${sessionTtlText}（固定期限，不自动续期）`);
+      output.info(
+        options.sessionTtl === undefined
+          ? "会话有效期: 永不过期（仅当前进程）"
+          : `会话有效期: ${options.sessionTtl}（固定期限，不自动续期）`,
+      );
       output.info("重启 CodeAgent 后，当前配对码和所有局域网会话将失效。");
     } else {
       output.info(`访问地址: http://127.0.0.1:${String(activePort)}`);

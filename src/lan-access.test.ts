@@ -10,11 +10,13 @@ import {
 } from "./lan-access.js";
 
 describe("LAN access helpers", () => {
-  it("parses bounded minute, hour, and day durations", () => {
+  it("parses any positive safe duration in supported units", () => {
+    expect(parseSessionTtl("1ms")).toBe(1);
+    expect(parseSessionTtl("59s")).toBe(59_000);
     expect(parseSessionTtl("1m")).toBe(60_000);
     expect(parseSessionTtl("12h")).toBe(43_200_000);
-    expect(parseSessionTtl("180d")).toBe(15_552_000_000);
-    for (const invalid of ["0m", "59s", "1.5h", "181d", "999999999999999999999d", " 1h"]) {
+    expect(parseSessionTtl("181d")).toBe(15_638_400_000);
+    for (const invalid of ["0ms", "1.5h", "1w", "999999999999999999999d", " 1h"]) {
       expect(() => parseSessionTtl(invalid)).toThrow(/session TTL/u);
     }
   });

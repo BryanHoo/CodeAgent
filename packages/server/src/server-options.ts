@@ -34,6 +34,7 @@ import type { ProjectOpenService } from "./project-open.js";
 
 export interface CreateCodeAgentServerOptions {
   access?: CodeAgentAccessOptions;
+  allowedHosts?: readonly string[];
   eventBufferSize?: number;
   eventSessionId?: string;
   handlerTimeoutMs?: number;

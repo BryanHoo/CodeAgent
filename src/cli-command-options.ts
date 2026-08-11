@@ -1,6 +1,5 @@
-import { DEFAULT_LAN_SESSION_TTL } from "./lan-access.js";
-
 export interface ParsedCommandOptions {
+  allowedHosts?: string[];
   codexBin?: string;
   codexHome?: string;
   lan?: boolean;
@@ -23,8 +22,9 @@ Start options:
                              This disables automatic browser opening.
   --lan-password <password>  Use a custom strong LAN access password instead of a random one.
                              Requires 16-128 characters and all character types. Requires --lan.
+  --allowed-host <domain>    Allow an exact reverse proxy domain. May be repeated.
   --session-ttl <duration>   Set the fixed LAN session lifetime using ms, s, m, h, or d.
-                             Defaults to ${DEFAULT_LAN_SESSION_TTL}. Requires --lan.
+                             Sessions do not expire when omitted. Requires --lan.
   --codex-bin <path>         Use the Codex executable at the specified path.
   --codex-home <path>        Use a custom Codex home directory instead of CODEX_HOME
                              or the default ~/.codex directory.
@@ -40,6 +40,7 @@ Examples:
   code-agent
   code-agent start --port 4567
   code-agent start --lan --lan-password 'Strong-Lan_Pass9!'
+  code-agent start --allowed-host code.example.com
   code-agent start --lan --session-ttl 12h
   code-agent doctor --codex-bin /path/to/codex
   code-agent version
@@ -60,7 +61,8 @@ export function parseCommandOptions(
     if (!option || (!valueOptions.has(option) && !flagOptions.has(option))) {
       throw new Error(`未知选项: ${option ?? "<empty>"}`);
     }
-    if (seen.has(option)) {
+    const repeatable = option === "--allowed-host";
+    if (seen.has(option) && !repeatable) {
       throw new Error(`选项重复: ${option}`);
     }
     seen.add(option);
@@ -81,6 +83,8 @@ export function parseCommandOptions(
       parsed.codexHome = value;
     } else if (option === "--lan-password") {
       parsed.lanPassword = value;
+    } else if (option === "--allowed-host") {
+      parsed.allowedHosts = [...(parsed.allowedHosts ?? []), value];
     } else if (option === "--port") {
       if (!/^\d+$/u.test(value)) {
         throw new Error("--port 必须是 1 到 65535 之间的整数");
