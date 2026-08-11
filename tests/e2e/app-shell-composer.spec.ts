@@ -1081,13 +1081,17 @@ test("project file tree opens changed, source, image, and system files by shared
   await expect(page.getByRole("dialog", { name: "100%完成 后续工作交接.pptx" })).toHaveCount(0);
 });
 
-test("project file tree context menu opens files and folders with a selected app", async ({
-  page,
-}) => {
+test("project file tree context menu and ellipsis share target actions", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const inspector = page.getByRole("complementary", { name: "运行环境" });
   const fileTree = inspector.getByRole("tree", { name: "项目文件" });
+  const selectOpenApp = async (name: string) => {
+    const item = page.getByRole("menuitem", { name });
+    await expect(item).toBeVisible();
+    await item.focus();
+    await item.press("Enter");
+  };
   await expect(page.getByRole("button", { name: "在 Zed 中打开" })).toHaveCount(0);
 
   const rootRequest = page.waitForRequest((request) => {
@@ -1102,9 +1106,24 @@ test("project file tree context menu opens files and folders with a selected app
   await rootTreeItem
     .getByRole("button", { exact: true, name: "CodeAgent" })
     .click({ button: "right" });
-  const rootMenu = page.getByRole("menu", { name: "打开 ~/Develop/person/CodeAgent 的方式" });
-  await expect(rootMenu.getByText("~/Develop/person/CodeAgent", { exact: true })).toBeVisible();
-  await rootMenu.getByRole("menuitem", { name: "Finder" }).click();
+  const rootMenu = page.getByRole("menu", { name: "~/Develop/person/CodeAgent 的操作" });
+  await expect(rootMenu.getByRole("menuitem", { name: "复制名称" })).toBeVisible();
+  await expect(rootMenu.getByRole("menuitem", { name: "复制路径" })).toBeVisible();
+  await expect(rootMenu.getByRole("menuitem", { name: "引用" })).toBeDisabled();
+  await rootMenu.getByRole("menuitem", { name: "复制名称" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("CodeAgent");
+  await rootTreeItem
+    .getByRole("button", { exact: true, name: "CodeAgent" })
+    .click({ button: "right" });
+  await rootMenu.getByRole("menuitem", { name: "复制路径" }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe("~/Develop/person/CodeAgent");
+  await rootTreeItem
+    .getByRole("button", { exact: true, name: "CodeAgent" })
+    .click({ button: "right" });
+  await rootMenu.getByRole("menuitem", { name: "打开" }).click();
+  await selectOpenApp("Finder");
   await rootRequest;
   await expect(rootMenu).not.toBeAttached();
 
@@ -1128,14 +1147,16 @@ test("project file tree context menu opens files and folders with a selected app
   await expect(docsNameButton).toHaveCSS("padding-left", "0px");
   await expect(docsNameButton).toHaveCSS("padding-right", "0px");
   await docsTreeItem.click({ button: "right" });
-  const folderMenu = page.getByRole("menu", { name: "打开 docs 的方式" });
+  const folderMenu = page.getByRole("menu", { name: "docs 的操作" });
   await expect(folderMenu).toBeVisible();
-  await expect(folderMenu.getByText("打开方式", { exact: true })).toBeVisible();
-  await expect(folderMenu.getByText("docs", { exact: true })).toBeVisible();
-  await expect(folderMenu.getByRole("menuitem", { name: "系统默认应用" })).toHaveCount(0);
-  await expect(folderMenu.getByText("__SYSTEM_DEFAULT__", { exact: true })).toHaveCount(0);
+  await expect(folderMenu.getByRole("menuitem", { name: "复制名称" })).toBeVisible();
+  await expect(folderMenu.getByRole("menuitem", { name: "复制路径" })).toBeVisible();
+  await expect(folderMenu.getByRole("menuitem", { name: "打开" })).toBeVisible();
+  await expect(folderMenu.getByRole("menuitem", { name: "引用" })).toBeVisible();
   await expect(docsTreeItem).toHaveAttribute("aria-selected", "true");
-  await folderMenu.getByRole("menuitem", { name: "Finder" }).click();
+  await folderMenu.getByRole("menuitem", { name: "打开" }).click();
+  await expect(page.getByRole("menuitem", { name: "系统默认应用" })).toHaveCount(0);
+  await selectOpenApp("Finder");
   await folderRequest;
   await expect(folderMenu).not.toBeAttached();
 
@@ -1146,7 +1167,7 @@ test("project file tree context menu opens files and folders with a selected app
     const body = parseRequestRecord(request.postData());
     return body["appId"] === "zed" && body["path"] === "docs";
   });
-  const folderAction = docsTreeItem.getByRole("button", { name: "打开 docs 的方式" });
+  const folderAction = docsTreeItem.getByRole("button", { name: "docs 的操作" });
   await expect(folderAction).toHaveClass(/opacity-0/u);
   await docsTreeItem.hover();
   await expect(docsTreeItem.locator(":scope > div").first()).toHaveCSS(
@@ -1154,18 +1175,15 @@ test("project file tree context menu opens files and folders with a selected app
     "rgba(23, 23, 23, 0.075)",
   );
   await expect(docsNameButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(docsNameButton).toHaveCSS("box-shadow", "none");
   await expect(folderAction).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(folderAction).toHaveCSS("box-shadow", "none");
   await expect(folderAction).toHaveCSS("opacity", "1");
   await folderAction.click();
-  const folderActionMenu = page.getByRole("menu", { name: "打开 docs 的方式" });
-  const folderActionMenuIcon = folderActionMenu
-    .getByRole("menuitem", { name: "Zed" })
-    .locator("svg");
+  const folderActionMenu = page.getByRole("menu", { name: "docs 的操作" });
+  await folderActionMenu.getByRole("menuitem", { name: "打开" }).click();
+  const folderActionMenuIcon = page.getByRole("menuitem", { name: "Zed" }).locator("svg");
   await expect(folderActionMenuIcon).toHaveCSS("width", "16px");
   await expect(folderActionMenuIcon).toHaveCSS("height", "16px");
-  await folderActionMenu.getByRole("menuitem", { name: "Zed" }).click();
+  await selectOpenApp("Zed");
   await folderActionRequest;
   await expect(folderActionMenu).not.toBeAttached();
 
@@ -1178,10 +1196,11 @@ test("project file tree context menu opens files and folders with a selected app
   });
   const packageTreeItem = fileTree.getByRole("treeitem", { name: /package\.json/u });
   await packageTreeItem.click({ button: "right" });
-  const fileMenu = page.getByRole("menu", { name: "打开 package.json 的方式" });
+  const fileMenu = page.getByRole("menu", { name: "package.json 的操作" });
   await expect(packageTreeItem).toHaveAttribute("aria-selected", "true");
   await expect(packageTreeItem).toHaveClass(/bg-control/u);
-  await fileMenu.getByRole("menuitem", { name: "系统默认应用" }).click();
+  await fileMenu.getByRole("menuitem", { name: "打开" }).click();
+  await selectOpenApp("系统默认应用");
   await fileRequest;
   await expect(fileMenu).not.toBeAttached();
 
@@ -1192,14 +1211,23 @@ test("project file tree context menu opens files and folders with a selected app
     const body = parseRequestRecord(request.postData());
     return body["appId"] === "zed" && body["path"] === "package.json";
   });
-  const fileAction = packageTreeItem.getByRole("button", { name: "打开 package.json 的方式" });
+  const fileAction = packageTreeItem.getByRole("button", { name: "package.json 的操作" });
   await packageTreeItem.hover();
   await expect(fileAction).toBeVisible();
   await fileAction.click();
-  const fileActionMenu = page.getByRole("menu", { name: "打开 package.json 的方式" });
-  await fileActionMenu.getByRole("menuitem", { name: "Zed" }).click();
+  const fileActionMenu = page.getByRole("menu", { name: "package.json 的操作" });
+  await fileActionMenu.getByRole("menuitem", { name: "打开" }).click();
+  await selectOpenApp("Zed");
   await fileActionRequest;
   await expect(fileActionMenu).not.toBeAttached();
+
+  const prompt = page.getByRole("textbox", { name: "任务输入" });
+  await docsTreeItem.click({ button: "right" });
+  await folderMenu.getByRole("menuitem", { name: "引用" }).click();
+  await expect(prompt.getByRole("button", { name: "@docs" })).toBeVisible();
+  await packageTreeItem.click({ button: "right" });
+  await fileMenu.getByRole("menuitem", { name: "引用" }).click();
+  await expect(prompt.getByRole("button", { name: "@package.json" })).toBeVisible();
 });
 
 test("keeps pasted images in attachments instead of the text editor", async ({ page }) => {

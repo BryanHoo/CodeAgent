@@ -1,4 +1,5 @@
 import * as ContextMenuPrimitive from "radix-ui/context-menu";
+import { ChevronRight } from "lucide-react";
 import type { ComponentProps } from "react";
 
 import { cn } from "../../lib/utils.js";
@@ -9,6 +10,10 @@ function ContextMenu(props: ComponentProps<typeof ContextMenuPrimitive.Root>) {
 
 function ContextMenuTrigger(props: ComponentProps<typeof ContextMenuPrimitive.Trigger>) {
   return <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />;
+}
+
+function ContextMenuSub(props: ComponentProps<typeof ContextMenuPrimitive.Sub>) {
+  return <ContextMenuPrimitive.Sub data-slot="context-menu-sub" {...props} />;
 }
 
 function ContextMenuPortal({
@@ -65,6 +70,51 @@ function ContextMenuItem({
   );
 }
 
+function ContextMenuSubTrigger({
+  children,
+  className,
+  ...props
+}: ComponentProps<typeof ContextMenuPrimitive.SubTrigger>) {
+  return (
+    <ContextMenuPrimitive.SubTrigger
+      className={cn(
+        "flex cursor-default select-none items-center gap-2.5 rounded-control px-2 py-1.5 text-body-small outline-none transition-colors data-[state=open]:bg-control-hover data-[highlighted]:bg-control-hover [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        className,
+      )}
+      data-slot="context-menu-sub-trigger"
+      {...props}
+    >
+      {children}
+      <ChevronRight aria-hidden="true" className="ml-auto size-3.5 text-muted-foreground" />
+    </ContextMenuPrimitive.SubTrigger>
+  );
+}
+
+function ContextMenuSubContent({
+  children,
+  className,
+  collisionPadding = 8,
+  sideOffset = 0,
+  ...props
+}: ComponentProps<typeof ContextMenuPrimitive.SubContent>) {
+  return (
+    <ContextMenuPortal>
+      <ContextMenuPrimitive.SubContent
+        className={cn(
+          "z-50 min-w-40 max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-surface border border-separator-strong bg-raised p-1.5 text-foreground shadow-floating outline-none",
+          className,
+        )}
+        collisionPadding={collisionPadding}
+        data-slot="context-menu-sub-content"
+        sideOffset={sideOffset}
+        {...props}
+      >
+        {children}
+      </ContextMenuPrimitive.SubContent>
+    </ContextMenuPortal>
+  );
+}
+
 function ContextMenuLabel({
   className,
   ...props
@@ -98,5 +148,8 @@ export {
   ContextMenuLabel,
   ContextMenuPortal,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 };

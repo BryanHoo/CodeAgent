@@ -41,7 +41,7 @@ export {
 } from "../composer-state.js";
 
 export function WorkbenchComposer({
-  buildPlanRef,
+  composerRef,
   capabilities,
   client,
   fixedSandboxMode,
@@ -128,6 +128,7 @@ export function WorkbenchComposer({
     promptContent,
     promptSubmission,
     queuedPrompts,
+    referenceProjectPath,
     replaceQueuedPrompts,
     reviewMenuMode,
     routeScope,
@@ -246,16 +247,16 @@ export function WorkbenchComposer({
     turnControlsDisabled,
   });
 
-  useImperativeHandle(buildPlanRef, () => ({
+  useImperativeHandle(composerRef, () => ({
     buildPlan: () => {
-      // 构建动作必须退出计划模式，否则后续 Turn 会再次请求生成计划。
-      setComposerModeState(undefined);
+      setComposerModeState(undefined); // 避免后续 Turn 再次请求生成计划。
       return submitPrompt({ files: [], text: t("composer.buildPlanPrompt") }, [], {
         composerMode: null,
         fileReferences: [],
         forceAction: "start",
       });
     },
+    referenceProjectPath,
   }));
 
   const submitQueuedPrompt = useEffectEvent(

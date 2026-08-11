@@ -1,22 +1,37 @@
-import type { ProjectOpenApp, ProjectOpenAppId, ProjectOpenAppKind } from "@code-agent/protocol";
-import { Code2, Ellipsis, ExternalLink, FolderOpen, Terminal, Wrench } from "lucide-react";
+import type {
+  ProjectFileSearchEntry,
+  ProjectOpenApp,
+  ProjectOpenAppId,
+  ProjectOpenAppKind,
+} from "@code-agent/protocol";
+import {
+  AtSign,
+  Code2,
+  Copy,
+  Ellipsis,
+  ExternalLink,
+  FolderOpen,
+  Terminal,
+  Wrench,
+} from "lucide-react";
 import type { ReactElement } from "react";
 
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuLabel,
-  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "../../../shared/components/core/context-menu.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../../../shared/components/core/dropdown-menu.js";
 import { Button } from "../../../shared/components/core/button.js";
@@ -46,54 +61,93 @@ export function getProjectOpenAppsForTarget(
 
 export type ProjectOpenContextMenuTarget = Readonly<{
   path: string;
+  reference?: ProjectFileSearchEntry;
   type: ProjectOpenTargetType;
 }>;
 
 type ProjectOpenContextMenuItemsProps = Readonly<{
   apps: readonly ProjectOpenApp[];
   ariaLabel?: string;
-  detail: string;
   isPending: boolean;
-  onSelect: (appId: ProjectOpenAppId) => void;
-  title: string;
+  onReference: (reference: ProjectFileSearchEntry) => void;
+  onSelect: (appId: ProjectOpenAppId, path: string) => void;
+  target: ProjectOpenContextMenuTarget;
 }>;
+
+function getProjectTargetName(path: string): string {
+  return path.split(/[\\/]/u).at(-1) ?? path;
+}
+
+function copyProjectTargetText(text: string) {
+  // 菜单关闭不应等待系统剪贴板，失败时保留当前文件树状态。
+  void navigator.clipboard.writeText(text).catch(() => undefined);
+}
 
 export function ProjectOpenContextMenuItems({
   apps,
   ariaLabel,
-  detail,
   isPending,
+  onReference,
   onSelect,
-  title,
+  target,
 }: ProjectOpenContextMenuItemsProps) {
   const { t } = useTranslation("workbench");
+  const targetApps = getProjectOpenAppsForTarget(apps, target.type);
+  const targetName = getProjectTargetName(target.path);
   return (
-    <ContextMenuContent aria-label={ariaLabel} className="w-60">
-      <ContextMenuLabel className="py-0.5">
-        <p>{title}</p>
-        <p className="mt-0.5 truncate text-meta font-normal text-muted-foreground" title={detail}>
-          {detail}
-        </p>
-      </ContextMenuLabel>
-      <ContextMenuSeparator />
-      {apps.map((app) => {
-        const Icon = appKindIcons[app.kind];
-        const appName = app.kind === "system-default" ? t("openMenu.systemDefault") : app.name;
-        return (
-          <ContextMenuItem
-            aria-label={appName}
-            className="h-9"
-            disabled={isPending}
-            key={app.id}
-            onSelect={() => {
-              onSelect(app.id);
-            }}
-          >
-            <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate">{appName}</span>
-          </ContextMenuItem>
-        );
-      })}
+    <ContextMenuContent aria-label={ariaLabel} className="w-52">
+      <ContextMenuItem
+        onSelect={() => {
+          copyProjectTargetText(targetName);
+        }}
+      >
+        <Copy aria-hidden="true" className="size-4 text-muted-foreground" />
+        <span>{t("openMenu.copyName")}</span>
+      </ContextMenuItem>
+      <ContextMenuItem
+        onSelect={() => {
+          copyProjectTargetText(target.path);
+        }}
+      >
+        <Copy aria-hidden="true" className="size-4 text-muted-foreground" />
+        <span>{t("openMenu.copyPath")}</span>
+      </ContextMenuItem>
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>
+          <FolderOpen aria-hidden="true" className="size-4 text-muted-foreground" />
+          <span>{t("openMenu.open")}</span>
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent>
+          {targetApps.map((app) => {
+            const Icon = appKindIcons[app.kind];
+            const appName = app.kind === "system-default" ? t("openMenu.systemDefault") : app.name;
+            return (
+              <ContextMenuItem
+                aria-label={appName}
+                disabled={isPending}
+                key={app.id}
+                onSelect={() => {
+                  onSelect(app.id, target.path);
+                }}
+              >
+                <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">{appName}</span>
+              </ContextMenuItem>
+            );
+          })}
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+      <ContextMenuItem
+        disabled={target.reference === undefined}
+        onSelect={() => {
+          if (target.reference !== undefined) {
+            onReference(target.reference);
+          }
+        }}
+      >
+        <AtSign aria-hidden="true" className="size-4 text-muted-foreground" />
+        <span>{t("openMenu.reference")}</span>
+      </ContextMenuItem>
     </ContextMenuContent>
   );
 }
@@ -102,6 +156,7 @@ type ProjectOpenDropdownMenuProps = Readonly<{
   apps: readonly ProjectOpenApp[];
   isPending: boolean;
   onOpen: () => void;
+  onReference: (reference: ProjectFileSearchEntry) => void;
   onSelect: (appId: ProjectOpenAppId, path: string) => void;
   target: ProjectOpenContextMenuTarget;
 }>;
@@ -110,6 +165,7 @@ export function ProjectOpenDropdownMenu({
   apps,
   isPending,
   onOpen,
+  onReference,
   onSelect,
   target,
 }: ProjectOpenDropdownMenuProps) {
@@ -117,10 +173,7 @@ export function ProjectOpenDropdownMenu({
   // 行尾入口复用右键菜单的目标过滤，目录不会暴露仅文件可用的系统默认应用。
   const targetApps = getProjectOpenAppsForTarget(apps, target.type);
   const targetLabel = t("openMenu.targetLabel", { path: target.path });
-
-  if (targetApps.length === 0) {
-    return null;
-  }
+  const targetName = getProjectTargetName(target.path);
 
   return (
     <DropdownMenu
@@ -145,39 +198,62 @@ export function ProjectOpenDropdownMenu({
             </Button>
           </TooltipTrigger>
         </DropdownMenuTrigger>
-        <TooltipContent side="left">{t("openMenu.title")}</TooltipContent>
+        <TooltipContent side="left">{t("openMenu.moreActions")}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" aria-label={targetLabel} className="w-60">
-        <DropdownMenuLabel className="py-0.5">
-          <p>{t("openMenu.title")}</p>
-          <p
-            className="mt-0.5 truncate text-meta font-normal text-muted-foreground"
-            title={target.path}
-          >
-            {target.path}
-          </p>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          {targetApps.map((app) => {
-            const Icon = appKindIcons[app.kind];
-            const appName = app.kind === "system-default" ? t("openMenu.systemDefault") : app.name;
-            return (
-              <DropdownMenuItem
-                aria-label={appName}
-                className="h-9"
-                disabled={isPending}
-                key={app.id}
-                onSelect={() => {
-                  onSelect(app.id, target.path);
-                }}
-              >
-                <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate">{appName}</span>
-              </DropdownMenuItem>
-            );
-          })}
-        </DropdownMenuGroup>
+      <DropdownMenuContent align="end" aria-label={targetLabel} className="w-52">
+        <DropdownMenuItem
+          onSelect={() => {
+            copyProjectTargetText(targetName);
+          }}
+        >
+          <Copy aria-hidden="true" className="size-4 text-muted-foreground" />
+          <span>{t("openMenu.copyName")}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => {
+            copyProjectTargetText(target.path);
+          }}
+        >
+          <Copy aria-hidden="true" className="size-4 text-muted-foreground" />
+          <span>{t("openMenu.copyPath")}</span>
+        </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <FolderOpen aria-hidden="true" className="size-4 text-muted-foreground" />
+            <span>{t("openMenu.open")}</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            {targetApps.map((app) => {
+              const Icon = appKindIcons[app.kind];
+              const appName =
+                app.kind === "system-default" ? t("openMenu.systemDefault") : app.name;
+              return (
+                <DropdownMenuItem
+                  aria-label={appName}
+                  disabled={isPending}
+                  key={app.id}
+                  onSelect={() => {
+                    onSelect(app.id, target.path);
+                  }}
+                >
+                  <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate">{appName}</span>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuItem
+          disabled={target.reference === undefined}
+          onSelect={() => {
+            if (target.reference !== undefined) {
+              onReference(target.reference);
+            }
+          }}
+        >
+          <AtSign aria-hidden="true" className="size-4 text-muted-foreground" />
+          <span>{t("openMenu.reference")}</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -188,6 +264,7 @@ type ProjectOpenContextMenuProps = Readonly<{
   children: ReactElement;
   isPending: boolean;
   onOpen: () => void;
+  onReference: (reference: ProjectFileSearchEntry) => void;
   onSelect: (appId: ProjectOpenAppId, path: string) => void;
   target: ProjectOpenContextMenuTarget;
 }>;
@@ -197,16 +274,11 @@ export function ProjectOpenContextMenu({
   children,
   isPending,
   onOpen,
+  onReference,
   onSelect,
   target,
 }: ProjectOpenContextMenuProps) {
   const { t } = useTranslation("workbench");
-  const targetApps = getProjectOpenAppsForTarget(apps, target.type);
-
-  if (targetApps.length === 0) {
-    return children;
-  }
-
   return (
     <ContextMenu
       modal={false}
@@ -226,14 +298,12 @@ export function ProjectOpenContextMenu({
         {children}
       </ContextMenuTrigger>
       <ProjectOpenContextMenuItems
-        apps={targetApps}
+        apps={apps}
         ariaLabel={t("openMenu.targetLabel", { path: target.path })}
-        detail={target.path}
         isPending={isPending}
-        onSelect={(appId) => {
-          onSelect(appId, target.path);
-        }}
-        title={t("openMenu.title")}
+        onReference={onReference}
+        onSelect={onSelect}
+        target={target}
       />
     </ContextMenu>
   );

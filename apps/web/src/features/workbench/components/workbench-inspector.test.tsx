@@ -283,9 +283,9 @@ describe("WorkbenchInspector", () => {
 
     expect(markup.match(/data-slot="context-menu-trigger"/gu)).toHaveLength(3);
     expect(markup.match(/data-slot="dropdown-menu-trigger"/gu)).toHaveLength(3);
-    expect(markup).toContain('aria-label="打开 /workspace/CodeAgent 的方式"');
-    expect(markup).toContain('aria-label="打开 src 的方式"');
-    expect(markup).toContain('aria-label="打开 README.md 的方式"');
+    expect(markup).toContain('aria-label="/workspace/CodeAgent 的操作"');
+    expect(markup).toContain('aria-label="src 的操作"');
+    expect(markup).toContain('aria-label="README.md 的操作"');
     expect(markup).toContain("group-hover/file-tree-node:opacity-100");
     expect(markup).toContain(
       "group-hover/file-tree-node:opacity-0 group-focus-within/file-tree-node:opacity-0",
@@ -321,8 +321,8 @@ describe("WorkbenchInspector", () => {
     expect(fileVisibleMarkup).toContain(
       'aria-label="src/components/app.tsx，新增 2 行，删除 1 行"',
     );
-    expect(fileVisibleMarkup).toMatch(
-      /app\.tsx<\/span><span[^>]*aria-label="src\/components\/app\.tsx，新增 2 行，删除 1 行"/u,
+    expect(fileVisibleMarkup).toContain(
+      'aria-label="src/components/app.tsx，新增 2 行，删除 1 行"',
     );
   });
 

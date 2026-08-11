@@ -35,6 +35,7 @@ import {
   type PromptSlashCommand,
 } from "./prompt-command.js";
 import {
+  appendPromptFileReference,
   fileReferencePlainText,
   insertPromptFileReference,
   isPromptTextRange,
@@ -266,6 +267,21 @@ export function useComposerSession({
     },
     [closeFileMenu, fileMention, promptContent, replacePromptContent],
   );
+  const referenceProjectPath = useCallback(
+    (file: ProjectFileSearchEntry) => {
+      const currentContent = skillEditorRef.current?.getContent() ?? promptContent;
+      const nextContent = appendPromptFileReference(currentContent, file);
+      const cursorPosition = serializePromptSkillContent(nextContent).length;
+      closeCommandMenu();
+      closeFileMenu();
+      setPromptHistoryIndex(null);
+      replacePromptContent(nextContent, cursorPosition);
+      requestAnimationFrame(() => {
+        skillEditorRef.current?.focus(cursorPosition);
+      });
+    },
+    [closeCommandMenu, closeFileMenu, promptContent, replacePromptContent],
+  );
   const selectActiveFileReference = useCallback(() => {
     if (!fileMenuOpen) {
       return false;
@@ -424,6 +440,7 @@ export function useComposerSession({
     promptContent,
     promptSubmission,
     queuedPrompts,
+    referenceProjectPath,
     replacePromptContent,
     replaceQueuedPrompts,
     reviewMenuMode,

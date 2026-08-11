@@ -116,9 +116,13 @@ export const workbench = {
     followUpPlaceholder: "输入后续要求",
   },
   openMenu: {
+    copyName: "复制名称",
+    copyPath: "复制路径",
+    moreActions: "更多操作",
+    open: "打开",
+    reference: "引用",
     systemDefault: "系统默认应用",
-    targetLabel: "打开 {{path}} 的方式",
-    title: "打开方式",
+    targetLabel: "{{path}} 的操作",
   },
   promptCommand: {
     availability: {

@@ -1,4 +1,5 @@
 import type {
+  ProjectFileSearchEntry,
   ProjectFileTree,
   ProjectFileTreeEntry,
   ProjectOpenApp,
@@ -19,11 +20,7 @@ import {
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
 import { countFileChangeLines, type AgentFileChange } from "../../diff/file-change.js";
-import {
-  getProjectOpenAppsForTarget,
-  ProjectOpenContextMenu,
-  ProjectOpenDropdownMenu,
-} from "./project-open-menu.js";
+import { ProjectOpenContextMenu, ProjectOpenDropdownMenu } from "./project-open-menu.js";
 
 export type ProjectFileTreeDirectoryState = Readonly<{
   data?: ProjectFileTree;
@@ -44,6 +41,7 @@ type ProjectFileTreeNodesProps = Readonly<{
   expandedPaths: ReadonlySet<string>;
   onContextMenuOpen: (path: string) => void;
   onOpenProjectPath: (appId: ProjectOpenAppId, path: string) => void;
+  onReferenceProjectPath: (entry: ProjectFileSearchEntry) => void;
   onRefreshDirectory: (directoryPath: string | null) => void;
   projectOpenApps: readonly ProjectOpenApp[];
   projectOpenPending: boolean;
@@ -179,6 +177,7 @@ function ProjectFileTreeDirectoryChildren({
   expandedPaths,
   onContextMenuOpen,
   onOpenProjectPath,
+  onReferenceProjectPath,
   onRefreshDirectory,
   projectOpenApps,
   projectOpenPending,
@@ -189,6 +188,7 @@ function ProjectFileTreeDirectoryChildren({
   expandedPaths: ReadonlySet<string>;
   onContextMenuOpen: (path: string) => void;
   onOpenProjectPath: (appId: ProjectOpenAppId, path: string) => void;
+  onReferenceProjectPath: (entry: ProjectFileSearchEntry) => void;
   onRefreshDirectory: (directoryPath: string | null) => void;
   projectOpenApps: readonly ProjectOpenApp[];
   projectOpenPending: boolean;
@@ -258,6 +258,7 @@ function ProjectFileTreeDirectoryChildren({
       expandedPaths={expandedPaths}
       onContextMenuOpen={onContextMenuOpen}
       onOpenProjectPath={onOpenProjectPath}
+      onReferenceProjectPath={onReferenceProjectPath}
       onRefreshDirectory={onRefreshDirectory}
       projectOpenApps={projectOpenApps}
       projectOpenPending={projectOpenPending}
@@ -272,6 +273,7 @@ export function ProjectFileTreeNodes({
   expandedPaths,
   onContextMenuOpen,
   onOpenProjectPath,
+  onReferenceProjectPath,
   onRefreshDirectory,
   projectOpenApps,
   projectOpenPending,
@@ -292,28 +294,27 @@ export function ProjectFileTreeNodes({
           stats={changeStats}
         />
       );
-    const trailing =
-      getProjectOpenAppsForTarget(projectOpenApps, entry.type).length === 0 ? (
-        (changeIndicator ?? undefined)
-      ) : (
-        <FileTreeActions className="relative">
-          <span className="transition-opacity group-hover/file-tree-node:opacity-0 group-focus-within/file-tree-node:opacity-0">
-            {changeIndicator}
-          </span>
-          {/* 菜单覆盖统计的行尾位置，避免透明按钮仍占宽度并挤压变更数字。 */}
-          <span className="absolute right-0 top-1/2 -translate-y-1/2">
-            <ProjectOpenDropdownMenu
-              apps={projectOpenApps}
-              isPending={projectOpenPending}
-              onOpen={() => {
-                onContextMenuOpen(entry.path);
-              }}
-              onSelect={onOpenProjectPath}
-              target={{ path: entry.path, type: entry.type }}
-            />
-          </span>
-        </FileTreeActions>
-      );
+    const reference = { name, path: entry.path };
+    const trailing = (
+      <FileTreeActions className="relative">
+        <span className="transition-opacity group-hover/file-tree-node:opacity-0 group-focus-within/file-tree-node:opacity-0">
+          {changeIndicator}
+        </span>
+        {/* 菜单覆盖统计的行尾位置，避免透明按钮仍占宽度并挤压变更数字。 */}
+        <span className="absolute right-0 top-1/2 -translate-y-1/2">
+          <ProjectOpenDropdownMenu
+            apps={projectOpenApps}
+            isPending={projectOpenPending}
+            onOpen={() => {
+              onContextMenuOpen(entry.path);
+            }}
+            onReference={onReferenceProjectPath}
+            onSelect={onOpenProjectPath}
+            target={{ path: entry.path, reference, type: entry.type }}
+          />
+        </span>
+      </FileTreeActions>
+    );
     return entry.type === "directory" ? (
       <ProjectOpenContextMenu
         apps={projectOpenApps}
@@ -322,8 +323,9 @@ export function ProjectFileTreeNodes({
         onOpen={() => {
           onContextMenuOpen(entry.path);
         }}
+        onReference={onReferenceProjectPath}
         onSelect={onOpenProjectPath}
-        target={{ path: entry.path, type: entry.type }}
+        target={{ path: entry.path, reference, type: entry.type }}
       >
         <FileTreeFolder name={name} path={entry.path} trailing={trailing}>
           <ProjectFileTreeDirectoryChildren
@@ -333,6 +335,7 @@ export function ProjectFileTreeNodes({
             expandedPaths={expandedPaths}
             onContextMenuOpen={onContextMenuOpen}
             onOpenProjectPath={onOpenProjectPath}
+            onReferenceProjectPath={onReferenceProjectPath}
             onRefreshDirectory={onRefreshDirectory}
             projectOpenApps={projectOpenApps}
             projectOpenPending={projectOpenPending}
@@ -347,8 +350,9 @@ export function ProjectFileTreeNodes({
         onOpen={() => {
           onContextMenuOpen(entry.path);
         }}
+        onReference={onReferenceProjectPath}
         onSelect={onOpenProjectPath}
-        target={{ path: entry.path, type: entry.type }}
+        target={{ path: entry.path, reference, type: entry.type }}
       >
         <FileTreeFile name={name} path={entry.path} trailing={trailing} />
       </ProjectOpenContextMenu>

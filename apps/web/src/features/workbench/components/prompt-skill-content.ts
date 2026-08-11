@@ -136,6 +136,23 @@ export function insertPromptFileReference(
   ]);
 }
 
+export function appendPromptFileReference(
+  content: PromptSkillContent,
+  file: ProjectFileSearchEntry,
+): PromptSkillContent {
+  if (content.some((part) => part.type === "file" && part.file.path === file.path)) {
+    return content;
+  }
+  const serializedText = serializePromptSkillContent(content);
+  return normalizePromptSkillContent([
+    ...content,
+    ...(serializedText === "" || /\s$/u.test(serializedText)
+      ? []
+      : [{ text: " ", type: "text" as const }]),
+    { file, type: "file" },
+  ]);
+}
+
 export function recognizePromptSkillReferences(
   content: PromptSkillContent,
   availableSkills: readonly AgentSkill[],

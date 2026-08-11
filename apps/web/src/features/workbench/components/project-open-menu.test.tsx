@@ -5,7 +5,7 @@ import { ContextMenu } from "../../../shared/components/core/context-menu.js";
 import { getProjectOpenAppsForTarget, ProjectOpenContextMenuItems } from "./project-open-menu.js";
 
 describe("ProjectOpenContextMenuItems", () => {
-  it("renders context-menu commands without changing selection", () => {
+  it("renders copy, open, and reference commands as one target menu", () => {
     const markup = renderToStaticMarkup(
       <ContextMenu open>
         <ProjectOpenContextMenuItems
@@ -13,18 +13,21 @@ describe("ProjectOpenContextMenuItems", () => {
             { id: "zed", kind: "editor", name: "Zed" },
             { id: "finder", kind: "file-manager", name: "Finder" },
           ]}
-          detail="README.md"
           isPending={false}
+          onReference={vi.fn()}
           onSelect={vi.fn()}
-          title="打开方式"
+          target={{ path: "README.md", type: "file" }}
         />
       </ContextMenu>,
     );
 
     expect(markup).toContain('data-slot="context-menu-content"');
-    expect(markup).toContain("打开方式");
-    expect(markup).toContain("README.md");
-    expect(markup.match(/data-slot="context-menu-item"/gu)).toHaveLength(2);
+    expect(markup).toContain("复制名称");
+    expect(markup).toContain("复制路径");
+    expect(markup).toContain("打开");
+    expect(markup).toContain("引用");
+    expect(markup.match(/data-slot="context-menu-sub-trigger"/gu)).toHaveLength(1);
+    expect(markup.match(/data-slot="context-menu-item"/gu)).toHaveLength(3);
     expect(markup).not.toContain("menuitemradio");
     expect(markup).not.toContain("aria-checked");
   });

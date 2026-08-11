@@ -1,6 +1,6 @@
 import { TEMPORARY_TASK_SANDBOX_MODE } from "@code-agent/protocol";
 import { PanelLeft, PanelRight, Pencil } from "lucide-react";
-import type { CSSProperties } from "react";
+import { useRef, type CSSProperties } from "react";
 
 import { Button } from "../../../shared/components/core/button.js";
 import { RuntimeUnavailable } from "../../../shared/components/core/runtime-unavailable.js";
@@ -11,7 +11,7 @@ import {
 } from "../../../shared/components/core/tooltip.js";
 import { ProjectSidebar } from "./project-sidebar.js";
 import { TaskTimeline } from "./task-timeline.js";
-import { WorkbenchComposer } from "./workbench-composer.js";
+import { WorkbenchComposer, type WorkbenchComposerHandle } from "./workbench-composer.js";
 import { WorkbenchPanelResizer } from "./workbench-panel-resizer.js";
 import type { useWorkbenchShellController } from "./workbench-shell-controller.js";
 import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
@@ -36,6 +36,7 @@ export function WorkbenchShellLayout({
   taskId?: string;
   temporary: boolean;
 }>) {
+  const composerRef = useRef<WorkbenchComposerHandle>(null);
   const {
     appInfoQuery,
     backgroundTerminals,
@@ -274,6 +275,7 @@ export function WorkbenchShellLayout({
             <WorkbenchComposer
               capabilities={capabilities}
               client={client}
+              composerRef={composerRef}
               {...(temporary ? { fixedSandboxMode: TEMPORARY_TASK_SANDBOX_MODE } : {})}
               followUpBehavior={globalSettings?.followUpBehavior ?? "queue"}
               models={models}
@@ -304,6 +306,7 @@ export function WorkbenchShellLayout({
           <ActiveTaskWorkbench
             capabilities={capabilities}
             client={client}
+            composerRef={composerRef}
             fallbackSettings={draftSettings}
             {...(temporary ? { fixedSandboxMode: TEMPORARY_TASK_SANDBOX_MODE } : {})}
             followUpBehavior={globalSettings?.followUpBehavior ?? "queue"}
@@ -415,6 +418,9 @@ export function WorkbenchShellLayout({
           }}
           onOpenProjectFile={(path) => {
             openMessageFileReference({ lineNumber: null, path });
+          }}
+          onReferenceProjectPath={(entry) => {
+            composerRef.current?.referenceProjectPath(entry);
           }}
           onRefreshGitStatus={() => {
             void refreshProjectGitStatus(projectId);

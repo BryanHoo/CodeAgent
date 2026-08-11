@@ -334,9 +334,7 @@ test("omits the project open module from the center toolbar", async ({ page }) =
     .first()
     .getByRole("button", { exact: true, name: "CodeAgent" })
     .click({ button: "right" });
-  await expect(
-    page.getByRole("menu", { name: "打开 ~/Develop/person/CodeAgent 的方式" }),
-  ).toBeVisible();
+  await expect(page.getByRole("menu", { name: "~/Develop/person/CodeAgent 的操作" })).toBeVisible();
   await page.keyboard.press("Escape");
 
   await expect(page.getByRole("button", { name: "在 Zed 中打开" })).toHaveCount(0);

@@ -116,9 +116,13 @@ export const workbench = {
     followUpPlaceholder: "Enter follow-up instructions",
   },
   openMenu: {
+    copyName: "Copy name",
+    copyPath: "Copy path",
+    moreActions: "More actions",
+    open: "Open",
+    reference: "Reference",
     systemDefault: "System default app",
-    targetLabel: "Ways to open {{path}}",
-    title: "Open with",
+    targetLabel: "Actions for {{path}}",
   },
   promptCommand: {
     availability: {

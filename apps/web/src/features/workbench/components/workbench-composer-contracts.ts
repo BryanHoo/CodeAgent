@@ -12,6 +12,7 @@ import type {
   AgentTurn,
   AgentTurnOptions,
   ProjectGitStatus,
+  ProjectFileSearchEntry,
 } from "@code-agent/protocol";
 import type { Ref } from "react";
 
@@ -45,10 +46,11 @@ export function createComposerTurnOptions(
 
 export type WorkbenchComposerHandle = Readonly<{
   buildPlan: () => Promise<boolean>;
+  referenceProjectPath: (file: ProjectFileSearchEntry) => void;
 }>;
 
 export type WorkbenchComposerProps = Readonly<{
-  buildPlanRef?: Ref<WorkbenchComposerHandle>;
+  composerRef?: Ref<WorkbenchComposerHandle>;
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentMutationClient &
     Pick<CodeAgentGitMutationClient, "createProjectBranch" | "switchProjectBranch"> &

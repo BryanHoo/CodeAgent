@@ -3,6 +3,7 @@ import type {
   AgentMcpServer,
   AgentSkill,
   AgentTaskSnapshot,
+  ProjectFileSearchEntry,
   ProjectGitStatus,
   ProjectOpenApp,
   ProjectOpenAppId,
@@ -23,11 +24,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
-import {
-  getProjectOpenAppsForTarget,
-  ProjectOpenContextMenu,
-  ProjectOpenDropdownMenu,
-} from "./project-open-menu.js";
+import { ProjectOpenContextMenu, ProjectOpenDropdownMenu } from "./project-open-menu.js";
 import type { SubagentContextEntry, SubagentSelection } from "./subagent.js";
 
 import {
@@ -72,6 +69,7 @@ type WorkbenchInspectorProps = Readonly<{
   onOpenFileDiff?: (change: AgentFileChange) => void;
   onOpenProjectPath?: (appId: ProjectOpenAppId, path?: string) => void;
   onOpenProjectFile?: (path: string) => void;
+  onReferenceProjectPath?: (entry: ProjectFileSearchEntry) => void;
   onOpenSubagent?: (selection: SubagentSelection) => void;
   onReloadMcpServers?: () => void;
   onRefreshFileTreeDirectory?: (directoryPath: string | null) => void;
@@ -117,6 +115,7 @@ export function WorkbenchInspector({
   onOpenFileDiff = () => undefined,
   onOpenProjectPath = () => undefined,
   onOpenProjectFile = () => undefined,
+  onReferenceProjectPath = () => undefined,
   onOpenSubagent = () => undefined,
   onReloadMcpServers = () => undefined,
   onRefreshFileTreeDirectory = () => undefined,
@@ -434,6 +433,7 @@ export function WorkbenchInspector({
                       onOpen={() => {
                         setSelectedTreePath(projectPath);
                       }}
+                      onReference={onReferenceProjectPath}
                       onSelect={(appId) => {
                         onOpenProjectPath(appId);
                       }}
@@ -443,22 +443,20 @@ export function WorkbenchInspector({
                         name={projectRootName}
                         path={projectPath}
                         trailing={
-                          getProjectOpenAppsForTarget(projectOpenApps, "directory").length ===
-                          0 ? undefined : (
-                            <FileTreeActions>
-                              <ProjectOpenDropdownMenu
-                                apps={projectOpenApps}
-                                isPending={projectOpenPending}
-                                onOpen={() => {
-                                  setSelectedTreePath(projectPath);
-                                }}
-                                onSelect={(appId) => {
-                                  onOpenProjectPath(appId);
-                                }}
-                                target={{ path: projectPath, type: "directory" }}
-                              />
-                            </FileTreeActions>
-                          )
+                          <FileTreeActions>
+                            <ProjectOpenDropdownMenu
+                              apps={projectOpenApps}
+                              isPending={projectOpenPending}
+                              onOpen={() => {
+                                setSelectedTreePath(projectPath);
+                              }}
+                              onReference={onReferenceProjectPath}
+                              onSelect={(appId) => {
+                                onOpenProjectPath(appId);
+                              }}
+                              target={{ path: projectPath, type: "directory" }}
+                            />
+                          </FileTreeActions>
                         }
                       >
                         <ProjectFileTreeNodes
@@ -471,6 +469,7 @@ export function WorkbenchInspector({
                             setSelectedTreePath(path);
                           }}
                           onOpenProjectPath={onOpenProjectPath}
+                          onReferenceProjectPath={onReferenceProjectPath}
                           onRefreshDirectory={onRefreshFileTreeDirectory}
                           projectOpenApps={projectOpenApps}
                           projectOpenPending={projectOpenPending}

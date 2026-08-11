@@ -2,6 +2,7 @@ import type { AgentSkill, ProjectFileSearchEntry } from "@code-agent/protocol";
 import { describe, expect, it } from "vitest";
 
 import {
+  appendPromptFileReference,
   createPromptSkillContent,
   insertPromptFileReference,
   insertPromptSkill,
@@ -22,6 +23,19 @@ const sourceFile: ProjectFileSearchEntry = { name: "main.tsx", path: "src/main.t
 const testFile: ProjectFileSearchEntry = { name: "main.test.tsx", path: "src/main.test.tsx" };
 
 describe("prompt file reference content", () => {
+  it("appends a unique file or directory reference after existing draft text", () => {
+    const withFile = appendPromptFileReference(createPromptSkillContent("Review this"), sourceFile);
+    const withDirectory = appendPromptFileReference(withFile, {
+      name: "components",
+      path: "src/components",
+    });
+
+    expect(serializePromptSkillContent(withDirectory)).toBe(
+      "Review this @src/main.tsx @src/components",
+    );
+    expect(appendPromptFileReference(withDirectory, sourceFile)).toBe(withDirectory);
+  });
+
   it("replaces mention ranges while preserving text and Skill token order", () => {
     const withSkill = insertPromptSkill(
       createPromptSkillContent("/security 请检查 @main 后续"),

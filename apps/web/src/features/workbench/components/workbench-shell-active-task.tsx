@@ -14,7 +14,7 @@ import type {
   ProjectGitStatus,
 } from "@code-agent/protocol";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useState, type RefObject } from "react";
 
 import type { MessageFileReference } from "../../../shared/components/agent/message.js";
 import {
@@ -33,6 +33,7 @@ import { useSubmissionStartedAt, type SubmittedPromptState } from "./workbench-s
 export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   capabilities,
   client,
+  composerRef,
   fallbackSettings,
   fixedSandboxMode,
   followUpBehavior,
@@ -57,6 +58,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
 }: Readonly<{
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentWorkbenchClient;
+  composerRef: RefObject<WorkbenchComposerHandle | null>;
   fallbackSettings: AgentTaskSettings;
   fixedSandboxMode?: AgentSandboxMode;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];
@@ -87,7 +89,6 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
 }>) {
   const queryClient = useQueryClient();
   const taskScope = `${projectId}:${taskId}`;
-  const composerRef = useRef<WorkbenchComposerHandle>(null);
   const [timelineScrollToBottomSignal, setTimelineScrollToBottomSignal] = useState(0);
   const {
     beginSubmission,
@@ -186,7 +187,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         {...(startingSnapshot === undefined ? {} : { startingSnapshot })}
       />
       <WorkbenchComposer
-        buildPlanRef={composerRef}
+        composerRef={composerRef}
         capabilities={capabilities}
         client={client}
         {...(fixedSandboxMode === undefined ? {} : { fixedSandboxMode })}
