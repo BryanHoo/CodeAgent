@@ -140,6 +140,13 @@ export function useTaskItem(itemStore: TaskItemStore): AgentItem {
   return itemStore.read();
 }
 
+export function getUserMessageCopyText(item: Extract<AgentItem, { type: "message" }>): string {
+  // 附件只用于消息展示，复制时仅保留可编辑的 Skill 引用与用户正文。
+  return [...(item.skills ?? []).map((skill) => `$${skill.name}`), item.text]
+    .filter((part) => part.length > 0)
+    .join("\n");
+}
+
 export function StoredTimelineItemContentValue({
   isLastTurnItem,
   itemStore,
@@ -232,20 +239,7 @@ export function StoredUserMessageValue({
     return null;
   }
   const copiedText =
-    item.type === "review"
-      ? getReviewMessageText(item)
-      : [
-          ...(item.skills ?? []).map((skill) => `$${skill.name}`),
-          ...(item.attachments ?? []).map((attachment) =>
-            i18n.t("timeline.imageCopyLabel", {
-              name: attachment.name,
-              ns: "conversation",
-            }),
-          ),
-          item.text,
-        ]
-          .filter((part) => part.length > 0)
-          .join("\n");
+    item.type === "review" ? getReviewMessageText(item) : getUserMessageCopyText(item);
 
   return (
     <Message from="user">

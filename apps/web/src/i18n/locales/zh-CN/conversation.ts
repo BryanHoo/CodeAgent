@@ -250,7 +250,6 @@ export const conversation = {
     fork: "复制任务",
     forkFailed: "复制任务失败，请重试",
     forking: "正在复制任务",
-    imageCopyLabel: "[图片] {{name}}",
     loading: "正在加载任务历史",
     loadError: "无法加载任务历史",
     moreFiles: "再显示 {{count}} 个文件",

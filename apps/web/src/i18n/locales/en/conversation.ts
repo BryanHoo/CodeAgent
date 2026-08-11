@@ -251,7 +251,6 @@ export const conversation = {
     fork: "Fork task",
     forkFailed: "Failed to fork task. Try again.",
     forking: "Forking task",
-    imageCopyLabel: "[Image] {{name}}",
     loading: "Loading task history",
     loadError: "Failed to load task history",
     moreFiles: "Show {{count}} more files",

@@ -12,7 +12,7 @@ import {
   TaskSnapshotTimeline,
   TaskTimeline,
 } from "./task-timeline.js";
-import { LiveFileChanges } from "./task-timeline-store-items.js";
+import { getUserMessageCopyText, LiveFileChanges } from "./task-timeline-store-items.js";
 
 function renderToStaticMarkup(children: ReactNode) {
   return renderReactToStaticMarkup(<TooltipProvider>{children}</TooltipProvider>);
@@ -1249,6 +1249,34 @@ describe("TaskSnapshotTimeline", () => {
     );
     expect(markup).toContain("检查认证边界。");
     expect(markup).not.toContain("SKILL.md");
+  });
+
+  it("excludes image and file attachments when copying a user message", () => {
+    const copiedText = getUserMessageCopyText({
+      attachments: [
+        {
+          id: "history/image-1",
+          kind: "image",
+          mediaType: "image/png",
+          name: "diagram.png",
+          size: 68,
+        },
+        {
+          id: "history/file-1",
+          kind: "file",
+          mediaType: "application/pdf",
+          name: "requirements.pdf",
+          size: 128,
+        },
+      ],
+      id: "message-user-copy",
+      role: "user",
+      skills: [{ name: "review-security" }],
+      text: "检查附件描述。",
+      type: "message",
+    });
+
+    expect(copiedText).toBe("$review-security\n检查附件描述。");
   });
 
   it("renders reasoning summaries without exposing raw reasoning content", () => {
