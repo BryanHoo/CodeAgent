@@ -1,9 +1,11 @@
+import { File } from "lucide-react";
 import { createContext, memo, useContext, useMemo, type ComponentProps } from "react";
 import { Block, Streamdown, StreamdownContext, type BlockProps, type Components } from "streamdown";
 
 import { Button } from "../core/button.js";
 import { CodeComments, parseCodeComments } from "./code-comments.js";
 import type { MessageFileReference } from "./message.js";
+import { promptReferenceTokenClassName } from "./prompt-reference-token.js";
 
 type MarkdownLinkProps = ComponentProps<"a"> & {
   node?: unknown;
@@ -12,7 +14,15 @@ type MarkdownLinkProps = ComponentProps<"a"> & {
 type FileReferenceMetadata = Readonly<{
   lineNumber: string | null;
   path: string;
+  prompt: boolean;
 }>;
+
+interface MarkdownNode {
+  children?: MarkdownNode[];
+  type?: string;
+  url?: string;
+  value?: string;
+}
 
 const MessageFileReferenceContext = createContext<
   ((reference: MessageFileReference) => void) | null
@@ -25,6 +35,9 @@ const WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN =
   /(?<=\]\()(?:[a-z]:[\\/]|\\\\)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
 const UNC_FILE_REFERENCE_PREFIX = "/__code_agent_unc__/";
 const RELATIVE_FILE_REFERENCE_PREFIX = "/__code_agent_relative__/";
+const PROMPT_FILE_REFERENCE_PREFIX = "/__code_agent_prompt_reference__/";
+const PROMPT_FILE_REFERENCE_PATTERN =
+  /(^|\s)@(?<path>[^\s,!?;:，。！？；：、()[\]{}"'`]+)(?=$|\s|[,!?;:，。！？；：、()[\]{}"'`])/gu;
 const RELATIVE_MARKDOWN_FILE_REFERENCE_PATTERN =
   /(?<=\]\()(?![a-z][a-z0-9+.-]*:|\/|#)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
 const LOCAL_MARKDOWN_FILE_REFERENCE_PATTERN =
@@ -44,7 +57,16 @@ function getFileReferenceMetadata(href: string | undefined): FileReferenceMetada
     return null;
   }
 
-  const match = LOCAL_FILE_REFERENCE_PATTERN.exec(decodeMarkdownFileReference(href));
+  const decodedHref = decodeMarkdownFileReference(href);
+  if (decodedHref.startsWith(PROMPT_FILE_REFERENCE_PREFIX)) {
+    return {
+      lineNumber: null,
+      path: decodedHref.slice(PROMPT_FILE_REFERENCE_PREFIX.length),
+      prompt: true,
+    };
+  }
+
+  const match = LOCAL_FILE_REFERENCE_PATTERN.exec(decodedHref);
   const matchedGroups = match?.groups;
   if (matchedGroups === undefined) {
     return null;
@@ -65,6 +87,51 @@ function getFileReferenceMetadata(href: string | undefined): FileReferenceMetada
   return {
     lineNumber: matchedGroups["line"] ?? null,
     path: filePath,
+    prompt: false,
+  };
+}
+
+function splitPromptFileReferenceText(value: string): MarkdownNode[] {
+  const nodes: MarkdownNode[] = [];
+  let cursor = 0;
+  for (const match of value.matchAll(PROMPT_FILE_REFERENCE_PATTERN)) {
+    const path = match.groups?.["path"];
+    if (path === undefined) {
+      continue;
+    }
+    const referenceStart = match.index + (match[1]?.length ?? 0);
+    if (referenceStart > cursor) {
+      nodes.push({ type: "text", value: value.slice(cursor, referenceStart) });
+    }
+    nodes.push({
+      children: [{ type: "text", value: path.split("/").at(-1) ?? path }],
+      type: "link",
+      url: `${PROMPT_FILE_REFERENCE_PREFIX}${encodeURIComponent(path)}`,
+    });
+    cursor = referenceStart + path.length + 1;
+  }
+  if (cursor < value.length) {
+    nodes.push({ type: "text", value: value.slice(cursor) });
+  }
+  return nodes;
+}
+
+function promptFileReferenceRemarkPlugin() {
+  return (tree: MarkdownNode) => {
+    // 只改写 Markdown 普通文本，已有链接和行内/块级代码由 AST 边界自然隔离。
+    const transform = (node: MarkdownNode) => {
+      if (node.type === "link" || node.type === "linkReference" || node.children === undefined) {
+        return;
+      }
+      node.children = node.children.flatMap((child) => {
+        if (child.type === "text" && child.value !== undefined) {
+          return splitPromptFileReferenceText(child.value);
+        }
+        transform(child);
+        return child;
+      });
+    };
+    transform(tree);
   };
 }
 
@@ -94,6 +161,45 @@ function MarkdownLink({ children, className = "", href, node, ...props }: Markdo
   const onOpenFileReference = useContext(MessageFileReferenceContext);
 
   if (fileReference !== null) {
+    if (fileReference.prompt) {
+      const classNames = `${promptReferenceTokenClassName} relative top-0.5 select-none ${className}`;
+      const content = (
+        <>
+          <File aria-hidden="true" className="size-4 shrink-0" />
+          <span className="truncate">{children}</span>
+        </>
+      );
+
+      if (onOpenFileReference !== null) {
+        return (
+          <Button
+            variant="embedded"
+            aria-label={`@${fileReference.path}`}
+            className={`${classNames} cursor-pointer hover:bg-control-hover`}
+            data-prompt-file-reference={fileReference.path}
+            onClick={() => {
+              onOpenFileReference({ lineNumber: null, path: fileReference.path });
+            }}
+            size="embedded"
+            title={fileReference.path}
+            type="button"
+          >
+            {content}
+          </Button>
+        );
+      }
+
+      return (
+        <span
+          className={classNames}
+          data-prompt-file-reference={fileReference.path}
+          title={fileReference.path}
+        >
+          {content}
+        </span>
+      );
+    }
+
     const content = (
       <>
         <span>{children}</span>
@@ -152,6 +258,7 @@ function MarkdownLink({ children, className = "", href, node, ...props }: Markdo
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown> & {
   onOpenFileReference?: (reference: MessageFileReference) => void;
+  promptFileReferences?: boolean;
 };
 
 function InteractiveMessageBlock(props: BlockProps) {
@@ -174,6 +281,8 @@ function MessageResponseContent({
   className = "",
   components,
   onOpenFileReference,
+  promptFileReferences = false,
+  remarkPlugins,
   ...props
 }: MessageResponseProps) {
   const parsedResponse = parseCodeComments(children ?? "");
@@ -182,6 +291,9 @@ function MessageResponseContent({
     ...components,
     a: MarkdownLink,
   };
+  const resolvedRemarkPlugins = promptFileReferences
+    ? [promptFileReferenceRemarkPlugin, ...(remarkPlugins ?? [])]
+    : remarkPlugins;
 
   return (
     <MessageFileReferenceContext.Provider value={onOpenFileReference ?? null}>
@@ -191,6 +303,7 @@ function MessageResponseContent({
         {...props}
         BlockComponent={InteractiveMessageBlock}
         components={markdownComponents}
+        {...(resolvedRemarkPlugins === undefined ? {} : { remarkPlugins: resolvedRemarkPlugins })}
       >
         {normalizedMarkdown}
       </Streamdown>
@@ -205,7 +318,8 @@ export const MessageResponse = memo(
     previousProps.children === nextProps.children &&
     previousProps.isAnimating === nextProps.isAnimating &&
     previousProps.mode === nextProps.mode &&
-    previousProps.onOpenFileReference === nextProps.onOpenFileReference,
+    previousProps.onOpenFileReference === nextProps.onOpenFileReference &&
+    previousProps.promptFileReferences === nextProps.promptFileReferences,
 );
 
 MessageResponse.displayName = "MessageResponse";

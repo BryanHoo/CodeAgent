@@ -125,6 +125,7 @@ export function TimelineItemContent({
               )}
               {...responseRendering}
               onOpenFileReference={onOpenSourceFile}
+              promptFileReferences={item.role === "user"}
             >
               {item.text}
             </LazyMessageResponse>

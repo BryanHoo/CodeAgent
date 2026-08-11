@@ -53,6 +53,20 @@ describe("prompt file reference content", () => {
     });
   });
 
+  it("keeps adjacent text outside a submitted file reference", () => {
+    const gitignoreFile: ProjectFileSearchEntry = { name: ".gitignore", path: ".gitignore" };
+
+    expect(
+      toPromptSkillSubmission([
+        { file: gitignoreFile, type: "file" },
+        { text: "读取文件", type: "text" },
+      ]),
+    ).toEqual({
+      skills: [],
+      text: "@.gitignore 读取文件",
+    });
+  });
+
   it("deduplicates selected paths and removes only the requested file token", () => {
     const once = insertPromptFileReference(
       createPromptSkillContent("@main 对比 @main"),

@@ -239,14 +239,25 @@ export function serializePromptSkillContent(content: PromptSkillContent): string
 export function toPromptSkillSubmission(content: PromptSkillContent): PromptSkillSubmission {
   const skills: AgentSkill[] = [];
   let text = "";
+  let needsFileBoundary = false;
   for (const part of content) {
     if (part.type === "skill") {
       skills.push(part.skill);
-    } else if (part.type === "file") {
-      text += fileReferencePlainText(part.file);
-    } else {
-      text += part.text;
+      continue;
     }
+    const partText = part.type === "file" ? fileReferencePlainText(part.file) : part.text;
+    if (partText === "") {
+      continue;
+    }
+    if (
+      (part.type === "file" && text !== "" && !/\s$/u.test(text)) ||
+      (needsFileBoundary && !/^\s/u.test(partText))
+    ) {
+      // 纯文本协议使用空格保留不可编辑文件 Token 的前后边界。
+      text += " ";
+    }
+    text += partText;
+    needsFileBoundary = part.type === "file";
   }
   return { skills, text: text.trim() };
 }

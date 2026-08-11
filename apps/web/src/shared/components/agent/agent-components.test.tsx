@@ -428,6 +428,24 @@ info`,
     expect(markup).toContain("(line 948)");
   });
 
+  it("renders prompt file references with the composer token treatment", () => {
+    const markup = renderWithTooltipProvider(
+      <Message from="user">
+        <MessageContent>
+          <MessageResponse promptFileReferences onOpenFileReference={() => undefined}>
+            {"请检查 @src/main.tsx，保留 `@src/raw.ts`。"}
+          </MessageResponse>
+        </MessageContent>
+      </Message>,
+    );
+
+    expect(markup).toContain('data-prompt-file-reference="src/main.tsx"');
+    expect(markup).toContain('title="src/main.tsx"');
+    expect(markup).toContain("main.tsx");
+    expect(markup).toContain("@src/raw.ts");
+    expect(markup.match(/data-prompt-file-reference=/gu)).toHaveLength(1);
+  });
+
   it("renders local Markdown file references as source preview buttons when enabled", () => {
     const markup = renderToStaticMarkup(
       <Message from="assistant">

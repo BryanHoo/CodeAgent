@@ -784,17 +784,23 @@ test("selects and submits a project file reference from an inline @ mention", as
 
   const fileToken = prompt.locator('[data-prompt-file-path="src/main.tsx"]');
   await expect(fileToken).toBeVisible();
-  await expect(prompt).toHaveAttribute("data-serialized-value", "请检查 @src/main.tsx");
+  await page.keyboard.type("读取文件");
+  await expect(prompt).toHaveAttribute("data-serialized-value", "请检查 @src/main.tsx读取文件");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
 
   await expect.poll(() => turnRequest).toBeDefined();
   expect(turnRequest?.["input"]).toEqual({
     attachments: [],
     skills: [],
-    text: "请检查 @src/main.tsx",
+    text: "请检查 @src/main.tsx 读取文件",
     type: "prompt",
   });
-  await expect(page.locator('article[data-role="user"]').last()).toContainText("@src/main.tsx");
+  const submittedMessage = page.locator('article[data-role="user"]').last();
+  await expect(submittedMessage).toContainText("请检查");
+  await expect(submittedMessage.locator('[data-prompt-file-reference="src/main.tsx"]')).toHaveText(
+    "main.tsx",
+  );
+  await expect(submittedMessage).toContainText("读取文件");
 });
 
 test("从最新 AI 回复复制任务", async ({ page }) => {
