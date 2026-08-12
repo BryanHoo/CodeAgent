@@ -20,14 +20,21 @@ repository = "https://github.com/BryanHoo/CodeAgent"
 rust-version = "1.88"
 
 [workspace.dependencies]
+async-trait = "=0.1.89"
+chrono = { version = "=0.4.44", default-features = false, features = ["serde", "std"] }
 code-agent-core = { path = "crates/core" }
 code-agent-platform = { path = "crates/platform" }
 code-agent-protocol = { path = "crates/protocol" }
 code-agent-provider-codex = { path = "crates/provider-codex" }
 code-agent-runtime = { path = "crates/runtime" }
 serde = { version = "=1.0.229" }
+serde_json = { version = "=1.0.150" }
+jsonschema = { version = "=0.49.2", default-features = false }
 tauri = { version = "=2.11.5" }
 tauri-build = { version = "=2.6.3" }
+thiserror = "=2.0.18"
+tokio = { version = "=1.49.0", features = ["macros", "rt", "sync", "time"] }
+tokio-util = { version = "=0.7.18", features = ["rt"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

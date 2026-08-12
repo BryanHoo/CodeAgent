@@ -27,6 +27,7 @@
 
 - JSONL 分帧测试覆盖多字节 UTF-8 字符跨 Buffer 边界；RPC 关联、服务端请求响应、超时、审批状态机和事件映射使用 Vitest 单元测试。
 - Codex App Server 协议必须使用锁定的 `@openai/codex` 和 `--experimental` 生成 TypeScript 与 JSON Schema，并由 `pnpm run codex:schema:check` 比较版本化规范基线；依赖升级必须显式更新基线并同步 Adapter 契约测试。
+- CodeAgent 公共 Rust DTO 必须由版本化 TypeBox Schema 显式生成，`pnpm check` 和 CI 必须执行 `pnpm run protocol:rust:check`；生成器无法可靠构造的复杂联合保留原 JSON Schema 校验，不得手写第二份宽松 DTO。
 - Binary 定位测试必须确认包内路径落到当前平台的原生可执行文件；Windows 只接受 `.exe`，不得把 `.cmd`、`.bat` 或 JS launcher 当作受管 App Server 进程。
 - Server 目录浏览测试必须覆盖 POSIX 路径规范化、Windows UTF-8 绝对路径契约、非目录与相对路径拒绝、符号链接省略和稳定排序；根 CLI 系统集成测试继续覆盖浏览器启动器的缺失回退。CI 质量门禁至少在 Ubuntu 与 Windows 上运行。
 - 根 CLI 参数测试必须覆盖 `pnpm run start -- ...` 转发的单个 `--` 分隔符；只忽略命令后的首个分隔符，后续未知或重复选项仍必须拒绝。

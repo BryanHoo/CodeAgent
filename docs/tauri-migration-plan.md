@@ -318,6 +318,14 @@ Tauri 实现：
 
 每一阶段单独合并，必须满足该阶段验收条件后才能继续。标记为“删除”的代码不能推迟到项目末尾集中清理。
 
+阶段状态：
+
+- Phase 0：已由现有性能门禁与技术验证覆盖；持续基线位于 `tests/performance-budgets.json`。
+- Phase 1：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-1-desktop-shell.md`。
+- Phase 2：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-2-client-transports.md`。
+- Phase 3：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-3-rust-runtime.md`。
+- Phase 4 至 Phase 9：待开始。
+
 ### Phase 0：建立基线与技术验证
 
 实施项：

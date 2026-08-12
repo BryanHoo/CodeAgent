@@ -1,5 +1,20 @@
 // 统一协议、JSON Schema 与事件信封只能从此公开入口导出。
 export {
+  AgentProviderEventSchema,
+  CodeAgentErrorCodeSchema,
+  CodeAgentErrorSchema,
+  ProjectIdSchema,
+  RUST_RUNTIME_SCHEMA_ID,
+  RustRuntimeProtocolSchema,
+  TaskIdSchema,
+  createRustRuntimeSchemaDocument,
+  type AgentProviderEvent,
+  type CodeAgentError,
+  type ProjectId,
+  type RustRuntimeSchemaDocument,
+  type TaskId,
+} from "./rust-runtime-schema.js";
+export {
   AppInfoResponseSchema,
   AppUpdateStatusSchema,
   InstallAppUpdateRequestSchema,

@@ -23,9 +23,11 @@
 - 公共协议归属 `packages/protocol`，领域规则归属 `packages/core`；跨包公共入口统一从包根 `src/index.ts` 导出。
 - `packages/client` 只保留宿主无关 facade 与契约；HTTP/WebSocket 和 Tauri IPC 分别归属 `packages/transport-http`、`packages/transport-tauri`，`apps/web/src/app/create-host-client.ts` 是唯一宿主 Composition Root。
 - 跨层协议变化必须同步更新 Schema、类型、边界适配和契约测试；外部数据在进入领域层前完成运行时校验。
+- TypeBox 继续作为 TypeScript/Rust 公共协议单一来源；使用 `pnpm run protocol:rust:generate` 显式更新版本化 Schema 与 Rust DTO，`pnpm run protocol:rust:check` 只读检查 drift。复杂 Provider Event 在 Rust 侧先按同一 JSON Schema 校验，再进入 Runtime Event Stream。
 - Provider 差异通过 Capability 或 `extensions` 表达，原始 Provider 结构不得泄漏到 Web。
 - 项目命令使用 pnpm，Python 命令使用 `python3`；内部依赖使用 `workspace:*`，共享外部版本使用 `catalog:`。
 - 子进程使用参数数组和 `shell: false`；路径、等待与资源清理必须跨平台且有界。
+- Rust Runtime 只依赖 Core/Protocol ports；操作、幂等、事件与订阅队列必须有界，关闭使用协作取消并等待全部受跟踪任务。
 
 ## Verification Checklist
 
