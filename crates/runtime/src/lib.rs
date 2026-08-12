@@ -1363,11 +1363,30 @@ impl CodeAgentRuntime {
         attachment_id: &str,
     ) -> Result<Vec<u8>, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
+        let platform_result = self
             .ports
             .attachment
             .read(project_id, task_id, attachment_id, &context)
             .await;
+        let result = match platform_result {
+            Ok(bytes) => Ok(bytes),
+            Err(error) if error.code() == CodeAgentErrorCode::NotFound => {
+                // 历史附件由 Provider 授权；仅平台 Store 明确未命中时才进入该读取路径。
+                match self.project_context(project_id, &context).await {
+                    Ok(project) => match project
+                        .provider
+                        .read_task_attachment(task_id.as_str(), attachment_id, &context)
+                        .await
+                    {
+                        Ok(Some(bytes)) => Ok(bytes),
+                        Ok(None) => Err(error),
+                        Err(provider_error) => Err(provider_error),
+                    },
+                    Err(context_error) => Err(context_error),
+                }
+            }
+            Err(error) => Err(error),
+        };
         self.finish_operation(request_id).await;
         result
     }

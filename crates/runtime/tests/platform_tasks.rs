@@ -5,8 +5,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use code_agent_core::{
-    AttachmentPort, ClockPort, CodeAgentError, FilePort, GitPort, PortRequestContext,
-    ProjectProviderPort, ProviderPort, RepositoryPort, UpdatePort,
+    AttachmentPort, ClockPort, CodeAgentError, CodeAgentErrorCode, FilePort, GitPort,
+    PortRequestContext, ProjectProviderPort, ProviderPort, RepositoryPort, UpdatePort,
 };
 use code_agent_protocol::{
     AgentBackgroundTerminalPage, AgentCapabilities, AgentGlobalSettings, AgentMcpServerPage,
@@ -61,6 +61,17 @@ impl ProjectProviderPort for FakeProjectProvider {
             "turns": [],
             "updatedAt": "2026-08-12T00:00:00Z"
         })))
+    }
+    async fn read_task_attachment(
+        &self,
+        task_id: &str,
+        attachment_id: &str,
+        _context: &PortRequestContext,
+    ) -> Result<Option<Vec<u8>>, CodeAgentError> {
+        Ok(
+            (task_id == "task-1" && attachment_id == "history-attachment")
+                .then(|| b"historical bytes".to_vec()),
+        )
     }
     async fn pin_task(
         &self,
@@ -416,7 +427,11 @@ impl AttachmentPort for FakePorts {
         _attachment_id: &str,
         _context: &PortRequestContext,
     ) -> Result<Vec<u8>, CodeAgentError> {
-        Ok(Vec::new())
+        Err(CodeAgentError::new(
+            CodeAgentErrorCode::NotFound,
+            "attachment was not found",
+            None,
+        ))
     }
 }
 impl ClockPort for FakePorts {
@@ -683,4 +698,24 @@ async fn temporary_project_should_be_created_once_from_configured_root() {
     right.expect("right list");
     assert_eq!(fake.temporary_calls.load(Ordering::SeqCst), 1);
     assert_eq!(fake.for_project_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn task_attachment_should_fallback_to_provider_history_when_platform_store_misses() {
+    let fake = FakePorts::new();
+    let runtime = runtime(fake);
+    let project_id = ProjectId::try_from("project-1").expect("project id");
+    let task_id = TaskId::try_from("task-1").expect("task id");
+
+    let bytes = runtime
+        .task_attachment(
+            "history-attachment",
+            &project_id,
+            &task_id,
+            "history-attachment",
+        )
+        .await
+        .expect("historical attachment");
+
+    assert_eq!(bytes, b"historical bytes");
 }

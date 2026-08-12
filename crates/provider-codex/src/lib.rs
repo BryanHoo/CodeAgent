@@ -2,12 +2,15 @@
 
 mod binary;
 mod connection;
+mod historical_attachments;
+mod history_mapping;
 mod mapping;
 mod process;
 mod project_provider;
 mod provider;
 mod rpc;
 mod skill_mapping;
+mod task_state;
 
 pub use binary::{
     CodexBinary, CodexBinarySource, CodexVersionInfo, LocateCodexBinaryOptions,

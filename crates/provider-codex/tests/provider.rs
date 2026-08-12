@@ -190,7 +190,7 @@ async fn project_provider_should_start_task_and_turn_with_resume_deduplication()
                 "id": "task-1",
                 "name": null,
                 "preview": "新任务",
-                "section": "unpinned",
+                "section": null,
                 "updatedAt": 1_754_956_800
             } }),
         )
@@ -257,7 +257,7 @@ async fn provider_should_route_mapped_notifications_to_project_subscription() {
                 "id": "task-1",
                 "name": null,
                 "preview": "新任务",
-                "section": "unpinned",
+                "section": null,
                 "updatedAt": 1_754_956_800
             } }),
         )
@@ -324,7 +324,7 @@ async fn pending_approval_should_publish_and_round_trip_native_decision() {
                 "id": "task-1",
                 "name": null,
                 "preview": "新任务",
-                "section": "unpinned",
+                "section": null,
                 "updatedAt": 1_754_956_800
             } }),
         )
@@ -410,7 +410,7 @@ async fn review_worker_notification_should_route_to_parent_task() {
                 "id": "task-1",
                 "name": null,
                 "preview": "新任务",
-                "section": "unpinned",
+                "section": null,
                 "updatedAt": 1_754_956_800
             } }),
         )

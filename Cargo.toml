@@ -27,6 +27,7 @@ code-agent-platform = { path = "crates/platform" }
 code-agent-protocol = { path = "crates/protocol" }
 code-agent-provider-codex = { path = "crates/provider-codex" }
 code-agent-runtime = { path = "crates/runtime" }
+data-encoding = "=2.11.1"
 serde = { version = "=1.0.229" }
 serde_json = { version = "=1.0.150" }
 jsonschema = { version = "=0.49.2", default-features = false }

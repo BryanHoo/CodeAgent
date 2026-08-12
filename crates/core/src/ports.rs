@@ -344,6 +344,15 @@ pub trait ProjectProviderPort: Send + Sync {
         task_id: &str,
         context: &PortRequestContext,
     ) -> Result<Option<Value>, CodeAgentError>;
+    /// 读取 Provider 历史快照授权的附件字节。
+    async fn read_task_attachment(
+        &self,
+        _task_id: &str,
+        _attachment_id: &str,
+        _context: &PortRequestContext,
+    ) -> Result<Option<Vec<u8>>, CodeAgentError> {
+        Ok(None)
+    }
     async fn pin_task(
         &self,
         task_id: &str,

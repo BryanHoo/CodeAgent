@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use chrono::{DateTime, SecondsFormat};
 use code_agent_core::{CodeAgentError, PortRequestContext, ProjectProviderPort};
 use code_agent_protocol::{
     AgentBackgroundTerminalPage, AgentMcpServerPage, AgentSkillPage, AgentTaskPage, Project,
@@ -12,9 +11,12 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
 use crate::{
-    JsonlRpcClient, PendingCodexRequest, RpcServerRequest, map_codex_server_request,
-    map_codex_turn, rpc_error_to_code_agent_error, skill_mapping::map_skills,
+    JsonlRpcClient, PendingCodexRequest, RpcServerRequest,
+    historical_attachments::HistoricalAttachmentStore, map_codex_server_request, map_codex_turn,
+    rpc_error_to_code_agent_error, skill_mapping::map_skills, task_state::TaskState,
 };
+
+mod tasks;
 
 const EVENT_SUBSCRIBER_CAPACITY: usize = 256;
 const MAX_PENDING_REQUESTS: usize = 1_000;
@@ -27,12 +29,14 @@ struct Subscriber {
 pub(crate) struct CodexProjectProvider {
     client: JsonlRpcClient,
     ephemeral: Mutex<HashSet<String>>,
+    historical_attachments: HistoricalAttachmentStore,
     owners: Arc<Mutex<HashMap<String, String>>>,
     pending: Mutex<HashMap<String, PendingCodexRequest>>,
     project: Project,
     resume_locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     resumed: Mutex<HashSet<String>>,
     subscribers: Mutex<Vec<Subscriber>>,
+    task_state: TaskState,
     tasks: Mutex<HashSet<String>>,
 }
 
@@ -45,12 +49,14 @@ impl CodexProjectProvider {
         Self {
             client,
             ephemeral: Mutex::new(HashSet::new()),
+            historical_attachments: HistoricalAttachmentStore::default(),
             owners,
             pending: Mutex::new(HashMap::new()),
             project,
             resume_locks: Mutex::new(HashMap::new()),
             resumed: Mutex::new(HashSet::new()),
             subscribers: Mutex::new(Vec::new()),
+            task_state: TaskState::default(),
             tasks: Mutex::new(HashSet::new()),
         }
     }
@@ -149,6 +155,7 @@ impl CodexProjectProvider {
     }
 
     pub(crate) async fn publish(&self, event: RawProviderEvent) {
+        self.task_state.observe(&event);
         let ephemeral = self
             .ephemeral
             .lock()
@@ -226,37 +233,6 @@ impl CodexProjectProvider {
     }
 }
 
-fn map_task(thread: &Value, project_id: &str) -> Result<Value, CodeAgentError> {
-    let id = thread
-        .get("id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| CodeAgentError::internal("Codex thread id is invalid"))?;
-    let timestamp = thread
-        .get("updatedAt")
-        .and_then(Value::as_i64)
-        .and_then(|seconds| DateTime::from_timestamp(seconds, 0))
-        .ok_or_else(|| CodeAgentError::internal("Codex thread updatedAt is invalid"))?;
-    let title = thread
-        .get("name")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| {
-            thread
-                .get("preview")
-                .and_then(Value::as_str)
-                .and_then(|value| value.lines().next())
-        })
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or("新聊天");
-    Ok(json!({
-        "id": id,
-        "pinned": thread.get("section").and_then(Value::as_str) == Some("pinned"),
-        "projectId": project_id,
-        "title": title,
-        "updatedAt": timestamp.to_rfc3339_opts(SecondsFormat::Millis, true)
-    }))
-}
-
 #[async_trait]
 impl ProjectProviderPort for CodexProjectProvider {
     async fn start_task(
@@ -264,23 +240,7 @@ impl ProjectProviderPort for CodexProjectProvider {
         input: Value,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        let ephemeral = input
-            .get("ephemeral")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let response = self
-            .rpc(
-                "thread/start",
-                Some(json!({ "cwd": self.project.root_path.as_str(), "ephemeral": ephemeral })),
-            )
-            .await?;
-        let task = map_task(&response["thread"], self.project.id.as_str())?;
-        self.claim_task(task["id"].as_str().unwrap_or_default(), ephemeral)?;
-        self.resumed
-            .lock()
-            .map_err(|_| CodeAgentError::internal("resume registry is poisoned"))?
-            .insert(task["id"].as_str().unwrap_or_default().to_string());
-        Ok(task)
+        self.start_task_impl(input).await
     }
 
     async fn list_tasks(
@@ -288,25 +248,7 @@ impl ProjectProviderPort for CodexProjectProvider {
         input: Value,
         _context: &PortRequestContext,
     ) -> Result<AgentTaskPage, CodeAgentError> {
-        let mut params = json!({ "cwd": self.project.root_path.as_str(), "sortDirection": "desc", "sortKey": "updated_at" });
-        if let Some(cursor) = input.get("cursor") {
-            params["cursor"] = cursor.clone();
-        }
-        if let Some(limit) = input.get("limit") {
-            params["limit"] = limit.clone();
-        }
-        let response = self.rpc("thread/list", Some(params)).await?;
-        let data = response
-            .get("data")
-            .and_then(Value::as_array)
-            .ok_or_else(|| CodeAgentError::internal("thread/list data is invalid"))?
-            .iter()
-            .map(|thread| map_task(thread, self.project.id.as_str()))
-            .collect::<Result<Vec<_>, _>>()?;
-        for task in &data {
-            self.claim_task(task["id"].as_str().unwrap_or_default(), false)?;
-        }
-        serde_json::from_value(json!({ "data": data, "nextCursor": response.get("nextCursor").cloned().unwrap_or(Value::Null) })).map_err(|error| CodeAgentError::internal(error.to_string()))
+        self.list_tasks_impl(input).await
     }
 
     async fn read_task(
@@ -314,37 +256,7 @@ impl ProjectProviderPort for CodexProjectProvider {
         task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<Option<Value>, CodeAgentError> {
-        let response = self
-            .rpc(
-                "thread/read",
-                Some(json!({ "includeTurns": true, "threadId": task_id })),
-            )
-            .await?;
-        let thread = &response["thread"];
-        if thread.get("cwd").and_then(Value::as_str) != Some(self.project.root_path.as_str()) {
-            return Ok(None);
-        }
-        self.claim_task(task_id, false)?;
-        let turns = thread
-            .get("turns")
-            .and_then(Value::as_array)
-            .map(|turns| {
-                turns
-                    .iter()
-                    .map(map_codex_turn)
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .transpose()
-            .map_err(|error| CodeAgentError::internal(error.to_string()))?
-            .unwrap_or_default();
-        let mut snapshot = map_task(thread, self.project.id.as_str())?;
-        snapshot["contextUsage"] = Value::Null;
-        snapshot["pendingRequests"] = json!([]);
-        snapshot["plan"] = Value::Null;
-        snapshot["status"] = Value::String("idle".to_string());
-        snapshot["turns"] = json!(turns);
-        // Provider 只负责执行态；用户设置由 Runtime 从持久层统一补齐。
-        Ok(Some(snapshot))
+        self.read_task_impl(task_id).await
     }
 
     async fn pin_task(
@@ -353,15 +265,15 @@ impl ProjectProviderPort for CodexProjectProvider {
         pinned: bool,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        self.assert_task(task_id)?;
-        self.rpc("thread/section/move", Some(json!({ "sectionId": if pinned { Value::String("pinned".to_string()) } else { Value::Null }, "threadId": task_id }))).await?;
-        let response = self
-            .rpc(
-                "thread/read",
-                Some(json!({ "includeTurns": false, "threadId": task_id })),
-            )
-            .await?;
-        map_task(&response["thread"], self.project.id.as_str())
+        self.pin_task_impl(task_id, pinned).await
+    }
+    async fn read_task_attachment(
+        &self,
+        task_id: &str,
+        attachment_id: &str,
+        _context: &PortRequestContext,
+    ) -> Result<Option<Vec<u8>>, CodeAgentError> {
+        Ok(self.read_task_attachment_impl(task_id, attachment_id))
     }
     async fn rename_task(
         &self,
@@ -369,60 +281,35 @@ impl ProjectProviderPort for CodexProjectProvider {
         title: &str,
         _context: &PortRequestContext,
     ) -> Result<(), CodeAgentError> {
-        self.assert_task(task_id)?;
-        self.rpc(
-            "thread/name/set",
-            Some(json!({ "name": title, "threadId": task_id })),
-        )
-        .await
-        .map(|_| ())
+        self.rename_task_impl(task_id, title).await
     }
     async fn archive_task(
         &self,
         task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<(), CodeAgentError> {
-        self.assert_task(task_id)?;
-        self.rpc("thread/archive", Some(json!({ "threadId": task_id })))
-            .await
-            .map(|_| ())
+        self.archive_task_impl(task_id).await
     }
     async fn fork_task(
         &self,
         task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        self.assert_task(task_id)?;
-        let response = self
-            .rpc("thread/fork", Some(json!({ "threadId": task_id })))
-            .await?;
-        let task = map_task(&response["thread"], self.project.id.as_str())?;
-        self.claim_task(task["id"].as_str().unwrap_or_default(), false)?;
-        Ok(task)
+        self.fork_task_impl(task_id).await
     }
     async fn compact_task(
         &self,
         task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<(), CodeAgentError> {
-        self.assert_task(task_id)?;
-        self.rpc("thread/compact/start", Some(json!({ "threadId": task_id })))
-            .await
-            .map(|_| ())
+        self.compact_task_impl(task_id).await
     }
     async fn unsubscribe_task(
         &self,
         task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<String, CodeAgentError> {
-        self.assert_task(task_id)?;
-        let response = self
-            .rpc("thread/unsubscribe", Some(json!({ "threadId": task_id })))
-            .await?;
-        Ok(response["status"]
-            .as_str()
-            .unwrap_or("notLoaded")
-            .to_string())
+        self.unsubscribe_task_impl(task_id).await
     }
 
     async fn start_turn(

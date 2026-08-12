@@ -652,6 +652,7 @@ dependencies = [
  "chrono",
  "code-agent-core",
  "code-agent-protocol",
+ "data-encoding",
  "nix",
  "reqwest",
  "serde",
@@ -660,6 +661,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
+ "uuid",
 ]
 
 [[package]]
