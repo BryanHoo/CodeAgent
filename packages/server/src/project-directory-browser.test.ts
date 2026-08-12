@@ -42,6 +42,24 @@ describe("project directory browser", () => {
       ],
       parentPath: dirname(homePath),
       path: homePath,
+      roots: [],
+    });
+  });
+
+  it("returns every available Windows drive for switching filesystem roots", async () => {
+    const homePath = await createTemporaryDirectory();
+    const filesystemRoots = async () => [
+      { name: "C:", path: "C:\\" },
+      { name: "D:", path: "D:\\" },
+    ];
+
+    await expect(
+      readProjectDirectory(undefined, { filesystemRoots, homePath }),
+    ).resolves.toMatchObject({
+      roots: [
+        { name: "C:", path: "C:\\" },
+        { name: "D:", path: "D:\\" },
+      ],
     });
   });
 

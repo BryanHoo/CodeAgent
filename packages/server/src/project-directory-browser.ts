@@ -5,6 +5,8 @@ import { dirname, isAbsolute, join } from "node:path";
 
 import type { ProjectDirectoryListing } from "@code-agent/protocol";
 
+import { listFilesystemRoots } from "./filesystem-roots.js";
+
 export type ProjectDirectoryBrowserErrorReason = "directory-unavailable" | "invalid-directory";
 
 export class ProjectDirectoryBrowserError extends Error {
@@ -18,7 +20,10 @@ export class ProjectDirectoryBrowserError extends Error {
   }
 }
 
-type ProjectDirectoryBrowserOptions = Readonly<{ homePath?: string }>;
+type ProjectDirectoryBrowserOptions = Readonly<{
+  filesystemRoots?: typeof listFilesystemRoots;
+  homePath?: string;
+}>;
 
 function toDirectoryError(error: unknown): ProjectDirectoryBrowserError {
   const code = (error as NodeJS.ErrnoException).code;
@@ -70,7 +75,10 @@ export async function readProjectDirectory(
   requestedPath?: string,
   options: ProjectDirectoryBrowserOptions = {},
 ): Promise<ProjectDirectoryListing> {
-  const path = await resolveProjectDirectory(requestedPath, options);
+  const [path, roots] = await Promise.all([
+    resolveProjectDirectory(requestedPath, options),
+    (options.filesystemRoots ?? listFilesystemRoots)(),
+  ]);
   let children: Dirent[];
   try {
     children = await readdir(path, { withFileTypes: true });
@@ -88,5 +96,6 @@ export async function readProjectDirectory(
     entries,
     parentPath: parentPath === path ? null : parentPath,
     path,
+    roots,
   };
 }

@@ -46,6 +46,7 @@ describe("ProjectDirectoryPickerDialog", () => {
           entries: [{ name: "src", path: "/workspace/CodeAgent/packages/src" }],
           parentPath: "/workspace/CodeAgent",
           path: "/workspace/CodeAgent/packages",
+          roots: [],
         },
         error: null,
         isFetching: false,
@@ -68,6 +69,7 @@ describe("ProjectDirectoryPickerDialog", () => {
           ],
           parentPath: "/workspace",
           path: "/workspace/CodeAgent",
+          roots: [],
         }}
         onExpandedChange={vi.fn()}
         onRetry={vi.fn()}
@@ -81,5 +83,35 @@ describe("ProjectDirectoryPickerDialog", () => {
     expect(markup).toContain("src");
     expect(markup).toContain("无法读取此文件夹");
     expect(markup).toContain("重试");
+  });
+
+  it("renders a drive selector when multiple Windows filesystem roots are available", async () => {
+    await changeAppLanguage("zh-CN");
+    const queryClient = new QueryClient();
+    queryClient.setQueryData<ProjectDirectoryListing>(["project-directories", null], {
+      entries: [],
+      parentPath: null,
+      path: "D:\\",
+      roots: [
+        { name: "C:", path: "C:\\" },
+        { name: "D:", path: "D:\\" },
+      ],
+    });
+    const markup = renderToStaticMarkup(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <ProjectDirectoryPickerDialog
+            addError={null}
+            client={{ listProjectDirectories: vi.fn() }}
+            isAdding={false}
+            onAdd={vi.fn()}
+            onClose={vi.fn()}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(markup).toContain('aria-label="选择磁盘"');
+    expect(markup).toContain("D:");
   });
 });

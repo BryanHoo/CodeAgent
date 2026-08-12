@@ -46,12 +46,30 @@ describe("host file browser", () => {
       ],
       parentPath: dirname(homePath),
       path: homePath,
+      roots: [],
     });
     await expect(readHostFileDirectory("file", homePath)).resolves.toMatchObject({
       entries: [
         { name: "Alpha", type: "directory" },
         { name: "zeta", type: "directory" },
         { name: "README.md", type: "file" },
+      ],
+    });
+  });
+
+  it("returns every available Windows drive for attachment browsing", async () => {
+    const homePath = await createTemporaryDirectory();
+    const filesystemRoots = async () => [
+      { name: "C:", path: "C:\\" },
+      { name: "D:", path: "D:\\" },
+    ];
+
+    await expect(
+      readHostFileDirectory("file", undefined, { filesystemRoots, homePath }),
+    ).resolves.toMatchObject({
+      roots: [
+        { name: "C:", path: "C:\\" },
+        { name: "D:", path: "D:\\" },
       ],
     });
   });

@@ -15,10 +15,18 @@ import {
   DialogTitle,
 } from "../../../shared/components/core/dialog.js";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../shared/components/core/select.js";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
+import { findActiveFilesystemRoot } from "../../../shared/lib/filesystem-roots.js";
 import type { CodeAgentProjectDirectoryClient } from "../project-queries.js";
 
 export type ProjectDirectoryState = Readonly<{
@@ -165,6 +173,8 @@ export function ProjectDirectoryPickerDialog({
     staleTime: 30_000,
   });
   const listing = rootQuery.data;
+  const activeRootPath =
+    listing === undefined ? undefined : findActiveFilesystemRoot(listing.roots, listing.path)?.path;
   const activeSelectedPath = selectedPath ?? listing?.path;
   const canAdd = listing !== undefined && activeSelectedPath !== undefined;
   const expandedDirectoryPaths = useMemo(() => [...expandedPaths], [expandedPaths]);
@@ -194,6 +204,11 @@ export function ProjectDirectoryPickerDialog({
     setExpandedPaths(new Set());
     setSelectedPath(parentPath);
   };
+  const navigateToRoot = (path: string) => {
+    setRootPath(path);
+    setExpandedPaths(new Set());
+    setSelectedPath(path);
+  };
 
   return (
     <Dialog
@@ -220,6 +235,27 @@ export function ProjectDirectoryPickerDialog({
         </DialogHeader>
 
         <div className="flex min-h-10 items-center gap-2 border-y border-separator bg-panel px-3 sm:px-4">
+          {listing === undefined || listing.roots.length < 2 ? null : (
+            <Select
+              onValueChange={navigateToRoot}
+              {...(activeRootPath === undefined ? {} : { value: activeRootPath })}
+            >
+              <SelectTrigger
+                aria-label={t("projectPicker.filesystemRoot")}
+                className="h-8 min-w-20 px-2 font-mono"
+                size="sm"
+              >
+                <SelectValue placeholder={t("projectPicker.filesystemRoot")} />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {listing.roots.map((root) => (
+                  <SelectItem key={root.path} value={root.path}>
+                    {root.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

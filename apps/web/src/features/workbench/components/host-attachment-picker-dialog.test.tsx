@@ -46,6 +46,7 @@ describe("HostAttachmentPickerDialog", () => {
           ],
           parentPath: "/Users/bryan/Pictures",
           path: "/Users/bryan/Pictures/design",
+          roots: [],
         },
         error: null,
         isFetching: false,
@@ -69,6 +70,7 @@ describe("HostAttachmentPickerDialog", () => {
           ],
           parentPath: "/Users/bryan",
           path: "/Users/bryan/Pictures",
+          roots: [],
         }}
         onExpandedChange={vi.fn()}
         onRetry={vi.fn()}
@@ -82,5 +84,35 @@ describe("HostAttachmentPickerDialog", () => {
     expect(markup).toContain("nested.png");
     expect(markup).toContain("无法读取此文件夹");
     expect(markup).toContain("重试");
+  });
+
+  it("renders a drive selector when multiple Windows filesystem roots are available", async () => {
+    await changeAppLanguage("zh-CN");
+    const queryClient = new QueryClient();
+    queryClient.setQueryData<HostFileListing>(["host-files", "image", null], {
+      entries: [],
+      parentPath: null,
+      path: "D:\\",
+      roots: [
+        { name: "C:", path: "C:\\" },
+        { name: "D:", path: "D:\\" },
+      ],
+    });
+    const markup = renderToStaticMarkup(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <HostAttachmentPickerDialog
+            client={{ importHostAttachment: vi.fn(), listHostFiles: vi.fn() }}
+            kind="image"
+            onAdd={vi.fn()}
+            onClose={vi.fn()}
+            projectId="code-agent"
+          />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(markup).toContain('aria-label="选择磁盘"');
+    expect(markup).toContain("D:");
   });
 });

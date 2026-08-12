@@ -11,6 +11,8 @@ import {
   type HostFileListing,
 } from "@code-agent/protocol";
 
+import { listFilesystemRoots } from "./filesystem-roots.js";
+
 const FILE_EXTENSIONS = new Set<string>(AGENT_FILE_EXTENSIONS);
 const IMAGE_MEDIA_TYPES = new Map<string, AgentAttachmentMediaType>([
   [".gif", "image/gif"],
@@ -51,7 +53,10 @@ export type HostAttachmentSource = Readonly<{
   name: string;
 }>;
 
-type HostFileBrowserOptions = Readonly<{ homePath?: string }>;
+type HostFileBrowserOptions = Readonly<{
+  filesystemRoots?: typeof listFilesystemRoots;
+  homePath?: string;
+}>;
 
 function toHostFileError(error: unknown): HostFileBrowserError {
   const code = (error as NodeJS.ErrnoException).code;
@@ -114,7 +119,10 @@ export async function readHostFileDirectory(
   requestedPath?: string,
   options: HostFileBrowserOptions = {},
 ): Promise<HostFileListing> {
-  const path = await resolveHostDirectory(requestedPath, options);
+  const [path, roots] = await Promise.all([
+    resolveHostDirectory(requestedPath, options),
+    (options.filesystemRoots ?? listFilesystemRoots)(),
+  ]);
   let children: Dirent[];
   try {
     children = await readdir(path, { withFileTypes: true });
@@ -137,7 +145,7 @@ export async function readHostFileDirectory(
       type: child.isDirectory() ? ("directory" as const) : ("file" as const),
     }));
   const parentPath = dirname(path);
-  return { entries, parentPath: parentPath === path ? null : parentPath, path };
+  return { entries, parentPath: parentPath === path ? null : parentPath, path, roots };
 }
 
 export async function resolveHostAttachment(

@@ -1341,6 +1341,7 @@ describe("CodeAgent Server", () => {
         entries: [{ name: "CodeAgent", path: selectedPath }],
         parentPath: "/Users/bryan",
         path: "/Users/bryan/Develop",
+        roots: [],
       }),
     );
     const resolveProjectDirectory = vi.fn(() => Promise.resolve(selectedPath));
@@ -1387,6 +1388,7 @@ describe("CodeAgent Server", () => {
       ],
       parentPath: "/Users/bryan",
       path: "/Users/bryan/Pictures",
+      roots: [],
     };
     const readHostFileDirectory = vi.fn(() => Promise.resolve(listing));
     const resolveHostAttachment = vi.fn(() =>

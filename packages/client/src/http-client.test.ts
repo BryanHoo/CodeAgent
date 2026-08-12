@@ -194,6 +194,7 @@ describe("CodeAgentClient", () => {
       entries: [{ name: "CodeAgent", path: project.rootPath }],
       parentPath: "/Users/bryan",
       path: "/Users/bryan/Develop",
+      roots: [],
     };
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock
@@ -223,6 +224,7 @@ describe("CodeAgentClient", () => {
       entries: [{ name: "screen image.png", path: selectedPath, type: "file" as const }],
       parentPath: "/Users/bryan",
       path: "/Users/bryan/Pictures",
+      roots: [],
     };
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock

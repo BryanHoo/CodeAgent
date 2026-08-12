@@ -28,7 +28,7 @@
 - JSONL 分帧测试覆盖多字节 UTF-8 字符跨 Buffer 边界；RPC 关联、服务端请求响应、超时、审批状态机和事件映射使用 Vitest 单元测试。
 - Codex App Server 协议必须使用锁定的 `@openai/codex` 和 `--experimental` 生成 TypeScript 与 JSON Schema，并由 `pnpm run codex:schema:check` 比较版本化规范基线；依赖升级必须显式更新基线并同步 Adapter 契约测试。
 - Binary 定位测试必须确认包内路径落到当前平台的原生可执行文件；Windows 只接受 `.exe`，不得把 `.cmd`、`.bat` 或 JS launcher 当作受管 App Server 进程。
-- Server 目录浏览测试必须覆盖 POSIX 路径规范化、Windows UTF-8 绝对路径契约、非目录与相对路径拒绝、符号链接省略和稳定排序；根 CLI 系统集成测试继续覆盖浏览器启动器的缺失回退。CI 质量门禁至少在 Ubuntu 与 Windows 上运行。
+- Server 目录浏览测试必须覆盖 POSIX 路径规范化、Windows UTF-8 绝对路径契约、全部可访问 Windows 盘符枚举、非目录与相对路径拒绝、符号链接省略和稳定排序；根 CLI 系统集成测试继续覆盖浏览器启动器的缺失回退。CI 质量门禁至少在 Ubuntu 与 Windows 上运行。
 - 根 CLI 参数测试必须覆盖 `pnpm run start -- ...` 转发的单个 `--` 分隔符；只忽略命令后的首个分隔符，后续未知或重复选项仍必须拒绝。
 - 根 CLI 端口测试必须覆盖连续占用后的递增、实际端口传播、非 `EADDRINUSE` 错误和 `65535` 上限。
 - Project 宿主打开测试必须覆盖 Windows Explorer 成功转交后不误报失败，以及 Windows Terminal 强制在目标目录打开独立新窗口。
