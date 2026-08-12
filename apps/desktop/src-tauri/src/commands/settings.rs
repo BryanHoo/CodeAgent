@@ -83,8 +83,7 @@ pub async fn task_settings_get(
     let task_id = parse_task_id(task_id)?;
     let settings = runtime
         .task_settings(&request_id, &project_id, &task_id)
-        .await?
-        .ok_or_else(settings_not_initialized)?;
+        .await?;
     Ok(TaskSettingsResponse { settings })
 }
 
@@ -114,8 +113,4 @@ fn parse_task_id(value: String) -> Result<TaskId, CommandError> {
 
 fn invalid_id(name: &str) -> CommandError {
     CommandError::invalid_input(format!("{name} must not be empty"))
-}
-
-fn settings_not_initialized() -> CommandError {
-    CommandError::not_found("settings are not initialized")
 }

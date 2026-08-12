@@ -10,8 +10,9 @@ use code_agent_core::{
 };
 use code_agent_protocol::{
     AgentBackgroundTerminalPage, AgentCapabilities, AgentGlobalSettings, AgentMcpServerPage,
-    AgentSkillPage, AgentTaskPage, GenerateCommitMessageRequest, Project, ProjectId,
-    RawProviderEvent, TaskId, parse_provider_event,
+    AgentModelPage, AgentProjectDefaults, AgentSkillPage, AgentTaskPage, AgentTaskSettings,
+    GenerateCommitMessageRequest, Project, ProjectId, RawProviderEvent, TaskId,
+    parse_provider_event,
 };
 use code_agent_runtime::{CodeAgentRuntime, CodeAgentRuntimeBuilder, EventReplay, RuntimeOptions};
 use serde_json::{Value, json};
@@ -55,11 +56,6 @@ impl ProjectProviderPort for FakeProjectProvider {
             "pinned": false,
             "plan": null,
             "projectId": "project-1",
-            "settings": {
-                "approvalPolicy": "never", "approvalsReviewer": "user",
-                "model": "provider-model", "reasoningEffort": "low",
-                "sandboxMode": "read-only"
-            },
             "status": "idle",
             "title": "共享实时任务",
             "turns": [],
@@ -245,8 +241,10 @@ impl ProjectProviderPort for FakeProjectProvider {
 struct FakePorts {
     event_sender: mpsc::Sender<RawProviderEvent>,
     for_project_calls: AtomicUsize,
+    models_calls: AtomicUsize,
     project_provider: Arc<FakeProjectProvider>,
     release_calls: AtomicUsize,
+    task_settings: Mutex<Option<AgentTaskSettings>>,
     temporary_calls: AtomicUsize,
 }
 
@@ -256,6 +254,7 @@ impl FakePorts {
         Arc::new(Self {
             event_sender: event_sender.clone(),
             for_project_calls: AtomicUsize::new(0),
+            models_calls: AtomicUsize::new(0),
             project_provider: Arc::new(FakeProjectProvider {
                 event_receiver: Mutex::new(Some(event_receiver)),
                 event_sender: event_sender.clone(),
@@ -264,6 +263,14 @@ impl FakePorts {
                 unsubscribe_calls: AtomicUsize::new(0),
             }),
             release_calls: AtomicUsize::new(0),
+            task_settings: Mutex::new(Some(
+                serde_json::from_value(json!({
+                    "approvalPolicy": "on-request", "approvalsReviewer": "user",
+                    "model": "sqlite-model", "reasoningEffort": "high",
+                    "sandboxMode": "workspace-write"
+                }))
+                .expect("task settings"),
+            )),
             temporary_calls: AtomicUsize::new(0),
         })
     }
@@ -318,14 +325,16 @@ impl RepositoryPort for FakePorts {
         _project_id: &ProjectId,
         _task_id: &TaskId,
         _context: &PortRequestContext,
-    ) -> Result<Option<code_agent_protocol::AgentTaskSettings>, CodeAgentError> {
-        serde_json::from_value(json!({
-            "approvalPolicy": "on-request", "approvalsReviewer": "user",
-            "model": "sqlite-model", "reasoningEffort": "high",
-            "sandboxMode": "workspace-write"
-        }))
-        .map(Some)
-        .map_err(|error| CodeAgentError::internal(error.to_string()))
+    ) -> Result<Option<AgentTaskSettings>, CodeAgentError> {
+        Ok(self.task_settings.lock().await.clone())
+    }
+
+    async fn read_project_defaults(
+        &self,
+        _project_id: &ProjectId,
+        _context: &PortRequestContext,
+    ) -> Result<Option<AgentProjectDefaults>, CodeAgentError> {
+        Ok(None)
     }
 }
 
@@ -336,6 +345,24 @@ impl ProviderPort for FakePorts {
         _context: &PortRequestContext,
     ) -> Result<AgentCapabilities, CodeAgentError> {
         serde_json::from_value(json!({ "feedback": { "upload": true }, "provider": "fake", "skills": { "list": true, "use": true }, "tasks": { "fork": true, "list": true, "read": true, "start": true }, "turns": { "compact": true, "interrupt": true, "review": true, "start": true, "steer": true } })).map_err(|error| CodeAgentError::internal(error.to_string()))
+    }
+    async fn models(
+        &self,
+        _context: &PortRequestContext,
+    ) -> Result<AgentModelPage, CodeAgentError> {
+        self.models_calls.fetch_add(1, Ordering::SeqCst);
+        serde_json::from_value(json!({
+            "data": [{
+                "defaultReasoningEffort": "high",
+                "description": "Default model",
+                "displayName": "GPT 5.6",
+                "id": "gpt-5.6",
+                "isDefault": true,
+                "supportedReasoningEfforts": [{ "description": "High", "id": "high" }]
+            }],
+            "nextCursor": null
+        }))
+        .map_err(|error| CodeAgentError::internal(error.to_string()))
     }
     async fn for_project(
         &self,
@@ -495,6 +522,32 @@ async fn task_snapshot_should_merge_persisted_settings_and_flushed_checkpoint() 
         response["snapshot"]["settings"]["sandboxMode"],
         "workspace-write"
     );
+    assert_eq!(fake.models_calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn task_snapshot_should_inherit_effective_settings_when_task_settings_are_missing() {
+    let fake = FakePorts::new();
+    *fake.task_settings.lock().await = None;
+    let runtime = runtime(fake.clone());
+    let project_id = ProjectId::try_from("project-1").expect("project id");
+
+    let response = runtime
+        .read_agent_task("read-history", &project_id, "task-1")
+        .await
+        .expect("read task")
+        .expect("snapshot");
+
+    assert_eq!(response["snapshot"]["settings"]["model"], "gpt-5.6");
+    assert_eq!(
+        response["snapshot"]["settings"]["approvalPolicy"],
+        "on-request"
+    );
+    assert_eq!(
+        response["snapshot"]["settings"]["sandboxMode"],
+        "workspace-write"
+    );
+    assert_eq!(fake.models_calls.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]

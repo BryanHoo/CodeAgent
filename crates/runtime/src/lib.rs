@@ -26,6 +26,7 @@ use code_agent_protocol::{
     AgentGlobalSettings, AgentMcpServerPage, AgentModelPage, AgentProjectDefaults,
     AgentProviderConnectionRecord, AgentSkillPage, AgentTaskPage, AgentTaskSettings,
     GenerateCommitMessageRequest, GenerateCommitMessageResponse, Project, ProjectId, TaskId,
+    ValueDefinition, parse_protocol_value,
 };
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
@@ -311,21 +312,21 @@ impl CodeAgentRuntime {
                 Some(mut snapshot) => {
                     let task_id = TaskId::try_from(task_id)
                         .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-                    if let Some(settings) = self
-                        .ports
-                        .repository
-                        .read_task_settings(project_id, &task_id, &operation)
-                        .await?
-                    {
-                        // SQLite 是用户设置的事实来源，Provider Snapshot 只提供任务执行状态。
-                        snapshot["settings"] = serde_json::to_value(settings)
-                            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-                    }
+                    let settings = self
+                        .resolve_task_settings(project_id, &task_id, &operation)
+                        .await?;
+                    // Runtime 在公共协议出口组合执行态和有效设置。
+                    snapshot["settings"] = serde_json::to_value(settings)
+                        .map_err(|error| CodeAgentError::internal(error.to_string()))?;
                     let checkpoint = context.event_stream.checkpoint().await;
-                    Ok(Some(json!({ "checkpoint": {
+                    let response = json!({ "checkpoint": {
                         "sequence": checkpoint.sequence,
                         "sessionId": checkpoint.session_id.as_ref()
-                    }, "snapshot": snapshot })))
+                    }, "snapshot": snapshot });
+                    Ok(Some(
+                        parse_protocol_value(ValueDefinition::AgentTaskSnapshotResponse, response)
+                            .map_err(|error| CodeAgentError::internal(error.to_string()))?,
+                    ))
                 }
                 None => Ok(None),
             },
@@ -1142,18 +1143,16 @@ impl CodeAgentRuntime {
         result
     }
 
-    /// 读取 Task 设置。
+    /// 读取 Task 有效设置。
     pub async fn task_settings(
         &self,
         request_id: &str,
         project_id: &ProjectId,
         task_id: &TaskId,
-    ) -> Result<Option<AgentTaskSettings>, CodeAgentError> {
+    ) -> Result<AgentTaskSettings, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
         let result = self
-            .ports
-            .repository
-            .read_task_settings(project_id, task_id, &context)
+            .resolve_task_settings(project_id, task_id, &context)
             .await;
         self.finish_operation(request_id).await;
         result

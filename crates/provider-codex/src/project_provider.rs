@@ -6,7 +6,7 @@ use chrono::{DateTime, SecondsFormat};
 use code_agent_core::{CodeAgentError, PortRequestContext, ProjectProviderPort};
 use code_agent_protocol::{
     AgentBackgroundTerminalPage, AgentMcpServerPage, AgentSkillPage, AgentTaskPage, Project,
-    RawProviderEvent, ValueDefinition, parse_protocol_value,
+    RawProviderEvent,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -343,10 +343,8 @@ impl ProjectProviderPort for CodexProjectProvider {
         snapshot["plan"] = Value::Null;
         snapshot["status"] = Value::String("idle".to_string());
         snapshot["turns"] = json!(turns);
-        Ok(Some(
-            parse_protocol_value(ValueDefinition::AgentTaskSnapshot, snapshot)
-                .map_err(|error| CodeAgentError::internal(error.to_string()))?,
-        ))
+        // Provider 只负责执行态；用户设置由 Runtime 从持久层统一补齐。
+        Ok(Some(snapshot))
     }
 
     async fn pin_task(

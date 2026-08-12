@@ -1,5 +1,7 @@
 use code_agent_core::{CodeAgentError, PortRequestContext};
-use code_agent_protocol::{AgentGlobalSettings, AgentModelPage, AgentProjectDefaults, ProjectId};
+use code_agent_protocol::{
+    AgentGlobalSettings, AgentModelPage, AgentProjectDefaults, AgentTaskSettings, ProjectId, TaskId,
+};
 use serde_json::{Map, Value, json};
 
 use crate::CodeAgentRuntime;
@@ -50,35 +52,107 @@ impl CodeAgentRuntime {
             return Ok(stored);
         }
         let defaults = self.ports.provider.default_settings(context).await?;
-        let config = defaults.get("config").unwrap_or(&defaults);
-        let project_defaults =
-            resolve_project_defaults(&self.ports.provider.models(context).await?, config)?;
-        let project_value = serde_json::to_value(&project_defaults)
-            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-        let approvals_reviewer = supported_string(config, "approvals_reviewer")
-            .filter(|value| *value == "auto_review")
-            .unwrap_or("user");
-        let approval_policy = if approvals_reviewer == "auto_review" {
-            "on-request"
-        } else {
-            supported_string(config, "approval_policy")
-                .filter(|value| matches!(*value, "untrusted" | "on-request" | "never"))
-                .unwrap_or("on-request")
+        let models = self.ports.provider.models(context).await?;
+        resolve_default_global_settings(&defaults, &models)
+    }
+
+    /// 按 Task、Project、Global 的优先级解析设置，历史任务无需预先写入 SQLite。
+    pub(crate) async fn resolve_task_settings(
+        &self,
+        project_id: &ProjectId,
+        task_id: &TaskId,
+        context: &PortRequestContext,
+    ) -> Result<AgentTaskSettings, CodeAgentError> {
+        if let Some(stored) = self
+            .ports
+            .repository
+            .read_task_settings(project_id, task_id, context)
+            .await?
+        {
+            return Ok(stored);
+        }
+
+        // 空库路径复用同一模型目录，避免每次历史读取重复访问 Provider。
+        let mut models = None;
+        let global = match self.ports.repository.read_global_settings(context).await? {
+            Some(stored) => stored,
+            None => {
+                let defaults = self.ports.provider.default_settings(context).await?;
+                let provider_models = self.ports.provider.models(context).await?;
+                let settings = resolve_default_global_settings(&defaults, &provider_models)?;
+                models = Some(provider_models);
+                settings
+            }
         };
+        let project_defaults = match self
+            .ports
+            .repository
+            .read_project_defaults(project_id, context)
+            .await?
+        {
+            Some(stored) => stored,
+            None => {
+                let requested = serde_json::to_value(&global)
+                    .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+                let provider_models = match models {
+                    Some(models) => models,
+                    None => self.ports.provider.models(context).await?,
+                };
+                resolve_project_defaults(&provider_models, &requested)?
+            }
+        };
+        let global = serde_json::to_value(global)
+            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+        let defaults = serde_json::to_value(project_defaults)
+            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+        let sandbox_mode = if project_id.as_str() == "temporary" {
+            Value::String("danger-full-access".to_string())
+        } else {
+            defaults["sandboxMode"].clone()
+        };
+
         serde_json::from_value(json!({
-            "approvalPolicy": approval_policy,
-            "approvalsReviewer": approvals_reviewer,
-            "commitMessageModel": project_value["model"],
-            "commitMessagePrompt": "",
-            "commitMessageReasoningEffort": project_value["reasoningEffort"],
-            "defaultOpenAppId": null,
-            "followUpBehavior": "queue",
-            "model": project_value["model"],
-            "reasoningEffort": project_value["reasoningEffort"],
-            "sandboxMode": project_value["sandboxMode"]
+            "approvalPolicy": global["approvalPolicy"],
+            "approvalsReviewer": global["approvalsReviewer"],
+            "model": defaults["model"],
+            "reasoningEffort": defaults["reasoningEffort"],
+            "sandboxMode": sandbox_mode
         }))
         .map_err(|error| CodeAgentError::internal(error.to_string()))
     }
+}
+
+fn resolve_default_global_settings(
+    defaults: &Value,
+    models: &AgentModelPage,
+) -> Result<AgentGlobalSettings, CodeAgentError> {
+    let config = defaults.get("config").unwrap_or(defaults);
+    let project_defaults = resolve_project_defaults(models, config)?;
+    let project_value = serde_json::to_value(&project_defaults)
+        .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+    let approvals_reviewer = supported_string(config, "approvals_reviewer")
+        .filter(|value| *value == "auto_review")
+        .unwrap_or("user");
+    let approval_policy = if approvals_reviewer == "auto_review" {
+        "on-request"
+    } else {
+        supported_string(config, "approval_policy")
+            .filter(|value| matches!(*value, "untrusted" | "on-request" | "never"))
+            .unwrap_or("on-request")
+    };
+    serde_json::from_value(json!({
+        "approvalPolicy": approval_policy,
+        "approvalsReviewer": approvals_reviewer,
+        "commitMessageModel": project_value["model"],
+        "commitMessagePrompt": "",
+        "commitMessageReasoningEffort": project_value["reasoningEffort"],
+        "defaultOpenAppId": null,
+        "followUpBehavior": "queue",
+        "model": project_value["model"],
+        "reasoningEffort": project_value["reasoningEffort"],
+        "sandboxMode": project_value["sandboxMode"]
+    }))
+    .map_err(|error| CodeAgentError::internal(error.to_string()))
 }
 
 fn resolve_project_defaults(
