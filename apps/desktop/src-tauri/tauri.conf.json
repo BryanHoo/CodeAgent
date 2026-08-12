@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CodeAgent",
+  "version": "1.9.0",
+  "identifier": "com.bryanhu.codeagent",
+  "build": {
+    "beforeDevCommand": {
+      "cwd": "../../..",
+      "script": "pnpm --filter @code-agent/web dev:desktop",
+      "wait": false
+    },
+    "beforeBuildCommand": {
+      "cwd": "../../..",
+      "script": "pnpm run build:desktop-ui"
+    },
+    "devUrl": "http://127.0.0.1:5173",
+    "frontendDist": "../../../dist/desktop"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "CodeAgent",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "capabilities": ["main-capability"],
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  }
+}

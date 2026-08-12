@@ -1,8 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import webConfig, { supportedBrowserTargets } from "./vite.config.js";
+import { createViteConfig, resolveBuildTarget, supportedBrowserTargets } from "./vite.config.js";
+
+const webConfig = createViteConfig("web");
 
 describe("Web Vite browser targets", () => {
+  it("isolates web and desktop build outputs", () => {
+    expect(webConfig.build).toMatchObject({
+      emptyOutDir: true,
+      outDir: "../../dist/web",
+    });
+    expect(createViteConfig("desktop").build).toMatchObject({
+      emptyOutDir: true,
+      outDir: "../../dist/desktop",
+    });
+    expect(() => resolveBuildTarget("production")).toThrow(
+      "Unsupported CODE_AGENT_TARGET mode: production",
+    );
+  });
+
   it("locks the production build to the supported browser minimums", () => {
     expect(supportedBrowserTargets).toEqual(["chrome116", "firefox124", "safari17.4"]);
     expect(webConfig).toMatchObject({

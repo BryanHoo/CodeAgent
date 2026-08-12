@@ -6,6 +6,8 @@ npm-debug.log*
 
 # 构建与 TypeScript 产物
 dist/
+target/
+apps/desktop/src-tauri/gen/
 .cache/
 .artifacts/
 .vite/

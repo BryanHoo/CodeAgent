@@ -1,0 +1,24 @@
+[package]
+name = "code-agent-desktop"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "code_agent_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+code-agent-runtime.workspace = true
+tauri.workspace = true
+
+[lints]
+workspace = true
+

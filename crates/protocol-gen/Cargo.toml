@@ -1,0 +1,13 @@
+[package]
+name = "code-agent-protocol-gen"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+

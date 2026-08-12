@@ -1,0 +1,14 @@
+{
+  "name": "@code-agent/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tauri build",
+    "dev": "tauri dev",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "catalog:"
+  }
+}

@@ -13,6 +13,7 @@ export default tseslint.config(
       "**/.cache/**",
       "**/.agents/**",
       "**/node_modules/**",
+      "**/target/**",
       "playwright-report/**",
       "test-results/**",
     ],

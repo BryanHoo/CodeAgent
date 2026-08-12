@@ -1,0 +1,18 @@
+[package]
+name = "code-agent-runtime"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+code-agent-core.workspace = true
+code-agent-platform.workspace = true
+code-agent-protocol.workspace = true
+code-agent-provider-codex.workspace = true
+
+[lints]
+workspace = true
+
