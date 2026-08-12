@@ -1,25 +1,24 @@
-// HTTP Snapshot 与实时事件客户端只能从此公开入口导出。
+// 宿主无关 Client 契约只能从此公开入口导出。
+export { TransportCodeAgentClient, type CodeAgentRequestOptions } from "./client.js";
+export { ProjectCodeAgentClient } from "./project-client.js";
+export { CodeAgentClient } from "./task-client.js";
+export type {
+  AgentAttachmentUploadInput,
+  AgentEventConnectionState,
+  AssetReference,
+  CodeAgentOperation,
+  CodeAgentOperationOutput,
+  CodeAgentRequestContext,
+  CodeAgentTransport,
+  ListTasksOptions,
+  MutationOptions,
+  PendingRequestResolution,
+  ReadOptions,
+  SubscribeAgentEventsOptions,
+} from "./contracts.js";
 export {
-  CodeAgentEventError,
-  startAgentEventSubscription,
-  type AgentEventConnectionState,
-  type SubscribeAgentEventsOptions,
-  type WebSocketFactory,
-} from "./event-client.js";
-export {
-  buildProjectAttachmentUrl,
-  buildProjectImageFileUrl,
-  buildTaskAttachmentUrl,
-  CodeAgentClient,
-  CodeAgentHttpError,
-  CodeAgentMutationError,
+  CodeAgentError,
   CodeAgentResponseError,
-  type AgentAttachmentUploadInput,
-  type CodeAgentRequestTimeouts,
-  type CodeAgentClientOptions,
-  type ListTasksOptions,
-  type MutationOptions,
-  type PendingRequestResolution,
-  type ReadOptions,
-  type UnauthorizedListener,
-} from "./http-client.js";
+  normalizeCodeAgentError,
+  type CodeAgentErrorShape,
+} from "./errors.js";

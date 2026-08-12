@@ -21,6 +21,7 @@
 
 - 先在变更所属包搜索可复用实现；只有至少两个真实消费者需要同一实现时才提取公共层。
 - 公共协议归属 `packages/protocol`，领域规则归属 `packages/core`；跨包公共入口统一从包根 `src/index.ts` 导出。
+- `packages/client` 只保留宿主无关 facade 与契约；HTTP/WebSocket 和 Tauri IPC 分别归属 `packages/transport-http`、`packages/transport-tauri`，`apps/web/src/app/create-host-client.ts` 是唯一宿主 Composition Root。
 - 跨层协议变化必须同步更新 Schema、类型、边界适配和契约测试；外部数据在进入领域层前完成运行时校验。
 - Provider 差异通过 Capability 或 `extensions` 表达，原始 Provider 结构不得泄漏到 Web。
 - 项目命令使用 pnpm，Python 命令使用 `python3`；内部依赖使用 `workspace:*`，共享外部版本使用 `catalog:`。

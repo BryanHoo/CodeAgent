@@ -1,10 +1,10 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { buildProjectImageFileUrl } from "@code-agent/client";
 import type { ProjectSourceFile } from "@code-agent/protocol";
 import { Code2, Eye, FileCode2, Image, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from "react";
 
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
+import { codeAgentClient } from "../../../app/create-host-client.js";
 import {
   CodeBlock,
   CodeBlockActions,
@@ -243,7 +243,11 @@ export function ProjectSourceDialog({
   const sourcePath = sourceData?.path ?? reference.path;
   const sourceContent = sourceData?.content ?? "";
   const fileName = getFileName(sourcePath);
-  const imageUrl = buildProjectImageFileUrl("", projectId, reference.path);
+  const imageUrl = codeAgentClient.resolveAssetUrl({
+    kind: "project-image",
+    path: reference.path,
+    projectId,
+  });
   const sourceLanguage = getCodeLanguage(sourcePath);
   const isMarkdown = sourceLanguage === "markdown" || sourceLanguage === "mdx";
   const canRenderMarkdown = isMarkdown && sourceData?.nextCursor === null;

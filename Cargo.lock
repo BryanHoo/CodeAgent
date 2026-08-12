@@ -333,6 +333,7 @@ name = "code-agent-desktop"
 version = "1.9.0"
 dependencies = [
  "code-agent-runtime",
+ "serde",
  "tauri",
  "tauri-build",
 ]

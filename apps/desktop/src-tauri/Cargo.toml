@@ -17,8 +17,8 @@ tauri-build.workspace = true
 
 [dependencies]
 code-agent-runtime.workspace = true
+serde = { workspace = true, features = ["derive"] }
 tauri.workspace = true
 
 [lints]
 workspace = true
-

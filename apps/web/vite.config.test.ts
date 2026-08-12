@@ -29,6 +29,19 @@ describe("Web Vite browser targets", () => {
     });
   });
 
+  it("selects exactly one host transport at build time", () => {
+    const desktopConfig = createViteConfig("desktop");
+    const webAliases = JSON.stringify(webConfig.resolve?.alias);
+    const desktopAliases = JSON.stringify(desktopConfig.resolve?.alias);
+
+    expect(webAliases).toContain("packages/transport-http/src/index.ts");
+    expect(webAliases).not.toContain("packages/transport-tauri/src/index.ts");
+    expect(desktopAliases).toContain("packages/transport-tauri/src/index.ts");
+    expect(desktopAliases).not.toContain("packages/transport-http/src/index.ts");
+    expect(webConfig.server?.proxy).toBeDefined();
+    expect(desktopConfig.server?.proxy).toBeUndefined();
+  });
+
   it("isolates the oversized C++ macro grammar from its parent language chunk", () => {
     expect(webConfig).toMatchObject({
       build: {

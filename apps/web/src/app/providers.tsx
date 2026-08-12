@@ -10,7 +10,7 @@ import {
   type AccessContextValue,
 } from "../features/access/access-context.js";
 import { PairingGate } from "../features/access/pairing-gate.js";
-import { codeAgentClient } from "../features/projects/project-queries.js";
+import { codeAgentClient } from "./create-host-client.js";
 import { createBrowserTaskNotifier } from "../features/notifications/browser-task-notifier.js";
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";

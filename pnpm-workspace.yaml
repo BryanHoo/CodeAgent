@@ -11,6 +11,7 @@ allowBuilds:
 catalog:
   "@eslint/js": 10.0.1
   "@tauri-apps/cli": 2.11.4
+  "@tauri-apps/api": 2.11.1
   "@fastify/compress": 9.1.0
   "@fastify/cookie": 11.1.2
   "@fastify/multipart": 10.1.0

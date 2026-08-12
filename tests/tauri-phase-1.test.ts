@@ -51,7 +51,8 @@ describe("Tauri Phase 1 repository contract", () => {
     expect(mainSource).toContain("code_agent_desktop_lib::run();");
     expect(mainSource).not.toContain("tauri::Builder");
     expect(librarySource).toContain("tauri::Builder::default()");
-    expect(librarySource).not.toContain("generate_handler!");
+    expect(librarySource.match(/generate_handler!/gu)).toHaveLength(1);
+    expect(librarySource).not.toContain("commands::execute");
     expect(capability).toEqual({
       $schema: "../gen/schemas/desktop-schema.json",
       description: "允许主窗口使用 Tauri 核心窗口能力。",

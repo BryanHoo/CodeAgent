@@ -5,6 +5,9 @@ import { configDefaults, defineConfig } from "vitest/config";
 export const vitestAliases = {
   "@code-agent/core": fileURLToPath(new URL("./packages/core/src/index.ts", import.meta.url)),
   "@code-agent/client": fileURLToPath(new URL("./packages/client/src/index.ts", import.meta.url)),
+  "@code-agent/host-transport": fileURLToPath(
+    new URL("./packages/transport-http/src/index.ts", import.meta.url),
+  ),
   "@code-agent/protocol": fileURLToPath(
     new URL("./packages/protocol/src/index.ts", import.meta.url),
   ),
@@ -12,6 +15,12 @@ export const vitestAliases = {
     new URL("./packages/provider-codex/src/index.ts", import.meta.url),
   ),
   "@code-agent/server": fileURLToPath(new URL("./packages/server/src/index.ts", import.meta.url)),
+  "@code-agent/transport-http": fileURLToPath(
+    new URL("./packages/transport-http/src/index.ts", import.meta.url),
+  ),
+  "@code-agent/transport-tauri": fileURLToPath(
+    new URL("./packages/transport-tauri/src/index.ts", import.meta.url),
+  ),
 };
 
 export default defineConfig({

@@ -3,6 +3,7 @@ import { Buffer } from "node:buffer";
 import { fileURLToPath } from "node:url";
 
 import { CodeAgentClient } from "@code-agent/client";
+import { HttpCodeAgentTransport } from "@code-agent/transport-http";
 import type {
   AgentEvent,
   AgentGlobalSettings,
@@ -45,11 +46,13 @@ const servers: Awaited<ReturnType<typeof createCodeAgentServer>>[] = [];
 
 function createRealtimeClient(baseUrl: string): CodeAgentClient {
   const origin = new URL(baseUrl).origin;
-  return new CodeAgentClient({
-    baseUrl,
-    // Node 集成测试显式模拟浏览器自动附带的同源 Origin。
-    webSocketFactory: (url) => new NodeWebSocket(url, { origin }) as unknown as WebSocket,
-  });
+  return new CodeAgentClient(
+    new HttpCodeAgentTransport({
+      baseUrl,
+      // Node 集成测试显式模拟浏览器自动附带的同源 Origin。
+      webSocketFactory: (url) => new NodeWebSocket(url, { origin }) as unknown as WebSocket,
+    }),
+  );
 }
 
 async function startFakeAppServer(scenario: string): Promise<CodexAppServerProcess> {

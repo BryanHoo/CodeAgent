@@ -1,10 +1,10 @@
-import { buildProjectAttachmentUrl } from "@code-agent/client";
 import type { HostFileKind, HostFileListing } from "@code-agent/protocol";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ArrowUp, FilePlus2, ImagePlus, LoaderCircle, RotateCcw } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
+import { codeAgentClient } from "../../../app/create-host-client.js";
 import {
   FileTree,
   FileTreeFile,
@@ -232,7 +232,14 @@ export function HostAttachmentPickerDialog({
         attachment: response.attachment,
         ...response.attachment,
         previewUrl:
-          kind === "image" ? buildProjectAttachmentUrl("", projectId, response.attachment.id) : "",
+          kind === "image"
+            ? codeAgentClient.resolveAssetUrl({
+                attachmentId: response.attachment.id,
+                kind: "project-attachment",
+                path: response.attachment.id,
+                projectId,
+              })
+            : "",
         source: "host",
       });
       importAttemptRef.current = undefined;

@@ -48,6 +48,9 @@ catalogs:
     '@tanstack/react-virtual':
       specifier: 3.14.9
       version: 3.14.9
+    '@tauri-apps/api':
+      specifier: 2.11.1
+      version: 2.11.1
     '@tauri-apps/cli':
       specifier: 2.11.4
       version: 2.11.4
@@ -263,6 +266,12 @@ importers:
       '@code-agent/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@code-agent/transport-http':
+        specifier: workspace:*
+        version: link:../../packages/transport-http
+      '@code-agent/transport-tauri':
+        specifier: workspace:*
+        version: link:../../packages/transport-tauri
       '@pierre/diffs':
         specifier: 'catalog:'
         version: 1.2.12(@shikijs/themes@4.3.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -433,6 +442,30 @@ importers:
       '@types/ws':
         specifier: 'catalog:'
         version: 8.18.1
+
+  packages/transport-http:
+    dependencies:
+      '@code-agent/client':
+        specifier: workspace:*
+        version: link:../client
+      '@code-agent/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@sinclair/typebox':
+        specifier: 'catalog:'
+        version: 0.34.52
+      uuid:
+        specifier: 'catalog:'
+        version: 14.0.1
+
+  packages/transport-tauri:
+    dependencies:
+      '@code-agent/client':
+        specifier: workspace:*
+        version: link:../client
+      '@tauri-apps/api':
+        specifier: 'catalog:'
+        version: 2.11.1
 
 packages:
 
@@ -2043,6 +2076,9 @@ packages:
 
   '@tanstack/virtual-core@3.17.7':
     resolution: {integrity: sha512-bp+v10y65sp2H7WpWfIMyxTNfl8ZVfxFTLRjPIFRryi6FV/J33z4IS53WO4pTk36KlvJ4iLiQz+oaydDC1xbcA==}
+
+  '@tauri-apps/api@2.11.1':
+    resolution: {integrity: sha512-M2FPuYND2m+wh5hfW9ZpSdxMPdEJovPBWwoHJmwUpysTYNHaOkVFN419m/K0LIgjb/7KU2vBgsUepJWugQCvAA==}
 
   '@tauri-apps/cli-darwin-arm64@2.11.4':
     resolution: {integrity: sha512-1ryOF3ZhpZ/nemHV5zVwBQBz9jDGKmKPvWPADOhc83ig0P4bMc2iER4NbC6r9sjeIZ6RVQ4g3RZIYvezhcl4TQ==}
@@ -6407,6 +6443,8 @@ snapshots:
   '@tanstack/store@0.9.3': {}
 
   '@tanstack/virtual-core@3.17.7': {}
+
+  '@tauri-apps/api@2.11.1': {}
 
   '@tauri-apps/cli-darwin-arm64@2.11.4':
     optional: true

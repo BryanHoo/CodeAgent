@@ -1,9 +1,9 @@
-import { buildTaskAttachmentUrl } from "@code-agent/client";
 import type { AgentItem, AgentTurn } from "@code-agent/protocol";
 import { FileText, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 
 import { i18n } from "../../../i18n/i18n.js";
+import { codeAgentClient } from "../../../app/create-host-client.js";
 import { Attachments } from "../../../shared/components/agent/attachments.js";
 import { cn } from "../../../shared/lib/utils.js";
 import { Button } from "../../../shared/components/core/button.js";
@@ -139,7 +139,13 @@ export function TimelineItemContent({
             aria-label={i18n.t("timeline.attachments", { ns: "conversation" })}
           >
             {attachments.map((attachment) => {
-              const attachmentUrl = buildTaskAttachmentUrl("", projectId, taskId, attachment.id);
+              const attachmentUrl = codeAgentClient.resolveAssetUrl({
+                attachmentId: attachment.id,
+                kind: "task-attachment",
+                path: attachment.id,
+                projectId,
+                taskId,
+              });
               if (attachment.kind === "image") {
                 return (
                   <MessageImageAttachment

@@ -9,7 +9,8 @@
       "@code-agent/core": ["../packages/core/src/index.ts"],
       "@code-agent/protocol": ["../packages/protocol/src/index.ts"],
       "@code-agent/provider-codex": ["../packages/provider-codex/src/index.ts"],
-      "@code-agent/server": ["../packages/server/src/index.ts"]
+      "@code-agent/server": ["../packages/server/src/index.ts"],
+      "@code-agent/transport-http": ["../packages/transport-http/src/index.ts"]
     },
     "tsBuildInfoFile": "../.cache/types/tests.tsbuildinfo",
     "types": ["node", "@playwright/test", "vitest"]
@@ -19,6 +20,7 @@
     { "path": "../packages/protocol" },
     { "path": "../packages/provider-codex" },
     { "path": "../packages/server" },
-    { "path": "../packages/client" }
+    { "path": "../packages/client" },
+    { "path": "../packages/transport-http" }
   ]
 }

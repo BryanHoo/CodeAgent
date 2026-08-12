@@ -25,6 +25,7 @@ code-agent-platform = { path = "crates/platform" }
 code-agent-protocol = { path = "crates/protocol" }
 code-agent-provider-codex = { path = "crates/provider-codex" }
 code-agent-runtime = { path = "crates/runtime" }
+serde = { version = "=1.0.229" }
 tauri = { version = "=2.11.5" }
 tauri-build = { version = "=2.6.3" }
 

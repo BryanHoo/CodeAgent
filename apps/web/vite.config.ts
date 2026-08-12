@@ -15,11 +15,19 @@ export function resolveBuildTarget(mode: string): CodeAgentBuildTarget {
 }
 
 export function createViteConfig(target: CodeAgentBuildTarget): UserConfig {
+  const hostTransport =
+    target === "web"
+      ? "../../packages/transport-http/src/index.ts"
+      : "../../packages/transport-tauri/src/index.ts";
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: [
         { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
+        {
+          find: "@code-agent/host-transport",
+          replacement: fileURLToPath(new URL(hostTransport, import.meta.url)),
+        },
         {
           find: /^shiki$/u,
           replacement: fileURLToPath(
@@ -71,9 +79,7 @@ export function createViteConfig(target: CodeAgentBuildTarget): UserConfig {
     server: {
       host: "127.0.0.1",
       port: 5173,
-      proxy: {
-        "/v1": "http://127.0.0.1:3210",
-      },
+      ...(target === "web" ? { proxy: { "/v1": "http://127.0.0.1:3210" } } : {}),
       strictPort: true,
     },
   };
