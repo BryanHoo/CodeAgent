@@ -8,10 +8,29 @@ import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import {
   HostAttachmentPickerDialog,
   HostFileTree,
+  resolveNativeFileSelection,
   type HostFileDirectoryState,
 } from "./host-attachment-picker-dialog.js";
 
 describe("HostAttachmentPickerDialog", () => {
+  it("resolves native file selection, cancellation, and web fallback", async () => {
+    await expect(
+      resolveNativeFileSelection(
+        { selectHostFiles: vi.fn().mockResolvedValue({ paths: ["/tmp/image.png"] }) },
+        "image",
+      ),
+    ).resolves.toEqual({ path: "/tmp/image.png", status: "selected" });
+    await expect(
+      resolveNativeFileSelection(
+        { selectHostFiles: vi.fn().mockResolvedValue({ paths: [] }) },
+        "image",
+      ),
+    ).resolves.toEqual({ status: "cancelled" });
+    await expect(resolveNativeFileSelection(undefined, "image")).resolves.toEqual({
+      status: "fallback",
+    });
+  });
+
   it("renders an accessible loading dialog for the CodeAgent host", async () => {
     await changeAppLanguage("zh-CN");
     const queryClient = new QueryClient();

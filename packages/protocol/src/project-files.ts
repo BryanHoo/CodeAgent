@@ -131,6 +131,40 @@ export const HostFileListingSchema = Type.Object(
 
 export type HostFileListing = Readonly<Static<typeof HostFileListingSchema>>;
 
+export const HostDirectorySelectionResponseSchema = Type.Object(
+  { path: Type.Union([ProjectDirectoryPathSchema, Type.Null()]) },
+  { additionalProperties: false },
+);
+
+export type HostDirectorySelectionResponse = Readonly<
+  Static<typeof HostDirectorySelectionResponseSchema>
+>;
+
+export const HostFileSelectionResponseSchema = Type.Object(
+  { paths: Type.Array(ProjectDirectoryPathSchema, { maxItems: 20 }) },
+  { additionalProperties: false },
+);
+
+export type HostFileSelectionResponse = Readonly<Static<typeof HostFileSelectionResponseSchema>>;
+
+export const HostNotificationRequestSchema = Type.Object(
+  {
+    body: Type.String({ maxLength: 512, minLength: 1 }),
+    tag: Type.String({ maxLength: 128, minLength: 1 }),
+    title: Type.String({ maxLength: 120, minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type HostNotificationRequest = Readonly<Static<typeof HostNotificationRequestSchema>>;
+
+export const HostNotificationResponseSchema = Type.Object(
+  { status: Type.Union([Type.Literal("denied"), Type.Literal("shown")]) },
+  { additionalProperties: false },
+);
+
+export type HostNotificationResponse = Readonly<Static<typeof HostNotificationResponseSchema>>;
+
 export const ImportHostAttachmentRequestSchema = Type.Object(
   { path: ProjectDirectoryPathSchema },
   { additionalProperties: false },

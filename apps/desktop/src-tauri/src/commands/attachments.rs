@@ -129,9 +129,5 @@ pub async fn attachment_open(
 }
 
 fn invalid(message: &str) -> CommandError {
-    CommandError {
-        code: "invalid_input".to_owned(),
-        message: message.to_owned(),
-        retryable: false,
-    }
+    CommandError::invalid_input(message)
 }

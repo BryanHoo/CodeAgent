@@ -8,10 +8,27 @@ import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import {
   ProjectDirectoryPickerDialog,
   ProjectDirectoryTree,
+  resolveNativeDirectorySelection,
   type ProjectDirectoryState,
 } from "./project-directory-picker-dialog.js";
 
 describe("ProjectDirectoryPickerDialog", () => {
+  it("resolves native selection, cancellation, and web fallback", async () => {
+    await expect(
+      resolveNativeDirectorySelection({
+        selectHostDirectory: vi.fn().mockResolvedValue({ path: "/workspace/app" }),
+      }),
+    ).resolves.toEqual({ path: "/workspace/app", status: "selected" });
+    await expect(
+      resolveNativeDirectorySelection({
+        selectHostDirectory: vi.fn().mockResolvedValue({ path: null }),
+      }),
+    ).resolves.toEqual({ status: "cancelled" });
+    await expect(resolveNativeDirectorySelection(undefined)).resolves.toEqual({
+      status: "fallback",
+    });
+  });
+
   it("renders an accessible loading dialog while resolving the host home directory", async () => {
     await changeAppLanguage("zh-CN");
     const queryClient = new QueryClient();

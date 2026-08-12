@@ -29,6 +29,8 @@
 - 子进程使用参数数组和 `shell: false`；路径、等待与资源清理必须跨平台且有界。
 - Rust Runtime 只依赖 Core/Protocol ports；操作、幂等、事件与订阅队列必须有界，关闭使用协作取消并等待全部受跟踪任务。
 - Desktop SQLite 由单独 owner thread 和有界 `sync_channel` 持有；附件使用 raw IPC 与受管 opaque asset protocol，Renderer capability 不授予任意 fs/shell。
+- Desktop 原生目录/文件选择与系统通知必须通过严格 Protocol、Client 和 Tauri Transport 契约进入 Rust plugin API；Web 保留浏览器宿主回退，Renderer 不直接获得 dialog、notification、fs 或 shell capability。
+- Desktop 只允许打包本地 origin 导航，生产 CSP 不使用 `unsafe-eval`；single-instance 只聚焦主窗口，退出按订阅、Runtime、Codex 子进程顺序幂等关闭。Tauri Command 错误必须返回稳定 `code`、用户安全 `message`、`retryable` 与非空 `correlationId`，不得泄漏宿主路径或内部错误文本。
 
 ## Verification Checklist
 
@@ -36,6 +38,7 @@
 - Rust Workspace 或 Tauri Desktop 改动额外运行 `pnpm check:rust`；Desktop 壳改动还必须运行 `pnpm --filter @code-agent/desktop build` 生成当前平台未签名 artifact。
 - Phase 4 平台能力改动必须运行 `pnpm run tauri:phase4:check`，禁止无界队列、base64 附件和万能 Command。
 - Phase 5 Provider、Runtime、Desktop Command 或 Tauri Transport 改动必须运行 `pnpm run tauri:phase5:check`；该门禁同时覆盖 Phase 4，并校验 Codex 版本/通知分类、进程安全边界、完整命令注册、Channel 信封和共享实时 fixture。
+- Phase 6 Desktop 宿主、安全、插件、窗口或错误边界改动必须运行 `pnpm run tauri:phase6:check`；该门禁同时覆盖 Phase 4/5，并校验严格 CSP、本地导航、最小 capability、single-instance、幂等关闭和 correlation ID。
 - 根 `build` 只生成 npm 发布所需的 Web 与 Node 产物；Desktop UI 和安装包分别使用 `build:desktop-ui`、`build:desktop`，不得进入 npm tarball。
 - `pnpm check` 必须执行 `pnpm audit --prod --audit-level moderate`，阻止中危及以上的已知生产依赖漏洞进入 CI 与发布流程。
 - `pnpm check` 和 CI 必须执行 `pnpm run codex:schema:check`，使用锁定的 `@openai/codex` 及 `--experimental` 生成 TypeScript 与 JSON Schema，并与 `schemas/codex-app-server/<version>.schema-baseline.json` 比较；升级 Codex 必须显式运行 `pnpm run codex:schema:update` 并审查差异。

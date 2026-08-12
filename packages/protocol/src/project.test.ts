@@ -52,6 +52,9 @@ import {
   GenerateCommitMessageResponseSchema,
   HostFileListingSchema,
   HostFileQuerySchema,
+  HostDirectorySelectionResponseSchema,
+  HostFileSelectionResponseSchema,
+  HostNotificationResponseSchema,
   ImportHostAttachmentRequestSchema,
   ProjectPageSchema,
   ProjectDirectoryListingSchema,
@@ -103,6 +106,17 @@ import {
 } from "./project.js";
 
 describe("project protocol", () => {
+  it("validates native host selection and notification results", () => {
+    expect(Value.Check(HostDirectorySelectionResponseSchema, { path: null })).toBe(true);
+    expect(Value.Check(HostDirectorySelectionResponseSchema, { path: "/workspace/app" })).toBe(
+      true,
+    );
+    expect(Value.Check(HostFileSelectionResponseSchema, { paths: ["/tmp/a.png"] })).toBe(true);
+    expect(Value.Check(HostFileSelectionResponseSchema, { paths: [42] })).toBe(false);
+    expect(Value.Check(HostNotificationResponseSchema, { status: "shown" })).toBe(true);
+    expect(Value.Check(HostNotificationResponseSchema, { status: "denied" })).toBe(true);
+  });
+
   it("defines a stable public scope for temporary tasks", () => {
     expect(TEMPORARY_TASK_SCOPE_ID).toBe("temporary");
     expect(TEMPORARY_TASK_API_PATH).toBe("/v1/temporary");

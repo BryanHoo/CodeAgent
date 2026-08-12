@@ -269,27 +269,15 @@ pub(crate) fn project(value: &str) -> Result<ProjectId, CommandError> {
 }
 
 fn invalid(message: &str) -> CommandError {
-    CommandError {
-        code: "invalid_input".to_owned(),
-        message: message.to_owned(),
-        retryable: false,
-    }
+    CommandError::invalid_input(message)
 }
 
 fn not_found(message: &str) -> CommandError {
-    CommandError {
-        code: "not_found".to_owned(),
-        message: message.to_owned(),
-        retryable: false,
-    }
+    CommandError::not_found(message)
 }
 
 fn internal(message: String) -> CommandError {
-    CommandError {
-        code: "internal".to_owned(),
-        message,
-        retryable: false,
-    }
+    CommandError::internal(message)
 }
 
 #[cfg(test)]

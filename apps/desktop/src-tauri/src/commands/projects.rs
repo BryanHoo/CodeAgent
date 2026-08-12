@@ -102,9 +102,5 @@ fn parse_project_ids(values: Vec<String>) -> Result<Vec<ProjectId>, CommandError
 }
 
 fn parse_project_id(value: String) -> Result<ProjectId, CommandError> {
-    ProjectId::from_str(&value).map_err(|_| CommandError {
-        code: "invalid_input".to_owned(),
-        message: "projectId must not be empty".to_owned(),
-        retryable: false,
-    })
+    ProjectId::from_str(&value).map_err(|_| CommandError::invalid_input("invalid project id"))
 }

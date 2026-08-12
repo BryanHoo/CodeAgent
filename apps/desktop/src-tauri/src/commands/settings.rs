@@ -117,17 +117,9 @@ fn parse_task_id(value: String) -> Result<TaskId, CommandError> {
 }
 
 fn invalid_id(name: &str) -> CommandError {
-    CommandError {
-        code: "invalid_input".to_owned(),
-        message: format!("{name} must not be empty"),
-        retryable: false,
-    }
+    CommandError::invalid_input(format!("{name} must not be empty"))
 }
 
 fn settings_not_initialized() -> CommandError {
-    CommandError {
-        code: "not_found".to_owned(),
-        message: "settings are not initialized".to_owned(),
-        retryable: false,
-    }
+    CommandError::not_found("settings are not initialized")
 }

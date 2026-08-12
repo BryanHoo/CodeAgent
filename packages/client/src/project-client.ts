@@ -6,6 +6,8 @@ import {
   CommitProjectChangesResponseSchema,
   GenerateCommitMessageResponseSchema,
   HostFileListingSchema,
+  HostDirectorySelectionResponseSchema,
+  HostFileSelectionResponseSchema,
   OpenProjectResponseSchema,
   ProjectDirectoryListingSchema,
   ProjectFileSearchPageSchema,
@@ -77,6 +79,20 @@ export class ProjectCodeAgentClient extends TransportCodeAgentClient {
   public listHostFiles(kind: HostFileKind, path?: string, options: ReadOptions = {}) {
     return this.read(
       { input: { kind, path }, name: "host_files.list", output: HostFileListingSchema },
+      options,
+    );
+  }
+
+  public selectHostDirectory(options: MutationOptions = {}) {
+    return this.mutation(
+      { name: "host.directory_select", output: HostDirectorySelectionResponseSchema },
+      options,
+    );
+  }
+
+  public selectHostFiles(kind: HostFileKind, options: MutationOptions = {}) {
+    return this.mutation(
+      { input: { kind }, name: "host.files_select", output: HostFileSelectionResponseSchema },
       options,
     );
   }

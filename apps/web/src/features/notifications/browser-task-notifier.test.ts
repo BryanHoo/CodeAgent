@@ -157,6 +157,21 @@ function createHarness(
 }
 
 describe("browser task notifier", () => {
+  it("uses the native host notification adapter when available", () => {
+    const show = vi.fn(() => Promise.resolve());
+    const notifier = createBrowserTaskNotifier({
+      nativeApi: { show },
+      isPageForeground: () => false,
+    });
+
+    notifier.notify("project-1", createTurnCompletedEvent("completed"), "完善通知功能");
+
+    expect(show).toHaveBeenCalledWith("CodeAgent · 完善通知功能", {
+      body: "Task 已完成",
+      tag: "project-1:task-1:turn-1:terminal",
+    });
+  });
+
   it.each([
     ["completed", "Task 已完成"],
     ["interrupted", "Task 已中断，无法继续"],

@@ -79,11 +79,7 @@ pub async fn cancel_operation(
 
 fn validate_request_id(request_id: &str) -> Result<(), CommandError> {
     if request_id.trim().is_empty() {
-        return Err(CommandError {
-            code: "invalid_request".to_owned(),
-            message: "requestId must not be empty".to_owned(),
-            retryable: false,
-        });
+        return Err(CommandError::invalid_request("requestId must not be empty"));
     }
     Ok(())
 }

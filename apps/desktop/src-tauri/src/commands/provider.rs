@@ -96,9 +96,5 @@ pub async fn provider_custom_configure(
 }
 
 fn internal(message: String) -> CommandError {
-    CommandError {
-        code: "internal".to_owned(),
-        message,
-        retryable: false,
-    }
+    CommandError::internal(message)
 }

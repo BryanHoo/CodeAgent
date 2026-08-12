@@ -1,7 +1,7 @@
 import type { HostFileKind, HostFileListing } from "@code-agent/protocol";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ArrowUp, FilePlus2, ImagePlus, LoaderCircle, RotateCcw } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { codeAgentClient } from "../../../app/create-host-client.js";
@@ -150,6 +150,26 @@ type HostAttachmentPickerDialogProps = Readonly<{
   projectId: string;
 }>;
 
+type NativeFileClient = Readonly<{
+  selectHostFiles?: CodeAgentHostAttachmentClient["selectHostFiles"];
+}>;
+type NativeFileSelection =
+  Readonly<{ path: string; status: "selected" }> | Readonly<{ status: "cancelled" | "fallback" }>;
+
+export async function resolveNativeFileSelection(
+  client: NativeFileClient | undefined,
+  kind: HostFileKind,
+): Promise<NativeFileSelection> {
+  if (client?.selectHostFiles === undefined) return { status: "fallback" };
+  try {
+    const response = await client.selectHostFiles(kind);
+    const path = response.paths[0];
+    return path === undefined ? { status: "cancelled" } : { path, status: "selected" };
+  } catch {
+    return { status: "fallback" };
+  }
+}
+
 export function HostAttachmentPickerDialog({
   client,
   kind,
@@ -165,6 +185,7 @@ export function HostAttachmentPickerDialog({
   const [isImporting, setIsImporting] = useState(false);
   const importLockRef = useRef(false);
   const importAttemptRef = useRef<IdempotencyAttempt | undefined>(undefined);
+  const nativeSelectionStartedRef = useRef(false);
   const rootQuery = useQuery({
     queryFn: ({ signal }) => client.listHostFiles(kind, rootPath, { signal }),
     queryKey: ["host-files", kind, rootPath ?? null] as const,
@@ -210,46 +231,67 @@ export function HostAttachmentPickerDialog({
     setSelectedPath(undefined);
     setImportError(null);
   };
-  const importSelectedFile = async () => {
-    if (selectedPath === undefined || importLockRef.current) return;
-    importLockRef.current = true;
-    setIsImporting(true);
-    setImportError(null);
-    // 同一路径失败重试必须复用幂等键，切换文件后再创建新的导入尝试。
-    const attempt = resolveIdempotencyAttempt(
-      importAttemptRef.current,
-      `${projectId}:${kind}:${selectedPath}`,
-    );
-    importAttemptRef.current = attempt;
-    try {
-      const response = await client.importHostAttachment(projectId, kind, selectedPath, {
-        idempotencyKey: attempt.key,
-      });
-      if (response.attachment.kind !== kind) {
-        throw new TypeError("Imported attachment kind does not match the selection");
+  const importSelectedFile = useCallback(
+    async (path = selectedPath) => {
+      if (path === undefined || importLockRef.current) return;
+      importLockRef.current = true;
+      setIsImporting(true);
+      setImportError(null);
+      // 同一路径失败重试必须复用幂等键，切换文件后再创建新的导入尝试。
+      const attempt = resolveIdempotencyAttempt(
+        importAttemptRef.current,
+        `${projectId}:${kind}:${path}`,
+      );
+      importAttemptRef.current = attempt;
+      try {
+        const response = await client.importHostAttachment(projectId, kind, path, {
+          idempotencyKey: attempt.key,
+        });
+        if (response.attachment.kind !== kind) {
+          throw new TypeError("Imported attachment kind does not match the selection");
+        }
+        onAdd({
+          attachment: response.attachment,
+          ...response.attachment,
+          previewUrl:
+            kind === "image"
+              ? codeAgentClient.resolveAssetUrl({
+                  attachmentId: response.attachment.id,
+                  kind: "project-attachment",
+                  path: response.attachment.id,
+                  projectId,
+                })
+              : "",
+          source: "host",
+        });
+        importAttemptRef.current = undefined;
+      } catch (error) {
+        setImportError(error instanceof Error ? error : new Error("Host attachment import failed"));
+      } finally {
+        importLockRef.current = false;
+        setIsImporting(false);
       }
-      onAdd({
-        attachment: response.attachment,
-        ...response.attachment,
-        previewUrl:
-          kind === "image"
-            ? codeAgentClient.resolveAssetUrl({
-                attachmentId: response.attachment.id,
-                kind: "project-attachment",
-                path: response.attachment.id,
-                projectId,
-              })
-            : "",
-        source: "host",
-      });
-      importAttemptRef.current = undefined;
-    } catch (error) {
-      setImportError(error instanceof Error ? error : new Error("Host attachment import failed"));
-    } finally {
-      importLockRef.current = false;
-      setIsImporting(false);
-    }
-  };
+    },
+    [client, kind, onAdd, projectId, selectedPath],
+  );
+
+  useEffect(() => {
+    if (nativeSelectionStartedRef.current) return;
+    nativeSelectionStartedRef.current = true;
+    let active = true;
+    void resolveNativeFileSelection(client, kind).then((selection) => {
+      if (!active) return;
+      if (selection.status === "selected") {
+        setSelectedPath(selection.path);
+        void importSelectedFile(selection.path);
+      } else if (selection.status === "cancelled") {
+        onClose();
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [client, importSelectedFile, kind, onClose]);
 
   return (
     <Dialog

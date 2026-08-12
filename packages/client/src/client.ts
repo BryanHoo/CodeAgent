@@ -8,10 +8,12 @@ import {
   AppInfoResponseSchema,
   ConfigureCustomProviderResponseSchema,
   HealthResponseSchema,
+  HostNotificationResponseSchema,
   InstallAppUpdateResponseSchema,
   StartOfficialProviderLoginResponseSchema,
   type AgentGlobalSettings,
   type ConfigureCustomProviderRequest,
+  type HostNotificationRequest,
 } from "@code-agent/protocol";
 import type { Static, TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
@@ -93,6 +95,13 @@ export class TransportCodeAgentClient {
 
   public getAccessStatus(options: ReadOptions = {}) {
     return this.read({ name: "access.status", output: AccessStatusResponseSchema }, options);
+  }
+
+  public showHostNotification(input: HostNotificationRequest, options: MutationOptions = {}) {
+    return this.mutation(
+      { input, name: "host.notification_show", output: HostNotificationResponseSchema },
+      options,
+    );
   }
 
   public pairAccess(code: string) {

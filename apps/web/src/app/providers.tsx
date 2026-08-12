@@ -48,6 +48,11 @@ export function navigateToTaskFromNotification(projectId: string, taskId: string
 
 const taskNotifier = createBrowserTaskNotifier({
   navigateToTask: navigateToTaskFromNotification,
+  nativeApi: {
+    async show(title, options) {
+      await codeAgentClient.showHostNotification({ title, ...options });
+    },
+  },
 });
 
 type AppProvidersProps = Readonly<{

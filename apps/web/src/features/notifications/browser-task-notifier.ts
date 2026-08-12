@@ -20,11 +20,16 @@ export type TaskNotifier = Readonly<{
   requestPermission: () => Promise<void>;
 }>;
 
+export type NativeNotificationApi = Readonly<{
+  show: (title: string, options: Readonly<{ body: string; tag: string }>) => Promise<void>;
+}>;
+
 type BrowserTaskNotifierOptions = Readonly<{
   api?: BrowserNotificationApi | undefined;
   focusPage?: (() => void) | undefined;
   isPageForeground?: (() => boolean) | undefined;
   navigateToTask?: ((projectId: string, taskId: string) => void) | undefined;
+  nativeApi?: NativeNotificationApi | undefined;
 }>;
 
 type TaskNotification = Readonly<{
@@ -105,6 +110,7 @@ class BrowserTaskNotifier implements TaskNotifier {
   readonly #focusPage: () => void;
   readonly #isPageForeground: () => boolean;
   readonly #navigateToTask: (projectId: string, taskId: string) => void;
+  readonly #nativeApi: NativeNotificationApi | undefined;
   #permissionRequest: Promise<void> | undefined;
 
   public constructor(options: BrowserTaskNotifierOptions) {
@@ -118,10 +124,14 @@ class BrowserTaskNotifier implements TaskNotifier {
       options.isPageForeground ??
       (() => globalThis.document.visibilityState === "visible" && globalThis.document.hasFocus());
     this.#navigateToTask = options.navigateToTask ?? (() => undefined);
+    this.#nativeApi = options.nativeApi;
   }
 
   public notify(projectId: string, event: AgentEvent, taskTitle: string): void {
-    if (this.#api?.getPermission() !== "granted" || this.#isPageForeground()) {
+    if (this.#nativeApi === undefined && this.#api === undefined) {
+      return;
+    }
+    if (this.#isPageForeground()) {
       return;
     }
 
@@ -152,18 +162,45 @@ class BrowserTaskNotifier implements TaskNotifier {
 
     try {
       const normalizedTaskTitle = taskTitle.trim() || "Task";
+      if (this.#nativeApi !== undefined) {
+        void this.#nativeApi
+          .show(`CodeAgent · ${normalizedTaskTitle}`, taskNotification)
+          .catch(() => {
+            this.#showBrowserNotification(
+              normalizedTaskTitle,
+              taskNotification,
+              projectId,
+              event.taskId,
+            );
+          });
+        return;
+      }
+      this.#showBrowserNotification(normalizedTaskTitle, taskNotification, projectId, event.taskId);
+    } catch {
+      // 系统通知属于增强能力，浏览器拒绝构造时不能中断实时事件处理。
+    }
+  }
+
+  #showBrowserNotification(
+    normalizedTaskTitle: string,
+    taskNotification: TaskNotification,
+    projectId: string,
+    taskId: string,
+  ): void {
+    if (this.#api?.getPermission() !== "granted") return;
+    try {
       const notification = this.#api.show(`CodeAgent · ${normalizedTaskTitle}`, {
         body: taskNotification.body,
-        data: { projectId, taskId: event.taskId },
+        data: { projectId, taskId },
         tag: taskNotification.tag,
       });
       notification.addClickListener(() => {
         notification.close();
         this.#focusPage();
-        this.#navigateToTask(projectId, event.taskId);
+        this.#navigateToTask(projectId, taskId);
       });
     } catch {
-      // 系统通知属于增强能力，浏览器拒绝构造时不能中断实时事件处理。
+      // 浏览器拒绝通知时保持实时事件处理继续运行。
     }
   }
 

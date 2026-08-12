@@ -139,9 +139,5 @@ pub async fn git_commit_message_generate(
 }
 
 fn project(value: &str) -> Result<ProjectId, CommandError> {
-    ProjectId::from_str(value).map_err(|_| CommandError {
-        code: "invalid_input".to_owned(),
-        message: "invalid project id".to_owned(),
-        retryable: false,
-    })
+    ProjectId::from_str(value).map_err(|_| CommandError::invalid_input("invalid project id"))
 }

@@ -22,6 +22,23 @@ function createTransport(
 }
 
 describe("CodeAgentClient", () => {
+  it("preserves a transport correlation ID on normalized errors", async () => {
+    const client = new TransportCodeAgentClient(
+      createTransport(() =>
+        Promise.reject(
+          Object.assign(new Error("请求参数无效"), {
+            code: "invalid_input",
+            correlationId: "trace-123",
+          }),
+        ),
+      ),
+    );
+
+    await expect(
+      client.request({ name: "app.health", output: HealthResponseSchema }),
+    ).rejects.toMatchObject({ correlationId: "trace-123" });
+  });
+
   it("generates a request id and validates a transport response", async () => {
     const calls: { context: CodeAgentRequestContext; operation: CodeAgentOperation }[] = [];
     const transport = createTransport((operation, context) => {

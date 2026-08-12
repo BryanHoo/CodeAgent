@@ -1,5 +1,6 @@
 export type CodeAgentErrorShape = Readonly<{
   code: string;
+  correlationId?: string;
   details?: unknown;
   message: string;
   retryable?: boolean;
@@ -8,6 +9,7 @@ export type CodeAgentErrorShape = Readonly<{
 
 export class CodeAgentError extends Error {
   public readonly code: string;
+  public readonly correlationId: string | undefined;
   public readonly details: unknown;
   public readonly retryable: boolean;
   public readonly status: number | undefined;
@@ -16,6 +18,7 @@ export class CodeAgentError extends Error {
     super(error.message, options);
     this.name = "CodeAgentError";
     this.code = error.code;
+    this.correlationId = error.correlationId;
     this.details = error.details;
     this.retryable = error.retryable ?? false;
     this.status = error.status;
@@ -36,6 +39,9 @@ export function normalizeCodeAgentError(error: unknown): CodeAgentError {
     if (typeof candidate.code === "string" && typeof candidate.message === "string") {
       return new CodeAgentError({
         code: candidate.code,
+        ...(typeof candidate.correlationId === "string"
+          ? { correlationId: candidate.correlationId }
+          : {}),
         ...(candidate.details === undefined ? {} : { details: candidate.details }),
         message: candidate.message,
         ...(candidate.retryable === undefined ? {} : { retryable: candidate.retryable }),

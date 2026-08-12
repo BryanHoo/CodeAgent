@@ -1,6 +1,7 @@
 mod asset_protocol;
 mod command_error;
 mod commands;
+mod lifecycle;
 mod platform_adapters;
 
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -13,9 +14,13 @@ use code_agent_platform::{
     SqliteRepository,
 };
 use code_agent_runtime::{CodeAgentRuntime, CodeAgentRuntimeBuilder, RuntimeOptions};
-use tauri::Manager;
+use tauri::{
+    Manager, Runtime,
+    plugin::{Builder as PluginBuilder, TauriPlugin},
+};
 
 use commands::events::EventSubscriptions;
+use lifecycle::DesktopLifecycle;
 use platform_adapters::{
     CodexSupervisor, DesktopHostPorts, DesktopProvider, start_codex_supervisor,
 };
@@ -23,6 +28,18 @@ use platform_adapters::{
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let application = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(
+            |app, _arguments, _cwd| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            },
+        ))
+        .plugin(navigation_guard_plugin())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let data_root = desktop_data_root(app)?;
             std::fs::create_dir_all(&data_root)?;
@@ -63,9 +80,15 @@ pub fn run() {
             let supervisor = Arc::new(CodexSupervisor::default());
             let subscriptions = Arc::new(EventSubscriptions::default());
             app.manage(Arc::new(runtime));
+            let runtime = app.state::<Arc<CodeAgentRuntime>>().inner().clone();
             app.manage(provider_slot.clone());
             app.manage(supervisor.clone());
-            app.manage(subscriptions);
+            app.manage(subscriptions.clone());
+            app.manage(Arc::new(DesktopLifecycle::new(
+                subscriptions,
+                runtime,
+                supervisor.clone(),
+            )));
 
             // Provider 启动失败只更新诊断，不能阻塞主窗口创建。
             let executable_path = std::env::current_exe()?;
@@ -106,6 +129,9 @@ pub fn run() {
             commands::git::git_commit_files,
             commands::git::git_history,
             commands::git::git_status,
+            commands::host::host_directory_select,
+            commands::host::host_files_select,
+            commands::host::host_notification_show,
             commands::projects::project_add,
             commands::projects::project_list,
             commands::projects::project_remove,
@@ -155,18 +181,30 @@ pub fn run() {
     };
     application.run(|app, event| {
         if matches!(event, tauri::RunEvent::Exit) {
-            let subscriptions = app.state::<Arc<EventSubscriptions>>().inner().clone();
-            let runtime = app.state::<Arc<CodeAgentRuntime>>().inner().clone();
-            let supervisor = app.state::<Arc<CodexSupervisor>>().inner().clone();
-            tauri::async_runtime::block_on(subscriptions.close());
-            if let Err(error) = tauri::async_runtime::block_on(runtime.shutdown()) {
-                eprintln!("CodeAgent Desktop failed to shut down cleanly: {error}");
-            }
-            if let Err(error) = tauri::async_runtime::block_on(supervisor.close()) {
-                eprintln!("CodeAgent Desktop failed to stop Codex cleanly: {error}");
-            }
+            let lifecycle = app.state::<Arc<DesktopLifecycle>>().inner().clone();
+            tauri::async_runtime::block_on(lifecycle.shutdown());
         }
     });
+}
+
+fn navigation_guard_plugin<R: Runtime>() -> TauriPlugin<R> {
+    PluginBuilder::new("navigation-guard")
+        .on_navigation(|_, url| allowed_navigation(url))
+        .build()
+}
+
+fn allowed_navigation(url: &tauri::Url) -> bool {
+    let host = url.host_str();
+    if url.scheme() == "tauri" && host == Some("localhost") {
+        return true;
+    }
+    if url.scheme() == "http" && host == Some("tauri.localhost") {
+        return true;
+    }
+    cfg!(debug_assertions)
+        && url.scheme() == "http"
+        && host == Some("127.0.0.1")
+        && url.port() == Some(5173)
 }
 
 fn desktop_data_root<R: tauri::Runtime>(
@@ -176,4 +214,25 @@ fn desktop_data_root<R: tauri::Runtime>(
         return Ok(PathBuf::from(codex_home).join("code-agent"));
     }
     Ok(app.path().app_data_dir()?.join("code-agent"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::allowed_navigation;
+
+    #[test]
+    fn navigation_guard_rejects_remote_origins() {
+        assert!(allowed_navigation(
+            &"tauri://localhost/".parse().expect("valid URL")
+        ));
+        assert!(allowed_navigation(
+            &"http://tauri.localhost/".parse().expect("valid URL")
+        ));
+        assert!(!allowed_navigation(
+            &"https://example.com/".parse().expect("valid URL")
+        ));
+        assert!(!allowed_navigation(
+            &"file:///tmp/index.html".parse().expect("valid URL")
+        ));
+    }
 }

@@ -30,7 +30,7 @@
     ],
     "security": {
       "capabilities": ["main-capability"],
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; img-src 'self' data: blob: codeagent-asset: http://codeagent-asset.localhost; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
     }
   },
   "bundle": {

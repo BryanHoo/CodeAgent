@@ -13,6 +13,49 @@ afterEach(() => {
 });
 
 describe("TauriCodeAgentTransport", () => {
+  it("maps native host operations to typed commands", async () => {
+    const calls: { command: string; payload: unknown }[] = [];
+    mockIPC((command, payload) => {
+      calls.push({ command, payload });
+      return { status: "shown" };
+    });
+    const transport = new TauriCodeAgentTransport();
+
+    await transport.request(
+      { name: "host.directory_select", output: {} as never },
+      { requestId: "host-request" },
+    );
+    await transport.request(
+      { input: { kind: "image" }, name: "host.files_select", output: {} as never },
+      { requestId: "host-request" },
+    );
+    await transport.request(
+      {
+        input: { body: "完成", tag: "task-1", title: "CodeAgent" },
+        name: "host.notification_show",
+        output: {} as never,
+      },
+      { requestId: "host-request" },
+    );
+
+    expect(calls).toEqual([
+      { command: "host_directory_select", payload: { requestId: "host-request" } },
+      {
+        command: "host_files_select",
+        payload: { kind: "image", requestId: "host-request" },
+      },
+      {
+        command: "host_notification_show",
+        payload: {
+          body: "完成",
+          requestId: "host-request",
+          tag: "task-1",
+          title: "CodeAgent",
+        },
+      },
+    ]);
+  });
+
   it("maps supported domain operations to typed commands", async () => {
     const calls: { command: string; payload: unknown }[] = [];
     mockIPC((command, payload) => {

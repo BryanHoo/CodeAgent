@@ -1,7 +1,7 @@
 import type { ProjectDirectoryListing } from "@code-agent/protocol";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ArrowUp, FolderPlus, LoaderCircle, RotateCcw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { FileTree, FileTreeFolder } from "../../../shared/components/agent/file-tree.js";
@@ -148,6 +148,27 @@ type ProjectDirectoryPickerDialogProps = Readonly<{
   onClose: () => void;
 }>;
 
+type NativeDirectoryClient = Readonly<{
+  selectHostDirectory?: CodeAgentProjectDirectoryClient["selectHostDirectory"];
+}>;
+type NativeDirectorySelection =
+  Readonly<{ path: string; status: "selected" }> | Readonly<{ status: "cancelled" | "fallback" }>;
+
+export async function resolveNativeDirectorySelection(
+  client: NativeDirectoryClient | undefined,
+): Promise<NativeDirectorySelection> {
+  if (client?.selectHostDirectory === undefined) return { status: "fallback" };
+  try {
+    const response = await client.selectHostDirectory();
+    return response.path === null
+      ? { status: "cancelled" }
+      : { path: response.path, status: "selected" };
+  } catch {
+    // Web 宿主不支持原生对话框时继续使用现有树形浏览器。
+    return { status: "fallback" };
+  }
+}
+
 export function ProjectDirectoryPickerDialog({
   addError,
   client,
@@ -159,6 +180,23 @@ export function ProjectDirectoryPickerDialog({
   const [rootPath, setRootPath] = useState<string>();
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const [selectedPath, setSelectedPath] = useState<string>();
+  const nativeSelectionStartedRef = useRef(false);
+  useEffect(() => {
+    if (nativeSelectionStartedRef.current) return;
+    nativeSelectionStartedRef.current = true;
+    let active = true;
+    void resolveNativeDirectorySelection(client).then((selection) => {
+      if (!active) return;
+      if (selection.status === "selected") {
+        void onAdd(selection.path);
+      } else if (selection.status === "cancelled") {
+        onClose();
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [client, onAdd, onClose]);
   const rootQuery = useQuery({
     queryFn: ({ signal }) => client.listProjectDirectories(rootPath, { signal }),
     queryKey: ["project-directories", rootPath ?? null] as const,
