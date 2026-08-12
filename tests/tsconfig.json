@@ -6,9 +6,8 @@
     "noEmit": true,
     "paths": {
       "@code-agent/client": ["../packages/client/src/index.ts"],
-      "@code-agent/core": ["../packages/core/src/index.ts"],
+      "@code-agent/engine-node": ["../packages/engine-node/src/index.ts"],
       "@code-agent/protocol": ["../packages/protocol/src/index.ts"],
-      "@code-agent/provider-codex": ["../packages/provider-codex/src/index.ts"],
       "@code-agent/server": ["../packages/server/src/index.ts"],
       "@code-agent/transport-http": ["../packages/transport-http/src/index.ts"]
     },
@@ -18,7 +17,7 @@
   "include": ["e2e/**/*.ts", "*.test.ts"],
   "references": [
     { "path": "../packages/protocol" },
-    { "path": "../packages/provider-codex" },
+    { "path": "../packages/engine-node" },
     { "path": "../packages/server" },
     { "path": "../packages/client" },
     { "path": "../packages/transport-http" }

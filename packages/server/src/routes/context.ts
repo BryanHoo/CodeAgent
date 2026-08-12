@@ -1,54 +1,11 @@
+import type { CodeAgentEngine } from "@code-agent/engine-node";
 import type {
-  AgentProvider,
-  AgentProviderConnectionRepository,
-  AgentProviderTurnInput,
-  AgentRuntimeProvider,
-  AgentSettingsRepository,
-  PendingRequestResolutionError,
-  ProjectRepository,
-} from "@code-agent/core";
-import type {
-  AppInfoResponse,
-  AgentAttachmentKind,
-  AgentCapabilities,
-  AgentGlobalSettings,
-  AgentModel,
-  AgentModelPage,
   AgentMutationError,
-  AgentProjectDefaults,
-  AgentPromptInput,
-  AgentTask,
-  AgentTaskSettings,
-  CommitProjectChangesRequest,
-  CommitProjectChangesResponse,
-  CreateProjectBranchRequest,
-  GenerateCommitMessageRequest,
-  HostFileKind,
-  HostFileListing,
+  AppInfoResponse,
   InstallAppUpdateResponse,
-  Project,
-  ProjectDirectoryListing,
-  ProjectFileSearchPage,
-  ProjectFileTree,
-  ProjectGitHistoryPage,
-  ProjectGitHistoryQuery,
-  ProjectGitCommitFileDiff,
-  ProjectGitCommitFileDiffQuery,
-  ProjectGitCommitFilesPage,
-  ProjectGitCommitFilesQuery,
-  ProjectGitStatus,
-  ProjectGitStatusQuery,
-  ProjectSourceFile,
-  SwitchProjectBranchRequest,
 } from "@code-agent/protocol";
 
-import type { AgentEventStream } from "../agent-event-stream.js";
 import type { AccessSessionService } from "../access-control.js";
-import type { AttachmentStore } from "../attachment-store.js";
-import type { GitCommitError } from "../git-commit.js";
-import type { HostAttachmentSource } from "../host-file-browser.js";
-import type { ProjectOpenService } from "../project-open.js";
-import type { ProjectImageFile } from "../project-image-file.js";
 
 export class MutationHttpError extends Error {
   public constructor(
@@ -62,160 +19,76 @@ export class MutationHttpError extends Error {
   }
 }
 
-export function toMcpProviderHttpError(error: unknown): MutationHttpError {
-  const message =
-    error instanceof Error && error.message.trim().length > 0
-      ? error.message
-      : "MCP provider request failed";
-  return new MutationHttpError("PROVIDER_ERROR", message, 502, true);
+export interface EventDeliveryMetrics {
+  readonly projects: Map<
+    string,
+    {
+      activeClients: number;
+      backpressureSignals: number;
+      slowClientDisconnects: number;
+    }
+  >;
 }
-
-export type ProjectRuntimeContext = Readonly<{
-  eventStream: AgentEventStream;
-  project: Project;
-  provider: AgentProvider;
-  transportMetrics: {
-    activeClients: number;
-    slowClientDisconnects: number;
-  };
-  unsubscribe: () => void;
-}>;
-
-export type ProjectContextResolver = (
-  projectId: string,
-) => Promise<ProjectRuntimeContext | undefined>;
-
-export type RunIdempotent = <T>(
-  scope: readonly string[],
-  key: string,
-  payload: unknown,
-  action: () => Promise<T> | T,
-) => Promise<T>;
-
-export type TaskStartRecovery = Readonly<{
-  fingerprint: string;
-  settings: AgentTaskSettings;
-  task: AgentTask;
-}>;
 
 export interface ServerRouteContext {
   readonly accessService?: AccessSessionService;
-  readonly activeGitMutations: Set<string>;
-  readonly assertCommitSelection: (
-    status: ProjectGitStatus,
-    request: GenerateCommitMessageRequest,
-  ) => void;
-  readonly assertValidProjectDefaults: (
-    models: readonly AgentModel[],
-    settings: AgentProjectDefaults,
-  ) => void;
-  readonly attachmentStore: AttachmentStore;
-  readonly buildCommitMessagePrompt: (
-    status: ProjectGitStatus,
-    request: GenerateCommitMessageRequest,
-    customPrompt: string,
-  ) => string;
-  readonly capabilities: AgentCapabilities;
-  readonly commitProjectChanges: (
-    projectRoot: string,
-    request: CommitProjectChangesRequest,
-  ) => Promise<CommitProjectChangesResponse>;
-  readonly generateCommitMessageWithCodex: (
-    provider: AgentProvider,
-    prompt: string,
-    settings: AgentTaskSettings,
-  ) => Promise<string>;
-  readonly getProjectContext: ProjectContextResolver;
-  readonly fingerprintPayload: (payload: unknown) => string;
-  readonly idempotencyCacheSize: number;
+  readonly engine: CodeAgentEngine;
+  readonly eventMetrics: EventDeliveryMetrics;
   readonly installAppUpdate: (version: string) => Promise<InstallAppUpdateResponse>;
-  readonly listModels: () => Promise<readonly AgentModel[]>;
-  readonly maximumAttachmentBytes: (kind: AgentAttachmentKind) => number;
-  readonly modelCatalogCache: Readonly<{
-    clear: () => void;
-    read: () => Promise<AgentModelPage>;
-  }>;
-  readonly multipartEnvelopeBytes: number;
-  readonly projectOpenService: ProjectOpenService;
-  readonly projectContexts: Map<string, ProjectRuntimeContext>;
-  readonly projectRepository: ProjectRepository;
-  readonly provider: AgentRuntimeProvider;
-  readonly providerConnectionRepository: AgentProviderConnectionRepository;
-  readonly readEffectiveGlobalSettings: (
-    models?: readonly AgentModel[],
-  ) => Promise<AgentGlobalSettings>;
   readonly readAppInfo: () => Promise<AppInfoResponse>;
-  readonly readEffectiveProjectDefaults: (
-    projectId: string,
-    models?: readonly AgentModel[],
-    globalSettings?: AgentGlobalSettings,
-  ) => Promise<AgentProjectDefaults>;
-  readonly readInheritedTaskSettings: (
-    projectId: string,
-    models?: readonly AgentModel[],
-  ) => Promise<AgentTaskSettings>;
-  readonly readEffectiveTaskSettings: (
-    projectId: string,
-    taskId: string,
-    models?: readonly AgentModel[],
-  ) => Promise<AgentTaskSettings>;
-  readonly readFileTree: (projectRoot: string, directoryPath?: string) => Promise<ProjectFileTree>;
-  readonly readFileSearch: (
-    projectRoot: string,
-    query: string,
-    signal?: AbortSignal,
-  ) => Promise<ProjectFileSearchPage>;
-  readonly readHostFileDirectory: (kind: HostFileKind, path?: string) => Promise<HostFileListing>;
-  readonly readProjectDirectory: (path?: string) => Promise<ProjectDirectoryListing>;
-  readonly readImageFile: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
-  readonly readProjectGitStatus: (
-    projectRoot: string,
-    query?: ProjectGitStatusQuery,
-  ) => Promise<ProjectGitStatus>;
-  readonly createProjectBranch: (
-    projectRoot: string,
-    request: CreateProjectBranchRequest,
-  ) => Promise<ProjectGitStatus>;
-  readonly readProjectGitHistory: (
-    projectRoot: string,
-    query: ProjectGitHistoryQuery,
-  ) => Promise<ProjectGitHistoryPage>;
-  readonly readProjectGitCommitFiles: (
-    projectRoot: string,
-    query: ProjectGitCommitFilesQuery,
-  ) => Promise<ProjectGitCommitFilesPage>;
-  readonly readProjectGitCommitFileDiff: (
-    projectRoot: string,
-    query: ProjectGitCommitFileDiffQuery,
-  ) => Promise<ProjectGitCommitFileDiff>;
-  readonly switchProjectBranch: (
-    projectRoot: string,
-    request: SwitchProjectBranchRequest,
-  ) => Promise<ProjectGitStatus>;
-  readonly readSourceFile: (
-    projectRoot: string,
-    path: string,
-    cursor?: number,
-  ) => Promise<ProjectSourceFile>;
-  readonly releaseProjectContext: (projectId: string) => Promise<void>;
-  readonly resolveProviderTurnInput: (
-    projectId: string,
-    input: AgentPromptInput,
-  ) => Promise<
-    Readonly<{ attachmentIds: readonly string[]; providerInput: AgentProviderTurnInput }>
-  >;
-  readonly runIdempotent: RunIdempotent;
-  readonly resolveProjectDirectory: (path: string) => Promise<string>;
-  readonly resolveHostAttachment: (
-    kind: HostFileKind,
-    path: string,
-  ) => Promise<HostAttachmentSource>;
-  readonly settingsRepository: AgentSettingsRepository;
-  readonly taskFromSnapshot: (
-    snapshot: Awaited<ReturnType<AgentProvider["readTask"]>> & object,
-    overrides?: Partial<Pick<AgentTask, "title">>,
-  ) => AgentTask;
-  readonly taskStartRecoveries: Map<string, TaskStartRecovery>;
-  readonly toGitCommitHttpError: (error: GitCommitError) => MutationHttpError;
-  readonly toPendingRequestHttpError: (error: PendingRequestResolutionError) => MutationHttpError;
+}
+
+export function readRequestId(headers: { readonly "idempotency-key": string }): string {
+  return headers["idempotency-key"];
+}
+
+export function createReadRequestId(): string {
+  return crypto.randomUUID();
+}
+
+export async function callEngine<T>(
+  action: () => Promise<unknown>,
+  notFoundCode: AgentMutationError["code"] = "PROJECT_NOT_FOUND",
+): Promise<T> {
+  try {
+    return (await action()) as T;
+  } catch (error) {
+    if (error instanceof MutationHttpError) throw error;
+    const rawMessage = error instanceof Error ? error.message : String(error);
+    const match =
+      /(?:^|:\s)(cancelled|capacity_exceeded|conflict|internal|invalid_input|not_found|provider_failure|shutting_down|timeout):\s(.+)$/u.exec(
+        rawMessage,
+      );
+    if (match === null) throw error;
+    const [, code, message] = match;
+    switch (code) {
+      case "invalid_input":
+        throw new MutationHttpError("INVALID_REQUEST", message ?? "Request is invalid", 400);
+      case "not_found":
+        throw new MutationHttpError(notFoundCode, message ?? "Resource was not found", 404);
+      case "conflict":
+        throw new MutationHttpError("IDEMPOTENCY_CONFLICT", message ?? "Request conflicts", 409);
+      case "provider_failure":
+        throw new MutationHttpError(
+          "PROVIDER_ERROR",
+          message ?? "Provider request failed",
+          502,
+          true,
+        );
+      case "capacity_exceeded":
+        throw new MutationHttpError(
+          "IDEMPOTENCY_CAPACITY_EXCEEDED",
+          message ?? "Runtime capacity is exhausted",
+          503,
+          true,
+        );
+      default:
+        throw new MutationHttpError(
+          "PROVIDER_ERROR",
+          message ?? "Runtime is unavailable",
+          503,
+          true,
+        );
+    }
+  }
 }

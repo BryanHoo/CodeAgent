@@ -14,38 +14,27 @@ import {
 } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
 
-import { MutationHttpError, type ServerRouteContext } from "./context.js";
+import {
+  MutationHttpError,
+  callEngine,
+  createReadRequestId,
+  readRequestId,
+  type ServerRouteContext,
+} from "./context.js";
 import { IdempotencyHeadersSchema } from "./schemas.js";
 
 const APP_UPDATE_HANDLER_TIMEOUT_MS = 150_000;
 
 export const registerRuntimeRoutes: FastifyPluginCallback<ServerRouteContext> = (
   app,
-  context,
+  { engine, eventMetrics, installAppUpdate, readAppInfo },
   done,
 ) => {
-  const {
-    assertValidProjectDefaults,
-    capabilities,
-    installAppUpdate,
-    listModels,
-    modelCatalogCache,
-    projectContexts,
-    readAppInfo,
-    readEffectiveGlobalSettings,
-    runIdempotent,
-    settingsRepository,
-  } = context;
-
   app.get("/v1/health", { schema: { response: { 200: HealthResponseSchema } } }, () => ({
     status: "ok" as const,
     version: 1 as const,
   }));
-
-  app.get("/v1/app-info", { schema: { response: { 200: AppInfoResponseSchema } } }, () =>
-    readAppInfo(),
-  );
-
+  app.get("/v1/app-info", { schema: { response: { 200: AppInfoResponseSchema } } }, readAppInfo);
   app.post<{
     Body: InstallAppUpdateRequest;
     Headers: { "idempotency-key": string };
@@ -65,69 +54,57 @@ export const registerRuntimeRoutes: FastifyPluginCallback<ServerRouteContext> = 
         },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["install-app-update"],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          try {
-            return await installAppUpdate(request.body.version);
-          } catch (error) {
-            const code =
-              typeof error === "object" &&
-              error !== null &&
-              "code" in error &&
-              (error.code === "UPDATE_NOT_AVAILABLE" ||
-                error.code === "UPDATE_CHECK_FAILED" ||
-                error.code === "UPDATE_INSTALL_FAILED")
-                ? error.code
-                : "UPDATE_INSTALL_FAILED";
-            throw new MutationHttpError(
-              code,
-              error instanceof Error ? error.message : "Failed to install the CodeAgent update",
-              code === "UPDATE_NOT_AVAILABLE" ? 409 : 502,
-              code !== "UPDATE_NOT_AVAILABLE",
-            );
-          }
-        },
-      ),
+    async (request) => {
+      try {
+        return await installAppUpdate(request.body.version);
+      } catch (error) {
+        const code =
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          (error.code === "UPDATE_NOT_AVAILABLE" ||
+            error.code === "UPDATE_CHECK_FAILED" ||
+            error.code === "UPDATE_INSTALL_FAILED")
+            ? error.code
+            : "UPDATE_INSTALL_FAILED";
+        throw new MutationHttpError(
+          code,
+          error instanceof Error ? error.message : "Failed to install the CodeAgent update",
+          code === "UPDATE_NOT_AVAILABLE" ? 409 : 502,
+          code !== "UPDATE_NOT_AVAILABLE",
+        );
+      }
+    },
   );
-
   app.get(
     "/v1/metrics/events",
     { schema: { response: { 200: EventStreamMetricsResponseSchema } } },
     () => ({
-      projects: [...projectContexts.values()].map((context) => ({
-        ...context.eventStream.metrics,
-        activeClients: context.transportMetrics.activeClients,
-        projectId: context.project.id,
-        slowClientDisconnects: context.transportMetrics.slowClientDisconnects,
+      projects: [...eventMetrics.projects].map(([projectId, metrics]) => ({
+        ...metrics,
+        coalescedEvents: 0,
+        pendingDeltas: 0,
+        projectId,
+        providerEventsReceived: 0,
+        publishedEvents: 0,
+        retainedEvents: 0,
+        retentionEvictions: 0,
       })),
       version: 1 as const,
     }),
   );
-
-  app.get(
-    "/v1/capabilities",
-    { schema: { response: { 200: AgentCapabilitiesSchema } } },
-    () => capabilities,
+  app.get("/v1/capabilities", { schema: { response: { 200: AgentCapabilitiesSchema } } }, () =>
+    callEngine(() => engine.capabilitiesGet(createReadRequestId())),
   );
-
   app.get("/v1/models", { schema: { response: { 200: AgentModelPageSchema } } }, () =>
-    modelCatalogCache.read(),
+    callEngine(() => engine.modelsList(createReadRequestId())),
   );
-
   app.get(
     "/v1/settings",
     { schema: { response: { 200: AgentGlobalSettingsResponseSchema } } },
-    async () => ({ settings: await readEffectiveGlobalSettings() }),
+    () => callEngine(() => engine.globalSettingsGet(createReadRequestId())),
   );
-
-  app.put<{
-    Body: AgentGlobalSettings;
-    Headers: { "idempotency-key": string };
-  }>(
+  app.put<{ Body: AgentGlobalSettings; Headers: { "idempotency-key": string } }>(
     "/v1/settings",
     {
       schema: {
@@ -142,18 +119,8 @@ export const registerRuntimeRoutes: FastifyPluginCallback<ServerRouteContext> = 
         },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["update-global-settings"],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          assertValidProjectDefaults(await listModels(), request.body);
-          return {
-            settings: await settingsRepository.writeGlobalSettings(request.body),
-          };
-        },
-      ),
+    (request) =>
+      callEngine(() => engine.globalSettingsUpdate(readRequestId(request.headers), request.body)),
   );
   done();
 };

@@ -20,25 +20,19 @@ module.exports = {
       name: "protocol-is-independent",
       severity: "error",
       from: { path: "^packages/protocol/src" },
-      to: { path: "^(packages/(core|provider-codex|server|client)|apps/web|src)" },
+      to: { path: "^(packages/(engine-node|server|client)|apps/web|src)" },
     },
     {
-      name: "core-only-depends-on-protocol",
+      name: "engine-node-does-not-depend-on-delivery",
       severity: "error",
-      from: { path: "^packages/core/src" },
-      to: { path: "^(packages/(provider-codex|server|client)|apps/web|src)" },
-    },
-    {
-      name: "provider-does-not-depend-on-delivery",
-      severity: "error",
-      from: { path: "^packages/provider-codex/src" },
+      from: { path: "^packages/engine-node/src" },
       to: { path: "^(packages/(server|client)|apps/web|src)" },
     },
     {
       name: "client-is-independent-from-server-runtime",
       severity: "error",
       from: { path: "^packages/client/src" },
-      to: { path: "^packages/(core|provider-codex|server)/src" },
+      to: { path: "^packages/(engine-node|server)/src" },
     },
     {
       name: "client-does-not-depend-on-host-transports",
@@ -62,7 +56,7 @@ module.exports = {
       name: "web-only-uses-client-and-protocol",
       severity: "error",
       from: { path: "^apps/web/src" },
-      to: { path: "^packages/(core|provider-codex|server)/src" },
+      to: { path: "^packages/(engine-node|server)/src" },
     },
     {
       name: "web-host-transport-only-through-composition-root",

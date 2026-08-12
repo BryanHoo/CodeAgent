@@ -128,6 +128,72 @@ fn item_and_turn_mapping_should_preserve_domain_shape() {
 }
 
 #[test]
+fn collaboration_item_should_preserve_subagent_contract() {
+    let item = map_codex_item(&json!({
+        "agentsStates": {
+            "frontend-analysis": {
+                "message": "完成",
+                "status": "completed"
+            }
+        },
+        "id": "collaboration-1",
+        "model": "gpt-5.6-sol",
+        "prompt": "分析前端",
+        "reasoningEffort": "high",
+        "receiverThreadIds": ["frontend-analysis"],
+        "senderThreadId": "task-1",
+        "status": "completed",
+        "tool": "spawnAgent",
+        "type": "collabAgentToolCall"
+    }))
+    .expect("collaboration item should map");
+
+    assert_eq!(item["name"], "agent/spawn");
+    assert_eq!(
+        item["input"]["receiverTaskIds"],
+        json!(["frontend-analysis"])
+    );
+    assert_eq!(item["output"]["agents"][0]["status"], "completed");
+}
+
+#[test]
+fn turn_mapping_should_backfill_subagent_nickname() {
+    let turn = map_codex_turn(&json!({
+        "completedAt": 1_754_998_402_i64,
+        "error": null,
+        "id": "turn-1",
+        "items": [
+            {
+                "agentsStates": {
+                    "frontend-analysis": { "status": "completed" }
+                },
+                "id": "collaboration-1",
+                "receiverThreadIds": ["frontend-analysis"],
+                "senderThreadId": "task-1",
+                "status": "completed",
+                "tool": "spawnAgent",
+                "type": "collabAgentToolCall"
+            },
+            {
+                "agentPath": "/root/frontend_analysis",
+                "agentThreadId": "frontend-analysis",
+                "id": "activity-1",
+                "kind": "started",
+                "type": "subAgentActivity"
+            }
+        ],
+        "startedAt": 1_754_998_400_i64,
+        "status": "completed"
+    }))
+    .expect("turn should map");
+
+    assert_eq!(
+        turn["items"][0]["output"]["agents"][0]["nickname"],
+        "frontend_analysis"
+    );
+}
+
+#[test]
 fn context_usage_mapping_should_reject_missing_counters() {
     let error = map_context_usage(&json!({
         "last": {},

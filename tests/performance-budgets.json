@@ -39,5 +39,10 @@
   "slowWebSocket": {
     "maxDispatchMs": 500,
     "messages": 10000
+  },
+  "napiEventBridge": {
+    "events": 10000,
+    "maxFrameBytes": 1048576,
+    "threadsafeQueueSize": 1
   }
 }

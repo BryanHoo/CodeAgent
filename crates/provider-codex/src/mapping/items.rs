@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde_json::{Value, json};
 
 use super::common::{
@@ -37,8 +39,130 @@ fn map_user_message_content(value: Option<&Value>) -> Result<String, CodexMappin
     Ok(texts.join("\n"))
 }
 
+fn collaboration_status(value: Option<&Value>) -> &'static str {
+    match value.and_then(Value::as_str) {
+        Some("pendingInit") => "pending",
+        Some("errored" | "notFound") => "failed",
+        Some("shutdown") => "completed",
+        _ => map_item_status(value),
+    }
+}
+
+fn map_collaboration_item(
+    item: &serde_json::Map<String, Value>,
+    id: &str,
+    subagent_nicknames: &HashMap<String, String>,
+) -> Result<Value, CodexMappingError> {
+    let name = match field_string(item, "tool", "Codex collaboration tool")? {
+        "closeAgent" => "agent/close",
+        "resumeAgent" => "agent/resume",
+        "sendInput" => "agent/send_input",
+        "spawnAgent" => "agent/spawn",
+        "wait" => "agent/wait",
+        _ => {
+            return Err(CodexMappingError(
+                "Codex collaboration tool is invalid".to_string(),
+            ));
+        }
+    };
+    let receiver_task_ids = item
+        .get("receiverThreadIds")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            CodexMappingError("Codex collaboration receivers must be an array".to_string())
+        })?
+        .iter()
+        .map(|value| {
+            value.as_str().map(str::to_owned).ok_or_else(|| {
+                CodexMappingError("Codex collaboration receiver must be a string".to_string())
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let states = record(
+        item.get("agentsStates").unwrap_or(&Value::Null),
+        "Codex collaboration agent states",
+    )?;
+    let agents = states
+        .iter()
+        .map(|(task_id, value)| {
+            let state = record(value, "Codex collaboration agent state")?;
+            let mut agent = json!({
+                "status": collaboration_status(state.get("status")),
+                "taskId": task_id
+            });
+            if let Some(message) = optional_string(
+                state.get("message"),
+                "Codex collaboration agent state message",
+            )? {
+                agent["message"] = Value::String(message);
+            }
+            if let Some(nickname) = subagent_nicknames.get(task_id) {
+                agent["nickname"] = Value::String(nickname.clone());
+            }
+            Ok(agent)
+        })
+        .collect::<Result<Vec<_>, CodexMappingError>>()?;
+    let mut input = json!({
+        "receiverTaskIds": receiver_task_ids,
+        "senderTaskId": field_string(item, "senderThreadId", "Codex collaboration sender")?
+    });
+    for (source, target) in [
+        ("model", "model"),
+        ("prompt", "prompt"),
+        ("reasoningEffort", "reasoningEffort"),
+    ] {
+        if let Some(value) = optional_string(item.get(source), "Codex collaboration input")? {
+            input[target] = Value::String(value);
+        }
+    }
+    Ok(json!({
+        "id": id,
+        "input": input,
+        "name": name,
+        "output": { "agents": agents },
+        "status": map_item_status(item.get("status")),
+        "type": "tool"
+    }))
+}
+
+fn map_subagent_activity(
+    item: &serde_json::Map<String, Value>,
+    id: &str,
+) -> Result<Value, CodexMappingError> {
+    field_string(item, "agentThreadId", "Codex subagent activity")?;
+    let path = field_string(item, "agentPath", "Codex subagent activity")?;
+    let name = path
+        .rsplit('/')
+        .find(|part| !part.is_empty())
+        .unwrap_or(path);
+    let (detail, status) = match field_string(item, "kind", "Codex subagent activity")? {
+        "interacted" => ("已交互", "completed"),
+        "interrupted" => ("已中断", "interrupted"),
+        "started" => ("已启动", "completed"),
+        _ => {
+            return Err(CodexMappingError(
+                "Codex subagent activity kind is invalid".to_string(),
+            ));
+        }
+    };
+    Ok(json!({
+        "detail": detail,
+        "id": id,
+        "label": format!("子代理 {name}"),
+        "status": status,
+        "type": "activity"
+    }))
+}
+
 /// 将 Codex 原生 Item 投影成统一 `AgentItem` JSON。
 pub fn map_codex_item(value: &Value) -> Result<Value, CodexMappingError> {
+    map_codex_item_with_nicknames(value, &HashMap::new())
+}
+
+pub(crate) fn map_codex_item_with_nicknames(
+    value: &Value,
+    subagent_nicknames: &HashMap<String, String>,
+) -> Result<Value, CodexMappingError> {
     let item = record(value, "Codex item")?;
     let id = field_string(item, "id", "Codex item")?;
     let kind = field_string(item, "type", "Codex item")?;
@@ -181,18 +305,14 @@ pub fn map_codex_item(value: &Value) -> Result<Value, CodexMappingError> {
             "label": "等待",
             "type": "activity"
         })),
-        "hookPrompt"
-        | "contextCompaction"
-        | "imageView"
-        | "subAgentActivity"
-        | "imageGeneration"
-        | "collabAgentToolCall" => {
+        "collabAgentToolCall" => map_collaboration_item(item, id, subagent_nicknames),
+        "subAgentActivity" => map_subagent_activity(item, id),
+        "hookPrompt" | "contextCompaction" | "imageView" | "imageGeneration" => {
             let label = match kind {
                 "hookPrompt" => "Hook 提示",
                 "contextCompaction" => "上下文压缩",
                 "imageView" => "查看图片",
                 "imageGeneration" => "图片生成",
-                "subAgentActivity" => "子代理活动",
                 _ => "协作代理",
             };
             Ok(json!({ "id": id, "label": label, "type": "activity" }))

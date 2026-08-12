@@ -3,16 +3,15 @@ import { fileURLToPath } from "node:url";
 import { configDefaults, defineConfig } from "vitest/config";
 
 export const vitestAliases = {
-  "@code-agent/core": fileURLToPath(new URL("./packages/core/src/index.ts", import.meta.url)),
+  "@code-agent/engine-node": fileURLToPath(
+    new URL("./packages/engine-node/src/index.ts", import.meta.url),
+  ),
   "@code-agent/client": fileURLToPath(new URL("./packages/client/src/index.ts", import.meta.url)),
   "@code-agent/host-transport": fileURLToPath(
     new URL("./packages/transport-http/src/index.ts", import.meta.url),
   ),
   "@code-agent/protocol": fileURLToPath(
     new URL("./packages/protocol/src/index.ts", import.meta.url),
-  ),
-  "@code-agent/provider-codex": fileURLToPath(
-    new URL("./packages/provider-codex/src/index.ts", import.meta.url),
   ),
   "@code-agent/server": fileURLToPath(new URL("./packages/server/src/index.ts", import.meta.url)),
   "@code-agent/transport-http": fileURLToPath(
@@ -42,12 +41,6 @@ export default defineConfig({
           functions: 60,
           lines: 60,
           statements: 60,
-        },
-        "packages/provider-codex/src/codex-transcript.ts": {
-          branches: 70,
-          functions: 85,
-          lines: 80,
-          statements: 80,
         },
         "packages/server/src/server-delivery.ts": {
           branches: 85,

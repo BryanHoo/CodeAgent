@@ -41,12 +41,13 @@
     "build": "pnpm run clean && pnpm run typecheck && pnpm run build:web && pnpm run build:node",
     "build:desktop": "pnpm --filter @code-agent/desktop build",
     "build:desktop-ui": "pnpm --filter @code-agent/web build:desktop",
-    "build:node": "tsup",
+    "build:native": "node ./tools/build-native-addon.mjs",
+    "build:node": "pnpm run build:native -- --release && tsup",
     "build:web": "pnpm --filter @code-agent/web build:web",
     "bundle:check": "node ./tools/verify-web-bundle.mjs --report .artifacts/web-bundle-report.json",
     "bundle:report": "node ./tools/verify-web-bundle.mjs --read-report .artifacts/web-bundle-report.json",
     "bundle:host:check": "node ./tools/verify-host-bundles.mjs",
-    "check": "pnpm run audit:prod && pnpm run codex:schema:check && pnpm run protocol:rust:check && pnpm run tauri:phase6:check && pnpm run format:check && pnpm run lint && pnpm run lint:architecture && pnpm run test && pnpm run test:performance && pnpm run build && pnpm run bundle:check && pnpm run package:check",
+    "check": "pnpm run audit:prod && pnpm run codex:schema:check && pnpm run protocol:rust:check && pnpm run tauri:phase7:check && pnpm run format:check && pnpm run lint && pnpm run lint:architecture && pnpm run test && pnpm run test:performance && pnpm run build && pnpm run bundle:check && pnpm run package:check",
     "check:rust": "cargo fmt --all --check && cargo check --workspace --locked && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked",
     "clean": "node ./tools/clean.mjs",
     "codex:schema:check": "node ./tools/verify-codex-schema.mjs",
@@ -55,7 +56,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
-    "lint:architecture": "depcruise --config dependency-cruiser.config.cjs src apps/web/src packages/client/src packages/core/src packages/protocol/src packages/provider-codex/src packages/server/src packages/transport-http/src packages/transport-tauri/src",
+    "lint:architecture": "depcruise --config dependency-cruiser.config.cjs src apps/web/src packages/client/src packages/engine-node/src packages/protocol/src packages/server/src packages/transport-http/src packages/transport-tauri/src",
     "package:check": "node ./tools/verify-package.mjs",
     "protocol:rust:check": "vitest run packages/protocol/src/rust-runtime-schema.test.ts && cargo run -p code-agent-protocol-gen --locked -- --check schemas/code-agent-runtime.schema.json crates/protocol/src/generated.rs",
     "protocol:rust:generate": "node ./tools/generate-rust-protocol.mjs",
@@ -63,6 +64,7 @@
     "tauri:phase4:check": "vitest run tests/tauri-phase-4.test.ts",
     "tauri:phase5:check": "vitest run tests/tauri-phase-4.test.ts tests/tauri-phase-5.test.ts",
     "tauri:phase6:check": "vitest run tests/tauri-phase-4.test.ts tests/tauri-phase-5.test.ts tests/tauri-phase-6.test.ts",
+    "tauri:phase7:check": "vitest run tests/tauri-phase-4.test.ts tests/tauri-phase-5.test.ts tests/tauri-phase-6.test.ts tests/tauri-phase-7.test.ts",
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
     "test:e2e": "pnpm build && playwright test",
@@ -71,8 +73,7 @@
     "prepublishOnly": "pnpm run check"
   },
   "dependencies": {
-    "@openai/codex": "catalog:",
-    "better-sqlite3": "catalog:"
+    "@openai/codex": "catalog:"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",

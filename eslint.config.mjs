@@ -31,6 +31,7 @@ export default tseslint.config(
       "**/*.d.ts",
       "**/*.{test,spec}.{js,mjs,cjs,ts,tsx}",
       "**/test/fixtures/**/*.{js,mjs,cjs,ts,tsx}",
+      "tests/fixtures/**/*.{js,mjs,cjs,ts,tsx}",
       "tests/e2e/**/*.{js,mjs,cjs,ts,tsx}",
     ],
     rules: {

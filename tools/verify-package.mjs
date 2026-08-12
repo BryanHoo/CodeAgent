@@ -1,27 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 const require = createRequire(import.meta.url);
-
-function verifyNativeDependencyInstall(name) {
-  const manifestPath = require.resolve(`${name}/package.json`);
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  const hasBindingConfig = existsSync(join(dirname(manifestPath), "binding.gyp"));
-  const overridesImplicitInstall =
-    manifest.gypfile === false ||
-    Boolean(manifest.scripts?.preinstall) ||
-    Boolean(manifest.scripts?.install);
-
-  // npm 会为未声明安装钩子的 binding.gyp 包自动执行 node-gyp rebuild。
-  if (hasBindingConfig && !overridesImplicitInstall) {
-    throw new Error(
-      `${name}@${manifest.version} triggers npm's implicit node-gyp rebuild during installation`,
-    );
-  }
-}
 
 const cliResult = spawnSync(process.execPath, ["dist/cli.js", "--help"], {
   encoding: "utf8",
@@ -39,8 +22,6 @@ if (cliResult.status !== 0 || !cliResult.stdout.includes("Usage: code-agent [com
   process.stderr.write(cliResult.stderr);
   throw new Error("Built CLI is not executable");
 }
-
-verifyNativeDependencyInstall("better-sqlite3");
 
 const packageManagerCli = process.env["npm_execpath"];
 if (!packageManagerCli) {
@@ -81,8 +62,8 @@ try {
   const requiredFiles = [
     "CHANGELOG.md",
     "dist/cli.js",
+    "dist/native/code-agent-node-binding.node",
     "dist/server/index.js",
-    "dist/sqlite-state-worker.js",
     "dist/web/index.html",
   ];
   const missingFiles = requiredFiles.filter((path) => !files.has(path));
@@ -128,10 +109,23 @@ try {
     );
   }
 
-  // 发布校验必须真实启动 Worker，单纯检查文件清单无法发现相对路径错误。
-  const { SqliteStateRepository } = await import("../dist/server/index.js");
-  const repository = await SqliteStateRepository.open(join(stateRoot, "state.sqlite3"));
-  await repository.close();
+  const extractResult = spawnSync("tar", ["-xf", manifest.filename, "-C", stateRoot], {
+    encoding: "utf8",
+    shell: false,
+  });
+  if (extractResult.status !== 0) {
+    process.stderr.write(extractResult.stderr);
+    throw new Error("Unable to extract packed tarball");
+  }
+
+  // 直接加载 tarball 内的 N-API addon，验证平台产物与 Node ABI 均可用。
+  const binding = require(join(stateRoot, "package/dist/native/code-agent-node-binding.node"));
+  if (
+    typeof binding.addonVersion !== "function" ||
+    typeof binding.NodeEngine?.open !== "function"
+  ) {
+    throw new Error("Packed native addon exports are invalid");
+  }
 
   process.stdout.write(`Package verified: ${manifest.filename} (${manifest.files.length} files)\n`);
 } finally {

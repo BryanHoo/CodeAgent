@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use super::common::{
     CodexMappingError, field_string, non_negative_integer, optional_string, record,
 };
-use super::items::map_codex_item;
+use super::items::map_codex_item_with_nicknames;
 
 /// 映射 Codex Token Usage，只公开统一协议需要的当前上下文占用。
 pub fn map_context_usage(value: &Value) -> Result<Value, CodexMappingError> {
@@ -63,12 +63,26 @@ fn turn_status(value: Option<&Value>) -> Result<&'static str, CodexMappingError>
 /// 将 Codex 原生 Turn 投影并通过公共 `AgentTurn` Schema 校验。
 pub fn map_codex_turn(value: &Value) -> Result<Value, CodexMappingError> {
     let turn = record(value, "Codex turn")?;
-    let items = turn
+    let native_items = turn
         .get("items")
         .and_then(Value::as_array)
-        .ok_or_else(|| CodexMappingError("Codex turn items must be an array".to_string()))?
+        .ok_or_else(|| CodexMappingError("Codex turn items must be an array".to_string()))?;
+    let subagent_nicknames = native_items
         .iter()
-        .map(map_codex_item)
+        .filter_map(|value| {
+            let item = value.as_object()?;
+            if item.get("type")?.as_str()? != "subAgentActivity" {
+                return None;
+            }
+            let task_id = item.get("agentThreadId")?.as_str()?;
+            let path = item.get("agentPath")?.as_str()?;
+            let nickname = path.rsplit('/').find(|part| !part.is_empty())?;
+            Some((task_id.to_string(), nickname.to_string()))
+        })
+        .collect::<HashMap<_, _>>();
+    let items = native_items
+        .iter()
+        .map(|item| map_codex_item_with_nicknames(item, &subagent_nicknames))
         .collect::<Result<Vec<_>, _>>()?;
     let error = match turn.get("error") {
         None | Some(Value::Null) => Value::Null,
@@ -94,3 +108,4 @@ pub(crate) fn optional_nullable_string(
 ) -> Result<Value, CodexMappingError> {
     Ok(optional_string(value, context)?.map_or(Value::Null, Value::String))
 }
+use std::collections::HashMap;
