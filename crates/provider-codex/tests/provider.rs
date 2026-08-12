@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use code_agent_core::{PortRequestContext, ProviderPort};
-use code_agent_protocol::Project;
+use code_agent_protocol::{AgentProviderConnectionStatus, Project};
 use code_agent_provider_codex::{CodexRuntimeProvider, JsonlRpcClient, JsonlRpcClientOptions};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, duplex};
@@ -38,6 +38,68 @@ async fn respond(writer: &mut tokio::io::WriteHalf<DuplexStream>, request: &Valu
         .write_all(format!("{}\n", json!({ "id": request["id"], "result": result })).as_bytes())
         .await
         .expect("write response");
+}
+
+#[tokio::test]
+async fn provider_connection_status_should_match_the_shared_protocol() {
+    let (runtime, server) = runtime();
+    let (read, mut write) = tokio::io::split(server);
+    let mut read = BufReader::new(read);
+    let scenario = tokio::spawn(async move {
+        for _ in 0..2 {
+            let request = read_frame(&mut read).await;
+            match request["method"].as_str() {
+                Some("config/read") => {
+                    respond(
+                        &mut write,
+                        &request,
+                        json!({ "config": { "model_provider": "openai" } }),
+                    )
+                    .await;
+                }
+                Some("account/read") => {
+                    respond(
+                        &mut write,
+                        &request,
+                        json!({
+                            "account": {
+                                "email": "developer@example.com",
+                                "planType": "plus",
+                                "type": "chatgpt"
+                            },
+                            "requiresOpenaiAuth": true
+                        }),
+                    )
+                    .await;
+                }
+                method => panic!("unexpected request: {method:?}"),
+            }
+        }
+    });
+
+    let status = runtime
+        .connection_status(&PortRequestContext::new("connection"))
+        .await
+        .expect("connection status");
+    let parsed: AgentProviderConnectionStatus =
+        serde_json::from_value(status.clone()).expect("shared provider connection contract");
+
+    assert_eq!(
+        status,
+        json!({
+            "account": {
+                "email": "developer@example.com",
+                "planType": "plus",
+                "type": "chatgpt"
+            },
+            "customBaseUrl": null,
+            "mode": "official",
+            "pendingLogin": null,
+            "state": "connected"
+        })
+    );
+    assert_eq!(parsed.state.to_string(), "connected");
+    scenario.await.expect("scenario");
 }
 
 #[tokio::test]
