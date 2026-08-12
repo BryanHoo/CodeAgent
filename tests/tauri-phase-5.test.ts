@@ -1,12 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  CODEX_IGNORED_NOTIFICATION_METHODS,
-  CODEX_MAPPED_NOTIFICATION_METHODS,
-  CODEX_SPECIAL_NOTIFICATION_METHODS,
-} from "../packages/provider-codex/src/codex-mapping-common.js";
-import { mapCodexNotification } from "../packages/provider-codex/src/codex-event-mapping.js";
 import { describe, expect, it } from "vitest";
 
 const repositoryRoot = process.cwd();
@@ -43,22 +37,20 @@ describe("Tauri Phase 5 repository contract", () => {
     expect(provider).not.toMatch(/base64::|BASE64_STANDARD|\.decode_base64/u);
   });
 
-  it("locks the same Codex version and notification classifications in Rust and TypeScript", () => {
+  it("locks the Codex version and disjoint notification classifications in Rust", () => {
     const rustBinary = read("crates/provider-codex/src/binary.rs");
-    const tsBinary = read("packages/provider-codex/src/binary.ts");
     const rustMapping = read("crates/provider-codex/src/mapping/common.rs");
     const versionPattern = /SUPPORTED_CODEX_VERSION[^=]*=\s*["']([^"']+)["']/u;
+    const mapped = rustStringSet(rustMapping, "CODEX_MAPPED_NOTIFICATION_METHODS");
+    const special = rustStringSet(rustMapping, "CODEX_SPECIAL_NOTIFICATION_METHODS");
+    const ignored = rustStringSet(rustMapping, "CODEX_IGNORED_NOTIFICATION_METHODS");
 
-    expect(versionPattern.exec(rustBinary)?.[1]).toBe(versionPattern.exec(tsBinary)?.[1]);
-    expect(rustStringSet(rustMapping, "CODEX_MAPPED_NOTIFICATION_METHODS")).toEqual(
-      CODEX_MAPPED_NOTIFICATION_METHODS,
-    );
-    expect(rustStringSet(rustMapping, "CODEX_SPECIAL_NOTIFICATION_METHODS")).toEqual(
-      CODEX_SPECIAL_NOTIFICATION_METHODS,
-    );
-    expect(rustStringSet(rustMapping, "CODEX_IGNORED_NOTIFICATION_METHODS")).toEqual(
-      CODEX_IGNORED_NOTIFICATION_METHODS,
-    );
+    expect(versionPattern.exec(rustBinary)?.[1]).toMatch(/^\d+\.\d+\.\d+$/u);
+    expect(mapped.size).toBeGreaterThan(0);
+    expect(special.size).toBeGreaterThan(0);
+    expect([...mapped].every((method) => !special.has(method))).toBe(true);
+    expect([...mapped].every((method) => !ignored.has(method))).toBe(true);
+    expect([...special].every((method) => !ignored.has(method))).toBe(true);
   });
 
   it("registers every Phase 5 command while keeping renderer capabilities minimal", () => {
@@ -119,23 +111,10 @@ describe("Tauri Phase 5 repository contract", () => {
     );
   });
 
-  it("maps the shared realtime scenario to the same domain event sequence", () => {
-    const fixture = JSON.parse(read("tests/fixtures/phase5/realtime-path.json")) as {
-      expectedEvents: unknown[];
-      expectedEventTypes: string[];
-      notifications: { method: string; params: unknown }[];
-    };
-    const events = fixture.notifications.map(({ method, params }) =>
-      mapCodexNotification(
-        method,
-        params,
-        () => undefined,
-        () => undefined,
-      ),
-    );
+  it("keeps the shared realtime scenario covered by Rust mapping tests", () => {
+    const mappingTest = read("crates/provider-codex/tests/mapping.rs");
 
-    expect(events.every((event) => event !== undefined)).toBe(true);
-    expect(events).toEqual(fixture.expectedEvents);
-    expect(events.map((event) => event?.type)).toEqual(fixture.expectedEventTypes);
+    expect(mappingTest).toContain("phase5_realtime_path_should_match_shared_delivery_fixture");
+    expect(mappingTest).toContain("tests/fixtures/phase5/realtime-path.json");
   });
 });

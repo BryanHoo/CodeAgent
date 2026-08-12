@@ -3,30 +3,19 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type {
-  AgentRuntimeProvider,
-  AgentProviderConnectionRepository,
-  AgentSettingsRepository,
-  ProjectRepository,
-} from "@code-agent/core";
 import {
-  checkCodexVersion,
-  createCodexRuntimeProvider,
   locateCodexBinary,
-  startCodexAppServer,
-  type CodexBinary,
-  type CodexProcessExit,
-  type CodexRpcClient,
-  type CodexVersionInfo,
+  openNodeEngine,
+  type CodeAgentEngine,
   type LocateCodexBinaryOptions,
-  type StartCodexAppServerOptions,
-} from "@code-agent/provider-codex";
+  type NodeEngineDiagnostic,
+  type NodeEngineOptions,
+  type NodeProcessExit,
+} from "@code-agent/engine-node";
 import {
   createCodeAgentServer,
   normalizeAllowedHost,
-  SqliteStateRepository,
   type CodeAgentAccessOptions,
-  type SqliteDatabaseDiagnostics,
 } from "@code-agent/server";
 
 import packageManifest from "../package.json" with { type: "json" };
@@ -48,11 +37,10 @@ import {
   validateLanPassword,
 } from "./lan-access.js";
 
-interface CliManagedRuntime {
-  client: CodexRpcClient;
+interface CliManagedEngine extends CodeAgentEngine {
   close: () => Promise<void>;
-  version: CodexVersionInfo;
-  waitForExit: () => Promise<CodexProcessExit>;
+  diagnose: () => Promise<NodeEngineDiagnostic>;
+  waitForExit: () => Promise<NodeProcessExit>;
 }
 
 interface CliManagedServer {
@@ -62,47 +50,29 @@ interface CliManagedServer {
 
 const MAX_TCP_PORT = 65_535;
 
-interface CliManagedStateRepository
-  extends ProjectRepository, AgentSettingsRepository, AgentProviderConnectionRepository {
-  close: () => Promise<void>;
-  diagnose: () => Promise<SqliteDatabaseDiagnostics>;
-}
-
-interface CreateRuntimeProviderInput {
-  client: CodexRpcClient;
-}
-
 interface CreateServerInput {
   access?: CodeAgentAccessOptions;
   allowedHosts?: readonly string[];
+  engine: CodeAgentEngine;
   installAppUpdate: ReturnType<typeof createAppUpdateService>["install"];
-  projectRepository: ProjectRepository;
-  providerConnectionRepository: AgentProviderConnectionRepository;
-  provider: AgentRuntimeProvider;
   readAppInfo: ReturnType<typeof createAppUpdateService>["read"];
-  settingsRepository: AgentSettingsRepository;
   staticRoot: string;
 }
 
 export interface CliDependencies {
   appVersion: string;
   checkAppUpdate: () => Promise<StartupAppUpdateCheck>;
-  checkCodexVersion: (binaryPath: string) => Promise<CodexVersionInfo>;
   confirmAppUpdate: (currentVersion: string, latestVersion: string) => Promise<boolean>;
-  createStateRepository: (databasePath: string) => Promise<CliManagedStateRepository>;
-  createRuntimeProvider: (
-    input: CreateRuntimeProviderInput,
-  ) => AgentRuntimeProvider | Promise<AgentRuntimeProvider>;
+  createEngine: (options: NodeEngineOptions) => Promise<CliManagedEngine>;
   createServer: (input: CreateServerInput) => Promise<CliManagedServer>;
   ensureTemporaryWorkspace: (path: string) => Promise<string>;
   generateLanPairingCode: () => string;
   listLanAccessUrls: (port: number) => readonly string[];
-  locateCodexBinary: (options?: LocateCodexBinaryOptions) => Promise<CodexBinary>;
+  locateCodexBinary: (options?: LocateCodexBinaryOptions) => Promise<string>;
   nodeVersion: string;
   openBrowser: (url: string) => Promise<void>;
   installAppUpdate: (version: string) => Promise<void>;
   restartAfterUpdate: (args: readonly string[]) => Promise<number>;
-  startCodexAppServer: (options?: StartCodexAppServerOptions) => Promise<CliManagedRuntime>;
   webRoot: string;
 }
 
@@ -119,10 +89,8 @@ const startupAppUpdate = createStartupAppUpdateOperations(packageManifest.versio
 const defaultDependencies: CliDependencies = {
   appVersion: packageManifest.version,
   checkAppUpdate: startupAppUpdate.check,
-  checkCodexVersion,
   confirmAppUpdate: confirmTerminalAppUpdate,
-  createStateRepository: (databasePath) => SqliteStateRepository.open(databasePath),
-  createRuntimeProvider: createCodexRuntimeProvider,
+  createEngine: openNodeEngine,
   createServer: async (input) => {
     const server = await createCodeAgentServer({
       ...input,
@@ -140,7 +108,6 @@ const defaultDependencies: CliDependencies = {
   openBrowser: openSystemBrowser,
   installAppUpdate: startupAppUpdate.install,
   restartAfterUpdate: restartCliAfterUpdate,
-  startCodexAppServer,
   webRoot: fileURLToPath(new URL("../dist/web", import.meta.url)),
 };
 
@@ -197,10 +164,7 @@ function resolveCodexHome(options: ParsedCommandOptions): string {
   return options.codexHome ?? process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
 }
 
-function assertDatabaseDiagnostics(diagnostics: SqliteDatabaseDiagnostics): void {
-  if (!diagnostics.writable) {
-    throw new Error("SQLite database is not writable");
-  }
+function assertDatabaseDiagnostics(diagnostics: NodeEngineDiagnostic): void {
   if (diagnostics.migrationVersion < 1) {
     throw new Error("SQLite migrations are not applied");
   }
@@ -210,13 +174,25 @@ function assertDatabaseDiagnostics(diagnostics: SqliteDatabaseDiagnostics): void
   if (diagnostics.journalMode.toLocaleLowerCase() !== "wal") {
     throw new Error(`SQLite journal_mode must be WAL; found ${diagnostics.journalMode}`);
   }
-  if (
-    !diagnostics.foreignKeys ||
-    diagnostics.synchronous !== "normal" ||
-    diagnostics.busyTimeout !== 5_000
-  ) {
+  if (!diagnostics.foreignKeys) {
     throw new Error("SQLite PRAGMA configuration is invalid");
   }
+}
+
+function engineOptions(
+  dependencies: CliDependencies,
+  codexPath: string,
+  codexHome: string,
+  temporaryWorkspace: string,
+): NodeEngineOptions {
+  return {
+    appVersion: dependencies.appVersion,
+    attachmentRoot: join(codexHome, "code-agent", "attachments"),
+    codexHome,
+    codexPath,
+    databasePath: join(codexHome, "code-agent", "state.sqlite3"),
+    temporaryWorkspace,
+  };
 }
 
 function createProcessShutdownSignal(): { cleanup: () => void; signal: AbortSignal } {
@@ -260,27 +236,27 @@ async function runDoctor(
   assertSupportedNodeVersion(dependencies.nodeVersion);
   output.success(`Node.js ${dependencies.nodeVersion}`);
 
-  const binary = await dependencies.locateCodexBinary(
+  const codexPath = await dependencies.locateCodexBinary(
     options.codexBin ? { explicitPath: options.codexBin } : {},
   );
-  const version = await dependencies.checkCodexVersion(binary.path);
-  output.success(`Codex ${version.version} (${binary.path})`);
   const codexHome = resolveCodexHome(options);
-  const stateRepository = await dependencies.createStateRepository(
-    join(codexHome, "code-agent", "state.sqlite3"),
+  const temporaryWorkspace = await dependencies.ensureTemporaryWorkspace(
+    join(codexHome, "code-agent", "temporary-workspace"),
+  );
+  const engine = await dependencies.createEngine(
+    engineOptions(dependencies, codexPath, codexHome, temporaryWorkspace),
   );
   try {
-    const diagnostics = await stateRepository.diagnose();
+    const diagnostics = await engine.diagnose();
     assertDatabaseDiagnostics(diagnostics);
+    output.success(`Codex ${diagnostics.codexVersion} (${codexPath})`);
     output.success(`SQLite 可写 (${join(codexHome, "code-agent", "state.sqlite3")})`);
     output.success(`SQLite migration ${String(diagnostics.migrationVersion)}`);
     output.success(`SQLite integrity_check ${diagnostics.integrityCheck}`);
     output.success(`SQLite journal_mode ${diagnostics.journalMode}`);
-    output.success(
-      `SQLite PRAGMA foreign_keys=ON synchronous=NORMAL busy_timeout=${String(diagnostics.busyTimeout)}`,
-    );
+    output.success("SQLite PRAGMA foreign_keys=ON synchronous=NORMAL busy_timeout=5000");
   } finally {
-    await stateRepository.close();
+    await engine.close();
   }
   return 0;
 }
@@ -348,44 +324,31 @@ async function runStart(
     throw new Error("Shutdown signal is unavailable");
   }
 
-  let runtime: CliManagedRuntime | undefined;
+  let engine: CliManagedEngine | undefined;
   let server: CliManagedServer | undefined;
-  let stateRepository: CliManagedStateRepository | undefined;
 
   try {
     const codexHome = resolveCodexHome(options);
-    const env = {
-      ...process.env,
-      ...(options.codexHome ? { CODEX_HOME: options.codexHome } : {}),
-    };
-    stateRepository = await dependencies.createStateRepository(
-      join(codexHome, "code-agent", "state.sqlite3"),
-    );
     const temporaryWorkspace = await dependencies.ensureTemporaryWorkspace(
       join(codexHome, "code-agent", "temporary-workspace"),
     );
-    await stateRepository.ensureTemporaryProject(temporaryWorkspace);
-    runtime = await dependencies.startCodexAppServer({
-      appVersion: dependencies.appVersion,
-      env,
-      ...(options.codexBin ? { binaryPath: options.codexBin } : {}),
-    });
-    const provider = await dependencies.createRuntimeProvider({
-      client: runtime.client,
-    });
+    const codexPath = await dependencies.locateCodexBinary(
+      options.codexBin ? { explicitPath: options.codexBin } : {},
+    );
+    engine = await dependencies.createEngine(
+      engineOptions(dependencies, codexPath, codexHome, temporaryWorkspace),
+    );
+    const diagnostics = await engine.diagnose();
     const appUpdateService = createAppUpdateService({
       appVersion: dependencies.appVersion,
-      codexVersion: runtime.version.version,
+      codexVersion: diagnostics.codexVersion,
     });
     server = await dependencies.createServer({
       ...(access === undefined ? {} : { access }),
       ...(allowedHosts === undefined ? {} : { allowedHosts }),
-      projectRepository: stateRepository,
-      providerConnectionRepository: stateRepository,
-      provider,
+      engine,
       installAppUpdate: appUpdateService.install,
       readAppInfo: appUpdateService.read,
-      settingsRepository: stateRepository,
       staticRoot: dependencies.webRoot,
     });
     const host = options.lan === true ? "0.0.0.0" : "127.0.0.1";
@@ -429,29 +392,26 @@ async function runStart(
 
     // 同时观察退出信号和子进程，避免 App Server 崩溃后 CLI 继续空等。
     const outcome = await Promise.race([
-      runtime.waitForExit().then((exit) => ({ exit, type: "process-exit" as const })),
+      engine.waitForExit().then((exit) => ({ exit, type: "process-exit" as const })),
       waitForAbort(shutdownSignal).then(() => ({ type: "shutdown" as const })),
     ]);
     if (outcome.type === "process-exit") {
-      const reason = outcome.exit.signal
-        ? `信号 ${outcome.exit.signal}`
-        : `退出码 ${String(outcome.exit.code)}`;
+      const reason =
+        outcome.exit.signal === undefined
+          ? `退出码 ${String(outcome.exit.code)}`
+          : `信号 ${String(outcome.exit.signal)}`;
       throw new Error(`Codex App Server 在 CodeAgent 关闭前意外退出，${reason}`);
     }
     return 0;
   } finally {
-    // 每层 finally 都保证后续资源被回收，避免单个关闭错误遗留长驻进程。
+    // Server 先断开请求和订阅；Engine close 幂等，兼顾 Server 尚未创建的失败路径。
     try {
       await server?.close();
     } finally {
       try {
-        await stateRepository?.close();
+        await engine?.close();
       } finally {
-        try {
-          await runtime?.close();
-        } finally {
-          ownedShutdown?.cleanup();
-        }
+        ownedShutdown?.cleanup();
       }
     }
   }

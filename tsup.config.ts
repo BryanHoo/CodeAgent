@@ -4,11 +4,9 @@ export default defineConfig({
   entry: {
     cli: "src/cli.ts",
     "client/index": "packages/client/src/index.ts",
-    "core/index": "packages/core/src/index.ts",
+    "engine-node/index": "packages/engine-node/src/index.ts",
     "protocol/index": "packages/protocol/src/index.ts",
-    "providers/codex/index": "packages/provider-codex/src/index.ts",
     "server/index": "packages/server/src/index.ts",
-    "sqlite-state-worker": "packages/server/src/sqlite-state-worker.js",
   },
   bundle: true,
   clean: false,
@@ -20,9 +18,8 @@ export default defineConfig({
     };
     options.alias = {
       ...options.alias,
-      "@code-agent/core": "./packages/core/src/index.ts",
+      "@code-agent/engine-node": "./packages/engine-node/src/index.ts",
       "@code-agent/protocol": "./packages/protocol/src/index.ts",
-      "@code-agent/provider-codex": "./packages/provider-codex/src/index.ts",
       "@code-agent/server": "./packages/server/src/index.ts",
     };
   },

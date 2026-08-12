@@ -13,7 +13,12 @@ import {
 } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
 
-import type { ServerRouteContext } from "./context.js";
+import {
+  callEngine,
+  createReadRequestId,
+  readRequestId,
+  type ServerRouteContext,
+} from "./context.js";
 import { IdempotencyHeadersSchema } from "./schemas.js";
 
 const mutationResponses = {
@@ -25,17 +30,14 @@ const mutationResponses = {
 
 export const registerProviderConnectionRoutes: FastifyPluginCallback<ServerRouteContext> = (
   app,
-  context,
+  { engine },
   done,
 ) => {
-  const { modelCatalogCache, provider, providerConnectionRepository, runIdempotent } = context;
-
   app.get(
     "/v1/provider-connection",
     { schema: { response: { 200: AgentProviderConnectionStatusSchema } } },
-    () => provider.readProviderConnection(),
+    () => callEngine(() => engine.providerConnectionGet(createReadRequestId())),
   );
-
   app.post<{
     Body: StartOfficialProviderLoginRequest;
     Headers: { "idempotency-key": string };
@@ -48,29 +50,9 @@ export const registerProviderConnectionRoutes: FastifyPluginCallback<ServerRoute
         response: { 200: StartOfficialProviderLoginResponseSchema, ...mutationResponses },
       },
     },
-    (request) =>
-      runIdempotent(
-        ["start-official-provider-login"],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const result = await provider.startOfficialProviderLogin();
-          await providerConnectionRepository.writeProviderConnection({
-            customBaseUrl: null,
-            customModels: null,
-            mode: "official",
-            updatedAt: new Date().toISOString(),
-          });
-          modelCatalogCache.clear();
-          return result;
-        },
-      ),
+    (request) => callEngine(() => engine.providerLoginStart(readRequestId(request.headers))),
   );
-
-  app.post<{
-    Body: CancelProviderLoginRequest;
-    Headers: { "idempotency-key": string };
-  }>(
+  app.post<{ Body: CancelProviderLoginRequest; Headers: { "idempotency-key": string } }>(
     "/v1/provider-connection/official-login/cancel",
     {
       schema: {
@@ -80,18 +62,11 @@ export const registerProviderConnectionRoutes: FastifyPluginCallback<ServerRoute
       },
     },
     (request) =>
-      runIdempotent(
-        ["cancel-provider-login", request.body.loginId],
-        request.headers["idempotency-key"],
-        request.body,
-        () => provider.cancelProviderLogin(request.body.loginId),
+      callEngine(() =>
+        engine.providerLoginCancel(readRequestId(request.headers), request.body.loginId),
       ),
   );
-
-  app.put<{
-    Body: ConfigureCustomProviderRequest;
-    Headers: { "idempotency-key": string };
-  }>(
+  app.put<{ Body: ConfigureCustomProviderRequest; Headers: { "idempotency-key": string } }>(
     "/v1/provider-connection/custom",
     {
       schema: {
@@ -101,24 +76,10 @@ export const registerProviderConnectionRoutes: FastifyPluginCallback<ServerRoute
       },
     },
     (request) =>
-      runIdempotent(
-        ["configure-custom-provider"],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const result = await provider.configureCustomProvider(request.body);
-          await providerConnectionRepository.writeProviderConnection({
-            customBaseUrl: result.status.customBaseUrl,
-            customModels: result.models,
-            mode: "custom",
-            updatedAt: new Date().toISOString(),
-          });
-          modelCatalogCache.clear();
-          return result;
-        },
+      callEngine(() =>
+        engine.providerCustomConfigure(readRequestId(request.headers), request.body),
       ),
   );
-
   app.post<{ Body: Record<string, never>; Headers: { "idempotency-key": string } }>(
     "/v1/provider-connection/logout",
     {
@@ -128,11 +89,7 @@ export const registerProviderConnectionRoutes: FastifyPluginCallback<ServerRoute
         response: { 200: AgentProviderConnectionMutationResponseSchema, ...mutationResponses },
       },
     },
-    (request) =>
-      runIdempotent(["logout-provider"], request.headers["idempotency-key"], request.body, () =>
-        provider.logoutProvider(),
-      ),
+    (request) => callEngine(() => engine.providerLogout(readRequestId(request.headers))),
   );
-
   done();
 };

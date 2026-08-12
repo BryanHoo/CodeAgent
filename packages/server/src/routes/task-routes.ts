@@ -1,11 +1,11 @@
 import {
   AgentBackgroundTerminalPageSchema,
   AgentMcpServerPageSchema,
-  ArchiveAgentTaskRequestSchema,
-  ArchiveAgentTaskResponseSchema,
   AgentMutationErrorSchema,
   AgentTaskPageSchema,
   AgentTaskSnapshotResponseSchema,
+  ArchiveAgentTaskRequestSchema,
+  ArchiveAgentTaskResponseSchema,
   PinAgentTaskRequestSchema,
   PinAgentTaskResponseSchema,
   RenameAgentTaskRequestSchema,
@@ -17,7 +17,15 @@ import {
   type RenameAgentTaskRequest,
 } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
-import { MutationHttpError, toMcpProviderHttpError, type ServerRouteContext } from "./context.js";
+
+import { registerTaskActionRoutes } from "./task-action-routes.js";
+import { registerTaskAttachmentRoutes } from "./task-attachment-routes.js";
+import {
+  callEngine,
+  createReadRequestId,
+  readRequestId,
+  type ServerRouteContext,
+} from "./context.js";
 import {
   ErrorResponseSchema,
   IdempotencyHeadersSchema,
@@ -27,16 +35,20 @@ import {
   TaskPageQuerySchema,
 } from "./schemas.js";
 
-import { registerTaskActionRoutes } from "./task-action-routes.js";
-import { registerTaskAttachmentRoutes } from "./task-attachment-routes.js";
+const mutationErrors = {
+  400: AgentMutationErrorSchema,
+  404: AgentMutationErrorSchema,
+  409: AgentMutationErrorSchema,
+  502: AgentMutationErrorSchema,
+  503: AgentMutationErrorSchema,
+} as const;
 
 export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
   app,
   context,
   done,
 ) => {
-  const { getProjectContext, readEffectiveTaskSettings, runIdempotent, taskFromSnapshot } = context;
-
+  const { engine } = context;
   app.get<{
     Params: { projectId: string };
     Querystring: { cursor?: string; limit?: number };
@@ -49,19 +61,11 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
         response: { 200: AgentTaskPageSchema, 404: ErrorResponseSchema },
       },
     },
-    async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
-      const input = {
-        ...(request.query.cursor === undefined ? {} : { cursor: request.query.cursor }),
-        ...(request.query.limit === undefined ? {} : { limit: request.query.limit }),
-      };
-      return context.provider.listTasks(input);
-    },
+    (request) =>
+      callEngine(() =>
+        engine.taskList(createReadRequestId(), request.params.projectId, request.query),
+      ),
   );
-
   app.post<{ Params: { projectId: string; taskId: string } }>(
     "/v1/projects/:projectId/tasks/:taskId/unsubscribe",
     {
@@ -70,17 +74,17 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
         response: { 200: UnsubscribeAgentTaskResponseSchema, 404: ErrorResponseSchema },
       },
     },
-    async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
-      // Provider 内部再次确认运行 Turn、Pending Request、后台终端和恢复 Promise。
-      const status = await context.provider.unsubscribeTask(request.params.taskId);
-      return { status, taskId: request.params.taskId };
-    },
+    async (request) => ({
+      status: await callEngine(() =>
+        engine.taskUnsubscribe(
+          createReadRequestId(),
+          request.params.projectId,
+          request.params.taskId,
+        ),
+      ),
+      taskId: request.params.taskId,
+    }),
   );
-
   app.get<{ Params: { projectId: string; taskId: string } }>(
     "/v1/projects/:projectId/tasks/:taskId",
     {
@@ -90,49 +94,31 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
       },
     },
     async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
-      const task = await context.provider.readTask(request.params.taskId);
-      if (task?.projectId !== context.project.id) {
-        return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
-      }
-      // Provider Promise 完成时已交付此前通知，此处 checkpoint 与返回 Snapshot 对齐。
-      const checkpoint = context.eventStream.checkpoint;
-      const settings = await readEffectiveTaskSettings(
-        request.params.projectId,
-        request.params.taskId,
+      const result = await callEngine<unknown>(() =>
+        engine.taskRead(createReadRequestId(), request.params.projectId, request.params.taskId),
       );
-      return { checkpoint, snapshot: { ...task, settings } };
+      return result === null
+        ? reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" })
+        : result;
     },
   );
-
   app.get<{ Params: { projectId: string; taskId: string } }>(
     "/v1/projects/:projectId/tasks/:taskId/mcp-servers",
     {
       schema: {
         params: ProjectTaskParamsSchema,
-        response: {
-          200: AgentMcpServerPageSchema,
-          404: ErrorResponseSchema,
-          502: AgentMutationErrorSchema,
-        },
+        response: { 200: AgentMcpServerPageSchema, 404: ErrorResponseSchema },
       },
     },
-    async (request, reply) => {
-      const projectContext = await getProjectContext(request.params.projectId);
-      if (projectContext === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
-      try {
-        return await projectContext.provider.listMcpServers(request.params.taskId);
-      } catch (error) {
-        throw toMcpProviderHttpError(error);
-      }
-    },
+    (request) =>
+      callEngine(() =>
+        engine.taskMcpServers(
+          createReadRequestId(),
+          request.params.projectId,
+          request.params.taskId,
+        ),
+      ),
   );
-
   app.get<{ Params: { projectId: string; taskId: string } }>(
     "/v1/projects/:projectId/tasks/:taskId/background-terminals",
     {
@@ -141,16 +127,15 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
         response: { 200: AgentBackgroundTerminalPageSchema, 404: ErrorResponseSchema },
       },
     },
-    async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
-      // Project Provider 在 Owner 缓存缺失时才读取一次 Task，轮询不重复映射完整历史。
-      return context.provider.listBackgroundTerminals(request.params.taskId);
-    },
+    (request) =>
+      callEngine(() =>
+        engine.taskTerminals(
+          createReadRequestId(),
+          request.params.projectId,
+          request.params.taskId,
+        ),
+      ),
   );
-
   app.post<{
     Body: Record<string, never>;
     Headers: { "idempotency-key": string };
@@ -162,45 +147,21 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
         body: { additionalProperties: false, properties: {}, type: "object" },
         headers: IdempotencyHeadersSchema,
         params: ProjectTaskTerminalParamsSchema,
-        response: {
-          200: TerminateAgentBackgroundTerminalResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: TerminateAgentBackgroundTerminalResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(
-        [
-          "terminate-background-terminal",
+    async (request) => {
+      await callEngine(() =>
+        engine.taskTerminalTerminate(
+          readRequestId(request.headers),
           request.params.projectId,
           request.params.taskId,
           request.params.terminalId,
-        ],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const context = await getProjectContext(request.params.projectId);
-          if (context === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-          // 终端可能在请求到达前自然退出；终止操作保持幂等成功语义。
-          await context.provider.terminateBackgroundTerminal(
-            request.params.taskId,
-            request.params.terminalId,
-          );
-          return { status: "terminated" as const, terminalId: request.params.terminalId };
-        },
-      ),
+        ),
+      );
+      return { status: "terminated" as const, terminalId: request.params.terminalId };
+    },
   );
-
   app.put<{
     Body: PinAgentTaskRequest;
     Headers: { "idempotency-key": string };
@@ -212,37 +173,20 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
         body: PinAgentTaskRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectTaskParamsSchema,
-        response: {
-          200: PinAgentTaskResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: PinAgentTaskResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["pin-task", request.params.projectId, request.params.taskId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const context = await getProjectContext(request.params.projectId);
-          if (context === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-          return {
-            task: await context.provider.pinTask(request.params.taskId, request.body.pinned),
-          };
-        },
+    async (request) => ({
+      task: await callEngine(() =>
+        engine.taskPin(
+          readRequestId(request.headers),
+          request.params.projectId,
+          request.params.taskId,
+          request.body.pinned,
+        ),
       ),
+    }),
   );
-
   app.post<{
     Body: RenameAgentTaskRequest;
     Headers: { "idempotency-key": string };
@@ -254,38 +198,20 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
         body: RenameAgentTaskRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectTaskParamsSchema,
-        response: {
-          200: RenameAgentTaskResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: RenameAgentTaskResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["rename-task", request.params.projectId, request.params.taskId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const context = await getProjectContext(request.params.projectId);
-          if (context === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-          const title = request.body.title.trim();
-          // Web 只提交统一标题，Codex 原生命名字段由 Provider 边界负责映射。
-          await context.provider.renameTask(request.params.taskId, title);
-          return { task: taskFromSnapshot(task, { title }) };
-        },
+    async (request) => ({
+      task: await callEngine(() =>
+        engine.taskRename(
+          readRequestId(request.headers),
+          request.params.projectId,
+          request.params.taskId,
+          request.body.title.trim(),
+        ),
       ),
+    }),
   );
-
   app.post<{
     Body: ArchiveAgentTaskRequest;
     Headers: { "idempotency-key": string };
@@ -297,36 +223,20 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
         body: ArchiveAgentTaskRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectTaskParamsSchema,
-        response: {
-          200: ArchiveAgentTaskResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: ArchiveAgentTaskResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["archive-task", request.params.projectId, request.params.taskId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const context = await getProjectContext(request.params.projectId);
-          if (context === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-          await context.provider.archiveTask(request.params.taskId);
-          return { status: "archived" as const, taskId: request.params.taskId };
-        },
-      ),
+    async (request) => {
+      await callEngine(() =>
+        engine.taskArchive(
+          readRequestId(request.headers),
+          request.params.projectId,
+          request.params.taskId,
+        ),
+      );
+      return { status: "archived" as const, taskId: request.params.taskId };
+    },
   );
-
   registerTaskActionRoutes(app, context);
   registerTaskAttachmentRoutes(app, context);
   done();

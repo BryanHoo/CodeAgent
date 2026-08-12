@@ -1,13 +1,15 @@
-import type { EventStreamMessage } from "@code-agent/protocol";
+import { Buffer } from "node:buffer";
+
 import type { FastifyPluginCallback } from "fastify";
 import type { WebSocket } from "ws";
-import { sendEventStreamMessage } from "../event-socket-sender.js";
 
 import { ACCESS_SESSION_COOKIE } from "./access-routes.js";
-import type { ServerRouteContext } from "./context.js";
+import { createReadRequestId, type ServerRouteContext } from "./context.js";
 import { EventQuerySchema, ProjectParamsSchema } from "./schemas.js";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const SOFT_BACKPRESSURE_BYTES = 256 * 1_024;
+const HARD_BACKPRESSURE_BYTES = 1_024 * 1_024;
 
 function scheduleSessionExpiry(socket: WebSocket, expiresAt: number): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -17,110 +19,76 @@ function scheduleSessionExpiry(socket: WebSocket, expiresAt: number): () => void
       socket.close(1008, "Access session expired");
       return;
     }
-    // Node 定时器有 32 位延迟上限，长会话分段等待但仍使用固定绝对期限。
     timer = setTimeout(expire, Math.min(remainingMs, MAX_TIMER_DELAY_MS));
     timer.unref();
   };
   expire();
   return () => {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
+    if (timer !== undefined) clearTimeout(timer);
   };
 }
 
 export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
   app,
-  context,
+  { accessService, engine, eventMetrics },
   done,
 ) => {
-  const { accessService, getProjectContext, projectContexts } = context;
-
   app.get<{ Params: { projectId: string }; Querystring: { afterSequence: number } }>(
     "/v1/projects/:projectId/events",
-    {
-      async preValidation(request, reply) {
-        if ((await getProjectContext(request.params.projectId)) === undefined) {
-          return await reply
-            .code(404)
-            .send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-        }
-      },
-      schema: { params: ProjectParamsSchema, querystring: EventQuerySchema },
-      websocket: true,
-    },
+    { schema: { params: ProjectParamsSchema, querystring: EventQuerySchema }, websocket: true },
     (socket, request) => {
       const sessionExpiresAt = accessService?.expiresAt(request.cookies[ACCESS_SESSION_COOKIE]);
       if (accessService !== undefined && sessionExpiresAt === undefined) {
         socket.close(1008, "Access session expired");
         return;
       }
-      const context = projectContexts.get(request.params.projectId);
-      if (context === undefined) {
-        socket.close(1008, "Project not found");
-        return;
-      }
-      const eventStream = context.eventStream;
-      context.transportMetrics.activeClients += 1;
+      const metrics = eventMetrics.projects.get(request.params.projectId) ?? {
+        activeClients: 0,
+        backpressureSignals: 0,
+        slowClientDisconnects: 0,
+      };
+      eventMetrics.projects.set(request.params.projectId, metrics);
+      metrics.activeClients += 1;
       let cleanedUp = false;
-      let unsubscribe: () => void = () => undefined;
-      const cancelSessionExpiry =
+      let unsubscribe = () => undefined;
+      const cancelExpiry =
         sessionExpiresAt === undefined || sessionExpiresAt === null
           ? () => undefined
           : scheduleSessionExpiry(socket, sessionExpiresAt);
       const cleanup = () => {
-        if (cleanedUp) {
-          return;
-        }
+        if (cleanedUp) return;
         cleanedUp = true;
-        cancelSessionExpiry();
+        cancelExpiry();
         unsubscribe();
-        context.transportMetrics.activeClients -= 1;
+        metrics.activeClients -= 1;
       };
       socket.once("close", cleanup);
       socket.once("error", cleanup);
-      const send = (message: EventStreamMessage): boolean =>
-        sendEventStreamMessage(
-          socket,
-          message,
-          () => {
-            eventStream.noteBackpressure();
-          },
-          () => {
-            context.transportMetrics.slowClientDisconnects += 1;
+      try {
+        const subscription = engine.eventSubscribe(
+          createReadRequestId(),
+          request.params.projectId,
+          "",
+          request.query.afterSequence,
+          (frame) => {
+            if (socket.readyState !== 1) return;
+            if (socket.bufferedAmount > HARD_BACKPRESSURE_BYTES) {
+              metrics.slowClientDisconnects += 1;
+              socket.close(1013, "Client is too slow; refresh the snapshot");
+              return;
+            }
+            if (socket.bufferedAmount > SOFT_BACKPRESSURE_BYTES) {
+              metrics.backpressureSignals += 1;
+            }
+            // native 已完成一次协议序列化；这里只做 UTF-8 视图转换以保持文本 WebSocket 帧。
+            socket.send(Buffer.from(frame).toString("utf8"));
           },
         );
-      const replay = eventStream.replayAfter(request.query.afterSequence);
-      if (replay.type === "resync") {
-        const sent = send({
-          latestSequence: replay.latestSequence,
-          reason: replay.reason,
-          sessionId: eventStream.checkpoint.sessionId,
-          type: "resync.required",
-          version: 2,
-        });
-        if (sent) {
-          socket.close(1000, "Snapshot resync required");
-        }
-        return;
-      }
-
-      // checkpoint getter 会同步冲刷待发送增量，必须在注册连接监听器前读取。
-      const checkpoint = eventStream.checkpoint;
-      // 同步建立实时订阅并挂载清理回调，避免补发与实时事件之间出现空窗。
-      unsubscribe = eventStream.subscribe((event) => {
-        send(event);
-      });
-      send({
-        latestSequence: checkpoint.sequence,
-        sessionId: checkpoint.sessionId,
-        type: "connection.ready",
-        version: 2,
-      });
-      for (const event of replay.events) {
-        if (!send(event)) {
-          return;
-        }
+        unsubscribe = () => {
+          subscription.unsubscribe();
+        };
+      } catch {
+        socket.close(1011, "Event subscription failed");
       }
     },
   );

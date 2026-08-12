@@ -4,9 +4,8 @@
     "composite": true,
     "noEmit": true,
     "paths": {
-      "@code-agent/core": ["./packages/core/src/index.ts"],
+      "@code-agent/engine-node": ["./packages/engine-node/src/index.ts"],
       "@code-agent/protocol": ["./packages/protocol/src/index.ts"],
-      "@code-agent/provider-codex": ["./packages/provider-codex/src/index.ts"],
       "@code-agent/server": ["./packages/server/src/index.ts"]
     },
     "tsBuildInfoFile": ".cache/types/root.tsbuildinfo",
@@ -15,8 +14,7 @@
   "include": ["src/**/*.ts", "tools/**/*.ts", "*.config.ts"],
   "references": [
     { "path": "./packages/protocol" },
-    { "path": "./packages/core" },
-    { "path": "./packages/provider-codex" },
+    { "path": "./packages/engine-node" },
     { "path": "./packages/server" }
   ]
 }
