@@ -59,10 +59,11 @@ describe("host file browser", () => {
 
   it("returns every available Windows drive for attachment browsing", async () => {
     const homePath = await createTemporaryDirectory();
-    const filesystemRoots = async () => [
-      { name: "C:", path: "C:\\" },
-      { name: "D:", path: "D:\\" },
-    ];
+    const filesystemRoots = () =>
+      Promise.resolve([
+        { name: "C:", path: "C:\\" },
+        { name: "D:", path: "D:\\" },
+      ]);
 
     await expect(
       readHostFileDirectory("file", undefined, { filesystemRoots, homePath }),

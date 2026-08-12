@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-08-12
+
+### 新增
+
+- 在 Windows 项目目录和宿主附件选择器中展示可访问磁盘，支持直接切换盘符并浏览其他磁盘上的文件。
+- 添加统一文件系统根目录协议和服务端盘符枚举，为项目目录与附件浏览提供一致的跨磁盘能力。
+
+### 工程
+
+- 补充协议、服务端、前端组件及端到端测试，覆盖文件系统根目录返回、盘符匹配和选择器切换行为。
+
 ## [1.9.0] - 2026-08-11
 
 ### 新增
@@ -282,7 +293,8 @@ CodeAgent 首个稳定版本，集中发布本地 Coding Agent 工作台的完�
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.6.0...v1.7.0

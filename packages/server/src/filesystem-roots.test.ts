@@ -4,8 +4,11 @@ import { listFilesystemRoots } from "./filesystem-roots.js";
 
 describe("filesystem roots", () => {
   it("lists every available Windows drive in letter order", async () => {
-    const accessPath = vi.fn(async (path: string) => {
-      if (path !== "C:\\" && path !== "F:\\") throw new Error("drive unavailable");
+    const accessPath = vi.fn((path: string) => {
+      if (path !== "C:\\" && path !== "F:\\") {
+        return Promise.reject(new Error("drive unavailable"));
+      }
+      return Promise.resolve();
     });
 
     await expect(listFilesystemRoots({ accessPath, platform: "win32" })).resolves.toEqual([
