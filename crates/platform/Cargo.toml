@@ -12,6 +12,7 @@ code-agent-core.workspace = true
 code-agent-protocol.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
+ignore.workspace = true
 rusqlite.workspace = true
 sha2.workspace = true
 serde.workspace = true

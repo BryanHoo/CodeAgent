@@ -6,7 +6,10 @@ use code_agent_core::{
     AttachmentPort, ClockPort, CodeAgentError, CodeAgentErrorCode, FilePort, GitPort,
     PortRequestContext, ProviderPort, RepositoryPort, UpdatePort,
 };
-use code_agent_protocol::{AgentCapabilities, ProjectId, TaskId, parse_provider_event};
+use code_agent_protocol::{
+    AgentCapabilities, AgentGlobalSettings, AgentProjectDefaults, ProjectId, TaskId,
+    parse_provider_event,
+};
 use code_agent_runtime::{
     AgentEventStream, CodeAgentRuntime, CodeAgentRuntimeBuilder, EventReplay, EventStreamOptions,
     RuntimeOptions,
@@ -56,6 +59,21 @@ impl RepositoryPort for FakePorts {
     ) -> Result<Option<Value>, CodeAgentError> {
         Ok(Some(json!({ "id": project_id.to_string() })))
     }
+
+    async fn read_global_settings(
+        &self,
+        _context: &PortRequestContext,
+    ) -> Result<Option<AgentGlobalSettings>, CodeAgentError> {
+        Ok(None)
+    }
+
+    async fn read_project_defaults(
+        &self,
+        _project_id: &ProjectId,
+        _context: &PortRequestContext,
+    ) -> Result<Option<AgentProjectDefaults>, CodeAgentError> {
+        Ok(None)
+    }
 }
 
 #[async_trait]
@@ -80,6 +98,41 @@ impl ProviderPort for FakePorts {
                 ))
             }
         }
+    }
+
+    async fn models(
+        &self,
+        _context: &PortRequestContext,
+    ) -> Result<code_agent_protocol::AgentModelPage, CodeAgentError> {
+        serde_json::from_value(json!({
+            "data": [{
+                "defaultReasoningEffort": "medium",
+                "description": "Default model",
+                "displayName": "GPT Test",
+                "id": "gpt-test",
+                "isDefault": true,
+                "supportedReasoningEfforts": [
+                    { "description": "Low", "id": "low" },
+                    { "description": "Medium", "id": "medium" }
+                ]
+            }],
+            "nextCursor": null
+        }))
+        .map_err(|error| CodeAgentError::internal(error.to_string()))
+    }
+
+    async fn default_settings(
+        &self,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Ok(json!({
+            "config": {
+                "approval_policy": "never",
+                "model": "gpt-test",
+                "model_reasoning_effort": "low",
+                "sandbox_mode": "read-only"
+            }
+        }))
     }
 }
 
@@ -180,6 +233,37 @@ async fn runtime_should_route_success_and_failure_through_ports() {
         .await
         .expect_err("provider failure");
     assert_eq!(error.code(), CodeAgentErrorCode::ProviderFailure);
+}
+
+#[tokio::test]
+async fn runtime_should_resolve_effective_settings_when_repository_is_empty() {
+    let runtime = build_runtime(ProviderBehavior::Succeed);
+    let project_id = ProjectId::try_from("project-1").expect("project id");
+
+    let global = runtime
+        .effective_global_settings("global-settings")
+        .await
+        .expect("effective global settings");
+    let project = runtime
+        .effective_project_defaults("project-defaults", &project_id)
+        .await
+        .expect("effective project defaults");
+
+    let global = serde_json::to_value(global).expect("serialize global settings");
+    let project = serde_json::to_value(project).expect("serialize project defaults");
+    assert_eq!(global["approvalPolicy"], "never");
+    assert_eq!(global["model"], "gpt-test");
+    assert_eq!(global["reasoningEffort"], "low");
+    assert_eq!(global["sandboxMode"], "read-only");
+    assert_eq!(global["commitMessagePrompt"], "");
+    assert_eq!(
+        project,
+        json!({
+            "model": "gpt-test",
+            "reasoningEffort": "low",
+            "sandboxMode": "read-only"
+        })
+    );
 }
 
 #[tokio::test]

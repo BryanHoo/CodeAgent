@@ -7,6 +7,7 @@ use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
+use crate::project_tree::{read_directory_entries, read_search_entries};
 use crate::{CanonicalPathPolicy, PlatformDatabase, PlatformError};
 
 const MAX_SOURCE_BYTES: usize = 256 * 1024;
@@ -201,7 +202,8 @@ impl FilePort for PlatformFilePort {
                 .map_err(map_error)?,
             None => service.policy.root().to_owned(),
         };
-        let mut entries = read_tree_entries(service.policy.root(), &directory)
+        // 文件树按目录懒加载；禁止把整个 Project 一次性序列化给 WebView。
+        let mut entries = read_directory_entries(service.policy.root(), &directory)
             .await
             .map_err(map_error)?;
         entries.sort_by(|left, right| left["path"].as_str().cmp(&right["path"].as_str()));
@@ -216,7 +218,7 @@ impl FilePort for PlatformFilePort {
     ) -> Result<Value, CodeAgentError> {
         ensure_active(context)?;
         let service = self.service(project_id).await?;
-        let mut entries = read_tree_entries(service.policy.root(), service.policy.root())
+        let mut entries = read_search_entries(service.policy.root())
             .await
             .map_err(map_error)?;
         let query = query.to_lowercase();
@@ -453,42 +455,6 @@ fn open_command(
             None,
         )),
     };
-}
-
-fn read_tree_entries<'a>(
-    root: &'a Path,
-    directory: &'a Path,
-) -> std::pin::Pin<
-    Box<dyn std::future::Future<Output = Result<Vec<Value>, PlatformError>> + Send + 'a>,
-> {
-    Box::pin(async move {
-        let mut entries = Vec::new();
-        let mut children = tokio::fs::read_dir(directory).await?;
-        while let Some(child) = children.next_entry().await? {
-            let file_type = child.file_type().await?;
-            if file_type.is_symlink() {
-                continue;
-            }
-            let relative = child
-                .path()
-                .strip_prefix(root)
-                .map_err(|_| PlatformError::Worker("file tree escaped project root".to_owned()))?
-                .to_string_lossy()
-                .replace('\\', "/");
-            let kind = if file_type.is_dir() {
-                "directory"
-            } else if file_type.is_file() {
-                "file"
-            } else {
-                continue;
-            };
-            entries.push(json!({ "path": relative, "type": kind }));
-            if file_type.is_dir() {
-                entries.extend(read_tree_entries(root, &child.path()).await?);
-            }
-        }
-        Ok(entries)
-    })
 }
 
 fn ensure_active(context: &PortRequestContext) -> Result<(), CodeAgentError> {

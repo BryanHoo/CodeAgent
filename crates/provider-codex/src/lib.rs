@@ -7,6 +7,7 @@ mod process;
 mod project_provider;
 mod provider;
 mod rpc;
+mod skill_mapping;
 
 pub use binary::{
     CodexBinary, CodexBinarySource, CodexVersionInfo, LocateCodexBinaryOptions,

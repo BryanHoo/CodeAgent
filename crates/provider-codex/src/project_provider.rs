@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     JsonlRpcClient, PendingCodexRequest, RpcServerRequest, map_codex_server_request,
-    map_codex_turn, rpc_error_to_code_agent_error,
+    map_codex_turn, rpc_error_to_code_agent_error, skill_mapping::map_skills,
 };
 
 const EVENT_SUBSCRIBER_CAPACITY: usize = 256;
@@ -531,8 +531,7 @@ impl ProjectProviderPort for CodexProjectProvider {
                 Some(json!({ "cwds": [self.project.root_path.as_str()], "forceReload": false })),
             )
             .await?;
-        serde_json::from_value(response)
-            .map_err(|error| CodeAgentError::internal(error.to_string()))
+        map_skills(&response, self.project.root_path.as_str())
     }
     async fn list_mcp_servers(
         &self,

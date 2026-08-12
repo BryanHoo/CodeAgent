@@ -7,6 +7,7 @@ mod git;
 mod migrations;
 mod path_policy;
 mod process;
+mod project_tree;
 mod repository;
 
 pub use attachments::{AttachmentContent, AttachmentKind, AttachmentStore, AttachmentUpload};

@@ -29,10 +29,7 @@ pub async fn global_settings_get(
     request_id: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<GlobalSettingsResponse, CommandError> {
-    let settings = runtime
-        .global_settings(&request_id)
-        .await?
-        .ok_or_else(settings_not_initialized)?;
+    let settings = runtime.effective_global_settings(&request_id).await?;
     Ok(GlobalSettingsResponse { settings })
 }
 
@@ -56,9 +53,8 @@ pub async fn project_defaults_get(
 ) -> Result<ProjectDefaultsResponse, CommandError> {
     let project_id = parse_project_id(project_id)?;
     let settings = runtime
-        .project_defaults(&request_id, &project_id)
-        .await?
-        .ok_or_else(settings_not_initialized)?;
+        .effective_project_defaults(&request_id, &project_id)
+        .await?;
     Ok(ProjectDefaultsResponse { settings })
 }
 

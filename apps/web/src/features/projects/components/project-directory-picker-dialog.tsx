@@ -1,4 +1,5 @@
 import type { ProjectDirectoryListing } from "@code-agent/protocol";
+import { hostCapabilities } from "@code-agent/host-transport";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ArrowUp, FolderPlus, LoaderCircle, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -156,7 +157,9 @@ type NativeDirectorySelection =
 
 export async function resolveNativeDirectorySelection(
   client: NativeDirectoryClient | undefined,
+  enabled = true,
 ): Promise<NativeDirectorySelection> {
+  if (!enabled) return { status: "fallback" };
   if (client?.selectHostDirectory === undefined) return { status: "fallback" };
   try {
     const response = await client.selectHostDirectory();
@@ -185,19 +188,22 @@ export function ProjectDirectoryPickerDialog({
     if (nativeSelectionStartedRef.current) return;
     nativeSelectionStartedRef.current = true;
     let active = true;
-    void resolveNativeDirectorySelection(client).then((selection) => {
-      if (!active) return;
-      if (selection.status === "selected") {
-        void onAdd(selection.path);
-      } else if (selection.status === "cancelled") {
-        onClose();
-      }
-    });
+    void resolveNativeDirectorySelection(client, hostCapabilities.nativeDirectoryPicker).then(
+      (selection) => {
+        if (!active) return;
+        if (selection.status === "selected") {
+          void onAdd(selection.path);
+        } else if (selection.status === "cancelled") {
+          onClose();
+        }
+      },
+    );
     return () => {
       active = false;
     };
   }, [client, onAdd, onClose]);
   const rootQuery = useQuery({
+    enabled: !hostCapabilities.nativeDirectoryPicker,
     queryFn: ({ signal }) => client.listProjectDirectories(rootPath, { signal }),
     queryKey: ["project-directories", rootPath ?? null] as const,
     staleTime: 30_000,
@@ -232,6 +238,9 @@ export function ProjectDirectoryPickerDialog({
     setExpandedPaths(new Set());
     setSelectedPath(parentPath);
   };
+
+  // Desktop 只展示系统选择器，避免与 Web 树形选择器同时出现。
+  if (hostCapabilities.nativeDirectoryPicker) return null;
 
   return (
     <Dialog

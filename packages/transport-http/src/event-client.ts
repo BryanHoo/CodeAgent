@@ -40,7 +40,9 @@ function createEventUrl(baseUrl: string, projectId: string, afterSequence: numbe
     projectId === TEMPORARY_TASK_SCOPE_ID
       ? `${TEMPORARY_TASK_API_PATH}/events`
       : `/v1/projects/${encodeURIComponent(projectId)}/events`;
-  const httpUrl = baseUrl ? new URL(`${baseUrl}${path}`) : new URL(path, globalThis.location.href);
+  const browserLocation = (globalThis as typeof globalThis & { location: { href: string } })
+    .location;
+  const httpUrl = baseUrl ? new URL(`${baseUrl}${path}`) : new URL(path, browserLocation.href);
   httpUrl.protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
   httpUrl.searchParams.set("afterSequence", String(afterSequence));
   return httpUrl.toString();

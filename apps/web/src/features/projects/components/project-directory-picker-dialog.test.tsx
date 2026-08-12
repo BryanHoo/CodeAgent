@@ -29,6 +29,15 @@ describe("ProjectDirectoryPickerDialog", () => {
     });
   });
 
+  it("does not call the native directory picker for the Web host", async () => {
+    const selectHostDirectory = vi.fn().mockResolvedValue({ path: "/workspace/app" });
+
+    await expect(resolveNativeDirectorySelection({ selectHostDirectory }, false)).resolves.toEqual({
+      status: "fallback",
+    });
+    expect(selectHostDirectory).not.toHaveBeenCalled();
+  });
+
   it("renders an accessible loading dialog while resolving the host home directory", async () => {
     await changeAppLanguage("zh-CN");
     const queryClient = new QueryClient();

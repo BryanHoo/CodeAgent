@@ -3,6 +3,7 @@
 mod builder;
 mod commit_message;
 mod control;
+mod effective_settings;
 mod event_stream;
 mod idempotency;
 mod project_context;

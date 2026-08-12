@@ -103,6 +103,72 @@ async fn provider_connection_status_should_match_the_shared_protocol() {
 }
 
 #[tokio::test]
+async fn project_provider_should_map_grouped_codex_skills_to_shared_protocol() {
+    let (runtime, server) = runtime();
+    let provider = runtime
+        .for_project(project(), &PortRequestContext::new("project"))
+        .await
+        .expect("project provider");
+    let (read, mut write) = tokio::io::split(server);
+    let mut read = BufReader::new(read);
+    let scenario = tokio::spawn(async move {
+        let request = read_frame(&mut read).await;
+        assert_eq!(request["method"], "skills/list");
+        respond(
+            &mut write,
+            &request,
+            json!({
+                "data": [{
+                    "cwd": "/workspace",
+                    "errors": [],
+                    "skills": [{
+                        "description": "Fallback description",
+                        "enabled": true,
+                        "interface": {
+                            "displayName": "Frontend Design",
+                            "shortDescription": "Design polished interfaces"
+                        },
+                        "name": "frontend-design",
+                        "path": "/workspace/.agents/skills/frontend-design/SKILL.md",
+                        "scope": "repo",
+                        "shortDescription": "Short description"
+                    }, {
+                        "description": "Disabled skill",
+                        "enabled": false,
+                        "interface": null,
+                        "name": "disabled-skill",
+                        "path": "/workspace/.agents/skills/disabled-skill/SKILL.md",
+                        "scope": "repo",
+                        "shortDescription": null
+                    }]
+                }]
+            }),
+        )
+        .await;
+    });
+
+    let page = provider
+        .list_skills(&PortRequestContext::new("skills"))
+        .await
+        .expect("mapped skills");
+    let page = serde_json::to_value(page).expect("serialized skill page");
+
+    assert_eq!(page["nextCursor"], Value::Null);
+    assert_eq!(page["data"].as_array().map(Vec::len), Some(1));
+    assert_eq!(page["data"][0]["name"], "frontend-design");
+    assert_eq!(page["data"][0]["displayName"], "Frontend Design");
+    assert_eq!(page["data"][0]["description"], "Design polished interfaces");
+    assert_eq!(page["data"][0]["scope"], "repo");
+    assert!(
+        page["data"][0]["id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("skill_") && id.len() == 38)
+    );
+    assert!(page["data"][0].get("path").is_none());
+    scenario.await.expect("scenario");
+}
+
+#[tokio::test]
 async fn project_provider_should_start_task_and_turn_with_resume_deduplication() {
     let (runtime, server) = runtime();
     let provider = runtime
