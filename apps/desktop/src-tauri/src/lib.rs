@@ -15,7 +15,10 @@ use code_agent_platform::{
 use code_agent_runtime::{CodeAgentRuntime, CodeAgentRuntimeBuilder, RuntimeOptions};
 use tauri::Manager;
 
-use platform_adapters::DesktopHostPorts;
+use commands::events::EventSubscriptions;
+use platform_adapters::{
+    CodexSupervisor, DesktopHostPorts, DesktopProvider, start_codex_supervisor,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -23,6 +26,8 @@ pub fn run() {
         .setup(|app| {
             let data_root = desktop_data_root(app)?;
             std::fs::create_dir_all(&data_root)?;
+            let temporary_project_root = data_root.join("temporary-workspace");
+            std::fs::create_dir_all(&temporary_project_root)?;
             let database = PlatformDatabase::open(DatabaseOptions {
                 path: data_root.join("state.sqlite3"),
                 queue_capacity: 64,
@@ -36,7 +41,8 @@ pub fn run() {
                 AttachmentStore::new(data_root.join("attachments")),
             )?);
             let host = Arc::new(DesktopHostPorts);
-            let provider: Arc<dyn ProviderPort> = host.clone();
+            let provider_slot = Arc::new(DesktopProvider::default());
+            let provider: Arc<dyn ProviderPort> = provider_slot.clone();
             let clock: Arc<dyn ClockPort> = host.clone();
             let update: Arc<dyn UpdatePort> = host;
             let runtime = CodeAgentRuntimeBuilder::new(RuntimeOptions {
@@ -44,6 +50,7 @@ pub fn run() {
                 idempotency_ttl: Duration::from_secs(30 * 60),
                 operation_capacity: 256,
                 shutdown_timeout: Duration::from_secs(10),
+                temporary_project_root: Some(temporary_project_root),
             })
             .repository(repository)
             .provider(provider)
@@ -53,7 +60,21 @@ pub fn run() {
             .clock(clock)
             .update(update)
             .build();
+            let supervisor = Arc::new(CodexSupervisor::default());
+            let subscriptions = Arc::new(EventSubscriptions::default());
             app.manage(Arc::new(runtime));
+            app.manage(provider_slot.clone());
+            app.manage(supervisor.clone());
+            app.manage(subscriptions);
+
+            // Provider 启动失败只更新诊断，不能阻塞主窗口创建。
+            let executable_path = std::env::current_exe()?;
+            tauri::async_runtime::spawn(start_codex_supervisor(
+                provider_slot,
+                supervisor,
+                env!("CARGO_PKG_VERSION").to_owned(),
+                executable_path,
+            ));
             Ok(())
         })
         .register_asynchronous_uri_scheme_protocol(
@@ -68,6 +89,8 @@ pub fn run() {
             commands::attachments::attachment_import_host,
             commands::attachments::attachment_open,
             commands::attachments::attachment_upload,
+            commands::events::event_subscribe,
+            commands::events::event_unsubscribe,
             commands::files::file_search,
             commands::files::file_source_read,
             commands::files::file_tree,
@@ -78,6 +101,7 @@ pub fn run() {
             commands::git::git_branch_create,
             commands::git::git_branch_switch,
             commands::git::git_commit,
+            commands::git::git_commit_message_generate,
             commands::git::git_commit_diff,
             commands::git::git_commit_files,
             commands::git::git_history,
@@ -87,13 +111,39 @@ pub fn run() {
             commands::projects::project_remove,
             commands::projects::project_rename,
             commands::projects::project_reorder,
+            commands::provider::capabilities_get,
+            commands::provider::models_list,
             commands::provider::provider_connection_get,
+            commands::provider::provider_custom_configure,
+            commands::provider::provider_login_cancel,
+            commands::provider::provider_login_start,
+            commands::provider::provider_logout,
+            commands::provider::skills_list,
             commands::settings::global_settings_get,
             commands::settings::global_settings_update,
             commands::settings::project_defaults_get,
             commands::settings::project_defaults_update,
             commands::settings::task_settings_get,
             commands::settings::task_settings_update,
+            commands::tasks::feedback_upload,
+            commands::tasks::mcp_servers_list,
+            commands::tasks::mcp_servers_retry,
+            commands::tasks::task_archive,
+            commands::tasks::task_compact,
+            commands::tasks::task_fork,
+            commands::tasks::task_list,
+            commands::tasks::task_pin,
+            commands::tasks::task_read,
+            commands::tasks::task_rename,
+            commands::tasks::task_review,
+            commands::tasks::task_start,
+            commands::tasks::task_unsubscribe,
+            commands::tasks::terminal_terminate,
+            commands::tasks::terminals_list,
+            commands::turns::pending_request_resolve,
+            commands::turns::turn_interrupt,
+            commands::turns::turn_start,
+            commands::turns::turn_steer,
         ])
         .build(tauri::generate_context!());
     let application = match application {
@@ -105,9 +155,15 @@ pub fn run() {
     };
     application.run(|app, event| {
         if matches!(event, tauri::RunEvent::Exit) {
+            let subscriptions = app.state::<Arc<EventSubscriptions>>().inner().clone();
             let runtime = app.state::<Arc<CodeAgentRuntime>>().inner().clone();
+            let supervisor = app.state::<Arc<CodexSupervisor>>().inner().clone();
+            tauri::async_runtime::block_on(subscriptions.close());
             if let Err(error) = tauri::async_runtime::block_on(runtime.shutdown()) {
                 eprintln!("CodeAgent Desktop failed to shut down cleanly: {error}");
+            }
+            if let Err(error) = tauri::async_runtime::block_on(supervisor.close()) {
+                eprintln!("CodeAgent Desktop failed to stop Codex cleanly: {error}");
             }
         }
     });

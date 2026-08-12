@@ -5,8 +5,11 @@ import {
   type CodeAgentRequestContext,
   type CodeAgentTransport,
   type SubscribeAgentEventsOptions,
+  normalizeCodeAgentError,
 } from "@code-agent/client";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+
+import { startTauriEventSubscription } from "./event-subscription.js";
 
 const OPERATION_COMMANDS: Readonly<Record<string, string>> = {
   "access.status": "access_status",
@@ -14,6 +17,7 @@ const OPERATION_COMMANDS: Readonly<Record<string, string>> = {
   "attachments.open": "attachment_open",
   "app.health": "app_diagnostics",
   "app.info": "app_info",
+  "capabilities.get": "capabilities_get",
   "files.search": "file_search",
   "files.source_read": "file_source_read",
   "files.tree": "file_tree",
@@ -24,10 +28,14 @@ const OPERATION_COMMANDS: Readonly<Record<string, string>> = {
   "git.branch_create": "git_branch_create",
   "git.branch_switch": "git_branch_switch",
   "git.commit": "git_commit",
+  "git.commit_message_generate": "git_commit_message_generate",
   "git.commit_diff": "git_commit_diff",
   "git.commit_files": "git_commit_files",
   "git.history": "git_history",
   "git.status": "git_status",
+  "mcp_servers.list": "mcp_servers_list",
+  "mcp_servers.retry": "mcp_servers_retry",
+  "models.list": "models_list",
   "project_defaults.get": "project_defaults_get",
   "project_defaults.update": "project_defaults_update",
   "projects.add": "project_add",
@@ -38,6 +46,28 @@ const OPERATION_COMMANDS: Readonly<Record<string, string>> = {
   "projects.rename": "project_rename",
   "projects.reorder": "project_reorder",
   "provider_connection.get": "provider_connection_get",
+  "provider_connection.custom_configure": "provider_custom_configure",
+  "provider_connection.login_cancel": "provider_login_cancel",
+  "provider_connection.logout": "provider_logout",
+  "provider_connection.official_login_start": "provider_login_start",
+  "skills.list": "skills_list",
+  "tasks.archive": "task_archive",
+  "tasks.compact": "task_compact",
+  "tasks.fork": "task_fork",
+  "tasks.list": "task_list",
+  "tasks.pin": "task_pin",
+  "tasks.read": "task_read",
+  "tasks.rename": "task_rename",
+  "tasks.review": "task_review",
+  "tasks.start": "task_start",
+  "tasks.unsubscribe": "task_unsubscribe",
+  "feedback.upload": "feedback_upload",
+  "pending_requests.resolve": "pending_request_resolve",
+  "terminals.list": "terminals_list",
+  "terminals.terminate": "terminal_terminate",
+  "turns.interrupt": "turn_interrupt",
+  "turns.start": "turn_start",
+  "turns.steer": "turn_steer",
   "task_settings.get": "task_settings_get",
   "task_settings.update": "task_settings_update",
 };
@@ -64,10 +94,18 @@ export class TauriCodeAgentTransport implements CodeAgentTransport {
       );
     }
     const input = operation.input;
+    const payload =
+      operation.name === "pending_requests.resolve" && typeof input === "object" && input !== null
+        ? pendingRequestPayload(input as Record<string, unknown>)
+        : typeof input === "object" && input !== null
+          ? input
+          : {};
     return invoke(command, {
-      ...(typeof input === "object" && input !== null ? input : {}),
+      ...payload,
       ...(context.idempotencyKey === undefined ? {} : { idempotencyKey: context.idempotencyKey }),
       requestId: context.requestId,
+    }).catch((error: unknown) => {
+      throw normalizeCodeAgentError(error);
     });
   }
 
@@ -88,11 +126,7 @@ export class TauriCodeAgentTransport implements CodeAgentTransport {
   }
 
   public subscribeEvents(options: SubscribeAgentEventsOptions): () => void {
-    void options;
-    throw new CodeAgentError({
-      code: "unsupported_operation",
-      message: "Tauri event subscriptions are not available in migration phase 2",
-    });
+    return startTauriEventSubscription(options);
   }
 
   private async uploadAttachment(
@@ -121,6 +155,16 @@ export class TauriCodeAgentTransport implements CodeAgentTransport {
       },
     });
   }
+}
+
+function pendingRequestPayload(input: Record<string, unknown>): Record<string, unknown> {
+  const resolution = input["input"];
+  if (typeof resolution !== "object" || resolution === null) return input;
+  const identity = resolution as Record<string, unknown>;
+  return {
+    input: { ...identity, requestId: input["requestId"] },
+    projectId: identity["projectId"],
+  };
 }
 
 function isAbsolutePath(path: string): boolean {

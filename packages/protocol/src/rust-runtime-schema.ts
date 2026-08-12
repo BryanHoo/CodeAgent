@@ -1,10 +1,43 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
-import { AgentEventSchema } from "./agent-event.js";
-import { AgentCapabilitiesSchema } from "./agent-runtime.js";
-import { AgentAttachmentSchema } from "./agent-task.js";
-import { AgentProviderConnectionRecordSchema } from "./provider-connection.js";
+import {
+  ReviewAgentTaskRequestSchema,
+  StartAgentTurnRequestSchema,
+  SteerAgentTurnRequestSchema,
+} from "./agent-actions.js";
+import { AgentBackgroundTerminalPageSchema, AgentTaskSchema } from "./agent-attachments.js";
+import {
+  AgentEventSchema,
+  AgentTaskSnapshotResponseSchema,
+  ConnectionReadySchema,
+  EventCheckpointSchema,
+  EventStreamMessageSchema,
+  ResyncRequiredSchema,
+} from "./agent-event.js";
+import {
+  AgentCapabilitiesSchema,
+  AgentModelPageSchema,
+  AgentSkillPageSchema,
+  AgentTaskPageSchema,
+  AgentTaskSnapshotSchema,
+  PendingRequestSchema,
+  ResolvePendingRequestRequestSchema,
+} from "./agent-runtime.js";
+import { AgentAttachmentSchema, AgentMcpServerPageSchema, AgentTurnSchema } from "./agent-task.js";
+import {
+  AgentProviderConnectionMutationResponseSchema,
+  AgentProviderConnectionRecordSchema,
+  AgentProviderConnectionStatusSchema,
+  CancelProviderLoginRequestSchema,
+  ConfigureCustomProviderRequestSchema,
+  ConfigureCustomProviderResponseSchema,
+  StartOfficialProviderLoginResponseSchema,
+} from "./provider-connection.js";
 import { ProjectSchema } from "./project-files.js";
+import {
+  GenerateCommitMessageRequestSchema,
+  GenerateCommitMessageResponseSchema,
+} from "./project-git.js";
 import {
   AgentGlobalSettingsSchema,
   AgentProjectDefaultsSchema,
@@ -93,13 +126,39 @@ export function createRustRuntimeSchemaDocument(): RustRuntimeSchemaDocument {
   const definitions = {
     AgentCapabilities: AgentCapabilitiesSchema,
     AgentAttachment: AgentAttachmentSchema,
+    AgentBackgroundTerminalPage: AgentBackgroundTerminalPageSchema,
     AgentGlobalSettings: AgentGlobalSettingsSchema,
+    AgentMcpServerPage: AgentMcpServerPageSchema,
+    AgentModelPage: AgentModelPageSchema,
     AgentProjectDefaults: AgentProjectDefaultsSchema,
+    AgentProviderConnectionMutationResponse: AgentProviderConnectionMutationResponseSchema,
     AgentProviderConnectionRecord: AgentProviderConnectionRecordSchema,
+    AgentProviderConnectionStatus: AgentProviderConnectionStatusSchema,
     AgentProviderEvent: AgentProviderEventSchema,
+    AgentSkillPage: AgentSkillPageSchema,
+    AgentTask: AgentTaskSchema,
+    AgentTaskPage: AgentTaskPageSchema,
     AgentTaskSettings: AgentTaskSettingsSchema,
+    AgentTaskSnapshot: AgentTaskSnapshotSchema,
+    AgentTaskSnapshotResponse: AgentTaskSnapshotResponseSchema,
+    AgentTurn: AgentTurnSchema,
+    CancelProviderLoginRequest: CancelProviderLoginRequestSchema,
     CodeAgentError: CodeAgentErrorSchema,
+    ConfigureCustomProviderRequest: ConfigureCustomProviderRequestSchema,
+    ConfigureCustomProviderResponse: ConfigureCustomProviderResponseSchema,
+    ConnectionReady: ConnectionReadySchema,
+    EventCheckpoint: EventCheckpointSchema,
+    EventStreamMessage: EventStreamMessageSchema,
+    GenerateCommitMessageRequest: GenerateCommitMessageRequestSchema,
+    GenerateCommitMessageResponse: GenerateCommitMessageResponseSchema,
+    PendingRequest: PendingRequestSchema,
     Project: ProjectSchema,
+    ResolvePendingRequestRequest: ResolvePendingRequestRequestSchema,
+    ResyncRequired: ResyncRequiredSchema,
+    ReviewAgentTaskRequest: ReviewAgentTaskRequestSchema,
+    StartAgentTurnRequest: StartAgentTurnRequestSchema,
+    StartOfficialProviderLoginResponse: StartOfficialProviderLoginResponseSchema,
+    SteerAgentTurnRequest: SteerAgentTurnRequestSchema,
     TaskId: TaskIdSchema,
   } satisfies Record<string, TSchema>;
 

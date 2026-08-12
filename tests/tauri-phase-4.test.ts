@@ -54,8 +54,7 @@ describe("Tauri Phase 4 repository contract", () => {
     };
     const runtimeManifest = read("crates/runtime/Cargo.toml");
 
-    expect(desktop.match(/app\.manage\(/g)).toHaveLength(1);
-    expect(desktop).toContain("Arc::new(runtime)");
+    expect(desktop.match(/app\.manage\(Arc::new\(runtime\)\)/g)).toHaveLength(1);
     expect(capability.windows).toEqual(["main"]);
     expect(capability.permissions).toEqual(["core:default"]);
     expect(runtimeManifest).not.toContain("tauri");

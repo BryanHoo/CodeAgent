@@ -81,12 +81,12 @@ describe("Tauri Phase 1 repository contract", () => {
       devDependencies: { "@tauri-apps/cli": "catalog:" },
       name: "@code-agent/desktop",
       scripts: {
-        build: "tauri build",
-        dev: "tauri dev",
+        build: "node ./scripts/prepare-codex-binary.mjs && tauri build",
+        dev: "node ./scripts/prepare-codex-binary.mjs && tauri dev",
         tauri: "tauri",
       },
     });
-    expect(desktopPackage.dependencies).toBeUndefined();
+    expect(desktopPackage.dependencies).toEqual({ "@openai/codex": "catalog:" });
     expect(tauriConfig.build).toMatchObject({
       devUrl: "http://127.0.0.1:5173",
       frontendDist: "../../../dist/desktop",

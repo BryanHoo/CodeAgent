@@ -3,11 +3,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use code_agent_protocol::{
-    AgentAttachment, AgentAttachmentKind, AgentCapabilities, AgentGlobalSettings,
-    AgentProjectDefaults, AgentProviderConnectionRecord, AgentTaskSettings, Project, ProjectId,
-    TaskId,
+    AgentAttachment, AgentAttachmentKind, AgentBackgroundTerminalPage, AgentCapabilities,
+    AgentGlobalSettings, AgentMcpServerPage, AgentModelPage, AgentProjectDefaults,
+    AgentProviderConnectionRecord, AgentSkillPage, AgentTaskPage, AgentTaskSettings, Project,
+    ProjectId, RawProviderEvent, TaskId,
 };
 use serde_json::Value;
+use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::CodeAgentError;
@@ -243,6 +245,203 @@ pub trait ProviderPort: Send + Sync {
         &self,
         context: &PortRequestContext,
     ) -> Result<AgentCapabilities, CodeAgentError>;
+
+    /// 读取全局模型目录。
+    async fn models(
+        &self,
+        _context: &PortRequestContext,
+    ) -> Result<AgentModelPage, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "provider model catalog is unavailable",
+        ))
+    }
+
+    /// 读取 Provider 默认设置。
+    async fn default_settings(
+        &self,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "provider defaults are unavailable",
+        ))
+    }
+
+    /// 读取 Provider 连接状态。
+    async fn connection_status(
+        &self,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "provider connection is unavailable",
+        ))
+    }
+
+    /// 启动官方 Provider 登录。
+    async fn start_official_login(
+        &self,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("provider login is unavailable"))
+    }
+
+    /// 取消官方 Provider 登录。
+    async fn cancel_login(
+        &self,
+        _login_id: &str,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("provider login is unavailable"))
+    }
+
+    /// 登出当前 Provider。
+    async fn logout(&self, _context: &PortRequestContext) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("provider logout is unavailable"))
+    }
+
+    /// 配置自定义 Provider；敏感字段不得进入持久化或返回值。
+    async fn configure_custom(
+        &self,
+        _input: Value,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("custom provider is unavailable"))
+    }
+
+    /// 创建或复用 Project 作用域 Provider。
+    async fn for_project(
+        &self,
+        _project: Project,
+        _context: &PortRequestContext,
+    ) -> Result<Arc<dyn ProjectProviderPort>, CodeAgentError> {
+        Err(CodeAgentError::internal("project provider is unavailable"))
+    }
+
+    /// 释放 Project 作用域 Provider 与全部路由状态。
+    async fn release_project(
+        &self,
+        _project_id: &ProjectId,
+        _context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        Ok(())
+    }
+}
+
+/// Project 作用域的任务、回合与实时能力端口。
+#[async_trait]
+pub trait ProjectProviderPort: Send + Sync {
+    async fn start_task(
+        &self,
+        input: Value,
+        context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError>;
+    async fn list_tasks(
+        &self,
+        input: Value,
+        context: &PortRequestContext,
+    ) -> Result<AgentTaskPage, CodeAgentError>;
+    async fn read_task(
+        &self,
+        task_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<Option<Value>, CodeAgentError>;
+    async fn pin_task(
+        &self,
+        task_id: &str,
+        pinned: bool,
+        context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError>;
+    async fn rename_task(
+        &self,
+        task_id: &str,
+        title: &str,
+        context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError>;
+    async fn archive_task(
+        &self,
+        task_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError>;
+    async fn fork_task(
+        &self,
+        task_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError>;
+    async fn compact_task(
+        &self,
+        task_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError>;
+    async fn unsubscribe_task(
+        &self,
+        task_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<String, CodeAgentError>;
+    async fn start_turn(
+        &self,
+        task_id: &str,
+        input: Value,
+        context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError>;
+    async fn steer_turn(
+        &self,
+        task_id: &str,
+        turn_id: &str,
+        input: Value,
+        context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError>;
+    async fn interrupt_turn(
+        &self,
+        task_id: &str,
+        turn_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError>;
+    async fn start_review(
+        &self,
+        task_id: &str,
+        target: Value,
+        context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError>;
+    async fn resolve_pending_request(
+        &self,
+        input: Value,
+        context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError>;
+    async fn list_skills(
+        &self,
+        context: &PortRequestContext,
+    ) -> Result<AgentSkillPage, CodeAgentError>;
+    async fn list_mcp_servers(
+        &self,
+        task_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<AgentMcpServerPage, CodeAgentError>;
+    async fn reload_mcp_servers(
+        &self,
+        task_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<AgentMcpServerPage, CodeAgentError>;
+    async fn list_background_terminals(
+        &self,
+        task_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<AgentBackgroundTerminalPage, CodeAgentError>;
+    async fn terminate_background_terminal(
+        &self,
+        task_id: &str,
+        terminal_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<bool, CodeAgentError>;
+    async fn upload_feedback(
+        &self,
+        task_id: &str,
+        input: Value,
+        context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError>;
+    async fn subscribe_events(
+        &self,
+        include_ephemeral: bool,
+        context: &PortRequestContext,
+    ) -> Result<mpsc::Receiver<RawProviderEvent>, CodeAgentError>;
 }
 
 /// Git 宿主能力端口。

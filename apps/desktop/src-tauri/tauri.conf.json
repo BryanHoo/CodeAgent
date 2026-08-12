@@ -35,6 +35,7 @@
   },
   "bundle": {
     "active": true,
+    "externalBin": ["binaries/codex"],
     "targets": "all"
   }
 }

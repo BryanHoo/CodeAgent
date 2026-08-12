@@ -113,6 +113,7 @@ fn build_runtime() -> code_agent_runtime::CodeAgentRuntime {
         idempotency_ttl: Duration::from_secs(60),
         operation_capacity: 2,
         shutdown_timeout: Duration::from_secs(1),
+        temporary_project_root: None,
     })
     .repository(fake.clone())
     .provider(fake.clone())

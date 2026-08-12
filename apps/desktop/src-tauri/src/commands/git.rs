@@ -1,6 +1,6 @@
 use std::{str::FromStr, sync::Arc};
 
-use code_agent_protocol::ProjectId;
+use code_agent_protocol::{GenerateCommitMessageRequest, GenerateCommitMessageResponse, ProjectId};
 use code_agent_runtime::CodeAgentRuntime;
 use serde::Deserialize;
 use serde_json::Value;
@@ -121,6 +121,19 @@ pub async fn git_commit(
 ) -> Result<Value, CommandError> {
     runtime
         .git_commit(&request_id, &project(&project_id)?, &request)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn git_commit_message_generate(
+    request_id: String,
+    project_id: String,
+    request: GenerateCommitMessageRequest,
+    runtime: State<'_, Arc<CodeAgentRuntime>>,
+) -> Result<GenerateCommitMessageResponse, CommandError> {
+    runtime
+        .generate_commit_message(&request_id, &project(&project_id)?, &request)
         .await
         .map_err(Into::into)
 }

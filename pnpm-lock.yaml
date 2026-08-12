@@ -253,6 +253,10 @@ importers:
         version: 8.21.1
 
   apps/desktop:
+    dependencies:
+      '@openai/codex':
+        specifier: 'catalog:'
+        version: 0.147.0
     devDependencies:
       '@tauri-apps/cli':
         specifier: 'catalog:'
@@ -463,6 +467,12 @@ importers:
       '@code-agent/client':
         specifier: workspace:*
         version: link:../client
+      '@code-agent/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@sinclair/typebox':
+        specifier: 'catalog:'
+        version: 0.34.52
       '@tauri-apps/api':
         specifier: 'catalog:'
         version: 2.11.1

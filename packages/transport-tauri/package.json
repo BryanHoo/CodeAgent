@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@code-agent/client": "workspace:*",
+    "@code-agent/protocol": "workspace:*",
+    "@sinclair/typebox": "catalog:",
     "@tauri-apps/api": "catalog:"
   }
 }

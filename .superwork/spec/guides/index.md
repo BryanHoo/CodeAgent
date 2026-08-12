@@ -35,6 +35,7 @@
 - 所有改动运行 `pnpm check`。
 - Rust Workspace 或 Tauri Desktop 改动额外运行 `pnpm check:rust`；Desktop 壳改动还必须运行 `pnpm --filter @code-agent/desktop build` 生成当前平台未签名 artifact。
 - Phase 4 平台能力改动必须运行 `pnpm run tauri:phase4:check`，禁止无界队列、base64 附件和万能 Command。
+- Phase 5 Provider、Runtime、Desktop Command 或 Tauri Transport 改动必须运行 `pnpm run tauri:phase5:check`；该门禁同时覆盖 Phase 4，并校验 Codex 版本/通知分类、进程安全边界、完整命令注册、Channel 信封和共享实时 fixture。
 - 根 `build` 只生成 npm 发布所需的 Web 与 Node 产物；Desktop UI 和安装包分别使用 `build:desktop-ui`、`build:desktop`，不得进入 npm tarball。
 - `pnpm check` 必须执行 `pnpm audit --prod --audit-level moderate`，阻止中危及以上的已知生产依赖漏洞进入 CI 与发布流程。
 - `pnpm check` 和 CI 必须执行 `pnpm run codex:schema:check`，使用锁定的 `@openai/codex` 及 `--experimental` 生成 TypeScript 与 JSON Schema，并与 `schemas/codex-app-server/<version>.schema-baseline.json` 比较；升级 Codex 必须显式运行 `pnpm run codex:schema:update` 并审查差异。

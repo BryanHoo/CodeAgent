@@ -142,6 +142,7 @@ fn build_runtime(provider_behavior: ProviderBehavior) -> CodeAgentRuntime {
         idempotency_ttl: Duration::from_secs(60),
         operation_capacity: 4,
         shutdown_timeout: Duration::from_secs(1),
+        temporary_project_root: None,
     })
     .repository(fake.clone())
     .provider(fake.clone())

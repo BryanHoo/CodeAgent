@@ -325,7 +325,8 @@ Tauri 实现：
 - Phase 2：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-2-client-transports.md`。
 - Phase 3：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-3-rust-runtime.md`。
 - Phase 4：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-4-platform-capabilities.md`。
-- Phase 5 至 Phase 9：待开始。
+- Phase 5：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-5-codex-provider.md`；持续门禁为 `pnpm run tauri:phase5:check`。
+- Phase 6 至 Phase 9：待开始。
 
 ### Phase 0：建立基线与技术验证
 

@@ -27,8 +27,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     let output_path = PathBuf::from(output_path);
 
     let mut root_schema: RootSchema = serde_json::from_slice(&fs::read(schema_path)?)?;
-    // typify 会合并事件分支的同名 payload，复杂事件改由 JSON Schema 直接校验。
-    root_schema.definitions.remove("AgentProviderEvent");
+    // typify 会合并联合分支的同名 payload，复杂联合改由 JSON Schema 直接校验。
+    for definition in [
+        "AgentProviderEvent",
+        "AgentTaskSnapshot",
+        "AgentTaskSnapshotResponse",
+        "AgentTurn",
+        "EventStreamMessage",
+        "PendingRequest",
+        "ResolvePendingRequestRequest",
+        "ReviewAgentTaskRequest",
+        "StartAgentTurnRequest",
+        "SteerAgentTurnRequest",
+    ] {
+        root_schema.definitions.remove(definition);
+    }
     let mut type_space = TypeSpace::new(&TypeSpaceSettings::default());
     type_space.add_root_schema(root_schema)?;
     let syntax = syn::parse2(type_space.to_stream())?;

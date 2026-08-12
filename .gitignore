@@ -8,6 +8,7 @@ npm-debug.log*
 dist/
 target/
 apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/binaries/
 .cache/
 .artifacts/
 .vite/

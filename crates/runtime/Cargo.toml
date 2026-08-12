@@ -11,9 +11,11 @@ rust-version.workspace = true
 chrono.workspace = true
 code-agent-core.workspace = true
 code-agent-protocol.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 async-trait.workspace = true

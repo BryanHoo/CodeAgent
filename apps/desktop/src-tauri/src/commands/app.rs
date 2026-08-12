@@ -4,7 +4,7 @@ use code_agent_runtime::CodeAgentRuntime;
 use serde::Serialize;
 use tauri::State;
 
-use crate::command_error::CommandError;
+use crate::{command_error::CommandError, platform_adapters::DesktopProvider};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,6 +27,7 @@ pub struct AccessStatusResponse {
 
 #[derive(Debug, Serialize)]
 pub struct DiagnosticsResponse {
+    provider: crate::platform_adapters::ProviderDiagnostic,
     status: &'static str,
     version: u8,
 }
@@ -36,7 +37,7 @@ pub async fn app_info(request_id: String) -> Result<AppInfoResponse, CommandErro
     validate_request_id(&request_id)?;
     Ok(AppInfoResponse {
         app_version: env!("CARGO_PKG_VERSION"),
-        codex_version: "0.147.0",
+        codex_version: code_agent_provider_codex::SUPPORTED_CODEX_VERSION,
         latest_version: None,
         release_notes: None,
         status: "current",
@@ -55,9 +56,13 @@ pub async fn access_status(request_id: String) -> Result<AccessStatusResponse, C
 }
 
 #[tauri::command]
-pub async fn app_diagnostics(request_id: String) -> Result<DiagnosticsResponse, CommandError> {
+pub async fn app_diagnostics(
+    request_id: String,
+    provider: State<'_, Arc<DesktopProvider>>,
+) -> Result<DiagnosticsResponse, CommandError> {
     validate_request_id(&request_id)?;
     Ok(DiagnosticsResponse {
+        provider: provider.diagnostic(),
         status: "ok",
         version: 1,
     })
@@ -85,21 +90,20 @@ fn validate_request_id(request_id: &str) -> Result<(), CommandError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{access_status, app_diagnostics, app_info};
+    use super::{access_status, app_info};
 
     #[test]
     fn returns_phase_two_host_contracts() {
         tauri::async_runtime::block_on(async {
             assert!(app_info("info-1".to_owned()).await.is_ok());
             assert!(access_status("access-1".to_owned()).await.is_ok());
-            assert!(app_diagnostics("diagnostics-1".to_owned()).await.is_ok());
         });
     }
 
     #[test]
     fn rejects_empty_request_ids() {
         tauri::async_runtime::block_on(async {
-            let error = app_diagnostics("  ".to_owned())
+            let error = access_status("  ".to_owned())
                 .await
                 .expect_err("empty requestId must be rejected");
             assert_eq!(error.code, "invalid_request");

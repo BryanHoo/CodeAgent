@@ -32,7 +32,9 @@
 - TypeBox 是 TypeScript/Rust 公共协议的单一来源；版本化 JSON Schema 与 Rust DTO 只通过 `pnpm run protocol:rust:generate` 更新，`pnpm run protocol:rust:check` 必须逐字节拒绝 drift。复杂事件联合在 Rust 边界使用同一 JSON Schema 严格校验，不能维护第二份宽松 DTO。
 - Project 级 Provider 只发布已通过 Project 归属验证的 Task 事件，未知或其他目录的 `threadId` 不得进入 Event Stream。
 - Task Snapshot HTTP 响应必须同时返回同一 Event Stream 的 `{ sessionId, sequence }` checkpoint，Client 不得猜测恢复序号。
+- Task Snapshot 的 `settings` 必须由持久化设置覆盖 Provider 原生快照值，并在冲刷此前事件后固定 checkpoint。HTTP/WebSocket 与 Tauri/Channel 的领域事件和 Snapshot 核心字段必须使用 `tests/fixtures/phase5/` 同一场景对照；跨 Delivery 比较只能忽略 `sessionId`、`sequence`、`timestamp` 和 `version`。
 - WebSocket 控制帧使用 `connection.ready` 和 `resync.required`；恢复原因只使用 Protocol 定义的判别值。
+- Tauri 实时控制帧使用同一 `EventStreamMessage` Schema，通过 IPC `Channel` 依次交付 `connection.ready`、连续事件和 `resync.required`；本地检测到 Session 变化或 Sequence gap 后必须停止订阅并要求 Snapshot 重同步。
 - Provider 专有数据只进入诊断字段或 `extensions`，未知事件记录告警但不破坏事件循环。
 - Task Snapshot 必须保留归一化的 Turn 与 Tool 错误；Command Output 最多保留最新 `10,000` 行或 `1 MiB`，并携带截断状态。
 - Project 源文件预览必须返回已解析的相对或绝对路径、当前文本分段和可空的下一页字节游标；相对路径限制在 Project 根目录内，显式绝对路径允许读取 Project 外的本机文件。Server 必须解析真实路径并拒绝不可读目标、目录、越界游标和二进制文件，每页最多读取 `256 KiB`、最多返回 `4,000` 行，分页不得切断 UTF-8 字符或丢失源文件字节。Client 与 Web 必须使用游标按需加载，查看器仅在滚动接近底部或目标引用行尚未加载时读取后续页，并阻止重复游标循环。Project 图片预览允许相同的绝对路径范围，但只接受有界普通文件及 GIF、JPEG、PNG、WebP 的有效内容签名，响应必须设置受检媒体类型和 `nosniff`。

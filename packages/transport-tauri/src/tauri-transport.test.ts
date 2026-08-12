@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TauriCodeAgentTransport } from "./tauri-transport.js";
 
 beforeEach(() => {
-  vi.stubGlobal("window", {});
+  vi.stubGlobal("window", { crypto: globalThis.crypto });
 });
 
 afterEach(() => {
@@ -46,15 +46,200 @@ describe("TauriCodeAgentTransport", () => {
     ]);
   });
 
-  it("returns a stable error for operations not migrated yet", async () => {
+  it("returns a stable error for operations intentionally unsupported on desktop", async () => {
     const transport = new TauriCodeAgentTransport();
 
     await expect(
       transport.request(
-        { name: "tasks.list", output: {} as never },
-        { requestId: "tasks-request" },
+        { name: "app.update_install", output: {} as never },
+        { requestId: "update-request" },
       ),
     ).rejects.toMatchObject({ code: "unsupported_operation" });
+  });
+
+  it("maps Phase 5 operations and preserves idempotency payloads", async () => {
+    const calls: { command: string; payload: unknown }[] = [];
+    mockIPC((command, payload) => {
+      calls.push({ command, payload });
+      return { status: "ok" };
+    });
+    const transport = new TauriCodeAgentTransport();
+
+    await transport.request(
+      {
+        input: {
+          input: {
+            attachments: [],
+            skills: [],
+            text: "继续",
+            type: "prompt",
+          },
+          projectId: "temporary",
+          taskId: "task-1",
+          turnOptions: {
+            approvalPolicy: "never",
+            approvalsReviewer: "user",
+            model: "gpt-5.6",
+            reasoningEffort: "high",
+            sandboxMode: "danger-full-access",
+          },
+        },
+        name: "turns.start",
+        output: {} as never,
+      },
+      { idempotencyKey: "turn-key", requestId: "turn-request" },
+    );
+    await transport.request(
+      {
+        input: { projectId: "temporary", taskId: "task-1" },
+        name: "mcp_servers.list",
+        output: {} as never,
+      },
+      { requestId: "mcp-request" },
+    );
+
+    expect(calls[0]?.command).toBe("turn_start");
+    expect(calls[0]?.payload).toMatchObject({
+      idempotencyKey: "turn-key",
+      projectId: "temporary",
+      requestId: "turn-request",
+      taskId: "task-1",
+    });
+    expect(calls.slice(1)).toEqual([
+      {
+        command: "mcp_servers_list",
+        payload: {
+          projectId: "temporary",
+          requestId: "mcp-request",
+          taskId: "task-1",
+        },
+      },
+    ]);
+  });
+
+  it("maps structured Tauri command errors", async () => {
+    mockIPC(() => {
+      throw Object.assign(new Error("Codex stopped"), {
+        code: "provider_failure",
+        retryable: true,
+      });
+    });
+    const transport = new TauriCodeAgentTransport();
+
+    await expect(
+      transport.request({ name: "models.list", output: {} as never }, { requestId: "models" }),
+    ).rejects.toMatchObject({
+      code: "provider_failure",
+      message: "Codex stopped",
+      retryable: true,
+    });
+  });
+
+  it("delivers ready and continuous Channel events then unsubscribes", async () => {
+    const states: string[] = [];
+    const events: unknown[] = [];
+    const calls: { command: string; payload: unknown }[] = [];
+    let channelId = 0;
+    mockIPC((command, payload) => {
+      calls.push({ command, payload });
+      if (command === "event_subscribe") {
+        channelId = readChannelId((payload as { channel: unknown }).channel);
+        return { subscriptionId: "subscription-1" };
+      }
+      return true;
+    });
+    const transport = new TauriCodeAgentTransport();
+    const unsubscribe = transport.subscribeEvents({
+      afterSequence: 3,
+      onConnectionState: (state) => states.push(state),
+      onEvent: (event) => events.push(event),
+      onResyncRequired: vi.fn(),
+      projectId: "temporary",
+      sessionId: "session-1",
+    });
+    await vi.waitFor(() => {
+      expect(channelId).toBeGreaterThan(0);
+    });
+    sendChannel(channelId, 0, {
+      latestSequence: 3,
+      sessionId: "session-1",
+      type: "connection.ready",
+      version: 2,
+    });
+    sendChannel(channelId, 1, providerEvent(4, "session-1"));
+    expect(states).toEqual(["connecting", "connected"]);
+    expect(events).toHaveLength(1);
+
+    unsubscribe();
+    sendChannel(channelId, 2, providerEvent(5, "session-1"));
+    await vi.waitFor(() => {
+      expect(calls).toContainEqual({
+        command: "event_unsubscribe",
+        payload: { subscriptionId: "subscription-1" },
+      });
+    });
+    expect(states.at(-1)).toBe("closed");
+    expect(events).toHaveLength(1);
+  });
+
+  it("stops Channel delivery for local sequence gaps and server resync", async () => {
+    const resyncs: unknown[] = [];
+    let channelId = 0;
+    mockIPC((command, payload) => {
+      if (command === "event_subscribe") {
+        channelId = readChannelId((payload as { channel: unknown }).channel);
+        return { subscriptionId: "subscription-gap" };
+      }
+      return true;
+    });
+    const transport = new TauriCodeAgentTransport();
+    transport.subscribeEvents({
+      afterSequence: 0,
+      onEvent: vi.fn(),
+      onResyncRequired: (message) => resyncs.push(message),
+      projectId: "project-a",
+      sessionId: "session-gap",
+    });
+    await vi.waitFor(() => {
+      expect(channelId).toBeGreaterThan(0);
+    });
+    sendChannel(channelId, 0, {
+      latestSequence: 0,
+      sessionId: "session-gap",
+      type: "connection.ready",
+      version: 2,
+    });
+    sendChannel(channelId, 1, providerEvent(2, "session-gap"));
+    expect(resyncs).toEqual([
+      expect.objectContaining({ latestSequence: 2, reason: "sequence_gap" }),
+    ]);
+
+    let serverChannelId = 0;
+    mockIPC((command, payload) => {
+      if (command === "event_subscribe") {
+        serverChannelId = readChannelId((payload as { channel: unknown }).channel);
+        return { subscriptionId: "subscription-server" };
+      }
+      return true;
+    });
+    transport.subscribeEvents({
+      afterSequence: 2,
+      onEvent: vi.fn(),
+      onResyncRequired: (message) => resyncs.push(message),
+      projectId: "project-a",
+      sessionId: "session-gap",
+    });
+    await vi.waitFor(() => {
+      expect(serverChannelId).toBeGreaterThan(0);
+    });
+    sendChannel(serverChannelId, 0, {
+      latestSequence: 8,
+      reason: "event_retention_exceeded",
+      sessionId: "session-gap",
+      type: "resync.required",
+      version: 2,
+    });
+    expect(resyncs.at(-1)).toMatchObject({ reason: "event_retention_exceeded" });
   });
 
   it("invokes explicit host cancellation", async () => {
@@ -173,3 +358,31 @@ describe("TauriCodeAgentTransport", () => {
     expect(window).not.toHaveProperty("__TAURI_INTERNALS__");
   });
 });
+
+function sendChannel(id: number, index: number, message: unknown): void {
+  (
+    window as unknown as { __TAURI_INTERNALS__: { runCallback(id: number, value: unknown): void } }
+  ).__TAURI_INTERNALS__.runCallback(id, { index, message });
+}
+
+function readChannelId(channel: unknown): number {
+  if (typeof channel === "object" && channel !== null && "id" in channel) {
+    return Number(channel.id);
+  }
+  return Number(String(channel).split(":").at(-1));
+}
+
+function providerEvent(sequence: number, sessionId: string) {
+  return {
+    itemId: "item-1",
+    payload: { delta: "hello" },
+    provider: "codex",
+    sequence,
+    sessionId,
+    taskId: "task-1",
+    timestamp: "2026-08-12T00:00:00.000Z",
+    turnId: "turn-1",
+    type: "message.delta",
+    version: 2,
+  };
+}

@@ -1,5 +1,7 @@
 //! CodeAgent 跨宿主序列化协议。
 
+// 生成代码中的正则常量由 typify 产出，统一豁免 unwrap 提示。
+#[allow(clippy::unwrap_used)]
 mod generated;
 
 pub use generated::*;
@@ -131,6 +133,85 @@ pub fn parse_provider_event(value: Value) -> Result<RawProviderEvent, ProtocolVa
     Ok(RawProviderEvent(value))
 }
 
+/// typify 无法无损生成的复杂联合定义；运行时以内嵌 JSON Schema 校验后按 JSON 使用。
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ValueDefinition {
+    AgentTaskSnapshot,
+    AgentTaskSnapshotResponse,
+    AgentTurn,
+    EventStreamMessage,
+    PendingRequest,
+    ResolvePendingRequestRequest,
+    ReviewAgentTaskRequest,
+    StartAgentTurnRequest,
+    SteerAgentTurnRequest,
+}
+
+impl ValueDefinition {
+    const ALL: [Self; 9] = [
+        Self::AgentTaskSnapshot,
+        Self::AgentTaskSnapshotResponse,
+        Self::AgentTurn,
+        Self::EventStreamMessage,
+        Self::PendingRequest,
+        Self::ResolvePendingRequestRequest,
+        Self::ReviewAgentTaskRequest,
+        Self::StartAgentTurnRequest,
+        Self::SteerAgentTurnRequest,
+    ];
+
+    /// 返回 Schema `$defs` 中的定义名。
+    #[must_use]
+    pub fn definition_name(self) -> &'static str {
+        match self {
+            Self::AgentTaskSnapshot => "AgentTaskSnapshot",
+            Self::AgentTaskSnapshotResponse => "AgentTaskSnapshotResponse",
+            Self::AgentTurn => "AgentTurn",
+            Self::EventStreamMessage => "EventStreamMessage",
+            Self::PendingRequest => "PendingRequest",
+            Self::ResolvePendingRequestRequest => "ResolvePendingRequestRequest",
+            Self::ReviewAgentTaskRequest => "ReviewAgentTaskRequest",
+            Self::StartAgentTurnRequest => "StartAgentTurnRequest",
+            Self::SteerAgentTurnRequest => "SteerAgentTurnRequest",
+        }
+    }
+}
+
+static VALUE_VALIDATORS: LazyLock<Result<Vec<(ValueDefinition, Validator)>, String>> =
+    LazyLock::new(|| {
+        ValueDefinition::ALL
+            .into_iter()
+            .map(|definition| {
+                build_validator(definition.definition_name())
+                    .map(|validator| (definition, validator))
+                    .map_err(|error| error.to_string())
+            })
+            .collect()
+    });
+
+/// 校验并返回复杂联合定义的 JSON 值。
+pub fn parse_protocol_value(
+    definition: ValueDefinition,
+    value: Value,
+) -> Result<Value, ProtocolValidationError> {
+    let validators = VALUE_VALIDATORS
+        .as_ref()
+        .map_err(|error| ProtocolValidationError::new(error.clone()))?;
+    let validator = validators
+        .iter()
+        .find_map(|(candidate, validator)| (*candidate == definition).then_some(validator))
+        .ok_or_else(|| ProtocolValidationError::new("unknown protocol definition"))?;
+    validator.validate(&value).map_err(|error| {
+        ProtocolValidationError::new(format!(
+            "protocol validation failed for {} at {} against {}",
+            definition.definition_name(),
+            error.instance_path(),
+            error.schema_path()
+        ))
+    })?;
+    Ok(value)
+}
+
 /// 校验并解析完整 Task 设置。
 pub fn parse_agent_task_settings(
     value: Value,
@@ -143,7 +224,10 @@ pub fn parse_agent_task_settings(
 mod tests {
     use serde_json::{Value, json};
 
-    use super::{CodeAgentError, parse_agent_task_settings, parse_provider_event};
+    use super::{
+        CodeAgentError, ValueDefinition, parse_agent_task_settings, parse_protocol_value,
+        parse_provider_event,
+    };
 
     fn valid_settings_fixture() -> Value {
         json!({
@@ -201,5 +285,147 @@ mod tests {
         });
 
         assert!(serde_json::from_value::<CodeAgentError>(fixture).is_err());
+    }
+
+    fn valid_turn_fixture() -> Value {
+        json!({
+            "completedAt": null,
+            "error": null,
+            "id": "turn-1",
+            "items": [],
+            "startedAt": "2026-08-12T00:00:00.000Z",
+            "status": "running"
+        })
+    }
+
+    #[test]
+    fn value_definitions_should_round_trip_valid_fixtures() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let turn = parse_protocol_value(ValueDefinition::AgentTurn, valid_turn_fixture())?;
+        assert_eq!(turn["id"], "turn-1");
+
+        let ready = parse_protocol_value(
+            ValueDefinition::EventStreamMessage,
+            json!({
+                "latestSequence": 7,
+                "sessionId": "session-1",
+                "type": "connection.ready",
+                "version": 2
+            }),
+        )?;
+        assert_eq!(ready["type"], "connection.ready");
+
+        let pending = parse_protocol_value(
+            ValueDefinition::PendingRequest,
+            json!({
+                "availableDecisions": ["allow", "deny"],
+                "command": "ls",
+                "createdAt": "2026-08-12T00:00:00.000Z",
+                "cwd": "/tmp",
+                "expiresAt": null,
+                "itemId": "item-1",
+                "networkAccess": null,
+                "projectId": "project-1",
+                "reason": null,
+                "requestId": "request-1",
+                "status": "pending",
+                "taskId": "task-1",
+                "turnId": "turn-1",
+                "type": "command_approval"
+            }),
+        )?;
+        assert_eq!(pending["type"], "command_approval");
+
+        let resolve = parse_protocol_value(
+            ValueDefinition::ResolvePendingRequestRequest,
+            json!({
+                "itemId": "item-1",
+                "projectId": "project-1",
+                "resolution": { "decision": "allow" },
+                "taskId": "task-1",
+                "turnId": "turn-1",
+                "type": "command_approval"
+            }),
+        )?;
+        assert_eq!(resolve["resolution"]["decision"], "allow");
+
+        let start_turn = parse_protocol_value(
+            ValueDefinition::StartAgentTurnRequest,
+            json!({
+                "input": {
+                    "attachments": [],
+                    "skills": [],
+                    "text": "hello",
+                    "type": "prompt"
+                },
+                "options": {
+                    "approvalPolicy": "never",
+                    "approvalsReviewer": "user",
+                    "model": "gpt-5",
+                    "reasoningEffort": "high",
+                    "sandboxMode": "workspace-write"
+                }
+            }),
+        )?;
+        assert_eq!(start_turn["input"]["text"], "hello");
+
+        let snapshot = parse_protocol_value(
+            ValueDefinition::AgentTaskSnapshotResponse,
+            json!({
+                "checkpoint": { "sequence": 3, "sessionId": "session-1" },
+                "snapshot": {
+                    "contextUsage": null,
+                    "id": "task-1",
+                    "pendingRequests": [],
+                    "pinned": false,
+                    "plan": null,
+                    "projectId": "project-1",
+                    "settings": {
+                        "approvalPolicy": "never",
+                        "approvalsReviewer": "user",
+                        "model": "gpt-5",
+                        "reasoningEffort": "high",
+                        "sandboxMode": "workspace-write"
+                    },
+                    "status": "idle",
+                    "title": "Task",
+                    "turns": [valid_turn_fixture()],
+                    "updatedAt": "2026-08-12T00:00:00.000Z"
+                }
+            }),
+        )?;
+        assert_eq!(snapshot["snapshot"]["id"], "task-1");
+        Ok(())
+    }
+
+    #[test]
+    fn value_definitions_should_reject_invalid_payloads() {
+        let mut broken_turn = valid_turn_fixture();
+        broken_turn["status"] = json!("paused");
+        assert!(parse_protocol_value(ValueDefinition::AgentTurn, broken_turn).is_err());
+
+        assert!(
+            parse_protocol_value(
+                ValueDefinition::EventStreamMessage,
+                json!({ "type": "connection.ready" }),
+            )
+            .is_err()
+        );
+
+        assert!(
+            parse_protocol_value(
+                ValueDefinition::PendingRequest,
+                json!({ "type": "command_approval" }),
+            )
+            .is_err()
+        );
+
+        assert!(
+            parse_protocol_value(
+                ValueDefinition::StartAgentTurnRequest,
+                json!({ "input": { "type": "prompt" } }),
+            )
+            .is_err()
+        );
     }
 }

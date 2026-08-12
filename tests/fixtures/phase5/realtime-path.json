@@ -1,0 +1,159 @@
+{
+  "name": "completed-streaming-turn",
+  "notifications": [
+    {
+      "method": "turn/started",
+      "params": {
+        "threadId": "task-1",
+        "turn": {
+          "completedAt": null,
+          "error": null,
+          "id": "turn-1",
+          "items": [],
+          "startedAt": 1786492801,
+          "status": "inProgress"
+        }
+      }
+    },
+    {
+      "method": "item/agentMessage/delta",
+      "params": {
+        "delta": "完成迁移",
+        "itemId": "message-1",
+        "threadId": "task-1",
+        "turnId": "turn-1"
+      }
+    },
+    {
+      "method": "item/completed",
+      "params": {
+        "item": {
+          "id": "message-1",
+          "memoryCitation": null,
+          "phase": "final_answer",
+          "text": "完成迁移",
+          "type": "agentMessage"
+        },
+        "threadId": "task-1",
+        "turnId": "turn-1"
+      }
+    },
+    {
+      "method": "thread/tokenUsage/updated",
+      "params": {
+        "threadId": "task-1",
+        "tokenUsage": {
+          "last": { "totalTokens": 21 },
+          "modelContextWindow": 128000,
+          "total": { "totalTokens": 21 }
+        },
+        "turnId": "turn-1"
+      }
+    },
+    {
+      "method": "turn/completed",
+      "params": {
+        "threadId": "task-1",
+        "turn": {
+          "completedAt": 1786492802,
+          "error": null,
+          "id": "turn-1",
+          "items": [
+            {
+              "id": "message-1",
+              "memoryCitation": null,
+              "phase": "final_answer",
+              "text": "完成迁移",
+              "type": "agentMessage"
+            }
+          ],
+          "startedAt": 1786492801,
+          "status": "completed"
+        }
+      }
+    }
+  ],
+  "expectedEventTypes": [
+    "turn.started",
+    "message.delta",
+    "item.completed",
+    "usage.updated",
+    "turn.completed"
+  ],
+  "expectedEvents": [
+    {
+      "payload": {
+        "turn": {
+          "completedAt": null,
+          "error": null,
+          "id": "turn-1",
+          "items": [],
+          "startedAt": "2026-08-12T00:00:01.000Z",
+          "status": "running"
+        }
+      },
+      "taskId": "task-1",
+      "turnId": "turn-1",
+      "type": "turn.started"
+    },
+    {
+      "itemId": "message-1",
+      "payload": { "delta": "完成迁移" },
+      "taskId": "task-1",
+      "turnId": "turn-1",
+      "type": "message.delta"
+    },
+    {
+      "itemId": "message-1",
+      "payload": {
+        "item": {
+          "id": "message-1",
+          "phase": "final_answer",
+          "role": "assistant",
+          "text": "完成迁移",
+          "type": "message"
+        }
+      },
+      "taskId": "task-1",
+      "turnId": "turn-1",
+      "type": "item.completed"
+    },
+    {
+      "payload": { "usage": { "contextWindow": 128000, "usedTokens": 21 } },
+      "taskId": "task-1",
+      "turnId": "turn-1",
+      "type": "usage.updated"
+    },
+    {
+      "payload": {
+        "turn": {
+          "completedAt": "2026-08-12T00:00:02.000Z",
+          "error": null,
+          "id": "turn-1",
+          "items": [
+            {
+              "id": "message-1",
+              "phase": "final_answer",
+              "role": "assistant",
+              "text": "完成迁移",
+              "type": "message"
+            }
+          ],
+          "startedAt": "2026-08-12T00:00:01.000Z",
+          "status": "completed"
+        }
+      },
+      "taskId": "task-1",
+      "turnId": "turn-1",
+      "type": "turn.completed"
+    }
+  ],
+  "expectedSnapshotCore": {
+    "checkpointSequence": 5,
+    "model": "sqlite-model",
+    "sandboxMode": "workspace-write",
+    "status": "idle",
+    "taskId": "task-1",
+    "title": "共享实时任务"
+  }
+}

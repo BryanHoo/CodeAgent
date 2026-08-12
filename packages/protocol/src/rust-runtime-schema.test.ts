@@ -17,18 +17,47 @@ describe("Rust Runtime 协议 Schema", () => {
     expect(document.$id).toBe(RUST_RUNTIME_SCHEMA_ID);
     expect(Object.keys(document.$defs)).toEqual([
       "AgentAttachment",
+      "AgentBackgroundTerminalPage",
       "AgentCapabilities",
       "AgentGlobalSettings",
+      "AgentMcpServerPage",
+      "AgentModelPage",
       "AgentProjectDefaults",
+      "AgentProviderConnectionMutationResponse",
       "AgentProviderConnectionRecord",
+      "AgentProviderConnectionStatus",
       "AgentProviderEvent",
+      "AgentSkillPage",
+      "AgentTask",
+      "AgentTaskPage",
       "AgentTaskSettings",
+      "AgentTaskSnapshot",
+      "AgentTaskSnapshotResponse",
+      "AgentTurn",
+      "CancelProviderLoginRequest",
       "CodeAgentError",
+      "ConfigureCustomProviderRequest",
+      "ConfigureCustomProviderResponse",
+      "ConnectionReady",
+      "EventCheckpoint",
+      "EventStreamMessage",
+      "GenerateCommitMessageRequest",
+      "GenerateCommitMessageResponse",
+      "PendingRequest",
       "Project",
+      "ResolvePendingRequestRequest",
+      "ResyncRequired",
+      "ReviewAgentTaskRequest",
+      "StartAgentTurnRequest",
+      "StartOfficialProviderLoginResponse",
+      "SteerAgentTurnRequest",
       "TaskId",
     ]);
     expect(document.$defs["AgentProviderEvent"]).toHaveProperty("oneOf");
     expect(document.$defs["AgentProviderEvent"]).not.toHaveProperty("anyOf");
+    expect(document.$defs["PendingRequest"]).toHaveProperty("oneOf");
+    expect(document.$defs["EventStreamMessage"]).toHaveProperty("oneOf");
+    expect(document.$defs["EventStreamMessage"]).not.toHaveProperty("anyOf");
   });
 
   it("拒绝非法设置和 Provider 传输字段", () => {

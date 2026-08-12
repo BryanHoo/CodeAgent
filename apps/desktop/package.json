@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tauri build",
-    "dev": "tauri dev",
+    "build": "node ./scripts/prepare-codex-binary.mjs && tauri build",
+    "dev": "node ./scripts/prepare-codex-binary.mjs && tauri dev",
+    "prepare:codex": "node ./scripts/prepare-codex-binary.mjs",
     "tauri": "tauri"
+  },
+  "dependencies": {
+    "@openai/codex": "catalog:"
   },
   "devDependencies": {
     "@tauri-apps/cli": "catalog:"

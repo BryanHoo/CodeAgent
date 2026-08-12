@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, sync::Arc, time::Duration};
+use std::{marker::PhantomData, path::PathBuf, sync::Arc, time::Duration};
 
 use code_agent_core::{
     AttachmentPort, ClockPort, FilePort, GitPort, ProviderPort, RepositoryPort, UpdatePort,
@@ -7,7 +7,7 @@ use code_agent_core::{
 use crate::CodeAgentRuntime;
 
 /// Runtime 有界容量与关闭等待配置。
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct RuntimeOptions {
     /// 幂等成功结果和进行中请求的共享容量。
     pub idempotency_capacity: usize,
@@ -17,6 +17,8 @@ pub struct RuntimeOptions {
     pub operation_capacity: usize,
     /// 等待受跟踪任务关闭的上限。
     pub shutdown_timeout: Duration,
+    /// 固定 `temporary` 作用域使用的内部工作区；未配置时拒绝惰性创建。
+    pub temporary_project_root: Option<PathBuf>,
 }
 
 /// 尚未注入的 Builder 端口标记。
