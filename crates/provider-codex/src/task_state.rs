@@ -21,6 +21,28 @@ pub(crate) struct TaskState {
 }
 
 impl TaskState {
+    pub(crate) fn mark_running(&self, task_id: &str) {
+        if let Ok(mut running) = self.running.lock() {
+            running.insert(task_id.to_owned());
+        }
+    }
+
+    pub(crate) fn sync_running(&self, task_id: &str, running: bool) {
+        if let Ok(mut tasks) = self.running.lock() {
+            if running {
+                tasks.insert(task_id.to_owned());
+            } else {
+                tasks.remove(task_id);
+            }
+        }
+    }
+
+    pub(crate) fn is_running(&self, task_id: &str) -> bool {
+        self.running
+            .lock()
+            .is_ok_and(|running| running.contains(task_id))
+    }
+
     pub(crate) fn remember_unmaterialized(&self, task: Value) -> Result<(), CodeAgentError> {
         let task_id = task["id"]
             .as_str()
@@ -235,6 +257,10 @@ pub(crate) fn is_thread_not_loaded(error: &RpcClientError) -> bool {
 
 pub(crate) fn is_thread_not_materialized(error: &RpcClientError) -> bool {
     matches!(error, RpcClientError::Response { code: -32600, message, .. } if message.contains("is not materialized yet; includeTurns is unavailable before first user message"))
+}
+
+pub(crate) fn is_background_terminal_thread_missing(error: &RpcClientError) -> bool {
+    matches!(error, RpcClientError::Response { code: -32600, message, .. } if message.starts_with("thread not found:"))
 }
 
 pub(crate) async fn same_canonical_path(left: &str, right: &str) -> bool {

@@ -238,6 +238,102 @@ async fn project_provider_should_start_task_and_turn_with_resume_deduplication()
 }
 
 #[tokio::test]
+async fn project_provider_should_map_prompt_attachments_and_skills() {
+    let (runtime, server) = runtime();
+    let provider = runtime
+        .for_project(project(), &PortRequestContext::new("project"))
+        .await
+        .expect("project provider");
+    let (read, mut write) = tokio::io::split(server);
+    let mut read = BufReader::new(read);
+    let scenario = tokio::spawn(async move {
+        let start = read_frame(&mut read).await;
+        respond(
+            &mut write,
+            &start,
+            json!({ "thread": {
+                "createdAt": 1_754_956_800, "cwd": "/workspace", "id": "task-1",
+                "name": null, "preview": "新任务", "section": null,
+                "updatedAt": 1_754_956_800
+            } }),
+        )
+        .await;
+
+        let skills = read_frame(&mut read).await;
+        assert_eq!(skills["method"], "skills/list");
+        respond(
+            &mut write,
+            &skills,
+            json!({ "data": [{ "cwd": "/workspace", "errors": [], "skills": [{
+                "description": "Design", "enabled": true, "interface": null,
+                "name": "frontend-design", "path": "/workspace/skills/frontend/SKILL.md",
+                "scope": "repo", "shortDescription": "Design"
+            }] }] }),
+        )
+        .await;
+
+        let turn = read_frame(&mut read).await;
+        assert_eq!(turn["method"], "turn/start");
+        let input = turn["params"]["input"].as_array().expect("native input");
+        assert_eq!(input[0]["type"], "skill");
+        assert_eq!(input[0]["name"], "frontend-design");
+        assert_eq!(input[0]["path"], "/workspace/skills/frontend/SKILL.md");
+        assert_eq!(input[1]["text"], "检查界面");
+        assert_eq!(input[2]["text"], "粘贴内容");
+        assert_eq!(input[2]["text_elements"][0]["placeholder"], "notes.txt");
+        assert_eq!(input[3]["text"], "/managed/report.pdf");
+        assert_eq!(input[4]["type"], "image");
+        assert_eq!(input[4]["url"], "data:image/png;base64,iVBORw0KGgo=");
+        respond(
+            &mut write,
+            &turn,
+            json!({ "turn": {
+                "completedAt": null, "error": null, "id": "turn-1", "items": [],
+                "startedAt": 1_754_956_801, "status": "inProgress"
+            } }),
+        )
+        .await;
+    });
+
+    provider
+        .start_task(json!({}), &PortRequestContext::new("start"))
+        .await
+        .expect("start task");
+    let skill_page = provider
+        .list_skills(&PortRequestContext::new("skills"))
+        .await
+        .expect("skills");
+    let skill_id = serde_json::to_value(skill_page).expect("skill page")["data"][0]["id"]
+        .as_str()
+        .expect("skill id")
+        .to_owned();
+    provider
+        .start_turn(
+            "task-1",
+            json!({
+                "prompt": {
+                    "attachments": [
+                        { "kind": "text", "mediaType": "text/plain", "name": "notes.txt", "path": "/managed/notes.txt", "text": "粘贴内容" },
+                        { "kind": "file", "mediaType": "application/pdf", "name": "report.pdf", "path": "/managed/report.pdf" },
+                        { "data": "iVBORw0KGgo=", "kind": "image", "mediaType": "image/png", "name": "shot.png", "path": "/managed/shot.png" }
+                    ],
+                    "skills": [{ "id": skill_id, "name": "frontend-design" }],
+                    "text": "检查界面"
+                },
+                "options": {
+                    "approvalPolicy": "on-request", "approvalsReviewer": "user",
+                    "model": "gpt-5.6", "reasoningEffort": "high",
+                    "sandboxMode": "workspace-write"
+                }
+            }),
+            &PortRequestContext::new("turn"),
+        )
+        .await
+        .expect("start turn");
+    scenario.await.expect("scenario");
+}
+
+#[tokio::test]
 async fn provider_should_route_mapped_notifications_to_project_subscription() {
     let (runtime, server) = runtime();
     let provider = runtime
@@ -302,6 +398,82 @@ async fn provider_should_route_mapped_notifications_to_project_subscription() {
         .expect("event timeout")
         .expect("event");
     assert_eq!(event.event_type(), "message.delta");
+}
+
+#[tokio::test]
+async fn goal_turn_should_update_settings_set_goal_and_wait_for_started_notification() {
+    let (runtime, server) = runtime();
+    let provider = runtime
+        .for_project(project(), &PortRequestContext::new("project"))
+        .await
+        .expect("project provider");
+    let (read, mut write) = tokio::io::split(server);
+    let mut read = BufReader::new(read);
+    let scenario = tokio::spawn(async move {
+        let start = read_frame(&mut read).await;
+        respond(
+            &mut write,
+            &start,
+            json!({ "thread": {
+                "createdAt": 1_754_956_800, "cwd": "/workspace", "id": "task-1",
+                "name": null, "preview": "新任务", "section": null,
+                "updatedAt": 1_754_956_800
+            } }),
+        )
+        .await;
+
+        let settings = read_frame(&mut read).await;
+        assert_eq!(settings["method"], "thread/settings/update");
+        assert_eq!(settings["params"]["threadId"], "task-1");
+        respond(&mut write, &settings, json!({})).await;
+        let objective = read_frame(&mut read).await;
+        assert_eq!(objective["method"], "thread/goal/set");
+        assert_eq!(objective["params"]["objective"], "完成 Rust 迁移");
+        respond(
+            &mut write,
+            &objective,
+            json!({ "goal": { "objective": "完成 Rust 迁移", "threadId": "task-1" } }),
+        )
+        .await;
+        write
+            .write_all(
+                format!(
+                    "{}\n",
+                    json!({
+                        "method": "turn/started",
+                        "params": { "threadId": "task-1", "turn": {
+                            "completedAt": null, "error": null, "id": "goal-turn-1",
+                            "items": [], "startedAt": 1_754_956_801, "status": "inProgress"
+                        } }
+                    })
+                )
+                .as_bytes(),
+            )
+            .await
+            .expect("goal turn notification");
+    });
+
+    provider
+        .start_task(json!({}), &PortRequestContext::new("start"))
+        .await
+        .expect("start task");
+    let turn = provider
+        .start_turn(
+            "task-1",
+            json!({
+                "prompt": { "attachments": [], "skills": [], "text": "  完成 Rust 迁移  " },
+                "options": {
+                    "approvalPolicy": "on-request", "approvalsReviewer": "user",
+                    "goalMode": true, "model": "gpt-5.6", "reasoningEffort": "high",
+                    "sandboxMode": "workspace-write"
+                }
+            }),
+            &PortRequestContext::new("goal"),
+        )
+        .await
+        .expect("goal turn");
+    assert_eq!(turn["id"], "goal-turn-1");
+    scenario.await.expect("scenario");
 }
 
 #[tokio::test]
@@ -378,7 +550,11 @@ async fn pending_approval_should_publish_and_round_trip_native_decision() {
 
     let resolve_context = PortRequestContext::new("resolve");
     let resolve = provider.resolve_pending_request(
-        json!({ "decision": "allow_for_session", "requestId": request_id, "taskId": "task-1" }),
+        json!({
+            "itemId": "command-1", "projectId": "project-1",
+            "requestId": request_id, "resolution": { "decision": "allow_for_session" },
+            "taskId": "task-1", "turnId": "turn-1", "type": "command_approval"
+        }),
         &resolve_context,
     );
     let response = async {
@@ -415,13 +591,40 @@ async fn review_worker_notification_should_route_to_parent_task() {
             } }),
         )
         .await;
+        let review = read_frame(&mut read).await;
+        assert_eq!(review["method"], "review/start");
+        assert_eq!(
+            review["params"]["target"],
+            json!({ "type": "uncommittedChanges" })
+        );
+        respond(
+            &mut write,
+            &review,
+            json!({
+                "reviewThreadId": "task-1",
+                "turn": {
+                    "completedAt": null, "error": null, "id": "review-outer-turn",
+                    "items": [], "startedAt": 1_754_956_801, "status": "inProgress"
+                }
+            }),
+        )
+        .await;
         (read, write)
     });
     provider
         .start_task(json!({}), &PortRequestContext::new("start"))
         .await
         .expect("start task");
-    let (read, write) = start.await.expect("start scenario");
+    let review_context = PortRequestContext::new("review");
+    let review = provider.start_review(
+        "task-1",
+        json!({ "type": "uncommitted_changes" }),
+        &review_context,
+    );
+    let (review, server) = tokio::join!(review, start);
+    let review = review.expect("start review");
+    assert_eq!(review["items"][0]["type"], "review");
+    let (read, write) = server.expect("start scenario");
     let mut server = read.into_inner().unsplit(write);
     let mut events = provider
         .subscribe_events(false, &PortRequestContext::new("events"))
@@ -438,6 +641,16 @@ async fn review_worker_notification_should_route_to_parent_task() {
             } }
         }),
         json!({
+            "method": "turn/started",
+            "params": {
+                "threadId": "review-worker-1",
+                "turn": {
+                    "completedAt": null, "error": null, "id": "review-worker-turn",
+                    "items": [], "startedAt": 1_754_956_802, "status": "inProgress"
+                }
+            }
+        }),
+        json!({
             "method": "item/completed",
             "params": {
                 "item": {
@@ -447,7 +660,7 @@ async fn review_worker_notification_should_route_to_parent_task() {
                     "type": "agentMessage"
                 },
                 "threadId": "review-worker-1",
-                "turnId": "review-turn-1"
+                "turnId": "review-worker-turn"
             }
         }),
     ] {
@@ -457,10 +670,18 @@ async fn review_worker_notification_should_route_to_parent_task() {
             .expect("notification");
     }
 
-    let event = tokio::time::timeout(std::time::Duration::from_secs(1), events.recv())
+    let started = tokio::time::timeout(std::time::Duration::from_secs(1), events.recv())
         .await
         .expect("review event timeout")
         .expect("review event");
+    assert_eq!(started.event_type(), "turn.started");
+    assert_eq!(started.turn_id(), Some("review-outer-turn"));
+    assert_eq!(
+        started.as_value()["payload"]["turn"]["items"][0]["type"],
+        "review"
+    );
+    let event = events.recv().await.expect("review item event");
     assert_eq!(event.task_id(), "task-1");
+    assert_eq!(event.turn_id(), Some("review-outer-turn"));
     assert_eq!(event.as_value()["payload"]["item"]["phase"], "commentary");
 }

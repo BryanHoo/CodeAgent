@@ -13,5 +13,6 @@ pub use common::{
 };
 pub use events::map_codex_notification;
 pub use items::map_codex_item;
+pub(crate) use server_requests::request_id_key;
 pub use server_requests::{PendingCodexRequest, map_codex_server_request};
 pub use turns::{map_codex_turn, map_context_usage};

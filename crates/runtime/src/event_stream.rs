@@ -298,6 +298,17 @@ impl AgentEventStream {
         Ok(EventSubscription { events, signal })
     }
 
+    /// 上游 Provider 已丢失连续事件时，立即使全部订阅进入重同步状态。
+    pub async fn require_resync(&self) {
+        let mut state = self.state.lock().await;
+        self.flush_locked(&mut state);
+        for (_, subscriber) in state.subscribers.drain(..) {
+            subscriber
+                .signal
+                .send_replace(SubscriberSignal::ResyncRequired);
+        }
+    }
+
     /// 返回不包含业务载荷的 Event Stream 指标。
     pub async fn metrics(&self) -> EventStreamMetrics {
         let state = self.state.lock().await;

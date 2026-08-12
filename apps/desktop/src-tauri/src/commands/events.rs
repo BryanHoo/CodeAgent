@@ -112,6 +112,9 @@ pub async fn event_subscribe(
         .await;
 
     let registry = subscriptions.inner().clone();
+    let runtime = runtime.inner().clone();
+    let resync_project_id = project_id.clone();
+    let resync_request_id = request_id.clone();
     let cleanup_id = subscription_id.clone();
     tauri::async_runtime::spawn(async move {
         let send = |message: Value| channel.send(message).is_ok();
@@ -125,10 +128,17 @@ pub async fn event_subscribe(
                 _ = cancellation.cancelled() => break,
                 signal = subscription.signal.changed() => {
                     if signal.is_err() || *subscription.signal.borrow() == SubscriberSignal::ResyncRequired {
+                        let latest = runtime
+                            .project_event_checkpoint(
+                                &format!("{resync_request_id}:resync-checkpoint"),
+                                &resync_project_id,
+                            )
+                            .await
+                            .unwrap_or_else(|_| checkpoint.clone());
                         let _ = send(json!({
-                            "latestSequence": checkpoint.sequence,
+                            "latestSequence": latest.sequence,
                             "reason": "sequence_gap",
-                            "sessionId": checkpoint.session_id.as_ref(),
+                            "sessionId": latest.session_id.as_ref(),
                             "type": "resync.required",
                             "version": 2
                         }));

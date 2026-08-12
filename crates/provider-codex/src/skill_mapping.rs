@@ -1,7 +1,15 @@
+use std::collections::HashMap;
+
 use code_agent_core::CodeAgentError;
 use code_agent_protocol::AgentSkillPage;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+
+#[derive(Clone, Debug)]
+pub(crate) struct NativeSkill {
+    pub name: String,
+    pub path: String,
+}
 
 pub(crate) fn map_skills(
     response: &Value,
@@ -26,6 +34,34 @@ pub(crate) fn map_skills(
         .collect::<Result<Vec<_>, _>>()?;
     serde_json::from_value(json!({ "data": data, "nextCursor": null }))
         .map_err(|error| CodeAgentError::internal(error.to_string()))
+}
+
+pub(crate) fn map_skill_catalog(
+    response: &Value,
+    project_root: &str,
+) -> Result<(AgentSkillPage, HashMap<String, NativeSkill>), CodeAgentError> {
+    let page = map_skills(response, project_root)?;
+    let skills = response["data"]
+        .as_array()
+        .and_then(|entries| {
+            entries
+                .iter()
+                .find(|entry| entry["cwd"].as_str() == Some(project_root))
+        })
+        .and_then(|entry| entry["skills"].as_array())
+        .ok_or_else(|| CodeAgentError::internal("skills/list skills must be an array"))?;
+    let mut catalog = HashMap::with_capacity(page.data.len());
+    for skill in skills.iter().filter(|skill| skill["enabled"] == true) {
+        let mapped = map_skill(skill)?;
+        catalog.insert(
+            required_string(&mapped, "id")?.to_owned(),
+            NativeSkill {
+                name: required_string(skill, "name")?.to_owned(),
+                path: required_string(skill, "path")?.to_owned(),
+            },
+        );
+    }
+    Ok((page, catalog))
 }
 
 fn map_skill(skill: &Value) -> Result<Value, CodeAgentError> {

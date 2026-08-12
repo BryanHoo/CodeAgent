@@ -11,15 +11,24 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
 use crate::{
-    JsonlRpcClient, PendingCodexRequest, RpcServerRequest,
-    historical_attachments::HistoricalAttachmentStore, map_codex_server_request, map_codex_turn,
-    rpc_error_to_code_agent_error, skill_mapping::map_skills, task_state::TaskState,
+    JsonlRpcClient,
+    historical_attachments::HistoricalAttachmentStore,
+    mcp::McpState,
+    pagination::PaginationGuard,
+    pending_requests::{PendingRequestRegistry, PrepareOutcome},
+    rpc_error_to_code_agent_error,
+    skill_mapping::{NativeSkill, map_skill_catalog},
+    task_state::TaskState,
 };
+use crate::{goal::GoalRegistry, review::ReviewRegistry};
 
+mod events;
+mod requests;
 mod tasks;
+mod turns;
 
 const EVENT_SUBSCRIBER_CAPACITY: usize = 256;
-const MAX_PENDING_REQUESTS: usize = 1_000;
+const EVENT_CHANNEL_CAPACITY: usize = EVENT_SUBSCRIBER_CAPACITY + 1;
 
 struct Subscriber {
     include_ephemeral: bool,
@@ -30,11 +39,17 @@ pub(crate) struct CodexProjectProvider {
     client: JsonlRpcClient,
     ephemeral: Mutex<HashSet<String>>,
     historical_attachments: HistoricalAttachmentStore,
+    lifecycle_locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    mcp: McpState,
     owners: Arc<Mutex<HashMap<String, String>>>,
-    pending: Mutex<HashMap<String, PendingCodexRequest>>,
+    pending: PendingRequestRegistry,
     project: Project,
+    resolution_lock: tokio::sync::Mutex<()>,
+    goals: Arc<GoalRegistry>,
+    reviews: Arc<ReviewRegistry>,
     resume_locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     resumed: Mutex<HashSet<String>>,
+    skills: Mutex<HashMap<String, NativeSkill>>,
     subscribers: Mutex<Vec<Subscriber>>,
     task_state: TaskState,
     tasks: Mutex<HashSet<String>>,
@@ -45,16 +60,24 @@ impl CodexProjectProvider {
         client: JsonlRpcClient,
         project: Project,
         owners: Arc<Mutex<HashMap<String, String>>>,
+        goals: Arc<GoalRegistry>,
+        reviews: Arc<ReviewRegistry>,
     ) -> Self {
         Self {
             client,
             ephemeral: Mutex::new(HashSet::new()),
             historical_attachments: HistoricalAttachmentStore::default(),
+            lifecycle_locks: Mutex::new(HashMap::new()),
+            mcp: McpState::default(),
+            goals,
             owners,
-            pending: Mutex::new(HashMap::new()),
+            pending: PendingRequestRegistry::default(),
             project,
+            resolution_lock: tokio::sync::Mutex::new(()),
+            reviews,
             resume_locks: Mutex::new(HashMap::new()),
             resumed: Mutex::new(HashSet::new()),
+            skills: Mutex::new(HashMap::new()),
             subscribers: Mutex::new(Vec::new()),
             task_state: TaskState::default(),
             tasks: Mutex::new(HashSet::new()),
@@ -114,7 +137,28 @@ impl CodexProjectProvider {
         }
     }
 
-    async fn resume(&self, task_id: &str) -> Result<(), CodeAgentError> {
+    fn has_task(&self, task_id: &str) -> bool {
+        self.tasks.lock().is_ok_and(|tasks| tasks.contains(task_id))
+    }
+
+    fn lifecycle_lock(&self, task_id: &str) -> Result<Arc<tokio::sync::Mutex<()>>, CodeAgentError> {
+        Ok(self
+            .lifecycle_locks
+            .lock()
+            .map_err(|_| CodeAgentError::internal("task lifecycle registry is poisoned"))?
+            .entry(task_id.to_owned())
+            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+            .clone())
+    }
+
+    fn has_lifecycle_obligations(&self, task_id: &str) -> bool {
+        self.task_state.is_running(task_id)
+            || self.pending.contains_task(task_id)
+            || self.goals.contains(task_id)
+            || self.reviews.contains(task_id)
+    }
+
+    pub(crate) async fn resume(&self, task_id: &str) -> Result<(), CodeAgentError> {
         if self
             .resumed
             .lock()
@@ -152,84 +196,6 @@ impl CodexProjectProvider {
             .map_err(|_| CodeAgentError::internal("resume registry is poisoned"))?
             .insert(task_id.to_string());
         Ok(())
-    }
-
-    pub(crate) async fn publish(&self, event: RawProviderEvent) {
-        self.task_state.observe(&event);
-        let ephemeral = self
-            .ephemeral
-            .lock()
-            .map(|tasks| tasks.contains(event.task_id()))
-            .unwrap_or(false);
-        if let Ok(mut subscribers) = self.subscribers.lock() {
-            // 满队列代表消费者已落后；直接淘汰，禁止阻塞 Provider 入站流。
-            subscribers.retain(|subscriber| {
-                if ephemeral && !subscriber.include_ephemeral {
-                    return !subscriber.sender.is_closed();
-                }
-                subscriber.sender.try_send(event.clone()).is_ok()
-            });
-        }
-    }
-
-    pub(crate) async fn publish_failure(&self) {
-        let tasks = self
-            .tasks
-            .lock()
-            .map(|tasks| tasks.iter().cloned().collect::<Vec<_>>())
-            .unwrap_or_default();
-        for task_id in tasks {
-            if let Ok(event) = code_agent_protocol::parse_provider_event(json!({
-                "payload": { "code": "connection_failed", "message": "Codex App Server exited", "willRetry": false },
-                "taskId": task_id,
-                "turnId": "provider",
-                "type": "provider.error"
-            })) {
-                self.publish(event).await;
-            }
-        }
-    }
-
-    pub(crate) async fn receive_server_request(&self, request: RpcServerRequest) {
-        let now = chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now());
-        match map_codex_server_request(&request, self.project.id.as_str(), now) {
-            Ok(Some(pending)) => {
-                let key = pending.request["requestId"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_string();
-                let inserted = self.pending.lock().is_ok_and(|mut requests| {
-                    if requests.len() >= MAX_PENDING_REQUESTS {
-                        return false;
-                    }
-                    requests.insert(key, pending.clone());
-                    true
-                });
-                if !inserted {
-                    let _ = self
-                        .client
-                        .reject_server_request(
-                            request.id,
-                            -32000,
-                            "Pending request capacity exceeded",
-                        )
-                        .await;
-                    return;
-                }
-                if let Ok(event) = code_agent_protocol::parse_provider_event(json!({
-                    "itemId": pending.request["itemId"], "payload": { "request": pending.request },
-                    "taskId": pending.request["taskId"], "turnId": pending.request["turnId"], "type": "pending_request.created"
-                })) {
-                    self.publish(event).await;
-                }
-            }
-            _ => {
-                let _ = self
-                    .client
-                    .reject_server_request(request.id, -32602, "Invalid provider request")
-                    .await;
-            }
-        }
     }
 }
 
@@ -315,32 +281,19 @@ impl ProjectProviderPort for CodexProjectProvider {
     async fn start_turn(
         &self,
         task_id: &str,
-        mut input: Value,
-        _context: &PortRequestContext,
+        input: Value,
+        context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        self.assert_task(task_id)?;
-        self.resume(task_id).await?;
-        input["threadId"] = Value::String(task_id.to_string());
-        let response = self.rpc("turn/start", Some(input)).await?;
-        map_codex_turn(&response["turn"])
-            .map_err(|error| CodeAgentError::internal(error.to_string()))
+        self.start_turn_impl(task_id, input, context).await
     }
     async fn steer_turn(
         &self,
         task_id: &str,
         turn_id: &str,
         input: Value,
-        _context: &PortRequestContext,
+        context: &PortRequestContext,
     ) -> Result<(), CodeAgentError> {
-        self.assert_task(task_id)?;
-        self.rpc(
-            "turn/steer",
-            Some(
-                json!({ "expectedTurnId": turn_id, "input": input["input"], "threadId": task_id }),
-            ),
-        )
-        .await
-        .map(|_| ())
+        self.steer_turn_impl(task_id, turn_id, input, context).await
     }
     async fn interrupt_turn(
         &self,
@@ -348,13 +301,7 @@ impl ProjectProviderPort for CodexProjectProvider {
         turn_id: &str,
         _context: &PortRequestContext,
     ) -> Result<(), CodeAgentError> {
-        self.assert_task(task_id)?;
-        self.rpc(
-            "turn/interrupt",
-            Some(json!({ "threadId": task_id, "turnId": turn_id })),
-        )
-        .await
-        .map(|_| ())
+        self.interrupt_turn_impl(task_id, turn_id).await
     }
     async fn start_review(
         &self,
@@ -362,15 +309,7 @@ impl ProjectProviderPort for CodexProjectProvider {
         target: Value,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        self.assert_task(task_id)?;
-        let response = self
-            .rpc(
-                "review/start",
-                Some(json!({ "delivery": "inline", "target": target, "threadId": task_id })),
-            )
-            .await?;
-        map_codex_turn(&response["turn"])
-            .map_err(|error| CodeAgentError::internal(error.to_string()))
+        self.start_review_impl(task_id, target).await
     }
 
     async fn resolve_pending_request(
@@ -381,28 +320,49 @@ impl ProjectProviderPort for CodexProjectProvider {
         let request_id = input
             .get("requestId")
             .and_then(Value::as_str)
-            .ok_or_else(|| CodeAgentError::internal("pending request id is invalid"))?;
-        let pending = self
-            .pending
-            .lock()
-            .map_err(|_| CodeAgentError::internal("pending registry is poisoned"))?
-            .remove(request_id)
-            .ok_or_else(|| CodeAgentError::internal("pending request is unavailable"))?;
-        let decision = input
-            .get("decision")
-            .and_then(Value::as_str)
-            .unwrap_or("deny");
-        let native = match decision {
-            "allow" => "accept",
-            "allow_for_session" => "acceptForSession",
-            _ => pending.deny_decision.unwrap_or("decline"),
+            .ok_or_else(|| CodeAgentError::internal("pending request id is invalid"))?
+            .to_owned();
+        let _resolution_guard = self.resolution_lock.lock().await;
+        let mut validated_body = input.clone();
+        validated_body
+            .as_object_mut()
+            .ok_or_else(|| CodeAgentError::internal("pending request input is invalid"))?
+            .remove("requestId");
+        code_agent_protocol::parse_protocol_value(
+            code_agent_protocol::ValueDefinition::ResolvePendingRequestRequest,
+            validated_body,
+        )
+        .map_err(|error| {
+            CodeAgentError::new(
+                code_agent_core::CodeAgentErrorCode::InvalidInput,
+                error.to_string(),
+                None,
+            )
+        })?;
+        let prepared = match self.pending.prepare(&input, self.project.id.as_str())? {
+            PrepareOutcome::Ready(prepared) => prepared,
+            PrepareOutcome::Reused(request) => return Ok(request),
         };
-        self.client
-            .respond_to_server_request(pending.provider_request_id, json!({ "decision": native }))
+        if let Err(error) = self
+            .client
+            .respond_to_server_request(
+                prepared.entry.provider_request_id.clone(),
+                prepared.native.clone(),
+            )
             .await
-            .map_err(|error| rpc_error_to_code_agent_error(&error))?;
-        let mut resolved = pending.request;
-        resolved["status"] = Value::String("resolved".to_string());
+        {
+            self.pending.rollback(&request_id, &prepared.fingerprint);
+            return Err(rpc_error_to_code_agent_error(&error));
+        }
+        let events = self.pending.complete(prepared, "resolved")?;
+        let resolved = events
+            .first()
+            .and_then(|event| event.pointer("/payload/request"))
+            .cloned()
+            .ok_or_else(|| CodeAgentError::internal("pending request result is invalid"))?;
+        for event in events {
+            self.publish_value(event);
+        }
         Ok(resolved)
     }
 
@@ -416,7 +376,12 @@ impl ProjectProviderPort for CodexProjectProvider {
                 Some(json!({ "cwds": [self.project.root_path.as_str()], "forceReload": false })),
             )
             .await?;
-        map_skills(&response, self.project.root_path.as_str())
+        let (page, catalog) = map_skill_catalog(&response, self.project.root_path.as_str())?;
+        *self
+            .skills
+            .lock()
+            .map_err(|_| CodeAgentError::internal("skill catalog is poisoned"))? = catalog;
+        Ok(page)
     }
     async fn list_mcp_servers(
         &self,
@@ -425,11 +390,24 @@ impl ProjectProviderPort for CodexProjectProvider {
     ) -> Result<AgentMcpServerPage, CodeAgentError> {
         self.assert_task(task_id)?;
         self.resume(task_id).await?;
-        let response = self
-            .rpc("mcpServerStatus/list", Some(json!({ "threadId": task_id })))
-            .await?;
-        serde_json::from_value(response)
-            .map_err(|error| CodeAgentError::internal(error.to_string()))
+        let mut data = Vec::new();
+        let mut cursor = None::<String>;
+        let mut pagination = PaginationGuard::new("mcpServerStatus/list", 10_000);
+        loop {
+            let mut params = json!({ "detail": "toolsAndAuthOnly", "threadId": task_id });
+            if let Some(value) = &cursor {
+                params["cursor"] = Value::String(value.clone());
+            }
+            let response = self.rpc("mcpServerStatus/list", Some(params)).await?;
+            data.extend(response["data"].as_array().cloned().ok_or_else(|| {
+                CodeAgentError::internal("mcpServerStatus/list data must be an array")
+            })?);
+            cursor = pagination.advance(&response, data.len())?;
+            if cursor.is_none() {
+                break;
+            }
+        }
+        self.mcp.merge_page(task_id, data)
     }
     async fn reload_mcp_servers(
         &self,
@@ -437,7 +415,13 @@ impl ProjectProviderPort for CodexProjectProvider {
         context: &PortRequestContext,
     ) -> Result<AgentMcpServerPage, CodeAgentError> {
         self.assert_task(task_id)?;
-        self.rpc("config/mcpServer/reload", None).await?;
+        self.resume(task_id).await?;
+        let previous = self.mcp.snapshot(task_id);
+        self.mcp.mark_reloading(task_id);
+        if let Err(error) = self.rpc("config/mcpServer/reload", None).await {
+            self.mcp.restore(task_id, previous);
+            return Err(error);
+        }
         self.list_mcp_servers(task_id, context).await
     }
     async fn list_background_terminals(
@@ -446,14 +430,7 @@ impl ProjectProviderPort for CodexProjectProvider {
         _context: &PortRequestContext,
     ) -> Result<AgentBackgroundTerminalPage, CodeAgentError> {
         self.assert_task(task_id)?;
-        let response = self
-            .rpc(
-                "thread/backgroundTerminals/list",
-                Some(json!({ "limit": 100, "threadId": task_id })),
-            )
-            .await?;
-        serde_json::from_value(response)
-            .map_err(|error| CodeAgentError::internal(error.to_string()))
+        self.list_background_terminals_impl(task_id).await
     }
     async fn terminate_background_terminal(
         &self,
@@ -485,7 +462,7 @@ impl ProjectProviderPort for CodexProjectProvider {
         include_ephemeral: bool,
         _context: &PortRequestContext,
     ) -> Result<mpsc::Receiver<RawProviderEvent>, CodeAgentError> {
-        let (sender, receiver) = mpsc::channel(EVENT_SUBSCRIBER_CAPACITY);
+        let (sender, receiver) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
         self.subscribers
             .lock()
             .map_err(|_| CodeAgentError::internal("event subscriber registry is poisoned"))?

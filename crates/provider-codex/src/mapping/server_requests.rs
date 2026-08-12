@@ -14,7 +14,7 @@ pub struct PendingCodexRequest {
     pub request: Value,
 }
 
-fn request_id_key(value: &Value) -> Result<String, CodexMappingError> {
+pub(crate) fn request_id_key(value: &Value) -> Result<String, CodexMappingError> {
     match value {
         Value::Number(number) => Ok(format!("number:{number}")),
         Value::String(value) => Ok(format!("string:{value}")),

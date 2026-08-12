@@ -129,10 +129,7 @@ impl CodexProjectProvider {
         .await?;
         let mut snapshot = map_task(thread, self.project.id.as_str())?;
         snapshot["turns"] = json!(turns);
-        let pending = self
-            .pending
-            .lock()
-            .map_err(|_| CodeAgentError::internal("pending registry is poisoned"))?;
+        let pending = self.pending.snapshot();
         self.task_state.enrich_snapshot(
             task_id,
             &mut snapshot,
@@ -140,6 +137,8 @@ impl CodexProjectProvider {
             &turns,
             &pending,
         );
+        self.task_state
+            .sync_running(task_id, snapshot["status"] == "running");
         Ok(Some(snapshot))
     }
 
@@ -231,19 +230,32 @@ impl CodexProjectProvider {
         &self,
         task_id: &str,
     ) -> Result<String, CodeAgentError> {
-        self.assert_task(task_id)?;
+        let lifecycle = self.lifecycle_lock(task_id)?;
+        let _guard = lifecycle.lock().await;
+        if !self.has_task(task_id) {
+            return Ok("notLoaded".to_owned());
+        }
+        if self.has_lifecycle_obligations(task_id) {
+            return Ok("busy".to_owned());
+        }
+        let terminals = self.list_background_terminals_impl(task_id).await?;
+        if !terminals.data.is_empty() || self.has_lifecycle_obligations(task_id) {
+            return Ok("busy".to_owned());
+        }
         let response = self
             .rpc("thread/unsubscribe", Some(json!({ "threadId": task_id })))
             .await?;
         let status = response["status"]
             .as_str()
-            .unwrap_or("notLoaded")
+            .filter(|status| matches!(*status, "notLoaded" | "notSubscribed" | "unsubscribed"))
+            .ok_or_else(|| {
+                CodeAgentError::internal("thread/unsubscribe returned an unknown status")
+            })?
             .to_string();
         self.historical_attachments.clear_task(task_id);
         self.task_state.clear_task(task_id);
-        if let Ok(mut pending) = self.pending.lock() {
-            pending.retain(|_, request| request.request["taskId"].as_str() != Some(task_id));
-        }
+        self.pending.clear_task(task_id);
+        self.mcp.clear_task(task_id);
         if let Ok(mut tasks) = self.tasks.lock() {
             tasks.remove(task_id);
         }
@@ -259,6 +271,52 @@ impl CodexProjectProvider {
         if let Ok(mut owners) = self.owners.lock() {
             owners.remove(task_id);
         }
+        if let Ok(mut locks) = self.lifecycle_locks.lock() {
+            locks.remove(task_id);
+        }
         Ok(status)
+    }
+
+    pub(super) async fn list_background_terminals_impl(
+        &self,
+        task_id: &str,
+    ) -> Result<code_agent_protocol::AgentBackgroundTerminalPage, CodeAgentError> {
+        let mut data = Vec::new();
+        let mut cursor = None::<String>;
+        let mut pagination =
+            crate::pagination::PaginationGuard::new("thread/backgroundTerminals/list", 10_000);
+        loop {
+            let mut params = json!({ "limit": 100, "threadId": task_id });
+            if let Some(value) = &cursor {
+                params["cursor"] = Value::String(value.clone());
+            }
+            let response = match self
+                .client
+                .request("thread/backgroundTerminals/list", Some(params))
+                .await
+            {
+                Ok(response) => response,
+                Err(error) if crate::task_state::is_background_terminal_thread_missing(&error) => {
+                    return serde_json::from_value(json!({ "data": [] }))
+                        .map_err(|error| CodeAgentError::internal(error.to_string()));
+                }
+                Err(error) => return Err(rpc_error_to_code_agent_error(&error)),
+            };
+            let page = response["data"].as_array().ok_or_else(|| {
+                CodeAgentError::internal("background terminal list data must be an array")
+            })?;
+            data.extend(page.iter().map(|terminal| {
+                json!({
+                    "command": terminal["command"], "cwd": terminal["cwd"],
+                    "id": terminal["processId"], "itemId": terminal["itemId"]
+                })
+            }));
+            cursor = pagination.advance(&response, data.len())?;
+            if cursor.is_none() {
+                break;
+            }
+        }
+        serde_json::from_value(json!({ "data": data }))
+            .map_err(|error| CodeAgentError::internal(error.to_string()))
     }
 }

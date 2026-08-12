@@ -58,6 +58,11 @@ describe("Rust Runtime 协议 Schema", () => {
     expect(document.$defs["PendingRequest"]).toHaveProperty("oneOf");
     expect(document.$defs["EventStreamMessage"]).toHaveProperty("oneOf");
     expect(document.$defs["EventStreamMessage"]).not.toHaveProperty("anyOf");
+    expect(document.$defs["StartAgentTurnRequest"]).toHaveProperty([
+      "properties",
+      "input",
+      "anyOf",
+    ]);
   });
 
   it("拒绝非法设置和 Provider 传输字段", () => {

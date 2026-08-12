@@ -15,25 +15,13 @@ pub async fn turn_start(
     turn_options: Value,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<Value, CommandError> {
-    // Provider 当前消费 Codex 原生 Turn 参数；在 Delivery 边界集中展开公共 options。
-    let native_input = json!({
-        "approvalPolicy": turn_options["approvalPolicy"],
-        "approvalsReviewer": turn_options["approvalsReviewer"],
-        "collaborationMode": {
-            "mode": turn_options["collaborationMode"].as_str().unwrap_or("default"),
-            "settings": {
-                "developer_instructions": null,
-                "model": turn_options["model"],
-                "reasoning_effort": turn_options["reasoningEffort"]
-            }
-        },
-        "effort": turn_options["reasoningEffort"],
-        "input": [{ "text": input["text"].as_str().unwrap_or_default(), "text_elements": [], "type": "text" }],
-        "model": turn_options["model"],
-        "sandboxPolicy": sandbox_policy(turn_options["sandboxMode"].as_str().unwrap_or("workspace-write"))
-    });
     let turn = runtime
-        .start_agent_turn(&request_id, &project(&project_id)?, &task_id, native_input)
+        .start_agent_turn(
+            &request_id,
+            &project(&project_id)?,
+            &task_id,
+            json!({ "input": input, "options": turn_options }),
+        )
         .await?;
     Ok(json!({ "taskId": task_id, "turn": turn }))
 }
@@ -53,7 +41,7 @@ pub async fn turn_steer(
             &project(&project_id)?,
             &task_id,
             &turn_id,
-            json!({ "input": [{ "text": input["text"].as_str().unwrap_or_default(), "text_elements": [], "type": "text" }] }),
+            json!({ "input": input, "taskId": task_id }),
         )
         .await?;
     Ok(json!({ "status": "accepted", "taskId": task_id, "turnId": turn_id }))
@@ -84,16 +72,4 @@ pub async fn pending_request_resolve(
         .resolve_agent_pending_request(&request_id, &project(&project_id)?, input)
         .await?;
     Ok(json!({ "request": resolved }))
-}
-
-fn sandbox_policy(mode: &str) -> Value {
-    match mode {
-        "read-only" => json!({ "networkAccess": false, "type": "readOnly" }),
-        "danger-full-access" => json!({ "type": "dangerFullAccess" }),
-        _ => json!({
-            "networkAccess": false,
-            "type": "workspaceWrite",
-            "writableRoots": [],
-        }),
-    }
 }

@@ -7,13 +7,20 @@ use std::{
 };
 
 use async_trait::async_trait;
-use code_agent_core::{AttachmentPort, CodeAgentError, CodeAgentErrorCode, PortRequestContext};
+use code_agent_core::{
+    AttachmentPort, CodeAgentError, CodeAgentErrorCode, ManagedAttachment, PortRequestContext,
+};
 use code_agent_protocol::{
     AgentAttachment, AgentAttachmentId, AgentAttachmentKind, AgentAttachmentMediaType,
     AgentAttachmentName, ProjectId, TaskId,
 };
 use tokio::sync::Mutex;
 use uuid::Uuid;
+
+use crate::{
+    attachment_open::default_open_command,
+    attachment_validation::{infer_media_type, validate_upload},
+};
 
 const MAX_FILE_BYTES: usize = 50 * 1024 * 1024;
 const MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
@@ -67,6 +74,7 @@ struct StoredAttachment {
     path: PathBuf,
     project_id: String,
     task_id: Option<String>,
+    turn_id: Option<String>,
 }
 
 #[derive(Default)]
@@ -120,6 +128,7 @@ impl AttachmentStore {
                 path,
                 project_id: project_id.to_owned(),
                 task_id: None,
+                turn_id: None,
             },
         );
         state.total_bytes += size;
@@ -223,30 +232,38 @@ impl AttachmentStore {
                 .filter(|(_, entry)| entry.project_id == project_id)
                 .map(|(id, _)| id.clone())
                 .collect::<Vec<_>>();
-            let mut removed = Vec::with_capacity(ids.len());
-            for id in ids {
-                if let Some(entry) = state.entries.remove(&id) {
-                    state.total_bytes = state
-                        .total_bytes
-                        .saturating_sub(entry.attachment.size.get() as usize);
-                    removed.push(entry);
-                }
-            }
-            removed
+            remove_entries(&mut state, ids)
         };
-        for entry in entries {
-            // path 只来自随机 ID，删除前仍验证位于 canonical 受管根内。
-            if entry.path.parent() != Some(self.root.as_path()) {
-                return Err(internal("attachment cleanup escaped managed root"));
-            }
-            match tokio::fs::remove_file(entry.path).await {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(_) => return Err(internal("attachment cleanup failed")),
-            }
-        }
-        Ok(())
+        remove_files(self.root.as_path(), entries).await
     }
+}
+
+fn remove_entries(state: &mut AttachmentState, ids: Vec<String>) -> Vec<StoredAttachment> {
+    let mut removed = Vec::with_capacity(ids.len());
+    for id in ids {
+        if let Some(entry) = state.entries.remove(&id) {
+            state.total_bytes = state
+                .total_bytes
+                .saturating_sub(entry.attachment.size.get() as usize);
+            removed.push(entry);
+        }
+    }
+    removed
+}
+
+async fn remove_files(root: &Path, entries: Vec<StoredAttachment>) -> Result<(), CodeAgentError> {
+    for entry in entries {
+        // path 只来自随机 ID，删除前仍验证位于 canonical 受管根内。
+        if entry.path.parent() != Some(root) {
+            return Err(internal("attachment cleanup escaped managed root"));
+        }
+        match tokio::fs::remove_file(entry.path).await {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(internal("attachment cleanup failed")),
+        }
+    }
+    Ok(())
 }
 
 #[async_trait]
@@ -292,6 +309,77 @@ impl AttachmentPort for AttachmentStore {
     ) -> Result<Vec<u8>, CodeAgentError> {
         ensure_active(context)?;
         Ok(self.read(project_id, attachment_id).await?.bytes)
+    }
+
+    async fn resolve_pending(
+        &self,
+        project_id: &ProjectId,
+        attachment_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<ManagedAttachment, CodeAgentError> {
+        ensure_active(context)?;
+        let entry = self
+            .state
+            .lock()
+            .await
+            .entries
+            .get(attachment_id)
+            .filter(|entry| entry.project_id == project_id.as_str() && entry.task_id.is_none())
+            .cloned()
+            .ok_or_else(not_found)?;
+        Ok(ManagedAttachment {
+            attachment: entry.attachment,
+            path: entry.path.to_string_lossy().into_owned(),
+        })
+    }
+
+    async fn bind_to_turn(
+        &self,
+        project_id: &ProjectId,
+        task_id: &TaskId,
+        turn_id: &str,
+        attachment_ids: &[String],
+        context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        ensure_active(context)?;
+        let mut state = self.state.lock().await;
+        if attachment_ids.iter().any(|id| {
+            !state.entries.get(id).is_some_and(|entry| {
+                entry.project_id == project_id.as_str() && entry.task_id.is_none()
+            })
+        }) {
+            return Err(not_found());
+        }
+        for id in attachment_ids {
+            if let Some(entry) = state.entries.get_mut(id) {
+                entry.task_id = Some(task_id.to_string());
+                entry.turn_id = Some(turn_id.to_owned());
+            }
+        }
+        Ok(())
+    }
+
+    async fn release_turn(
+        &self,
+        project_id: &ProjectId,
+        turn_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        ensure_active(context)?;
+        let entries = {
+            let mut state = self.state.lock().await;
+            let ids = state
+                .entries
+                .iter()
+                .filter(|(_, entry)| {
+                    entry.project_id == project_id.as_str()
+                        && entry.turn_id.as_deref() == Some(turn_id)
+                })
+                .map(|(id, _)| id.clone())
+                .collect::<Vec<_>>();
+            remove_entries(&mut state, ids)
+        };
+        remove_files(self.root.as_path(), entries).await
     }
 
     async fn read(
@@ -353,78 +441,6 @@ impl AttachmentPort for AttachmentStore {
         }
         Ok(())
     }
-}
-
-fn default_open_command(path: &Path) -> Result<tokio::process::Command, CodeAgentError> {
-    #[cfg(target_os = "macos")]
-    let mut command = tokio::process::Command::new("open");
-    #[cfg(target_os = "windows")]
-    let mut command = {
-        let mut command = tokio::process::Command::new("cmd");
-        command.args(["/C", "start", ""]);
-        command
-    };
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let mut command = tokio::process::Command::new("xdg-open");
-    command.arg(path);
-    command.kill_on_drop(true);
-    Ok(command)
-}
-
-fn validate_upload(upload: &AttachmentUpload) -> Result<(), CodeAgentError> {
-    if upload.bytes.is_empty() || upload.name.is_empty() || upload.name.chars().count() > 255 {
-        return Err(invalid("attachment metadata or content is invalid"));
-    }
-    let maximum = match upload.kind {
-        AttachmentKind::File => MAX_FILE_BYTES,
-        AttachmentKind::Image => MAX_IMAGE_BYTES,
-        AttachmentKind::Text => MAX_TEXT_BYTES,
-    };
-    if upload.bytes.len() > maximum {
-        return Err(capacity("attachment exceeds the maximum size"));
-    }
-    match upload.kind {
-        AttachmentKind::Image if !valid_image(&upload.bytes, &upload.media_type) => {
-            Err(invalid("attachment image content is invalid"))
-        }
-        AttachmentKind::Text
-            if upload.media_type != "text/plain" || std::str::from_utf8(&upload.bytes).is_err() =>
-        {
-            Err(invalid("text attachment must contain UTF-8 text/plain"))
-        }
-        AttachmentKind::File if upload.media_type.is_empty() => {
-            Err(invalid("attachment media type is invalid"))
-        }
-        _ => Ok(()),
-    }
-}
-
-fn valid_image(bytes: &[u8], media_type: &str) -> bool {
-    match media_type {
-        "image/png" => bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]),
-        "image/jpeg" => bytes.starts_with(&[0xff, 0xd8, 0xff]),
-        "image/gif" => bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a"),
-        "image/webp" => bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP"),
-        _ => false,
-    }
-}
-
-fn infer_media_type(kind: AttachmentKind, path: &Path) -> Result<String, CodeAgentError> {
-    let extension = path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    let media_type = match (kind, extension.as_str()) {
-        (AttachmentKind::Image, "png") => "image/png",
-        (AttachmentKind::Image, "jpg" | "jpeg") => "image/jpeg",
-        (AttachmentKind::Image, "gif") => "image/gif",
-        (AttachmentKind::Image, "webp") => "image/webp",
-        (AttachmentKind::Text, _) => "text/plain",
-        (AttachmentKind::File, _) => "application/octet-stream",
-        _ => return Err(invalid("host attachment type is unsupported")),
-    };
-    Ok(media_type.to_owned())
 }
 
 fn build_attachment(

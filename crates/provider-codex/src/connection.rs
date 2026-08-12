@@ -7,6 +7,74 @@ use serde_json::{Value, json};
 const MAX_MODELS: usize = 1_000;
 const MAX_MODELS_RESPONSE_BYTES: usize = 1_048_576;
 
+pub(crate) fn bounded_string(value: Option<&Value>, maximum_chars: usize) -> Option<String> {
+    value
+        .and_then(Value::as_str)
+        .map(|value| value.chars().take(maximum_chars).collect())
+}
+
+fn map_connection_account(value: &Value) -> Value {
+    match value.get("type").and_then(Value::as_str) {
+        Some("apiKey") => json!({ "type": "apiKey" }),
+        Some("chatgpt") => json!({
+            "email": bounded_string(value.get("email"), 320),
+            "planType": bounded_string(value.get("planType"), 64),
+            "type": "chatgpt"
+        }),
+        _ => Value::Null,
+    }
+}
+
+pub(crate) fn map_connection_status(
+    config_response: &Value,
+    account_response: &Value,
+    pending_login: Option<Value>,
+) -> Value {
+    let config = config_response.get("config").and_then(Value::as_object);
+    let provider_id = config
+        .and_then(|config| config.get("model_provider"))
+        .and_then(Value::as_str)
+        .unwrap_or("openai");
+    let openai_base_url = config
+        .and_then(|config| bounded_string(config.get("openai_base_url"), 2_048))
+        .filter(|value| !value.is_empty());
+    let (mode, custom_base_url) = if provider_id == "openai" && openai_base_url.is_none() {
+        ("official", None)
+    } else if provider_id == "openai" {
+        ("custom", openai_base_url)
+    } else {
+        let base_url = config
+            .and_then(|config| config.get("model_providers"))
+            .and_then(Value::as_object)
+            .and_then(|providers| providers.get(provider_id))
+            .and_then(Value::as_object)
+            .and_then(|provider| bounded_string(provider.get("base_url"), 2_048))
+            .filter(|value| !value.is_empty());
+        ("custom", base_url)
+    };
+    let account = map_connection_account(&account_response["account"]);
+    let requires_auth = account_response["requiresOpenaiAuth"]
+        .as_bool()
+        .unwrap_or(true);
+    let connected = if mode == "custom" {
+        !requires_auth || !account.is_null()
+    } else {
+        !account.is_null()
+    };
+    let state = pending_login
+        .as_ref()
+        .and_then(|login| login["state"].as_str())
+        .unwrap_or(if connected {
+            "connected"
+        } else {
+            "disconnected"
+        });
+    json!({
+        "account": account, "customBaseUrl": custom_base_url, "mode": mode,
+        "pendingLogin": pending_login, "state": state
+    })
+}
+
 fn normalize_base_url(value: &str) -> Result<Url, CodeAgentError> {
     let mut url = Url::parse(value)
         .map_err(|_| CodeAgentError::internal("custom provider baseUrl is invalid"))?;

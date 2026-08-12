@@ -1,12 +1,13 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use code_agent_core::{
     AttachmentPort, ClockPort, CodeAgentError, CodeAgentErrorCode, FilePort, GitPort,
-    PortRequestContext, ProjectProviderPort, ProviderPort, RepositoryPort, UpdatePort,
+    ManagedAttachment, PortRequestContext, ProjectProviderPort, ProviderPort, RepositoryPort,
+    UpdatePort,
 };
 use code_agent_protocol::{
     AgentBackgroundTerminalPage, AgentCapabilities, AgentGlobalSettings, AgentMcpServerPage,
@@ -21,6 +22,7 @@ use tokio::sync::{Mutex, mpsc};
 struct FakeProjectProvider {
     event_receiver: Mutex<Option<mpsc::Receiver<RawProviderEvent>>>,
     event_sender: mpsc::Sender<RawProviderEvent>,
+    fail_start_turn: AtomicBool,
     start_task_input: Mutex<Option<Value>>,
     start_turn_input: Mutex<Option<Value>>,
     unsubscribe_calls: AtomicUsize,
@@ -125,6 +127,13 @@ impl ProjectProviderPort for FakeProjectProvider {
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
         *self.start_turn_input.lock().await = Some(input);
+        if self.fail_start_turn.load(Ordering::SeqCst) {
+            return Err(CodeAgentError::new(
+                CodeAgentErrorCode::ProviderFailure,
+                "start turn failed",
+                None,
+            ));
+        }
         self.event_sender
             .send(
                 parse_provider_event(json!({
@@ -250,6 +259,8 @@ impl ProjectProviderPort for FakeProjectProvider {
 }
 
 struct FakePorts {
+    attachment_bind_calls: AtomicUsize,
+    attachment_release_calls: AtomicUsize,
     event_sender: mpsc::Sender<RawProviderEvent>,
     for_project_calls: AtomicUsize,
     models_calls: AtomicUsize,
@@ -263,12 +274,15 @@ impl FakePorts {
     fn new() -> Arc<Self> {
         let (event_sender, event_receiver) = mpsc::channel(8);
         Arc::new(Self {
+            attachment_bind_calls: AtomicUsize::new(0),
+            attachment_release_calls: AtomicUsize::new(0),
             event_sender: event_sender.clone(),
             for_project_calls: AtomicUsize::new(0),
             models_calls: AtomicUsize::new(0),
             project_provider: Arc::new(FakeProjectProvider {
                 event_receiver: Mutex::new(Some(event_receiver)),
                 event_sender: event_sender.clone(),
+                fail_start_turn: AtomicBool::new(false),
                 start_task_input: Mutex::new(None),
                 start_turn_input: Mutex::new(None),
                 unsubscribe_calls: AtomicUsize::new(0),
@@ -420,6 +434,52 @@ impl FilePort for FakePorts {
 }
 #[async_trait]
 impl AttachmentPort for FakePorts {
+    async fn resolve_pending(
+        &self,
+        _project_id: &ProjectId,
+        attachment_id: &str,
+        _context: &PortRequestContext,
+    ) -> Result<ManagedAttachment, CodeAgentError> {
+        if attachment_id != "attachment-1" {
+            return Err(CodeAgentError::new(
+                CodeAgentErrorCode::NotFound,
+                "attachment was not found",
+                None,
+            ));
+        }
+        serde_json::from_value(json!({
+            "id": "attachment-1", "kind": "text", "mediaType": "text/plain",
+            "name": "notes.txt", "size": 5
+        }))
+        .map(|attachment| ManagedAttachment {
+            attachment,
+            path: "/managed/notes.txt".to_owned(),
+        })
+        .map_err(|error| CodeAgentError::internal(error.to_string()))
+    }
+
+    async fn bind_to_turn(
+        &self,
+        _project_id: &ProjectId,
+        _task_id: &TaskId,
+        _turn_id: &str,
+        _attachment_ids: &[String],
+        _context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        self.attachment_bind_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    async fn release_turn(
+        &self,
+        _project_id: &ProjectId,
+        _turn_id: &str,
+        _context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        self.attachment_release_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
     async fn read(
         &self,
         _project_id: &ProjectId,
@@ -433,6 +493,52 @@ impl AttachmentPort for FakePorts {
             None,
         ))
     }
+}
+
+#[tokio::test]
+async fn prompt_attachments_should_bind_only_after_provider_accepts_turn() {
+    let fake = FakePorts::new();
+    let runtime = runtime(fake.clone());
+    let project_id = ProjectId::try_from("project-1").expect("project id");
+    let request = json!({
+        "input": {
+            "attachments": [{ "id": "attachment-1" }],
+            "skills": [], "text": "check", "type": "prompt"
+        },
+        "options": {
+            "approvalPolicy": "on-request", "approvalsReviewer": "user",
+            "model": "gpt-5.6", "reasoningEffort": "high",
+            "sandboxMode": "workspace-write"
+        }
+    });
+
+    runtime
+        .start_agent_turn("prompt-success", &project_id, "task-1", request.clone())
+        .await
+        .expect("start turn");
+    let provider_input = fake
+        .project_provider
+        .start_turn_input
+        .lock()
+        .await
+        .clone()
+        .expect("provider input");
+    assert_eq!(
+        provider_input["prompt"]["attachments"][0]["path"],
+        "/managed/notes.txt"
+    );
+    assert_eq!(fake.attachment_bind_calls.load(Ordering::SeqCst), 1);
+
+    fake.project_provider
+        .fail_start_turn
+        .store(true, Ordering::SeqCst);
+    assert!(
+        runtime
+            .start_agent_turn("prompt-failure", &project_id, "task-1", request)
+            .await
+            .is_err()
+    );
+    assert_eq!(fake.attachment_bind_calls.load(Ordering::SeqCst), 1);
 }
 impl ClockPort for FakePorts {
     fn now(&self) -> DateTime<Utc> {

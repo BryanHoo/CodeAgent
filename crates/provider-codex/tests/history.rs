@@ -615,6 +615,14 @@ async fn historical_local_image_should_return_readable_attachment_metadata() {
             } }),
         )
         .await;
+        let terminals = read_frame(&mut read).await;
+        assert_eq!(terminals["method"], "thread/backgroundTerminals/list");
+        respond(
+            &mut write,
+            &terminals,
+            json!({ "data": [], "nextCursor": null }),
+        )
+        .await;
         let unsubscribe = read_frame(&mut read).await;
         assert_eq!(unsubscribe["method"], "thread/unsubscribe");
         respond(

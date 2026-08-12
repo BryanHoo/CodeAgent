@@ -212,6 +212,20 @@ async fn event_stream_should_signal_slow_subscriber_without_blocking_publish() {
 }
 
 #[tokio::test]
+async fn event_stream_should_signal_all_subscribers_when_provider_overflows() {
+    let stream = AgentEventStream::new(options()).expect("stream");
+    let mut first = stream.subscribe().await.expect("first subscriber");
+    let mut second = stream.subscribe().await.expect("second subscriber");
+
+    stream.require_resync().await;
+
+    first.signal.changed().await.expect("first signal");
+    second.signal.changed().await.expect("second signal");
+    assert_eq!(*first.signal.borrow(), SubscriberSignal::ResyncRequired);
+    assert_eq!(*second.signal.borrow(), SubscriberSignal::ResyncRequired);
+}
+
+#[tokio::test]
 async fn event_stream_should_flush_before_checkpoint_and_close() {
     let stream = AgentEventStream::new(options()).expect("stream");
     stream.publish(message_delta("item-a", "pending")).await;

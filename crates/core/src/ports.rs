@@ -14,6 +14,13 @@ use tokio_util::sync::CancellationToken;
 
 use crate::CodeAgentError;
 
+/// 已通过附件 Store 归属校验的受管文件。
+#[derive(Clone, Debug)]
+pub struct ManagedAttachment {
+    pub attachment: AgentAttachment,
+    pub path: String,
+}
+
 /// 单次领域操作的身份与协作取消上下文。
 #[derive(Clone, Debug)]
 pub struct PortRequestContext {
@@ -658,6 +665,42 @@ pub trait AttachmentPort: Send + Sync {
         Err(CodeAgentError::internal(
             "attachment service is unavailable",
         ))
+    }
+
+    /// 解析待提交附件，但不改变其生命周期状态。
+    async fn resolve_pending(
+        &self,
+        _project_id: &ProjectId,
+        _attachment_id: &str,
+        _context: &PortRequestContext,
+    ) -> Result<ManagedAttachment, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "attachment service is unavailable",
+        ))
+    }
+
+    /// Provider 接受 Turn 后，将附件原子绑定到 Task/Turn。
+    async fn bind_to_turn(
+        &self,
+        _project_id: &ProjectId,
+        _task_id: &TaskId,
+        _turn_id: &str,
+        _attachment_ids: &[String],
+        _context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "attachment service is unavailable",
+        ))
+    }
+
+    /// Turn 终态后释放运行期附件副本。
+    async fn release_turn(
+        &self,
+        _project_id: &ProjectId,
+        _turn_id: &str,
+        _context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        Ok(())
     }
 
     /// 读取已授权附件字节。

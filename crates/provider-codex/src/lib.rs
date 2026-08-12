@@ -2,12 +2,18 @@
 
 mod binary;
 mod connection;
+mod goal;
 mod historical_attachments;
 mod history_mapping;
 mod mapping;
+mod mcp;
+mod pagination;
+mod pending_requests;
 mod process;
 mod project_provider;
+mod prompt;
 mod provider;
+mod review;
 mod rpc;
 mod skill_mapping;
 mod task_state;

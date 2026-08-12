@@ -7,6 +7,7 @@ mod effective_settings;
 mod event_stream;
 mod idempotency;
 mod project_context;
+mod prompt;
 
 use std::{
     collections::HashMap,
@@ -35,6 +36,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use uuid::Uuid;
 
 use project_context::ProjectRuntimeContext;
+use prompt::resolve_prompt;
 
 use commit_message::{
     COMMIT_MESSAGE_CLEANUP_TIMEOUT, COMMIT_MESSAGE_TIMEOUT, build_commit_message_prompt,
@@ -191,12 +193,31 @@ impl CodeAgentRuntime {
             let mut events = provider.subscribe_events(true, context).await?;
             let forwarding_stream = Arc::clone(&stream);
             let forwarding_cancellation = cancellation.clone();
+            let forwarding_attachment = Arc::clone(&self.ports.attachment);
+            let forwarding_project_id = project.id.clone();
             self.tasks.spawn(async move {
                 loop {
                     tokio::select! {
                         _ = forwarding_cancellation.cancelled() => break,
                         event = events.recv() => {
                             let Some(event) = event else { break };
+                            if event.event_type() == "provider.error"
+                                && event.as_value()["payload"]["message"]
+                                    == "Provider event subscription overflowed"
+                            {
+                                forwarding_stream.require_resync().await;
+                                break;
+                            }
+                            if event.event_type() == "turn.completed"
+                                && let Some(turn_id) = event.turn_id()
+                            {
+                                let cleanup = PortRequestContext::new(format!(
+                                    "release-turn-{turn_id}"
+                                ));
+                                let _ = forwarding_attachment
+                                    .release_turn(&forwarding_project_id, turn_id, &cleanup)
+                                    .await;
+                            }
                             forwarding_stream.publish(event).await;
                         }
                     }
@@ -345,13 +366,52 @@ impl CodeAgentRuntime {
         input: Value,
     ) -> Result<Value, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
+        let input = code_agent_protocol::parse_protocol_value(
+            ValueDefinition::StartAgentTurnRequest,
+            input,
+        )
+        .map_err(|error| {
+            CodeAgentError::new(CodeAgentErrorCode::InvalidInput, error.to_string(), None)
+        })?;
         let result = match self.project_context(project_id, &operation).await {
             Ok(context) => {
                 self.idempotency
-                    .execute("start-turn", request_id, &input, || {
-                        context
+                    .execute("start-turn", request_id, &input, || async {
+                        let prompt = resolve_prompt(
+                            self.ports.attachment.as_ref(),
+                            project_id,
+                            &input["input"],
+                            &operation,
+                        )
+                        .await?;
+                        let turn = context
                             .provider
-                            .start_turn(task_id, input.clone(), &operation)
+                            .start_turn(
+                                task_id,
+                                json!({ "options": input["options"], "prompt": prompt.value }),
+                                &operation,
+                            )
+                            .await?;
+                        let turn_id =
+                            turn["id"]
+                                .as_str()
+                                .filter(|id| !id.is_empty())
+                                .ok_or_else(|| {
+                                    CodeAgentError::internal("Provider returned an invalid turn")
+                                })?;
+                        let task_id = TaskId::try_from(task_id)
+                            .map_err(|_| CodeAgentError::internal("Task id is invalid"))?;
+                        self.ports
+                            .attachment
+                            .bind_to_turn(
+                                project_id,
+                                &task_id,
+                                turn_id,
+                                &prompt.attachment_ids,
+                                &operation,
+                            )
+                            .await?;
+                        Ok(turn)
                     })
                     .await
             }
@@ -371,13 +431,44 @@ impl CodeAgentRuntime {
         input: Value,
     ) -> Result<(), CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
+        let input = code_agent_protocol::parse_protocol_value(
+            ValueDefinition::SteerAgentTurnRequest,
+            input,
+        )
+        .map_err(|error| {
+            CodeAgentError::new(CodeAgentErrorCode::InvalidInput, error.to_string(), None)
+        })?;
         let result = match self.project_context(project_id, &operation).await {
             Ok(context) => self
                 .idempotency
                 .execute("steer-turn", request_id, &input, || async {
+                    let prompt = resolve_prompt(
+                        self.ports.attachment.as_ref(),
+                        project_id,
+                        &input["input"],
+                        &operation,
+                    )
+                    .await?;
                     context
                         .provider
-                        .steer_turn(task_id, turn_id, input.clone(), &operation)
+                        .steer_turn(
+                            task_id,
+                            turn_id,
+                            json!({ "prompt": prompt.value }),
+                            &operation,
+                        )
+                        .await?;
+                    let task_id = TaskId::try_from(task_id)
+                        .map_err(|_| CodeAgentError::internal("Task id is invalid"))?;
+                    self.ports
+                        .attachment
+                        .bind_to_turn(
+                            project_id,
+                            &task_id,
+                            turn_id,
+                            &prompt.attachment_ids,
+                            &operation,
+                        )
                         .await?;
                     Ok(Value::Null)
                 })

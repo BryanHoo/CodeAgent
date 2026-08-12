@@ -8,82 +8,25 @@ use serde_json::{Value, json};
 use tokio::task::JoinHandle;
 
 use crate::{
-    JsonlRpcClient, RpcIncoming, RpcServerRequest, map_codex_notification,
+    JsonlRpcClient, RpcIncoming, RpcServerRequest, map_codex_notification, mapping::request_id_key,
     rpc_error_to_code_agent_error,
 };
 
-use crate::connection::{discover_models, map_model};
+use crate::connection::{bounded_string, discover_models, map_connection_status, map_model};
+use crate::goal::GoalRegistry;
+use crate::pagination::PaginationGuard;
 use crate::project_provider::CodexProjectProvider;
-
-fn bounded_string(value: Option<&Value>, maximum_chars: usize) -> Option<String> {
-    value
-        .and_then(Value::as_str)
-        .map(|value| value.chars().take(maximum_chars).collect())
-}
-
-fn map_connection_account(value: &Value) -> Value {
-    match value.get("type").and_then(Value::as_str) {
-        Some("apiKey") => json!({ "type": "apiKey" }),
-        Some("chatgpt") => json!({
-            "email": bounded_string(value.get("email"), 320),
-            "planType": bounded_string(value.get("planType"), 64),
-            "type": "chatgpt"
-        }),
-        _ => Value::Null,
-    }
-}
-
-fn map_connection_status(config_response: &Value, account_response: &Value) -> Value {
-    let config = config_response.get("config").and_then(Value::as_object);
-    let provider_id = config
-        .and_then(|config| config.get("model_provider"))
-        .and_then(Value::as_str)
-        .unwrap_or("openai");
-    let openai_base_url = config
-        .and_then(|config| bounded_string(config.get("openai_base_url"), 2_048))
-        .filter(|value| !value.is_empty());
-    let (mode, custom_base_url) = if provider_id == "openai" && openai_base_url.is_none() {
-        ("official", None)
-    } else if provider_id == "openai" {
-        ("custom", openai_base_url)
-    } else {
-        let base_url = config
-            .and_then(|config| config.get("model_providers"))
-            .and_then(Value::as_object)
-            .and_then(|providers| providers.get(provider_id))
-            .and_then(Value::as_object)
-            .and_then(|provider| bounded_string(provider.get("base_url"), 2_048))
-            .filter(|value| !value.is_empty());
-        ("custom", base_url)
-    };
-    let account = map_connection_account(&account_response["account"]);
-    let requires_openai_auth = account_response["requiresOpenaiAuth"]
-        .as_bool()
-        .unwrap_or(true);
-    // 自定义 Provider 可以声明无需 OpenAI 认证，此时没有账户也属于已连接。
-    let connected = if mode == "custom" {
-        !requires_openai_auth || !account.is_null()
-    } else {
-        !account.is_null()
-    };
-    json!({
-        "account": account,
-        "customBaseUrl": custom_base_url,
-        "mode": mode,
-        "pendingLogin": null,
-        "state": if connected { "connected" } else { "disconnected" }
-    })
-}
-
+use crate::review::ReviewRegistry;
 struct ProviderInner {
     client: JsonlRpcClient,
     incoming_task: Mutex<Option<JoinHandle<()>>>,
     owners: Arc<Mutex<HashMap<String, String>>>,
+    pending_login: Mutex<Option<Value>>,
     projects: Mutex<HashMap<String, Arc<CodexProjectProvider>>>,
-    review_workers: Mutex<HashMap<String, String>>,
+    goals: Arc<GoalRegistry>,
+    reviews: Arc<ReviewRegistry>,
 }
 
-/// 全局 Codex Runtime Provider，独占 RPC 入站流并按 Task owner 路由。
 #[derive(Clone)]
 pub struct CodexRuntimeProvider {
     inner: Arc<ProviderInner>,
@@ -96,8 +39,10 @@ impl CodexRuntimeProvider {
             client,
             incoming_task: Mutex::new(None),
             owners: Arc::new(Mutex::new(HashMap::new())),
+            pending_login: Mutex::new(None),
             projects: Mutex::new(HashMap::new()),
-            review_workers: Mutex::new(HashMap::new()),
+            goals: Arc::new(GoalRegistry::default()),
+            reviews: Arc::new(ReviewRegistry::default()),
         });
         let task = tokio::spawn(route_incoming(Arc::downgrade(&inner), incoming));
         if let Ok(mut slot) = inner.incoming_task.lock() {
@@ -127,6 +72,20 @@ impl CodexRuntimeProvider {
             .await
             .map_err(|error| rpc_error_to_code_agent_error(&error))
     }
+
+    async fn read_connection_status(&self) -> Result<Value, CodeAgentError> {
+        let (config, account) = tokio::try_join!(
+            self.rpc("config/read", Some(json!({ "includeLayers": false }))),
+            self.rpc("account/read", Some(json!({ "refreshToken": false })))
+        )?;
+        let pending = self
+            .inner
+            .pending_login
+            .lock()
+            .ok()
+            .and_then(|value| value.clone());
+        Ok(map_connection_status(&config, &account, pending))
+    }
 }
 
 async fn route_incoming(inner: Weak<ProviderInner>, mut incoming: RpcIncoming) {
@@ -142,27 +101,135 @@ async fn route_incoming(inner: Weak<ProviderInner>, mut incoming: RpcIncoming) {
                             thread["id"].as_str(),
                             thread["parentThreadId"].as_str(),
                         )
-                        && inner.owners.lock().is_ok_and(|owners| owners.contains_key(parent_id))
-                        && let Ok(mut workers) = inner.review_workers.lock()
+                        && let Some(project_id) = inner.owners.lock().ok().and_then(|owners| owners.get(parent_id).cloned())
                     {
-                        workers.insert(worker_id.to_string(), parent_id.to_string());
+                        inner.reviews.register_worker(parent_id, worker_id);
+                        if let Ok(mut owners) = inner.owners.lock() {
+                            owners.insert(worker_id.to_owned(), project_id);
+                        }
+                        if let Some(provider) = (CodexRuntimeProvider { inner: Arc::clone(&inner) }).project_for_task(parent_id) {
+                            let worker_id = worker_id.to_owned();
+                            tokio::spawn(async move {
+                                let _ = provider.resume(&worker_id).await;
+                            });
+                        }
+                    }
+                    continue;
+                }
+                if notification.method == "account/updated" {
+                    if notification.params["authMode"] == "chatgpt"
+                        && let Ok(mut pending) = inner.pending_login.lock()
+                    {
+                        *pending = None;
+                    }
+                    continue;
+                }
+                if notification.method == "account/login/completed" {
+                    let login_id = notification.params["loginId"].as_str();
+                    if let (Some(login_id), Ok(mut pending)) = (login_id, inner.pending_login.lock())
+                        && pending.as_ref().and_then(|value| value["loginId"].as_str()) == Some(login_id)
+                    {
+                        if notification.params["success"] == true {
+                            *pending = None;
+                        } else {
+                            let error = bounded_string(notification.params.get("error"), 1_000)
+                                .unwrap_or_else(|| "Login failed".to_owned());
+                            *pending = Some(json!({ "error": error, "loginId": login_id, "state": "failed" }));
+                        }
+                    }
+                    continue;
+                }
+                if notification.method == "mcpServer/startupStatus/updated" {
+                    let task_id = notification.params["threadId"].as_str();
+                    if let Some(provider) = task_id.and_then(|id| (CodexRuntimeProvider { inner: Arc::clone(&inner) }).project_for_task(id)) {
+                        provider.receive_mcp_status(&notification.params).await;
+                    }
+                    continue;
+                }
+                if notification.method == "serverRequest/resolved" {
+                    let task_id = notification.params["threadId"].as_str();
+                    let request_id = request_id_key(&notification.params["requestId"]).ok();
+                    if let (Some(task_id), Some(request_id)) = (task_id, request_id)
+                        && let Some(provider) = (CodexRuntimeProvider { inner: Arc::clone(&inner) }).project_for_task(task_id)
+                    {
+                        provider.receive_resolved_request(&request_id, task_id);
                     }
                     continue;
                 }
                 let native_task_id = notification.params.get("threadId").and_then(Value::as_str).map(str::to_string);
-                let parent_task_id = native_task_id.as_deref().and_then(|task_id| {
-                    inner.review_workers.lock().ok().and_then(|workers| workers.get(task_id).cloned())
+                if notification.method == "turn/started"
+                    && let (Some(task_id), Some(turn)) = (
+                        native_task_id.as_deref(),
+                        notification.params.get("turn").cloned(),
+                    )
+                {
+                    inner.goals.started(task_id, turn);
+                    if inner.reviews.contains(task_id)
+                        && let Some(turn_id) = notification.params.pointer("/turn/id").and_then(Value::as_str)
+                    {
+                        inner.reviews.set_outer_turn(task_id, turn_id);
+                    }
+                }
+                let route = native_task_id.as_deref().and_then(|task_id| {
+                    let turn_id = notification.params.get("turnId").and_then(Value::as_str)
+                        .or_else(|| notification.params.pointer("/turn/id").and_then(Value::as_str));
+                    let item_type = notification.params.pointer("/item/type").and_then(Value::as_str);
+                    let item_phase = notification.params.pointer("/item/phase").and_then(Value::as_str);
+                    inner.reviews.route(task_id, turn_id, &notification.method, item_type, item_phase)
                 });
-                let task_id = parent_task_id.as_deref().or(native_task_id.as_deref());
+                let parent_task_id = route.as_ref().map(|route| route.parent_task_id.as_str());
+                let task_id = parent_task_id.or(native_task_id.as_deref());
                 let Some(task_id) = task_id else { continue };
-                let runtime = CodexRuntimeProvider { inner };
+                let notification_item_type = notification
+                    .params
+                    .pointer("/item/type")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                let runtime = CodexRuntimeProvider { inner: Arc::clone(&inner) };
                 let Some(provider) = runtime.project_for_task(task_id) else { continue };
                 let mut params = notification.params;
-                if parent_task_id.is_some() {
-                    params["threadId"] = Value::String(task_id.to_string());
+                if route.as_ref().is_some_and(|route| route.suppress) {
+                    continue;
                 }
-                if let Ok(Some(event)) = map_codex_notification(&notification.method, &params) {
+                if let Some(route) = &route {
+                    params["threadId"] = Value::String(task_id.to_string());
+                    if let Some(turn_id) = &route.outer_turn_id {
+                        params["turnId"] = Value::String(turn_id.clone());
+                        if notification.method.starts_with("turn/") {
+                            params["turn"]["id"] = Value::String(turn_id.clone());
+                        }
+                    }
+                }
+                if let Ok(Some(mut event)) = map_codex_notification(&notification.method, &params) {
+                    if matches!(notification.method.as_str(), "turn/started" | "turn/completed")
+                        && route.is_some()
+                        && let Some(turn_id) = event.turn_id().map(str::to_owned)
+                        && let Some(item) = inner.reviews.target_item(task_id, &turn_id)
+                    {
+                        let mut value = event.as_value().clone();
+                        value["payload"]["turn"]["items"] = json!([item]);
+                        if let Ok(mapped) = code_agent_protocol::parse_provider_event(value) {
+                            event = mapped;
+                        }
+                    }
+                    if matches!(notification.method.as_str(), "item/started" | "item/completed")
+                        && notification_item_type.as_deref() == Some("enteredReviewMode")
+                        && let Some(turn_id) = event.turn_id().map(str::to_owned)
+                        && let Some(item) = inner.reviews.target_item(task_id, &turn_id)
+                    {
+                        let mut value = event.as_value().clone();
+                        value["itemId"] = item["id"].clone();
+                        value["payload"]["item"] = item;
+                        if let Ok(mapped) = code_agent_protocol::parse_provider_event(value) {
+                            event = mapped;
+                        }
+                    }
                     provider.publish(event).await;
+                }
+                if notification.method == "turn/completed"
+                    && route.as_ref().is_some_and(|route| !route.is_worker)
+                {
+                    inner.reviews.clear(task_id);
                 }
             }
             request = incoming.server_requests.recv() => {
@@ -216,17 +283,26 @@ impl ProviderPort for CodexRuntimeProvider {
         &self,
         _context: &PortRequestContext,
     ) -> Result<AgentModelPage, CodeAgentError> {
-        let response = self
-            .rpc(
-                "model/list",
-                Some(json!({ "includeHidden": false, "limit": 100 })),
-            )
-            .await?;
-        let data = response
-            .get("data")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+        let mut data = Vec::new();
+        let mut cursor = None::<String>;
+        let mut pagination = PaginationGuard::new("model/list", 1_000);
+        loop {
+            let mut params = json!({ "includeHidden": false, "limit": 100 });
+            if let Some(value) = &cursor {
+                params["cursor"] = Value::String(value.clone());
+            }
+            let response = self.rpc("model/list", Some(params)).await?;
+            data.extend(
+                response["data"]
+                    .as_array()
+                    .cloned()
+                    .ok_or_else(|| CodeAgentError::internal("model/list data must be an array"))?,
+            );
+            cursor = pagination.advance(&response, data.len())?;
+            if cursor.is_none() {
+                break;
+            }
+        }
         let mapped = data.into_iter().filter(|model| model.get("hidden") == Some(&Value::Bool(false))).map(|model| json!({
             "defaultReasoningEffort": model["defaultReasoningEffort"],
             "description": model["description"],
@@ -251,11 +327,7 @@ impl ProviderPort for CodexRuntimeProvider {
         &self,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        let (config, account) = tokio::try_join!(
-            self.rpc("config/read", Some(json!({ "includeLayers": false }))),
-            self.rpc("account/read", Some(json!({ "refreshToken": false })))
-        )?;
-        Ok(map_connection_status(&config, &account))
+        self.read_connection_status().await
     }
 
     async fn start_official_login(
@@ -263,7 +335,29 @@ impl ProviderPort for CodexRuntimeProvider {
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
         self.rpc("config/batchWrite", Some(json!({ "edits": [{ "keyPath": "model_provider", "mergeStrategy": "upsert", "value": "openai" }] }))).await?;
-        self.rpc("account/login/start", Some(json!({ "appBrand": "chatgpt", "type": "chatgpt", "useHostedLoginSuccessPage": true }))).await
+        let response = self.rpc("account/login/start", Some(json!({ "appBrand": "chatgpt", "type": "chatgpt", "useHostedLoginSuccessPage": true }))).await?;
+        let login_id = response["loginId"]
+            .as_str()
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| CodeAgentError::internal("Codex returned an invalid login response"))?;
+        let auth_url = response["authUrl"]
+            .as_str()
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| CodeAgentError::internal("Codex returned an invalid login response"))?;
+        if response["type"] != "chatgpt" {
+            return Err(CodeAgentError::internal(
+                "Codex returned an invalid login response",
+            ));
+        }
+        *self
+            .inner
+            .pending_login
+            .lock()
+            .map_err(|_| CodeAgentError::internal("login state is poisoned"))? =
+            Some(json!({ "error": null, "loginId": login_id, "state": "pending" }));
+        Ok(
+            json!({ "authUrl": auth_url, "loginId": login_id, "status": self.read_connection_status().await? }),
+        )
     }
 
     async fn cancel_login(
@@ -272,11 +366,21 @@ impl ProviderPort for CodexRuntimeProvider {
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
         self.rpc("account/login/cancel", Some(json!({ "loginId": login_id })))
-            .await
+            .await?;
+        if let Ok(mut pending) = self.inner.pending_login.lock()
+            && pending.as_ref().and_then(|value| value["loginId"].as_str()) == Some(login_id)
+        {
+            *pending = None;
+        }
+        Ok(json!({ "status": self.read_connection_status().await? }))
     }
 
     async fn logout(&self, _context: &PortRequestContext) -> Result<Value, CodeAgentError> {
-        self.rpc("account/logout", None).await
+        self.rpc("account/logout", None).await?;
+        if let Ok(mut pending) = self.inner.pending_login.lock() {
+            *pending = None;
+        }
+        Ok(json!({ "status": self.read_connection_status().await? }))
     }
 
     async fn configure_custom(
@@ -325,7 +429,13 @@ impl ProviderPort for CodexRuntimeProvider {
             { "keyPath": "model_providers.code_agent_custom", "mergeStrategy": "upsert", "value": { "base_url": base_url, "name": "CodeAgent Custom API", "requires_openai_auth": input.get("apiKey").is_some(), "wire_api": "responses" } },
             { "keyPath": "model_provider", "mergeStrategy": "upsert", "value": "code_agent_custom" }
         ] }))).await?;
-        Ok(json!({ "models": { "data": models, "nextCursor": null } }))
+        if let Ok(mut pending) = self.inner.pending_login.lock() {
+            *pending = None;
+        }
+        Ok(json!({
+            "models": { "data": models, "nextCursor": null },
+            "status": self.read_connection_status().await?
+        }))
     }
 
     async fn for_project(
@@ -352,6 +462,8 @@ impl ProviderPort for CodexRuntimeProvider {
             self.inner.client.clone(),
             project,
             Arc::clone(&self.inner.owners),
+            Arc::clone(&self.inner.goals),
+            Arc::clone(&self.inner.reviews),
         ));
         self.inner
             .projects
@@ -377,20 +489,6 @@ impl ProviderPort for CodexRuntimeProvider {
             .lock()
             .map_err(|_| CodeAgentError::internal("provider owner registry is poisoned"))?
             .retain(|_, owner| owner != &project_id);
-        let owned_tasks = self
-            .inner
-            .owners
-            .lock()
-            .map(|owners| {
-                owners
-                    .keys()
-                    .cloned()
-                    .collect::<std::collections::HashSet<_>>()
-            })
-            .unwrap_or_default();
-        if let Ok(mut workers) = self.inner.review_workers.lock() {
-            workers.retain(|_, parent| owned_tasks.contains(parent));
-        }
         Ok(())
     }
 }

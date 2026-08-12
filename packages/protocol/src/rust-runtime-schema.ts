@@ -106,19 +106,28 @@ export interface RustRuntimeSchemaDocument extends Record<string, unknown> {
   readonly $schema: string;
 }
 
-function normalizeRustUnion(value: unknown): unknown {
+function normalizeRustUnion(value: unknown, path: readonly string[] = []): unknown {
   if (Array.isArray(value)) {
-    return value.map(normalizeRustUnion);
+    return value.map((entry, index) => normalizeRustUnion(entry, [...path, String(index)]));
   }
   if (typeof value !== "object" || value === null) {
     return value;
   }
 
   return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [
-      key === "anyOf" ? "oneOf" : key,
-      normalizeRustUnion(entry),
-    ]),
+    Object.entries(value).map(([key, entry]) => {
+      const nextPath = [...path, key];
+      const promptInput =
+        key === "anyOf" &&
+        path.length === 3 &&
+        path[1] === "properties" &&
+        path[2] === "input" &&
+        (path[0] === "StartAgentTurnRequest" || path[0] === "SteerAgentTurnRequest");
+      return [
+        promptInput ? key : key === "anyOf" ? "oneOf" : key,
+        normalizeRustUnion(entry, nextPath),
+      ];
+    }),
   );
 }
 
