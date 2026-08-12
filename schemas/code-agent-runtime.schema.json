@@ -1,5 +1,53 @@
 {
   "$defs": {
+    "AgentAttachment": {
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "mediaType",
+        "name",
+        "size"
+      ],
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "oneOf": [
+            {
+              "const": "file",
+              "type": "string"
+            },
+            {
+              "const": "image",
+              "type": "string"
+            },
+            {
+              "const": "text",
+              "type": "string"
+            }
+          ]
+        },
+        "mediaType": {
+          "maxLength": 255,
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 255,
+          "minLength": 1,
+          "type": "string"
+        },
+        "size": {
+          "maximum": 52428800,
+          "minimum": 1,
+          "type": "integer"
+        }
+      }
+    },
     "AgentCapabilities": {
       "additionalProperties": false,
       "type": "object",
@@ -94,6 +142,470 @@
               "type": "boolean"
             }
           }
+        }
+      }
+    },
+    "AgentGlobalSettings": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "approvalPolicy",
+            "approvalsReviewer",
+            "commitMessageModel",
+            "commitMessagePrompt",
+            "commitMessageReasoningEffort",
+            "defaultOpenAppId",
+            "followUpBehavior",
+            "model",
+            "reasoningEffort",
+            "sandboxMode"
+          ],
+          "properties": {
+            "approvalPolicy": {
+              "oneOf": [
+                {
+                  "const": "untrusted",
+                  "type": "string"
+                },
+                {
+                  "const": "on-request",
+                  "type": "string"
+                },
+                {
+                  "const": "never",
+                  "type": "string"
+                }
+              ]
+            },
+            "approvalsReviewer": {
+              "const": "user",
+              "type": "string"
+            },
+            "commitMessageModel": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "commitMessagePrompt": {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            "commitMessageReasoningEffort": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "defaultOpenAppId": {
+              "oneOf": [
+                {
+                  "oneOf": [
+                    {
+                      "const": "visual-studio-code",
+                      "type": "string"
+                    },
+                    {
+                      "const": "zed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "windsurf",
+                      "type": "string"
+                    },
+                    {
+                      "const": "finder",
+                      "type": "string"
+                    },
+                    {
+                      "const": "terminal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "ghostty",
+                      "type": "string"
+                    },
+                    {
+                      "const": "xcode",
+                      "type": "string"
+                    },
+                    {
+                      "const": "android-studio",
+                      "type": "string"
+                    },
+                    {
+                      "const": "file-manager",
+                      "type": "string"
+                    },
+                    {
+                      "const": "gnome-terminal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "konsole",
+                      "type": "string"
+                    },
+                    {
+                      "const": "xfce-terminal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "explorer",
+                      "type": "string"
+                    },
+                    {
+                      "const": "windows-terminal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "command-prompt",
+                      "type": "string"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "followUpBehavior": {
+              "oneOf": [
+                {
+                  "const": "queue",
+                  "type": "string"
+                },
+                {
+                  "const": "steer",
+                  "type": "string"
+                }
+              ]
+            },
+            "model": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "reasoningEffort": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sandboxMode": {
+              "oneOf": [
+                {
+                  "const": "read-only",
+                  "type": "string"
+                },
+                {
+                  "const": "workspace-write",
+                  "type": "string"
+                },
+                {
+                  "const": "danger-full-access",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "approvalPolicy",
+            "approvalsReviewer",
+            "commitMessageModel",
+            "commitMessagePrompt",
+            "commitMessageReasoningEffort",
+            "defaultOpenAppId",
+            "followUpBehavior",
+            "model",
+            "reasoningEffort",
+            "sandboxMode"
+          ],
+          "properties": {
+            "approvalPolicy": {
+              "const": "on-request",
+              "type": "string"
+            },
+            "approvalsReviewer": {
+              "const": "auto_review",
+              "type": "string"
+            },
+            "commitMessageModel": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "commitMessagePrompt": {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            "commitMessageReasoningEffort": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "defaultOpenAppId": {
+              "oneOf": [
+                {
+                  "oneOf": [
+                    {
+                      "const": "visual-studio-code",
+                      "type": "string"
+                    },
+                    {
+                      "const": "zed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "windsurf",
+                      "type": "string"
+                    },
+                    {
+                      "const": "finder",
+                      "type": "string"
+                    },
+                    {
+                      "const": "terminal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "ghostty",
+                      "type": "string"
+                    },
+                    {
+                      "const": "xcode",
+                      "type": "string"
+                    },
+                    {
+                      "const": "android-studio",
+                      "type": "string"
+                    },
+                    {
+                      "const": "file-manager",
+                      "type": "string"
+                    },
+                    {
+                      "const": "gnome-terminal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "konsole",
+                      "type": "string"
+                    },
+                    {
+                      "const": "xfce-terminal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "explorer",
+                      "type": "string"
+                    },
+                    {
+                      "const": "windows-terminal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "command-prompt",
+                      "type": "string"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "followUpBehavior": {
+              "oneOf": [
+                {
+                  "const": "queue",
+                  "type": "string"
+                },
+                {
+                  "const": "steer",
+                  "type": "string"
+                }
+              ]
+            },
+            "model": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "reasoningEffort": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sandboxMode": {
+              "oneOf": [
+                {
+                  "const": "read-only",
+                  "type": "string"
+                },
+                {
+                  "const": "workspace-write",
+                  "type": "string"
+                },
+                {
+                  "const": "danger-full-access",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "AgentProjectDefaults": {
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "model",
+        "reasoningEffort",
+        "sandboxMode"
+      ],
+      "properties": {
+        "model": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reasoningEffort": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sandboxMode": {
+          "oneOf": [
+            {
+              "const": "read-only",
+              "type": "string"
+            },
+            {
+              "const": "workspace-write",
+              "type": "string"
+            },
+            {
+              "const": "danger-full-access",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    "AgentProviderConnectionRecord": {
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "customBaseUrl",
+        "customModels",
+        "mode",
+        "updatedAt"
+      ],
+      "properties": {
+        "customBaseUrl": {
+          "oneOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "customModels": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "data",
+                "nextCursor"
+              ],
+              "properties": {
+                "data": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "defaultReasoningEffort",
+                      "description",
+                      "displayName",
+                      "id",
+                      "isDefault",
+                      "supportedReasoningEfforts"
+                    ],
+                    "properties": {
+                      "defaultReasoningEffort": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "isDefault": {
+                        "type": "boolean"
+                      },
+                      "supportedReasoningEfforts": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "description",
+                            "id"
+                          ],
+                          "properties": {
+                            "description": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "nextCursor": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mode": {
+          "oneOf": [
+            {
+              "const": "official",
+              "type": "string"
+            },
+            {
+              "const": "custom",
+              "type": "string"
+            }
+          ]
+        },
+        "updatedAt": {
+          "format": "date-time",
+          "type": "string"
         }
       }
     },
@@ -6384,9 +6896,33 @@
         }
       }
     },
-    "ProjectId": {
-      "minLength": 1,
-      "type": "string"
+    "Project": {
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "createdAt",
+        "id",
+        "name",
+        "rootPath"
+      ],
+      "properties": {
+        "createdAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "rootPath": {
+          "minLength": 1,
+          "type": "string"
+        }
+      }
     },
     "TaskId": {
       "minLength": 1,

@@ -2,7 +2,14 @@ import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
 import { AgentEventSchema } from "./agent-event.js";
 import { AgentCapabilitiesSchema } from "./agent-runtime.js";
-import { AgentTaskSettingsSchema } from "./project-settings.js";
+import { AgentAttachmentSchema } from "./agent-task.js";
+import { AgentProviderConnectionRecordSchema } from "./provider-connection.js";
+import { ProjectSchema } from "./project-files.js";
+import {
+  AgentGlobalSettingsSchema,
+  AgentProjectDefaultsSchema,
+  AgentTaskSettingsSchema,
+} from "./project-settings.js";
 
 export const RUST_RUNTIME_SCHEMA_ID = "https://codeagent.dev/schemas/runtime/v1";
 
@@ -85,10 +92,14 @@ function normalizeRustUnion(value: unknown): unknown {
 export function createRustRuntimeSchemaDocument(): RustRuntimeSchemaDocument {
   const definitions = {
     AgentCapabilities: AgentCapabilitiesSchema,
+    AgentAttachment: AgentAttachmentSchema,
+    AgentGlobalSettings: AgentGlobalSettingsSchema,
+    AgentProjectDefaults: AgentProjectDefaultsSchema,
+    AgentProviderConnectionRecord: AgentProviderConnectionRecordSchema,
     AgentProviderEvent: AgentProviderEventSchema,
     AgentTaskSettings: AgentTaskSettingsSchema,
     CodeAgentError: CodeAgentErrorSchema,
-    ProjectId: ProjectIdSchema,
+    Project: ProjectSchema,
     TaskId: TaskIdSchema,
   } satisfies Record<string, TSchema>;
 

@@ -10,7 +10,16 @@ rust-version.workspace = true
 [dependencies]
 code-agent-core.workspace = true
 code-agent-protocol.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+rusqlite.workspace = true
+sha2.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+unicode-normalization.workspace = true
+uuid.workspace = true
 
 [lints]
 workspace = true
-

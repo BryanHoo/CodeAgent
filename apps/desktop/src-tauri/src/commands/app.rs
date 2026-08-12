@@ -1,4 +1,8 @@
+use std::sync::Arc;
+
+use code_agent_runtime::CodeAgentRuntime;
 use serde::Serialize;
+use tauri::State;
 
 use crate::command_error::CommandError;
 
@@ -60,14 +64,18 @@ pub async fn app_diagnostics(request_id: String) -> Result<DiagnosticsResponse, 
 }
 
 #[tauri::command]
-pub async fn cancel_operation(request_id: String) -> Result<(), CommandError> {
-    validate_request_id(&request_id)
+pub async fn cancel_operation(
+    request_id: String,
+    runtime: State<'_, Arc<CodeAgentRuntime>>,
+) -> Result<bool, CommandError> {
+    validate_request_id(&request_id)?;
+    Ok(runtime.cancel_operation(&request_id).await)
 }
 
 fn validate_request_id(request_id: &str) -> Result<(), CommandError> {
     if request_id.trim().is_empty() {
         return Err(CommandError {
-            code: "invalid_request",
+            code: "invalid_request".to_owned(),
             message: "requestId must not be empty".to_owned(),
             retryable: false,
         });
@@ -77,7 +85,7 @@ fn validate_request_id(request_id: &str) -> Result<(), CommandError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{access_status, app_diagnostics, app_info, cancel_operation};
+    use super::{access_status, app_diagnostics, app_info};
 
     #[test]
     fn returns_phase_two_host_contracts() {
@@ -85,7 +93,6 @@ mod tests {
             assert!(app_info("info-1".to_owned()).await.is_ok());
             assert!(access_status("access-1".to_owned()).await.is_ok());
             assert!(app_diagnostics("diagnostics-1".to_owned()).await.is_ok());
-            assert!(cancel_operation("cancel-1".to_owned()).await.is_ok());
         });
     }
 

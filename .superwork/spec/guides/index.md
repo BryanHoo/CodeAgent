@@ -28,11 +28,13 @@
 - 项目命令使用 pnpm，Python 命令使用 `python3`；内部依赖使用 `workspace:*`，共享外部版本使用 `catalog:`。
 - 子进程使用参数数组和 `shell: false`；路径、等待与资源清理必须跨平台且有界。
 - Rust Runtime 只依赖 Core/Protocol ports；操作、幂等、事件与订阅队列必须有界，关闭使用协作取消并等待全部受跟踪任务。
+- Desktop SQLite 由单独 owner thread 和有界 `sync_channel` 持有；附件使用 raw IPC 与受管 opaque asset protocol，Renderer capability 不授予任意 fs/shell。
 
 ## Verification Checklist
 
 - 所有改动运行 `pnpm check`。
 - Rust Workspace 或 Tauri Desktop 改动额外运行 `pnpm check:rust`；Desktop 壳改动还必须运行 `pnpm --filter @code-agent/desktop build` 生成当前平台未签名 artifact。
+- Phase 4 平台能力改动必须运行 `pnpm run tauri:phase4:check`，禁止无界队列、base64 附件和万能 Command。
 - 根 `build` 只生成 npm 发布所需的 Web 与 Node 产物；Desktop UI 和安装包分别使用 `build:desktop-ui`、`build:desktop`，不得进入 npm tarball。
 - `pnpm check` 必须执行 `pnpm audit --prod --audit-level moderate`，阻止中危及以上的已知生产依赖漏洞进入 CI 与发布流程。
 - `pnpm check` 和 CI 必须执行 `pnpm run codex:schema:check`，使用锁定的 `@openai/codex` 及 `--experimental` 生成 TypeScript 与 JSON Schema，并与 `schemas/codex-app-server/<version>.schema-baseline.json` 比较；升级 Codex 必须显式运行 `pnpm run codex:schema:update` 并审查差异。

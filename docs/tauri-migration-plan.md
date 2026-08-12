@@ -324,7 +324,8 @@ Tauri 实现：
 - Phase 1：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-1-desktop-shell.md`。
 - Phase 2：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-2-client-transports.md`。
 - Phase 3：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-3-rust-runtime.md`。
-- Phase 4 至 Phase 9：待开始。
+- Phase 4：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-4-platform-capabilities.md`。
+- Phase 5 至 Phase 9：待开始。
 
 ### Phase 0：建立基线与技术验证
 

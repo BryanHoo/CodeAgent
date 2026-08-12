@@ -2,7 +2,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use code_agent_protocol::{AgentCapabilities, ProjectId, TaskId};
+use code_agent_protocol::{
+    AgentAttachment, AgentAttachmentKind, AgentCapabilities, AgentGlobalSettings,
+    AgentProjectDefaults, AgentProviderConnectionRecord, AgentTaskSettings, Project, ProjectId,
+    TaskId,
+};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
@@ -51,13 +55,185 @@ impl PortRequestContext {
 /// Project 与设置持久化端口。
 #[async_trait]
 pub trait RepositoryPort: Send + Sync {
+    /// 关闭持久化 owner 与命令队列。
+    async fn close(&self) -> Result<(), CodeAgentError> {
+        Ok(())
+    }
+
     /// 读取已注册 Project；不存在时返回 `None`。
     async fn read_project(
         &self,
         project_id: &ProjectId,
         context: &PortRequestContext,
     ) -> Result<Option<Value>, CodeAgentError>;
+
+    /// 返回全部用户 Project，排除临时 Project。
+    async fn list_projects(
+        &self,
+        _context: &PortRequestContext,
+    ) -> Result<Vec<Project>, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "project repository is unavailable",
+        ))
+    }
+
+    /// 注册用户 Project；同一路径重复注册返回既有记录。
+    async fn register_project(
+        &self,
+        _root_path: &str,
+        _name: &str,
+        _created_at: DateTime<Utc>,
+        _context: &PortRequestContext,
+    ) -> Result<Project, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "project repository is unavailable",
+        ))
+    }
+
+    /// 确保临时 Project 存在且不进入用户列表。
+    async fn ensure_temporary_project(
+        &self,
+        _root_path: &str,
+        _created_at: DateTime<Utc>,
+        _context: &PortRequestContext,
+    ) -> Result<Project, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "project repository is unavailable",
+        ))
+    }
+
+    /// 原子替换全部用户 Project 顺序。
+    async fn reorder_projects(
+        &self,
+        _project_ids: &[ProjectId],
+        _context: &PortRequestContext,
+    ) -> Result<Vec<Project>, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "project repository is unavailable",
+        ))
+    }
+
+    /// 重命名用户 Project。
+    async fn rename_project(
+        &self,
+        _project_id: &ProjectId,
+        _name: &str,
+        _context: &PortRequestContext,
+    ) -> Result<Project, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "project repository is unavailable",
+        ))
+    }
+
+    /// 删除用户 Project 的本地注册信息。
+    async fn remove_project(
+        &self,
+        _project_id: &ProjectId,
+        _context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "project repository is unavailable",
+        ))
+    }
+
+    /// 读取全局设置。
+    async fn read_global_settings(
+        &self,
+        _context: &PortRequestContext,
+    ) -> Result<Option<AgentGlobalSettings>, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "settings repository is unavailable",
+        ))
+    }
+
+    /// 原子写入完整全局设置。
+    async fn write_global_settings(
+        &self,
+        _settings: &AgentGlobalSettings,
+        _updated_at: DateTime<Utc>,
+        _context: &PortRequestContext,
+    ) -> Result<AgentGlobalSettings, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "settings repository is unavailable",
+        ))
+    }
+
+    /// 读取 Project 默认设置。
+    async fn read_project_defaults(
+        &self,
+        _project_id: &ProjectId,
+        _context: &PortRequestContext,
+    ) -> Result<Option<AgentProjectDefaults>, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "settings repository is unavailable",
+        ))
+    }
+
+    /// 原子写入 Project 默认设置。
+    async fn write_project_defaults(
+        &self,
+        _project_id: &ProjectId,
+        _settings: &AgentProjectDefaults,
+        _updated_at: DateTime<Utc>,
+        _context: &PortRequestContext,
+    ) -> Result<AgentProjectDefaults, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "settings repository is unavailable",
+        ))
+    }
+
+    /// 读取 Task 设置。
+    async fn read_task_settings(
+        &self,
+        _project_id: &ProjectId,
+        _task_id: &TaskId,
+        _context: &PortRequestContext,
+    ) -> Result<Option<AgentTaskSettings>, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "settings repository is unavailable",
+        ))
+    }
+
+    /// 原子写入 Task 设置。
+    async fn write_task_settings(
+        &self,
+        _project_id: &ProjectId,
+        _task_id: &TaskId,
+        _settings: &AgentTaskSettings,
+        _updated_at: DateTime<Utc>,
+        _context: &PortRequestContext,
+    ) -> Result<AgentTaskSettings, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "settings repository is unavailable",
+        ))
+    }
+
+    /// 读取 Provider connection 持久化记录。
+    async fn read_provider_connection(
+        &self,
+        _context: &PortRequestContext,
+    ) -> Result<Option<AgentProviderConnectionRecord>, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "provider connection repository is unavailable",
+        ))
+    }
+
+    /// 原子写入 Provider connection 持久化记录。
+    async fn write_provider_connection(
+        &self,
+        _record: &AgentProviderConnectionRecord,
+        _context: &PortRequestContext,
+    ) -> Result<AgentProviderConnectionRecord, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "provider connection repository is unavailable",
+        ))
+    }
 }
+
+/// 标记实现完整 Project registry 能力的 Repository。
+pub trait ProjectRepositoryPort: RepositoryPort {}
+
+impl<T: RepositoryPort + ?Sized> ProjectRepositoryPort for T {}
 
 /// Provider 领域能力端口。
 #[async_trait]
@@ -78,6 +254,78 @@ pub trait GitPort: Send + Sync {
         project_id: &ProjectId,
         context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError>;
+
+    /// 按可选直属子仓库读取状态。
+    async fn status_for(
+        &self,
+        project_id: &ProjectId,
+        _repository: Option<&str>,
+        context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        self.status(project_id, context).await
+    }
+
+    /// 读取提交历史。
+    async fn history(
+        &self,
+        _project_id: &ProjectId,
+        _query: &Value,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("git service is unavailable"))
+    }
+
+    /// 读取提交文件列表。
+    async fn commit_files(
+        &self,
+        _project_id: &ProjectId,
+        _query: &Value,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("git service is unavailable"))
+    }
+
+    /// 读取提交文件 diff。
+    async fn commit_diff(
+        &self,
+        _project_id: &ProjectId,
+        _query: &Value,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("git service is unavailable"))
+    }
+
+    /// 切换分支。
+    async fn switch_branch(
+        &self,
+        _project_id: &ProjectId,
+        _branch: &str,
+        _expected_snapshot: &str,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("git service is unavailable"))
+    }
+
+    /// 创建并切换分支。
+    async fn create_branch(
+        &self,
+        _project_id: &ProjectId,
+        _branch: &str,
+        _expected_snapshot: &str,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("git service is unavailable"))
+    }
+
+    /// 提交选定文件。
+    async fn commit(
+        &self,
+        _project_id: &ProjectId,
+        _request: &Value,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("git service is unavailable"))
+    }
 }
 
 /// Project 文件能力端口。
@@ -90,11 +338,120 @@ pub trait FilePort: Send + Sync {
         path: &str,
         context: &PortRequestContext,
     ) -> Result<Vec<u8>, CodeAgentError>;
+
+    /// 读取 Project 源文件分页。
+    async fn source_read(
+        &self,
+        _project_id: &ProjectId,
+        _path: &str,
+        _cursor: u64,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("file service is unavailable"))
+    }
+
+    /// 读取 Project 文件树。
+    async fn tree(
+        &self,
+        _project_id: &ProjectId,
+        _path: Option<&str>,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("file service is unavailable"))
+    }
+
+    /// 搜索 Project 文件。
+    async fn search(
+        &self,
+        _project_id: &ProjectId,
+        _query: &str,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("file service is unavailable"))
+    }
+
+    /// 浏览宿主目录。
+    async fn browse_directories(
+        &self,
+        _path: Option<&str>,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("directory browser is unavailable"))
+    }
+
+    /// 浏览宿主支持的普通文件。
+    async fn browse_host_files(
+        &self,
+        _kind: &str,
+        _path: Option<&str>,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("host file browser is unavailable"))
+    }
+
+    /// 返回当前平台可用打开方式。
+    async fn open_capabilities(
+        &self,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("system open is unavailable"))
+    }
+
+    /// 使用受控宿主应用打开 Project 路径。
+    async fn open_project_path(
+        &self,
+        _project_id: &ProjectId,
+        _app_id: &str,
+        _path: Option<&str>,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal("system open is unavailable"))
+    }
 }
 
 /// Task 附件能力端口。
 #[async_trait]
 pub trait AttachmentPort: Send + Sync {
+    /// 保存 Renderer 通过 raw IPC 上传的附件字节。
+    async fn upload(
+        &self,
+        _project_id: &ProjectId,
+        _kind: AgentAttachmentKind,
+        _media_type: &str,
+        _name: &str,
+        _bytes: Vec<u8>,
+        _context: &PortRequestContext,
+    ) -> Result<AgentAttachment, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "attachment service is unavailable",
+        ))
+    }
+
+    /// 将受检宿主文件复制到附件受管目录。
+    async fn import_host(
+        &self,
+        _project_id: &ProjectId,
+        _kind: AgentAttachmentKind,
+        _path: &str,
+        _context: &PortRequestContext,
+    ) -> Result<AgentAttachment, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "attachment service is unavailable",
+        ))
+    }
+
+    /// 读取尚未绑定 Task 的 Project 附件。
+    async fn read_pending(
+        &self,
+        _project_id: &ProjectId,
+        _attachment_id: &str,
+        _context: &PortRequestContext,
+    ) -> Result<Vec<u8>, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "attachment service is unavailable",
+        ))
+    }
+
     /// 读取已授权附件字节。
     async fn read(
         &self,
@@ -103,6 +460,30 @@ pub trait AttachmentPort: Send + Sync {
         attachment_id: &str,
         context: &PortRequestContext,
     ) -> Result<Vec<u8>, CodeAgentError>;
+
+    /// 清理 Project 受管附件。
+    async fn release_project(
+        &self,
+        _project_id: &ProjectId,
+        _context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "attachment service is unavailable",
+        ))
+    }
+
+    /// 使用系统默认应用打开已授权 Task 附件副本。
+    async fn open(
+        &self,
+        _project_id: &ProjectId,
+        _task_id: &TaskId,
+        _attachment_id: &str,
+        _context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "attachment service is unavailable",
+        ))
+    }
 }
 
 /// 可替换时钟端口。

@@ -35,6 +35,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run quality gates
         run: pnpm check
+      - name: Run Rust and Tauri Phase 4 gates
+        run: pnpm check:rust
       # 覆盖率阈值只在 Linux 执行，避免 Windows 矩阵重复生成报告。
       - name: Enforce coverage thresholds
         if: matrix.os == 'ubuntu-latest'

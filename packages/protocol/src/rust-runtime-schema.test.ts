@@ -16,11 +16,15 @@ describe("Rust Runtime 协议 Schema", () => {
 
     expect(document.$id).toBe(RUST_RUNTIME_SCHEMA_ID);
     expect(Object.keys(document.$defs)).toEqual([
+      "AgentAttachment",
       "AgentCapabilities",
+      "AgentGlobalSettings",
+      "AgentProjectDefaults",
+      "AgentProviderConnectionRecord",
       "AgentProviderEvent",
       "AgentTaskSettings",
       "CodeAgentError",
-      "ProjectId",
+      "Project",
       "TaskId",
     ]);
     expect(document.$defs["AgentProviderEvent"]).toHaveProperty("oneOf");

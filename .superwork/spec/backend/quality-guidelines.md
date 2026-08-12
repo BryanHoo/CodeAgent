@@ -25,6 +25,8 @@
 
 ## 测试
 
+- Tauri Platform 测试必须覆盖历史 SQLite 原位升级、路径 traversal/symlink、附件 Project/Task 归属、10 MiB raw IPC、Git 参数注入/超时/输出预算和最小 capability。
+
 - JSONL 分帧测试覆盖多字节 UTF-8 字符跨 Buffer 边界；RPC 关联、服务端请求响应、超时、审批状态机和事件映射使用 Vitest 单元测试。
 - Codex App Server 协议必须使用锁定的 `@openai/codex` 和 `--experimental` 生成 TypeScript 与 JSON Schema，并由 `pnpm run codex:schema:check` 比较版本化规范基线；依赖升级必须显式更新基线并同步 Adapter 契约测试。
 - CodeAgent 公共 Rust DTO 必须由版本化 TypeBox Schema 显式生成，`pnpm check` 和 CI 必须执行 `pnpm run protocol:rust:check`；生成器无法可靠构造的复杂联合保留原 JSON Schema 校验，不得手写第二份宽松 DTO。
