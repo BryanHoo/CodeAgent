@@ -1,37 +1,30 @@
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-    time::Duration,
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
 };
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use code_agent_core::{
-    AttachmentPort, ClockPort, CodeAgentError, FilePort, GitPort, PortRequestContext,
-    ProjectProviderPort, ProviderPort, RepositoryPort, UpdatePort,
+    AttachmentPort, ClockPort, CodeAgentError, CodeAgentErrorCode, FilePort, GitPort,
+    PortRequestContext, ProjectProviderPort, ProviderPort, RepositoryPort, UpdatePort,
 };
 use code_agent_protocol::{
     AgentAttachment, AgentBackgroundTerminalPage, AgentCapabilities, AgentGlobalSettings,
-    AgentMcpServerPage, AgentModelPage, AgentSkillPage, AgentTaskPage, Project, ProjectId,
-    RawProviderEvent, TaskId,
+    AgentMcpServerPage, AgentModelPage, AgentProjectDefaults, AgentSkillPage, AgentTaskPage,
+    AgentTaskSettings, Project, ProjectId, RawProviderEvent, TaskId,
 };
-use code_agent_runtime::{CodeAgentRuntime, CodeAgentRuntimeBuilder, RuntimeOptions};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
-#[derive(Default)]
-struct MutationCounters {
-    commit: AtomicUsize,
-    fork: AtomicUsize,
-    global_settings: AtomicUsize,
-    login: AtomicUsize,
-    review: AtomicUsize,
-}
+#[path = "settings_validation/fixtures.rs"]
+mod fixtures;
+use fixtures::{global_settings, project_defaults, runtime, task_settings};
 
+#[derive(Default)]
 struct FakePorts {
-    counters: Arc<MutationCounters>,
+    task_writes: Mutex<Vec<(String, String, Value)>>,
+    writes: AtomicUsize,
 }
 
 impl FakePorts {
@@ -49,6 +42,9 @@ impl RepositoryPort for FakePorts {
         project_id: &ProjectId,
         _context: &PortRequestContext,
     ) -> Result<Option<Value>, CodeAgentError> {
+        if project_id.as_str() == "missing-project" {
+            return Ok(None);
+        }
         Ok(Some(json!({
             "createdAt": "2026-08-13T00:00:00Z",
             "id": project_id,
@@ -63,7 +59,35 @@ impl RepositoryPort for FakePorts {
         _updated_at: DateTime<Utc>,
         _context: &PortRequestContext,
     ) -> Result<AgentGlobalSettings, CodeAgentError> {
-        self.counters.global_settings.fetch_add(1, Ordering::SeqCst);
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        Ok(settings.clone())
+    }
+
+    async fn write_project_defaults(
+        &self,
+        _project_id: &ProjectId,
+        settings: &AgentProjectDefaults,
+        _updated_at: DateTime<Utc>,
+        _context: &PortRequestContext,
+    ) -> Result<AgentProjectDefaults, CodeAgentError> {
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        Ok(settings.clone())
+    }
+
+    async fn write_task_settings(
+        &self,
+        project_id: &ProjectId,
+        task_id: &TaskId,
+        settings: &AgentTaskSettings,
+        _updated_at: DateTime<Utc>,
+        _context: &PortRequestContext,
+    ) -> Result<AgentTaskSettings, CodeAgentError> {
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        self.task_writes.lock().expect("task writes").push((
+            project_id.to_string(),
+            task_id.to_string(),
+            serde_json::to_value(settings).expect("serialized settings"),
+        ));
         Ok(settings.clone())
     }
 }
@@ -98,40 +122,39 @@ impl ProviderPort for FakePorts {
                 "displayName": "GPT-5.6",
                 "id": "gpt-5.6",
                 "isDefault": true,
-                "supportedReasoningEfforts": [{ "description": "High", "id": "high" }]
+                "supportedReasoningEfforts": [
+                    { "description": "Low", "id": "low" },
+                    { "description": "High", "id": "high" }
+                ]
             }],
             "nextCursor": null
         }))
         .map_err(|error| CodeAgentError::internal(error.to_string()))
     }
 
-    async fn start_official_login(
-        &self,
-        _context: &PortRequestContext,
-    ) -> Result<Value, CodeAgentError> {
-        self.counters.login.fetch_add(1, Ordering::SeqCst);
-        Ok(json!({ "loginId": "login-1" }))
-    }
-
     async fn for_project(
         &self,
-        _project: Project,
+        project: Project,
         _context: &PortRequestContext,
     ) -> Result<Arc<dyn ProjectProviderPort>, CodeAgentError> {
-        Ok(Arc::new(Self {
-            counters: Arc::clone(&self.counters),
+        Ok(Arc::new(FakeProjectProvider {
+            project_id: project.id.to_string(),
         }))
     }
 }
 
+struct FakeProjectProvider {
+    project_id: String,
+}
+
 #[async_trait]
-impl ProjectProviderPort for FakePorts {
+impl ProjectProviderPort for FakeProjectProvider {
     async fn start_task(
         &self,
         _input: Value,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn list_tasks(
@@ -139,15 +162,20 @@ impl ProjectProviderPort for FakePorts {
         _input: Value,
         _context: &PortRequestContext,
     ) -> Result<AgentTaskPage, CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn read_task(
         &self,
-        _task_id: &str,
+        task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<Option<Value>, CodeAgentError> {
-        Self::unavailable()
+        let project_id = if task_id == "foreign-task" {
+            "other-project"
+        } else {
+            &self.project_id
+        };
+        Ok(Some(json!({ "id": task_id, "projectId": project_id })))
     }
 
     async fn pin_task(
@@ -156,7 +184,7 @@ impl ProjectProviderPort for FakePorts {
         _pinned: bool,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn rename_task(
@@ -165,7 +193,7 @@ impl ProjectProviderPort for FakePorts {
         _title: &str,
         _context: &PortRequestContext,
     ) -> Result<(), CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn archive_task(
@@ -173,17 +201,15 @@ impl ProjectProviderPort for FakePorts {
         _task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<(), CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn fork_task(
         &self,
-        task_id: &str,
+        _task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        self.counters.fork.fetch_add(1, Ordering::SeqCst);
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        Ok(json!({ "id": format!("{task_id}-fork") }))
+        FakePorts::unavailable()
     }
 
     async fn compact_task(
@@ -191,7 +217,7 @@ impl ProjectProviderPort for FakePorts {
         _task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<(), CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn unsubscribe_task(
@@ -199,7 +225,7 @@ impl ProjectProviderPort for FakePorts {
         _task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<String, CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn start_turn(
@@ -208,7 +234,7 @@ impl ProjectProviderPort for FakePorts {
         _input: Value,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn steer_turn(
@@ -218,7 +244,7 @@ impl ProjectProviderPort for FakePorts {
         _input: Value,
         _context: &PortRequestContext,
     ) -> Result<(), CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn interrupt_turn(
@@ -227,17 +253,16 @@ impl ProjectProviderPort for FakePorts {
         _turn_id: &str,
         _context: &PortRequestContext,
     ) -> Result<(), CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn start_review(
         &self,
-        task_id: &str,
-        target: Value,
+        _task_id: &str,
+        _target: Value,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        self.counters.review.fetch_add(1, Ordering::SeqCst);
-        Ok(json!({ "id": "review-1", "target": target, "taskId": task_id }))
+        FakePorts::unavailable()
     }
 
     async fn resolve_pending_request(
@@ -245,14 +270,14 @@ impl ProjectProviderPort for FakePorts {
         _input: Value,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn list_skills(
         &self,
         _context: &PortRequestContext,
     ) -> Result<AgentSkillPage, CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn list_mcp_servers(
@@ -260,7 +285,7 @@ impl ProjectProviderPort for FakePorts {
         _task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<AgentMcpServerPage, CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn reload_mcp_servers(
@@ -268,7 +293,7 @@ impl ProjectProviderPort for FakePorts {
         _task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<AgentMcpServerPage, CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn list_background_terminals(
@@ -276,7 +301,7 @@ impl ProjectProviderPort for FakePorts {
         _task_id: &str,
         _context: &PortRequestContext,
     ) -> Result<AgentBackgroundTerminalPage, CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn terminate_background_terminal(
@@ -285,7 +310,7 @@ impl ProjectProviderPort for FakePorts {
         _terminal_id: &str,
         _context: &PortRequestContext,
     ) -> Result<bool, CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn upload_feedback(
@@ -294,7 +319,7 @@ impl ProjectProviderPort for FakePorts {
         _input: Value,
         _context: &PortRequestContext,
     ) -> Result<(), CodeAgentError> {
-        Self::unavailable()
+        FakePorts::unavailable()
     }
 
     async fn subscribe_events(
@@ -315,16 +340,6 @@ impl GitPort for FakePorts {
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
         Self::unavailable()
-    }
-
-    async fn commit(
-        &self,
-        project_id: &ProjectId,
-        request: &Value,
-        _context: &PortRequestContext,
-    ) -> Result<Value, CodeAgentError> {
-        self.counters.commit.fetch_add(1, Ordering::SeqCst);
-        Ok(json!({ "projectId": project_id, "request": request }))
     }
 }
 
@@ -381,106 +396,86 @@ impl UpdatePort for FakePorts {
     }
 }
 
-fn runtime() -> (Arc<MutationCounters>, CodeAgentRuntime) {
-    let counters = Arc::new(MutationCounters::default());
-    let ports = Arc::new(FakePorts {
-        counters: Arc::clone(&counters),
-    });
-    let runtime = CodeAgentRuntimeBuilder::new(RuntimeOptions {
-        idempotency_capacity: 16,
-        idempotency_ttl: Duration::from_secs(60),
-        operation_capacity: 16,
-        shutdown_timeout: Duration::from_secs(1),
-        temporary_project_root: None,
-    })
-    .repository(ports.clone())
-    .provider(ports.clone())
-    .git(ports.clone())
-    .file(ports.clone())
-    .attachment(ports.clone())
-    .clock(ports.clone())
-    .update(ports)
-    .build();
-    (counters, runtime)
-}
-
-fn global_settings() -> AgentGlobalSettings {
-    serde_json::from_value(json!({
-        "approvalPolicy": "on-request",
-        "approvalsReviewer": "user",
-        "commitMessageModel": "gpt-5.6",
-        "commitMessagePrompt": "",
-        "commitMessageReasoningEffort": "high",
-        "defaultOpenAppId": null,
-        "followUpBehavior": "queue",
-        "model": "gpt-5.6",
-        "reasoningEffort": "high",
-        "sandboxMode": "workspace-write"
-    }))
-    .expect("global settings")
-}
-
 #[tokio::test]
-async fn representative_mutation_retries_should_execute_each_port_once() {
-    let (counters, runtime) = runtime();
+async fn settings_updates_should_validate_capabilities_and_resource_ownership_before_writing() {
+    let (ports, runtime) = runtime();
     let project_id = ProjectId::try_from("project-1").expect("project id");
-    let settings = global_settings();
-    let commit = json!({ "expectedSnapshot": "snapshot", "message": "message" });
-    let review = json!({ "type": "uncommittedChanges" });
+    let missing_project = ProjectId::try_from("missing-project").expect("missing project id");
+    let foreign_task = TaskId::try_from("foreign-task").expect("foreign task id");
+    let task_id = TaskId::try_from("task-1").expect("task id");
 
-    for _ in 0..2 {
-        runtime
-            .update_global_settings("settings-key", &settings)
-            .await
-            .expect("update settings");
-        runtime
-            .start_provider_login("login-key")
-            .await
-            .expect("start login");
-        runtime
-            .start_agent_review("review-key", &project_id, "task-1", review.clone())
-            .await
-            .expect("start review");
-        runtime
-            .git_commit("commit-key", &project_id, &commit)
-            .await
-            .expect("commit");
-    }
+    let invalid_model = runtime
+        .update_global_settings("invalid-model", &global_settings("removed-model", "high"))
+        .await
+        .expect_err("missing model must be rejected");
+    assert_eq!(invalid_model.code(), CodeAgentErrorCode::InvalidInput);
 
-    assert_eq!(counters.global_settings.load(Ordering::SeqCst), 1);
-    assert_eq!(counters.login.load(Ordering::SeqCst), 1);
-    assert_eq!(counters.review.load(Ordering::SeqCst), 1);
-    assert_eq!(counters.commit.load(Ordering::SeqCst), 1);
+    let invalid_effort = runtime
+        .update_project_defaults(
+            "invalid-effort",
+            &project_id,
+            &project_defaults("gpt-5.6", "ultra"),
+        )
+        .await
+        .expect_err("unsupported reasoning effort must be rejected");
+    assert_eq!(invalid_effort.code(), CodeAgentErrorCode::InvalidInput);
+
+    let project_not_found = runtime
+        .update_project_defaults(
+            "missing-project",
+            &missing_project,
+            &project_defaults("gpt-5.6", "high"),
+        )
+        .await
+        .expect_err("missing project must be rejected");
+    assert_eq!(project_not_found.code(), CodeAgentErrorCode::NotFound);
+
+    let task_project_not_found = runtime
+        .update_task_settings(
+            "missing-task-project",
+            &missing_project,
+            &task_id,
+            &task_settings("workspace-write"),
+        )
+        .await
+        .expect_err("task project must exist");
+    assert_eq!(task_project_not_found.code(), CodeAgentErrorCode::NotFound);
+
+    let task_not_found = runtime
+        .update_task_settings(
+            "foreign-task",
+            &project_id,
+            &foreign_task,
+            &task_settings("workspace-write"),
+        )
+        .await
+        .expect_err("foreign task must be rejected");
+    assert_eq!(task_not_found.code(), CodeAgentErrorCode::NotFound);
+    assert_eq!(ports.writes.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]
-async fn concurrent_task_mutation_retries_should_share_in_flight_result() {
-    let (counters, runtime) = runtime();
-    let runtime = Arc::new(runtime);
-    let project_id = ProjectId::try_from("project-1").expect("project id");
+async fn temporary_task_updates_should_force_danger_full_access_before_writing() {
+    let (ports, runtime) = runtime();
+    let project_id = ProjectId::try_from("temporary").expect("temporary project id");
+    let task_id = TaskId::try_from("task-1").expect("task id");
 
-    let (first, second) = tokio::join!(
-        runtime.fork_agent_task("fork-key", &project_id, "task-1"),
-        runtime.fork_agent_task("fork-key", &project_id, "task-1"),
+    let updated = runtime
+        .update_task_settings(
+            "temporary-task",
+            &project_id,
+            &task_id,
+            &task_settings("read-only"),
+        )
+        .await
+        .expect("temporary settings update");
+
+    assert_eq!(
+        serde_json::to_value(updated).expect("updated settings")["sandboxMode"],
+        "danger-full-access"
     );
-
-    assert_eq!(first.expect("first fork"), second.expect("second fork"));
-    assert_eq!(counters.fork.load(Ordering::SeqCst), 1);
-}
-
-#[tokio::test]
-async fn same_request_key_should_execute_independently_across_projects() {
-    let (counters, runtime) = runtime();
-    let project_one = ProjectId::try_from("project-1").expect("first project id");
-    let project_two = ProjectId::try_from("project-2").expect("second project id");
-    let commit = json!({ "expectedSnapshot": "snapshot", "message": "message" });
-
-    let (first, second) = tokio::join!(
-        runtime.git_commit("shared-key", &project_one, &commit),
-        runtime.git_commit("shared-key", &project_two, &commit),
+    assert_eq!(
+        ports.task_writes.lock().expect("task writes")[0].2["sandboxMode"],
+        "danger-full-access"
     );
-
-    first.expect("first project commit");
-    second.expect("second project commit");
-    assert_eq!(counters.commit.load(Ordering::SeqCst), 2);
 }

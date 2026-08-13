@@ -8,6 +8,7 @@ mod event_stream;
 mod idempotency;
 mod project_context;
 mod prompt;
+mod settings_validation;
 
 use std::{
     collections::HashMap,
@@ -170,7 +171,11 @@ impl CodeAgentRuntime {
                 serde_json::to_value(project)
                     .map_err(|error| CodeAgentError::internal(error.to_string()))?
             } else {
-                return Err(CodeAgentError::internal("project does not exist"));
+                return Err(CodeAgentError::new(
+                    CodeAgentErrorCode::NotFound,
+                    "project was not found",
+                    None,
+                ));
             };
             let project: Project = serde_json::from_value(value)
                 .map_err(|error| CodeAgentError::internal(error.to_string()))?;
@@ -1251,11 +1256,14 @@ impl CodeAgentRuntime {
     ) -> Result<AgentGlobalSettings, CodeAgentError> {
         let payload = serde_json::to_value(settings)
             .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+        let validation_payload = payload.clone();
         self.run_idempotent(
             &["update-global-settings"],
             request_id,
             &payload,
             |operation| async move {
+                self.validate_settings_model(&validation_payload, &operation)
+                    .await?;
                 self.ports
                     .repository
                     .write_global_settings(settings, self.ports.clock.now(), &operation)
@@ -1288,11 +1296,15 @@ impl CodeAgentRuntime {
     ) -> Result<AgentProjectDefaults, CodeAgentError> {
         let payload = serde_json::to_value(settings)
             .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+        let validation_payload = payload.clone();
         self.run_idempotent(
             &["update-project-defaults", project_id.as_str()],
             request_id,
             &payload,
             |operation| async move {
+                self.ensure_project_exists(project_id, &operation).await?;
+                self.validate_settings_model(&validation_payload, &operation)
+                    .await?;
                 self.ports
                     .repository
                     .write_project_defaults(
@@ -1339,12 +1351,17 @@ impl CodeAgentRuntime {
             request_id,
             &payload,
             |operation| async move {
+                self.ensure_task_belongs_to_project(project_id, task_id, &operation)
+                    .await?;
+                let settings = self
+                    .validated_task_settings(project_id, settings, &operation)
+                    .await?;
                 self.ports
                     .repository
                     .write_task_settings(
                         project_id,
                         task_id,
-                        settings,
+                        &settings,
                         self.ports.clock.now(),
                         &operation,
                     )
