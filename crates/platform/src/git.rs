@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    str,
-};
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use code_agent_core::{
@@ -10,11 +7,14 @@ use code_agent_core::{
 use code_agent_protocol::ProjectId;
 use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 use crate::{PlatformDatabase, PlatformError, process::execute_git};
 
+mod mutation;
+mod status;
+
 const HISTORY_PAGE_SIZE: usize = 20;
+const MAX_HISTORY_REPOSITORIES: usize = 256;
 const COMMIT_FILES_PAGE_SIZE: usize = 100;
 const MAX_DIFF_BYTES: usize = 512 * 1024;
 
@@ -24,10 +24,9 @@ pub struct GitCliService {
 }
 
 #[derive(Debug)]
-struct WorkingEntry {
-    index: u8,
-    path: String,
-    working: u8,
+struct ChildRepository {
+    name: String,
+    root: PathBuf,
 }
 
 impl GitCliService {
@@ -97,6 +96,46 @@ impl GitCliService {
         Ok(root)
     }
 
+    async fn child_repositories(root: &Path) -> Result<Vec<ChildRepository>, CodeAgentError> {
+        let mut directory = tokio::fs::read_dir(root)
+            .await
+            .map_err(|_| git_repository_not_found())?;
+        let mut repositories = Vec::new();
+        while let Some(entry) = directory
+            .next_entry()
+            .await
+            .map_err(|_| git_repository_not_found())?
+        {
+            let file_type = entry
+                .file_type()
+                .await
+                .map_err(|_| git_repository_not_found())?;
+            if !file_type.is_dir() {
+                continue;
+            }
+            let candidate = entry.path();
+            if tokio::fs::symlink_metadata(candidate.join(".git"))
+                .await
+                .is_err()
+            {
+                continue;
+            }
+            let resolved = tokio::fs::canonicalize(&candidate)
+                .await
+                .map_err(|_| git_repository_not_found())?;
+            // 每次枚举都重新验证真实父目录，避免目录在读取期间被替换成越界链接。
+            if resolved.parent() != Some(root) {
+                continue;
+            }
+            repositories.push(ChildRepository {
+                name: entry.file_name().to_string_lossy().into_owned(),
+                root: resolved,
+            });
+        }
+        repositories.sort_by(|left, right| left.name.cmp(&right.name));
+        Ok(repositories)
+    }
+
     async fn git(
         root: &Path,
         arguments: &[&str],
@@ -120,95 +159,50 @@ impl GitCliService {
         String::from_utf8(output.stdout).map_err(|_| invalid("git output is not UTF-8"))
     }
 
-    async fn read_status(
-        &self,
-        project_id: &ProjectId,
-        repository: Option<&str>,
-        context: &PortRequestContext,
-    ) -> Result<Value, CodeAgentError> {
-        let root = self.repository_root(project_id, repository).await?;
-        let raw = Self::git(
-            &root,
-            &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
-            context,
-        )
-        .await?;
-        let entries = parse_porcelain(raw.as_bytes())?;
-        let mut staged = Vec::new();
-        let mut unstaged = Vec::new();
-        for entry in entries.into_iter().take(1_000) {
-            if entry.index != b' ' && entry.index != b'?' && entry.index != b'!' {
-                staged.push(change_value(&root, &entry.path, entry.index, true, context).await?);
-            }
-            if entry.index == b'?' && entry.working == b'?' {
-                unstaged.push(untracked_change(&root, &entry.path).await?);
-            } else if entry.working != b' ' && entry.working != b'!' {
-                unstaged
-                    .push(change_value(&root, &entry.path, entry.working, false, context).await?);
-            }
-        }
-        sort_changes(&mut staged);
-        sort_changes(&mut unstaged);
-        let branch = optional_git(&root, &["branch", "--show-current"], context)
-            .await
-            .trim()
-            .to_owned();
-        let branch = (!branch.is_empty()).then_some(branch);
-        let local = optional_git(
-            &root,
-            &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
-            context,
-        )
-        .await;
-        let mut branches = lines(&local);
-        if let Some(current) = &branch
-            && let Some(index) = branches.iter().position(|value| value == current)
-        {
-            let current = branches.remove(index);
-            branches.insert(0, current);
-        }
-        let refs = optional_git(
-            &root,
-            &["for-each-ref", "--format=%(refname:short)", "refs/remotes"],
-            context,
-        )
-        .await;
-        let base_branches = lines(&refs)
-            .into_iter()
-            .filter(|value| !value.ends_with("/HEAD"))
-            .collect::<Vec<_>>();
-        let snapshot_payload = json!({
-            "branch": branch,
-            "repositoryMode": "root",
-            "staged": staged,
-            "unstaged": unstaged,
-        });
-        let snapshot = format!(
-            "{:x}",
-            Sha256::digest(
-                serde_json::to_vec(&snapshot_payload)
-                    .map_err(|_| internal("git snapshot failed"))?
-            )
-        );
-        Ok(json!({
-            "baseBranches": base_branches,
-            "branch": branch,
-            "branches": branches,
-            "repositoryMode": "root",
-            "snapshot": snapshot,
-            "staged": staged,
-            "unstaged": unstaged,
-        }))
-    }
-
     pub async fn history(
         &self,
         project_id: &ProjectId,
         query: &Value,
         context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        let repository = optional_string(query, "repository")?;
-        let root = self.repository_root(project_id, repository).await?;
+        let repository = optional_string(query, "repository")?.map(str::to_owned);
+        let project_root = self.project_root(project_id).await?;
+        let (root, repositories, repository, repository_mode) =
+            if tokio::fs::symlink_metadata(project_root.join(".git"))
+                .await
+                .is_ok()
+            {
+                if repository.is_some() {
+                    return Err(git_repository_not_found());
+                }
+                (project_root, Vec::new(), None, "root")
+            } else {
+                let child_repositories = Self::child_repositories(&project_root).await?;
+                let repository = repository
+                    .or_else(|| child_repositories.first().map(|value| value.name.clone()))
+                    .ok_or_else(git_repository_not_found)?;
+                let selected = child_repositories
+                    .iter()
+                    .find(|candidate| candidate.name == repository)
+                    .ok_or_else(git_repository_not_found)?;
+                let repositories = child_repositories
+                    .iter()
+                    .take(MAX_HISTORY_REPOSITORIES)
+                    .map(|candidate| candidate.name.clone())
+                    .collect::<Vec<_>>();
+                if !repositories
+                    .iter()
+                    .any(|candidate| candidate == &repository)
+                {
+                    return Err(git_repository_not_found());
+                }
+                (
+                    selected.root.clone(),
+                    repositories,
+                    Some(repository),
+                    "children",
+                )
+            };
         let offset = parse_cursor(query.get("cursor"))?;
         let output = Self::git_owned(
             &root,
@@ -247,9 +241,9 @@ impl GitCliService {
             "branch": (!branch.is_empty()).then_some(branch),
             "commits": commits,
             "nextCursor": has_next.then(|| (offset + HISTORY_PAGE_SIZE).to_string()),
-            "repositories": [],
+            "repositories": repositories,
             "repository": repository,
-            "repositoryMode": "root",
+            "repositoryMode": repository_mode,
         }))
     }
 
@@ -287,8 +281,9 @@ impl GitCliService {
             .filter_map(|chunk| {
                 let status = *chunk.first()?;
                 let path = *chunk.get(1)?;
-                (!status.is_empty() && !path.is_empty())
-                    .then(|| json!({ "kind": change_kind(status.as_bytes()[0]), "path": path }))
+                (!status.is_empty() && !path.is_empty()).then(
+                    || json!({ "kind": status::change_kind(status.as_bytes()[0]), "path": path }),
+                )
             })
             .collect::<Vec<_>>();
         let next = (offset + COMMIT_FILES_PAGE_SIZE < files.len())
@@ -331,195 +326,6 @@ impl GitCliService {
         .await?;
         let (diff, truncated) = truncate_utf8(output, MAX_DIFF_BYTES);
         Ok(json!({ "diff": diff, "truncated": truncated }))
-    }
-
-    pub async fn create_branch(
-        &self,
-        project_id: &ProjectId,
-        branch: &str,
-        expected_snapshot: &str,
-        context: &PortRequestContext,
-    ) -> Result<Value, CodeAgentError> {
-        self.mutate_branch(project_id, branch, expected_snapshot, true, context)
-            .await
-    }
-
-    async fn mutate_branch(
-        &self,
-        project_id: &ProjectId,
-        branch: &str,
-        expected_snapshot: &str,
-        create: bool,
-        context: &PortRequestContext,
-    ) -> Result<Value, CodeAgentError> {
-        let status = self.read_status(project_id, None, context).await?;
-        ensure_snapshot(&status, expected_snapshot)?;
-        let branches = status["branches"]
-            .as_array()
-            .ok_or_else(|| internal("git branch catalog is invalid"))?;
-        if create && branches.iter().any(|candidate| candidate == branch) {
-            return Err(conflict("git branch already exists")
-                .with_mutation_code(AgentMutationErrorCode::GitBranchAlreadyExists));
-        }
-        if !create && !branches.iter().any(|candidate| candidate == branch) {
-            return Err(not_found("git branch was not found")
-                .with_mutation_code(AgentMutationErrorCode::GitBranchNotFound));
-        }
-        if !create && status["branch"] == branch {
-            return Err(conflict("git branch is already active")
-                .with_mutation_code(AgentMutationErrorCode::GitBranchAlreadyActive));
-        }
-        let root = self.repository_root(project_id, None).await?;
-        let checked = Self::git(&root, &["check-ref-format", "--branch", branch], context)
-            .await
-            .map_err(|_| {
-                invalid("git branch name is invalid")
-                    .with_mutation_code(AgentMutationErrorCode::GitBranchInvalid)
-            })?;
-        if checked.trim() != branch {
-            return Err(invalid("git branch name is invalid")
-                .with_mutation_code(AgentMutationErrorCode::GitBranchInvalid));
-        }
-        if create {
-            Self::git(&root, &["switch", "-c", branch], context)
-                .await
-                .map_err(|_| {
-                    internal("git branch creation failed")
-                        .with_mutation_code(AgentMutationErrorCode::GitBranchCreateFailed)
-                })?;
-        } else {
-            Self::git(&root, &["switch", "--no-guess", branch], context)
-                .await
-                .map_err(|_| {
-                    internal("git branch switch failed")
-                        .with_mutation_code(AgentMutationErrorCode::GitBranchSwitchFailed)
-                })?;
-        }
-        self.read_status(project_id, None, context).await
-    }
-
-    pub async fn commit(
-        &self,
-        project_id: &ProjectId,
-        request: &Value,
-        context: &PortRequestContext,
-    ) -> Result<Value, CodeAgentError> {
-        let repository = optional_string(request, "repository")?;
-        let status = self.read_status(project_id, repository, context).await?;
-        ensure_snapshot(&status, required_string(request, "expectedSnapshot")?)?;
-        let message = required_string(request, "message")?;
-        if message.trim().is_empty() || message.len() > 10_000 {
-            return Err(invalid("commit message is invalid"));
-        }
-        let action = required_string(request, "action")?;
-        if action != "commit" && action != "commit_and_push" {
-            return Err(invalid("commit action is invalid"));
-        }
-        let paths = request
-            .get("paths")
-            .and_then(Value::as_array)
-            .ok_or_else(|| invalid("commit paths are invalid"))?;
-        if paths.is_empty() || paths.len() > 500 {
-            return Err(invalid("commit paths are invalid"));
-        }
-        let changed = status["staged"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .chain(status["unstaged"].as_array().into_iter().flatten())
-            .filter_map(|value| value["path"].as_str())
-            .collect::<std::collections::HashSet<_>>();
-        let staged = status["staged"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|value| value["path"].as_str())
-            .collect::<std::collections::HashSet<_>>();
-        let untracked = status["unstaged"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|value| value["kind"] == "create")
-            .filter_map(|value| value["path"].as_str())
-            .filter(|path| !staged.contains(path))
-            .collect::<std::collections::HashSet<_>>();
-        let mut selected_paths = Vec::with_capacity(paths.len());
-        let mut arguments = vec![
-            "commit".to_owned(),
-            "--only".to_owned(),
-            "--file=-".to_owned(),
-            "--".to_owned(),
-        ];
-        for value in paths {
-            let path = valid_relative_path(
-                value
-                    .as_str()
-                    .ok_or_else(|| invalid("commit path is invalid"))?,
-            )?;
-            if !changed.contains(path) {
-                return Err(conflict("git changes changed before the commit")
-                    .with_mutation_code(AgentMutationErrorCode::GitPathUnavailable));
-            }
-            selected_paths.push(path.to_owned());
-            arguments.push(path.to_owned());
-        }
-        let root = self.repository_root(project_id, repository).await?;
-        let untracked_paths = selected_paths
-            .iter()
-            .filter(|path| untracked.contains(path.as_str()))
-            .cloned()
-            .collect::<Vec<_>>();
-        if !untracked_paths.is_empty() {
-            let mut prepare = vec![
-                "add".to_owned(),
-                "--intent-to-add".to_owned(),
-                "--".to_owned(),
-            ];
-            prepare.extend(untracked_paths.iter().cloned());
-            Self::git_owned(&root, prepare, None, context).await?;
-        }
-
-        if let Err(error) =
-            Self::git_owned(&root, arguments, Some(message.as_bytes()), context).await
-        {
-            // 提交失败时撤销 intent-to-add，避免污染用户原有索引状态。
-            if !untracked_paths.is_empty() {
-                let mut reset = vec!["reset".to_owned(), "--".to_owned()];
-                reset.extend(untracked_paths);
-                let _ = Self::git_owned(&root, reset, None, context).await;
-            }
-            return Err(error);
-        }
-        let commit_sha = Self::git(&root, &["rev-parse", "HEAD"], context)
-            .await?
-            .trim()
-            .to_owned();
-        let push_status = if action == "commit_and_push" {
-            if Self::git(
-                &root,
-                &[
-                    "rev-parse",
-                    "--abbrev-ref",
-                    "--symbolic-full-name",
-                    "@{upstream}",
-                ],
-                context,
-            )
-            .await
-            .is_err()
-            {
-                "not_configured"
-            } else if Self::git(&root, &["push"], context).await.is_ok() {
-                "pushed"
-            } else {
-                "failed"
-            }
-        } else {
-            "not_requested"
-        };
-        Ok(
-            json!({ "branch": status["branch"], "commitSha": commit_sha, "message": message, "pushStatus": push_status }),
-        )
     }
 }
 
@@ -601,110 +407,6 @@ impl GitPort for GitCliService {
     }
 }
 
-async fn change_value(
-    root: &Path,
-    path: &str,
-    status: u8,
-    staged: bool,
-    context: &PortRequestContext,
-) -> Result<Value, CodeAgentError> {
-    let arguments = if staged {
-        vec![
-            "diff",
-            "--cached",
-            "--no-ext-diff",
-            "--no-textconv",
-            "--",
-            path,
-        ]
-    } else {
-        vec!["diff", "--no-ext-diff", "--no-textconv", "--", path]
-    };
-    let diff = GitCliService::git(root, &arguments, context).await?;
-    Ok(json!({ "diff": diff, "kind": change_kind(status), "path": path }))
-}
-
-async fn untracked_change(root: &Path, path: &str) -> Result<Value, CodeAgentError> {
-    let relative = valid_relative_path(path)?;
-    let resolved = root.join(relative);
-    let metadata = tokio::fs::symlink_metadata(&resolved)
-        .await
-        .map_err(|_| not_found("git file was not found"))?;
-    let diff = if metadata.is_file() && metadata.len() <= 5 * 1024 * 1024 {
-        let bytes = tokio::fs::read(&resolved)
-            .await
-            .map_err(|_| internal("git file could not be read"))?;
-        if bytes.contains(&0) {
-            String::new()
-        } else {
-            let text = String::from_utf8_lossy(&bytes);
-            let lines = if text.is_empty() {
-                0
-            } else {
-                text.lines().count()
-            };
-            format!(
-                "--- /dev/null\n+++ b/{path}\n@@ -0,0 +1,{lines} @@\n{}",
-                text.lines()
-                    .map(|line| format!("+{line}"))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            )
-        }
-    } else {
-        String::new()
-    };
-    Ok(json!({ "diff": diff, "kind": "create", "path": path }))
-}
-
-fn parse_porcelain(output: &[u8]) -> Result<Vec<WorkingEntry>, CodeAgentError> {
-    let records = output.split(|byte| *byte == 0).collect::<Vec<_>>();
-    let mut entries = Vec::new();
-    let mut index = 0;
-    while let Some(record) = records.get(index) {
-        if record.len() >= 4 {
-            entries.push(WorkingEntry {
-                index: record[0],
-                working: record[1],
-                path: str::from_utf8(&record[3..])
-                    .map_err(|_| invalid("git path is not UTF-8"))?
-                    .to_owned(),
-            });
-            if matches!(record[0], b'R' | b'C') || matches!(record[1], b'R' | b'C') {
-                index += 1;
-            }
-        }
-        index += 1;
-    }
-    Ok(entries)
-}
-
-fn change_kind(status: u8) -> &'static str {
-    match status {
-        b'A' | b'?' => "create",
-        b'D' => "delete",
-        _ => "update",
-    }
-}
-fn sort_changes(values: &mut [Value]) {
-    values.sort_by(|left, right| left["path"].as_str().cmp(&right["path"].as_str()));
-}
-fn lines(value: &str) -> Vec<String> {
-    let mut values = value
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
-    values.sort();
-    values.dedup();
-    values
-}
-async fn optional_git(root: &Path, arguments: &[&str], context: &PortRequestContext) -> String {
-    GitCliService::git(root, arguments, context)
-        .await
-        .unwrap_or_default()
-}
 fn nonempty<'a>(value: &'a str, fallback: &'a str) -> &'a str {
     let value = value.trim();
     if value.is_empty() { fallback } else { value }
@@ -754,14 +456,6 @@ fn valid_relative_path(value: &str) -> Result<&str, CodeAgentError> {
         Err(invalid("git path is invalid"))
     } else {
         Ok(value)
-    }
-}
-fn ensure_snapshot(status: &Value, expected: &str) -> Result<(), CodeAgentError> {
-    if status["snapshot"] == expected {
-        Ok(())
-    } else {
-        Err(conflict("git working tree snapshot changed")
-            .with_mutation_code(AgentMutationErrorCode::GitStatusChanged))
     }
 }
 fn truncate_utf8(value: String, maximum: usize) -> (String, bool) {
