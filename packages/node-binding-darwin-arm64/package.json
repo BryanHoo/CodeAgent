@@ -1,0 +1,19 @@
+{
+  "name": "@bryanhu/code-agent-darwin-arm64",
+  "version": "1.9.0",
+  "private": false,
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "code-agent-node-binding.node",
+  "files": [
+    "code-agent-node-binding.node"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}

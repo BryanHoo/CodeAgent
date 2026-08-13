@@ -1,6 +1,7 @@
 export {
   NativeBindingLoadError,
   loadNativeBinding,
+  resolveNativeBindingPackage,
   type NativeBinding,
   type NativeBindingLoaderOptions,
 } from "./native-binding.js";

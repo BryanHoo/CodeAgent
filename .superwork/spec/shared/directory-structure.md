@@ -7,9 +7,8 @@
 ## Rules
 
 - `protocol` 不依赖其他内部包，维护统一类型、Schema 和 API 描述。
-- `core` 只依赖 `protocol`，维护领域模型、用例和 Provider 端口。
-- `provider-codex` 只依赖 `core` 与 `protocol`，维护 Codex 进程和协议适配。
-- `server` 可以依赖 `core`、`protocol`、`provider-codex`，负责交付与基础设施装配。
+- `engine-node` 只维护 Rust N-API addon loader 与 Node Engine facade；领域、SQLite、Provider 和平台能力归属 Rust crates。
+- `server` 依赖 `engine-node` 与 `protocol`，只负责 Fastify HTTP/WebSocket、认证、静态资源和 Delivery serialization。
 - `client` 只依赖 `protocol`，维护宿主无关 facade、operation 契约、Schema 校验、结构化错误与取消协调，不得导入 HTTP、WebSocket 或 Tauri API。
 - `transport-http` 依赖 `client` 与 `protocol`，维护 Web/LAN 的 HTTP route、附件 URL 和 WebSocket 事件交付。
 - `transport-tauri` 依赖 `client` 与 Tauri API，维护 Desktop IPC 交付；两个 Transport 不得互相依赖。

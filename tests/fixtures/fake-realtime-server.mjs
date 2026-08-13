@@ -6,25 +6,31 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { openNodeEngine } from "../../dist/engine-node/index.js";
-import { createCodeAgentServer } from "../../dist/server/index.js";
+import { openNodeEngine } from "../../apps/node-cli/dist/engine-node/index.js";
+import { createCodeAgentServer } from "../../apps/node-cli/dist/server/index.js";
 
 const fixtureProjectId = "code-agent";
 // 与 Fake Codex thread cwd 保持一致，确保 Provider history 归属同一 Project。
 const projectRoot = "/workspace/CodeAgent";
 const codexPath = fileURLToPath(new URL("./fake-codex-server.mjs", import.meta.url));
-const staticRoot = fileURLToPath(new URL("../../dist/web", import.meta.url));
+const addonPath = fileURLToPath(
+  new URL("../../packages/engine-node/native/code-agent-node-binding.node", import.meta.url),
+);
+const staticRoot = fileURLToPath(new URL("../../apps/node-cli/dist/web", import.meta.url));
 const stateRoot = await mkdtemp(join(tmpdir(), "code-agent-e2e-"));
 
 process.env["FAKE_APP_SERVER_SCENARIO"] = "realtime-actions";
-const nativeEngine = await openNodeEngine({
-  appVersion: "1.9.0",
-  attachmentRoot: join(stateRoot, "attachments"),
-  codexHome: stateRoot,
-  codexPath,
-  databasePath: join(stateRoot, "state.sqlite3"),
-  temporaryWorkspace: join(stateRoot, "temporary-workspace"),
-});
+const nativeEngine = await openNodeEngine(
+  {
+    appVersion: "1.9.0",
+    attachmentRoot: join(stateRoot, "attachments"),
+    codexHome: stateRoot,
+    codexPath,
+    databasePath: join(stateRoot, "state.sqlite3"),
+    temporaryWorkspace: join(stateRoot, "temporary-workspace"),
+  },
+  { addonPath },
+);
 const project = await nativeEngine.projectAdd(randomUUID(), projectRoot);
 const nativeProjectId = project.id;
 

@@ -2,12 +2,12 @@
 
 ## Scope
 
-适用于根发布包、`apps/web` 和所有 `packages/*` 的持久工程约束。
+适用于根 Workspace、`apps/node-cli`、`apps/web` 和所有 `packages/*` 的持久工程约束。
 
 ## Naming
 
 - 产品展示名称统一使用 `CodeAgent`。
-- 根 npm 包使用 `@bryanhu/code-agent`，唯一 CLI 命令使用 `code-agent`，不提供额外兼容别名。
+- `apps/node-cli` 发布为 `@bryanhu/code-agent`，唯一 CLI 命令使用 `code-agent`，不提供额外兼容别名；根包仅作为 private Workspace 编排器。
 - 内部私有 Workspace 包统一使用 `@code-agent/*` 作用域。
 
 ## Pre-Development Checklist
@@ -26,6 +26,7 @@
 - TypeBox 继续作为 TypeScript/Rust 公共协议单一来源；使用 `pnpm run protocol:rust:generate` 显式更新版本化 Schema 与 Rust DTO，`pnpm run protocol:rust:check` 只读检查 drift。复杂 Provider Event 在 Rust 侧先按同一 JSON Schema 校验，再进入 Runtime Event Stream。
 - Provider 差异通过 Capability 或 `extensions` 表达，原始 Provider 结构不得泄漏到 Web。
 - 项目命令使用 pnpm，Python 命令使用 `python3`；内部依赖使用 `workspace:*`，共享外部版本使用 `catalog:`。
+- 根 `package.json` 是唯一产品版本源；CLI、native packages、Cargo workspace 与 Tauri config 必须由 `release:version:check` 保持一致。
 - 子进程使用参数数组和 `shell: false`；路径、等待与资源清理必须跨平台且有界。
 - Rust Runtime 只依赖 Core/Protocol ports；操作、幂等、事件与订阅队列必须有界，关闭使用协作取消并等待全部受跟踪任务。
 - Desktop SQLite 由单独 owner thread 和有界 `sync_channel` 持有；附件使用 raw IPC 与受管 opaque asset protocol，Renderer capability 不授予任意 fs/shell。
@@ -39,13 +40,14 @@
 - Phase 4 平台能力改动必须运行 `pnpm run tauri:phase4:check`，禁止无界队列、base64 附件和万能 Command。
 - Phase 5 Provider、Runtime、Desktop Command 或 Tauri Transport 改动必须运行 `pnpm run tauri:phase5:check`；该门禁同时覆盖 Phase 4，并校验 Codex 版本/通知分类、进程安全边界、完整命令注册、Channel 信封和共享实时 fixture。
 - Phase 6 Desktop 宿主、安全、插件、窗口或错误边界改动必须运行 `pnpm run tauri:phase6:check`；该门禁同时覆盖 Phase 4/5，并校验严格 CSP、本地导航、最小 capability、single-instance、幂等关闭和 correlation ID。
+- Phase 8 Workspace、版本、native package 或发布流程改动必须运行 `pnpm run tauri:phase8:check` 和 `pnpm run package:check`；主包不得内嵌 `.node`，必须通过精确版本 `optionalDependencies` 选择平台包。
 - 根 `build` 只生成 npm 发布所需的 Web 与 Node 产物；Desktop UI 和安装包分别使用 `build:desktop-ui`、`build:desktop`，不得进入 npm tarball。
 - `pnpm check` 必须执行 `pnpm audit --prod --audit-level moderate`，阻止中危及以上的已知生产依赖漏洞进入 CI 与发布流程。
 - `pnpm check` 和 CI 必须执行 `pnpm run codex:schema:check`，使用锁定的 `@openai/codex` 及 `--experimental` 生成 TypeScript 与 JSON Schema，并与 `schemas/codex-app-server/<version>.schema-baseline.json` 比较；升级 Codex 必须显式运行 `pnpm run codex:schema:update` 并审查差异。
 - 涉及浏览器装配或用户流程时运行 `pnpm test:e2e`。
 - 涉及发布结构时确认 `pnpm run package:check` 通过。
-- CI 在 Ubuntu 与 Windows 完整门禁之外，必须保留 macOS 轻量 smoke，覆盖 Web 目录浏览、浏览器与宿主应用打开以及 Darwin Codex 二进制解析。
-- 发布必须先使用 `pnpm pack` 生成 tarball，将 `catalog:` 和 `workspace:` 协议转换为 npm 可安装版本，再使用 npm CLI 发布该 tarball，以完成 Trusted Publisher OIDC 认证。
+- CI 在 Ubuntu 与 Windows 完整门禁之外，必须保留 macOS 轻量 smoke，覆盖 CLI 宿主命令、native loader 和当前平台 addon 构建。
+- 发布必须先使用 `pnpm pack` 生成 tarball，将 `catalog:` 和 `workspace:` 协议转换为 npm 可安装版本；先发布所有 native packages，再通过 npm CLI 发布主包，以完成 Trusted Publisher OIDC 认证。
 - 原生运行时依赖不得因包含 `binding.gyp` 且缺少显式安装钩子而触发 npm 隐式 `node-gyp rebuild`；`package:check` 必须拒绝此类依赖。
 - Web 与 Node 发布构建不得生成或打包 `.map` 源码映射，`package:check` 必须拒绝含 `.map` 的发布清单。
 - `.agents/**` 属于代理技能资产，不进入产品 Prettier 与 ESLint 门禁；相关改动使用技能自身校验。

@@ -2,7 +2,7 @@
 
 ## Scope
 
-适用于 `packages/protocol`、`packages/core`、`packages/client` 及所有跨包公共入口。
+适用于 `packages/protocol`、`packages/client`、两个 Transport 及所有跨包公共入口。
 
 ## Guidelines Index
 

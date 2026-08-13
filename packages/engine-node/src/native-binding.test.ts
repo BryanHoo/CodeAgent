@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { NativeBindingLoadError, loadNativeBinding } from "./native-binding.js";
+import {
+  NativeBindingLoadError,
+  loadNativeBinding,
+  resolveNativeBindingPackage,
+} from "./native-binding.js";
 
 describe("loadNativeBinding", () => {
   it("returns an injected binding without touching the filesystem", () => {
@@ -40,5 +44,35 @@ describe("loadNativeBinding", () => {
         code: "NATIVE_BINDING_LOAD_FAILED",
       });
     }
+  });
+
+  it.each([
+    ["darwin", "arm64", "@bryanhu/code-agent-darwin-arm64"],
+    ["darwin", "x64", "@bryanhu/code-agent-darwin-x64"],
+    ["linux", "x64", "@bryanhu/code-agent-linux-x64-gnu"],
+    ["win32", "x64", "@bryanhu/code-agent-win32-x64-msvc"],
+  ] as const)("maps %s-%s to %s", (platform, arch, expected) => {
+    expect(resolveNativeBindingPackage(platform, arch)).toBe(expected);
+  });
+
+  it("rejects unsupported targets before loading a module", () => {
+    expect(() => resolveNativeBindingPackage("linux", "riscv64")).toThrow(
+      "不支持 native addon 平台: linux-riscv64",
+    );
+  });
+
+  it("loads the exact platform package without scanning directories", () => {
+    const NodeEngine = Object.assign(() => undefined, {
+      open: () => Promise.reject(new Error("unused")),
+    });
+    const binding = {
+      NodeEngine,
+      addonVersion: () => "test",
+    };
+    const load = vi.fn(() => binding);
+
+    expect(loadNativeBinding({ arch: "arm64", load, platform: "darwin" })).toBe(binding);
+    expect(load).toHaveBeenCalledOnce();
+    expect(load).toHaveBeenCalledWith("@bryanhu/code-agent-darwin-arm64");
   });
 });

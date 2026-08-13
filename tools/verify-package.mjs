@@ -1,125 +1,122 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
-const require = createRequire(import.meta.url);
-
-const cliResult = spawnSync(process.execPath, ["dist/cli.js", "--help"], {
-  encoding: "utf8",
-  shell: false,
-});
-
-const packageManifest = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-);
-if (packageManifest.bin?.["code-agent"] !== "dist/cli.js") {
-  throw new Error(`Unexpected code-agent bin path: ${packageManifest.bin?.["code-agent"]}`);
-}
-
-if (cliResult.status !== 0 || !cliResult.stdout.includes("Usage: code-agent [command] [options]")) {
-  process.stderr.write(cliResult.stderr);
-  throw new Error("Built CLI is not executable");
-}
-
+const root = resolve(import.meta.dirname, "..");
+const cliRoot = resolve(root, "apps/node-cli");
 const packageManagerCli = process.env["npm_execpath"];
-if (!packageManagerCli) {
-  throw new Error("package:check must run through pnpm so npm_execpath is available");
+if (!packageManagerCli) throw new Error("package:check must run through pnpm");
+
+const nativeTarget = new Map([
+  ["darwin-arm64", "darwin-arm64"],
+  ["darwin-x64", "darwin-x64"],
+  ["linux-x64", "linux-x64-gnu"],
+  ["win32-x64", "win32-x64-msvc"],
+]).get(`${process.platform}-${process.arch}`);
+if (nativeTarget === undefined) {
+  throw new Error(`Unsupported package check target: ${process.platform}-${process.arch}`);
+}
+
+function run(command, args, cwd) {
+  const result = spawnSync(command, args, { cwd, encoding: "utf8", shell: false });
+  if (result.status !== 0) {
+    process.stderr.write(result.stderr);
+    throw new Error(`${command} ${args.join(" ")} failed`);
+  }
+  return result.stdout;
+}
+
+function pack(workspaceRoot, destination) {
+  const output = run(
+    process.execPath,
+    [packageManagerCli, "pack", "--pack-destination", destination, "--json"],
+    workspaceRoot,
+  );
+  const value = JSON.parse(output);
+  const manifest = Array.isArray(value) ? value[0] : value;
+  if (!manifest?.filename) throw new Error(`Pack output is invalid for ${workspaceRoot}`);
+  return manifest;
 }
 
 const packRoot = mkdtempSync(join(tmpdir(), "code-agent-pack-check-"));
-const stateRoot = mkdtempSync(join(tmpdir(), "code-agent-package-check-"));
+const installRoot = mkdtempSync(join(tmpdir(), "code-agent-install-check-"));
 try {
-  // 必须生成真实 tarball，dry-run 无法验证发布时转换后的依赖协议。
-  const result = spawnSync(
-    process.execPath,
-    [packageManagerCli, "pack", "--pack-destination", packRoot, "--json"],
-    {
-      encoding: "utf8",
-      shell: false,
-    },
-  );
+  const cliManifest = pack(cliRoot, packRoot);
+  const nativeManifest = pack(resolve(root, `packages/node-binding-${nativeTarget}`), packRoot);
+  const expectedVersion = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")).version;
 
-  if (result.status !== 0) {
-    process.stderr.write(result.stderr);
-    process.exit(result.status ?? 1);
+  if (cliManifest.name !== "@bryanhu/code-agent") {
+    throw new Error(`Unexpected package name: ${String(cliManifest.name)}`);
   }
-
-  const output = JSON.parse(result.stdout);
-  // pnpm 返回单个对象；保留数组分支便于兼容不同打包器的 JSON 形态。
-  const manifest = Array.isArray(output) ? output[0] : output;
-
-  if (!manifest) {
-    throw new Error("Package manifest is missing from pack output");
-  }
-
-  if (manifest.name !== "@bryanhu/code-agent") {
-    throw new Error(`Unexpected package name: ${manifest.name}`);
-  }
-
-  const files = new Set(manifest.files.map(({ path }) => path));
+  const files = new Set(cliManifest.files.map(({ path }) => path));
   const requiredFiles = [
-    "CHANGELOG.md",
+    "dist/CHANGELOG.md",
+    "dist/LICENSE",
+    "dist/README.md",
+    "dist/README.zh-CN.md",
     "dist/cli.js",
-    "dist/native/code-agent-node-binding.node",
+    "dist/engine-node/index.js",
     "dist/server/index.js",
     "dist/web/index.html",
   ];
   const missingFiles = requiredFiles.filter((path) => !files.has(path));
-  const sourceMapFiles = [...files].filter((path) => path.endsWith(".map"));
-
+  const forbiddenFiles = [...files].filter(
+    (path) => path.endsWith(".map") || path.endsWith(".node") || path.startsWith("src/"),
+  );
   if (missingFiles.length > 0) {
     throw new Error(`Package is missing required files: ${missingFiles.join(", ")}`);
   }
-
-  if (sourceMapFiles.length > 0) {
-    throw new Error(`Package must not include source maps: ${sourceMapFiles.join(", ")}`);
+  if (forbiddenFiles.length > 0) {
+    throw new Error(`Main package contains forbidden files: ${forbiddenFiles.join(", ")}`);
   }
 
-  // 读取 tarball 内最终 package.json，防止 npm 客户端收到 pnpm 专用协议。
-  const packedManifestResult = spawnSync(
-    "tar",
-    ["-xOf", manifest.filename, "package/package.json"],
-    {
-      encoding: "utf8",
-      shell: false,
-    },
+  const packedManifest = JSON.parse(
+    run("tar", ["-xOf", cliManifest.filename, "package/package.json"], root),
   );
-  if (packedManifestResult.status !== 0) {
-    process.stderr.write(packedManifestResult.stderr);
-    throw new Error("Unable to read package.json from packed tarball");
-  }
-
-  const packedManifest = JSON.parse(packedManifestResult.stdout);
-  const dependencyFields = [
+  const unresolvedDependencies = [
     "dependencies",
     "devDependencies",
     "optionalDependencies",
     "peerDependencies",
-  ];
-  const unresolvedDependencies = dependencyFields.flatMap((field) =>
+  ].flatMap((field) =>
     Object.entries(packedManifest[field] ?? {})
       .filter(([, version]) => /^(catalog|workspace):/.test(version))
-      .map(([name, version]) => `${field}.${name}=${version}`),
+      .map(([name, version]) => `${field}.${name}=${String(version)}`),
   );
   if (unresolvedDependencies.length > 0) {
-    throw new Error(
-      `Package contains unresolved dependency protocols: ${unresolvedDependencies.join(", ")}`,
-    );
+    throw new Error(`Package contains unresolved protocols: ${unresolvedDependencies.join(", ")}`);
+  }
+  if (
+    Object.values(packedManifest.optionalDependencies ?? {}).some(
+      (version) => version !== expectedVersion,
+    )
+  ) {
+    throw new Error("Native optional dependencies must use the exact product version");
   }
 
-  const extractResult = spawnSync("tar", ["-xf", manifest.filename, "-C", stateRoot], {
+  const scopeRoot = join(installRoot, "node_modules/@bryanhu");
+  mkdirSync(scopeRoot, { recursive: true });
+  run("tar", ["-xf", cliManifest.filename, "-C", installRoot], root);
+  run("tar", ["-xf", nativeManifest.filename, "-C", scopeRoot], root);
+  const installedCli = join(installRoot, "package");
+  const nativePackageName = `code-agent-${nativeTarget}`;
+  const extractedNative = join(scopeRoot, "package");
+  const installedNative = join(scopeRoot, nativePackageName);
+  renameSync(extractedNative, installedNative);
+
+  const cliResult = spawnSync(process.execPath, [join(installedCli, "dist/cli.js"), "--help"], {
     encoding: "utf8",
     shell: false,
   });
-  if (extractResult.status !== 0) {
-    process.stderr.write(extractResult.stderr);
-    throw new Error("Unable to extract packed tarball");
+  if (cliResult.status !== 0 || !cliResult.stdout.includes("Usage: code-agent")) {
+    process.stderr.write(cliResult.stderr);
+    throw new Error("Packed CLI is not executable");
   }
-
-  // 直接加载 tarball 内的 N-API addon，验证平台产物与 Node ABI 均可用。
-  const binding = require(join(stateRoot, "package/dist/native/code-agent-node-binding.node"));
+  const binding = createRequire(import.meta.url)(
+    join(installedNative, "code-agent-node-binding.node"),
+  );
   if (
     typeof binding.addonVersion !== "function" ||
     typeof binding.NodeEngine?.open !== "function"
@@ -127,8 +124,8 @@ try {
     throw new Error("Packed native addon exports are invalid");
   }
 
-  process.stdout.write(`Package verified: ${manifest.filename} (${manifest.files.length} files)\n`);
+  process.stdout.write(`Packages verified: ${cliManifest.filename}, ${nativeManifest.filename}\n`);
 } finally {
   rmSync(packRoot, { force: true, recursive: true });
-  rmSync(stateRoot, { force: true, recursive: true });
+  rmSync(installRoot, { force: true, recursive: true });
 }

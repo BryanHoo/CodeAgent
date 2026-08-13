@@ -51,7 +51,7 @@ export default defineConfig({
       },
     },
     exclude: [...configDefaults.exclude, "**/*.performance.test.{ts,tsx}"],
-    include: ["{apps,packages,src}/**/*.test.{ts,tsx}", "tests/*.test.ts"],
+    include: ["{apps,packages}/**/*.test.{ts,tsx}", "tests/*.test.ts"],
     passWithNoTests: true,
     restoreMocks: true,
   },

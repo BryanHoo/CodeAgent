@@ -1,0 +1,54 @@
+{
+  "name": "@bryanhu/code-agent",
+  "version": "1.9.0",
+  "private": false,
+  "description": "通过 Web 操作本地 Coding Agent 的应用",
+  "type": "module",
+  "author": "BryanHu",
+  "homepage": "https://github.com/BryanHoo/CodeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BryanHoo/CodeAgent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/BryanHoo/CodeAgent/issues"
+  },
+  "keywords": [
+    "ai",
+    "codex",
+    "coding-agent",
+    "developer-tools",
+    "web"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "code-agent": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup --config tsup.config.ts"
+  },
+  "dependencies": {
+    "@openai/codex": "catalog:"
+  },
+  "devDependencies": {
+    "@code-agent/engine-node": "workspace:*",
+    "@code-agent/protocol": "workspace:*",
+    "@code-agent/server": "workspace:*",
+    "tsup": "catalog:"
+  },
+  "optionalDependencies": {
+    "@bryanhu/code-agent-darwin-arm64": "1.9.0",
+    "@bryanhu/code-agent-darwin-x64": "1.9.0",
+    "@bryanhu/code-agent-linux-x64-gnu": "1.9.0",
+    "@bryanhu/code-agent-win32-x64-msvc": "1.9.0"
+  },
+  "license": "MIT"
+}
