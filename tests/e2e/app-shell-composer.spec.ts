@@ -293,6 +293,20 @@ test("keeps composer attachment icons aligned with the compact toolbar", async (
   await expect(imageMenuIcon).toHaveCSS("height", "16px");
 });
 
+test("uses the shared attachment picker and reveals hidden files on demand", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+  await page.getByRole("button", { name: "添加图片或文件" }).click();
+  await page.getByRole("menuitem", { name: "添加图片" }).click();
+  const picker = page.getByRole("dialog", { name: "选择本机图片" });
+
+  await expect(picker.getByRole("textbox", { name: "绝对路径" })).toHaveValue(
+    "/Users/bryan/Attachments",
+  );
+  await expect(picker.getByText(".hidden.png", { exact: true })).toHaveCount(0);
+  await picker.getByRole("button", { name: "显示隐藏文件" }).click();
+  await expect(picker.getByText(".hidden.png", { exact: true })).toBeVisible();
+});
+
 test("undoes text pasted into the composer", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 

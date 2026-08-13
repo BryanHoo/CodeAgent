@@ -263,16 +263,20 @@ impl FilePort for PlatformFilePort {
     async fn browse_directories(
         &self,
         path: Option<&str>,
+        show_hidden: bool,
         context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
         ensure_active(context)?;
-        browse_directory(path, None).await.map_err(map_error)
+        browse_directory(path, None, show_hidden)
+            .await
+            .map_err(map_error)
     }
 
     async fn browse_host_files(
         &self,
         kind: &str,
         path: Option<&str>,
+        show_hidden: bool,
         context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
         ensure_active(context)?;
@@ -283,7 +287,9 @@ impl FilePort for PlatformFilePort {
                 None,
             ));
         }
-        browse_directory(path, Some(kind)).await.map_err(map_error)
+        browse_directory(path, Some(kind), show_hidden)
+            .await
+            .map_err(map_error)
     }
 
     async fn open_capabilities(

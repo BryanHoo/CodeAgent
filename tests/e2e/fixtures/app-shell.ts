@@ -415,7 +415,14 @@ export const projectFileSearchEntries = [
   { name: "package.json", path: "package.json" },
 ] as const;
 
-export const projectDirectoryListings = new Map<string | null, object>([
+type ProjectDirectoryFixture = Readonly<{
+  entries: readonly Readonly<{ name: string; path: string }>[];
+  parentPath: string | null;
+  path: string;
+  roots: readonly Readonly<{ name: string; path: string }>[];
+}>;
+
+export const projectDirectoryListings = new Map<string | null, ProjectDirectoryFixture>([
   [
     null,
     {
@@ -857,10 +864,14 @@ export async function mockAppShellApi(
       body = { data: routedProjects, nextCursor: null };
     } else if (url.pathname === "/v1/host-files") {
       const kind = url.searchParams.get("kind");
-      const fileNames =
+      const visibleFileNames =
         kind === "image"
           ? ["draft.png", "preserved.png", "screen.png", "task-draft.png"]
           : ["specification.pdf"];
+      const fileNames =
+        url.searchParams.get("showHidden") === "true"
+          ? [kind === "image" ? ".hidden.png" : ".hidden.pdf", ...visibleFileNames]
+          : visibleFileNames;
       body = {
         entries: fileNames.map((name) => ({
           name,
@@ -893,9 +904,19 @@ export async function mockAppShellApi(
       };
     } else if (url.pathname === "/v1/project-directories") {
       const path = url.searchParams.get("path");
-      body =
+      const listing =
         projectDirectoryListings.get(path) ??
-        ({ entries: [], parentPath: "/workspace", path, roots: [] } as const);
+        ({ entries: [], parentPath: "/workspace", path: path ?? "/workspace", roots: [] } as const);
+      body =
+        url.searchParams.get("showHidden") === "true" && path === null
+          ? {
+              ...listing,
+              entries: [
+                { name: ".hidden-project", path: "/workspace/.hidden-project" },
+                ...listing.entries,
+              ],
+            }
+          : listing;
     } else if (url.pathname === "/v1/projects" && route.request().method() === "POST") {
       const request = parseRequestRecord(route.request().postData());
       const rootPath = request["rootPath"];

@@ -103,10 +103,11 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async listProjectDirectories(
     path?: string,
+    showHidden = false,
     options: ReadOptions = {},
   ): Promise<ProjectDirectoryListing> {
     return this.read(
-      appendQuery("/v1/project-directories", { path }),
+      appendQuery("/v1/project-directories", { path, showHidden: showHidden ? "true" : undefined }),
       ProjectDirectoryListingSchema,
       options,
     );
@@ -115,9 +116,14 @@ export class ProjectHttpClient extends CodeAgentTransport {
   public async listHostFiles(
     kind: HostFileKind,
     path?: string,
+    showHidden = false,
     options: ReadOptions = {},
   ): Promise<HostFileListing> {
-    return this.read(appendQuery("/v1/host-files", { kind, path }), HostFileListingSchema, options);
+    return this.read(
+      appendQuery("/v1/host-files", { kind, path, showHidden: showHidden ? "true" : undefined }),
+      HostFileListingSchema,
+      options,
+    );
   }
 
   public async reorderProjects(

@@ -102,13 +102,13 @@ export interface CodeAgentEngine extends NativeEventEngine {
   gitStatus(requestId: string, projectId: string, repository?: string): JsonResult;
   globalSettingsGet(requestId: string): JsonResult;
   globalSettingsUpdate(requestId: string, settings: unknown): JsonResult;
-  hostFilesList(requestId: string, kind: string, path?: string): JsonResult;
+  hostFilesList(requestId: string, kind: string, path?: string, showHidden?: boolean): JsonResult;
   modelsList(requestId: string): JsonResult;
   pendingRequestResolve(requestId: string, projectId: string, input: unknown): JsonResult;
   projectAdd(requestId: string, rootPath: string): JsonResult;
   projectDefaultsGet(requestId: string, projectId: string): JsonResult;
   projectDefaultsUpdate(requestId: string, projectId: string, settings: unknown): JsonResult;
-  projectDirectoriesList(requestId: string, path?: string): JsonResult;
+  projectDirectoriesList(requestId: string, path?: string, showHidden?: boolean): JsonResult;
   projectImage(requestId: string, projectId: string, path: string): Promise<Uint8Array>;
   projectList(requestId: string): JsonResult;
   projectOpen(requestId: string, projectId: string, appId: string, path?: string): JsonResult;

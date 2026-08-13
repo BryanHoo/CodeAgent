@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { hostCapabilities as httpHostCapabilities } from "@code-agent/transport-http";
-import { hostCapabilities as tauriHostCapabilities } from "@code-agent/transport-tauri";
 
 import { createViteConfig, resolveBuildTarget, supportedBrowserTargets } from "./vite.config.js";
 
@@ -42,8 +40,6 @@ describe("Web Vite browser targets", () => {
     expect(desktopAliases).not.toContain("packages/transport-http/src/index.ts");
     expect(webConfig.server?.proxy).toBeDefined();
     expect(desktopConfig.server?.proxy).toBeUndefined();
-    expect(httpHostCapabilities.nativeDirectoryPicker).toBe(false);
-    expect(tauriHostCapabilities.nativeDirectoryPicker).toBe(true);
   });
 
   it("isolates the oversized C++ macro grammar from its parent language chunk", () => {

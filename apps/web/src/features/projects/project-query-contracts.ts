@@ -21,13 +21,11 @@ export type CodeAgentGitMutationClient = Pick<
 >;
 export type CodeAgentFileTreeClient = Pick<CodeAgentClient, "listProjectFiles">;
 export type CodeAgentProjectFileSearchClient = Pick<CodeAgentClient, "searchProjectFiles">;
-export type CodeAgentProjectDirectoryClient = Pick<CodeAgentClient, "listProjectDirectories"> &
-  Partial<Pick<CodeAgentClient, "selectHostDirectory">>;
+export type CodeAgentProjectDirectoryClient = Pick<CodeAgentClient, "listProjectDirectories">;
 export type CodeAgentHostAttachmentClient = Pick<
   CodeAgentClient,
   "importHostAttachment" | "listHostFiles"
-> &
-  Partial<Pick<CodeAgentClient, "selectHostFiles">>;
+>;
 export type CodeAgentSourceFileClient = Pick<CodeAgentClient, "readProjectSourceFile">;
 export type CodeAgentProjectOpenClient = Pick<
   CodeAgentClient,

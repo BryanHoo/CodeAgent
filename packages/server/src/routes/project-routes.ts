@@ -67,7 +67,12 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     },
     (request) =>
       callEngine(() =>
-        engine.hostFilesList(createReadRequestId(), request.query.kind, request.query.path),
+        engine.hostFilesList(
+          createReadRequestId(),
+          request.query.kind,
+          request.query.path,
+          request.query.showHidden ?? false,
+        ),
       ),
   );
   app.get<{ Querystring: ProjectDirectoryQuery }>(
@@ -79,7 +84,13 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
       },
     },
     (request) =>
-      callEngine(() => engine.projectDirectoriesList(createReadRequestId(), request.query.path)),
+      callEngine(() =>
+        engine.projectDirectoriesList(
+          createReadRequestId(),
+          request.query.path,
+          request.query.showHidden ?? false,
+        ),
+      ),
   );
   app.get<{ Params: { projectId: string } }>(
     "/v1/projects/:projectId/open-capabilities",

@@ -36,6 +36,23 @@ describe("Tauri Phase 6 repository contract", () => {
     expect(capability.permissions.join("\n")).not.toMatch(/fs:|shell|http|dialog|notification/u);
   });
 
+  it("uses the shared Web file picker without native system dialogs", () => {
+    const workspaceManifest = read("Cargo.toml");
+    const desktopManifest = read("apps/desktop/src-tauri/Cargo.toml");
+    const desktop = read("apps/desktop/src-tauri/src/lib.rs");
+    const hostCommands = read("apps/desktop/src-tauri/src/commands/host.rs");
+    const transport = read("packages/transport-tauri/src/tauri-transport.ts");
+    const combined = [workspaceManifest, desktopManifest, desktop, hostCommands, transport].join(
+      "\n",
+    );
+
+    expect(combined).not.toContain("tauri-plugin-dialog");
+    expect(combined).not.toContain("host_directory_select");
+    expect(combined).not.toContain("host_files_select");
+    expect(combined).not.toContain("host.directory_select");
+    expect(combined).not.toContain("host.files_select");
+  });
+
   it("rejects remote navigation and release DevTools", () => {
     const desktop = read("apps/desktop/src-tauri/src/lib.rs");
     const manifest = read("apps/desktop/src-tauri/Cargo.toml");

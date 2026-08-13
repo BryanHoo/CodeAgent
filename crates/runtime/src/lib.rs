@@ -1484,10 +1484,14 @@ impl CodeAgentRuntime {
         &self,
         request_id: &str,
         path: Option<&str>,
+        show_hidden: bool,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
 
-        self.ports.file.browse_directories(path, &context).await
+        self.ports
+            .file
+            .browse_directories(path, show_hidden, &context)
+            .await
     }
 
     /// 浏览宿主可导入普通文件。
@@ -1496,12 +1500,13 @@ impl CodeAgentRuntime {
         request_id: &str,
         kind: &str,
         path: Option<&str>,
+        show_hidden: bool,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
 
         self.ports
             .file
-            .browse_host_files(kind, path, &context)
+            .browse_host_files(kind, path, show_hidden, &context)
             .await
     }
 
