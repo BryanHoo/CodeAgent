@@ -65,7 +65,14 @@ pub(crate) async fn browse_directory(
         }
         let child_path = child.path();
         if file_type.is_dir() {
-            entries.push(json!({ "name": child.file_name().to_string_lossy(), "path": child_path, "type": "directory" }));
+            let entry = match kind {
+                // ProjectDirectoryListing 保持严格的 name + path 条目契约。
+                None => json!({ "name": child.file_name().to_string_lossy(), "path": child_path }),
+                Some(_) => {
+                    json!({ "name": child.file_name().to_string_lossy(), "path": child_path, "type": "directory" })
+                }
+            };
+            entries.push(entry);
         } else if file_type.is_file()
             && kind.is_some_and(|kind| supported_host_file(kind, &child_path))
         {
@@ -163,6 +170,7 @@ mod tests {
         let root =
             std::env::temp_dir().join(format!("code-agent-host-browser-{}", std::process::id()));
         fs::create_dir_all(&root).expect("fixture directory must be created");
+        fs::create_dir_all(root.join("source")).expect("fixture child directory must be created");
         fs::write(root.join("notes.txt"), b"notes").expect("fixture file must be created");
         let root_path = root.to_string_lossy();
 
@@ -183,6 +191,16 @@ mod tests {
                 .as_array()
                 .is_some_and(|roots| !roots.is_empty())
         );
+        let directory_entry = directories["entries"]
+            .as_array()
+            .and_then(|entries| entries.iter().find(|entry| entry["name"] == "source"))
+            .expect("project directory entry must exist");
+        let host_directory_entry = host_files["entries"]
+            .as_array()
+            .and_then(|entries| entries.iter().find(|entry| entry["name"] == "source"))
+            .expect("host directory entry must exist");
+        assert_eq!(directory_entry.get("type"), None);
+        assert_eq!(host_directory_entry["type"], "directory");
         fs::remove_dir_all(root).expect("fixture directory must be removed");
     }
 
