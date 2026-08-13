@@ -20,7 +20,7 @@ function createOptions(engine: CodeAgentEngine) {
     loggerEnabled: false,
     readAppInfo: () =>
       Promise.resolve({
-        appVersion: "1.9.0",
+        appVersion: "1.10.0",
         codexVersion: "0.147.0",
         latestVersion: null,
         releaseNotes: null,

@@ -1,6 +1,6 @@
 {
   "name": "@bryanhu/code-agent-win32-x64-msvc",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "private": false,
   "os": [
     "win32"

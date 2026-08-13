@@ -21,10 +21,18 @@ import {
   DialogTitle,
 } from "../../../shared/components/core/dialog.js";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../shared/components/core/select.js";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
+import { findActiveFilesystemRoot } from "../../../shared/lib/filesystem-roots.js";
 import type { CodeAgentHostAttachmentClient } from "../../projects/project-queries.js";
 import { resolveIdempotencyAttempt, type IdempotencyAttempt } from "../composer-state.js";
 
@@ -192,6 +200,8 @@ export function HostAttachmentPickerDialog({
     staleTime: 30_000,
   });
   const listing = rootQuery.data;
+  const activeRootPath =
+    listing === undefined ? undefined : findActiveFilesystemRoot(listing.roots, listing.path)?.path;
   const expandedDirectoryPaths = useMemo(() => [...expandedPaths], [expandedPaths]);
   const directoryQueries = useQueries({
     queries: expandedDirectoryPaths.map((path) => ({
@@ -227,6 +237,12 @@ export function HostAttachmentPickerDialog({
     if (parentPath === null || parentPath === undefined) return;
     // 切换浏览根目录时丢弃上一层的选择，避免确认不可见文件。
     setRootPath(parentPath);
+    setExpandedPaths(new Set());
+    setSelectedPath(undefined);
+    setImportError(null);
+  };
+  const navigateToRoot = (path: string) => {
+    setRootPath(path);
     setExpandedPaths(new Set());
     setSelectedPath(undefined);
     setImportError(null);
@@ -324,6 +340,27 @@ export function HostAttachmentPickerDialog({
         </DialogHeader>
 
         <div className="flex min-h-10 items-center gap-2 border-y border-separator bg-panel px-3 sm:px-4">
+          {listing === undefined || listing.roots.length < 2 ? null : (
+            <Select
+              onValueChange={navigateToRoot}
+              {...(activeRootPath === undefined ? {} : { value: activeRootPath })}
+            >
+              <SelectTrigger
+                aria-label={t("hostAttachmentPicker.filesystemRoot")}
+                className="h-8 min-w-20 px-2 font-mono"
+                size="sm"
+              >
+                <SelectValue placeholder={t("hostAttachmentPicker.filesystemRoot")} />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {listing.roots.map((root) => (
+                  <SelectItem key={root.path} value={root.path}>
+                    {root.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

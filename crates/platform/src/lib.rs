@@ -20,5 +20,6 @@ pub use attachments::{AttachmentContent, AttachmentKind, AttachmentStore, Attach
 pub use database::{DatabaseDiagnostics, DatabaseOptions, PlatformDatabase, PlatformError};
 pub use files::{ImageFile, PlatformFilePort, PlatformFileService, SourceFilePage};
 pub use git::GitCliService;
+pub use host_file_browser::filesystem_roots;
 pub use path_policy::CanonicalPathPolicy;
 pub use repository::SqliteRepository;

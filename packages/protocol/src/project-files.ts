@@ -84,11 +84,22 @@ export const ProjectDirectoryEntrySchema = Type.Object(
 
 export type ProjectDirectoryEntry = Readonly<Static<typeof ProjectDirectoryEntrySchema>>;
 
+export const FilesystemRootSchema = Type.Object(
+  {
+    name: Type.String({ minLength: 1 }),
+    path: ProjectDirectoryPathSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type FilesystemRoot = Readonly<Static<typeof FilesystemRootSchema>>;
+
 export const ProjectDirectoryListingSchema = Type.Object(
   {
     entries: Type.Array(ProjectDirectoryEntrySchema),
     parentPath: Type.Union([ProjectDirectoryPathSchema, Type.Null()]),
     path: ProjectDirectoryPathSchema,
+    roots: Type.Array(FilesystemRootSchema),
   },
   { additionalProperties: false },
 );
@@ -125,6 +136,7 @@ export const HostFileListingSchema = Type.Object(
     entries: Type.Array(HostFileEntrySchema),
     parentPath: Type.Union([ProjectDirectoryPathSchema, Type.Null()]),
     path: ProjectDirectoryPathSchema,
+    roots: Type.Array(FilesystemRootSchema),
   },
   { additionalProperties: false },
 );

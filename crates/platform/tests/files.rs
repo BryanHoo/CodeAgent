@@ -1,6 +1,21 @@
 use std::fs;
 
-use code_agent_platform::PlatformFileService;
+use code_agent_platform::{PlatformFileService, filesystem_roots};
+
+#[tokio::test]
+async fn filesystem_roots_should_include_the_current_platform_root() {
+    let roots = filesystem_roots().await;
+
+    assert!(!roots.is_empty());
+    assert!(roots.iter().all(|root| root.is_absolute()));
+    #[cfg(not(windows))]
+    assert_eq!(
+        roots,
+        vec![std::path::PathBuf::from(
+            std::path::MAIN_SEPARATOR.to_string()
+        )]
+    );
+}
 
 #[tokio::test]
 async fn files_should_preserve_utf8_cursor_and_validate_image_signature() {

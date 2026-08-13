@@ -560,7 +560,7 @@ dependencies = [
 
 [[package]]
 name = "code-agent-core"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -573,7 +573,7 @@ dependencies = [
 
 [[package]]
 name = "code-agent-desktop"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -597,11 +597,11 @@ dependencies = [
 
 [[package]]
 name = "code-agent-mcp-command-proxy"
-version = "1.9.0"
+version = "1.10.0"
 
 [[package]]
 name = "code-agent-node-binding"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -622,7 +622,7 @@ dependencies = [
 
 [[package]]
 name = "code-agent-platform"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -642,7 +642,7 @@ dependencies = [
 
 [[package]]
 name = "code-agent-protocol"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "chrono",
  "jsonschema",
@@ -653,7 +653,7 @@ dependencies = [
 
 [[package]]
 name = "code-agent-protocol-gen"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "prettyplease",
  "schemars 0.8.22",
@@ -664,7 +664,7 @@ dependencies = [
 
 [[package]]
 name = "code-agent-provider-codex"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -684,7 +684,7 @@ dependencies = [
 
 [[package]]
 name = "code-agent-runtime"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-trait",
  "chrono",
