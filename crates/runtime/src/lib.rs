@@ -8,6 +8,7 @@ mod event_stream;
 mod idempotency;
 mod project_context;
 mod prompt;
+mod provider_connection;
 mod settings_validation;
 
 use std::{
@@ -304,6 +305,9 @@ impl CodeAgentRuntime {
     pub async fn models(&self, request_id: &str) -> Result<AgentModelPage, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
 
+        if let Some(models) = self.persisted_models(&context).await? {
+            return Ok(models);
+        }
         self.ports.provider.models(&context).await
     }
 
@@ -838,7 +842,15 @@ impl CodeAgentRuntime {
             &["start-official-provider-login"],
             request_id,
             &json!({}),
-            |operation| async move { self.ports.provider.start_official_login(&operation).await },
+            |operation| async move {
+                let response = self.ports.provider.start_official_login(&operation).await?;
+                let record = provider_connection::official_record(self.ports.clock.now())?;
+                self.ports
+                    .repository
+                    .write_provider_connection(&record, &operation)
+                    .await?;
+                Ok(response)
+            },
         )
         .await
     }
@@ -881,10 +893,17 @@ impl CodeAgentRuntime {
             request_id,
             &payload,
             |operation| async move {
-                self.ports
+                let response = self
+                    .ports
                     .provider
                     .configure_custom(input, &operation)
-                    .await
+                    .await?;
+                let record = provider_connection::custom_record(&response, self.ports.clock.now())?;
+                self.ports
+                    .repository
+                    .write_provider_connection(&record, &operation)
+                    .await?;
+                Ok(response)
             },
         )
         .await
