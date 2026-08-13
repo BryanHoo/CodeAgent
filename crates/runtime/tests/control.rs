@@ -177,14 +177,24 @@ async fn idempotency_registry_should_reuse_success_and_reject_payload_conflict()
     };
 
     let first = registry
-        .execute("start_task", "key-1", &json!({ "input": "same" }), execute)
+        .execute(
+            &["start-task", "project-1"],
+            "key-1",
+            &json!({ "input": "same" }),
+            execute,
+        )
         .await;
     let second = registry
-        .execute("start_task", "key-1", &json!({ "input": "same" }), execute)
+        .execute(
+            &["start-task", "project-1"],
+            "key-1",
+            &json!({ "input": "same" }),
+            execute,
+        )
         .await;
     let conflict = registry
         .execute(
-            "start_task",
+            &["start-task", "project-1"],
             "key-1",
             &json!({ "input": "different" }),
             execute,
@@ -197,9 +207,40 @@ async fn idempotency_registry_should_reuse_success_and_reject_payload_conflict()
 
     tokio::time::sleep(Duration::from_millis(20)).await;
     let expired = registry
-        .execute("start_task", "key-1", &json!({ "input": "same" }), execute)
+        .execute(
+            &["start-task", "project-1"],
+            "key-1",
+            &json!({ "input": "same" }),
+            execute,
+        )
         .await;
     assert_eq!(expired, first);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn idempotency_registry_should_isolate_resource_scopes() {
+    let registry = IdempotencyRegistry::new(2, Duration::from_secs(60));
+    let calls = Arc::new(AtomicUsize::new(0));
+
+    for project_id in ["project-1", "project-2"] {
+        registry
+            .execute(
+                &["start-task", project_id],
+                "shared-key",
+                &json!({ "input": "same" }),
+                || {
+                    let calls = Arc::clone(&calls);
+                    async move {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        Ok(json!({ "projectId": project_id }))
+                    }
+                },
+            )
+            .await
+            .expect("scoped execution");
+    }
+
     assert_eq!(calls.load(Ordering::SeqCst), 2);
 }
 
@@ -211,11 +252,16 @@ async fn idempotency_registry_should_share_in_flight_and_not_cache_failure() {
         let calls = calls.clone();
         tokio::spawn(async move {
             registry
-                .execute("operation", "key", &json!({}), || async move {
-                    calls.fetch_add(1, Ordering::SeqCst);
-                    tokio::time::sleep(Duration::from_millis(20)).await;
-                    Ok(json!(1))
-                })
+                .execute(
+                    &["operation", "project-1"],
+                    "key",
+                    &json!({}),
+                    || async move {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        tokio::time::sleep(Duration::from_millis(20)).await;
+                        Ok(json!(1))
+                    },
+                )
                 .await
         })
     };
@@ -224,16 +270,66 @@ async fn idempotency_registry_should_share_in_flight_and_not_cache_failure() {
     assert_eq!(first.expect("first task"), second.expect("second task"));
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 
-    let failed = registry
-        .execute("failure", "key", &json!({}), || async {
+    let failed: Result<Value, CodeAgentError> = registry
+        .execute(&["failure"], "key", &json!({}), || async {
             Err(CodeAgentError::internal("failed"))
         })
         .await;
     let retried = registry
-        .execute("failure", "key", &json!({}), || async { Ok(json!(2)) })
+        .execute(&["failure"], "key", &json!({}), || async { Ok(json!(2)) })
         .await;
     assert!(failed.is_err());
     assert_eq!(retried.expect("retry succeeds"), json!(2));
+}
+
+#[tokio::test]
+async fn idempotency_registry_should_release_in_flight_when_executor_is_cancelled() {
+    let registry = Arc::new(IdempotencyRegistry::new(2, Duration::from_secs(60)));
+    let first = {
+        let registry = Arc::clone(&registry);
+        tokio::spawn(async move {
+            registry
+                .execute(&["operation", "project-1"], "key", &json!({}), || async {
+                    std::future::pending::<Result<Value, CodeAgentError>>().await
+                })
+                .await
+        })
+    };
+    tokio::task::yield_now().await;
+    first.abort();
+    let _ = first.await;
+
+    let retried = registry
+        .execute(&["operation", "project-1"], "key", &json!({}), || async {
+            Ok(json!({ "retried": true }))
+        })
+        .await
+        .expect("retry after cancellation");
+
+    assert_eq!(retried, json!({ "retried": true }));
+}
+
+#[tokio::test]
+async fn completed_entries_should_not_consume_in_flight_capacity() {
+    let registry = IdempotencyRegistry::new(1, Duration::from_secs(60));
+
+    registry
+        .execute(&["operation", "project-1"], "first", &json!({}), || async {
+            Ok(json!(1))
+        })
+        .await
+        .expect("first completed result");
+    let second = registry
+        .execute(
+            &["operation", "project-1"],
+            "second",
+            &json!({}),
+            || async { Ok(json!(2)) },
+        )
+        .await
+        .expect("second key is admitted");
+
+    assert_eq!(second, json!(2));
 }
 
 #[tokio::test]
@@ -258,7 +354,7 @@ async fn runtime_shutdown_should_be_idempotent_and_reject_new_operations() {
     assert!(
         runtime
             .idempotency()
-            .execute("operation", "key", &json!({}), || async { Ok(json!(1)) })
+            .execute(&["operation"], "key", &json!({}), || async { Ok(json!(1)) })
             .await
             .is_err()
     );

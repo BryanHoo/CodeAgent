@@ -59,6 +59,15 @@ impl OperationRegistry {
 
     /// 注册新操作并返回自动释放容量的共享取消上下文。
     pub async fn begin(&self, request_id: &str) -> Result<OperationGuard<'_>, CodeAgentError> {
+        self.begin_scoped(request_id, request_id).await
+    }
+
+    /// 使用独立注册身份承载同一外部请求 ID 的不同资源操作。
+    pub async fn begin_scoped(
+        &self,
+        identity: &str,
+        request_id: &str,
+    ) -> Result<OperationGuard<'_>, CodeAgentError> {
         let mut state = self.lock_state();
         if !state.accepting {
             return Err(CodeAgentError::new(
@@ -67,7 +76,7 @@ impl OperationRegistry {
                 None,
             ));
         }
-        if state.operations.contains_key(request_id) {
+        if state.operations.contains_key(identity) {
             return Err(CodeAgentError::new(
                 CodeAgentErrorCode::Conflict,
                 "request ID is already active",
@@ -83,25 +92,28 @@ impl OperationRegistry {
         }
 
         let context = PortRequestContext::new(request_id);
-        let request_id = Arc::from(request_id);
+        let identity = Arc::from(identity);
         state
             .operations
-            .insert(Arc::clone(&request_id), context.clone());
+            .insert(Arc::clone(&identity), context.clone());
         Ok(OperationGuard {
             context,
             registry: self,
-            request_id,
+            request_id: identity,
         })
     }
 
     /// 协作取消活动操作；不存在时幂等返回 `false`。
     pub async fn cancel(&self, request_id: &str) -> bool {
         let state = self.lock_state();
-        let Some(context) = state.operations.get(request_id) else {
-            return false;
-        };
-        context.cancel();
-        true
+        let mut cancelled = false;
+        for context in state.operations.values() {
+            if context.request_id() == request_id {
+                context.cancel();
+                cancelled = true;
+            }
+        }
+        cancelled
     }
 
     /// 原子停止接收新操作，并取消全部活动操作。
