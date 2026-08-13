@@ -53,6 +53,21 @@ describe("Tauri Phase 5 repository contract", () => {
     expect([...special].every((method) => !ignored.has(method))).toBe(true);
   });
 
+  it("bundles the complete Codex native runtime", () => {
+    const prepareScript = read("apps/desktop/scripts/prepare-codex-binary.mjs");
+    const artifactCheck = read("tools/verify-desktop-artifact.mjs");
+    const tauriConfig = JSON.parse(read("apps/desktop/src-tauri/tauri.conf.json")) as {
+      bundle: { externalBin: string[] };
+    };
+
+    expect(prepareScript).toContain('"codex-code-mode-host"');
+    expect(tauriConfig.bundle.externalBin).toEqual([
+      "binaries/codex",
+      "binaries/codex-code-mode-host",
+    ]);
+    expect(artifactCheck).toContain('"codex-code-mode-host"');
+  });
+
   it("registers every Phase 5 command while keeping renderer capabilities minimal", () => {
     const desktop = read("apps/desktop/src-tauri/src/lib.rs");
     const capability = JSON.parse(read("apps/desktop/src-tauri/capabilities/main.json")) as {
