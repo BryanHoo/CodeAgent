@@ -14,6 +14,8 @@ export {
   openNodeEngine,
   type CodeAgentEngine,
   type NodeEngineDiagnostic,
+  type NodeEventStreamMetrics,
+  type NodeEventStreamMetricsPage,
   type NodeEngineOptions,
   type NodeProcessExit,
 } from "./engine.js";

@@ -1,5 +1,5 @@
 import { constants, accessSync, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { extname, join, resolve } from "node:path";
+import { extname, join, relative, resolve } from "node:path";
 
 const bundleRoot = resolve("target/release/bundle");
 if (!existsSync(bundleRoot)) {
@@ -9,12 +9,12 @@ if (!existsSync(bundleRoot)) {
 const forbiddenNames = ["node", "node.exe", "code-agent-node-binding.node"];
 const forbiddenContent = ["fastify", "@fastify/websocket", "node:child_process"];
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
-const requiredCodexRuntime = ["codex", "codex-code-mode-host"].map(
-  (name) => `${name}${executableSuffix}`,
-);
-const bundledFiles = new Set();
+const bundledRuntimeDirectories = [];
 const textExtensions = new Set([".html", ".js", ".json", ".txt"]);
 const visit = (directory) => {
+  if (directory.endsWith("codex-runtime") && existsSync(join(directory, "codex-package.json"))) {
+    bundledRuntimeDirectories.push(directory);
+  }
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     if (forbiddenNames.includes(entry.name.toLowerCase())) {
@@ -23,7 +23,6 @@ const visit = (directory) => {
     if (entry.isDirectory()) {
       visit(path);
     } else {
-      bundledFiles.add(entry.name.toLowerCase());
       if (textExtensions.has(extname(entry.name)) && statSync(path).size <= 16 * 1024 * 1024) {
         const content = readFileSync(path, "utf8");
         const marker = forbiddenContent.find((value) => content.includes(value));
@@ -35,21 +34,53 @@ const visit = (directory) => {
 
 visit(bundleRoot);
 
-// 所有发布平台都必须包含完整 Codex 原生运行时，避免平台制品只携带主程序。
-for (const executable of requiredCodexRuntime) {
-  if (!bundledFiles.has(executable)) {
-    throw new Error(`Desktop bundle is missing required Codex runtime: ${executable}`);
-  }
+const preparedRuntime = resolve("apps/desktop/src-tauri/resources/codex-runtime");
+if (!existsSync(preparedRuntime)) {
+  throw new Error("Prepared Codex runtime is missing");
+}
+const runtimeManifest = JSON.parse(
+  readFileSync(join(preparedRuntime, "codex-package.json"), "utf8"),
+);
+if (
+  runtimeManifest.entrypoint !== `bin/codex${executableSuffix}` ||
+  runtimeManifest.pathDir !== "codex-path" ||
+  runtimeManifest.resourcesDir !== "codex-resources"
+) {
+  throw new Error("Prepared Codex runtime manifest is invalid");
 }
 
-const macosExecutableDirectory = resolve(bundleRoot, "macos", "CodeAgent.app", "Contents", "MacOS");
-if (existsSync(macosExecutableDirectory)) {
-  // Codex 与 code-mode host 必须相邻，否则安装后的命令执行宿主无法启动。
-  for (const executable of requiredCodexRuntime) {
-    const path = join(macosExecutableDirectory, executable);
+const runtimeFiles = [];
+const collectRuntimeFiles = (directory) => {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) collectRuntimeFiles(path);
+    else runtimeFiles.push(relative(preparedRuntime, path));
+  }
+};
+collectRuntimeFiles(preparedRuntime);
+if (bundledRuntimeDirectories.length === 0) {
+  throw new Error("Desktop bundle is missing the canonical Codex runtime package");
+}
+
+for (const runtimeDirectory of bundledRuntimeDirectories) {
+  // 逐项校验官方 package，平台新增沙箱或 Shell 资源时不能静默漏包。
+  for (const relativePath of runtimeFiles) {
+    const source = join(preparedRuntime, relativePath);
+    const path = join(runtimeDirectory, relativePath);
     if (!existsSync(path) || !statSync(path).isFile()) {
       throw new Error(`Desktop bundle is missing required Codex runtime: ${path}`);
     }
+    if (process.platform !== "win32" && (statSync(source).mode & 0o111) !== 0) {
+      accessSync(path, constants.X_OK);
+    }
+  }
+  const requiredExecutables = [
+    runtimeManifest.entrypoint,
+    `bin/codex-code-mode-host${executableSuffix}`,
+    `${runtimeManifest.pathDir}/rg${executableSuffix}`,
+  ];
+  for (const relativePath of requiredExecutables) {
+    const path = join(runtimeDirectory, relativePath);
     accessSync(path, constants.X_OK);
   }
 }

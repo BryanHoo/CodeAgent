@@ -1,11 +1,10 @@
 import { constants } from "node:fs";
-import { access, chmod, copyFile, mkdir, readFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SUPPORTED_CODEX_VERSION = "0.147.0";
-const CODEX_EXECUTABLES = ["codex", "codex-code-mode-host"];
 const TARGETS = {
   "darwin-arm64": {
     package: "@openai/codex-darwin-arm64",
@@ -62,26 +61,49 @@ if (
   throw new Error("Codex platform package does not match the current architecture");
 }
 
-const binaryDirectory = resolve(desktopDirectory, "src-tauri", "binaries");
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
-const sourceDirectory = resolve(dirname(platformManifestPath), "vendor", target.triple, "bin");
-const binaries = CODEX_EXECUTABLES.map((name) => ({
-  destination: resolve(binaryDirectory, `${name}-${target.triple}${executableSuffix}`),
-  source: resolve(sourceDirectory, `${name}${executableSuffix}`),
-}));
+const vendorDirectory = resolve(dirname(platformManifestPath), "vendor", target.triple);
+const runtimeManifest = JSON.parse(
+  await readFile(resolve(vendorDirectory, "codex-package.json"), "utf8"),
+);
+const expectedEntrypoint = `bin/codex${executableSuffix}`;
+if (
+  runtimeManifest.layoutVersion !== 1 ||
+  runtimeManifest.version !== SUPPORTED_CODEX_VERSION ||
+  runtimeManifest.target !== target.triple ||
+  runtimeManifest.variant !== "codex" ||
+  runtimeManifest.entrypoint !== expectedEntrypoint ||
+  runtimeManifest.pathDir !== "codex-path" ||
+  runtimeManifest.resourcesDir !== "codex-resources"
+) {
+  throw new Error("Codex runtime package manifest is invalid");
+}
 
-// Codex 会从自身目录启动 code-mode host，打包前必须先验证整套原生运行时完整。
+const requiredExecutables = [
+  runtimeManifest.entrypoint,
+  `bin/codex-code-mode-host${executableSuffix}`,
+  `${runtimeManifest.pathDir}/rg${executableSuffix}`,
+];
 await Promise.all(
-  binaries.map(({ source }) =>
-    access(source, process.platform === "win32" ? constants.F_OK : constants.X_OK),
+  requiredExecutables.map((path) =>
+    access(
+      resolve(vendorDirectory, path),
+      process.platform === "win32" ? constants.F_OK : constants.X_OK,
+    ),
   ),
 );
-await mkdir(binaryDirectory, { recursive: true });
-await Promise.all(binaries.map(({ destination, source }) => copyFile(source, destination)));
-if (process.platform !== "win32") {
-  await Promise.all(binaries.map(({ destination }) => chmod(destination, 0o755)));
-  await Promise.all(binaries.map(({ destination }) => access(destination, constants.X_OK)));
-}
-console.log(
-  `Prepared Codex ${SUPPORTED_CODEX_VERSION}: ${binaries.map(({ destination }) => destination).join(", ")}`,
+
+const runtimeDirectory = resolve(desktopDirectory, "src-tauri", "resources", "codex-runtime");
+await rm(runtimeDirectory, { recursive: true, force: true });
+await mkdir(dirname(runtimeDirectory), { recursive: true });
+// 镜像官方 canonical package，自动包含当前平台的全部沙箱、Shell 和搜索资源。
+await cp(vendorDirectory, runtimeDirectory, { recursive: true });
+await Promise.all(
+  requiredExecutables.map((path) =>
+    access(
+      resolve(runtimeDirectory, path),
+      process.platform === "win32" ? constants.F_OK : constants.X_OK,
+    ),
+  ),
 );
+console.log(`Prepared complete Codex ${SUPPORTED_CODEX_VERSION} runtime: ${runtimeDirectory}`);

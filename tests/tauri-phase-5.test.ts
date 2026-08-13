@@ -56,16 +56,26 @@ describe("Tauri Phase 5 repository contract", () => {
   it("bundles the complete Codex native runtime", () => {
     const prepareScript = read("apps/desktop/scripts/prepare-codex-binary.mjs");
     const artifactCheck = read("tools/verify-desktop-artifact.mjs");
+    const desktop = read("apps/desktop/src-tauri/src/lib.rs");
+    const platformAdapters = read("apps/desktop/src-tauri/src/platform_adapters.rs");
     const tauriConfig = JSON.parse(read("apps/desktop/src-tauri/tauri.conf.json")) as {
-      bundle: { externalBin: string[] };
+      bundle: { externalBin: string[]; resources: Record<string, string> };
     };
 
-    expect(prepareScript).toContain('"codex-code-mode-host"');
-    expect(tauriConfig.bundle.externalBin).toEqual([
-      "binaries/codex",
-      "binaries/codex-code-mode-host",
-    ]);
-    expect(artifactCheck).toContain('"codex-code-mode-host"');
+    expect(prepareScript).toContain("runtimeManifest.resourcesDir");
+    expect(prepareScript).toContain("runtimeManifest.pathDir");
+    expect(prepareScript).toContain("runtimeManifest.entrypoint");
+    expect(tauriConfig.bundle.externalBin).toEqual([]);
+    expect(tauriConfig.bundle.resources).toEqual({
+      "resources/codex-runtime/": "codex-runtime/",
+    });
+    expect(artifactCheck).toContain('"codex-package.json"');
+    expect(artifactCheck).toContain('"codex-resources"');
+    expect(artifactCheck).toContain('"codex-path"');
+    expect(desktop).toContain("resource_dir()");
+    expect(platformAdapters).toContain("desktop_codex_environment");
+    expect(platformAdapters).toContain('"PATH".to_string()');
+    expect(platformAdapters).toContain('join("codex-path")');
   });
 
   it("registers every Phase 5 command while keeping renderer capabilities minimal", () => {

@@ -114,6 +114,8 @@ pub struct EventSubscription {
 pub struct EventStreamMetrics {
     /// 被合并的 Provider 事件数。
     pub coalesced_events: u64,
+    /// 当前等待窗口冲刷的 Delta 数。
+    pub pending_deltas: usize,
     /// Provider 输入事件数。
     pub provider_events_received: u64,
     /// 已分配序号的事件数。
@@ -313,6 +315,7 @@ impl AgentEventStream {
     pub async fn metrics(&self) -> EventStreamMetrics {
         let state = self.state.lock().await;
         EventStreamMetrics {
+            pending_deltas: state.pending.len(),
             retained_events: state.retained.len(),
             ..state.metrics
         }
