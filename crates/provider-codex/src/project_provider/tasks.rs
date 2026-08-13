@@ -183,16 +183,22 @@ impl CodexProjectProvider {
         Ok(task)
     }
 
-    pub(super) fn read_task_attachment_impl(
+    pub(super) async fn read_task_attachment_impl(
         &self,
         task_id: &str,
         attachment_id: &str,
-    ) -> Option<Vec<u8>> {
-        self.tasks
+    ) -> Option<code_agent_core::AttachmentBytes> {
+        let authorized = self
+            .tasks
             .lock()
             .ok()
-            .filter(|tasks| tasks.contains(task_id))
-            .and_then(|_| self.historical_attachments.read(task_id, attachment_id))
+            .is_some_and(|tasks| tasks.contains(task_id));
+        if !authorized {
+            return None;
+        }
+        self.historical_attachments
+            .read(task_id, attachment_id)
+            .await
     }
 
     pub(super) async fn rename_task_impl(

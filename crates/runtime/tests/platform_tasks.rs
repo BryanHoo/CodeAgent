@@ -69,10 +69,10 @@ impl ProjectProviderPort for FakeProjectProvider {
         task_id: &str,
         attachment_id: &str,
         _context: &PortRequestContext,
-    ) -> Result<Option<Vec<u8>>, CodeAgentError> {
+    ) -> Result<Option<code_agent_core::AttachmentBytes>, CodeAgentError> {
         Ok(
             (task_id == "task-1" && attachment_id == "history-attachment")
-                .then(|| b"historical bytes".to_vec()),
+                .then(|| b"historical bytes".to_vec().into()),
         )
     }
     async fn pin_task(
@@ -823,5 +823,5 @@ async fn task_attachment_should_fallback_to_provider_history_when_platform_store
         .await
         .expect("historical attachment");
 
-    assert_eq!(bytes, b"historical bytes");
+    assert_eq!(bytes.as_slice(), b"historical bytes");
 }

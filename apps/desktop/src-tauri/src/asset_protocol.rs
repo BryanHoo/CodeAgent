@@ -1,5 +1,6 @@
 use std::{str::FromStr, sync::Arc};
 
+use code_agent_core::AttachmentBytes;
 use code_agent_protocol::{ProjectId, TaskId};
 use code_agent_runtime::CodeAgentRuntime;
 use percent_encoding::percent_decode_str;
@@ -21,9 +22,12 @@ pub fn handle_asset_request<R: Runtime>(
         let response = match read_asset(runtime, &path).await {
             Ok(bytes) => http::Response::builder()
                 .status(http::StatusCode::OK)
-                .header(http::header::CONTENT_TYPE, detect_media_type(&bytes))
+                .header(
+                    http::header::CONTENT_TYPE,
+                    detect_media_type(bytes.as_slice()),
+                )
                 .header(http::header::CACHE_CONTROL, "private, no-store")
-                .body(bytes),
+                .body(bytes.into_vec()),
             Err(status) => http::Response::builder()
                 .status(status)
                 .header(http::header::CACHE_CONTROL, "no-store")
@@ -37,7 +41,7 @@ pub fn handle_asset_request<R: Runtime>(
 async fn read_asset(
     runtime: Arc<CodeAgentRuntime>,
     path: &str,
-) -> Result<Vec<u8>, http::StatusCode> {
+) -> Result<AttachmentBytes, http::StatusCode> {
     let decoded_path = decode_segment(path.trim_start_matches('/'))?;
     let segments = decoded_path
         .split('/')
@@ -50,6 +54,7 @@ async fn read_asset(
             runtime
                 .pending_attachment(&request_id, &project_id, attachment_id)
                 .await
+                .map(AttachmentBytes::from)
                 .map_err(|_| http::StatusCode::NOT_FOUND)
         }
         [kind, project_id, task_id, attachment_id] if kind == "task-attachment" => {
@@ -65,6 +70,7 @@ async fn read_asset(
             runtime
                 .project_image(&request_id, &project_id, image_path)
                 .await
+                .map(AttachmentBytes::from)
                 .map_err(|_| http::StatusCode::NOT_FOUND)
         }
         _ => Err(http::StatusCode::BAD_REQUEST),

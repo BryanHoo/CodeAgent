@@ -5,6 +5,7 @@ mod ports;
 
 pub use error::{CodeAgentError, CodeAgentErrorCode};
 pub use ports::{
-    AttachmentPort, ClockPort, FilePort, GitPort, ManagedAttachment, PortRequestContext,
-    ProjectProviderPort, ProjectRepositoryPort, ProviderPort, RepositoryPort, UpdatePort,
+    AttachmentBytes, AttachmentPort, ClockPort, FilePort, GitPort, ManagedAttachment,
+    PortRequestContext, ProjectProviderPort, ProjectRepositoryPort, ProviderPort, RepositoryPort,
+    UpdatePort,
 };

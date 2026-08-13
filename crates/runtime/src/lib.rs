@@ -1579,7 +1579,7 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
         task_id: &TaskId,
         attachment_id: &str,
-    ) -> Result<Vec<u8>, CodeAgentError> {
+    ) -> Result<code_agent_core::AttachmentBytes, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
         let platform_result = self
             .ports
@@ -1588,7 +1588,7 @@ impl CodeAgentRuntime {
             .await;
 
         match platform_result {
-            Ok(bytes) => Ok(bytes),
+            Ok(bytes) => Ok(bytes.into()),
             Err(error) if error.code() == CodeAgentErrorCode::NotFound => {
                 // 历史附件由 Provider 授权；仅平台 Store 明确未命中时才进入该读取路径。
                 match self.project_context(project_id, &context).await {

@@ -807,7 +807,7 @@ async fn historical_local_image_should_return_readable_attachment_metadata() {
 
     assert_eq!(attachment["mediaType"], "image/png");
     assert_eq!(attachment["name"], "diagram.png");
-    assert_eq!(content, image_bytes);
+    assert_eq!(content.as_slice(), image_bytes);
     assert!(
         !snapshot
             .to_string()
@@ -926,7 +926,7 @@ async fn historical_inline_generated_and_text_attachments_should_be_stable_and_r
             )
             .await
             .expect("read inline"),
-        Some(image_bytes.clone())
+        Some(image_bytes.clone().into())
     );
     assert_eq!(
         provider
@@ -937,14 +937,14 @@ async fn historical_inline_generated_and_text_attachments_should_be_stable_and_r
             )
             .await
             .expect("read generated"),
-        Some(image_bytes)
+        Some(image_bytes.into())
     );
     assert_eq!(
         provider
             .read_task_attachment("task-1", first_text_id, &PortRequestContext::new("text"))
             .await
             .expect("read text"),
-        Some(pasted_text.as_bytes().to_vec())
+        Some(pasted_text.as_bytes().to_vec().into())
     );
     assert!(!first.to_string().contains(image_data_url));
     assert!(!first.to_string().contains(pasted_text));
