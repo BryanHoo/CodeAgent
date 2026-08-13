@@ -93,7 +93,7 @@ impl NodeEngine {
                 &attachment,
             )
             .await
-            .map(Buffer::from)
+            .map(|bytes| Buffer::from(bytes.into_vec()))
             .map_err(to_napi_error)
     }
 

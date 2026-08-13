@@ -14,6 +14,53 @@ use tokio_util::sync::CancellationToken;
 
 use crate::CodeAgentError;
 
+/// 附件正文所有权；内联历史附件可共享底层只读分配，文件读取则直接转移所有权。
+#[derive(Clone, Debug)]
+pub enum AttachmentBytes {
+    Owned(Vec<u8>),
+    Shared(Arc<[u8]>),
+}
+
+impl PartialEq for AttachmentBytes {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+
+impl Eq for AttachmentBytes {}
+
+impl AsRef<[u8]> for AttachmentBytes {
+    fn as_ref(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
+
+impl From<Vec<u8>> for AttachmentBytes {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self::Owned(bytes)
+    }
+}
+
+impl AttachmentBytes {
+    /// 返回附件字节切片。
+    #[must_use]
+    pub fn as_slice(&self) -> &[u8] {
+        match self {
+            Self::Owned(bytes) => bytes,
+            Self::Shared(bytes) => bytes,
+        }
+    }
+
+    /// 转为独占缓冲区；共享内容仅在宿主边界确实要求时复制一次。
+    #[must_use]
+    pub fn into_vec(self) -> Vec<u8> {
+        match self {
+            Self::Owned(bytes) => bytes,
+            Self::Shared(bytes) => bytes.as_ref().to_vec(),
+        }
+    }
+}
+
 /// 已通过附件 Store 归属校验的受管文件。
 #[derive(Clone, Debug)]
 pub struct ManagedAttachment {
@@ -357,7 +404,7 @@ pub trait ProjectProviderPort: Send + Sync {
         _task_id: &str,
         _attachment_id: &str,
         _context: &PortRequestContext,
-    ) -> Result<Option<Vec<u8>>, CodeAgentError> {
+    ) -> Result<Option<AttachmentBytes>, CodeAgentError> {
         Ok(None)
     }
     async fn pin_task(

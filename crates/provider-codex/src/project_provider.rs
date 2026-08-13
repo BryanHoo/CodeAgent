@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use code_agent_core::{CodeAgentError, PortRequestContext, ProjectProviderPort};
+use code_agent_core::{AttachmentBytes, CodeAgentError, PortRequestContext, ProjectProviderPort};
 use code_agent_protocol::{
     AgentBackgroundTerminalPage, AgentMcpServerPage, AgentSkillPage, AgentTaskPage, Project,
     RawProviderEvent,
@@ -241,8 +241,8 @@ impl ProjectProviderPort for CodexProjectProvider {
         task_id: &str,
         attachment_id: &str,
         _context: &PortRequestContext,
-    ) -> Result<Option<Vec<u8>>, CodeAgentError> {
-        Ok(self.read_task_attachment_impl(task_id, attachment_id))
+    ) -> Result<Option<AttachmentBytes>, CodeAgentError> {
+        Ok(self.read_task_attachment_impl(task_id, attachment_id).await)
     }
     async fn rename_task(
         &self,
