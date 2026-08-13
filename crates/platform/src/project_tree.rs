@@ -1,9 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use ignore::gitignore::{Gitignore, GitignoreBuilder};
-use serde_json::{Value, json};
+use code_agent_core::PortRequestContext;
 
 use crate::PlatformError;
+
+pub(crate) const MAX_PROJECT_FILE_DEPTH: usize = 20;
 
 const IGNORED_DIRECTORIES: &[&str] = &[
     ".git",
@@ -16,40 +17,109 @@ const IGNORED_DIRECTORIES: &[&str] = &[
     "target",
 ];
 
-fn is_ignored_directory(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| IGNORED_DIRECTORIES.contains(&name))
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ProjectTreeEntryKind {
+    Directory,
+    File,
 }
 
-fn build_ignore_matcher(root: &Path, directory: &Path) -> Result<Gitignore, PlatformError> {
-    let mut builder = GitignoreBuilder::new(root);
-    let relative_directory = directory
-        .strip_prefix(root)
-        .map_err(|_| PlatformError::Worker("file tree escaped project root".to_owned()))?;
-    let mut scope = PathBuf::from(root);
-    // 只加载根目录到当前目录沿途的规则，保持分层读取与 Git 的作用域一致。
-    add_ignore_file(&mut builder, &scope)?;
-    for component in relative_directory.components() {
-        scope.push(component);
-        add_ignore_file(&mut builder, &scope)?;
+impl ProjectTreeEntryKind {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Directory => "directory",
+            Self::File => "file",
+        }
     }
-    builder
-        .build()
-        .map_err(|error| PlatformError::Worker(format!("invalid project ignore rules: {error}")))
 }
 
-fn add_ignore_file(builder: &mut GitignoreBuilder, directory: &Path) -> Result<(), PlatformError> {
-    let path = directory.join(".gitignore");
-    if !path.is_file() {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ProjectTreeEntry {
+    pub(crate) kind: ProjectTreeEntryKind,
+    pub(crate) path: String,
+}
+
+pub(crate) fn is_ignored_directory_name(name: &str) -> bool {
+    IGNORED_DIRECTORIES.contains(&name)
+}
+
+pub(crate) fn validate_directory_path(path: Option<&str>) -> Result<(), PlatformError> {
+    let Some(path) = path else {
         return Ok(());
+    };
+    if path.is_empty()
+        || path.starts_with('/')
+        || path.ends_with('/')
+        || path.contains('\\')
+        || path.contains("//")
+        || path.as_bytes().get(1) == Some(&b':')
+    {
+        return Err(invalid_tree_path());
     }
-    if let Some(error) = builder.add(path) {
-        return Err(PlatformError::Worker(format!(
-            "invalid project ignore rules: {error}"
-        )));
+    let mut depth = 0;
+    for segment in path.split('/') {
+        if matches!(segment, "" | "." | "..") || is_ignored_directory_name(segment) {
+            return Err(invalid_tree_path());
+        }
+        depth += 1;
+        if depth > MAX_PROJECT_FILE_DEPTH {
+            return Err(invalid_tree_path());
+        }
     }
     Ok(())
+}
+
+pub(crate) async fn read_directory_entries(
+    root: &Path,
+    directory: &Path,
+    context: &PortRequestContext,
+) -> Result<Vec<ProjectTreeEntry>, PlatformError> {
+    ensure_active(context)?;
+    let mut entries = Vec::new();
+    let mut children = tokio::fs::read_dir(directory).await?;
+    loop {
+        let child = tokio::select! {
+            () = context.cancelled() => return Err(PlatformError::Cancelled),
+            child = children.next_entry() => child?,
+        };
+        let Some(child) = child else {
+            break;
+        };
+        let file_type = tokio::select! {
+            () = context.cancelled() => return Err(PlatformError::Cancelled),
+            file_type = child.file_type() => file_type?,
+        };
+        let child_path = child.path();
+        let name = child.file_name();
+        if file_type.is_symlink()
+            || (file_type.is_dir() && name.to_str().is_some_and(is_ignored_directory_name))
+        {
+            continue;
+        }
+        let kind = if file_type.is_dir() {
+            ProjectTreeEntryKind::Directory
+        } else if file_type.is_file() {
+            ProjectTreeEntryKind::File
+        } else {
+            continue;
+        };
+        entries.push(ProjectTreeEntry {
+            kind,
+            path: project_relative_path(root, &child_path)?,
+        });
+    }
+    entries.sort_unstable_by(|left, right| {
+        kind_order(left.kind)
+            .cmp(&kind_order(right.kind))
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    Ok(entries)
+}
+
+fn kind_order(kind: ProjectTreeEntryKind) -> u8 {
+    match kind {
+        ProjectTreeEntryKind::Directory => 0,
+        ProjectTreeEntryKind::File => 1,
+    }
 }
 
 fn project_relative_path(root: &Path, path: &Path) -> Result<String, PlatformError> {
@@ -58,62 +128,26 @@ fn project_relative_path(root: &Path, path: &Path) -> Result<String, PlatformErr
         .map(|relative| relative.to_string_lossy().replace('\\', "/"))
 }
 
-pub(crate) async fn read_directory_entries(
-    root: &Path,
-    directory: &Path,
-) -> Result<Vec<Value>, PlatformError> {
-    let mut entries = Vec::new();
-    let ignore_matcher = build_ignore_matcher(root, directory)?;
-    let mut children = tokio::fs::read_dir(directory).await?;
-    while let Some(child) = children.next_entry().await? {
-        let file_type = child.file_type().await?;
-        let child_path = child.path();
-        if file_type.is_symlink()
-            || (file_type.is_dir() && is_ignored_directory(&child_path))
-            || ignore_matcher
-                .matched_path_or_any_parents(&child_path, file_type.is_dir())
-                .is_ignore()
-        {
-            continue;
-        }
-        let kind = if file_type.is_dir() {
-            "directory"
-        } else if file_type.is_file() {
-            "file"
-        } else {
-            continue;
-        };
-        entries.push(json!({
-            "path": project_relative_path(root, &child_path)?,
-            "type": kind,
-        }));
+fn ensure_active(context: &PortRequestContext) -> Result<(), PlatformError> {
+    if context.is_cancelled() {
+        return Err(PlatformError::Cancelled);
     }
-    entries.sort_by(|left, right| left["path"].as_str().cmp(&right["path"].as_str()));
-    Ok(entries)
+    Ok(())
 }
 
-pub(crate) async fn read_search_entries(root: &Path) -> Result<Vec<Value>, PlatformError> {
-    let mut entries = Vec::new();
-    let mut pending_directories = vec![PathBuf::from(root)];
-    while let Some(directory) = pending_directories.pop() {
-        for entry in read_directory_entries(root, &directory).await? {
-            if entry["type"] == "directory" {
-                let path = entry["path"]
-                    .as_str()
-                    .ok_or_else(|| PlatformError::Worker("file tree path is invalid".to_owned()))?;
-                pending_directories.push(root.join(path));
-            }
-            entries.push(entry);
-        }
-    }
-    Ok(entries)
+fn invalid_tree_path() -> PlatformError {
+    PlatformError::InvalidOptions("project file tree path is invalid".to_owned())
 }
 
 #[cfg(test)]
 mod tests {
     use std::fs;
 
-    use super::{read_directory_entries, read_search_entries};
+    use code_agent_core::PortRequestContext;
+
+    use super::{
+        ProjectTreeEntry, ProjectTreeEntryKind, read_directory_entries, validate_directory_path,
+    };
 
     fn test_root(name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!(
@@ -123,55 +157,68 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn directory_entries_should_return_only_direct_children() {
-        let root = test_root("one-level");
-        fs::create_dir_all(root.join("src/nested")).expect("nested directory");
+    async fn directory_entries_should_keep_paths_listed_by_gitignore() {
+        let root = test_root("gitignore");
+        fs::create_dir_all(root.join("generated/nested")).expect("generated directory");
+        fs::create_dir_all(root.join("node_modules/package")).expect("dependency directory");
+        fs::write(root.join(".gitignore"), "generated/\n").expect("ignore rules");
+        fs::write(root.join("generated/kept.txt"), "kept").expect("kept file");
         fs::write(root.join("README.md"), "readme").expect("root file");
-        fs::write(root.join("src/lib.rs"), "lib").expect("nested file");
+        let context = PortRequestContext::new("tree-test");
 
-        let entries = read_directory_entries(&root, &root)
+        let root_entries = read_directory_entries(&root, &root, &context)
             .await
             .expect("root entries");
+        let generated_entries = read_directory_entries(&root, &root.join("generated"), &context)
+            .await
+            .expect("generated entries");
 
         assert_eq!(
-            entries,
+            root_entries,
             vec![
-                serde_json::json!({ "path": "README.md", "type": "file" }),
-                serde_json::json!({ "path": "src", "type": "directory" }),
+                ProjectTreeEntry {
+                    kind: ProjectTreeEntryKind::Directory,
+                    path: "generated".to_owned(),
+                },
+                ProjectTreeEntry {
+                    kind: ProjectTreeEntryKind::File,
+                    path: ".gitignore".to_owned(),
+                },
+                ProjectTreeEntry {
+                    kind: ProjectTreeEntryKind::File,
+                    path: "README.md".to_owned(),
+                },
             ]
+        );
+        assert!(
+            generated_entries
+                .iter()
+                .any(|entry| entry.path == "generated/kept.txt")
         );
         fs::remove_dir_all(root).expect("remove root");
     }
 
+    #[test]
+    fn directory_path_should_enforce_depth_and_generated_directory_boundaries() {
+        let depth_twenty = std::iter::repeat_n("a", 20).collect::<Vec<_>>().join("/");
+        let depth_twenty_one = format!("{depth_twenty}/b");
+
+        assert!(validate_directory_path(Some(&depth_twenty)).is_ok());
+        assert!(validate_directory_path(Some(&depth_twenty_one)).is_err());
+        assert!(validate_directory_path(Some("src/node_modules/package")).is_err());
+        assert!(validate_directory_path(Some("../src")).is_err());
+    }
+
     #[tokio::test]
-    async fn search_entries_should_skip_generated_directories() {
-        let root = test_root("ignored");
-        fs::create_dir_all(root.join("src")).expect("source directory");
-        fs::create_dir_all(root.join("node_modules/package")).expect("dependency directory");
-        fs::create_dir_all(root.join("target/debug")).expect("target directory");
-        fs::create_dir_all(root.join("generated/kept")).expect("generated directory");
-        fs::write(root.join("src/lib.rs"), "lib").expect("source file");
-        fs::write(root.join("node_modules/package/index.js"), "dependency")
-            .expect("dependency file");
-        fs::write(root.join("target/debug/app"), "binary").expect("target file");
-        fs::write(root.join("generated/dropped.txt"), "generated").expect("ignored file");
-        fs::write(root.join("generated/kept/source.txt"), "kept").expect("kept file");
-        fs::write(root.join(".gitignore"), "generated/*\n!generated/kept/\n")
-            .expect("ignore rules");
+    async fn directory_entries_should_stop_after_cancellation() {
+        let root = test_root("cancelled");
+        fs::create_dir_all(&root).expect("root");
+        let context = PortRequestContext::new("cancelled-tree-test");
+        context.cancel();
 
-        let entries = read_search_entries(&root).await.expect("search entries");
+        let result = read_directory_entries(&root, &root, &context).await;
 
-        assert_eq!(
-            entries,
-            vec![
-                serde_json::json!({ "path": ".gitignore", "type": "file" }),
-                serde_json::json!({ "path": "generated", "type": "directory" }),
-                serde_json::json!({ "path": "src", "type": "directory" }),
-                serde_json::json!({ "path": "src/lib.rs", "type": "file" }),
-                serde_json::json!({ "path": "generated/kept", "type": "directory" }),
-                serde_json::json!({ "path": "generated/kept/source.txt", "type": "file" }),
-            ]
-        );
+        assert!(matches!(result, Err(crate::PlatformError::Cancelled)));
         fs::remove_dir_all(root).expect("remove root");
     }
 }

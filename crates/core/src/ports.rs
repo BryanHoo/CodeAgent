@@ -593,6 +593,20 @@ pub trait GitPort: Send + Sync {
 /// Project 文件能力端口。
 #[async_trait]
 pub trait FilePort: Send + Sync {
+    /// 释放指定 Project 的文件索引与进行中遍历。
+    async fn release_project(
+        &self,
+        _project_id: &ProjectId,
+        _context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        Ok(())
+    }
+
+    /// 关闭全部文件索引与进行中遍历。
+    async fn close(&self) -> Result<(), CodeAgentError> {
+        Ok(())
+    }
+
     /// 读取受 Project 范围约束的文件字节。
     async fn read(
         &self,

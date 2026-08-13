@@ -6,9 +6,12 @@ mod attachments;
 mod database;
 mod files;
 mod git;
+mod host_file_browser;
 mod migrations;
 mod path_policy;
 mod process;
+mod project_file_index;
+mod project_file_index_cache;
 mod project_tree;
 mod repository;
 

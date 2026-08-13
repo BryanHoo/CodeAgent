@@ -1146,6 +1146,11 @@ impl CodeAgentRuntime {
         let operation = self.begin_operation(request_id).await?;
         let cell = self.project_contexts.lock().await.remove(project_id);
 
+        self.ports
+            .file
+            .release_project(project_id, &operation)
+            .await?;
+
         if let Some(context) = cell.and_then(|cell| cell.get().cloned()) {
             context.close().await?;
             self.ports
@@ -1274,6 +1279,10 @@ impl CodeAgentRuntime {
                 self.ports
                     .repository
                     .remove_project(project_id, &operation)
+                    .await?;
+                self.ports
+                    .file
+                    .release_project(project_id, &operation)
                     .await?;
                 self.ports
                     .attachment
@@ -1830,6 +1839,7 @@ impl CodeAgentRuntime {
                     None,
                 )
             })?;
+        self.ports.file.close().await?;
         self.ports.repository.close().await
     }
 }

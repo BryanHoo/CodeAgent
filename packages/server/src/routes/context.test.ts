@@ -1,7 +1,7 @@
 import { NodeEngineError } from "@code-agent/engine-node";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { callEngine, MutationHttpError } from "./context.js";
+import { callCancelableRead, callEngine, MutationHttpError } from "./context.js";
 
 describe("callEngine", () => {
   it.each([
@@ -27,5 +27,57 @@ describe("callEngine", () => {
     const error = new Error("GenericFailure: not_found: task missing");
 
     await expect(callEngine(() => Promise.reject(error))).rejects.toBe(error);
+  });
+});
+
+describe("callCancelableRead", () => {
+  it("cancels the native operation with the same request id", async () => {
+    const controller = new AbortController();
+    const cancelOperation = vi.fn(() => Promise.resolve(true));
+    let resolveOperation: ((value: unknown) => void) | undefined;
+    const operation = new Promise((resolve) => {
+      resolveOperation = resolve;
+    });
+
+    const result = callCancelableRead(
+      { cancelOperation },
+      controller.signal,
+      () => "request-1",
+      (requestId) => {
+        expect(requestId).toBe("request-1");
+        return operation;
+      },
+    );
+    controller.abort();
+    resolveOperation?.({ data: [] });
+
+    await expect(result).resolves.toEqual({ data: [] });
+    expect(cancelOperation).toHaveBeenCalledOnce();
+    expect(cancelOperation).toHaveBeenCalledWith("request-1");
+  });
+
+  it("starts the native operation before forwarding a pre-aborted signal", async () => {
+    const controller = new AbortController();
+    const calls: string[] = [];
+    const cancelOperation = vi.fn(() => {
+      calls.push("cancel");
+      return Promise.resolve(true);
+    });
+    controller.abort();
+
+    await expect(
+      callCancelableRead(
+        { cancelOperation },
+        controller.signal,
+        () => "request-2",
+        () => {
+          calls.push("start");
+          return Promise.resolve({ entries: [], path: null });
+        },
+      ),
+    ).resolves.toEqual({ entries: [], path: null });
+
+    expect(calls).toEqual(["start", "cancel"]);
+    expect(cancelOperation).toHaveBeenCalledOnce();
   });
 });

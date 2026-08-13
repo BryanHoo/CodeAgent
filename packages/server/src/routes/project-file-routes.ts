@@ -24,6 +24,7 @@ import type { FastifyInstance } from "fastify";
 import {
   MutationHttpError,
   callEngine,
+  callCancelableRead,
   createReadRequestId,
   readRequestId,
   type ServerRouteContext,
@@ -72,8 +73,8 @@ export function registerProjectFileRoutes(
       },
     },
     (request) =>
-      callEngine(() =>
-        engine.fileTree(createReadRequestId(), request.params.projectId, request.query.path),
+      callCancelableRead(engine, request.signal, createReadRequestId, (requestId) =>
+        engine.fileTree(requestId, request.params.projectId, request.query.path),
       ),
   );
   app.get<{ Params: { projectId: string }; Querystring: ProjectFileSearchQuery }>(
@@ -90,8 +91,8 @@ export function registerProjectFileRoutes(
       },
     },
     (request) =>
-      callEngine(() =>
-        engine.fileSearch(createReadRequestId(), request.params.projectId, request.query.query),
+      callCancelableRead(engine, request.signal, createReadRequestId, (requestId) =>
+        engine.fileSearch(requestId, request.params.projectId, request.query.query),
       ),
   );
   app.get<{ Params: { projectId: string }; Querystring: { path: string } }>(
