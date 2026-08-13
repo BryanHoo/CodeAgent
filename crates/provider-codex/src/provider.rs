@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Weak};
 
 use async_trait::async_trait;
@@ -7,16 +8,15 @@ use code_agent_protocol::{AgentCapabilities, AgentModelPage, Project, ProjectId}
 use serde_json::{Value, json};
 use tokio::task::JoinHandle;
 
-use crate::{
-    JsonlRpcClient, RpcIncoming, RpcServerRequest, map_codex_notification, mapping::request_id_key,
-    rpc_error_to_code_agent_error,
-};
+use crate::{JsonlRpcClient, RpcIncoming, RpcServerRequest, rpc_error_to_code_agent_error};
 
-use crate::connection::{bounded_string, discover_models, map_connection_status, map_model};
+use crate::connection::{discover_models, map_connection_status, map_model};
 use crate::goal::GoalRegistry;
 use crate::pagination::PaginationGuard;
 use crate::project_provider::CodexProjectProvider;
 use crate::review::ReviewRegistry;
+
+mod notifications;
 struct ProviderInner {
     client: JsonlRpcClient,
     incoming_task: Mutex<Option<JoinHandle<()>>>,
@@ -25,6 +25,7 @@ struct ProviderInner {
     projects: Mutex<HashMap<String, Arc<CodexProjectProvider>>>,
     goals: Arc<GoalRegistry>,
     reviews: Arc<ReviewRegistry>,
+    transcript_skills: Arc<crate::transcript_skills::TranscriptSkillStore>,
 }
 
 #[derive(Clone)]
@@ -35,6 +36,23 @@ pub struct CodexRuntimeProvider {
 impl CodexRuntimeProvider {
     #[must_use]
     pub fn new(client: JsonlRpcClient, incoming: RpcIncoming) -> Self {
+        Self::new_inner(client, incoming, None)
+    }
+
+    #[must_use]
+    pub fn new_with_codex_home(
+        client: JsonlRpcClient,
+        incoming: RpcIncoming,
+        codex_home: PathBuf,
+    ) -> Self {
+        Self::new_inner(client, incoming, Some(codex_home))
+    }
+
+    fn new_inner(
+        client: JsonlRpcClient,
+        incoming: RpcIncoming,
+        codex_home: Option<PathBuf>,
+    ) -> Self {
         let inner = Arc::new(ProviderInner {
             client,
             incoming_task: Mutex::new(None),
@@ -43,6 +61,9 @@ impl CodexRuntimeProvider {
             projects: Mutex::new(HashMap::new()),
             goals: Arc::new(GoalRegistry::default()),
             reviews: Arc::new(ReviewRegistry::default()),
+            transcript_skills: Arc::new(crate::transcript_skills::TranscriptSkillStore::new(
+                codex_home,
+            )),
         });
         let task = tokio::spawn(route_incoming(Arc::downgrade(&inner), incoming));
         if let Ok(mut slot) = inner.incoming_task.lock() {
@@ -89,157 +110,36 @@ impl CodexRuntimeProvider {
 }
 
 async fn route_incoming(inner: Weak<ProviderInner>, mut incoming: RpcIncoming) {
+    let mut notifications_open = true;
+    let mut requests_open = true;
+    let mut errors_open = true;
     loop {
+        if !notifications_open && !requests_open && !errors_open {
+            break;
+        }
         tokio::select! {
-            notification = incoming.notifications.recv() => {
-                let Some(notification) = notification else { break };
+            notification = incoming.notifications.recv(), if notifications_open => {
+                let Some(notification) = notification else {
+                    notifications_open = false;
+                    continue;
+                };
                 let Some(inner) = inner.upgrade() else { break };
-                if notification.method == "thread/started" {
-                    let thread = &notification.params["thread"];
-                    if thread["source"]["subAgent"] == "review"
-                        && let (Some(worker_id), Some(parent_id)) = (
-                            thread["id"].as_str(),
-                            thread["parentThreadId"].as_str(),
-                        )
-                        && let Some(project_id) = inner.owners.lock().ok().and_then(|owners| owners.get(parent_id).cloned())
-                    {
-                        inner.reviews.register_worker(parent_id, worker_id);
-                        if let Ok(mut owners) = inner.owners.lock() {
-                            owners.insert(worker_id.to_owned(), project_id);
-                        }
-                        if let Some(provider) = (CodexRuntimeProvider { inner: Arc::clone(&inner) }).project_for_task(parent_id) {
-                            let worker_id = worker_id.to_owned();
-                            tokio::spawn(async move {
-                                let _ = provider.resume(&worker_id).await;
-                            });
-                        }
-                    }
-                    continue;
-                }
-                if notification.method == "account/updated" {
-                    if notification.params["authMode"] == "chatgpt"
-                        && let Ok(mut pending) = inner.pending_login.lock()
-                    {
-                        *pending = None;
-                    }
-                    continue;
-                }
-                if notification.method == "account/login/completed" {
-                    let login_id = notification.params["loginId"].as_str();
-                    if let (Some(login_id), Ok(mut pending)) = (login_id, inner.pending_login.lock())
-                        && pending.as_ref().and_then(|value| value["loginId"].as_str()) == Some(login_id)
-                    {
-                        if notification.params["success"] == true {
-                            *pending = None;
-                        } else {
-                            let error = bounded_string(notification.params.get("error"), 1_000)
-                                .unwrap_or_else(|| "Login failed".to_owned());
-                            *pending = Some(json!({ "error": error, "loginId": login_id, "state": "failed" }));
-                        }
-                    }
-                    continue;
-                }
-                if notification.method == "mcpServer/startupStatus/updated" {
-                    let task_id = notification.params["threadId"].as_str();
-                    if let Some(provider) = task_id.and_then(|id| (CodexRuntimeProvider { inner: Arc::clone(&inner) }).project_for_task(id)) {
-                        provider.receive_mcp_status(&notification.params).await;
-                    }
-                    continue;
-                }
-                if notification.method == "serverRequest/resolved" {
-                    let task_id = notification.params["threadId"].as_str();
-                    let request_id = request_id_key(&notification.params["requestId"]).ok();
-                    if let (Some(task_id), Some(request_id)) = (task_id, request_id)
-                        && let Some(provider) = (CodexRuntimeProvider { inner: Arc::clone(&inner) }).project_for_task(task_id)
-                    {
-                        provider.receive_resolved_request(&request_id, task_id);
-                    }
-                    continue;
-                }
-                let native_task_id = notification.params.get("threadId").and_then(Value::as_str).map(str::to_string);
-                if notification.method == "turn/started"
-                    && let (Some(task_id), Some(turn)) = (
-                        native_task_id.as_deref(),
-                        notification.params.get("turn").cloned(),
-                    )
-                {
-                    inner.goals.started(task_id, turn);
-                    if inner.reviews.contains(task_id)
-                        && let Some(turn_id) = notification.params.pointer("/turn/id").and_then(Value::as_str)
-                    {
-                        inner.reviews.set_outer_turn(task_id, turn_id);
-                    }
-                }
-                let route = native_task_id.as_deref().and_then(|task_id| {
-                    let turn_id = notification.params.get("turnId").and_then(Value::as_str)
-                        .or_else(|| notification.params.pointer("/turn/id").and_then(Value::as_str));
-                    let item_type = notification.params.pointer("/item/type").and_then(Value::as_str);
-                    let item_phase = notification.params.pointer("/item/phase").and_then(Value::as_str);
-                    inner.reviews.route(task_id, turn_id, &notification.method, item_type, item_phase)
-                });
-                let parent_task_id = route.as_ref().map(|route| route.parent_task_id.as_str());
-                let task_id = parent_task_id.or(native_task_id.as_deref());
-                let Some(task_id) = task_id else { continue };
-                let notification_item_type = notification
-                    .params
-                    .pointer("/item/type")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned);
-                let runtime = CodexRuntimeProvider { inner: Arc::clone(&inner) };
-                let Some(provider) = runtime.project_for_task(task_id) else { continue };
-                let mut params = notification.params;
-                if route.as_ref().is_some_and(|route| route.suppress) {
-                    continue;
-                }
-                if let Some(route) = &route {
-                    params["threadId"] = Value::String(task_id.to_string());
-                    if let Some(turn_id) = &route.outer_turn_id {
-                        params["turnId"] = Value::String(turn_id.clone());
-                        if notification.method.starts_with("turn/") {
-                            params["turn"]["id"] = Value::String(turn_id.clone());
-                        }
-                    }
-                }
-                if let Ok(Some(mut event)) = map_codex_notification(&notification.method, &params) {
-                    if matches!(notification.method.as_str(), "turn/started" | "turn/completed")
-                        && route.is_some()
-                        && let Some(turn_id) = event.turn_id().map(str::to_owned)
-                        && let Some(item) = inner.reviews.target_item(task_id, &turn_id)
-                    {
-                        let mut value = event.as_value().clone();
-                        value["payload"]["turn"]["items"] = json!([item]);
-                        if let Ok(mapped) = code_agent_protocol::parse_provider_event(value) {
-                            event = mapped;
-                        }
-                    }
-                    if matches!(notification.method.as_str(), "item/started" | "item/completed")
-                        && notification_item_type.as_deref() == Some("enteredReviewMode")
-                        && let Some(turn_id) = event.turn_id().map(str::to_owned)
-                        && let Some(item) = inner.reviews.target_item(task_id, &turn_id)
-                    {
-                        let mut value = event.as_value().clone();
-                        value["itemId"] = item["id"].clone();
-                        value["payload"]["item"] = item;
-                        if let Ok(mapped) = code_agent_protocol::parse_provider_event(value) {
-                            event = mapped;
-                        }
-                    }
-                    provider.publish(event).await;
-                }
-                if notification.method == "turn/completed"
-                    && route.as_ref().is_some_and(|route| !route.is_worker)
-                {
-                    inner.reviews.clear(task_id);
-                }
+                notifications::route_notification(inner, notification).await;
             }
-            request = incoming.server_requests.recv() => {
-                let Some(request) = request else { break };
+            request = incoming.server_requests.recv(), if requests_open => {
+                let Some(request) = request else {
+                    requests_open = false;
+                    continue;
+                };
                 let Some(inner) = inner.upgrade() else { break };
                 let runtime = CodexRuntimeProvider { inner };
                 route_server_request(&runtime, request).await;
             }
-            error = incoming.errors.recv() => {
-                let Some(_error) = error else { break };
+            error = incoming.errors.recv(), if errors_open => {
+                let Some(_error) = error else {
+                    errors_open = false;
+                    continue;
+                };
                 let Some(inner) = inner.upgrade() else { break };
                 let providers = inner.projects.lock().map(|projects| projects.values().cloned().collect::<Vec<_>>()).unwrap_or_default();
                 for provider in providers {
@@ -464,6 +364,7 @@ impl ProviderPort for CodexRuntimeProvider {
             Arc::clone(&self.inner.owners),
             Arc::clone(&self.inner.goals),
             Arc::clone(&self.inner.reviews),
+            Arc::clone(&self.inner.transcript_skills),
         ));
         self.inner
             .projects

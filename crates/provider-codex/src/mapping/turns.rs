@@ -5,6 +5,7 @@ use super::common::{
     CodexMappingError, field_string, non_negative_integer, optional_string, record,
 };
 use super::items::map_codex_item_with_nicknames;
+use super::message_skills::merge_expanded_skill_messages;
 
 /// 映射 Codex Token Usage，只公开统一协议需要的当前上下文占用。
 pub fn map_context_usage(value: &Value) -> Result<Value, CodexMappingError> {
@@ -84,6 +85,7 @@ pub fn map_codex_turn(value: &Value) -> Result<Value, CodexMappingError> {
         .iter()
         .map(|item| map_codex_item_with_nicknames(item, &subagent_nicknames))
         .collect::<Result<Vec<_>, _>>()?;
+    let items = merge_expanded_skill_messages(items);
     let error = match turn.get("error") {
         None | Some(Value::Null) => Value::Null,
         Some(value) => {

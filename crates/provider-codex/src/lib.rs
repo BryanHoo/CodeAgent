@@ -17,6 +17,7 @@ mod review;
 mod rpc;
 mod skill_mapping;
 mod task_state;
+mod transcript_skills;
 
 pub use binary::{
     CodexBinary, CodexBinarySource, CodexVersionInfo, LocateCodexBinaryOptions,

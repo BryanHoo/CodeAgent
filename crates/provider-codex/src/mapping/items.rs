@@ -21,24 +21,6 @@ fn strings_joined(value: Option<&Value>, context: &str) -> Result<String, CodexM
         .join("\n"))
 }
 
-fn map_user_message_content(value: Option<&Value>) -> Result<String, CodexMappingError> {
-    let Some(value) = value else {
-        return Ok(String::new());
-    };
-    let content = value.as_array().ok_or_else(|| {
-        CodexMappingError("Codex user message content must be an array".to_string())
-    })?;
-    let mut texts = Vec::new();
-    for part in content {
-        let part = record(part, "Codex user message part")?;
-        let kind = field_string(part, "type", "Codex user message part")?;
-        if kind == "text" || kind == "inputText" {
-            texts.push(field_string(part, "text", "Codex user message part")?);
-        }
-    }
-    Ok(texts.join("\n"))
-}
-
 fn collaboration_status(value: Option<&Value>) -> &'static str {
     match value.and_then(Value::as_str) {
         Some("pendingInit") => "pending",
@@ -167,12 +149,19 @@ pub(crate) fn map_codex_item_with_nicknames(
     let id = field_string(item, "id", "Codex item")?;
     let kind = field_string(item, "type", "Codex item")?;
     match kind {
-        "userMessage" => Ok(json!({
-            "id": id,
-            "role": "user",
-            "text": map_user_message_content(item.get("content"))?,
-            "type": "message"
-        })),
+        "userMessage" => {
+            let content = super::message_skills::map_user_message_content(item.get("content"))?;
+            let mut mapped = json!({
+                "id": id,
+                "role": "user",
+                "text": content.text,
+                "type": "message"
+            });
+            if !content.skills.is_empty() {
+                mapped["skills"] = Value::Array(content.skills);
+            }
+            Ok(mapped)
+        }
         "agentMessage" => {
             let mut mapped = json!({
                 "id": id,

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use code_agent_core::CodeAgentError;
 use code_agent_protocol::{ValueDefinition, parse_protocol_value};
 use serde_json::{Value, json};
@@ -99,7 +101,19 @@ async fn map_turn(
     let Some(mapped_items) = mapped["items"].as_array_mut() else {
         return validate_turn(mapped);
     };
-    for (native_item, mapped_item) in native_items.iter().zip(mapped_items.iter_mut()) {
+    let mapped_indexes = mapped_items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item)| item["id"].as_str().map(|id| (id.to_string(), index)))
+        .collect::<HashMap<_, _>>();
+    for native_item in native_items {
+        let Some(item_id) = native_item["id"].as_str() else {
+            continue;
+        };
+        let Some(mapped_index) = mapped_indexes.get(item_id).copied() else {
+            continue;
+        };
+        let mapped_item = &mut mapped_items[mapped_index];
         if native_item["type"] == "imageGeneration" {
             if native_item["status"] == "completed"
                 && let Some(encoded) = native_item["result"].as_str()
@@ -156,8 +170,9 @@ async fn map_turn(
                         map_text_part(attachments, task_id, part, text, text_index);
                     text_index += part_attachments.len();
                     metadata.append(&mut part_attachments);
-                    if !part_text.is_empty() {
-                        visible_text.push(part_text);
+                    let extracted = crate::mapping::message_skills::extract_text_skills(&part_text);
+                    if !extracted.text.is_empty() {
+                        visible_text.push(extracted.text);
                     }
                 }
                 Some("audio" | "localAudio") => visible_text.push("[音频]".to_string()),
@@ -165,6 +180,7 @@ async fn map_turn(
             }
         }
         mapped_item["text"] = Value::String(visible_text.join("\n"));
+        crate::mapping::message_skills::normalize_message_skill_references(mapped_item);
         if !metadata.is_empty() {
             mapped_item["attachments"] = Value::Array(metadata);
         }
