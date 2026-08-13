@@ -247,6 +247,41 @@ test("adds a folder through the Web project directory picker", async ({ page }) 
   ).toHaveCount(0);
 });
 
+test("navigates absolute paths and reveals hidden project folders on demand", async ({ page }) => {
+  const directoryRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/v1/project-directories") {
+      directoryRequests.push(request.url());
+    }
+  });
+  await page.goto("/p/code-agent");
+  await page.getByRole("button", { name: "添加项目" }).click();
+  const picker = page.getByRole("dialog", { name: "选择项目文件夹" });
+
+  await expect(picker.getByText(".hidden-project", { exact: true })).toHaveCount(0);
+  await picker.getByRole("button", { name: "显示隐藏文件" }).click();
+  await expect(picker.getByText(".hidden-project", { exact: true })).toBeVisible();
+
+  await page.setViewportSize({ height: 720, width: 320 });
+  await expect
+    .poll(() =>
+      picker.evaluate(
+        (element) =>
+          element.scrollWidth <= element.clientWidth &&
+          document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    )
+    .toBe(true);
+
+  const pathInput = picker.getByRole("textbox", { name: "绝对路径" });
+  await pathInput.fill("/workspace/AddedProject");
+  await pathInput.press("Enter");
+  await expect(pathInput).toHaveValue("/workspace/AddedProject");
+  await expect
+    .poll(() => directoryRequests.some((url) => url.includes("path=%2Fworkspace%2FAddedProject")))
+    .toBe(true);
+});
+
 test("keeps the Web directory picker open after add failure", async ({ page }) => {
   const pageErrors: Error[] = [];
   page.on("pageerror", (error) => {

@@ -202,14 +202,14 @@ describe("CodeAgentClient", () => {
       .mockResolvedValueOnce(jsonResponse({ project }));
     const client = new CodeAgentClient({ fetch: fetchMock });
 
-    await expect(client.listProjectDirectories(listing.path)).resolves.toEqual(listing);
+    await expect(client.listProjectDirectories(listing.path, true)).resolves.toEqual(listing);
     await expect(
       client.addProject(project.rootPath, { idempotencyKey: "project-key" }),
     ).resolves.toEqual({
       project,
     });
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "/v1/project-directories?path=%2FUsers%2Fbryan%2FDevelop",
+      "/v1/project-directories?path=%2FUsers%2Fbryan%2FDevelop&showHidden=true",
     );
     expect(fetchMock.mock.calls[1]?.[0]).toBe("/v1/projects");
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
@@ -232,7 +232,7 @@ describe("CodeAgentClient", () => {
       .mockResolvedValueOnce(jsonResponse({ attachment }));
     const client = new CodeAgentClient({ fetch: fetchMock });
 
-    await expect(client.listHostFiles("image", listing.path)).resolves.toEqual(listing);
+    await expect(client.listHostFiles("image", listing.path, true)).resolves.toEqual(listing);
     await expect(
       client.importHostAttachment("code agent", "image", selectedPath, {
         idempotencyKey: "host-image-key",
@@ -240,7 +240,7 @@ describe("CodeAgentClient", () => {
     ).resolves.toEqual({ attachment });
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "/v1/host-files?kind=image&path=%2FUsers%2Fbryan%2FPictures",
+      "/v1/host-files?kind=image&path=%2FUsers%2Fbryan%2FPictures&showHidden=true",
     );
     expect(fetchMock.mock.calls[1]?.[0]).toBe("/v1/projects/code%20agent/attachments/image/host");
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({

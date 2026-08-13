@@ -36,6 +36,7 @@ pub async fn filesystem_roots() -> Vec<PathBuf> {
 pub(crate) async fn browse_directory(
     path: Option<&str>,
     kind: Option<&str>,
+    show_hidden: bool,
 ) -> Result<Value, PlatformError> {
     let (resolved, roots) = tokio::join!(resolve_directory(path), filesystem_roots());
     let resolved = resolved?;
@@ -55,6 +56,9 @@ pub(crate) async fn browse_directory(
     let mut entries = Vec::new();
     let mut children = tokio::fs::read_dir(&resolved).await?;
     while let Some(child) = children.next_entry().await? {
+        if !show_hidden && is_hidden_entry(&child).await? {
+            continue;
+        }
         let file_type = child.file_type().await?;
         if file_type.is_symlink() {
             continue;
@@ -74,6 +78,21 @@ pub(crate) async fn browse_directory(
         .filter(|parent| *parent != resolved)
         .map(|parent| parent.to_string_lossy().into_owned());
     Ok(json!({ "entries": entries, "parentPath": parent, "path": resolved, "roots": roots }))
+}
+
+async fn is_hidden_entry(entry: &tokio::fs::DirEntry) -> Result<bool, std::io::Error> {
+    if entry.file_name().to_string_lossy().starts_with('.') {
+        return Ok(true);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
+        return Ok(entry.metadata().await?.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0);
+    }
+    #[cfg(not(windows))]
+    Ok(false)
 }
 
 async fn resolve_directory(path: Option<&str>) -> Result<PathBuf, PlatformError> {
@@ -147,10 +166,10 @@ mod tests {
         fs::write(root.join("notes.txt"), b"notes").expect("fixture file must be created");
         let root_path = root.to_string_lossy();
 
-        let directories = browse_directory(Some(&root_path), None)
+        let directories = browse_directory(Some(&root_path), None, false)
             .await
             .expect("directory listing must succeed");
-        let host_files = browse_directory(Some(&root_path), Some("file"))
+        let host_files = browse_directory(Some(&root_path), Some("file"), false)
             .await
             .expect("host file listing must succeed");
 
@@ -164,6 +183,39 @@ mod tests {
                 .as_array()
                 .is_some_and(|roots| !roots.is_empty())
         );
+        fs::remove_dir_all(root).expect("fixture directory must be removed");
+    }
+
+    #[tokio::test]
+    async fn browse_directory_should_hide_dot_entries_by_default() {
+        let root =
+            std::env::temp_dir().join(format!("code-agent-hidden-browser-{}", std::process::id()));
+        fs::create_dir_all(root.join(".private")).expect("hidden directory must be created");
+        fs::write(root.join(".secret.txt"), b"secret").expect("hidden file must be created");
+        fs::write(root.join("notes.txt"), b"notes").expect("visible file must be created");
+        let root_path = root.to_string_lossy();
+
+        let hidden = browse_directory(Some(&root_path), Some("file"), false)
+            .await
+            .expect("default listing must succeed");
+        let visible = browse_directory(Some(&root_path), Some("file"), true)
+            .await
+            .expect("hidden listing must succeed");
+
+        let hidden_names = hidden["entries"]
+            .as_array()
+            .expect("entries")
+            .iter()
+            .filter_map(|entry| entry["name"].as_str())
+            .collect::<Vec<_>>();
+        let visible_names = visible["entries"]
+            .as_array()
+            .expect("entries")
+            .iter()
+            .filter_map(|entry| entry["name"].as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(hidden_names, vec!["notes.txt"]);
+        assert_eq!(visible_names, vec![".private", ".secret.txt", "notes.txt"]);
         fs::remove_dir_all(root).expect("fixture directory must be removed");
     }
 }

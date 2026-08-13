@@ -650,6 +650,7 @@ pub trait FilePort: Send + Sync {
     async fn browse_directories(
         &self,
         _path: Option<&str>,
+        _show_hidden: bool,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
         Err(CodeAgentError::internal("directory browser is unavailable"))
@@ -660,6 +661,7 @@ pub trait FilePort: Send + Sync {
         &self,
         _kind: &str,
         _path: Option<&str>,
+        _show_hidden: bool,
         _context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
         Err(CodeAgentError::internal("host file browser is unavailable"))

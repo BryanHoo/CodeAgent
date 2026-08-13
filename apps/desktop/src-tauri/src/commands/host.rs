@@ -1,80 +1,16 @@
 use serde::Serialize;
 use tauri::{AppHandle, Runtime, plugin::PermissionState};
-use tauri_plugin_dialog::{DialogExt, FilePath};
 use tauri_plugin_notification::NotificationExt;
-use tokio::sync::oneshot;
 
 use crate::command_error::CommandError;
 
-const MAX_SELECTED_FILES: usize = 20;
 const MAX_NOTIFICATION_TITLE_CHARS: usize = 120;
 const MAX_NOTIFICATION_BODY_CHARS: usize = 512;
 const MAX_NOTIFICATION_TAG_CHARS: usize = 128;
 
 #[derive(Debug, Serialize)]
-pub struct HostDirectorySelectionResponse {
-    path: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct HostFileSelectionResponse {
-    paths: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
 pub struct HostNotificationResponse {
     status: &'static str,
-}
-
-#[tauri::command]
-pub async fn host_directory_select<R: Runtime>(
-    request_id: String,
-    app: AppHandle<R>,
-) -> Result<HostDirectorySelectionResponse, CommandError> {
-    validate_request_id(&request_id)?;
-    let (sender, receiver) = oneshot::channel();
-    app.dialog().file().pick_folder(move |selection| {
-        let _ = sender.send(selection.and_then(file_path_to_string));
-    });
-    let path = receiver
-        .await
-        .map_err(|_| CommandError::internal("目录选择器意外关闭"))?;
-    Ok(HostDirectorySelectionResponse { path })
-}
-
-#[tauri::command]
-pub async fn host_files_select<R: Runtime>(
-    request_id: String,
-    kind: String,
-    app: AppHandle<R>,
-) -> Result<HostFileSelectionResponse, CommandError> {
-    validate_request_id(&request_id)?;
-    let mut dialog = app.dialog().file().set_title("选择附件");
-    dialog = match kind.as_str() {
-        "image" => dialog.add_filter("图片", &["gif", "jpeg", "jpg", "png", "webp"]),
-        "file" => dialog.add_filter(
-            "文档",
-            &[
-                "csv", "doc", "docx", "html", "json", "md", "pdf", "ppt", "pptx", "txt", "xls",
-                "xlsx", "xml", "yaml", "yml",
-            ],
-        ),
-        _ => return Err(CommandError::invalid_input("附件类型无效")),
-    };
-    let (sender, receiver) = oneshot::channel();
-    dialog.pick_files(move |selection| {
-        let paths = selection
-            .unwrap_or_default()
-            .into_iter()
-            .take(MAX_SELECTED_FILES)
-            .filter_map(file_path_to_string)
-            .collect();
-        let _ = sender.send(paths);
-    });
-    let paths = receiver
-        .await
-        .map_err(|_| CommandError::internal("文件选择器意外关闭"))?;
-    Ok(HostFileSelectionResponse { paths })
 }
 
 #[tauri::command]
@@ -106,12 +42,6 @@ pub async fn host_notification_show<R: Runtime>(
         .show()
         .map_err(|_| CommandError::internal("系统通知发送失败"))?;
     Ok(HostNotificationResponse { status: "shown" })
-}
-
-fn file_path_to_string(path: FilePath) -> Option<String> {
-    path.into_path()
-        .ok()
-        .map(|path| path.to_string_lossy().into_owned())
 }
 
 fn validate_request_id(request_id: &str) -> Result<(), CommandError> {

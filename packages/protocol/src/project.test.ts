@@ -52,8 +52,6 @@ import {
   GenerateCommitMessageResponseSchema,
   HostFileListingSchema,
   HostFileQuerySchema,
-  HostDirectorySelectionResponseSchema,
-  HostFileSelectionResponseSchema,
   HostNotificationResponseSchema,
   ImportHostAttachmentRequestSchema,
   ProjectPageSchema,
@@ -106,13 +104,7 @@ import {
 } from "./project.js";
 
 describe("project protocol", () => {
-  it("validates native host selection and notification results", () => {
-    expect(Value.Check(HostDirectorySelectionResponseSchema, { path: null })).toBe(true);
-    expect(Value.Check(HostDirectorySelectionResponseSchema, { path: "/workspace/app" })).toBe(
-      true,
-    );
-    expect(Value.Check(HostFileSelectionResponseSchema, { paths: ["/tmp/a.png"] })).toBe(true);
-    expect(Value.Check(HostFileSelectionResponseSchema, { paths: [42] })).toBe(false);
+  it("validates native host notification results", () => {
     expect(Value.Check(HostNotificationResponseSchema, { status: "shown" })).toBe(true);
     expect(Value.Check(HostNotificationResponseSchema, { status: "denied" })).toBe(true);
   });
@@ -139,6 +131,8 @@ describe("project protocol", () => {
 
   it("validates host directory queries and listings", () => {
     expect(Value.Check(ProjectDirectoryQuerySchema, {})).toBe(true);
+    expect(Value.Check(ProjectDirectoryQuerySchema, { showHidden: true })).toBe(true);
+    expect(Value.Check(ProjectDirectoryQuerySchema, { showHidden: "true" })).toBe(false);
     expect(Value.Check(ProjectDirectoryQuerySchema, { path: "/Users/bryan/Develop" })).toBe(true);
     expect(Value.Check(ProjectDirectoryQuerySchema, { path: "C:\\Users\\bryan\\Develop" })).toBe(
       true,
@@ -166,6 +160,8 @@ describe("project protocol", () => {
 
   it("validates host attachment file queries, listings, and imports", () => {
     expect(Value.Check(HostFileQuerySchema, { kind: "image" })).toBe(true);
+    expect(Value.Check(HostFileQuerySchema, { kind: "image", showHidden: true })).toBe(true);
+    expect(Value.Check(HostFileQuerySchema, { kind: "image", showHidden: "true" })).toBe(false);
     expect(
       Value.Check(HostFileQuerySchema, {
         kind: "file",

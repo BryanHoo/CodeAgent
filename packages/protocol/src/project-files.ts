@@ -68,7 +68,10 @@ export const ProjectDirectoryPathSchema = Type.String({
 export type ProjectDirectoryPath = Static<typeof ProjectDirectoryPathSchema>;
 
 export const ProjectDirectoryQuerySchema = Type.Object(
-  { path: Type.Optional(ProjectDirectoryPathSchema) },
+  {
+    path: Type.Optional(ProjectDirectoryPathSchema),
+    showHidden: Type.Optional(Type.Boolean()),
+  },
   { additionalProperties: false },
 );
 
@@ -114,6 +117,7 @@ export const HostFileQuerySchema = Type.Object(
   {
     kind: HostFileKindSchema,
     path: Type.Optional(ProjectDirectoryPathSchema),
+    showHidden: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );
@@ -142,22 +146,6 @@ export const HostFileListingSchema = Type.Object(
 );
 
 export type HostFileListing = Readonly<Static<typeof HostFileListingSchema>>;
-
-export const HostDirectorySelectionResponseSchema = Type.Object(
-  { path: Type.Union([ProjectDirectoryPathSchema, Type.Null()]) },
-  { additionalProperties: false },
-);
-
-export type HostDirectorySelectionResponse = Readonly<
-  Static<typeof HostDirectorySelectionResponseSchema>
->;
-
-export const HostFileSelectionResponseSchema = Type.Object(
-  { paths: Type.Array(ProjectDirectoryPathSchema, { maxItems: 20 }) },
-  { additionalProperties: false },
-);
-
-export type HostFileSelectionResponse = Readonly<Static<typeof HostFileSelectionResponseSchema>>;
 
 export const HostNotificationRequestSchema = Type.Object(
   {

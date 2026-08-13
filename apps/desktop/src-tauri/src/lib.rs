@@ -39,7 +39,6 @@ pub fn run() {
             },
         ))
         .plugin(navigation_guard_plugin())
-        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let codex_home = codex_home(app)?;
@@ -132,8 +131,6 @@ pub fn run() {
             commands::git::git_commit_files,
             commands::git::git_history,
             commands::git::git_status,
-            commands::host::host_directory_select,
-            commands::host::host_files_select,
             commands::host::host_notification_show,
             commands::projects::project_add,
             commands::projects::project_list,

@@ -81,9 +81,15 @@ function mapOperation(
     case "projects.list":
       return { args: [readOptions], method: "listProjects" };
     case "project_directories.list":
-      return { args: [input["path"], readOptions], method: "listProjectDirectories" };
+      return {
+        args: [input["path"], input["showHidden"], readOptions],
+        method: "listProjectDirectories",
+      };
     case "host_files.list":
-      return { args: [input["kind"], input["path"], readOptions], method: "listHostFiles" };
+      return {
+        args: [input["kind"], input["path"], input["showHidden"], readOptions],
+        method: "listHostFiles",
+      };
     case "projects.reorder":
       return { args: [input["projectIds"], mutationOptions], method: "reorderProjects" };
     case "project_defaults.get":

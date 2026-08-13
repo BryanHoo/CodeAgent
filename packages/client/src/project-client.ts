@@ -6,8 +6,6 @@ import {
   CommitProjectChangesResponseSchema,
   GenerateCommitMessageResponseSchema,
   HostFileListingSchema,
-  HostDirectorySelectionResponseSchema,
-  HostFileSelectionResponseSchema,
   OpenProjectResponseSchema,
   ProjectDirectoryListingSchema,
   ProjectFileSearchPageSchema,
@@ -69,30 +67,25 @@ export class ProjectCodeAgentClient extends TransportCodeAgentClient {
     return this.read({ name: "projects.list", output: ProjectPageSchema }, options);
   }
 
-  public listProjectDirectories(path?: string, options: ReadOptions = {}) {
+  public listProjectDirectories(path?: string, showHidden = false, options: ReadOptions = {}) {
     return this.read(
-      { input: { path }, name: "project_directories.list", output: ProjectDirectoryListingSchema },
+      {
+        input: { path, showHidden },
+        name: "project_directories.list",
+        output: ProjectDirectoryListingSchema,
+      },
       options,
     );
   }
 
-  public listHostFiles(kind: HostFileKind, path?: string, options: ReadOptions = {}) {
+  public listHostFiles(
+    kind: HostFileKind,
+    path?: string,
+    showHidden = false,
+    options: ReadOptions = {},
+  ) {
     return this.read(
-      { input: { kind, path }, name: "host_files.list", output: HostFileListingSchema },
-      options,
-    );
-  }
-
-  public selectHostDirectory(options: MutationOptions = {}) {
-    return this.mutation(
-      { name: "host.directory_select", output: HostDirectorySelectionResponseSchema },
-      options,
-    );
-  }
-
-  public selectHostFiles(kind: HostFileKind, options: MutationOptions = {}) {
-    return this.mutation(
-      { input: { kind }, name: "host.files_select", output: HostFileSelectionResponseSchema },
+      { input: { kind, path, showHidden }, name: "host_files.list", output: HostFileListingSchema },
       options,
     );
   }

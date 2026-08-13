@@ -53,9 +53,10 @@ impl NodeEngine {
         &self,
         request_id: String,
         path: Option<String>,
+        show_hidden: Option<bool>,
     ) -> napi::Result<Value> {
         self.runtime()
-            .project_directories(&request_id, path.as_deref())
+            .project_directories(&request_id, path.as_deref(), show_hidden.unwrap_or(false))
             .await
             .map_err(to_napi_error)
     }
@@ -66,9 +67,15 @@ impl NodeEngine {
         request_id: String,
         kind: String,
         path: Option<String>,
+        show_hidden: Option<bool>,
     ) -> napi::Result<Value> {
         self.runtime()
-            .host_files(&request_id, &kind, path.as_deref())
+            .host_files(
+                &request_id,
+                &kind,
+                path.as_deref(),
+                show_hidden.unwrap_or(false),
+            )
             .await
             .map_err(to_napi_error)
     }

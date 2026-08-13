@@ -82,10 +82,11 @@ fn parse_project_id(value: String) -> Result<ProjectId, CommandError> {
 pub async fn project_directories_list(
     request_id: String,
     path: Option<String>,
+    show_hidden: Option<bool>,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<Value, CommandError> {
     runtime
-        .project_directories(&request_id, path.as_deref())
+        .project_directories(&request_id, path.as_deref(), show_hidden.unwrap_or(false))
         .await
         .map_err(Into::into)
 }
@@ -95,10 +96,16 @@ pub async fn host_files_list(
     request_id: String,
     kind: String,
     path: Option<String>,
+    show_hidden: Option<bool>,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<Value, CommandError> {
     runtime
-        .host_files(&request_id, &kind, path.as_deref())
+        .host_files(
+            &request_id,
+            &kind,
+            path.as_deref(),
+            show_hidden.unwrap_or(false),
+        )
         .await
         .map_err(Into::into)
 }
