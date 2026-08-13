@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-pub use code_agent_protocol::CodeAgentErrorCode;
+pub use code_agent_protocol::{
+    CodeAgentErrorCode, CodeAgentErrorMutationCode as AgentMutationErrorCode,
+};
 use serde_json::{Value, json};
 use thiserror::Error;
 
@@ -11,6 +13,7 @@ pub struct CodeAgentError {
     code: CodeAgentErrorCode,
     correlation_id: Option<Arc<str>>,
     message: Arc<str>,
+    mutation_code: Option<AgentMutationErrorCode>,
 }
 
 impl CodeAgentError {
@@ -25,7 +28,15 @@ impl CodeAgentError {
             code,
             correlation_id,
             message: message.into(),
+            mutation_code: None,
         }
+    }
+
+    /// 为 Delivery 边界附加稳定的领域错误码。
+    #[must_use]
+    pub fn with_mutation_code(mut self, mutation_code: AgentMutationErrorCode) -> Self {
+        self.mutation_code = Some(mutation_code);
+        self
     }
 
     /// 创建不暴露底层实现细节的内部错误。
@@ -46,6 +57,12 @@ impl CodeAgentError {
         &self.message
     }
 
+    /// 返回供客户端恢复和反馈使用的领域错误码。
+    #[must_use]
+    pub fn mutation_code(&self) -> Option<AgentMutationErrorCode> {
+        self.mutation_code
+    }
+
     /// 返回可选的内部追踪 ID。
     #[must_use]
     pub fn correlation_id(&self) -> Option<&str> {
@@ -61,6 +78,9 @@ impl CodeAgentError {
         });
         if let Some(correlation_id) = &self.correlation_id {
             value["correlationId"] = json!(correlation_id.as_ref());
+        }
+        if let Some(mutation_code) = self.mutation_code {
+            value["mutationCode"] = json!(mutation_code);
         }
         value
     }

@@ -1,10 +1,13 @@
 import { constants } from "node:fs";
-import { access, cp, mkdir, readFile, rm } from "node:fs/promises";
+import { access, copyFile, cp, mkdir, readFile, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 const SUPPORTED_CODEX_VERSION = "0.147.0";
+const execFileAsync = promisify(execFile);
 const TARGETS = {
   "darwin-arm64": {
     package: "@openai/codex-darwin-arm64",
@@ -34,6 +37,7 @@ const TARGETS = {
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const desktopDirectory = resolve(scriptDirectory, "..");
+const repositoryRoot = resolve(desktopDirectory, "../..");
 const target = TARGETS[`${process.platform}-${process.arch}`];
 if (target === undefined) {
   throw new Error(`Unsupported Codex desktop target: ${process.platform}-${process.arch}`);
@@ -98,6 +102,17 @@ await rm(runtimeDirectory, { recursive: true, force: true });
 await mkdir(dirname(runtimeDirectory), { recursive: true });
 // 镜像官方 canonical package，自动包含当前平台的全部沙箱、Shell 和搜索资源。
 await cp(vendorDirectory, runtimeDirectory, { recursive: true });
+if (process.platform === "win32") {
+  await execFileAsync(
+    "cargo",
+    ["build", "--release", "--locked", "-p", "code-agent-mcp-command-proxy"],
+    { cwd: repositoryRoot, windowsHide: true },
+  );
+  const proxy = resolve(repositoryRoot, "target/release/code-agent-mcp-command-proxy.exe");
+  const bundledProxy = resolve(runtimeDirectory, runtimeManifest.pathDir, "npx.exe");
+  await access(proxy, constants.F_OK);
+  await copyFile(proxy, bundledProxy);
+}
 await Promise.all(
   requiredExecutables.map((path) =>
     access(

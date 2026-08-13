@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use code_agent_core::{
-    AttachmentPort, ClockPort, CodeAgentError, CodeAgentErrorCode, FilePort, GitPort,
-    PortRequestContext, ProviderPort, RepositoryPort, UpdatePort,
+    AgentMutationErrorCode, AttachmentPort, ClockPort, CodeAgentError, CodeAgentErrorCode,
+    FilePort, GitPort, PortRequestContext, ProviderPort, RepositoryPort, UpdatePort,
 };
 use code_agent_protocol::{AgentCapabilities, ProjectId, TaskId};
 use serde_json::{Value, json};
@@ -110,17 +110,19 @@ async fn ports_should_share_request_context_and_cooperative_cancellation() {
 #[test]
 fn error_should_serialize_stable_protocol_shape() {
     let error = CodeAgentError::new(
-        CodeAgentErrorCode::ProviderFailure,
-        "Provider failed",
+        CodeAgentErrorCode::Conflict,
+        "Git status changed",
         Some(Arc::<str>::from("correlation-1")),
-    );
+    )
+    .with_mutation_code(AgentMutationErrorCode::GitStatusChanged);
 
     assert_eq!(
         error.to_protocol_value(),
         json!({
-            "code": "provider_failure",
+            "code": "conflict",
             "correlationId": "correlation-1",
-            "message": "Provider failed"
+            "message": "Git status changed",
+            "mutationCode": "GIT_STATUS_CHANGED"
         })
     );
 }

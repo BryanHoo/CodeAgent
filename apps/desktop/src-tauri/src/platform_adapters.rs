@@ -16,6 +16,8 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
+use crate::process_environment::resolved_process_path;
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderDiagnostic {
@@ -228,7 +230,7 @@ pub async fn start_codex_supervisor(
     };
     let process = match start_codex_app_server(CodexAppServerOptions {
         app_version,
-        env_overrides: desktop_codex_environment(&binary, &codex_home),
+        env_overrides: desktop_codex_environment(&binary, &codex_home).await,
         binary_path: binary,
         ..CodexAppServerOptions::default()
     })
@@ -267,7 +269,7 @@ pub async fn start_codex_supervisor(
     ));
 }
 
-fn desktop_codex_environment(binary: &Path, codex_home: &Path) -> Vec<(String, String)> {
+async fn desktop_codex_environment(binary: &Path, codex_home: &Path) -> Vec<(String, String)> {
     let binary_directory = binary.parent().unwrap_or_else(|| Path::new("."));
     let package_directory = binary_directory
         .parent()
@@ -277,25 +279,16 @@ fn desktop_codex_environment(binary: &Path, codex_home: &Path) -> Vec<(String, S
         package_directory.join("codex-path"),
         binary_directory.to_path_buf(),
     ];
-    let inherited_path = std::env::var_os("PATH").unwrap_or_default();
-    let mut paths = Vec::with_capacity(2 + std::env::split_paths(&inherited_path).count());
-    paths.extend(
-        managed_directories
-            .iter()
-            .filter(|path| path.is_dir())
-            .cloned(),
-    );
-    paths.extend(std::env::split_paths(&inherited_path).filter(|path| {
-        !managed_directories
-            .iter()
-            .any(|managed| managed.as_path() == path.as_path())
-    }));
-    let path = std::env::join_paths(paths)
-        .unwrap_or_else(|_| binary_directory.as_os_str().to_owned())
+    let managed_directories = managed_directories
+        .into_iter()
+        .filter(|path| path.is_dir())
+        .collect::<Vec<_>>();
+    let path = resolved_process_path(&managed_directories)
+        .await
         .to_string_lossy()
         .into_owned();
 
-    // canonical package 的搜索目录优先，确保 GUI 启动时使用同版本受管工具。
+    // 受管目录保持最高优先级，同时让 GUI 启动的 Codex 能找到用户配置的 MCP 启动器。
     vec![
         (
             "CODEX_HOME".to_string(),

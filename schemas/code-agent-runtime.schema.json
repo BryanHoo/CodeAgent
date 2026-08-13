@@ -12015,6 +12015,142 @@
         "message": {
           "minLength": 1,
           "type": "string"
+        },
+        "mutationCode": {
+          "oneOf": [
+            {
+              "const": "ACCESS_DENIED",
+              "type": "string"
+            },
+            {
+              "const": "IDEMPOTENCY_KEY_REQUIRED",
+              "type": "string"
+            },
+            {
+              "const": "IDEMPOTENCY_CONFLICT",
+              "type": "string"
+            },
+            {
+              "const": "IDEMPOTENCY_CAPACITY_EXCEEDED",
+              "type": "string"
+            },
+            {
+              "const": "INVALID_REQUEST",
+              "type": "string"
+            },
+            {
+              "const": "PROJECT_NOT_FOUND",
+              "type": "string"
+            },
+            {
+              "const": "TASK_NOT_FOUND",
+              "type": "string"
+            },
+            {
+              "const": "TURN_NOT_FOUND",
+              "type": "string"
+            },
+            {
+              "const": "TURN_NOT_RUNNING",
+              "type": "string"
+            },
+            {
+              "const": "ATTACHMENT_NOT_FOUND",
+              "type": "string"
+            },
+            {
+              "const": "PENDING_REQUEST_NOT_FOUND",
+              "type": "string"
+            },
+            {
+              "const": "PENDING_REQUEST_EXPIRED",
+              "type": "string"
+            },
+            {
+              "const": "PENDING_REQUEST_ALREADY_RESOLVED",
+              "type": "string"
+            },
+            {
+              "const": "PENDING_REQUEST_MISMATCH",
+              "type": "string"
+            },
+            {
+              "const": "PAIRING_FAILED",
+              "type": "string"
+            },
+            {
+              "const": "PAIRING_RATE_LIMITED",
+              "type": "string"
+            },
+            {
+              "const": "GIT_STATUS_CHANGED",
+              "type": "string"
+            },
+            {
+              "const": "GIT_REPOSITORY_UNAVAILABLE",
+              "type": "string"
+            },
+            {
+              "const": "GIT_PATH_UNAVAILABLE",
+              "type": "string"
+            },
+            {
+              "const": "GIT_COMMIT_FAILED",
+              "type": "string"
+            },
+            {
+              "const": "GIT_BRANCH_ALREADY_ACTIVE",
+              "type": "string"
+            },
+            {
+              "const": "GIT_BRANCH_ALREADY_EXISTS",
+              "type": "string"
+            },
+            {
+              "const": "GIT_BRANCH_CREATE_FAILED",
+              "type": "string"
+            },
+            {
+              "const": "GIT_BRANCH_INVALID",
+              "type": "string"
+            },
+            {
+              "const": "GIT_BRANCH_NOT_FOUND",
+              "type": "string"
+            },
+            {
+              "const": "GIT_BRANCH_SWITCH_FAILED",
+              "type": "string"
+            },
+            {
+              "const": "GIT_MUTATION_IN_PROGRESS",
+              "type": "string"
+            },
+            {
+              "const": "GIT_REPOSITORY_READ_ONLY",
+              "type": "string"
+            },
+            {
+              "const": "COMMIT_MESSAGE_GENERATION_FAILED",
+              "type": "string"
+            },
+            {
+              "const": "UPDATE_NOT_AVAILABLE",
+              "type": "string"
+            },
+            {
+              "const": "UPDATE_CHECK_FAILED",
+              "type": "string"
+            },
+            {
+              "const": "UPDATE_INSTALL_FAILED",
+              "type": "string"
+            },
+            {
+              "const": "PROVIDER_ERROR",
+              "type": "string"
+            }
+          ]
         }
       }
     },

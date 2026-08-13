@@ -21,8 +21,8 @@ use std::{
 };
 
 use code_agent_core::{
-    AttachmentPort, ClockPort, CodeAgentError, CodeAgentErrorCode, FilePort, GitPort,
-    PortRequestContext, ProviderPort, RepositoryPort, UpdatePort,
+    AgentMutationErrorCode, AttachmentPort, ClockPort, CodeAgentError, CodeAgentErrorCode,
+    FilePort, GitPort, PortRequestContext, ProviderPort, RepositoryPort, UpdatePort,
 };
 use code_agent_protocol::{
     AgentAttachment, AgentAttachmentKind, AgentBackgroundTerminalPage, AgentCapabilities,
@@ -176,7 +176,8 @@ impl CodeAgentRuntime {
                     CodeAgentErrorCode::NotFound,
                     "project was not found",
                     None,
-                ));
+                )
+                .with_mutation_code(AgentMutationErrorCode::ProjectNotFound));
             };
             let project: Project = serde_json::from_value(value)
                 .map_err(|error| CodeAgentError::internal(error.to_string()))?;

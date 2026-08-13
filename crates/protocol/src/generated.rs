@@ -8103,6 +8103,142 @@ impl<'de> ::serde::Deserialize<'de> for CancelProviderLoginRequestLoginId {
 ///    "message": {
 ///      "type": "string",
 ///      "minLength": 1
+///    },
+///    "mutationCode": {
+///      "oneOf": [
+///        {
+///          "type": "string",
+///          "const": "ACCESS_DENIED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "IDEMPOTENCY_KEY_REQUIRED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "IDEMPOTENCY_CONFLICT"
+///        },
+///        {
+///          "type": "string",
+///          "const": "IDEMPOTENCY_CAPACITY_EXCEEDED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "INVALID_REQUEST"
+///        },
+///        {
+///          "type": "string",
+///          "const": "PROJECT_NOT_FOUND"
+///        },
+///        {
+///          "type": "string",
+///          "const": "TASK_NOT_FOUND"
+///        },
+///        {
+///          "type": "string",
+///          "const": "TURN_NOT_FOUND"
+///        },
+///        {
+///          "type": "string",
+///          "const": "TURN_NOT_RUNNING"
+///        },
+///        {
+///          "type": "string",
+///          "const": "ATTACHMENT_NOT_FOUND"
+///        },
+///        {
+///          "type": "string",
+///          "const": "PENDING_REQUEST_NOT_FOUND"
+///        },
+///        {
+///          "type": "string",
+///          "const": "PENDING_REQUEST_EXPIRED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "PENDING_REQUEST_ALREADY_RESOLVED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "PENDING_REQUEST_MISMATCH"
+///        },
+///        {
+///          "type": "string",
+///          "const": "PAIRING_FAILED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "PAIRING_RATE_LIMITED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "GIT_STATUS_CHANGED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "GIT_REPOSITORY_UNAVAILABLE"
+///        },
+///        {
+///          "type": "string",
+///          "const": "GIT_PATH_UNAVAILABLE"
+///        },
+///        {
+///          "type": "string",
+///          "const": "GIT_COMMIT_FAILED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "GIT_BRANCH_ALREADY_ACTIVE"
+///        },
+///        {
+///          "type": "string",
+///          "const": "GIT_BRANCH_ALREADY_EXISTS"
+///        },
+///        {
+///          "type": "string",
+///          "const": "GIT_BRANCH_CREATE_FAILED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "GIT_BRANCH_INVALID"
+///        },
+///        {
+///          "type": "string",
+///          "const": "GIT_BRANCH_NOT_FOUND"
+///        },
+///        {
+///          "type": "string",
+///          "const": "GIT_BRANCH_SWITCH_FAILED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "GIT_MUTATION_IN_PROGRESS"
+///        },
+///        {
+///          "type": "string",
+///          "const": "GIT_REPOSITORY_READ_ONLY"
+///        },
+///        {
+///          "type": "string",
+///          "const": "COMMIT_MESSAGE_GENERATION_FAILED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "UPDATE_NOT_AVAILABLE"
+///        },
+///        {
+///          "type": "string",
+///          "const": "UPDATE_CHECK_FAILED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "UPDATE_INSTALL_FAILED"
+///        },
+///        {
+///          "type": "string",
+///          "const": "PROVIDER_ERROR"
+///        }
+///      ]
 ///    }
 ///  },
 ///  "additionalProperties": false
@@ -8120,6 +8256,12 @@ pub struct CodeAgentError {
     )]
     pub correlation_id: ::std::option::Option<CodeAgentErrorCorrelationId>,
     pub message: CodeAgentErrorMessage,
+    #[serde(
+        rename = "mutationCode",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub mutation_code: ::std::option::Option<CodeAgentErrorMutationCode>,
 }
 ///`CodeAgentErrorCode`
 ///
@@ -8388,6 +8530,331 @@ impl<'de> ::serde::Deserialize<'de> for CodeAgentErrorMessage {
             .map_err(|e: self::error::ConversionError| {
                 <D::Error as ::serde::de::Error>::custom(e.to_string())
             })
+    }
+}
+///`CodeAgentErrorMutationCode`
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "oneOf": [
+///    {
+///      "type": "string",
+///      "const": "ACCESS_DENIED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "IDEMPOTENCY_KEY_REQUIRED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "IDEMPOTENCY_CONFLICT"
+///    },
+///    {
+///      "type": "string",
+///      "const": "IDEMPOTENCY_CAPACITY_EXCEEDED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "INVALID_REQUEST"
+///    },
+///    {
+///      "type": "string",
+///      "const": "PROJECT_NOT_FOUND"
+///    },
+///    {
+///      "type": "string",
+///      "const": "TASK_NOT_FOUND"
+///    },
+///    {
+///      "type": "string",
+///      "const": "TURN_NOT_FOUND"
+///    },
+///    {
+///      "type": "string",
+///      "const": "TURN_NOT_RUNNING"
+///    },
+///    {
+///      "type": "string",
+///      "const": "ATTACHMENT_NOT_FOUND"
+///    },
+///    {
+///      "type": "string",
+///      "const": "PENDING_REQUEST_NOT_FOUND"
+///    },
+///    {
+///      "type": "string",
+///      "const": "PENDING_REQUEST_EXPIRED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "PENDING_REQUEST_ALREADY_RESOLVED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "PENDING_REQUEST_MISMATCH"
+///    },
+///    {
+///      "type": "string",
+///      "const": "PAIRING_FAILED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "PAIRING_RATE_LIMITED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "GIT_STATUS_CHANGED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "GIT_REPOSITORY_UNAVAILABLE"
+///    },
+///    {
+///      "type": "string",
+///      "const": "GIT_PATH_UNAVAILABLE"
+///    },
+///    {
+///      "type": "string",
+///      "const": "GIT_COMMIT_FAILED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "GIT_BRANCH_ALREADY_ACTIVE"
+///    },
+///    {
+///      "type": "string",
+///      "const": "GIT_BRANCH_ALREADY_EXISTS"
+///    },
+///    {
+///      "type": "string",
+///      "const": "GIT_BRANCH_CREATE_FAILED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "GIT_BRANCH_INVALID"
+///    },
+///    {
+///      "type": "string",
+///      "const": "GIT_BRANCH_NOT_FOUND"
+///    },
+///    {
+///      "type": "string",
+///      "const": "GIT_BRANCH_SWITCH_FAILED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "GIT_MUTATION_IN_PROGRESS"
+///    },
+///    {
+///      "type": "string",
+///      "const": "GIT_REPOSITORY_READ_ONLY"
+///    },
+///    {
+///      "type": "string",
+///      "const": "COMMIT_MESSAGE_GENERATION_FAILED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "UPDATE_NOT_AVAILABLE"
+///    },
+///    {
+///      "type": "string",
+///      "const": "UPDATE_CHECK_FAILED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "UPDATE_INSTALL_FAILED"
+///    },
+///    {
+///      "type": "string",
+///      "const": "PROVIDER_ERROR"
+///    }
+///  ]
+///}
+/// ```
+/// </details>
+#[derive(
+    ::serde::Deserialize,
+    ::serde::Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum CodeAgentErrorMutationCode {
+    #[serde(rename = "ACCESS_DENIED")]
+    AccessDenied,
+    #[serde(rename = "IDEMPOTENCY_KEY_REQUIRED")]
+    IdempotencyKeyRequired,
+    #[serde(rename = "IDEMPOTENCY_CONFLICT")]
+    IdempotencyConflict,
+    #[serde(rename = "IDEMPOTENCY_CAPACITY_EXCEEDED")]
+    IdempotencyCapacityExceeded,
+    #[serde(rename = "INVALID_REQUEST")]
+    InvalidRequest,
+    #[serde(rename = "PROJECT_NOT_FOUND")]
+    ProjectNotFound,
+    #[serde(rename = "TASK_NOT_FOUND")]
+    TaskNotFound,
+    #[serde(rename = "TURN_NOT_FOUND")]
+    TurnNotFound,
+    #[serde(rename = "TURN_NOT_RUNNING")]
+    TurnNotRunning,
+    #[serde(rename = "ATTACHMENT_NOT_FOUND")]
+    AttachmentNotFound,
+    #[serde(rename = "PENDING_REQUEST_NOT_FOUND")]
+    PendingRequestNotFound,
+    #[serde(rename = "PENDING_REQUEST_EXPIRED")]
+    PendingRequestExpired,
+    #[serde(rename = "PENDING_REQUEST_ALREADY_RESOLVED")]
+    PendingRequestAlreadyResolved,
+    #[serde(rename = "PENDING_REQUEST_MISMATCH")]
+    PendingRequestMismatch,
+    #[serde(rename = "PAIRING_FAILED")]
+    PairingFailed,
+    #[serde(rename = "PAIRING_RATE_LIMITED")]
+    PairingRateLimited,
+    #[serde(rename = "GIT_STATUS_CHANGED")]
+    GitStatusChanged,
+    #[serde(rename = "GIT_REPOSITORY_UNAVAILABLE")]
+    GitRepositoryUnavailable,
+    #[serde(rename = "GIT_PATH_UNAVAILABLE")]
+    GitPathUnavailable,
+    #[serde(rename = "GIT_COMMIT_FAILED")]
+    GitCommitFailed,
+    #[serde(rename = "GIT_BRANCH_ALREADY_ACTIVE")]
+    GitBranchAlreadyActive,
+    #[serde(rename = "GIT_BRANCH_ALREADY_EXISTS")]
+    GitBranchAlreadyExists,
+    #[serde(rename = "GIT_BRANCH_CREATE_FAILED")]
+    GitBranchCreateFailed,
+    #[serde(rename = "GIT_BRANCH_INVALID")]
+    GitBranchInvalid,
+    #[serde(rename = "GIT_BRANCH_NOT_FOUND")]
+    GitBranchNotFound,
+    #[serde(rename = "GIT_BRANCH_SWITCH_FAILED")]
+    GitBranchSwitchFailed,
+    #[serde(rename = "GIT_MUTATION_IN_PROGRESS")]
+    GitMutationInProgress,
+    #[serde(rename = "GIT_REPOSITORY_READ_ONLY")]
+    GitRepositoryReadOnly,
+    #[serde(rename = "COMMIT_MESSAGE_GENERATION_FAILED")]
+    CommitMessageGenerationFailed,
+    #[serde(rename = "UPDATE_NOT_AVAILABLE")]
+    UpdateNotAvailable,
+    #[serde(rename = "UPDATE_CHECK_FAILED")]
+    UpdateCheckFailed,
+    #[serde(rename = "UPDATE_INSTALL_FAILED")]
+    UpdateInstallFailed,
+    #[serde(rename = "PROVIDER_ERROR")]
+    ProviderError,
+}
+impl ::std::fmt::Display for CodeAgentErrorMutationCode {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::AccessDenied => f.write_str("ACCESS_DENIED"),
+            Self::IdempotencyKeyRequired => f.write_str("IDEMPOTENCY_KEY_REQUIRED"),
+            Self::IdempotencyConflict => f.write_str("IDEMPOTENCY_CONFLICT"),
+            Self::IdempotencyCapacityExceeded => f.write_str("IDEMPOTENCY_CAPACITY_EXCEEDED"),
+            Self::InvalidRequest => f.write_str("INVALID_REQUEST"),
+            Self::ProjectNotFound => f.write_str("PROJECT_NOT_FOUND"),
+            Self::TaskNotFound => f.write_str("TASK_NOT_FOUND"),
+            Self::TurnNotFound => f.write_str("TURN_NOT_FOUND"),
+            Self::TurnNotRunning => f.write_str("TURN_NOT_RUNNING"),
+            Self::AttachmentNotFound => f.write_str("ATTACHMENT_NOT_FOUND"),
+            Self::PendingRequestNotFound => f.write_str("PENDING_REQUEST_NOT_FOUND"),
+            Self::PendingRequestExpired => f.write_str("PENDING_REQUEST_EXPIRED"),
+            Self::PendingRequestAlreadyResolved => f.write_str("PENDING_REQUEST_ALREADY_RESOLVED"),
+            Self::PendingRequestMismatch => f.write_str("PENDING_REQUEST_MISMATCH"),
+            Self::PairingFailed => f.write_str("PAIRING_FAILED"),
+            Self::PairingRateLimited => f.write_str("PAIRING_RATE_LIMITED"),
+            Self::GitStatusChanged => f.write_str("GIT_STATUS_CHANGED"),
+            Self::GitRepositoryUnavailable => f.write_str("GIT_REPOSITORY_UNAVAILABLE"),
+            Self::GitPathUnavailable => f.write_str("GIT_PATH_UNAVAILABLE"),
+            Self::GitCommitFailed => f.write_str("GIT_COMMIT_FAILED"),
+            Self::GitBranchAlreadyActive => f.write_str("GIT_BRANCH_ALREADY_ACTIVE"),
+            Self::GitBranchAlreadyExists => f.write_str("GIT_BRANCH_ALREADY_EXISTS"),
+            Self::GitBranchCreateFailed => f.write_str("GIT_BRANCH_CREATE_FAILED"),
+            Self::GitBranchInvalid => f.write_str("GIT_BRANCH_INVALID"),
+            Self::GitBranchNotFound => f.write_str("GIT_BRANCH_NOT_FOUND"),
+            Self::GitBranchSwitchFailed => f.write_str("GIT_BRANCH_SWITCH_FAILED"),
+            Self::GitMutationInProgress => f.write_str("GIT_MUTATION_IN_PROGRESS"),
+            Self::GitRepositoryReadOnly => f.write_str("GIT_REPOSITORY_READ_ONLY"),
+            Self::CommitMessageGenerationFailed => f.write_str("COMMIT_MESSAGE_GENERATION_FAILED"),
+            Self::UpdateNotAvailable => f.write_str("UPDATE_NOT_AVAILABLE"),
+            Self::UpdateCheckFailed => f.write_str("UPDATE_CHECK_FAILED"),
+            Self::UpdateInstallFailed => f.write_str("UPDATE_INSTALL_FAILED"),
+            Self::ProviderError => f.write_str("PROVIDER_ERROR"),
+        }
+    }
+}
+impl ::std::str::FromStr for CodeAgentErrorMutationCode {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "ACCESS_DENIED" => Ok(Self::AccessDenied),
+            "IDEMPOTENCY_KEY_REQUIRED" => Ok(Self::IdempotencyKeyRequired),
+            "IDEMPOTENCY_CONFLICT" => Ok(Self::IdempotencyConflict),
+            "IDEMPOTENCY_CAPACITY_EXCEEDED" => Ok(Self::IdempotencyCapacityExceeded),
+            "INVALID_REQUEST" => Ok(Self::InvalidRequest),
+            "PROJECT_NOT_FOUND" => Ok(Self::ProjectNotFound),
+            "TASK_NOT_FOUND" => Ok(Self::TaskNotFound),
+            "TURN_NOT_FOUND" => Ok(Self::TurnNotFound),
+            "TURN_NOT_RUNNING" => Ok(Self::TurnNotRunning),
+            "ATTACHMENT_NOT_FOUND" => Ok(Self::AttachmentNotFound),
+            "PENDING_REQUEST_NOT_FOUND" => Ok(Self::PendingRequestNotFound),
+            "PENDING_REQUEST_EXPIRED" => Ok(Self::PendingRequestExpired),
+            "PENDING_REQUEST_ALREADY_RESOLVED" => Ok(Self::PendingRequestAlreadyResolved),
+            "PENDING_REQUEST_MISMATCH" => Ok(Self::PendingRequestMismatch),
+            "PAIRING_FAILED" => Ok(Self::PairingFailed),
+            "PAIRING_RATE_LIMITED" => Ok(Self::PairingRateLimited),
+            "GIT_STATUS_CHANGED" => Ok(Self::GitStatusChanged),
+            "GIT_REPOSITORY_UNAVAILABLE" => Ok(Self::GitRepositoryUnavailable),
+            "GIT_PATH_UNAVAILABLE" => Ok(Self::GitPathUnavailable),
+            "GIT_COMMIT_FAILED" => Ok(Self::GitCommitFailed),
+            "GIT_BRANCH_ALREADY_ACTIVE" => Ok(Self::GitBranchAlreadyActive),
+            "GIT_BRANCH_ALREADY_EXISTS" => Ok(Self::GitBranchAlreadyExists),
+            "GIT_BRANCH_CREATE_FAILED" => Ok(Self::GitBranchCreateFailed),
+            "GIT_BRANCH_INVALID" => Ok(Self::GitBranchInvalid),
+            "GIT_BRANCH_NOT_FOUND" => Ok(Self::GitBranchNotFound),
+            "GIT_BRANCH_SWITCH_FAILED" => Ok(Self::GitBranchSwitchFailed),
+            "GIT_MUTATION_IN_PROGRESS" => Ok(Self::GitMutationInProgress),
+            "GIT_REPOSITORY_READ_ONLY" => Ok(Self::GitRepositoryReadOnly),
+            "COMMIT_MESSAGE_GENERATION_FAILED" => Ok(Self::CommitMessageGenerationFailed),
+            "UPDATE_NOT_AVAILABLE" => Ok(Self::UpdateNotAvailable),
+            "UPDATE_CHECK_FAILED" => Ok(Self::UpdateCheckFailed),
+            "UPDATE_INSTALL_FAILED" => Ok(Self::UpdateInstallFailed),
+            "PROVIDER_ERROR" => Ok(Self::ProviderError),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for CodeAgentErrorMutationCode {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for CodeAgentErrorMutationCode {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for CodeAgentErrorMutationCode {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 ///`ConfigureCustomProviderRequest`

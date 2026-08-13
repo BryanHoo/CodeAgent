@@ -3,6 +3,7 @@ mod command_error;
 mod commands;
 mod lifecycle;
 mod platform_adapters;
+mod process_environment;
 
 use std::{path::PathBuf, sync::Arc, time::Duration};
 

@@ -1,6 +1,7 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
 import {
+  AgentMutationErrorCodeSchema,
   ReviewAgentTaskRequestSchema,
   StartAgentTurnRequestSchema,
   SteerAgentTurnRequestSchema,
@@ -69,6 +70,7 @@ export const CodeAgentErrorSchema = Type.Object(
     code: CodeAgentErrorCodeSchema,
     correlationId: Type.Optional(Type.String({ minLength: 1 })),
     message: Type.String({ minLength: 1 }),
+    mutationCode: Type.Optional(AgentMutationErrorCodeSchema),
   },
   { additionalProperties: false },
 );

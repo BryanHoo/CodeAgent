@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use code_agent_core::{CodeAgentError, PortRequestContext, RepositoryPort};
+use code_agent_core::{
+    AgentMutationErrorCode, CodeAgentError, CodeAgentErrorCode, PortRequestContext, RepositoryPort,
+};
 use code_agent_protocol::{
     AgentGlobalSettings, AgentProjectDefaults, AgentProviderConnectionRecord, AgentTaskSettings,
     Project, ProjectId, TaskId,
@@ -579,5 +581,25 @@ fn ensure_active(context: &PortRequestContext) -> Result<(), CodeAgentError> {
 }
 
 fn map_platform_error(error: PlatformError) -> CodeAgentError {
-    CodeAgentError::internal(error.to_string())
+    match error {
+        PlatformError::Worker(message) if message == "project not found" => {
+            CodeAgentError::new(CodeAgentErrorCode::NotFound, "project was not found", None)
+                .with_mutation_code(AgentMutationErrorCode::ProjectNotFound)
+        }
+        PlatformError::InvalidOptions(message) => {
+            CodeAgentError::new(CodeAgentErrorCode::InvalidInput, message, None)
+        }
+        PlatformError::Timeout => CodeAgentError::new(
+            CodeAgentErrorCode::Timeout,
+            "database request timed out",
+            None,
+        ),
+        PlatformError::Closed => {
+            CodeAgentError::new(CodeAgentErrorCode::ShuttingDown, "database is closed", None)
+        }
+        PlatformError::Worker(message) if message == "database queue is full" => {
+            CodeAgentError::new(CodeAgentErrorCode::CapacityExceeded, message, None)
+        }
+        other => CodeAgentError::internal(other.to_string()),
+    }
 }

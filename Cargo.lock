@@ -596,6 +596,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "code-agent-mcp-command-proxy"
+version = "1.9.0"
+
+[[package]]
 name = "code-agent-node-binding"
 version = "1.9.0"
 dependencies = [

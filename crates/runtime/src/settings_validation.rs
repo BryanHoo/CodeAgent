@@ -1,4 +1,6 @@
-use code_agent_core::{CodeAgentError, CodeAgentErrorCode, PortRequestContext};
+use code_agent_core::{
+    AgentMutationErrorCode, CodeAgentError, CodeAgentErrorCode, PortRequestContext,
+};
 use code_agent_protocol::{AgentTaskSettings, ProjectId, TaskId};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -46,7 +48,10 @@ impl CodeAgentRuntime {
         {
             return Ok(());
         }
-        Err(not_found("project was not found"))
+        Err(not_found(
+            "project was not found",
+            AgentMutationErrorCode::ProjectNotFound,
+        ))
     }
 
     pub(super) async fn ensure_task_belongs_to_project(
@@ -64,7 +69,10 @@ impl CodeAgentRuntime {
         {
             return Ok(());
         }
-        Err(not_found("task was not found"))
+        Err(not_found(
+            "task was not found",
+            AgentMutationErrorCode::TaskNotFound,
+        ))
     }
 
     pub(super) async fn validated_task_settings(
@@ -90,6 +98,7 @@ fn invalid_input(message: &'static str) -> CodeAgentError {
     CodeAgentError::new(CodeAgentErrorCode::InvalidInput, message, None)
 }
 
-fn not_found(message: &'static str) -> CodeAgentError {
+fn not_found(message: &'static str, mutation_code: AgentMutationErrorCode) -> CodeAgentError {
     CodeAgentError::new(CodeAgentErrorCode::NotFound, message, None)
+        .with_mutation_code(mutation_code)
 }

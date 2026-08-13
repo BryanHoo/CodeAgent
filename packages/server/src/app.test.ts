@@ -1,4 +1,4 @@
-import type { CodeAgentEngine } from "@code-agent/engine-node";
+import { NodeEngineError, type CodeAgentEngine } from "@code-agent/engine-node";
 import { describe, expect, it, vi } from "vitest";
 
 import { createCodeAgentServer } from "./app.js";
@@ -119,8 +119,16 @@ describe("createCodeAgentServer", () => {
     await app.close();
   });
 
-  it("maps stable native not_found errors to the HTTP protocol", async () => {
-    const taskRead = vi.fn(() => Promise.reject(new Error("not_found: task missing")));
+  it("serializes structured native domain errors without parsing messages", async () => {
+    const taskRead = vi.fn(() =>
+      Promise.reject(
+        new NodeEngineError({
+          code: "not_found",
+          message: "Task not found",
+          mutationCode: "TASK_NOT_FOUND",
+        }),
+      ),
+    );
     const app = await createCodeAgentServer(
       createOptions(createEngine({ close: () => Promise.resolve(), taskRead })),
     );
@@ -130,7 +138,10 @@ describe("createCodeAgentServer", () => {
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json()).toMatchObject({ code: "PROJECT_NOT_FOUND" });
+    expect(response.json()).toEqual({
+      code: "TASK_NOT_FOUND",
+      message: "Task not found",
+    });
     await app.close();
   });
 });
