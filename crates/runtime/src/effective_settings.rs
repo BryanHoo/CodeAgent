@@ -13,9 +13,8 @@ impl CodeAgentRuntime {
         request_id: &str,
     ) -> Result<AgentGlobalSettings, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self.resolve_global_settings(&context).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.resolve_global_settings(&context).await
     }
 
     /// 返回 Project 的有效默认设置；本地记录缺失时继承当前有效全局设置。
@@ -25,7 +24,8 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
     ) -> Result<AgentProjectDefaults, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = async {
+
+        async {
             if let Some(stored) = self
                 .ports
                 .repository
@@ -39,9 +39,7 @@ impl CodeAgentRuntime {
                 .map_err(|error| CodeAgentError::internal(error.to_string()))?;
             resolve_project_defaults(&self.ports.provider.models(&context).await?, &requested)
         }
-        .await;
-        self.finish_operation(request_id).await;
-        result
+        .await
     }
 
     async fn resolve_global_settings(

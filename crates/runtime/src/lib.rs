@@ -44,7 +44,7 @@ use commit_message::{
 };
 
 pub use builder::{CodeAgentRuntimeBuilder, RuntimeOptions};
-pub use control::OperationRegistry;
+pub use control::{OperationGuard, OperationRegistry};
 pub use event_stream::{
     AgentEventStream, DEFAULT_COALESCING_WINDOW, EventCheckpoint, EventReplay, EventStreamMetrics,
     EventStreamOptions, EventSubscription, PublishedEvent, SubscriberSignal,
@@ -242,7 +242,7 @@ impl CodeAgentRuntime {
     pub async fn begin_operation(
         &self,
         request_id: &str,
-    ) -> Result<PortRequestContext, CodeAgentError> {
+    ) -> Result<OperationGuard<'_>, CodeAgentError> {
         if !self.accepting.load(Ordering::Acquire) {
             return Err(CodeAgentError::new(
                 CodeAgentErrorCode::ShuttingDown,
@@ -251,11 +251,6 @@ impl CodeAgentRuntime {
             ));
         }
         self.operations.begin(request_id).await
-    }
-
-    /// 完成并释放活动操作。
-    pub async fn finish_operation(&self, request_id: &str) {
-        self.operations.finish(request_id).await;
     }
 
     /// 取消指定活动操作；不存在时幂等返回 `false`。
@@ -269,17 +264,15 @@ impl CodeAgentRuntime {
         request_id: &str,
     ) -> Result<AgentCapabilities, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self.ports.provider.capabilities(&context).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.provider.capabilities(&context).await
     }
 
     /// 读取 Provider 模型目录。
     pub async fn models(&self, request_id: &str) -> Result<AgentModelPage, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self.ports.provider.models(&context).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.provider.models(&context).await
     }
 
     /// 读取 Project Task 列表并惰性创建唯一 Runtime Context。
@@ -290,12 +283,11 @@ impl CodeAgentRuntime {
         input: Value,
     ) -> Result<AgentTaskPage, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => context.provider.list_tasks(input, &operation).await,
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 创建 Task。
@@ -306,7 +298,8 @@ impl CodeAgentRuntime {
         input: Value,
     ) -> Result<Value, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => {
                 self.idempotency
                     .execute("start-task", request_id, &input, || {
@@ -315,9 +308,7 @@ impl CodeAgentRuntime {
                     .await
             }
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 读取 Task Snapshot，并在返回前固定 Event Stream checkpoint。
@@ -328,7 +319,8 @@ impl CodeAgentRuntime {
         task_id: &str,
     ) -> Result<Option<Value>, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => match context.provider.read_task(task_id, &operation).await? {
                 Some(mut snapshot) => {
                     let task_id = TaskId::try_from(task_id)
@@ -352,9 +344,7 @@ impl CodeAgentRuntime {
                 None => Ok(None),
             },
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 启动 Task Turn。
@@ -373,7 +363,8 @@ impl CodeAgentRuntime {
         .map_err(|error| {
             CodeAgentError::new(CodeAgentErrorCode::InvalidInput, error.to_string(), None)
         })?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => {
                 self.idempotency
                     .execute("start-turn", request_id, &input, || async {
@@ -416,9 +407,7 @@ impl CodeAgentRuntime {
                     .await
             }
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// Steer 当前 Turn。
@@ -438,7 +427,8 @@ impl CodeAgentRuntime {
         .map_err(|error| {
             CodeAgentError::new(CodeAgentErrorCode::InvalidInput, error.to_string(), None)
         })?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => self
                 .idempotency
                 .execute("steer-turn", request_id, &input, || async {
@@ -475,9 +465,7 @@ impl CodeAgentRuntime {
                 .await
                 .map(|_| ()),
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 中断当前 Turn。
@@ -490,7 +478,8 @@ impl CodeAgentRuntime {
     ) -> Result<(), CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
         let payload = json!({ "taskId": task_id, "turnId": turn_id });
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => self
                 .idempotency
                 .execute("interrupt-turn", request_id, &payload, || async {
@@ -503,9 +492,7 @@ impl CodeAgentRuntime {
                 .await
                 .map(|_| ()),
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 启动代码评审 Turn。
@@ -517,7 +504,8 @@ impl CodeAgentRuntime {
         target: Value,
     ) -> Result<Value, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => {
                 context
                     .provider
@@ -525,9 +513,7 @@ impl CodeAgentRuntime {
                     .await
             }
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 解析待处理审批或用户输入请求。
@@ -538,7 +524,8 @@ impl CodeAgentRuntime {
         input: Value,
     ) -> Result<Value, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => {
                 self.idempotency
                     .execute("resolve-pending-request", request_id, &input, || {
@@ -549,9 +536,7 @@ impl CodeAgentRuntime {
                     .await
             }
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 读取 Project Skills。
@@ -561,12 +546,11 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
     ) -> Result<AgentSkillPage, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => context.provider.list_skills(&operation).await,
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 读取 Task MCP Servers。
@@ -577,12 +561,11 @@ impl CodeAgentRuntime {
         task_id: &str,
     ) -> Result<AgentMcpServerPage, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => context.provider.list_mcp_servers(task_id, &operation).await,
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 读取 Task 后台终端。
@@ -593,7 +576,8 @@ impl CodeAgentRuntime {
         task_id: &str,
     ) -> Result<AgentBackgroundTerminalPage, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => {
                 context
                     .provider
@@ -601,9 +585,7 @@ impl CodeAgentRuntime {
                     .await
             }
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 固定或取消固定 Task。
@@ -615,12 +597,11 @@ impl CodeAgentRuntime {
         pinned: bool,
     ) -> Result<Value, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => context.provider.pin_task(task_id, pinned, &operation).await,
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 重命名 Task。
@@ -632,7 +613,8 @@ impl CodeAgentRuntime {
         title: &str,
     ) -> Result<(), CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => {
                 context
                     .provider
@@ -640,9 +622,7 @@ impl CodeAgentRuntime {
                     .await
             }
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 归档 Task。
@@ -653,12 +633,11 @@ impl CodeAgentRuntime {
         task_id: &str,
     ) -> Result<(), CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => context.provider.archive_task(task_id, &operation).await,
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// Fork Task。
@@ -669,12 +648,11 @@ impl CodeAgentRuntime {
         task_id: &str,
     ) -> Result<Value, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => context.provider.fork_task(task_id, &operation).await,
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 压缩 Task 上下文。
@@ -685,12 +663,11 @@ impl CodeAgentRuntime {
         task_id: &str,
     ) -> Result<(), CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => context.provider.compact_task(task_id, &operation).await,
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 取消订阅 Task。
@@ -701,12 +678,11 @@ impl CodeAgentRuntime {
         task_id: &str,
     ) -> Result<String, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => context.provider.unsubscribe_task(task_id, &operation).await,
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 重载 Task MCP Servers。
@@ -717,7 +693,8 @@ impl CodeAgentRuntime {
         task_id: &str,
     ) -> Result<AgentMcpServerPage, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => {
                 context
                     .provider
@@ -725,9 +702,7 @@ impl CodeAgentRuntime {
                     .await
             }
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 终止 Task 后台终端。
@@ -739,7 +714,8 @@ impl CodeAgentRuntime {
         terminal_id: &str,
     ) -> Result<bool, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => {
                 context
                     .provider
@@ -747,9 +723,7 @@ impl CodeAgentRuntime {
                     .await
             }
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 上传 Task 反馈。
@@ -761,7 +735,8 @@ impl CodeAgentRuntime {
         input: Value,
     ) -> Result<(), CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => {
                 context
                     .provider
@@ -769,9 +744,7 @@ impl CodeAgentRuntime {
                     .await
             }
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 读取 Provider 连接状态。
@@ -780,17 +753,15 @@ impl CodeAgentRuntime {
         request_id: &str,
     ) -> Result<Value, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = self.ports.provider.connection_status(&operation).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.provider.connection_status(&operation).await
     }
 
     /// 启动官方 Provider 登录。
     pub async fn start_provider_login(&self, request_id: &str) -> Result<Value, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = self.ports.provider.start_official_login(&operation).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.provider.start_official_login(&operation).await
     }
 
     /// 取消 Provider 登录。
@@ -800,17 +771,15 @@ impl CodeAgentRuntime {
         login_id: &str,
     ) -> Result<Value, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = self.ports.provider.cancel_login(login_id, &operation).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.provider.cancel_login(login_id, &operation).await
     }
 
     /// 登出 Provider。
     pub async fn logout_provider(&self, request_id: &str) -> Result<Value, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = self.ports.provider.logout(&operation).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.provider.logout(&operation).await
     }
 
     /// 配置自定义 Provider。
@@ -820,13 +789,11 @@ impl CodeAgentRuntime {
         input: Value,
     ) -> Result<Value, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .provider
             .configure_custom(input, &operation)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 固定当前 Project Event checkpoint。
@@ -836,12 +803,11 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
     ) -> Result<EventCheckpoint, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => Ok(context.event_stream.checkpoint().await),
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 回放 Project Event；空 session 使用当前 session，供首次连接发送 ready。
@@ -853,7 +819,8 @@ impl CodeAgentRuntime {
         sequence: u64,
     ) -> Result<EventReplay, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => {
                 let current = context.event_stream.checkpoint().await;
                 let session_id = if session_id.is_empty() {
@@ -867,9 +834,7 @@ impl CodeAgentRuntime {
                     .await)
             }
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 订阅 Project 实时事件。
@@ -879,12 +844,11 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
     ) -> Result<EventSubscription, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = match self.project_context(project_id, &operation).await {
+
+        match self.project_context(project_id, &operation).await {
             Ok(context) => context.event_stream.subscribe().await,
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 使用只读 ephemeral Task 为选定 Git 变更生成提交信息。
@@ -895,7 +859,8 @@ impl CodeAgentRuntime {
         request: &GenerateCommitMessageRequest,
     ) -> Result<GenerateCommitMessageResponse, CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let result = async {
+
+        async {
             let runtime_context = self.project_context(project_id, &operation).await?;
             let status = self
                 .ports
@@ -1033,9 +998,7 @@ impl CodeAgentRuntime {
                 .to_owned();
             response(message, request.expected_snapshot.as_str())
         }
-        .await;
-        self.finish_operation(request_id).await;
-        result
+        .await
     }
 
     /// 释放 Project Context；关闭事件流后释放 Provider owner。
@@ -1046,7 +1009,8 @@ impl CodeAgentRuntime {
     ) -> Result<(), CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
         let cell = self.project_contexts.lock().await.remove(project_id);
-        let result = if let Some(context) = cell.and_then(|cell| cell.get().cloned()) {
+
+        if let Some(context) = cell.and_then(|cell| cell.get().cloned()) {
             context.close().await?;
             self.ports
                 .provider
@@ -1057,9 +1021,7 @@ impl CodeAgentRuntime {
                 .provider
                 .release_project(project_id, &operation)
                 .await
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 通过 Repository port 读取 Project。
@@ -1069,21 +1031,18 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
     ) -> Result<Option<Value>, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .repository
             .read_project(project_id, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 返回全部已注册用户 Project。
     pub async fn list_projects(&self, request_id: &str) -> Result<Vec<Project>, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self.ports.repository.list_projects(&context).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.repository.list_projects(&context).await
     }
 
     /// 注册用户 Project。
@@ -1094,13 +1053,11 @@ impl CodeAgentRuntime {
         name: &str,
     ) -> Result<Project, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .repository
             .register_project(root_path, name, self.ports.clock.now(), &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 原子替换全部用户 Project 顺序。
@@ -1110,13 +1067,11 @@ impl CodeAgentRuntime {
         project_ids: &[ProjectId],
     ) -> Result<Vec<Project>, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .repository
             .reorder_projects(project_ids, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 重命名用户 Project。
@@ -1127,13 +1082,11 @@ impl CodeAgentRuntime {
         name: &str,
     ) -> Result<Project, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .repository
             .rename_project(project_id, name, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 删除用户 Project 本地注册信息及其受管附件。
@@ -1156,7 +1109,8 @@ impl CodeAgentRuntime {
                 .release_project(project_id, &context)
                 .await?;
         }
-        let result = match self
+
+        match self
             .ports
             .repository
             .remove_project(project_id, &context)
@@ -1169,9 +1123,7 @@ impl CodeAgentRuntime {
                     .await
             }
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 读取持久化全局设置。
@@ -1180,9 +1132,8 @@ impl CodeAgentRuntime {
         request_id: &str,
     ) -> Result<Option<AgentGlobalSettings>, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self.ports.repository.read_global_settings(&context).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.repository.read_global_settings(&context).await
     }
 
     /// 原子更新完整全局设置。
@@ -1192,13 +1143,11 @@ impl CodeAgentRuntime {
         settings: &AgentGlobalSettings,
     ) -> Result<AgentGlobalSettings, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .repository
             .write_global_settings(settings, self.ports.clock.now(), &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 读取 Project 默认设置。
@@ -1208,13 +1157,11 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
     ) -> Result<Option<AgentProjectDefaults>, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .repository
             .read_project_defaults(project_id, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 原子更新 Project 默认设置。
@@ -1225,13 +1172,11 @@ impl CodeAgentRuntime {
         settings: &AgentProjectDefaults,
     ) -> Result<AgentProjectDefaults, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .repository
             .write_project_defaults(project_id, settings, self.ports.clock.now(), &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 读取 Task 有效设置。
@@ -1242,11 +1187,9 @@ impl CodeAgentRuntime {
         task_id: &TaskId,
     ) -> Result<AgentTaskSettings, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .resolve_task_settings(project_id, task_id, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.resolve_task_settings(project_id, task_id, &context)
+            .await
     }
 
     /// 原子更新 Task 设置。
@@ -1258,8 +1201,8 @@ impl CodeAgentRuntime {
         settings: &AgentTaskSettings,
     ) -> Result<AgentTaskSettings, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .repository
             .write_task_settings(
                 project_id,
@@ -1268,9 +1211,7 @@ impl CodeAgentRuntime {
                 self.ports.clock.now(),
                 &context,
             )
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 读取 Provider connection 持久化记录。
@@ -1279,13 +1220,11 @@ impl CodeAgentRuntime {
         request_id: &str,
     ) -> Result<Option<AgentProviderConnectionRecord>, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .repository
             .read_provider_connection(&context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 读取 Project 源文件分页。
@@ -1297,13 +1236,11 @@ impl CodeAgentRuntime {
         cursor: u64,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .file
             .source_read(project_id, path, cursor, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 读取 Project 文件树。
@@ -1314,9 +1251,8 @@ impl CodeAgentRuntime {
         path: Option<&str>,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self.ports.file.tree(project_id, path, &context).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.file.tree(project_id, path, &context).await
     }
 
     /// 搜索 Project 文件。
@@ -1327,9 +1263,8 @@ impl CodeAgentRuntime {
         query: &str,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self.ports.file.search(project_id, query, &context).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.file.search(project_id, query, &context).await
     }
 
     /// 浏览宿主目录。
@@ -1339,9 +1274,8 @@ impl CodeAgentRuntime {
         path: Option<&str>,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self.ports.file.browse_directories(path, &context).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.file.browse_directories(path, &context).await
     }
 
     /// 浏览宿主可导入普通文件。
@@ -1352,13 +1286,11 @@ impl CodeAgentRuntime {
         path: Option<&str>,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .file
             .browse_host_files(kind, path, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 返回当前平台可用打开方式。
@@ -1367,9 +1299,8 @@ impl CodeAgentRuntime {
         request_id: &str,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self.ports.file.open_capabilities(&context).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.file.open_capabilities(&context).await
     }
 
     /// 使用受控宿主应用打开 Project 路径。
@@ -1381,13 +1312,11 @@ impl CodeAgentRuntime {
         path: Option<&str>,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .file
             .open_project_path(project_id, app_id, path, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 保存 raw IPC 上传的附件。
@@ -1401,13 +1330,11 @@ impl CodeAgentRuntime {
         bytes: Vec<u8>,
     ) -> Result<AgentAttachment, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .attachment
             .upload(project_id, kind, media_type, name, bytes, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 将宿主普通文件复制到附件受管目录。
@@ -1419,13 +1346,11 @@ impl CodeAgentRuntime {
         path: &str,
     ) -> Result<AgentAttachment, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .attachment
             .import_host(project_id, kind, path, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 读取待提交 Project 附件字节。
@@ -1436,13 +1361,11 @@ impl CodeAgentRuntime {
         attachment_id: &str,
     ) -> Result<Vec<u8>, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .attachment
             .read_pending(project_id, attachment_id, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 读取已绑定 Task 附件字节。
@@ -1459,7 +1382,8 @@ impl CodeAgentRuntime {
             .attachment
             .read(project_id, task_id, attachment_id, &context)
             .await;
-        let result = match platform_result {
+
+        match platform_result {
             Ok(bytes) => Ok(bytes),
             Err(error) if error.code() == CodeAgentErrorCode::NotFound => {
                 // 历史附件由 Provider 授权；仅平台 Store 明确未命中时才进入该读取路径。
@@ -1477,9 +1401,7 @@ impl CodeAgentRuntime {
                 }
             }
             Err(error) => Err(error),
-        };
-        self.finish_operation(request_id).await;
-        result
+        }
     }
 
     /// 使用系统默认应用打开已授权 Task 附件。
@@ -1491,13 +1413,11 @@ impl CodeAgentRuntime {
         attachment_id: &str,
     ) -> Result<(), CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .attachment
             .open(project_id, task_id, attachment_id, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 读取受检 Project 图片字节。
@@ -1508,9 +1428,8 @@ impl CodeAgentRuntime {
         path: &str,
     ) -> Result<Vec<u8>, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self.ports.file.read(project_id, path, &context).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.file.read(project_id, path, &context).await
     }
 
     /// 读取 Git working tree 状态。
@@ -1521,13 +1440,11 @@ impl CodeAgentRuntime {
         repository: Option<&str>,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .git
             .status_for(project_id, repository, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 读取 Git 历史。
@@ -1538,9 +1455,8 @@ impl CodeAgentRuntime {
         query: &Value,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self.ports.git.history(project_id, query, &context).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.git.history(project_id, query, &context).await
     }
 
     /// 读取提交文件列表。
@@ -1551,13 +1467,11 @@ impl CodeAgentRuntime {
         query: &Value,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .git
             .commit_files(project_id, query, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 读取提交文件 diff。
@@ -1568,13 +1482,11 @@ impl CodeAgentRuntime {
         query: &Value,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .git
             .commit_diff(project_id, query, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 切换 Git 分支。
@@ -1586,13 +1498,11 @@ impl CodeAgentRuntime {
         expected_snapshot: &str,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .git
             .switch_branch(project_id, branch, expected_snapshot, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 创建 Git 分支。
@@ -1604,13 +1514,11 @@ impl CodeAgentRuntime {
         expected_snapshot: &str,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self
-            .ports
+
+        self.ports
             .git
             .create_branch(project_id, branch, expected_snapshot, &context)
-            .await;
-        self.finish_operation(request_id).await;
-        result
+            .await
     }
 
     /// 提交选定 Git 文件。
@@ -1621,9 +1529,8 @@ impl CodeAgentRuntime {
         request: &Value,
     ) -> Result<Value, CodeAgentError> {
         let context = self.begin_operation(request_id).await?;
-        let result = self.ports.git.commit(project_id, request, &context).await;
-        self.finish_operation(request_id).await;
-        result
+
+        self.ports.git.commit(project_id, request, &context).await
     }
 
     /// 停止接收、通知取消并有界等待所有受跟踪任务。
