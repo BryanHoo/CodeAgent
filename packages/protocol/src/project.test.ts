@@ -152,8 +152,16 @@ describe("project protocol", () => {
         ],
         parentPath: "/Users/bryan",
         path: "/Users/bryan/Develop",
+        roots: [{ name: "C:", path: "C:\\" }],
       }),
     ).toBe(true);
+    expect(
+      Value.Check(ProjectDirectoryListingSchema, {
+        entries: [],
+        parentPath: null,
+        path: "C:\\",
+      }),
+    ).toBe(false);
   });
 
   it("validates host attachment file queries, listings, and imports", () => {
@@ -176,6 +184,10 @@ describe("project protocol", () => {
         ],
         parentPath: "/Users",
         path: "/Users/bryan",
+        roots: [
+          { name: "C:", path: "C:\\" },
+          { name: "D:", path: "D:\\" },
+        ],
       }),
     ).toBe(true);
     expect(

@@ -68,11 +68,11 @@ Open CodeAgent, select **New task** in the sidebar, enter your request, and subm
 4. Enter the work you want completed, optionally add images, files, or a Skill, and submit it.
 5. Follow Codex responses, tool activity, and approval requests while it works.
 
-Project folders come from the computer running CodeAgent. When you connect from another device, the directory picker still shows files from the host computer.
+Project folders come from the computer running CodeAgent. When you connect from another device, the directory picker still shows files from the host computer. On Windows, use the drive selector to browse folders on any accessible drive.
 
 Use a file tree item's `...` button or context menu to copy its name or project-relative path, open it with a supported application, or append it as a reference to the current composer draft.
 
-The inspector's **Sources** section collects attachments used in the current task. Images and source files open in CodeAgent, including on-demand loading for long text files; other files open with their system default application.
+The inspector's **Sources** section collects attachments used in the current task. Images and source files open in CodeAgent, including on-demand loading for long text files; other files open with their system default application. The host attachment picker also supports switching between accessible Windows drives.
 
 ### Adjust Task Settings
 

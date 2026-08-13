@@ -426,11 +426,12 @@ export const projectDirectoryListings = new Map<string | null, object>([
       ],
       parentPath: "/",
       path: "/workspace",
+      roots: [],
     },
   ],
   [
     "/workspace/AddedProject",
-    { entries: [], parentPath: "/workspace", path: "/workspace/AddedProject" },
+    { entries: [], parentPath: "/workspace", path: "/workspace/AddedProject", roots: [] },
   ],
 ]);
 
@@ -868,6 +869,7 @@ export async function mockAppShellApi(
         })),
         parentPath: "/Users/bryan",
         path: "/Users/bryan/Attachments",
+        roots: [],
       };
     } else if (
       /^\/v1\/projects\/[^/]+\/attachments\/(file|image)\/host$/u.test(url.pathname) &&
@@ -893,7 +895,7 @@ export async function mockAppShellApi(
       const path = url.searchParams.get("path");
       body =
         projectDirectoryListings.get(path) ??
-        ({ entries: [], parentPath: "/workspace", path } as const);
+        ({ entries: [], parentPath: "/workspace", path, roots: [] } as const);
     } else if (url.pathname === "/v1/projects" && route.request().method() === "POST") {
       const request = parseRequestRecord(route.request().postData());
       const rootPath = request["rootPath"];
