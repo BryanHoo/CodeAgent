@@ -29,10 +29,18 @@ export class NativeBindingLoadError extends Error {
   }
 }
 
-const developmentAddonPaths = [
-  fileURLToPath(new URL("../native/code-agent-node-binding.node", import.meta.url)),
-  fileURLToPath(new URL("./native/code-agent-node-binding.node", import.meta.url)),
-] as const;
+export function resolveDevelopmentAddonPaths(moduleUrl: string | URL): readonly string[] {
+  return [
+    fileURLToPath(new URL("../native/code-agent-node-binding.node", moduleUrl)),
+    fileURLToPath(new URL("./native/code-agent-node-binding.node", moduleUrl)),
+    // CLI bundle 位于 apps/node-cli/dist，开发构建的 addon 仍由 engine-node 持有。
+    fileURLToPath(
+      new URL("../../../packages/engine-node/native/code-agent-node-binding.node", moduleUrl),
+    ),
+  ];
+}
+
+const developmentAddonPaths = resolveDevelopmentAddonPaths(import.meta.url);
 const nativePackages = new Map<string, string>([
   ["darwin-arm64", "@bryanhu/code-agent-darwin-arm64"],
   ["darwin-x64", "@bryanhu/code-agent-darwin-x64"],
