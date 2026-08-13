@@ -36,7 +36,7 @@
 - Server 目录浏览测试必须覆盖 POSIX 路径规范化、Windows UTF-8 绝对路径契约、非目录与相对路径拒绝、符号链接省略和稳定排序；根 CLI 系统集成测试继续覆盖浏览器启动器的缺失回退。CI 质量门禁至少在 Ubuntu 与 Windows 上运行。
 - 根 CLI 参数测试必须覆盖 `pnpm run start -- ...` 转发的单个 `--` 分隔符；只忽略命令后的首个分隔符，后续未知或重复选项仍必须拒绝。
 - 根 CLI 端口测试必须覆盖连续占用后的递增、实际端口传播、非 `EADDRINUSE` 错误和 `65535` 上限。
-- Project 宿主打开测试必须覆盖 Windows Explorer 成功转交后不误报失败，以及 Windows Terminal 强制在目标目录打开独立新窗口。
+- Project 宿主打开测试必须覆盖能力只返回当前机器实际安装的应用、macOS Finder 与 Windows Explorer 成功转交后不误报失败、Finder 文件定位与目录打开语义，以及 Windows Terminal 强制在目标目录打开独立新窗口。
 - 子进程关闭测试覆盖发送 `SIGKILL` 后仍未退出的路径，并验证关闭 Promise 在截止时间内失败。
 - Provider 集成使用 Fake App Server，不依赖真实账号完成默认 CI。
 - Provider 连接测试必须覆盖官方登录完成通知、自定义模型发现、无 key、本机 HTTP、重定向、超时、超限、Secret 不落盘和模式模型缓存失效。

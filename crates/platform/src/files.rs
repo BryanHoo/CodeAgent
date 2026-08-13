@@ -11,6 +11,7 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use crate::host_file_browser::browse_directory;
 use crate::project_file_index_cache::ProjectFileIndexCache;
+use crate::project_open::{OpenTarget, capabilities as open_capabilities, open as open_target};
 use crate::project_tree::{read_directory_entries, validate_directory_path};
 use crate::{CanonicalPathPolicy, PlatformDatabase, PlatformError};
 
@@ -314,84 +315,14 @@ impl FilePort for PlatformFilePort {
                 .map_err(map_error)?,
             None => service.policy.root().to_owned(),
         };
-        let (program, arguments) = open_command(app_id, &target)?;
-        let status = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            tokio::process::Command::new(program)
-                .args(arguments)
-                .status(),
-        )
-        .await
-        .map_err(|_| {
-            CodeAgentError::new(
-                code_agent_protocol::CodeAgentErrorCode::Timeout,
-                "system open timed out",
-                None,
-            )
-        })?
-        .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-        if !status.success() {
-            return Err(CodeAgentError::internal("system open failed"));
-        }
+        let metadata = tokio::fs::metadata(&target)
+            .await
+            .map_err(PlatformError::from)
+            .map_err(map_error)?;
+        let target = OpenTarget::new(&target, metadata.is_dir());
+        open_target(&target, service.policy.root(), app_id).await?;
         Ok(json!({ "appId": app_id, "path": path }))
     }
-}
-
-fn open_capabilities() -> Value {
-    #[cfg(target_os = "macos")]
-    let (platform, apps) = (
-        "darwin",
-        json!([
-            { "id": "system-default", "kind": "system-default", "name": "系统默认应用" },
-            { "id": "finder", "kind": "file-manager", "name": "Finder" }
-        ]),
-    );
-    #[cfg(target_os = "windows")]
-    let (platform, apps) = (
-        "win32",
-        json!([{ "id": "explorer", "kind": "file-manager", "name": "Explorer" }]),
-    );
-    #[cfg(target_os = "linux")]
-    let (platform, apps) = (
-        "linux",
-        json!([{ "id": "file-manager", "kind": "file-manager", "name": "文件管理器" }]),
-    );
-    json!({ "apps": apps, "platform": platform })
-}
-
-fn open_command(
-    app_id: &str,
-    target: &Path,
-) -> Result<(&'static str, Vec<String>), CodeAgentError> {
-    let target = target.to_string_lossy().into_owned();
-    #[cfg(target_os = "macos")]
-    return match app_id {
-        "system-default" => Ok(("/usr/bin/open", vec![target])),
-        "finder" => Ok(("/usr/bin/open", vec!["-R".to_owned(), target])),
-        _ => Err(CodeAgentError::new(
-            code_agent_protocol::CodeAgentErrorCode::InvalidInput,
-            "open app is unavailable",
-            None,
-        )),
-    };
-    #[cfg(target_os = "windows")]
-    return match app_id {
-        "explorer" => Ok(("explorer.exe", vec![target])),
-        _ => Err(CodeAgentError::new(
-            code_agent_protocol::CodeAgentErrorCode::InvalidInput,
-            "open app is unavailable",
-            None,
-        )),
-    };
-    #[cfg(target_os = "linux")]
-    return match app_id {
-        "file-manager" => Ok(("xdg-open", vec![target])),
-        _ => Err(CodeAgentError::new(
-            code_agent_protocol::CodeAgentErrorCode::InvalidInput,
-            "open app is unavailable",
-            None,
-        )),
-    };
 }
 
 fn ensure_active(context: &PortRequestContext) -> Result<(), CodeAgentError> {
