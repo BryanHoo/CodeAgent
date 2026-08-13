@@ -2,7 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use code_agent_core::{AttachmentBytes, CodeAgentError, PortRequestContext, ProjectProviderPort};
+use code_agent_core::{
+    AgentMutationErrorCode, AttachmentBytes, CodeAgentError, CodeAgentErrorCode,
+    PortRequestContext, ProjectProviderPort,
+};
 use code_agent_protocol::{
     AgentBackgroundTerminalPage, AgentMcpServerPage, AgentSkillPage, AgentTaskPage, Project,
     RawProviderEvent,
@@ -134,9 +137,10 @@ impl CodexProjectProvider {
         {
             Ok(())
         } else {
-            Err(CodeAgentError::internal(
-                "Codex thread does not belong to the active project",
-            ))
+            Err(
+                CodeAgentError::new(CodeAgentErrorCode::NotFound, "task was not found", None)
+                    .with_mutation_code(AgentMutationErrorCode::TaskNotFound),
+            )
         }
     }
 

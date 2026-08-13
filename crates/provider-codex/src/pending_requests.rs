@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 
-use code_agent_core::{CodeAgentError, CodeAgentErrorCode};
+use code_agent_core::{AgentMutationErrorCode, CodeAgentError, CodeAgentErrorCode};
 use serde_json::{Map, Value, json};
 
 use crate::PendingCodexRequest;
@@ -85,7 +85,8 @@ impl PendingRequestRegistry {
         if let Some(terminal) = state.terminal.get(request_id) {
             validate_identity(&terminal.request, input, project_id)?;
             if terminal.request["status"] == "expired" {
-                return Err(conflict("pending request already expired"));
+                return Err(conflict("pending request already expired")
+                    .with_mutation_code(AgentMutationErrorCode::PendingRequestExpired));
             }
             let (native, _) = map_resolution(&terminal.entry, input)?;
             let fingerprint = serde_json::to_string(&native)
@@ -93,26 +94,28 @@ impl PendingRequestRegistry {
             return if terminal.fingerprint.as_deref() == Some(&fingerprint) {
                 Ok(PrepareOutcome::Reused(terminal.request.clone()))
             } else {
-                Err(conflict(
-                    "pending request already resolved with another response",
-                ))
+                Err(
+                    conflict("pending request already resolved with another response")
+                        .with_mutation_code(AgentMutationErrorCode::PendingRequestAlreadyResolved),
+                )
             };
         }
-        let entry = state
-            .pending
-            .get(request_id)
-            .cloned()
-            .ok_or_else(|| not_found("pending request was not found"))?;
+        let entry = state.pending.get(request_id).cloned().ok_or_else(|| {
+            not_found("pending request was not found")
+                .with_mutation_code(AgentMutationErrorCode::PendingRequestNotFound)
+        })?;
         validate_identity(&entry.request, input, project_id)?;
         let (native, answer_item) = map_resolution(&entry, input)?;
         let fingerprint = serde_json::to_string(&native)
             .map_err(|error| CodeAgentError::internal(error.to_string()))?;
         if let Some(active) = state.resolving.get(request_id) {
-            return Err(conflict(if active == &fingerprint {
+            let message = if active == &fingerprint {
                 "pending request resolution is in progress"
             } else {
                 "pending request is resolving with another response"
-            }));
+            };
+            return Err(conflict(message)
+                .with_mutation_code(AgentMutationErrorCode::PendingRequestAlreadyResolved));
         }
         state
             .resolving
@@ -144,7 +147,8 @@ impl PendingRequestRegistry {
         let id = request_id(&prepared.entry.request)?.to_owned();
         let mut state = self.lock()?;
         if state.resolving.get(&id) != Some(&prepared.fingerprint) {
-            return Err(conflict("pending request resolution changed"));
+            return Err(conflict("pending request resolution changed")
+                .with_mutation_code(AgentMutationErrorCode::PendingRequestAlreadyResolved));
         }
         state.resolving.remove(&id);
         let Some(entry) = state.pending.remove(&id) else {
@@ -233,11 +237,13 @@ fn validate_identity(
 ) -> Result<(), CodeAgentError> {
     for key in ["taskId", "turnId", "itemId", "type"] {
         if request[key] != input[key] {
-            return Err(conflict("pending request identity does not match"));
+            return Err(conflict("pending request identity does not match")
+                .with_mutation_code(AgentMutationErrorCode::PendingRequestMismatch));
         }
     }
     if request["projectId"] != project_id || input["projectId"] != project_id {
-        return Err(conflict("pending request project does not match"));
+        return Err(conflict("pending request project does not match")
+            .with_mutation_code(AgentMutationErrorCode::PendingRequestMismatch));
     }
     Ok(())
 }
@@ -273,7 +279,8 @@ fn map_resolution(
         .as_array()
         .is_some_and(|values| values.iter().any(|value| value == decision))
     {
-        return Err(conflict("approval decision is unavailable"));
+        return Err(conflict("approval decision is unavailable")
+            .with_mutation_code(AgentMutationErrorCode::PendingRequestMismatch));
     }
     let native = match decision {
         "allow" => "accept",
@@ -289,7 +296,8 @@ fn validate_answers(request: &Value, answers: &Map<String, Value>) -> Result<(),
         .as_array()
         .ok_or_else(|| invalid("pending questions are invalid"))?;
     if answers.len() != questions.len() {
-        return Err(conflict("user input answers do not match questions"));
+        return Err(conflict("user input answers do not match questions")
+            .with_mutation_code(AgentMutationErrorCode::PendingRequestMismatch));
     }
     for question in questions {
         let id = string(question, "id")?;
@@ -308,7 +316,8 @@ fn validate_answers(request: &Value, answers: &Map<String, Value>) -> Result<(),
             && question["isOther"] != true
             && !options.iter().any(|option| option["label"] == answer)
         {
-            return Err(conflict("user input answer is unavailable"));
+            return Err(conflict("user input answer is unavailable")
+                .with_mutation_code(AgentMutationErrorCode::PendingRequestMismatch));
         }
     }
     Ok(())

@@ -8,7 +8,8 @@ use std::{
 
 use async_trait::async_trait;
 use code_agent_core::{
-    AttachmentPort, CodeAgentError, CodeAgentErrorCode, ManagedAttachment, PortRequestContext,
+    AgentMutationErrorCode, AttachmentPort, CodeAgentError, CodeAgentErrorCode, ManagedAttachment,
+    PortRequestContext,
 };
 use code_agent_protocol::{
     AgentAttachment, AgentAttachmentId, AgentAttachmentKind, AgentAttachmentMediaType,
@@ -487,6 +488,7 @@ fn not_found() -> CodeAgentError {
         "attachment was not found",
         None,
     )
+    .with_mutation_code(AgentMutationErrorCode::AttachmentNotFound)
 }
 
 fn internal(message: &'static str) -> CodeAgentError {

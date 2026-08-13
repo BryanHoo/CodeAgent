@@ -1,4 +1,4 @@
-import type { CodeAgentEngine } from "@code-agent/engine-node";
+import { NodeEngineError, type CodeAgentEngine } from "@code-agent/engine-node";
 import type {
   AgentMutationError,
   AppInfoResponse,
@@ -46,49 +46,69 @@ export function createReadRequestId(): string {
   return crypto.randomUUID();
 }
 
-export async function callEngine<T>(
-  action: () => Promise<unknown>,
-  notFoundCode: AgentMutationError["code"] = "PROJECT_NOT_FOUND",
-): Promise<T> {
+export async function callEngine<T>(action: () => Promise<unknown>): Promise<T> {
   try {
     return (await action()) as T;
   } catch (error) {
     if (error instanceof MutationHttpError) throw error;
-    const rawMessage = error instanceof Error ? error.message : String(error);
-    const match =
-      /(?:^|:\s)(cancelled|capacity_exceeded|conflict|internal|invalid_input|not_found|provider_failure|shutting_down|timeout):\s(.+)$/u.exec(
-        rawMessage,
-      );
-    if (match === null) throw error;
-    const [, code, message] = match;
-    switch (code) {
-      case "invalid_input":
-        throw new MutationHttpError("INVALID_REQUEST", message ?? "Request is invalid", 400);
-      case "not_found":
-        throw new MutationHttpError(notFoundCode, message ?? "Resource was not found", 404);
-      case "conflict":
-        throw new MutationHttpError("IDEMPOTENCY_CONFLICT", message ?? "Request conflicts", 409);
-      case "provider_failure":
-        throw new MutationHttpError(
-          "PROVIDER_ERROR",
-          message ?? "Provider request failed",
-          502,
-          true,
-        );
-      case "capacity_exceeded":
-        throw new MutationHttpError(
-          "IDEMPOTENCY_CAPACITY_EXCEEDED",
-          message ?? "Runtime capacity is exhausted",
-          503,
-          true,
-        );
-      default:
-        throw new MutationHttpError(
-          "PROVIDER_ERROR",
-          message ?? "Runtime is unavailable",
-          503,
-          true,
-        );
-    }
+    if (!(error instanceof NodeEngineError)) throw error;
+    throw toMutationHttpError(error);
+  }
+}
+
+function toMutationHttpError(error: NodeEngineError): MutationHttpError {
+  const code = error.mutationCode ?? fallbackMutationCode(error.code);
+  const policy = mutationPolicies[code];
+  return new MutationHttpError(code, error.message, policy.statusCode, policy.retryable);
+}
+
+const mutationPolicies: Readonly<
+  Record<AgentMutationError["code"], Readonly<{ retryable: boolean; statusCode: number }>>
+> = {
+  ACCESS_DENIED: { retryable: false, statusCode: 403 },
+  ATTACHMENT_NOT_FOUND: { retryable: false, statusCode: 404 },
+  COMMIT_MESSAGE_GENERATION_FAILED: { retryable: true, statusCode: 502 },
+  GIT_BRANCH_ALREADY_ACTIVE: { retryable: true, statusCode: 409 },
+  GIT_BRANCH_ALREADY_EXISTS: { retryable: true, statusCode: 409 },
+  GIT_BRANCH_CREATE_FAILED: { retryable: true, statusCode: 502 },
+  GIT_BRANCH_INVALID: { retryable: false, statusCode: 400 },
+  GIT_BRANCH_NOT_FOUND: { retryable: true, statusCode: 409 },
+  GIT_BRANCH_SWITCH_FAILED: { retryable: true, statusCode: 502 },
+  GIT_COMMIT_FAILED: { retryable: true, statusCode: 502 },
+  GIT_MUTATION_IN_PROGRESS: { retryable: true, statusCode: 409 },
+  GIT_PATH_UNAVAILABLE: { retryable: true, statusCode: 409 },
+  GIT_REPOSITORY_READ_ONLY: { retryable: true, statusCode: 409 },
+  GIT_REPOSITORY_UNAVAILABLE: { retryable: true, statusCode: 409 },
+  GIT_STATUS_CHANGED: { retryable: true, statusCode: 409 },
+  IDEMPOTENCY_CAPACITY_EXCEEDED: { retryable: true, statusCode: 503 },
+  IDEMPOTENCY_CONFLICT: { retryable: false, statusCode: 409 },
+  IDEMPOTENCY_KEY_REQUIRED: { retryable: false, statusCode: 400 },
+  INVALID_REQUEST: { retryable: false, statusCode: 400 },
+  PAIRING_FAILED: { retryable: false, statusCode: 403 },
+  PAIRING_RATE_LIMITED: { retryable: true, statusCode: 429 },
+  PENDING_REQUEST_ALREADY_RESOLVED: { retryable: false, statusCode: 409 },
+  PENDING_REQUEST_EXPIRED: { retryable: false, statusCode: 409 },
+  PENDING_REQUEST_MISMATCH: { retryable: false, statusCode: 409 },
+  PENDING_REQUEST_NOT_FOUND: { retryable: false, statusCode: 404 },
+  PROJECT_NOT_FOUND: { retryable: false, statusCode: 404 },
+  PROVIDER_ERROR: { retryable: true, statusCode: 502 },
+  TASK_NOT_FOUND: { retryable: false, statusCode: 404 },
+  TURN_NOT_FOUND: { retryable: false, statusCode: 404 },
+  TURN_NOT_RUNNING: { retryable: false, statusCode: 409 },
+  UPDATE_CHECK_FAILED: { retryable: true, statusCode: 502 },
+  UPDATE_INSTALL_FAILED: { retryable: true, statusCode: 502 },
+  UPDATE_NOT_AVAILABLE: { retryable: false, statusCode: 409 },
+};
+
+function fallbackMutationCode(code: NodeEngineError["code"]): AgentMutationError["code"] {
+  switch (code) {
+    case "invalid_input":
+      return "INVALID_REQUEST";
+    case "conflict":
+      return "IDEMPOTENCY_CONFLICT";
+    case "capacity_exceeded":
+      return "IDEMPOTENCY_CAPACITY_EXCEEDED";
+    default:
+      return "PROVIDER_ERROR";
   }
 }

@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use code_agent_core::{CodeAgentError, FilePort, PortRequestContext};
+use code_agent_core::{
+    AgentMutationErrorCode, CodeAgentError, CodeAgentErrorCode, FilePort, PortRequestContext,
+};
 use code_agent_protocol::ProjectId;
 use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
@@ -469,7 +471,26 @@ fn ensure_active(context: &PortRequestContext) -> Result<(), CodeAgentError> {
 }
 
 fn map_error(error: PlatformError) -> CodeAgentError {
-    CodeAgentError::internal(error.to_string())
+    match error {
+        PlatformError::Worker(message) if message == "project not found" => {
+            CodeAgentError::new(CodeAgentErrorCode::NotFound, "project was not found", None)
+                .with_mutation_code(AgentMutationErrorCode::ProjectNotFound)
+        }
+        PlatformError::InvalidOptions(message) => {
+            CodeAgentError::new(CodeAgentErrorCode::InvalidInput, message, None)
+        }
+        PlatformError::Timeout => CodeAgentError::new(
+            CodeAgentErrorCode::Timeout,
+            "filesystem request timed out",
+            None,
+        ),
+        PlatformError::Closed => CodeAgentError::new(
+            CodeAgentErrorCode::ShuttingDown,
+            "filesystem service is closed",
+            None,
+        ),
+        other => CodeAgentError::internal(other.to_string()),
+    }
 }
 
 fn detect_image(bytes: &[u8]) -> Option<&'static str> {

@@ -88,7 +88,11 @@ describe("Rust Runtime 协议 Schema", () => {
             steer: true,
           },
         },
-        error: { code: "provider_failure", message: "Provider failed" },
+        error: {
+          code: "conflict",
+          message: "Git status changed",
+          mutationCode: "GIT_STATUS_CHANGED",
+        },
         projectId: "project-1",
         providerEvent: {
           payload: { delta: "hello" },

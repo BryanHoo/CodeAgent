@@ -3,6 +3,7 @@ members = [
   "apps/desktop/src-tauri",
   "crates/core",
   "crates/node-binding",
+  "crates/mcp-command-proxy",
   "crates/platform",
   "crates/protocol",
   "crates/protocol-gen",

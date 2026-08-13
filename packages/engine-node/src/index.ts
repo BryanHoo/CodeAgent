@@ -5,6 +5,7 @@ export {
   type NativeBinding,
   type NativeBindingLoaderOptions,
 } from "./native-binding.js";
+export { NodeEngineError, normalizeNodeEngineError } from "./errors.js";
 export {
   startNodeEventSubscription,
   type NodeEventCallbacks,

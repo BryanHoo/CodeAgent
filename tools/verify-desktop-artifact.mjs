@@ -78,6 +78,7 @@ for (const runtimeDirectory of bundledRuntimeDirectories) {
     runtimeManifest.entrypoint,
     `bin/codex-code-mode-host${executableSuffix}`,
     `${runtimeManifest.pathDir}/rg${executableSuffix}`,
+    ...(process.platform === "win32" ? [`${runtimeManifest.pathDir}/npx.exe`] : []),
   ];
   for (const relativePath of requiredExecutables) {
     const path = join(runtimeDirectory, relativePath);

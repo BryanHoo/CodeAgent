@@ -7,15 +7,13 @@ pub fn to_napi_error(error: CodeAgentError) -> Error {
         CodeAgentErrorCode::Cancelled => Status::Cancelled,
         _ => Status::GenericFailure,
     };
-    let correlation = error
-        .correlation_id()
-        .map_or_else(String::new, |id| format!("; correlationId={id}"));
-    Error::new(
-        status,
-        format!("{}: {}{correlation}", error.code(), error.message()),
-    )
+    let reason = serde_json::to_string(&error.to_protocol_value()).unwrap_or_else(|_| {
+        r#"{"code":"internal","message":"Native error serialization failed"}"#.to_owned()
+    });
+    Error::new(status, reason)
 }
 
 pub fn invalid_input(message: impl Into<String>) -> Error {
-    Error::new(Status::InvalidArg, message.into())
+    let error = CodeAgentError::new(CodeAgentErrorCode::InvalidInput, message.into(), None);
+    to_napi_error(error)
 }

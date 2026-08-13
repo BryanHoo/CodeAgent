@@ -43,15 +43,13 @@ export function registerTaskAttachmentRoutes(
       schema: { params: ProjectTaskAttachmentParamsSchema, response: { 404: ErrorResponseSchema } },
     },
     async (request, reply) => {
-      const bytes = await callEngine<Uint8Array>(
-        () =>
-          engine.attachmentTaskRead(
-            createReadRequestId(),
-            request.params.projectId,
-            request.params.taskId,
-            request.params.attachmentId,
-          ),
-        "ATTACHMENT_NOT_FOUND",
+      const bytes = await callEngine<Uint8Array>(() =>
+        engine.attachmentTaskRead(
+          createReadRequestId(),
+          request.params.projectId,
+          request.params.taskId,
+          request.params.attachmentId,
+        ),
       );
       return reply
         .header("cache-control", "private, max-age=300")

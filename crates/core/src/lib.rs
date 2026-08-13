@@ -3,7 +3,7 @@
 mod error;
 mod ports;
 
-pub use error::{CodeAgentError, CodeAgentErrorCode};
+pub use error::{AgentMutationErrorCode, CodeAgentError, CodeAgentErrorCode};
 pub use ports::{
     AttachmentBytes, AttachmentPort, ClockPort, FilePort, GitPort, ManagedAttachment,
     PortRequestContext, ProjectProviderPort, ProjectRepositoryPort, ProviderPort, RepositoryPort,

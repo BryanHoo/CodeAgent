@@ -5,7 +5,7 @@
 - 默认使用长驻 `codex app-server --listen stdio://`，不为每个 Turn 创建进程；允许 Codex 忽略其版本尚未识别的前向配置字段，避免 Desktop 与打包 CLI 的配置版本差异阻断启动。
 - CLI 启动 App Server 时不绑定 Project `cwd`；全局 `CodexRuntimeProvider` 只注册一次 RPC Notification 与 Server Request Listener，并维护 `taskId -> projectId/cwd` 归属映射。
 - CodeAgent 只通过 App Server `account/read`、`account/login/start`、`account/login/cancel`、`account/logout` 管理官方登录或 API key 凭证；禁止读取、修改或复制 `auth.json`。CodeAgent 创建的自定义 Provider 固定使用 `code_agent_custom`，通过 `config/batchWrite` 写入无 Secret 的 Responses API 配置。连接状态必须同时读取有效 `config/read`：只要 `model_provider` 不是内置 `openai`，或配置了 `openai_base_url`，就按用户现有 Codex CLI 自定义 API 处理，并返回所选 Provider 的 `base_url`。
-- Desktop 必须按平台可选依赖中的 `codex-package.json` 镜像并打包完整 canonical package，保留 `bin`、`pathDir`、`resourcesDir` 及其目录层级，不能维护可执行文件白名单；启动 App Server 时直接使用 package 的原生 entrypoint，并将 `pathDir` 和 `bin` 置于 `PATH` 首位，不得依赖 GUI 进程继承用户 Shell 环境，也不得把会再次派生子进程的 JS launcher 作为受管进程。
+- Desktop 必须按平台可选依赖中的 `codex-package.json` 镜像并打包完整 canonical package，保留 `bin`、`pathDir`、`resourcesDir` 及其目录层级，不能维护可执行文件白名单；启动 App Server 时直接使用 package 的原生 entrypoint，并将 `pathDir` 和 `bin` 置于 `PATH` 首位。Desktop 必须有界恢复 Unix 登录 Shell 与各平台常见用户工具目录，使 Codex 派生的 MCP Server 可找到 `npx`、`uvx` 等启动器；Windows 必须提供原生 `npx.exe` 代理并直接执行 `node.exe` 与 `npx-cli.js`，不得依赖 `.cmd` 或 GUI 进程继承用户 Shell 环境，也不得把会再次派生子进程的 JS launcher 作为受管 App Server 进程。
 - 使用参数数组、`shell: false` 和经过控制的环境变量；Secret 不进入参数或日志。
 - 子进程不消费输入时必须将 stdin 配置为 `ignore`；确需 `pipe` 写入时必须监听写端错误，避免进程提前退出产生未处理的 `EPIPE`。
 - 所有 RPC 设置超时；子进程退出时统一 Reject Pending RPC，并清理 Listener。

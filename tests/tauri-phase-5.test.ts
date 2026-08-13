@@ -65,6 +65,8 @@ describe("Tauri Phase 5 repository contract", () => {
     expect(prepareScript).toContain("runtimeManifest.resourcesDir");
     expect(prepareScript).toContain("runtimeManifest.pathDir");
     expect(prepareScript).toContain("runtimeManifest.entrypoint");
+    expect(prepareScript).toContain('"code-agent-mcp-command-proxy"');
+    expect(prepareScript).toContain('"npx.exe"');
     expect(tauriConfig.bundle.externalBin).toEqual([]);
     expect(tauriConfig.bundle.resources).toEqual({
       "resources/codex-runtime/": "codex-runtime/",
@@ -72,10 +74,12 @@ describe("Tauri Phase 5 repository contract", () => {
     expect(artifactCheck).toContain('"codex-package.json"');
     expect(artifactCheck).toContain('"codex-resources"');
     expect(artifactCheck).toContain('"codex-path"');
+    expect(artifactCheck).toContain("npx.exe");
     expect(desktop).toContain("resource_dir()");
     expect(platformAdapters).toContain("desktop_codex_environment");
     expect(platformAdapters).toContain('"PATH".to_string()');
     expect(platformAdapters).toContain('join("codex-path")');
+    expect(platformAdapters).toContain("resolved_process_path");
   });
 
   it("registers every Phase 5 command while keeping renderer capabilities minimal", () => {

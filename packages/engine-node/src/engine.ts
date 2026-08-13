@@ -1,4 +1,5 @@
 import type { NativeEventEngine } from "./event-subscription.js";
+import { normalizeNodeEngineError } from "./errors.js";
 import { loadNativeBinding, type NativeBindingLoaderOptions } from "./native-binding.js";
 
 export interface NodeEngineOptions {
@@ -180,5 +181,26 @@ export async function openNodeEngine(
   options: NodeEngineOptions,
   loader: NativeBindingLoaderOptions = {},
 ): Promise<CodeAgentEngine> {
-  return (await loadNativeBinding(loader).NodeEngine.open(options)) as CodeAgentEngine;
+  let engine: CodeAgentEngine;
+  try {
+    engine = (await loadNativeBinding(loader).NodeEngine.open(options)) as CodeAgentEngine;
+  } catch (error) {
+    throw normalizeNodeEngineError(error);
+  }
+  return new Proxy(engine, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver) as unknown;
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]) => {
+        try {
+          const result = Reflect.apply(value, target, args) as unknown;
+          return result instanceof Promise
+            ? result.catch((error: unknown) => Promise.reject(normalizeNodeEngineError(error)))
+            : result;
+        } catch (error) {
+          throw normalizeNodeEngineError(error);
+        }
+      };
+    },
+  });
 }

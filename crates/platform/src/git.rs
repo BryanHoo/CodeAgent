@@ -4,7 +4,9 @@ use std::{
 };
 
 use async_trait::async_trait;
-use code_agent_core::{CodeAgentError, CodeAgentErrorCode, GitPort, PortRequestContext};
+use code_agent_core::{
+    AgentMutationErrorCode, CodeAgentError, CodeAgentErrorCode, GitPort, PortRequestContext,
+};
 use code_agent_protocol::ProjectId;
 use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
@@ -49,9 +51,10 @@ impl GitCliService {
                     .ok_or_else(|| PlatformError::Worker("project not found".to_owned()))
             })
             .map_err(map_platform_error)?;
-        tokio::fs::canonicalize(root)
-            .await
-            .map_err(|_| not_found("project root was not found"))
+        tokio::fs::canonicalize(root).await.map_err(|_| {
+            not_found("project root was not found")
+                .with_mutation_code(AgentMutationErrorCode::ProjectNotFound)
+        })
     }
 
     async fn repository_root(
@@ -65,15 +68,15 @@ impl GitCliService {
                 || repository.contains(['/', '\\'])
                 || tokio::fs::symlink_metadata(root.join(".git")).await.is_ok()
             {
-                return Err(not_found("git repository was not found"));
+                return Err(git_repository_not_found());
             }
             let candidate = root.join(repository);
             let metadata = tokio::fs::symlink_metadata(&candidate)
                 .await
-                .map_err(|_| not_found("git repository was not found"))?;
+                .map_err(|_| git_repository_not_found())?;
             let resolved = tokio::fs::canonicalize(&candidate)
                 .await
-                .map_err(|_| not_found("git repository was not found"))?;
+                .map_err(|_| git_repository_not_found())?;
             if metadata.file_type().is_symlink()
                 || !metadata.is_dir()
                 || resolved.parent() != Some(root.as_path())
@@ -81,7 +84,7 @@ impl GitCliService {
                     .await
                     .is_err()
             {
-                return Err(not_found("git repository was not found"));
+                return Err(git_repository_not_found());
             }
             return Ok(resolved);
         }
@@ -89,7 +92,7 @@ impl GitCliService {
             .await
             .is_err()
         {
-            return Err(not_found("git repository was not found"));
+            return Err(git_repository_not_found());
         }
         Ok(root)
     }
@@ -351,15 +354,46 @@ impl GitCliService {
     ) -> Result<Value, CodeAgentError> {
         let status = self.read_status(project_id, None, context).await?;
         ensure_snapshot(&status, expected_snapshot)?;
+        let branches = status["branches"]
+            .as_array()
+            .ok_or_else(|| internal("git branch catalog is invalid"))?;
+        if create && branches.iter().any(|candidate| candidate == branch) {
+            return Err(conflict("git branch already exists")
+                .with_mutation_code(AgentMutationErrorCode::GitBranchAlreadyExists));
+        }
+        if !create && !branches.iter().any(|candidate| candidate == branch) {
+            return Err(not_found("git branch was not found")
+                .with_mutation_code(AgentMutationErrorCode::GitBranchNotFound));
+        }
+        if !create && status["branch"] == branch {
+            return Err(conflict("git branch is already active")
+                .with_mutation_code(AgentMutationErrorCode::GitBranchAlreadyActive));
+        }
         let root = self.repository_root(project_id, None).await?;
-        let checked = Self::git(&root, &["check-ref-format", "--branch", branch], context).await?;
+        let checked = Self::git(&root, &["check-ref-format", "--branch", branch], context)
+            .await
+            .map_err(|_| {
+                invalid("git branch name is invalid")
+                    .with_mutation_code(AgentMutationErrorCode::GitBranchInvalid)
+            })?;
         if checked.trim() != branch {
-            return Err(invalid("git branch name is invalid"));
+            return Err(invalid("git branch name is invalid")
+                .with_mutation_code(AgentMutationErrorCode::GitBranchInvalid));
         }
         if create {
-            Self::git(&root, &["switch", "-c", branch], context).await?;
+            Self::git(&root, &["switch", "-c", branch], context)
+                .await
+                .map_err(|_| {
+                    internal("git branch creation failed")
+                        .with_mutation_code(AgentMutationErrorCode::GitBranchCreateFailed)
+                })?;
         } else {
-            Self::git(&root, &["switch", "--no-guess", branch], context).await?;
+            Self::git(&root, &["switch", "--no-guess", branch], context)
+                .await
+                .map_err(|_| {
+                    internal("git branch switch failed")
+                        .with_mutation_code(AgentMutationErrorCode::GitBranchSwitchFailed)
+                })?;
         }
         self.read_status(project_id, None, context).await
     }
@@ -423,7 +457,8 @@ impl GitCliService {
                     .ok_or_else(|| invalid("commit path is invalid"))?,
             )?;
             if !changed.contains(path) {
-                return Err(conflict("git changes changed before the commit"));
+                return Err(conflict("git changes changed before the commit")
+                    .with_mutation_code(AgentMutationErrorCode::GitPathUnavailable));
             }
             selected_paths.push(path.to_owned());
             arguments.push(path.to_owned());
@@ -725,7 +760,8 @@ fn ensure_snapshot(status: &Value, expected: &str) -> Result<(), CodeAgentError>
     if status["snapshot"] == expected {
         Ok(())
     } else {
-        Err(conflict("git working tree snapshot changed"))
+        Err(conflict("git working tree snapshot changed")
+            .with_mutation_code(AgentMutationErrorCode::GitStatusChanged))
     }
 }
 fn truncate_utf8(value: String, maximum: usize) -> (String, bool) {
@@ -742,9 +778,14 @@ fn map_platform_error(error: PlatformError) -> CodeAgentError {
     match error {
         PlatformError::Worker(message) if message == "project not found" => {
             not_found("project was not found")
+                .with_mutation_code(AgentMutationErrorCode::ProjectNotFound)
         }
         _ => internal("project registry is unavailable"),
     }
+}
+fn git_repository_not_found() -> CodeAgentError {
+    not_found("git repository was not found")
+        .with_mutation_code(AgentMutationErrorCode::GitRepositoryUnavailable)
 }
 fn invalid(message: &'static str) -> CodeAgentError {
     CodeAgentError::new(CodeAgentErrorCode::InvalidInput, message, None)

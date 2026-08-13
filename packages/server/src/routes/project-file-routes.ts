@@ -104,10 +104,8 @@ export function registerProjectFileRoutes(
       },
     },
     async (request, reply) => {
-      const bytes = await callEngine<Uint8Array>(
-        () =>
-          engine.projectImage(createReadRequestId(), request.params.projectId, request.query.path),
-        "PROJECT_NOT_FOUND",
+      const bytes = await callEngine<Uint8Array>(() =>
+        engine.projectImage(createReadRequestId(), request.params.projectId, request.query.path),
       );
       return reply
         .header("cache-control", "private, max-age=60")
@@ -223,14 +221,12 @@ export function registerProjectFileRoutes(
       },
     },
     async (request, reply) => {
-      const bytes = await callEngine<Uint8Array>(
-        () =>
-          engine.attachmentPendingRead(
-            createReadRequestId(),
-            request.params.projectId,
-            request.params.attachmentId,
-          ),
-        "ATTACHMENT_NOT_FOUND",
+      const bytes = await callEngine<Uint8Array>(() =>
+        engine.attachmentPendingRead(
+          createReadRequestId(),
+          request.params.projectId,
+          request.params.attachmentId,
+        ),
       );
       return reply
         .header("x-content-type-options", "nosniff")
