@@ -5,34 +5,29 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SUPPORTED_CODEX_VERSION = "0.147.0";
+const CODEX_EXECUTABLES = ["codex", "codex-code-mode-host"];
 const TARGETS = {
   "darwin-arm64": {
-    executable: "codex",
     package: "@openai/codex-darwin-arm64",
     triple: "aarch64-apple-darwin",
   },
   "darwin-x64": {
-    executable: "codex",
     package: "@openai/codex-darwin-x64",
     triple: "x86_64-apple-darwin",
   },
   "linux-arm64": {
-    executable: "codex",
     package: "@openai/codex-linux-arm64",
     triple: "aarch64-unknown-linux-musl",
   },
   "linux-x64": {
-    executable: "codex",
     package: "@openai/codex-linux-x64",
     triple: "x86_64-unknown-linux-musl",
   },
   "win32-arm64": {
-    executable: "codex.exe",
     package: "@openai/codex-win32-arm64",
     triple: "aarch64-pc-windows-msvc",
   },
   "win32-x64": {
-    executable: "codex.exe",
     package: "@openai/codex-win32-x64",
     triple: "x86_64-pc-windows-msvc",
   },
@@ -67,24 +62,26 @@ if (
   throw new Error("Codex platform package does not match the current architecture");
 }
 
-const source = resolve(
-  dirname(platformManifestPath),
-  "vendor",
-  target.triple,
-  "bin",
-  target.executable,
-);
-await access(source, process.platform === "win32" ? constants.F_OK : constants.X_OK);
-
 const binaryDirectory = resolve(desktopDirectory, "src-tauri", "binaries");
-const destination = resolve(
-  binaryDirectory,
-  `codex-${target.triple}${process.platform === "win32" ? ".exe" : ""}`,
+const executableSuffix = process.platform === "win32" ? ".exe" : "";
+const sourceDirectory = resolve(dirname(platformManifestPath), "vendor", target.triple, "bin");
+const binaries = CODEX_EXECUTABLES.map((name) => ({
+  destination: resolve(binaryDirectory, `${name}-${target.triple}${executableSuffix}`),
+  source: resolve(sourceDirectory, `${name}${executableSuffix}`),
+}));
+
+// Codex 会从自身目录启动 code-mode host，打包前必须先验证整套原生运行时完整。
+await Promise.all(
+  binaries.map(({ source }) =>
+    access(source, process.platform === "win32" ? constants.F_OK : constants.X_OK),
+  ),
 );
 await mkdir(binaryDirectory, { recursive: true });
-await copyFile(source, destination);
+await Promise.all(binaries.map(({ destination, source }) => copyFile(source, destination)));
 if (process.platform !== "win32") {
-  await chmod(destination, 0o755);
-  await access(destination, constants.X_OK);
+  await Promise.all(binaries.map(({ destination }) => chmod(destination, 0o755)));
+  await Promise.all(binaries.map(({ destination }) => access(destination, constants.X_OK)));
 }
-console.log(`Prepared Codex ${SUPPORTED_CODEX_VERSION}: ${destination}`);
+console.log(
+  `Prepared Codex ${SUPPORTED_CODEX_VERSION}: ${binaries.map(({ destination }) => destination).join(", ")}`,
+);
