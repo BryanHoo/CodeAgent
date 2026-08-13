@@ -9,8 +9,8 @@ use std::{
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use code_agent_core::{
-    AttachmentPort, ClockPort, CodeAgentError, FilePort, GitPort, PortRequestContext, ProviderPort,
-    RepositoryPort, UpdatePort,
+    AttachmentPort, ClockPort, CodeAgentError, CodeAgentErrorCode, FilePort, GitPort,
+    PortRequestContext, ProviderPort, RepositoryPort, UpdatePort,
 };
 use code_agent_protocol::{AgentCapabilities, ProjectId, TaskId};
 use code_agent_runtime::{
@@ -134,10 +134,34 @@ async fn operation_registry_should_enforce_capacity_identity_and_cancellation() 
     assert!(registry.begin("request-2").await.is_err());
     assert!(registry.cancel("request-1").await);
     assert!(context.is_cancelled());
-    registry.finish("request-1").await;
+    drop(context);
     assert!(registry.begin("request-2").await.is_ok());
     registry.close().await;
     assert!(registry.begin("request-3").await.is_err());
+}
+
+#[tokio::test]
+async fn operation_registry_should_release_capacity_when_operation_is_dropped() {
+    let registry = OperationRegistry::new(1);
+    {
+        let _operation = registry.begin("request-1").await.expect("first request");
+    }
+
+    assert!(registry.begin("request-1").await.is_ok());
+}
+
+#[tokio::test]
+async fn runtime_should_release_operation_after_protocol_validation_failure() {
+    let runtime = build_runtime();
+    let project_id = ProjectId::try_from("project-1").expect("project id");
+
+    for _ in 0..2 {
+        let error = runtime
+            .start_agent_turn("invalid-turn", &project_id, "task-1", json!({}))
+            .await
+            .expect_err("invalid request");
+        assert_eq!(error.code(), CodeAgentErrorCode::InvalidInput);
+    }
 }
 
 #[tokio::test]

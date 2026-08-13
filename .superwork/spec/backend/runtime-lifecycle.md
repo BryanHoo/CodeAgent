@@ -91,7 +91,7 @@
 ## 关闭
 
 - Rust `CodeAgentRuntimeBuilder` 必须在编译期要求 Repository、Provider、Git、File、Attachment、Clock 与 Update ports；Runtime 不依赖 Tauri、N-API 或具体 Provider/Platform crate。
-- Rust 活动操作通过有界 Registry 管理，取消使用共享 `CancellationToken`；成功幂等结果同时受容量与 TTL 限制，关闭时清空并拒绝新请求；后台任务通过 `TaskTracker` 纳入关闭树，关闭时停止接收、通知取消并有界等待。
+- Rust 活动操作通过有界 Registry 管理，取消使用共享 `CancellationToken`；注册项必须由 RAII guard 在成功、错误传播和 Future 取消时自动释放，禁止依赖调用方手动完成清理；成功幂等结果同时受容量与 TTL 限制，关闭时清空并拒绝新请求；后台任务通过 `TaskTracker` 纳入关闭树，关闭时停止接收、通知取消并有界等待。
 - Rust Project Event Stream 由 Runtime 分配 Provider、Session、Sequence、Timestamp 与 Version；相邻同 Key Delta 才允许合并，关键事件、checkpoint、replay 和 close 前必须先 flush。保留同时受事件数、单事件 UTF-8 字节和总字节预算限制，慢订阅者通过独立控制信号进入 resync，不得阻塞 Provider。Provider 上游订阅满载时必须用预留槽位交付一次不可重试的溢出终态并关闭该订阅；Runtime 收到后立即把全部下游订阅标记为 `ResyncRequired`，Tauri 使用触发时的最新 checkpoint 发送 `resync.required`。
 - Tauri 只 `manage` 一个 `Arc<CodeAgentRuntime>`；退出时先关闭 Runtime 操作树，再关闭 Repository 的有界数据库队列并 join 唯一 SQLite owner thread。
 - Desktop 启动只管理一个 Codex supervisor；二进制按环境变量、应用旁 sidecar、仓库 target-triple 产物顺序解析。握手失败或进程退出写入诊断但不阻塞窗口，退出顺序固定为 Channel 订阅、Runtime、Codex 进程。
