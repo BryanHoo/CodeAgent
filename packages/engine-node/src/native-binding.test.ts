@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   NativeBindingLoadError,
   loadNativeBinding,
+  resolveDevelopmentAddonPaths,
   resolveNativeBindingPackage,
 } from "./native-binding.js";
 
@@ -74,5 +75,13 @@ describe("loadNativeBinding", () => {
     expect(loadNativeBinding({ arch: "arm64", load, platform: "darwin" })).toBe(binding);
     expect(load).toHaveBeenCalledOnce();
     expect(load).toHaveBeenCalledWith("@bryanhu/code-agent-darwin-arm64");
+  });
+
+  it("resolves the workspace addon from the bundled CLI location", () => {
+    const paths = resolveDevelopmentAddonPaths(
+      new URL("file:///workspace/apps/node-cli/dist/chunk.js"),
+    );
+
+    expect(paths).toContain("/workspace/packages/engine-node/native/code-agent-node-binding.node");
   });
 });
