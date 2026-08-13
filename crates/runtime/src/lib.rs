@@ -29,7 +29,9 @@ use code_agent_protocol::{
     GenerateCommitMessageRequest, GenerateCommitMessageResponse, Project, ProjectId, TaskId,
     ValueDefinition, parse_protocol_value,
 };
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 use tokio::sync::OnceCell;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -258,6 +260,31 @@ impl CodeAgentRuntime {
         self.operations.cancel(request_id).await
     }
 
+    /// 仅为首个幂等请求注册活动操作；并发重试直接等待同一结果。
+    async fn run_idempotent<T, F, Fut>(
+        &self,
+        scope: &[&str],
+        request_id: &str,
+        payload: &Value,
+        execute: F,
+    ) -> Result<T, CodeAgentError>
+    where
+        T: DeserializeOwned + Serialize,
+        F: FnOnce(PortRequestContext) -> Fut,
+        Fut: Future<Output = Result<T, CodeAgentError>>,
+    {
+        let operation_identity = idempotency::operation_identity(scope, request_id);
+        self.idempotency
+            .execute(scope, request_id, payload, || async {
+                let operation = self
+                    .operations
+                    .begin_scoped(&operation_identity, request_id)
+                    .await?;
+                execute((*operation).clone()).await
+            })
+            .await
+    }
+
     /// 通过 Provider port 读取当前能力。
     pub async fn capabilities(
         &self,
@@ -297,18 +324,17 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
         input: Value,
     ) -> Result<Value, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => {
-                self.idempotency
-                    .execute("start-task", request_id, &input, || {
-                        context.provider.start_task(input.clone(), &operation)
-                    })
-                    .await
-            }
-            Err(error) => Err(error),
-        }
+        let payload = input.clone();
+        self.run_idempotent(
+            &["start-task", project_id.as_str()],
+            request_id,
+            &payload,
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
+                context.provider.start_task(input, &operation).await
+            },
+        )
+        .await
     }
 
     /// 读取 Task Snapshot，并在返回前固定 Event Stream checkpoint。
@@ -355,7 +381,6 @@ impl CodeAgentRuntime {
         task_id: &str,
         input: Value,
     ) -> Result<Value, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
         let input = code_agent_protocol::parse_protocol_value(
             ValueDefinition::StartAgentTurnRequest,
             input,
@@ -363,51 +388,49 @@ impl CodeAgentRuntime {
         .map_err(|error| {
             CodeAgentError::new(CodeAgentErrorCode::InvalidInput, error.to_string(), None)
         })?;
+        let payload = input.clone();
 
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => {
-                self.idempotency
-                    .execute("start-turn", request_id, &input, || async {
-                        let prompt = resolve_prompt(
-                            self.ports.attachment.as_ref(),
-                            project_id,
-                            &input["input"],
-                            &operation,
-                        )
-                        .await?;
-                        let turn = context
-                            .provider
-                            .start_turn(
-                                task_id,
-                                json!({ "options": input["options"], "prompt": prompt.value }),
-                                &operation,
-                            )
-                            .await?;
-                        let turn_id =
-                            turn["id"]
-                                .as_str()
-                                .filter(|id| !id.is_empty())
-                                .ok_or_else(|| {
-                                    CodeAgentError::internal("Provider returned an invalid turn")
-                                })?;
-                        let task_id = TaskId::try_from(task_id)
-                            .map_err(|_| CodeAgentError::internal("Task id is invalid"))?;
-                        self.ports
-                            .attachment
-                            .bind_to_turn(
-                                project_id,
-                                &task_id,
-                                turn_id,
-                                &prompt.attachment_ids,
-                                &operation,
-                            )
-                            .await?;
-                        Ok(turn)
-                    })
-                    .await
-            }
-            Err(error) => Err(error),
-        }
+        self.run_idempotent(
+            &["start-turn", project_id.as_str(), task_id],
+            request_id,
+            &payload,
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
+                let prompt = resolve_prompt(
+                    self.ports.attachment.as_ref(),
+                    project_id,
+                    &input["input"],
+                    &operation,
+                )
+                .await?;
+                let turn = context
+                    .provider
+                    .start_turn(
+                        task_id,
+                        json!({ "options": input["options"], "prompt": prompt.value }),
+                        &operation,
+                    )
+                    .await?;
+                let turn_id = turn["id"]
+                    .as_str()
+                    .filter(|id| !id.is_empty())
+                    .ok_or_else(|| CodeAgentError::internal("Provider returned an invalid turn"))?;
+                let task_id = TaskId::try_from(task_id)
+                    .map_err(|_| CodeAgentError::internal("Task id is invalid"))?;
+                self.ports
+                    .attachment
+                    .bind_to_turn(
+                        project_id,
+                        &task_id,
+                        turn_id,
+                        &prompt.attachment_ids,
+                        &operation,
+                    )
+                    .await?;
+                Ok(turn)
+            },
+        )
+        .await
     }
 
     /// Steer 当前 Turn。
@@ -419,7 +442,6 @@ impl CodeAgentRuntime {
         turn_id: &str,
         input: Value,
     ) -> Result<(), CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
         let input = code_agent_protocol::parse_protocol_value(
             ValueDefinition::SteerAgentTurnRequest,
             input,
@@ -427,45 +449,47 @@ impl CodeAgentRuntime {
         .map_err(|error| {
             CodeAgentError::new(CodeAgentErrorCode::InvalidInput, error.to_string(), None)
         })?;
+        let payload = input.clone();
 
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => self
-                .idempotency
-                .execute("steer-turn", request_id, &input, || async {
-                    let prompt = resolve_prompt(
-                        self.ports.attachment.as_ref(),
-                        project_id,
-                        &input["input"],
+        self.run_idempotent(
+            &["steer-turn", project_id.as_str(), task_id, turn_id],
+            request_id,
+            &payload,
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
+                let prompt = resolve_prompt(
+                    self.ports.attachment.as_ref(),
+                    project_id,
+                    &input["input"],
+                    &operation,
+                )
+                .await?;
+                context
+                    .provider
+                    .steer_turn(
+                        task_id,
+                        turn_id,
+                        json!({ "prompt": prompt.value }),
                         &operation,
                     )
                     .await?;
-                    context
-                        .provider
-                        .steer_turn(
-                            task_id,
-                            turn_id,
-                            json!({ "prompt": prompt.value }),
-                            &operation,
-                        )
-                        .await?;
-                    let task_id = TaskId::try_from(task_id)
-                        .map_err(|_| CodeAgentError::internal("Task id is invalid"))?;
-                    self.ports
-                        .attachment
-                        .bind_to_turn(
-                            project_id,
-                            &task_id,
-                            turn_id,
-                            &prompt.attachment_ids,
-                            &operation,
-                        )
-                        .await?;
-                    Ok(Value::Null)
-                })
-                .await
-                .map(|_| ()),
-            Err(error) => Err(error),
-        }
+                let task_id = TaskId::try_from(task_id)
+                    .map_err(|_| CodeAgentError::internal("Task id is invalid"))?;
+                self.ports
+                    .attachment
+                    .bind_to_turn(
+                        project_id,
+                        &task_id,
+                        turn_id,
+                        &prompt.attachment_ids,
+                        &operation,
+                    )
+                    .await?;
+                Ok(Value::Null)
+            },
+        )
+        .await
+        .map(|_: Value| ())
     }
 
     /// 中断当前 Turn。
@@ -476,23 +500,23 @@ impl CodeAgentRuntime {
         task_id: &str,
         turn_id: &str,
     ) -> Result<(), CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
         let payload = json!({ "taskId": task_id, "turnId": turn_id });
 
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => self
-                .idempotency
-                .execute("interrupt-turn", request_id, &payload, || async {
-                    context
-                        .provider
-                        .interrupt_turn(task_id, turn_id, &operation)
-                        .await?;
-                    Ok(Value::Null)
-                })
-                .await
-                .map(|_| ()),
-            Err(error) => Err(error),
-        }
+        self.run_idempotent(
+            &["interrupt-turn", project_id.as_str(), task_id, turn_id],
+            request_id,
+            &payload,
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
+                context
+                    .provider
+                    .interrupt_turn(task_id, turn_id, &operation)
+                    .await?;
+                Ok(Value::Null)
+            },
+        )
+        .await
+        .map(|_: Value| ())
     }
 
     /// 启动代码评审 Turn。
@@ -503,17 +527,20 @@ impl CodeAgentRuntime {
         task_id: &str,
         target: Value,
     ) -> Result<Value, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => {
+        let payload = target.clone();
+        self.run_idempotent(
+            &["review-task", project_id.as_str(), task_id],
+            request_id,
+            &payload,
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
                 context
                     .provider
                     .start_review(task_id, target, &operation)
                     .await
-            }
-            Err(error) => Err(error),
-        }
+            },
+        )
+        .await
     }
 
     /// 解析待处理审批或用户输入请求。
@@ -523,20 +550,27 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
         input: Value,
     ) -> Result<Value, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => {
-                self.idempotency
-                    .execute("resolve-pending-request", request_id, &input, || {
-                        context
-                            .provider
-                            .resolve_pending_request(input.clone(), &operation)
-                    })
+        let task_id = input["taskId"].as_str().unwrap_or_default().to_owned();
+        let pending_request_id = input["requestId"].as_str().unwrap_or_default().to_owned();
+        let payload = input.clone();
+        self.run_idempotent(
+            &[
+                "resolve-pending-request",
+                project_id.as_str(),
+                &task_id,
+                &pending_request_id,
+            ],
+            request_id,
+            &payload,
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
+                context
+                    .provider
+                    .resolve_pending_request(input, &operation)
                     .await
-            }
-            Err(error) => Err(error),
-        }
+            },
+        )
+        .await
     }
 
     /// 读取 Project Skills。
@@ -596,12 +630,17 @@ impl CodeAgentRuntime {
         task_id: &str,
         pinned: bool,
     ) -> Result<Value, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => context.provider.pin_task(task_id, pinned, &operation).await,
-            Err(error) => Err(error),
-        }
+        let payload = json!({ "pinned": pinned });
+        self.run_idempotent(
+            &["pin-task", project_id.as_str(), task_id],
+            request_id,
+            &payload,
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
+                context.provider.pin_task(task_id, pinned, &operation).await
+            },
+        )
+        .await
     }
 
     /// 重命名 Task。
@@ -612,17 +651,20 @@ impl CodeAgentRuntime {
         task_id: &str,
         title: &str,
     ) -> Result<(), CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => {
+        let payload = json!({ "title": title });
+        self.run_idempotent(
+            &["rename-task", project_id.as_str(), task_id],
+            request_id,
+            &payload,
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
                 context
                     .provider
                     .rename_task(task_id, title, &operation)
                     .await
-            }
-            Err(error) => Err(error),
-        }
+            },
+        )
+        .await
     }
 
     /// 归档 Task。
@@ -632,12 +674,16 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
         task_id: &str,
     ) -> Result<(), CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => context.provider.archive_task(task_id, &operation).await,
-            Err(error) => Err(error),
-        }
+        self.run_idempotent(
+            &["archive-task", project_id.as_str(), task_id],
+            request_id,
+            &json!({}),
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
+                context.provider.archive_task(task_id, &operation).await
+            },
+        )
+        .await
     }
 
     /// Fork Task。
@@ -647,12 +693,16 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
         task_id: &str,
     ) -> Result<Value, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => context.provider.fork_task(task_id, &operation).await,
-            Err(error) => Err(error),
-        }
+        self.run_idempotent(
+            &["fork-task", project_id.as_str(), task_id],
+            request_id,
+            &json!({}),
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
+                context.provider.fork_task(task_id, &operation).await
+            },
+        )
+        .await
     }
 
     /// 压缩 Task 上下文。
@@ -662,12 +712,16 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
         task_id: &str,
     ) -> Result<(), CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => context.provider.compact_task(task_id, &operation).await,
-            Err(error) => Err(error),
-        }
+        self.run_idempotent(
+            &["compact-task", project_id.as_str(), task_id],
+            request_id,
+            &json!({}),
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
+                context.provider.compact_task(task_id, &operation).await
+            },
+        )
+        .await
     }
 
     /// 取消订阅 Task。
@@ -677,12 +731,16 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
         task_id: &str,
     ) -> Result<String, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => context.provider.unsubscribe_task(task_id, &operation).await,
-            Err(error) => Err(error),
-        }
+        self.run_idempotent(
+            &["unsubscribe-task", project_id.as_str(), task_id],
+            request_id,
+            &json!({}),
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
+                context.provider.unsubscribe_task(task_id, &operation).await
+            },
+        )
+        .await
     }
 
     /// 重载 Task MCP Servers。
@@ -692,17 +750,19 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
         task_id: &str,
     ) -> Result<AgentMcpServerPage, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => {
+        self.run_idempotent(
+            &["reload-task-mcp-servers", project_id.as_str(), task_id],
+            request_id,
+            &json!({}),
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
                 context
                     .provider
                     .reload_mcp_servers(task_id, &operation)
                     .await
-            }
-            Err(error) => Err(error),
-        }
+            },
+        )
+        .await
     }
 
     /// 终止 Task 后台终端。
@@ -713,17 +773,24 @@ impl CodeAgentRuntime {
         task_id: &str,
         terminal_id: &str,
     ) -> Result<bool, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => {
+        self.run_idempotent(
+            &[
+                "terminate-background-terminal",
+                project_id.as_str(),
+                task_id,
+                terminal_id,
+            ],
+            request_id,
+            &json!({}),
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
                 context
                     .provider
                     .terminate_background_terminal(task_id, terminal_id, &operation)
                     .await
-            }
-            Err(error) => Err(error),
-        }
+            },
+        )
+        .await
     }
 
     /// 上传 Task 反馈。
@@ -734,17 +801,20 @@ impl CodeAgentRuntime {
         task_id: &str,
         input: Value,
     ) -> Result<(), CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        match self.project_context(project_id, &operation).await {
-            Ok(context) => {
+        let payload = input.clone();
+        self.run_idempotent(
+            &["feedback-task", project_id.as_str(), task_id],
+            request_id,
+            &payload,
+            |operation| async move {
+                let context = self.project_context(project_id, &operation).await?;
                 context
                     .provider
                     .upload_feedback(task_id, input, &operation)
                     .await
-            }
-            Err(error) => Err(error),
-        }
+            },
+        )
+        .await
     }
 
     /// 读取 Provider 连接状态。
@@ -759,9 +829,13 @@ impl CodeAgentRuntime {
 
     /// 启动官方 Provider 登录。
     pub async fn start_provider_login(&self, request_id: &str) -> Result<Value, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        self.ports.provider.start_official_login(&operation).await
+        self.run_idempotent(
+            &["start-official-provider-login"],
+            request_id,
+            &json!({}),
+            |operation| async move { self.ports.provider.start_official_login(&operation).await },
+        )
+        .await
     }
 
     /// 取消 Provider 登录。
@@ -770,16 +844,24 @@ impl CodeAgentRuntime {
         request_id: &str,
         login_id: &str,
     ) -> Result<Value, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        self.ports.provider.cancel_login(login_id, &operation).await
+        self.run_idempotent(
+            &["cancel-provider-login", login_id],
+            request_id,
+            &json!({ "loginId": login_id }),
+            |operation| async move { self.ports.provider.cancel_login(login_id, &operation).await },
+        )
+        .await
     }
 
     /// 登出 Provider。
     pub async fn logout_provider(&self, request_id: &str) -> Result<Value, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        self.ports.provider.logout(&operation).await
+        self.run_idempotent(
+            &["logout-provider"],
+            request_id,
+            &json!({}),
+            |operation| async move { self.ports.provider.logout(&operation).await },
+        )
+        .await
     }
 
     /// 配置自定义 Provider。
@@ -788,12 +870,19 @@ impl CodeAgentRuntime {
         request_id: &str,
         input: Value,
     ) -> Result<Value, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        self.ports
-            .provider
-            .configure_custom(input, &operation)
-            .await
+        let payload = input.clone();
+        self.run_idempotent(
+            &["configure-custom-provider"],
+            request_id,
+            &payload,
+            |operation| async move {
+                self.ports
+                    .provider
+                    .configure_custom(input, &operation)
+                    .await
+            },
+        )
+        .await
     }
 
     /// 固定当前 Project Event checkpoint。
@@ -858,9 +947,13 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
         request: &GenerateCommitMessageRequest,
     ) -> Result<GenerateCommitMessageResponse, CodeAgentError> {
-        let operation = self.begin_operation(request_id).await?;
-
-        async {
+        let payload = serde_json::to_value(request)
+            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+        self.run_idempotent(
+            &["generate-commit-message", project_id.as_str()],
+            request_id,
+            &payload,
+            |operation| async move {
             let runtime_context = self.project_context(project_id, &operation).await?;
             let status = self
                 .ports
@@ -892,15 +985,7 @@ impl CodeAgentRuntime {
                 models.as_ref().unwrap_or(&empty_models),
             )?;
             let prompt = build_commit_message_prompt(&status, request, &settings.custom_prompt)?;
-            let idempotency_payload = serde_json::to_value(request)
-                .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-            let result = self
-                .idempotency
-                .execute(
-                    "generate-commit-message",
-                    request_id,
-                    &idempotency_payload,
-                    || async {
+            let result = async {
                     let mut subscription = runtime_context.event_stream.subscribe().await?;
                     let task = runtime_context
                         .provider
@@ -988,16 +1073,16 @@ impl CodeAgentRuntime {
                             .unsubscribe_task(&task_id, &operation),
                     )
                     .await;
-                        generated.map(Value::String)
-                    },
-                )
+                    generated.map(Value::String)
+                }
                 .await?;
             let message = result
                 .as_str()
                 .ok_or_else(|| generation_error("Cached commit message is invalid"))?
                 .to_owned();
             response(message, request.expected_snapshot.as_str())
-        }
+            },
+        )
         .await
     }
 
@@ -1052,12 +1137,19 @@ impl CodeAgentRuntime {
         root_path: &str,
         name: &str,
     ) -> Result<Project, CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports
-            .repository
-            .register_project(root_path, name, self.ports.clock.now(), &context)
-            .await
+        let payload = json!({ "name": name, "rootPath": root_path });
+        self.run_idempotent(
+            &["add-project"],
+            request_id,
+            &payload,
+            |operation| async move {
+                self.ports
+                    .repository
+                    .register_project(root_path, name, self.ports.clock.now(), &operation)
+                    .await
+            },
+        )
+        .await
     }
 
     /// 原子替换全部用户 Project 顺序。
@@ -1066,12 +1158,20 @@ impl CodeAgentRuntime {
         request_id: &str,
         project_ids: &[ProjectId],
     ) -> Result<Vec<Project>, CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports
-            .repository
-            .reorder_projects(project_ids, &context)
-            .await
+        let payload = serde_json::to_value(project_ids)
+            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+        self.run_idempotent(
+            &["reorder-projects"],
+            request_id,
+            &payload,
+            |operation| async move {
+                self.ports
+                    .repository
+                    .reorder_projects(project_ids, &operation)
+                    .await
+            },
+        )
+        .await
     }
 
     /// 重命名用户 Project。
@@ -1081,12 +1181,19 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
         name: &str,
     ) -> Result<Project, CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports
-            .repository
-            .rename_project(project_id, name, &context)
-            .await
+        let payload = json!({ "name": name });
+        self.run_idempotent(
+            &["rename-project", project_id.as_str()],
+            request_id,
+            &payload,
+            |operation| async move {
+                self.ports
+                    .repository
+                    .rename_project(project_id, name, &operation)
+                    .await
+            },
+        )
+        .await
     }
 
     /// 删除用户 Project 本地注册信息及其受管附件。
@@ -1095,35 +1202,35 @@ impl CodeAgentRuntime {
         request_id: &str,
         project_id: &ProjectId,
     ) -> Result<(), CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-        if let Some(runtime_context) = self
-            .project_contexts
-            .lock()
-            .await
-            .remove(project_id)
-            .and_then(|cell| cell.get().cloned())
-        {
-            runtime_context.close().await?;
-            self.ports
-                .provider
-                .release_project(project_id, &context)
-                .await?;
-        }
-
-        match self
-            .ports
-            .repository
-            .remove_project(project_id, &context)
-            .await
-        {
-            Ok(()) => {
+        self.run_idempotent(
+            &["remove-project", project_id.as_str()],
+            request_id,
+            &json!({}),
+            |operation| async move {
+                if let Some(runtime_context) = self
+                    .project_contexts
+                    .lock()
+                    .await
+                    .remove(project_id)
+                    .and_then(|cell| cell.get().cloned())
+                {
+                    runtime_context.close().await?;
+                    self.ports
+                        .provider
+                        .release_project(project_id, &operation)
+                        .await?;
+                }
+                self.ports
+                    .repository
+                    .remove_project(project_id, &operation)
+                    .await?;
                 self.ports
                     .attachment
-                    .release_project(project_id, &context)
+                    .release_project(project_id, &operation)
                     .await
-            }
-            Err(error) => Err(error),
-        }
+            },
+        )
+        .await
     }
 
     /// 读取持久化全局设置。
@@ -1142,12 +1249,20 @@ impl CodeAgentRuntime {
         request_id: &str,
         settings: &AgentGlobalSettings,
     ) -> Result<AgentGlobalSettings, CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports
-            .repository
-            .write_global_settings(settings, self.ports.clock.now(), &context)
-            .await
+        let payload = serde_json::to_value(settings)
+            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+        self.run_idempotent(
+            &["update-global-settings"],
+            request_id,
+            &payload,
+            |operation| async move {
+                self.ports
+                    .repository
+                    .write_global_settings(settings, self.ports.clock.now(), &operation)
+                    .await
+            },
+        )
+        .await
     }
 
     /// 读取 Project 默认设置。
@@ -1171,12 +1286,25 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
         settings: &AgentProjectDefaults,
     ) -> Result<AgentProjectDefaults, CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports
-            .repository
-            .write_project_defaults(project_id, settings, self.ports.clock.now(), &context)
-            .await
+        let payload = serde_json::to_value(settings)
+            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+        self.run_idempotent(
+            &["update-project-defaults", project_id.as_str()],
+            request_id,
+            &payload,
+            |operation| async move {
+                self.ports
+                    .repository
+                    .write_project_defaults(
+                        project_id,
+                        settings,
+                        self.ports.clock.now(),
+                        &operation,
+                    )
+                    .await
+            },
+        )
+        .await
     }
 
     /// 读取 Task 有效设置。
@@ -1200,18 +1328,30 @@ impl CodeAgentRuntime {
         task_id: &TaskId,
         settings: &AgentTaskSettings,
     ) -> Result<AgentTaskSettings, CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports
-            .repository
-            .write_task_settings(
-                project_id,
-                task_id,
-                settings,
-                self.ports.clock.now(),
-                &context,
-            )
-            .await
+        let payload = serde_json::to_value(settings)
+            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+        self.run_idempotent(
+            &[
+                "update-task-settings",
+                project_id.as_str(),
+                task_id.as_str(),
+            ],
+            request_id,
+            &payload,
+            |operation| async move {
+                self.ports
+                    .repository
+                    .write_task_settings(
+                        project_id,
+                        task_id,
+                        settings,
+                        self.ports.clock.now(),
+                        &operation,
+                    )
+                    .await
+            },
+        )
+        .await
     }
 
     /// 读取 Provider connection 持久化记录。
@@ -1311,12 +1451,19 @@ impl CodeAgentRuntime {
         app_id: &str,
         path: Option<&str>,
     ) -> Result<Value, CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports
-            .file
-            .open_project_path(project_id, app_id, path, &context)
-            .await
+        let payload = json!({ "appId": app_id, "path": path });
+        self.run_idempotent(
+            &["open-project", project_id.as_str()],
+            request_id,
+            &payload,
+            |operation| async move {
+                self.ports
+                    .file
+                    .open_project_path(project_id, app_id, path, &operation)
+                    .await
+            },
+        )
+        .await
     }
 
     /// 保存 raw IPC 上传的附件。
@@ -1329,12 +1476,26 @@ impl CodeAgentRuntime {
         name: &str,
         bytes: Vec<u8>,
     ) -> Result<AgentAttachment, CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports
-            .attachment
-            .upload(project_id, kind, media_type, name, bytes, &context)
-            .await
+        let content_hash = format!("{:x}", Sha256::digest(&bytes));
+        let payload = json!({
+            "contentHash": content_hash,
+            "kind": kind,
+            "mediaType": media_type,
+            "name": name,
+            "size": bytes.len(),
+        });
+        self.run_idempotent(
+            &["upload-attachment", project_id.as_str()],
+            request_id,
+            &payload,
+            |operation| async move {
+                self.ports
+                    .attachment
+                    .upload(project_id, kind, media_type, name, bytes, &operation)
+                    .await
+            },
+        )
+        .await
     }
 
     /// 将宿主普通文件复制到附件受管目录。
@@ -1345,12 +1506,19 @@ impl CodeAgentRuntime {
         kind: AgentAttachmentKind,
         path: &str,
     ) -> Result<AgentAttachment, CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports
-            .attachment
-            .import_host(project_id, kind, path, &context)
-            .await
+        let payload = json!({ "kind": kind, "path": path });
+        self.run_idempotent(
+            &["import-host-attachment", project_id.as_str()],
+            request_id,
+            &payload,
+            |operation| async move {
+                self.ports
+                    .attachment
+                    .import_host(project_id, kind, path, &operation)
+                    .await
+            },
+        )
+        .await
     }
 
     /// 读取待提交 Project 附件字节。
@@ -1412,12 +1580,23 @@ impl CodeAgentRuntime {
         task_id: &TaskId,
         attachment_id: &str,
     ) -> Result<(), CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports
-            .attachment
-            .open(project_id, task_id, attachment_id, &context)
-            .await
+        self.run_idempotent(
+            &[
+                "open-task-attachment",
+                project_id.as_str(),
+                task_id.as_str(),
+                attachment_id,
+            ],
+            request_id,
+            &json!({}),
+            |operation| async move {
+                self.ports
+                    .attachment
+                    .open(project_id, task_id, attachment_id, &operation)
+                    .await
+            },
+        )
+        .await
     }
 
     /// 读取受检 Project 图片字节。
@@ -1497,12 +1676,19 @@ impl CodeAgentRuntime {
         branch: &str,
         expected_snapshot: &str,
     ) -> Result<Value, CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports
-            .git
-            .switch_branch(project_id, branch, expected_snapshot, &context)
-            .await
+        let payload = json!({ "branch": branch, "expectedSnapshot": expected_snapshot });
+        self.run_idempotent(
+            &["switch-project-branch", project_id.as_str()],
+            request_id,
+            &payload,
+            |operation| async move {
+                self.ports
+                    .git
+                    .switch_branch(project_id, branch, expected_snapshot, &operation)
+                    .await
+            },
+        )
+        .await
     }
 
     /// 创建 Git 分支。
@@ -1513,12 +1699,19 @@ impl CodeAgentRuntime {
         branch: &str,
         expected_snapshot: &str,
     ) -> Result<Value, CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports
-            .git
-            .create_branch(project_id, branch, expected_snapshot, &context)
-            .await
+        let payload = json!({ "branch": branch, "expectedSnapshot": expected_snapshot });
+        self.run_idempotent(
+            &["create-project-branch", project_id.as_str()],
+            request_id,
+            &payload,
+            |operation| async move {
+                self.ports
+                    .git
+                    .create_branch(project_id, branch, expected_snapshot, &operation)
+                    .await
+            },
+        )
+        .await
     }
 
     /// 提交选定 Git 文件。
@@ -1528,9 +1721,13 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
         request: &Value,
     ) -> Result<Value, CodeAgentError> {
-        let context = self.begin_operation(request_id).await?;
-
-        self.ports.git.commit(project_id, request, &context).await
+        self.run_idempotent(
+            &["commit-project-changes", project_id.as_str()],
+            request_id,
+            request,
+            |operation| async move { self.ports.git.commit(project_id, request, &operation).await },
+        )
+        .await
     }
 
     /// 停止接收、通知取消并有界等待所有受跟踪任务。
