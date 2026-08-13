@@ -2,17 +2,18 @@
 
 ## 包职责
 
-- `src/cli.ts`：唯一公开 CLI 入口，只负责命令解析、配置装配和进程退出码。
-- `packages/server`：Fastify 插件、HTTP/WebSocket、持久化适配和 Database Worker。
-- `packages/provider-codex`：Codex Binary 定位、App Server 子进程、JSONL/RPC 和事件映射。
-- `packages/core`：Provider 接口、领域状态机和用例；不得导入 Fastify、SQLite 或 Codex 实现。
+- `apps/node-cli/src/cli.ts`：唯一公开 CLI 入口，只负责命令解析、Rust Engine/Server 装配和进程退出码。
+- `packages/server`：只包含 Fastify、HTTP/WebSocket、access control、static files 和 Delivery serialization。
+- `packages/engine-node`：N-API loader、Codex binary 定位和 Node Engine facade。
+- `crates/core`、`crates/runtime`、`crates/provider-codex`、`crates/platform`：唯一领域、Provider、SQLite、Git、文件和附件实现。
 - `packages/protocol`：Provider 无关的 Schema、类型和 API 版本。
 
 ## 规则
 
 - Fastify 路由只做 Schema 校验、身份与 Project 校验、用例调用和响应映射。
 - `packages/server/src/app.ts` 只装配 Fastify、共享资源、根级 Access Hook、错误处理和领域路由；HTTP/WebSocket 路由按 Access、Runtime、Project、Task、Turn、Event 领域放入 `routes/*-routes.ts` 插件。插件通过显式 `ServerRouteContext` 获取依赖，不自行关闭共享资源，也不引入字符串 Service Locator。
-- `packages/provider-codex/src/agent-provider.ts` 只编排 RPC 与 Provider 生命周期；无状态的 Codex 协议转换放入纯映射模块，Task 运行状态、Pending Request 终态与定时器、Runtime Owner 分别由单一对象维护，禁止在 Provider 中复制同类 Map。
+- `packages/server` 只接收 `CodeAgentEngine`，不得重新引入 TypeScript Repository、Provider、SQLite、Git、文件、附件、幂等或事件实现。
+- `apps/node-cli` 是 Node composition root；根 `package.json` 只负责编排，不能恢复公开 `bin`、`files` 或生产 dependencies。
 - Project Git 状态只通过固定的只读端点暴露，不接受浏览器传入的命令或文件路径；优先读取已配置 Project 根目录并同时返回当前分支、当前分支优先的去重本地分支切换候选和本地/远端基础分支候选，远端默认分支可解析时必须排在基础分支首位。根目录不是 Git 仓库时仅聚合其直属子目录中的 Git 仓库，以子目录名作为变更路径前缀，并返回空分支上下文。
 - Project Git 历史只通过固定的只读分页端点读取已配置根目录；根仓库不接受仓库参数，非根仓库只允许选择最新枚举出的直属 Git 子目录。历史命令固定以所选仓库当前 `HEAD` 为起点，不使用 `--all` 或接受其他分支名称；每次响应必须从同一仓库目录读取并返回该仓库可空的当前分支。响应返回有界子仓库 Tab 列表，每页固定最多 20 条提交和下一页游标，不跨子仓库混合记录，也不暴露宿主绝对路径。历史命令必须复用受控 `simple-git` Adapter，并使用固定参数数组与 NUL 字段分隔解析。
 - Git 提交审核只接受历史响应中的 40 至 64 位十六进制 SHA、最新枚举的仓库和严格 Project 相对路径。提交文件每页最多返回 `100` 条；单文件 Diff 按选择读取，响应最多保留前 `512 KiB` UTF-8 内容并返回截断状态。文件清单与 Diff 命令必须使用固定参数数组、`--no-ext-diff`、`--no-textconv` 和 `--no-renames`，不得接受任意 revision、pathspec 或 Git 参数。

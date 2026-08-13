@@ -177,14 +177,13 @@ overrides:
 importers:
 
   .:
-    dependencies:
-      '@openai/codex':
-        specifier: 'catalog:'
-        version: 0.147.0
     devDependencies:
       '@eslint/js':
         specifier: 'catalog:'
         version: 10.0.1(eslint@10.7.0(jiti@2.7.0)(supports-color@7.2.0))
+      '@openai/codex':
+        specifier: 'catalog:'
+        version: 0.147.0
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.61.1
@@ -243,6 +242,25 @@ importers:
       '@tauri-apps/cli':
         specifier: 'catalog:'
         version: 2.11.4
+
+  apps/node-cli:
+    dependencies:
+      '@openai/codex':
+        specifier: 'catalog:'
+        version: 0.147.0
+    devDependencies:
+      '@code-agent/engine-node':
+        specifier: workspace:*
+        version: link:../../packages/engine-node
+      '@code-agent/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@code-agent/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+      tsup:
+        specifier: 'catalog:'
+        version: 8.5.1(jiti@2.7.0)(postcss@8.5.20)(supports-color@7.2.0)(typescript@6.0.2)
 
   apps/web:
     dependencies:
@@ -361,6 +379,14 @@ importers:
       '@sinclair/typebox':
         specifier: 'catalog:'
         version: 0.34.52
+
+  packages/node-binding-darwin-arm64: {}
+
+  packages/node-binding-darwin-x64: {}
+
+  packages/node-binding-linux-x64-gnu: {}
+
+  packages/node-binding-win32-x64-msvc: {}
 
   packages/protocol:
     dependencies:

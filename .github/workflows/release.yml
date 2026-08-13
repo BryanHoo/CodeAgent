@@ -2,8 +2,7 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       tag:
@@ -20,11 +19,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Publish GitHub release and npm package
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: npm
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, target: darwin-arm64 }
+          - { os: macos-15-intel, target: darwin-x64 }
+          - { os: ubuntu-22.04, target: linux-x64-gnu }
+          - { os: windows-2025, target: win32-x64-msvc }
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
@@ -39,34 +45,106 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify release version
         shell: bash
         run: |
           package_version="$(node --print "require('./package.json').version")"
-          if [[ "v${package_version}" != "${RELEASE_TAG}" ]]; then
-            echo "Release tag ${RELEASE_TAG} does not match package version ${package_version}." >&2
+          test "v${package_version}" = "${RELEASE_TAG}" || {
+            echo "Release tag ${RELEASE_TAG} does not match ${package_version}." >&2
             exit 1
-          fi
-          git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}" >/dev/null
-      - name: Run quality gates
-        run: pnpm check
-      - name: Publish with provenance
+          }
+          pnpm run release:version:check
+      - name: Build and test target artifacts
+        run: pnpm build && pnpm run package:check && pnpm --filter @code-agent/desktop build && pnpm run desktop:artifact:check
+      - name: Pack npm artifacts
         shell: bash
         run: |
-          package_name="$(node --print "require('./package.json').name")"
-          package_version="$(node --print "require('./package.json').version")"
-          if npm view "${package_name}@${package_version}" version --json >/dev/null 2>&1; then
-            echo "${package_name}@${package_version} is already published; skipping pnpm publish."
-          else
-            # pnpm 负责转换 Workspace 协议，npm CLI 负责 Trusted Publisher OIDC 认证。
-            package_tarball="${RUNNER_TEMP}/code-agent-${package_version}.tgz"
-            pnpm pack --out "${package_tarball}"
-            npm publish "${package_tarball}" --access public --provenance
+          mkdir -p .artifacts
+          pnpm --dir "packages/node-binding-${{ matrix.target }}" pack --pack-destination ../../.artifacts
+          if [[ "${{ matrix.target }}" = "linux-x64-gnu" ]]; then
+            pnpm --dir apps/node-cli pack --pack-destination ../../.artifacts
           fi
-      - name: Create GitHub release
-        run: gh release create "${RELEASE_TAG}" --generate-notes --title "CodeAgent ${RELEASE_TAG}" --verify-tag
+          tar -czf ".artifacts/code-agent-desktop-${{ matrix.target }}.tar.gz" -C target/release/bundle .
+      - name: Upload npm artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: npm-${{ matrix.target }}
+          path: .artifacts/*.tgz
+          if-no-files-found: error
+          compression-level: 0
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: desktop-${{ matrix.target }}
+          path: .artifacts/code-agent-desktop-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish verified artifacts
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Download npm artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: npm-*
+          path: .artifacts/npm
+          merge-multiple: true
+      - name: Download desktop artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: desktop-*
+          path: .artifacts/desktop
+          merge-multiple: true
+      - name: Verify complete artifact set
+        shell: bash
+        run: |
+          package_version="${RELEASE_TAG#v}"
+          targets=(darwin-arm64 darwin-x64 linux-x64-gnu win32-x64-msvc)
+          for target in "${targets[@]}"; do
+            test -f ".artifacts/npm/bryanhu-code-agent-${target}-${package_version}.tgz" || exit 1
+          done
+          test -f ".artifacts/npm/bryanhu-code-agent-${package_version}.tgz" || exit 1
+          find .artifacts/npm .artifacts/desktop -type f -print0 | sort -z | xargs -0 shasum -a 256 > .artifacts/SHA256SUMS
+      - name: Publish native packages before the CLI
+        shell: bash
+        run: |
+          package_version="${RELEASE_TAG#v}"
+          for target in darwin-arm64 darwin-x64 linux-x64-gnu win32-x64-msvc; do
+            name="@bryanhu/code-agent-${target}"
+            tarball=".artifacts/npm/bryanhu-code-agent-${target}-${package_version}.tgz"
+            npm view "${name}@${package_version}" version --json >/dev/null 2>&1 || npm publish "${tarball}" --access public --provenance
+          done
+      - name: Publish main CLI package
+        shell: bash
+        run: |
+          package_version="${RELEASE_TAG#v}"
+          npm view "@bryanhu/code-agent@${package_version}" version --json >/dev/null 2>&1 || npm publish ".artifacts/npm/bryanhu-code-agent-${package_version}.tgz" --access public --provenance
+      - name: Create draft GitHub release
+        shell: bash
+        run: >-
+          gh release create "${RELEASE_TAG}"
+          .artifacts/desktop/*.tar.gz .artifacts/SHA256SUMS
+          --draft --generate-notes --title "CodeAgent ${RELEASE_TAG}" --verify-tag
         env:
           GH_TOKEN: ${{ github.token }}

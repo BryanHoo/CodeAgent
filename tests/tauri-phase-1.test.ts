@@ -70,8 +70,11 @@ describe("Tauri Phase 1 repository contract", () => {
       scripts: Record<string, string>;
     };
     const rootPackage = readRepositoryJson("package.json") as {
-      files: string[];
+      private: boolean;
       scripts: Record<string, string>;
+    };
+    const cliPackage = readRepositoryJson("apps/node-cli/package.json") as {
+      files: string[];
     };
     const tauriConfig = readRepositoryJson("apps/desktop/src-tauri/tauri.conf.json") as {
       build: { devUrl: string; frontendDist: string };
@@ -98,12 +101,7 @@ describe("Tauri Phase 1 repository contract", () => {
     });
     expect(rootPackage.scripts["check:rust"]).toContain("cargo check --workspace --locked");
     expect(rootPackage.scripts["build"]).not.toContain("build:desktop");
-    expect(rootPackage.files).toEqual([
-      "dist",
-      "README.md",
-      "README.zh-CN.md",
-      "CHANGELOG.md",
-      "LICENSE",
-    ]);
+    expect(rootPackage.private).toBe(true);
+    expect(cliPackage.files).toEqual(["dist"]);
   });
 });

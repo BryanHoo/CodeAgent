@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./tsconfig.node.json" },
+    { "path": "./apps/node-cli" },
     { "path": "./packages/protocol" },
     { "path": "./packages/engine-node" },
     { "path": "./packages/server" },

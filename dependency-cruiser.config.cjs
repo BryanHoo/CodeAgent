@@ -20,13 +20,13 @@ module.exports = {
       name: "protocol-is-independent",
       severity: "error",
       from: { path: "^packages/protocol/src" },
-      to: { path: "^(packages/(engine-node|server|client)|apps/web|src)" },
+      to: { path: "^(packages/(engine-node|server|client)|apps/(node-cli|web))" },
     },
     {
       name: "engine-node-does-not-depend-on-delivery",
       severity: "error",
       from: { path: "^packages/engine-node/src" },
-      to: { path: "^(packages/(server|client)|apps/web|src)" },
+      to: { path: "^(packages/(server|client)|apps/(node-cli|web))" },
     },
     {
       name: "client-is-independent-from-server-runtime",

@@ -14,9 +14,18 @@ const sourceName =
       ? "libcode_agent_node_binding.dylib"
       : "libcode_agent_node_binding.so";
 const source = resolve(root, "target", profile, sourceName);
+const nativeTarget = new Map([
+  ["darwin-arm64", "darwin-arm64"],
+  ["darwin-x64", "darwin-x64"],
+  ["linux-x64", "linux-x64-gnu"],
+  ["win32-x64", "win32-x64-msvc"],
+]).get(`${process.platform}-${process.arch}`);
+if (nativeTarget === undefined) {
+  throw new Error(`Unsupported native build target: ${process.platform}-${process.arch}`);
+}
 const destinations = [
   resolve(root, "packages/engine-node/native/code-agent-node-binding.node"),
-  resolve(root, "dist/native/code-agent-node-binding.node"),
+  resolve(root, `packages/node-binding-${nativeTarget}/code-agent-node-binding.node`),
 ];
 
 // Cargo 负责增量编译，脚本只执行确定性的扩展名转换，不扫描 target 目录。

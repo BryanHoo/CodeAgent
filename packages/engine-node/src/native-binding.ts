@@ -11,8 +11,10 @@ export interface NativeBinding {
 
 export interface NativeBindingLoaderOptions {
   readonly addonPath?: string;
+  readonly arch?: NodeJS.Architecture;
   readonly binding?: NativeBinding;
   readonly load?: (path: string) => unknown;
+  readonly platform?: NodeJS.Platform;
 }
 
 export class NativeBindingLoadError extends Error {
@@ -27,15 +29,28 @@ export class NativeBindingLoadError extends Error {
   }
 }
 
-const sourceAddonPath = fileURLToPath(
-  new URL("../native/code-agent-node-binding.node", import.meta.url),
-);
-const bundledAddonPath = fileURLToPath(
-  new URL("./native/code-agent-node-binding.node", import.meta.url),
-);
+const developmentAddonPaths = [
+  fileURLToPath(new URL("../native/code-agent-node-binding.node", import.meta.url)),
+  fileURLToPath(new URL("./native/code-agent-node-binding.node", import.meta.url)),
+] as const;
+const nativePackages = new Map<string, string>([
+  ["darwin-arm64", "@bryanhu/code-agent-darwin-arm64"],
+  ["darwin-x64", "@bryanhu/code-agent-darwin-x64"],
+  ["linux-x64", "@bryanhu/code-agent-linux-x64-gnu"],
+  ["win32-x64", "@bryanhu/code-agent-win32-x64-msvc"],
+]);
 
-// 仅检查两个确定位置，兼顾 workspace 源码执行与扁平化发布产物。
-const defaultAddonPath = existsSync(sourceAddonPath) ? sourceAddonPath : bundledAddonPath;
+export function resolveNativeBindingPackage(
+  platform: NodeJS.Platform,
+  arch: NodeJS.Architecture,
+): string {
+  const target = `${platform}-${arch}`;
+  const packageName = nativePackages.get(target);
+  if (packageName === undefined) {
+    throw new Error(`不支持 native addon 平台: ${target}`);
+  }
+  return packageName;
+}
 
 function isNativeBinding(value: unknown): value is NativeBinding {
   return (
@@ -55,15 +70,29 @@ export function loadNativeBinding(options: NativeBindingLoaderOptions = {}): Nat
     return options.binding;
   }
 
-  const addonPath = options.addonPath ?? defaultAddonPath;
   const load = options.load ?? createRequire(import.meta.url);
+  const addonPath =
+    options.addonPath ??
+    resolveNativeBindingPackage(options.platform ?? process.platform, options.arch ?? process.arch);
   try {
     const binding: unknown = load(addonPath);
     if (!isNativeBinding(binding)) {
       throw new TypeError("native addon exports are invalid");
     }
     return binding;
-  } catch (error) {
-    throw new NativeBindingLoadError(addonPath, { cause: error });
+  } catch (packageError) {
+    if (options.addonPath === undefined) {
+      // Workspace 开发构建保留一个确定性回退；发布包不会携带该文件。
+      const developmentAddonPath = developmentAddonPaths.find((path) => existsSync(path));
+      if (developmentAddonPath !== undefined) {
+        try {
+          const binding: unknown = load(developmentAddonPath);
+          if (isNativeBinding(binding)) return binding;
+        } catch (error) {
+          throw new NativeBindingLoadError(developmentAddonPath, { cause: error });
+        }
+      }
+    }
+    throw new NativeBindingLoadError(addonPath, { cause: packageError });
   }
 }

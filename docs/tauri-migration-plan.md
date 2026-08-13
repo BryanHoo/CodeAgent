@@ -46,7 +46,7 @@
 - `packages/server` 同时包含 Fastify Delivery、Runtime 编排、SQLite、Git、文件系统、附件和事件流。
 - `packages/provider-codex` 负责 Codex binary 定位、App Server 子进程和 RPC 映射。
 - `packages/protocol` 的 TypeBox Schema 是 Web、HTTP 和 Agent Event v2 的运行时协议边界。
-- `src/cli-command.ts` 负责 SQLite、Codex Runtime、Fastify、端口、更新、浏览器和关闭顺序的最终装配。
+- `apps/node-cli/src/cli-command.ts` 负责 Rust Engine、Fastify Delivery、端口、更新、浏览器和关闭顺序的最终装配。
 - SQLite 使用 WAL、`foreign_keys=ON`、`synchronous=NORMAL` 和 `busy_timeout=5000`，数据库位于 `$CODEX_HOME/code-agent/state.sqlite3`。
 - Agent Event 已包含 `sessionId`、`sequence`、有界历史、Delta 合并、Checkpoint 和 Snapshot 重同步语义。
 
@@ -328,7 +328,8 @@ Tauri 实现：
 - Phase 5：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-5-codex-provider.md`；持续门禁为 `pnpm run tauri:phase5:check`。
 - Phase 6：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-6-desktop-security.md`；持续门禁为 `pnpm run tauri:phase6:check`。
 - Phase 7：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-7-node-engine.md`；持续门禁为 `pnpm run tauri:phase7:check`。
-- Phase 8 至 Phase 9：待开始。
+- Phase 8：已完成，执行记录见 `.superwork/plans/2026-08-13-tauri-phase-8-release-workspace.md`；持续门禁为 `pnpm run tauri:phase8:check`、`pnpm run package:check` 和 `pnpm run desktop:artifact:check`。
+- Phase 9：待开始。
 
 ### Phase 0：建立基线与技术验证
 
