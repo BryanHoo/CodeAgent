@@ -89,6 +89,35 @@ describe("TauriCodeAgentTransport", () => {
     ]);
   });
 
+  it("maps source file reads to the nested Tauri query contract", async () => {
+    const calls: { command: string; payload: unknown }[] = [];
+    mockIPC((command, payload) => {
+      calls.push({ command, payload });
+      return { content: "export {};", nextCursor: null, path: "src/main.ts" };
+    });
+    const transport = new TauriCodeAgentTransport();
+
+    await transport.request(
+      {
+        input: { cursor: 1024, path: "src/main.ts", projectId: "project-a" },
+        name: "files.source_read",
+        output: {} as never,
+      },
+      { requestId: "source-request" },
+    );
+
+    expect(calls).toEqual([
+      {
+        command: "file_source_read",
+        payload: {
+          projectId: "project-a",
+          query: { cursor: 1024, path: "src/main.ts" },
+          requestId: "source-request",
+        },
+      },
+    ]);
+  });
+
   it("returns a stable error for operations intentionally unsupported on desktop", async () => {
     const transport = new TauriCodeAgentTransport();
 

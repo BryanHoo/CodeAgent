@@ -100,9 +100,11 @@ export class TauriCodeAgentTransport implements CodeAgentTransport {
     const payload =
       operation.name === "pending_requests.resolve" && typeof input === "object" && input !== null
         ? pendingRequestPayload(input as Record<string, unknown>)
-        : typeof input === "object" && input !== null
-          ? input
-          : {};
+        : operation.name === "files.source_read" && typeof input === "object" && input !== null
+          ? sourceReadPayload(input as Record<string, unknown>)
+          : typeof input === "object" && input !== null
+            ? input
+            : {};
     return invoke(command, {
       ...payload,
       ...(context.idempotencyKey === undefined ? {} : { idempotencyKey: context.idempotencyKey }),
@@ -167,6 +169,14 @@ function pendingRequestPayload(input: Record<string, unknown>): Record<string, u
   return {
     input: { ...identity, requestId: input["requestId"] },
     projectId: identity["projectId"],
+  };
+}
+
+function sourceReadPayload(input: Record<string, unknown>): Record<string, unknown> {
+  // Tauri Command 将分页参数作为 SourceQuery 统一反序列化。
+  return {
+    projectId: input["projectId"],
+    query: { cursor: input["cursor"], path: input["path"] },
   };
 }
 
