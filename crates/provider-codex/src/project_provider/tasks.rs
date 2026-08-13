@@ -120,13 +120,21 @@ impl CodexProjectProvider {
         let native_turns = thread["turns"]
             .as_array()
             .ok_or_else(|| CodeAgentError::internal("Codex thread turns are invalid"))?;
-        let turns = map_history_turns(
+        let mut turns = map_history_turns(
             &self.client,
             &self.historical_attachments,
             task_id,
             native_turns,
         )
         .await?;
+        let transcript_skills = self.transcript_skills.read(task_id).await;
+        for turn in &mut turns {
+            if let Some(turn_id) = turn["id"].as_str()
+                && let Some(names) = transcript_skills.get(turn_id)
+            {
+                crate::mapping::message_skills::attach_turn_skills(turn, names);
+            }
+        }
         let mut snapshot = map_task(thread, self.project.id.as_str())?;
         snapshot["turns"] = json!(turns);
         let pending = self.pending.snapshot();

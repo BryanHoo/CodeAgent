@@ -53,6 +53,7 @@ pub(crate) struct CodexProjectProvider {
     subscribers: Mutex<Vec<Subscriber>>,
     task_state: TaskState,
     tasks: Mutex<HashSet<String>>,
+    transcript_skills: Arc<crate::transcript_skills::TranscriptSkillStore>,
 }
 
 impl CodexProjectProvider {
@@ -62,6 +63,7 @@ impl CodexProjectProvider {
         owners: Arc<Mutex<HashMap<String, String>>>,
         goals: Arc<GoalRegistry>,
         reviews: Arc<ReviewRegistry>,
+        transcript_skills: Arc<crate::transcript_skills::TranscriptSkillStore>,
     ) -> Self {
         Self {
             client,
@@ -81,6 +83,7 @@ impl CodexProjectProvider {
             subscribers: Mutex::new(Vec::new()),
             task_state: TaskState::default(),
             tasks: Mutex::new(HashSet::new()),
+            transcript_skills,
         }
     }
 

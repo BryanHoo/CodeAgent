@@ -41,6 +41,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            let codex_home = codex_home(app)?;
             let data_root = desktop_data_root(app)?;
             std::fs::create_dir_all(&data_root)?;
             let temporary_project_root = data_root.join("temporary-workspace");
@@ -97,6 +98,7 @@ pub fn run() {
                 supervisor,
                 env!("CARGO_PKG_VERSION").to_owned(),
                 executable_path,
+                codex_home,
             ));
             Ok(())
         })
@@ -214,6 +216,14 @@ fn desktop_data_root<R: tauri::Runtime>(
         return Ok(PathBuf::from(codex_home).join("code-agent"));
     }
     Ok(app.path().app_data_dir()?.join("code-agent"))
+}
+
+fn codex_home<R: tauri::Runtime>(
+    app: &tauri::App<R>,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    Ok(std::env::var_os("CODEX_HOME")
+        .map(PathBuf::from)
+        .unwrap_or(app.path().home_dir()?.join(".codex")))
 }
 
 #[cfg(test)]

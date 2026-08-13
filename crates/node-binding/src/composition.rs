@@ -93,9 +93,10 @@ pub async fn open_runtime(options: NodeEngineOptions) -> napi::Result<NodeRuntim
     let incoming = process
         .take_incoming()
         .ok_or_else(|| napi::Error::from_reason("Codex incoming RPC stream is unavailable"))?;
-    let provider: Arc<dyn ProviderPort> = Arc::new(CodexRuntimeProvider::new(
+    let provider: Arc<dyn ProviderPort> = Arc::new(CodexRuntimeProvider::new_with_codex_home(
         process.client().clone(),
         incoming,
+        codex_home,
     ));
     let host = Arc::new(NodeHostPorts {
         version: options.app_version,

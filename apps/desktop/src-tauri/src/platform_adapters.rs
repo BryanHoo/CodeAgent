@@ -217,6 +217,7 @@ pub async fn start_codex_supervisor(
     supervisor: Arc<CodexSupervisor>,
     app_version: String,
     executable_path: PathBuf,
+    codex_home: PathBuf,
 ) {
     let binary = match locate_desktop_codex(&executable_path) {
         Ok(binary) => binary,
@@ -228,6 +229,10 @@ pub async fn start_codex_supervisor(
     let process = match start_codex_app_server(CodexAppServerOptions {
         app_version,
         binary_path: binary,
+        env_overrides: vec![(
+            "CODEX_HOME".to_string(),
+            codex_home.to_string_lossy().into_owned(),
+        )],
         ..CodexAppServerOptions::default()
     })
     .await
@@ -243,9 +248,10 @@ pub async fn start_codex_supervisor(
         let _ = process.close().await;
         return;
     };
-    let provider: Arc<dyn ProviderPort> = Arc::new(CodexRuntimeProvider::new(
+    let provider: Arc<dyn ProviderPort> = Arc::new(CodexRuntimeProvider::new_with_codex_home(
         process.client().clone(),
         incoming,
+        codex_home,
     ));
     provider_slot.install(provider);
     supervisor.set(process.clone()).await;

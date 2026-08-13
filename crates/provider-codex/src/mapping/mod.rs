@@ -3,6 +3,7 @@
 mod common;
 mod events;
 mod items;
+pub(crate) mod message_skills;
 mod server_requests;
 mod turns;
 

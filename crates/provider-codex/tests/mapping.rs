@@ -128,6 +128,57 @@ fn item_and_turn_mapping_should_preserve_domain_shape() {
 }
 
 #[test]
+fn user_message_mapping_should_preserve_skills_without_native_paths() {
+    let item = map_codex_item(&json!({
+        "content": [
+            { "name": "frontend-design", "path": "/private/SKILL.md", "type": "skill" },
+            { "text": "检查界面", "type": "text" }
+        ],
+        "id": "message-skill",
+        "type": "userMessage"
+    }))
+    .expect("user message should map");
+
+    assert_eq!(item["skills"], json!([{ "name": "frontend-design" }]));
+    assert_eq!(item["text"], "检查界面");
+    assert!(!item.to_string().contains("/private/SKILL.md"));
+}
+
+#[test]
+fn turn_mapping_should_merge_expanded_skill_messages() {
+    let turn = map_codex_turn(&json!({
+        "completedAt": 1_753_228_830,
+        "error": null,
+        "id": "turn-skill",
+        "items": [{
+            "content": [{
+                "text": "$superwork:superwork-start $superwork:superwork-start 根据项目需求继续实现。",
+                "type": "text"
+            }],
+            "id": "user-skill",
+            "type": "userMessage"
+        }, {
+            "content": [{
+                "text": "<skill>\n<name>superwork:superwork-start</name>\n<path>/private/SKILL.md</path>\n执行 Superwork 流程。\n</skill>",
+                "type": "text"
+            }],
+            "id": "expanded-skill",
+            "type": "userMessage"
+        }],
+        "startedAt": 1_753_228_800,
+        "status": "completed"
+    }))
+    .expect("turn should map");
+
+    assert_eq!(turn["items"].as_array().map(Vec::len), Some(1));
+    assert_eq!(
+        turn["items"][0]["skills"],
+        json!([{ "name": "superwork:superwork-start" }])
+    );
+    assert_eq!(turn["items"][0]["text"], "根据项目需求继续实现。");
+}
+
+#[test]
 fn collaboration_item_should_preserve_subagent_contract() {
     let item = map_codex_item(&json!({
         "agentsStates": {

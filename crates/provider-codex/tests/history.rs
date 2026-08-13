@@ -85,6 +85,161 @@ async fn read_frame(reader: &mut BufReader<tokio::io::ReadHalf<DuplexStream>>) -
     serde_json::from_str(&line).expect("valid frame")
 }
 
+#[tokio::test]
+async fn historical_snapshot_should_restore_skills_from_rollout_transcript() {
+    let unique = format!("code-agent-transcript-{}", std::process::id());
+    let codex_home = std::env::temp_dir().join(unique);
+    let session_directory = codex_home.join("sessions/2026/08/13");
+    std::fs::create_dir_all(&session_directory).expect("create session directory");
+    let task_id = "task-transcript";
+    let transcript_path = session_directory.join(format!("rollout-2026-08-13-{task_id}.jsonl"));
+    let transcript_entry = json!({
+        "payload": {
+            "content": [{
+                "text": "<skill>\n<name>superwork:superwork-start</name>\n<path>/private/SKILL.md</path>\nSkill instructions\n</skill>",
+                "type": "input_text"
+            }],
+            "internal_chat_message_metadata_passthrough": { "turn_id": "turn-1" },
+            "role": "user",
+            "type": "message"
+        },
+        "type": "response_item"
+    });
+    std::fs::write(&transcript_path, format!("{transcript_entry}\n")).expect("write transcript");
+
+    let (client_stream, server) = duplex(128 * 1024);
+    let (read, write) = tokio::io::split(client_stream);
+    let (client, incoming, _workers) =
+        JsonlRpcClient::spawn(read, write, JsonlRpcClientOptions::default());
+    let runtime = Arc::new(CodexRuntimeProvider::new_with_codex_home(
+        client,
+        incoming,
+        codex_home.clone(),
+    ));
+    let provider = runtime
+        .for_project(project(), &PortRequestContext::new("project"))
+        .await
+        .expect("project provider");
+    let (read, mut write) = tokio::io::split(server);
+    let mut read = BufReader::new(read);
+    let scenario = tokio::spawn(async move {
+        let request = read_frame(&mut read).await;
+        respond(
+            &mut write,
+            &request,
+            json!({ "thread": {
+                "createdAt": 1_754_956_800,
+                "cwd": "/workspace",
+                "id": task_id,
+                "name": null,
+                "preview": "Skill task",
+                "section": null,
+                "turns": [{
+                    "completedAt": 1_754_956_802,
+                    "error": null,
+                    "id": "turn-1",
+                    "items": [{
+                        "content": [{ "text": "$superwork:superwork-start 继续实现", "type": "text" }],
+                        "id": "message-1",
+                        "type": "userMessage"
+                    }],
+                    "startedAt": 1_754_956_801,
+                    "status": "completed"
+                }],
+                "updatedAt": 1_754_956_802
+            } }),
+        )
+        .await;
+    });
+
+    let snapshot = provider
+        .read_task(task_id, &PortRequestContext::new("read"))
+        .await
+        .expect("read task")
+        .expect("snapshot");
+
+    assert_eq!(
+        snapshot["turns"][0]["items"][0]["skills"],
+        json!([{ "name": "superwork:superwork-start" }])
+    );
+    assert_eq!(snapshot["turns"][0]["items"][0]["text"], "继续实现");
+    scenario.await.expect("scenario");
+    std::fs::remove_dir_all(codex_home).expect("remove transcript fixture");
+}
+
+#[tokio::test]
+async fn historical_snapshot_should_merge_expanded_skill_messages_without_transcript() {
+    let (runtime, server) = runtime();
+    let provider = runtime
+        .for_project(project(), &PortRequestContext::new("project"))
+        .await
+        .expect("project provider");
+    let (read, mut write) = tokio::io::split(server);
+    let mut read = BufReader::new(read);
+    let scenario = tokio::spawn(async move {
+        let request = read_frame(&mut read).await;
+        respond(
+            &mut write,
+            &request,
+            json!({ "thread": {
+                "createdAt": 1_754_956_800,
+                "cwd": "/workspace",
+                "id": "task-1",
+                "name": null,
+                "preview": "Skill task",
+                "section": null,
+                "turns": [{
+                    "completedAt": 1_754_956_802,
+                    "error": null,
+                    "id": "turn-1",
+                    "items": [{
+                        "content": [{
+                            "text": "$superwork:superwork-start $superwork:superwork-start 继续实现",
+                            "type": "text"
+                        }],
+                        "id": "message-1",
+                        "type": "userMessage"
+                    }, {
+                        "content": [{
+                            "text": "<skill>\n<name>superwork:superwork-start</name>\n<path>/private/SKILL.md</path>\nSkill instructions\n</skill>",
+                            "type": "text"
+                        }],
+                        "id": "message-skill",
+                        "type": "userMessage"
+                    }, {
+                        "id": "assistant-1",
+                        "phase": "final_answer",
+                        "text": "完成",
+                        "type": "agentMessage"
+                    }],
+                    "startedAt": 1_754_956_801,
+                    "status": "completed"
+                }],
+                "updatedAt": 1_754_956_802
+            } }),
+        )
+        .await;
+    });
+
+    let snapshot = provider
+        .read_task("task-1", &PortRequestContext::new("read"))
+        .await
+        .expect("read task")
+        .expect("snapshot");
+
+    assert_eq!(
+        snapshot["turns"][0]["items"].as_array().map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(
+        snapshot["turns"][0]["items"][0]["skills"],
+        json!([{ "name": "superwork:superwork-start" }])
+    );
+    assert_eq!(snapshot["turns"][0]["items"][0]["text"], "继续实现");
+    assert_eq!(snapshot["turns"][0]["items"][1]["text"], "完成");
+    scenario.await.expect("scenario");
+}
+
 async fn respond(writer: &mut tokio::io::WriteHalf<DuplexStream>, request: &Value, result: Value) {
     writer
         .write_all(format!("{}\n", json!({ "id": request["id"], "result": result })).as_bytes())
