@@ -14,8 +14,8 @@ use code_agent_core::{
 };
 use code_agent_protocol::{
     AgentAttachment, AgentBackgroundTerminalPage, AgentCapabilities, AgentGlobalSettings,
-    AgentMcpServerPage, AgentModelPage, AgentSkillPage, AgentTaskPage, Project, ProjectId,
-    RawProviderEvent, TaskId,
+    AgentMcpServerPage, AgentModelPage, AgentProviderConnectionRecord, AgentSkillPage,
+    AgentTaskPage, Project, ProjectId, RawProviderEvent, TaskId,
 };
 use code_agent_runtime::{CodeAgentRuntime, CodeAgentRuntimeBuilder, RuntimeOptions};
 use serde_json::{Value, json};
@@ -27,6 +27,7 @@ struct MutationCounters {
     fork: AtomicUsize,
     global_settings: AtomicUsize,
     login: AtomicUsize,
+    provider_connection: AtomicUsize,
     review: AtomicUsize,
 }
 
@@ -65,6 +66,17 @@ impl RepositoryPort for FakePorts {
     ) -> Result<AgentGlobalSettings, CodeAgentError> {
         self.counters.global_settings.fetch_add(1, Ordering::SeqCst);
         Ok(settings.clone())
+    }
+
+    async fn write_provider_connection(
+        &self,
+        record: &AgentProviderConnectionRecord,
+        _context: &PortRequestContext,
+    ) -> Result<AgentProviderConnectionRecord, CodeAgentError> {
+        self.counters
+            .provider_connection
+            .fetch_add(1, Ordering::SeqCst);
+        Ok(record.clone())
     }
 }
 
@@ -449,6 +461,7 @@ async fn representative_mutation_retries_should_execute_each_port_once() {
 
     assert_eq!(counters.global_settings.load(Ordering::SeqCst), 1);
     assert_eq!(counters.login.load(Ordering::SeqCst), 1);
+    assert_eq!(counters.provider_connection.load(Ordering::SeqCst), 1);
     assert_eq!(counters.review.load(Ordering::SeqCst), 1);
     assert_eq!(counters.commit.load(Ordering::SeqCst), 1);
 }
