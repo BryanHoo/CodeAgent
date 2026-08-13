@@ -9,7 +9,9 @@ use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
-use crate::project_tree::{read_directory_entries, read_search_entries};
+use crate::host_file_browser::browse_directory;
+use crate::project_file_index_cache::ProjectFileIndexCache;
+use crate::project_tree::{read_directory_entries, validate_directory_path};
 use crate::{CanonicalPathPolicy, PlatformDatabase, PlatformError};
 
 const MAX_SOURCE_BYTES: usize = 256 * 1024;
@@ -38,12 +40,16 @@ pub struct PlatformFileService {
 #[derive(Clone)]
 pub struct PlatformFilePort {
     database: PlatformDatabase,
+    file_indexes: ProjectFileIndexCache,
 }
 
 impl PlatformFilePort {
     #[must_use]
     pub fn new(database: PlatformDatabase) -> Self {
-        Self { database }
+        Self {
+            database,
+            file_indexes: ProjectFileIndexCache::new(),
+        }
     }
 
     async fn service(&self, project_id: &ProjectId) -> Result<PlatformFileService, CodeAgentError> {
@@ -196,6 +202,7 @@ impl FilePort for PlatformFilePort {
     ) -> Result<Value, CodeAgentError> {
         ensure_active(context)?;
         let service = self.service(project_id).await?;
+        validate_directory_path(path).map_err(map_error)?;
         let directory = match path {
             Some(path) => service
                 .policy
@@ -205,10 +212,12 @@ impl FilePort for PlatformFilePort {
             None => service.policy.root().to_owned(),
         };
         // 文件树按目录懒加载；禁止把整个 Project 一次性序列化给 WebView。
-        let mut entries = read_directory_entries(service.policy.root(), &directory)
+        let entries = read_directory_entries(service.policy.root(), &directory, context)
             .await
-            .map_err(map_error)?;
-        entries.sort_by(|left, right| left["path"].as_str().cmp(&right["path"].as_str()));
+            .map_err(map_error)?
+            .into_iter()
+            .map(|entry| json!({ "path": entry.path, "type": entry.kind.as_str() }))
+            .collect::<Vec<_>>();
         Ok(json!({ "entries": entries, "path": path }))
     }
 
@@ -220,30 +229,34 @@ impl FilePort for PlatformFilePort {
     ) -> Result<Value, CodeAgentError> {
         ensure_active(context)?;
         let service = self.service(project_id).await?;
-        let mut entries = read_search_entries(service.policy.root())
+        let index = self
+            .file_indexes
+            .get_or_build(project_id.as_str(), service.policy.root(), context)
             .await
             .map_err(map_error)?;
-        let query = query.to_lowercase();
-        entries.retain(|entry| {
-            entry["type"] == "file"
-                && entry["path"]
-                    .as_str()
-                    .is_some_and(|path| path.to_lowercase().contains(&query))
-        });
-        entries.truncate(50);
-        let data = entries
+        let data = index
+            .search(query)
             .into_iter()
-            .map(|entry| {
-                let path = entry["path"].clone();
-                let name = path
-                    .as_str()
-                    .and_then(|path| Path::new(path).file_name())
-                    .and_then(|name| name.to_str())
-                    .unwrap_or_default();
-                json!({ "name": name, "path": path })
-            })
+            .map(|entry| json!({ "name": entry.name, "path": entry.path }))
             .collect::<Vec<_>>();
         Ok(json!({ "data": data }))
+    }
+
+    async fn release_project(
+        &self,
+        project_id: &ProjectId,
+        _context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        self.file_indexes
+            .release_project(project_id.as_str())
+            .await
+            .map_err(map_error)?;
+        Ok(())
+    }
+
+    async fn close(&self) -> Result<(), CodeAgentError> {
+        self.file_indexes.close().await.map_err(map_error)?;
+        Ok(())
     }
 
     async fn browse_directories(
@@ -324,84 +337,6 @@ impl FilePort for PlatformFilePort {
     }
 }
 
-async fn browse_directory(path: Option<&str>, kind: Option<&str>) -> Result<Value, PlatformError> {
-    let requested = path.map(PathBuf::from).unwrap_or_else(home_directory);
-    if !requested.is_absolute()
-        || tokio::fs::symlink_metadata(&requested)
-            .await?
-            .file_type()
-            .is_symlink()
-    {
-        return Err(PlatformError::Worker(
-            "directory path is invalid".to_owned(),
-        ));
-    }
-    let resolved = tokio::fs::canonicalize(requested).await?;
-    if !tokio::fs::metadata(&resolved).await?.is_dir() {
-        return Err(PlatformError::Worker(
-            "directory path is invalid".to_owned(),
-        ));
-    }
-    let mut entries = Vec::new();
-    let mut children = tokio::fs::read_dir(&resolved).await?;
-    while let Some(child) = children.next_entry().await? {
-        let file_type = child.file_type().await?;
-        if file_type.is_symlink() {
-            continue;
-        }
-        let child_path = child.path();
-        if file_type.is_dir() {
-            entries.push(json!({ "name": child.file_name().to_string_lossy(), "path": child_path, "type": "directory" }));
-        } else if file_type.is_file()
-            && kind.is_some_and(|kind| supported_host_file(kind, &child_path))
-        {
-            entries.push(json!({ "name": child.file_name().to_string_lossy(), "path": child_path, "type": "file" }));
-        }
-    }
-    entries.sort_by(|left, right| left["name"].as_str().cmp(&right["name"].as_str()));
-    let parent = resolved
-        .parent()
-        .filter(|parent| *parent != resolved)
-        .map(|parent| parent.to_string_lossy().into_owned());
-    Ok(json!({ "entries": entries, "parentPath": parent, "path": resolved }))
-}
-
-fn supported_host_file(kind: &str, path: &Path) -> bool {
-    let extension = path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    match kind {
-        "image" => matches!(extension.as_str(), "gif" | "jpeg" | "jpg" | "png" | "webp"),
-        "file" => matches!(
-            extension.as_str(),
-            "csv"
-                | "html"
-                | "json"
-                | "md"
-                | "pdf"
-                | "txt"
-                | "xml"
-                | "yaml"
-                | "yml"
-                | "doc"
-                | "docx"
-                | "ppt"
-                | "pptx"
-                | "xls"
-                | "xlsx"
-        ),
-        _ => false,
-    }
-}
-
-fn home_directory() -> PathBuf {
-    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::path::MAIN_SEPARATOR.to_string()))
-}
-
 fn open_capabilities() -> Value {
     #[cfg(target_os = "macos")]
     let (platform, apps) = (
@@ -472,6 +407,11 @@ fn ensure_active(context: &PortRequestContext) -> Result<(), CodeAgentError> {
 
 fn map_error(error: PlatformError) -> CodeAgentError {
     match error {
+        PlatformError::Cancelled => CodeAgentError::new(
+            code_agent_protocol::CodeAgentErrorCode::Cancelled,
+            "operation was cancelled",
+            None,
+        ),
         PlatformError::Worker(message) if message == "project not found" => {
             CodeAgentError::new(CodeAgentErrorCode::NotFound, "project was not found", None)
                 .with_mutation_code(AgentMutationErrorCode::ProjectNotFound)

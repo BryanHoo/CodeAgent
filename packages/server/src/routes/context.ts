@@ -56,6 +56,38 @@ export async function callEngine<T>(action: () => Promise<unknown>): Promise<T> 
   }
 }
 
+export async function callCancelableRead<T>(
+  engine: Pick<CodeAgentEngine, "cancelOperation">,
+  signal: AbortSignal,
+  createRequestId: () => string,
+  action: (requestId: string) => Promise<unknown>,
+): Promise<T> {
+  const requestId = createRequestId();
+  let cancellationRequested = false;
+  let operationStarted = false;
+  let nativeCancelSent = false;
+  const cancelNative = (): void => {
+    if (!operationStarted || nativeCancelSent) return;
+    nativeCancelSent = true;
+    void engine.cancelOperation(requestId).catch(() => undefined);
+  };
+  const cancel = (): void => {
+    cancellationRequested = true;
+    cancelNative();
+  };
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    return await callEngine(() => {
+      const operation = action(requestId);
+      operationStarted = true;
+      if (cancellationRequested || signal.aborted) cancelNative();
+      return operation;
+    });
+  } finally {
+    signal.removeEventListener("abort", cancel);
+  }
+}
+
 function toMutationHttpError(error: NodeEngineError): MutationHttpError {
   const code = error.mutationCode ?? fallbackMutationCode(error.code);
   const policy = mutationPolicies[code];

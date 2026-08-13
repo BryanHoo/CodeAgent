@@ -1,4 +1,10 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -24,12 +30,18 @@ enum ProviderBehavior {
 }
 
 struct FakePorts {
+    file_close_calls: AtomicUsize,
+    file_release_calls: AtomicUsize,
     provider_behavior: ProviderBehavior,
 }
 
 impl FakePorts {
     fn new(provider_behavior: ProviderBehavior) -> Self {
-        Self { provider_behavior }
+        Self {
+            file_close_calls: AtomicUsize::new(0),
+            file_release_calls: AtomicUsize::new(0),
+            provider_behavior,
+        }
     }
 }
 
@@ -149,6 +161,20 @@ impl GitPort for FakePorts {
 
 #[async_trait]
 impl FilePort for FakePorts {
+    async fn release_project(
+        &self,
+        _project_id: &ProjectId,
+        _context: &PortRequestContext,
+    ) -> Result<(), CodeAgentError> {
+        self.file_release_calls.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    async fn close(&self) -> Result<(), CodeAgentError> {
+        self.file_close_calls.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
     async fn read(
         &self,
         _project_id: &ProjectId,
@@ -190,7 +216,11 @@ impl UpdatePort for FakePorts {
 
 fn build_runtime(provider_behavior: ProviderBehavior) -> CodeAgentRuntime {
     let fake = Arc::new(FakePorts::new(provider_behavior));
-    CodeAgentRuntimeBuilder::new(RuntimeOptions {
+    build_runtime_with_ports(fake).0
+}
+
+fn build_runtime_with_ports(fake: Arc<FakePorts>) -> (CodeAgentRuntime, Arc<FakePorts>) {
+    let runtime = CodeAgentRuntimeBuilder::new(RuntimeOptions {
         idempotency_capacity: 4,
         idempotency_ttl: Duration::from_secs(60),
         operation_capacity: 4,
@@ -203,8 +233,9 @@ fn build_runtime(provider_behavior: ProviderBehavior) -> CodeAgentRuntime {
     .file(fake.clone())
     .attachment(fake.clone())
     .clock(fake.clone())
-    .update(fake)
-    .build()
+    .update(fake.clone())
+    .build();
+    (runtime, fake)
 }
 
 #[tokio::test]
@@ -281,6 +312,22 @@ async fn runtime_should_cancel_in_flight_provider_operation() {
         .expect("provider task")
         .expect_err("cancelled operation");
     assert_eq!(error.code(), CodeAgentErrorCode::Cancelled);
+}
+
+#[tokio::test]
+async fn runtime_should_release_and_close_file_port_state() {
+    let fake = Arc::new(FakePorts::new(ProviderBehavior::Succeed));
+    let (runtime, fake) = build_runtime_with_ports(fake);
+    let project_id = ProjectId::try_from("project-1").expect("project id");
+
+    runtime
+        .release_project_context("release-files", &project_id)
+        .await
+        .expect("release project files");
+    runtime.shutdown().await.expect("runtime shutdown");
+
+    assert_eq!(fake.file_release_calls.load(Ordering::Relaxed), 1);
+    assert_eq!(fake.file_close_calls.load(Ordering::Relaxed), 1);
 }
 
 #[tokio::test]

@@ -31,6 +31,8 @@ pub struct DatabaseDiagnostics {
 
 #[derive(Debug, Error)]
 pub enum PlatformError {
+    #[error("operation was cancelled")]
+    Cancelled,
     #[error("database is closed")]
     Closed,
     #[error("database request timed out")]
