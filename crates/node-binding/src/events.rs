@@ -85,6 +85,30 @@ async fn send(callback: &EventCallback, bytes: Vec<u8>) -> bool {
 #[napi]
 impl NodeEngine {
     #[napi]
+    pub async fn event_metrics_get(&self, request_id: String) -> napi::Result<serde_json::Value> {
+        let projects = self
+            .runtime()
+            .event_stream_metrics(&request_id)
+            .await
+            .map_err(crate::errors::to_napi_error)?
+            .into_iter()
+            .map(|(project_id, metrics)| {
+                json!({
+                    "coalescedEvents": metrics.coalesced_events,
+                    "pendingDeltas": metrics.pending_deltas,
+                    "projectId": project_id.as_str(),
+                    "providerEventsReceived": metrics.provider_events_received,
+                    "publishedEvents": metrics.published_events,
+                    "retainedEvents": metrics.retained_events,
+                    "retentionEvictions": metrics.retention_evictions,
+                    "slowSubscribers": metrics.slow_subscribers,
+                })
+            })
+            .collect::<Vec<_>>();
+        Ok(json!({ "projects": projects }))
+    }
+
+    #[napi]
     pub fn event_subscribe(
         &self,
         request_id: String,

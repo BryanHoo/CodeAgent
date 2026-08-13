@@ -42,6 +42,54 @@ describe("createCodeAgentServer", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
+  it("returns native event stream metrics with delivery counters", async () => {
+    const eventMetricsGet = vi.fn(() =>
+      Promise.resolve({
+        projects: [
+          {
+            coalescedEvents: 3,
+            pendingDeltas: 1,
+            projectId: "code-agent",
+            providerEventsReceived: 7,
+            publishedEvents: 4,
+            retainedEvents: 2,
+            retentionEvictions: 2,
+            slowSubscribers: 2,
+          },
+        ],
+      }),
+    );
+    const app = await createCodeAgentServer(
+      createOptions(createEngine({ close: () => Promise.resolve(), eventMetricsGet })),
+    );
+
+    const response = await app.inject({
+      headers: { host: "localhost" },
+      url: "/v1/metrics/events",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      projects: [
+        {
+          activeClients: 0,
+          backpressureSignals: 0,
+          coalescedEvents: 3,
+          pendingDeltas: 1,
+          projectId: "code-agent",
+          providerEventsReceived: 7,
+          publishedEvents: 4,
+          retainedEvents: 2,
+          retentionEvictions: 2,
+          slowClientDisconnects: 2,
+        },
+      ],
+      version: 1,
+    });
+    expect(eventMetricsGet).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
   it("forwards named project operations and reuses the idempotency key", async () => {
     const project = {
       createdAt: "2026-08-12T00:00:00.000Z",

@@ -23,6 +23,21 @@ export interface NodeProcessExit {
   readonly signal?: number;
 }
 
+export interface NodeEventStreamMetrics {
+  readonly coalescedEvents: number;
+  readonly pendingDeltas: number;
+  readonly projectId: string;
+  readonly providerEventsReceived: number;
+  readonly publishedEvents: number;
+  readonly retainedEvents: number;
+  readonly retentionEvictions: number;
+  readonly slowSubscribers: number;
+}
+
+export interface NodeEventStreamMetricsPage {
+  readonly projects: readonly NodeEventStreamMetrics[];
+}
+
 type JsonResult = Promise<unknown>;
 
 /** Server 与 CLI 共享的具名 Engine 边界；禁止退化为字符串操作分发器。 */
@@ -62,6 +77,7 @@ export interface CodeAgentEngine extends NativeEventEngine {
   capabilitiesGet(requestId: string): JsonResult;
   close(): Promise<void>;
   diagnose(): Promise<NodeEngineDiagnostic>;
+  eventMetricsGet(requestId: string): Promise<NodeEventStreamMetricsPage>;
   fileSearch(requestId: string, projectId: string, query: string): JsonResult;
   fileSourceRead(requestId: string, projectId: string, path: string, cursor?: number): JsonResult;
   fileTree(requestId: string, projectId: string, path?: string): JsonResult;

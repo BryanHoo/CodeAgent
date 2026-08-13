@@ -12,6 +12,7 @@ import {
   type AgentGlobalSettings,
   type InstallAppUpdateRequest,
 } from "@code-agent/protocol";
+import type { NodeEventStreamMetricsPage } from "@code-agent/engine-node";
 import type { FastifyPluginCallback } from "fastify";
 
 import {
@@ -79,19 +80,24 @@ export const registerRuntimeRoutes: FastifyPluginCallback<ServerRouteContext> = 
   app.get(
     "/v1/metrics/events",
     { schema: { response: { 200: EventStreamMetricsResponseSchema } } },
-    () => ({
-      projects: [...eventMetrics.projects].map(([projectId, metrics]) => ({
-        ...metrics,
-        coalescedEvents: 0,
-        pendingDeltas: 0,
-        projectId,
-        providerEventsReceived: 0,
-        publishedEvents: 0,
-        retainedEvents: 0,
-        retentionEvictions: 0,
-      })),
-      version: 1 as const,
-    }),
+    async () => {
+      const runtimeMetrics = await callEngine<NodeEventStreamMetricsPage>(() =>
+        engine.eventMetricsGet(createReadRequestId()),
+      );
+      return {
+        projects: runtimeMetrics.projects.map((metrics) => {
+          const delivery = eventMetrics.projects.get(metrics.projectId);
+          const { slowSubscribers, ...runtime } = metrics;
+          return {
+            activeClients: delivery?.activeClients ?? 0,
+            backpressureSignals: delivery?.backpressureSignals ?? 0,
+            ...runtime,
+            slowClientDisconnects: slowSubscribers + (delivery?.slowClientDisconnects ?? 0),
+          };
+        }),
+        version: 1 as const,
+      };
+    },
   );
   app.get("/v1/capabilities", { schema: { response: { 200: AgentCapabilitiesSchema } } }, () =>
     callEngine(() => engine.capabilitiesGet(createReadRequestId())),

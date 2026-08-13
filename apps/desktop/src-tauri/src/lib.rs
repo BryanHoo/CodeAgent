@@ -92,12 +92,12 @@ pub fn run() {
             )));
 
             // Provider 启动失败只更新诊断，不能阻塞主窗口创建。
-            let executable_path = std::env::current_exe()?;
+            let resource_directory = app.path().resource_dir()?;
             tauri::async_runtime::spawn(start_codex_supervisor(
                 provider_slot,
                 supervisor,
                 env!("CARGO_PKG_VERSION").to_owned(),
-                executable_path,
+                resource_directory,
                 codex_home,
             ));
             Ok(())

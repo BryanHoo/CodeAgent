@@ -216,10 +216,10 @@ pub async fn start_codex_supervisor(
     provider_slot: Arc<DesktopProvider>,
     supervisor: Arc<CodexSupervisor>,
     app_version: String,
-    executable_path: PathBuf,
+    resource_directory: PathBuf,
     codex_home: PathBuf,
 ) {
-    let binary = match locate_desktop_codex(&executable_path) {
+    let binary = match locate_desktop_codex(&resource_directory) {
         Ok(binary) => binary,
         Err(error) => {
             provider_slot.fail(error.message());
@@ -228,11 +228,8 @@ pub async fn start_codex_supervisor(
     };
     let process = match start_codex_app_server(CodexAppServerOptions {
         app_version,
+        env_overrides: desktop_codex_environment(&binary, &codex_home),
         binary_path: binary,
-        env_overrides: vec![(
-            "CODEX_HOME".to_string(),
-            codex_home.to_string_lossy().into_owned(),
-        )],
         ..CodexAppServerOptions::default()
     })
     .await
@@ -270,16 +267,56 @@ pub async fn start_codex_supervisor(
     ));
 }
 
-fn locate_desktop_codex(executable_path: &Path) -> Result<PathBuf, CodeAgentError> {
-    let triple = target_triple();
+fn desktop_codex_environment(binary: &Path, codex_home: &Path) -> Vec<(String, String)> {
+    let binary_directory = binary.parent().unwrap_or_else(|| Path::new("."));
+    let package_directory = binary_directory
+        .parent()
+        .filter(|directory| directory.join("codex-package.json").is_file())
+        .unwrap_or(binary_directory);
+    let managed_directories = [
+        package_directory.join("codex-path"),
+        binary_directory.to_path_buf(),
+    ];
+    let inherited_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = Vec::with_capacity(2 + std::env::split_paths(&inherited_path).count());
+    paths.extend(
+        managed_directories
+            .iter()
+            .filter(|path| path.is_dir())
+            .cloned(),
+    );
+    paths.extend(std::env::split_paths(&inherited_path).filter(|path| {
+        !managed_directories
+            .iter()
+            .any(|managed| managed.as_path() == path.as_path())
+    }));
+    let path = std::env::join_paths(paths)
+        .unwrap_or_else(|_| binary_directory.as_os_str().to_owned())
+        .to_string_lossy()
+        .into_owned();
+
+    // canonical package 的搜索目录优先，确保 GUI 启动时使用同版本受管工具。
+    vec![
+        (
+            "CODEX_HOME".to_string(),
+            codex_home.to_string_lossy().into_owned(),
+        ),
+        ("PATH".to_string(), path),
+    ]
+}
+
+fn locate_desktop_codex(resource_directory: &Path) -> Result<PathBuf, CodeAgentError> {
     let suffix = if cfg!(windows) { ".exe" } else { "" };
-    let executable_dir = executable_path.parent().unwrap_or_else(|| Path::new("."));
     let candidates = vec![
-        executable_dir.join(format!("codex-{triple}{suffix}")),
-        executable_dir.join(format!("codex{suffix}")),
+        resource_directory
+            .join("codex-runtime")
+            .join("bin")
+            .join(format!("codex{suffix}")),
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("binaries")
-            .join(format!("codex-{triple}{suffix}")),
+            .join("resources")
+            .join("codex-runtime")
+            .join("bin")
+            .join(format!("codex{suffix}")),
     ];
     let environment_path = std::env::var_os("CODE_AGENT_CODEX_BIN").map(PathBuf::from);
     locate_codex_binary(&LocateCodexBinaryOptions {
@@ -288,22 +325,4 @@ fn locate_desktop_codex(executable_path: &Path) -> Result<PathBuf, CodeAgentErro
         explicit_path: None,
     })
     .map(|binary| binary.path)
-}
-
-fn target_triple() -> &'static str {
-    option_env!("TAURI_ENV_TARGET_TRIPLE").unwrap_or(
-        if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            "aarch64-apple-darwin"
-        } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
-            "x86_64-apple-darwin"
-        } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
-            "aarch64-pc-windows-msvc"
-        } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            "x86_64-pc-windows-msvc"
-        } else if cfg!(target_arch = "aarch64") {
-            "aarch64-unknown-linux-musl"
-        } else {
-            "x86_64-unknown-linux-musl"
-        },
-    )
 }

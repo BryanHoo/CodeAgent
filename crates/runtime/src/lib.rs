@@ -964,6 +964,32 @@ impl CodeAgentRuntime {
         }
     }
 
+    /// 读取所有已初始化 Project 的 Event Stream 指标快照。
+    pub async fn event_stream_metrics(
+        &self,
+        request_id: &str,
+    ) -> Result<Vec<(ProjectId, EventStreamMetrics)>, CodeAgentError> {
+        let _operation = self.begin_operation(request_id).await?;
+        // 仅在 Map 锁内复制上下文，避免逐个读取指标时阻塞 Project 生命周期操作。
+        let contexts = self
+            .project_contexts
+            .lock()
+            .await
+            .iter()
+            .filter_map(|(project_id, cell)| {
+                cell.get()
+                    .cloned()
+                    .map(|context| (project_id.clone(), context))
+            })
+            .collect::<Vec<_>>();
+        let mut metrics = Vec::with_capacity(contexts.len());
+        for (project_id, context) in contexts {
+            metrics.push((project_id, context.event_stream.metrics().await));
+        }
+        metrics.sort_unstable_by(|left, right| left.0.as_str().cmp(right.0.as_str()));
+        Ok(metrics)
+    }
+
     /// 使用只读 ephemeral Task 为选定 Git 变更生成提交信息。
     pub async fn generate_commit_message(
         &self,

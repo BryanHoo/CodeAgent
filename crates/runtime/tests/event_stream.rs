@@ -82,6 +82,26 @@ async fn event_stream_should_coalesce_adjacent_delta_and_flush_before_terminal()
 }
 
 #[tokio::test]
+async fn event_stream_should_report_live_and_accumulated_metrics() {
+    let stream = AgentEventStream::new(options()).expect("stream");
+
+    stream.publish(message_delta("item-a", "hel")).await;
+    stream.publish(message_delta("item-a", "lo")).await;
+
+    let pending = stream.metrics().await;
+    assert_eq!(pending.provider_events_received, 2);
+    assert_eq!(pending.coalesced_events, 1);
+    assert_eq!(pending.pending_deltas, 1);
+    assert_eq!(pending.published_events, 0);
+
+    stream.flush().await;
+    let published = stream.metrics().await;
+    assert_eq!(published.pending_deltas, 0);
+    assert_eq!(published.published_events, 1);
+    assert_eq!(published.retained_events, 1);
+}
+
+#[tokio::test]
 async fn event_stream_should_preserve_a_b_a_order() {
     let stream = AgentEventStream::new(options()).expect("stream");
     stream.publish(message_delta("item-a", "one")).await;
