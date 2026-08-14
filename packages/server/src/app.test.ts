@@ -124,6 +124,71 @@ describe("createCodeAgentServer", () => {
     await app.close();
   });
 
+  it("reuses controlled file preview and open operations for temporary tasks", async () => {
+    const fileSourceRead = vi.fn(() =>
+      Promise.resolve({ content: "temporary note\n", nextCursor: null, path: "/tmp/note.txt" }),
+    );
+    const projectImage = vi.fn(() =>
+      Promise.resolve(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+    );
+    const projectOpen = vi.fn(() =>
+      Promise.resolve({ appId: "system-default", path: "/tmp/archive.bin" }),
+    );
+    const app = await createCodeAgentServer(
+      createOptions(
+        createEngine({
+          close: () => Promise.resolve(),
+          fileSourceRead,
+          projectImage,
+          projectOpen,
+        }),
+      ),
+    );
+
+    const sourceResponse = await app.inject({
+      headers: { host: "localhost" },
+      url: "/v1/temporary/files/source?path=%2Ftmp%2Fnote.txt",
+    });
+    const imageResponse = await app.inject({
+      headers: { host: "localhost" },
+      url: "/v1/temporary/files/image?path=%2Ftmp%2Fimage.png",
+    });
+    const openResponse = await app.inject({
+      headers: {
+        "content-type": "application/json",
+        host: "localhost",
+        "idempotency-key": "temporary-open-1",
+      },
+      method: "POST",
+      payload: { appId: "system-default", path: "/tmp/archive.bin" },
+      url: "/v1/temporary/open",
+    });
+    const hiddenProjectResponse = await app.inject({
+      headers: { host: "localhost" },
+      url: "/v1/projects/temporary/files/source?path=%2Ftmp%2Fnote.txt",
+    });
+
+    expect(sourceResponse.statusCode).toBe(200);
+    expect(imageResponse.statusCode).toBe(200);
+    expect(openResponse.statusCode).toBe(200);
+    expect(hiddenProjectResponse.statusCode).toBe(404);
+    expect(fileSourceRead).toHaveBeenCalledWith(
+      expect.any(String),
+      "temporary",
+      "/tmp/note.txt",
+      undefined,
+    );
+    expect(projectImage).toHaveBeenCalledWith(expect.any(String), "temporary", "/tmp/image.png");
+    expect(projectOpen).toHaveBeenCalledWith(
+      "temporary-open-1",
+      "temporary",
+      "system-default",
+      "/tmp/archive.bin",
+    );
+    expect(fileSourceRead).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
   it("serializes structured native domain errors without parsing messages", async () => {
     const taskRead = vi.fn(() =>
       Promise.reject(

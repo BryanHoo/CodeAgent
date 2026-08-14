@@ -170,7 +170,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         onBuildPlan={() => composerRef.current?.buildPlan() ?? Promise.resolve(false)}
         {...(capabilities?.tasks.fork === true ? { onForkTask: forkTask } : {})}
         {...(projectToolsEnabled ? { onOpenFileDiff } : {})}
-        {...(projectToolsEnabled ? { onOpenSourceFile } : {})}
+        onOpenSourceFile={onOpenSourceFile}
         {...(projectToolsEnabled ? { onReviewFileChanges } : {})}
         onResolvePendingRequest={resolvePendingRequest}
         projectId={projectId}

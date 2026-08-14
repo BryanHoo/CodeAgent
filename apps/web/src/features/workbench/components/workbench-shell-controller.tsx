@@ -67,26 +67,32 @@ export function useWorkbenchShellController(
     },
     [projectId, setFileDiffSelection],
   );
+  const openSystemFileReference = useCallback(
+    (reference: MessageFileReference) => {
+      const mutation = projectPathOpenMutationRef.current;
+      mutation.reset();
+      void projectPathOpenLockRef.current
+        .run(() =>
+          mutation.mutateAsync({
+            appId: "system-default",
+            path: reference.path,
+          }),
+        )
+        .catch(showErrorToast);
+    },
+    [projectPathOpenLockRef, projectPathOpenMutationRef],
+  );
   const openMessageFileReference = useCallback(
     (reference: MessageFileReference) => {
       const kind = classifyProjectFileReference(reference.path);
       if (kind === "system") {
-        const mutation = projectPathOpenMutationRef.current;
-        mutation.reset();
-        void projectPathOpenLockRef.current
-          .run(() =>
-            mutation.mutateAsync({
-              appId: "system-default",
-              path: reference.path,
-            }),
-          )
-          .catch(showErrorToast);
+        openSystemFileReference(reference);
         return;
       }
 
       setSourceFileSelection({ kind, projectId, reference });
     },
-    [projectId, projectPathOpenLockRef, projectPathOpenMutationRef, setSourceFileSelection],
+    [openSystemFileReference, projectId, setSourceFileSelection],
   );
   const openFileReview = useCallback(
     (changes: readonly AgentFileChange[]) => {
@@ -313,6 +319,7 @@ export function useWorkbenchShellController(
     openFileDiff,
     openFileReview,
     openMessageFileReference,
+    openSystemFileReference,
     renameActiveTask,
     updateDraftSettings,
   };

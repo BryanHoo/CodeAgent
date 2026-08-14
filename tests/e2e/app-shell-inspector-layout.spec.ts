@@ -80,7 +80,7 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
   expect(pinnedBox.y).toBeLessThan(projectsBox.y);
 });
 
-test("preserves the original sidebar control typography and dimensions", async ({ page }) => {
+test("preserves the compact sidebar control typography and dimensions", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
@@ -110,10 +110,16 @@ test("preserves the original sidebar control typography and dimensions", async (
     .poll(() => readControlStyle(page.locator("#global-settings-trigger")))
     .toMatchObject({
       display: "flex",
-      fontSize: "13px",
+      fontSize: "12px",
       fontWeight: "450",
       height: "36px",
       justifyContent: "flex-start",
+    });
+  await expect
+    .poll(() => readControlStyle(page.locator("#global-about-trigger")))
+    .toMatchObject({
+      fontSize: "12px",
+      height: "36px",
     });
   await expect
     .poll(() => readControlStyle(sidebar.getByRole("button", { name: "添加项目" })))

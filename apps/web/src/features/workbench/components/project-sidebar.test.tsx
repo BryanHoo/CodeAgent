@@ -194,6 +194,8 @@ describe("SidebarSettingsButton", () => {
     expect(markup).toContain('aria-label="设置"');
     expect(markup).toContain('aria-label="设置，CodeAgent 1.3.0"');
     expect(markup.match(/<button/gu)).toHaveLength(2);
+    expect(markup.match(/text-label/gu)).toHaveLength(3);
+    expect(markup).not.toContain("text-body-small");
     expect(markup).toContain("v1.3.0");
     expect(markup).not.toContain("在线");
     expect(markup).not.toContain("lucide-wifi");
@@ -339,21 +341,24 @@ describe("Project folder actions", () => {
 });
 
 describe("TaskStatusIndicator", () => {
-  it("keeps the activity animation limited to opacity with a reduced-motion fallback", () => {
+  it("uses a slow opacity pulse with a reduced-motion fallback", () => {
     const styles = readFileSync(
       new URL("../../../shared/styles/globals.css", import.meta.url),
       "utf8",
     );
-    const activityRule = /\.sidebar-task-activity\s*\{(?<declarations>[^}]*)\}/u.exec(styles);
+    const dotRule = /\.sidebar-task-status-dot\s*\{(?<declarations>[^}]*)\}/u.exec(styles);
+    const pulseRule = /\.sidebar-task-status-dot--pulse\s*\{(?<declarations>[^}]*)\}/u.exec(styles);
 
-    expect(activityRule?.groups?.["declarations"]).toContain(
-      "animation: sidebar-task-activity 1.2s ease-in-out infinite",
+    expect(pulseRule?.groups?.["declarations"]).toContain(
+      "animation: sidebar-task-status-pulse 2.4s ease-in-out infinite",
     );
-    expect(activityRule?.groups?.["declarations"]).not.toMatch(
+    expect(dotRule?.groups?.["declarations"]).toContain("width: 0.5rem");
+    expect(dotRule?.groups?.["declarations"]).toContain("height: 0.5rem");
+    expect(pulseRule?.groups?.["declarations"]).not.toMatch(
       /(?:^|\n)\s*(?:border|transform|will-change)\s*:/u,
     );
     expect(styles).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.sidebar-task-activity\s*\{[\s\S]*?animation: none/u,
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.sidebar-task-status-dot--pulse\s*\{[\s\S]*?animation: none/u,
     );
   });
 
@@ -366,26 +371,27 @@ describe("TaskStatusIndicator", () => {
     expect(markup).toContain("-mr-2");
     expect(markup).toContain("w-7");
     expect(markup).toContain("justify-center");
-    expect(markup).toContain("text-brand/60");
-    expect(markup).toContain("sidebar-task-activity");
+    expect(markup).toContain("text-brand");
+    expect(markup).toContain("sidebar-task-status-dot");
+    expect(markup).toContain("sidebar-task-status-dot--pulse");
     expect(markup).not.toContain("sidebar-task-spinner");
     expect(markup).not.toContain("<svg");
     expect(markup).not.toContain("task-age");
   });
 
-  it("shows a primary approval icon instead of the activity indicator while awaiting approval", () => {
+  it("shows a pulsing warning dot while awaiting approval", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator attention="approval" isRunning updatedAt="2026-07-23T00:01:00.000Z" />,
     );
 
     expect(markup).toContain('aria-label="任务等待审批"');
-    expect(markup).toContain("text-brand");
-    expect(markup).toContain("lucide-shield-question-mark");
-    expect(markup).not.toContain("animate-spin");
+    expect(markup).toContain("text-warning");
+    expect(markup).toContain("sidebar-task-status-dot--pulse");
+    expect(markup).not.toContain("<svg");
     expect(markup).not.toContain("task-age");
   });
 
-  it("shows an accessible completed reply marker before the task age", () => {
+  it("shows a static green dot after a completed reply", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator
         attention="completed"
@@ -396,11 +402,13 @@ describe("TaskStatusIndicator", () => {
 
     expect(markup).toContain('aria-label="AI 回复已完成"');
     expect(markup).toContain("text-diff-added");
-    expect(markup).toContain("lucide-circle-check");
+    expect(markup).toContain("sidebar-task-status-dot");
+    expect(markup).not.toContain("sidebar-task-status-dot--pulse");
+    expect(markup).not.toContain("<svg");
     expect(markup).not.toContain("task-age");
   });
 
-  it("shows an accessible unfinished reply marker before the task age", () => {
+  it("shows a static red dot after a failed or interrupted reply", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator
         attention="failed"
@@ -411,7 +419,9 @@ describe("TaskStatusIndicator", () => {
 
     expect(markup).toContain('aria-label="AI 回复未完成"');
     expect(markup).toContain("text-danger");
-    expect(markup).toContain("lucide-circle-alert");
+    expect(markup).toContain("sidebar-task-status-dot");
+    expect(markup).not.toContain("sidebar-task-status-dot--pulse");
+    expect(markup).not.toContain("<svg");
     expect(markup).not.toContain("task-age");
   });
 

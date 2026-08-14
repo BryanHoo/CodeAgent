@@ -179,6 +179,18 @@ describe("browser task notifier", () => {
     });
   });
 
+  it("skips browser permission requests when native host notifications are available", async () => {
+    const harness = createHarness("default");
+    const notifier = createBrowserTaskNotifier({
+      api: harness.api,
+      nativeApi: { show: vi.fn(() => Promise.resolve()) },
+    });
+
+    await notifier.requestPermission();
+
+    expect(harness.api.requestPermission).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["completed", "Task 已完成"],
     ["interrupted", "Task 已中断，无法继续"],

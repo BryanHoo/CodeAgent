@@ -450,17 +450,19 @@ describe("TauriCodeAgentTransport", () => {
   });
 
   it.each(["/Users/private/image.png", "C:\\private\\image.png", "\\\\server\\image.png"])(
-    "rejects absolute project image paths before building asset URLs: %s",
+    "builds controlled asset URLs for absolute project image paths: %s",
     (path) => {
+      mockConvertFileSrc("macos");
       const transport = new TauriCodeAgentTransport();
 
-      expect(() =>
-        transport.resolveAssetUrl({
-          kind: "project-image",
-          path,
-          projectId: "project-a",
-        }),
-      ).toThrow("Project image asset paths must be relative");
+      const url = transport.resolveAssetUrl({
+        kind: "project-image",
+        path,
+        projectId: "project-a",
+      });
+
+      expect(url).toContain("project-image");
+      expect(decodeURIComponent(decodeURIComponent(url))).toContain(path);
     },
   );
 

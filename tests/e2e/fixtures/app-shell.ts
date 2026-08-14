@@ -787,7 +787,12 @@ export async function mockAppShellApi(
           {
             id: `temporary-assistant-${String(turnNumber)}`,
             role: "assistant" as const,
-            text: `临时回复：${input["text"]}`,
+            text:
+              input["text"] === "查看临时文件"
+                ? "[temporary-note.txt](/tmp/temporary-note.txt)"
+                : input["text"] === "查看二进制文件"
+                  ? "[unknown.bin](/tmp/unknown.bin)"
+                  : `临时回复：${input["text"]}`,
             type: "message" as const,
           },
         ],
@@ -796,6 +801,23 @@ export async function mockAppShellApi(
       };
       temporaryTurns.set(taskId, [...(temporaryTurns.get(taskId) ?? []), turn]);
       body = { taskId, turn };
+    } else if (url.pathname === "/v1/temporary/files/source") {
+      if (url.searchParams.get("path") === "/tmp/unknown.bin") {
+        await route.fulfill({
+          contentType: "application/json",
+          json: { code: "NOT_FOUND", message: "source file is invalid" },
+          status: 404,
+        });
+        return;
+      }
+      body = {
+        content: "temporary note\n",
+        nextCursor: null,
+        path: "/tmp/temporary-note.txt",
+      };
+    } else if (url.pathname === "/v1/temporary/open" && route.request().method() === "POST") {
+      const request = parseRequestRecord(route.request().postData());
+      body = { appId: request["appId"], path: request["path"] };
     } else if (temporaryTaskMatch !== null) {
       const taskId = temporaryTaskMatch[1] ?? "";
       const task = temporaryTasks.find((item) => item.id === taskId);

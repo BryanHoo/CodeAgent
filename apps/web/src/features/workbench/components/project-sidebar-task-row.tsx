@@ -1,13 +1,5 @@
 import { TEMPORARY_TASK_SCOPE_ID, type AgentTask } from "@code-agent/protocol";
-import {
-  Archive,
-  CircleAlert,
-  CircleCheck,
-  Ellipsis,
-  Pencil,
-  Pin,
-  ShieldQuestion,
-} from "lucide-react";
+import { Archive, Ellipsis, Pencil, Pin } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
@@ -111,16 +103,27 @@ type TaskStatusIndicatorProps = Readonly<{
   updatedAt: string;
 }>;
 
+const taskStatusClassName = "task-status -mr-2 ml-auto inline-flex w-7 shrink-0 justify-center";
+
+function TaskStatusDot({ pulse = false }: Readonly<{ pulse?: boolean }>) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`sidebar-task-status-dot${pulse ? " sidebar-task-status-dot--pulse" : ""}`}
+    />
+  );
+}
+
 export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskStatusIndicatorProps) {
   const { t } = useTranslation("workbench");
   if (attention === "approval") {
     return (
       <span
         aria-label={t("sidebar.taskApproval")}
-        className="task-status ml-auto inline-flex shrink-0 text-brand"
+        className={`${taskStatusClassName} text-warning`}
         role="status"
       >
-        <ShieldQuestion className="size-3.5" aria-hidden="true" />
+        <TaskStatusDot pulse />
       </span>
     );
   }
@@ -129,11 +132,10 @@ export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskSta
     return (
       <span
         aria-label={t("sidebar.taskRunning")}
-        className="task-status -mr-2 ml-auto inline-flex w-7 shrink-0 justify-center text-brand/60"
+        className={`${taskStatusClassName} text-brand`}
         role="status"
       >
-        {/* 单元素透明度动画不旋转几何图形，降低多任务并行动画的合成压力。 */}
-        <span className="sidebar-task-activity" aria-hidden="true" />
+        <TaskStatusDot pulse />
       </span>
     );
   }
@@ -142,10 +144,10 @@ export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskSta
     return (
       <span
         aria-label={t("sidebar.taskComplete")}
-        className="task-status ml-auto inline-flex shrink-0 text-diff-added"
+        className={`${taskStatusClassName} text-diff-added`}
         role="status"
       >
-        <CircleCheck className="size-3.5" aria-hidden="true" />
+        <TaskStatusDot />
       </span>
     );
   }
@@ -154,10 +156,10 @@ export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskSta
     return (
       <span
         aria-label={t("sidebar.taskIncomplete")}
-        className="task-status ml-auto inline-flex shrink-0 text-danger"
+        className={`${taskStatusClassName} text-danger`}
         role="status"
       >
-        <CircleAlert className="size-3.5" aria-hidden="true" />
+        <TaskStatusDot />
       </span>
     );
   }

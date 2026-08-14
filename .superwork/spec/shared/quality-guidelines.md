@@ -39,7 +39,7 @@
 - Tauri mutation IPC 必须同时传递独立的 `requestId` 与 `idempotencyKey`：前者只用于 Runtime 操作追踪和协作取消，后者只用于幂等缓存与重试结果复用；所有 Desktop mutation Command 必须接收并透传两者。显式业务键缺失时 Transport 使用本次 `requestId` 作为单次调用的幂等键；重试复用同一业务键时不得因新的 `requestId` 重复执行 mutation。
 - Provider 专有数据只进入诊断字段或 `extensions`，未知事件记录告警但不破坏事件循环。
 - Task Snapshot 必须保留归一化的 Turn 与 Tool 错误；Command Output 最多保留最新 `10,000` 行或 `1 MiB`，并携带截断状态。
-- Project 源文件预览必须返回已解析的相对或绝对路径、当前文本分段和可空的下一页字节游标；相对路径限制在 Project 根目录内，显式绝对路径允许读取 Project 外的本机文件。Server 必须解析真实路径并拒绝不可读目标、目录、越界游标和二进制文件，每页最多读取 `256 KiB`、最多返回 `4,000` 行，分页不得切断 UTF-8 字符或丢失源文件字节。Client 与 Web 必须使用游标按需加载，查看器仅在滚动接近底部或目标引用行尚未加载时读取后续页，并阻止重复游标循环。Project 图片预览允许相同的绝对路径范围，但只接受有界普通文件及 GIF、JPEG、PNG、WebP 的有效内容签名，响应必须设置受检媒体类型和 `nosniff`。
+- Project 源文件预览必须返回已解析的相对或绝对路径、当前文本分段和可空的下一页字节游标；相对路径限制在 Project 根目录内，显式绝对路径允许读取 Project 外的本机文件。Server 必须解析真实路径并拒绝不可读目标、目录、越界游标和二进制文件，每页最多读取 `256 KiB`、最多返回 `4,000` 行，分页不得切断 UTF-8 字符或丢失源文件字节。Client 与 Web 必须使用游标按需加载，查看器仅在滚动接近底部或目标引用行尚未加载时读取后续页，并阻止重复游标循环；HTTP Transport 对临时作用域必须使用 `/v1/temporary/files/source`，不得暴露 `/v1/projects/temporary`。Project 图片预览允许相同的绝对路径范围，但只接受有界普通文件及 GIF、JPEG、PNG、WebP 的有效内容签名，响应必须设置受检媒体类型与 `nosniff`；Tauri 绝对图片引用必须编码进受控 Asset Protocol，再由 Runtime 复验路径和内容。
 - `OpenProjectRequest.path` 同时承载普通菜单的 Project 相对路径和 AI 输出的本机绝对引用，只执行有界字符串 Schema 校验；Server 必须限制相对路径位于 Repository 根目录内，显式绝对路径则校验 `realpath`、可读性和目标类型，不能把 Protocol Schema 当作文件系统授权。
 - Rust Provider 的历史附件授权 Store 必须对本地图片只保存路径与注册时文件指纹，Snapshot 映射只读取有界文件头；正文按需异步读取，并在读取前后复验普通文件身份、大小、修改时间和内容签名，变化或不可读时立即撤销授权。图片单项最多 `10 MiB`，Store 最多 `1,500` 项、合计 `512 MiB`，使用 `30` 分钟滑动 TTL 并在容量压力下按 LRU 淘汰；内联正文使用共享只读字节，只有 Node/Tauri 宿主响应边界确实需要独占缓冲区时才复制。
 - Agent 写入必须由 Protocol 提供结构化 `AgentPromptInput`、Task/Turn Mutation 请求响应、能力和错误 Schema；Client 与 Server 都必须执行运行时校验。

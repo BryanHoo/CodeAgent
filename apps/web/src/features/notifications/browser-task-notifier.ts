@@ -207,7 +207,8 @@ class BrowserTaskNotifier implements TaskNotifier {
   }
 
   public requestPermission(): Promise<void> {
-    if (this.#api === undefined) {
+    // Desktop 权限由受控宿主命令处理，避免 Renderer 直接触发 Tauri plugin ACL。
+    if (this.#nativeApi !== undefined || this.#api === undefined) {
       return Promise.resolve();
     }
     if (this.#permissionRequest !== undefined) {
