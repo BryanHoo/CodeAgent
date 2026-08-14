@@ -35,6 +35,7 @@ import {
 import { ProjectGitStatusCoordinator } from "./project-git-status-coordinator.js";
 import {
   capabilitiesQueryOptions,
+  cacheAddedProject,
   codeAgentClient,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
   projectRemoveMutationOptions,
@@ -281,7 +282,7 @@ export function ProjectProvider({
         setAddProjectError(null);
         try {
           const response = await client.addProject(rootPath);
-          await queryClient.invalidateQueries({ queryKey: ["projects"] });
+          cacheAddedProject(queryClient, response.project);
           return response.project;
         } catch (error) {
           const normalizedError = normalizeError(error);

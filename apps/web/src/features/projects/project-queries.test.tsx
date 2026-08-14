@@ -35,6 +35,7 @@ import {
   taskSnapshotQueryOptions,
   taskSettingsMutationOptions,
   updateNewTaskTitleFromSnapshotInInfiniteData,
+  cacheAddedProject,
   flattenProjectTaskPages,
   removeProjectTaskFromInfiniteData,
   reorderProjectPage,
@@ -121,6 +122,27 @@ const snapshotResponse = {
 };
 
 describe("project queries", () => {
+  it("publishes an added project without invalidating lazy project state", () => {
+    const addedProject = {
+      ...project,
+      id: "new-project",
+      name: "New Project",
+      rootPath: "/workspace/new-project",
+    };
+    const queryClient = new QueryClient();
+    const gitStatusKey = ["projects", project.id, "git-status"] as const;
+    queryClient.setQueryData(["projects"], { data: [project], nextCursor: null });
+    queryClient.setQueryData(gitStatusKey, { branch: "main" });
+
+    cacheAddedProject(queryClient, addedProject);
+
+    expect(queryClient.getQueryData(["projects"])).toEqual({
+      data: [project, addedProject],
+      nextCursor: null,
+    });
+    expect(queryClient.getQueryState(gitStatusKey)?.isInvalidated).toBe(false);
+  });
+
   it("inserts a created task immediately and replaces it when fresh metadata arrives", () => {
     const initialData = {
       pageParams: [undefined, "next-page"],
