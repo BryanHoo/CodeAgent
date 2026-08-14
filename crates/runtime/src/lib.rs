@@ -208,7 +208,7 @@ impl CodeAgentRuntime {
                 subscriber_capacity: 256,
             })?);
             let cancellation = self.shutdown.child_token();
-            let mut events = provider.subscribe_events(true, context).await?;
+            let mut events = provider.subscribe_events(false, context).await?;
             let forwarding_stream = Arc::clone(&stream);
             let forwarding_cancellation = cancellation.clone();
             let forwarding_attachment = Arc::clone(&self.ports.attachment);
@@ -1093,7 +1093,11 @@ impl CodeAgentRuntime {
             )?;
             let prompt = build_commit_message_prompt(&status, request, &settings.custom_prompt)?;
             let result = async {
-                    let mut subscription = runtime_context.event_stream.subscribe().await?;
+                    // 提交信息事件仅进入本次内部流程，禁止泄漏到 Project 公共事件流。
+                    let mut ephemeral_events = runtime_context
+                        .provider
+                        .subscribe_events(true, &operation)
+                        .await?;
                     let task = runtime_context
                         .provider
                         .start_task(json!({ "ephemeral": true }), &operation)
@@ -1122,14 +1126,9 @@ impl CodeAgentRuntime {
                                 _ = operation.cancelled() => {
                                     return Err(CodeAgentError::new(CodeAgentErrorCode::Cancelled, "commit message generation was cancelled", None));
                                 }
-                                signal = subscription.signal.changed() => {
-                                    if signal.is_err() || *subscription.signal.borrow() == SubscriberSignal::ResyncRequired {
-                                        return Err(generation_error("Commit message event subscription fell behind"));
-                                    }
-                                }
-                                event = subscription.events.recv() => {
+                                event = ephemeral_events.recv() => {
                                     let event = event.ok_or_else(|| generation_error("Commit message event subscription closed"))?;
-                                    let value = event.value();
+                                    let value = event.as_value();
                                     if value["taskId"] != task_id {
                                         continue;
                                     }
