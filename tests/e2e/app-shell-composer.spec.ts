@@ -1917,6 +1917,10 @@ test("generates a message and commits only selected files", async ({ page }) => 
         branch: "feat/review-targets",
         commitSha: "0123456789abcdef0123456789abcdef01234567",
         message: commitRequest["message"],
+        pushError: {
+          code: "provider_failure",
+          message: "remote: Permission to repository denied",
+        },
         pushStatus: "failed",
       },
       status: 201,
@@ -2121,6 +2125,7 @@ test("generates a message and commits only selected files", async ({ page }) => 
   await page.getByRole("menuitem", { name: "提交并推送" }).click();
 
   await expect(dialog.getByText("提交已完成，但推送失败")).toBeVisible();
+  await expect(dialog.getByText("remote: Permission to repository denied")).toBeVisible();
   expect(messageRequest).toEqual({ expectedSnapshot: snapshot, paths: ["package.json"] });
   expect(commitRequest).toEqual({
     action: "commit_and_push",
@@ -2227,6 +2232,7 @@ for (const scenario of [
           branch: "feat/review-targets",
           commitSha: "0123456789abcdef0123456789abcdef01234567",
           message: request["message"],
+          pushError: null,
           pushStatus: scenario.pushStatus,
         },
         status: 201,

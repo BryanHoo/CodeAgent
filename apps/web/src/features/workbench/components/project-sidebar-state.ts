@@ -1,14 +1,6 @@
-import type { AgentEventConnectionState } from "@code-agent/client";
 import type { AgentTask } from "@code-agent/protocol";
 
 import { i18n } from "../../../i18n/i18n.js";
-
-type ProjectSidebarConnectionInput = Readonly<{
-  hasActiveTask: boolean;
-  projectDataFailed: boolean;
-  projectDataPending: boolean;
-  taskConnectionState: AgentEventConnectionState;
-}>;
 
 type ProjectTaskPaginationControlInput = Readonly<{
   error: Error | null;
@@ -96,49 +88,4 @@ export function getProjectTaskPaginationControl({
         label: i18n.t("sidebar.collapse", { ns: "workbench" }),
       } as const)
     : null;
-}
-
-export function deriveProjectSidebarConnectionState({
-  hasActiveTask,
-  projectDataFailed,
-  projectDataPending,
-  taskConnectionState,
-}: ProjectSidebarConnectionInput): AgentEventConnectionState {
-  // 活动任务以实时终端链路为准；新任务页则使用 HTTP Runtime 的可用性作为连接依据。
-  if (hasActiveTask) {
-    return taskConnectionState;
-  }
-  if (projectDataFailed) {
-    return "closed";
-  }
-  if (projectDataPending) {
-    return "connecting";
-  }
-  return "connected";
-}
-
-export function getProjectSidebarConnectionStatus(connectionState: AgentEventConnectionState) {
-  // 连接状态只映射稳定翻译 key，当前语言由渲染组件统一解析。
-  switch (connectionState) {
-    case "connected":
-      return {
-        labelKey: "sidebar.connection.online",
-        toneClassName: "text-diff-added",
-      } as const;
-    case "connecting":
-      return {
-        labelKey: "sidebar.connection.connecting",
-        toneClassName: "text-warning",
-      } as const;
-    case "reconnecting":
-      return {
-        labelKey: "sidebar.connection.reconnecting",
-        toneClassName: "text-warning",
-      } as const;
-    case "closed":
-      return {
-        labelKey: "sidebar.connection.offline",
-        toneClassName: "text-danger",
-      } as const;
-  }
 }

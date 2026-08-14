@@ -57,6 +57,7 @@ import {
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentGitHistoryClient } from "../../projects/project-queries.js";
 import { CommitChangesTreeSection } from "./commit-changes-tree.js";
+import { CommitChangesResult } from "./commit-changes-result.js";
 import { GitHistoryList } from "./git-history-list.js";
 
 type CommitFileEntry = Readonly<{
@@ -113,12 +114,6 @@ export function collectCommitRepositories(status: ProjectGitStatus): readonly st
     }
   }
   return [...repositories].toSorted((left, right) => left.localeCompare(right, "en"));
-}
-
-function commitResultMessageKey(result: CommitProjectChangesResponse): string {
-  if (result.pushStatus === "failed") return "commit.commitCompletePushFailed";
-  if (result.pushStatus === "not_configured") return "commit.commitCompleteUpstreamMissing";
-  return result.pushStatus === "pushed" ? "commit.commitAndPushComplete" : "commit.commitComplete";
 }
 
 function createCommitContentState(identity: string, entries: readonly CommitFileEntry[]) {
@@ -380,12 +375,7 @@ export function CommitChangesDialog({
                     </DropdownMenu>
                   </ButtonGroup>
                 ) : (
-                  <div className="mt-2" role="status">
-                    <p className="text-label font-medium">{t(commitResultMessageKey(result))}</p>
-                    <p className="mt-1 font-mono text-caption text-muted-foreground">
-                      {result.commitSha.slice(0, 7)}
-                    </p>
-                  </div>
+                  <CommitChangesResult result={result} />
                 )}
               </section>
 

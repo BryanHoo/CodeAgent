@@ -51,7 +51,7 @@ test("connects a custom API from the provider gate and reuses it in settings", a
   await page.getByRole("button", { exact: true, name: "连接" }).click();
 
   await expect(page).toHaveURL(/\/p\/code-agent$/u);
-  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  await page.getByRole("button", { name: /设置，CodeAgent/u }).click();
   const dialog = page.getByRole("dialog", { name: "全局设置" });
   await dialog.getByRole("button", { name: "模型服务" }).click();
   await expect(dialog.getByRole("textbox", { name: "API Base URL" })).toHaveValue(
@@ -85,7 +85,7 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(taskModel).toHaveAccessibleName("模型和思考量：GPT-5.6 Sol，高");
   await expect(taskApproval).toHaveValue("on-request");
 
-  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  await page.getByRole("button", { name: /设置，CodeAgent/u }).click();
   const dialog = page.getByRole("dialog", { name: "全局设置" });
   await expect(dialog).toBeVisible();
   await expect(page).toHaveURL(workbenchUrl);
@@ -126,7 +126,7 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(taskModel).toHaveAccessibleName("模型和思考量：GPT-5.6 Sol，高");
   await expect(taskApproval).toHaveValue("on-request");
 
-  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  await page.getByRole("button", { name: /设置，CodeAgent/u }).click();
   const reopenedDialog = page.getByRole("dialog", { name: "全局设置" });
   await reopenedDialog.getByRole("button", { name: "外观" }).click();
   await expect(reopenedDialog.getByRole("button", { name: "深色模式" })).toHaveAttribute(
@@ -168,7 +168,7 @@ test("edits global defaults in a dialog without overriding task settings", async
 test("switches the interface language and restores it after reload", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  await page.getByRole("button", { name: /设置，CodeAgent/u }).click();
   const chineseDialog = page.getByRole("dialog", { name: "全局设置" });
   await chineseDialog.getByRole("button", { name: "外观" }).click();
   await chineseDialog.getByRole("combobox", { name: "语言" }).selectOption("en");
@@ -188,9 +188,7 @@ test("switches the interface language and restores it after reload", async ({ pa
   await page.reload();
 
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await page
-    .getByRole("button", { name: /Settings, CodeAgent .*terminal connection status/u })
-    .click();
+  await page.getByRole("button", { name: /Settings, CodeAgent/u }).click();
   await expect(page.getByRole("dialog", { name: "Global settings" })).toBeVisible();
 });
 
@@ -228,7 +226,7 @@ test("opens About from the sidebar and installs an available update", async ({ p
   await page.goto("/p/code-agent/t/task-1");
 
   const settingsButton = page.getByRole("button", {
-    name: /设置，CodeAgent 1\.3\.0，有可用更新，终端连接状态：在线/u,
+    name: /设置，CodeAgent 1\.3\.0，有可用更新/u,
   });
   await expect(settingsButton.locator(".text-warning")).toContainText("v1.3.0");
   await expect(settingsButton.locator(".lucide-circle-arrow-up")).toBeVisible();

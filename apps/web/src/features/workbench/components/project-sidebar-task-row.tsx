@@ -132,8 +132,8 @@ export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskSta
         className="task-status ml-auto inline-flex shrink-0 text-subtle-foreground"
         role="status"
       >
-        {/* 纯 CSS spinner 隔离绘制，避免持续重绘 SVG 路径。 */}
-        <span className="sidebar-task-spinner" aria-hidden="true" />
+        {/* 单元素透明度动画不旋转几何图形，降低多任务并行动画的合成压力。 */}
+        <span className="sidebar-task-activity" aria-hidden="true" />
       </span>
     );
   }

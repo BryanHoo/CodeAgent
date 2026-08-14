@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -6,9 +8,7 @@ import { DropdownMenu } from "../../../shared/components/core/dropdown-menu.js";
 import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { requestNextProjectTaskPage } from "../../projects/project-context.js";
 import {
-  deriveProjectSidebarConnectionState,
   getProjectTaskPaginationControl,
-  getProjectSidebarConnectionStatus,
   groupTasksByProjectId,
   shouldShowProjectTaskEmptyState,
   ProjectActionMenu,
@@ -160,67 +160,6 @@ describe("Project task pagination", () => {
   });
 });
 
-describe("ProjectSidebar connection status", () => {
-  it("uses the active task terminal connection state", () => {
-    for (const connectionState of ["closed", "connected", "connecting", "reconnecting"] as const) {
-      expect(
-        deriveProjectSidebarConnectionState({
-          hasActiveTask: true,
-          projectDataFailed: true,
-          projectDataPending: true,
-          taskConnectionState: connectionState,
-        }),
-      ).toBe(connectionState);
-    }
-  });
-
-  it("derives an HTTP runtime status before a task terminal exists", () => {
-    expect(
-      deriveProjectSidebarConnectionState({
-        hasActiveTask: false,
-        projectDataFailed: false,
-        projectDataPending: true,
-        taskConnectionState: "connecting",
-      }),
-    ).toBe("connecting");
-    expect(
-      deriveProjectSidebarConnectionState({
-        hasActiveTask: false,
-        projectDataFailed: false,
-        projectDataPending: false,
-        taskConnectionState: "connecting",
-      }),
-    ).toBe("connected");
-    expect(
-      deriveProjectSidebarConnectionState({
-        hasActiveTask: false,
-        projectDataFailed: true,
-        projectDataPending: false,
-        taskConnectionState: "connecting",
-      }),
-    ).toBe("closed");
-  });
-
-  it("maps every transport state to a visible status", () => {
-    expect(getProjectSidebarConnectionStatus("connected")).toEqual({
-      labelKey: "sidebar.connection.online",
-      toneClassName: "text-diff-added",
-    });
-    expect(getProjectSidebarConnectionStatus("connecting")).toEqual({
-      labelKey: "sidebar.connection.connecting",
-      toneClassName: "text-warning",
-    });
-    expect(getProjectSidebarConnectionStatus("reconnecting")).toEqual({
-      labelKey: "sidebar.connection.reconnecting",
-      toneClassName: "text-warning",
-    });
-    expect(getProjectSidebarConnectionStatus("closed")).toEqual({
-      labelKey: "sidebar.connection.offline",
-      toneClassName: "text-danger",
-    });
-  });
-});
-
 describe("ProjectPickerButton", () => {
   it("opens the Web directory picker without exposing native picker state", () => {
     const markup = renderToStaticMarkup(
@@ -245,51 +184,29 @@ describe("SidebarSettingsButton", () => {
     updateAvailable: false,
   };
 
-  it("renders every connection status in Chinese", async () => {
+  it("renders the version without a connection status in Chinese", async () => {
     await changeAppLanguage("zh-CN");
-    const cases = [
-      ["connected", "在线"],
-      ["connecting", "正在连接"],
-      ["reconnecting", "正在重新连接"],
-      ["closed", "离线"],
-    ] as const;
+    const markup = renderToStaticMarkup(
+      <SidebarSettingsButton appInfo={appInfo} onOpen={vi.fn()} />,
+    );
 
-    for (const [connectionState, label] of cases) {
-      const markup = renderToStaticMarkup(
-        <SidebarSettingsButton
-          appInfo={appInfo}
-          connectionState={connectionState}
-          onOpen={vi.fn()}
-        />,
-      );
-      expect(markup).toContain(`CodeAgent 1.3.0，终端连接状态：${label}`);
-      expect(markup).toContain("v1.3.0");
-      expect(markup).toContain(`>${label}</span>`);
-      expect(markup).not.toContain("href=");
-    }
+    expect(markup).toContain('aria-label="设置，CodeAgent 1.3.0"');
+    expect(markup).toContain("v1.3.0");
+    expect(markup).not.toContain("在线");
+    expect(markup).not.toContain("lucide-wifi");
+    expect(markup).not.toContain("href=");
   });
 
-  it("renders every connection status in English", async () => {
+  it("renders the version without a connection status in English", async () => {
     await changeAppLanguage("en");
     try {
-      const cases = [
-        ["connected", "Online"],
-        ["connecting", "Connecting"],
-        ["reconnecting", "Reconnecting"],
-        ["closed", "Offline"],
-      ] as const;
+      const markup = renderToStaticMarkup(
+        <SidebarSettingsButton appInfo={appInfo} onOpen={vi.fn()} />,
+      );
 
-      for (const [connectionState, label] of cases) {
-        const markup = renderToStaticMarkup(
-          <SidebarSettingsButton
-            appInfo={appInfo}
-            connectionState={connectionState}
-            onOpen={vi.fn()}
-          />,
-        );
-        expect(markup).toContain(`CodeAgent 1.3.0, terminal connection status: ${label}`);
-        expect(markup).toContain(`>${label}</span>`);
-      }
+      expect(markup).toContain('aria-label="Settings, CodeAgent 1.3.0"');
+      expect(markup).not.toContain("Online");
+      expect(markup).not.toContain("lucide-wifi");
     } finally {
       await changeAppLanguage("zh-CN");
     }
@@ -306,12 +223,11 @@ describe("SidebarSettingsButton", () => {
           status: "available",
           updateAvailable: true,
         }}
-        connectionState="connected"
         onOpen={vi.fn()}
       />,
     );
 
-    expect(markup).toContain("CodeAgent 1.3.0，有可用更新，终端连接状态：在线");
+    expect(markup).toContain("设置，CodeAgent 1.3.0，有可用更新");
     expect(markup).toContain("lucide-circle-arrow-up");
     expect(markup).toContain('class="text-warning"');
   });
@@ -418,18 +334,37 @@ describe("Project folder actions", () => {
 });
 
 describe("TaskStatusIndicator", () => {
-  it("replaces the task age with an accessible spinner while running", () => {
+  it("keeps the activity animation limited to opacity with a reduced-motion fallback", () => {
+    const styles = readFileSync(
+      new URL("../../../shared/styles/globals.css", import.meta.url),
+      "utf8",
+    );
+    const activityRule = /\.sidebar-task-activity\s*\{(?<declarations>[^}]*)\}/u.exec(styles);
+
+    expect(activityRule?.groups?.["declarations"]).toContain(
+      "animation: sidebar-task-activity 1.2s ease-in-out infinite",
+    );
+    expect(activityRule?.groups?.["declarations"]).not.toMatch(
+      /(?:^|\n)\s*(?:border|transform|will-change)\s*:/u,
+    );
+    expect(styles).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.sidebar-task-activity\s*\{[\s\S]*?animation: none/u,
+    );
+  });
+
+  it("replaces the task age with an accessible low-cost activity indicator while running", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator attention={null} isRunning updatedAt="2026-07-23T00:01:00.000Z" />,
     );
 
     expect(markup).toContain('aria-label="任务运行中"');
-    expect(markup).toContain("sidebar-task-spinner");
+    expect(markup).toContain("sidebar-task-activity");
+    expect(markup).not.toContain("sidebar-task-spinner");
     expect(markup).not.toContain("<svg");
     expect(markup).not.toContain("task-age");
   });
 
-  it("shows a primary approval icon instead of the running spinner while awaiting approval", () => {
+  it("shows a primary approval icon instead of the activity indicator while awaiting approval", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator attention="approval" isRunning updatedAt="2026-07-23T00:01:00.000Z" />,
     );

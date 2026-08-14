@@ -282,12 +282,17 @@ describe("CommitChangesDialog", () => {
           branch: "feat/commit",
           commitSha: "0123456789abcdef0123456789abcdef01234567",
           message: "feat(git): 提交选择文件",
+          pushError: {
+            code: "provider_failure",
+            message: "remote: Permission to repository denied",
+          },
           pushStatus: "failed",
         }}
       />,
     );
 
     expect(markup).toContain("提交已完成，但推送失败");
+    expect(markup).toContain("remote: Permission to repository denied");
     expect(markup).toContain("0123456");
   });
 });

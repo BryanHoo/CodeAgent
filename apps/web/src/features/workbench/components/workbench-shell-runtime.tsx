@@ -39,7 +39,6 @@ import {
 } from "../../projects/project-queries.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
 import type { CommitChangesLauncherHandle } from "./commit-changes-launcher.js";
-import { deriveProjectSidebarConnectionState } from "./project-sidebar.js";
 import { collectSubagents, type SubagentSelection } from "./subagent.js";
 import type {
   ProjectFileTreeDirectoryState,
@@ -214,12 +213,6 @@ export function useWorkbenchShellRuntime({
     [taskLaunchState],
   );
   const projectTaskState = projectTaskStates.get(projectId);
-  const sidebarConnectionState = deriveProjectSidebarConnectionState({
-    hasActiveTask: taskId !== undefined,
-    projectDataFailed: error !== null || (projectTaskState?.error ?? null) !== null,
-    projectDataPending: isPending || projectTaskState?.isPending === true,
-    taskConnectionState: runtime.connectionState,
-  });
   const isTaskRunning =
     runtime.snapshot?.status === "running" || startingSnapshot?.status === "running";
   const backgroundTerminals = useBackgroundTerminals(client, projectId, taskId, isTaskRunning);
@@ -427,7 +420,6 @@ export function useWorkbenchShellRuntime({
     setSubagentDialogSelection,
     setTaskRenameError,
     setTaskRenameOpen,
-    sidebarConnectionState,
     sidebarOpen,
     sidebarWidth,
     skillsQuery,

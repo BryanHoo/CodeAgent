@@ -16,7 +16,22 @@ use tokio::{
 };
 
 const MAX_OUTPUT_BYTES: usize = 10 * 1024 * 1024;
-const PROCESS_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum GitCommandKind {
+    Local,
+    Push,
+}
+
+impl GitCommandKind {
+    const fn timeout(self) -> Duration {
+        match self {
+            Self::Local => Duration::from_secs(10),
+            // 网络写入允许完成 SSH 协商，同时必须先于客户端的 60 秒 mutation 截止时间结束。
+            Self::Push => Duration::from_secs(45),
+        }
+    }
+}
 
 pub struct ProcessOutput {
     pub stdout: Vec<u8>,
@@ -73,6 +88,7 @@ pub async fn execute_git(
     root: &Path,
     arguments: &[String],
     stdin: Option<&[u8]>,
+    kind: GitCommandKind,
     environment: &ProcessEnvironment,
     context: &PortRequestContext,
 ) -> Result<ProcessOutput, CodeAgentError> {
@@ -112,7 +128,7 @@ pub async fn execute_git(
     command.env("GIT_OPTIONAL_LOCKS", "0");
     let mut child = command
         .spawn()
-        .map_err(|_| failure("git command could not start"))?;
+        .map_err(|error| failure(format!("git command could not start: {error}")))?;
     if let Some(input) = stdin {
         let mut writer = child
             .stdin
@@ -121,7 +137,7 @@ pub async fn execute_git(
         writer
             .write_all(input)
             .await
-            .map_err(|_| failure("git stdin failed"))?;
+            .map_err(|error| failure(format!("git stdin failed: {error}")))?;
     }
     let stdout = child
         .stdout
@@ -135,29 +151,33 @@ pub async fn execute_git(
     let stdout_task = tokio::spawn(read_bounded(stdout, budget.clone()));
     let stderr_task = tokio::spawn(read_bounded(stderr, budget));
     let status = tokio::select! {
-        status = child.wait() => status.map_err(|_| failure("git command failed"))?,
+        status = child.wait() => status.map_err(|error| failure(format!("git command failed: {error}")))?,
         () = context.cancelled() => {
             let _ = child.kill().await;
             return Err(CodeAgentError::new(CodeAgentErrorCode::Cancelled, "operation was cancelled", None));
         }
-        () = tokio::time::sleep(PROCESS_TIMEOUT) => {
+        () = tokio::time::sleep(kind.timeout()) => {
             let _ = child.kill().await;
-            return Err(CodeAgentError::new(CodeAgentErrorCode::Timeout, "git command timed out", None));
+            return Err(CodeAgentError::new(
+                CodeAgentErrorCode::Timeout,
+                format!("git command timed out after {} seconds", kind.timeout().as_secs()),
+                None,
+            ));
         }
     };
     let stdout = stdout_task
         .await
-        .map_err(|_| failure("git output task failed"))??;
+        .map_err(|error| failure(format!("git output task failed: {error}")))??;
     let stderr = stderr_task
         .await
-        .map_err(|_| failure("git output task failed"))??;
+        .map_err(|error| failure(format!("git output task failed: {error}")))??;
     if !status.success() {
-        let message = String::from_utf8_lossy(&stderr);
-        return Err(failure(if message.is_empty() {
-            "git command failed"
+        let message = if stderr.is_empty() {
+            format!("git command exited with status {status}")
         } else {
-            "git command was rejected"
-        }));
+            String::from_utf8_lossy(&stderr).into_owned()
+        };
+        return Err(failure(message));
     }
     Ok(ProcessOutput { stdout })
 }
@@ -172,7 +192,7 @@ async fn read_bounded(
         let read = reader
             .read(&mut buffer)
             .await
-            .map_err(|_| failure("git output failed"))?;
+            .map_err(|error| failure(format!("git output failed: {error}")))?;
         if read == 0 {
             return Ok(output);
         }
@@ -184,7 +204,7 @@ async fn read_bounded(
     }
 }
 
-fn failure(message: &'static str) -> CodeAgentError {
+fn failure(message: impl Into<Arc<str>>) -> CodeAgentError {
     CodeAgentError::new(CodeAgentErrorCode::ProviderFailure, message, None)
 }
 
@@ -196,10 +216,17 @@ fn capacity(message: &'static str) -> CodeAgentError {
 mod tests {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
+    use std::time::Duration;
 
     use code_agent_core::PortRequestContext;
 
-    use super::{ProcessEnvironment, execute_git};
+    use super::{GitCommandKind, ProcessEnvironment, execute_git};
+
+    #[test]
+    fn push_uses_a_longer_bounded_timeout() {
+        assert_eq!(GitCommandKind::Local.timeout(), Duration::from_secs(10));
+        assert_eq!(GitCommandKind::Push.timeout(), Duration::from_secs(45));
+    }
 
     #[tokio::test]
     async fn execute_git_uses_injected_path_and_removes_dangerous_variables() {
@@ -233,6 +260,7 @@ mod tests {
             &root,
             &[],
             None,
+            GitCommandKind::Local,
             &environment,
             &PortRequestContext::new("git-environment-test"),
         )
@@ -241,5 +269,42 @@ mod tests {
 
         fs::remove_dir_all(&root).expect("remove Git environment fixture");
         assert_eq!(output.stdout, b"injected\n");
+    }
+
+    #[tokio::test]
+    async fn execute_git_preserves_stderr_from_failed_command() {
+        let root =
+            std::env::temp_dir().join(format!("code-agent-git-error-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("create Git error fixture");
+        let executable = root.join("git");
+        fs::write(
+            &executable,
+            "#!/bin/sh\nprintf 'remote: permission denied' >&2\nexit 1\n",
+        )
+        .expect("write failing Git executable");
+        let mut permissions = fs::metadata(&executable)
+            .expect("read fake Git metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&executable, permissions).expect("make fake Git executable");
+        let environment =
+            ProcessEnvironment::from_variables([("PATH", root.to_string_lossy().as_ref())]);
+
+        let result = execute_git(
+            &root,
+            &[],
+            None,
+            GitCommandKind::Local,
+            &environment,
+            &PortRequestContext::new("git-error-test"),
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("Git command should fail"),
+            Err(error) => error,
+        };
+
+        fs::remove_dir_all(&root).expect("remove root");
+        assert_eq!(error.message(), "remote: permission denied");
     }
 }

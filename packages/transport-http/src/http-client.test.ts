@@ -736,6 +736,7 @@ describe("CodeAgentClient", () => {
           branch: "feat/commit",
           commitSha: "0123456789abcdef0123456789abcdef01234567",
           message: commitRequest.message,
+          pushError: null,
           pushStatus: "pushed",
         }),
       );

@@ -356,7 +356,29 @@ describe("project protocol", () => {
         branch: "feat/commit",
         commitSha: "0123456789abcdef0123456789abcdef01234567",
         message: "feat(git): 添加选择文件提交",
+        pushError: null,
         pushStatus: "pushed",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(CommitProjectChangesResponseSchema, {
+        branch: "feat/commit",
+        commitSha: "0123456789abcdef0123456789abcdef01234567",
+        message: "feat(git): 添加选择文件提交",
+        pushError: null,
+        pushStatus: "failed",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CommitProjectChangesResponseSchema, {
+        branch: "feat/commit",
+        commitSha: "0123456789abcdef0123456789abcdef01234567",
+        message: "feat(git): 添加选择文件提交",
+        pushError: {
+          code: "provider_failure",
+          message: "remote: Permission to repository denied",
+        },
+        pushStatus: "failed",
       }),
     ).toBe(true);
 

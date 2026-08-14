@@ -6,7 +6,10 @@ use code_agent_protocol::ProjectId;
 use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 
-use crate::{PlatformDatabase, PlatformError, ProcessEnvironment, process::execute_git};
+use crate::{
+    PlatformDatabase, PlatformError, ProcessEnvironment,
+    process::{GitCommandKind, execute_git},
+};
 
 mod mutation;
 mod status;
@@ -155,7 +158,32 @@ impl GitCliService {
             .iter()
             .map(|value| (*value).to_owned())
             .collect::<Vec<_>>();
-        let output = execute_git(root, &arguments, None, &self.environment, context).await?;
+        let output = execute_git(
+            root,
+            &arguments,
+            None,
+            GitCommandKind::Local,
+            &self.environment,
+            context,
+        )
+        .await?;
+        String::from_utf8(output.stdout).map_err(|_| invalid("git output is not UTF-8"))
+    }
+
+    async fn push(
+        &self,
+        root: &Path,
+        context: &PortRequestContext,
+    ) -> Result<String, CodeAgentError> {
+        let output = execute_git(
+            root,
+            &["push".to_owned()],
+            None,
+            GitCommandKind::Push,
+            &self.environment,
+            context,
+        )
+        .await?;
         String::from_utf8(output.stdout).map_err(|_| invalid("git output is not UTF-8"))
     }
 
@@ -166,7 +194,15 @@ impl GitCliService {
         stdin: Option<&[u8]>,
         context: &PortRequestContext,
     ) -> Result<String, CodeAgentError> {
-        let output = execute_git(root, &arguments, stdin, &self.environment, context).await?;
+        let output = execute_git(
+            root,
+            &arguments,
+            stdin,
+            GitCommandKind::Local,
+            &self.environment,
+            context,
+        )
+        .await?;
         String::from_utf8(output.stdout).map_err(|_| invalid("git output is not UTF-8"))
     }
 
