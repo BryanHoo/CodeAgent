@@ -56,7 +56,7 @@
 - 通过显式 Props 或专用 Hook 获取数据，不从组件内部访问 Server 或 Provider。
 - Composer 公共入口只装配 controller 与视图：纯状态推导放入独立模块，Mutation 单飞、幂等尝试和作用域清理由 controller hook 持有，Prompt Input、队列、附件、命令菜单和状态行由无 Client 访问的视图组件渲染。拆分不得改变编辑器 DOM 身份、IME 组合缓冲、可访问名称或用户事件直接触发 Mutation 的时机。
 - 长列表使用稳定尺寸与虚拟化；流式 Item 独立订阅，避免整个 Task 重渲染。
-- Task Timeline 必须在该 Turn 已产生的消息与结构化结果之后显示归一化错误，使部分回复与最终失败原因保持同一阅读顺序；Command 继续使用 `Tool` 表达调用和状态，输出使用 项目 Agent 组件 `Terminal` 解析 ANSI、复制、流式跟随和自动滚动，并明确标识截断状态。历史输出保持只读，不提供清空操作；缺少输出时只能展示真实 `cwd`，不得伪造内容。
+- Task Timeline 必须在该 Turn 已产生的消息与结构化结果之后显示归一化错误，使部分回复与最终失败原因保持同一阅读顺序；Command 继续使用 `Tool` 表达调用和状态，展开详情必须先以结构化输入展示原始 `command` 与 `cwd`，再使用 项目 Agent 组件 `Terminal` 展示真实输出并支持 ANSI 解析、复制、流式跟随和自动滚动，同时明确标识截断状态。历史输出保持只读，不提供清空操作；非流式 Command 缺少真实输出时不得挂载空 Terminal，也不得用 `cwd` 伪装输出。
 - 通用 Tool 必须使用 项目 Agent 组件 `ToolInput` 与 `ToolOutput` 分区展示参数、JSON 结果和错误文本；`AgentItemStatus` 只在 Timeline 视图边界映射为 项目 Agent 组件 Tool 执行状态，不向 Web 引入 `ToolUIPart` 或 AI SDK Runtime。Command 与通用 Tool 无论运行或终态都必须默认收起，并在摘要中保留当前状态；参数、输出、错误和 Terminal 只在用户首次展开时挂载，重新折叠后立即卸载。
 - Task Timeline 的 Plan Item 必须使用 项目 Agent 组件 `Plan` 卡片和统一 Markdown 渲染器原样展示计划文本；仅当它是运行中 Turn 的当前最后一个 Item 时启用 `isStreaming`，不得为展示状态扩展 Protocol 或使用 `Tool` 模拟 Plan。运行中的计划只展示生成状态，最新完成计划才提供单飞的“构建”动作；构建成功必须清除计划模式标签，并通过普通 Turn 提交开发指令，不得再次携带 `collaborationMode: "plan"`。
 - Task Timeline 仅将 `AgentItem` 中的 `activity` 映射为 项目 Agent 组件 `Task`，按 Activity 状态映射进度；有 `detail` 时允许展开，没有 `detail` 时保持紧凑。不得继续用 `Tool` 模拟 Activity，也不得把 CodeAgent 的整个 Task 或 Turn 映射为 项目 Agent 组件 `Task`。`activity` 与 `runtime_status` 的 `detail` 可能包含连续 URL 编码串，展开后必须在内容边界换行且不得增加中栏会话宽度；Playwright 回归必须断言会话容器的 `scrollWidth` 不超过 `clientWidth`。
@@ -73,7 +73,7 @@
 - 运行中的 Turn 每当 `file_change` Item 进入 `completed`，必须立即逐文件展示文件名、增删行统计和可点击的单文件 Diff 入口；Turn Diff 流式更新期间的折叠提示必须订阅当前 Turn 最新且仍处于 `pending | running` 的 `file_change` Item，优先显示文件名和增删行统计，仅在尚无文件级事件时回退为通用实时变更文案。该 Item 进入任一终态后必须立即隐藏实时提示，不能与已完成文件行重复展示。Turn 结束后改为在回复末尾聚合全部已完成文件变更，以卡片展示去重文件数和总增删行，不能同时保留运行态条目造成重复。单击文件继续打开单文件 Diff，“审核”则打开同一组文件的连续审核弹窗。连续审核必须提供明确的当前位置、上一个/下一个按钮、左右方向键和首尾禁用状态，并支持 Escape 与 backdrop 关闭。连续审核右栏必须按 Project 相对路径使用本地 `FileTree` 展示变更文件；没有直接文件且只有一个子目录的连续目录链合并为单一路径节点，文件节点保留增删统计和当前选中状态。变更文件导航在桌面端打开弹窗时默认展开，在工作台移动断点下默认收起，两端均通过可访问图标按钮展开或收起；移动端展开时从右侧覆盖审核内容，不得压缩 Diff 宽度。单文件 Diff 与连续审核弹窗的根网格不得被 Diff 固有宽度撑出视口。
 - 交互控件使用语义化元素并提供可访问名称、键盘行为和明确状态。
 - Approval 使用 `Confirmation` 提供 Allow、Deny 和可用的 Session 级决策；进入已有待审批 Task 或当前 Task 新增审批时，队首可操作请求的“允许”按钮必须自动聚焦，让用户可直接按 Enter 确认；网络审批必须明确显示目标 Host 与协议，不能依赖命令文本表达授权对象；User Input 的选择、确认和短文本分别使用 Radio、可切换 Button 和 Input，提交回答使用主色按钮，提交开始后立即禁用重复操作，响应确认后在同一 Turn 中显示用户回答。
-- 可能位于裁剪容器或视口边缘的 Tooltip 必须脱离局部层叠上下文渲染，并在桌面与窄屏中自动翻转、限制到视口安全边距；同时验证 Hover 和键盘焦点行为。
+- 可能位于裁剪容器或视口边缘的 Tooltip 必须脱离局部层叠上下文渲染，默认使用固定可读宽度并允许长文本换行，在窄屏中缩小到视口安全边距内而不能扩满屏幕；桌面与窄屏都必须验证自动翻转、无横向溢出、Hover 和键盘焦点行为。
 - `shared/styles/globals.css` 是颜色、字体、间距、圆角、阴影、动效和固定布局尺寸的唯一设计 Token 来源；组件使用语义化 Tailwind Token，不散落视觉字面值。
 - 浅色与深色主题在同一语义 Token 中使用 `light-dark()` 定义，`data-theme` 只切换 `color-scheme`，禁止复制整套主题变量。
 - 颜色模式提供 `auto | light | dark`，默认使用 `auto` 并跟随 `prefers-color-scheme` 实时切换；版本化浏览器存储只保存用户偏好，根节点 `data-theme` 始终写入解析后的 `light | dark`。主题在 React 挂载前同步且切换即时生效，不进入 Agent 设置 API，也不因取消设置表单而回滚。

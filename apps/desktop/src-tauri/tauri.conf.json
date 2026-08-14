@@ -35,10 +35,17 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "externalBin": [],
     "resources": {
       "resources/codex-runtime/": "codex-runtime/"
     },
     "targets": "all"
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://github.com/BryanHoo/CodeAgent/releases/latest/download/latest.json"],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM2NUNCRUY0RDA0NDkxMTkKUldRWmtVVFE5TDVjeHJ3Z1RReUFPZVhJN2dpUUl5cUQwYWcwamFJWG4xc3RRMmNFR2treko4enIK"
+    }
   }
 }

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node ./scripts/prepare-codex-binary.mjs && tauri build",
+    "build": "node ./scripts/prepare-codex-binary.mjs && node ./scripts/run-tauri-build.mjs",
     "dev": "node ./scripts/prepare-codex-binary.mjs && tauri dev",
     "prepare:codex": "node ./scripts/prepare-codex-binary.mjs",
     "tauri": "tauri"

@@ -61,8 +61,28 @@ jobs:
             exit 1
           }
           pnpm run release:version:check
-      - name: Build and test target artifacts
-        run: pnpm build && pnpm run package:check && pnpm --filter @code-agent/desktop build && pnpm run desktop:artifact:check
+      - name: Build and test npm artifacts
+        run: pnpm build && pnpm run package:check
+      - name: Prepare bundled Codex runtime
+        run: pnpm --filter @code-agent/desktop prepare:codex
+      - name: Build and upload signed Desktop artifacts
+        uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: pnpm tauri
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: CodeAgent ${{ env.RELEASE_TAG }}
+          generateReleaseNotes: true
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
+      - name: Verify Desktop artifact isolation
+        run: pnpm run desktop:artifact:check
       - name: Pack npm artifacts
         shell: bash
         run: |
@@ -140,11 +160,11 @@ jobs:
         run: |
           package_version="${RELEASE_TAG#v}"
           npm view "@bryanhu/code-agent@${package_version}" version --json >/dev/null 2>&1 || npm publish ".artifacts/npm/bryanhu-code-agent-${package_version}.tgz" --access public --provenance
-      - name: Create draft GitHub release
+      - name: Upload release checksums and Desktop archives
         shell: bash
         run: >-
-          gh release create "${RELEASE_TAG}"
+          gh release upload "${RELEASE_TAG}"
           .artifacts/desktop/*.tar.gz .artifacts/SHA256SUMS
-          --draft --generate-notes --title "CodeAgent ${RELEASE_TAG}" --verify-tag
+          --clobber
         env:
           GH_TOKEN: ${{ github.token }}

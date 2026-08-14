@@ -27,6 +27,22 @@ impl CommandError {
         Self::new("internal", message, false)
     }
 
+    pub fn update_check_failed(message: impl Into<String>) -> Self {
+        Self::new("update_check_failed", message, true)
+    }
+
+    pub fn update_install_failed(message: impl Into<String>) -> Self {
+        Self::new("update_install_failed", message, true)
+    }
+
+    pub fn update_not_available() -> Self {
+        Self::new(
+            "update_not_available",
+            "The requested update is not available",
+            false,
+        )
+    }
+
     fn new(code: &str, message: impl Into<String>, retryable: bool) -> Self {
         Self {
             code: code.to_owned(),

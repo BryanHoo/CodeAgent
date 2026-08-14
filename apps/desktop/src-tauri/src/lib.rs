@@ -45,6 +45,7 @@ pub fn run() {
         ))
         .plugin(navigation_guard_plugin())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let codex_home = codex_home(app)?;
             let data_root = code_agent_data_root(&app.path().home_dir()?);
@@ -121,6 +122,7 @@ pub fn run() {
             commands::app::access_status,
             commands::app::app_diagnostics,
             commands::app::app_info,
+            commands::app::app_update_install,
             commands::app::cancel_operation,
             commands::attachments::attachment_import_host,
             commands::attachments::attachment_open,

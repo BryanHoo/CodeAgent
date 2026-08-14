@@ -30,6 +30,7 @@ uuid.workspace = true
 tauri.workspace = true
 tauri-plugin-notification.workspace = true
 tauri-plugin-single-instance.workspace = true
+tauri-plugin-updater.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 

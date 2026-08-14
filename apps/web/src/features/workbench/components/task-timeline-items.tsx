@@ -225,28 +225,34 @@ export function TimelineItemContent({
       const commandOutput =
         item.output === RETAINED_COMMAND_OUTPUT_MARKER
           ? i18n.t("timeline.outputRetained", { ns: "conversation" })
-          : (item.output ?? item.cwd);
+          : item.output;
       const isStreamingCommand = turnStatus === "running" && item.status === "running";
       return (
         <Tool>
           <ToolHeader state={toToolState(item.status)} title={commandLabel} />
-          <ToolBody>
-            <Terminal isStreaming={isStreamingCommand} output={commandOutput}>
-              <TerminalHeader>
-                <TerminalTitle>{i18n.t("timeline.output", { ns: "conversation" })}</TerminalTitle>
-                <TerminalActions>
-                  <TerminalCopyButton />
-                </TerminalActions>
-              </TerminalHeader>
-              <TerminalContent>
-                {item.outputTruncated ? (
-                  <p className="mt-2 text-warning">
-                    {i18n.t("timeline.outputTruncated", { ns: "conversation" })}
-                  </p>
-                ) : null}
-              </TerminalContent>
-            </Terminal>
-          </ToolBody>
+          <ToolContent>
+            {/* 命令与工作目录属于调用输入，展开后必须和真实输出明确分区。 */}
+            <ToolInput input={{ command: item.command, cwd: item.cwd }} />
+          </ToolContent>
+          {commandOutput === undefined && !isStreamingCommand ? null : (
+            <ToolBody>
+              <Terminal isStreaming={isStreamingCommand} output={commandOutput ?? ""}>
+                <TerminalHeader>
+                  <TerminalTitle>{i18n.t("timeline.output", { ns: "conversation" })}</TerminalTitle>
+                  <TerminalActions>
+                    <TerminalCopyButton />
+                  </TerminalActions>
+                </TerminalHeader>
+                <TerminalContent>
+                  {item.outputTruncated ? (
+                    <p className="mt-2 text-warning">
+                      {i18n.t("timeline.outputTruncated", { ns: "conversation" })}
+                    </p>
+                  ) : null}
+                </TerminalContent>
+              </Terminal>
+            </ToolBody>
+          )}
         </Tool>
       );
     }

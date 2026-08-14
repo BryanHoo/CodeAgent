@@ -56,7 +56,7 @@ describe("Tauri Phase 4 repository contract", () => {
 
     expect(desktop.match(/app\.manage\(Arc::new\(runtime\)\)/g)).toHaveLength(1);
     expect(capability.windows).toEqual(["main"]);
-    expect(capability.permissions).toEqual(["core:default"]);
+    expect(capability.permissions).toEqual(["core:default", "updater:default"]);
     expect(runtimeManifest).not.toContain("tauri");
     expect(runtimeManifest).not.toContain("code-agent-platform");
   });

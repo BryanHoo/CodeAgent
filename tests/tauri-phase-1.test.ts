@@ -55,9 +55,9 @@ describe("Tauri Phase 1 repository contract", () => {
     expect(librarySource).not.toContain("commands::execute");
     expect(capability).toEqual({
       $schema: "../gen/schemas/desktop-schema.json",
-      description: "允许主窗口使用 Tauri 核心窗口能力。",
+      description: "允许主窗口使用 Tauri 核心窗口和签名更新能力。",
       identifier: "main-capability",
-      permissions: ["core:default"],
+      permissions: ["core:default", "updater:default"],
       windows: ["main"],
     });
   });
@@ -84,7 +84,7 @@ describe("Tauri Phase 1 repository contract", () => {
       devDependencies: { "@tauri-apps/cli": "catalog:" },
       name: "@code-agent/desktop",
       scripts: {
-        build: "node ./scripts/prepare-codex-binary.mjs && tauri build",
+        build: "node ./scripts/prepare-codex-binary.mjs && node ./scripts/run-tauri-build.mjs",
         dev: "node ./scripts/prepare-codex-binary.mjs && tauri dev",
         tauri: "tauri",
       },
