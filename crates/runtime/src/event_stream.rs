@@ -10,8 +10,8 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-/// 默认 Delta 合并窗口。
-pub const DEFAULT_COALESCING_WINDOW: Duration = Duration::from_millis(16);
+/// 首个 Delta 直发后的 trailing 合并窗口。
+pub const DEFAULT_COALESCING_WINDOW: Duration = Duration::from_millis(8);
 
 const APPEND_EVENT_TYPES: [&str; 4] = [
     "command.output_delta",
@@ -120,6 +120,8 @@ pub struct EventStreamMetrics {
     pub provider_events_received: u64,
     /// 已分配序号的事件数。
     pub published_events: u64,
+    /// 单个订阅队列观测到的最大积压事件数。
+    pub queue_high_water_mark: usize,
     /// 当前保留事件数。
     pub retained_events: usize,
     /// 因数量或字节预算发生的淘汰数。
@@ -140,6 +142,7 @@ struct Subscriber {
 
 struct EventStreamState {
     closed: bool,
+    coalescing_window_open: bool,
     history_floor_sequence: u64,
     metrics: EventStreamMetrics,
     next_subscriber_id: u64,
@@ -176,6 +179,7 @@ impl AgentEventStream {
             options,
             state: Mutex::new(EventStreamState {
                 closed: false,
+                coalescing_window_open: false,
                 history_floor_sequence: 0,
                 metrics: EventStreamMetrics::default(),
                 next_subscriber_id: 0,
@@ -201,6 +205,13 @@ impl AgentEventStream {
             return;
         }
 
+        if !state.coalescing_window_open {
+            // 窗口首事件直接交付，避免与浏览器下一帧提交串成两次调度等待。
+            state.coalescing_window_open = true;
+            self.publish_now(&mut state, event);
+            return;
+        }
+
         let previous = state.pending.last_mut();
         if let Some(previous) =
             previous.filter(|previous| coalescing_key(previous) == coalescing_key(&event))
@@ -218,7 +229,7 @@ impl AgentEventStream {
         self.flush_locked(&mut state);
     }
 
-    /// 按默认窗口冲刷 Delta，关闭信号到达时执行最后一次冲刷。
+    /// 按默认 trailing 窗口冲刷 Delta，关闭信号到达时执行最后一次冲刷。
     pub async fn run_flush_loop(&self, shutdown: CancellationToken) {
         let start = Instant::now() + DEFAULT_COALESCING_WINDOW;
         let mut interval = tokio::time::interval_at(start, DEFAULT_COALESCING_WINDOW);
@@ -229,7 +240,7 @@ impl AgentEventStream {
                     self.flush().await;
                     return;
                 }
-                _ = interval.tick() => self.flush().await,
+                _ = interval.tick() => self.flush_trailing().await,
             }
         }
     }
@@ -332,7 +343,16 @@ impl AgentEventStream {
         state.subscribers.clear();
     }
 
+    async fn flush_trailing(&self) {
+        let mut state = self.state.lock().await;
+        let had_pending = !state.pending.is_empty();
+        self.flush_locked(&mut state);
+        // 持续输入保持合并态；连续一个空窗口后，下一段输入才重新直发首条。
+        state.coalescing_window_open = had_pending;
+    }
+
     fn flush_locked(&self, state: &mut EventStreamState) {
+        state.coalescing_window_open = false;
         let pending = std::mem::take(&mut state.pending);
         for event in pending {
             self.publish_now(state, event);
@@ -371,9 +391,16 @@ impl AgentEventStream {
         state.metrics.published_events += 1;
 
         state.subscribers.retain(|(_, subscriber)| {
+            let queued_events = subscriber.events.max_capacity() - subscriber.events.capacity();
             if subscriber.events.try_send(event.clone()).is_ok() {
+                state.metrics.queue_high_water_mark = state
+                    .metrics
+                    .queue_high_water_mark
+                    .max(queued_events.saturating_add(1));
                 true
             } else {
+                state.metrics.queue_high_water_mark =
+                    state.metrics.queue_high_water_mark.max(queued_events);
                 subscriber
                     .signal
                     .send_replace(SubscriberSignal::ResyncRequired);

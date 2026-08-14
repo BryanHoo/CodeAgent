@@ -5,6 +5,7 @@ import {
   type ResyncRequired,
 } from "@code-agent/protocol";
 import { Value } from "@sinclair/typebox/value";
+import { performance } from "node:perf_hooks";
 
 export interface NativeEventSubscription {
   readonly id: string;
@@ -26,6 +27,11 @@ export interface NodeEventCallbacks {
   onConnectionState?: (state: "closed" | "connected" | "connecting") => void;
   onError?: (error: Error) => void;
   onEvent: (event: AgentEvent) => void;
+  onPerformanceSample?: (sample: {
+    readonly at: number;
+    readonly point: "transport_received";
+    readonly sequence: number;
+  }) => void;
   onResyncRequired: (message: ResyncRequired) => void;
   projectId: string;
   requestId: string;
@@ -107,6 +113,11 @@ export function startNodeEventSubscription(
       return;
     }
     lastSequence = message.sequence;
+    options.onPerformanceSample?.({
+      at: performance.now(),
+      point: "transport_received",
+      sequence: message.sequence,
+    });
     options.onEvent(message);
   };
 

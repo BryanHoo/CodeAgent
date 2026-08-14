@@ -23,7 +23,8 @@
 - `sequence` 是 Runtime Session 内的事件顺序依据；断线恢复先刷新 Snapshot，再从检查点补发。
 - Task Snapshot 必须显式携带可空的结构化计划；`plan.updated` 以完整列表替换最新计划，只更新 Snapshot 元数据，不得重建 Timeline Item Store 或改变 Item 顺序。Inspector 在上下文顶部持续展示最新计划，并在当前 Task 首次拥有计划时自动选择上下文 Tab；用户手动选回其他 Tab 后，同一 Task 的步骤状态更新不得再次抢占选择。
 - Client 必须忽略 `sequence <= lastAppliedSequence` 的重复事件，并在更大缺口或 `sessionId` 变化时停止增量应用、请求 resync。
-- Delta 可在同一动画帧按 Item 与字段合并，但只能合并相邻同 Key 事件，不得跨其他 Item 重排首次出现顺序；Reasoning Summary 的 Key 必须包含 `sectionIndex`。Message、Reasoning、Command 与 Plan Delta 追加文本，Tool Progress、File Change 与 Turn Diff 状态快照只保留窗口内最新值；关键事件到达时先按 `sequence` 冲刷所有更早事件，再应用完整 Item/Turn 终态。
+- Delta 可在同一动画帧按 Item 与字段合并，每个 Task Store 每帧最多提交一次，但只能合并相邻同 Key 事件，不得跨其他 Item 重排首次出现顺序；Reasoning Summary 的 Key 必须包含 `sectionIndex`。Message、Reasoning、Command 与 Plan Delta 追加文本，Tool Progress、File Change 与 Turn Diff 状态快照只保留窗口内最新值；关键事件到达时先按 `sequence` 冲刷所有更早事件，再应用完整 Item/Turn 终态。
+- 性能门禁可通过显式注入且默认关闭的只读 Observer 采集 `transport_received` 与 `store_committed`；生产路径未注入时不得分配样本对象、保留历史或增加 Timeline Store 遍历。
 - `reconnecting`、`resync.required` 和 Session 变化触发 Snapshot refetch；旧订阅、Socket、Timer 和动画帧回调必须在替换或卸载时清理。
 - Snapshot 恢复必须使用明确状态机并在请求失败后有界退避重试；成功 Hydrate 权威 Snapshot 前始终保持非阻塞 `reconnecting`，底层 Socket 的 `connected` 不得提前解除恢复状态或放行增量事件。恢复期间保留已渲染 Timeline，成功后从 Snapshot checkpoint 回放保留事件。
 - Snapshot 请求错误优先于加载状态展示；WebSocket 成功恢复为 `connected` 后清除上一次连接尝试产生的瞬时错误。

@@ -9,6 +9,7 @@ export { NodeEngineError, normalizeNodeEngineError } from "./errors.js";
 export {
   startNodeEventSubscription,
   type NodeEventCallbacks,
+  type NativeEventEngine,
   type NativeEventSubscription,
 } from "./event-subscription.js";
 export {

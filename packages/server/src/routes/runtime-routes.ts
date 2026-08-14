@@ -92,6 +92,7 @@ export const registerRuntimeRoutes: FastifyPluginCallback<ServerRouteContext> = 
           return {
             activeClients: delivery?.activeClients ?? 0,
             backpressureSignals: delivery?.backpressureSignals ?? 0,
+            maxBufferedAmount: delivery?.maxBufferedAmount ?? 0,
             ...runtime,
             slowClientDisconnects: slowSubscribers + (delivery?.slowClientDisconnects ?? 0),
           };

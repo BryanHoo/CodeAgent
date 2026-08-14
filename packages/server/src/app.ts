@@ -12,7 +12,7 @@ import { configureServerDelivery } from "./server-delivery.js";
 import type { CreateCodeAgentServerOptions } from "./server-options.js";
 import { rewriteTemporaryTaskUrl } from "./temporary-task-routing.js";
 
-export type { CreateCodeAgentServerOptions } from "./server-options.js";
+export type { CreateCodeAgentServerOptions, ServerPerformanceSample } from "./server-options.js";
 
 const DEFAULT_HANDLER_TIMEOUT_MS = 60_000;
 
@@ -60,6 +60,9 @@ export async function createCodeAgentServer(
     engine: options.engine,
     eventMetrics: { projects: new Map() },
     installAppUpdate: options.installAppUpdate,
+    ...(options.onPerformanceSample === undefined
+      ? {}
+      : { onPerformanceSample: options.onPerformanceSample }),
     readAppInfo: options.readAppInfo,
   };
 

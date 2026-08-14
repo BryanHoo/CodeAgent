@@ -6,6 +6,7 @@ import type {
 } from "@code-agent/protocol";
 
 import type { AccessSessionService } from "../access-control.js";
+import type { ServerPerformanceSample } from "../server-options.js";
 
 export class MutationHttpError extends Error {
   public constructor(
@@ -25,6 +26,7 @@ export interface EventDeliveryMetrics {
     {
       activeClients: number;
       backpressureSignals: number;
+      maxBufferedAmount: number;
       slowClientDisconnects: number;
     }
   >;
@@ -35,6 +37,7 @@ export interface ServerRouteContext {
   readonly engine: CodeAgentEngine;
   readonly eventMetrics: EventDeliveryMetrics;
   readonly installAppUpdate: (version: string) => Promise<InstallAppUpdateResponse>;
+  readonly onPerformanceSample?: (sample: ServerPerformanceSample) => void;
   readonly readAppInfo: () => Promise<AppInfoResponse>;
 }
 

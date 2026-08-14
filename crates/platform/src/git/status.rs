@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use super::{GitCliService, git_repository_not_found, internal, invalid, not_found};
 
 pub(super) const MAX_WORKING_ENTRIES: usize = 1_000;
+const MAX_DIFF_CONCURRENCY: usize = 2;
 const MAX_STATUS_CONCURRENCY: usize = 4;
 
 #[derive(Debug)]
@@ -171,22 +172,64 @@ impl GitCliService {
     ) -> Result<(Vec<Value>, Vec<Value>), CodeAgentError> {
         let mut staged = Vec::new();
         let mut unstaged = Vec::new();
-        for entry in entries {
-            if entry.index != b' ' && entry.index != b'?' && entry.index != b'!' {
-                staged.push(
-                    self.change_value(root, &entry.path, entry.index, true, context)
-                        .await?,
-                );
+        let mut indexed_entries = entries.into_iter().enumerate();
+        loop {
+            let batch = indexed_entries
+                .by_ref()
+                .take(MAX_DIFF_CONCURRENCY)
+                .collect::<Vec<_>>();
+            if batch.is_empty() {
+                break;
             }
-            if entry.index == b'?' && entry.working == b'?' {
-                unstaged.push(untracked_change(root, &entry.path).await?);
-            } else if entry.working != b' ' && entry.working != b'!' {
-                unstaged.push(
-                    self.change_value(root, &entry.path, entry.working, false, context)
-                        .await?,
-                );
+            let mut tasks = tokio::task::JoinSet::new();
+            for (index, entry) in batch {
+                let context = context.clone();
+                let root = root.to_owned();
+                let service = self.clone();
+                tasks.spawn(async move {
+                    service
+                        .materialize_working_change(&root, entry, &context)
+                        .await
+                        .map(|(staged, unstaged)| (index, staged, unstaged))
+                });
+            }
+            let mut changes = Vec::with_capacity(MAX_DIFF_CONCURRENCY);
+            while let Some(result) = tasks.join_next().await {
+                changes.push(result.map_err(|_| internal("git diff task failed"))??);
+            }
+            changes.sort_unstable_by_key(|(index, _, _)| *index);
+            for (_, staged_change, unstaged_change) in changes {
+                staged.extend(staged_change);
+                unstaged.extend(unstaged_change);
             }
         }
+        Ok((staged, unstaged))
+    }
+
+    async fn materialize_working_change(
+        &self,
+        root: &Path,
+        entry: WorkingEntry,
+        context: &PortRequestContext,
+    ) -> Result<(Option<Value>, Option<Value>), CodeAgentError> {
+        let staged = if entry.index != b' ' && entry.index != b'?' && entry.index != b'!' {
+            Some(
+                self.change_value(root, &entry.path, entry.index, true, context)
+                    .await?,
+            )
+        } else {
+            None
+        };
+        let unstaged = if entry.index == b'?' && entry.working == b'?' {
+            Some(untracked_change(root, &entry.path).await?)
+        } else if entry.working != b' ' && entry.working != b'!' {
+            Some(
+                self.change_value(root, &entry.path, entry.working, false, context)
+                    .await?,
+            )
+        } else {
+            None
+        };
         Ok((staged, unstaged))
     }
 

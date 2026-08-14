@@ -5,6 +5,7 @@ export { CodeAgentClient } from "./task-client.js";
 export type {
   AgentAttachmentUploadInput,
   AgentEventConnectionState,
+  AgentEventPerformanceSample,
   AssetReference,
   CodeAgentOperation,
   CodeAgentOperationOutput,

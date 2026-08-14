@@ -52,11 +52,18 @@ export type CodeAgentOperationOutput<TOperation extends CodeAgentOperation> = St
 
 export type AgentEventConnectionState = "closed" | "connected" | "connecting" | "reconnecting";
 
+export type AgentEventPerformanceSample = Readonly<{
+  at: number;
+  point: "transport_received";
+  sequence: number;
+}>;
+
 export interface SubscribeAgentEventsOptions {
   afterSequence: number;
   onConnectionState?: (state: AgentEventConnectionState) => void;
   onError?: (error: Error) => void;
   onEvent: (event: AgentEvent) => void;
+  onPerformanceSample?: (sample: AgentEventPerformanceSample) => void;
   onResyncRequired: (message: ResyncRequired) => void;
   projectId: string;
   reconnectDelayMs?: number;

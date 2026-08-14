@@ -73,11 +73,12 @@
 - Task 固定状态不得写入本地数据库；SQLite migration 必须删除旧 `task_metadata`，Task 列表、Snapshot 和固定 Mutation 都以 Provider 返回的 Codex 原生 `Pinned` Section 状态为唯一事实来源。
 - Provider 连接只允许持久化 `official | custom` 模式、自定义 Base URL、已验证的有界模型目录和更新时间；API key、登录 URL、登录 ID、`allow_for_session` 和可操作 Pending Approval 不得持久化，进程重启后不得恢复可操作 `pending`。
 - WebSocket 客户端使用独立有界队列，慢客户端不能阻塞 Provider；`bufferedAmount` 超过 `256 KiB` 时向 Event Stream 发出软背压信号，超过 `1 MiB` 时以 `1013` 关闭连接并要求刷新 Snapshot。
-- 每个 Project 创建独立 Event Stream Session，Provider 不分配传输序号。Server 在分配单调 `sequence` 前，按 `taskId + turnId + itemId + type + field` 合并 `message.delta`、`reasoning.delta` 和 `command.output_delta`：缓冲队列只能合并相邻同 Key 事件，不得跨其他 Item 重排 A-B-A 交错输入；普通窗口固定为 `16ms`，收到软背压信号后的下一窗口固定为 `32ms`。
+- Event Stream 指标必须以 O(1) 更新并暴露 Rust 发送队列 `queueHighWaterMark`；WebSocket Delivery 必须记录连接生命周期内的 `maxBufferedAmount`，不能通过遍历历史事件补算高水位。
+- 每个 Project 创建独立 Event Stream Session，Provider 不分配传输序号。Server 在分配单调 `sequence` 前，按 `taskId + turnId + itemId + type + field` 合并 `message.delta`、`reasoning.delta` 和 `command.output_delta`：每段连续输入的首个可合并事件必须立即发布，后续事件使用不超过 `8ms` 的 trailing 窗口；只要上一窗口存在 trailing 数据就保持合并态，连续一个空窗口后才允许下一段输入重新直发首条。缓冲队列只能合并相邻同 Key 事件，不得跨其他 Item 重排 A-B-A 交错输入。
 - 非 Delta 事件、Snapshot checkpoint、事件回放和 Runtime 关闭前必须立即冲刷所有更早 Delta；不同 key 按首次进入窗口的顺序分配连续 `sequence`，关键终态不得越过待发送 Delta。
 - Event Stream 使用固定数组环形缓冲区，每个 Project 最多保留 `1,000` 条、合计 `4 MiB` 的已发布事件，单事件最多保留 `1 MiB`；容量按序列化 UTF-8 字节计量并从最旧事件开始淘汰。同一 Event 对象的 Frame 与字节长度必须只序列化一次，并通过弱引用结果供保留预算和全部 WebSocket 客户端复用。回放必须按 `sequence` 升序返回，跨越已淘汰或因单事件超限而未保留的序列时发送 `resync.required`。
 - `/v1/projects/:projectId/events` 首帧发送 `connection.ready`，只补发 `afterSequence` 之后仍在缓存窗口内的事件；过期或超前序号发送 `resync.required`。
-- `/v1/metrics/events` 只读暴露每个 Project 的 Provider 输入、发布、合并、pending Delta、保留淘汰、软背压、活动客户端和慢客户端断开计数，不得包含 Prompt、命令输出或文件内容。
+- `/v1/metrics/events` 只读暴露每个 Project 的 Provider 输入、发布、合并、pending Delta、保留淘汰、Rust 发送队列高水位、WebSocket `bufferedAmount` 高水位、软背压、活动客户端和慢客户端断开计数，不得包含 Prompt、命令输出或文件内容。
 - Provider `readTask` Promise 完成前必须让返回 Snapshot 包含此前状态并同步交付对应通知；Task Snapshot 读取完成后再从当前 Event Stream 固定 checkpoint，避免丢失事件或重复补发已有内容；Task 归属确认后读取有效设置，固定状态直接保留 Provider Snapshot 的原生值。
 - `resync.required` 发送后由 Server 主动关闭当前 WebSocket；客户端必须使用新 Snapshot checkpoint 建立新连接。
 - Fastify 关闭时取消 Provider Event 订阅并关闭 WebSocket 资源。

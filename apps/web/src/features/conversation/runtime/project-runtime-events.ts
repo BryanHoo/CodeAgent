@@ -25,6 +25,7 @@ export class ProjectEventRuntime {
   readonly #client: CodeAgentRuntimeClient;
   readonly #eventHistory: ProjectEventHistory;
   readonly #idleTimeoutMs: number;
+  readonly #onPerformanceSample: ProjectEventRuntimeOptions["onPerformanceSample"];
   readonly #projectId: string;
   readonly #snapshotRecovery: SnapshotRecoveryController<AgentTaskSnapshotResponse>;
   readonly #targets = new Map<TaskStore, TaskEventTarget>();
@@ -48,6 +49,7 @@ export class ProjectEventRuntime {
     this.#client = client;
     this.#callbacks = callbacks;
     this.#idleTimeoutMs = options.idleTimeoutMs;
+    this.#onPerformanceSample = options.onPerformanceSample;
     this.#eventHistory = new ProjectEventHistory({
       maxBytes: options.maxEventHistoryBytes,
       maxEvents: options.maxEventHistoryEvents,
@@ -78,9 +80,14 @@ export class ProjectEventRuntime {
     storeState.reconcile(response);
     let target = this.#targets.get(store);
     if (target === undefined) {
-      target = new TaskEventTarget(store, recoverSnapshot, (recoveredResponse, recoveredTarget) => {
-        this.#hydrateRecoveredSnapshot(recoveredResponse, store, recoveredTarget);
-      });
+      target = new TaskEventTarget(
+        store,
+        recoverSnapshot,
+        (recoveredResponse, recoveredTarget) => {
+          this.#hydrateRecoveredSnapshot(recoveredResponse, store, recoveredTarget);
+        },
+        this.#onPerformanceSample,
+      );
       this.#targets.set(store, target);
     } else {
       target.addConsumer(recoverSnapshot);
@@ -225,6 +232,9 @@ export class ProjectEventRuntime {
         }
         this.#reevaluateIdleRelease();
       },
+      ...(this.#onPerformanceSample === undefined
+        ? {}
+        : { onPerformanceSample: this.#onPerformanceSample }),
       onResyncRequired: () => {
         this.#snapshotRecoveryRequired = true;
         this.#stopConnection();
