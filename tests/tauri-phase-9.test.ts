@@ -17,6 +17,27 @@ interface UpdaterSigningModule {
 }
 
 describe("Tauri Phase 9 updater contract", () => {
+  it("enables the hardened runtime while explicitly disabling App Sandbox", () => {
+    const config = readJson("apps/desktop/src-tauri/tauri.conf.json") as {
+      bundle?: {
+        macOS?: {
+          entitlements?: string;
+          hardenedRuntime?: boolean;
+          minimumSystemVersion?: string;
+        };
+      };
+    };
+    const entitlements = read("apps/desktop/src-tauri/Entitlements.plist");
+
+    expect(config.bundle?.macOS).toEqual({
+      entitlements: "./Entitlements.plist",
+      hardenedRuntime: true,
+      minimumSystemVersion: "14.0",
+    });
+    expect(entitlements).toMatch(/<key>com\.apple\.security\.app-sandbox<\/key>\s*<false\/>/u);
+    expect(entitlements).not.toContain("<true/>");
+  });
+
   it("uses a signed HTTPS GitHub Release updater", () => {
     const config = readJson("apps/desktop/src-tauri/tauri.conf.json") as {
       bundle?: { createUpdaterArtifacts?: boolean };
@@ -66,6 +87,53 @@ describe("Tauri Phase 9 updater contract", () => {
     expect(releaseGuide).toContain(
       "https://github.com/BryanHoo/CodeAgent/releases/latest/download/latest.json",
     );
+  });
+
+  it("signs, notarizes, and verifies Apple Silicon release artifacts", () => {
+    const workflow = read(".github/workflows/release.yml");
+    const requiredSecrets = [
+      "APPLE_CERTIFICATE",
+      "APPLE_CERTIFICATE_PASSWORD",
+      "APPLE_SIGNING_IDENTITY",
+      "APPLE_API_ISSUER",
+      "APPLE_API_KEY",
+      "APPLE_API_PRIVATE_KEY",
+    ];
+
+    for (const secret of requiredSecrets) {
+      expect(workflow).toContain(`${secret}: \${{ secrets.${secret} }}`);
+    }
+    expect(workflow).toContain('key_path="${RUNNER_TEMP}/app-store-connect-private-key.p8"');
+    expect(workflow).toContain('chmod 600 "${key_path}"');
+    expect(workflow).toContain("APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}");
+    expect(workflow).toContain("codesign --verify --deep --strict --verbose=2");
+    expect(workflow).toContain('codesign -d --entitlements "${signed_entitlements}" --xml');
+    expect(workflow).toContain("com.apple.security.app-sandbox");
+    expect(workflow).toContain('grep -qx "true"');
+    expect(workflow).toContain("xcrun stapler validate");
+    expect(workflow).toContain("spctl --assess --type execute --verbose=4");
+    expect(workflow).toContain("spctl --assess --type open --context context:primary-signature");
+    expect(workflow.indexOf("Verify macOS signatures and notarization")).toBeLessThan(
+      workflow.indexOf("Pack npm artifacts"),
+    );
+  });
+
+  it("documents the macOS 14 Apple Silicon signing and notarization runbook", () => {
+    const releaseGuide = read("docs/releasing.md");
+    const migrationPlan = read("docs/tauri-migration-plan.md");
+    const engineeringGuide = read(".superwork/spec/guides/index.md");
+
+    expect(releaseGuide).toContain("macOS 14+");
+    expect(releaseGuide).toContain("Developer ID Application");
+    expect(releaseGuide).toContain("APPLE_API_PRIVATE_KEY");
+    expect(releaseGuide).toContain("codesign --verify --deep --strict");
+    expect(releaseGuide).toContain("xcrun stapler validate");
+    expect(releaseGuide).toContain("spctl --assess");
+    expect(releaseGuide).not.toContain("macOS Intel");
+    expect(migrationPlan).toContain("Phase 9：进行中");
+    expect(migrationPlan).not.toContain("macOS x64");
+    expect(migrationPlan).not.toContain("x86_64-apple-darwin");
+    expect(engineeringGuide).toContain("macOS 14+");
   });
 
   it("resolves updater signing credentials for CI and local Desktop builds", async () => {

@@ -43,7 +43,6 @@ export function resolveDevelopmentAddonPaths(moduleUrl: string | URL): readonly 
 const developmentAddonPaths = resolveDevelopmentAddonPaths(import.meta.url);
 const nativePackages = new Map<string, string>([
   ["darwin-arm64", "@bryanhu/code-agent-darwin-arm64"],
-  ["darwin-x64", "@bryanhu/code-agent-darwin-x64"],
   ["linux-x64", "@bryanhu/code-agent-linux-x64-gnu"],
   ["win32-x64", "@bryanhu/code-agent-win32-x64-msvc"],
 ]);

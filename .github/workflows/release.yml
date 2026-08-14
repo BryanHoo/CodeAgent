@@ -28,7 +28,6 @@ jobs:
       matrix:
         include:
           - { os: macos-latest, target: darwin-arm64 }
-          - { os: macos-15-intel, target: darwin-x64 }
           - { os: ubuntu-22.04, target: linux-x64-gnu }
           - { os: windows-2025, target: win32-x64-msvc }
     env:
@@ -65,7 +64,54 @@ jobs:
         run: pnpm build && pnpm run package:check
       - name: Prepare bundled Codex runtime
         run: pnpm --filter @code-agent/desktop prepare:codex
-      - name: Build and upload signed Desktop artifacts
+      - name: Prepare Apple notarization credentials
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          for secret_name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_API_ISSUER APPLE_API_KEY APPLE_API_PRIVATE_KEY; do
+            if [[ -z "${!secret_name:-}" ]]; then
+              echo "Missing required GitHub Actions secret: ${secret_name}" >&2
+              exit 1
+            fi
+          done
+          key_path="${RUNNER_TEMP}/app-store-connect-private-key.p8"
+          umask 077
+          printf '%s' "${APPLE_API_PRIVATE_KEY}" > "${key_path}"
+          chmod 600 "${key_path}"
+          test -s "${key_path}"
+          echo "APPLE_API_KEY_PATH=${key_path}" >> "${GITHUB_ENV}"
+      - name: Build and upload signed macOS Desktop artifacts
+        if: runner.os == 'macOS'
+        uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: pnpm tauri
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: CodeAgent ${{ env.RELEASE_TAG }}
+          generateReleaseNotes: true
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
+      - name: Build and upload Desktop artifacts
+        if: runner.os != 'macOS'
         uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -81,6 +127,30 @@ jobs:
           prerelease: false
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
+      - name: Verify macOS signatures and notarization
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          apps=(target/release/bundle/macos/*.app)
+          dmgs=(target/release/bundle/dmg/*.dmg)
+          test "${#apps[@]}" -eq 1
+          test "${#dmgs[@]}" -eq 1
+          app_bundle="${apps[0]}"
+          dmg_bundle="${dmgs[0]}"
+          test "$(plutil -extract LSMinimumSystemVersion raw "${app_bundle}/Contents/Info.plist")" = "14.0"
+          codesign --verify --deep --strict --verbose=2 "${app_bundle}"
+          signed_entitlements="${RUNNER_TEMP}/code-agent-signed-entitlements.plist"
+          codesign -d --entitlements "${signed_entitlements}" --xml "${app_bundle}"
+          # App Sandbox 必须保持关闭；任务隔离由 Codex sandboxPolicy 负责。
+          if /usr/libexec/PlistBuddy -c "Print :com.apple.security.app-sandbox" "${signed_entitlements}" 2>/dev/null | grep -qx "true"; then
+            echo "Signed macOS app unexpectedly enables App Sandbox." >&2
+            exit 1
+          fi
+          codesign --verify --strict --verbose=2 "${dmg_bundle}"
+          xcrun stapler validate "${app_bundle}"
+          spctl --assess --type execute --verbose=4 "${app_bundle}"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "${dmg_bundle}"
       - name: Verify Desktop artifact isolation
         run: pnpm run desktop:artifact:check
       - name: Pack npm artifacts
@@ -140,7 +210,7 @@ jobs:
         shell: bash
         run: |
           package_version="${RELEASE_TAG#v}"
-          targets=(darwin-arm64 darwin-x64 linux-x64-gnu win32-x64-msvc)
+          targets=(darwin-arm64 linux-x64-gnu win32-x64-msvc)
           for target in "${targets[@]}"; do
             test -f ".artifacts/npm/bryanhu-code-agent-${target}-${package_version}.tgz" || exit 1
           done
@@ -150,7 +220,7 @@ jobs:
         shell: bash
         run: |
           package_version="${RELEASE_TAG#v}"
-          for target in darwin-arm64 darwin-x64 linux-x64-gnu win32-x64-msvc; do
+          for target in darwin-arm64 linux-x64-gnu win32-x64-msvc; do
             name="@bryanhu/code-agent-${target}"
             tarball=".artifacts/npm/bryanhu-code-agent-${target}-${package_version}.tgz"
             npm view "${name}@${package_version}" version --json >/dev/null 2>&1 || npm publish "${tarball}" --access public --provenance

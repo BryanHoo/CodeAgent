@@ -49,7 +49,6 @@ describe("loadNativeBinding", () => {
 
   it.each([
     ["darwin", "arm64", "@bryanhu/code-agent-darwin-arm64"],
-    ["darwin", "x64", "@bryanhu/code-agent-darwin-x64"],
     ["linux", "x64", "@bryanhu/code-agent-linux-x64-gnu"],
     ["win32", "x64", "@bryanhu/code-agent-win32-x64-msvc"],
   ] as const)("maps %s-%s to %s", (platform, arch, expected) => {
@@ -57,6 +56,9 @@ describe("loadNativeBinding", () => {
   });
 
   it("rejects unsupported targets before loading a module", () => {
+    expect(() => resolveNativeBindingPackage("darwin", "x64")).toThrow(
+      "不支持 native addon 平台: darwin-x64",
+    );
     expect(() => resolveNativeBindingPackage("linux", "riscv64")).toThrow(
       "不支持 native addon 平台: linux-riscv64",
     );

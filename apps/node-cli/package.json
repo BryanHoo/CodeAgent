@@ -46,7 +46,6 @@
   },
   "optionalDependencies": {
     "@bryanhu/code-agent-darwin-arm64": "1.10.0",
-    "@bryanhu/code-agent-darwin-x64": "1.10.0",
     "@bryanhu/code-agent-linux-x64-gnu": "1.10.0",
     "@bryanhu/code-agent-win32-x64-msvc": "1.10.0"
   },

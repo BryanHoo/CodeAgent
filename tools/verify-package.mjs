@@ -11,7 +11,6 @@ if (!packageManagerCli) throw new Error("package:check must run through pnpm");
 
 const nativeTarget = new Map([
   ["darwin-arm64", "darwin-arm64"],
-  ["darwin-x64", "darwin-x64"],
   ["linux-x64", "linux-x64-gnu"],
   ["win32-x64", "win32-x64-msvc"],
 ]).get(`${process.platform}-${process.arch}`);

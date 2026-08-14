@@ -1,0 +1,348 @@
+import type { AgentItem, AgentTurn } from "@code-agent/protocol";
+import { useState } from "react";
+import { useStore } from "zustand";
+
+import { ConversationNestedVirtualList } from "../../../shared/components/agent/conversation.js";
+import { Message, type MessageFileReference } from "../../../shared/components/agent/message.js";
+import type { NormalizedAgentTurn, TaskStore } from "../../conversation/runtime/task-store.js";
+import type { AgentFileChange } from "../../diff/file-change.js";
+import type { BuildPlanAction, ForkTaskAction } from "./task-timeline-contracts.js";
+import { ChangedFilesCard } from "./task-timeline-file-changes.js";
+import {
+  RunningReplyStatus,
+  shouldRenderTimelineHistoryItem,
+  shouldRenderTimelineItem,
+} from "./task-timeline-running.js";
+import {
+  StoredLiveFileChanges as LiveFileChanges,
+  StoredRunningReplyStatus,
+  StoredTimelineItemContent,
+  StoredUserMessage,
+  groupStoredTurnTimelineItems,
+} from "./task-timeline-store-items.js";
+import {
+  MessageMetadata,
+  TurnProcessingTime,
+  getMessageTimestamp,
+} from "./task-timeline-status.js";
+
+const ITEM_VIRTUALIZATION_THRESHOLD = 40;
+const getItemIdKey = (itemId: string) => itemId;
+
+export function resolveCompletedTurnProcessItemIds(
+  items: readonly AgentItem[],
+  turnStatus: AgentTurn["status"],
+): string[] {
+  if (turnStatus === "running") return [];
+  const finalAnswerIndex = items.findLastIndex(
+    (item) => item.type === "message" && item.role === "assistant" && item.phase === "final_answer",
+  );
+  if (finalAnswerIndex < 0) return [];
+
+  return items.slice(0, finalAnswerIndex).flatMap((item) => {
+    if (!shouldRenderTimelineItem(item)) return [];
+    if (item.type === "message") {
+      return item.role === "assistant" && item.phase === "commentary" ? [item.id] : [];
+    }
+    // Reasoning 摘要与运行操作都属于可折叠过程；File Change 继续由最终摘要统一展示。
+    return item.type === "file_change" || item.type === "review" ? [] : [item.id];
+  });
+}
+
+function StoredTimelineItemWindow({
+  itemIds,
+  lastTurnItemId,
+  onBuildPlan,
+  onOpenFileDiff,
+  onOpenSourceFile,
+  projectId,
+  store,
+  taskId,
+  turnStatus,
+}: Readonly<{
+  itemIds: readonly string[];
+  lastTurnItemId: string | undefined;
+  onBuildPlan?: BuildPlanAction;
+  onOpenFileDiff: (change: AgentFileChange) => void;
+  onOpenSourceFile: (reference: MessageFileReference) => void;
+  projectId: string;
+  store: TaskStore;
+  taskId: string;
+  turnStatus: AgentTurn["status"];
+}>) {
+  const itemStoresById = store.getState().itemStoresById;
+  const historyItemIds = itemIds.filter((itemId) => {
+    const item = itemStoresById.get(itemId)?.peek();
+    return (
+      item === undefined ||
+      shouldRenderTimelineHistoryItem(item, itemId === lastTurnItemId, turnStatus)
+    );
+  });
+  const renderItem = (itemId: string) => (
+    <StoredTimelineItemContent
+      isLastTurnItem={itemId === lastTurnItemId}
+      itemId={itemId}
+      key={itemId}
+      {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
+      onOpenFileDiff={onOpenFileDiff}
+      onOpenSourceFile={onOpenSourceFile}
+      projectId={projectId}
+      store={store}
+      taskId={taskId}
+      turnStatus={turnStatus}
+    />
+  );
+
+  if (historyItemIds.length <= ITEM_VIRTUALIZATION_THRESHOLD) {
+    return historyItemIds.map(renderItem);
+  }
+  return (
+    <ConversationNestedVirtualList
+      getItemKey={getItemIdKey}
+      items={historyItemIds}
+      renderItem={renderItem}
+    />
+  );
+}
+
+function StoredAssistantGroup({
+  itemIds,
+  lastTurnItemId,
+  latestSnapshotTimestamp,
+  liveFileChangesDiff,
+  onOpenFileDiff,
+  onForkTask,
+  onBuildPlan,
+  onOpenSourceFile,
+  onReviewFileChanges,
+  onToggleProcess,
+  processExpanded,
+  processItemIds,
+  processToggleAvailable,
+  projectId,
+  showProcessingTime,
+  showRunningShimmer,
+  store,
+  taskId,
+  turn,
+}: Readonly<{
+  itemIds: readonly string[];
+  lastTurnItemId: string | undefined;
+  latestSnapshotTimestamp: string;
+  liveFileChangesDiff?: string;
+  onOpenFileDiff: (change: AgentFileChange) => void;
+  onForkTask?: ForkTaskAction;
+  onBuildPlan?: BuildPlanAction;
+  onOpenSourceFile: (reference: MessageFileReference) => void;
+  onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
+  onToggleProcess: () => void;
+  processExpanded: boolean;
+  processItemIds: ReadonlySet<string>;
+  processToggleAvailable: boolean;
+  projectId: string;
+  showProcessingTime: boolean;
+  showRunningShimmer: boolean;
+  store: TaskStore;
+  taskId: string;
+  turn: NormalizedAgentTurn;
+}>) {
+  // 完成态聚合只在 Turn 终态或 Item 顺序变化时执行，不参与文本 Delta。
+  const itemStoresById = store.getState().itemStoresById;
+  const assistantTextParts: string[] = [];
+  const responseFileChanges: AgentFileChange[] = [];
+  const visibleItemIds =
+    turn.status === "running" || processExpanded
+      ? itemIds
+      : itemIds.filter((itemId) => !processItemIds.has(itemId));
+  if (turn.status !== "running") {
+    for (const itemId of visibleItemIds) {
+      const item = itemStoresById.get(itemId)?.read();
+      if (item?.type === "message" && item.role === "assistant") {
+        assistantTextParts.push(item.text);
+      } else if (item?.type === "file_change" && item.status === "completed") {
+        responseFileChanges.push(...item.changes);
+      }
+    }
+  }
+  const assistantText = assistantTextParts.join("\n\n");
+
+  return (
+    <Message from="assistant">
+      {showProcessingTime ? (
+        <TurnProcessingTime
+          completedAt={turn.completedAt}
+          startedAt={turn.startedAt}
+          {...(processToggleAvailable
+            ? { expanded: processExpanded, onToggle: onToggleProcess }
+            : {})}
+        />
+      ) : null}
+      {visibleItemIds.length > 0 || liveFileChangesDiff !== undefined || showRunningShimmer ? (
+        <div className="w-full space-y-4">
+          <StoredTimelineItemWindow
+            itemIds={visibleItemIds}
+            lastTurnItemId={lastTurnItemId}
+            {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
+            onOpenFileDiff={onOpenFileDiff}
+            onOpenSourceFile={onOpenSourceFile}
+            projectId={projectId}
+            store={store}
+            taskId={taskId}
+            turnStatus={turn.status}
+          />
+          {/* Turn 级 Diff 必须先于持续运行状态，确保 Shimmer 始终是回复最后一行。 */}
+          {liveFileChangesDiff === undefined ? null : (
+            <LiveFileChanges diff={liveFileChangesDiff} itemIds={itemIds} store={store} />
+          )}
+          {showRunningShimmer ? <StoredRunningReplyStatus itemIds={itemIds} store={store} /> : null}
+        </div>
+      ) : null}
+      {turn.status !== "running" && responseFileChanges.length > 0 ? (
+        <ChangedFilesCard
+          changes={responseFileChanges}
+          onOpenFileDiff={onOpenFileDiff}
+          onReviewFileChanges={onReviewFileChanges}
+        />
+      ) : null}
+      {turn.status !== "running" && assistantText.trim().length > 0 ? (
+        <MessageMetadata
+          {...(onForkTask === undefined ? {} : { onForkTask })}
+          text={assistantText}
+          timestamp={getMessageTimestamp("assistant", turn, latestSnapshotTimestamp)}
+        />
+      ) : null}
+    </Message>
+  );
+}
+
+export function StoreTurnTimelineSection({
+  onBuildPlan,
+  onForkTask,
+  onOpenFileDiff,
+  onOpenSourceFile,
+  onReviewFileChanges,
+  projectId,
+  store,
+  taskId,
+  turnId,
+  turnIndex,
+  suppressEmptyRunningStatus,
+}: Readonly<{
+  onBuildPlan?: BuildPlanAction;
+  onForkTask?: ForkTaskAction;
+  onOpenFileDiff: (change: AgentFileChange) => void;
+  onOpenSourceFile: (reference: MessageFileReference) => void;
+  onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
+  projectId: string;
+  store: TaskStore;
+  taskId: string;
+  turnId: string;
+  turnIndex: number;
+  suppressEmptyRunningStatus: boolean;
+}>) {
+  const turn = useStore(store, (state) => state.turnsById[turnId]);
+  const itemIds = useStore(store, (state) => state.itemIdsByTurnId[turnId] ?? []);
+  const turnDiff = useStore(store, (state) => state.turnDiffsById[turnId]);
+  const [processExpanded, setProcessExpanded] = useState(false);
+  if (turn === undefined) return null;
+
+  const latestSnapshotTimestamp = store.getState().snapshotMetadata?.updatedAt ?? "";
+  const itemStoresById = store.getState().itemStoresById;
+  const timelineGroups = groupStoredTurnTimelineItems(itemIds, itemStoresById);
+  const processItemIds = new Set(
+    resolveCompletedTurnProcessItemIds(
+      itemIds.flatMap((itemId) => {
+        const item = itemStoresById.get(itemId)?.peek();
+        return item === undefined ? [] : [item];
+      }),
+      turn.status,
+    ),
+  );
+  const processToggleAvailable = processItemIds.size > 0;
+  const firstAssistantGroupIndex = timelineGroups.findIndex((group) => group.type === "assistant");
+  const hasAssistantItems = firstAssistantGroupIndex >= 0;
+  const latestAssistantGroupIndex = timelineGroups.findLastIndex(
+    (group) => group.type === "assistant",
+  );
+  const lastTurnItemId = itemIds.at(-1);
+  const liveDiff = turn.status === "running" && turnDiff?.trim() ? turnDiff : undefined;
+
+  return (
+    <section
+      aria-label={`Turn ${String(turnIndex + 1)}`}
+      className="space-y-4"
+      data-status={turn.status}
+    >
+      {timelineGroups.map((group, groupIndex) =>
+        group.type === "user" ? (
+          <StoredUserMessage
+            itemId={group.itemId}
+            key={group.itemId}
+            latestSnapshotTimestamp={latestSnapshotTimestamp}
+            onOpenFileDiff={onOpenFileDiff}
+            onOpenSourceFile={onOpenSourceFile}
+            projectId={projectId}
+            store={store}
+            taskId={taskId}
+            turn={turn}
+          />
+        ) : (
+          <StoredAssistantGroup
+            itemIds={group.itemIds}
+            key={group.key}
+            lastTurnItemId={lastTurnItemId}
+            latestSnapshotTimestamp={latestSnapshotTimestamp}
+            {...(groupIndex === latestAssistantGroupIndex && liveDiff !== undefined
+              ? { liveFileChangesDiff: liveDiff }
+              : {})}
+            {...(turn.status === "completed" && onBuildPlan !== undefined ? { onBuildPlan } : {})}
+            onOpenFileDiff={onOpenFileDiff}
+            onToggleProcess={() => {
+              setProcessExpanded((expanded) => !expanded);
+            }}
+            {...(turn.status === "completed" &&
+            groupIndex === latestAssistantGroupIndex &&
+            onForkTask !== undefined
+              ? { onForkTask }
+              : {})}
+            onOpenSourceFile={onOpenSourceFile}
+            onReviewFileChanges={onReviewFileChanges}
+            processExpanded={processExpanded}
+            processItemIds={processItemIds}
+            processToggleAvailable={processToggleAvailable}
+            projectId={projectId}
+            showProcessingTime={groupIndex === firstAssistantGroupIndex}
+            showRunningShimmer={
+              turn.status === "running" && groupIndex === timelineGroups.length - 1
+            }
+            store={store}
+            taskId={taskId}
+            turn={turn}
+          />
+        ),
+      )}
+      {turn.status === "running" && !hasAssistantItems && !suppressEmptyRunningStatus ? (
+        <Message from="assistant">
+          <TurnProcessingTime completedAt={turn.completedAt} startedAt={turn.startedAt} />
+          <div className="w-full space-y-4">
+            {liveDiff === undefined ? null : (
+              <LiveFileChanges diff={liveDiff} itemIds={itemIds} store={store} />
+            )}
+            <RunningReplyStatus />
+          </div>
+        </Message>
+      ) : null}
+      {!hasAssistantItems && suppressEmptyRunningStatus && liveDiff !== undefined ? (
+        <LiveFileChanges diff={liveDiff} itemIds={itemIds} store={store} />
+      ) : null}
+      {turn.error === null ? null : (
+        <div
+          className="rounded-surface bg-control px-3 py-2 text-label leading-5 text-danger"
+          role="alert"
+        >
+          <p>{turn.error}</p>
+        </div>
+      )}
+    </section>
+  );
+}

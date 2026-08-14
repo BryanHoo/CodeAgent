@@ -8,11 +8,10 @@
 
 - `@bryanhu/code-agent`：CLI、Web 静态资源、Server Delivery 和 native loader。
 - `@bryanhu/code-agent-darwin-arm64`：macOS Apple Silicon addon。
-- `@bryanhu/code-agent-darwin-x64`：macOS Intel addon。
 - `@bryanhu/code-agent-linux-x64-gnu`：Linux x64 glibc addon。
 - `@bryanhu/code-agent-win32-x64-msvc`：Windows x64 MSVC addon。
 
-主包用精确版本 `optionalDependencies` 选择当前平台包，不包含本地 `.node`、安装脚本或 `node-gyp` fallback。Windows/Linux arm64 在目标环境完成验证前不发布。
+主包用精确版本 `optionalDependencies` 选择当前平台包，不包含本地 `.node`、安装脚本或 `node-gyp` fallback。macOS 仅支持 macOS 14+ 和 Apple Silicon；Intel macOS、Windows/Linux arm64 在目标环境完成验证前不发布。
 
 ## 发布前配置
 
@@ -34,18 +33,34 @@ GitHub 必须存在 `npm` Environment。工作流使用 OIDC 和 npm provenance�
 | ------------------------------------ | ------------------------------------------------------ |
 | `TAURI_SIGNING_PRIVATE_KEY`          | Tauri updater 私钥完整内容，只用于 CI 生成更新包签名。 |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 私钥密码；当前私钥无密码时可不配置。                   |
+| `APPLE_CERTIFICATE`                  | `Developer ID Application` `.p12` 文件的单行 Base64。  |
+| `APPLE_CERTIFICATE_PASSWORD`         | 导出 `.p12` 时设置的密码。                             |
+| `APPLE_SIGNING_IDENTITY`             | 完整 Developer ID identity。                           |
+| `APPLE_API_ISSUER`                   | App Store Connect API Issuer ID。                      |
+| `APPLE_API_KEY`                      | App Store Connect API Key ID。                         |
+| `APPLE_API_PRIVATE_KEY`              | `AuthKey_*.p8` 文件完整内容。                          |
 
-公钥已提交到 `apps/desktop/src-tauri/tauri.conf.json`。私钥不得提交到仓库、Artifact 或日志；当前生成文件位于 `/Users/bryanhu/.tauri/code-agent-updater.key`，必须另行存入受控密码库并保留离线备份。丢失私钥后，已安装版本将无法验证后续更新。
+公钥已提交到 `apps/desktop/src-tauri/tauri.conf.json`。私钥不得提交到仓库、Artifact 或日志；本地 updater 私钥固定使用 `~/.tauri/code-agent-updater.key`，必须另行存入受控密码库并保留离线备份。丢失私钥后，已安装版本将无法验证后续更新。
 
-Updater 签名只验证更新包来源，不替代 macOS Developer ID/notarization 或 Windows Authenticode。公开正式 Release 前仍需配置并验证对应系统签名材料。
+在 Apple Developer 中创建 `Developer ID Application` 证书，将证书及私钥导出为带密码的 `.p12`，再生成 `APPLE_CERTIFICATE`：
+
+```bash
+openssl base64 -A -in DeveloperIDApplication.p12 -out certificate-base64.txt
+```
+
+在 App Store Connect 的 Users and Access > Integrations 创建具有 Developer 权限的 API Key。下载只能获取一次的 `AuthKey_*.p8`，将完整文件内容保存为 `APPLE_API_PRIVATE_KEY`。Workflow 只在 macOS runner 中将它写入 `RUNNER_TEMP` 的 `0600` 临时文件，并通过 `APPLE_API_KEY_PATH` 交给 Tauri；仓库不保存 `.p12` 或 `.p8`。
+
+`APPLE_SIGNING_IDENTITY` 必须使用 `security find-identity -v -p codesigning` 显示的完整 `Developer ID Application: Organization Name (TEAMID)`。Tauri 配置显式启用 Hardened Runtime、要求 `minimumSystemVersion: "14.0"`，并在 `Entitlements.plist` 中将 `com.apple.security.app-sandbox` 固定为 `false`。macOS 系统 App Sandbox 必须保持关闭，任务与命令隔离由 Codex 自己的 `sandboxPolicy` 独立控制；当前 Desktop 也不启用 JIT、unsigned executable memory、禁用 library validation 或调试 entitlement。
+
+Updater 签名只验证更新包来源，不替代 macOS Developer ID signing/notarization 或 Windows Authenticode。公开正式 Release 前必须同时通过系统签名门禁。
 
 本地执行 `pnpm build:desktop` 时，构建脚本优先使用当前环境的 `TAURI_SIGNING_PRIVATE_KEY`；未设置时自动使用 `~/.tauri/code-agent-updater.key`。无密码私钥会显式传递空的 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`，无需在本地 shell 重复配置。GitHub Actions Secret 只在工作流内生效，不会同步到本地环境。
 
 ## 准备版本
 
-1. 同时更新根 `package.json`、`apps/node-cli/package.json` 和四个平台 `package.json` 的版本。
+1. 同时更新根 `package.json`、`apps/node-cli/package.json` 和三个平台 `package.json` 的版本。
 2. 更新 `CHANGELOG.md`，将 `Unreleased` 内容移入对应版本并填写日期。
-3. 确认 updater 私钥已进入 GitHub Secrets，并运行版本与完整门禁：
+3. 确认 updater 与 Apple 签名材料已进入 GitHub Secrets，并运行版本与完整门禁：
 
 ```bash
 pnpm check:ci
@@ -66,13 +81,27 @@ git push origin "v${RELEASE_VERSION}"
 
 ## 自动流程
 
-`.github/workflows/release.yml` 在四个原生 runner 上并行执行以下步骤：
+`.github/workflows/release.yml` 在三个原生 runner 上并行执行以下步骤：
 
 1. 校验 tag、根版本、CLI、native packages、Cargo workspace 和 Tauri 版本一致。
-2. 通过固定 SHA 的 `tauri-action` 在四个原生 runner 上各构建一次 Desktop bundle，使用 `TAURI_SIGNING_PRIVATE_KEY` 生成 updater artifact 和 `.sig`。
+2. 通过固定 SHA 的 `tauri-action` 在三个原生 runner 上各构建一次 Desktop bundle，使用 `TAURI_SIGNING_PRIVATE_KEY` 生成 updater artifact 和 `.sig`；macOS runner 额外执行 Developer ID 签名、公证和 stapling。
 3. 将各平台安装包、updater artifact、签名和合并后的 `latest.json` 上传到同一个 draft GitHub Release。
 4. 生成名称带版本与 target 的 npm tarball 和 Desktop 归档，汇总后生成 `SHA256SUMS`。
-5. 先发布四个 native packages，再发布主 CLI 包，最后向已有 draft Release 补充 Desktop 归档和校验和。
+5. 先发布三个 native packages，再发布主 CLI 包，最后向已有 draft Release 补充 Desktop 归档和校验和。
+
+macOS build job 在进入发布汇总前执行以下等价检查：
+
+```bash
+codesign --verify --deep --strict --verbose=2 "CodeAgent.app"
+codesign -d --entitlements signed-entitlements.plist --xml "CodeAgent.app"
+/usr/libexec/PlistBuddy -c "Print :com.apple.security.app-sandbox" signed-entitlements.plist
+xcrun stapler validate "CodeAgent.app"
+spctl --assess --type execute --verbose=4 "CodeAgent.app"
+codesign --verify --strict --verbose=2 "CodeAgent.dmg"
+spctl --assess --type open --context context:primary-signature --verbose=4 "CodeAgent.dmg"
+```
+
+Tauri 对 `.app` 完成公证并附加 ticket，再创建并签名 `.dmg`。因此 `stapler` 检查 `.app`，DMG 通过签名与 Gatekeeper 检查。CI 还会读取 `.app/Contents/Info.plist`，拒绝不等于 `14.0` 的 `LSMinimumSystemVersion`；同时提取最终签名 entitlement，拒绝将 `com.apple.security.app-sandbox` 设置为 `true` 的产物。
 
 Desktop 固定从 `https://github.com/BryanHoo/CodeAgent/releases/latest/download/latest.json` 检查更新。`latest.json` 中包含平台下载 URL 和 `.sig` 内容；`tauri-plugin-updater` 下载后使用内置公钥验证签名，验证成功才安装并重启应用。
 
@@ -86,8 +115,10 @@ GitHub 的 `/releases/latest/` 不返回 draft。发布 draft 前必须在各目
 - native packages 已齐全但主包失败：重跑工作流；已存在 native 版本会跳过，主包继续发布。
 - 主包已发布但平台包缺失：立即补发同版本缺失平台包；无法补齐时弃用主包版本并发布新版本。
 - GitHub Release 创建失败：不修改制品，重跑 publish Job；工作流会复用已发布 npm 版本。
+- Apple secret 缺失：补齐同名 Repository Actions Secret 后重跑 macOS build Job；不得把值写进 workflow、仓库文件或 Artifact。
+- macOS 签名、公证、stapling 或 Gatekeeper 验证失败：保持 Release 为 draft，检查 Developer ID identity、证书链和 App Store Connect API Key 后重跑；不得上传未验收产物替换签名制品。
 - updater 签名失败：确认 `TAURI_SIGNING_PRIVATE_KEY` 内容完整且与仓库公钥匹配；不得生成或替换新密钥后直接发布。
-- `latest.json` 缺少平台：保持 Release 为 draft，重跑缺失平台的 build Job；四个平台齐全前不得公开。
+- `latest.json` 缺少平台：保持 Release 为 draft，重跑缺失平台的 build Job；三个支持平台齐全前不得公开。
 - updater 安装拒绝签名：下载对应 Release artifact 和 `.sig` 复验构建输入，禁止关闭签名验证或改用 HTTP endpoint。
 - `EUNSUPPORTEDPROTOCOL`：确认发布的是 `pnpm pack` 产生的 tarball，并运行 `pnpm run package:check`。
 
