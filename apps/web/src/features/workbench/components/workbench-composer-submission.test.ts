@@ -120,6 +120,7 @@ function createHarness(overrides: Partial<ComposerSubmissionOptions> = {}) {
     onTaskCreated,
     onTaskStarted,
     onTurnStarted,
+    options,
     setAttachments,
     setPromptContent,
     setQueuedPrompts,
@@ -194,5 +195,65 @@ describe("createComposerSubmission", () => {
       scope: "code-agent:draft",
       turnId: turn.id,
     });
+  });
+
+  it("keeps a direct steer in a waiting composer state until its user message arrives", async () => {
+    const steerTurn = vi.fn(() =>
+      Promise.resolve({ status: "accepted" as const, taskId: "task-1", turnId: "turn-1" }),
+    );
+    const harness = createHarness({
+      activeTaskId: "task-1",
+      activeTurnId: "turn-1",
+      canSteer: true,
+      client: {
+        startTask: vi.fn(),
+        startTurn: vi.fn(),
+        steerTurn,
+      } as unknown as ComposerSubmissionOptions["client"],
+      followUpBehavior: "steer",
+      state: "running",
+      taskId: "task-1",
+    });
+
+    await expect(harness.submit({ files: [], text: "立即引导" })).resolves.toBe(true);
+    expect(harness.setQueuedPrompts).toHaveBeenCalledWith([
+      expect.objectContaining({
+        deliveryState: "awaiting_acknowledgement",
+        presentation: "composer",
+        text: "立即引导",
+      }),
+    ]);
+    expect(harness.options.clearComposerInput).not.toHaveBeenCalled();
+  });
+
+  it("keeps an automatically started queued message waiting for its Codex user item", async () => {
+    const queuedPrompt = {
+      acknowledgedUserMessageIds: [],
+      deliveryState: "queued" as const,
+      files: [],
+      id: "queued-1",
+      presentation: "queue" as const,
+      skills: [],
+      text: "顺序发送",
+    };
+    const harness = createHarness({
+      activeTaskId: "task-1",
+      queuedPrompts: [queuedPrompt],
+      taskId: "task-1",
+    });
+
+    await expect(
+      harness.submit({ files: [], text: queuedPrompt.text }, [], {
+        clearInputOnSuccess: false,
+        forceAction: "start",
+        queuedPrompt,
+      }),
+    ).resolves.toBe(true);
+    expect(harness.setQueuedPrompts).toHaveBeenCalledWith([
+      expect.objectContaining({
+        deliveryState: "awaiting_acknowledgement",
+        id: queuedPrompt.id,
+      }),
+    ]);
   });
 });
