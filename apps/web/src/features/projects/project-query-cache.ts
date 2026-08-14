@@ -1,5 +1,5 @@
 import type { CodeAgentClient } from "@code-agent/client";
-import type { AgentTask, ProjectPage } from "@code-agent/protocol";
+import type { AgentTask, Project, ProjectPage } from "@code-agent/protocol";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { i18n } from "../../i18n/i18n.js";
@@ -26,6 +26,27 @@ export function flattenProjectTaskPages(currentData: ProjectTaskInfiniteData | u
   }
 
   return [...taskById.values()];
+}
+
+export function cacheAddedProject(queryClient: QueryClient, project: Project) {
+  // 注册响应已经是权威结果，直接发布到侧栏；Project 下的重型状态继续按路由和展开状态懒加载。
+  queryClient.setQueryData<ProjectPage>(["projects"], (currentPage) => {
+    if (currentPage === undefined) {
+      return { data: [project], nextCursor: null };
+    }
+    const existingProjectIndex = currentPage.data.findIndex(
+      (currentProject) => currentProject.id === project.id,
+    );
+    if (existingProjectIndex < 0) {
+      return { ...currentPage, data: [...currentPage.data, project] };
+    }
+    return {
+      ...currentPage,
+      data: currentPage.data.map((currentProject, index) =>
+        index === existingProjectIndex ? project : currentProject,
+      ),
+    };
+  });
 }
 
 export function upsertProjectTaskInInfiniteData(
