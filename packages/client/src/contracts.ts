@@ -62,7 +62,8 @@ export interface SubscribeAgentEventsOptions {
   afterSequence: number;
   onConnectionState?: (state: AgentEventConnectionState) => void;
   onError?: (error: Error) => void;
-  onEvent: (event: AgentEvent) => void;
+  // HTTP Transport 提供原始 wire 字节数；可信内部 Transport 无 wire 文本时传 undefined。
+  onEvent: (event: AgentEvent, wireBytes: number | undefined) => void;
   onPerformanceSample?: (sample: AgentEventPerformanceSample) => void;
   onResyncRequired: (message: ResyncRequired) => void;
   projectId: string;

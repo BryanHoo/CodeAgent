@@ -1,16 +1,16 @@
 import type { AgentEventConnectionState, SubscribeAgentEventsOptions } from "@code-agent/client";
 import {
-  EventStreamMessageSchema,
   TEMPORARY_TASK_API_PATH,
   TEMPORARY_TASK_SCOPE_ID,
-  type EventStreamMessage,
+  checkEventStreamMessage,
   type ResyncRequired,
 } from "@code-agent/protocol";
-import { Value } from "@sinclair/typebox/value";
 
 export type { AgentEventConnectionState, SubscribeAgentEventsOptions } from "@code-agent/client";
 
 export type WebSocketFactory = (url: string) => WebSocket;
+
+const textEncoder = new TextEncoder();
 
 interface StartAgentEventSubscriptionOptions extends SubscribeAgentEventsOptions {
   baseUrl: string;
@@ -110,18 +110,19 @@ export function startAgentEventSubscription(
         return;
       }
       let frame: unknown;
+      const wireFrame = String(event.data);
       try {
-        frame = JSON.parse(String(event.data)) as unknown;
+        frame = JSON.parse(wireFrame) as unknown;
       } catch (error) {
         failProtocol("CodeAgent event frame is not valid JSON", error);
         return;
       }
-      if (!Value.Check(EventStreamMessageSchema, frame)) {
+      if (!checkEventStreamMessage(frame)) {
         failProtocol("CodeAgent event frame does not match the protocol schema");
         return;
       }
       // Agent Event Schema 不含 Transform，Check 成功后直接使用已验证数据，避免二次深遍历。
-      const message = frame as EventStreamMessage;
+      const message = frame;
 
       if (message.type === "resync.required") {
         stopForResync(message);
@@ -160,7 +161,7 @@ export function startAgentEventSubscription(
         point: "transport_received",
         sequence: message.sequence,
       });
-      options.onEvent(message);
+      options.onEvent(message, textEncoder.encode(wireFrame).byteLength);
     };
 
     const onError = () => {

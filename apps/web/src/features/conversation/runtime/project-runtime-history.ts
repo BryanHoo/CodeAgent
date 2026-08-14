@@ -81,8 +81,12 @@ export class ProjectEventHistory {
     return this.#floorSequence;
   }
 
-  public append(event: AgentEvent): void {
-    const retainedBytes = estimateRetainedBytes(event);
+  public append(event: AgentEvent, wireBytes: number | undefined): void {
+    // 网络事件直接复用 Transport 已知的 wire 大小；内部事件才执行保守对象估算。
+    const retainedBytes = wireBytes ?? estimateRetainedBytes(event);
+    if (!Number.isSafeInteger(retainedBytes) || retainedBytes < 0) {
+      throw new RangeError("Project Event history wireBytes must be a non-negative safe integer");
+    }
     if (retainedBytes > this.#maxBytes || this.#maxEvents === 0) {
       this.reset(event.sequence);
       return;

@@ -10,6 +10,11 @@
     "maxServerPublishMs": 1500,
     "serverEvents": 100000
   },
+  "eventHotPath": {
+    "frames": 10000,
+    "maxAppendMs": 10,
+    "maxValidateMs": 30
+  },
   "git": {
     "childRepositories": 16,
     "changes": 500,

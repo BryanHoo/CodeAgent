@@ -1,10 +1,5 @@
 import { type SubscribeAgentEventsOptions, normalizeCodeAgentError } from "@code-agent/client";
-import {
-  EventStreamMessageSchema,
-  type EventStreamMessage,
-  type ResyncRequired,
-} from "@code-agent/protocol";
-import { Value } from "@sinclair/typebox/value";
+import type { EventStreamMessage, ResyncRequired } from "@code-agent/protocol";
 import { Channel, invoke } from "@tauri-apps/api/core";
 
 function resync(
@@ -43,14 +38,10 @@ export function startTauriEventSubscription(options: SubscribeAgentEventsOptions
     }
   };
 
-  const channel = new Channel<unknown>();
-  channel.onmessage = (frame) => {
+  // Rust Runtime 已在发布前完成协议校验，IPC Channel 直接消费可信类型，避免主线程重复深遍历。
+  const channel = new Channel<EventStreamMessage>();
+  channel.onmessage = (message) => {
     if (!active) return;
-    if (!Value.Check(EventStreamMessageSchema, frame)) {
-      fail(new Error("Tauri event frame does not match the protocol schema"));
-      return;
-    }
-    const message = frame as EventStreamMessage;
     if (message.type === "resync.required") {
       stopForResync(message);
       return;
@@ -83,7 +74,7 @@ export function startTauriEventSubscription(options: SubscribeAgentEventsOptions
       point: "transport_received",
       sequence: message.sequence,
     });
-    options.onEvent(message);
+    options.onEvent(message, undefined);
   };
 
   options.onConnectionState?.("connecting");

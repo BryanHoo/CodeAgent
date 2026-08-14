@@ -1,4 +1,5 @@
 import { Type, type Static, type TProperties, type TSchema } from "@sinclair/typebox";
+import { Value } from "@sinclair/typebox/value";
 
 import {
   ActivePendingRequestSchema,
@@ -293,6 +294,30 @@ export const EventStreamMessageSchema = Type.Union([
 ]);
 
 export type EventStreamMessage = Readonly<Static<typeof EventStreamMessageSchema>>;
+
+const eventStreamSchemaByType = new Map<string, TSchema>([
+  [ConnectionReadySchema.properties.type.const, ConnectionReadySchema],
+  [ResyncRequiredSchema.properties.type.const, ResyncRequiredSchema],
+  ...AgentEventSchema.anyOf.map((schema): readonly [string, TSchema] => [
+    schema.properties.type.const,
+    schema,
+  ]),
+]);
+
+/** 按判别字段只校验唯一 Schema，避免通用 union 对每个事件重复尝试所有分支。 */
+export function checkEventStreamMessage(value: unknown): value is EventStreamMessage {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("type" in value) ||
+    typeof value.type !== "string"
+  ) {
+    return false;
+  }
+  const schema = eventStreamSchemaByType.get(value.type);
+  return schema !== undefined && Value.Check(schema, value);
+}
 
 export const EventCheckpointSchema = Type.Object(
   { sequence: SequenceSchema, sessionId: SessionIdSchema },

@@ -186,7 +186,7 @@ function createClientHarness() {
       if (subscription === undefined) {
         throw new Error("Project event subscription has not started");
       }
-      subscription.onEvent(event);
+      subscription.onEvent(event, undefined);
     },
     requireResync() {
       if (subscription === undefined) {
@@ -567,9 +567,9 @@ describe("project runtime manager", () => {
       const firstEvent = createTurnStartedEvent("task-1", 1);
       const secondEvent = createTurnStartedEvent("task-2", 2);
       const thirdEvent = createMessageDeltaEvent("task-2", 3, "环绕后继续输出");
-      retainedHistory.append(firstEvent);
-      retainedHistory.append(secondEvent);
-      retainedHistory.append(thirdEvent);
+      retainedHistory.append(firstEvent, undefined);
+      retainedHistory.append(secondEvent, undefined);
+      retainedHistory.append(thirdEvent, undefined);
       retainedHistory.forEachAfter(1, (event) => {
         retainedEvents.push(event);
       });
@@ -606,14 +606,27 @@ describe("project runtime manager", () => {
     });
     const retainedSequences: number[] = [];
 
-    history.append(firstEvent);
-    history.append(secondEvent);
+    history.append(firstEvent, undefined);
+    history.append(secondEvent, undefined);
     history.forEachAfter(0, (event) => {
       retainedSequences.push(event.sequence);
     });
 
     expect(history.floorSequence).toBe(1);
     expect(retainedSequences).toEqual([2]);
+  });
+
+  it("uses transport wire bytes instead of recursively estimating a history event", () => {
+    const event = createMessageDeltaEvent("task-1", 1, "高频流式文本");
+    const wireBytes = 32;
+    const history = new ProjectEventHistory({ maxBytes: wireBytes, maxEvents: 10 });
+    const retainedSequences: number[] = [];
+
+    expect(estimateRetainedBytes(event)).toBeGreaterThan(wireBytes);
+    history.append(event, wireBytes);
+    history.forEachAfter(0, (retainedEvent) => retainedSequences.push(retainedEvent.sequence));
+
+    expect(retainedSequences).toEqual([1]);
   });
 
   it("refreshes stores that still belong to an earlier Project Session", () => {
