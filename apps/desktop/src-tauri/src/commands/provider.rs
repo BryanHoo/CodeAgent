@@ -52,10 +52,11 @@ pub async fn provider_connection_get(
 #[tauri::command]
 pub async fn provider_login_start(
     request_id: String,
+    idempotency_key: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<Value, CommandError> {
     runtime
-        .start_provider_login(&request_id)
+        .start_provider_login(&request_id, &idempotency_key)
         .await
         .map_err(Into::into)
 }
@@ -63,11 +64,12 @@ pub async fn provider_login_start(
 #[tauri::command]
 pub async fn provider_login_cancel(
     request_id: String,
+    idempotency_key: String,
     login_id: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<Value, CommandError> {
     runtime
-        .cancel_provider_login(&request_id, &login_id)
+        .cancel_provider_login(&request_id, &idempotency_key, &login_id)
         .await
         .map_err(Into::into)
 }
@@ -75,10 +77,11 @@ pub async fn provider_login_cancel(
 #[tauri::command]
 pub async fn provider_logout(
     request_id: String,
+    idempotency_key: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<Value, CommandError> {
     runtime
-        .logout_provider(&request_id)
+        .logout_provider(&request_id, &idempotency_key)
         .await
         .map_err(Into::into)
 }
@@ -86,11 +89,12 @@ pub async fn provider_logout(
 #[tauri::command]
 pub async fn provider_custom_configure(
     request_id: String,
+    idempotency_key: String,
     input: Value,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<Value, CommandError> {
     runtime
-        .configure_custom_provider(&request_id, input)
+        .configure_custom_provider(&request_id, &idempotency_key, input)
         .await
         .map_err(Into::into)
 }

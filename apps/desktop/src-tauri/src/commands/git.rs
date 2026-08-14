@@ -79,6 +79,7 @@ pub async fn git_commit_diff(
 #[tauri::command]
 pub async fn git_branch_switch(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     request: BranchRequest,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
@@ -86,6 +87,7 @@ pub async fn git_branch_switch(
     runtime
         .git_switch_branch(
             &request_id,
+            &idempotency_key,
             &project(&project_id)?,
             &request.branch,
             &request.expected_snapshot,
@@ -97,6 +99,7 @@ pub async fn git_branch_switch(
 #[tauri::command]
 pub async fn git_branch_create(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     request: BranchRequest,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
@@ -104,6 +107,7 @@ pub async fn git_branch_create(
     runtime
         .git_create_branch(
             &request_id,
+            &idempotency_key,
             &project(&project_id)?,
             &request.branch,
             &request.expected_snapshot,
@@ -115,12 +119,18 @@ pub async fn git_branch_create(
 #[tauri::command]
 pub async fn git_commit(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     request: Value,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<Value, CommandError> {
     runtime
-        .git_commit(&request_id, &project(&project_id)?, &request)
+        .git_commit(
+            &request_id,
+            &idempotency_key,
+            &project(&project_id)?,
+            &request,
+        )
         .await
         .map_err(Into::into)
 }
@@ -128,12 +138,18 @@ pub async fn git_commit(
 #[tauri::command]
 pub async fn git_commit_message_generate(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     request: GenerateCommitMessageRequest,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<GenerateCommitMessageResponse, CommandError> {
     runtime
-        .generate_commit_message(&request_id, &project(&project_id)?, &request)
+        .generate_commit_message(
+            &request_id,
+            &idempotency_key,
+            &project(&project_id)?,
+            &request,
+        )
         .await
         .map_err(Into::into)
 }

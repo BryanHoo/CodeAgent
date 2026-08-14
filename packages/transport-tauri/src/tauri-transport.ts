@@ -73,6 +73,43 @@ const OPERATION_COMMANDS: Readonly<Record<string, string>> = {
   "task_settings.update": "task_settings_update",
 };
 
+const MUTATION_OPERATIONS: ReadonlySet<string> = new Set([
+  "attachments.import_host",
+  "attachments.open",
+  "attachments.upload",
+  "feedback.upload",
+  "git.branch_create",
+  "git.branch_switch",
+  "git.commit",
+  "git.commit_message_generate",
+  "global_settings.update",
+  "mcp_servers.retry",
+  "pending_requests.resolve",
+  "project_defaults.update",
+  "projects.add",
+  "projects.open",
+  "projects.remove",
+  "projects.rename",
+  "projects.reorder",
+  "provider_connection.custom_configure",
+  "provider_connection.login_cancel",
+  "provider_connection.logout",
+  "provider_connection.official_login_start",
+  "tasks.archive",
+  "tasks.compact",
+  "tasks.fork",
+  "tasks.pin",
+  "tasks.rename",
+  "tasks.review",
+  "tasks.start",
+  "tasks.unsubscribe",
+  "terminals.terminate",
+  "turns.interrupt",
+  "turns.start",
+  "turns.steer",
+  "task_settings.update",
+]);
+
 export class TauriCodeAgentTransport implements CodeAgentTransport {
   public cancel(requestId: string): Promise<void> {
     return invoke("cancel_operation", { requestId });
@@ -95,6 +132,10 @@ export class TauriCodeAgentTransport implements CodeAgentTransport {
       );
     }
     const input = operation.input;
+    // 未指定业务幂等键时，以本次请求 ID 保持单次 mutation 的既有语义。
+    const idempotencyKey = MUTATION_OPERATIONS.has(operation.name)
+      ? (context.idempotencyKey ?? context.requestId)
+      : undefined;
     const payload =
       operation.name === "pending_requests.resolve" && typeof input === "object" && input !== null
         ? pendingRequestPayload(input as Record<string, unknown>)
@@ -105,7 +146,7 @@ export class TauriCodeAgentTransport implements CodeAgentTransport {
             : {};
     return invoke(command, {
       ...payload,
-      ...(context.idempotencyKey === undefined ? {} : { idempotencyKey: context.idempotencyKey }),
+      ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
       requestId: context.requestId,
     }).catch((error: unknown) => {
       throw normalizeCodeAgentError(error);
@@ -151,6 +192,7 @@ export class TauriCodeAgentTransport implements CodeAgentTransport {
     return invoke("attachment_upload", bytes, {
       headers: {
         "x-code-agent-kind": input.kind,
+        "x-code-agent-idempotency-key": context.idempotencyKey ?? context.requestId,
         "x-code-agent-media-type": input.content.type || "application/octet-stream",
         "x-code-agent-name": encodeURIComponent(input.name),
         "x-code-agent-project-id": operationInput.projectId,

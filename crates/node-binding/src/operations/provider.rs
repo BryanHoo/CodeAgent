@@ -49,7 +49,7 @@ impl NodeEngine {
     #[napi]
     pub async fn provider_login_start(&self, request_id: String) -> napi::Result<Value> {
         self.runtime()
-            .start_provider_login(&request_id)
+            .start_provider_login(&request_id, &request_id)
             .await
             .map_err(to_napi_error)
     }
@@ -61,7 +61,7 @@ impl NodeEngine {
         login_id: String,
     ) -> napi::Result<Value> {
         self.runtime()
-            .cancel_provider_login(&request_id, &login_id)
+            .cancel_provider_login(&request_id, &request_id, &login_id)
             .await
             .map_err(to_napi_error)
     }
@@ -69,7 +69,7 @@ impl NodeEngine {
     #[napi]
     pub async fn provider_logout(&self, request_id: String) -> napi::Result<Value> {
         self.runtime()
-            .logout_provider(&request_id)
+            .logout_provider(&request_id, &request_id)
             .await
             .map_err(to_napi_error)
     }
@@ -81,7 +81,7 @@ impl NodeEngine {
         input: Value,
     ) -> napi::Result<Value> {
         self.runtime()
-            .configure_custom_provider(&request_id, input)
+            .configure_custom_provider(&request_id, &request_id, input)
             .await
             .map_err(to_napi_error)
     }

@@ -99,6 +99,7 @@ impl NodeEngine {
         self.runtime()
             .open_project_path(
                 &request_id,
+                &request_id,
                 &project_id(&project)?,
                 &app_id,
                 path.as_deref(),

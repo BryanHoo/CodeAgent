@@ -157,7 +157,13 @@ async fn runtime_should_release_operation_after_protocol_validation_failure() {
 
     for _ in 0..2 {
         let error = runtime
-            .start_agent_turn("invalid-turn", &project_id, "task-1", json!({}))
+            .start_agent_turn(
+                "invalid-turn",
+                "invalid-turn",
+                &project_id,
+                "task-1",
+                json!({}),
+            )
             .await
             .expect_err("invalid request");
         assert_eq!(error.code(), CodeAgentErrorCode::InvalidInput);

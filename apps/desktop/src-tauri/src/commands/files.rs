@@ -124,6 +124,7 @@ pub async fn project_open_capabilities(
 #[tauri::command]
 pub async fn project_open(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     request: OpenProjectRequest,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
@@ -132,6 +133,7 @@ pub async fn project_open(
     runtime
         .open_project_path(
             &request_id,
+            &idempotency_key,
             &project_id,
             &request.app_id,
             request.path.as_deref(),

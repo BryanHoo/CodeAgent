@@ -146,4 +146,54 @@ describe("Tauri Phase 5 repository contract", () => {
     expect(mappingTest).toContain("phase5_realtime_path_should_match_shared_delivery_fixture");
     expect(mappingTest).toContain("tests/fixtures/phase5/realtime-path.json");
   });
+
+  it("forwards request and idempotency identities through every Runtime mutation command", () => {
+    const commands = {
+      "attachments.rs": ["attachment_import_host", "attachment_open"],
+      "files.rs": ["project_open"],
+      "git.rs": [
+        "git_branch_create",
+        "git_branch_switch",
+        "git_commit",
+        "git_commit_message_generate",
+      ],
+      "projects.rs": ["project_add", "project_remove", "project_rename", "project_reorder"],
+      "provider.rs": [
+        "provider_custom_configure",
+        "provider_login_cancel",
+        "provider_login_start",
+        "provider_logout",
+      ],
+      "settings.rs": ["global_settings_update", "project_defaults_update", "task_settings_update"],
+      "tasks.rs": [
+        "feedback_upload",
+        "mcp_servers_retry",
+        "task_archive",
+        "task_compact",
+        "task_fork",
+        "task_pin",
+        "task_rename",
+        "task_review",
+        "task_start",
+        "task_unsubscribe",
+        "terminal_terminate",
+      ],
+      "turns.rs": ["pending_request_resolve", "turn_interrupt", "turn_start", "turn_steer"],
+    } as const;
+
+    for (const [file, names] of Object.entries(commands)) {
+      const source = read(`apps/desktop/src-tauri/src/commands/${file}`);
+      for (const name of names) {
+        const command = source.split(`pub async fn ${name}(`)[1]?.split("#[tauri::command]")[0];
+        expect(command, name).toContain("idempotency_key: String");
+        expect(command, name).toContain("&idempotency_key");
+      }
+    }
+
+    const attachments = read("apps/desktop/src-tauri/src/commands/attachments.rs");
+    expect(attachments).toContain(
+      'const IDEMPOTENCY_KEY_HEADER: &str = "x-code-agent-idempotency-key"',
+    );
+    expect(attachments).toMatch(/upload\.request_id,[\s\S]*&upload\.idempotency_key,/u);
+  });
 });

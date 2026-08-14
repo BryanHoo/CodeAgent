@@ -237,11 +237,16 @@ fn deserialize_result<T: DeserializeOwned>(value: Value) -> Result<T, CodeAgentE
     serde_json::from_value(value).map_err(|error| CodeAgentError::internal(error.to_string()))
 }
 
-/// 生成无分隔符碰撞的活动操作身份，外部取消仍使用原始 request ID。
-pub(crate) fn operation_identity(scope: &[&str], request_id: &str) -> String {
-    let capacity = scope.iter().map(|part| part.len() + 8).sum::<usize>() + request_id.len() + 8;
+/// 使用业务幂等键生成无分隔符碰撞的活动操作身份。
+pub(crate) fn operation_identity(scope: &[&str], idempotency_key: &str) -> String {
+    let capacity =
+        scope.iter().map(|part| part.len() + 8).sum::<usize>() + idempotency_key.len() + 8;
     let mut identity = String::with_capacity(capacity);
-    for part in scope.iter().copied().chain(std::iter::once(request_id)) {
+    for part in scope
+        .iter()
+        .copied()
+        .chain(std::iter::once(idempotency_key))
+    {
         let _ = write!(identity, "{}:{part}", part.len());
     }
     identity

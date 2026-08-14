@@ -513,7 +513,13 @@ async fn prompt_attachments_should_bind_only_after_provider_accepts_turn() {
     });
 
     runtime
-        .start_agent_turn("prompt-success", &project_id, "task-1", request.clone())
+        .start_agent_turn(
+            "prompt-success",
+            "prompt-success",
+            &project_id,
+            "task-1",
+            request.clone(),
+        )
         .await
         .expect("start turn");
     let provider_input = fake
@@ -534,7 +540,13 @@ async fn prompt_attachments_should_bind_only_after_provider_accepts_turn() {
         .store(true, Ordering::SeqCst);
     assert!(
         runtime
-            .start_agent_turn("prompt-failure", &project_id, "task-1", request)
+            .start_agent_turn(
+                "prompt-failure",
+                "prompt-failure",
+                &project_id,
+                "task-1",
+                request,
+            )
             .await
             .is_err()
     );
@@ -751,7 +763,7 @@ async fn commit_message_should_use_ephemeral_read_only_turn_and_cleanup() {
     .expect("request");
 
     let response = runtime
-        .generate_commit_message("commit-message", &project_id, &request)
+        .generate_commit_message("commit-message", "commit-message", &project_id, &request)
         .await
         .expect("generated message");
     assert_eq!(response.message.as_str(), "feat(runtime): 生成提交信息");

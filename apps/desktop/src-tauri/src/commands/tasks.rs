@@ -50,11 +50,17 @@ pub async fn task_list(
 #[tauri::command]
 pub async fn task_start(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<TaskResponse, CommandError> {
     let task = runtime
-        .start_agent_task(&request_id, &project(&project_id)?, json!({}))
+        .start_agent_task(
+            &request_id,
+            &idempotency_key,
+            &project(&project_id)?,
+            json!({}),
+        )
         .await?;
     Ok(TaskResponse { task })
 }
@@ -75,13 +81,20 @@ pub async fn task_read(
 #[tauri::command]
 pub async fn task_pin(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     task_id: String,
     pinned: bool,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<TaskResponse, CommandError> {
     let task = runtime
-        .pin_agent_task(&request_id, &project(&project_id)?, &task_id, pinned)
+        .pin_agent_task(
+            &request_id,
+            &idempotency_key,
+            &project(&project_id)?,
+            &task_id,
+            pinned,
+        )
         .await?;
     Ok(TaskResponse { task })
 }
@@ -89,6 +102,7 @@ pub async fn task_pin(
 #[tauri::command]
 pub async fn task_rename(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     task_id: String,
     title: String,
@@ -102,7 +116,7 @@ pub async fn task_rename(
     let mut task = snapshot["snapshot"].clone();
     let title = title.trim();
     runtime
-        .rename_agent_task(&request_id, &project_id, &task_id, title)
+        .rename_agent_task(&request_id, &idempotency_key, &project_id, &task_id, title)
         .await?;
     task["title"] = Value::String(title.to_owned());
     Ok(TaskResponse { task })
@@ -111,12 +125,18 @@ pub async fn task_rename(
 #[tauri::command]
 pub async fn task_archive(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     task_id: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<TaskMutationResponse, CommandError> {
     runtime
-        .archive_agent_task(&request_id, &project(&project_id)?, &task_id)
+        .archive_agent_task(
+            &request_id,
+            &idempotency_key,
+            &project(&project_id)?,
+            &task_id,
+        )
         .await?;
     Ok(TaskMutationResponse {
         status: "archived",
@@ -127,12 +147,18 @@ pub async fn task_archive(
 #[tauri::command]
 pub async fn task_unsubscribe(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     task_id: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<TaskUnsubscribeResponse, CommandError> {
     let status = runtime
-        .unsubscribe_agent_task(&request_id, &project(&project_id)?, &task_id)
+        .unsubscribe_agent_task(
+            &request_id,
+            &idempotency_key,
+            &project(&project_id)?,
+            &task_id,
+        )
         .await?;
     Ok(TaskUnsubscribeResponse { status, task_id })
 }
@@ -140,12 +166,18 @@ pub async fn task_unsubscribe(
 #[tauri::command]
 pub async fn task_fork(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     task_id: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<TaskResponse, CommandError> {
     let task = runtime
-        .fork_agent_task(&request_id, &project(&project_id)?, &task_id)
+        .fork_agent_task(
+            &request_id,
+            &idempotency_key,
+            &project(&project_id)?,
+            &task_id,
+        )
         .await?;
     Ok(TaskResponse { task })
 }
@@ -153,12 +185,18 @@ pub async fn task_fork(
 #[tauri::command]
 pub async fn task_compact(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     task_id: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<TaskMutationResponse, CommandError> {
     runtime
-        .compact_agent_task(&request_id, &project(&project_id)?, &task_id)
+        .compact_agent_task(
+            &request_id,
+            &idempotency_key,
+            &project(&project_id)?,
+            &task_id,
+        )
         .await?;
     Ok(TaskMutationResponse {
         status: "compacting",
@@ -169,6 +207,7 @@ pub async fn task_compact(
 #[tauri::command]
 pub async fn task_review(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     task_id: String,
     input: Value,
@@ -177,6 +216,7 @@ pub async fn task_review(
     let turn = runtime
         .start_agent_review(
             &request_id,
+            &idempotency_key,
             &project(&project_id)?,
             &task_id,
             input["target"].clone(),
@@ -188,13 +228,20 @@ pub async fn task_review(
 #[tauri::command]
 pub async fn feedback_upload(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     task_id: String,
     input: Value,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<TaskMutationResponse, CommandError> {
     runtime
-        .upload_agent_feedback(&request_id, &project(&project_id)?, &task_id, input)
+        .upload_agent_feedback(
+            &request_id,
+            &idempotency_key,
+            &project(&project_id)?,
+            &task_id,
+            input,
+        )
         .await?;
     Ok(TaskMutationResponse {
         status: "sent",
@@ -220,13 +267,19 @@ pub async fn mcp_servers_list(
 #[tauri::command]
 pub async fn mcp_servers_retry(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     task_id: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<Value, CommandError> {
     serde_json::to_value(
         runtime
-            .reload_agent_mcp_servers(&request_id, &project(&project_id)?, &task_id)
+            .reload_agent_mcp_servers(
+                &request_id,
+                &idempotency_key,
+                &project(&project_id)?,
+                &task_id,
+            )
             .await?,
     )
     .map_err(|error| internal(error.to_string()))
@@ -250,13 +303,20 @@ pub async fn terminals_list(
 #[tauri::command]
 pub async fn terminal_terminate(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     task_id: String,
     terminal_id: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<TerminalMutationResponse, CommandError> {
     runtime
-        .terminate_agent_terminal(&request_id, &project(&project_id)?, &task_id, &terminal_id)
+        .terminate_agent_terminal(
+            &request_id,
+            &idempotency_key,
+            &project(&project_id)?,
+            &task_id,
+            &terminal_id,
+        )
         .await?;
     Ok(TerminalMutationResponse {
         status: "terminated",
