@@ -6,7 +6,7 @@ import type { AgentEvent, AgentTaskSnapshotResponse } from "@code-agent/protocol
 import { describe, expect, it, vi } from "vitest";
 
 import performanceBudgets from "../../../../../../tests/performance-budgets.json" with { type: "json" };
-import { createTaskStore } from "./task-store.js";
+import { createTaskStore, createTaskStoreRegistry } from "./task-store.js";
 
 const timestamp = "2026-08-02T00:00:00.000Z";
 
@@ -66,10 +66,10 @@ function createDeltaEvents(taskId: string, count: number): AgentEvent[] {
   }));
 }
 
-function createLongHistoryResponse(): AgentTaskSnapshotResponse {
+function createLongHistoryResponse(taskId = "task-long-history"): AgentTaskSnapshotResponse {
   const { items, itemsPerTurn } = performanceBudgets.longHistory;
   const turnCount = items / itemsPerTurn;
-  const response = createResponse("task-long-history");
+  const response = createResponse(taskId);
   return {
     ...response,
     snapshot: {
@@ -191,5 +191,51 @@ describe("TaskStore performance", () => {
 
     const heapGrowth = collectHeap() - heapBefore;
     expect(heapGrowth).toBeLessThanOrEqual(maxGrowthBytes);
+  });
+
+  it("switches 20 Task Stores with 10,000 Items each within allocation budget", () => {
+    const { itemsPerTask, maxGcRetainedBytes, maxHeapGrowthBytes, maxSwitchDurationMs, tasks } =
+      performanceBudgets.taskStoreSwitch;
+    expect({ itemsPerTask, tasks }).toEqual({ itemsPerTask: 10_000, tasks: 20 });
+    expect(performanceBudgets.longHistory.items).toBe(itemsPerTask);
+
+    const registry = createTaskStoreRegistry({
+      createStore: (identity) =>
+        createTaskStore(identity, createLongHistoryResponse(identity.taskId)),
+      maxRetainedBytes: Number.MAX_SAFE_INTEGER,
+      maxRetainedStores: tasks,
+    });
+    const taskIds = Array.from({ length: tasks }, (_, index) => `task-switch-${String(index)}`);
+    for (const taskId of taskIds) {
+      registry.acquire("project-performance", taskId);
+      registry.release("project-performance", taskId);
+    }
+    expect(registry.size).toBe(tasks);
+
+    const heapBefore = collectHeap();
+    let peakHeap = heapBefore;
+    const startedAt = performance.now();
+    for (const taskId of taskIds) {
+      registry.acquire("project-performance", taskId);
+      registry.release("project-performance", taskId);
+      peakHeap = Math.max(peakHeap, memoryUsage().heapUsed);
+    }
+    const switchDurationMs = performance.now() - startedAt;
+    const gcRetainedBytes = collectHeap() - heapBefore;
+    const heapGrowthBytes = peakHeap - heapBefore;
+
+    console.info(
+      JSON.stringify({
+        benchmark: "task-store-switch",
+        gcRetainedBytes,
+        heapGrowthBytes,
+        itemsPerTask,
+        switchDurationMs,
+        tasks,
+      }),
+    );
+    expect(switchDurationMs).toBeLessThan(maxSwitchDurationMs);
+    expect(heapGrowthBytes).toBeLessThan(maxHeapGrowthBytes);
+    expect(gcRetainedBytes).toBeLessThan(maxGcRetainedBytes);
   });
 });

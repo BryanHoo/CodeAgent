@@ -1,5 +1,3 @@
-const textEncoder = new TextEncoder();
-
 const ARRAY_BASE_BYTES = 32;
 const ARRAY_SLOT_BYTES = 8;
 const OBJECT_BASE_BYTES = 48;
@@ -7,7 +5,29 @@ const OBJECT_PROPERTY_BYTES = 16;
 const STRING_BASE_BYTES = 16;
 
 export function getUtf8ByteLength(value: string): number {
-  return textEncoder.encode(value).byteLength;
+  let byteLength = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit <= 0x7f) {
+      byteLength += 1;
+    } else if (codeUnit <= 0x7ff) {
+      byteLength += 2;
+    } else if (
+      codeUnit >= 0xd800 &&
+      codeUnit <= 0xdbff &&
+      index + 1 < value.length &&
+      value.charCodeAt(index + 1) >= 0xdc00 &&
+      value.charCodeAt(index + 1) <= 0xdfff
+    ) {
+      // 合法代理对编码为一个四字节码点；推进索引避免重复计数低代理。
+      byteLength += 4;
+      index += 1;
+    } else {
+      // BMP 字符及孤立代理均与 TextEncoder 一致，占三个 UTF-8 字节。
+      byteLength += 3;
+    }
+  }
+  return byteLength;
 }
 
 /**

@@ -1717,4 +1717,31 @@ describe("task store registry", () => {
     expect(registry.peek("project-1", "task-1")).toBeUndefined();
     expect(registry.peek("project-1", "task-2")).toBeDefined();
   });
+
+  it("evicts an inactive store when its retained byte estimate grows", () => {
+    const firstStore = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ id: "task-1", title: "first" }),
+    );
+    const secondStore = createTaskStore(
+      { projectId: "project-1", taskId: "task-2" },
+      createResponse({ id: "task-2", title: "second" }),
+    );
+    const initialBudget =
+      estimateTaskStoreRetainedBytes(firstStore) + estimateTaskStoreRetainedBytes(secondStore) + 1;
+    const registry = createTaskStoreRegistry({
+      createStore: (identity) => (identity.taskId === "task-1" ? firstStore : secondStore),
+      maxRetainedBytes: initialBudget,
+      maxRetainedStores: 2,
+    });
+
+    registry.acquire("project-1", "task-1");
+    registry.release("project-1", "task-1");
+    registry.acquire("project-1", "task-2");
+    registry.release("project-1", "task-2");
+    firstStore.getState().hydrate(createResponse({ id: "task-1", title: "x".repeat(10_000) }));
+
+    expect(registry.peek("project-1", "task-1")).toBeUndefined();
+    expect(registry.peek("project-1", "task-2")).toBe(secondStore);
+  });
 });
