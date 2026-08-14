@@ -89,6 +89,10 @@ function truncateUtf8(value: string, maxBytes: number): string {
   return new TextDecoder("utf-8", { fatal: false }).decode(bytes.subarray(0, maxBytes)).trimEnd();
 }
 
+function readErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function extractVersionReleaseNotes(changelog: string, version: string): string | undefined {
   const lines = changelog.split(/\r?\n/u);
   const start = lines.findIndex((line) => line.startsWith(`## [${version}]`));
@@ -181,7 +185,7 @@ async function installGlobalPackage(version: string): Promise<void> {
       { shell: false, timeout: INSTALL_TIMEOUT_MS, windowsHide: true },
       (error) => {
         if (error === null) resolve();
-        else reject(new Error("npm install failed", { cause: error }));
+        else reject(new Error(error.message, { cause: error }));
       },
     );
   });
@@ -198,8 +202,8 @@ export function createAppUpdateService(options: CreateAppUpdateServiceOptions): 
       const latestVersion = await fetchLatestVersion();
       if (parseSemanticVersion(latestVersion) === undefined) throw new Error("Invalid version");
       return latestVersion;
-    } catch {
-      throw new AppUpdateError("UPDATE_CHECK_FAILED", "Failed to check for CodeAgent updates");
+    } catch (error) {
+      throw new AppUpdateError("UPDATE_CHECK_FAILED", readErrorMessage(error));
     }
   };
 
@@ -211,13 +215,14 @@ export function createAppUpdateService(options: CreateAppUpdateServiceOptions): 
       }
       try {
         await runNpmInstall(latestVersion);
-      } catch {
-        throw new AppUpdateError("UPDATE_INSTALL_FAILED", "Failed to install the CodeAgent update");
+      } catch (error) {
+        throw new AppUpdateError("UPDATE_INSTALL_FAILED", readErrorMessage(error));
       }
       installedVersion = latestVersion;
       return {
         appVersion: options.appVersion,
         codexVersion: options.codexVersion,
+        error: null,
         latestVersion,
         releaseNotes: null,
         status: "restart-required",
@@ -228,10 +233,11 @@ export function createAppUpdateService(options: CreateAppUpdateServiceOptions): 
       let latestVersion: string;
       try {
         latestVersion = await readLatest();
-      } catch {
+      } catch (error) {
         return {
           appVersion: options.appVersion,
           codexVersion: options.codexVersion,
+          error: readErrorMessage(error),
           latestVersion: null,
           releaseNotes: null,
           status: "check-failed",
@@ -242,6 +248,7 @@ export function createAppUpdateService(options: CreateAppUpdateServiceOptions): 
         return {
           appVersion: options.appVersion,
           codexVersion: options.codexVersion,
+          error: null,
           latestVersion,
           releaseNotes: null,
           status: "restart-required",
@@ -249,19 +256,22 @@ export function createAppUpdateService(options: CreateAppUpdateServiceOptions): 
         };
       }
       const updateAvailable = isNewerVersion(latestVersion, options.appVersion);
+      let error: string | null = null;
       let releaseNotes: string | null = null;
       if (updateAvailable) {
         try {
           // 更新日志是辅助信息，读取失败不能掩盖已确认的可用更新。
           releaseNotes =
             extractVersionReleaseNotes(await fetchChangelog(latestVersion), latestVersion) ?? null;
-        } catch {
+        } catch (releaseNotesError) {
+          error = readErrorMessage(releaseNotesError);
           releaseNotes = null;
         }
       }
       return {
         appVersion: options.appVersion,
         codexVersion: options.codexVersion,
+        error,
         latestVersion,
         releaseNotes,
         status: updateAvailable ? "available" : "current",

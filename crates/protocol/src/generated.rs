@@ -2278,8 +2278,7 @@ impl ::std::convert::TryFrom<::std::string::String> for AgentGlobalSettingsSandb
 ///          "error": {
 ///            "oneOf": [
 ///              {
-///                "type": "string",
-///                "maxLength": 8192
+///                "type": "string"
 ///              },
 ///              {
 ///                "type": "null"
@@ -2423,8 +2422,7 @@ pub struct AgentMcpServerPage {
 ///    "error": {
 ///      "oneOf": [
 ///        {
-///          "type": "string",
-///          "maxLength": 8192
+///          "type": "string"
 ///        },
 ///        {
 ///          "type": "null"
@@ -2501,7 +2499,7 @@ pub struct AgentMcpServerPageDataItem {
     #[serde(rename = "authStatus")]
     pub auth_status: ::std::option::Option<AgentMcpServerPageDataItemAuthStatus>,
     pub description: ::std::option::Option<::std::string::String>,
-    pub error: ::std::option::Option<AgentMcpServerPageDataItemError>,
+    pub error: ::std::option::Option<::std::string::String>,
     #[serde(rename = "failureReason")]
     pub failure_reason: ::std::option::Option<::std::string::String>,
     pub name: AgentMcpServerPageDataItemName,
@@ -2610,74 +2608,6 @@ impl ::std::convert::TryFrom<::std::string::String> for AgentMcpServerPageDataIt
         value: ::std::string::String,
     ) -> ::std::result::Result<Self, self::error::ConversionError> {
         value.parse()
-    }
-}
-///`AgentMcpServerPageDataItemError`
-///
-/// <details><summary>JSON schema</summary>
-///
-/// ```json
-///{
-///  "type": "string",
-///  "maxLength": 8192
-///}
-/// ```
-/// </details>
-#[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct AgentMcpServerPageDataItemError(::std::string::String);
-impl ::std::ops::Deref for AgentMcpServerPageDataItemError {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<AgentMcpServerPageDataItemError> for ::std::string::String {
-    fn from(value: AgentMcpServerPageDataItemError) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for AgentMcpServerPageDataItemError {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() > 8192usize {
-            return Err("longer than 8192 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for AgentMcpServerPageDataItemError {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for AgentMcpServerPageDataItemError {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for AgentMcpServerPageDataItemError {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for AgentMcpServerPageDataItemError {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
     }
 }
 ///`AgentMcpServerPageDataItemName`
@@ -3709,8 +3639,7 @@ impl ::std::convert::TryFrom<::std::string::String> for AgentProjectDefaultsSand
 ///                "error": {
 ///                  "oneOf": [
 ///                    {
-///                      "type": "string",
-///                      "maxLength": 1000
+///                      "type": "string"
 ///                    },
 ///                    {
 ///                      "type": "null"
@@ -3888,8 +3817,7 @@ pub struct AgentProviderConnectionMutationResponse {
 ///            "error": {
 ///              "oneOf": [
 ///                {
-///                  "type": "string",
-///                  "maxLength": 1000
+///                  "type": "string"
 ///                },
 ///                {
 ///                  "type": "null"
@@ -4360,8 +4288,7 @@ impl ::std::convert::TryFrom<::std::string::String>
 ///    "error": {
 ///      "oneOf": [
 ///        {
-///          "type": "string",
-///          "maxLength": 1000
+///          "type": "string"
 ///        },
 ///        {
 ///          "type": "null"
@@ -4393,89 +4320,10 @@ impl ::std::convert::TryFrom<::std::string::String>
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct AgentProviderConnectionMutationResponseStatusPendingLogin {
-    pub error:
-        ::std::option::Option<AgentProviderConnectionMutationResponseStatusPendingLoginError>,
+    pub error: ::std::option::Option<::std::string::String>,
     #[serde(rename = "loginId")]
     pub login_id: AgentProviderConnectionMutationResponseStatusPendingLoginLoginId,
     pub state: AgentProviderConnectionMutationResponseStatusPendingLoginState,
-}
-///`AgentProviderConnectionMutationResponseStatusPendingLoginError`
-///
-/// <details><summary>JSON schema</summary>
-///
-/// ```json
-///{
-///  "type": "string",
-///  "maxLength": 1000
-///}
-/// ```
-/// </details>
-#[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct AgentProviderConnectionMutationResponseStatusPendingLoginError(::std::string::String);
-impl ::std::ops::Deref for AgentProviderConnectionMutationResponseStatusPendingLoginError {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<AgentProviderConnectionMutationResponseStatusPendingLoginError>
-    for ::std::string::String
-{
-    fn from(value: AgentProviderConnectionMutationResponseStatusPendingLoginError) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for AgentProviderConnectionMutationResponseStatusPendingLoginError {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() > 1000usize {
-            return Err("longer than 1000 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str>
-    for AgentProviderConnectionMutationResponseStatusPendingLoginError
-{
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String>
-    for AgentProviderConnectionMutationResponseStatusPendingLoginError
-{
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String>
-    for AgentProviderConnectionMutationResponseStatusPendingLoginError
-{
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de>
-    for AgentProviderConnectionMutationResponseStatusPendingLoginError
-{
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
 }
 ///`AgentProviderConnectionMutationResponseStatusPendingLoginLoginId`
 ///
@@ -5665,8 +5513,7 @@ impl ::std::convert::TryFrom<::std::string::String> for AgentProviderConnectionR
 ///            "error": {
 ///              "oneOf": [
 ///                {
-///                  "type": "string",
-///                  "maxLength": 1000
+///                  "type": "string"
 ///                },
 ///                {
 ///                  "type": "null"
@@ -6114,8 +5961,7 @@ impl ::std::convert::TryFrom<::std::string::String> for AgentProviderConnectionS
 ///    "error": {
 ///      "oneOf": [
 ///        {
-///          "type": "string",
-///          "maxLength": 1000
+///          "type": "string"
 ///        },
 ///        {
 ///          "type": "null"
@@ -6147,84 +5993,10 @@ impl ::std::convert::TryFrom<::std::string::String> for AgentProviderConnectionS
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct AgentProviderConnectionStatusPendingLogin {
-    pub error: ::std::option::Option<AgentProviderConnectionStatusPendingLoginError>,
+    pub error: ::std::option::Option<::std::string::String>,
     #[serde(rename = "loginId")]
     pub login_id: AgentProviderConnectionStatusPendingLoginLoginId,
     pub state: AgentProviderConnectionStatusPendingLoginState,
-}
-///`AgentProviderConnectionStatusPendingLoginError`
-///
-/// <details><summary>JSON schema</summary>
-///
-/// ```json
-///{
-///  "type": "string",
-///  "maxLength": 1000
-///}
-/// ```
-/// </details>
-#[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct AgentProviderConnectionStatusPendingLoginError(::std::string::String);
-impl ::std::ops::Deref for AgentProviderConnectionStatusPendingLoginError {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<AgentProviderConnectionStatusPendingLoginError>
-    for ::std::string::String
-{
-    fn from(value: AgentProviderConnectionStatusPendingLoginError) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for AgentProviderConnectionStatusPendingLoginError {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() > 1000usize {
-            return Err("longer than 1000 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for AgentProviderConnectionStatusPendingLoginError {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String>
-    for AgentProviderConnectionStatusPendingLoginError
-{
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String>
-    for AgentProviderConnectionStatusPendingLoginError
-{
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for AgentProviderConnectionStatusPendingLoginError {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
 }
 ///`AgentProviderConnectionStatusPendingLoginLoginId`
 ///
@@ -9460,8 +9232,7 @@ impl<'de> ::serde::Deserialize<'de> for ConfigureCustomProviderRequestModelsItem
 ///                "error": {
 ///                  "oneOf": [
 ///                    {
-///                      "type": "string",
-///                      "maxLength": 1000
+///                      "type": "string"
 ///                    },
 ///                    {
 ///                      "type": "null"
@@ -10152,8 +9923,7 @@ impl<'de> ::serde::Deserialize<'de>
 ///            "error": {
 ///              "oneOf": [
 ///                {
-///                  "type": "string",
-///                  "maxLength": 1000
+///                  "type": "string"
 ///                },
 ///                {
 ///                  "type": "null"
@@ -10613,8 +10383,7 @@ impl ::std::convert::TryFrom<::std::string::String> for ConfigureCustomProviderR
 ///    "error": {
 ///      "oneOf": [
 ///        {
-///          "type": "string",
-///          "maxLength": 1000
+///          "type": "string"
 ///        },
 ///        {
 ///          "type": "null"
@@ -10646,84 +10415,10 @@ impl ::std::convert::TryFrom<::std::string::String> for ConfigureCustomProviderR
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct ConfigureCustomProviderResponseStatusPendingLogin {
-    pub error: ::std::option::Option<ConfigureCustomProviderResponseStatusPendingLoginError>,
+    pub error: ::std::option::Option<::std::string::String>,
     #[serde(rename = "loginId")]
     pub login_id: ConfigureCustomProviderResponseStatusPendingLoginLoginId,
     pub state: ConfigureCustomProviderResponseStatusPendingLoginState,
-}
-///`ConfigureCustomProviderResponseStatusPendingLoginError`
-///
-/// <details><summary>JSON schema</summary>
-///
-/// ```json
-///{
-///  "type": "string",
-///  "maxLength": 1000
-///}
-/// ```
-/// </details>
-#[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct ConfigureCustomProviderResponseStatusPendingLoginError(::std::string::String);
-impl ::std::ops::Deref for ConfigureCustomProviderResponseStatusPendingLoginError {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<ConfigureCustomProviderResponseStatusPendingLoginError>
-    for ::std::string::String
-{
-    fn from(value: ConfigureCustomProviderResponseStatusPendingLoginError) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for ConfigureCustomProviderResponseStatusPendingLoginError {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() > 1000usize {
-            return Err("longer than 1000 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConfigureCustomProviderResponseStatusPendingLoginError {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String>
-    for ConfigureCustomProviderResponseStatusPendingLoginError
-{
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String>
-    for ConfigureCustomProviderResponseStatusPendingLoginError
-{
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for ConfigureCustomProviderResponseStatusPendingLoginError {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
 }
 ///`ConfigureCustomProviderResponseStatusPendingLoginLoginId`
 ///
@@ -12276,8 +11971,7 @@ impl<'de> ::serde::Deserialize<'de> for ResyncRequiredSessionId {
 ///                "error": {
 ///                  "oneOf": [
 ///                    {
-///                      "type": "string",
-///                      "maxLength": 1000
+///                      "type": "string"
 ///                    },
 ///                    {
 ///                      "type": "null"
@@ -12603,8 +12297,7 @@ impl<'de> ::serde::Deserialize<'de> for StartOfficialProviderLoginResponseLoginI
 ///            "error": {
 ///              "oneOf": [
 ///                {
-///                  "type": "string",
-///                  "maxLength": 1000
+///                  "type": "string"
 ///                },
 ///                {
 ///                  "type": "null"
@@ -13069,8 +12762,7 @@ impl ::std::convert::TryFrom<::std::string::String>
 ///    "error": {
 ///      "oneOf": [
 ///        {
-///          "type": "string",
-///          "maxLength": 1000
+///          "type": "string"
 ///        },
 ///        {
 ///          "type": "null"
@@ -13102,84 +12794,10 @@ impl ::std::convert::TryFrom<::std::string::String>
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct StartOfficialProviderLoginResponseStatusPendingLogin {
-    pub error: ::std::option::Option<StartOfficialProviderLoginResponseStatusPendingLoginError>,
+    pub error: ::std::option::Option<::std::string::String>,
     #[serde(rename = "loginId")]
     pub login_id: StartOfficialProviderLoginResponseStatusPendingLoginLoginId,
     pub state: StartOfficialProviderLoginResponseStatusPendingLoginState,
-}
-///`StartOfficialProviderLoginResponseStatusPendingLoginError`
-///
-/// <details><summary>JSON schema</summary>
-///
-/// ```json
-///{
-///  "type": "string",
-///  "maxLength": 1000
-///}
-/// ```
-/// </details>
-#[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct StartOfficialProviderLoginResponseStatusPendingLoginError(::std::string::String);
-impl ::std::ops::Deref for StartOfficialProviderLoginResponseStatusPendingLoginError {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<StartOfficialProviderLoginResponseStatusPendingLoginError>
-    for ::std::string::String
-{
-    fn from(value: StartOfficialProviderLoginResponseStatusPendingLoginError) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for StartOfficialProviderLoginResponseStatusPendingLoginError {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() > 1000usize {
-            return Err("longer than 1000 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for StartOfficialProviderLoginResponseStatusPendingLoginError {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String>
-    for StartOfficialProviderLoginResponseStatusPendingLoginError
-{
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String>
-    for StartOfficialProviderLoginResponseStatusPendingLoginError
-{
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for StartOfficialProviderLoginResponseStatusPendingLoginError {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
 }
 ///`StartOfficialProviderLoginResponseStatusPendingLoginLoginId`
 ///

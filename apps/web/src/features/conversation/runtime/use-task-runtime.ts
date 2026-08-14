@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "zustand";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
 
 import { taskSnapshotQueryOptions } from "../../projects/project-queries.js";
 import type { ProjectRuntimeManager } from "./project-runtime.js";
@@ -63,7 +64,7 @@ export function useTaskRuntime(
       const becameInactive = taskStoreRegistry.release(projectId, taskId);
       if (becameInactive) {
         // 页面卸载不等待释放请求；Provider 会对运行 Turn、审批和后台终端做最终安全检查。
-        void client.unsubscribeTask(projectId, taskId).catch(() => undefined);
+        void client.unsubscribeTask(projectId, taskId).catch(showErrorToast);
       }
     };
   }, [client, projectId, taskId]);

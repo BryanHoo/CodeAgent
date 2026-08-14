@@ -11,6 +11,7 @@ use crate::{command_error::CommandError, platform_adapters::DesktopProvider};
 pub struct AppInfoResponse {
     app_version: &'static str,
     codex_version: &'static str,
+    error: Option<&'static str>,
     latest_version: Option<&'static str>,
     release_notes: Option<&'static str>,
     status: &'static str,
@@ -38,6 +39,7 @@ pub async fn app_info(request_id: String) -> Result<AppInfoResponse, CommandErro
     Ok(AppInfoResponse {
         app_version: env!("CARGO_PKG_VERSION"),
         codex_version: code_agent_provider_codex::SUPPORTED_CODEX_VERSION,
+        error: None,
         latest_version: None,
         release_notes: None,
         status: "current",

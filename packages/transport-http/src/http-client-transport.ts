@@ -85,17 +85,19 @@ export type PendingRequestResolution<T extends PendingRequest> = Extract<
 >["resolution"];
 
 export class CodeAgentHttpError extends Error {
+  public readonly code: string | undefined;
   public readonly status: number;
 
-  public constructor(status: number, statusText: string, message?: string) {
+  public constructor(status: number, statusText: string, message?: string, code?: string) {
     super(message ?? `CodeAgent request failed with ${String(status)} ${statusText}`.trim());
     this.name = "CodeAgentHttpError";
+    this.code = code;
     this.status = status;
   }
 }
 
 export class CodeAgentMutationError extends CodeAgentHttpError {
-  public readonly code: AgentMutationError["code"];
+  public override readonly code: AgentMutationError["code"];
   public readonly retryable: boolean;
 
   public constructor(status: number, statusText: string, error: AgentMutationError) {
@@ -412,7 +414,14 @@ export class CodeAgentTransport {
           errorBody as AgentMutationError,
         );
       }
-      throw new CodeAgentHttpError(response.status, response.statusText);
+      const errorBody = await response.text();
+      const structuredError = parseErrorResponse(errorBody);
+      throw new CodeAgentHttpError(
+        response.status,
+        response.statusText,
+        structuredError.message,
+        structuredError.code,
+      );
     }
 
     let body: unknown;
@@ -427,4 +436,21 @@ export class CodeAgentTransport {
     }
     return body;
   }
+}
+
+function parseErrorResponse(body: string): Readonly<{ code?: string; message?: string }> {
+  if (body.length === 0) return {};
+  try {
+    const value = JSON.parse(body) as unknown;
+    if (typeof value === "object" && value !== null) {
+      const error = value as Readonly<Record<string, unknown>>;
+      return {
+        ...(typeof error["code"] === "string" ? { code: error["code"] } : {}),
+        ...(typeof error["message"] === "string" ? { message: error["message"] } : {}),
+      };
+    }
+  } catch {
+    // 非 JSON 错误正文仍是底层返回的原始错误信息。
+  }
+  return { message: body };
 }

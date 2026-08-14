@@ -19,6 +19,26 @@ describe("createAppQueryClient", () => {
     expect(queryDefaults?.refetchOnWindowFocus).toBe(false);
   });
 
+  it("reports final Query and Mutation errors through one callback", async () => {
+    const onError = vi.fn();
+    const queryClient = createAppQueryClient({ onError });
+    const queryError = new Error("git status failed");
+    const mutationError = new Error("remote: permission denied");
+
+    await expect(
+      queryClient.fetchQuery({ queryFn: () => Promise.reject(queryError), queryKey: ["git"] }),
+    ).rejects.toBe(queryError);
+    await expect(
+      queryClient
+        .getMutationCache()
+        .build(queryClient, { mutationFn: () => Promise.reject(mutationError) })
+        .execute(undefined),
+    ).rejects.toBe(mutationError);
+
+    expect(onError).toHaveBeenNthCalledWith(1, queryError);
+    expect(onError).toHaveBeenNthCalledWith(2, mutationError);
+  });
+
   it("routes notification clicks inside the current application", () => {
     const navigate = vi.spyOn(router, "navigate").mockResolvedValue();
 
@@ -48,6 +68,7 @@ describe("createAppQueryClient", () => {
       <AccessControlledContent
         access={{
           error: null,
+          errorSource: null,
           loading: false,
           logout: vi.fn(),
           pair: vi.fn(),
@@ -63,6 +84,7 @@ describe("createAppQueryClient", () => {
       <AccessControlledContent
         access={{
           error: null,
+          errorSource: null,
           loading: false,
           logout: vi.fn(),
           pair: vi.fn(),

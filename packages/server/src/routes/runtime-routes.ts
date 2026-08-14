@@ -71,7 +71,7 @@ export const registerRuntimeRoutes: FastifyPluginCallback<ServerRouteContext> = 
             : "UPDATE_INSTALL_FAILED";
         throw new MutationHttpError(
           code,
-          error instanceof Error ? error.message : "Failed to install the CodeAgent update",
+          error instanceof Error ? error.message : String(error),
           code === "UPDATE_NOT_AVAILABLE" ? 409 : 502,
           code !== "UPDATE_NOT_AVAILABLE",
         );

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { classifyProjectFileReference } from "../project-file-reference.js";
 
 import type { MessageFileReference } from "../../../shared/components/agent/message.js";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import {
   PROJECT_TASK_SEARCH_SOURCE_KEY,
@@ -57,10 +58,8 @@ export function useWorkbenchShellController(
     setPendingTaskSelection,
     setSidebarOpen,
     setSourceFileSelection,
-    setTaskRenameError,
     setTaskRenameOpen,
     taskLaunchState,
-    t,
   } = shell;
   const openFileDiff = useCallback(
     (change: AgentFileChange) => {
@@ -74,12 +73,14 @@ export function useWorkbenchShellController(
       if (kind === "system") {
         const mutation = projectPathOpenMutationRef.current;
         mutation.reset();
-        void projectPathOpenLockRef.current.run(() =>
-          mutation.mutateAsync({
-            appId: "system-default",
-            path: reference.path,
-          }),
-        );
+        void projectPathOpenLockRef.current
+          .run(() =>
+            mutation.mutateAsync({
+              appId: "system-default",
+              path: reference.path,
+            }),
+          )
+          .catch(showErrorToast);
         return;
       }
 
@@ -95,7 +96,6 @@ export function useWorkbenchShellController(
   );
   const closeTaskRenameDialog = () => {
     setTaskRenameOpen(false);
-    setTaskRenameError(null);
     requestAnimationFrame(() => {
       document.querySelector<HTMLButtonElement>("#workbench-task-title-rename")?.focus();
     });
@@ -105,14 +105,13 @@ export function useWorkbenchShellController(
       if (taskId === undefined) {
         return;
       }
-      setTaskRenameError(null);
       try {
         const response = await renameMutation.mutateAsync({ projectId, taskId, title: nextTitle });
         // 服务端结果同时覆盖普通列表与已加载的搜索源，确保中栏和侧栏立即一致。
         replaceProjectTaskInQueryCaches(queryClient, response.task);
         closeTaskRenameDialog();
-      } catch {
-        setTaskRenameError(t("sidebar.errorRenameTask"));
+      } catch (error) {
+        showErrorToast(error);
       }
     });
   const cacheProjectTask = useCallback(

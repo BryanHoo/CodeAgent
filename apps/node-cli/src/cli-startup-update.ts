@@ -6,6 +6,7 @@ import { createAppUpdateService } from "./app-update.js";
 export const STARTUP_UPDATE_APPLIED_ENV = "CODE_AGENT_STARTUP_UPDATE_APPLIED";
 
 export type StartupAppUpdateCheck = Readonly<{
+  error: string | null;
   latestVersion: string | null;
   status: "available" | "check-failed" | "current";
 }>;
@@ -23,6 +24,7 @@ export function createStartupAppUpdateOperations(appVersion: string): {
     check: async () => {
       const info = await service.read();
       return {
+        error: info.error,
         latestVersion: info.latestVersion,
         status:
           info.status === "available"

@@ -14,6 +14,7 @@ import type { ThemedToken } from "shiki/core";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
+import { normalizeError, showErrorToast } from "../../errors/error-toast.js";
 import type { CodeBlockLanguage } from "./code-languages.js";
 import { CodeTokenCache, type TokenizedCode } from "./code-token-cache.js";
 
@@ -109,7 +110,8 @@ export function CodeBlockContent({
           setTokenized(result);
         }
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        showErrorToast(error);
         // 高亮失败时继续展示完整纯文本，避免查看器因可选增强不可用而清空。
       });
     return () => {
@@ -278,7 +280,9 @@ export function CodeBlockCopyButton({
         setCopied(false);
       }, timeout);
     } catch (error) {
-      onError?.(error instanceof Error ? error : new Error("Unable to copy code"));
+      const normalizedError = normalizeError(error);
+      showErrorToast(normalizedError);
+      onError?.(normalizedError);
     }
   };
 

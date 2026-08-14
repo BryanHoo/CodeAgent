@@ -117,7 +117,7 @@ async fn model_catalog_should_merge_all_pages_and_reject_repeated_cursor() {
 }
 
 #[tokio::test]
-async fn mcp_contract_should_page_merge_deduplicate_and_redact_startup_failure() {
+async fn mcp_contract_should_page_merge_deduplicate_and_preserve_startup_failure() {
     let (runtime, server) = runtime();
     let provider = runtime
         .for_project(project(), &PortRequestContext::new("project"))
@@ -152,7 +152,7 @@ async fn mcp_contract_should_page_merge_deduplicate_and_redact_startup_failure()
     assert_eq!(event.event_type(), "mcp_server.status_updated");
     assert_eq!(
         event.as_value()["payload"]["error"],
-        "OAuth [URL redacted] API_TOKEN=[REDACTED]"
+        "OAuth https://auth.example API_TOKEN=secret"
     );
 
     let (read, mut write) = tokio::io::split(server);

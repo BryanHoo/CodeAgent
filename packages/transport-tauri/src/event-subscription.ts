@@ -20,6 +20,9 @@ export function startTauriEventSubscription(options: SubscribeAgentEventsOptions
   let connectionReady = false;
   let lastSequence = options.afterSequence;
   let subscriptionId: string | undefined;
+  const reportError = (error: unknown) => {
+    options.onError?.(normalizeCodeAgentError(error));
+  };
 
   const stopForResync = (message: ResyncRequired) => {
     if (!active) return;
@@ -27,16 +30,16 @@ export function startTauriEventSubscription(options: SubscribeAgentEventsOptions
     options.onResyncRequired(message);
     options.onConnectionState?.("closed");
     if (subscriptionId !== undefined) {
-      void invoke("event_unsubscribe", { subscriptionId }).catch(() => undefined);
+      void invoke("event_unsubscribe", { subscriptionId }).catch(reportError);
     }
   };
   const fail = (error: unknown) => {
     if (!active) return;
     active = false;
-    options.onError?.(normalizeCodeAgentError(error));
+    reportError(error);
     options.onConnectionState?.("closed");
     if (subscriptionId !== undefined) {
-      void invoke("event_unsubscribe", { subscriptionId }).catch(() => undefined);
+      void invoke("event_unsubscribe", { subscriptionId }).catch(reportError);
     }
   };
 
@@ -100,7 +103,7 @@ export function startTauriEventSubscription(options: SubscribeAgentEventsOptions
     active = false;
     options.onConnectionState?.("closed");
     if (subscriptionId !== undefined) {
-      void invoke("event_unsubscribe", { subscriptionId }).catch(() => undefined);
+      void invoke("event_unsubscribe", { subscriptionId }).catch(reportError);
     }
   };
 }

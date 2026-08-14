@@ -13,6 +13,7 @@ import { createTaskStore } from "../../conversation/runtime/task-store.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { PendingRequestResolution } from "./pending-request.js";
+import { useErrorToast } from "../../../shared/errors/error-toast.js";
 
 import { EmptyTimeline, TimelineState } from "./task-timeline-status.js";
 import { TurnProcessingTime } from "./task-timeline-status.js";
@@ -158,9 +159,10 @@ function ActiveTaskTimeline({
   submissionTurnId: string | undefined;
   startingSnapshot: RuntimeTaskSnapshot | undefined;
 }>) {
+  useErrorToast(runtime.error);
   if (runtime.error !== null) {
-    return (
-      <TimelineState message={i18n.t("timeline.loadError", { ns: "conversation" })} role="alert" />
+    return startingSnapshot === undefined ? null : (
+      <TaskSnapshotTimeline connected={false} snapshot={startingSnapshot} />
     );
   }
   if (runtime.isPending || runtime.snapshot === undefined) {

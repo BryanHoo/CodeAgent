@@ -19,6 +19,7 @@ import {
   FileTreeFolder,
 } from "../../../shared/components/agent/file-tree.js";
 import { Button } from "../../../shared/components/core/button.js";
+import { useErrorToasts } from "../../../shared/errors/error-toast.js";
 import {
   Tooltip,
   TooltipContent,
@@ -80,7 +81,6 @@ type WorkbenchInspectorProps = Readonly<{
   projectName: string;
   projectId?: string;
   projectOpenApps?: readonly ProjectOpenApp[];
-  projectOpenError?: Error | null;
   projectOpenPending?: boolean;
   projectPath: string;
   skills?: readonly AgentSkill[];
@@ -129,7 +129,6 @@ export function WorkbenchInspector({
   projectId,
   projectName,
   projectOpenApps = [],
-  projectOpenError = null,
   projectOpenPending = false,
   projectPath,
   skills = [],
@@ -141,6 +140,15 @@ export function WorkbenchInspector({
   terminatingTerminalId = null,
 }: WorkbenchInspectorProps) {
   useTranslation("conversation");
+  useErrorToasts([
+    backgroundTerminalsError,
+    gitStatusError,
+    mcpServersError,
+    mcpServersRetryError,
+    terminalMutationError,
+    ...fileTreeDirectories.map((state) => state.error),
+    ...mcpServers.map((server) => server.error),
+  ]);
   const changeSummary = useMemo(() => {
     const changes = [...(gitStatus?.unstaged ?? []), ...(gitStatus?.staged ?? [])];
     return { changes, ...collectFileTreeChangeSummary(changes) };
@@ -186,7 +194,6 @@ export function WorkbenchInspector({
         <BackgroundTerminalSection
           error={backgroundTerminalsError}
           isPending={backgroundTerminalsPending}
-          mutationError={terminalMutationError}
           onTerminate={onTerminateBackgroundTerminal}
           terminals={backgroundTerminals}
           terminatingTerminalId={terminatingTerminalId}
@@ -327,12 +334,7 @@ export function WorkbenchInspector({
             ) : null}
             <div className="flex min-h-0 flex-1 flex-col">
               {gitStatusError !== null ? (
-                <div className="mx-2.5 mb-2 flex items-center gap-2 rounded-control bg-control px-2 py-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-label text-diff-removed">
-                      {i18n.t("inspector.gitChangesRetrying", { ns: "conversation" })}
-                    </p>
-                  </div>
+                <div className="mx-2.5 mb-2 flex items-center justify-end rounded-control bg-control px-2 py-2">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -362,15 +364,12 @@ export function WorkbenchInspector({
               <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2.5">
                 {rootFileTreeState?.error !== null && rootFileTreeState?.error !== undefined ? (
                   <div className="flex flex-col items-center px-2 py-5 text-center">
-                    <p className="text-label text-diff-removed">
-                      {i18n.t("inspector.projectFilesError", { ns: "conversation" })}
-                    </p>
                     <Button
                       variant="ghost"
                       aria-label={i18n.t("inspector.refreshProjectFiles", {
                         ns: "conversation",
                       })}
-                      className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-control bg-control px-3 text-label font-medium text-foreground transition-colors hover:bg-raised disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-control bg-control px-3 text-label font-medium text-foreground transition-colors hover:bg-raised disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={rootFileTreeState.isFetching}
                       onClick={() => {
                         onRefreshFileTreeDirectory(null);
@@ -481,14 +480,6 @@ export function WorkbenchInspector({
           contextContent
         )}
       </div>
-      {projectOpenError === null ? null : (
-        <p
-          className="absolute bottom-3 right-3 z-40 w-60 rounded-control bg-danger-soft px-2 py-1.5 text-meta text-danger shadow-floating"
-          role="alert"
-        >
-          {i18n.t("inspector.openFailed", { ns: "conversation" })}
-        </p>
-      )}
     </aside>
   );
 }

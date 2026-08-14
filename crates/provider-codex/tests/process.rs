@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use code_agent_provider_codex::{
     CodexAppServerOptions, CodexBinarySource, LocateCodexBinaryOptions, SUPPORTED_CODEX_VERSION,
-    check_codex_version, locate_codex_binary, start_codex_app_server,
+    check_codex_version, locate_codex_binary, rpc_error_to_code_agent_error,
+    start_codex_app_server,
 };
 use serde_json::json;
 
@@ -86,8 +87,11 @@ async fn unexpected_exit_should_reject_pending_with_stderr() {
         .request("hang/request", None)
         .await
         .expect_err("exit must reject pending request");
+    assert_eq!(
+        rpc_error_to_code_agent_error(&error).message(),
+        "codex exploded"
+    );
     let message = error.to_string();
-    assert!(message.contains("exited"), "message: {message}");
     assert!(message.contains("codex exploded"), "message: {message}");
 
     let exit = process.wait_for_exit().await;
@@ -132,6 +136,21 @@ async fn version_check_should_reject_unsupported_version() {
         .await
         .expect("supported version passes");
     assert_eq!(info.version, SUPPORTED_CODEX_VERSION);
+}
+
+#[tokio::test]
+async fn version_check_should_preserve_codex_stderr() {
+    let error = check_codex_version(
+        &fake_codex_path(),
+        &[(
+            "FAKE_CODEX_VERSION_ERROR".to_string(),
+            "codex version probe failed".to_string(),
+        )],
+    )
+    .await
+    .expect_err("failed version probe must propagate stderr");
+
+    assert_eq!(error.message(), "codex version probe failed");
 }
 
 async fn check_codex_version_with_env(

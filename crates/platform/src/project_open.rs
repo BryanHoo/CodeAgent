@@ -2,6 +2,7 @@ use std::{path::Path, process::Stdio, sync::Arc, time::Duration};
 
 use code_agent_core::{CodeAgentError, CodeAgentErrorCode};
 use serde_json::{Value, json};
+use tokio::io::AsyncReadExt;
 
 #[path = "project_open_commands.rs"]
 mod commands;
@@ -11,6 +12,7 @@ use commands::{resolve_linux, resolve_macos, resolve_windows};
 use crate::process::ProcessEnvironment;
 
 const LAUNCH_CONFIRMATION: Duration = Duration::from_millis(500);
+const LAUNCH_EXIT_GRACE: Duration = Duration::from_millis(500);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Platform {
@@ -363,18 +365,56 @@ async fn launch(
         })
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(if command.observe_early_exit {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        });
     let mut child = process
         .spawn()
-        .map_err(|_| CodeAgentError::internal("system open could not start"))?;
+        .map_err(|error| CodeAgentError::internal(error.to_string()))?;
     if !command.observe_early_exit {
         // Finder 和 Explorer 只负责把请求转交给系统，代理退出码不能代表打开结果。
         return Ok(());
     }
-    match tokio::time::timeout(LAUNCH_CONFIRMATION, child.wait()).await {
-        Err(_) => Ok(()),
-        Ok(Ok(status)) if status.success() => Ok(()),
-        Ok(_) => Err(CodeAgentError::internal("system open failed")),
+    let stderr_task = child.stderr.take().map(|stderr| {
+        tokio::spawn(async move {
+            let mut bytes = Vec::new();
+            stderr.take(8 * 1024).read_to_end(&mut bytes).await?;
+            Ok::<_, std::io::Error>(bytes)
+        })
+    });
+    let status = match tokio::time::timeout(LAUNCH_CONFIRMATION, child.wait()).await {
+        // 超时边界可能与进程退出重合；短暂继续等待，避免把已经失败的启动误报为成功。
+        Err(_) => match tokio::time::timeout(LAUNCH_EXIT_GRACE, child.wait()).await {
+            Err(_) => {
+                if let Some(task) = stderr_task {
+                    task.abort();
+                }
+                return Ok(());
+            }
+            Ok(Err(error)) => return Err(CodeAgentError::internal(error.to_string())),
+            Ok(Ok(status)) => status,
+        },
+        Ok(Err(error)) => return Err(CodeAgentError::internal(error.to_string())),
+        Ok(Ok(status)) => status,
+    };
+    let stderr = match stderr_task {
+        Some(task) => task
+            .await
+            .map_err(|error| CodeAgentError::internal(error.to_string()))?
+            .map_err(|error| CodeAgentError::internal(error.to_string()))?,
+        None => Vec::new(),
+    };
+    if status.success() {
+        Ok(())
+    } else {
+        let message = String::from_utf8_lossy(&stderr).trim().to_owned();
+        Err(CodeAgentError::internal(if message.is_empty() {
+            status.to_string()
+        } else {
+            message
+        }))
     }
 }
 

@@ -198,6 +198,8 @@ export class TauriCodeAgentTransport implements CodeAgentTransport {
         "x-code-agent-project-id": operationInput.projectId,
         "x-code-agent-request-id": context.requestId,
       },
+    }).catch((error: unknown) => {
+      throw normalizeCodeAgentError(error);
     });
   }
 }

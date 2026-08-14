@@ -30,6 +30,17 @@ function createClient() {
 }
 
 describe("AccessSessionController", () => {
+  it("preserves the original access error", async () => {
+    const { client } = createClient();
+    const originalError = new Error("Access service unavailable");
+    client.getAccessStatus.mockRejectedValueOnce(originalError);
+    const controller = new AccessSessionController(client, new QueryClient());
+
+    await controller.load();
+
+    expect(controller.getSnapshot().error).toBe(originalError);
+  });
+
   it("loads access before exposing authenticated application state", async () => {
     const { client } = createClient();
     const controller = new AccessSessionController(client, new QueryClient());

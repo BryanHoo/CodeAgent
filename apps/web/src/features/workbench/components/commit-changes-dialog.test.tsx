@@ -291,8 +291,9 @@ describe("CommitChangesDialog", () => {
       />,
     );
 
-    expect(markup).toContain("提交已完成，但推送失败");
-    expect(markup).toContain("remote: Permission to repository denied");
+    expect(markup).toContain("提交已完成");
+    expect(markup).not.toContain("提交已完成，但推送失败");
+    expect(markup).not.toContain("remote: Permission to repository denied");
     expect(markup).toContain("0123456");
   });
 });

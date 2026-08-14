@@ -50,6 +50,16 @@ async fn git_service_reads_and_mutates_only_registered_repository() {
     assert_eq!(status["unstaged"][0]["path"], "tracked.txt");
     let snapshot = status["snapshot"].as_str().expect("snapshot").to_owned();
 
+    let invalid_branch_error = service
+        .create_branch(&project_id, "bad..branch", &snapshot, &context)
+        .await
+        .expect_err("invalid branch must fail");
+    assert!(
+        invalid_branch_error.message().contains("bad..branch"),
+        "message: {}",
+        invalid_branch_error.message()
+    );
+
     service
         .create_branch(&project_id, "feature", &snapshot, &context)
         .await

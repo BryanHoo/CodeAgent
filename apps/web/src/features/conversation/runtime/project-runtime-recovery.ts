@@ -1,5 +1,6 @@
 import type { AgentEventConnectionState } from "@code-agent/client";
 import type { AgentEvent, AgentTaskSnapshotResponse } from "@code-agent/protocol";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
 import { AgentEventBuffer } from "./task-runtime.js";
 import type { TaskStore } from "./task-store.js";
 
@@ -89,7 +90,8 @@ export class SnapshotRecoveryController<T> {
     let recovery: Promise<T | undefined>;
     try {
       recovery = Promise.resolve(this.#recoverSnapshot());
-    } catch {
+    } catch (error) {
+      showErrorToast(error);
       if (recoveryGeneration === this.#recoveryGeneration) {
         this.#scheduleRecoveryRetry();
       }
@@ -110,7 +112,8 @@ export class SnapshotRecoveryController<T> {
         // 只允许当前代次的权威 Snapshot 完成恢复，过期请求不能覆盖新连接基线。
         this.#onRecovered(response);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        showErrorToast(error);
         if (
           this.#recoveryState === "recovering" &&
           recoveryGeneration === this.#recoveryGeneration

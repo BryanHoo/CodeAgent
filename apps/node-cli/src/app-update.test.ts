@@ -54,6 +54,7 @@ describe("app update service", () => {
     await expect(service.read()).resolves.toEqual({
       appVersion: "1.3.0",
       codexVersion: "0.147.0",
+      error: null,
       latestVersion: "1.4.0",
       releaseNotes: "### 新增\n\n- 添加在线更新。",
       status: "available",
@@ -74,6 +75,7 @@ describe("app update service", () => {
     await expect(service.read()).resolves.toEqual({
       appVersion: "1.3.0",
       codexVersion: "0.147.0",
+      error: "offline",
       latestVersion: null,
       releaseNotes: null,
       status: "check-failed",
@@ -93,6 +95,7 @@ describe("app update service", () => {
     await expect(service.read()).resolves.toEqual({
       appVersion: "1.3.0",
       codexVersion: "0.147.0",
+      error: "offline",
       latestVersion: "1.4.0",
       releaseNotes: null,
       status: "available",
@@ -112,6 +115,7 @@ describe("app update service", () => {
     await expect(service.install("1.4.0")).resolves.toEqual({
       appVersion: "1.3.0",
       codexVersion: "0.147.0",
+      error: null,
       latestVersion: "1.4.0",
       releaseNotes: null,
       status: "restart-required",
@@ -121,6 +125,20 @@ describe("app update service", () => {
 
     await expect(service.install("1.5.0")).rejects.toMatchObject({
       code: "UPDATE_NOT_AVAILABLE",
+    });
+  });
+
+  it("preserves npm install errors exactly", async () => {
+    const service = createAppUpdateService({
+      appVersion: "1.3.0",
+      codexVersion: "0.147.0",
+      fetchLatestVersion: vi.fn(() => Promise.resolve("1.4.0")),
+      runNpmInstall: vi.fn(() => Promise.reject(new Error("npm ERR! permission denied"))),
+    });
+
+    await expect(service.install("1.4.0")).rejects.toMatchObject({
+      code: "UPDATE_INSTALL_FAILED",
+      message: "npm ERR! permission denied",
     });
   });
 });

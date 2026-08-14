@@ -2,8 +2,6 @@ import type { AgentBackgroundTerminal, AgentMcpServer } from "@code-agent/protoc
 import {
   Bot,
   CheckCircle2,
-  ChevronRight,
-  CircleAlert,
   CircleOff,
   CircleX,
   LoaderCircle,
@@ -18,11 +16,6 @@ import { i18n } from "../../../i18n/i18n.js";
 import { Task, TaskTrigger } from "../../../shared/components/agent/task.js";
 import { Button } from "../../../shared/components/core/button.js";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "../../../shared/components/core/collapsible.js";
-import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -36,14 +29,12 @@ import {
 export function BackgroundTerminalSection({
   error,
   isPending,
-  mutationError,
   onTerminate,
   terminals,
   terminatingTerminalId,
 }: Readonly<{
   error: Error | null;
   isPending: boolean;
-  mutationError: Error | null;
   onTerminate: (terminalId: string) => Promise<void>;
   terminals: readonly AgentBackgroundTerminal[];
   terminatingTerminalId: string | null;
@@ -58,11 +49,7 @@ export function BackgroundTerminalSection({
           <p className="px-2 py-2 text-caption text-muted-foreground">
             {i18n.t("inspector.terminalLoading", { ns: "conversation" })}
           </p>
-        ) : error !== null && terminals.length === 0 ? (
-          <p className="px-2 py-2 text-caption text-diff-removed">
-            {i18n.t("inspector.terminalError", { ns: "conversation" })}
-          </p>
-        ) : (
+        ) : error !== null && terminals.length === 0 ? null : (
           <div className="space-y-1">
             {terminals.map((terminal) => {
               const isTerminating = terminatingTerminalId === terminal.id;
@@ -114,11 +101,6 @@ export function BackgroundTerminalSection({
               );
             })}
           </div>
-        )}
-        {mutationError === null ? null : (
-          <p className="px-2 pt-1 text-caption text-diff-removed" role="alert">
-            {i18n.t("inspector.terminalStopRetry", { ns: "conversation" })}
-          </p>
         )}
       </section>
     </InspectorSection>
@@ -202,9 +184,6 @@ export function McpServerSection({
   const reloadLabel = i18n.t(isRetrying ? "inspector.mcpReloading" : "inspector.mcpReload", {
     ns: "conversation",
   });
-  const requestError = retryError ?? error;
-  const requestErrorTitleKey =
-    retryError === null ? "inspector.mcpError" : "inspector.mcpRetryError";
   return (
     <InspectorSection
       action={
@@ -237,9 +216,8 @@ export function McpServerSection({
           <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
           {i18n.t("inspector.mcpLoading", { ns: "conversation" })}
         </p>
-      ) : requestError !== null && servers.length === 0 ? (
-        <McpRequestErrorState error={requestError} titleKey={requestErrorTitleKey} />
-      ) : servers.length === 0 ? (
+      ) : (retryError !== null || error !== null) &&
+        servers.length === 0 ? null : servers.length === 0 ? (
         <p className="px-2 py-2 text-caption text-muted-foreground">
           {i18n.t("inspector.mcpEmpty", { ns: "conversation" })}
         </p>
@@ -253,66 +231,7 @@ export function McpServerSection({
           ))}
         </div>
       )}
-      {retryError === null || servers.length === 0 ? null : (
-        <McpRequestErrorState error={retryError} titleKey="inspector.mcpRetryError" />
-      )}
     </InspectorSection>
-  );
-}
-
-function formatMcpErrorMetadata(error: Error): string | null {
-  const details: string[] = [];
-  if ("code" in error && typeof error.code === "string") {
-    details.push(error.code);
-  }
-  if ("status" in error && typeof error.status === "number") {
-    details.push(`HTTP ${String(error.status)}`);
-  }
-  return details.length === 0 ? null : details.join(" · ");
-}
-
-function McpErrorLog({ error }: Readonly<{ error: string }>) {
-  return (
-    <Collapsible>
-      <CollapsibleTrigger asChild>
-        <Button className="group h-7 justify-start px-0 text-caption" type="button" variant="link">
-          <ChevronRight
-            aria-hidden="true"
-            className="transition-transform group-data-[state=open]:rotate-90"
-            data-icon="inline-start"
-          />
-          {i18n.t("inspector.mcpErrorLog", { ns: "conversation" })}
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="data-[state=closed]:hidden" forceMount>
-        <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-control bg-control px-2 py-1.5 font-mono text-meta leading-5 text-foreground">
-          {error}
-        </pre>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function McpRequestErrorState({
-  error,
-  titleKey,
-}: Readonly<{ error: Error; titleKey: "inspector.mcpError" | "inspector.mcpRetryError" }>) {
-  const metadata = formatMcpErrorMetadata(error);
-  return (
-    <div className="flex items-start gap-2 px-2 py-1.5" role="alert">
-      <CircleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-danger" />
-      <div className="min-w-0 flex-1">
-        <p className="text-label font-medium text-danger">
-          {i18n.t(titleKey, { ns: "conversation" })}
-        </p>
-        <pre className="mt-1 max-h-44 overflow-auto whitespace-pre-wrap break-words font-mono text-meta leading-5 text-foreground">
-          {error.message}
-        </pre>
-        {metadata === null ? null : (
-          <p className="mt-1 text-meta text-muted-foreground">{metadata}</p>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -348,14 +267,6 @@ function McpServerRow({ server }: Readonly<{ server: AgentMcpServer }>) {
           {server.name}
         </p>
         <p className="text-caption text-muted-foreground">{metadata.join(" · ")}</p>
-        {server.failureReason === null ? null : (
-          <p className="text-caption text-danger">
-            {i18n.t(`inspector.mcpFailureReason.${server.failureReason}`, {
-              ns: "conversation",
-            })}
-          </p>
-        )}
-        {server.error === null ? null : <McpErrorLog error={server.error} />}
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ import type {
   PromptInputAttachment,
   PromptInputMessage,
 } from "../../../shared/components/agent/prompt-input.js";
+import { normalizeError } from "../../../shared/errors/error-toast.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
 import type { QueuedComposerPrompt, useComposerDraftStore } from "../composer-draft-context.js";
 import { createAwaitingQueuedPrompt, createManagedPromptAttachments } from "../composer-queue.js";
@@ -215,9 +216,7 @@ export function createComposerSubmission({
       };
     } catch (error) {
       if (isCurrentScope(requestScope)) {
-        setMutationError(
-          error instanceof Error ? error : new Error(t("composer.attachmentUploadFailed")),
-        );
+        setMutationError(normalizeError(error));
         setIsSubmitting(false);
       }
       return false;

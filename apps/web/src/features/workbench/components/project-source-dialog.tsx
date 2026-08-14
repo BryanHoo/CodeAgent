@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
 import { useTranslation } from "../../../i18n/i18n.js";
+import { useErrorToast } from "../../../shared/errors/error-toast.js";
 
 export { getCodeLanguage } from "../../../shared/components/agent/code-languages.js";
 
@@ -46,7 +47,7 @@ type SourceHeaderProps = Readonly<{
   previewKind: "image" | "source";
   sourcePath: string;
   titleId: string;
-  sourceStatus: "error" | "loading" | "partial" | null;
+  sourceStatus: "loading" | "partial" | null;
 }>;
 
 function SourceHeader({
@@ -82,16 +83,11 @@ function SourceHeader({
         </div>
       </CodeBlockTitle>
       {sourceStatus === null ? null : (
-        <span
-          className={`shrink-0 text-label ${sourceStatus === "error" ? "text-danger" : "text-warning"}`}
-          role={sourceStatus === "error" ? "alert" : "status"}
-        >
+        <span className="shrink-0 text-label text-warning" role="status">
           {t(
             sourceStatus === "loading"
               ? "projectDialog.loadingMoreSource"
-              : sourceStatus === "error"
-                ? "projectDialog.loadMoreSourceError"
-                : "projectDialog.sourcePartial",
+              : "projectDialog.sourcePartial",
           )}
         </span>
       )}
@@ -173,7 +169,7 @@ export function ProjectSourceDialog({
   const contentRef = useRef<HTMLDivElement>(null);
   // 渲染状态绑定源文件路径，切换文件或关闭弹窗后必须回到原始内容。
   const [renderedMarkdownPath, setRenderedMarkdownPath] = useState<string | null>(null);
-  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState<Error | null>(null);
   const sourceQuery = useInfiniteQuery({
     enabled: reference !== null && previewKind === "source",
     getNextPageParam: (
@@ -201,8 +197,9 @@ export function ProjectSourceDialog({
   );
 
   useEffect(() => {
-    setImageLoadFailed(false);
+    setImageLoadError(null);
   }, [previewKind, reference?.path]);
+  useErrorToast(imageLoadError);
 
   useEffect(() => {
     const lineNumber = reference?.lineNumber;
@@ -263,7 +260,7 @@ export function ProjectSourceDialog({
       : isFetchingNextSourcePage
         ? "loading"
         : sourceQuery.isFetchNextPageError
-          ? "error"
+          ? null
           : hasNextSourcePage
             ? "partial"
             : null;
@@ -314,17 +311,15 @@ export function ProjectSourceDialog({
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">
               <SourceHeader {...headerProps} />
               <div className="grid min-h-0 place-items-center overflow-auto p-4 sm:p-6">
-                {imageLoadFailed ? (
-                  <div className="text-body-small text-danger" role="alert">
-                    {t("projectDialog.loadImageError")}
-                  </div>
+                {imageLoadError !== null ? (
+                  <div />
                 ) : (
                   <img
                     alt={fileName}
                     className="max-h-full max-w-full object-contain"
                     decoding="async"
                     onError={() => {
-                      setImageLoadFailed(true);
+                      setImageLoadError(new Error(t("projectDialog.loadImageError")));
                     }}
                     src={imageUrl}
                   />
@@ -344,12 +339,7 @@ export function ProjectSourceDialog({
           ) : sourceData === undefined && sourceQuery.error !== null ? (
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
               <SourceHeader {...headerProps} />
-              <div
-                className="grid min-h-48 place-items-center text-body-small text-danger"
-                role="alert"
-              >
-                {t("projectDialog.loadSourceError")}
-              </div>
+              <div />
             </div>
           ) : showRenderedMarkdown ? (
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">

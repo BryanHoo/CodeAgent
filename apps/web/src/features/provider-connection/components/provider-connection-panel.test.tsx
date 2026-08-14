@@ -109,4 +109,22 @@ describe("ProviderConnectionPanelView", () => {
     expect(hasIncompleteCustomModels([{ id: "alpha", key: "model-1", name: "" }])).toBe(true);
     expect(hasIncompleteCustomModels([])).toBe(false);
   });
+
+  it("does not render request errors inside the connection panel", () => {
+    const markup = renderWithTooltipProvider(
+      <ProviderConnectionPanelView
+        {...handlers}
+        apiKey=""
+        baseUrl=""
+        error="model/list failed"
+        isBusy={false}
+        mode="official"
+        models={[]}
+        status={undefined}
+      />,
+    );
+
+    expect(markup).not.toContain("model/list failed");
+    expect(markup).not.toContain('role="alert"');
+  });
 });

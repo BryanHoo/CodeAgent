@@ -49,6 +49,7 @@ import {
   SelectValue,
 } from "../../../shared/components/core/select.js";
 import { Sheet, SheetContent, SheetTitle } from "../../../shared/components/core/sheet.js";
+import { useErrorToast } from "../../../shared/errors/error-toast.js";
 import {
   Tooltip,
   TooltipContent,
@@ -146,6 +147,7 @@ export function CommitChangesDialog({
   selectedRepository = null,
 }: CommitChangesDialogProps) {
   const { t } = useTranslation("workbench");
+  useErrorToast(error);
   const entries = useMemo(() => collectCommitFileEntries(gitStatus), [gitStatus]);
   const contentIdentity = `${selectedRepository ?? "root"}:${gitStatus.snapshot}`;
   const [contentState, setContentState] = useState(() =>
@@ -261,21 +263,10 @@ export function CommitChangesDialog({
                 {t("commit.repositoryLoading")}
               </p>
             ) : null}
-            {repositories.length === 0 ? (
-              <p className="mt-1 text-caption text-danger" role="alert">
-                {t("commit.repositoryUnavailable")}
-              </p>
-            ) : null}
           </div>
         ) : null}
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden" data-slot="commit-sheet-body">
-          {error === null ? null : (
-            <p className="mx-3 mt-2 shrink-0 text-caption text-danger" role="alert">
-              {error.message}
-            </p>
-          )}
-
           {repositoryReady ? (
             <>
               <section className="shrink-0 px-3 py-2">

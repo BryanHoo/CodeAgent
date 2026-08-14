@@ -131,7 +131,7 @@ export const TaskNoticeEventSchema = createEventSchema({
 export const McpServerStatusUpdatedEventSchema = createEventSchema({
   payload: Type.Object(
     {
-      error: Type.Union([Type.String({ maxLength: 8_192 }), Type.Null()]),
+      error: Type.Union([Type.String(), Type.Null()]),
       failureReason: Type.Union([AgentMcpServerFailureReasonSchema, Type.Null()]),
       name: Type.String({ minLength: 1 }),
       status: AgentMcpServerStatusSchema,

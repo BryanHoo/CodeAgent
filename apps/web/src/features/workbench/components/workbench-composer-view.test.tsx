@@ -73,7 +73,6 @@ describe("WorkbenchComposerView", () => {
     const markup = renderToStaticMarkup(
       <TooltipProvider>
         <ComposerBranchSwitcher
-          branchCreateError={undefined}
           creatingBranch={undefined}
           gitStatus={{
             baseBranches: ["origin/main", "main"],
@@ -98,7 +97,6 @@ describe("WorkbenchComposerView", () => {
   it("聚合仓库模式只展示分支状态，不提供切换按钮", () => {
     const markup = renderToStaticMarkup(
       <ComposerBranchSwitcher
-        branchCreateError={undefined}
         creatingBranch={undefined}
         gitStatus={{
           baseBranches: [],

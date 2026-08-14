@@ -7,7 +7,6 @@ describe("CreateBranchDialog", () => {
   it("渲染可访问的分支名称表单", () => {
     const markup = renderToStaticMarkup(
       <CreateBranchDialog
-        error={undefined}
         isPending={false}
         onClose={() => undefined}
         onCreate={() => Promise.resolve(true)}
@@ -22,18 +21,16 @@ describe("CreateBranchDialog", () => {
     expect(markup).toContain("创建并切换");
   });
 
-  it("提交期间禁用输入与操作并展示错误", () => {
+  it("提交期间禁用输入与操作且不在模块内展示错误", () => {
     const markup = renderToStaticMarkup(
       <CreateBranchDialog
-        error="分支名称无效"
         isPending
         onClose={() => undefined}
         onCreate={() => Promise.resolve(false)}
       />,
     );
 
-    expect(markup).toContain("分支名称无效");
-    expect(markup).toContain('role="alert"');
+    expect(markup).not.toContain('role="alert"');
     expect(markup.match(/disabled=""/gu)?.length).toBeGreaterThanOrEqual(3);
   });
 });

@@ -271,7 +271,6 @@ export function useWorkbenchShellRuntime({
     taskId: string;
   }>();
   const [taskRenameOpen, setTaskRenameOpen] = useState(false);
-  const [taskRenameError, setTaskRenameError] = useState<string | null>(null);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
   const [globalSettingsInitialSection, setGlobalSettingsInitialSection] =
     useState<SettingsSectionId>("appearance");
@@ -423,7 +422,6 @@ export function useWorkbenchShellRuntime({
     setSidebarWidth,
     setSourceFileSelection,
     setSubagentDialogSelection,
-    setTaskRenameError,
     setTaskRenameOpen,
     sidebarOpen,
     sidebarWidth,
@@ -432,7 +430,6 @@ export function useWorkbenchShellRuntime({
     subagents,
     taskLaunchState,
     temporary,
-    taskRenameError,
     taskRenameOpen,
     tasks,
     t,

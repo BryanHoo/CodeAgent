@@ -17,6 +17,7 @@ export const AppInfoResponseSchema = Type.Object(
   {
     appVersion: SemanticVersionSchema,
     codexVersion: SemanticVersionSchema,
+    error: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     latestVersion: Type.Union([SemanticVersionSchema, Type.Null()]),
     releaseNotes: Type.Union([Type.String({ maxLength: 32_768 }), Type.Null()]),
     status: AppUpdateStatusSchema,
@@ -36,6 +37,7 @@ export const InstallAppUpdateResponseSchema = Type.Object(
   {
     appVersion: SemanticVersionSchema,
     codexVersion: SemanticVersionSchema,
+    error: Type.Null(),
     latestVersion: SemanticVersionSchema,
     releaseNotes: Type.Null(),
     status: Type.Literal("restart-required"),

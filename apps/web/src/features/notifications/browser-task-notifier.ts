@@ -1,6 +1,7 @@
 import type { AgentEvent } from "@code-agent/protocol";
 
 import { i18n } from "../../i18n/i18n.js";
+import { showErrorToast } from "../../shared/errors/error-toast.js";
 
 const MAX_FAILED_TURN_KEYS = 256;
 
@@ -165,7 +166,8 @@ class BrowserTaskNotifier implements TaskNotifier {
       if (this.#nativeApi !== undefined) {
         void this.#nativeApi
           .show(`CodeAgent · ${normalizedTaskTitle}`, taskNotification)
-          .catch(() => {
+          .catch((error: unknown) => {
+            showErrorToast(error);
             this.#showBrowserNotification(
               normalizedTaskTitle,
               taskNotification,
@@ -176,8 +178,8 @@ class BrowserTaskNotifier implements TaskNotifier {
         return;
       }
       this.#showBrowserNotification(normalizedTaskTitle, taskNotification, projectId, event.taskId);
-    } catch {
-      // 系统通知属于增强能力，浏览器拒绝构造时不能中断实时事件处理。
+    } catch (error) {
+      showErrorToast(error);
     }
   }
 
@@ -199,8 +201,8 @@ class BrowserTaskNotifier implements TaskNotifier {
         this.#focusPage();
         this.#navigateToTask(projectId, taskId);
       });
-    } catch {
-      // 浏览器拒绝通知时保持实时事件处理继续运行。
+    } catch (error) {
+      showErrorToast(error);
     }
   }
 
@@ -217,12 +219,13 @@ class BrowserTaskNotifier implements TaskNotifier {
         return Promise.resolve();
       }
       browserPermissionRequest = this.#api.requestPermission();
-    } catch {
+    } catch (error) {
+      showErrorToast(error);
       return Promise.resolve();
     }
     this.#permissionRequest = browserPermissionRequest
       .then(() => undefined)
-      .catch(() => undefined)
+      .catch(showErrorToast)
       .finally(() => {
         this.#permissionRequest = undefined;
       });

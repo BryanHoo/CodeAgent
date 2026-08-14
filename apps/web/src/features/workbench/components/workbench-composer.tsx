@@ -2,6 +2,7 @@ import type { AgentTaskSettings } from "@code-agent/protocol";
 import { useEffect, useImperativeHandle } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
+import { normalizeError, useErrorToast } from "../../../shared/errors/error-toast.js";
 import {
   interruptPromptTurn,
   resolveComposerSubmitAction,
@@ -163,18 +164,20 @@ export function WorkbenchComposer({
     // 设置写回由用户事件直接触发，避免 effect 重放或并发渲染造成重复请求。
     void Promise.resolve(onSettingsChange(nextSettings, field)).catch((error: unknown) => {
       if (isCurrentScope(requestScope)) {
-        setMutationError(error instanceof Error ? error : new Error("Settings update failed"));
+        setMutationError(normalizeError(error));
       }
     });
   };
   const branchMutation = useWorkbenchBranchSwitch({
     client,
-    failureMessage: t("composer.branchSwitchFailed"),
     gitStatus,
     isCurrentScope,
     projectId,
     routeScope,
   });
+  useErrorToast(mutationError);
+  useErrorToast(branchMutation.branchCreateError);
+  useErrorToast(branchMutation.branchSwitchError);
 
   useEffect(() => {
     if (turnControlsDisabled) {
@@ -299,7 +302,7 @@ export function WorkbenchComposer({
         await interruptPromptTurn(client, projectId, activeTaskId, activeTurnId, attempt.key);
       } catch (error) {
         if (isCurrentScope(requestScope)) {
-          setMutationError(error instanceof Error ? error : new Error("Turn interruption failed"));
+          setMutationError(normalizeError(error));
         }
       } finally {
         if (isCurrentScope(requestScope)) {
@@ -343,8 +346,6 @@ export function WorkbenchComposer({
       attachments={attachments}
       attachmentsDisabled={attachmentsDisabled || composerQueue.waitingForAcknowledgement}
       baseBranches={baseBranches}
-      branchCreateError={branchMutation.branchCreateError}
-      branchSwitchError={branchMutation.branchSwitchError}
       canInterrupt={canInterrupt}
       canSteer={canSteer}
       canSubmit={canSubmit}

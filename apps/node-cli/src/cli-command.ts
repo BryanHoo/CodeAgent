@@ -309,7 +309,7 @@ async function runStart(
   if (process.env[STARTUP_UPDATE_APPLIED_ENV] !== "1") {
     const update = await dependencies.checkAppUpdate();
     if (update.status === "check-failed") {
-      output.warning("无法检查 CodeAgent 更新，将继续启动当前版本。");
+      output.warning(update.error ?? "无法检查 CodeAgent 更新，将继续启动当前版本。");
     } else if (update.status === "available" && update.latestVersion !== null) {
       const shouldUpdate = await dependencies.confirmAppUpdate(
         dependencies.appVersion,

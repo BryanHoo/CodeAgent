@@ -34,6 +34,20 @@ export function reconstructSnapshot(state: TaskStoreState): ReconstructedTaskSna
 
 type AgentMessage = Extract<AgentItem, { type: "message" }>;
 
+function hasMatchingSkillOnlyContent(current: AgentMessage, snapshot: AgentMessage): boolean {
+  const currentSkills = current.skills ?? [];
+  const snapshotSkills = snapshot.skills ?? [];
+  return (
+    current.text.length === 0 &&
+    snapshot.text.length === 0 &&
+    (current.attachments?.length ?? 0) === 0 &&
+    (snapshot.attachments?.length ?? 0) === 0 &&
+    currentSkills.length > 0 &&
+    currentSkills.length === snapshotSkills.length &&
+    currentSkills.every((skill, index) => skill.name === snapshotSkills[index]?.name)
+  );
+}
+
 function retainSnapshotTurnItems(currentTurn: AgentTurn, snapshotTurn: AgentTurn): AgentItem[] {
   const snapshotItemsById = new Map(snapshotTurn.items.map((item) => [item.id, item]));
   const snapshotMessagesByCurrentId = new Map<string, AgentMessage>();
@@ -79,10 +93,12 @@ function retainSnapshotTurnItems(currentTurn: AgentTurn, snapshotTurn: AgentTurn
     const candidates = unmatchedCurrentMessages.filter(
       (currentMessage) =>
         currentMessage.role === snapshotMessage.role &&
-        currentMessage.text.length > 0 &&
-        snapshotMessage.text.length > 0 &&
-        (currentMessage.text.startsWith(snapshotMessage.text) ||
-          snapshotMessage.text.startsWith(currentMessage.text)),
+        ((currentMessage.text.length > 0 &&
+          snapshotMessage.text.length > 0 &&
+          (currentMessage.text.startsWith(snapshotMessage.text) ||
+            snapshotMessage.text.startsWith(currentMessage.text))) ||
+          // 纯 Skill 消息没有正文，使用有序结构化 Skill 作为同一消息证据。
+          hasMatchingSkillOnlyContent(currentMessage, snapshotMessage)),
     );
     currentCandidatesBySnapshotId.set(snapshotMessage.id, candidates);
     for (const candidate of candidates) {
@@ -93,7 +109,7 @@ function retainSnapshotTurnItems(currentTurn: AgentTurn, snapshotTurn: AgentTurn
     }
   }
 
-  // 文本只能在候选关系两侧都唯一时兜底，歧义消息保留各自 ID。
+  // 内容候选只能在关系两侧都唯一时兜底，歧义消息保留各自 ID。
   for (const snapshotMessage of unmatchedSnapshotMessages) {
     const candidates = currentCandidatesBySnapshotId.get(snapshotMessage.id) ?? [];
     const currentMessage = candidates.length === 1 ? candidates[0] : undefined;

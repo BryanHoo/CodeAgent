@@ -71,8 +71,7 @@ export function ProviderConnectionGate({ children }: Readonly<{ children: ReactN
         {gateState === "setup" ? (
           <ProviderConnectionPanel />
         ) : (
-          <div className="grid justify-items-start gap-3" role="alert">
-            <p className="text-body-small text-danger">{t("provider.errors.load")}</p>
+          <div className="grid justify-items-start gap-3">
             <Button
               onClick={() => {
                 if (readiness.error !== null || readiness.data?.runtime.state === "failed") {
