@@ -1282,7 +1282,13 @@ describe("project protocol", () => {
   });
 
   it("validates health and capability responses", () => {
-    expect(Value.Check(HealthResponseSchema, { status: "ok", version: 1 })).toBe(true);
+    expect(
+      Value.Check(HealthResponseSchema, {
+        runtime: { state: "ready" },
+        status: "ok",
+        version: 1,
+      }),
+    ).toBe(true);
     expect(
       Value.Check(AgentCapabilitiesSchema, {
         feedback: { upload: true },

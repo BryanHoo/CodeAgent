@@ -27,7 +27,7 @@ pub struct AccessStatusResponse {
 
 #[derive(Debug, Serialize)]
 pub struct DiagnosticsResponse {
-    provider: crate::platform_adapters::ProviderDiagnostic,
+    runtime: crate::platform_adapters::RuntimeReadiness,
     status: &'static str,
     version: u8,
 }
@@ -62,7 +62,7 @@ pub async fn app_diagnostics(
 ) -> Result<DiagnosticsResponse, CommandError> {
     validate_request_id(&request_id)?;
     Ok(DiagnosticsResponse {
-        provider: provider.diagnostic(),
+        runtime: provider.readiness(),
         status: "ok",
         version: 1,
     })

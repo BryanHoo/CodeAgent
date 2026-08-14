@@ -32,6 +32,7 @@ export const registerRuntimeRoutes: FastifyPluginCallback<ServerRouteContext> = 
   done,
 ) => {
   app.get("/v1/health", { schema: { response: { 200: HealthResponseSchema } } }, () => ({
+    runtime: { state: "ready" as const },
     status: "ok" as const,
     version: 1 as const,
   }));

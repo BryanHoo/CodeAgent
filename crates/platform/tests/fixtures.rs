@@ -48,6 +48,14 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "create_provider_connection",
         include_str!("../migrations/011_create_provider_connection.sql"),
     ),
+    (
+        "scope_agent_state_by_backend",
+        include_str!("../migrations/012_scope_agent_state_by_backend.sql"),
+    ),
+    (
+        "remove_backend_scoping",
+        include_str!("../migrations/013_remove_backend_scoping.sql"),
+    ),
 ];
 
 fn fixture_path(version: usize) -> PathBuf {
@@ -111,7 +119,7 @@ fn every_historical_database_should_upgrade_without_losing_rows() {
         let diagnostics = database
             .diagnose()
             .expect("upgraded database must be healthy");
-        assert_eq!(diagnostics.migration_version, 11);
+        assert_eq!(diagnostics.migration_version, 13);
         database.close().expect("upgraded database must close");
 
         let connection = Connection::open(&path).expect("upgraded database must reopen");

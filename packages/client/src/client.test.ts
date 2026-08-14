@@ -43,13 +43,21 @@ describe("CodeAgentClient", () => {
     const calls: { context: CodeAgentRequestContext; operation: CodeAgentOperation }[] = [];
     const transport = createTransport((operation, context) => {
       calls.push({ context, operation });
-      return Promise.resolve({ status: "ok", version: 1 });
+      return Promise.resolve({
+        runtime: { state: "ready" },
+        status: "ok",
+        version: 1,
+      });
     });
     const client = new TransportCodeAgentClient(transport);
 
     await expect(
       client.request({ name: "app.health", output: HealthResponseSchema }),
-    ).resolves.toEqual({ status: "ok", version: 1 });
+    ).resolves.toEqual({
+      runtime: { state: "ready" },
+      status: "ok",
+      version: 1,
+    });
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.operation.name).toBe("app.health");
@@ -105,7 +113,11 @@ describe("CodeAgentClient", () => {
     await vi.waitFor(() => {
       expect(cancel).toHaveBeenCalledOnce();
     });
-    resolveRequest?.({ status: "ok", version: 1 });
+    resolveRequest?.({
+      runtime: { state: "ready" },
+      status: "ok",
+      version: 1,
+    });
     await expect(request).rejects.toMatchObject({ name: "AbortError" });
   });
 });

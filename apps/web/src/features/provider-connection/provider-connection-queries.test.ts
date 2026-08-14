@@ -5,6 +5,8 @@ import {
   configureCustomProvider,
   providerConnectionQueryOptions,
   providerConnectionRefetchInterval,
+  runtimeReadinessQueryOptions,
+  runtimeReadinessRefetchInterval,
   startOfficialProviderLoginMutationOptions,
 } from "./provider-connection-queries.js";
 
@@ -17,6 +19,24 @@ const pendingStatus = {
 };
 
 describe("provider connection queries", () => {
+  it("polls Runtime readiness only while Desktop startup is in progress", () => {
+    const client = {
+      getHealth: vi.fn(() =>
+        Promise.resolve({
+          runtime: { state: "starting" as const },
+          status: "ok" as const,
+          version: 1 as const,
+        }),
+      ),
+    };
+    const options = runtimeReadinessQueryOptions(client);
+
+    expect(options.queryKey).toEqual(["runtime-readiness"]);
+    expect(runtimeReadinessRefetchInterval({ state: "starting" })).toBe(500);
+    expect(runtimeReadinessRefetchInterval({ state: "ready" })).toBe(false);
+    expect(runtimeReadinessRefetchInterval({ state: "failed" })).toBe(false);
+  });
+
   it("polls only while an official login is pending", () => {
     const client = { getProviderConnection: vi.fn(() => Promise.resolve(pendingStatus)) };
     const options = providerConnectionQueryOptions(client);

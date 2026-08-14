@@ -9,10 +9,14 @@ use code_agent_protocol::{
 };
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
-use unicode_normalization::UnicodeNormalization;
 
-use crate::{PlatformDatabase, PlatformError};
+use crate::{
+    PlatformDatabase, PlatformError,
+    repository_support::{
+        create_project_id, deserialize_protocol_json, normalized_name, project_from_row,
+        read_project_by_root, serialize_protocol,
+    },
+};
 
 #[derive(Clone)]
 pub struct SqliteRepository {
@@ -246,12 +250,9 @@ impl RepositoryPort for SqliteRepository {
             .call(|connection| {
                 connection
                     .query_row(
-                        "SELECT approval_policy, approvals_reviewer, commit_message_model,
-                                commit_message_prompt, commit_message_reasoning_effort, model,
-                                reasoning_effort, sandbox_mode, default_open_app_id, follow_up_behavior
-                         FROM global_settings WHERE id = 1",
+                        "SELECT settings_json FROM global_settings WHERE id = 1",
                         [],
-                        global_settings_from_row,
+                        |row| deserialize_protocol_json(row.get(0)?),
                     )
                     .optional()
                     .map_err(PlatformError::from)
@@ -266,35 +267,15 @@ impl RepositoryPort for SqliteRepository {
         context: &PortRequestContext,
     ) -> Result<AgentGlobalSettings, CodeAgentError> {
         ensure_active(context)?;
-        let value = serde_json::to_value(settings)
-            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-        let stored = serde_json::from_value(value.clone())
-            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+        let settings_json = serialize_protocol(settings)?;
+        let stored = settings.clone();
         self.database
             .call(move |connection| {
                 connection.execute(
-                    "INSERT INTO global_settings (
-                       id, approval_policy, approvals_reviewer, commit_message_model,
-                       commit_message_prompt, commit_message_reasoning_effort, model,
-                       reasoning_effort, sandbox_mode, default_open_app_id, follow_up_behavior, updated_at
-                     ) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-                     ON CONFLICT(id) DO UPDATE SET
-                       approval_policy=excluded.approval_policy,
-                       approvals_reviewer=excluded.approvals_reviewer,
-                       commit_message_model=excluded.commit_message_model,
-                       commit_message_prompt=excluded.commit_message_prompt,
-                       commit_message_reasoning_effort=excluded.commit_message_reasoning_effort,
-                       model=excluded.model, reasoning_effort=excluded.reasoning_effort,
-                       sandbox_mode=excluded.sandbox_mode, default_open_app_id=excluded.default_open_app_id,
-                       follow_up_behavior=excluded.follow_up_behavior, updated_at=excluded.updated_at",
-                    params![
-                        required_string(&value, "approvalPolicy")?, required_string(&value, "approvalsReviewer")?,
-                        required_string(&value, "commitMessageModel")?, required_string(&value, "commitMessagePrompt")?,
-                        required_string(&value, "commitMessageReasoningEffort")?, required_string(&value, "model")?,
-                        required_string(&value, "reasoningEffort")?, required_string(&value, "sandboxMode")?,
-                        optional_string(&value, "defaultOpenAppId")?, required_string(&value, "followUpBehavior")?,
-                        updated_at.to_rfc3339(),
-                    ],
+                    "INSERT INTO global_settings (id, settings_json, updated_at)
+                     VALUES (1, ?1, ?2) ON CONFLICT(id) DO UPDATE SET
+                     settings_json=excluded.settings_json, updated_at=excluded.updated_at",
+                    params![settings_json, updated_at.to_rfc3339()],
                 )?;
                 Ok(stored)
             })
@@ -312,13 +293,10 @@ impl RepositoryPort for SqliteRepository {
             .call(move |connection| {
                 connection
                     .query_row(
-                        "SELECT model, reasoning_effort, sandbox_mode FROM project_defaults WHERE project_id = ?1",
+                        "SELECT settings_json FROM project_defaults
+                         WHERE project_id = ?1",
                         [project_id],
-                        |row| deserialize_protocol(serde_json::json!({
-                            "model": row.get::<_, String>(0)?,
-                            "reasoningEffort": row.get::<_, String>(1)?,
-                            "sandboxMode": row.get::<_, String>(2)?,
-                        })),
+                        |row| deserialize_protocol_json(row.get(0)?),
                     )
                     .optional()
                     .map_err(PlatformError::from)
@@ -335,20 +313,19 @@ impl RepositoryPort for SqliteRepository {
     ) -> Result<AgentProjectDefaults, CodeAgentError> {
         ensure_active(context)?;
         let project_id = project_id.to_string();
-        let value = serde_json::to_value(settings)
-            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-        let stored = serde_json::from_value(value.clone())
-            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-        self.database.call(move |connection| {
-            connection.execute(
-                "INSERT INTO project_defaults (project_id, model, reasoning_effort, sandbox_mode, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(project_id) DO UPDATE SET
-                 model=excluded.model, reasoning_effort=excluded.reasoning_effort,
-                 sandbox_mode=excluded.sandbox_mode, updated_at=excluded.updated_at",
-                params![project_id, required_string(&value, "model")?, required_string(&value, "reasoningEffort")?, required_string(&value, "sandboxMode")?, updated_at.to_rfc3339()],
-            )?;
-            Ok(stored)
-        }).map_err(map_platform_error)
+        let settings_json = serialize_protocol(settings)?;
+        let stored = settings.clone();
+        self.database
+            .call(move |connection| {
+                connection.execute(
+                    "INSERT INTO project_defaults (project_id, settings_json, updated_at)
+                 VALUES (?1, ?2, ?3) ON CONFLICT(project_id) DO UPDATE SET
+                 settings_json=excluded.settings_json, updated_at=excluded.updated_at",
+                    params![project_id, settings_json, updated_at.to_rfc3339()],
+                )?;
+                Ok(stored)
+            })
+            .map_err(map_platform_error)
     }
 
     async fn read_task_settings(
@@ -362,18 +339,15 @@ impl RepositoryPort for SqliteRepository {
         let task_id = task_id.to_string();
         self.database
             .call(move |connection| {
-                connection.query_row(
-                "SELECT approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode
-                 FROM task_settings WHERE project_id = ?1 AND task_id = ?2",
-                params![project_id, task_id],
-                |row| deserialize_protocol(serde_json::json!({
-                    "approvalPolicy": row.get::<_, String>(0)?,
-                    "approvalsReviewer": row.get::<_, String>(1)?,
-                    "model": row.get::<_, String>(2)?,
-                    "reasoningEffort": row.get::<_, String>(3)?,
-                    "sandboxMode": row.get::<_, String>(4)?,
-                })),
-            ).optional().map_err(PlatformError::from)
+                connection
+                    .query_row(
+                        "SELECT settings_json FROM task_settings
+                 WHERE project_id = ?1 AND task_id = ?2",
+                        params![project_id, task_id],
+                        |row| deserialize_protocol_json(row.get(0)?),
+                    )
+                    .optional()
+                    .map_err(PlatformError::from)
             })
             .map_err(map_platform_error)
     }
@@ -389,21 +363,19 @@ impl RepositoryPort for SqliteRepository {
         ensure_active(context)?;
         let project_id = project_id.to_string();
         let task_id = task_id.to_string();
-        let value = serde_json::to_value(settings)
-            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-        let stored = serde_json::from_value(value.clone())
-            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-        self.database.call(move |connection| {
-            connection.execute(
-                "INSERT INTO task_settings (project_id, task_id, approval_policy, approvals_reviewer, model, reasoning_effort, sandbox_mode, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(project_id, task_id) DO UPDATE SET
-                 approval_policy=excluded.approval_policy, approvals_reviewer=excluded.approvals_reviewer,
-                 model=excluded.model, reasoning_effort=excluded.reasoning_effort,
-                 sandbox_mode=excluded.sandbox_mode, updated_at=excluded.updated_at",
-                params![project_id, task_id, required_string(&value, "approvalPolicy")?, required_string(&value, "approvalsReviewer")?, required_string(&value, "model")?, required_string(&value, "reasoningEffort")?, required_string(&value, "sandboxMode")?, updated_at.to_rfc3339()],
-            )?;
-            Ok(stored)
-        }).map_err(map_platform_error)
+        let settings_json = serialize_protocol(settings)?;
+        let stored = settings.clone();
+        self.database
+            .call(move |connection| {
+                connection.execute(
+                    "INSERT INTO task_settings (project_id, task_id, settings_json, updated_at)
+                 VALUES (?1, ?2, ?3, ?4) ON CONFLICT(project_id, task_id) DO UPDATE SET
+                 settings_json=excluded.settings_json, updated_at=excluded.updated_at",
+                    params![project_id, task_id, settings_json, updated_at.to_rfc3339()],
+                )?;
+                Ok(stored)
+            })
+            .map_err(map_platform_error)
     }
 
     async fn read_provider_connection(
@@ -411,12 +383,18 @@ impl RepositoryPort for SqliteRepository {
         context: &PortRequestContext,
     ) -> Result<Option<AgentProviderConnectionRecord>, CodeAgentError> {
         ensure_active(context)?;
-        self.database.call(|connection| {
-            connection.query_row(
-                "SELECT mode, custom_base_url, custom_models_json, updated_at FROM provider_connection WHERE id = 1",
-                [], provider_connection_from_row,
-            ).optional().map_err(PlatformError::from)
-        }).map_err(map_platform_error)
+        self.database
+            .call(|connection| {
+                connection
+                    .query_row(
+                        "SELECT connection_json FROM provider_connection WHERE id = 1",
+                        [],
+                        |row| deserialize_protocol_json(row.get(0)?),
+                    )
+                    .optional()
+                    .map_err(PlatformError::from)
+            })
+            .map_err(map_platform_error)
     }
 
     async fn write_provider_connection(
@@ -425,148 +403,21 @@ impl RepositoryPort for SqliteRepository {
         context: &PortRequestContext,
     ) -> Result<AgentProviderConnectionRecord, CodeAgentError> {
         ensure_active(context)?;
-        let value = serde_json::to_value(record)
-            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-        let stored = serde_json::from_value(value.clone())
-            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-        let custom_models_json = match value.get("customModels") {
-            Some(Value::Null) | None => None,
-            Some(models) => Some(
-                serde_json::to_string(models)
-                    .map_err(|error| CodeAgentError::internal(error.to_string()))?,
-            ),
-        };
-        self.database.call(move |connection| {
-            connection.execute(
-                "INSERT INTO provider_connection (id, mode, custom_base_url, custom_models_json, updated_at)
-                 VALUES (1, ?1, ?2, ?3, ?4) ON CONFLICT(id) DO UPDATE SET
-                 mode=excluded.mode, custom_base_url=excluded.custom_base_url,
-                 custom_models_json=excluded.custom_models_json, updated_at=excluded.updated_at",
-                params![required_string(&value, "mode")?, optional_string(&value, "customBaseUrl")?, custom_models_json, required_string(&value, "updatedAt")?],
-            )?;
-            Ok(stored)
-        }).map_err(map_platform_error)
+        let connection_json = serialize_protocol(record)?;
+        let stored = record.clone();
+        let updated_at = record.updated_at.to_rfc3339();
+        self.database
+            .call(move |connection| {
+                connection.execute(
+                    "INSERT INTO provider_connection (id, connection_json, updated_at)
+                 VALUES (1, ?1, ?2) ON CONFLICT(id) DO UPDATE SET
+                 connection_json=excluded.connection_json, updated_at=excluded.updated_at",
+                    params![connection_json, updated_at],
+                )?;
+                Ok(stored)
+            })
+            .map_err(map_platform_error)
     }
-}
-
-fn global_settings_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentGlobalSettings> {
-    deserialize_protocol(serde_json::json!({
-        "approvalPolicy": row.get::<_, String>(0)?,
-        "approvalsReviewer": row.get::<_, String>(1)?,
-        "commitMessageModel": row.get::<_, String>(2)?,
-        "commitMessagePrompt": row.get::<_, String>(3)?,
-        "commitMessageReasoningEffort": row.get::<_, String>(4)?,
-        "model": row.get::<_, String>(5)?,
-        "reasoningEffort": row.get::<_, String>(6)?,
-        "sandboxMode": row.get::<_, String>(7)?,
-        "defaultOpenAppId": row.get::<_, Option<String>>(8)?,
-        "followUpBehavior": row.get::<_, String>(9)?,
-    }))
-}
-
-fn provider_connection_from_row(
-    row: &rusqlite::Row<'_>,
-) -> rusqlite::Result<AgentProviderConnectionRecord> {
-    let models: Option<Value> = row
-        .get::<_, Option<String>>(2)?
-        .map(|value| serde_json::from_str(&value))
-        .transpose()
-        .map_err(protocol_row_error)?;
-    deserialize_protocol(serde_json::json!({
-        "mode": row.get::<_, String>(0)?,
-        "customBaseUrl": row.get::<_, Option<String>>(1)?,
-        "customModels": models,
-        "updatedAt": row.get::<_, String>(3)?,
-    }))
-}
-
-fn deserialize_protocol<T: serde::de::DeserializeOwned>(value: Value) -> rusqlite::Result<T> {
-    serde_json::from_value(value).map_err(protocol_row_error)
-}
-
-fn protocol_row_error(error: serde_json::Error) -> rusqlite::Error {
-    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
-}
-
-fn required_string(value: &Value, key: &str) -> Result<String, PlatformError> {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| PlatformError::Worker(format!("protocol field {key} must be a string")))
-}
-
-fn optional_string(value: &Value, key: &str) -> Result<Option<String>, PlatformError> {
-    match value.get(key) {
-        Some(Value::String(value)) => Ok(Some(value.clone())),
-        Some(Value::Null) | None => Ok(None),
-        Some(_) => Err(PlatformError::Worker(format!(
-            "protocol field {key} must be a string or null"
-        ))),
-    }
-}
-
-fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Project> {
-    let value = serde_json::json!({
-        "id": row.get::<_, String>(0)?,
-        "name": row.get::<_, String>(1)?,
-        "rootPath": row.get::<_, String>(2)?,
-        "createdAt": row.get::<_, String>(3)?,
-    });
-    serde_json::from_value(value).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
-    })
-}
-
-fn read_project_by_root(
-    connection: &rusqlite::Connection,
-    root_path: &str,
-) -> Result<Option<Project>, PlatformError> {
-    connection
-        .query_row(
-            "SELECT id, name, root_path, created_at FROM projects WHERE root_path = ?1",
-            [root_path],
-            project_from_row,
-        )
-        .optional()
-        .map_err(PlatformError::from)
-}
-
-fn create_project_id(name: &str, root_path: &str) -> String {
-    let slug = name
-        .nfkd()
-        .flat_map(char::to_lowercase)
-        .map(|character| {
-            if character.is_ascii_alphanumeric() {
-                character
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("-");
-    let slug = slug.chars().take(48).collect::<String>();
-    let hash = format!("{:x}", Sha256::digest(root_path.as_bytes()));
-    format!(
-        "{}-{}",
-        if slug.is_empty() { "project" } else { &slug },
-        &hash[..12]
-    )
-}
-
-fn normalized_name(name: &str, root_path: &str) -> String {
-    let trimmed = name.trim();
-    if !trimmed.is_empty() {
-        return trimmed.to_owned();
-    }
-    std::path::Path::new(root_path)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or(root_path)
-        .to_owned()
 }
 
 fn ensure_active(context: &PortRequestContext) -> Result<(), CodeAgentError> {

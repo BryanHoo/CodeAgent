@@ -3,12 +3,30 @@ import type {
   AgentProviderConnectionStatus,
   ConfigureCustomProviderRequest,
   ConfigureCustomProviderResponse,
+  RuntimeReadiness,
 } from "@code-agent/protocol";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { codeAgentClient } from "../projects/project-query-contracts.js";
 
 export const providerConnectionQueryKey = ["provider-connection"] as const;
+export const runtimeReadinessQueryKey = ["runtime-readiness"] as const;
+
+export function runtimeReadinessRefetchInterval(
+  readiness: RuntimeReadiness | undefined,
+): number | false {
+  return readiness?.state === "starting" ? 500 : false;
+}
+
+type RuntimeReadinessReadClient = Pick<CodeAgentClient, "getHealth">;
+
+export function runtimeReadinessQueryOptions(client: RuntimeReadinessReadClient = codeAgentClient) {
+  return queryOptions({
+    queryFn: ({ signal }) => client.getHealth({ signal }),
+    queryKey: runtimeReadinessQueryKey,
+    refetchInterval: (query) => runtimeReadinessRefetchInterval(query.state.data?.runtime),
+  });
+}
 
 export function providerConnectionRefetchInterval(
   status: AgentProviderConnectionStatus | undefined,

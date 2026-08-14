@@ -310,8 +310,20 @@ export type AgentModelPage = Page<AgentModel>;
 export const AgentSkillPageSchema = createPageSchema(AgentSkillSchema);
 export type AgentSkillPage = Page<AgentSkill>;
 
+export const RuntimeReadinessStateSchema = Type.Union([
+  Type.Literal("starting"),
+  Type.Literal("ready"),
+  Type.Literal("failed"),
+]);
+
+export const RuntimeReadinessSchema = Type.Object(
+  { state: RuntimeReadinessStateSchema },
+  { additionalProperties: false },
+);
+
 export const HealthResponseSchema = Type.Object(
   {
+    runtime: RuntimeReadinessSchema,
     status: Type.Literal("ok"),
     version: Type.Literal(1),
   },
@@ -319,6 +331,8 @@ export const HealthResponseSchema = Type.Object(
 );
 
 export type HealthResponse = Readonly<Static<typeof HealthResponseSchema>>;
+export type RuntimeReadiness = Readonly<Static<typeof RuntimeReadinessSchema>>;
+export type RuntimeReadinessState = Readonly<Static<typeof RuntimeReadinessStateSchema>>;
 
 export const AgentCapabilitiesSchema = Type.Object(
   {

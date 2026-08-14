@@ -36,7 +36,11 @@ describe("createCodeAgentServer", () => {
     const app = await createCodeAgentServer(createOptions(createEngine({ close })));
 
     const response = await app.inject({ headers: { host: "localhost" }, url: "/v1/health" });
-    expect(response.json()).toEqual({ status: "ok", version: 1 });
+    expect(response.json()).toEqual({
+      runtime: { state: "ready" },
+      status: "ok",
+      version: 1,
+    });
 
     await app.close();
     expect(close).toHaveBeenCalledTimes(1);

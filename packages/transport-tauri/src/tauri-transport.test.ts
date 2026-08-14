@@ -57,7 +57,11 @@ describe("TauriCodeAgentTransport", () => {
           updateAvailable: false,
         };
       }
-      return { status: "ok", version: 1 };
+      return {
+        runtime: { state: "ready" },
+        status: "ok",
+        version: 1,
+      };
     });
     const transport = new TauriCodeAgentTransport();
 
