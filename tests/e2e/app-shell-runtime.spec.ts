@@ -1066,13 +1066,14 @@ test("shows original Codex MCP request errors once", async ({ page }) => {
 test("queues follow-up messages and can steer or cancel them during an active turn", async ({
   page,
 }) => {
+  let followUpBehavior: "queue" | "steer" = "queue";
   await page.unroute("**/v1/**");
   await page.route("**/v1/settings", async (route) => {
     const response = await route.fetch();
     const body = (await response.json()) as { settings: Record<string, unknown> };
     await route.fulfill({
       response,
-      json: { settings: { ...body.settings, followUpBehavior: "queue" } },
+      json: { settings: { ...body.settings, followUpBehavior } },
     });
   });
   await page.goto("/p/code-agent");
@@ -1104,7 +1105,14 @@ test("queues follow-up messages and can steer or cancel them during an active tu
   await expect(page.getByText("先补充失败测试", { exact: true })).toBeVisible();
   const queuedList = page.getByRole("list", { name: "已排队消息" });
   expect(await queuedList.evaluate((element) => element.closest("form") === null)).toBe(true);
-  const steerQueued = page.getByRole("button", { name: "立即引导：先补充失败测试" });
+  await page.getByRole("button", { name: "编辑排队消息：先补充失败测试" }).click();
+  await expect(input).toHaveText("先补充失败测试");
+  await expect(queuedList).toHaveCount(0);
+  await input.fill("先补充失败测试并覆盖确认状态");
+  await queueMessage.click();
+  const steerQueued = page.getByRole("button", {
+    name: "立即引导：先补充失败测试并覆盖确认状态",
+  });
   await expect(steerQueued).toBeEnabled();
   await steerQueued.hover();
   await expect(page.getByRole("tooltip")).toHaveText("立即作为引导发送");
@@ -1112,10 +1120,44 @@ test("queues follow-up messages and can steer or cancel them during an active tu
   await expect
     .poll(() => steerPayload)
     .toEqual({
-      input: { attachments: [], skills: [], text: "先补充失败测试", type: "prompt" },
+      input: {
+        attachments: [],
+        skills: [],
+        text: "先补充失败测试并覆盖确认状态",
+        type: "prompt",
+      },
       taskId: expect.stringMatching(/^task-action-\d+$/u),
     });
-  await expect(page.getByText("先补充失败测试", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("先补充失败测试并覆盖确认状态", { exact: true })).toBeVisible();
+  await expect(page.getByText("等待发送", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "编辑排队消息：先补充失败测试并覆盖确认状态" }),
+  ).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByText("先补充失败测试并覆盖确认状态", { exact: true })).toBeVisible();
+  await expect(page.getByText("等待发送", { exact: true })).toBeVisible();
+
+  await page.evaluate(() => {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith("code-agent.composer-queue.")) localStorage.removeItem(key);
+    }
+  });
+  followUpBehavior = "steer";
+  await page.reload();
+  await input.fill("直接引导等待确认");
+  await page.getByRole("button", { name: "发送引导" }).click();
+  await expect(input).toHaveText("直接引导等待确认");
+  await expect(input).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByText("等待发送", { exact: true })).toBeVisible();
+
+  await page.evaluate(() => {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith("code-agent.composer-queue.")) localStorage.removeItem(key);
+    }
+  });
+  followUpBehavior = "queue";
+  await page.reload();
 
   await input.fill("无需继续的消息");
   await queueMessage.click();

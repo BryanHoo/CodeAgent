@@ -8,7 +8,7 @@ import {
   MAX_AGENT_IMAGE_TOTAL_BYTES,
   type AgentSandboxMode,
 } from "@code-agent/protocol";
-import { Folder, History, SendHorizontal, X } from "lucide-react";
+import { Folder, History } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Context, ContextTrigger } from "../../../shared/components/agent/context.js";
@@ -43,11 +43,12 @@ import { PromptSkillEditor } from "./prompt-skill-editor.js";
 import { selectionOffset } from "./prompt-skill-editor-dom.js";
 import { ComposerCommandMenu } from "./workbench-composer-command-menu.js";
 import { ComposerFileMenu } from "./workbench-composer-file-menu.js";
-import { ComposerAttachments, ComposerModeTag } from "./workbench-composer-toolbar.js";
 import {
-  resolveQueuedPromptSummary,
-  type WorkbenchComposerViewProps,
-} from "./workbench-composer-view-contracts.js";
+  ComposerQueuedPrompts,
+  ComposerWaitingForAcknowledgement,
+} from "./workbench-composer-queue.js";
+import { ComposerAttachments, ComposerModeTag } from "./workbench-composer-toolbar.js";
+import type { WorkbenchComposerViewProps } from "./workbench-composer-view-contracts.js";
 export { ComposerModeTag } from "./workbench-composer-toolbar.js";
 export * from "./workbench-composer-view-contracts.js";
 
@@ -80,68 +81,23 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
       <div className="relative mx-auto w-full max-w-content" ref={props.commandSurfaceRef}>
         <ComposerCommandMenu props={props} />
         <ComposerFileMenu props={props} />
-        {props.queuedPrompts.length === 0 ? null : (
-          <div aria-label={t("composer.queuedMessages")} className="mb-2 space-y-1.5" role="list">
-            {props.queuedPrompts.map((queuedPrompt) => {
-              const summary = resolveQueuedPromptSummary(
-                queuedPrompt,
-                t("composer.attachmentCount", { count: queuedPrompt.files.length }),
-              );
-              return (
-                <div
-                  className="flex min-w-0 items-center gap-2 rounded-control border border-separator bg-control px-2 py-1.5"
-                  key={queuedPrompt.id}
-                  role="listitem"
-                >
-                  <span className="min-w-0 flex-1 truncate text-label text-foreground">
-                    {summary}
-                  </span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        aria-label={t("composer.steerNow", { summary })}
-                        className="hover:text-brand"
-                        disabled={
-                          !props.canSteer || props.activeTurnId === undefined || props.isSubmitting
-                        }
-                        onClick={() => {
-                          props.steerQueuedPrompt(queuedPrompt);
-                        }}
-                        size="icon-sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <SendHorizontal aria-hidden="true" className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("composer.steerNowTooltip")}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        aria-label={t("composer.cancelQueued", { summary })}
-                        className="hover:text-danger"
-                        disabled={props.isSubmitting}
-                        onClick={() => {
-                          props.removeQueuedPrompt(queuedPrompt.id);
-                        }}
-                        size="icon-sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <X aria-hidden="true" className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("composer.cancelQueuedTooltip")}</TooltipContent>
-                  </Tooltip>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <ComposerQueuedPrompts
+          activeTurnId={props.activeTurnId}
+          canEdit={!props.hasComposerInput}
+          canSteer={props.canSteer}
+          isSubmitting={props.isSubmitting}
+          onEdit={props.editQueuedPrompt}
+          onRemove={props.removeQueuedPrompt}
+          onSteer={props.steerQueuedPrompt}
+          prompts={props.queuedPrompts}
+        />
         <PromptInput
           attachments={props.attachments}
-          aria-busy={props.state === "submitting" || props.state === "reconnecting"}
+          aria-busy={
+            props.state === "submitting" ||
+            props.state === "reconnecting" ||
+            props.waitingForAcknowledgement
+          }
           className="w-full"
           data-state={props.state}
           disabled={props.attachmentsDisabled}
@@ -224,6 +180,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
               skills={props.skills}
               scope={props.composerScope}
             />
+            {props.waitingForAcknowledgement ? <ComposerWaitingForAcknowledgement /> : null}
             {props.mutationError === null ? null : (
               <p className="px-1 pb-1 text-label text-danger" role="alert">
                 {t("composer.operationFailed")}
@@ -314,6 +271,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                         : t("composer.submit")
                 }
                 disabled={
+                  props.waitingForAcknowledgement ||
                   props.turnControlsDisabled ||
                   props.submitAction === "blocked" ||
                   (props.submitAction === "start" &&
@@ -324,7 +282,13 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                     (!props.canInterrupt || props.activeTurnId === undefined))
                 }
                 onClick={props.submitAction === "interrupt" ? props.onInterrupt : undefined}
-                status={props.state === "running" && props.hasComposerInput ? "idle" : props.state}
+                status={
+                  props.waitingForAcknowledgement
+                    ? "submitting"
+                    : props.state === "running" && props.hasComposerInput
+                      ? "idle"
+                      : props.state
+                }
                 type={props.submitAction === "interrupt" ? "button" : "submit"}
               />
             </div>

@@ -36,7 +36,14 @@ describe("WorkbenchComposerView", () => {
   });
 
   it("优先展示队列文本、Skill 和附件摘要", () => {
-    const basePrompt = { files: [], id: "queue-1", skills: [] } as const;
+    const basePrompt = {
+      acknowledgedUserMessageIds: [],
+      deliveryState: "queued",
+      files: [],
+      id: "queue-1",
+      presentation: "queue",
+      skills: [],
+    } as const;
 
     expect(resolveQueuedPromptSummary({ ...basePrompt, text: "继续修复" }, "1 个附件")).toBe(
       "继续修复",

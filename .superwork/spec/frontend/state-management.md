@@ -46,6 +46,7 @@
 - Sidebar 的轻量活动状态必须按 `projectId + taskId` 保存；切换当前 Task 或 Project 不能清除后台 Task 的运行或审批状态，只有对应 Task 的 Snapshot 或终态事件可以更新该行状态。Project 无 Task Store 消费者、无运行 Task、无待审批且连续 2 分钟未访问后必须关闭 Event Stream 并释放 Runtime；详细 Timeline Store 不得把完整历史复制到 Sidebar 状态。
 - Task 归档成功后必须清理 `taskActivity`、最近 Snapshot 恢复引用、非活动 Runtime Store 与 Task Snapshot Query；不可见 Task 收到 `turn.completed` 后再次尝试安全 unsubscribe，避免首次切换时因运行态跳过后永久保留 Thread。
 - Composer 只使用 `idle`、`submitting`、`running`、`reconnecting`、`failed` 五种状态；运行态来自活动 Turn，重连态暂停网络 Mutation，失败态保留草稿。
+- Composer 顺序消息按 `projectId + taskId` 使用版本化浏览器存储恢复；浏览器附件必须先上传并转换为受管附件元数据后才能进入可持久化队列。未发送项允许恢复到 Composer 编辑；`turn/start` 或 `turn/steer` 被底层接受后必须保留不可编辑的“等待发送”状态，只有实时或 Snapshot 中出现内容匹配且非 `submitted-user-*` 本地占位的权威 User Item 才能移除。直接引导使用相同确认状态，并在确认前保留且锁定输入框。
 - 同一次用户动作在结果尚未确定前重试时必须复用原 `Idempotency-Key`；输入或目标变化后生成新 Key。
 - Git 提交弹窗的文件选择、可编辑 message 和部分成功结果属于瞬时 UI 状态；打开时按路径合并 staged/unstaged 记录并默认全选。生成与提交必须携带当前 Git `snapshot` 和所选路径；提交成功后失效 `['projects', projectId, 'git-status']`，push 失败或未配置 upstream 时保留 commit 成功结果，不得把它展示为整体失败。聚合子仓库模式必须禁用提交入口。
 - 中栏 Composer 底部的分支切换入口只消费共享 Git 状态中的本地 `branches` 候选；当前分支必须选中且不可重复提交，聚合子仓库、detached HEAD 或没有其他本地分支时只显示静态状态。切换使用同步单飞锁并携带当前 `snapshot`；Mutation 前先取消同 Project 的在途 Git 状态读取，成功后以 Server 返回的完整状态原子更新 `['projects', projectId, 'git-status']`，失败后失效该 Query 重新校准。
