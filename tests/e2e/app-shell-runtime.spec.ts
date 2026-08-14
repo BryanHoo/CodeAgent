@@ -26,6 +26,54 @@ test("shows a task error when the initial snapshot request fails", async ({ page
   ).toHaveCount(0);
 });
 
+test("waits for an old task snapshot before loading task-scoped resources", async ({ page }) => {
+  let releaseSnapshot: (() => void) | undefined;
+  const snapshotBlocked = new Promise<void>((resolve) => {
+    releaseSnapshot = resolve;
+  });
+  let signalSnapshotRequestStarted: (() => void) | undefined;
+  const snapshotRequestStarted = new Promise<void>((resolve) => {
+    signalSnapshotRequestStarted = resolve;
+  });
+  let mcpRequestCount = 0;
+  let terminalRequestCount = 0;
+
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    signalSnapshotRequestStarted?.();
+    await snapshotBlocked;
+    await route.fulfill({ contentType: "application/json", json: taskSnapshotResponse });
+  });
+  await page.route("**/v1/projects/code-agent/tasks/task-1/mcp-servers", async (route) => {
+    mcpRequestCount += 1;
+    await route.fulfill({ contentType: "application/json", json: { data: [] } });
+  });
+  await page.route("**/v1/projects/code-agent/tasks/task-1/background-terminals", async (route) => {
+    terminalRequestCount += 1;
+    await route.fulfill({ contentType: "application/json", json: { data: [] } });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+  await snapshotRequestStarted;
+  const taskResourceRequestedBeforeSnapshot =
+    mcpRequestCount + terminalRequestCount > 0
+      ? true
+      : await page
+          .waitForRequest(
+            (request) =>
+              /\/(?:mcp-servers|background-terminals)$/u.test(new URL(request.url()).pathname),
+            { timeout: 500 },
+          )
+          .then(
+            () => true,
+            () => false,
+          );
+  expect(taskResourceRequestedBeforeSnapshot).toBe(false);
+
+  releaseSnapshot?.();
+  await expect.poll(() => mcpRequestCount).toBe(1);
+  await expect.poll(() => terminalRequestCount).toBe(1);
+});
+
 test("keeps retrying Snapshot recovery and applies later realtime events", async ({ page }) => {
   let snapshotRequestCount = 0;
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {

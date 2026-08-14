@@ -133,7 +133,6 @@ export function useWorkbenchShellRuntime({
     },
   });
   const modelsQuery = useQuery(modelsQueryOptions(client));
-  const mcpServersQuery = useQuery(mcpServersQueryOptions(projectId, taskId, client));
   const mcpServersReloadMutation = useMutation({
     ...mcpServersReloadMutationOptions(projectId, taskId, client),
     onSuccess(response) {
@@ -213,10 +212,21 @@ export function useWorkbenchShellRuntime({
           ),
     [taskLaunchState],
   );
+  // 历史 Task 必须先通过 Snapshot 确认 Project 归属，再读取依赖已加载 Task 的资源。
+  const taskResourcesReady = runtime.snapshot !== undefined || startingSnapshot !== undefined;
+  const mcpServersQuery = useQuery(
+    mcpServersQueryOptions(projectId, taskId, client, taskResourcesReady),
+  );
   const projectTaskState = projectTaskStates.get(projectId);
   const isTaskRunning =
     runtime.snapshot?.status === "running" || startingSnapshot?.status === "running";
-  const backgroundTerminals = useBackgroundTerminals(client, projectId, taskId, isTaskRunning);
+  const backgroundTerminals = useBackgroundTerminals(
+    client,
+    projectId,
+    taskId,
+    isTaskRunning,
+    taskResourcesReady,
+  );
   const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, client, !temporary));
   const [fileTreeExpansion, setFileTreeExpansion] = useState(() => ({
     paths: new Set<string>(),
