@@ -128,7 +128,7 @@ pub async fn execute_git(
     command.env("GIT_OPTIONAL_LOCKS", "0");
     let mut child = command
         .spawn()
-        .map_err(|error| failure(format!("git command could not start: {error}")))?;
+        .map_err(|error| failure(error.to_string()))?;
     if let Some(input) = stdin {
         let mut writer = child
             .stdin
@@ -137,7 +137,7 @@ pub async fn execute_git(
         writer
             .write_all(input)
             .await
-            .map_err(|error| failure(format!("git stdin failed: {error}")))?;
+            .map_err(|error| failure(error.to_string()))?;
     }
     let stdout = child
         .stdout
@@ -151,7 +151,7 @@ pub async fn execute_git(
     let stdout_task = tokio::spawn(read_bounded(stdout, budget.clone()));
     let stderr_task = tokio::spawn(read_bounded(stderr, budget));
     let status = tokio::select! {
-        status = child.wait() => status.map_err(|error| failure(format!("git command failed: {error}")))?,
+        status = child.wait() => status.map_err(|error| failure(error.to_string()))?,
         () = context.cancelled() => {
             let _ = child.kill().await;
             return Err(CodeAgentError::new(CodeAgentErrorCode::Cancelled, "operation was cancelled", None));
@@ -167,10 +167,10 @@ pub async fn execute_git(
     };
     let stdout = stdout_task
         .await
-        .map_err(|error| failure(format!("git output task failed: {error}")))??;
+        .map_err(|error| failure(error.to_string()))??;
     let stderr = stderr_task
         .await
-        .map_err(|error| failure(format!("git output task failed: {error}")))??;
+        .map_err(|error| failure(error.to_string()))??;
     if !status.success() {
         let message = if stderr.is_empty() {
             format!("git command exited with status {status}")
@@ -192,7 +192,7 @@ async fn read_bounded(
         let read = reader
             .read(&mut buffer)
             .await
-            .map_err(|error| failure(format!("git output failed: {error}")))?;
+            .map_err(|error| failure(error.to_string()))?;
         if read == 0 {
             return Ok(output);
         }

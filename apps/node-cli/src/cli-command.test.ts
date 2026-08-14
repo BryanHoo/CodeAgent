@@ -49,7 +49,7 @@ function createHarness(overrides: Partial<CliDependencies> = {}) {
   const dependencies: CliDependencies = {
     appVersion: "1.2.3",
     checkAppUpdate: vi.fn(() =>
-      Promise.resolve({ latestVersion: "1.2.3", status: "current" as const }),
+      Promise.resolve({ error: null, latestVersion: "1.2.3", status: "current" as const }),
     ),
     confirmAppUpdate: vi.fn(() => Promise.resolve(false)),
     createEngine: vi.fn(() => Promise.resolve(engine)),
@@ -216,7 +216,7 @@ describe("runCli", () => {
   it("installs an accepted update before opening Engine", async () => {
     const harness = createHarness({
       checkAppUpdate: vi.fn(() =>
-        Promise.resolve({ latestVersion: "1.3.0", status: "available" as const }),
+        Promise.resolve({ error: null, latestVersion: "1.3.0", status: "available" as const }),
       ),
       confirmAppUpdate: vi.fn(() => Promise.resolve(true)),
     });

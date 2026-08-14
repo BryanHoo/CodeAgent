@@ -13,6 +13,10 @@ use serde_json::{Value, json};
 fn main() {
     let arguments: Vec<String> = std::env::args().collect();
     if arguments.get(1).map(String::as_str) == Some("--version") {
+        if let Ok(message) = std::env::var("FAKE_CODEX_VERSION_ERROR") {
+            eprint!("{message}");
+            std::process::exit(1);
+        }
         let version = std::env::var("FAKE_CODEX_VERSION").unwrap_or_else(|_| "0.147.0".to_string());
         println!("codex-cli {version}");
         return;

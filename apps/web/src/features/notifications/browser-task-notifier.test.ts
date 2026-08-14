@@ -1,11 +1,14 @@
 import type { AgentEvent, AgentTurn, PendingRequest } from "@code-agent/protocol";
-import { describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createBrowserTaskNotifier,
   type BrowserNotificationApi,
   type BrowserNotificationHandle,
 } from "./browser-task-notifier.js";
+
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 function createTurnCompletedEvent(
   status: Extract<AgentTurn["status"], "completed" | "failed" | "interrupted">,
@@ -157,6 +160,10 @@ function createHarness(
 }
 
 describe("browser task notifier", () => {
+  beforeEach(() => {
+    vi.mocked(toast.error).mockClear();
+  });
+
   it("uses the native host notification adapter when available", () => {
     const show = vi.fn(() => Promise.resolve());
     const notifier = createBrowserTaskNotifier({
@@ -263,5 +270,24 @@ describe("browser task notifier", () => {
     });
 
     await expect(harness.notifier.requestPermission()).resolves.toBeUndefined();
+    expect(toast.error).toHaveBeenCalledWith("Notification permission is unavailable");
+  });
+
+  it("reports a native notification failure before using the browser fallback", async () => {
+    const harness = createHarness();
+    const notifier = createBrowserTaskNotifier({
+      api: harness.api,
+      isPageForeground: () => false,
+      nativeApi: {
+        show: vi.fn(() => Promise.reject(new Error("native notification channel closed"))),
+      },
+    });
+
+    notifier.notify("project-1", createTurnCompletedEvent("completed"), "完善通知功能");
+
+    await vi.waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("native notification channel closed");
+    });
+    expect(harness.api.show).toHaveBeenCalledOnce();
   });
 });

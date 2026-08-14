@@ -47,6 +47,15 @@ function parseRequestHost(host: string | undefined): URL | undefined {
 
 const DOMAIN_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
 
+function readErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as Readonly<{ message?: unknown }>).message;
+    if (typeof message === "string") return message;
+  }
+  return String(error);
+}
+
 export function normalizeAllowedHost(value: string): string {
   const normalized = domainToASCII(value).toLowerCase();
   const labels = normalized.split(".");
@@ -176,7 +185,7 @@ export async function configureServerDelivery(
     if (error instanceof MutationHttpError) {
       return reply.code(error.statusCode).send({
         code: error.code,
-        message: error.message,
+        message: readErrorMessage(error),
         retryable: error.retryable,
       });
     }
@@ -191,7 +200,7 @@ export async function configureServerDelivery(
         (key === undefined || key === "");
       return reply.code(400).send({
         code: missingKey ? "IDEMPOTENCY_KEY_REQUIRED" : "INVALID_REQUEST",
-        message: missingKey ? "Idempotency-Key header is required" : "Request is invalid",
+        message: readErrorMessage(error),
         retryable: false,
       });
     }
@@ -208,14 +217,14 @@ export async function configureServerDelivery(
     if (explicitStatusCode < 500) {
       return reply.code(explicitStatusCode).send({
         code: "INVALID_REQUEST",
-        message: explicitStatusCode === 413 ? "Request is too large" : "Request is invalid",
+        message: readErrorMessage(error),
         retryable: false,
       });
     }
-    // 未知异常只在服务端完成日志中保留诊断类型，禁止把路径或依赖错误透传给 Web。
+    // 底层 Codex、Git 与第三方错误必须原样到达客户端，避免诊断信息在 HTTP 边界丢失。
     return reply.code(explicitStatusCode).send({
       code: "INTERNAL_ERROR",
-      message: "Internal server error",
+      message: readErrorMessage(error),
       retryable: false,
     });
   });

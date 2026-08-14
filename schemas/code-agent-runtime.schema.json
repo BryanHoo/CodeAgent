@@ -560,7 +560,6 @@
               "error": {
                 "oneOf": [
                   {
-                    "maxLength": 8192,
                     "type": "string"
                   },
                   {
@@ -860,7 +859,6 @@
                     "error": {
                       "oneOf": [
                         {
-                          "maxLength": 1000,
                           "type": "string"
                         },
                         {
@@ -1149,7 +1147,6 @@
                 "error": {
                   "oneOf": [
                     {
-                      "maxLength": 1000,
                       "type": "string"
                     },
                     {
@@ -5470,7 +5467,6 @@
                 "error": {
                   "oneOf": [
                     {
-                      "maxLength": 8192,
                       "type": "string"
                     },
                     {
@@ -12421,7 +12417,6 @@
                     "error": {
                       "oneOf": [
                         {
-                          "maxLength": 1000,
                           "type": "string"
                         },
                         {
@@ -17265,7 +17260,6 @@
                     "error": {
                       "oneOf": [
                         {
-                          "maxLength": 8192,
                           "type": "string"
                         },
                         {
@@ -20688,7 +20682,6 @@
                     "error": {
                       "oneOf": [
                         {
-                          "maxLength": 1000,
                           "type": "string"
                         },
                         {

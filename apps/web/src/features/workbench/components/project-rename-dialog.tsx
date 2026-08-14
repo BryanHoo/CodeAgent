@@ -14,7 +14,6 @@ import {
 import { Input } from "../../../shared/components/core/input.js";
 
 type ProjectRenameDialogProps = Readonly<{
-  error?: string | null;
   initialName: string;
   isPending: boolean;
   onClose: () => void;
@@ -22,7 +21,6 @@ type ProjectRenameDialogProps = Readonly<{
 }>;
 
 export function ProjectRenameDialog({
-  error = null,
   initialName,
   isPending,
   onClose,
@@ -75,11 +73,6 @@ export function ProjectRenameDialog({
             }}
             value={name}
           />
-          {error === null ? null : (
-            <p className="mt-2 text-meta text-danger" role="alert">
-              {error}
-            </p>
-          )}
           <DialogFooter>
             <Button disabled={isPending} onClick={onClose} type="button" variant="ghost">
               {t("actions.cancel")}

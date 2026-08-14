@@ -47,18 +47,18 @@ impl GitCliService {
         sort_changes(&mut staged);
         sort_changes(&mut unstaged);
         let branch = self
-            .optional_git(root, &["branch", "--show-current"], context)
-            .await
+            .git(root, &["branch", "--show-current"], context)
+            .await?
             .trim()
             .to_owned();
         let branch = (!branch.is_empty()).then_some(branch);
         let local = self
-            .optional_git(
+            .git(
                 root,
                 &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
                 context,
             )
-            .await;
+            .await?;
         let mut branches = lines(&local);
         if let Some(current) = &branch
             && let Some(index) = branches.iter().position(|value| value == current)
@@ -67,12 +67,12 @@ impl GitCliService {
             branches.insert(0, current);
         }
         let refs = self
-            .optional_git(
+            .git(
                 root,
                 &["for-each-ref", "--format=%(refname:short)", "refs/remotes"],
                 context,
             )
-            .await;
+            .await?;
         let base_branches = lines(&refs)
             .into_iter()
             .filter(|value| !value.ends_with("/HEAD"))
@@ -212,15 +212,6 @@ impl GitCliService {
         };
         let diff = self.git(root, &arguments, context).await?;
         Ok(json!({ "diff": diff, "kind": change_kind(status), "path": path }))
-    }
-
-    async fn optional_git(
-        &self,
-        root: &Path,
-        arguments: &[&str],
-        context: &PortRequestContext,
-    ) -> String {
-        self.git(root, arguments, context).await.unwrap_or_default()
     }
 }
 

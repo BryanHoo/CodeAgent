@@ -79,6 +79,19 @@ describe("Provider connection protocol", () => {
       }),
     ).toBe(true);
     expect(
+      Value.Check(AgentProviderConnectionStatusSchema, {
+        account: null,
+        customBaseUrl: null,
+        mode: "official",
+        pendingLogin: {
+          error: `login failed\n${"x".repeat(1_000)}`,
+          loginId: "login-1",
+          state: "failed",
+        },
+        state: "failed",
+      }),
+    ).toBe(true);
+    expect(
       Value.Check(ConfigureCustomProviderRequestSchema, {
         apiKey: "custom-key",
         baseUrl: "https://api.example.com/v1",

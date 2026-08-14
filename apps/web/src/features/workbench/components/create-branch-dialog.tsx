@@ -14,18 +14,12 @@ import {
 import { Input } from "../../../shared/components/core/input.js";
 
 type CreateBranchDialogProps = Readonly<{
-  error: string | undefined;
   isPending: boolean;
   onClose: () => void;
   onCreate: (branch: string) => Promise<boolean>;
 }>;
 
-export function CreateBranchDialog({
-  error,
-  isPending,
-  onClose,
-  onCreate,
-}: CreateBranchDialogProps) {
+export function CreateBranchDialog({ isPending, onClose, onCreate }: CreateBranchDialogProps) {
   const { t } = useTranslation("workbench");
   const [branch, setBranch] = useState("");
   const submissionRef = useRef(false);
@@ -94,11 +88,6 @@ export function CreateBranchDialog({
               variant="outline"
             />
           </label>
-          {error === undefined ? null : (
-            <p className="text-meta text-danger" role="alert">
-              {error}
-            </p>
-          )}
           <DialogFooter>
             <Button disabled={isPending} onClick={onClose} type="button" variant="ghost">
               {t("actions.cancel")}

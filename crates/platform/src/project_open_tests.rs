@@ -190,3 +190,45 @@ async fn broker_launch_does_not_report_a_fast_nonzero_proxy_exit() {
         .is_ok()
     );
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn observed_launch_preserves_process_stderr() {
+    let root = std::env::temp_dir().join(format!("code-agent-open-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&root).expect("create open fixture");
+    let executable = root.join("failing-open");
+    std::fs::write(
+        &executable,
+        "#!/bin/sh\nprintf 'Unable to open target with selected app' >&2\nexit 1\n",
+    )
+    .expect("write open fixture");
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = std::fs::metadata(&executable)
+        .expect("read open fixture")
+        .permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&executable, permissions).expect("make open fixture executable");
+    let command = OpenCommand {
+        app: OpenApp {
+            id: "test",
+            kind: "editor",
+            name: "Test",
+        },
+        program: executable.to_string_lossy().into_owned(),
+        arguments: Arguments::Absolute,
+        observe_early_exit: true,
+        file_only: false,
+    };
+
+    let error = launch(
+        &command,
+        &OpenTarget::directory("/tmp"),
+        Path::new("/tmp"),
+        None,
+    )
+    .await
+    .expect_err("failed launch must preserve stderr");
+
+    std::fs::remove_dir_all(root).expect("remove open fixture");
+    assert_eq!(error.message(), "Unable to open target with selected app");
+}

@@ -76,8 +76,7 @@ pub(crate) fn map_connection_status(
 }
 
 fn normalize_base_url(value: &str) -> Result<Url, CodeAgentError> {
-    let mut url = Url::parse(value)
-        .map_err(|_| CodeAgentError::internal("custom provider baseUrl is invalid"))?;
+    let mut url = Url::parse(value).map_err(|error| CodeAgentError::internal(error.to_string()))?;
     if !matches!(url.scheme(), "http" | "https")
         || !url.username().is_empty()
         || url.password().is_some()
@@ -107,7 +106,7 @@ pub(crate) async fn discover_models(
         .timeout(Duration::from_secs(10))
         .redirect(Policy::none())
         .build()
-        .map_err(|_| CodeAgentError::internal("custom provider HTTP client is unavailable"))?;
+        .map_err(|error| CodeAgentError::internal(error.to_string()))?;
     let mut request = client.get(endpoint);
     if let Some(api_key) = api_key {
         request = request.bearer_auth(api_key);
@@ -115,12 +114,8 @@ pub(crate) async fn discover_models(
     let response = request
         .send()
         .await
-        .map_err(|_| CodeAgentError::internal("custom provider model discovery failed"))?;
-    if response.status().is_redirection() || !response.status().is_success() {
-        return Err(CodeAgentError::internal(
-            "custom provider model discovery failed",
-        ));
-    }
+        .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+    let status = response.status();
     if response
         .content_length()
         .is_some_and(|length| length > MAX_MODELS_RESPONSE_BYTES as u64)
@@ -132,14 +127,22 @@ pub(crate) async fn discover_models(
     let bytes = response
         .bytes()
         .await
-        .map_err(|_| CodeAgentError::internal("custom provider model response is invalid"))?;
+        .map_err(|error| CodeAgentError::internal(error.to_string()))?;
     if bytes.len() > MAX_MODELS_RESPONSE_BYTES {
         return Err(CodeAgentError::internal(
             "custom provider model response is too large",
         ));
     }
+    if status.is_redirection() || !status.is_success() {
+        let message = String::from_utf8_lossy(&bytes).trim().to_owned();
+        return Err(CodeAgentError::internal(if message.is_empty() {
+            status.to_string()
+        } else {
+            message
+        }));
+    }
     let body: Value = serde_json::from_slice(&bytes)
-        .map_err(|_| CodeAgentError::internal("custom provider model response is invalid"))?;
+        .map_err(|error| CodeAgentError::internal(error.to_string()))?;
     let models = body
         .get("data")
         .and_then(Value::as_array)
@@ -178,8 +181,36 @@ pub(crate) fn map_model(id: &str) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_base_url;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
 
+    use super::{discover_models, normalize_base_url};
+
+    #[tokio::test]
+    async fn model_discovery_preserves_upstream_error_body() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind model endpoint");
+        let address = listener.local_addr().expect("read model endpoint");
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept model request");
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request).await.expect("read model request");
+            stream
+                .write_all(
+                    b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 22\r\nConnection: close\r\n\r\nupstream model failure",
+                )
+                .await
+                .expect("write model response");
+        });
+
+        let error = discover_models(&format!("http://{address}/v1"), None)
+            .await
+            .expect_err("upstream error must fail discovery");
+        server.await.expect("join model endpoint");
+
+        assert_eq!(error.message(), "upstream model failure");
+    }
     #[test]
     fn base_url_should_accept_http_and_https_without_unsafe_components() {
         assert_eq!(

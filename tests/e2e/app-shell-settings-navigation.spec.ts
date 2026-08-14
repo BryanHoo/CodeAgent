@@ -224,6 +224,7 @@ test("opens About from the sidebar and installs an available update", async ({ p
       json: {
         appVersion: "1.3.0",
         codexVersion: "0.147.0",
+        error: null,
         latestVersion: "1.4.0",
         releaseNotes: "### 新增\n\n- 添加更新日志查看入口。",
         status: "available",
@@ -238,6 +239,7 @@ test("opens About from the sidebar and installs an available update", async ({ p
       json: {
         appVersion: "1.3.0",
         codexVersion: "0.147.0",
+        error: null,
         latestVersion: "1.4.0",
         releaseNotes: null,
         status: "restart-required",

@@ -1,10 +1,10 @@
 import type { AppInfoResponse } from "@code-agent/protocol";
 import { BookOpen, Download, GitFork, LoaderCircle, RefreshCw } from "lucide-react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
-import { cn } from "../../../shared/lib/utils.js";
+import { showErrorToast, useErrorToast } from "../../../shared/errors/error-toast.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { AppReleaseNotesDialog } from "./app-release-notes-dialog.js";
 import { SettingsField, SettingsPanel, type SettingsSectionId } from "./global-settings-fields.js";
@@ -34,9 +34,15 @@ export function GlobalSettingsAbout({
   const [isChecking, setIsChecking] = useState(false);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [updateFailed, setUpdateFailed] = useState(false);
   const updating = isUpdating || isUpdatePending === true;
-  const updateHasFailed = updateFailed || (updateError !== null && updateError !== undefined);
+  const appInfoError = useMemo(
+    () =>
+      appInfo?.error === null || appInfo?.error === undefined ? null : new Error(appInfo.error),
+    [appInfo?.error],
+  );
+  useErrorToast(error);
+  useErrorToast(appInfoError);
+  useErrorToast(updateError);
   const checkForUpdates = () =>
     checkLockRef.current.run(async () => {
       setIsChecking(true);
@@ -54,8 +60,7 @@ export function GlobalSettingsAbout({
           {t("about.loading")}
         </p>
       ) : error !== null || appInfo === undefined ? (
-        <div className="flex items-center justify-between gap-3 py-4" role="alert">
-          <p className="text-body-small text-danger">{t("errors.appInfo")}</p>
+        <div className="flex items-center justify-end gap-3 py-4">
           <Button onClick={() => void onRetry()} size="sm" type="button" variant="ghost">
             <RefreshCw aria-hidden="true" data-icon="inline-start" />
             {t("about.retry")}
@@ -85,27 +90,20 @@ export function GlobalSettingsAbout({
           </SettingsField>
           <SettingsField alignStart label={t("about.update")}>
             <div className="flex min-w-0 flex-wrap items-center gap-2 py-2">
-              <p
-                className={cn(
-                  "shrink-0 text-body-small",
-                  appInfo.status === "available" && !updateHasFailed
-                    ? "text-warning"
-                    : appInfo.status === "check-failed" || updateHasFailed
-                      ? "text-danger"
-                      : "text-muted-foreground",
-                )}
-                role={appInfo.status === "check-failed" || updateHasFailed ? "alert" : "status"}
-              >
-                {updateHasFailed
-                  ? t("errors.update")
-                  : appInfo.status === "available" && appInfo.latestVersion !== null
+              {appInfo.status === "check-failed" ? null : (
+                <p
+                  className={`shrink-0 text-body-small ${
+                    appInfo.status === "available" ? "text-warning" : "text-muted-foreground"
+                  }`}
+                  role="status"
+                >
+                  {appInfo.status === "available" && appInfo.latestVersion !== null
                     ? t("about.available", { version: appInfo.latestVersion })
                     : appInfo.status === "restart-required"
                       ? t("about.restartRequired")
-                      : appInfo.status === "check-failed"
-                        ? t("errors.updateCheck")
-                        : t("about.current")}
-              </p>
+                      : t("about.current")}
+                </p>
+              )}
               <Button
                 disabled={isChecking}
                 onClick={() => void checkForUpdates()}
@@ -143,12 +141,11 @@ export function GlobalSettingsAbout({
                       const version = appInfo.latestVersion;
                       if (version === null) return;
                       void updateLockRef.current.run(async () => {
-                        setUpdateFailed(false);
                         setIsUpdating(true);
                         try {
                           await onUpdate(version);
-                        } catch {
-                          setUpdateFailed(true);
+                        } catch (error) {
+                          showErrorToast(error);
                         } finally {
                           setIsUpdating(false);
                         }

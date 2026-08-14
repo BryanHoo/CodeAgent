@@ -42,9 +42,6 @@ function CommitDiffContent({ change, client, projectId, repository, sha }: Commi
   if (query.error !== null) {
     return (
       <div className="flex min-h-48 flex-col items-center justify-center gap-3 px-5 text-center">
-        <p className="text-body-small text-danger">
-          {i18n.t("gitHistory.diffLoadError", { ns: "conversation" })}
-        </p>
         <Button onClick={() => void query.refetch()} type="button" variant="outline">
           {i18n.t("gitHistory.retry", { ns: "conversation" })}
         </Button>
@@ -149,9 +146,6 @@ export function GitCommitReview({
                 </p>
               ) : filesQuery.error !== null ? (
                 <div className="flex flex-col items-center gap-3">
-                  <p className="text-danger">
-                    {i18n.t("gitHistory.filesLoadError", { ns: "conversation" })}
-                  </p>
                   <Button onClick={() => void filesQuery.refetch()} type="button" variant="outline">
                     {i18n.t("gitHistory.retry", { ns: "conversation" })}
                   </Button>

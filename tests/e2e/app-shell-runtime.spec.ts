@@ -20,7 +20,10 @@ test("shows a task error when the initial snapshot request fails", async ({ page
 
   await page.goto("/p/code-agent/t/task-1");
 
-  await expect(page.getByRole("alert", { name: "会话内容" })).toHaveText("无法加载任务历史");
+  await expect(page.getByText("Snapshot failed", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("log", { name: "会话内容" }).getByText("Snapshot failed"),
+  ).toHaveCount(0);
 });
 
 test("keeps retrying Snapshot recovery and applies later realtime events", async ({ page }) => {
@@ -1000,6 +1003,8 @@ test("shows MCP startup diagnostics and manually retries the current task", asyn
   });
 
   await page.goto("/p/code-agent/t/task-1");
+  const startupError = "MCP startup timed out after 10s\nProcess exited with code 1";
+  await expect(page.getByRole("listitem").filter({ hasText: startupError })).toBeVisible();
   await page.getByRole("tab", { name: "上下文" }).click();
   const mcp = page.getByRole("region", { name: "MCP" });
   const reloadIcon = mcp.getByRole("button", { name: "重新加载 MCP" }).locator("svg");
@@ -1009,14 +1014,9 @@ test("shows MCP startup diagnostics and manually retries the current task", asyn
   await expect(mcp.getByText("启动失败", { exact: true })).toBeVisible();
   await expect(mcp.getByText("已就绪", { exact: false })).toBeVisible();
   await expect(mcp.getByText("Provider-only MCP description", { exact: true })).toHaveCount(0);
-  await expect(mcp.getByText("需要重新认证", { exact: true })).toBeVisible();
-  const logButton = mcp.getByRole("button", { name: "查看错误日志" });
-  await expect(logButton).toHaveCSS("display", "inline-flex");
-  await expect
-    .poll(() => logButton.locator("svg").evaluate((icon) => icon.getBoundingClientRect().width))
-    .toBeLessThanOrEqual(16);
-  await logButton.click();
-  await expect(mcp.getByText("MCP startup timed out after 10s", { exact: false })).toBeVisible();
+  await expect(mcp.getByText("需要重新认证", { exact: true })).toHaveCount(0);
+  await expect(mcp.getByRole("button", { name: "查看错误日志" })).toHaveCount(0);
+  await expect(mcp.getByText(startupError, { exact: true })).toHaveCount(0);
   await mcp.getByRole("button", { name: "重新加载 MCP" }).click();
   await expect.poll(() => retries).toBe(1);
   await expect(mcp.getByText("正在启动", { exact: true })).toBeVisible();
@@ -1050,17 +1050,20 @@ test("shows original Codex MCP request errors once", async ({ page }) => {
   await page.getByRole("tab", { name: "上下文" }).click();
   const mcp = page.getByRole("region", { name: "MCP" });
   await expect(
-    mcp.getByText("mcpServerStatus/list failed: MCP server `docs` executable was not found"),
+    page.getByText("mcpServerStatus/list failed: MCP server `docs` executable was not found"),
   ).toBeVisible();
-  await expect(mcp.getByText("PROVIDER_ERROR · HTTP 502")).toBeVisible();
+  await expect(
+    mcp.getByText("mcpServerStatus/list failed: MCP server `docs` executable was not found"),
+  ).toHaveCount(0);
+  await expect(mcp.getByText("PROVIDER_ERROR · HTTP 502")).toHaveCount(0);
   await expect(mcp.getByRole("button", { name: "查看错误日志" })).toHaveCount(0);
 
   await mcp.getByRole("button", { name: "重新加载 MCP" }).click();
   await expect(
-    mcp.getByText("config/mcpServer/reload failed: transport channel closed"),
+    page.getByText("config/mcpServer/reload failed: transport channel closed"),
   ).toBeVisible();
-  await expect(mcp.getByText("mcpServerStatus/list failed", { exact: false })).toHaveCount(0);
-  await expect(mcp.getByText("重新加载 MCP 失败", { exact: true })).toHaveCount(1);
+  await expect(mcp.getByText("config/mcpServer/reload failed", { exact: false })).toHaveCount(0);
+  await expect(mcp.getByText("重新加载 MCP 失败", { exact: true })).toHaveCount(0);
 });
 
 test("queues follow-up messages and can steer or cancel them during an active turn", async ({
@@ -1454,7 +1457,10 @@ test("preserves the prompt draft when submission fails", async ({ page }) => {
   await prompt.fill("失败后保留这段草稿");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
 
-  await expect(page.getByRole("alert")).toHaveText("操作失败，请重试");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "Agent provider request failed" }),
+  ).toBeVisible();
   await expect(prompt).toHaveAttribute("data-serialized-value", "失败后保留这段草稿");
   await expect(page.getByText("preserved.png", { exact: true })).toBeVisible();
 });

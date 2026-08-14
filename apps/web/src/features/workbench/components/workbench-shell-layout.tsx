@@ -3,6 +3,7 @@ import { PanelLeft, PanelRight, Pencil } from "lucide-react";
 import { useRef, type CSSProperties } from "react";
 
 import { Button } from "../../../shared/components/core/button.js";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
 import { RuntimeUnavailable } from "../../../shared/components/core/runtime-unavailable.js";
 import {
   Tooltip,
@@ -95,7 +96,6 @@ export function WorkbenchShellLayout({
     setSidebarOpen,
     setSidebarWidth,
     setSubagentDialogSelection,
-    setTaskRenameError,
     setTaskRenameOpen,
     sidebarOpen,
     sidebarWidth,
@@ -205,7 +205,6 @@ export function WorkbenchShellLayout({
                   className="group flex max-w-full items-center gap-1 rounded-control px-1 py-0.5 text-left hover:bg-control-hover focus-visible:shadow-focus"
                   id="workbench-task-title-rename"
                   onClick={() => {
-                    setTaskRenameError(null);
                     setTaskRenameOpen(true);
                   }}
                   type="button"
@@ -413,9 +412,9 @@ export function WorkbenchShellLayout({
           onOpenFileDiff={openFileDiff}
           onOpenProjectPath={(appId, path) => {
             projectPathOpenMutation.reset();
-            void projectPathOpenLockRef.current.run(() =>
-              projectPathOpenMutation.mutateAsync({ appId, path }),
-            );
+            void projectPathOpenLockRef.current
+              .run(() => projectPathOpenMutation.mutateAsync({ appId, path }))
+              .catch(showErrorToast);
           }}
           onOpenProjectFile={(path) => {
             openMessageFileReference({ lineNumber: null, path });
@@ -448,7 +447,6 @@ export function WorkbenchShellLayout({
           projectName={projectName}
           projectId={projectId}
           projectOpenApps={projectOpenCapabilitiesQuery.data?.apps ?? []}
-          projectOpenError={projectPathOpenMutation.error}
           projectOpenPending={projectPathOpenMutation.isPending}
           projectPath={projectPath}
           skills={skillsQuery.data?.data ?? []}

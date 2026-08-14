@@ -289,7 +289,7 @@ export const AgentMcpServerSchema = Type.Object(
   {
     authStatus: Type.Union([AgentMcpAuthStatusSchema, Type.Null()]),
     description: Type.Union([Type.String(), Type.Null()]),
-    error: Type.Union([Type.String({ maxLength: 8_192 }), Type.Null()]),
+    error: Type.Union([Type.String(), Type.Null()]),
     failureReason: Type.Union([AgentMcpServerFailureReasonSchema, Type.Null()]),
     name: Type.String({ minLength: 1 }),
     status: AgentMcpServerStatusSchema,

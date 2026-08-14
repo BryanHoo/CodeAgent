@@ -305,7 +305,10 @@ test("keeps the Web directory picker open after add failure", async ({ page }) =
   await picker.getByRole("button", { exact: true, name: "AddedProject" }).click();
   await picker.getByRole("button", { name: "添加此文件夹" }).click();
 
-  await expect(picker.getByRole("alert")).toContainText("无法添加所选文件夹");
+  await expect(picker.getByRole("alert")).toHaveCount(0);
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "Project picker failed" }),
+  ).toBeVisible();
   await expect(picker).toBeVisible();
   expect(pageErrors).toEqual([]);
 });

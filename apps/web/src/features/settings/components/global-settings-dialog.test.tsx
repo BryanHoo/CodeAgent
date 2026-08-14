@@ -133,6 +133,7 @@ describe("GlobalSettingsDialog", () => {
     const appInfo: AppInfoResponse = {
       appVersion: "1.3.0",
       codexVersion: "0.147.0",
+      error: null,
       latestVersion: "1.4.0",
       releaseNotes: "### 新增\n\n- 添加在线更新。",
       status: "available" as const,
@@ -191,6 +192,7 @@ describe("GlobalSettingsDialog", () => {
         appInfo={{
           appVersion: "1.3.0",
           codexVersion: "0.147.0",
+          error: null,
           latestVersion: "1.4.0",
           releaseNotes: "### 新增\n\n- 添加在线更新。",
           status: "available",
@@ -216,6 +218,7 @@ describe("GlobalSettingsDialog", () => {
     const available: AppInfoResponse = {
       appVersion: "1.3.0",
       codexVersion: "0.147.0",
+      error: null,
       latestVersion: "1.4.0",
       releaseNotes: "### 新增\n\n- 添加在线更新。",
       status: "available",
@@ -251,6 +254,7 @@ describe("GlobalSettingsDialog", () => {
         activeSection="about"
         appInfo={{
           ...available,
+          error: "offline",
           latestVersion: null,
           status: "check-failed",
           updateAvailable: false,
@@ -264,7 +268,7 @@ describe("GlobalSettingsDialog", () => {
 
     expect(updating).toContain("正在更新");
     expect(restartRequired).toContain("更新完成，重启 CodeAgent 后生效");
-    expect(checkFailed).toContain("无法检查更新");
+    expect(checkFailed).not.toContain("无法检查更新");
     expect(checkFailed).toContain("检查更新");
   });
 

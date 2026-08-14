@@ -30,8 +30,6 @@ export type WorkbenchComposerViewProps = Readonly<{
   attachments: readonly PromptInputAttachment[];
   attachmentsDisabled: boolean;
   baseBranches: readonly string[];
-  branchCreateError: string | undefined;
-  branchSwitchError: string | undefined;
   canInterrupt: boolean;
   canSteer: boolean;
   canSubmit: boolean;

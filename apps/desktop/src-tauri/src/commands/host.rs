@@ -27,9 +27,9 @@ pub async fn host_notification_show<R: Runtime>(
     let permission = match notification.permission_state() {
         Ok(PermissionState::Prompt | PermissionState::PromptWithRationale) => notification
             .request_permission()
-            .map_err(|_| CommandError::internal("无法请求系统通知权限"))?,
+            .map_err(|error| CommandError::internal(error.to_string()))?,
         Ok(permission) => permission,
-        Err(_) => return Err(CommandError::internal("无法读取系统通知权限")),
+        Err(error) => return Err(CommandError::internal(error.to_string())),
     };
     if permission != PermissionState::Granted {
         return Ok(HostNotificationResponse { status: "denied" });
@@ -40,7 +40,7 @@ pub async fn host_notification_show<R: Runtime>(
         .title(title)
         .body(body)
         .show()
-        .map_err(|_| CommandError::internal("系统通知发送失败"))?;
+        .map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(HostNotificationResponse { status: "shown" })
 }
 

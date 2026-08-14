@@ -5,8 +5,6 @@ use code_agent_core::CodeAgentError;
 use code_agent_protocol::{AgentMcpServerPage, RawProviderEvent, parse_provider_event};
 use serde_json::{Value, json};
 
-const MAX_MCP_ERROR_CHARS: usize = 8_192;
-
 #[derive(Default)]
 pub(crate) struct McpState {
     names: Mutex<HashMap<String, HashSet<String>>>,
@@ -47,7 +45,7 @@ impl McpState {
         };
         let error = match params.get("error") {
             None | Some(Value::Null) => Value::Null,
-            Some(Value::String(value)) => Value::String(sanitize_error(value)),
+            Some(Value::String(value)) => Value::String(value.clone()),
             _ => return Err(invalid("MCP startup error is invalid")),
         };
         let startup = json!({
@@ -196,17 +194,7 @@ fn sanitize_error(value: &str) -> String {
             word.to_owned()
         })
         .collect::<Vec<_>>();
-    let value = words.join(" ");
-    if value.chars().count() <= MAX_MCP_ERROR_CHARS {
-        value
-    } else {
-        let suffix = "\n[truncated]";
-        let prefix = value
-            .chars()
-            .take(MAX_MCP_ERROR_CHARS - suffix.chars().count())
-            .collect::<String>();
-        format!("{prefix}{suffix}")
-    }
+    words.join(" ")
 }
 
 fn display(value: Option<&Value>) -> Value {
@@ -226,4 +214,29 @@ fn string<'a>(value: &'a Value, key: &str) -> Result<&'a str, CodeAgentError> {
 
 fn invalid(message: impl Into<String>) -> CodeAgentError {
     CodeAgentError::internal(message.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::McpState;
+
+    #[test]
+    fn startup_error_preserves_codex_message_exactly() {
+        let state = McpState::default();
+        let message = "Bearer secret-token https://mcp.example.test API_KEY=secret\nprocess failed";
+
+        let event = state
+            .update(&json!({
+                "error": message,
+                "failureReason": null,
+                "name": "docs",
+                "status": "failed",
+                "threadId": "thread-1"
+            }))
+            .expect("MCP status");
+
+        assert_eq!(event.as_value()["payload"]["error"], message);
+    }
 }

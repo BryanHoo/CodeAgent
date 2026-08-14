@@ -1,4 +1,5 @@
 import { clearMocks, mockConvertFileSrc, mockIPC } from "@tauri-apps/api/mocks";
+import { CodeAgentError } from "@code-agent/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TauriCodeAgentTransport } from "./tauri-transport.js";
@@ -51,6 +52,7 @@ describe("TauriCodeAgentTransport", () => {
         return {
           appVersion: "1.9.0",
           codexVersion: "0.147.0",
+          error: null,
           latestVersion: null,
           releaseNotes: null,
           status: "current",
@@ -245,6 +247,43 @@ describe("TauriCodeAgentTransport", () => {
     expect(events).toHaveLength(1);
   });
 
+  it("reports event unsubscribe errors without rewriting them", async () => {
+    let channelId = 0;
+    mockIPC((command, payload) => {
+      if (command === "event_subscribe") {
+        channelId = readChannelId((payload as { channel: unknown }).channel);
+        return { subscriptionId: "subscription-failing-unsubscribe" };
+      }
+      if (command === "event_unsubscribe") {
+        return Promise.reject(new Error("native unsubscribe failed exactly"));
+      }
+      return true;
+    });
+    const onError = vi.fn();
+    const transport = new TauriCodeAgentTransport();
+    const unsubscribe = transport.subscribeEvents({
+      afterSequence: 0,
+      onError,
+      onEvent: vi.fn(),
+      onResyncRequired: vi.fn(),
+      projectId: "project-a",
+      sessionId: "session-unsubscribe-error",
+    });
+    await vi.waitFor(() => {
+      expect(channelId).toBeGreaterThan(0);
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    unsubscribe();
+
+    await vi.waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "native unsubscribe failed exactly" }),
+      );
+    });
+  });
+
   it("stops Channel delivery for local sequence gaps and server resync", async () => {
     const resyncs: unknown[] = [];
     let channelId = 0;
@@ -347,6 +386,39 @@ describe("TauriCodeAgentTransport", () => {
 
     expect(payload).toBeInstanceOf(Uint8Array);
     expect((payload as Uint8Array).byteLength).toBe(bytes.byteLength);
+  });
+
+  it("preserves structured attachment upload errors", async () => {
+    mockIPC(() => {
+      throw Object.assign(new Error("git: remote rejected"), {
+        code: "provider_failure",
+        retryable: true,
+      });
+    });
+    const transport = new TauriCodeAgentTransport();
+
+    const request = transport.request(
+      {
+        input: {
+          input: {
+            content: new Blob(["content"], { type: "text/plain" }),
+            kind: "text",
+            name: "note.txt",
+          },
+          projectId: "project-a",
+        },
+        name: "attachments.upload",
+        output: {} as never,
+      },
+      { requestId: "upload-error" },
+    );
+
+    await expect(request).rejects.toBeInstanceOf(CodeAgentError);
+    await expect(request).rejects.toMatchObject({
+      code: "provider_failure",
+      message: "git: remote rejected",
+      retryable: true,
+    });
   });
 
   it("builds scoped asset URLs without absolute host paths", () => {

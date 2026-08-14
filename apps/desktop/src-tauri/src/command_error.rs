@@ -12,30 +12,26 @@ pub struct CommandError {
 
 impl CommandError {
     pub fn invalid_input(message: impl Into<String>) -> Self {
-        let _ = message.into();
-        Self::new("invalid_input", "请求参数无效", false)
+        Self::new("invalid_input", message, false)
     }
 
     pub fn invalid_request(message: impl Into<String>) -> Self {
-        let _ = message.into();
-        Self::new("invalid_request", "请求无效", false)
+        Self::new("invalid_request", message, false)
     }
 
     pub fn not_found(message: impl Into<String>) -> Self {
-        let _ = message.into();
-        Self::new("not_found", "请求的资源不存在", false)
+        Self::new("not_found", message, false)
     }
 
     pub fn internal(message: impl Into<String>) -> Self {
-        let _ = message.into();
-        Self::new("internal", "操作失败，请使用追踪 ID 定位问题", false)
+        Self::new("internal", message, false)
     }
 
-    fn new(code: &str, message: &str, retryable: bool) -> Self {
+    fn new(code: &str, message: impl Into<String>, retryable: bool) -> Self {
         Self {
             code: code.to_owned(),
             correlation_id: Uuid::new_v4().to_string(),
-            message: message.to_owned(),
+            message: message.into(),
             retryable,
         }
     }
@@ -55,24 +51,9 @@ impl From<code_agent_core::CodeAgentError> for CommandError {
                 .correlation_id()
                 .map(str::to_owned)
                 .unwrap_or_else(|| Uuid::new_v4().to_string()),
-            message: user_message(error.code()).to_owned(),
+            message: error.message().to_owned(),
             retryable,
         }
-    }
-}
-
-fn user_message(code: code_agent_core::CodeAgentErrorCode) -> &'static str {
-    use code_agent_core::CodeAgentErrorCode;
-    match code {
-        CodeAgentErrorCode::Cancelled => "操作已取消",
-        CodeAgentErrorCode::CapacityExceeded => "请求内容过大或系统繁忙，请稍后重试",
-        CodeAgentErrorCode::Conflict => "当前状态已变化，请刷新后重试",
-        CodeAgentErrorCode::Internal => "操作失败，请使用追踪 ID 定位问题",
-        CodeAgentErrorCode::InvalidInput => "请求参数无效",
-        CodeAgentErrorCode::NotFound => "请求的资源不存在",
-        CodeAgentErrorCode::ProviderFailure => "Provider 暂时不可用，请稍后重试",
-        CodeAgentErrorCode::ShuttingDown => "应用正在退出",
-        CodeAgentErrorCode::Timeout => "操作超时，请稍后重试",
     }
 }
 
@@ -86,16 +67,17 @@ mod tests {
     use super::CommandError;
 
     #[test]
-    fn preserves_or_generates_correlation_ids() {
+    fn preserves_messages_and_correlation_ids() {
         let existing = CommandError::from(CodeAgentError::new(
             CodeAgentErrorCode::Internal,
             "/secret/path failed",
             Some(Arc::from("trace-existing")),
         ));
         assert_eq!(existing.correlation_id, "trace-existing");
-        assert!(!existing.message.contains("/secret/path"));
+        assert_eq!(existing.message, "/secret/path failed");
 
         let generated = CommandError::invalid_input("bad field");
         assert!(Uuid::parse_str(&generated.correlation_id).is_ok());
+        assert_eq!(generated.message, "bad field");
     }
 }

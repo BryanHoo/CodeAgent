@@ -13,6 +13,7 @@
 - 浏览器侧 UUID 统一使用 `uuid` 的 `v4()`，不得直接依赖仅在安全上下文提供的 `crypto.randomUUID()`；回归测试必须覆盖局域网 HTTP 环境中仅有 `crypto.getRandomValues()` 的情况。
 - Web ESLint 必须启用 `react-hooks/rules-of-hooks`、`react-hooks/exhaustive-deps` 和 `eslint-plugin-jsx-a11y` 推荐规则；原生 Dialog、ARIA 复合控件等已验证语义只能使用带原因的局部例外，禁止全局降级规则。
 - 检查键盘操作、焦点、可访问名称、空状态、错误状态与慢连接状态。
+- 错误回归必须同时断言应用级 toast 包含完整原始消息，并断言对应功能模块不渲染错误文案；AI 流式 Turn/Tool 错误例外用例必须断言错误位于流式输出之后且后续正常结果会清除旧错误。
 - 移动工作台 E2E 至少覆盖 `320px` 最窄竖屏和手机横屏；页面 viewport 必须允许用户缩放，不得设置 `maximum-scale=1` 或 `user-scalable=no`，并使用 `viewport-fit=cover`；根容器必须使用 `dvh` 并承接 `safe-area-inset-*`；文档及 Composer 等内部控件不得横向或纵向溢出动态视口，Composer 常用控件在手机宽度下必须保持单行，主要移动操作的触控目标不得小于 `44px`。
 - 流式输出和长历史变更检查渲染次数、DOM 规模及布局稳定性。
 - Agent 与命令终端输出只允许把 ANSI SGR 转换为 React 文本样式节点，不得自动识别链接或注入解析器生成的 HTML；回归测试必须覆盖 ANSI 样式保留以及 URL、`mailto:` 按普通文本渲染。

@@ -3,6 +3,7 @@ import type { SubmitEvent } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { findActiveFilesystemRoot } from "../../../shared/lib/filesystem-roots.js";
+import { useErrorToast } from "../../../shared/errors/error-toast.js";
 import { Button } from "../../../shared/components/core/button.js";
 import {
   Dialog,
@@ -53,6 +54,7 @@ export function HostFilePickerDialog({
   onConfirm,
 }: HostFilePickerDialogProps) {
   const { t } = useTranslation("workbench");
+  useErrorToast(error);
   const picker = useHostFilePicker(mode, loadDirectory);
   const activeRoot =
     picker.listing === undefined
@@ -189,9 +191,6 @@ export function HostFilePickerDialog({
             </p>
           ) : picker.rootQuery.error !== null ? (
             <div className="flex min-h-32 flex-col items-center justify-center gap-3 text-center">
-              <p className="text-body-small text-danger" role="alert">
-                {t("hostFilePicker.loadError")}
-              </p>
               <Button
                 onClick={() => void picker.rootQuery.refetch()}
                 type="button"
@@ -234,15 +233,6 @@ export function HostFilePickerDialog({
               {picker.selectedPath ??
                 t(mode === "directory" ? "hostFilePicker.noDirectory" : "hostFilePicker.noFile")}
             </p>
-            {error === null ? null : (
-              <p className="mt-1 text-meta text-danger" role="alert">
-                {t(
-                  mode === "directory"
-                    ? "projectPicker.addError"
-                    : "hostAttachmentPicker.importError",
-                )}
-              </p>
-            )}
           </div>
           <DialogFooter className="w-full flex-col-reverse sm:w-auto sm:flex-row">
             <Button

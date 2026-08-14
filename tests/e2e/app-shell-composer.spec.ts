@@ -654,10 +654,25 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   );
   // 浏览器快捷键跟随运行平台，确保 macOS、Linux 和 Windows 都能完成全选复制。
   const primaryModifier = process.platform === "darwin" ? "Meta" : "Control";
+  await page.evaluate(() => {
+    const capture = window as Window & { __codeAgentCopiedText?: string };
+    capture.__codeAgentCopiedText = "";
+    document.addEventListener(
+      "copy",
+      (event) => {
+        capture.__codeAgentCopiedText = event.clipboardData?.getData("text/plain") ?? "";
+      },
+      { once: true },
+    );
+  });
   await prompt.press(`${primaryModifier}+a`);
   await prompt.press(`${primaryModifier}+c`);
   await expect
-    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .poll(() =>
+      page.evaluate(
+        () => (window as Window & { __codeAgentCopiedText?: string }).__codeAgentCopiedText,
+      ),
+    )
     .toBe("说明 $review-security $documentation-writer");
   const skillColors = await selectedSkill.evaluate((element) => {
     const probe = document.createElement("span");
@@ -2124,8 +2139,11 @@ test("generates a message and commits only selected files", async ({ page }) => 
   );
   await page.getByRole("menuitem", { name: "提交并推送" }).click();
 
-  await expect(dialog.getByText("提交已完成，但推送失败")).toBeVisible();
-  await expect(dialog.getByText("remote: Permission to repository denied")).toBeVisible();
+  await expect(dialog.getByText("提交已完成", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("remote: Permission to repository denied")).toHaveCount(0);
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "remote: Permission to repository denied" }),
+  ).toBeVisible();
   expect(messageRequest).toEqual({ expectedSnapshot: snapshot, paths: ["package.json"] });
   expect(commitRequest).toEqual({
     action: "commit_and_push",

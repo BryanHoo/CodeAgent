@@ -4,6 +4,7 @@ import type { Dispatch, SetStateAction } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
 import {
   Tooltip,
   TooltipContent,
@@ -24,12 +25,10 @@ const EMPTY_PROJECT_TASKS: readonly AgentTask[] = [];
 
 type ProjectSidebarTaskListProps = Readonly<{
   archiveTask: (task: AgentTask) => unknown;
-  error: Error | null;
   expandedProjects: ReadonlySet<string>;
   expandedTaskProjects: ReadonlySet<string>;
   fetchNextProjectTaskPage: (projectId: string) => Promise<void>;
   getProjectReorderProps: ReturnType<typeof useProjectReordering>["getProjectReorderProps"];
-  hasTaskError: boolean;
   isPending: boolean;
   isProjectActionPending: boolean;
   isProjectAddPending: boolean;
@@ -44,12 +43,10 @@ type ProjectSidebarTaskListProps = Readonly<{
   pinnedTasks: readonly AgentTask[];
   projectId?: string;
   projectOrderAnnouncement: string;
-  projectOrderError: Error | null;
   projectTaskStates: ReadonlyMap<string, ProjectTaskListState>;
   reorderingProjectId: string | null;
   setExpandedTaskProjects: Dispatch<SetStateAction<ReadonlySet<string>>>;
   setRenamingTask: Dispatch<SetStateAction<AgentTask | null>>;
-  taskActionError: string | null;
   taskActionPending: boolean;
   taskActivity: TaskActivityMap;
   taskId?: string;
@@ -60,12 +57,10 @@ type ProjectSidebarTaskListProps = Readonly<{
 
 export function ProjectSidebarTaskList({
   archiveTask,
-  error,
   expandedProjects,
   expandedTaskProjects,
   fetchNextProjectTaskPage,
   getProjectReorderProps,
-  hasTaskError,
   isPending,
   isProjectActionPending,
   isProjectAddPending,
@@ -80,12 +75,10 @@ export function ProjectSidebarTaskList({
   pinnedTasks,
   projectId,
   projectOrderAnnouncement,
-  projectOrderError,
   projectTaskStates,
   reorderingProjectId,
   setExpandedTaskProjects,
   setRenamingTask,
-  taskActionError,
   taskActionPending,
   taskActivity,
   taskId,
@@ -163,26 +156,6 @@ export function ProjectSidebarTaskList({
           {taskSearch.isPending ? (
             <p className="px-2 py-1.5 text-meta text-subtle-foreground">{t("sidebar.searchAll")}</p>
           ) : null}
-          {error === null && !hasTaskError ? null : (
-            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              {t("sidebar.errorLoadTasks")}
-            </p>
-          )}
-          {taskActionError === null ? null : (
-            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              {taskActionError}
-            </p>
-          )}
-          {taskSearch.error === null ? null : (
-            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              {t("sidebar.errorSearchTasks")}
-            </p>
-          )}
-          {projectOrderError === null ? null : (
-            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              {t("sidebar.errorProjectOrder")}
-            </p>
-          )}
           <p aria-live="polite" className="sr-only">
             {projectOrderAnnouncement}
           </p>
@@ -237,7 +210,7 @@ export function ProjectSidebarTaskList({
                         temporaryPaginationControl.action === "load"
                       ) {
                         void fetchNextProjectTaskPage(TEMPORARY_TASK_SCOPE_ID).catch(
-                          () => undefined,
+                          showErrorToast,
                         );
                       }
                     }}
@@ -391,7 +364,7 @@ export function ProjectSidebarTaskList({
                               taskPaginationControl.action === "load"
                             ) {
                               // 下一页错误由对应 Project Query 持有，现有 Task 始终保持可见。
-                              void fetchNextProjectTaskPage(project.id).catch(() => undefined);
+                              void fetchNextProjectTaskPage(project.id).catch(showErrorToast);
                             }
                           }}
                           type="button"

@@ -5,7 +5,6 @@ import {
   buildProjectAttachmentUrl,
   buildProjectImageFileUrl,
   CodeAgentClient,
-  CodeAgentHttpError,
   CodeAgentMutationError,
   CodeAgentResponseError,
 } from "./http-client.js";
@@ -876,12 +875,21 @@ describe("CodeAgentClient", () => {
     ]);
   });
 
-  it("rejects non-success HTTP responses", async () => {
+  it("preserves the original message from non-success HTTP responses", async () => {
     const fetchMock = vi.fn<typeof fetch>();
-    fetchMock.mockResolvedValue(jsonResponse({ message: "failed" }, { status: 500 }));
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        { code: "PROVIDER_FAILURE", message: "remote: permission denied" },
+        { status: 500 },
+      ),
+    );
     const client = new CodeAgentClient({ fetch: fetchMock });
 
-    await expect(client.getHealth()).rejects.toBeInstanceOf(CodeAgentHttpError);
+    await expect(client.getHealth()).rejects.toMatchObject({
+      code: "PROVIDER_FAILURE",
+      message: "remote: permission denied",
+      status: 500,
+    });
   });
 
   it("reads and atomically updates project defaults and task settings", async () => {
@@ -955,6 +963,7 @@ describe("CodeAgentClient", () => {
     const available = {
       appVersion: "1.3.0",
       codexVersion: "0.147.0",
+      error: null,
       latestVersion: "1.4.0",
       releaseNotes: "### 新增\n\n- 添加在线更新。",
       status: "available" as const,
@@ -963,6 +972,7 @@ describe("CodeAgentClient", () => {
     const installed = {
       appVersion: available.appVersion,
       codexVersion: available.codexVersion,
+      error: null,
       latestVersion: available.latestVersion,
       releaseNotes: null,
       status: "restart-required" as const,
@@ -994,6 +1004,7 @@ describe("CodeAgentClient", () => {
       jsonResponse({
         appVersion: "1.3.0",
         codexVersion: "0.147.0",
+        error: null,
         latestVersion: "latest",
         releaseNotes: null,
         status: "available",

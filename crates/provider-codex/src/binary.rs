@@ -123,7 +123,7 @@ pub async fn check_codex_version(
         .arg("--version")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .kill_on_drop(true);
     for (key, value) in env_overrides {
         command.env(key, value);
@@ -144,16 +144,22 @@ pub async fn check_codex_version(
             )
         })?
         .map_err(|error| {
-            CodeAgentError::new(
-                CodeAgentErrorCode::ProviderFailure,
-                format!("Codex version check failed: {error}"),
-                None,
-            )
+            CodeAgentError::new(CodeAgentErrorCode::ProviderFailure, error.to_string(), None)
         })?;
     if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
         return Err(CodeAgentError::new(
             CodeAgentErrorCode::ProviderFailure,
-            "Codex version check failed: non-zero exit status",
+            if stderr.is_empty() {
+                if stdout.is_empty() {
+                    output.status.to_string()
+                } else {
+                    stdout
+                }
+            } else {
+                stderr
+            },
             None,
         ));
     }

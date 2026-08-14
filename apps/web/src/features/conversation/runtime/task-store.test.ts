@@ -499,6 +499,46 @@ describe("task store", () => {
     });
   });
 
+  it("reconciles a skill-only user message when the snapshot changes its id", () => {
+    const liveMessage = {
+      id: "realtime-skill-message",
+      role: "user" as const,
+      skills: [{ name: "git-commit" }],
+      text: "",
+      type: "message" as const,
+    };
+    const liveTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-running",
+      items: [liveMessage],
+      startedAt: timestamp,
+      status: "running" as const,
+    };
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ turns: [liveTurn] }),
+    );
+
+    store.getState().reconcile(
+      createResponse({
+        turns: [
+          {
+            ...liveTurn,
+            items: [{ ...liveMessage, id: "snapshot-skill-message" }],
+          },
+        ],
+      }),
+    );
+
+    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual(["realtime-skill-message"]);
+    expect(store.getState().getItem("realtime-skill-message")).toMatchObject({
+      skills: [{ name: "git-commit" }],
+      text: "",
+    });
+    expect(store.getState().getItem("snapshot-skill-message")).toBeUndefined();
+  });
+
   it("matches later commentary after unmatched and omitted snapshot messages", () => {
     const liveTurn = {
       completedAt: null,

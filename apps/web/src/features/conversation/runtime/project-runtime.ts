@@ -14,6 +14,7 @@ import {
   type TaskActivityMap,
 } from "./task-activity.js";
 import type { TaskStore } from "./task-store.js";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
 
 import {
   MAX_PROJECT_EVENT_HISTORY_BYTES,
@@ -146,7 +147,7 @@ export class ProjectRuntimeManager {
   }
 
   public requestNotificationPermission(): Promise<void> {
-    return this.#taskNotifier.requestPermission().catch(() => undefined);
+    return this.#taskNotifier.requestPermission().catch(showErrorToast);
   }
 
   public rememberTaskTitles(tasks: readonly Pick<AgentTask, "id" | "projectId" | "title">[]): void {

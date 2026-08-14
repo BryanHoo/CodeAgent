@@ -186,11 +186,9 @@ pub fn rpc_error_to_code_agent_error(error: &RpcClientError) -> CodeAgentError {
         RpcClientError::Timeout { .. } => {
             CodeAgentError::new(CodeAgentErrorCode::Timeout, error.to_string(), None)
         }
-        RpcClientError::Response { message, .. } => {
-            provider_failure(format!("Codex request failed: {message}"))
-        }
-        RpcClientError::ConnectionClosed(_) | RpcClientError::Protocol(_) => {
-            provider_failure(error.to_string())
+        RpcClientError::Response { message, .. } => provider_failure(message.clone()),
+        RpcClientError::ConnectionClosed(message) | RpcClientError::Protocol(message) => {
+            provider_failure(message.clone())
         }
     }
 }
@@ -261,14 +259,12 @@ async fn run_supervisor(
                         .lock()
                         .map(|tail| String::from_utf8_lossy(&tail).trim().to_string())
                         .unwrap_or_default();
-                    let detail = if tail.is_empty() {
-                        String::new()
+                    let message = if tail.is_empty() {
+                        format!("Codex App Server exited unexpectedly with {reason}")
                     } else {
-                        format!(": {tail}")
+                        tail
                     };
-                    client.close(Some(RpcClientError::ConnectionClosed(format!(
-                        "Codex App Server exited unexpectedly with {reason}{detail}"
-                    ))));
+                    client.close(Some(RpcClientError::ConnectionClosed(message)));
                 }
                 let _ = exit_tx.send(Some(exit));
                 break;
@@ -313,7 +309,7 @@ pub async fn start_codex_app_server(
 
     let mut child = command
         .spawn()
-        .map_err(|error| provider_failure(format!("Failed to start Codex App Server: {error}")))?;
+        .map_err(|error| provider_failure(error.to_string()))?;
     let stdout = child
         .stdout
         .take()
@@ -401,5 +397,28 @@ pub async fn start_codex_app_server(
             let _ = process.close().await;
             Err(rpc_error_to_code_agent_error(&error))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    use super::rpc_error_to_code_agent_error;
+    use crate::RpcClientError;
+
+    #[test]
+    fn rpc_response_error_preserves_codex_message() {
+        let error = RpcClientError::Response {
+            code: -32_000,
+            data: Value::Null,
+            message: "model is not available".to_owned(),
+            method: "turn/start".to_owned(),
+        };
+
+        assert_eq!(
+            rpc_error_to_code_agent_error(&error).message(),
+            "model is not available"
+        );
     }
 }

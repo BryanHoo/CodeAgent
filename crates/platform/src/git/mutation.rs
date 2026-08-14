@@ -57,10 +57,7 @@ impl GitCliService {
         let checked = self
             .git(&root, &["check-ref-format", "--branch", branch], context)
             .await
-            .map_err(|_| {
-                invalid("git branch name is invalid")
-                    .with_mutation_code(AgentMutationErrorCode::GitBranchInvalid)
-            })?;
+            .map_err(|error| error.with_mutation_code(AgentMutationErrorCode::GitBranchInvalid))?;
         if checked.trim() != branch {
             return Err(invalid("git branch name is invalid")
                 .with_mutation_code(AgentMutationErrorCode::GitBranchInvalid));
@@ -68,16 +65,14 @@ impl GitCliService {
         if create {
             self.git(&root, &["switch", "-c", branch], context)
                 .await
-                .map_err(|_| {
-                    internal("git branch creation failed")
-                        .with_mutation_code(AgentMutationErrorCode::GitBranchCreateFailed)
+                .map_err(|error| {
+                    error.with_mutation_code(AgentMutationErrorCode::GitBranchCreateFailed)
                 })?;
         } else {
             self.git(&root, &["switch", "--no-guess", branch], context)
                 .await
-                .map_err(|_| {
-                    internal("git branch switch failed")
-                        .with_mutation_code(AgentMutationErrorCode::GitBranchSwitchFailed)
+                .map_err(|error| {
+                    error.with_mutation_code(AgentMutationErrorCode::GitBranchSwitchFailed)
                 })?;
         }
         self.read_status(project_id, None, context).await

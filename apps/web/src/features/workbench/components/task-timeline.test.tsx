@@ -89,6 +89,25 @@ describe("LiveFileChanges", () => {
 });
 
 describe("TaskTimeline", () => {
+  it("does not render Runtime errors inside the Timeline", () => {
+    const markup = renderToStaticMarkup(
+      <TaskTimeline
+        projectId="project-1"
+        runtime={{
+          connectionState: "closed",
+          error: new Error("snapshot request failed"),
+          isPending: false,
+          snapshot: undefined,
+          store: undefined,
+        }}
+        taskId="task-1"
+      />,
+    );
+
+    expect(markup).not.toContain("snapshot request failed");
+    expect(markup).not.toContain("无法加载会话");
+  });
+
   it("renders automatic approval review results in the assistant timeline", () => {
     const approvalReviewSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,

@@ -3,7 +3,6 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use super::{CodexRuntimeProvider, ProviderInner};
-use crate::connection::bounded_string;
 use crate::{RpcNotification, map_codex_notification, mapping::request_id_key};
 
 pub(super) async fn route_notification(inner: Arc<ProviderInner>, notification: RpcNotification) {
@@ -51,7 +50,9 @@ pub(super) async fn route_notification(inner: Arc<ProviderInner>, notification: 
             if notification.params["success"] == true {
                 *pending = None;
             } else {
-                let error = bounded_string(notification.params.get("error"), 1_000)
+                let error = notification.params["error"]
+                    .as_str()
+                    .map(str::to_owned)
                     .unwrap_or_else(|| "Login failed".to_owned());
                 *pending = Some(json!({ "error": error, "loginId": login_id, "state": "failed" }));
             }

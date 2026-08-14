@@ -3,6 +3,7 @@ import type { AgentEvent, AgentTaskSnapshotResponse, EventCheckpoint } from "@co
 import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
 import { hasActiveProjectTask, type TaskActivityMap } from "./task-activity.js";
 import type { TaskStore } from "./task-store.js";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
 
 import {
   ProjectEventHistory,
@@ -220,7 +221,7 @@ export class ProjectEventRuntime {
           }
         }
         if (event.type === "turn.completed" && !this.#hasTaskConsumers(event.taskId)) {
-          void this.#client.unsubscribeTask(this.#projectId, event.taskId).catch(() => undefined);
+          void this.#client.unsubscribeTask(this.#projectId, event.taskId).catch(showErrorToast);
         }
         this.#reevaluateIdleRelease();
       },

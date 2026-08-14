@@ -19,6 +19,7 @@ import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.j
 import { Button } from "../../../shared/components/core/button.js";
 import { Input } from "../../../shared/components/core/input.js";
 import { useTranslation } from "../../../i18n/i18n.js";
+import { useErrorToast } from "../../../shared/errors/error-toast.js";
 
 export type PendingRequestResolution = ResolvePendingRequestRequest["resolution"];
 
@@ -81,7 +82,8 @@ function ApprovalRequestCard({
 }: Omit<PendingRequestCardProps, "request"> & { request: ApprovalRequest }) {
   const { t } = useTranslation("workbench");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  useErrorToast(error);
   const [attempt, setAttempt] = useState<PendingRequestResolutionAttempt>();
   const allowButtonRef = useRef<HTMLButtonElement>(null);
   const resolutionLockRef = useRef(createAsyncActionLock());
@@ -119,8 +121,8 @@ function ApprovalRequestCard({
       setError(null);
       try {
         await onResolve(request, resolution, nextAttempt.key);
-      } catch {
-        setError(t("pending.requestFailed"));
+      } catch (error) {
+        setError(error instanceof Error ? error : new Error(String(error)));
         setSubmitting(false);
       }
     });
@@ -141,11 +143,6 @@ function ApprovalRequestCard({
           {!interactive ? (
             <p className="mt-2 text-label text-muted-foreground">{t("pending.previousPending")}</p>
           ) : null}
-          {error === null ? null : (
-            <p className="mt-2 text-label text-danger" role="alert">
-              {error}
-            </p>
-          )}
           <ConfirmationActions>
             {request.availableDecisions.includes("deny") ? (
               <ConfirmationAction
@@ -191,7 +188,8 @@ function UserInputRequestCard({
   const { t } = useTranslation("workbench");
   const [answers, setAnswers] = useState<Answers>({});
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  useErrorToast(error);
   const [attempt, setAttempt] = useState<PendingRequestResolutionAttempt>();
   const resolutionLockRef = useRef(createAsyncActionLock());
   const complete = request.questions.every(
@@ -213,8 +211,8 @@ function UserInputRequestCard({
       setAttempt(nextAttempt);
       try {
         await onResolve(request, resolution, nextAttempt.key);
-      } catch {
-        setError(t("pending.answerFailed"));
+      } catch (error) {
+        setError(error instanceof Error ? error : new Error(String(error)));
         setSubmitting(false);
       }
     });
@@ -325,11 +323,6 @@ function UserInputRequestCard({
       {!interactive ? (
         <p className="mt-3 text-label text-muted-foreground">{t("pending.previousPending")}</p>
       ) : null}
-      {error === null ? null : (
-        <p className="mt-3 text-label text-danger" role="alert">
-          {error}
-        </p>
-      )}
       <div className="mt-3 flex justify-end">
         <Button disabled={!canSubmit} size="compact" type="submit">
           {t("pending.submitAnswers")}

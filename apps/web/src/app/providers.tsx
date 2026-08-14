@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TEMPORARY_TASK_SCOPE_ID } from "@code-agent/protocol";
 import type { ReactNode } from "react";
 import { Toaster } from "sonner";
@@ -16,14 +16,24 @@ import { ProviderConnectionGate } from "../features/provider-connection/componen
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
 import { TooltipProvider } from "../shared/components/core/tooltip.js";
+import { normalizeError, showErrorToast, useErrorToast } from "../shared/errors/error-toast.js";
 import { useTranslation } from "../i18n/i18n.js";
 import { installInactiveSnapshotMemoryLimit } from "./snapshot-memory.js";
 import { router } from "./router.js";
 
 export const DEFAULT_QUERY_GC_TIME_MS = 2 * 60_000;
 
-export function createAppQueryClient() {
+type AppQueryClientOptions = Readonly<{
+  onError?: (error: Error) => void;
+}>;
+
+export function createAppQueryClient(options: AppQueryClientOptions = {}) {
+  const onError = (error: unknown) => {
+    (options.onError ?? showErrorToast)(normalizeError(error));
+  };
   const queryClient = new QueryClient({
+    mutationCache: new MutationCache({ onError }),
+    queryCache: new QueryCache({ onError }),
     defaultOptions: {
       queries: {
         gcTime: DEFAULT_QUERY_GC_TIME_MS,
@@ -59,12 +69,13 @@ export function AccessControlledContent({
   access,
   children,
 }: Readonly<{ access: AccessContextValue; children: ReactNode }>) {
+  useErrorToast(access.error);
   if (access.status?.authenticated === true) {
     return children;
   }
   return (
     <PairingGate
-      error={access.error}
+      loadFailed={access.errorSource === "load"}
       loading={access.loading}
       onPair={access.pair}
       onRetry={access.retry}

@@ -14,6 +14,7 @@ import { Tooltip } from "../../../shared/components/core/tooltip.js";
 import { TooltipContent } from "../../../shared/components/core/tooltip.js";
 import { TooltipTrigger } from "../../../shared/components/core/tooltip.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 import {
   applyThemePreference,
@@ -90,7 +91,6 @@ export function GlobalSettingsDialog({
     () => settings ?? createFallbackSettings(models),
   );
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
-  const [saveError, setSaveError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const selectedModel = models.find((model) => model.id === draft.model);
   const selectedCommitModel = models.find((model) => model.id === draft.commitMessageModel);
@@ -145,13 +145,12 @@ export function GlobalSettingsDialog({
               return;
             }
             void saveLockRef.current.run(async () => {
-              setSaveError(false);
               setIsSaving(true);
               try {
                 await onSave(draft);
                 onClose();
-              } catch {
-                setSaveError(true);
+              } catch (error) {
+                showErrorToast(error);
               } finally {
                 setIsSaving(false);
               }
@@ -232,11 +231,7 @@ export function GlobalSettingsDialog({
                   <ProviderConnectionPanel />
                 </section>
               ) : activeSection === "about" ? null : error !== null ? (
-                <div
-                  className="flex min-h-40 flex-col items-center justify-center gap-3"
-                  role="alert"
-                >
-                  <p className="text-body-small text-danger">{t("errors.load")}</p>
+                <div className="flex min-h-40 flex-col items-center justify-center gap-3">
                   <Button
                     variant="ghost"
                     className="h-8 rounded-control bg-control px-3 text-body-small font-medium hover:bg-control-hover"
@@ -438,11 +433,6 @@ export function GlobalSettingsDialog({
           </div>
 
           <footer className="flex min-h-14 items-center justify-end gap-2 px-4 shadow-[0_-1px_0_var(--ui-color-separator)] sm:px-5">
-            {saveError ? (
-              <p className="mr-auto text-meta text-danger" role="alert">
-                {t("errors.save")}
-              </p>
-            ) : null}
             <Button
               variant="ghost"
               className="h-8 rounded-control px-3 text-body-small text-muted-foreground hover:bg-control-hover hover:text-foreground disabled:opacity-50"

@@ -1454,7 +1454,7 @@ describe("project protocol", () => {
           {
             authStatus: null,
             description: null,
-            error: "MCP startup timed out after 10s",
+            error: `MCP startup timed out after 10s\n${"x".repeat(8_192)}`,
             failureReason: null,
             name: "chrome-devtools",
             status: "failed",

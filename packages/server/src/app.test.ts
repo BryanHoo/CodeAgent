@@ -22,6 +22,7 @@ function createOptions(engine: CodeAgentEngine) {
       Promise.resolve({
         appVersion: "1.10.0",
         codexVersion: "0.147.0",
+        error: null,
         latestVersion: null,
         releaseNotes: null,
         status: "current" as const,
@@ -146,6 +147,49 @@ describe("createCodeAgentServer", () => {
       code: "TASK_NOT_FOUND",
       message: "Task not found",
     });
+    await app.close();
+  });
+
+  it("preserves unknown engine error messages", async () => {
+    const taskRead = vi.fn(() => Promise.reject(new Error("git: fatal: remote rejected")));
+    const app = await createCodeAgentServer(
+      createOptions(createEngine({ close: () => Promise.resolve(), taskRead })),
+    );
+
+    const response = await app.inject({
+      headers: { host: "localhost" },
+      url: "/v1/projects/code-agent/tasks/task-1",
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      code: "INTERNAL_ERROR",
+      message: "git: fatal: remote rejected",
+      retryable: false,
+    });
+    await app.close();
+  });
+
+  it("preserves request validation messages", async () => {
+    const app = await createCodeAgentServer(
+      createOptions(createEngine({ close: () => Promise.resolve() })),
+    );
+
+    const response = await app.inject({
+      headers: {
+        "content-type": "application/json",
+        host: "localhost",
+        "idempotency-key": "invalid-project",
+      },
+      method: "POST",
+      payload: {},
+      url: "/v1/projects",
+    });
+
+    expect(response.statusCode).toBe(400);
+    const payload = response.json<{ code: string; message: string }>();
+    expect(payload.code).toBe("INVALID_REQUEST");
+    expect(payload.message).toContain("rootPath");
     await app.close();
   });
 });
