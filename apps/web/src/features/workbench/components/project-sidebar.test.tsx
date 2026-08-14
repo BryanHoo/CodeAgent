@@ -187,10 +187,12 @@ describe("SidebarSettingsButton", () => {
   it("renders the version without a connection status in Chinese", async () => {
     await changeAppLanguage("zh-CN");
     const markup = renderToStaticMarkup(
-      <SidebarSettingsButton appInfo={appInfo} onOpen={vi.fn()} />,
+      <SidebarSettingsButton appInfo={appInfo} onOpenAbout={vi.fn()} onOpenSettings={vi.fn()} />,
     );
 
+    expect(markup).toContain('aria-label="设置"');
     expect(markup).toContain('aria-label="设置，CodeAgent 1.3.0"');
+    expect(markup.match(/<button/gu)).toHaveLength(2);
     expect(markup).toContain("v1.3.0");
     expect(markup).not.toContain("在线");
     expect(markup).not.toContain("lucide-wifi");
@@ -201,9 +203,10 @@ describe("SidebarSettingsButton", () => {
     await changeAppLanguage("en");
     try {
       const markup = renderToStaticMarkup(
-        <SidebarSettingsButton appInfo={appInfo} onOpen={vi.fn()} />,
+        <SidebarSettingsButton appInfo={appInfo} onOpenAbout={vi.fn()} onOpenSettings={vi.fn()} />,
       );
 
+      expect(markup).toContain('aria-label="Settings"');
       expect(markup).toContain('aria-label="Settings, CodeAgent 1.3.0"');
       expect(markup).not.toContain("Online");
       expect(markup).not.toContain("lucide-wifi");
@@ -223,13 +226,14 @@ describe("SidebarSettingsButton", () => {
           status: "available",
           updateAvailable: true,
         }}
-        onOpen={vi.fn()}
+        onOpenAbout={vi.fn()}
+        onOpenSettings={vi.fn()}
       />,
     );
 
     expect(markup).toContain("设置，CodeAgent 1.3.0，有可用更新");
     expect(markup).toContain("lucide-circle-arrow-up");
-    expect(markup).toContain('class="text-warning"');
+    expect(markup).toMatch(/class="[^"]*text-warning/u);
   });
 });
 
@@ -358,6 +362,10 @@ describe("TaskStatusIndicator", () => {
     );
 
     expect(markup).toContain('aria-label="任务运行中"');
+    expect(markup).toContain("-mr-2");
+    expect(markup).toContain("w-7");
+    expect(markup).toContain("justify-center");
+    expect(markup).toContain("text-brand/60");
     expect(markup).toContain("sidebar-task-activity");
     expect(markup).not.toContain("sidebar-task-spinner");
     expect(markup).not.toContain("<svg");

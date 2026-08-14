@@ -21,6 +21,7 @@ import {
 import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { useProjectActions, useProjectData } from "../../projects/project-context.js";
+import type { SettingsSectionId } from "../../settings/components/global-settings-fields.js";
 import {
   appInfoQueryOptions,
   appUpdateMutationOptions,
@@ -272,6 +273,8 @@ export function useWorkbenchShellRuntime({
   const [taskRenameOpen, setTaskRenameOpen] = useState(false);
   const [taskRenameError, setTaskRenameError] = useState<string | null>(null);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+  const [globalSettingsInitialSection, setGlobalSettingsInitialSection] =
+    useState<SettingsSectionId>("appearance");
   const [gitHistoryOpen, setGitHistoryOpen] = useState(false);
   const [fileDiffSelection, setFileDiffSelection] = useState<{
     change: AgentFileChange;
@@ -368,6 +371,7 @@ export function useWorkbenchShellRuntime({
     gitStatusQuery,
     gitHistoryOpen,
     globalSettingsMutation,
+    globalSettingsInitialSection,
     globalSettingsOpen,
     globalSettingsQuery,
     handleNewChatSubmissionStateChange,
@@ -408,6 +412,7 @@ export function useWorkbenchShellRuntime({
     setFileDiffSelection,
     setFileReviewSelection,
     setFileTreeExpansion,
+    setGlobalSettingsInitialSection,
     setGlobalSettingsOpen,
     setGitHistoryOpen,
     setInspectorOpen,

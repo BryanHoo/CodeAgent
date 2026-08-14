@@ -86,6 +86,7 @@ export function WorkbenchShellLayout({
     retry,
     runtime,
     setFileTreeExpansion,
+    setGlobalSettingsInitialSection,
     setGlobalSettingsOpen,
     setGitHistoryOpen,
     setInspectorOpen,
@@ -123,7 +124,8 @@ export function WorkbenchShellLayout({
       <ProjectSidebar
         {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
         onClose={closeSidebar}
-        onOpenSettings={() => {
+        onOpenSettings={(section) => {
+          setGlobalSettingsInitialSection(section);
           setGlobalSettingsOpen(true);
         }}
         projectId={projectId}

@@ -496,8 +496,8 @@ a {
 
 .sidebar-task-activity {
   display: block;
-  width: 0.4375rem;
-  height: 0.4375rem;
+  width: 0.625rem;
+  height: 0.625rem;
   background-color: currentColor;
   border-radius: 9999px;
   animation: sidebar-task-activity 1.2s ease-in-out infinite;

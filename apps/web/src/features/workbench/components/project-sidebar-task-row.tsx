@@ -129,7 +129,7 @@ export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskSta
     return (
       <span
         aria-label={t("sidebar.taskRunning")}
-        className="task-status ml-auto inline-flex shrink-0 text-subtle-foreground"
+        className="task-status -mr-2 ml-auto inline-flex w-7 shrink-0 justify-center text-brand/60"
         role="status"
       >
         {/* 单元素透明度动画不旋转几何图形，降低多任务并行动画的合成压力。 */}

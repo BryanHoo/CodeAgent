@@ -85,9 +85,31 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(taskModel).toHaveAccessibleName("模型和思考量：GPT-5.6 Sol，高");
   await expect(taskApproval).toHaveValue("on-request");
 
-  await page.getByRole("button", { name: /设置，CodeAgent/u }).click();
+  const settingsTrigger = page.getByRole("button", { exact: true, name: "设置" });
+  const branchTrigger = page.getByRole("button", { name: /切换分支，当前分支/u });
+  const [settingsTriggerBox, branchTriggerBox] = await Promise.all([
+    settingsTrigger.boundingBox(),
+    branchTrigger.boundingBox(),
+  ]);
+  expect(settingsTriggerBox).not.toBeNull();
+  expect(branchTriggerBox).not.toBeNull();
+  if (settingsTriggerBox === null || branchTriggerBox === null) {
+    throw new Error("底部设置或分支入口缺少布局边界");
+  }
+  expect(
+    Math.abs(
+      settingsTriggerBox.y +
+        settingsTriggerBox.height / 2 -
+        (branchTriggerBox.y + branchTriggerBox.height / 2),
+    ),
+  ).toBeLessThanOrEqual(1);
+  await settingsTrigger.click();
   const dialog = page.getByRole("dialog", { name: "全局设置" });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "外观" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
   await expect(page).toHaveURL(workbenchUrl);
   await expect(dialog.getByRole("button", { name: "外观" })).toHaveCSS(
     "justify-content",
@@ -225,12 +247,13 @@ test("opens About from the sidebar and installs an available update", async ({ p
   });
   await page.goto("/p/code-agent/t/task-1");
 
-  const settingsButton = page.getByRole("button", {
+  const versionButton = page.getByRole("button", {
     name: /设置，CodeAgent 1\.3\.0，有可用更新/u,
   });
-  await expect(settingsButton.locator(".text-warning")).toContainText("v1.3.0");
-  await expect(settingsButton.locator(".lucide-circle-arrow-up")).toBeVisible();
-  await settingsButton.click();
+  await expect(versionButton).toContainText("v1.3.0");
+  await expect(versionButton).toHaveClass(/text-warning/u);
+  await expect(versionButton.locator(".lucide-circle-arrow-up")).toBeVisible();
+  await versionButton.click();
 
   const dialog = page.getByRole("dialog", { name: "全局设置" });
   await expect(dialog.getByRole("button", { name: "关于" })).toHaveAttribute(
