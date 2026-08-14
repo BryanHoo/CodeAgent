@@ -33,7 +33,7 @@ impl NodeEngine {
         let settings: AgentGlobalSettings = parse(settings)?;
         let settings = self
             .runtime()
-            .update_global_settings(&request_id, &settings)
+            .update_global_settings(&request_id, &request_id, &settings)
             .await
             .map_err(to_napi_error)?;
         Ok(json!({ "settings": settings }))
@@ -63,7 +63,7 @@ impl NodeEngine {
         let settings: AgentProjectDefaults = parse(settings)?;
         let settings = self
             .runtime()
-            .update_project_defaults(&request_id, &project_id(&project)?, &settings)
+            .update_project_defaults(&request_id, &request_id, &project_id(&project)?, &settings)
             .await
             .map_err(to_napi_error)?;
         Ok(json!({ "settings": settings }))
@@ -96,6 +96,7 @@ impl NodeEngine {
         let settings = self
             .runtime()
             .update_task_settings(
+                &request_id,
                 &request_id,
                 &project_id(&project)?,
                 &task_id(&task)?,

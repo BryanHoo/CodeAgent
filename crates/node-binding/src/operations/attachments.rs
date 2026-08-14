@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use code_agent_protocol::AgentAttachmentKind;
+use code_agent_runtime::AttachmentUploadInput;
 use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
 use serde_json::Value;
@@ -31,11 +32,14 @@ impl NodeEngine {
             .runtime()
             .upload_attachment(
                 &request_id,
+                &request_id,
                 &project_id(&project)?,
-                kind(&kind_value)?,
-                &media_type,
-                &name,
-                bytes.to_vec(),
+                AttachmentUploadInput {
+                    bytes: bytes.to_vec(),
+                    kind: kind(&kind_value)?,
+                    media_type,
+                    name,
+                },
             )
             .await
             .map_err(to_napi_error)?;
@@ -53,6 +57,7 @@ impl NodeEngine {
         let attachment = self
             .runtime()
             .import_host_attachment(
+                &request_id,
                 &request_id,
                 &project_id(&project)?,
                 kind(&kind_value)?,
@@ -107,6 +112,7 @@ impl NodeEngine {
     ) -> napi::Result<()> {
         self.runtime()
             .open_task_attachment(
+                &request_id,
                 &request_id,
                 &project_id(&project)?,
                 &task_id(&task)?,

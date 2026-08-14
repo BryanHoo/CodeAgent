@@ -1,7 +1,7 @@
 use std::{str::FromStr, sync::Arc};
 
 use code_agent_protocol::{AgentAttachment, AgentAttachmentKind, ProjectId, TaskId};
-use code_agent_runtime::CodeAgentRuntime;
+use code_agent_runtime::{AttachmentUploadInput, CodeAgentRuntime};
 use percent_encoding::percent_decode_str;
 use serde::Serialize;
 use tauri::{
@@ -12,6 +12,7 @@ use tauri::{
 use crate::command_error::CommandError;
 
 const PROJECT_ID_HEADER: &str = "x-code-agent-project-id";
+const IDEMPOTENCY_KEY_HEADER: &str = "x-code-agent-idempotency-key";
 const KIND_HEADER: &str = "x-code-agent-kind";
 const MEDIA_TYPE_HEADER: &str = "x-code-agent-media-type";
 const NAME_HEADER: &str = "x-code-agent-name";
@@ -25,6 +26,7 @@ pub struct RawAttachmentUpload {
     name: String,
     project_id: ProjectId,
     request_id: String,
+    idempotency_key: String,
 }
 
 impl<'de, R: Runtime> CommandArg<'de, R> for RawAttachmentUpload {
@@ -58,6 +60,7 @@ impl<'de, R: Runtime> CommandArg<'de, R> for RawAttachmentUpload {
             name,
             project_id,
             request_id: value(REQUEST_ID_HEADER)?,
+            idempotency_key: value(IDEMPOTENCY_KEY_HEADER)?,
         })
     }
 }
@@ -75,11 +78,14 @@ pub async fn attachment_upload(
     let attachment = runtime
         .upload_attachment(
             &upload.request_id,
+            &upload.idempotency_key,
             &upload.project_id,
-            upload.kind,
-            &upload.media_type,
-            &upload.name,
-            upload.bytes,
+            AttachmentUploadInput {
+                bytes: upload.bytes,
+                kind: upload.kind,
+                media_type: upload.media_type,
+                name: upload.name,
+            },
         )
         .await?;
     Ok(AttachmentResponse { attachment })
@@ -88,6 +94,7 @@ pub async fn attachment_upload(
 #[tauri::command]
 pub async fn attachment_import_host(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     kind: String,
     path: String,
@@ -97,7 +104,7 @@ pub async fn attachment_import_host(
     let kind =
         AgentAttachmentKind::from_str(&kind).map_err(|_| invalid("invalid attachment kind"))?;
     let attachment = runtime
-        .import_host_attachment(&request_id, &project_id, kind, &path)
+        .import_host_attachment(&request_id, &idempotency_key, &project_id, kind, &path)
         .await?;
     Ok(AttachmentResponse { attachment })
 }
@@ -112,6 +119,7 @@ pub struct OpenAttachmentResponse {
 #[tauri::command]
 pub async fn attachment_open(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     task_id: String,
     attachment_id: String,
@@ -120,7 +128,13 @@ pub async fn attachment_open(
     let project_id = ProjectId::from_str(&project_id).map_err(|_| invalid("invalid project id"))?;
     let task_id = TaskId::from_str(&task_id).map_err(|_| invalid("invalid task id"))?;
     runtime
-        .open_task_attachment(&request_id, &project_id, &task_id, &attachment_id)
+        .open_task_attachment(
+            &request_id,
+            &idempotency_key,
+            &project_id,
+            &task_id,
+            &attachment_id,
+        )
         .await?;
     Ok(OpenAttachmentResponse {
         attachment_id,

@@ -29,7 +29,7 @@ impl NodeEngine {
         input: Value,
     ) -> napi::Result<Value> {
         self.runtime()
-            .start_agent_task(&request_id, &project_id(&project)?, input)
+            .start_agent_task(&request_id, &request_id, &project_id(&project)?, input)
             .await
             .map_err(to_napi_error)
     }
@@ -56,7 +56,13 @@ impl NodeEngine {
         input: Value,
     ) -> napi::Result<Value> {
         self.runtime()
-            .start_agent_turn(&request_id, &project_id(&project)?, &task, input)
+            .start_agent_turn(
+                &request_id,
+                &request_id,
+                &project_id(&project)?,
+                &task,
+                input,
+            )
             .await
             .map_err(to_napi_error)
     }
@@ -71,7 +77,14 @@ impl NodeEngine {
         input: Value,
     ) -> napi::Result<()> {
         self.runtime()
-            .steer_agent_turn(&request_id, &project_id(&project)?, &task, &turn, input)
+            .steer_agent_turn(
+                &request_id,
+                &request_id,
+                &project_id(&project)?,
+                &task,
+                &turn,
+                input,
+            )
             .await
             .map_err(to_napi_error)
     }
@@ -85,7 +98,13 @@ impl NodeEngine {
         turn: String,
     ) -> napi::Result<()> {
         self.runtime()
-            .interrupt_agent_turn(&request_id, &project_id(&project)?, &task, &turn)
+            .interrupt_agent_turn(
+                &request_id,
+                &request_id,
+                &project_id(&project)?,
+                &task,
+                &turn,
+            )
             .await
             .map_err(to_napi_error)
     }
@@ -99,7 +118,13 @@ impl NodeEngine {
         target: Value,
     ) -> napi::Result<Value> {
         self.runtime()
-            .start_agent_review(&request_id, &project_id(&project)?, &task, target)
+            .start_agent_review(
+                &request_id,
+                &request_id,
+                &project_id(&project)?,
+                &task,
+                target,
+            )
             .await
             .map_err(to_napi_error)
     }
@@ -113,7 +138,7 @@ impl NodeEngine {
     ) -> napi::Result<Value> {
         let request = self
             .runtime()
-            .resolve_agent_pending_request(&request_id, &project_id(&project)?, input)
+            .resolve_agent_pending_request(&request_id, &request_id, &project_id(&project)?, input)
             .await
             .map_err(to_napi_error)?;
         Ok(json!({ "request": request }))
@@ -128,7 +153,13 @@ impl NodeEngine {
         pinned: bool,
     ) -> napi::Result<Value> {
         self.runtime()
-            .pin_agent_task(&request_id, &project_id(&project)?, &task, pinned)
+            .pin_agent_task(
+                &request_id,
+                &request_id,
+                &project_id(&project)?,
+                &task,
+                pinned,
+            )
             .await
             .map_err(to_napi_error)
     }
@@ -142,7 +173,13 @@ impl NodeEngine {
         title: String,
     ) -> napi::Result<Value> {
         self.runtime()
-            .rename_agent_task(&request_id, &project_id(&project)?, &task, &title)
+            .rename_agent_task(
+                &request_id,
+                &request_id,
+                &project_id(&project)?,
+                &task,
+                &title,
+            )
             .await
             .map_err(to_napi_error)?;
         let response = self
@@ -167,7 +204,7 @@ impl NodeEngine {
         task: String,
     ) -> napi::Result<()> {
         self.runtime()
-            .archive_agent_task(&request_id, &project_id(&project)?, &task)
+            .archive_agent_task(&request_id, &request_id, &project_id(&project)?, &task)
             .await
             .map_err(to_napi_error)
     }
@@ -180,7 +217,7 @@ impl NodeEngine {
         task: String,
     ) -> napi::Result<Value> {
         self.runtime()
-            .fork_agent_task(&request_id, &project_id(&project)?, &task)
+            .fork_agent_task(&request_id, &request_id, &project_id(&project)?, &task)
             .await
             .map_err(to_napi_error)
     }
@@ -193,7 +230,7 @@ impl NodeEngine {
         task: String,
     ) -> napi::Result<()> {
         self.runtime()
-            .compact_agent_task(&request_id, &project_id(&project)?, &task)
+            .compact_agent_task(&request_id, &request_id, &project_id(&project)?, &task)
             .await
             .map_err(to_napi_error)
     }
@@ -206,7 +243,7 @@ impl NodeEngine {
         task: String,
     ) -> napi::Result<String> {
         self.runtime()
-            .unsubscribe_agent_task(&request_id, &project_id(&project)?, &task)
+            .unsubscribe_agent_task(&request_id, &request_id, &project_id(&project)?, &task)
             .await
             .map_err(to_napi_error)
     }
@@ -236,7 +273,7 @@ impl NodeEngine {
     ) -> napi::Result<Value> {
         serde_json::to_value(
             self.runtime()
-                .reload_agent_mcp_servers(&request_id, &project_id(&project)?, &task)
+                .reload_agent_mcp_servers(&request_id, &request_id, &project_id(&project)?, &task)
                 .await
                 .map_err(to_napi_error)?,
         )
@@ -268,7 +305,13 @@ impl NodeEngine {
         terminal: String,
     ) -> napi::Result<bool> {
         self.runtime()
-            .terminate_agent_terminal(&request_id, &project_id(&project)?, &task, &terminal)
+            .terminate_agent_terminal(
+                &request_id,
+                &request_id,
+                &project_id(&project)?,
+                &task,
+                &terminal,
+            )
             .await
             .map_err(to_napi_error)
     }
@@ -282,7 +325,13 @@ impl NodeEngine {
         input: Value,
     ) -> napi::Result<()> {
         self.runtime()
-            .upload_agent_feedback(&request_id, &project_id(&project)?, &task, input)
+            .upload_agent_feedback(
+                &request_id,
+                &request_id,
+                &project_id(&project)?,
+                &task,
+                input,
+            )
             .await
             .map_err(to_napi_error)
     }

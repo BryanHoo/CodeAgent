@@ -36,11 +36,12 @@ pub async fn global_settings_get(
 #[tauri::command]
 pub async fn global_settings_update(
     request_id: String,
+    idempotency_key: String,
     settings: AgentGlobalSettings,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<GlobalSettingsResponse, CommandError> {
     let settings = runtime
-        .update_global_settings(&request_id, &settings)
+        .update_global_settings(&request_id, &idempotency_key, &settings)
         .await?;
     Ok(GlobalSettingsResponse { settings })
 }
@@ -61,13 +62,14 @@ pub async fn project_defaults_get(
 #[tauri::command]
 pub async fn project_defaults_update(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     settings: AgentProjectDefaults,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<ProjectDefaultsResponse, CommandError> {
     let project_id = parse_project_id(project_id)?;
     let settings = runtime
-        .update_project_defaults(&request_id, &project_id, &settings)
+        .update_project_defaults(&request_id, &idempotency_key, &project_id, &settings)
         .await?;
     Ok(ProjectDefaultsResponse { settings })
 }
@@ -90,6 +92,7 @@ pub async fn task_settings_get(
 #[tauri::command]
 pub async fn task_settings_update(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     task_id: String,
     settings: AgentTaskSettings,
@@ -98,7 +101,13 @@ pub async fn task_settings_update(
     let project_id = parse_project_id(project_id)?;
     let task_id = parse_task_id(task_id)?;
     let settings = runtime
-        .update_task_settings(&request_id, &project_id, &task_id, &settings)
+        .update_task_settings(
+            &request_id,
+            &idempotency_key,
+            &project_id,
+            &task_id,
+            &settings,
+        )
         .await?;
     Ok(TaskSettingsResponse { settings })
 }

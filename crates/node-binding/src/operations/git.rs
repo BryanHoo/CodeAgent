@@ -73,6 +73,7 @@ impl NodeEngine {
         self.runtime()
             .git_switch_branch(
                 &request_id,
+                &request_id,
                 &project_id(&project)?,
                 &branch,
                 &expected_snapshot,
@@ -92,6 +93,7 @@ impl NodeEngine {
         self.runtime()
             .git_create_branch(
                 &request_id,
+                &request_id,
                 &project_id(&project)?,
                 &branch,
                 &expected_snapshot,
@@ -108,7 +110,7 @@ impl NodeEngine {
         request: Value,
     ) -> napi::Result<Value> {
         self.runtime()
-            .git_commit(&request_id, &project_id(&project)?, &request)
+            .git_commit(&request_id, &request_id, &project_id(&project)?, &request)
             .await
             .map_err(to_napi_error)
     }
@@ -124,7 +126,7 @@ impl NodeEngine {
             serde_json::from_value(request).map_err(|error| invalid_input(error.to_string()))?;
         let response = self
             .runtime()
-            .generate_commit_message(&request_id, &project_id(&project)?, &request)
+            .generate_commit_message(&request_id, &request_id, &project_id(&project)?, &request)
             .await
             .map_err(to_napi_error)?;
         serde_json::to_value(response).map_err(napi::Error::from)

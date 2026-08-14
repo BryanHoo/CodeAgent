@@ -38,6 +38,7 @@ pub async fn project_list(
 #[tauri::command]
 pub async fn project_add(
     request_id: String,
+    idempotency_key: String,
     root_path: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<ProjectResponse, CommandError> {
@@ -46,7 +47,7 @@ pub async fn project_add(
         .and_then(|name| name.to_str())
         .unwrap_or(&root_path);
     let project = runtime
-        .register_project(&request_id, &root_path, name)
+        .register_project(&request_id, &idempotency_key, &root_path, name)
         .await?;
     Ok(ProjectResponse { project })
 }
@@ -54,24 +55,28 @@ pub async fn project_add(
 #[tauri::command]
 pub async fn project_reorder(
     request_id: String,
+    idempotency_key: String,
     project_ids: Vec<String>,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<ProjectPageResponse, CommandError> {
     let project_ids = parse_project_ids(project_ids)?;
-    let projects = runtime.reorder_projects(&request_id, &project_ids).await?;
+    let projects = runtime
+        .reorder_projects(&request_id, &idempotency_key, &project_ids)
+        .await?;
     Ok(project_page(projects))
 }
 
 #[tauri::command]
 pub async fn project_rename(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     name: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<ProjectResponse, CommandError> {
     let project_id = parse_project_id(project_id)?;
     let project = runtime
-        .rename_project(&request_id, &project_id, &name)
+        .rename_project(&request_id, &idempotency_key, &project_id, &name)
         .await?;
     Ok(ProjectResponse { project })
 }
@@ -79,11 +84,14 @@ pub async fn project_rename(
 #[tauri::command]
 pub async fn project_remove(
     request_id: String,
+    idempotency_key: String,
     project_id: String,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
 ) -> Result<RemoveProjectResponse, CommandError> {
     let project_id = parse_project_id(project_id)?;
-    runtime.remove_project(&request_id, &project_id).await?;
+    runtime
+        .remove_project(&request_id, &idempotency_key, &project_id)
+        .await?;
     Ok(RemoveProjectResponse {
         project_id,
         status: "removed",

@@ -442,19 +442,19 @@ async fn representative_mutation_retries_should_execute_each_port_once() {
 
     for _ in 0..2 {
         runtime
-            .update_global_settings("settings-key", &settings)
+            .update_global_settings("settings-request", "settings-key", &settings)
             .await
             .expect("update settings");
         runtime
-            .start_provider_login("login-key")
+            .start_provider_login("login-request", "login-key")
             .await
             .expect("start login");
         runtime
-            .start_agent_review("review-key", &project_id, "task-1", review.clone())
+            .start_agent_review("review", "key", &project_id, "task-1", review.clone())
             .await
             .expect("start review");
         runtime
-            .git_commit("commit-key", &project_id, &commit)
+            .git_commit("commit-request", "commit-key", &project_id, &commit)
             .await
             .expect("commit");
     }
@@ -473,8 +473,8 @@ async fn concurrent_task_mutation_retries_should_share_in_flight_result() {
     let project_id = ProjectId::try_from("project-1").expect("project id");
 
     let (first, second) = tokio::join!(
-        runtime.fork_agent_task("fork-key", &project_id, "task-1"),
-        runtime.fork_agent_task("fork-key", &project_id, "task-1"),
+        runtime.fork_agent_task("fork-request-1", "fork-key", &project_id, "task-1"),
+        runtime.fork_agent_task("fork-request-2", "fork-key", &project_id, "task-1"),
     );
 
     assert_eq!(first.expect("first fork"), second.expect("second fork"));
@@ -489,8 +489,8 @@ async fn same_request_key_should_execute_independently_across_projects() {
     let commit = json!({ "expectedSnapshot": "snapshot", "message": "message" });
 
     let (first, second) = tokio::join!(
-        runtime.git_commit("shared-key", &project_one, &commit),
-        runtime.git_commit("shared-key", &project_two, &commit),
+        runtime.git_commit("request-1", "shared-key", &project_one, &commit),
+        runtime.git_commit("request-2", "shared-key", &project_two, &commit),
     );
 
     first.expect("first project commit");

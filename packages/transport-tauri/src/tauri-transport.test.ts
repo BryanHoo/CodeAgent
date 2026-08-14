@@ -417,6 +417,31 @@ describe("TauriCodeAgentTransport", () => {
     ]);
   });
 
+  it("uses the request ID as the default mutation idempotency key", async () => {
+    const calls: { command: string; payload: unknown }[] = [];
+    mockIPC((command, payload) => {
+      calls.push({ command, payload });
+      return { task: { id: "task-1" } };
+    });
+    const transport = new TauriCodeAgentTransport();
+
+    await transport.request(
+      { input: { projectId: "project-a" }, name: "tasks.start", output: {} as never },
+      { requestId: "task-request" },
+    );
+
+    expect(calls).toEqual([
+      {
+        command: "task_start",
+        payload: {
+          idempotencyKey: "task-request",
+          projectId: "project-a",
+          requestId: "task-request",
+        },
+      },
+    ]);
+  });
+
   it("starts each test without retained Tauri internals", () => {
     expect(window).not.toHaveProperty("__TAURI_INTERNALS__");
   });

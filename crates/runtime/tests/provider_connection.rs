@@ -244,6 +244,7 @@ async fn custom_configuration_and_official_login_should_persist_connection_recor
     runtime
         .configure_custom_provider(
             "configure-custom",
+            "configure-custom",
             json!({
                 "apiKey": "must-not-be-persisted",
                 "baseUrl": "https://api.example.com/v1"
@@ -268,7 +269,7 @@ async fn custom_configuration_and_official_login_should_persist_connection_recor
     );
 
     runtime
-        .start_provider_login("official-login")
+        .start_provider_login("official-login", "official-login")
         .await
         .expect("start official login");
     let official = ports

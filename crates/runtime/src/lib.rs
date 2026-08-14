@@ -65,6 +65,15 @@ struct RuntimePorts {
     _update: Arc<dyn UpdatePort>,
 }
 
+/// Runtime 附件上传边界的已解析输入。
+#[derive(Debug)]
+pub struct AttachmentUploadInput {
+    pub bytes: Vec<u8>,
+    pub kind: AgentAttachmentKind,
+    pub media_type: String,
+    pub name: String,
+}
+
 /// 管理全部宿主无关端口、操作和关闭树的 Runtime facade。
 pub struct CodeAgentRuntime {
     accepting: AtomicBool,
@@ -267,11 +276,12 @@ impl CodeAgentRuntime {
         self.operations.cancel(request_id).await
     }
 
-    /// 仅为首个幂等请求注册活动操作；并发重试直接等待同一结果。
+    /// 幂等键只负责结果复用；请求 ID 保留给活动操作追踪与协作取消。
     async fn run_idempotent<T, F, Fut>(
         &self,
         scope: &[&str],
         request_id: &str,
+        idempotency_key: &str,
         payload: &Value,
         execute: F,
     ) -> Result<T, CodeAgentError>
@@ -280,9 +290,9 @@ impl CodeAgentRuntime {
         F: FnOnce(PortRequestContext) -> Fut,
         Fut: Future<Output = Result<T, CodeAgentError>>,
     {
-        let operation_identity = idempotency::operation_identity(scope, request_id);
+        let operation_identity = idempotency::operation_identity(scope, idempotency_key);
         self.idempotency
-            .execute(scope, request_id, payload, || async {
+            .execute(scope, idempotency_key, payload, || async {
                 let operation = self
                     .operations
                     .begin_scoped(&operation_identity, request_id)
@@ -331,6 +341,7 @@ impl CodeAgentRuntime {
     pub async fn start_agent_task(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         input: Value,
     ) -> Result<Value, CodeAgentError> {
@@ -338,6 +349,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["start-task", project_id.as_str()],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -387,6 +399,7 @@ impl CodeAgentRuntime {
     pub async fn start_agent_turn(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
         input: Value,
@@ -403,6 +416,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["start-turn", project_id.as_str(), task_id],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -447,6 +461,7 @@ impl CodeAgentRuntime {
     pub async fn steer_agent_turn(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
         turn_id: &str,
@@ -464,6 +479,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["steer-turn", project_id.as_str(), task_id, turn_id],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -506,6 +522,7 @@ impl CodeAgentRuntime {
     pub async fn interrupt_agent_turn(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
         turn_id: &str,
@@ -515,6 +532,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["interrupt-turn", project_id.as_str(), task_id, turn_id],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -533,6 +551,7 @@ impl CodeAgentRuntime {
     pub async fn start_agent_review(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
         target: Value,
@@ -541,6 +560,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["review-task", project_id.as_str(), task_id],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -557,6 +577,7 @@ impl CodeAgentRuntime {
     pub async fn resolve_agent_pending_request(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         input: Value,
     ) -> Result<Value, CodeAgentError> {
@@ -571,6 +592,7 @@ impl CodeAgentRuntime {
                 &pending_request_id,
             ],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -636,6 +658,7 @@ impl CodeAgentRuntime {
     pub async fn pin_agent_task(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
         pinned: bool,
@@ -644,6 +667,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["pin-task", project_id.as_str(), task_id],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -657,6 +681,7 @@ impl CodeAgentRuntime {
     pub async fn rename_agent_task(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
         title: &str,
@@ -665,6 +690,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["rename-task", project_id.as_str(), task_id],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -681,12 +707,14 @@ impl CodeAgentRuntime {
     pub async fn archive_agent_task(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
     ) -> Result<(), CodeAgentError> {
         self.run_idempotent(
             &["archive-task", project_id.as_str(), task_id],
             request_id,
+            idempotency_key,
             &json!({}),
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -700,12 +728,14 @@ impl CodeAgentRuntime {
     pub async fn fork_agent_task(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
     ) -> Result<Value, CodeAgentError> {
         self.run_idempotent(
             &["fork-task", project_id.as_str(), task_id],
             request_id,
+            idempotency_key,
             &json!({}),
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -719,12 +749,14 @@ impl CodeAgentRuntime {
     pub async fn compact_agent_task(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
     ) -> Result<(), CodeAgentError> {
         self.run_idempotent(
             &["compact-task", project_id.as_str(), task_id],
             request_id,
+            idempotency_key,
             &json!({}),
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -738,12 +770,14 @@ impl CodeAgentRuntime {
     pub async fn unsubscribe_agent_task(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
     ) -> Result<String, CodeAgentError> {
         self.run_idempotent(
             &["unsubscribe-task", project_id.as_str(), task_id],
             request_id,
+            idempotency_key,
             &json!({}),
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -757,12 +791,14 @@ impl CodeAgentRuntime {
     pub async fn reload_agent_mcp_servers(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
     ) -> Result<AgentMcpServerPage, CodeAgentError> {
         self.run_idempotent(
             &["reload-task-mcp-servers", project_id.as_str(), task_id],
             request_id,
+            idempotency_key,
             &json!({}),
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -779,6 +815,7 @@ impl CodeAgentRuntime {
     pub async fn terminate_agent_terminal(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
         terminal_id: &str,
@@ -791,6 +828,7 @@ impl CodeAgentRuntime {
                 terminal_id,
             ],
             request_id,
+            idempotency_key,
             &json!({}),
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -807,6 +845,7 @@ impl CodeAgentRuntime {
     pub async fn upload_agent_feedback(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &str,
         input: Value,
@@ -815,6 +854,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["feedback-task", project_id.as_str(), task_id],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 let context = self.project_context(project_id, &operation).await?;
@@ -838,10 +878,15 @@ impl CodeAgentRuntime {
     }
 
     /// 启动官方 Provider 登录。
-    pub async fn start_provider_login(&self, request_id: &str) -> Result<Value, CodeAgentError> {
+    pub async fn start_provider_login(
+        &self,
+        request_id: &str,
+        idempotency_key: &str,
+    ) -> Result<Value, CodeAgentError> {
         self.run_idempotent(
             &["start-official-provider-login"],
             request_id,
+            idempotency_key,
             &json!({}),
             |operation| async move {
                 let response = self.ports.provider.start_official_login(&operation).await?;
@@ -860,11 +905,13 @@ impl CodeAgentRuntime {
     pub async fn cancel_provider_login(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         login_id: &str,
     ) -> Result<Value, CodeAgentError> {
         self.run_idempotent(
             &["cancel-provider-login", login_id],
             request_id,
+            idempotency_key,
             &json!({ "loginId": login_id }),
             |operation| async move { self.ports.provider.cancel_login(login_id, &operation).await },
         )
@@ -872,10 +919,15 @@ impl CodeAgentRuntime {
     }
 
     /// 登出 Provider。
-    pub async fn logout_provider(&self, request_id: &str) -> Result<Value, CodeAgentError> {
+    pub async fn logout_provider(
+        &self,
+        request_id: &str,
+        idempotency_key: &str,
+    ) -> Result<Value, CodeAgentError> {
         self.run_idempotent(
             &["logout-provider"],
             request_id,
+            idempotency_key,
             &json!({}),
             |operation| async move { self.ports.provider.logout(&operation).await },
         )
@@ -886,12 +938,14 @@ impl CodeAgentRuntime {
     pub async fn configure_custom_provider(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         input: Value,
     ) -> Result<Value, CodeAgentError> {
         let payload = input.clone();
         self.run_idempotent(
             &["configure-custom-provider"],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 let response = self
@@ -995,6 +1049,7 @@ impl CodeAgentRuntime {
     pub async fn generate_commit_message(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         request: &GenerateCommitMessageRequest,
     ) -> Result<GenerateCommitMessageResponse, CodeAgentError> {
@@ -1003,6 +1058,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["generate-commit-message", project_id.as_str()],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
             let runtime_context = self.project_context(project_id, &operation).await?;
@@ -1190,6 +1246,7 @@ impl CodeAgentRuntime {
     pub async fn register_project(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         root_path: &str,
         name: &str,
     ) -> Result<Project, CodeAgentError> {
@@ -1197,6 +1254,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["add-project"],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 self.ports
@@ -1212,6 +1270,7 @@ impl CodeAgentRuntime {
     pub async fn reorder_projects(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_ids: &[ProjectId],
     ) -> Result<Vec<Project>, CodeAgentError> {
         let payload = serde_json::to_value(project_ids)
@@ -1219,6 +1278,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["reorder-projects"],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 self.ports
@@ -1234,6 +1294,7 @@ impl CodeAgentRuntime {
     pub async fn rename_project(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         name: &str,
     ) -> Result<Project, CodeAgentError> {
@@ -1241,6 +1302,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["rename-project", project_id.as_str()],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 self.ports
@@ -1256,11 +1318,13 @@ impl CodeAgentRuntime {
     pub async fn remove_project(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
     ) -> Result<(), CodeAgentError> {
         self.run_idempotent(
             &["remove-project", project_id.as_str()],
             request_id,
+            idempotency_key,
             &json!({}),
             |operation| async move {
                 if let Some(runtime_context) = self
@@ -1307,6 +1371,7 @@ impl CodeAgentRuntime {
     pub async fn update_global_settings(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         settings: &AgentGlobalSettings,
     ) -> Result<AgentGlobalSettings, CodeAgentError> {
         let payload = serde_json::to_value(settings)
@@ -1315,6 +1380,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["update-global-settings"],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 self.validate_settings_model(&validation_payload, &operation)
@@ -1346,6 +1412,7 @@ impl CodeAgentRuntime {
     pub async fn update_project_defaults(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         settings: &AgentProjectDefaults,
     ) -> Result<AgentProjectDefaults, CodeAgentError> {
@@ -1355,6 +1422,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["update-project-defaults", project_id.as_str()],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 self.ensure_project_exists(project_id, &operation).await?;
@@ -1391,6 +1459,7 @@ impl CodeAgentRuntime {
     pub async fn update_task_settings(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &TaskId,
         settings: &AgentTaskSettings,
@@ -1404,6 +1473,7 @@ impl CodeAgentRuntime {
                 task_id.as_str(),
             ],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 self.ensure_task_belongs_to_project(project_id, task_id, &operation)
@@ -1524,6 +1594,7 @@ impl CodeAgentRuntime {
     pub async fn open_project_path(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         app_id: &str,
         path: Option<&str>,
@@ -1532,6 +1603,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["open-project", project_id.as_str()],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 self.ports
@@ -1547,28 +1619,33 @@ impl CodeAgentRuntime {
     pub async fn upload_attachment(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
-        kind: AgentAttachmentKind,
-        media_type: &str,
-        name: &str,
-        bytes: Vec<u8>,
+        input: AttachmentUploadInput,
     ) -> Result<AgentAttachment, CodeAgentError> {
+        let AttachmentUploadInput {
+            bytes,
+            kind,
+            media_type,
+            name,
+        } = input;
         let content_hash = format!("{:x}", Sha256::digest(&bytes));
         let payload = json!({
             "contentHash": content_hash,
             "kind": kind,
-            "mediaType": media_type,
-            "name": name,
+            "mediaType": media_type.as_str(),
+            "name": name.as_str(),
             "size": bytes.len(),
         });
         self.run_idempotent(
             &["upload-attachment", project_id.as_str()],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 self.ports
                     .attachment
-                    .upload(project_id, kind, media_type, name, bytes, &operation)
+                    .upload(project_id, kind, &media_type, &name, bytes, &operation)
                     .await
             },
         )
@@ -1579,6 +1656,7 @@ impl CodeAgentRuntime {
     pub async fn import_host_attachment(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         kind: AgentAttachmentKind,
         path: &str,
@@ -1587,6 +1665,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["import-host-attachment", project_id.as_str()],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 self.ports
@@ -1653,6 +1732,7 @@ impl CodeAgentRuntime {
     pub async fn open_task_attachment(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         task_id: &TaskId,
         attachment_id: &str,
@@ -1665,6 +1745,7 @@ impl CodeAgentRuntime {
                 attachment_id,
             ],
             request_id,
+            idempotency_key,
             &json!({}),
             |operation| async move {
                 self.ports
@@ -1749,6 +1830,7 @@ impl CodeAgentRuntime {
     pub async fn git_switch_branch(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         branch: &str,
         expected_snapshot: &str,
@@ -1757,6 +1839,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["switch-project-branch", project_id.as_str()],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 self.ports
@@ -1772,6 +1855,7 @@ impl CodeAgentRuntime {
     pub async fn git_create_branch(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         branch: &str,
         expected_snapshot: &str,
@@ -1780,6 +1864,7 @@ impl CodeAgentRuntime {
         self.run_idempotent(
             &["create-project-branch", project_id.as_str()],
             request_id,
+            idempotency_key,
             &payload,
             |operation| async move {
                 self.ports
@@ -1795,12 +1880,14 @@ impl CodeAgentRuntime {
     pub async fn git_commit(
         &self,
         request_id: &str,
+        idempotency_key: &str,
         project_id: &ProjectId,
         request: &Value,
     ) -> Result<Value, CodeAgentError> {
         self.run_idempotent(
             &["commit-project-changes", project_id.as_str()],
             request_id,
+            idempotency_key,
             request,
             |operation| async move { self.ports.git.commit(project_id, request, &operation).await },
         )

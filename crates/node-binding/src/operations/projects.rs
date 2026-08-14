@@ -42,7 +42,7 @@ impl NodeEngine {
             .unwrap_or(&root_path);
         let project = self
             .runtime()
-            .register_project(&request_id, &root_path, name)
+            .register_project(&request_id, &request_id, &root_path, name)
             .await
             .map_err(to_napi_error)?;
         serde_json::to_value(project).map_err(napi::Error::from)
@@ -60,7 +60,7 @@ impl NodeEngine {
             .collect::<napi::Result<Vec<_>>>()?;
         let projects = self
             .runtime()
-            .reorder_projects(&request_id, &ids)
+            .reorder_projects(&request_id, &request_id, &ids)
             .await
             .map_err(to_napi_error)?;
         Ok(json!({ "data": projects, "nextCursor": null }))
@@ -75,7 +75,12 @@ impl NodeEngine {
     ) -> napi::Result<Value> {
         let project = self
             .runtime()
-            .rename_project(&request_id, &project_id(&project_id_value)?, &name)
+            .rename_project(
+                &request_id,
+                &request_id,
+                &project_id(&project_id_value)?,
+                &name,
+            )
             .await
             .map_err(to_napi_error)?;
         serde_json::to_value(project).map_err(napi::Error::from)
@@ -88,7 +93,7 @@ impl NodeEngine {
         project_id_value: String,
     ) -> napi::Result<()> {
         self.runtime()
-            .remove_project(&request_id, &project_id(&project_id_value)?)
+            .remove_project(&request_id, &request_id, &project_id(&project_id_value)?)
             .await
             .map_err(to_napi_error)
     }

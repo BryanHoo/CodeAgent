@@ -405,13 +405,18 @@ async fn settings_updates_should_validate_capabilities_and_resource_ownership_be
     let task_id = TaskId::try_from("task-1").expect("task id");
 
     let invalid_model = runtime
-        .update_global_settings("invalid-model", &global_settings("removed-model", "high"))
+        .update_global_settings(
+            "invalid-model",
+            "invalid-model",
+            &global_settings("removed-model", "high"),
+        )
         .await
         .expect_err("missing model must be rejected");
     assert_eq!(invalid_model.code(), CodeAgentErrorCode::InvalidInput);
 
     let invalid_effort = runtime
         .update_project_defaults(
+            "invalid-effort",
             "invalid-effort",
             &project_id,
             &project_defaults("gpt-5.6", "ultra"),
@@ -423,6 +428,7 @@ async fn settings_updates_should_validate_capabilities_and_resource_ownership_be
     let project_not_found = runtime
         .update_project_defaults(
             "missing-project",
+            "missing-project",
             &missing_project,
             &project_defaults("gpt-5.6", "high"),
         )
@@ -432,6 +438,7 @@ async fn settings_updates_should_validate_capabilities_and_resource_ownership_be
 
     let task_project_not_found = runtime
         .update_task_settings(
+            "missing-task-project",
             "missing-task-project",
             &missing_project,
             &task_id,
@@ -443,6 +450,7 @@ async fn settings_updates_should_validate_capabilities_and_resource_ownership_be
 
     let task_not_found = runtime
         .update_task_settings(
+            "foreign-task",
             "foreign-task",
             &project_id,
             &foreign_task,
@@ -462,6 +470,7 @@ async fn temporary_task_updates_should_force_danger_full_access_before_writing()
 
     let updated = runtime
         .update_task_settings(
+            "temporary-task",
             "temporary-task",
             &project_id,
             &task_id,
