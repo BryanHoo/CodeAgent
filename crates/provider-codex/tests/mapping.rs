@@ -128,6 +128,18 @@ fn item_and_turn_mapping_should_preserve_domain_shape() {
 }
 
 #[test]
+fn context_compaction_should_map_as_running_only_activity() {
+    let item = map_codex_item(&json!({
+        "id": "context-compaction-1",
+        "type": "contextCompaction"
+    }))
+    .expect("context compaction should map");
+
+    assert_eq!(item["type"], "activity");
+    assert_eq!(item["visibility"], "running_only");
+}
+
+#[test]
 fn user_message_mapping_should_preserve_skills_without_native_paths() {
     let item = map_codex_item(&json!({
         "content": [

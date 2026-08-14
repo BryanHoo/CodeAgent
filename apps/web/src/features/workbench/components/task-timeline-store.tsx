@@ -21,7 +21,7 @@ import { PendingRequestCard, type PendingRequestResolution } from "./pending-req
 
 import type { BuildPlanAction, ForkTaskAction } from "./task-timeline-contracts.js";
 import { ChangedFilesCard } from "./task-timeline-file-changes.js";
-import { RunningReplyStatus } from "./task-timeline-running.js";
+import { RunningReplyStatus, shouldRenderTimelineItem } from "./task-timeline-running.js";
 import {
   StoredLiveFileChanges as LiveFileChanges,
   StoredRunningReplyStatus,
@@ -47,11 +47,10 @@ export function resolveCompletedTurnProcessItemIds(
   const finalAnswerIndex = items.findLastIndex(
     (item) => item.type === "message" && item.role === "assistant" && item.phase === "final_answer",
   );
-  if (finalAnswerIndex < 0) {
-    return [];
-  }
+  if (finalAnswerIndex < 0) return [];
 
   return items.slice(0, finalAnswerIndex).flatMap((item) => {
+    if (!shouldRenderTimelineItem(item)) return [];
     if (item.type === "message") {
       return item.role === "assistant" && item.phase === "commentary" ? [item.id] : [];
     }

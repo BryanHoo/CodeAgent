@@ -29,6 +29,7 @@
 - `file_change.updated` 与 `turn.diff_updated` 必须携带 `truncated` 和非负 `originalByteLength`；前者最多包含 `100` 个变更，两类事件的 diff 均由 Provider 按单事件 `512 KiB` UTF-8 聚合预算截断。Client 与 Web 不得重新读取或长期保存被 Provider 省略的原始载荷。
 - `EventStreamMetricsResponse` 使用版本化严格 Schema，按 Project 只返回非负累计计数和当前活动量；字段覆盖 Provider 输入、合并、发布、pending Delta、保留淘汰、软背压、活动客户端与慢客户端断开，不得携带 Prompt、命令输出、文件内容或额外字段。
 - Provider 只发布不含 `sessionId`、`sequence`、`timestamp` 和 `version` 的统一事件；Server Event Stream 统一分配这些传输字段。结构化 Item 的开始与完成分别使用 `item.started` 和 `item.completed`，并携带同一统一 Item 载荷供客户端按 ID 替换。
+- 仅运行阶段有意义的统一 Activity 必须携带 `visibility: "running_only"`；Provider 在对应 `item.started` 与 `item.completed` 载荷中保持该标记，使实时 Store 和历史 Snapshot 使用同一可见性规则。Codex `contextCompaction` 固定映射为此类 Activity，不能退化为永久历史活动。
 - TypeBox 是 TypeScript/Rust 公共协议的单一来源；版本化 JSON Schema 与 Rust DTO 只通过 `pnpm run protocol:rust:generate` 更新，`pnpm run protocol:rust:check` 必须逐字节拒绝 drift。复杂事件联合在 Rust 边界使用同一 JSON Schema 严格校验，不能维护第二份宽松 DTO。
 - Project 级 Provider 只发布已通过 Project 归属验证的 Task 事件，未知或其他目录的 `threadId` 不得进入 Event Stream。
 - Task Snapshot HTTP 响应必须同时返回同一 Event Stream 的 `{ sessionId, sequence }` checkpoint，Client 不得猜测恢复序号。

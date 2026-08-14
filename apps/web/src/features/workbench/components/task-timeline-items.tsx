@@ -59,6 +59,7 @@ import {
   getCommandLabel,
   getReviewMessageText,
   resolveMessageResponseRendering,
+  shouldRenderTimelineItem,
 } from "./task-timeline-running.js";
 import {
   SubagentToolItem,
@@ -89,6 +90,10 @@ export function TimelineItemContent({
   taskId: string;
   turnStatus: AgentTurn["status"];
 }>) {
+  if (!shouldRenderTimelineItem(item)) {
+    return null;
+  }
+
   switch (item.type) {
     case "message": {
       const attachments = item.attachments ?? [];
