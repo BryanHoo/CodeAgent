@@ -131,11 +131,11 @@ export function SidebarSettingsButton({
   const appVersion = appInfo?.appVersion ?? "…";
   const updateAvailable = appInfo?.updateAvailable === true;
   return (
-    <div className="flex h-9 w-full min-w-0 items-center text-body-small text-muted-foreground">
+    <div className="flex h-9 w-full min-w-0 items-center text-label text-muted-foreground">
       <Button
         variant="ghost"
         aria-label={t("sidebar.settings")}
-        className="flex h-9 min-w-0 flex-1 items-center gap-1.5 rounded-control px-1 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+        className="flex h-9 min-w-0 flex-1 items-center gap-1.5 rounded-control px-1 text-label text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
         contentAlign="start"
         id="global-settings-trigger"
         onClick={onOpenSettings}
@@ -150,7 +150,7 @@ export function SidebarSettingsButton({
           update: updateAvailable ? t("sidebar.updateAvailableLabel") : "",
           version: appVersion,
         })}
-        className={`h-9 rounded-control px-1 text-body-small transition-colors hover:bg-control-hover hover:text-foreground ${
+        className={`h-9 rounded-control px-1 text-label transition-colors hover:bg-control-hover hover:text-foreground ${
           updateAvailable ? "text-warning" : "text-muted-foreground"
         }`}
         id="global-about-trigger"

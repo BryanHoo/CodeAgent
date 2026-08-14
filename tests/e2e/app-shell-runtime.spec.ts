@@ -684,7 +684,13 @@ test("updates a running background task title and clears attention after enterin
     version: 2,
   });
 
-  await expect(backgroundTask.getByRole("status", { name: "任务等待审批" })).toBeVisible();
+  const approvalStatus = backgroundTask.getByRole("status", { name: "任务等待审批" });
+  await expect(approvalStatus).toBeVisible();
+  await expect(approvalStatus).toHaveCSS("color", "rgb(178, 89, 0)");
+  await expect(approvalStatus.locator(".sidebar-task-status-dot")).toHaveCSS(
+    "animation-duration",
+    "2.4s",
+  );
   await backgroundTask.click();
   await expect(backgroundTask.getByRole("status", { name: "任务等待审批" })).toHaveCount(0);
 
@@ -714,7 +720,13 @@ test("updates a running background task title and clears attention after enterin
     type: "turn.started",
     version: 2,
   });
-  await expect(completedTask.getByRole("status", { name: "任务运行中" })).toBeVisible();
+  const runningStatus = completedTask.getByRole("status", { name: "任务运行中" });
+  await expect(runningStatus).toBeVisible();
+  await expect(runningStatus).toHaveCSS("color", "rgb(0, 106, 255)");
+  await expect(runningStatus.locator(".sidebar-task-status-dot")).toHaveCSS(
+    "animation-duration",
+    "2.4s",
+  );
   await emitTaskEvent({
     itemId: "markdown-assistant",
     payload: { delta: "正在回复" },
@@ -750,7 +762,13 @@ test("updates a running background task title and clears attention after enterin
     version: 2,
   });
 
-  await expect(completedTask.getByRole("status", { name: "AI 回复已完成" })).toBeVisible();
+  const completedStatus = completedTask.getByRole("status", { name: "AI 回复已完成" });
+  await expect(completedStatus).toBeVisible();
+  await expect(completedStatus).toHaveCSS("color", "rgb(40, 169, 72)");
+  await expect(completedStatus.locator(".sidebar-task-status-dot")).toHaveCSS(
+    "animation-name",
+    "none",
+  );
   await expect(completedTask).toContainText("后台任务正式标题");
 
   await completedTask.click();
@@ -796,7 +814,13 @@ test("updates a running background task title and clears attention after enterin
     type: "provider.error",
     version: 2,
   });
-  await expect(failedTask.getByRole("status", { name: "AI 回复未完成" })).toBeVisible();
+  const failedStatus = failedTask.getByRole("status", { name: "AI 回复未完成" });
+  await expect(failedStatus).toBeVisible();
+  await expect(failedStatus).toHaveCSS("color", "rgb(235, 0, 29)");
+  await expect(failedStatus.locator(".sidebar-task-status-dot")).toHaveCSS(
+    "animation-name",
+    "none",
+  );
 
   await failedTask.click();
   await expect(failedTask.getByRole("status", { name: "AI 回复未完成" })).toHaveCount(0);

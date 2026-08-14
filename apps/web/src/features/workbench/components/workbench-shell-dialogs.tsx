@@ -41,6 +41,7 @@ export function WorkbenchShellDialogs({
     models,
     modelsQuery,
     openFileDiff,
+    openSystemFileReference,
     projectOpenCapabilitiesQuery,
     projectRuntime,
     queryClient,
@@ -111,12 +112,13 @@ export function WorkbenchShellDialogs({
           projectId={projectId}
         />
       ) : null}
-      {!projectToolsEnabled || selectedSourceFile === null ? null : (
+      {selectedSourceFile === null ? null : (
         <ProjectSourceDialog
           client={client}
           onClose={() => {
             setSourceFileSelection(null);
           }}
+          onOpenSystemDefault={openSystemFileReference}
           projectId={projectId}
           previewKind={selectedSourceFile.kind}
           reference={selectedSourceFile.reference}

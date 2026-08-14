@@ -154,12 +154,6 @@ export class TauriCodeAgentTransport implements CodeAgentTransport {
   }
 
   public resolveAssetUrl(reference: AssetReference): string {
-    if (reference.kind === "project-image" && isAbsolutePath(reference.path)) {
-      throw new CodeAgentError({
-        code: "invalid_input",
-        message: "Project image asset paths must be relative",
-      });
-    }
     const segments = [reference.kind, reference.projectId];
     if (reference.kind === "task-attachment") {
       segments.push(reference.taskId ?? "");
@@ -220,8 +214,4 @@ function sourceReadPayload(input: Record<string, unknown>): Record<string, unkno
     projectId: input["projectId"],
     query: { cursor: input["cursor"], path: input["path"] },
   };
-}
-
-function isAbsolutePath(path: string): boolean {
-  return path.startsWith("/") || path.startsWith("\\") || /^[A-Za-z]:[\\/]/u.test(path);
 }

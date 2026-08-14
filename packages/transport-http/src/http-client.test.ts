@@ -782,6 +782,23 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("reads temporary task source references through the public temporary scope", async () => {
+    const sourceFile = {
+      content: "temporary note\n",
+      nextCursor: null,
+      path: "/tmp/temporary-note.txt",
+    };
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(sourceFile));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(
+      client.readProjectSourceFile("temporary", "/tmp/temporary-note.txt"),
+    ).resolves.toEqual(sourceFile);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/temporary/files/source?path=%2Ftmp%2Ftemporary-note.txt",
+    );
+  });
+
   it("reads and validates a project file tree directory", async () => {
     const fileTree = {
       entries: [{ path: "src/components/app.tsx", type: "file" }],

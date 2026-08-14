@@ -180,7 +180,6 @@ export const workbench = {
     closeImagePreview: "关闭图片预览",
     closeSource: "关闭源文件",
     delete: "删除",
-    loadImageError: "无法加载图片",
     loadMoreSourceError: "加载更多内容失败",
     loadSourceError: "无法加载源文件",
     loadingMoreSource: "正在加载更多内容",

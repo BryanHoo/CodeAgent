@@ -180,7 +180,6 @@ export const workbench = {
     closeImagePreview: "Close image preview",
     closeSource: "Close source file",
     delete: "Remove",
-    loadImageError: "Unable to load image",
     loadMoreSourceError: "Unable to load more content",
     loadSourceError: "Unable to load source file",
     loadingMoreSource: "Loading more content",

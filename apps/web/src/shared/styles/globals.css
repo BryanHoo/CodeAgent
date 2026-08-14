@@ -494,19 +494,23 @@ a {
   pointer-events: none;
 }
 
-.sidebar-task-activity {
+.sidebar-task-status-dot {
   display: block;
-  width: 0.625rem;
-  height: 0.625rem;
+  width: 0.5rem;
+  height: 0.5rem;
   background-color: currentColor;
   border-radius: 9999px;
-  animation: sidebar-task-activity 1.2s ease-in-out infinite;
 }
 
-@keyframes sidebar-task-activity {
+.sidebar-task-status-dot--pulse {
+  /* 仅改变透明度，以安静的呼吸节奏表达持续等待。 */
+  animation: sidebar-task-status-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes sidebar-task-status-pulse {
   0%,
   100% {
-    opacity: 0.35;
+    opacity: 0.45;
   }
 
   50% {
@@ -619,7 +623,7 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sidebar-task-activity {
+  .sidebar-task-status-dot--pulse {
     animation: none;
     opacity: 1;
   }

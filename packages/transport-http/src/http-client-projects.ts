@@ -361,7 +361,7 @@ export class ProjectHttpClient extends CodeAgentTransport {
     cursor?: number,
     options: ReadOptions = {},
   ): Promise<ProjectSourceFile> {
-    const requestPath = appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/files/source`, {
+    const requestPath = appendQuery(`${projectPath(projectId)}/files/source`, {
       cursor,
       path,
     });
