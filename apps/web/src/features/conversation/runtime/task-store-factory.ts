@@ -11,6 +11,7 @@ import {
 } from "./task-store-core.js";
 
 import { applyAcceptedEvent, getTouchedCommandOutputItemIds } from "./task-store-events.js";
+import { TaskStoreRetainedBytesTracker } from "./task-store-retained-bytes.js";
 import { reconcileSnapshot, reconstructSnapshot } from "./task-store-snapshot.js";
 
 export function createTaskStore(
@@ -46,6 +47,8 @@ export function createTaskStore(
   ) {
     throw new Error("Task store identity does not match the initial snapshot");
   }
+
+  const retainedBytesTracker = new TaskStoreRetainedBytesTracker(initialData);
 
   return createStore<TaskStoreState>()((set, get) => ({
     ...initialData,
@@ -88,7 +91,17 @@ export function createTaskStore(
             };
           }
         }
-        return nextState;
+        if (nextState === currentState) {
+          return currentState;
+        }
+        return {
+          ...nextState,
+          estimatedRetainedBytes: retainedBytesTracker.update(
+            currentState,
+            nextState,
+            changedItemStores,
+          ),
+        };
       });
       // 同一动画帧内的多个 Delta 合并为一次目标 Item 通知，避免重复渲染。
       for (const itemStore of changedItemStores) {
@@ -97,6 +110,7 @@ export function createTaskStore(
     },
     connectionState: "connecting",
     error: null,
+    estimatedRetainedBytes: retainedBytesTracker.retainedBytes,
     hydrate(response) {
       if (
         response.snapshot.projectId !== identity.projectId ||
@@ -104,13 +118,17 @@ export function createTaskStore(
       ) {
         throw new Error("Task store identity does not match the snapshot");
       }
-      set((state) => ({
-        ...normalizeSnapshot(response),
-        // Snapshot 替换会重建 Turn 与 Item 容器，必须推进修订号以失效兼容快照 memo。
-        itemStructureRevision: state.itemStructureRevision + 1,
-        connectionState: "connecting",
-        error: null,
-      }));
+      set((state) => {
+        const normalizedData = normalizeSnapshot(response);
+        return {
+          ...normalizedData,
+          // Snapshot 替换会重建 Turn 与 Item 容器，必须推进修订号以失效兼容快照 memo。
+          itemStructureRevision: state.itemStructureRevision + 1,
+          connectionState: "connecting",
+          error: null,
+          estimatedRetainedBytes: retainedBytesTracker.replace(normalizedData),
+        };
+      });
     },
     projectId: identity.projectId,
     reconcile(response) {
@@ -120,13 +138,17 @@ export function createTaskStore(
       ) {
         throw new Error("Task store identity does not match the snapshot");
       }
-      set((state) => ({
-        ...normalizeSnapshot(reconcileSnapshot(state, response)),
-        // 即使 Task 元数据未变，缺失或新增 Turn 也必须通知快照消费者重新读取 Store。
-        itemStructureRevision: state.itemStructureRevision + 1,
-        connectionState: "connecting",
-        error: null,
-      }));
+      set((state) => {
+        const normalizedData = normalizeSnapshot(reconcileSnapshot(state, response));
+        return {
+          ...normalizedData,
+          // 即使 Task 元数据未变，缺失或新增 Turn 也必须通知快照消费者重新读取 Store。
+          itemStructureRevision: state.itemStructureRevision + 1,
+          connectionState: "connecting",
+          error: null,
+          estimatedRetainedBytes: retainedBytesTracker.replace(normalizedData),
+        };
+      });
     },
     getItem: (itemId) => get().itemStoresById.get(itemId)?.read(),
     reconstructSnapshot: () => reconstructSnapshot(get()),

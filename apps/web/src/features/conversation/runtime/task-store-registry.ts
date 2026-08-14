@@ -1,5 +1,3 @@
-import { estimateRetainedBytes } from "../../../shared/memory/byte-lru.js";
-
 import {
   MAX_RETAINED_TASK_RUNTIME_BYTES,
   type TaskStore,
@@ -11,8 +9,10 @@ import { createTaskStore } from "./task-store-factory.js";
 interface TaskStoreRegistryEntry {
   consumers: number;
   identity: TaskStoreIdentity;
-  lastAccess: number;
+  registryKey: string;
+  retainedBytes: number;
   store: TaskStore;
+  unsubscribe: () => void;
 }
 
 export interface TaskStoreRegistryOptions {
@@ -25,10 +25,11 @@ export interface TaskStoreRegistryOptions {
 export class TaskStoreRegistry {
   readonly #createStore: (identity: TaskStoreIdentity) => TaskStore;
   readonly #entries = new Map<string, TaskStoreRegistryEntry>();
+  readonly #inactiveEntries = new Map<string, TaskStoreRegistryEntry>();
   readonly #maxRetainedBytes: number;
   readonly #maxRetainedStores: number;
   readonly #onEvict: TaskStoreRegistryOptions["onEvict"];
-  #accessSequence = 0;
+  #retainedBytes = 0;
 
   public constructor(options: TaskStoreRegistryOptions = {}) {
     this.#maxRetainedBytes = options.maxRetainedBytes ?? MAX_RETAINED_TASK_RUNTIME_BYTES;
@@ -47,17 +48,26 @@ export class TaskStoreRegistry {
     const registryKey = createRegistryKey(projectId, taskId);
     let entry = this.#entries.get(registryKey);
     if (entry === undefined) {
+      const store = this.#createStore({ projectId, taskId });
       entry = {
         consumers: 0,
         identity: { projectId, taskId },
-        lastAccess: 0,
-        store: this.#createStore({ projectId, taskId }),
+        registryKey,
+        retainedBytes: store.getState().estimatedRetainedBytes,
+        store,
+        unsubscribe: () => undefined,
       };
+      const subscribedEntry = entry;
+      entry.unsubscribe = store.subscribe((state, previousState) => {
+        if (state.estimatedRetainedBytes !== previousState.estimatedRetainedBytes) {
+          this.#updateInactiveBytes(subscribedEntry, state.estimatedRetainedBytes);
+        }
+      });
       this.#entries.set(registryKey, entry);
+    } else if (entry.consumers === 0) {
+      this.#removeInactiveEntry(entry);
     }
     entry.consumers += 1;
-    entry.lastAccess = ++this.#accessSequence;
-    this.#evictIfNeeded();
     return entry.store;
   }
 
@@ -67,8 +77,12 @@ export class TaskStoreRegistry {
       return false;
     }
     entry.consumers -= 1;
-    entry.lastAccess = ++this.#accessSequence;
-    this.#evictIfNeeded();
+    if (entry.consumers === 0) {
+      entry.retainedBytes = entry.store.getState().estimatedRetainedBytes;
+      this.#inactiveEntries.set(entry.registryKey, entry);
+      this.#retainedBytes += entry.retainedBytes;
+      this.#evictIfNeeded();
+    }
     return entry.consumers === 0;
   }
 
@@ -86,60 +100,55 @@ export class TaskStoreRegistry {
     if (entry === undefined || entry.consumers > 0) {
       return false;
     }
-    this.#entries.delete(registryKey);
-    this.#onEvict?.(entry.identity, entry.store);
+    this.#removeInactiveEntry(entry);
+    this.#deleteEntry(entry);
     return true;
   }
 
   #evictIfNeeded(): void {
-    const evictionCandidates = [...this.#entries]
-      .filter((candidate) => canEvictEntry(candidate[1]))
-      .sort((left, right) => left[1].lastAccess - right[1].lastAccess);
-    let retainedBytes = evictionCandidates.reduce(
-      (totalBytes, candidate) => totalBytes + estimateTaskStoreRetainedBytes(candidate[1].store),
-      0,
-    );
-    let retainedStores = evictionCandidates.length;
-    for (const [registryKey, entry] of evictionCandidates) {
-      if (retainedStores <= this.#maxRetainedStores && retainedBytes <= this.#maxRetainedBytes) {
-        break;
+    while (
+      this.#inactiveEntries.size > this.#maxRetainedStores ||
+      this.#retainedBytes > this.#maxRetainedBytes
+    ) {
+      // Map 迭代首项即最久未访问的空闲 Store，无需构造候选数组或排序。
+      const oldestEntry = this.#inactiveEntries.values().next().value;
+      if (oldestEntry === undefined) {
+        return;
       }
-      // 容量只约束安全静止的未选中 Store，活动 Store 不挤占 LRU 配额。
-      const entryBytes = estimateTaskStoreRetainedBytes(entry.store);
-      this.#entries.delete(registryKey);
-      retainedBytes -= entryBytes;
-      retainedStores -= 1;
-      this.#onEvict?.(entry.identity, entry.store);
+      this.#removeInactiveEntry(oldestEntry);
+      this.#deleteEntry(oldestEntry);
     }
+  }
+
+  #deleteEntry(entry: TaskStoreRegistryEntry): void {
+    this.#entries.delete(entry.registryKey);
+    entry.unsubscribe();
+    this.#onEvict?.(entry.identity, entry.store);
+  }
+
+  #removeInactiveEntry(entry: TaskStoreRegistryEntry): void {
+    if (!this.#inactiveEntries.delete(entry.registryKey)) {
+      return;
+    }
+    this.#retainedBytes -= entry.retainedBytes;
+  }
+
+  #updateInactiveBytes(entry: TaskStoreRegistryEntry, retainedBytes: number): void {
+    if (entry.consumers > 0 || !this.#inactiveEntries.has(entry.registryKey)) {
+      return;
+    }
+    this.#retainedBytes += retainedBytes - entry.retainedBytes;
+    entry.retainedBytes = retainedBytes;
+    this.#evictIfNeeded();
   }
 }
 
 export function estimateTaskStoreRetainedBytes(store: TaskStore): number {
-  const state = store.getState();
-  return estimateRetainedBytes({
-    checkpoint: state.checkpoint,
-    commandOutputAccessByItemId: [...state.commandOutputAccessByItemId],
-    commandOutputBytesByItemId: [...state.commandOutputBytesByItemId],
-    itemIdsByTurnId: state.itemIdsByTurnId,
-    itemTurnIdsById: state.itemTurnIdsById,
-    items: [...state.itemStoresById.values()].map((itemStore) => itemStore.read()),
-    notices: state.notices,
-    pendingRequestIds: state.pendingRequestIds,
-    pendingRequestsById: state.pendingRequestsById,
-    snapshotMetadata: state.snapshotMetadata,
-    turnIds: state.turnIds,
-    turnDiffsById: state.turnDiffsById,
-    turnsById: state.turnsById,
-  });
+  return store.getState().estimatedRetainedBytes;
 }
 
 function createRegistryKey(projectId: string, taskId: string): string {
   return JSON.stringify([projectId, taskId]);
-}
-
-function canEvictEntry(entry: TaskStoreRegistryEntry): boolean {
-  // 最后一个消费者释放时传输已关闭；后续重开会以权威 Snapshot 重新校准。
-  return entry.consumers === 0;
 }
 
 export function createTaskStoreRegistry(options: TaskStoreRegistryOptions = {}): TaskStoreRegistry {

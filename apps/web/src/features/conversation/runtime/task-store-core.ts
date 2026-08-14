@@ -9,6 +9,8 @@ import type {
 } from "@code-agent/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
+import { estimateRetainedBytes, getUtf8ByteLength } from "../../../shared/memory/byte-lru.js";
+
 const MAX_COMMAND_OUTPUT_BYTES = 1_048_576;
 const MAX_COMMAND_OUTPUT_LINES = 10_000;
 export const MAX_TASK_COMMAND_OUTPUT_BYTES = 8 * 1_048_576;
@@ -47,6 +49,7 @@ export interface TaskStoreState {
   commandOutputBytes: number;
   connectionState: AgentEventConnectionState;
   error: Error | null;
+  estimatedRetainedBytes: number;
   hydrate: (response: TaskStoreHydrationResponse) => void;
   itemIdsByTurnId: Readonly<Record<string, readonly string[]>>;
   itemStoresById: Map<string, TaskItemStore>;
@@ -81,6 +84,7 @@ type DeltaEvent = Extract<
 
 export interface TaskItemStore extends StoreApi<TaskItemStoreState> {
   appendDelta: (event: DeltaEvent) => boolean;
+  getEstimatedRetainedBytes: () => number;
   peek: () => AgentItem;
   publish: () => void;
   read: () => AgentItem;
@@ -91,6 +95,7 @@ type StreamedTextField = "content" | "output" | "plan" | "summary" | "text";
 
 export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
   let baseItem = initialItem;
+  let estimatedRetainedBytes = estimateRetainedBytes(initialItem);
   // Delta 热路径只追加 Chunk；完整字符串仅在目标 Item 被读取时延迟物化并缓存。
   const chunksByField = new Map<StreamedTextField, string[]>();
   let contentGeneration = 0;
@@ -106,6 +111,7 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
     } else {
       chunks.push(delta);
     }
+    estimatedRetainedBytes += getUtf8ByteLength(delta);
     contentGeneration += 1;
   }
 
@@ -152,6 +158,7 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
       appendChunk("output", event.payload.delta);
       return true;
     },
+    getEstimatedRetainedBytes: () => estimatedRetainedBytes,
     peek: (): AgentItem => baseItem,
     publish(): void {
       store.setState((state) => ({ revision: state.revision + 1 }));
@@ -199,6 +206,7 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
     },
     replace(item: AgentItem): void {
       baseItem = item;
+      estimatedRetainedBytes = estimateRetainedBytes(item);
       chunksByField.clear();
       summarySectionIndex = undefined;
       contentGeneration += 1;

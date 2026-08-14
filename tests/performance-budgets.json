@@ -71,6 +71,13 @@
     ],
     "maxLongTaskMs": 250
   },
+  "taskStoreSwitch": {
+    "itemsPerTask": 10000,
+    "maxGcRetainedBytes": 4194304,
+    "maxHeapGrowthBytes": 16777216,
+    "maxSwitchDurationMs": 100,
+    "tasks": 20
+  },
   "napiEventBridge": {
     "events": 10000,
     "maxDurationMs": 1000,
