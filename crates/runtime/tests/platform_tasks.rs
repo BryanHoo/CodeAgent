@@ -20,12 +20,26 @@ use serde_json::{Value, json};
 use tokio::sync::{Mutex, mpsc};
 
 struct FakeProjectProvider {
-    event_receiver: Mutex<Option<mpsc::Receiver<RawProviderEvent>>>,
-    event_sender: mpsc::Sender<RawProviderEvent>,
+    event_subscribers: Mutex<Vec<(bool, mpsc::Sender<RawProviderEvent>)>>,
     fail_start_turn: AtomicBool,
     start_task_input: Mutex<Option<Value>>,
     start_turn_input: Mutex<Option<Value>>,
+    subscription_modes: Mutex<Vec<bool>>,
     unsubscribe_calls: AtomicUsize,
+}
+
+impl FakeProjectProvider {
+    async fn publish(&self, event: RawProviderEvent, ephemeral: bool) {
+        self.event_subscribers
+            .lock()
+            .await
+            .retain(|(include_ephemeral, sender)| {
+                if ephemeral && !*include_ephemeral {
+                    return !sender.is_closed();
+                }
+                sender.try_send(event.clone()).is_ok()
+            });
+    }
 }
 
 #[async_trait]
@@ -134,34 +148,38 @@ impl ProjectProviderPort for FakeProjectProvider {
                 None,
             ));
         }
-        self.event_sender
-            .send(
-                parse_provider_event(json!({
-                    "itemId": "message-1",
-                    "payload": { "item": {
-                        "id": "message-1", "role": "assistant",
-                        "text": "{\"message\":\"feat(runtime): 生成提交信息\"}", "type": "message"
-                    } },
-                    "taskId": "task-1", "turnId": "turn-1", "type": "item.completed"
-                }))
-                .expect("completed item"),
-            )
+        let ephemeral = self
+            .start_task_input
+            .lock()
             .await
-            .expect("send completed item");
-        self.event_sender
-            .send(
-                parse_provider_event(json!({
-                    "payload": { "turn": {
-                        "completedAt": "2026-08-12T00:00:02.000Z", "error": null,
-                        "id": "turn-1", "items": [],
-                        "startedAt": "2026-08-12T00:00:01.000Z", "status": "completed"
-                    } },
-                    "taskId": "task-1", "turnId": "turn-1", "type": "turn.completed"
-                }))
-                .expect("completed turn"),
-            )
-            .await
-            .expect("send completed turn");
+            .as_ref()
+            .is_some_and(|input| input["ephemeral"] == true);
+        self.publish(
+            parse_provider_event(json!({
+                "itemId": "message-1",
+                "payload": { "item": {
+                    "id": "message-1", "role": "assistant",
+                    "text": "{\"message\":\"feat(runtime): 生成提交信息\"}", "type": "message"
+                } },
+                "taskId": "task-1", "turnId": "turn-1", "type": "item.completed"
+            }))
+            .expect("completed item"),
+            ephemeral,
+        )
+        .await;
+        self.publish(
+            parse_provider_event(json!({
+                "payload": { "turn": {
+                    "completedAt": "2026-08-12T00:00:02.000Z", "error": null,
+                    "id": "turn-1", "items": [],
+                    "startedAt": "2026-08-12T00:00:01.000Z", "status": "completed"
+                } },
+                "taskId": "task-1", "turnId": "turn-1", "type": "turn.completed"
+            }))
+            .expect("completed turn"),
+            ephemeral,
+        )
+        .await;
         Ok(json!({
             "completedAt": null, "error": null, "id": "turn-1",
             "items": [], "startedAt": "2026-08-12T00:00:01.000Z", "status": "running"
@@ -247,21 +265,22 @@ impl ProjectProviderPort for FakeProjectProvider {
     }
     async fn subscribe_events(
         &self,
-        _include_ephemeral: bool,
+        include_ephemeral: bool,
         _context: &PortRequestContext,
     ) -> Result<mpsc::Receiver<RawProviderEvent>, CodeAgentError> {
-        self.event_receiver
+        self.subscription_modes.lock().await.push(include_ephemeral);
+        let (sender, receiver) = mpsc::channel(8);
+        self.event_subscribers
             .lock()
             .await
-            .take()
-            .ok_or_else(|| CodeAgentError::internal("already subscribed"))
+            .push((include_ephemeral, sender));
+        Ok(receiver)
     }
 }
 
 struct FakePorts {
     attachment_bind_calls: AtomicUsize,
     attachment_release_calls: AtomicUsize,
-    event_sender: mpsc::Sender<RawProviderEvent>,
     for_project_calls: AtomicUsize,
     models_calls: AtomicUsize,
     project_provider: Arc<FakeProjectProvider>,
@@ -272,19 +291,17 @@ struct FakePorts {
 
 impl FakePorts {
     fn new() -> Arc<Self> {
-        let (event_sender, event_receiver) = mpsc::channel(8);
         Arc::new(Self {
             attachment_bind_calls: AtomicUsize::new(0),
             attachment_release_calls: AtomicUsize::new(0),
-            event_sender: event_sender.clone(),
             for_project_calls: AtomicUsize::new(0),
             models_calls: AtomicUsize::new(0),
             project_provider: Arc::new(FakeProjectProvider {
-                event_receiver: Mutex::new(Some(event_receiver)),
-                event_sender: event_sender.clone(),
+                event_subscribers: Mutex::new(Vec::new()),
                 fail_start_turn: AtomicBool::new(false),
                 start_task_input: Mutex::new(None),
                 start_turn_input: Mutex::new(None),
+                subscription_modes: Mutex::new(Vec::new()),
                 unsubscribe_calls: AtomicUsize::new(0),
             }),
             release_calls: AtomicUsize::new(0),
@@ -605,7 +622,7 @@ async fn project_context_should_initialize_once_and_forward_events() {
     right.expect("right list");
     assert_eq!(fake.for_project_calls.load(Ordering::SeqCst), 1);
 
-    fake.event_sender.send(parse_provider_event(json!({ "itemId": "item-1", "payload": { "delta": "hello" }, "taskId": "task-1", "turnId": "turn-1", "type": "message.delta" })).expect("event")).await.expect("send event");
+    fake.project_provider.publish(parse_provider_event(json!({ "itemId": "item-1", "payload": { "delta": "hello" }, "taskId": "task-1", "turnId": "turn-1", "type": "message.delta" })).expect("event"), false).await;
     tokio::time::sleep(Duration::from_millis(20)).await;
     let EventReplay::Events(events) = runtime
         .replay_project_events("replay", &project_id, "", 0)
@@ -632,16 +649,16 @@ async fn task_snapshot_should_merge_persisted_settings_and_flushed_checkpoint() 
         .list_agent_tasks("initialize", &project_id, json!({}))
         .await
         .expect("initialize context");
-    fake.event_sender
-        .send(
+    fake.project_provider
+        .publish(
             parse_provider_event(json!({
                 "itemId": "message-1", "payload": { "delta": "hello" },
                 "taskId": "task-1", "turnId": "turn-1", "type": "message.delta"
             }))
             .expect("event"),
+            false,
         )
-        .await
-        .expect("send event");
+        .await;
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     let response = runtime
@@ -702,7 +719,7 @@ async fn phase5_shared_fixture_should_match_provider_runtime_delivery() {
         .expect("expected events")
     {
         let event = parse_provider_event(expected.clone()).expect("provider event");
-        fake.event_sender.send(event).await.expect("send event");
+        fake.project_provider.publish(event, false).await;
     }
     tokio::time::sleep(Duration::from_millis(20)).await;
 
@@ -753,6 +770,23 @@ async fn phase5_shared_fixture_should_match_provider_runtime_delivery() {
 }
 
 #[tokio::test]
+async fn project_event_stream_should_exclude_ephemeral_tasks() {
+    let fake = FakePorts::new();
+    let runtime = runtime(fake.clone());
+    let project_id = ProjectId::try_from("project-1").expect("project id");
+
+    runtime
+        .list_agent_tasks("initialize-events", &project_id, json!({}))
+        .await
+        .expect("initialize project events");
+
+    assert_eq!(
+        *fake.project_provider.subscription_modes.lock().await,
+        vec![false]
+    );
+}
+
+#[tokio::test]
 async fn commit_message_should_use_ephemeral_read_only_turn_and_cleanup() {
     let fake = FakePorts::new();
     let runtime = runtime(fake.clone());
@@ -798,6 +832,18 @@ async fn commit_message_should_use_ephemeral_read_only_turn_and_cleanup() {
             .load(Ordering::SeqCst),
         1
     );
+    assert_eq!(
+        *fake.project_provider.subscription_modes.lock().await,
+        vec![false, true]
+    );
+    let EventReplay::Events(events) = runtime
+        .replay_project_events("commit-message-replay", &project_id, "", 0)
+        .await
+        .expect("replay project events")
+    else {
+        panic!("expected events replay")
+    };
+    assert!(events.is_empty());
 }
 
 #[tokio::test]
