@@ -56,35 +56,6 @@ function createLongHistoryResponse() {
   };
 }
 
-function createPathologicalTurnResponse() {
-  const { items } = performanceBudgets.pathologicalTurn;
-  return {
-    checkpoint: { sequence: 0, sessionId: "e2e-session" },
-    snapshot: {
-      ...taskSnapshot,
-      status: "running" as const,
-      title: "One Turn with 10,000 tool items",
-      turns: [
-        {
-          completedAt: null,
-          error: null,
-          id: "pathological-turn",
-          items: Array.from({ length: items }, (_, itemIndex) => ({
-            id: `pathological-tool-${String(itemIndex)}`,
-            input: { itemIndex },
-            name: `pathological_tool_${String(itemIndex)}`,
-            status: "completed" as const,
-            type: "tool" as const,
-          })),
-          startedAt: timestamp,
-          status: "running" as const,
-        },
-      ],
-      updatedAt: timestamp,
-    },
-  };
-}
-
 async function installBrowserProbes(
   page: Page,
   samples: number,
@@ -421,74 +392,4 @@ test("measures Timeline DOM, paint, interaction, memory and realtime latency", a
   expect(stageLatency.endToEnd.p99).toBeLessThan(
     performanceBudgets.realtimePipeline.maxEndToEndP99Ms,
   );
-});
-
-test("bounds DOM and commit cost for one Turn with 10,000 tool items", async ({ page }) => {
-  const { items } = performanceBudgets.pathologicalTurn;
-  await page.addInitScript(() => {
-    const state = { longTasks: [] as number[], startedAt: performance.now() };
-    Reflect.set(globalThis, "__CODE_AGENT_PATHOLOGICAL_TURN_PROBE__", state);
-    new PerformanceObserver((list) => {
-      state.longTasks.push(...list.getEntries().map((entry) => entry.duration));
-    }).observe({ entryTypes: ["longtask"] });
-  });
-  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      json: createPathologicalTurnResponse(),
-    });
-  });
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Performance.enable");
-  await cdp.send("HeapProfiler.enable");
-  const initialMetrics = (await cdp.send("Performance.getMetrics")).metrics;
-  const initialHeap = metric(initialMetrics, "JSHeapUsedSize");
-  const initialCpu = metric(initialMetrics, "TaskDuration");
-
-  await page.goto("/p/code-agent/t/task-1");
-  const conversation = page.getByRole("log", { name: "会话内容" });
-  await expect(conversation).toBeVisible();
-  await expect(
-    conversation.getByText(`pathological_tool_${String(items - 1)}`, { exact: true }),
-  ).toBeVisible();
-
-  const mountedItems = await conversation
-    .locator("[data-conversation-nested-virtual-item]")
-    .count();
-  const peakMetrics = (await cdp.send("Performance.getMetrics")).metrics;
-  const heapGrowth = metric(peakMetrics, "JSHeapUsedSize") - initialHeap;
-  const cpuDurationMs = (metric(peakMetrics, "TaskDuration") - initialCpu) * 1_000;
-  await cdp.send("HeapProfiler.collectGarbage");
-  const dom = await cdp.send("Memory.getDOMCounters");
-  const retainedMetrics = (await cdp.send("Performance.getMetrics")).metrics;
-  const gcRetainedBytes = metric(retainedMetrics, "JSHeapUsedSize") - initialHeap;
-  const browserState = await page.evaluate(() => {
-    const state = Reflect.get(globalThis, "__CODE_AGENT_PATHOLOGICAL_TURN_PROBE__") as {
-      longTasks: number[];
-      startedAt: number;
-    };
-    return {
-      hydrationMs: performance.now() - state.startedAt,
-      maxLongTaskMs: Math.max(0, ...state.longTasks),
-    };
-  });
-
-  console.info("Chromium pathological Turn performance", {
-    ...browserState,
-    cpuDurationMs,
-    domNodes: dom.nodes,
-    gcRetainedBytes,
-    heapGrowth,
-    mountedItems,
-  });
-  expect(mountedItems).toBeGreaterThan(0);
-  expect(mountedItems).toBeLessThanOrEqual(performanceBudgets.pathologicalTurn.maxMountedItems);
-  expect(dom.nodes).toBeLessThan(performanceBudgets.pathologicalTurn.maxDomNodes);
-  expect(browserState.hydrationMs).toBeLessThan(performanceBudgets.pathologicalTurn.maxHydrationMs);
-  expect(browserState.maxLongTaskMs).toBeLessThan(
-    performanceBudgets.pathologicalTurn.maxLongTaskMs,
-  );
-  expect(cpuDurationMs).toBeLessThan(performanceBudgets.pathologicalTurn.maxCpuDurationMs);
-  expect(heapGrowth).toBeLessThan(performanceBudgets.pathologicalTurn.maxHeapGrowthBytes);
-  expect(gcRetainedBytes).toBeLessThan(performanceBudgets.pathologicalTurn.maxGcRetainedBytes);
 });

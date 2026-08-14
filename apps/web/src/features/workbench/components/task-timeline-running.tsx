@@ -33,20 +33,6 @@ export function shouldRenderTimelineItem(item: AgentItem): boolean {
   );
 }
 
-export function shouldRenderTimelineHistoryItem(
-  item: AgentItem,
-  isLastTurnItem: boolean,
-  turnStatus: AgentTurn["status"],
-): boolean {
-  // 瞬时活动只供底部运行状态读取，不能占用二级虚拟列表的稳定历史槽位。
-  if (item.type === "activity" && item.visibility === "running_only") return false;
-  // 只让当前流式 Reasoning 保留占位；历史空摘要不会产生任何可见内容。
-  if (item.type === "reasoning" && item.summary.trim().length === 0) {
-    return turnStatus === "running" && isLastTurnItem;
-  }
-  return true;
-}
-
 export function getCommandLabel(command: string): string {
   return command === PENDING_COMMAND_LABEL
     ? i18n.t("timeline.commandPending", { ns: "conversation" })
