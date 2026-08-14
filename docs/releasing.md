@@ -35,8 +35,7 @@ GitHub 必须存在 `npm` Environment。工作流使用 OIDC 和 npm provenance�
 3. 运行版本与完整门禁：
 
 ```bash
-pnpm run release:version:check
-pnpm check
+pnpm check:ci
 pnpm check:rust
 pnpm test:e2e
 pnpm --filter @code-agent/desktop build

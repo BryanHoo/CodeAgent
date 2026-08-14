@@ -29,11 +29,13 @@ describe("Tauri Phase 7 repository contract", () => {
     expect(manifest.private).toBe(true);
   });
 
-  it("defines native build and Phase 7 gate scripts", () => {
+  it("defines the native build and relies on the unified repository test gate", () => {
     const manifest = JSON.parse(read("package.json")) as { scripts?: Record<string, string> };
+    const vitestConfig = read("vitest.config.ts");
 
     expect(manifest.scripts?.["build:native"]).toContain("build-native-addon.mjs");
-    expect(manifest.scripts?.["tauri:phase7:check"]).toContain("tauri-phase-7.test.ts");
+    expect(manifest.scripts?.["tauri:phase7:check"]).toBeUndefined();
+    expect(vitestConfig).toContain('"tests/*.test.ts"');
   });
 
   it("exposes a named Node Engine lifecycle without a generic dispatcher", () => {
