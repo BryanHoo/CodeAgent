@@ -94,6 +94,7 @@ export const AgentActivityItemSchema = Type.Object(
     label: Type.String({ minLength: 1 }),
     status: Type.Optional(AgentItemStatusSchema),
     type: Type.Literal("activity"),
+    visibility: Type.Optional(Type.Literal("running_only")),
   },
   { additionalProperties: false },
 );

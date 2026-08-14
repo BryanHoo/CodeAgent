@@ -304,7 +304,12 @@ pub(crate) fn map_codex_item_with_nicknames(
                 "imageGeneration" => "图片生成",
                 _ => "协作代理",
             };
-            Ok(json!({ "id": id, "label": label, "type": "activity" }))
+            let mut mapped = json!({ "id": id, "label": label, "type": "activity" });
+            if kind == "contextCompaction" {
+                // 压缩完成后只保留事件终态，不把运行提示写入后续时间线。
+                mapped["visibility"] = Value::String("running_only".to_string());
+            }
+            Ok(mapped)
         }
         _ => Ok(json!({
             "detail": format!("未识别的活动类型: {kind}"),

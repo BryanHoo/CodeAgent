@@ -1689,6 +1689,10 @@
                               "type": {
                                 "const": "activity",
                                 "type": "string"
+                              },
+                              "visibility": {
+                                "const": "running_only",
+                                "type": "string"
                               }
                             }
                           },
@@ -2934,6 +2938,10 @@
                         "type": {
                           "const": "activity",
                           "type": "string"
+                        },
+                        "visibility": {
+                          "const": "running_only",
+                          "type": "string"
                         }
                       }
                     },
@@ -3790,6 +3798,10 @@
                         },
                         "type": {
                           "const": "activity",
+                          "type": "string"
+                        },
+                        "visibility": {
+                          "const": "running_only",
                           "type": "string"
                         }
                       }
@@ -4681,6 +4693,10 @@
                               },
                               "type": {
                                 "const": "activity",
+                                "type": "string"
+                              },
+                              "visibility": {
+                                "const": "running_only",
                                 "type": "string"
                               }
                             }
@@ -8872,6 +8888,10 @@
                         "type": {
                           "const": "activity",
                           "type": "string"
+                        },
+                        "visibility": {
+                          "const": "running_only",
+                          "type": "string"
                         }
                       }
                     },
@@ -10616,6 +10636,10 @@
                             "type": {
                               "const": "activity",
                               "type": "string"
+                            },
+                            "visibility": {
+                              "const": "running_only",
+                              "type": "string"
                             }
                           }
                         },
@@ -11516,6 +11540,10 @@
                   },
                   "type": {
                     "const": "activity",
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "const": "running_only",
                     "type": "string"
                   }
                 }
@@ -13081,6 +13109,10 @@
                                   "type": {
                                     "const": "activity",
                                     "type": "string"
+                                  },
+                                  "visibility": {
+                                    "const": "running_only",
+                                    "type": "string"
                                   }
                                 }
                               },
@@ -14526,6 +14558,10 @@
                             "type": {
                               "const": "activity",
                               "type": "string"
+                            },
+                            "visibility": {
+                              "const": "running_only",
+                              "type": "string"
                             }
                           }
                         },
@@ -15407,6 +15443,10 @@
                             },
                             "type": {
                               "const": "activity",
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "const": "running_only",
                               "type": "string"
                             }
                           }
@@ -16323,6 +16363,10 @@
                                   },
                                   "type": {
                                     "const": "activity",
+                                    "type": "string"
+                                  },
+                                  "visibility": {
+                                    "const": "running_only",
                                     "type": "string"
                                   }
                                 }
