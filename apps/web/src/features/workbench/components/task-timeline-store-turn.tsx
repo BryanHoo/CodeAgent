@@ -2,17 +2,12 @@ import type { AgentItem, AgentTurn } from "@code-agent/protocol";
 import { useState } from "react";
 import { useStore } from "zustand";
 
-import { ConversationNestedVirtualList } from "../../../shared/components/agent/conversation.js";
 import { Message, type MessageFileReference } from "../../../shared/components/agent/message.js";
 import type { NormalizedAgentTurn, TaskStore } from "../../conversation/runtime/task-store.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { BuildPlanAction, ForkTaskAction } from "./task-timeline-contracts.js";
 import { ChangedFilesCard } from "./task-timeline-file-changes.js";
-import {
-  RunningReplyStatus,
-  shouldRenderTimelineHistoryItem,
-  shouldRenderTimelineItem,
-} from "./task-timeline-running.js";
+import { RunningReplyStatus, shouldRenderTimelineItem } from "./task-timeline-running.js";
 import {
   StoredLiveFileChanges as LiveFileChanges,
   StoredRunningReplyStatus,
@@ -25,9 +20,6 @@ import {
   TurnProcessingTime,
   getMessageTimestamp,
 } from "./task-timeline-status.js";
-
-const ITEM_VIRTUALIZATION_THRESHOLD = 40;
-const getItemIdKey = (itemId: string) => itemId;
 
 export function resolveCompletedTurnProcessItemIds(
   items: readonly AgentItem[],
@@ -47,62 +39,6 @@ export function resolveCompletedTurnProcessItemIds(
     // Reasoning 摘要与运行操作都属于可折叠过程；File Change 继续由最终摘要统一展示。
     return item.type === "file_change" || item.type === "review" ? [] : [item.id];
   });
-}
-
-function StoredTimelineItemWindow({
-  itemIds,
-  lastTurnItemId,
-  onBuildPlan,
-  onOpenFileDiff,
-  onOpenSourceFile,
-  projectId,
-  store,
-  taskId,
-  turnStatus,
-}: Readonly<{
-  itemIds: readonly string[];
-  lastTurnItemId: string | undefined;
-  onBuildPlan?: BuildPlanAction;
-  onOpenFileDiff: (change: AgentFileChange) => void;
-  onOpenSourceFile: (reference: MessageFileReference) => void;
-  projectId: string;
-  store: TaskStore;
-  taskId: string;
-  turnStatus: AgentTurn["status"];
-}>) {
-  const itemStoresById = store.getState().itemStoresById;
-  const historyItemIds = itemIds.filter((itemId) => {
-    const item = itemStoresById.get(itemId)?.peek();
-    return (
-      item === undefined ||
-      shouldRenderTimelineHistoryItem(item, itemId === lastTurnItemId, turnStatus)
-    );
-  });
-  const renderItem = (itemId: string) => (
-    <StoredTimelineItemContent
-      isLastTurnItem={itemId === lastTurnItemId}
-      itemId={itemId}
-      key={itemId}
-      {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
-      onOpenFileDiff={onOpenFileDiff}
-      onOpenSourceFile={onOpenSourceFile}
-      projectId={projectId}
-      store={store}
-      taskId={taskId}
-      turnStatus={turnStatus}
-    />
-  );
-
-  if (historyItemIds.length <= ITEM_VIRTUALIZATION_THRESHOLD) {
-    return historyItemIds.map(renderItem);
-  }
-  return (
-    <ConversationNestedVirtualList
-      getItemKey={getItemIdKey}
-      items={historyItemIds}
-      renderItem={renderItem}
-    />
-  );
 }
 
 function StoredAssistantGroup({
@@ -179,17 +115,20 @@ function StoredAssistantGroup({
       ) : null}
       {visibleItemIds.length > 0 || liveFileChangesDiff !== undefined || showRunningShimmer ? (
         <div className="w-full space-y-4">
-          <StoredTimelineItemWindow
-            itemIds={visibleItemIds}
-            lastTurnItemId={lastTurnItemId}
-            {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
-            onOpenFileDiff={onOpenFileDiff}
-            onOpenSourceFile={onOpenSourceFile}
-            projectId={projectId}
-            store={store}
-            taskId={taskId}
-            turnStatus={turn.status}
-          />
+          {visibleItemIds.map((itemId) => (
+            <StoredTimelineItemContent
+              isLastTurnItem={itemId === lastTurnItemId}
+              itemId={itemId}
+              key={itemId}
+              {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
+              onOpenFileDiff={onOpenFileDiff}
+              onOpenSourceFile={onOpenSourceFile}
+              projectId={projectId}
+              store={store}
+              taskId={taskId}
+              turnStatus={turn.status}
+            />
+          ))}
           {/* Turn 级 Diff 必须先于持续运行状态，确保 Shimmer 始终是回复最后一行。 */}
           {liveFileChangesDiff === undefined ? null : (
             <LiveFileChanges diff={liveFileChangesDiff} itemIds={itemIds} store={store} />
