@@ -5,7 +5,11 @@ mod lifecycle;
 mod platform_adapters;
 mod process_environment;
 
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use code_agent_core::{
     AttachmentPort, ClockPort, FilePort, GitPort, ProviderPort, RepositoryPort, UpdatePort,
@@ -42,7 +46,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let codex_home = codex_home(app)?;
-            let data_root = desktop_data_root(app)?;
+            let data_root = code_agent_data_root(&app.path().home_dir()?);
             std::fs::create_dir_all(&data_root)?;
             let temporary_project_root = data_root.join("temporary-workspace");
             std::fs::create_dir_all(&temporary_project_root)?;
@@ -207,13 +211,9 @@ fn allowed_navigation(url: &tauri::Url) -> bool {
         && url.port() == Some(5173)
 }
 
-fn desktop_data_root<R: tauri::Runtime>(
-    app: &tauri::App<R>,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    if let Some(codex_home) = std::env::var_os("CODEX_HOME") {
-        return Ok(PathBuf::from(codex_home).join("code-agent"));
-    }
-    Ok(app.path().app_data_dir()?.join("code-agent"))
+fn code_agent_data_root(home: &Path) -> PathBuf {
+    // 自有数据不跟随 CODEX_HOME，避免 CLI 与 Desktop 启动时打开不同状态目录。
+    home.join(".code-agent")
 }
 
 fn codex_home<R: tauri::Runtime>(
@@ -226,7 +226,16 @@ fn codex_home<R: tauri::Runtime>(
 
 #[cfg(test)]
 mod tests {
-    use super::allowed_navigation;
+    use std::path::Path;
+
+    use super::{allowed_navigation, code_agent_data_root};
+
+    #[test]
+    fn code_agent_data_root_is_hidden_directory_under_user_home() {
+        let home = Path::new("user-home");
+
+        assert_eq!(code_agent_data_root(home), home.join(".code-agent"));
+    }
 
     #[test]
     fn navigation_guard_rejects_remote_origins() {

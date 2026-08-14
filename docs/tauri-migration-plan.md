@@ -47,7 +47,7 @@
 - `packages/provider-codex` 负责 Codex binary 定位、App Server 子进程和 RPC 映射。
 - `packages/protocol` 的 TypeBox Schema 是 Web、HTTP 和 Agent Event v2 的运行时协议边界。
 - `apps/node-cli/src/cli-command.ts` 负责 Rust Engine、Fastify Delivery、端口、更新、浏览器和关闭顺序的最终装配。
-- SQLite 使用 WAL、`foreign_keys=ON`、`synchronous=NORMAL` 和 `busy_timeout=5000`，数据库位于 `$CODEX_HOME/code-agent/state.sqlite3`。
+- SQLite 使用 WAL、`foreign_keys=ON`、`synchronous=NORMAL` 和 `busy_timeout=5000`，Node CLI 与 Desktop 共用 `~/.code-agent/state.sqlite3`；`CODEX_HOME` 只控制 Codex 配置。
 - Agent Event 已包含 `sessionId`、`sequence`、有界历史、Delta 合并、Checkpoint 和 Snapshot 重同步语义。
 
 这些协议和行为是迁移验收基线，但现有 TypeScript Runtime 不是最终兼容层。某项能力切换到 Rust 后，必须删除对应 TypeScript 实现。

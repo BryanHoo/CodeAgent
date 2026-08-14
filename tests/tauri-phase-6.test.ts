@@ -53,6 +53,17 @@ describe("Tauri Phase 6 repository contract", () => {
     expect(combined).not.toContain("host.files_select");
   });
 
+  it("keeps Node CLI and Desktop on one data root across host restarts", () => {
+    const cli = read("apps/node-cli/src/cli-command.ts");
+    const desktop = read("apps/desktop/src-tauri/src/lib.rs");
+
+    expect(cli).toContain('join(homedir(), ".code-agent")');
+    expect(desktop).toContain('home.join(".code-agent")');
+    expect(cli).not.toMatch(/join\(codexHome,\s*"code-agent"/u);
+    expect(desktop).not.toContain("app_data_dir()");
+    expect(desktop).not.toMatch(/CODEX_HOME[\s\S]{0,120}join\("code-agent"\)/u);
+  });
+
   it("rejects remote navigation and release DevTools", () => {
     const desktop = read("apps/desktop/src-tauri/src/lib.rs");
     const manifest = read("apps/desktop/src-tauri/Cargo.toml");

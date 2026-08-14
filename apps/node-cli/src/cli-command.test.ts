@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { CodeAgentEngine } from "@code-agent/engine-node";
@@ -113,7 +113,7 @@ describe("runCli", () => {
     expect(unsupported.stderr.join("")).toContain("需要 Node.js 24 或更高版本");
   });
 
-  it("opens the Rust Engine for doctor diagnostics and closes it", async () => {
+  it("keeps CodeAgent data in the user home when Codex uses a custom home", async () => {
     const harness = createHarness();
     await expect(
       runCli(
@@ -127,12 +127,15 @@ describe("runCli", () => {
     });
     expect(harness.dependencies.createEngine).toHaveBeenCalledWith({
       appVersion: "1.2.3",
-      attachmentRoot: join("/custom/home", "code-agent", "attachments"),
+      attachmentRoot: join(homedir(), ".code-agent", "attachments"),
       codexHome: "/custom/home",
       codexPath: "/fake/codex",
-      databasePath: join("/custom/home", "code-agent", "state.sqlite3"),
-      temporaryWorkspace: join("/custom/home", "code-agent", "temporary-workspace"),
+      databasePath: join(homedir(), ".code-agent", "state.sqlite3"),
+      temporaryWorkspace: join(homedir(), ".code-agent", "temporary-workspace"),
     });
+    expect(harness.stdout.join("")).toContain(
+      `SQLite 可写 (${join(homedir(), ".code-agent", "state.sqlite3")})`,
+    );
     expect(harness.stdout.join("")).toContain("Codex 0.147.0 (/fake/codex)");
     expect(harness.stdout.join("")).toContain("SQLite migration 4");
     expect(harness.engineClose).toHaveBeenCalledOnce();
