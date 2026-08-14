@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 系统 App Sandbox 保持关闭，任务隔离由 Codex sandboxPolicy 独立控制。 -->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+</dict>
+</plist>

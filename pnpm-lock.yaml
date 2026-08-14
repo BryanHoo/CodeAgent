@@ -382,8 +382,6 @@ importers:
 
   packages/node-binding-darwin-arm64: {}
 
-  packages/node-binding-darwin-x64: {}
-
   packages/node-binding-linux-x64-gnu: {}
 
   packages/node-binding-win32-x64-msvc: {}

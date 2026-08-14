@@ -15,11 +15,6 @@ const BUNDLED_TARGETS: Readonly<Record<string, BundledTarget>> = {
     packageName: "@openai/codex-darwin-arm64",
     triple: "aarch64-apple-darwin",
   },
-  "darwin-x64": {
-    executable: "codex",
-    packageName: "@openai/codex-darwin-x64",
-    triple: "x86_64-apple-darwin",
-  },
   "linux-arm64": {
     executable: "codex",
     packageName: "@openai/codex-linux-arm64",

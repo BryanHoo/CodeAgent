@@ -329,7 +329,7 @@ Tauri 实现：
 - Phase 6：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-6-desktop-security.md`。
 - Phase 7：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-7-node-engine.md`。
 - Phase 8：已完成，执行记录见 `.superwork/plans/2026-08-13-tauri-phase-8-release-workspace.md`。
-- Phase 9：待开始。
+- Phase 9：进行中；签名 Updater 与 macOS 14+ Apple Silicon Developer ID 签名、公证门禁已完成，Windows 签名和 Linux clean VM 验证待完成。
 
 Phase 4–8 的持续仓库契约统一由 `pnpm test` 收集；Rust、Desktop artifact 和发布结构检查只在对应边界改动时额外触发。
 
@@ -529,7 +529,7 @@ Phase 4–8 的持续仓库契约统一由 `pnpm test` 收集；Rust、Desktop a
 
 实施项：
 
-- macOS 配置 Developer ID、Hardened Runtime、签名和 notarization。
+- macOS 14+ Apple Silicon 配置 Developer ID、Hardened Runtime、最小权限 entitlements、签名、notarization 和 Gatekeeper 门禁。
 - Windows 配置 OV/EV code signing 和时间戳服务。
 - Linux 在最低支持系统上构建，验证 WebKitGTK 4.1、glibc 和安装依赖。
 - 配置 `tauri-plugin-updater`、HTTPS endpoint、public key 和 updater capability。
@@ -640,7 +640,6 @@ pnpm test:e2e
 | Runner      | Target                     | 产物                                  |
 | ----------- | -------------------------- | ------------------------------------- |
 | macOS arm64 | `aarch64-apple-darwin`     | `.app`、`.dmg`、updater artifact      |
-| macOS x64   | `x86_64-apple-darwin`      | `.app`、`.dmg`、updater artifact      |
 | Windows x64 | `x86_64-pc-windows-msvc`   | `.msi`、NSIS `.exe`、updater artifact |
 | Linux x64   | `x86_64-unknown-linux-gnu` | `.deb`、`.rpm`、`.AppImage`           |
 
@@ -657,7 +656,8 @@ pnpm test:e2e
 - [ ] IPC 输入在进入 Core 前通过长度、Schema 和语义校验。
 - [ ] Custom URI protocol 只接受 opaque ID，拒绝原始绝对路径和 traversal。
 - [ ] Production 禁用 DevTools，CSP 不包含无必要的 `unsafe-eval`。
-- [ ] updater 只使用 HTTPS、签名 artifact 和受保护 private key。
+- [x] updater 只使用 HTTPS、签名 artifact 和受保护 private key。
+- [x] macOS 仅发布 14+ Apple Silicon artifact，并在 release runner 验证 Developer ID、notarization ticket 和 Gatekeeper。
 - [ ] npm、Cargo 和 GitHub Actions 同时执行依赖审计与 lockfile 校验。
 
 ## 15. 可观测性与故障诊断

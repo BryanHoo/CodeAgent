@@ -91,6 +91,16 @@
     "maxNapiRssGrowthBytes": 33554432,
     "maxWebSocketRssGrowthBytes": 201326592
   },
+  "pathologicalTurn": {
+    "items": 10000,
+    "maxCpuDurationMs": 1500,
+    "maxDomNodes": 4000,
+    "maxGcRetainedBytes": 50331648,
+    "maxHeapGrowthBytes": 67108864,
+    "maxHydrationMs": 1500,
+    "maxLongTaskMs": 100,
+    "maxMountedItems": 32
+  },
   "realtimePipeline": {
     "maxEndToEndP50Ms": 50,
     "maxEndToEndP95Ms": 100,

@@ -37,6 +37,9 @@ type ConversationContextValue = Readonly<{
 const ConversationContext = createContext<ConversationContextValue | null>(null);
 const CONVERSATION_INITIAL_RECT = { height: 768, width: 1_024 };
 const DEFAULT_TURN_ESTIMATED_HEIGHT_PX = 300;
+const DEFAULT_NESTED_ITEM_ESTIMATED_HEIGHT_PX = 44;
+const NESTED_ITEM_GAP_PX = 16;
+const NESTED_ITEM_OVERSCAN = 6;
 const TURN_GAP_PX = 24;
 const TURN_OVERSCAN = 3;
 
@@ -243,6 +246,101 @@ export function ConversationVirtualList<TItem>({
       {footer === undefined ? null : (
         <div className={items.length === 0 ? "space-y-6" : "mt-6 space-y-6"}>{footer}</div>
       )}
+    </div>
+  );
+}
+
+export type ConversationNestedVirtualListProps<TItem> = Readonly<{
+  estimateSize?: (item: TItem, index: number) => number;
+  getItemKey: (item: TItem, index: number) => Key;
+  items: readonly TItem[];
+  renderItem: (item: TItem, index: number) => ReactNode;
+}>;
+
+export function ConversationNestedVirtualList<TItem>({
+  estimateSize,
+  getItemKey,
+  items,
+  renderItem,
+}: ConversationNestedVirtualListProps<TItem>) {
+  const context = useConversationContext();
+  const listRef = useRef<HTMLDivElement>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+  const getScrollElement = useCallback(() => context.containerRef.current, [context.containerRef]);
+  const estimateItemSize = useCallback(
+    (index: number) =>
+      estimateSize?.(items[index] as TItem, index) ?? DEFAULT_NESTED_ITEM_ESTIMATED_HEIGHT_PX,
+    [estimateSize, items],
+  );
+  const getNestedItemKey = useCallback(
+    (index: number) => getItemKey(items[index] as TItem, index),
+    [getItemKey, items],
+  );
+  const updateScrollMargin = useCallback(() => {
+    const list = listRef.current;
+    const scrollElement = context.containerRef.current;
+    if (list === null || scrollElement === null) return;
+
+    // 嵌套列表与 Turn 共用滚动容器，必须把自身文档位置传给 Virtualizer 才能命中正确窗口。
+    const nextMargin =
+      list.getBoundingClientRect().top -
+      scrollElement.getBoundingClientRect().top +
+      scrollElement.scrollTop;
+    setScrollMargin((currentMargin) =>
+      Math.abs(currentMargin - nextMargin) < 0.5 ? currentMargin : nextMargin,
+    );
+  }, [context.containerRef]);
+  const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+    anchorTo: "end",
+    count: items.length,
+    estimateSize: estimateItemSize,
+    followOnAppend: "auto",
+    gap: NESTED_ITEM_GAP_PX,
+    getItemKey: getNestedItemKey,
+    getScrollElement,
+    initialRect: CONVERSATION_INITIAL_RECT,
+    overscan: NESTED_ITEM_OVERSCAN,
+    scrollMargin,
+  });
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const scrollElement = context.containerRef.current;
+    if (list === null || scrollElement === null) return;
+
+    updateScrollMargin();
+    const resizeObserver = new ResizeObserver(updateScrollMargin);
+    resizeObserver.observe(list);
+    const conversationContent = scrollElement.firstElementChild;
+    if (conversationContent !== null) resizeObserver.observe(conversationContent);
+    scrollElement.addEventListener("scroll", updateScrollMargin, { passive: true });
+    return () => {
+      resizeObserver.disconnect();
+      scrollElement.removeEventListener("scroll", updateScrollMargin);
+    };
+  }, [context.containerRef, updateScrollMargin]);
+
+  return (
+    <div
+      className="relative w-full"
+      data-conversation-nested-virtual-list=""
+      ref={listRef}
+      style={{ height: virtualizer.getTotalSize() }}
+    >
+      {virtualizer.getVirtualItems().map((virtualItem) => (
+        <div
+          className="absolute left-0 top-0 w-full"
+          data-conversation-nested-virtual-item=""
+          data-index={virtualItem.index}
+          key={virtualItem.key}
+          ref={virtualizer.measureElement}
+          style={{
+            transform: `translateY(${String(virtualItem.start - scrollMargin)}px)`,
+          }}
+        >
+          {renderItem(items[virtualItem.index] as TItem, virtualItem.index)}
+        </div>
+      ))}
     </div>
   );
 }

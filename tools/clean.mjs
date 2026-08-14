@@ -18,7 +18,6 @@ await Promise.all(
     "packages/protocol/tsconfig.tsbuildinfo",
     "packages/server/tsconfig.tsbuildinfo",
     "packages/node-binding-darwin-arm64/code-agent-node-binding.node",
-    "packages/node-binding-darwin-x64/code-agent-node-binding.node",
     "packages/node-binding-linux-x64-gnu/code-agent-node-binding.node",
     "packages/node-binding-win32-x64-msvc/code-agent-node-binding.node",
     "tests/tsconfig.tsbuildinfo",

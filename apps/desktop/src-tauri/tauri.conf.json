@@ -37,6 +37,11 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "externalBin": [],
+    "macOS": {
+      "entitlements": "./Entitlements.plist",
+      "hardenedRuntime": true,
+      "minimumSystemVersion": "14.0"
+    },
     "resources": {
       "resources/codex-runtime/": "codex-runtime/"
     },

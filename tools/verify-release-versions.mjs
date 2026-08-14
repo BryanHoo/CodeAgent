@@ -14,7 +14,6 @@ const tauriConfig = readJson("apps/desktop/src-tauri/tauri.conf.json");
 const versionedPackages = [
   "apps/node-cli/package.json",
   "packages/node-binding-darwin-arm64/package.json",
-  "packages/node-binding-darwin-x64/package.json",
   "packages/node-binding-linux-x64-gnu/package.json",
   "packages/node-binding-win32-x64-msvc/package.json",
 ];

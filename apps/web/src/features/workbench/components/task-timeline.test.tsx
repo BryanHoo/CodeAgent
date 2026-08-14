@@ -1208,6 +1208,34 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("contain-intrinsic-size:auto_300px");
   });
 
+  it("virtualizes items inside one pathological Turn", () => {
+    const pathologicalSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          ...completedTurn,
+          completedAt: null,
+          items: Array.from({ length: 1_000 }, (_, index) => ({
+            id: `tool-pathological-${String(index)}`,
+            input: { index },
+            name: `pathological_tool_${String(index)}`,
+            status: "completed" as const,
+            type: "tool" as const,
+          })),
+          status: "running",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={pathologicalSnapshot} />);
+    const mountedItems = markup.match(/data-conversation-nested-virtual-item=""/g) ?? [];
+
+    expect(markup).toContain('data-conversation-nested-virtual-list=""');
+    expect(mountedItems.length).toBeGreaterThan(0);
+    expect(mountedItems.length).toBeLessThan(100);
+  });
+
   it("renders only the raw failed turn error after its partial assistant reply", () => {
     const failedSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
@@ -1726,6 +1754,20 @@ describe("TaskSnapshotTimeline", () => {
           ...completedTurn,
           completedAt: null,
           items: [
+            ...Array.from({ length: 41 }, (_, index) => [
+              {
+                id: `tool-before-compaction-${String(index)}`,
+                name: `tool_${String(index)}`,
+                status: "completed" as const,
+                type: "tool" as const,
+              },
+              {
+                content: "internal reasoning",
+                id: `reasoning-without-summary-${String(index)}`,
+                summary: "",
+                type: "reasoning" as const,
+              },
+            ]).flat(),
             {
               id: "activity-context-compaction",
               label: "上下文压缩",
@@ -1743,6 +1785,11 @@ describe("TaskSnapshotTimeline", () => {
 
     expect(markup).toContain("上下文压缩");
     expect(markup).toContain('aria-label="AI 回复正在运行：上下文压缩"');
+    expect(markup).toContain('data-conversation-nested-virtual-list=""');
+    expect(markup).not.toContain('data-ai-task=""');
+    expect(markup.match(/data-conversation-nested-virtual-item=""/gu)).toHaveLength(
+      markup.match(/group\/tool/gu)?.length ?? 0,
+    );
   });
 
   it("does not retain completed context compaction after the final answer", () => {

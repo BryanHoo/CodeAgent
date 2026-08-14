@@ -13,10 +13,6 @@ const TARGETS = {
     package: "@openai/codex-darwin-arm64",
     triple: "aarch64-apple-darwin",
   },
-  "darwin-x64": {
-    package: "@openai/codex-darwin-x64",
-    triple: "x86_64-apple-darwin",
-  },
   "linux-arm64": {
     package: "@openai/codex-linux-arm64",
     triple: "aarch64-unknown-linux-musl",

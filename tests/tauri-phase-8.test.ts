@@ -16,7 +16,7 @@ interface PackageManifest {
   readonly version?: string;
 }
 
-const nativePackages = ["darwin-arm64", "darwin-x64", "linux-x64-gnu", "win32-x64-msvc"] as const;
+const nativePackages = ["darwin-arm64", "linux-x64-gnu", "win32-x64-msvc"] as const;
 
 describe("Tauri Phase 8 repository contract", () => {
   it("keeps the root package private and publishes only apps/node-cli", () => {
@@ -55,6 +55,24 @@ describe("Tauri Phase 8 repository contract", () => {
     expect(manifest.files).toContain("code-agent-node-binding.node");
   });
 
+  it("removes Intel macOS from product-owned native paths", () => {
+    const productTargetFiles = [
+      "apps/desktop/scripts/prepare-codex-binary.mjs",
+      "packages/engine-node/src/codex-binary.ts",
+      "packages/engine-node/src/native-binding.ts",
+      "pnpm-workspace.yaml",
+      "tools/build-native-addon.mjs",
+      "tools/clean.mjs",
+      "tools/verify-package.mjs",
+      "tools/verify-release-versions.mjs",
+    ];
+    const targetConfiguration = productTargetFiles.map(read).join("\n");
+
+    expect(existsSync(resolve(root, "packages/node-binding-darwin-x64"))).toBe(false);
+    expect(targetConfiguration).not.toContain("darwin-x64");
+    expect(targetConfiguration).not.toContain("x86_64-apple-darwin");
+  });
+
   it("derives the Tauri version from the root product manifest", () => {
     const config = readJson("apps/desktop/src-tauri/tauri.conf.json") as { version?: string };
 
@@ -69,11 +87,11 @@ describe("Tauri Phase 8 repository contract", () => {
     expect(manifest.scripts?.["tauri:phase8:check"]).toBeUndefined();
   });
 
-  it("builds the four verified native and desktop release targets", () => {
+  it("builds the three verified native and desktop release targets", () => {
     const workflow = read(".github/workflows/release.yml");
 
     expect(workflow).toContain("target: darwin-arm64");
-    expect(workflow).toContain("target: darwin-x64");
+    expect(workflow).not.toContain("target: darwin-x64");
     expect(workflow).toContain("target: linux-x64-gnu");
     expect(workflow).toContain("target: win32-x64-msvc");
     expect(workflow).toContain("Publish native packages before the CLI");
