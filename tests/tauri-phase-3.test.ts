@@ -22,7 +22,7 @@ describe("Tauri Phase 3 repository contract", () => {
     expect(generationRunner).toContain("CODE_AGENT_UPDATE_RUST_PROTOCOL");
     expect(generationRunner).toContain("shell: false");
     expect(rootPackage.scripts["protocol:rust:check"]).toContain("--check");
-    expect(rootPackage.scripts["check"]).toContain("protocol:rust:check");
+    expect(rootPackage.scripts["check:ci"]).toContain("protocol:rust:check");
     expect(generator).toContain("TypeSpace::new");
     expect(protocol).toContain('"../../../schemas/code-agent-runtime.schema.json"');
   });

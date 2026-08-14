@@ -35,17 +35,13 @@
 
 ## Verification Checklist
 
-- 所有改动运行 `pnpm check`。
-- Rust Workspace 或 Tauri Desktop 改动额外运行 `pnpm check:rust`；Desktop 壳改动还必须运行 `pnpm --filter @code-agent/desktop build` 生成当前平台未签名 artifact。
-- Phase 4 平台能力改动必须运行 `pnpm run tauri:phase4:check`，禁止无界队列、base64 附件和万能 Command。
-- Phase 5 Provider、Runtime、Desktop Command 或 Tauri Transport 改动必须运行 `pnpm run tauri:phase5:check`；该门禁同时覆盖 Phase 4，并校验 Codex 版本/通知分类、进程安全边界、完整命令注册、Channel 信封和共享实时 fixture。
-- Phase 6 Desktop 宿主、安全、插件、窗口或错误边界改动必须运行 `pnpm run tauri:phase6:check`；该门禁同时覆盖 Phase 4/5，并校验严格 CSP、本地导航、最小 capability、single-instance、幂等关闭和 correlation ID。
-- Phase 8 Workspace、版本、native package 或发布流程改动必须运行 `pnpm run tauri:phase8:check` 和 `pnpm run package:check`；主包不得内嵌 `.node`，必须通过精确版本 `optionalDependencies` 选择平台包。
+- 所有改动运行快速基线 `pnpm check`，统一覆盖格式、Lint、依赖边界、类型和 Vitest；`tests/tauri-phase-*.test.ts` 由该测试入口一次性收集，不再按迁移阶段累积执行。
+- CI 与 npm 发布前运行 `pnpm check:ci`，在快速基线外执行生产依赖审计、Codex Schema 与 Rust Protocol drift、版本一致性、性能、生产构建、Bundle 预算和发布包检查。
+- Rust Workspace 或 Tauri Desktop 改动额外运行 `pnpm check:rust`；Desktop 壳、资源或安全边界改动还必须运行 `pnpm run build:desktop` 和 `pnpm run desktop:artifact:check`。
+- Protocol 或 Codex 适配改动分别运行 `pnpm run protocol:rust:check` 或 `pnpm run codex:schema:check`；升级 Codex 时显式运行 `pnpm run codex:schema:update` 并审查基线差异。
+- Workspace 版本、native package 或发布结构改动运行 `pnpm run release:version:check` 和 `pnpm run package:check`；主包不得内嵌 `.node`，必须通过精确版本 `optionalDependencies` 选择平台包。
 - 根 `build` 只生成 npm 发布所需的 Web 与 Node 产物；Desktop UI 和安装包分别使用 `build:desktop-ui`、`build:desktop`，不得进入 npm tarball。
-- `pnpm check` 必须执行 `pnpm audit --prod --audit-level moderate`，阻止中危及以上的已知生产依赖漏洞进入 CI 与发布流程。
-- `pnpm check` 和 CI 必须执行 `pnpm run codex:schema:check`，使用锁定的 `@openai/codex` 及 `--experimental` 生成 TypeScript 与 JSON Schema，并与 `schemas/codex-app-server/<version>.schema-baseline.json` 比较；升级 Codex 必须显式运行 `pnpm run codex:schema:update` 并审查差异。
 - 涉及浏览器装配或用户流程时运行 `pnpm test:e2e`。
-- 涉及发布结构时确认 `pnpm run package:check` 通过。
 - CI 在 Ubuntu 与 Windows 完整门禁之外，必须保留 macOS 轻量 smoke，覆盖 CLI 宿主命令、native loader 和当前平台 addon 构建。
 - 发布必须先使用 `pnpm pack` 生成 tarball，将 `catalog:` 和 `workspace:` 协议转换为 npm 可安装版本；先发布所有 native packages，再通过 npm CLI 发布主包，以完成 Trusted Publisher OIDC 认证。
 - 原生运行时依赖不得因包含 `binding.gyp` 且缺少显式安装钩子而触发 npm 隐式 `node-gyp rebuild`；`package:check` 必须拒绝此类依赖。

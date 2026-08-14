@@ -325,11 +325,13 @@ Tauri 实现：
 - Phase 2：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-2-client-transports.md`。
 - Phase 3：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-3-rust-runtime.md`。
 - Phase 4：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-4-platform-capabilities.md`。
-- Phase 5：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-5-codex-provider.md`；持续门禁为 `pnpm run tauri:phase5:check`。
-- Phase 6：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-6-desktop-security.md`；持续门禁为 `pnpm run tauri:phase6:check`。
-- Phase 7：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-7-node-engine.md`；持续门禁为 `pnpm run tauri:phase7:check`。
-- Phase 8：已完成，执行记录见 `.superwork/plans/2026-08-13-tauri-phase-8-release-workspace.md`；持续门禁为 `pnpm run tauri:phase8:check`、`pnpm run package:check` 和 `pnpm run desktop:artifact:check`。
+- Phase 5：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-5-codex-provider.md`。
+- Phase 6：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-6-desktop-security.md`。
+- Phase 7：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-7-node-engine.md`。
+- Phase 8：已完成，执行记录见 `.superwork/plans/2026-08-13-tauri-phase-8-release-workspace.md`。
 - Phase 9：待开始。
+
+Phase 4–8 的持续仓库契约统一由 `pnpm test` 收集；Rust、Desktop artifact 和发布结构检查只在对应边界改动时额外触发。
 
 ### Phase 0：建立基线与技术验证
 
@@ -619,13 +621,10 @@ CODE_AGENT_TARGET=desktop
 
 ```text
 pnpm install --frozen-lockfile
-pnpm check
+pnpm check:ci
+pnpm check:rust
+pnpm run test:coverage # 仅 Ubuntu
 pnpm test:e2e
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test --workspace --all-features --locked
-pnpm run protocol:rust:check
-pnpm run desktop:bundle:check
 ```
 
 - Ubuntu 和 Windows 运行完整 TypeScript/Rust 门禁。

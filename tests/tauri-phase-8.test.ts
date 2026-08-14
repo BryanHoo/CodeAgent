@@ -61,11 +61,12 @@ describe("Tauri Phase 8 repository contract", () => {
     expect(config.version).toBe("../../../package.json");
   });
 
-  it("defines Phase 8 and release version gates", () => {
+  it("keeps release version verification in the full CI gate", () => {
     const manifest = readJson("package.json") as { scripts?: Record<string, string> };
 
     expect(manifest.scripts?.["release:version:check"]).toContain("verify-release-versions.mjs");
-    expect(manifest.scripts?.["tauri:phase8:check"]).toContain("tauri-phase-8.test.ts");
+    expect(manifest.scripts?.["check:ci"]).toContain("release:version:check");
+    expect(manifest.scripts?.["tauri:phase8:check"]).toBeUndefined();
   });
 
   it("builds the four verified native and desktop release targets", () => {

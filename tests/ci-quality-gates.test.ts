@@ -4,6 +4,33 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("CI 质量门禁", () => {
+  it("分离本地基线与 CI 全量检查且不重复执行阶段测试", () => {
+    const packageJson = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    const vitestConfig = readFileSync(join(process.cwd(), "vitest.config.ts"), "utf8");
+
+    expect(packageJson.scripts["check"]).toBe(
+      "pnpm run format:check && pnpm run lint && pnpm run lint:architecture && pnpm run typecheck && pnpm run test",
+    );
+    expect(packageJson.scripts["check:ci"]).toContain("pnpm run check");
+    expect(packageJson.scripts["check:ci"]).toContain("pnpm run audit:prod");
+    expect(packageJson.scripts["check:ci"]).toContain("pnpm run codex:schema:check");
+    expect(packageJson.scripts["check:ci"]).toContain("pnpm run protocol:rust:check");
+    expect(packageJson.scripts["check:ci"]).toContain("pnpm run test:performance");
+    expect(packageJson.scripts["check:ci"]).toContain("pnpm run build");
+    expect(packageJson.scripts["check:ci"]).toContain("pnpm run bundle:check");
+    expect(packageJson.scripts["check:ci"]).toContain("pnpm run package:check");
+    expect(packageJson.scripts["protocol:rust:check"]).not.toContain("vitest");
+    expect(packageJson.scripts["prepublishOnly"]).toBe("pnpm run check:ci");
+
+    // 阶段契约由统一测试入口收集一次，不再维护累积执行的脚本别名。
+    for (const phase of [4, 5, 6, 7, 8]) {
+      expect(packageJson.scripts[`tauri:phase${String(phase)}:check`]).toBeUndefined();
+    }
+    expect(vitestConfig).toContain('"tests/*.test.ts"');
+  });
+
   it("仅在 Linux quality job 中执行覆盖率阈值检查", () => {
     const packageJson = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
       scripts: Record<string, string>;
@@ -17,6 +44,9 @@ describe("CI 质量门禁", () => {
     expect(qualityJobEnd).toBeGreaterThan(qualityJobStart);
 
     const qualityJob = workflow.slice(qualityJobStart, qualityJobEnd);
+    expect(qualityJob).toContain(`      - name: Run full quality gates
+        run: pnpm check:ci`);
+    expect(qualityJob).not.toContain("run: pnpm check\n");
     // 条件必须绑定矩阵 OS，避免 Windows 重复生成覆盖率报告。
     expect(qualityJob).toContain(`      - name: Enforce coverage thresholds
         if: matrix.os == 'ubuntu-latest'
