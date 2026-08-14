@@ -56,8 +56,8 @@
 - Fastify 资源通过插件封装，并在 `onClose` 中释放。
 - 幂等 Mutation 的已完成结果缓存与进行中请求必须独立管理；`idempotencyCacheSize` 同时作为结果缓存容量和不同 Key 进行中请求的硬上限。同 Key 继续复用原请求，不同 Key 超限时返回可重试的 `503 IDEMPOTENCY_CAPACITY_EXCEEDED`，请求完成或失败后立即释放进行中名额。
 - 普通 HTTP 路由使用 Fastify 原生 60 秒 `handlerTimeout` 和 `request.signal` 执行协作取消；Event Stream WebSocket 是显式长连接，不继承 Handler 截止时间，其有界性由队列、背压和连接关闭生命周期保证。
-- Project 列表默认空，通过宿主系统目录选择器注册，并持久化到 `CODEX_HOME/code-agent/state.sqlite3`；重复真实路径幂等返回已有 Project。
-- CLI 启动时必须以 `0700` 幂等创建 `${CODEX_HOME}/code-agent/temporary-workspace`，拒绝最终目标为符号链接，并在 SQLite 中确保固定 ID、`kind = temporary` 的内部 Project。Project 列表、排序、重命名、删除及 Project defaults 只能操作 `kind = user`。
+- Project 列表默认空，通过宿主系统目录选择器注册，并由 Node CLI 与 Desktop 统一持久化到 `~/.code-agent/state.sqlite3`；重复真实路径幂等返回已有 Project。`CODEX_HOME` 只控制 Codex 配置，不得改变 CodeAgent 数据目录。
+- CLI 启动时必须以 `0700` 幂等创建 `~/.code-agent/temporary-workspace`，拒绝最终目标为符号链接，并在 SQLite 中确保固定 ID、`kind = temporary` 的内部 Project。Project 列表、排序、重命名、删除及 Project defaults 只能操作 `kind = user`。
 - 用户临时聊天必须通过 `/v1/temporary/**` 访问内部作用域，`/v1/projects/temporary/**` 即使经过 URL 编码也必须返回资源不存在。创建必须调用不带 `ephemeral` 的 `thread/start`；Snapshot、设置更新和 Turn 参数必须完整保留普通 `AgentTaskSettings`，不得覆写审批、Sandbox、模型或思考量。temporary API 允许 Task、Turn、Attachment、Event、Skill、MCP 和后台终端能力；Web 不得借该作用域请求 Git、文件、目录打开、Project defaults 或其他 Project Mutation，也不得展示内部路径。
 - Server 启动不得枚举项目并预建 Runtime；Project Runtime Context 只在首次 Project API 或 WebSocket 访问时激活。已激活 Context 必须先从进程内缓存解析，只有缓存未命中时才读取 Project Repository。Project 重命名成功后同步刷新缓存中的展示信息；Project 删除成功后必须释放事件订阅和 Context 缓存，后续访问重新读取 Repository 并返回资源不存在，不能复用已删除 Runtime。
 - 同一 Project 的首次 Runtime Context 初始化必须按 Project ID 复用进行中的 Promise；异步读取 Project Repository 返回后再次检查 Context 缓存，确保并发请求只创建一个 Event Stream 和一份 Provider 事件订阅。初始化成功、资源不存在或失败后都必须清理进行中条目，并使用并发 `inject` 测试覆盖该行为。

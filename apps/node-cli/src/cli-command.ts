@@ -164,6 +164,11 @@ function resolveCodexHome(options: ParsedCommandOptions): string {
   return options.codexHome ?? process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
 }
 
+function resolveCodeAgentDataRoot(): string {
+  // CodeAgent 数据独立于 Codex 配置，确保 CLI 与 Desktop 始终共享同一持久化目录。
+  return join(homedir(), ".code-agent");
+}
+
 function assertDatabaseDiagnostics(diagnostics: NodeEngineDiagnostic): void {
   if (diagnostics.migrationVersion < 1) {
     throw new Error("SQLite migrations are not applied");
@@ -183,14 +188,15 @@ function engineOptions(
   dependencies: CliDependencies,
   codexPath: string,
   codexHome: string,
+  dataRoot: string,
   temporaryWorkspace: string,
 ): NodeEngineOptions {
   return {
     appVersion: dependencies.appVersion,
-    attachmentRoot: join(codexHome, "code-agent", "attachments"),
+    attachmentRoot: join(dataRoot, "attachments"),
     codexHome,
     codexPath,
-    databasePath: join(codexHome, "code-agent", "state.sqlite3"),
+    databasePath: join(dataRoot, "state.sqlite3"),
     temporaryWorkspace,
   };
 }
@@ -240,17 +246,18 @@ async function runDoctor(
     options.codexBin ? { explicitPath: options.codexBin } : {},
   );
   const codexHome = resolveCodexHome(options);
+  const dataRoot = resolveCodeAgentDataRoot();
   const temporaryWorkspace = await dependencies.ensureTemporaryWorkspace(
-    join(codexHome, "code-agent", "temporary-workspace"),
+    join(dataRoot, "temporary-workspace"),
   );
   const engine = await dependencies.createEngine(
-    engineOptions(dependencies, codexPath, codexHome, temporaryWorkspace),
+    engineOptions(dependencies, codexPath, codexHome, dataRoot, temporaryWorkspace),
   );
   try {
     const diagnostics = await engine.diagnose();
     assertDatabaseDiagnostics(diagnostics);
     output.success(`Codex ${diagnostics.codexVersion} (${codexPath})`);
-    output.success(`SQLite 可写 (${join(codexHome, "code-agent", "state.sqlite3")})`);
+    output.success(`SQLite 可写 (${join(dataRoot, "state.sqlite3")})`);
     output.success(`SQLite migration ${String(diagnostics.migrationVersion)}`);
     output.success(`SQLite integrity_check ${diagnostics.integrityCheck}`);
     output.success(`SQLite journal_mode ${diagnostics.journalMode}`);
@@ -329,14 +336,15 @@ async function runStart(
 
   try {
     const codexHome = resolveCodexHome(options);
+    const dataRoot = resolveCodeAgentDataRoot();
     const temporaryWorkspace = await dependencies.ensureTemporaryWorkspace(
-      join(codexHome, "code-agent", "temporary-workspace"),
+      join(dataRoot, "temporary-workspace"),
     );
     const codexPath = await dependencies.locateCodexBinary(
       options.codexBin ? { explicitPath: options.codexBin } : {},
     );
     engine = await dependencies.createEngine(
-      engineOptions(dependencies, codexPath, codexHome, temporaryWorkspace),
+      engineOptions(dependencies, codexPath, codexHome, dataRoot, temporaryWorkspace),
     );
     const diagnostics = await engine.diagnose();
     const appUpdateService = createAppUpdateService({
