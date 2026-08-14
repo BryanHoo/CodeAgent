@@ -9,6 +9,7 @@
 - `src/main.tsx` 只创建 React Root 并装配应用级 Provider。
 - `src/App.tsx` 只承担应用外壳和顶层导航结构。
 - `src/app/create-host-client.ts` 是唯一宿主 Composition Root；Vite 必须通过 build-time alias 为 Web 选择 HTTP Transport、为 Desktop 选择 Tauri Transport，禁止运行时宿主判断或同时打包两个 Transport。
+- 系统通知等可选宿主能力必须由同一 build-time host module 显式提供；Web 不支持时返回 `undefined`，消费者只注入已存在的能力，禁止通过 `unsupported_operation` 或其他失败请求探测宿主。
 - `src/app/routes` 只定义业务页面与路由级状态，不提供登录页面或认证回调路由。
 - Project、Task 与临时路由只保留路径匹配和参数映射，并复用单一 React Suspense 边界动态加载 `WorkbenchShell`；不得为各路径重复创建微型懒加载路由模块。工作台内常用 UI 进入同一静态闭包，Markdown、Patch Diff Viewer、Shiki Engine 和语言 Grammar 继续由内容级边界按需加载。
 - 功能代码按真实用户能力放入 `src/features/<feature>`，不要按技术类型堆放全局目录。

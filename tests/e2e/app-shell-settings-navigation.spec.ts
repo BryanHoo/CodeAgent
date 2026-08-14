@@ -77,6 +77,7 @@ test("redirects the root route to the default project workbench @smoke", async (
 });
 
 test("edits global defaults in a dialog without overriding task settings", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/p/code-agent/t/task-1");
   const workbenchUrl = page.url();
   const taskModel = getComposerModelSelector(page);
@@ -94,7 +95,17 @@ test("edits global defaults in a dialog without overriding task settings", async
   );
 
   await dialog.getByRole("button", { name: "外观" }).click();
+  await expect(dialog.getByRole("button", { name: "自动模式" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  // 自动模式响应真实媒体查询变化，显式模式则保持用户选择。
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await dialog.getByRole("button", { name: "深色模式" }).click();
+  await page.emulateMedia({ colorScheme: "light" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await dialog.getByRole("button", { name: "Agent 默认值" }).click();
   await dialog.getByRole("combobox", { name: "审批" }).selectOption("never");

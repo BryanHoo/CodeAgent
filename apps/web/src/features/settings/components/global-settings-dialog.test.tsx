@@ -77,6 +77,7 @@ describe("GlobalSettingsDialog", () => {
     expect(markup).toContain("提交消息");
     expect(markup).toContain("应用集成");
     expect(markup).toContain("模型服务");
+    expect(markup).toContain('aria-label="自动模式" aria-pressed="true"');
     expect(markup).toContain('aria-label="浅色模式"');
     expect(markup).toContain('aria-label="深色模式"');
     expect(markup).toContain('aria-label="审批"');
@@ -319,6 +320,7 @@ describe("GlobalSettingsDialog", () => {
       expect(markup).toContain("Global settings");
       expect(markup).toContain("Approval policy");
       expect(markup).toContain("Reasoning effort");
+      expect(markup).toContain('aria-label="Automatic color mode"');
       expect(markup).toContain('aria-label="Language"');
       expect(markup).toContain("GPT-5.6 Sol");
       expect(markup).toContain(">High</option>");

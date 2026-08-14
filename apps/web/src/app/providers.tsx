@@ -10,7 +10,7 @@ import {
   type AccessContextValue,
 } from "../features/access/access-context.js";
 import { PairingGate } from "../features/access/pairing-gate.js";
-import { codeAgentClient } from "./create-host-client.js";
+import { codeAgentClient, hostNotificationApi } from "./create-host-client.js";
 import { createBrowserTaskNotifier } from "../features/notifications/browser-task-notifier.js";
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
@@ -48,11 +48,7 @@ export function navigateToTaskFromNotification(projectId: string, taskId: string
 
 const taskNotifier = createBrowserTaskNotifier({
   navigateToTask: navigateToTaskFromNotification,
-  nativeApi: {
-    async show(title, options) {
-      await codeAgentClient.showHostNotification({ title, ...options });
-    },
-  },
+  nativeApi: hostNotificationApi,
 });
 
 type AppProvidersProps = Readonly<{
