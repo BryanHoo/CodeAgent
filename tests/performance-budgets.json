@@ -45,6 +45,27 @@
     "maxObservedBufferedAmountBytes": 1310720,
     "messages": 10000
   },
+  "streamingMarkdown": {
+    "cases": [
+      {
+        "bytes": 102400,
+        "chunkBytes": 4096,
+        "maxCpuDurationMs": 400,
+        "maxGcRetainedBytes": 25165824,
+        "maxHeapUsedBytes": 50331648,
+        "maxStreamHeapGrowthBytes": 33554432
+      },
+      {
+        "bytes": 1048576,
+        "chunkBytes": 8192,
+        "maxCpuDurationMs": 2500,
+        "maxGcRetainedBytes": 41943040,
+        "maxHeapUsedBytes": 268435456,
+        "maxStreamHeapGrowthBytes": 268435456
+      }
+    ],
+    "maxLongTaskMs": 250
+  },
   "napiEventBridge": {
     "events": 10000,
     "maxDurationMs": 1000,

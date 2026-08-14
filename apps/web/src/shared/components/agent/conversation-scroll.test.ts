@@ -92,6 +92,19 @@ describe("conversation auto scroll", () => {
     expect(scrollTarget.scrollTo).not.toHaveBeenCalled();
   });
 
+  it("ignores the scroll event emitted by a programmatic bottom adjustment", () => {
+    const onAtBottomChange = vi.fn();
+    const controller = createConversationAutoScrollController(onAtBottomChange);
+    const scrollTarget = createScrollTarget();
+
+    controller.handleConversationChange(scrollTarget);
+    scrollTarget.scrollTo.mockClear();
+    controller.handleScroll(scrollTarget, false);
+
+    expect(scrollTarget.scrollTo).not.toHaveBeenCalled();
+    expect(onAtBottomChange).toHaveBeenLastCalledWith(true);
+  });
+
   it("pauses after the user scrolls away and resumes after they return to the bottom", () => {
     const onAtBottomChange = vi.fn();
     const controller = createConversationAutoScrollController(onAtBottomChange);

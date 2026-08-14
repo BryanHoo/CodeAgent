@@ -15,7 +15,7 @@
 - 检查键盘操作、焦点、可访问名称、空状态、错误状态与慢连接状态。
 - 错误回归必须同时断言应用级 toast 包含完整原始消息，并断言对应功能模块不渲染错误文案；AI 流式 Turn/Tool 错误例外用例必须断言错误位于流式输出之后且后续正常结果会清除旧错误。
 - 移动工作台 E2E 至少覆盖 `320px` 最窄竖屏和手机横屏；页面 viewport 必须允许用户缩放，不得设置 `maximum-scale=1` 或 `user-scalable=no`，并使用 `viewport-fit=cover`；根容器必须使用 `dvh` 并承接 `safe-area-inset-*`；文档及 Composer 等内部控件不得横向或纵向溢出动态视口，Composer 常用控件在手机宽度下必须保持单行，主要移动操作的触控目标不得小于 `44px`。
-- 流式输出和长历史变更检查渲染次数、DOM 规模及布局稳定性。
+- 流式输出和长历史变更检查渲染次数、DOM 规模及布局稳定性；append-only Markdown 必须缓存已稳定的完整行与块，只重新处理增量尾部，非追加更新必须失效缓存。真实 Chromium 性能门禁必须覆盖至少 `100 KiB` 与 `1 MiB` 的完整流式 Markdown，分别采集并限制主线程 CPU、最大 Long Task、峰值 Heap、流式 Heap 增长和 GC 后保留 Heap，场景规模与阈值统一维护在 `tests/performance-budgets.json`。
 - Agent 与命令终端输出只允许把 ANSI SGR 转换为 React 文本样式节点，不得自动识别链接或注入解析器生成的 HTML；回归测试必须覆盖 ANSI 样式保留以及 URL、`mailto:` 按普通文本渲染。
 - `pnpm test:performance` 必须在真实 Chromium 中以固定 10,000 Item 历史验证归一化、虚拟挂载、DOM、绘制、交互延迟、long task、CPU、Heap 与 GC，并以固定实时样本采集 `provider_received`、`runtime_published`、`transport_received`、`store_committed`、`painted`，分别断言端到端 `p50/p95/p99`；不得用 `renderToStaticMarkup` 结果代替浏览器性能门禁。规模与阈值只维护在 `tests/performance-budgets.json`。
 - Web 语法高亮必须使用 `shiki/core`、JavaScript Regex Engine、项目语言白名单和 `github-light`/`github-dark` 两个主题；Markdown/Streamdown、Patch Diff Viewer、高亮器、主题和语言 Grammar 只在对应内容出现后动态加载，Markdown 实现加载前必须展示完整纯文本。源码预览和轻量 Diff Dialog 可以随工作台加载，但不得静态引入这些重型实现。生产构建不得重新引入完整 `shiki`、全量主题或 Oniguruma WASM；超大 Grammar 只能按依赖闭包拆分，静态 Chunk 图不得形成循环。
