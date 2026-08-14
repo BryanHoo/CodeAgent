@@ -55,10 +55,48 @@ function frame(sequence: number, message = "performance"): Uint8Array {
   );
 }
 
+function measureBest(run: () => number): { checksum: number; durationMs: number } {
+  let checksum = 0;
+  let durationMs = Number.POSITIVE_INFINITY;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const startedAt = performance.now();
+    checksum = run();
+    durationMs = Math.min(durationMs, performance.now() - startedAt);
+  }
+  return { checksum, durationMs };
+}
+
 describe("Server event route performance", () => {
   const cleanups: (() => Promise<void>)[] = [];
   afterEach(async () => {
     await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
+  });
+
+  it("compares binary delivery with the previous text re-encoding path", () => {
+    const decoder = new TextDecoder();
+    const iterations = performanceBudgets.delta.serverEvents;
+    const sample = frame(1, "实时事件".repeat(64));
+
+    const text = measureBest(() => {
+      let checksum = 0;
+      for (let index = 0; index < iterations; index += 1) {
+        const nodeText = Buffer.from(sample).toString("utf8");
+        const websocketBytes = Buffer.from(nodeText, "utf8");
+        checksum += decoder.decode(websocketBytes).length;
+      }
+      return checksum;
+    });
+    const binary = measureBest(() => {
+      let checksum = 0;
+      for (let index = 0; index < iterations; index += 1) {
+        checksum += decoder.decode(sample).length;
+      }
+      return checksum;
+    });
+
+    console.info("WebSocket delivery encoding comparison", { binary, text });
+    expect(binary.checksum).toBe(text.checksum);
+    expect(binary.durationMs).toBeLessThan(text.durationMs);
   });
 
   it("publishes through a real WebSocket within latency and resource budgets", async () => {
@@ -100,13 +138,15 @@ describe("Server event route performance", () => {
     });
 
     const expected = performanceBudgets.delta.serverEvents;
+    let allFramesBinary = true;
     let received = 0;
     let resolveInitialDispatch: (() => void) | undefined;
     const initialDispatch = new Promise<void>((resolve) => {
       resolveInitialDispatch = resolve;
     });
     const allReceived = new Promise<void>((resolve, reject) => {
-      socket.on("message", () => {
+      socket.on("message", (_data, isBinary) => {
+        allFramesBinary &&= isBinary;
         const sampleId = received;
         if (sampleId < performanceBudgets.realtimePipeline.samples) {
           trace.record(sampleId, "transport_received");
@@ -188,6 +228,7 @@ describe("Server event route performance", () => {
     });
 
     expect(received).toBe(expected);
+    expect(allFramesBinary).toBe(true);
     expect(metrics?.backpressureSignals).toBeGreaterThan(0);
     expect(metrics?.maxBufferedAmount).toBeGreaterThan(
       performanceBudgets.slowWebSocket.hardBackpressureBytes,

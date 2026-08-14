@@ -3,12 +3,17 @@ use std::{collections::HashMap, sync::Arc};
 use code_agent_runtime::{CodeAgentRuntime, EventReplay, SubscriberSignal};
 use serde::Serialize;
 use serde_json::{Value, json};
-use tauri::{State, ipc::Channel};
+use tauri::{
+    State,
+    ipc::{Channel, InvokeResponseBody},
+};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::{command_error::CommandError, commands::tasks::project};
+
+const FALLBACK_RESYNC_FRAME: &str = r#"{"latestSequence":0,"reason":"sequence_gap","sessionId":"","type":"resync.required","version":2}"#;
 
 #[derive(Default)]
 pub struct EventSubscriptions {
@@ -45,24 +50,26 @@ pub struct EventSubscribeResponse {
 }
 
 fn send_replay(
-    channel: &Channel<Value>,
+    channel: &Channel<InvokeResponseBody>,
     replay: EventReplay,
     checkpoint: &code_agent_runtime::EventCheckpoint,
 ) -> bool {
-    let send = |message: Value| channel.send(message).is_ok();
+    let send = |message: InvokeResponseBody| channel.send(message).is_ok();
     match replay {
         EventReplay::Events(events) => {
-            if !send(json!({
+            if !send(json_message(json!({
                 "latestSequence": checkpoint.sequence,
                 "sessionId": checkpoint.session_id.as_ref(),
                 "type": "connection.ready",
                 "version": 2
-            })) {
+            }))) {
                 return false;
             }
             for event in events {
                 // replay 获取期间的新事件留给实时队列，维持 checkpoint 分界。
-                if event.sequence() <= checkpoint.sequence && !send(event.value().clone()) {
+                if event.sequence() <= checkpoint.sequence
+                    && !send(serialized_message(event.frame()))
+                {
                     return false;
                 }
             }
@@ -72,15 +79,29 @@ fn send_replay(
             latest_sequence,
             reason,
         } => {
-            let _ = send(json!({
+            let _ = send(json_message(json!({
                 "latestSequence": latest_sequence,
                 "reason": reason,
                 "sessionId": checkpoint.session_id.as_ref(),
                 "type": "resync.required",
                 "version": 2
-            }));
+            })));
             false
         }
+    }
+}
+
+fn json_message(value: Value) -> InvokeResponseBody {
+    InvokeResponseBody::Json(
+        serde_json::to_string(&value).unwrap_or_else(|_| FALLBACK_RESYNC_FRAME.to_owned()),
+    )
+}
+
+fn serialized_message(frame: &[u8]) -> InvokeResponseBody {
+    // Runtime frame 来自 serde_json，UTF-8 是内部不变量；这里只复制到 Tauri 所需的 owned String。
+    match String::from_utf8(frame.to_vec()) {
+        Ok(frame) => InvokeResponseBody::Json(frame),
+        Err(_) => InvokeResponseBody::Json(FALLBACK_RESYNC_FRAME.to_owned()),
     }
 }
 
@@ -90,7 +111,7 @@ pub async fn event_subscribe(
     project_id: String,
     after_sequence: u64,
     session_id: String,
-    channel: Channel<Value>,
+    channel: Channel<InvokeResponseBody>,
     runtime: State<'_, Arc<CodeAgentRuntime>>,
     subscriptions: State<'_, Arc<EventSubscriptions>>,
 ) -> Result<EventSubscribeResponse, CommandError> {
@@ -117,7 +138,7 @@ pub async fn event_subscribe(
     let resync_request_id = request_id.clone();
     let cleanup_id = subscription_id.clone();
     tauri::async_runtime::spawn(async move {
-        let send = |message: Value| channel.send(message).is_ok();
+        let send = |message: InvokeResponseBody| channel.send(message).is_ok();
         if !send_replay(&channel, replay, &checkpoint) {
             registry.remove(&cleanup_id).await;
             return;
@@ -135,13 +156,13 @@ pub async fn event_subscribe(
                             )
                             .await
                             .unwrap_or_else(|_| checkpoint.clone());
-                        let _ = send(json!({
+                        let _ = send(json_message(json!({
                             "latestSequence": latest.sequence,
                             "reason": "sequence_gap",
                             "sessionId": latest.session_id.as_ref(),
                             "type": "resync.required",
                             "version": 2
-                        }));
+                        })));
                         break;
                     }
                 }
@@ -151,7 +172,7 @@ pub async fn event_subscribe(
                     if event.sequence() <= checkpoint.sequence {
                         continue;
                     }
-                    if !send(event.value().clone()) {
+                    if !send(serialized_message(event.frame())) {
                         break;
                     }
                 }
@@ -197,21 +218,27 @@ mod tests {
             .await;
         let checkpoint = stream.checkpoint().await;
         let replay = stream.replay_after("session-1", 0).await;
-        let messages = Arc::new(Mutex::new(Vec::<Value>::new()));
+        let expected_frame = match &replay {
+            code_agent_runtime::EventReplay::Events(events) => events[0].frame().to_vec(),
+            code_agent_runtime::EventReplay::Resync { .. } => panic!("expected replay events"),
+        };
+        let messages = Arc::new(Mutex::new(Vec::<String>::new()));
         let sink = messages.clone();
-        let channel = Channel::new(move |body| {
-            if let InvokeResponseBody::Json(value) = body {
-                sink.lock()
-                    .expect("messages")
-                    .push(serde_json::from_str(&value)?);
+        let channel: Channel<InvokeResponseBody> = Channel::new(move |body| {
+            match body {
+                InvokeResponseBody::Json(value) => sink.lock().expect("messages").push(value),
+                InvokeResponseBody::Raw(_) => panic!("event channel must use JSON response bodies"),
             }
             Ok(())
         });
         assert!(send_replay(&channel, replay, &checkpoint));
         {
             let messages = messages.lock().expect("messages");
-            assert_eq!(messages[0]["type"], "connection.ready");
-            assert_eq!(messages[1]["type"], "message.delta");
+            assert_eq!(
+                serde_json::from_str::<Value>(&messages[0]).expect("ready")["type"],
+                "connection.ready"
+            );
+            assert_eq!(messages[1].as_bytes(), expected_frame);
         }
 
         let registry = EventSubscriptions::default();
@@ -237,7 +264,7 @@ mod tests {
         let checkpoint = stream.checkpoint().await;
         let messages = Arc::new(Mutex::new(Vec::<Value>::new()));
         let sink = messages.clone();
-        let channel = Channel::new(move |body| {
+        let channel: Channel<InvokeResponseBody> = Channel::new(move |body| {
             if let InvokeResponseBody::Json(value) = body {
                 sink.lock()
                     .expect("messages")
