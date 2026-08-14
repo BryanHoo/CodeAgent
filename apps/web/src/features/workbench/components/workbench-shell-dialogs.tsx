@@ -35,6 +35,7 @@ export function WorkbenchShellDialogs({
     gitStatusQuery,
     gitHistoryOpen,
     globalSettingsMutation,
+    globalSettingsInitialSection,
     globalSettingsOpen,
     globalSettingsQuery,
     models,
@@ -157,14 +158,20 @@ export function WorkbenchShellDialogs({
               modelsQuery.isPending ||
               (projectToolsEnabled && projectOpenCapabilitiesQuery.isPending)
             }
-            initialSection="about"
+            initialSection={globalSettingsInitialSection}
             isAppInfoPending={appInfoQuery.isPending}
             isAppUpdatePending={appUpdateMutation.isPending}
             models={models}
             onClose={() => {
               setGlobalSettingsOpen(false);
               requestAnimationFrame(() => {
-                document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
+                document
+                  .querySelector<HTMLButtonElement>(
+                    globalSettingsInitialSection === "about"
+                      ? "#global-about-trigger"
+                      : "#global-settings-trigger",
+                  )
+                  ?.focus();
               });
             }}
             onLogoutAccess={access.logout}

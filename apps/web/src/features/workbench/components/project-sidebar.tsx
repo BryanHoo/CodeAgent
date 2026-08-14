@@ -58,7 +58,7 @@ const primaryActionIconClassName = "size-4 shrink-0 text-muted-foreground";
 type ProjectSidebarProps = Readonly<{
   appInfo?: AppInfoResponse;
   onClose: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (section: "about" | "appearance") => void;
   projectId?: string;
   taskId?: string;
 }>;
@@ -482,10 +482,15 @@ export function ProjectSidebar({
         />
       )}
 
-      <div className="p-2">
+      <div className="px-2 pb-2.5">
         <SidebarSettingsButton
           {...(appInfo === undefined ? {} : { appInfo })}
-          onOpen={onOpenSettings}
+          onOpenAbout={() => {
+            onOpenSettings("about");
+          }}
+          onOpenSettings={() => {
+            onOpenSettings("appearance");
+          }}
         />
       </div>
     </aside>
