@@ -813,7 +813,9 @@ describe("CodeAgentClient", () => {
   it("uses the configured base URL for all read methods", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ status: "ok", version: 1 }))
+      .mockResolvedValueOnce(
+        jsonResponse({ runtime: { state: "ready" }, status: "ok", version: 1 }),
+      )
       .mockResolvedValueOnce(
         jsonResponse({
           feedback: { upload: true },

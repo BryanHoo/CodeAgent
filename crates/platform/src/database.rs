@@ -212,7 +212,9 @@ fn open_connection(path: &Path) -> Result<Connection, PlatformError> {
 }
 
 fn backup_before_migration(connection: &Connection, path: &Path) -> Result<(), PlatformError> {
-    let backup_path = path.with_extension("sqlite3.pre-rust-v11.bak");
+    let migration_version = MIGRATIONS.last().map_or(0, |migration| migration.version);
+    // 每个目标 Schema 使用独立备份，避免旧备份让后续破坏性迁移失去恢复点。
+    let backup_path = path.with_extension(format!("sqlite3.pre-rust-v{migration_version}.bak"));
     if !backup_path.exists() {
         connection.backup("main", backup_path, None)?;
     }

@@ -610,7 +610,11 @@ export async function mockAppShellApi(
     if (url.pathname === "/v1/access") {
       body = { authenticated: true, mode: "local", version: 1 };
     } else if (url.pathname === "/v1/health") {
-      body = { status: "ok", version: 1 };
+      body = {
+        runtime: { state: "ready" },
+        status: "ok",
+        version: 1,
+      };
     } else if (url.pathname === "/v1/app-info") {
       body = {
         appVersion: "1.3.0",

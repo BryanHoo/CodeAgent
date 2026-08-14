@@ -14,7 +14,9 @@ describe("HttpCodeAgentTransport", () => {
   it("maps domain operations to the existing HTTP routes", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse({ status: "ok", version: 1 }))
+      .mockResolvedValueOnce(
+        jsonResponse({ runtime: { state: "ready" }, status: "ok", version: 1 }),
+      )
       .mockResolvedValueOnce(jsonResponse({ data: [], nextCursor: null }));
     const transport = new HttpCodeAgentTransport({ fetch: fetchMock });
 

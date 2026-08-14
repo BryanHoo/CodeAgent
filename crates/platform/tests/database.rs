@@ -27,7 +27,7 @@ fn database_should_configure_and_migrate_on_dedicated_thread() {
 
     let diagnostics = database.diagnose().expect("diagnostics must succeed");
 
-    assert_eq!(diagnostics.migration_version, 11);
+    assert_eq!(diagnostics.migration_version, 13);
     assert_eq!(diagnostics.journal_mode, "wal");
     assert!(diagnostics.foreign_keys);
     assert_eq!(diagnostics.integrity_check, "ok");
@@ -60,7 +60,7 @@ fn database_should_backup_existing_state_before_migration() {
     .expect("database must open");
     database.close().expect("database must close cleanly");
 
-    let backup_path = path.with_extension("sqlite3.pre-rust-v11.bak");
+    let backup_path = path.with_extension("sqlite3.pre-rust-v13.bak");
     let backup = rusqlite::Connection::open(&backup_path).expect("backup database must exist");
     let marker: String = backup
         .query_row("SELECT value FROM legacy_marker", [], |row| row.get(0))

@@ -15,6 +15,7 @@ mod project_file_index_cache;
 mod project_open;
 mod project_tree;
 mod repository;
+mod repository_support;
 
 pub use attachments::{AttachmentContent, AttachmentKind, AttachmentStore, AttachmentUpload};
 pub use database::{DatabaseDiagnostics, DatabaseOptions, PlatformDatabase, PlatformError};

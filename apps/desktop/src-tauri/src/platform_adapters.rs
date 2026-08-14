@@ -20,9 +20,14 @@ use crate::process_environment::resolved_process_path;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProviderDiagnostic {
-    pub message: Option<String>,
+pub struct RuntimeReadiness {
     pub state: &'static str,
+}
+
+#[derive(Clone, Debug)]
+struct ProviderDiagnostic {
+    message: Option<String>,
+    state: &'static str,
 }
 
 /// Runtime 启动前即可注入的 Provider 容器；Codex 握手成功后原子切换到真实实现。
@@ -66,7 +71,16 @@ impl DesktopProvider {
         }
     }
 
-    pub fn diagnostic(&self) -> ProviderDiagnostic {
+    pub fn readiness(&self) -> RuntimeReadiness {
+        self.diagnostic
+            .read()
+            .map(|diagnostic| RuntimeReadiness {
+                state: diagnostic.state,
+            })
+            .unwrap_or(RuntimeReadiness { state: "failed" })
+    }
+
+    fn diagnostic(&self) -> ProviderDiagnostic {
         self.diagnostic
             .read()
             .map(|diagnostic| diagnostic.clone())
@@ -318,4 +332,27 @@ fn locate_desktop_codex(resource_directory: &Path) -> Result<PathBuf, CodeAgentE
         explicit_path: None,
     })
     .map(|binary| binary.path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DesktopProvider;
+
+    #[test]
+    fn runtime_readiness_starts_as_starting() {
+        let provider = DesktopProvider::default();
+
+        assert_eq!(provider.readiness().state, "starting");
+    }
+
+    #[test]
+    fn runtime_readiness_hides_internal_failure_details() {
+        let provider = DesktopProvider::default();
+        provider.fail("private stderr and host path");
+
+        assert_eq!(
+            serde_json::to_value(provider.readiness()).expect("serialize Runtime readiness"),
+            serde_json::json!({ "state": "failed" })
+        );
+    }
 }

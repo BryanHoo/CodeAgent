@@ -7,7 +7,7 @@
 ## Rules
 
 - Access 状态先于 Project Snapshot、Query Cache 和 Event Runtime 初始化。Local 状态直接放行业务树；LAN 未认证状态只保留 `{ authenticated: false, mode: "lan", version: 1 }`，不得缓存访问密码。
-- Provider 连接状态必须在 Project Provider、Snapshot Query 和 Event Runtime 之前读取；只有 `connected` 才挂载业务树。官方登录仅在 `pending` 时轮询，完成、失败、取消或卸载后停止。
+- Runtime 就绪状态必须先于 Provider 连接状态、Project Provider、Snapshot Query 和 Event Runtime 读取；`starting` 时每 500ms 轮询统一 Health 契约，`ready` 后才启用 Provider 连接查询，`failed` 或 Health 请求失败后停止轮询并展示重试入口。只有 Provider `connected` 才挂载业务树；官方登录仅在 `pending` 时轮询，完成、失败、取消或卸载后停止。
 - 自定义 API key 只保留在连接面板的瞬时组件状态和当前 Client 调用栈；不得作为 TanStack Query/Mutation key、variables、data 或 error，也不得进入 Zustand、localStorage 或 URL。连接成功或失败后都必须清空输入值。
 - 任意 Client `401` 或 LAN 注销成功后必须立即清空 Query Cache 并卸载 Project Runtime、Composer Draft Provider 与 Router 业务树；Provider 清理必须关闭 WebSocket、释放附件 Blob URL 和内存草稿。刷新后的认证只从 HttpOnly Cookie 重新读取。
 - 瞬时 UI 状态默认保留在最近组件或功能内。

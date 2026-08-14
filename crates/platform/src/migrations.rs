@@ -60,4 +60,14 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
         name: "create_provider_connection",
         sql: include_str!("../migrations/011_create_provider_connection.sql"),
     },
+    Migration {
+        version: 12,
+        name: "scope_agent_state_by_backend",
+        sql: include_str!("../migrations/012_scope_agent_state_by_backend.sql"),
+    },
+    Migration {
+        version: 13,
+        name: "remove_backend_scoping",
+        sql: include_str!("../migrations/013_remove_backend_scoping.sql"),
+    },
 ];

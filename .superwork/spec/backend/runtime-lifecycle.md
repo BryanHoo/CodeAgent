@@ -57,6 +57,7 @@
 - 幂等 Mutation 的已完成结果缓存与进行中请求必须独立管理；`idempotencyCacheSize` 同时作为结果缓存容量和不同 Key 进行中请求的硬上限。同 Key 继续复用原请求，不同 Key 超限时返回可重试的 `503 IDEMPOTENCY_CAPACITY_EXCEEDED`，请求完成或失败后立即释放进行中名额。
 - 普通 HTTP 路由使用 Fastify 原生 60 秒 `handlerTimeout` 和 `request.signal` 执行协作取消；Event Stream WebSocket 是显式长连接，不继承 Handler 截止时间，其有界性由队列、背压和连接关闭生命周期保证。
 - Project 列表默认空，通过宿主系统目录选择器注册，并由 Node CLI 与 Desktop 统一持久化到 `~/.code-agent/state.sqlite3`；重复真实路径幂等返回已有 Project。`CODEX_HOME` 只控制 Codex 配置，不得改变 CodeAgent 数据目录。
+- SQLite 只持久化 Codex Runtime 状态；Global settings、Project defaults、Task settings 与 Provider connection 以完整 Protocol JSON 保存，不设置或保留其他 Backend 分区。破坏性 Migration 必须先生成带目标 Schema 版本的独立数据库备份。
 - CLI 启动时必须以 `0700` 幂等创建 `~/.code-agent/temporary-workspace`，拒绝最终目标为符号链接，并在 SQLite 中确保固定 ID、`kind = temporary` 的内部 Project。Project 列表、排序、重命名、删除及 Project defaults 只能操作 `kind = user`。
 - 用户临时聊天必须通过 `/v1/temporary/**` 访问内部作用域，`/v1/projects/temporary/**` 即使经过 URL 编码也必须返回资源不存在。创建必须调用不带 `ephemeral` 的 `thread/start`；Snapshot、设置更新和 Turn 参数必须完整保留普通 `AgentTaskSettings`，不得覆写审批、Sandbox、模型或思考量。temporary API 允许 Task、Turn、Attachment、Event、Skill、MCP 和后台终端能力；Web 不得借该作用域请求 Git、文件、目录打开、Project defaults 或其他 Project Mutation，也不得展示内部路径。
 - Server 启动不得枚举项目并预建 Runtime；Project Runtime Context 只在首次 Project API 或 WebSocket 访问时激活。已激活 Context 必须先从进程内缓存解析，只有缓存未命中时才读取 Project Repository。Project 重命名成功后同步刷新缓存中的展示信息；Project 删除成功后必须释放事件订阅和 Context 缓存，后续访问重新读取 Repository 并返回资源不存在，不能复用已删除 Runtime。
@@ -95,6 +96,7 @@
 - Rust Project Event Stream 由 Runtime 分配 Provider、Session、Sequence、Timestamp 与 Version；相邻同 Key Delta 才允许合并，关键事件、checkpoint、replay 和 close 前必须先 flush。保留同时受事件数、单事件 UTF-8 字节和总字节预算限制，慢订阅者通过独立控制信号进入 resync，不得阻塞 Provider。Provider 上游订阅满载时必须用预留槽位交付一次不可重试的溢出终态并关闭该订阅；Runtime 收到后立即把全部下游订阅标记为 `ResyncRequired`，Tauri 使用触发时的最新 checkpoint 发送 `resync.required`。
 - Tauri 只 `manage` 一个 `Arc<CodeAgentRuntime>`；退出时先关闭 Runtime 操作树，再关闭 Repository 的有界数据库队列并 join 唯一 SQLite owner thread。
 - Desktop 启动只管理一个 Codex supervisor；二进制按环境变量、应用旁 sidecar、仓库 target-triple 产物顺序解析。握手失败或进程退出写入诊断但不阻塞窗口，退出顺序固定为 Channel 订阅、Runtime、Codex 进程。
+- `/v1/health` 与 Desktop `app_diagnostics` 必须返回统一的 `runtime.state = starting | ready | failed` 就绪状态。Node Server 仅在 Runtime 完成装配后监听，因此固定返回 `ready`；Desktop 在 Codex `initialize` 完成前返回 `starting`，握手成功后返回 `ready`，启动失败或进程退出后返回 `failed`，且响应不得暴露 stderr、宿主路径或内部错误文本。
 - Tauri 事件订阅必须先建立实时接收器，再固定 checkpoint 并回放；只通过 `Channel<EventStreamMessage>` 交付 `connection.ready`、连续事件和 `resync.required`，不得使用全局窗口事件。取消、发送失败和 resync 必须清理订阅任务。
 
 - 本地 CLI 启动在所有平台统一复用已打开的 CodeAgent 页面：Web 通过进程级浏览器会话 ID 识别 Server 重启并刷新当前标签，CLI 在 HTTP Server 就绪后执行有界等待；收到旧页面握手时不得再次调用系统浏览器，超时后才打开新标签。LAN 模式继续不自动打开浏览器。
