@@ -224,7 +224,7 @@ describe("TauriCodeAgentTransport", () => {
 
   it("delivers ready and continuous Channel events then unsubscribes", async () => {
     const states: string[] = [];
-    const events: unknown[] = [];
+    const events: { event: unknown; wireBytes: number | undefined }[] = [];
     const calls: { command: string; payload: unknown }[] = [];
     let channelId = 0;
     mockIPC((command, payload) => {
@@ -239,7 +239,7 @@ describe("TauriCodeAgentTransport", () => {
     const unsubscribe = transport.subscribeEvents({
       afterSequence: 3,
       onConnectionState: (state) => states.push(state),
-      onEvent: (event) => events.push(event),
+      onEvent: (event, wireBytes) => events.push({ event, wireBytes }),
       onResyncRequired: vi.fn(),
       projectId: "temporary",
       sessionId: "session-1",
@@ -256,6 +256,7 @@ describe("TauriCodeAgentTransport", () => {
     sendChannel(channelId, 1, providerEvent(4, "session-1"));
     expect(states).toEqual(["connecting", "connected"]);
     expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ event: providerEvent(4, "session-1"), wireBytes: undefined });
 
     unsubscribe();
     sendChannel(channelId, 2, providerEvent(5, "session-1"));

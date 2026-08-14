@@ -110,7 +110,7 @@ describe("CodeAgentClient realtime events", () => {
 
   it("validates frames, ignores duplicates, and delivers consecutive events", () => {
     const { client, sockets } = createHarness();
-    const events: AgentEvent[] = [];
+    const deliveries: { event: AgentEvent; wireBytes: number | undefined }[] = [];
     const performanceSamples: { point: string; sequence: number }[] = [];
     const states: string[] = [];
 
@@ -118,7 +118,7 @@ describe("CodeAgentClient realtime events", () => {
       afterSequence: 3,
       projectId: "code-agent",
       onConnectionState: (state) => states.push(state),
-      onEvent: (event) => events.push(event),
+      onEvent: (event, wireBytes) => deliveries.push({ event, wireBytes }),
       onPerformanceSample: (sample) => performanceSamples.push(sample),
       onResyncRequired: vi.fn(),
       sessionId: "runtime-1",
@@ -130,7 +130,13 @@ describe("CodeAgentClient realtime events", () => {
     socket?.receive(messageEvent(3, "重复"));
     socket?.receive(messageEvent(4));
 
-    expect(events).toEqual([messageEvent(4)]);
+    const deliveredEvent = messageEvent(4);
+    expect(deliveries).toEqual([
+      {
+        event: deliveredEvent,
+        wireBytes: new TextEncoder().encode(JSON.stringify(deliveredEvent)).byteLength,
+      },
+    ]);
     expect(performanceSamples).toEqual([
       expect.objectContaining({ point: "transport_received", sequence: 4 }),
     ]);

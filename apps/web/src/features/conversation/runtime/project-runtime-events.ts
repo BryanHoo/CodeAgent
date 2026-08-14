@@ -161,9 +161,9 @@ export class ProjectEventRuntime {
     this.#reevaluateIdleRelease();
   }
 
-  #appendEventHistory(event: AgentEvent): void {
+  #appendEventHistory(event: AgentEvent, wireBytes: number | undefined): void {
     // 有界历史用于补齐 Snapshot 请求期间到达的事件，超出预算后由 Snapshot 恢复兜底。
-    this.#eventHistory.append(event);
+    this.#eventHistory.append(event, wireBytes);
   }
 
   #assertSnapshotProject(response: AgentTaskSnapshotResponse): void {
@@ -217,9 +217,9 @@ export class ProjectEventRuntime {
           target.setError(error);
         }
       },
-      onEvent: (event) => {
+      onEvent: (event, wireBytes) => {
         this.#latestSequence = event.sequence;
-        this.#appendEventHistory(event);
+        this.#appendEventHistory(event, wireBytes);
         this.#callbacks.onActivityEvent(this.#projectId, event);
         // 先更新轻量 Activity，再只向同 taskId 的详细 Store 分发，避免重复解析和跨 Task 缓冲。
         for (const [store, target] of this.#targets) {

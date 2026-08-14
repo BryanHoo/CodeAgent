@@ -86,6 +86,7 @@ export {
   TurnDiffUpdatedEventSchema,
   TurnStartedEventSchema,
   UsageUpdatedEventSchema,
+  checkEventStreamMessage,
   type AgentEvent,
   type AgentTaskSnapshotResponse,
   type ConnectionReady,

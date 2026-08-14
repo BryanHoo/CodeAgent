@@ -32,6 +32,7 @@
 - Provider 只发布不含 `sessionId`、`sequence`、`timestamp` 和 `version` 的统一事件；Server Event Stream 统一分配这些传输字段。结构化 Item 的开始与完成分别使用 `item.started` 和 `item.completed`，并携带同一统一 Item 载荷供客户端按 ID 替换。
 - 仅运行阶段有意义的统一 Activity 必须携带 `visibility: "running_only"`；Provider 在对应 `item.started` 与 `item.completed` 载荷中保持该标记，使实时 Store 和历史 Snapshot 使用同一可见性规则。Codex `contextCompaction` 固定映射为此类 Activity，不能退化为永久历史活动。
 - TypeBox 是 TypeScript/Rust 公共协议的单一来源；版本化 JSON Schema 与 Rust DTO 只通过 `pnpm run protocol:rust:generate` 更新，`pnpm run protocol:rust:check` 必须逐字节拒绝 drift。复杂事件联合在 Rust 边界使用同一 JSON Schema 严格校验，不能维护第二份宽松 DTO。
+- HTTP WebSocket Event 必须在 Transport 边界按 `type` 从 `EventStreamMessageSchema` 分派并严格校验唯一分支，校验后的对象不得再次解码或遍历全部 union。Transport 必须把原始文本帧的 UTF-8 `wireBytes` 随事件交给 Project Runtime，事件历史直接使用该值进行 O(1) 容量计量；Rust Runtime 已校验的 Tauri IPC Event 作为可信内部对象直接交付且不重复 Schema 校验，没有 wire 文本时才允许回退到保守对象估算。
 - Project 级 Provider 只发布已通过 Project 归属验证的 Task 事件，未知或其他目录的 `threadId` 不得进入 Event Stream。
 - Task Snapshot HTTP 响应必须同时返回同一 Event Stream 的 `{ sessionId, sequence }` checkpoint，Client 不得猜测恢复序号。
 - Task Snapshot 的 `settings` 必须由 Runtime 按 Task、Project、Global 优先级解析有效设置并覆盖 Provider 原生快照值；历史 Task 没有 Task 级持久化记录时必须继承有效的 Global 审批设置与 Project 默认设置，不能导致 Snapshot 读取失败。Runtime 在补齐设置并冲刷此前事件后固定 checkpoint，再对完整 Snapshot 响应执行统一 Protocol Schema 校验。HTTP/WebSocket 与 Tauri/Channel 的领域事件和 Snapshot 核心字段必须使用 `tests/fixtures/phase5/` 同一场景对照；跨 Delivery 比较只能忽略 `sessionId`、`sequence`、`timestamp` 和 `version`。
