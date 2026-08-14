@@ -12,6 +12,7 @@ import type { ProjectRuntimeManager } from "../conversation/runtime/project-runt
 import type { TaskActivityMap } from "../conversation/runtime/task-activity.js";
 import {
   flattenProjectTaskPages,
+  projectPinnedTasksQueryOptions,
   projectTaskSearchSourceQueryOptions,
   projectTasksInfiniteQueryOptions,
   type CodeAgentWorkbenchClient,
@@ -205,4 +206,14 @@ export function useProjectTaskSearch(normalizedQuery: string) {
           .filter((task) => task.title.toLocaleLowerCase().includes(normalizedQuery));
 
   return { error, isPending, tasks } as const;
+}
+
+export function usePinnedProjectTasks() {
+  const { client, projects } = useProjectData();
+  const taskScopeIds = [TEMPORARY_TASK_SCOPE_ID, ...projects.map((project) => project.id)];
+  const pinnedQueries = useQueries({
+    queries: taskScopeIds.map((projectId) => projectPinnedTasksQueryOptions(projectId, client)),
+  });
+
+  return pinnedQueries.flatMap((query) => query.data ?? emptyTasks);
 }

@@ -967,6 +967,56 @@ test("opens message images in a preview dialog @cross-browser", async ({ context
   await expect(imagePreview).toHaveCount(0);
 });
 
+test("shows a pinned task that is outside the five recent Project tasks", async ({ page }) => {
+  const recentTasks = Array.from({ length: 5 }, (_, index) => ({
+    id: `recent-task-${String(index + 1)}`,
+    pinned: false,
+    projectId: "code-agent",
+    title: `近期任务 ${String(index + 1)}`,
+    updatedAt: `2026-08-14T0${String(index)}:00:00.000Z`,
+  }));
+  const olderPinnedTask = {
+    id: "older-pinned-task",
+    pinned: true,
+    projectId: "code-agent",
+    title: "首屏之外的固定任务",
+    updatedAt: "2026-07-01T00:00:00.000Z",
+  };
+  await page.route("**/v1/projects/code-agent/tasks**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname !== "/v1/projects/code-agent/tasks") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        data: url.searchParams.get("pinnedOnly") === "true" ? [olderPinnedTask] : recentTasks,
+        nextCursor: url.searchParams.get("pinnedOnly") === "true" ? null : "next-page",
+      },
+    });
+  });
+  const pinnedRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/v1/projects/code-agent/tasks" &&
+      url.searchParams.get("pinnedOnly") === "true"
+    );
+  });
+  await page.goto("/p/code-agent");
+  await pinnedRequest;
+
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
+  const pinnedSection = sidebar.getByRole("heading", { name: "已固定" }).locator("xpath=..");
+  const projectGroup = sidebar
+    .getByRole("button", { name: "切换项目 CodeAgent" })
+    .locator("xpath=../..");
+
+  await expect(pinnedSection.getByRole("link", { name: /首屏之外的固定任务/u })).toBeVisible();
+  await expect(projectGroup.getByRole("link")).toHaveCount(5);
+  await expect(projectGroup.getByRole("link", { name: /首屏之外的固定任务/u })).toHaveCount(0);
+});
+
 test("keeps Projects fixed and manages task actions from the compact tree", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 

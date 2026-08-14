@@ -19,11 +19,11 @@ import {
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
 import { useTranslation } from "../../../i18n/i18n.js";
-import { getPinnedTasks } from "../../projects/project-data.js";
 import {
   useProjectActions,
   useProjectActivity,
   useProjectData,
+  usePinnedProjectTasks,
   useProjectTaskSearch,
 } from "../../projects/project-context.js";
 import {
@@ -125,11 +125,13 @@ export function ProjectSidebar({
   const taskActionLockRef = useRef(createAsyncActionLock());
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const taskSearch = useProjectTaskSearch(normalizedQuery);
+  const pinnedTasks = usePinnedProjectTasks().filter(
+    (task) =>
+      normalizedQuery.length === 0 || task.title.toLocaleLowerCase().includes(normalizedQuery),
+  );
   const visibleTasks = normalizedQuery.length === 0 ? tasks : taskSearch.tasks;
   // 大列表只分组一次，Project 渲染不再重复扫描全部 Task。
   const tasksByProjectId = useMemo(() => groupTasksByProjectId(visibleTasks), [visibleTasks]);
-  const pinnedTasks = getPinnedTasks(visibleTasks);
-  const hasPendingTasks = [...projectTaskStates.values()].some((state) => state.isPending);
   const hasTaskError = [...projectTaskStates.values()].some((state) => state.error !== null);
   const taskActionPending =
     pinMutation.isPending || renameMutation.isPending || archiveMutation.isPending;
@@ -386,7 +388,6 @@ export function ProjectSidebar({
         expandedTaskProjects={expandedTaskProjects}
         fetchNextProjectTaskPage={fetchNextProjectTaskPage}
         getProjectReorderProps={getProjectReorderProps}
-        hasPendingTasks={hasPendingTasks}
         hasTaskError={hasTaskError}
         isPending={isPending}
         isProjectActionPending={isProjectActionPending}

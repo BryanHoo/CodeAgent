@@ -4,7 +4,6 @@ import {
   CircleAlert,
   CircleCheck,
   Ellipsis,
-  LoaderCircle,
   Pencil,
   Pin,
   ShieldQuestion,
@@ -133,10 +132,8 @@ export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskSta
         className="task-status ml-auto inline-flex shrink-0 text-subtle-foreground"
         role="status"
       >
-        {/* 动画放在 HTML 容器上，确保 SVG 图标在各浏览器中平滑旋转。 */}
-        <span className="inline-flex animate-spin" aria-hidden="true">
-          <LoaderCircle className="size-3.5" />
-        </span>
+        {/* 纯 CSS spinner 隔离绘制，避免持续重绘 SVG 路径。 */}
+        <span className="sidebar-task-spinner" aria-hidden="true" />
       </span>
     );
   }

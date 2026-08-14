@@ -25,6 +25,7 @@ import {
   projectCommitChangesMutationOptions,
   projectCommitMessageMutationOptions,
   projectFileTreeQueryOptions,
+  projectPinnedTasksQueryOptions,
   projectReorderMutationOptions,
   listProjectTasksForSearch,
   projectTasksInfiniteQueryOptions,
@@ -38,6 +39,7 @@ import {
   removeProjectTaskFromInfiniteData,
   reorderProjectPage,
   replaceProjectTaskInInfiniteData,
+  replaceProjectTaskInQueryCaches,
   upsertProjectTaskInInfiniteData,
 } from "./project-queries.js";
 
@@ -684,6 +686,40 @@ describe("project queries", () => {
       cursor: "next-page",
       limit: 100,
     });
+  });
+
+  it("loads pinned tasks directly from the Provider section across pages", async () => {
+    const pinnedTask = { ...task, id: "task-pinned", pinned: true };
+    const olderPinnedTask = { ...pinnedTask, id: "task-pinned-older" };
+    const listTasks = vi
+      .fn<CodeAgentReadClient["listTasks"]>()
+      .mockResolvedValueOnce({ data: [pinnedTask], nextCursor: "pinned-next" })
+      .mockResolvedValueOnce({ data: [olderPinnedTask], nextCursor: null });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const options = projectPinnedTasksQueryOptions("code-agent", { listTasks });
+
+    await expect(queryClient.fetchQuery(options)).resolves.toEqual([pinnedTask, olderPinnedTask]);
+    expect(listTasks.mock.calls[0]?.slice(0, 2)).toEqual([
+      "code-agent",
+      { limit: 100, pinnedOnly: true },
+    ]);
+    expect(listTasks.mock.calls[1]?.slice(0, 2)).toEqual([
+      "code-agent",
+      { cursor: "pinned-next", limit: 100, pinnedOnly: true },
+    ]);
+    expect(listTasks.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
+    expect(listTasks.mock.calls[1]?.[2]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("adds a newly pinned task to the dedicated pinned cache", () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["projects", "code-agent", "tasks", "pinned-source"], []);
+
+    replaceProjectTaskInQueryCaches(queryClient, { ...task, pinned: true });
+
+    expect(queryClient.getQueryData(["projects", "code-agent", "tasks", "pinned-source"])).toEqual([
+      { ...task, pinned: true },
+    ]);
   });
 
   it("refetches the active first page after archive to keep five recent tasks visible", async () => {

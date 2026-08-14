@@ -307,6 +307,48 @@ async fn task_pinning_should_use_codex_fixed_section_uuid() {
 }
 
 #[tokio::test]
+async fn pinned_task_listing_should_query_only_the_codex_fixed_section() {
+    let (runtime, server) = runtime();
+    let provider = runtime
+        .for_project(project(), &PortRequestContext::new("project"))
+        .await
+        .expect("project provider");
+    let (read, mut write) = tokio::io::split(server);
+    let mut read = BufReader::new(read);
+    let scenario = tokio::spawn(async move {
+        let list = read_frame(&mut read).await;
+        assert_eq!(list["method"], "thread/list");
+        assert_eq!(list["params"]["sectionId"], PINNED_SECTION_ID);
+        assert_eq!(list["params"]["useStateDbOnly"], true);
+        respond(
+            &mut write,
+            &list,
+            json!({ "data": [{
+                "createdAt": 1_754_956_800,
+                "cwd": "/workspace",
+                "id": "task-pinned",
+                "name": null,
+                "preview": "固定任务",
+                "section": { "id": PINNED_SECTION_ID, "name": "Pinned" },
+                "updatedAt": 1_754_956_801
+            }], "nextCursor": null }),
+        )
+        .await;
+    });
+
+    let page = provider
+        .list_tasks(
+            json!({ "limit": 100, "pinnedOnly": true }),
+            &PortRequestContext::new("list-pinned"),
+        )
+        .await
+        .expect("list pinned tasks");
+
+    assert_eq!(page.data.len(), 1);
+    scenario.await.expect("scenario");
+}
+
+#[tokio::test]
 async fn newly_started_task_should_remain_visible_before_codex_materializes_history() {
     let (runtime, server) = runtime();
     let provider = runtime

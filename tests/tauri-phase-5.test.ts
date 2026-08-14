@@ -79,7 +79,20 @@ describe("Tauri Phase 5 repository contract", () => {
     expect(platformAdapters).toContain("desktop_codex_environment");
     expect(platformAdapters).toContain('"PATH".to_string()');
     expect(platformAdapters).toContain('join("codex-path")');
-    expect(platformAdapters).toContain("resolved_process_path");
+    expect(desktop).toContain("resolved_process_path");
+  });
+
+  it("injects one resolved host tool environment into desktop services", () => {
+    const desktop = read("apps/desktop/src-tauri/src/lib.rs");
+    const platformAdapters = read("apps/desktop/src-tauri/src/platform_adapters.rs");
+
+    expect(desktop.match(/resolved_process_path\(/gu)).toHaveLength(1);
+    expect(desktop).toContain("ProcessEnvironment::capture_with_path");
+    expect(desktop).toMatch(
+      /PlatformFilePort::new\(\s*database\.clone\(\),\s*host_environment\.clone\(\),?\s*\)/u,
+    );
+    expect(desktop).toContain("GitCliService::new(database, host_environment)");
+    expect(platformAdapters).not.toContain("resolved_process_path");
   });
 
   it("registers every Phase 5 command while keeping renderer capabilities minimal", () => {

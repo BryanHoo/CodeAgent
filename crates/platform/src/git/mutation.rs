@@ -54,7 +54,8 @@ impl GitCliService {
                 .with_mutation_code(AgentMutationErrorCode::GitBranchAlreadyActive));
         }
         let root = self.repository_root(project_id, None).await?;
-        let checked = Self::git(&root, &["check-ref-format", "--branch", branch], context)
+        let checked = self
+            .git(&root, &["check-ref-format", "--branch", branch], context)
             .await
             .map_err(|_| {
                 invalid("git branch name is invalid")
@@ -65,14 +66,14 @@ impl GitCliService {
                 .with_mutation_code(AgentMutationErrorCode::GitBranchInvalid));
         }
         if create {
-            Self::git(&root, &["switch", "-c", branch], context)
+            self.git(&root, &["switch", "-c", branch], context)
                 .await
                 .map_err(|_| {
                     internal("git branch creation failed")
                         .with_mutation_code(AgentMutationErrorCode::GitBranchCreateFailed)
                 })?;
         } else {
-            Self::git(&root, &["switch", "--no-guess", branch], context)
+            self.git(&root, &["switch", "--no-guess", branch], context)
                 .await
                 .map_err(|_| {
                     internal("git branch switch failed")
@@ -160,40 +161,43 @@ impl GitCliService {
                 "--".to_owned(),
             ];
             prepare.extend(untracked_paths.iter().cloned());
-            Self::git_owned(&root, prepare, None, context).await?;
+            self.git_owned(&root, prepare, None, context).await?;
         }
 
-        if let Err(error) =
-            Self::git_owned(&root, arguments, Some(message.as_bytes()), context).await
+        if let Err(error) = self
+            .git_owned(&root, arguments, Some(message.as_bytes()), context)
+            .await
         {
             // 提交失败时撤销 intent-to-add，避免污染用户原有索引状态。
             if !untracked_paths.is_empty() {
                 let mut reset = vec!["reset".to_owned(), "--".to_owned()];
                 reset.extend(untracked_paths);
-                let _ = Self::git_owned(&root, reset, None, context).await;
+                let _ = self.git_owned(&root, reset, None, context).await;
             }
             return Err(error);
         }
-        let commit_sha = Self::git(&root, &["rev-parse", "HEAD"], context)
+        let commit_sha = self
+            .git(&root, &["rev-parse", "HEAD"], context)
             .await?
             .trim()
             .to_owned();
         let push_status = if action == "commit_and_push" {
-            if Self::git(
-                &root,
-                &[
-                    "rev-parse",
-                    "--abbrev-ref",
-                    "--symbolic-full-name",
-                    "@{upstream}",
-                ],
-                context,
-            )
-            .await
-            .is_err()
+            if self
+                .git(
+                    &root,
+                    &[
+                        "rev-parse",
+                        "--abbrev-ref",
+                        "--symbolic-full-name",
+                        "@{upstream}",
+                    ],
+                    context,
+                )
+                .await
+                .is_err()
             {
                 "not_configured"
-            } else if Self::git(&root, &["push"], context).await.is_ok() {
+            } else if self.git(&root, &["push"], context).await.is_ok() {
                 "pushed"
             } else {
                 "failed"

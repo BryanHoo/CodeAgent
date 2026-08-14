@@ -1,17 +1,22 @@
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use code_agent_core::{
-    AgentMutationErrorCode, CodeAgentError, CodeAgentErrorCode, GitPort, PortRequestContext,
-};
+use code_agent_core::{AgentMutationErrorCode, CodeAgentError, GitPort, PortRequestContext};
 use code_agent_protocol::ProjectId;
 use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 
-use crate::{PlatformDatabase, PlatformError, process::execute_git};
+use crate::{PlatformDatabase, PlatformError, ProcessEnvironment, process::execute_git};
 
 mod mutation;
 mod status;
+mod support;
+
+use support::{
+    conflict, git_repository_not_found, internal, invalid, not_found, optional_string,
+    required_string, valid_relative_path,
+};
+use support::{map_platform_error, nonempty, parse_cursor, truncate_utf8, validate_sha};
 
 const HISTORY_PAGE_SIZE: usize = 20;
 const MAX_HISTORY_REPOSITORIES: usize = 256;
@@ -21,6 +26,7 @@ const MAX_DIFF_BYTES: usize = 512 * 1024;
 #[derive(Clone)]
 pub struct GitCliService {
     database: PlatformDatabase,
+    environment: ProcessEnvironment,
 }
 
 #[derive(Debug)]
@@ -31,8 +37,11 @@ struct ChildRepository {
 
 impl GitCliService {
     #[must_use]
-    pub fn new(database: PlatformDatabase) -> Self {
-        Self { database }
+    pub fn new(database: PlatformDatabase, environment: ProcessEnvironment) -> Self {
+        Self {
+            database,
+            environment,
+        }
     }
 
     async fn project_root(&self, project_id: &ProjectId) -> Result<PathBuf, CodeAgentError> {
@@ -137,6 +146,7 @@ impl GitCliService {
     }
 
     async fn git(
+        &self,
         root: &Path,
         arguments: &[&str],
         context: &PortRequestContext,
@@ -145,17 +155,18 @@ impl GitCliService {
             .iter()
             .map(|value| (*value).to_owned())
             .collect::<Vec<_>>();
-        let output = execute_git(root, &arguments, None, context).await?;
+        let output = execute_git(root, &arguments, None, &self.environment, context).await?;
         String::from_utf8(output.stdout).map_err(|_| invalid("git output is not UTF-8"))
     }
 
     async fn git_owned(
+        &self,
         root: &Path,
         arguments: Vec<String>,
         stdin: Option<&[u8]>,
         context: &PortRequestContext,
     ) -> Result<String, CodeAgentError> {
-        let output = execute_git(root, &arguments, stdin, context).await?;
+        let output = execute_git(root, &arguments, stdin, &self.environment, context).await?;
         String::from_utf8(output.stdout).map_err(|_| invalid("git output is not UTF-8"))
     }
 
@@ -204,19 +215,20 @@ impl GitCliService {
                 )
             };
         let offset = parse_cursor(query.get("cursor"))?;
-        let output = Self::git_owned(
-            &root,
-            vec![
-                "log".to_owned(),
-                format!("--max-count={}", HISTORY_PAGE_SIZE + 1),
-                format!("--skip={offset}"),
-                "--format=%H%x00%an%x00%ae%x00%aI%x00%s%x00".to_owned(),
-                "HEAD".to_owned(),
-            ],
-            None,
-            context,
-        )
-        .await?;
+        let output = self
+            .git_owned(
+                &root,
+                vec![
+                    "log".to_owned(),
+                    format!("--max-count={}", HISTORY_PAGE_SIZE + 1),
+                    format!("--skip={offset}"),
+                    "--format=%H%x00%an%x00%ae%x00%aI%x00%s%x00".to_owned(),
+                    "HEAD".to_owned(),
+                ],
+                None,
+                context,
+            )
+            .await?;
         let fields = output.split('\0').collect::<Vec<_>>();
         let mut commits = Vec::new();
         for chunk in fields.chunks(5) {
@@ -233,7 +245,8 @@ impl GitCliService {
         }
         let has_next = commits.len() > HISTORY_PAGE_SIZE;
         commits.truncate(HISTORY_PAGE_SIZE);
-        let branch = Self::git(&root, &["branch", "--show-current"], context)
+        let branch = self
+            .git(&root, &["branch", "--show-current"], context)
             .await?
             .trim()
             .to_owned();
@@ -259,22 +272,23 @@ impl GitCliService {
         let sha = required_string(query, "sha")?;
         validate_sha(sha)?;
         let offset = parse_cursor(query.get("cursor"))?;
-        let output = Self::git(
-            &root,
-            &[
-                "diff-tree",
-                "--root",
-                "--no-commit-id",
-                "--name-status",
-                "-z",
-                "-r",
-                "--no-renames",
-                sha,
-                "--",
-            ],
-            context,
-        )
-        .await?;
+        let output = self
+            .git(
+                &root,
+                &[
+                    "diff-tree",
+                    "--root",
+                    "--no-commit-id",
+                    "--name-status",
+                    "-z",
+                    "-r",
+                    "--no-renames",
+                    sha,
+                    "--",
+                ],
+                context,
+            )
+            .await?;
         let fields = output.split('\0').collect::<Vec<_>>();
         let mut files = fields
             .chunks(2)
@@ -308,22 +322,23 @@ impl GitCliService {
         let sha = required_string(query, "sha")?;
         validate_sha(sha)?;
         let path = valid_relative_path(required_string(query, "path")?)?;
-        let output = Self::git(
-            &root,
-            &[
-                "show",
-                "--format=",
-                "--no-ext-diff",
-                "--no-textconv",
-                "--no-renames",
-                "--unified=3",
-                sha,
-                "--",
-                path,
-            ],
-            context,
-        )
-        .await?;
+        let output = self
+            .git(
+                &root,
+                &[
+                    "show",
+                    "--format=",
+                    "--no-ext-diff",
+                    "--no-textconv",
+                    "--no-renames",
+                    "--unified=3",
+                    sha,
+                    "--",
+                    path,
+                ],
+                context,
+            )
+            .await?;
         let (diff, truncated) = truncate_utf8(output, MAX_DIFF_BYTES);
         Ok(json!({ "diff": diff, "truncated": truncated }))
     }
@@ -405,91 +420,4 @@ impl GitPort for GitCliService {
     ) -> Result<Value, CodeAgentError> {
         self.commit(project_id, request, context).await
     }
-}
-
-fn nonempty<'a>(value: &'a str, fallback: &'a str) -> &'a str {
-    let value = value.trim();
-    if value.is_empty() { fallback } else { value }
-}
-fn parse_cursor(value: Option<&Value>) -> Result<usize, CodeAgentError> {
-    match value.and_then(Value::as_str) {
-        None => Ok(0),
-        Some(value) => value.parse().map_err(|_| invalid("git cursor is invalid")),
-    }
-}
-fn required_string<'a>(value: &'a Value, key: &str) -> Result<&'a str, CodeAgentError> {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| invalid("git request is invalid"))
-}
-fn optional_string<'a>(value: &'a Value, key: &str) -> Result<Option<&'a str>, CodeAgentError> {
-    match value.get(key) {
-        None | Some(Value::Null) => Ok(None),
-        Some(value) => value
-            .as_str()
-            .filter(|value| !value.is_empty())
-            .map(Some)
-            .ok_or_else(|| invalid("git request is invalid")),
-    }
-}
-fn validate_sha(value: &str) -> Result<(), CodeAgentError> {
-    if (40..=64).contains(&value.len())
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
-        Ok(())
-    } else {
-        Err(invalid("git commit SHA is invalid"))
-    }
-}
-fn valid_relative_path(value: &str) -> Result<&str, CodeAgentError> {
-    let path = Path::new(value);
-    if value.is_empty()
-        || path.is_absolute()
-        || path
-            .components()
-            .any(|component| !matches!(component, std::path::Component::Normal(_)))
-    {
-        Err(invalid("git path is invalid"))
-    } else {
-        Ok(value)
-    }
-}
-fn truncate_utf8(value: String, maximum: usize) -> (String, bool) {
-    if value.len() <= maximum {
-        return (value, false);
-    }
-    let mut end = maximum;
-    while !value.is_char_boundary(end) {
-        end -= 1;
-    }
-    (value[..end].to_owned(), true)
-}
-fn map_platform_error(error: PlatformError) -> CodeAgentError {
-    match error {
-        PlatformError::Worker(message) if message == "project not found" => {
-            not_found("project was not found")
-                .with_mutation_code(AgentMutationErrorCode::ProjectNotFound)
-        }
-        _ => internal("project registry is unavailable"),
-    }
-}
-fn git_repository_not_found() -> CodeAgentError {
-    not_found("git repository was not found")
-        .with_mutation_code(AgentMutationErrorCode::GitRepositoryUnavailable)
-}
-fn invalid(message: &'static str) -> CodeAgentError {
-    CodeAgentError::new(CodeAgentErrorCode::InvalidInput, message, None)
-}
-fn not_found(message: &'static str) -> CodeAgentError {
-    CodeAgentError::new(CodeAgentErrorCode::NotFound, message, None)
-}
-fn conflict(message: &'static str) -> CodeAgentError {
-    CodeAgentError::new(CodeAgentErrorCode::Conflict, message, None)
-}
-fn internal(message: &'static str) -> CodeAgentError {
-    CodeAgentError::internal(message)
 }
