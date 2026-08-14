@@ -1,4 +1,5 @@
 use std::{
+    ffi::{OsStr, OsString},
     path::Path,
     process::Stdio,
     sync::{
@@ -21,13 +22,62 @@ pub struct ProcessOutput {
     pub stdout: Vec<u8>,
 }
 
+#[derive(Clone, Debug)]
+pub struct ProcessEnvironment {
+    variables: Arc<[(OsString, OsString)]>,
+}
+
+impl ProcessEnvironment {
+    #[must_use]
+    pub fn capture_with_path(path: OsString) -> Self {
+        // Composition Root 只覆盖工具搜索路径，其余宿主变量保持启动时快照。
+        let variables = std::env::vars_os()
+            .filter(|(key, _)| !environment_key_matches(key, "PATH"))
+            .chain(std::iter::once((OsString::from("PATH"), path)));
+        Self::from_variables(variables)
+    }
+
+    #[must_use]
+    pub fn from_variables<K, V>(variables: impl IntoIterator<Item = (K, V)>) -> Self
+    where
+        K: Into<OsString>,
+        V: Into<OsString>,
+    {
+        Self {
+            variables: variables
+                .into_iter()
+                .map(|(key, value)| (key.into(), value.into()))
+                .collect(),
+        }
+    }
+
+    pub(crate) fn apply(&self, command: &mut Command) {
+        // 清空继承环境后应用快照，避免调用期间的进程环境变化绕过注入边界。
+        command
+            .env_clear()
+            .envs(self.variables.iter().map(|(key, value)| (key, value)));
+    }
+
+    pub(crate) fn utf8_variables(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.variables
+            .iter()
+            .filter_map(|(key, value)| Some((key.to_str()?, value.to_str()?)))
+    }
+}
+
+fn environment_key_matches(key: &OsStr, expected: &str) -> bool {
+    key.to_string_lossy().eq_ignore_ascii_case(expected)
+}
+
 pub async fn execute_git(
     root: &Path,
     arguments: &[String],
     stdin: Option<&[u8]>,
+    environment: &ProcessEnvironment,
     context: &PortRequestContext,
 ) -> Result<ProcessOutput, CodeAgentError> {
     let mut command = Command::new("git");
+    environment.apply(&mut command);
     command
         .current_dir(root)
         .args(arguments)
@@ -140,4 +190,56 @@ fn failure(message: &'static str) -> CodeAgentError {
 
 fn capacity(message: &'static str) -> CodeAgentError {
     CodeAgentError::new(CodeAgentErrorCode::CapacityExceeded, message, None)
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    use code_agent_core::PortRequestContext;
+
+    use super::{ProcessEnvironment, execute_git};
+
+    #[tokio::test]
+    async fn execute_git_uses_injected_path_and_removes_dangerous_variables() {
+        let root = std::env::temp_dir().join(format!(
+            "code-agent-git-environment-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).expect("create Git environment fixture");
+        let executable = root.join("git");
+        fs::write(
+            &executable,
+            "#!/bin/sh\n[ -z \"${GIT_CONFIG_COUNT+x}\" ] || exit 99\n[ -z \"${GIT_EXEC_PATH+x}\" ] || exit 99\n[ -z \"${GIT_EXTERNAL_DIFF+x}\" ] || exit 99\n[ -z \"${GIT_SSH_COMMAND+x}\" ] || exit 99\n[ -z \"${GIT_ASKPASS+x}\" ] || exit 99\nprintf '%s\\n' \"$CODE_AGENT_TEST_MARKER\"\n",
+        )
+        .expect("write fake Git executable");
+        let mut permissions = fs::metadata(&executable)
+            .expect("read fake Git metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&executable, permissions).expect("make fake Git executable");
+        let environment = ProcessEnvironment::from_variables([
+            ("PATH", root.to_string_lossy().as_ref()),
+            ("CODE_AGENT_TEST_MARKER", "injected"),
+            ("GIT_CONFIG_COUNT", "1"),
+            ("GIT_EXEC_PATH", "/unsafe/git-core"),
+            ("GIT_EXTERNAL_DIFF", "unsafe-diff"),
+            ("GIT_SSH_COMMAND", "unsafe-ssh"),
+            ("GIT_ASKPASS", "unsafe-askpass"),
+        ]);
+
+        let output = execute_git(
+            &root,
+            &[],
+            None,
+            &environment,
+            &PortRequestContext::new("git-environment-test"),
+        )
+        .await
+        .expect("execute injected Git");
+
+        fs::remove_dir_all(&root).expect("remove Git environment fixture");
+        assert_eq!(output.stdout, b"injected\n");
+    }
 }

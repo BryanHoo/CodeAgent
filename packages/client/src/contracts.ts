@@ -29,6 +29,7 @@ export type AgentAttachmentUploadInput = Readonly<{
 export type ListTasksOptions = Readonly<{
   cursor?: string;
   limit?: number;
+  pinnedOnly?: true;
 }>;
 
 export type PendingRequestResolution<T extends PendingRequest> = Extract<

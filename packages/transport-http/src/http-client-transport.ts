@@ -69,6 +69,7 @@ export type AgentAttachmentUploadInput = Readonly<{
 export type ListTasksOptions = Readonly<{
   cursor?: string;
   limit?: number;
+  pinnedOnly?: true;
 }>;
 
 export type MutationOptions = Readonly<{
@@ -114,7 +115,7 @@ export class CodeAgentResponseError extends Error {
 
 export function appendQuery(
   path: string,
-  values: Readonly<Record<string, string | number | undefined>>,
+  values: Readonly<Record<string, boolean | string | number | undefined>>,
 ) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(values)) {

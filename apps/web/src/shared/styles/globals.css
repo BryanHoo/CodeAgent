@@ -494,6 +494,23 @@ a {
   pointer-events: none;
 }
 
+.sidebar-task-spinner {
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 9999px;
+  contain: strict;
+  will-change: transform;
+  animation: sidebar-task-spin 800ms linear infinite;
+}
+
+@keyframes sidebar-task-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
 .group:hover > .task-actions,
 .group:focus-within > .task-actions {
   opacity: 1;
@@ -599,6 +616,10 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .sidebar-task-spinner {
+    animation: none;
+  }
+
   .workbench-shell,
   .workbench-sidebar,
   .workbench-inspector {

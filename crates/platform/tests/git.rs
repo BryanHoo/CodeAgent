@@ -4,7 +4,9 @@ use std::time::Duration;
 
 use chrono::{TimeZone, Utc};
 use code_agent_core::{GitPort, PortRequestContext, RepositoryPort};
-use code_agent_platform::{DatabaseOptions, GitCliService, PlatformDatabase, SqliteRepository};
+use code_agent_platform::{
+    DatabaseOptions, GitCliService, PlatformDatabase, ProcessEnvironment, SqliteRepository,
+};
 use serde_json::json;
 
 #[tokio::test]
@@ -39,7 +41,7 @@ async fn git_service_reads_and_mutates_only_registered_repository() {
         .await
         .expect("project row");
     let project_id = project.id;
-    let service = GitCliService::new(database.clone());
+    let service = GitCliService::new(database.clone(), current_process_environment());
     let context = PortRequestContext::new("git-test");
 
     fs::write(repository.join("tracked.txt"), "changed\n").expect("change");
@@ -136,7 +138,7 @@ async fn git_service_aggregates_and_operates_on_immediate_child_repositories() {
         )
         .await
         .expect("project row");
-    let service = GitCliService::new(database.clone());
+    let service = GitCliService::new(database.clone(), current_process_environment());
     let context = PortRequestContext::new("child-git-test");
 
     fs::write(backend.join("tracked.txt"), "backend changed\n").expect("backend change");
@@ -252,4 +254,8 @@ fn run_git(root: &std::path::Path, arguments: &[&str]) {
         .status()
         .expect("git command");
     assert!(status.success(), "git command failed: {arguments:?}");
+}
+
+fn current_process_environment() -> ProcessEnvironment {
+    ProcessEnvironment::capture_with_path(std::env::var_os("PATH").unwrap_or_default())
 }

@@ -382,6 +382,20 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("requests only tasks in the pinned Provider section", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(
+      jsonResponse({ data: [{ ...task, pinned: true }], nextCursor: null }),
+    );
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await client.listTasks("code-agent", { limit: 100, pinnedOnly: true });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/projects/code-agent/tasks?limit=100&pinnedOnly=true",
+    );
+  });
+
   it("uses the public temporary scope without exposing an internal Project route", async () => {
     const temporaryTask = { ...task, projectId: "temporary" };
     const fetchMock = vi.fn<typeof fetch>();

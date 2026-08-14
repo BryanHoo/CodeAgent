@@ -11,9 +11,9 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use crate::host_file_browser::browse_directory;
 use crate::project_file_index_cache::ProjectFileIndexCache;
-use crate::project_open::{OpenTarget, capabilities as open_capabilities, open as open_target};
+use crate::project_open::{OpenTarget, ProjectOpenService};
 use crate::project_tree::{read_directory_entries, validate_directory_path};
-use crate::{CanonicalPathPolicy, PlatformDatabase, PlatformError};
+use crate::{CanonicalPathPolicy, PlatformDatabase, PlatformError, ProcessEnvironment};
 
 const MAX_SOURCE_BYTES: usize = 256 * 1024;
 const MAX_SOURCE_LINES: usize = 4_000;
@@ -42,14 +42,16 @@ pub struct PlatformFileService {
 pub struct PlatformFilePort {
     database: PlatformDatabase,
     file_indexes: ProjectFileIndexCache,
+    project_open: ProjectOpenService,
 }
 
 impl PlatformFilePort {
     #[must_use]
-    pub fn new(database: PlatformDatabase) -> Self {
+    pub fn new(database: PlatformDatabase, environment: ProcessEnvironment) -> Self {
         Self {
             database,
             file_indexes: ProjectFileIndexCache::new(),
+            project_open: ProjectOpenService::new(environment),
         }
     }
 
@@ -297,7 +299,7 @@ impl FilePort for PlatformFilePort {
         context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
         ensure_active(context)?;
-        Ok(open_capabilities())
+        Ok(self.project_open.capabilities())
     }
 
     async fn open_project_path(
@@ -326,7 +328,9 @@ impl FilePort for PlatformFilePort {
             .map_err(PlatformError::from)
             .map_err(map_error)?;
         let target = OpenTarget::new(&target, metadata.is_dir());
-        open_target(&target, service.policy.root(), app_id).await?;
+        self.project_open
+            .open(&target, service.policy.root(), app_id)
+            .await?;
         Ok(json!({ "appId": app_id, "path": path }))
     }
 }

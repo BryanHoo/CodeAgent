@@ -14,7 +14,10 @@ import { getProjectTaskPreview, PROJECT_TASK_PREVIEW_LIMIT } from "../../project
 import type { ProjectTaskListState } from "../../projects/project-context.js";
 import type { useProjectReordering } from "../hooks/use-project-reordering.js";
 import { ProjectActions, ProjectPickerButton } from "./project-sidebar-actions.js";
-import { getProjectTaskPaginationControl } from "./project-sidebar-state.js";
+import {
+  getProjectTaskPaginationControl,
+  shouldShowProjectTaskEmptyState,
+} from "./project-sidebar-state.js";
 import { TaskLink } from "./project-sidebar-task-row.js";
 
 const EMPTY_PROJECT_TASKS: readonly AgentTask[] = [];
@@ -26,7 +29,6 @@ type ProjectSidebarTaskListProps = Readonly<{
   expandedTaskProjects: ReadonlySet<string>;
   fetchNextProjectTaskPage: (projectId: string) => Promise<void>;
   getProjectReorderProps: ReturnType<typeof useProjectReordering>["getProjectReorderProps"];
-  hasPendingTasks: boolean;
   hasTaskError: boolean;
   isPending: boolean;
   isProjectActionPending: boolean;
@@ -63,7 +65,6 @@ export function ProjectSidebarTaskList({
   expandedTaskProjects,
   fetchNextProjectTaskPage,
   getProjectReorderProps,
-  hasPendingTasks,
   hasTaskError,
   isPending,
   isProjectActionPending,
@@ -154,7 +155,7 @@ export function ProjectSidebarTaskList({
             />
           </div>
 
-          {isPending || hasPendingTasks ? (
+          {isPending ? (
             <p className="px-2 py-1.5 text-meta text-subtle-foreground">
               {t("sidebar.taskLoading")}
             </p>
@@ -245,7 +246,18 @@ export function ProjectSidebarTaskList({
                     {temporaryPaginationControl.label}
                   </Button>
                 )}
-                {temporaryTasks.length === 0 && normalizedQuery.length === 0 ? (
+                {normalizedQuery.length === 0 &&
+                temporaryTasks.length === 0 &&
+                (temporaryTaskState === undefined || temporaryTaskState.isPending) ? (
+                  <p className="px-2 py-1.5 text-meta text-subtle-foreground">
+                    {t("sidebar.taskLoading")}
+                  </p>
+                ) : null}
+                {shouldShowProjectTaskEmptyState(
+                  temporaryTaskState,
+                  temporaryTasks.length,
+                  normalizedQuery,
+                ) ? (
                   <p className="px-2 py-1.5 text-meta text-subtle-foreground">
                     {t("sidebar.noTemporaryTasks")}
                   </p>
@@ -387,7 +399,18 @@ export function ProjectSidebarTaskList({
                           {taskPaginationControl.label}
                         </Button>
                       )}
-                      {projectTasks.length === 0 && normalizedQuery.length === 0 ? (
+                      {normalizedQuery.length === 0 &&
+                      projectTasks.length === 0 &&
+                      (projectTaskState === undefined || projectTaskState.isPending) ? (
+                        <p className="px-2 py-1.5 text-meta text-subtle-foreground">
+                          {t("sidebar.taskLoading")}
+                        </p>
+                      ) : null}
+                      {shouldShowProjectTaskEmptyState(
+                        projectTaskState,
+                        projectTasks.length,
+                        normalizedQuery,
+                      ) ? (
                         <p className="px-2 py-1.5 text-meta text-subtle-foreground">
                           {t("sidebar.noTasks")}
                         </p>

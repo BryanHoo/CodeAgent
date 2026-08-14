@@ -623,7 +623,9 @@ test("toggles project tasks from the project name without navigation", async ({ 
 test("loads tasks only for the current or expanded projects", async ({ page }) => {
   let superworkTaskRequests = 0;
   await page.route("**/v1/projects/superwork/tasks?*", async (route) => {
-    superworkTaskRequests += 1;
+    if (new URL(route.request().url()).searchParams.get("pinnedOnly") !== "true") {
+      superworkTaskRequests += 1;
+    }
     await route.fallback();
   });
 
@@ -644,7 +646,10 @@ test("loads one project task page only after showing more", async ({ page }) => 
   const taskListRequests: URL[] = [];
   page.on("request", (request) => {
     const requestUrl = new URL(request.url());
-    if (requestUrl.pathname === "/v1/projects/code-agent/tasks") {
+    if (
+      requestUrl.pathname === "/v1/projects/code-agent/tasks" &&
+      requestUrl.searchParams.get("pinnedOnly") !== "true"
+    ) {
       taskListRequests.push(requestUrl);
     }
   });
@@ -679,7 +684,10 @@ test("keeps project add buttons visible after opening a task", async ({ page }) 
   await page.goto("/p/code-agent/t/task-1");
 
   const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
-  await sidebar.getByRole("link", { name: longTask.title }).click();
+  await sidebar
+    .getByTestId("project-tree-scroll")
+    .getByRole("link", { name: longTask.title })
+    .click();
 
   const layout = await sidebar.evaluate((element) => {
     const sidebarRect = element.getBoundingClientRect();

@@ -608,9 +608,10 @@ test("updates a running background task title and clears attention after enterin
 
   await page.goto("/p/code-agent/t/task-1");
   const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
-  const backgroundTask = sidebar.getByRole("link", { name: /优化输入框交互/ });
-  const completedTask = sidebar.locator('a[href="/p/code-agent/t/markdown"]');
-  const failedTask = sidebar.getByRole("link", { name: /完善 Runtime 状态/ });
+  const projectTree = sidebar.getByTestId("project-tree-scroll");
+  const backgroundTask = projectTree.getByRole("link", { name: /优化输入框交互/ });
+  const completedTask = projectTree.locator('a[href="/p/code-agent/t/markdown"]');
+  const failedTask = projectTree.getByRole("link", { name: /完善 Runtime 状态/ });
   await expect
     .poll(() =>
       page.evaluate(
@@ -1241,7 +1242,7 @@ test("shows the complete truncated command title on hover and focus", async ({ p
   await expect(page.getByRole("tooltip")).toHaveText(command);
 });
 
-test("keeps long runtime activity details within the conversation", async ({ page }) => {
+test("keeps long automatic approval details within the conversation", async ({ page }) => {
   const historicalTurn = taskSnapshot.turns[0];
   if (historicalTurn === undefined) {
     throw new Error("Expected the task fixture to contain a turn");
@@ -1265,11 +1266,14 @@ test("keeps long runtime activity details within the conversation", async ({ pag
               completedAt: null,
               items: [
                 {
-                  detail: longDetail,
-                  id: "activity-long-detail",
-                  label: "长执行详情",
-                  status: "running",
-                  type: "activity",
+                  action: { detail: longDetail, type: "command" },
+                  id: "approval-review-long-detail",
+                  rationale: "用户明确要求执行该命令",
+                  riskLevel: "low",
+                  status: "in_progress",
+                  targetItemId: "command-long-detail",
+                  type: "approval_review",
+                  userAuthorization: "high",
                 },
               ],
               status: "running",
@@ -1282,9 +1286,10 @@ test("keeps long runtime activity details within the conversation", async ({ pag
   await page.setViewportSize({ height: 720, width: 1_280 });
   await page.goto("/p/code-agent/t/task-1");
 
-  await page.getByText("长执行详情", { exact: true }).click();
+  const approvalReview = page.locator("[data-ai-task]").filter({ hasText: "自动审批：审批中" });
+  await approvalReview.getByText("自动审批：审批中", { exact: true }).click();
   const conversation = page.getByRole("log", { name: "会话内容" });
-  await expect(page.getByText(longDetail, { exact: true })).toBeVisible();
+  await expect(approvalReview).toContainText(longDetail);
   expect(await conversation.evaluate((element) => element.scrollWidth)).toBe(
     await conversation.evaluate((element) => element.clientWidth),
   );

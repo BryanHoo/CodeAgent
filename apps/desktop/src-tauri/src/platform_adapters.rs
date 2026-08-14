@@ -1,3 +1,4 @@
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
@@ -16,7 +17,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
-use crate::process_environment::resolved_process_path;
+use crate::process_environment::prepend_process_path;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -234,6 +235,7 @@ pub async fn start_codex_supervisor(
     app_version: String,
     resource_directory: PathBuf,
     codex_home: PathBuf,
+    host_process_path: OsString,
 ) {
     let binary = match locate_desktop_codex(&resource_directory) {
         Ok(binary) => binary,
@@ -244,7 +246,7 @@ pub async fn start_codex_supervisor(
     };
     let process = match start_codex_app_server(CodexAppServerOptions {
         app_version,
-        env_overrides: desktop_codex_environment(&binary, &codex_home).await,
+        env_overrides: desktop_codex_environment(&binary, &codex_home, &host_process_path),
         binary_path: binary,
         ..CodexAppServerOptions::default()
     })
@@ -283,7 +285,11 @@ pub async fn start_codex_supervisor(
     ));
 }
 
-async fn desktop_codex_environment(binary: &Path, codex_home: &Path) -> Vec<(String, String)> {
+fn desktop_codex_environment(
+    binary: &Path,
+    codex_home: &Path,
+    host_process_path: &OsStr,
+) -> Vec<(String, String)> {
     let binary_directory = binary.parent().unwrap_or_else(|| Path::new("."));
     let package_directory = binary_directory
         .parent()
@@ -297,8 +303,7 @@ async fn desktop_codex_environment(binary: &Path, codex_home: &Path) -> Vec<(Str
         .into_iter()
         .filter(|path| path.is_dir())
         .collect::<Vec<_>>();
-    let path = resolved_process_path(&managed_directories)
-        .await
+    let path = prepend_process_path(&managed_directories, host_process_path)
         .to_string_lossy()
         .into_owned();
 

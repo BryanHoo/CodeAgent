@@ -712,12 +712,16 @@ export async function mockAppShellApi(
       });
       body = { task };
     } else if (url.pathname === "/v1/temporary/tasks") {
+      const visibleTemporaryTasks =
+        url.searchParams.get("pinnedOnly") === "true"
+          ? temporaryTasks.filter((task) => task.pinned)
+          : temporaryTasks;
       const pageLimit = Number(url.searchParams.get("limit") ?? "5");
       const pageOffset = Number(url.searchParams.get("cursor") ?? "0");
       const nextOffset = pageOffset + pageLimit;
       body = {
-        data: temporaryTasks.slice(pageOffset, nextOffset),
-        nextCursor: nextOffset < temporaryTasks.length ? String(nextOffset) : null,
+        data: visibleTemporaryTasks.slice(pageOffset, nextOffset),
+        nextCursor: nextOffset < visibleTemporaryTasks.length ? String(nextOffset) : null,
       };
     } else if (temporarySettingsMatch !== null) {
       const taskId = temporarySettingsMatch[1] ?? "";
@@ -1071,7 +1075,11 @@ export async function mockAppShellApi(
       body = { data: [], nextCursor: null };
     } else if (url.pathname.startsWith("/v1/projects/") && url.pathname.endsWith("/tasks")) {
       const projectId = url.pathname.split("/")[3];
-      const projectTasks = routedTasks.filter((task) => task.projectId === projectId);
+      const projectTasks = routedTasks.filter(
+        (task) =>
+          task.projectId === projectId &&
+          (url.searchParams.get("pinnedOnly") !== "true" || task.pinned),
+      );
       const pageLimit = Number(url.searchParams.get("limit") ?? "5");
       const pageOffset = Number(url.searchParams.get("cursor") ?? "0");
       const nextOffset = pageOffset + pageLimit;

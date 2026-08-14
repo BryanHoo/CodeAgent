@@ -1,6 +1,11 @@
 use std::{collections::HashSet, path::Path};
 
-use super::{Arguments, OpenApp, OpenCommand, OpenTarget, Platform, launch, resolve_commands};
+use crate::process::ProcessEnvironment;
+
+use super::{
+    Arguments, OpenApp, OpenCommand, OpenTarget, Platform, launch, resolve_commands,
+    resolve_commands_with_environment,
+};
 
 fn existing(paths: &[&str]) -> impl Fn(&Path) -> bool {
     let paths = paths
@@ -90,6 +95,25 @@ fn only_exposes_installed_linux_apps_and_builds_terminal_arguments() {
 }
 
 #[test]
+fn injected_environment_controls_linux_app_discovery() {
+    let environment = ProcessEnvironment::from_variables([("PATH", "/host-tools")]);
+
+    let commands = resolve_commands_with_environment(
+        Platform::Linux,
+        &environment,
+        &existing(&["/host-tools/code"]),
+    );
+
+    assert_eq!(
+        commands
+            .iter()
+            .map(|command| command.app.id)
+            .collect::<Vec<_>>(),
+        ["visual-studio-code"]
+    );
+}
+
+#[test]
 fn detects_windows_apps_and_uses_broker_launch_semantics() {
     let commands = resolve_commands(
         Platform::Windows,
@@ -156,8 +180,13 @@ async fn broker_launch_does_not_report_a_fast_nonzero_proxy_exit() {
     };
 
     assert!(
-        launch(&command, &OpenTarget::directory("/tmp"), Path::new("/tmp"))
-            .await
-            .is_ok()
+        launch(
+            &command,
+            &OpenTarget::directory("/tmp"),
+            Path::new("/tmp"),
+            None,
+        )
+        .await
+        .is_ok()
     );
 }

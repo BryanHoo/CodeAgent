@@ -10,6 +10,7 @@ import {
   getProjectTaskPaginationControl,
   getProjectSidebarConnectionStatus,
   groupTasksByProjectId,
+  shouldShowProjectTaskEmptyState,
   ProjectActionMenu,
   ProjectActions,
   ProjectPickerButton,
@@ -84,6 +85,30 @@ describe("Project task pagination", () => {
 
   it("ignores a next-page request for an unavailable Project", async () => {
     await expect(requestNextProjectTaskPage(new Map(), "missing-project")).resolves.toBeUndefined();
+  });
+
+  it("does not show the empty state before an expanded Project task query settles", () => {
+    expect(shouldShowProjectTaskEmptyState(undefined, 0, "")).toBe(false);
+    expect(
+      shouldShowProjectTaskEmptyState(
+        {
+          error: null,
+          isPending: true,
+        },
+        0,
+        "",
+      ),
+    ).toBe(false);
+    expect(
+      shouldShowProjectTaskEmptyState(
+        {
+          error: null,
+          isPending: false,
+        },
+        0,
+        "",
+      ),
+    ).toBe(true);
   });
 
   it("separates local expansion, remote loading, retry, and collapse actions", () => {
@@ -399,7 +424,8 @@ describe("TaskStatusIndicator", () => {
     );
 
     expect(markup).toContain('aria-label="任务运行中"');
-    expect(markup).toContain("animate-spin");
+    expect(markup).toContain("sidebar-task-spinner");
+    expect(markup).not.toContain("<svg");
     expect(markup).not.toContain("task-age");
   });
 

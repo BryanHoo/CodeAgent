@@ -41,21 +41,24 @@ impl GitCliService {
         root: &Path,
         context: &PortRequestContext,
     ) -> Result<Value, CodeAgentError> {
-        let (mut staged, mut unstaged, _) =
-            read_working_changes(root, MAX_WORKING_ENTRIES, context).await?;
+        let (mut staged, mut unstaged, _) = self
+            .read_working_changes(root, MAX_WORKING_ENTRIES, context)
+            .await?;
         sort_changes(&mut staged);
         sort_changes(&mut unstaged);
-        let branch = optional_git(root, &["branch", "--show-current"], context)
+        let branch = self
+            .optional_git(root, &["branch", "--show-current"], context)
             .await
             .trim()
             .to_owned();
         let branch = (!branch.is_empty()).then_some(branch);
-        let local = optional_git(
-            root,
-            &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
-            context,
-        )
-        .await;
+        let local = self
+            .optional_git(
+                root,
+                &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+                context,
+            )
+            .await;
         let mut branches = lines(&local);
         if let Some(current) = &branch
             && let Some(index) = branches.iter().position(|value| value == current)
@@ -63,12 +66,13 @@ impl GitCliService {
             let current = branches.remove(index);
             branches.insert(0, current);
         }
-        let refs = optional_git(
-            root,
-            &["for-each-ref", "--format=%(refname:short)", "refs/remotes"],
-            context,
-        )
-        .await;
+        let refs = self
+            .optional_git(
+                root,
+                &["for-each-ref", "--format=%(refname:short)", "refs/remotes"],
+                context,
+            )
+            .await;
         let base_branches = lines(&refs)
             .into_iter()
             .filter(|value| !value.ends_with("/HEAD"))
@@ -97,8 +101,10 @@ impl GitCliService {
             for (index, repository) in repository_batch.iter().enumerate() {
                 let root = repository.root.clone();
                 let context = context.clone();
+                let service = self.clone();
                 tasks.spawn(async move {
-                    read_working_entries(&root, MAX_WORKING_ENTRIES, &context)
+                    service
+                        .read_working_entries(&root, MAX_WORKING_ENTRIES, &context)
                         .await
                         .map(|entries| (index, entries))
                 });
@@ -113,8 +119,9 @@ impl GitCliService {
             {
                 entries.truncate(remaining);
                 remaining -= entries.len();
-                let (repository_staged, repository_unstaged) =
-                    materialize_working_changes(&repository.root, entries, context).await?;
+                let (repository_staged, repository_unstaged) = self
+                    .materialize_working_changes(&repository.root, entries, context)
+                    .await?;
                 staged.extend(prefix_changes(&repository.name, repository_staged));
                 unstaged.extend(prefix_changes(&repository.name, repository_unstaged));
             }
@@ -123,54 +130,98 @@ impl GitCliService {
         sort_changes(&mut unstaged);
         status_value(None, Vec::new(), Vec::new(), "children", staged, unstaged)
     }
-}
-
-async fn read_working_changes(
-    root: &Path,
-    maximum: usize,
-    context: &PortRequestContext,
-) -> Result<(Vec<Value>, Vec<Value>, usize), CodeAgentError> {
-    let mut entries = read_working_entries(root, maximum, context).await?;
-    entries.truncate(maximum);
-    let entry_count = entries.len();
-    let (staged, unstaged) = materialize_working_changes(root, entries, context).await?;
-    Ok((staged, unstaged, entry_count))
-}
-
-async fn read_working_entries(
-    root: &Path,
-    maximum: usize,
-    context: &PortRequestContext,
-) -> Result<Vec<WorkingEntry>, CodeAgentError> {
-    let raw = GitCliService::git(
-        root,
-        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
-        context,
-    )
-    .await?;
-    let mut entries = parse_porcelain(raw.as_bytes())?;
-    entries.truncate(maximum);
-    Ok(entries)
-}
-
-async fn materialize_working_changes(
-    root: &Path,
-    entries: Vec<WorkingEntry>,
-    context: &PortRequestContext,
-) -> Result<(Vec<Value>, Vec<Value>), CodeAgentError> {
-    let mut staged = Vec::new();
-    let mut unstaged = Vec::new();
-    for entry in entries {
-        if entry.index != b' ' && entry.index != b'?' && entry.index != b'!' {
-            staged.push(change_value(root, &entry.path, entry.index, true, context).await?);
-        }
-        if entry.index == b'?' && entry.working == b'?' {
-            unstaged.push(untracked_change(root, &entry.path).await?);
-        } else if entry.working != b' ' && entry.working != b'!' {
-            unstaged.push(change_value(root, &entry.path, entry.working, false, context).await?);
-        }
+    async fn read_working_changes(
+        &self,
+        root: &Path,
+        maximum: usize,
+        context: &PortRequestContext,
+    ) -> Result<(Vec<Value>, Vec<Value>, usize), CodeAgentError> {
+        let mut entries = self.read_working_entries(root, maximum, context).await?;
+        entries.truncate(maximum);
+        let entry_count = entries.len();
+        let (staged, unstaged) = self
+            .materialize_working_changes(root, entries, context)
+            .await?;
+        Ok((staged, unstaged, entry_count))
     }
-    Ok((staged, unstaged))
+
+    async fn read_working_entries(
+        &self,
+        root: &Path,
+        maximum: usize,
+        context: &PortRequestContext,
+    ) -> Result<Vec<WorkingEntry>, CodeAgentError> {
+        let raw = self
+            .git(
+                root,
+                &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+                context,
+            )
+            .await?;
+        let mut entries = parse_porcelain(raw.as_bytes())?;
+        entries.truncate(maximum);
+        Ok(entries)
+    }
+
+    async fn materialize_working_changes(
+        &self,
+        root: &Path,
+        entries: Vec<WorkingEntry>,
+        context: &PortRequestContext,
+    ) -> Result<(Vec<Value>, Vec<Value>), CodeAgentError> {
+        let mut staged = Vec::new();
+        let mut unstaged = Vec::new();
+        for entry in entries {
+            if entry.index != b' ' && entry.index != b'?' && entry.index != b'!' {
+                staged.push(
+                    self.change_value(root, &entry.path, entry.index, true, context)
+                        .await?,
+                );
+            }
+            if entry.index == b'?' && entry.working == b'?' {
+                unstaged.push(untracked_change(root, &entry.path).await?);
+            } else if entry.working != b' ' && entry.working != b'!' {
+                unstaged.push(
+                    self.change_value(root, &entry.path, entry.working, false, context)
+                        .await?,
+                );
+            }
+        }
+        Ok((staged, unstaged))
+    }
+
+    async fn change_value(
+        &self,
+        root: &Path,
+        path: &str,
+        status: u8,
+        staged: bool,
+        context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        let arguments = if staged {
+            vec![
+                "diff",
+                "--cached",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--",
+                path,
+            ]
+        } else {
+            vec!["diff", "--no-ext-diff", "--no-textconv", "--", path]
+        };
+        let diff = self.git(root, &arguments, context).await?;
+        Ok(json!({ "diff": diff, "kind": change_kind(status), "path": path }))
+    }
+
+    async fn optional_git(
+        &self,
+        root: &Path,
+        arguments: &[&str],
+        context: &PortRequestContext,
+    ) -> String {
+        self.git(root, arguments, context).await.unwrap_or_default()
+    }
 }
 
 fn prefix_changes(repository: &str, mut changes: Vec<Value>) -> Vec<Value> {
@@ -211,29 +262,6 @@ fn status_value(
         "staged": staged,
         "unstaged": unstaged,
     }))
-}
-
-async fn change_value(
-    root: &Path,
-    path: &str,
-    status: u8,
-    staged: bool,
-    context: &PortRequestContext,
-) -> Result<Value, CodeAgentError> {
-    let arguments = if staged {
-        vec![
-            "diff",
-            "--cached",
-            "--no-ext-diff",
-            "--no-textconv",
-            "--",
-            path,
-        ]
-    } else {
-        vec!["diff", "--no-ext-diff", "--no-textconv", "--", path]
-    };
-    let diff = GitCliService::git(root, &arguments, context).await?;
-    Ok(json!({ "diff": diff, "kind": change_kind(status), "path": path }))
 }
 
 async fn untracked_change(root: &Path, path: &str) -> Result<Value, CodeAgentError> {
@@ -313,10 +341,4 @@ fn lines(value: &str) -> Vec<String> {
     values.sort();
     values.dedup();
     values
-}
-
-async fn optional_git(root: &Path, arguments: &[&str], context: &PortRequestContext) -> String {
-    GitCliService::git(root, arguments, context)
-        .await
-        .unwrap_or_default()
 }

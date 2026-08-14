@@ -45,6 +45,15 @@ impl CodexProjectProvider {
             "sortDirection": "desc",
             "sortKey": "updated_at"
         });
+        let pinned_only = input
+            .get("pinnedOnly")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if pinned_only {
+            // Codex 固定任务拥有独立 section，直接过滤避免扫描普通历史。
+            params["sectionId"] = Value::String(CODEX_PINNED_THREAD_SECTION_ID.to_string());
+            params["useStateDbOnly"] = Value::Bool(true);
+        }
         if let Some(cursor) = input.get("cursor") {
             params["cursor"] = cursor.clone();
         }
@@ -73,7 +82,7 @@ impl CodexProjectProvider {
             self.task_state
                 .materialized(task["id"].as_str().unwrap_or_default());
         }
-        let mut data = if input.get("cursor").is_none() {
+        let mut data = if input.get("cursor").is_none() && !pinned_only {
             self.task_state.pending_tasks()
         } else {
             Vec::new()

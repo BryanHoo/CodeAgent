@@ -18,6 +18,11 @@ type ProjectTaskPaginationControlInput = Readonly<{
   isFetchingNextPage: boolean;
 }>;
 
+type ProjectTaskEmptyState = Readonly<{
+  error: Error | null;
+  isPending: boolean;
+}>;
+
 export function groupTasksByProjectId(
   tasks: readonly AgentTask[],
 ): ReadonlyMap<string, readonly AgentTask[]> {
@@ -31,6 +36,20 @@ export function groupTasksByProjectId(
     }
   }
   return tasksByProjectId;
+}
+
+export function shouldShowProjectTaskEmptyState(
+  state: ProjectTaskEmptyState | undefined,
+  taskCount: number,
+  normalizedQuery: string,
+) {
+  return (
+    normalizedQuery.length === 0 &&
+    taskCount === 0 &&
+    state !== undefined &&
+    !state.isPending &&
+    state.error === null
+  );
 }
 
 export function getProjectTaskPaginationControl({

@@ -1,4 +1,4 @@
-use std::{path::Path, process::Stdio, time::Duration};
+use std::{path::Path, process::Stdio, sync::Arc, time::Duration};
 
 use code_agent_core::{CodeAgentError, CodeAgentErrorCode};
 use serde_json::{Value, json};
@@ -7,6 +7,8 @@ use serde_json::{Value, json};
 mod commands;
 
 use commands::{resolve_linux, resolve_macos, resolve_windows};
+
+use crate::process::ProcessEnvironment;
 
 const LAUNCH_CONFIRMATION: Duration = Duration::from_millis(500);
 
@@ -110,6 +112,64 @@ pub(crate) struct OpenCommand {
     arguments: Arguments,
     pub(crate) observe_early_exit: bool,
     file_only: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ProjectOpenService {
+    commands: Arc<[OpenCommand]>,
+    environment: ProcessEnvironment,
+    platform: Platform,
+}
+
+impl ProjectOpenService {
+    pub(crate) fn new(environment: ProcessEnvironment) -> Self {
+        let platform = Platform::current();
+        let commands =
+            resolve_commands_with_environment(platform, &environment, &default_path_exists);
+        Self {
+            commands: commands.into(),
+            environment,
+            platform,
+        }
+    }
+
+    pub(crate) fn capabilities(&self) -> Value {
+        let apps = self
+            .commands
+            .iter()
+            .map(|command| {
+                json!({ "id": command.app.id, "kind": command.app.kind, "name": command.app.name })
+            })
+            .collect::<Vec<_>>();
+        json!({ "apps": apps, "platform": self.platform.protocol_name() })
+    }
+
+    pub(crate) async fn open(
+        &self,
+        target: &OpenTarget,
+        project_root: &Path,
+        app_id: &str,
+    ) -> Result<(), CodeAgentError> {
+        let command = self
+            .commands
+            .iter()
+            .find(|command| command.app.id == app_id)
+            .ok_or_else(|| {
+                CodeAgentError::new(
+                    CodeAgentErrorCode::InvalidInput,
+                    "open app is unavailable",
+                    None,
+                )
+            })?;
+        if !command.supports(target) {
+            return Err(CodeAgentError::new(
+                CodeAgentErrorCode::InvalidInput,
+                "open target is invalid",
+                None,
+            ));
+        }
+        launch(command, target, project_root, Some(&self.environment)).await
+    }
 }
 
 impl OpenCommand {
@@ -256,6 +316,15 @@ fn resolve_commands(
     }
 }
 
+fn resolve_commands_with_environment(
+    platform: Platform,
+    environment: &ProcessEnvironment,
+    path_exists: &impl Fn(&Path) -> bool,
+) -> Vec<OpenCommand> {
+    let variables = environment.utf8_variables().collect::<Vec<_>>();
+    resolve_commands(platform, &variables, path_exists)
+}
+
 fn default_path_exists(path: &Path) -> bool {
     let Ok(metadata) = std::fs::metadata(path) else {
         return false;
@@ -275,72 +344,16 @@ fn default_path_exists(path: &Path) -> bool {
     }
 }
 
-fn current_commands() -> (Platform, Vec<OpenCommand>) {
-    const KEYS: &[&str] = &[
-        "HOME",
-        "PATH",
-        "SystemRoot",
-        "WINDIR",
-        "LOCALAPPDATA",
-        "ProgramFiles",
-        "ProgramFiles(x86)",
-        "COMSPEC",
-    ];
-    let owned = KEYS
-        .iter()
-        .filter_map(|key| std::env::var(key).ok().map(|value| (*key, value)))
-        .collect::<Vec<_>>();
-    let environment = owned
-        .iter()
-        .map(|(key, value)| (*key, value.as_str()))
-        .collect::<Vec<_>>();
-    let platform = Platform::current();
-    (
-        platform,
-        resolve_commands(platform, &environment, &default_path_exists),
-    )
-}
-
-pub(crate) fn capabilities() -> Value {
-    let (platform, commands) = current_commands();
-    let apps = commands.into_iter().map(|command| {
-        json!({ "id": command.app.id, "kind": command.app.kind, "name": command.app.name })
-    }).collect::<Vec<_>>();
-    json!({ "apps": apps, "platform": platform.protocol_name() })
-}
-
-pub(crate) async fn open(
-    target: &OpenTarget,
-    project_root: &Path,
-    app_id: &str,
-) -> Result<(), CodeAgentError> {
-    let (_, commands) = current_commands();
-    let command = commands
-        .into_iter()
-        .find(|command| command.app.id == app_id)
-        .ok_or_else(|| {
-            CodeAgentError::new(
-                CodeAgentErrorCode::InvalidInput,
-                "open app is unavailable",
-                None,
-            )
-        })?;
-    if !command.supports(target) {
-        return Err(CodeAgentError::new(
-            CodeAgentErrorCode::InvalidInput,
-            "open target is invalid",
-            None,
-        ));
-    }
-    launch(&command, target, project_root).await
-}
-
 async fn launch(
     command: &OpenCommand,
     target: &OpenTarget,
     project_root: &Path,
+    environment: Option<&ProcessEnvironment>,
 ) -> Result<(), CodeAgentError> {
     let mut process = tokio::process::Command::new(&command.program);
+    if let Some(environment) = environment {
+        environment.apply(&mut process);
+    }
     process
         .args(command.arguments(target))
         .current_dir(if command.app.kind == "terminal" {

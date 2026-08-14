@@ -8,7 +8,7 @@ use code_agent_core::{
 };
 use code_agent_platform::{
     AttachmentStore, DatabaseOptions, GitCliService, PlatformDatabase, PlatformFilePort,
-    SqliteRepository,
+    ProcessEnvironment, SqliteRepository,
 };
 use code_agent_provider_codex::{
     CodexAppServerOptions, CodexAppServerProcess, CodexRuntimeProvider, start_codex_app_server,
@@ -70,8 +70,13 @@ pub async fn open_runtime(options: NodeEngineOptions) -> napi::Result<NodeRuntim
     .map_err(|error| napi::Error::from_reason(error.to_string()))?
     .map_err(|error| napi::Error::from_reason(error.to_string()))?;
     let repository: Arc<dyn RepositoryPort> = Arc::new(SqliteRepository::new(database.clone()));
-    let file: Arc<dyn FilePort> = Arc::new(PlatformFilePort::new(database.clone()));
-    let git: Arc<dyn GitPort> = Arc::new(GitCliService::new(database.clone()));
+    let process_environment =
+        ProcessEnvironment::capture_with_path(std::env::var_os("PATH").unwrap_or_default());
+    let file: Arc<dyn FilePort> = Arc::new(PlatformFilePort::new(
+        database.clone(),
+        process_environment.clone(),
+    ));
+    let git: Arc<dyn GitPort> = Arc::new(GitCliService::new(database.clone(), process_environment));
     let attachment: Arc<dyn AttachmentPort> = Arc::new(
         AttachmentStore::new(attachment_root)
             .await

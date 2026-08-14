@@ -1,8 +1,6 @@
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
-#[cfg(unix)]
-use std::ffi::OsStr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
 #[cfg(unix)]
@@ -19,7 +17,7 @@ const MAX_SHELL_OUTPUT_BYTES: u64 = 64 * 1024;
 #[cfg(unix)]
 const PATH_MARKER: &[u8] = b"CODE_AGENT_PATH=";
 
-pub async fn resolved_process_path(managed_directories: &[PathBuf]) -> OsString {
+pub async fn resolved_process_path() -> OsString {
     let inherited_path = std::env::var_os("PATH").unwrap_or_default();
     let inherited = std::env::split_paths(&inherited_path).collect::<Vec<_>>();
     let mut discovered = environment_tool_directories();
@@ -30,11 +28,17 @@ pub async fn resolved_process_path(managed_directories: &[PathBuf]) -> OsString 
     }
     discovered.extend(common_tool_directories());
 
-    // 受管运行时必须优先；用户工具目录其次；GUI 继承环境最后兜底。
-    let paths = merge_search_paths(managed_directories, &discovered, &inherited);
+    // 登录 shell 与常见用户工具目录优先，GUI 继承环境只作为最后兜底。
+    let paths = merge_search_paths(&[], &discovered, &inherited);
+    std::env::join_paths(&paths).unwrap_or_default()
+}
+
+pub fn prepend_process_path(managed_directories: &[PathBuf], process_path: &OsStr) -> OsString {
+    let inherited = std::env::split_paths(process_path).collect::<Vec<_>>();
+    let paths = merge_search_paths(managed_directories, &[], &inherited);
     std::env::join_paths(&paths)
         .or_else(|_| std::env::join_paths(managed_directories))
-        .unwrap_or_default()
+        .unwrap_or_else(|_| process_path.to_owned())
 }
 
 fn merge_search_paths(
@@ -235,7 +239,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn resolved_path_starts_npx_for_gui_launches() {
-        let path = super::resolved_process_path(&[]).await;
+        let path = super::resolved_process_path().await;
         let directories = std::env::split_paths(&path).collect::<Vec<_>>();
         let npx = directories
             .iter()

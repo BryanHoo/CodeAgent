@@ -16,7 +16,7 @@ use code_agent_core::{
 };
 use code_agent_platform::{
     AttachmentStore, DatabaseOptions, GitCliService, PlatformDatabase, PlatformFilePort,
-    SqliteRepository,
+    ProcessEnvironment, SqliteRepository,
 };
 use code_agent_runtime::{CodeAgentRuntime, CodeAgentRuntimeBuilder, RuntimeOptions};
 use tauri::{
@@ -29,6 +29,7 @@ use lifecycle::DesktopLifecycle;
 use platform_adapters::{
     CodexSupervisor, DesktopHostPorts, DesktopProvider, start_codex_supervisor,
 };
+use process_environment::resolved_process_path;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -57,8 +58,13 @@ pub fn run() {
             })?;
             let repository: Arc<dyn RepositoryPort> =
                 Arc::new(SqliteRepository::new(database.clone()));
-            let file: Arc<dyn FilePort> = Arc::new(PlatformFilePort::new(database.clone()));
-            let git: Arc<dyn GitPort> = Arc::new(GitCliService::new(database));
+            let host_process_path = tauri::async_runtime::block_on(resolved_process_path());
+            let host_environment = ProcessEnvironment::capture_with_path(host_process_path.clone());
+            let file: Arc<dyn FilePort> = Arc::new(PlatformFilePort::new(
+                database.clone(),
+                host_environment.clone(),
+            ));
+            let git: Arc<dyn GitPort> = Arc::new(GitCliService::new(database, host_environment));
             let attachment: Arc<dyn AttachmentPort> = Arc::new(tauri::async_runtime::block_on(
                 AttachmentStore::new(data_root.join("attachments")),
             )?);
@@ -103,6 +109,7 @@ pub fn run() {
                 env!("CARGO_PKG_VERSION").to_owned(),
                 resource_directory,
                 codex_home,
+                host_process_path,
             ));
             Ok(())
         })

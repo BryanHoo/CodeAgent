@@ -101,6 +101,7 @@ export type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
 
 export const PROJECT_TASK_PAGE_SIZE = 5;
 export const PROJECT_TASK_SEARCH_PAGE_SIZE = 100;
+export const PROJECT_PINNED_TASKS_SOURCE_KEY = "pinned-source";
 export const PROJECT_TASK_SEARCH_SOURCE_KEY = "search-source";
 export const TASK_SNAPSHOT_GC_TIME_MS = 30_000;
 

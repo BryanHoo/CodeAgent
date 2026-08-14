@@ -51,7 +51,7 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
   const { engine } = context;
   app.get<{
     Params: { projectId: string };
-    Querystring: { cursor?: string; limit?: number };
+    Querystring: { cursor?: string; limit?: number; pinnedOnly?: true };
   }>(
     "/v1/projects/:projectId/tasks",
     {
