@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer";
 import { performance } from "node:perf_hooks";
 
 import type { FastifyPluginCallback } from "fastify";
@@ -85,8 +84,8 @@ export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
             if (bufferedAmount > SOFT_BACKPRESSURE_BYTES) {
               metrics.backpressureSignals += 1;
             }
-            // native 已完成一次协议序列化；这里只做 UTF-8 视图转换以保持文本 WebSocket 帧。
-            socket.send(Buffer.from(frame).toString("utf8"));
+            // native 已完成协议序列化，直接交付 binary frame，避免 Node 解码后由 ws 再编码。
+            socket.send(frame);
           },
         );
         unsubscribe = () => {

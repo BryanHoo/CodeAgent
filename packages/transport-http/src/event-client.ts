@@ -10,7 +10,7 @@ export type { AgentEventConnectionState, SubscribeAgentEventsOptions } from "@co
 
 export type WebSocketFactory = (url: string) => WebSocket;
 
-const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
 interface StartAgentEventSubscriptionOptions extends SubscribeAgentEventsOptions {
   baseUrl: string;
@@ -103,14 +103,20 @@ export function startAgentEventSubscription(
     const currentSocket = options.webSocketFactory(
       createEventUrl(options.baseUrl, options.projectId, lastSequence),
     );
+    currentSocket.binaryType = "arraybuffer";
     socket = currentSocket;
 
     const onMessage = (event: MessageEvent) => {
       if (!active || socket !== currentSocket) {
         return;
       }
+      if (!(event.data instanceof ArrayBuffer)) {
+        failProtocol("CodeAgent event frame must be binary");
+        return;
+      }
       let frame: unknown;
-      const wireFrame = String(event.data);
+      // WebSocket 只交付 ArrayBuffer；浏览器在协议校验前仅执行一次 UTF-8 解码。
+      const wireFrame = textDecoder.decode(event.data);
       try {
         frame = JSON.parse(wireFrame) as unknown;
       } catch (error) {
@@ -161,7 +167,7 @@ export function startAgentEventSubscription(
         point: "transport_received",
         sequence: message.sequence,
       });
-      options.onEvent(message, textEncoder.encode(wireFrame).byteLength);
+      options.onEvent(message, event.data.byteLength);
     };
 
     const onError = () => {

@@ -44,6 +44,6 @@
 - 附件上传路由测试必须覆盖 `multipart/form-data` 流式成功路径、旧 JSON 请求拒绝、按类型执行单文件限制，以及声明长度明显超限时在解析文件数据前返回 `413`。
 - 静态资源 `inject` 测试必须覆盖 Brotli/Gzip 解压后的正文、哈希资源长期缓存头和 SPA HTML 重新验证头。
 - Event Stream 单元测试使用 fake timers 覆盖普通与软背压合并窗口、完整 Delta key 隔离、关键事件冲刷、环形覆盖、连续 Sequence 和窗口外 resync；WebSocket 路由测试验证合并后帧数与指标响应。
-- `pnpm test:performance` 必须分别运行 Node、Rust Release 与 Chromium 门禁，使用固定负载覆盖 N-API 事件桥、高频 Delta、真实 WebSocket 发布与软/硬背压、50 MiB 流式附件、数百 Git 变更和 Event Stream 队列高水位；同时采集 Node `monitorEventLoopDelay`、GC、RSS、CPU 与 WebSocket `bufferedAmount`。规模与阈值只维护在 `tests/performance-budgets.json`，压力文件不得混入普通 `pnpm test`。
+- `pnpm test:performance` 必须分别运行 Node、Rust Release 与 Chromium 门禁，使用固定负载覆盖 N-API 事件桥、高频 Delta、真实 binary WebSocket 发布与软/硬背压、50 MiB 流式附件、数百 Git 变更和 Event Stream 队列高水位；WebSocket 性能测试必须保留 binary 单次解码与旧文本重编码路径的同负载 A/B，并同时采集 Node `monitorEventLoopDelay`、GC、RSS、CPU 与 WebSocket `bufferedAmount`。规模与阈值只维护在 `tests/performance-budgets.json`，压力文件不得混入普通 `pnpm test`。
 - 发布包校验必须真实打包主 CLI 与当前平台 native package，解压到隔离的 `node_modules` 布局，并执行 CLI 与 N-API addon smoke；主包必须拒绝 `.node`、源码和 source map。
 - Desktop bundle 校验必须拒绝 Node、Fastify、WebSocket Server 和 N-API addon，并在全部发布平台将准备阶段的 canonical Codex package 与最终制品逐文件比对，同时验证所有源可执行文件在制品中保持可执行；Windows 制品必须额外包含原生 `codex-path/npx.exe` 代理。Desktop 单元测试必须覆盖受管目录优先、发现目录去重、GUI 环境恢复和 Windows `node.exe + npx-cli.js` 定位；未签名制品只能进入 draft Release。

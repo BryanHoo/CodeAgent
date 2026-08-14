@@ -21,6 +21,7 @@ vi.mock("@sinclair/typebox/value", async (importOriginal) => {
 });
 
 class FakeWebSocket extends EventTarget {
+  public binaryType: BinaryType = "blob";
   public readonly url: string;
   public readyState: number = WebSocket.CONNECTING;
 
@@ -43,7 +44,8 @@ class FakeWebSocket extends EventTarget {
   }
 
   public receive(message: unknown): void {
-    this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(message) }));
+    const frame = new TextEncoder().encode(JSON.stringify(message));
+    this.dispatchEvent(new MessageEvent("message", { data: frame.buffer }));
   }
 
   public serverClose(code = 1006): void {
@@ -125,6 +127,7 @@ describe("CodeAgentClient realtime events", () => {
     });
     const socket = sockets[0];
     expect(socket?.url).toBe("ws://127.0.0.1:3210/v1/projects/code-agent/events?afterSequence=3");
+    expect(socket?.binaryType).toBe("arraybuffer");
     socket?.open();
     socket?.receive(ready);
     socket?.receive(messageEvent(3, "重复"));
@@ -161,6 +164,23 @@ describe("CodeAgentClient realtime events", () => {
 
     expect(onEvent).toHaveBeenCalledOnce();
     expect(decodeSpy).not.toHaveBeenCalled();
+  });
+
+  it("decodes each binary frame from UTF-8 exactly once", () => {
+    const utf8Decode = vi.spyOn(TextDecoder.prototype, "decode");
+    const { client, sockets } = createHarness();
+    client.subscribeEvents({
+      afterSequence: 3,
+      projectId: "code-agent",
+      onEvent: vi.fn(),
+      onResyncRequired: vi.fn(),
+      sessionId: "runtime-1",
+    });
+    sockets[0]?.open();
+    sockets[0]?.receive(ready);
+    sockets[0]?.receive(messageEvent(4));
+
+    expect(utf8Decode).toHaveBeenCalledTimes(2);
   });
 
   it("turns sequence gaps and session changes into resync requests", () => {

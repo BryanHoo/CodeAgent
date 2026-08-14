@@ -142,7 +142,9 @@ describe("Tauri Phase 5 repository contract", () => {
     const events = read("apps/desktop/src-tauri/src/commands/events.rs");
     const runtimeManifest = read("crates/runtime/Cargo.toml");
 
-    expect(events).toContain("ipc::Channel");
+    expect(events).toContain("ipc::{Channel, InvokeResponseBody}");
+    expect(events).toContain("Channel<InvokeResponseBody>");
+    expect(events).not.toContain("event.value().clone()");
     expect(events).toContain('"connection.ready"');
     expect(events).toContain('"resync.required"');
     expect(events).not.toMatch(/\.emit\(|listen_global/u);
