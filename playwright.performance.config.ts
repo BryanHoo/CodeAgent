@@ -6,7 +6,7 @@ export default defineConfig({
   reporter: "list",
   retries: 0,
   testDir: "./tests/performance",
-  testMatch: "timeline.performance.spec.ts",
+  testMatch: ["markdown-streaming.performance.spec.ts", "timeline.performance.spec.ts"],
   timeout: 60_000,
   use: {
     ...devices["Desktop Chrome"],

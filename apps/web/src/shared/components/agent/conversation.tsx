@@ -155,7 +155,7 @@ export function Conversation({
         className={`relative min-h-0 flex-1 overflow-y-auto overscroll-contain ${className}`}
         onScroll={(event) => {
           const container = event.currentTarget;
-          autoScrollController.handleScroll(container);
+          autoScrollController.handleScroll(container, event.nativeEvent.isTrusted);
           onScroll?.(event);
         }}
         ref={containerRef}
