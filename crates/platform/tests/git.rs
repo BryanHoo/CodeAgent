@@ -94,6 +94,47 @@ async fn git_service_reads_and_mutates_only_registered_repository() {
         "untracked.txt"
     );
 
+    let missing_remote = root.join("missing-remote.git");
+    run_git(
+        &repository,
+        &["remote", "add", "origin", &missing_remote.to_string_lossy()],
+    );
+    run_git(&repository, &["config", "branch.feature.remote", "origin"]);
+    run_git(
+        &repository,
+        &["config", "branch.feature.merge", "refs/heads/feature"],
+    );
+    run_git(
+        &repository,
+        &["update-ref", "refs/remotes/origin/feature", "HEAD"],
+    );
+    fs::write(repository.join("tracked.txt"), "push failure\n").expect("push failure change");
+    let status = service
+        .status(&project_id, &context)
+        .await
+        .expect("push status");
+    let result = service
+        .commit(
+            &project_id,
+            &json!({
+                "action": "commit_and_push",
+                "expectedSnapshot": status["snapshot"],
+                "message": "preserve push failure",
+                "paths": ["tracked.txt"]
+            }),
+            &context,
+        )
+        .await
+        .expect("commit with failed push");
+    assert_eq!(result["pushStatus"], "failed");
+    assert_eq!(result["pushError"]["code"], "provider_failure");
+    assert!(
+        result["pushError"]["message"]
+            .as_str()
+            .expect("push error message")
+            .contains("missing-remote.git")
+    );
+
     database.close().expect("close database");
     fs::remove_dir_all(root).expect("remove root");
 }

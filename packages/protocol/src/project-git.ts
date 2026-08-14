@@ -25,6 +25,23 @@ const SelectedGitPathsSchema = Type.Array(ProjectRelativePathSchema, {
   uniqueItems: true,
 });
 const CommitMessageSchema = Type.String({ maxLength: 10_000, minLength: 1, pattern: "\\S" });
+const GitPushErrorSchema = Type.Object(
+  {
+    code: Type.Union([
+      Type.Literal("cancelled"),
+      Type.Literal("capacity_exceeded"),
+      Type.Literal("conflict"),
+      Type.Literal("internal"),
+      Type.Literal("invalid_input"),
+      Type.Literal("not_found"),
+      Type.Literal("provider_failure"),
+      Type.Literal("shutting_down"),
+      Type.Literal("timeout"),
+    ]),
+    message: Type.String({ maxLength: 10 * 1024 * 1024, minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
 const ProjectGitFileChangeSchema = Type.Object(
   {
     diff: Type.String(),
@@ -203,20 +220,32 @@ export type CommitProjectChangesRequest = Readonly<
   Static<typeof CommitProjectChangesRequestSchema>
 >;
 
-export const CommitProjectChangesResponseSchema = Type.Object(
-  {
-    branch: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
-    commitSha: Type.String({ maxLength: 64, minLength: 7, pattern: "^[a-f0-9]+$" }),
-    message: CommitMessageSchema,
-    pushStatus: Type.Union([
-      Type.Literal("not_requested"),
-      Type.Literal("pushed"),
-      Type.Literal("failed"),
-      Type.Literal("not_configured"),
-    ]),
-  },
-  { additionalProperties: false },
-);
+const CommitProjectChangesResponseFields = {
+  branch: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  commitSha: Type.String({ maxLength: 64, minLength: 7, pattern: "^[a-f0-9]+$" }),
+  message: CommitMessageSchema,
+};
+
+export const CommitProjectChangesResponseSchema = Type.Union([
+  Type.Object(
+    {
+      ...CommitProjectChangesResponseFields,
+      pushError: GitPushErrorSchema,
+      pushStatus: Type.Literal("failed"),
+    },
+    { additionalProperties: false },
+  ),
+  ...(["not_requested", "pushed", "not_configured"] as const).map((pushStatus) =>
+    Type.Object(
+      {
+        ...CommitProjectChangesResponseFields,
+        pushError: Type.Null(),
+        pushStatus: Type.Literal(pushStatus),
+      },
+      { additionalProperties: false },
+    ),
+  ),
+]);
 export type CommitProjectChangesResponse = Readonly<
   Static<typeof CommitProjectChangesResponseSchema>
 >;

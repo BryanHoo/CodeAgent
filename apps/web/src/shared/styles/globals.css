@@ -494,20 +494,23 @@ a {
   pointer-events: none;
 }
 
-.sidebar-task-spinner {
-  width: 0.875rem;
-  height: 0.875rem;
-  border: 1.5px solid currentColor;
-  border-right-color: transparent;
+.sidebar-task-activity {
+  display: block;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  background-color: currentColor;
   border-radius: 9999px;
-  contain: strict;
-  will-change: transform;
-  animation: sidebar-task-spin 800ms linear infinite;
+  animation: sidebar-task-activity 1.2s ease-in-out infinite;
 }
 
-@keyframes sidebar-task-spin {
-  to {
-    transform: rotate(1turn);
+@keyframes sidebar-task-activity {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 1;
   }
 }
 
@@ -616,8 +619,9 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sidebar-task-spinner {
+  .sidebar-task-activity {
     animation: none;
+    opacity: 1;
   }
 
   .workbench-shell,

@@ -181,7 +181,7 @@ impl GitCliService {
             .await?
             .trim()
             .to_owned();
-        let push_status = if action == "commit_and_push" {
+        let (push_status, push_error) = if action == "commit_and_push" {
             if self
                 .git(
                     &root,
@@ -196,17 +196,28 @@ impl GitCliService {
                 .await
                 .is_err()
             {
-                "not_configured"
-            } else if self.git(&root, &["push"], context).await.is_ok() {
-                "pushed"
+                ("not_configured", Value::Null)
             } else {
-                "failed"
+                match self.push(&root, context).await {
+                    Ok(_) => ("pushed", Value::Null),
+                    Err(error) => (
+                        "failed",
+                        json!({
+                            "code": error.code().to_string(),
+                            "message": error.message(),
+                        }),
+                    ),
+                }
             }
         } else {
-            "not_requested"
+            ("not_requested", Value::Null)
         };
-        Ok(
-            json!({ "branch": status["branch"], "commitSha": commit_sha, "message": message, "pushStatus": push_status }),
-        )
+        Ok(json!({
+            "branch": status["branch"],
+            "commitSha": commit_sha,
+            "message": message,
+            "pushError": push_error,
+            "pushStatus": push_status,
+        }))
     }
 }

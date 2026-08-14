@@ -280,14 +280,6 @@ export const workbench = {
     archive: "Archive",
     close: "Close project sidebar",
     collapse: "Show less",
-    connection: {
-      connecting: "Connecting",
-      offline: "Offline",
-      online: "Online",
-      reconnecting: "Reconnecting",
-    },
-    connectionSettings:
-      "Settings, CodeAgent {{version}}{{update}}, terminal connection status: {{status}}",
     createInProject: "Create a task in {{project}}",
     errorAddProject: "Unable to add project",
     errorArchiveTask: "Unable to archive task",
@@ -315,6 +307,7 @@ export const workbench = {
     search: "Search tasks",
     searchAll: "Searching all tasks",
     settings: "Settings",
+    settingsLabel: "Settings, CodeAgent {{version}}{{update}}",
     updateAvailableLabel: ", update available",
     taskActions: "Actions for {{task}}",
     taskApproval: "Task awaiting approval",
