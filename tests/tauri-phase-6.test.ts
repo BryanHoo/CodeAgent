@@ -32,7 +32,7 @@ describe("Tauri Phase 6 repository contract", () => {
 
     expect(capability.windows).toEqual(["main"]);
     expect(capability).not.toHaveProperty("remote");
-    expect(capability.permissions).toEqual(["core:default"]);
+    expect(capability.permissions).toEqual(["core:default", "updater:default"]);
     expect(capability.permissions.join("\n")).not.toMatch(/fs:|shell|http|dialog|notification/u);
   });
 

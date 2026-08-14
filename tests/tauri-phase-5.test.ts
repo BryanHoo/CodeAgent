@@ -134,7 +134,7 @@ describe("Tauri Phase 5 repository contract", () => {
     ];
 
     for (const command of commands) expect(desktop).toMatch(new RegExp(`::${command}[,\\n]`, "u"));
-    expect(capability.permissions).toEqual(["core:default"]);
+    expect(capability.permissions).toEqual(["core:default", "updater:default"]);
     expect(capability.permissions.join("\n")).not.toMatch(/shell|fs:/u);
   });
 

@@ -111,15 +111,37 @@ describe("TauriCodeAgentTransport", () => {
     ]);
   });
 
-  it("returns a stable error for operations intentionally unsupported on desktop", async () => {
+  it("maps the app update mutation with stable request identities", async () => {
+    const calls: { command: string; payload: unknown }[] = [];
+    mockIPC((command, payload) => {
+      calls.push({ command, payload });
+      return {
+        appVersion: "1.10.0",
+        codexVersion: "0.147.0",
+        error: null,
+        latestVersion: "1.11.0",
+        releaseNotes: null,
+        status: "restart-required",
+        updateAvailable: false,
+      };
+    });
     const transport = new TauriCodeAgentTransport();
 
-    await expect(
-      transport.request(
-        { name: "app.update_install", output: {} as never },
-        { requestId: "update-request" },
-      ),
-    ).rejects.toMatchObject({ code: "unsupported_operation" });
+    await transport.request(
+      { input: { version: "1.11.0" }, name: "app.update_install", output: {} as never },
+      { idempotencyKey: "update-key", requestId: "update-request" },
+    );
+
+    expect(calls).toEqual([
+      {
+        command: "app_update_install",
+        payload: {
+          idempotencyKey: "update-key",
+          requestId: "update-request",
+          version: "1.11.0",
+        },
+      },
+    ]);
   });
 
   it("maps Phase 5 operations and preserves idempotency payloads", async () => {

@@ -1261,7 +1261,7 @@ test("shows the latest raw Codex operation throughout a running turn", async ({ 
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
 });
 
-test("shows the complete truncated command title on hover and focus", async ({ page }) => {
+test("shows wrapped command details and input in a fixed-width tooltip", async ({ page }) => {
   const command =
     "pnpm exec vitest run apps/web/src/features/workbench/components/task-timeline.test.tsx --testNamePattern tool-command-title-tooltip";
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
@@ -1279,6 +1279,7 @@ test("shows the complete truncated command title on hover and focus", async ({ p
                 command,
                 cwd: "/workspace/CodeAgent",
                 id: "command-with-truncated-title",
+                output: "268 passed",
                 outputTruncated: false,
                 status: "completed",
                 type: "command",
@@ -1294,20 +1295,38 @@ test("shows the complete truncated command title on hover and focus", async ({ p
 
   // 等待异步 Markdown 升级完成，避免前序内容重排在 Tooltip 延迟期间取消 hover。
   await expect(page.getByRole("link", { name: "OpenAI" })).toBeVisible();
-  const commandTitle = page.getByText(command, { exact: true });
+  const commandSummary = page.locator("summary").filter({ hasText: command });
+  const commandDetails = commandSummary.locator("..");
+  const commandTitle = commandSummary.getByText(command, { exact: true });
   await expect(commandTitle).toBeVisible();
   expect(await commandTitle.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(
     true,
   );
 
+  await commandSummary.click();
+  await expect(commandDetails.getByText("参数", { exact: true })).toBeVisible();
+  await expect(commandDetails.locator("pre").first()).toContainText(command);
+  await expect(commandDetails.locator("pre").first()).toContainText("/workspace/CodeAgent");
+  await expect(commandDetails.getByText("输出", { exact: true })).toBeVisible();
+  await expect(commandDetails.locator('[data-terminal=""]')).toContainText("268 passed");
+  await commandSummary.click();
+
   await commandTitle.hover();
   const tooltip = page.getByRole("tooltip");
   await expect(tooltip).toHaveText(command);
+  await expect(tooltip).toHaveCSS("width", "256px");
+  expect(
+    await tooltip.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    })),
+  ).toMatchObject({ clientWidth: 256, scrollWidth: 256 });
   expect(await tooltip.evaluate((element) => element.closest("details") === null)).toBe(true);
 
   await page.mouse.move(0, 0);
   await expect(tooltip).toHaveCount(0);
-  await commandTitle.locator("..").focus();
+  await page.getByRole("textbox", { name: "任务输入" }).focus();
+  await commandSummary.focus();
   await expect(page.getByRole("tooltip")).toHaveText(command);
 });
 
