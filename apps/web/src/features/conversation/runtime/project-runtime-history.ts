@@ -13,18 +13,31 @@ export type ActivityListener = () => void;
 export type RecoverTaskSnapshot = () => Promise<AgentTaskSnapshotResponse | undefined>;
 export type TaskRecoveryState = "disposed" | "ready" | "recovering" | "waiting_to_retry";
 
+export type RealtimePerformanceSample = Readonly<{
+  at: number;
+  point: "store_committed" | "transport_received";
+  sequence: number;
+}>;
+export type RealtimePerformanceObserver = (sample: RealtimePerformanceSample) => void;
+
+declare global {
+  var __CODE_AGENT_PERFORMANCE_OBSERVER__: RealtimePerformanceObserver | undefined;
+}
+
 export type ProjectEventRuntimeOptions = Required<
   Pick<
     ProjectRuntimeManagerOptions,
     "idleTimeoutMs" | "maxEventHistoryBytes" | "maxEventHistoryEvents"
   >
->;
+> &
+  Pick<ProjectRuntimeManagerOptions, "onPerformanceSample">;
 
 export type ProjectRuntimeManagerOptions = Readonly<{
   idleTimeoutMs?: number;
   maxEventHistoryBytes?: number;
   maxEventHistoryEvents?: number;
   onMcpServerStatusChanged?: (projectId: string, taskId: string) => void;
+  onPerformanceSample?: RealtimePerformanceObserver;
   onProjectGitActivity?: (
     projectId: string,
     taskId: string,

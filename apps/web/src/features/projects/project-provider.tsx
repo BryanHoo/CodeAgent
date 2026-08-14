@@ -69,8 +69,10 @@ export function ProjectProvider({
   );
   const projectRuntime = useMemo(() => {
     const taskMetadataSyncs = new Map<string, Promise<void>>();
+    const onPerformanceSample = globalThis.__CODE_AGENT_PERFORMANCE_OBSERVER__;
     return createProjectRuntimeManager(client, {
       ...(taskNotifier === undefined ? {} : { taskNotifier }),
+      ...(onPerformanceSample === undefined ? {} : { onPerformanceSample }),
       onMcpServerStatusChanged(projectId, taskId) {
         // 官方通知只携带启动状态，重新读取清单以补齐工具数、认证和版本元数据。
         void queryClient.invalidateQueries({

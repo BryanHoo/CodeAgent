@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { performance } from "node:perf_hooks";
 
 import type { FastifyPluginCallback } from "fastify";
 import type { WebSocket } from "ws";
@@ -30,7 +31,7 @@ function scheduleSessionExpiry(socket: WebSocket, expiresAt: number): () => void
 
 export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
   app,
-  { accessService, engine, eventMetrics },
+  { accessService, engine, eventMetrics, onPerformanceSample },
   done,
 ) => {
   app.get<{ Params: { projectId: string }; Querystring: { afterSequence: number } }>(
@@ -45,6 +46,7 @@ export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
       const metrics = eventMetrics.projects.get(request.params.projectId) ?? {
         activeClients: 0,
         backpressureSignals: 0,
+        maxBufferedAmount: 0,
         slowClientDisconnects: 0,
       };
       eventMetrics.projects.set(request.params.projectId, metrics);
@@ -71,13 +73,16 @@ export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
           "",
           request.query.afterSequence,
           (frame) => {
+            onPerformanceSample?.({ at: performance.now(), point: "runtime_published" });
             if (socket.readyState !== 1) return;
-            if (socket.bufferedAmount > HARD_BACKPRESSURE_BYTES) {
+            const bufferedAmount = socket.bufferedAmount;
+            metrics.maxBufferedAmount = Math.max(metrics.maxBufferedAmount, bufferedAmount);
+            if (bufferedAmount > HARD_BACKPRESSURE_BYTES) {
               metrics.slowClientDisconnects += 1;
               socket.close(1013, "Client is too slow; refresh the snapshot");
               return;
             }
-            if (socket.bufferedAmount > SOFT_BACKPRESSURE_BYTES) {
+            if (bufferedAmount > SOFT_BACKPRESSURE_BYTES) {
               metrics.backpressureSignals += 1;
             }
             // native 已完成一次协议序列化；这里只做 UTF-8 视图转换以保持文本 WebSocket 帧。

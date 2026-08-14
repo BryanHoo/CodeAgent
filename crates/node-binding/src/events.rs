@@ -82,6 +82,43 @@ async fn send(callback: &EventCallback, bytes: Vec<u8>) -> bool {
     bytes.len() <= MAX_BRIDGE_FRAME_BYTES && callback.call_async(bytes).await.is_ok()
 }
 
+#[cfg(feature = "performance-probe")]
+#[napi]
+pub fn performance_event_bridge(
+    events: u32,
+    callback: Function<'_, Buffer, ()>,
+) -> napi::Result<()> {
+    if events == 0 || events > 1_000_000 {
+        return Err(crate::errors::invalid_input(
+            "events must be between 1 and 1000000",
+        ));
+    }
+    let callback = callback
+        .build_threadsafe_function::<Vec<u8>>()
+        .weak::<true>()
+        .max_queue_size::<1>()
+        .build_callback(|context| Ok(Buffer::from(context.value)))?;
+
+    napi::bindgen_prelude::spawn(async move {
+        for sequence in 1..=events {
+            let bytes = frame(json!({
+                "payload": { "code": "runtime_warning", "level": "info", "message": "performance" },
+                "provider": "codex",
+                "sequence": sequence,
+                "sessionId": "session-performance",
+                "taskId": "task-performance",
+                "timestamp": "2026-08-14T00:00:00.000Z",
+                "type": "task.notice",
+                "version": 2
+            }));
+            if !send(&callback, bytes).await {
+                break;
+            }
+        }
+    });
+    Ok(())
+}
+
 #[napi]
 impl NodeEngine {
     #[napi]
@@ -99,6 +136,7 @@ impl NodeEngine {
                     "projectId": project_id.as_str(),
                     "providerEventsReceived": metrics.provider_events_received,
                     "publishedEvents": metrics.published_events,
+                    "queueHighWaterMark": metrics.queue_high_water_mark,
                     "retainedEvents": metrics.retained_events,
                     "retentionEvictions": metrics.retention_evictions,
                     "slowSubscribers": metrics.slow_subscribers,

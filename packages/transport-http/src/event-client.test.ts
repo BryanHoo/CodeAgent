@@ -111,6 +111,7 @@ describe("CodeAgentClient realtime events", () => {
   it("validates frames, ignores duplicates, and delivers consecutive events", () => {
     const { client, sockets } = createHarness();
     const events: AgentEvent[] = [];
+    const performanceSamples: { point: string; sequence: number }[] = [];
     const states: string[] = [];
 
     const unsubscribe = client.subscribeEvents({
@@ -118,6 +119,7 @@ describe("CodeAgentClient realtime events", () => {
       projectId: "code-agent",
       onConnectionState: (state) => states.push(state),
       onEvent: (event) => events.push(event),
+      onPerformanceSample: (sample) => performanceSamples.push(sample),
       onResyncRequired: vi.fn(),
       sessionId: "runtime-1",
     });
@@ -129,6 +131,9 @@ describe("CodeAgentClient realtime events", () => {
     socket?.receive(messageEvent(4));
 
     expect(events).toEqual([messageEvent(4)]);
+    expect(performanceSamples).toEqual([
+      expect.objectContaining({ point: "transport_received", sequence: 4 }),
+    ]);
     expect(states).toEqual(["connecting", "connected"]);
     unsubscribe();
     expect(socket?.readyState).toBe(WebSocket.CLOSED);

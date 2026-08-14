@@ -2,7 +2,7 @@
   "attachment": {
     "bytes": 52428800,
     "maxDurationMs": 8000,
-    "maxHeapGrowthBytes": 16777216
+    "maxRssGrowthBytes": 67108864
   },
   "delta": {
     "clientEvents": 50000,
@@ -30,19 +30,38 @@
   "longHistory": {
     "items": 10000,
     "itemsPerTurn": 10,
+    "maxDomNodes": 5000,
+    "maxGcRetainedBytes": 33554432,
+    "maxHeapGrowthBytes": 67108864,
     "maxHydrationMs": 1500,
-    "maxMarkupBytes": 131072,
+    "maxInpMs": 200,
+    "maxLongTaskMs": 100,
     "maxMountedTurns": 8,
-    "maxRenderMs": 1000,
     "maxTurnCompletionMs": 250
   },
   "slowWebSocket": {
+    "hardBackpressureBytes": 1048576,
     "maxDispatchMs": 500,
+    "maxObservedBufferedAmountBytes": 1310720,
     "messages": 10000
   },
   "napiEventBridge": {
     "events": 10000,
+    "maxDurationMs": 1000,
     "maxFrameBytes": 1048576,
     "threadsafeQueueSize": 1
+  },
+  "nodeResources": {
+    "maxCpuMicros": 5000000,
+    "maxEventLoopDelayP99Ms": 100,
+    "maxGcDurationMs": 250,
+    "maxNapiRssGrowthBytes": 33554432,
+    "maxWebSocketRssGrowthBytes": 201326592
+  },
+  "realtimePipeline": {
+    "maxEndToEndP50Ms": 50,
+    "maxEndToEndP95Ms": 100,
+    "maxEndToEndP99Ms": 200,
+    "samples": 200
   }
 }

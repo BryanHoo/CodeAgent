@@ -1,27 +1,16 @@
+import type { AgentEventConnectionState, SubscribeAgentEventsOptions } from "@code-agent/client";
 import {
   EventStreamMessageSchema,
   TEMPORARY_TASK_API_PATH,
   TEMPORARY_TASK_SCOPE_ID,
-  type AgentEvent,
   type EventStreamMessage,
   type ResyncRequired,
 } from "@code-agent/protocol";
 import { Value } from "@sinclair/typebox/value";
 
-export type AgentEventConnectionState = "closed" | "connected" | "connecting" | "reconnecting";
+export type { AgentEventConnectionState, SubscribeAgentEventsOptions } from "@code-agent/client";
 
 export type WebSocketFactory = (url: string) => WebSocket;
-
-export interface SubscribeAgentEventsOptions {
-  afterSequence: number;
-  onConnectionState?: (state: AgentEventConnectionState) => void;
-  onError?: (error: Error) => void;
-  onEvent: (event: AgentEvent) => void;
-  onResyncRequired: (message: ResyncRequired) => void;
-  projectId: string;
-  reconnectDelayMs?: number;
-  sessionId: string;
-}
 
 interface StartAgentEventSubscriptionOptions extends SubscribeAgentEventsOptions {
   baseUrl: string;
@@ -166,6 +155,11 @@ export function startAgentEventSubscription(
         return;
       }
       lastSequence = message.sequence;
+      options.onPerformanceSample?.({
+        at: performance.now(),
+        point: "transport_received",
+        sequence: message.sequence,
+      });
       options.onEvent(message);
     };
 

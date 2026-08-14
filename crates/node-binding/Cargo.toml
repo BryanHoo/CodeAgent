@@ -10,6 +10,9 @@ rust-version.workspace = true
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+performance-probe = []
+
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true

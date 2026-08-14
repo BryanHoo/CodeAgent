@@ -2,7 +2,9 @@ use std::{sync::Arc, time::Duration};
 
 use chrono::DateTime;
 use code_agent_protocol::parse_provider_event;
-use code_agent_runtime::{AgentEventStream, EventReplay, EventStreamOptions, SubscriberSignal};
+use code_agent_runtime::{
+    AgentEventStream, DEFAULT_COALESCING_WINDOW, EventReplay, EventStreamOptions, SubscriberSignal,
+};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
@@ -64,41 +66,65 @@ fn options() -> EventStreamOptions {
     }
 }
 
+#[test]
+fn default_coalescing_window_should_balance_latency_and_publish_rate() {
+    assert!(
+        (Duration::from_millis(4)..=Duration::from_millis(8)).contains(&DEFAULT_COALESCING_WINDOW)
+    );
+}
+
+#[tokio::test]
+async fn event_stream_should_publish_first_delta_without_waiting_for_flush_window() {
+    let stream = AgentEventStream::new(options()).expect("stream");
+    let mut subscriber = stream.subscribe().await.expect("subscriber");
+
+    stream.publish(message_delta("item-a", "visible")).await;
+
+    let published = subscriber.events.try_recv().expect("first delta published");
+    assert_eq!(published.value()["payload"]["delta"], "visible");
+}
+
 #[tokio::test]
 async fn event_stream_should_coalesce_adjacent_delta_and_flush_before_terminal() {
     let stream = AgentEventStream::new(options()).expect("stream");
     let mut subscriber = stream.subscribe().await.expect("subscriber");
 
+    stream.publish(message_delta("item-a", "visible")).await;
     stream.publish(message_delta("item-a", "hel")).await;
     stream.publish(message_delta("item-a", "lo")).await;
     stream.publish(completed()).await;
 
-    let delta = subscriber.events.recv().await.expect("delta");
+    let leading = subscriber.events.recv().await.expect("leading delta");
+    let trailing = subscriber.events.recv().await.expect("trailing delta");
     let terminal = subscriber.events.recv().await.expect("terminal");
-    assert_eq!(delta.sequence(), 1);
-    assert_eq!(delta.value()["payload"]["delta"], "hello");
-    assert_eq!(terminal.sequence(), 2);
+    assert_eq!(leading.value()["payload"]["delta"], "visible");
+    assert_eq!(trailing.value()["payload"]["delta"], "hello");
+    assert_eq!(terminal.sequence(), 3);
     assert_eq!(terminal.value()["type"], "turn.completed");
 }
 
 #[tokio::test]
 async fn event_stream_should_report_live_and_accumulated_metrics() {
     let stream = AgentEventStream::new(options()).expect("stream");
+    let _subscriber = stream.subscribe().await.expect("subscriber");
 
     stream.publish(message_delta("item-a", "hel")).await;
     stream.publish(message_delta("item-a", "lo")).await;
+    stream.publish(message_delta("item-a", "!")).await;
 
     let pending = stream.metrics().await;
-    assert_eq!(pending.provider_events_received, 2);
+    assert_eq!(pending.provider_events_received, 3);
     assert_eq!(pending.coalesced_events, 1);
     assert_eq!(pending.pending_deltas, 1);
-    assert_eq!(pending.published_events, 0);
+    assert_eq!(pending.published_events, 1);
+    assert_eq!(pending.queue_high_water_mark, 1);
 
     stream.flush().await;
     let published = stream.metrics().await;
     assert_eq!(published.pending_deltas, 0);
-    assert_eq!(published.published_events, 1);
-    assert_eq!(published.retained_events, 1);
+    assert_eq!(published.published_events, 2);
+    assert_eq!(published.queue_high_water_mark, 2);
+    assert_eq!(published.retained_events, 2);
 }
 
 #[tokio::test]
@@ -145,12 +171,24 @@ async fn event_stream_should_flush_delta_on_default_window() {
         flush_stream.run_flush_loop(flush_shutdown).await;
     });
 
+    stream.publish(message_delta("item-a", "visible")).await;
+    let leading = subscriber.events.recv().await.expect("leading delta");
+    assert_eq!(leading.value()["payload"]["delta"], "visible");
+
     stream.publish(message_delta("item-a", "windowed")).await;
     let published = tokio::time::timeout(Duration::from_millis(100), subscriber.events.recv())
         .await
         .expect("default window elapsed")
         .expect("published event");
     assert_eq!(published.value()["payload"]["delta"], "windowed");
+
+    stream.publish(message_delta("item-a", "next-window")).await;
+    assert!(subscriber.events.try_recv().is_err());
+    let next = tokio::time::timeout(Duration::from_millis(100), subscriber.events.recv())
+        .await
+        .expect("next window elapsed")
+        .expect("next published event");
+    assert_eq!(next.value()["payload"]["delta"], "next-window");
 
     shutdown.cancel();
     flush_task.await.expect("flush task");

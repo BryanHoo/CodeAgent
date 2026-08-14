@@ -30,6 +30,7 @@ export interface NodeEventStreamMetrics {
   readonly projectId: string;
   readonly providerEventsReceived: number;
   readonly publishedEvents: number;
+  readonly queueHighWaterMark: number;
   readonly retainedEvents: number;
   readonly retentionEvictions: number;
   readonly slowSubscribers: number;

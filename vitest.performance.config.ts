@@ -6,8 +6,9 @@ export default defineConfig({
   resolve: { alias: vitestAliases },
   test: {
     // 压力测试串行执行，避免并发用例互相污染墙钟和 Heap 预算。
+    disableConsoleIntercept: true,
     fileParallelism: false,
-    include: ["{apps,packages}/**/*.performance.test.{ts,tsx}"],
+    include: ["{apps,packages}/**/*.performance.test.{ts,tsx}", "tests/performance/**/*.test.ts"],
     maxWorkers: 1,
     passWithNoTests: true,
     pool: "threads",

@@ -78,6 +78,11 @@ export function startTauriEventSubscription(options: SubscribeAgentEventsOptions
       return;
     }
     lastSequence = message.sequence;
+    options.onPerformanceSample?.({
+      at: performance.now(),
+      point: "transport_received",
+      sequence: message.sequence,
+    });
     options.onEvent(message);
   };
 

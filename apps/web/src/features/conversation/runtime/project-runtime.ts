@@ -38,6 +38,7 @@ export class ProjectRuntimeManager {
   readonly #onMcpServerStatusChanged: NonNullable<
     ProjectRuntimeManagerOptions["onMcpServerStatusChanged"]
   >;
+  readonly #onPerformanceSample: ProjectRuntimeManagerOptions["onPerformanceSample"];
   readonly #onProjectGitActivity: NonNullable<ProjectRuntimeManagerOptions["onProjectGitActivity"]>;
   readonly #onTaskMetadataChanged: NonNullable<
     ProjectRuntimeManagerOptions["onTaskMetadataChanged"]
@@ -57,6 +58,7 @@ export class ProjectRuntimeManager {
     this.#maxEventHistoryBytes = options.maxEventHistoryBytes ?? MAX_PROJECT_EVENT_HISTORY_BYTES;
     this.#maxEventHistoryEvents = options.maxEventHistoryEvents ?? MAX_PROJECT_EVENT_HISTORY_EVENTS;
     this.#onMcpServerStatusChanged = options.onMcpServerStatusChanged ?? (() => undefined);
+    this.#onPerformanceSample = options.onPerformanceSample;
     this.#onProjectGitActivity = options.onProjectGitActivity ?? (() => undefined);
     this.#onTaskMetadataChanged = options.onTaskMetadataChanged ?? (() => undefined);
     this.#taskNotifier = options.taskNotifier ?? createBrowserTaskNotifier();
@@ -242,6 +244,9 @@ export class ProjectRuntimeManager {
         idleTimeoutMs: this.#idleTimeoutMs,
         maxEventHistoryBytes: this.#maxEventHistoryBytes,
         maxEventHistoryEvents: this.#maxEventHistoryEvents,
+        ...(this.#onPerformanceSample === undefined
+          ? {}
+          : { onPerformanceSample: this.#onPerformanceSample }),
       },
     );
     this.#projects.set(projectId, project);
