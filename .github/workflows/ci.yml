@@ -33,6 +33,13 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      # 浏览器性能门禁只使用 Chromium；Linux runner 还需同步安装系统依赖。
+      - name: Install Chromium with Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Install Chromium on Windows
+        if: matrix.os == 'windows-latest'
+        run: pnpm exec playwright install chromium
       - name: Run full quality gates
         run: pnpm check:ci
       - name: Run Rust checks
