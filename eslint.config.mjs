@@ -20,7 +20,7 @@ export default tseslint.config(
   },
   eslint.configs.recommended,
   {
-    files: ["**/*.{js,mjs,cjs,ts,tsx}"],
+    files: ["**/*.{js,mjs,cjs,ts,tsx,mts,cts}"],
     rules: {
       // 生产模块保持单一职责；测试场景和 fixture 在下方集中豁免。
       "max-lines": ["error", { max: 500, skipBlankLines: false, skipComments: false }],
@@ -28,11 +28,11 @@ export default tseslint.config(
   },
   {
     files: [
-      "**/*.d.ts",
-      "**/*.{test,spec}.{js,mjs,cjs,ts,tsx}",
-      "**/test/fixtures/**/*.{js,mjs,cjs,ts,tsx}",
-      "tests/fixtures/**/*.{js,mjs,cjs,ts,tsx}",
-      "tests/e2e/**/*.{js,mjs,cjs,ts,tsx}",
+      "**/*.d.{ts,mts,cts}",
+      "**/*.{test,spec}.{js,mjs,cjs,ts,tsx,mts,cts}",
+      "**/test/fixtures/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
+      "tests/fixtures/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
+      "tests/e2e/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
     ],
     rules: {
       "max-lines": "off",
@@ -45,7 +45,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["**/*.{ts,tsx}"],
+    files: ["**/*.{ts,tsx,mts,cts}"],
     extends: [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
     languageOptions: {
       parserOptions: {

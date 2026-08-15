@@ -75,7 +75,7 @@ jobs:
           tauriScript: pnpm tauri
           args: --bundles ${{ matrix.bundles }}
           tagName: ${{ env.RELEASE_TAG }}
-          releaseName: "CodeAgent ${{ env.RELEASE_TAG }} (Desktop: Preview / Unsigned)"
+          releaseName: "CodeAgent ${{ env.RELEASE_TAG }} Beta (Desktop: Preview / Unsigned)"
           generateReleaseNotes: true
           releaseDraft: true
           prerelease: false
@@ -114,6 +114,39 @@ jobs:
           name: desktop-${{ matrix.target }}
           path: .artifacts/code-agent-desktop-${{ matrix.target }}.tar.gz
           if-no-files-found: error
+
+  updater-acceptance:
+    name: Updater bootstrap acceptance
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Install minisign
+        run: sudo apt-get update && sudo apt-get install -y minisign
+      - name: Download current draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .artifacts/updater
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > .artifacts/release.json
+          gh release download "${RELEASE_TAG}" --dir .artifacts/updater
+      - name: Verify updater metadata, signatures, and tamper rejection
+        shell: bash
+        run: >-
+          node tools/release/verify-updater-release.mjs
+          --artifacts .artifacts/updater
+          --config apps/desktop/src-tauri/tauri.conf.json
+          --manifest .artifacts/updater/latest.json
+          --release .artifacts/release.json
+          --tag "${RELEASE_TAG}"
+          --version "${RELEASE_TAG#v}"
 
   smoke-hosted:
     name: Smoke ${{ matrix.target }} on minimum OS
@@ -196,7 +229,7 @@ jobs:
 
   release-approval:
     name: Approve updater acceptance
-    needs: [smoke-hosted, smoke-windows-10]
+    needs: [smoke-hosted, smoke-windows-10, updater-acceptance]
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     environment: release
@@ -249,20 +282,45 @@ jobs:
           done
           test -f ".artifacts/npm/bryanhu-code-agent-${package_version}.tgz" || exit 1
           find .artifacts/npm .artifacts/desktop -type f -print0 | sort -z | xargs -0 shasum -a 256 > .artifacts/SHA256SUMS
+      - name: Resolve npm release channel
+        shell: bash
+        run: |
+          package_version="${RELEASE_TAG#v}"
+          npm_tag="latest"
+          if [[ "${package_version}" == *-* ]]; then npm_tag="beta"; fi
+          latest_before="$(npm view "@bryanhu/code-agent" dist-tags.latest --json | tr -d '"')"
+          test -n "${latest_before}"
+          echo "NPM_TAG=${npm_tag}" >> "${GITHUB_ENV}"
+          echo "NPM_LATEST_BEFORE=${latest_before}" >> "${GITHUB_ENV}"
       - name: Publish native packages before the CLI
         shell: bash
         run: |
           package_version="${RELEASE_TAG#v}"
+          npm_tag="${NPM_TAG}"
           for target in darwin-arm64 linux-x64-gnu win32-x64-msvc; do
             name="@bryanhu/code-agent-${target}"
             tarball=".artifacts/npm/bryanhu-code-agent-${target}-${package_version}.tgz"
-            npm view "${name}@${package_version}" version --json >/dev/null 2>&1 || npm publish "${tarball}" --access public --provenance
+            npm view "${name}@${package_version}" version --json >/dev/null 2>&1 || npm publish "${tarball}" --access public --provenance --tag "${npm_tag}"
           done
       - name: Publish main CLI package
         shell: bash
         run: |
           package_version="${RELEASE_TAG#v}"
-          npm view "@bryanhu/code-agent@${package_version}" version --json >/dev/null 2>&1 || npm publish ".artifacts/npm/bryanhu-code-agent-${package_version}.tgz" --access public --provenance
+          npm_tag="${NPM_TAG}"
+          npm view "@bryanhu/code-agent@${package_version}" version --json >/dev/null 2>&1 || npm publish ".artifacts/npm/bryanhu-code-agent-${package_version}.tgz" --access public --provenance --tag "${npm_tag}"
+      - name: Verify npm dist-tags
+        shell: bash
+        run: |
+          package_version="${RELEASE_TAG#v}"
+          if [[ "${NPM_TAG}" = "beta" ]]; then
+            beta_version="$(npm view "@bryanhu/code-agent" dist-tags.beta --json | tr -d '"')"
+            latest_after="$(npm view "@bryanhu/code-agent" dist-tags.latest --json | tr -d '"')"
+            test "${beta_version}" = "${package_version}"
+            test "${latest_after}" = "${NPM_LATEST_BEFORE}"
+          else
+            latest_after="$(npm view "@bryanhu/code-agent" dist-tags.latest --json | tr -d '"')"
+            test "${latest_after}" = "${package_version}"
+          fi
       - name: Upload release checksums and Desktop archives
         shell: bash
         run: >-

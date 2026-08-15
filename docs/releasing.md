@@ -23,9 +23,9 @@
 
 ## 发布前配置
 
-GitHub 必须存在 `npm` Environment。工作流使用 OIDC 和 npm provenance，不保存长期 npm Token。另建受保护的 `release` Environment 并配置 Required reviewers；审批人只有在 draft artifacts 完成上一正式版本升级和篡改 updater 签名拒绝 smoke 后才能放行。
+GitHub 必须存在 `npm` Environment。工作流使用 OIDC 和 npm provenance，不保存长期 npm Token。另建受保护的 `release` Environment 并配置 Required reviewers；审批人只有在三端 smoke 和自动 updater 验收全部通过后才能放行。
 
-配置一台每次 job 前恢复干净快照的 Windows 10 x64 自托管 runner，并添加 `self-hosted, Windows, X64, windows-10` 标签。Windows Server runner 只负责可复现构建，不替代 Windows 10 最低系统验收。
+配置一台每次 job 前恢复干净快照的 Windows 10 x64 自托管 runner，并添加 `self-hosted, Windows, X64, windows-10` 标签。先按 GitHub 仓库 Settings 页面解压当前 Actions runner，再以管理员 PowerShell 运行 `tools/release/register-windows-runner.ps1`；Windows Server runner 只负责可复现构建，不替代 Windows 10 最低系统验收。
 
 Repository Actions Secrets 只需要 updater 密钥：
 
@@ -71,24 +71,27 @@ Updater 签名只验证更新包来源，不等同于操作系统代码签名。
 2. 通过固定 SHA 的 `tauri-action` 分别构建 DMG、DEB/AppImage 和 MSI/NSIS；三端都不读取操作系统证书，统一生成 Preview / Unsigned 安装包。
 3. 使用 `TAURI_SIGNING_PRIVATE_KEY` 生成 updater artifact 和 `.sig`，将安装包、更新器 metadata 与签名上传到同一个 draft GitHub Release。
 4. 在 macOS 14 Apple Silicon、Ubuntu 22.04 x64 和 Windows 10 x64 clean runner 安装 CLI 与 Desktop，执行 CLI doctor 和有界启动 smoke。macOS 额外检查 `LSMinimumSystemVersion` 为 `14.0`。
-5. 等待 `release` Environment 审批人确认上一正式版本升级和篡改 updater 签名拒绝 smoke。
-6. 按 native packages 在前、CLI 主包在后的顺序发布 npm，并执行：
+5. 自动验证 `latest.json` 三平台覆盖、内置公钥合法签名，以及 artifact/signature 篡改均被拒绝。
+6. 等待 `release` Environment 审批，按 native packages 在前、CLI 主包在后的顺序发布 npm。SemVer prerelease 只进入 npm `beta`，不得移动 `latest`，随后执行：
 
    ```bash
    gh release edit "${RELEASE_TAG}" --draft=false
    ```
 
-GitHub 的 `/releases/latest/` 不返回 draft。自动最低系统 smoke 与人工 updater 验收完成前，npm publish 和 Release promotion 都不会执行。
+GitHub 的 `/releases/latest/` 不返回 draft 或 prerelease。因为 Desktop 当前固定使用该 endpoint，`2.0.0-beta.1` 的 GitHub Release 在完成验收后保持 `prerelease=false`，Beta 身份由 SemVer、标题和 npm `beta` channel 表达。自动最低系统 smoke 与 updater 验收完成前，npm publish 和 Release promotion 都不会执行。
 
 ## Updater 验证边界
 
 Desktop 固定从 `https://github.com/BryanHoo/CodeAgent/releases/latest/download/latest.json` 检查更新。`latest.json` 中包含平台下载 URL 和 `.sig` 内容；`tauri-plugin-updater` 下载后使用内置公钥验证签名，验证成功才安装并重启应用。
 
-`release-approval` 必须从上一正式版本分别验证：
+`v2.0.0-beta.1` 是首个公开 Desktop updater 基线，没有可用于原位升级的上一 Desktop Release，因此本次执行 `bootstrap` 验收：
 
-- 合法更新可以下载、安装并启动目标版本。
-- 任意修改 updater artifact 或 `.sig` 后，安装会被拒绝。
 - macOS、Windows 和 Linux 的目标版本、URL 与签名均存在于 `latest.json`。
+- 仓库内置公钥可验证每个平台的合法 updater artifact。
+- 任意修改 updater artifact 或 `.sig` 后，签名验证会被拒绝。
+- 三个平台的实际安装与有界启动由最低系统 smoke 负责。
+
+从下一个 Desktop 版本开始，除上述自动校验外，还必须在 clean runner 从上一公开版本执行原位升级、重启并确认目标版本；不得把首发 `bootstrap` 结果复用为后续升级证据。
 
 ## 处理失败
 

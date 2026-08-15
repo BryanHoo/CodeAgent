@@ -1,6 +1,6 @@
 {
   "name": "code-agent-workspace",
-  "version": "1.10.0",
+  "version": "2.0.0-beta.1",
   "private": true,
   "description": "通过 Web 操作本地 Coding Agent 的应用",
   "type": "module",
@@ -55,6 +55,7 @@
     "start": "pnpm run build && node ./apps/node-cli/dist/cli.js start",
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
+    "test:desktop-ipc": "pnpm --filter @code-agent/desktop prepare:codex && pnpm --filter @code-agent/desktop exec tauri build --debug --features desktop-e2e --bundles app --config ../../tests/desktop-ipc/tauri.e2e.conf.json --ci --no-sign && wdio run ./tests/desktop-ipc/wdio.conf.ts",
     "test:e2e": "pnpm build && playwright test",
     "test:performance": "pnpm run test:performance:node && pnpm run test:performance:rust && pnpm run test:performance:browser",
     "test:performance:browser": "pnpm build && playwright test --config playwright.performance.config.ts",
@@ -65,11 +66,18 @@
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
-    "@playwright/test": "catalog:",
     "@openai/codex": "catalog:",
+    "@playwright/test": "catalog:",
+    "@types/mocha": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "@wdio/cli": "catalog:",
+    "@wdio/globals": "catalog:",
+    "@wdio/local-runner": "catalog:",
+    "@wdio/mocha-framework": "catalog:",
+    "@wdio/tauri-service": "catalog:",
+    "@wdio/types": "catalog:",
     "dependency-cruiser": "catalog:",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
@@ -81,6 +89,7 @@
     "typescript": "catalog:",
     "typescript-eslint": "catalog:",
     "vitest": "catalog:",
+    "webdriverio": "catalog:",
     "ws": "catalog:"
   },
   "license": "MIT"

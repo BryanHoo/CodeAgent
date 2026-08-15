@@ -35,20 +35,25 @@ use process_environment::{immediate_process_path, resolved_process_path};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let application = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(
-            |app, _arguments, _cwd| {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-                }
-            },
-        ))
+    let builder = tauri::Builder::default();
+    #[cfg(not(feature = "desktop-e2e"))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(
+        |app, _arguments, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        },
+    ));
+    let builder = builder
         .plugin(navigation_guard_plugin())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build());
+    #[cfg(feature = "desktop-e2e")]
+    let builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
+    let application = builder
         .setup(|app| {
             let codex_home = codex_home(app)?;
             let data_root = code_agent_data_root(&app.path().home_dir()?);
@@ -225,6 +230,10 @@ fn allowed_navigation(url: &tauri::Url) -> bool {
 }
 
 fn code_agent_data_root(home: &Path) -> PathBuf {
+    #[cfg(feature = "desktop-e2e")]
+    if let Some(path) = std::env::var_os("CODE_AGENT_E2E_DATA_ROOT") {
+        return PathBuf::from(path);
+    }
     // 自有数据不跟随 CODEX_HOME，避免 CLI 与 Desktop 启动时打开不同状态目录。
     home.join(".code-agent")
 }
