@@ -84,4 +84,14 @@ describe("CI 质量门禁", () => {
       "pnpm run prepare:e2e-fixtures",
     );
   });
+
+  it("浏览器性能门禁关闭会污染采样的 Playwright trace", () => {
+    const performanceConfig = readFileSync(
+      join(process.cwd(), "playwright.performance.config.ts"),
+      "utf8",
+    );
+
+    expect(performanceConfig).toContain('trace: "off"');
+    expect(performanceConfig).not.toContain('trace: "retain-on-failure"');
+  });
 });
