@@ -85,6 +85,7 @@ function createPendingRequest<Status extends PendingRequest["status"] = "pending
   status: Status = "pending" as Status,
 ): PendingRequest & Readonly<{ status: Status }> {
   return {
+    additionalPermissions: null,
     availableDecisions: ["allow", "deny"],
     command: "pnpm test",
     createdAt: timestamp,

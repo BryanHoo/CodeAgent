@@ -87,6 +87,67 @@ fn map_network_access(value: Option<&Value>) -> Result<Value, CodexMappingError>
     Ok(json!({ "host": host, "protocol": protocol }))
 }
 
+fn map_permission_profile(
+    value: Option<&Value>,
+    context: &str,
+) -> Result<Value, CodexMappingError> {
+    let Some(value) = value else {
+        return Ok(Value::Null);
+    };
+    if value.is_null() {
+        return Ok(Value::Null);
+    }
+    let profile = record(value, context)?;
+    let network = map_network_permission(profile.get("network"), context)?;
+    let file_system = map_file_system_permissions(profile.get("fileSystem"), context)?;
+    Ok(json!({ "fileSystem": file_system, "network": network }))
+}
+
+fn map_network_permission(
+    value: Option<&Value>,
+    context: &str,
+) -> Result<Value, CodexMappingError> {
+    let value = value.ok_or_else(|| {
+        CodexMappingError(format!("{context} network permission must be present"))
+    })?;
+    if value.is_null() {
+        return Ok(Value::Null);
+    }
+    let network = record(value, "Codex network permission")?;
+    let enabled = network.get("enabled").ok_or_else(|| {
+        CodexMappingError("Codex network permission enabled must be present".to_string())
+    })?;
+    if !enabled.is_null() {
+        boolean(enabled, "Codex network permission enabled")?;
+    }
+    Ok(json!({ "enabled": enabled }))
+}
+
+fn map_file_system_permissions(
+    value: Option<&Value>,
+    context: &str,
+) -> Result<Value, CodexMappingError> {
+    let value = value.ok_or_else(|| {
+        CodexMappingError(format!("{context} fileSystem permission must be present"))
+    })?;
+    if value.is_null() {
+        return Ok(Value::Null);
+    }
+    let file_system = record(value, "Codex file system permissions")?;
+    let read = file_system.get("read").ok_or_else(|| {
+        CodexMappingError("Codex file system permissions read must be present".to_string())
+    })?;
+    let write = file_system.get("write").ok_or_else(|| {
+        CodexMappingError("Codex file system permissions write must be present".to_string())
+    })?;
+    Ok(json!({
+        "entries": file_system.get("entries").unwrap_or(&Value::Null),
+        "globScanMaxDepth": file_system.get("globScanMaxDepth").unwrap_or(&Value::Null),
+        "read": read,
+        "write": write
+    }))
+}
+
 fn confirmation_options(options: &[Value]) -> bool {
     if options.len() != 2 {
         return false;
@@ -177,6 +238,7 @@ pub fn map_codex_server_request(
         server_request.method.as_str(),
         "item/commandExecution/requestApproval"
             | "item/fileChange/requestApproval"
+            | "item/permissions/requestApproval"
             | "item/tool/requestUserInput"
     ) {
         return Ok(None);
@@ -219,6 +281,38 @@ pub fn map_codex_server_request(
             }),
             None,
         )
+    } else if server_request.method == "item/permissions/requestApproval" {
+        let created_at = timestamp_millis(
+            params.get("startedAtMs").unwrap_or(&Value::Null),
+            "Codex permission approval startedAtMs",
+        )?;
+        (
+            json!({
+                "createdAt": created_at,
+                "cwd": field_string(params, "cwd", "Codex permission approval")?,
+                "environmentId": optional_nullable_string(
+                    params.get("environmentId"),
+                    "Codex permission approval environmentId",
+                )?,
+                "expiresAt": null,
+                "itemId": item_id,
+                "permissions": map_permission_profile(
+                    params.get("permissions"),
+                    "Codex requested permission profile",
+                )?,
+                "projectId": project_id,
+                "reason": optional_nullable_string(
+                    params.get("reason"),
+                    "Codex permission approval reason",
+                )?,
+                "requestId": request_id,
+                "status": "pending",
+                "taskId": task_id,
+                "turnId": turn_id,
+                "type": "permissions_approval"
+            }),
+            None,
+        )
     } else {
         let (available_decisions, deny_decision) =
             approval_decisions(params.get("availableDecisions"))?;
@@ -239,6 +333,10 @@ pub fn map_codex_server_request(
         });
         let mut request = identity;
         if server_request.method == "item/commandExecution/requestApproval" {
+            request["additionalPermissions"] = map_permission_profile(
+                params.get("additionalPermissions"),
+                "Codex additional permission profile",
+            )?;
             request["command"] =
                 optional_nullable_string(params.get("command"), "Codex approval command")?;
             request["cwd"] = optional_nullable_string(params.get("cwd"), "Codex approval cwd")?;

@@ -1205,6 +1205,7 @@ describe("project protocol", () => {
     } as const;
     const commandRequest = {
       ...identity,
+      additionalPermissions: null,
       availableDecisions: ["allow", "allow_for_session", "deny"],
       command: "pnpm check",
       cwd: "/workspace/CodeAgent",
@@ -1239,9 +1240,33 @@ describe("project protocol", () => {
       requestId: "string:input-1",
       type: "user_input",
     } as const;
+    const permissionsRequest = {
+      ...identity,
+      cwd: "/workspace/CodeAgent",
+      environmentId: "local",
+      permissions: {
+        fileSystem: {
+          entries: [
+            { access: "read", path: { path: "/workspace/input", type: "path" } },
+            { access: "write", path: { pattern: "/tmp/code-agent-*", type: "glob_pattern" } },
+            {
+              access: "read",
+              path: { type: "special", value: { kind: "project_roots", subpath: "docs" } },
+            },
+          ],
+          globScanMaxDepth: 4,
+          read: ["/workspace/legacy-read"],
+          write: ["/workspace/legacy-write"],
+        },
+        network: { enabled: true },
+      },
+      reason: "需要读取输入并访问网络",
+      requestId: "number:9",
+      type: "permissions_approval",
+    } as const;
 
     expect(
-      [commandRequest, fileRequest, inputRequest].every((request) =>
+      [commandRequest, fileRequest, inputRequest, permissionsRequest].every((request) =>
         Value.Check(PendingRequestSchema, request),
       ),
     ).toBe(true);
@@ -1282,6 +1307,52 @@ describe("project protocol", () => {
         type: commandRequest.type,
       }),
     ).toBe(true);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: permissionsRequest.itemId,
+        projectId: permissionsRequest.projectId,
+        resolution: {
+          permissions: {
+            fileSystem: {
+              entries: [permissionsRequest.permissions.fileSystem.entries[0]],
+              globScanMaxDepth: 4,
+              read: null,
+              write: null,
+            },
+            network: null,
+          },
+          scope: "session",
+        },
+        taskId: permissionsRequest.taskId,
+        turnId: permissionsRequest.turnId,
+        type: permissionsRequest.type,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(PendingRequestSchema, {
+        ...permissionsRequest,
+        permissions: {
+          ...permissionsRequest.permissions,
+          fileSystem: {
+            ...permissionsRequest.permissions.fileSystem,
+            entries: [{ access: "execute", path: { path: "/workspace/input", type: "path" } }],
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: permissionsRequest.itemId,
+        projectId: permissionsRequest.projectId,
+        resolution: {
+          permissions: { fileSystem: null, network: null },
+          scope: "global",
+        },
+        taskId: permissionsRequest.taskId,
+        turnId: permissionsRequest.turnId,
+        type: permissionsRequest.type,
+      }),
+    ).toBe(false);
     expect(
       Value.Check(ResolvePendingRequestRequestSchema, {
         itemId: inputRequest.itemId,

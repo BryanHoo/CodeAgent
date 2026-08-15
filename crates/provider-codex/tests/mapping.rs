@@ -364,6 +364,99 @@ fn server_request_mapping_should_validate_all_pending_request_variants() {
 }
 
 #[test]
+fn permission_server_requests_should_preserve_granular_profiles() {
+    let now = Utc
+        .with_ymd_and_hms(2026, 8, 12, 12, 0, 0)
+        .single()
+        .expect("fixed timestamp");
+    let command = map_codex_server_request(
+        &RpcServerRequest {
+            id: json!(10),
+            method: "item/commandExecution/requestApproval".to_string(),
+            params: json!({
+                "additionalPermissions": {
+                    "fileSystem": {
+                        "entries": [{
+                            "access": "read",
+                            "path": { "path": "/workspace/input", "type": "path" }
+                        }],
+                        "globScanMaxDepth": 3,
+                        "read": null,
+                        "write": null
+                    },
+                    "network": { "enabled": true }
+                },
+                "availableDecisions": ["accept", "decline"],
+                "command": "pnpm check",
+                "cwd": "/workspace",
+                "itemId": "command-1",
+                "networkApprovalContext": null,
+                "reason": null,
+                "startedAtMs": 1_754_998_400_000_i64,
+                "threadId": "task-1",
+                "turnId": "turn-1"
+            }),
+        },
+        "project-1",
+        now,
+    )
+    .expect("command request should map")
+    .expect("command request should be supported");
+    assert_eq!(
+        command.request["additionalPermissions"]["fileSystem"]["entries"][0]["access"],
+        "read"
+    );
+
+    let permission = map_codex_server_request(
+        &RpcServerRequest {
+            id: json!(11),
+            method: "item/permissions/requestApproval".to_string(),
+            params: permission_request_params(),
+        },
+        "project-1",
+        now,
+    )
+    .expect("permission request should map")
+    .expect("permission request should be supported");
+    assert_eq!(permission.request["type"], "permissions_approval");
+    assert_eq!(permission.request["environmentId"], "local");
+    assert_eq!(
+        permission.request["permissions"]["network"]["enabled"],
+        true
+    );
+}
+
+fn permission_request_params() -> Value {
+    json!({
+        "cwd": "/workspace",
+        "environmentId": "local",
+        "itemId": "permission-1",
+        "permissions": {
+            "fileSystem": {
+                "entries": [
+                    {
+                        "access": "read",
+                        "path": { "path": "/workspace/input", "type": "path" }
+                    },
+                    {
+                        "access": "write",
+                        "path": { "pattern": "/tmp/code-agent-*", "type": "glob_pattern" }
+                    }
+                ],
+                "globScanMaxDepth": 3,
+                "read": ["/workspace/legacy-read"],
+                "write": null
+            },
+            "network": { "enabled": true }
+        },
+        "reason": "需要额外权限",
+        "startedAtMs": 1_754_998_400_000_i64,
+        "threadId": "task-1",
+        "turnId": "turn-1"
+    })
+}
+
+#[test]
 fn automatic_approval_review_should_map_to_stream_item() {
     let event = map_codex_notification(
         "item/autoApprovalReview/completed",

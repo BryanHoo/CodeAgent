@@ -446,6 +446,7 @@ describe("project runtime manager", () => {
     const harness = createClientHarness();
     const manager = createProjectRuntimeManager(harness.client, { idleTimeoutMs: 1_000 });
     const pendingRequest: AgentTaskSnapshot["pendingRequests"][number] = {
+      additionalPermissions: null,
       availableDecisions: ["allow", "deny"],
       command: "pnpm check",
       createdAt: "2026-07-28T00:00:00.000Z",

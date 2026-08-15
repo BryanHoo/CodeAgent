@@ -712,6 +712,7 @@ test("updates a running background task title and clears attention after enterin
     itemId: "approval-input-design",
     payload: {
       request: {
+        additionalPermissions: null,
         availableDecisions: ["allow", "deny"],
         command: "pnpm check",
         createdAt: "2026-07-29T00:00:01.000Z",
@@ -883,6 +884,7 @@ test("updates a running background task title and clears attention after enterin
 test("restores network approvals from the task snapshot after refresh", async ({ page }) => {
   let resolutionCount = 0;
   const pendingRequest = {
+    additionalPermissions: null,
     availableDecisions: ["allow", "deny"],
     command: "pnpm check",
     createdAt: "2026-07-23T00:00:00.000Z",
@@ -1504,6 +1506,22 @@ test("allows a command approval and completes the turn", async ({ page }) => {
   const allow = page.getByRole("button", { exact: true, name: "允许" });
   await expect(allow).toBeFocused();
   await page.keyboard.press("Enter");
+
+  await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
+});
+
+test("grants a selected permission subset for the current session", async ({ page }) => {
+  await page.unroute("**/v1/**");
+  await page.goto("/p/code-agent");
+
+  await page.getByRole("textbox", { name: "任务输入" }).fill("审批权限");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  const approval = page.getByRole("region", { name: "权限请求请求" });
+  await expect(approval).toBeVisible();
+  await expect(approval.getByRole("checkbox")).toHaveCount(3);
+  await approval.getByRole("checkbox", { name: /\/tmp\/code-agent-/ }).uncheck();
+  await approval.getByRole("button", { exact: true, name: "本次会话允许" }).click();
 
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
