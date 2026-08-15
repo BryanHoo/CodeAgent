@@ -40,7 +40,7 @@
     "check:ci": "pnpm run check:ci:host && pnpm run test:performance:browser",
     "check:ci:host": "pnpm run check:ci:quality && pnpm run test:performance:host",
     "check:ci:quality": "pnpm run audit:prod && pnpm run codex:schema:check && pnpm run protocol:rust:check && pnpm run release:version:check && pnpm run check && pnpm run build && pnpm run bundle:check && pnpm run package:check",
-    "check:rust": "cargo fmt --all --check && cargo check --workspace --locked && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked",
+    "check:rust": "pnpm --filter @code-agent/desktop prepare:codex && cargo fmt --all --check && cargo check --workspace --locked && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked",
     "clean": "node ./tools/clean.mjs",
     "codex:schema:check": "node ./tools/verify-codex-schema.mjs",
     "codex:schema:update": "node ./tools/verify-codex-schema.mjs --update",
