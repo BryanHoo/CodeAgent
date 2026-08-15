@@ -62,11 +62,14 @@ async fn database_should_backup_existing_state_before_migration() {
     database.close().expect("database must close cleanly");
 
     let backup_path = path.with_extension("sqlite3.pre-rust-v13.bak");
-    let backup = rusqlite::Connection::open(&backup_path).expect("backup database must exist");
-    let marker: String = backup
-        .query_row("SELECT value FROM legacy_marker", [], |row| row.get(0))
-        .expect("backup must preserve legacy rows");
-    assert_eq!(marker, "preserve-me");
+    {
+        // Windows 删除目录前必须释放备份文件句柄。
+        let backup = rusqlite::Connection::open(&backup_path).expect("backup database must exist");
+        let marker: String = backup
+            .query_row("SELECT value FROM legacy_marker", [], |row| row.get(0))
+            .expect("backup must preserve legacy rows");
+        assert_eq!(marker, "preserve-me");
+    }
 
     fs::remove_dir_all(path.parent().expect("database must have parent"))
         .expect("temporary database directory must be removed");
