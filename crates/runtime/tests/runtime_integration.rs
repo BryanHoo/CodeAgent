@@ -18,9 +18,13 @@ use code_agent_protocol::{
 };
 use code_agent_runtime::{
     AgentEventStream, CodeAgentRuntime, CodeAgentRuntimeBuilder, EventReplay, EventStreamOptions,
-    RuntimeOptions,
+    PublishedEvent, RuntimeOptions,
 };
 use serde_json::{Value, json};
+
+fn published_value(event: &PublishedEvent) -> Value {
+    serde_json::from_slice(event.frame()).expect("valid published event frame")
+}
 
 #[derive(Clone, Copy)]
 enum ProviderBehavior {
@@ -357,7 +361,7 @@ async fn validated_provider_event_should_flow_through_replay_and_shutdown() {
         panic!("expected replay")
     };
     assert_eq!(checkpoint.sequence, 1);
-    assert_eq!(events[0].value()["payload"]["delta"], "hello");
+    assert_eq!(published_value(&events[0])["payload"]["delta"], "hello");
 
     stream.close().await;
     assert!(stream.subscribe().await.is_err());

@@ -14,9 +14,15 @@ use code_agent_protocol::{
     AgentModelPage, AgentProjectDefaults, AgentSkillPage, AgentTaskPage, AgentTaskSettings,
     GenerateCommitMessageRequest, Project, ProjectId, ProviderEvent, TaskId, parse_provider_event,
 };
-use code_agent_runtime::{CodeAgentRuntime, CodeAgentRuntimeBuilder, EventReplay, RuntimeOptions};
+use code_agent_runtime::{
+    CodeAgentRuntime, CodeAgentRuntimeBuilder, EventReplay, PublishedEvent, RuntimeOptions,
+};
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, mpsc};
+
+fn published_value(event: &PublishedEvent) -> Value {
+    serde_json::from_slice(event.frame()).expect("valid published event frame")
+}
 
 struct FakeProjectProvider {
     event_subscribers: Mutex<Vec<(bool, mpsc::Sender<ProviderEvent>)>>,
@@ -630,7 +636,7 @@ async fn project_context_should_initialize_once_and_forward_events() {
     else {
         panic!("events")
     };
-    assert_eq!(events[0].value()["payload"]["delta"], "hello");
+    assert_eq!(published_value(&events[0])["payload"]["delta"], "hello");
 
     runtime
         .release_project_context("release", &project_id)
@@ -757,7 +763,12 @@ async fn phase5_shared_fixture_should_match_provider_runtime_delivery() {
     };
     let event_types = events
         .iter()
-        .map(|event| event.value()["type"].as_str().expect("event type"))
+        .map(|event| {
+            published_value(event)["type"]
+                .as_str()
+                .expect("event type")
+                .to_owned()
+        })
         .collect::<Vec<_>>();
     let expected_types = fixture["expectedEventTypes"]
         .as_array()
