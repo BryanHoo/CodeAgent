@@ -60,6 +60,10 @@ impl PublishedEvent {
     pub fn frame(&self) -> &[u8] {
         &self.frame
     }
+
+    pub(crate) fn shared_frame(&self) -> Arc<[u8]> {
+        Arc::clone(&self.frame)
+    }
 }
 
 /// 回放结果或必须重读 Snapshot 的原因。

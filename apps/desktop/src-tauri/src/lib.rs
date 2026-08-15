@@ -24,7 +24,6 @@ use tauri::{
     plugin::{Builder as PluginBuilder, TauriPlugin},
 };
 
-use commands::events::EventSubscriptions;
 use lifecycle::DesktopLifecycle;
 use platform_adapters::{
     CodexSupervisor, DesktopHostPorts, DesktopProvider, start_codex_supervisor,
@@ -90,17 +89,11 @@ pub fn run() {
             .update(update)
             .build();
             let supervisor = Arc::new(CodexSupervisor::default());
-            let subscriptions = Arc::new(EventSubscriptions::default());
             app.manage(Arc::new(runtime));
             let runtime = app.state::<Arc<CodeAgentRuntime>>().inner().clone();
             app.manage(provider_slot.clone());
             app.manage(supervisor.clone());
-            app.manage(subscriptions.clone());
-            app.manage(Arc::new(DesktopLifecycle::new(
-                subscriptions,
-                runtime,
-                supervisor.clone(),
-            )));
+            app.manage(Arc::new(DesktopLifecycle::new(runtime, supervisor.clone())));
 
             // Provider 启动失败只更新诊断，不能阻塞主窗口创建。
             let resource_directory = app.path().resource_dir()?;

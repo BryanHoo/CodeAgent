@@ -78,6 +78,8 @@ describe("Tauri Phase 6 repository contract", () => {
   it("registers single-instance first and owns shutdown in one lifecycle", () => {
     const desktop = read("apps/desktop/src-tauri/src/lib.rs");
     const lifecycle = read("apps/desktop/src-tauri/src/lifecycle.rs");
+    const runtime = read("crates/runtime/src/lib.rs");
+    const shutdown = read("crates/runtime/src/shutdown.rs");
     const firstPlugin = desktop.indexOf(".plugin(");
 
     expect(desktop.slice(firstPlugin, firstPlugin + 120)).toContain("single_instance");
@@ -86,9 +88,11 @@ describe("Tauri Phase 6 repository contract", () => {
     expect(desktop).toContain("window.set_focus()");
     expect(desktop).not.toContain("TrayIcon");
     expect(lifecycle).toContain("DesktopLifecycle");
-    expect(lifecycle).toContain("compare_exchange");
-    expect(lifecycle.indexOf("subscriptions.close")).toBeLessThan(
-      lifecycle.indexOf("runtime.shutdown"),
+    expect(lifecycle).toContain("ShutdownGate");
+    expect(lifecycle).not.toContain("compare_exchange");
+    expect(shutdown).toContain("compare_exchange");
+    expect(runtime.indexOf("event_subscriptions.close()")).toBeLessThan(
+      runtime.indexOf("let project_contexts"),
     );
     expect(lifecycle.indexOf("runtime.shutdown")).toBeLessThan(
       lifecycle.indexOf("supervisor.close"),

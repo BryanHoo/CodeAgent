@@ -144,13 +144,18 @@ describe("Tauri Phase 5 repository contract", () => {
 
   it("uses Tauri Channel envelopes and keeps Runtime host-independent", () => {
     const events = read("apps/desktop/src-tauri/src/commands/events.rs");
+    const subscription = read("crates/runtime/src/event_subscription.rs");
     const runtimeManifest = read("crates/runtime/Cargo.toml");
 
     expect(events).toContain("ipc::{Channel, InvokeResponseBody}");
     expect(events).toContain("Channel<InvokeResponseBody>");
+    expect(events).toContain("start_project_event_subscription");
     expect(events).not.toContain("event.value().clone()");
-    expect(events).toContain('"connection.ready"');
-    expect(events).toContain('"resync.required"');
+    expect(events).not.toContain('"connection.ready"');
+    expect(events).not.toContain('"resync.required"');
+    expect(subscription).toContain('"connection.ready"');
+    expect(subscription).toContain('"resync.required"');
+    expect(subscription).not.toMatch(/tauri|napi/u);
     expect(events).not.toMatch(/\.emit\(|listen_global/u);
     const productionDependencies =
       runtimeManifest.split("[dev-dependencies]")[0] ?? runtimeManifest;
