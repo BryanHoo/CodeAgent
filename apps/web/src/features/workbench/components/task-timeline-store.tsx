@@ -20,8 +20,6 @@ import { groupStoredTurnTimelineItems } from "./task-timeline-store-items.js";
 import { StoreTurnTimelineSection } from "./task-timeline-store-turn.js";
 import { TimelineState, TurnProcessingTime } from "./task-timeline-status.js";
 
-export { resolveCompletedTurnProcessItemIds } from "./task-timeline-store-turn.js";
-
 const getTurnIdKey = (turnId: string) => turnId;
 
 function TaskNoticeRow({ notice }: Readonly<{ notice: TaskNotice }>) {

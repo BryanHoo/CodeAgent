@@ -7,11 +7,11 @@ import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import { createTaskStore } from "../../conversation/runtime/task-store.js";
 import {
-  resolveCompletedTurnProcessItemIds,
   resolveMessageResponseRendering,
   TaskSnapshotTimeline,
   TaskTimeline,
 } from "./task-timeline.js";
+import { resolveCompletedTurnProcess } from "./task-timeline-process.js";
 import { getUserMessageCopyText, LiveFileChanges } from "./task-timeline-store-items.js";
 
 function renderToStaticMarkup(children: ReactNode) {
@@ -53,6 +53,69 @@ const snapshot: RuntimeTaskSnapshot = {
   turns: [completedTurn],
   updatedAt: "2026-07-24T00:01:00.000Z",
 };
+
+describe("completed turn process aggregation", () => {
+  it("keeps a 10,000-operation turn intact while deriving its collapsed summary", () => {
+    const completedCommands = Array.from({ length: 9_980 }, (_, index) => ({
+      command: `command-${String(index)}`,
+      cwd: "/workspace/CodeAgent",
+      exitCode: 0,
+      id: `command-${String(index)}`,
+      output: "done",
+      outputTruncated: false,
+      status: "completed" as const,
+      type: "command" as const,
+    }));
+    const failedTools = Array.from({ length: 2 }, (_, index) => ({
+      id: `failed-tool-${String(index)}`,
+      name: `failed-tool-${String(index)}`,
+      output: "failed",
+      status: "failed" as const,
+      type: "tool" as const,
+    }));
+    const items: RuntimeTaskSnapshot["turns"][number]["items"] = [
+      ...completedCommands,
+      ...failedTools,
+      {
+        changes: Array.from({ length: 36 }, (_, index) => ({
+          diff: "+updated",
+          kind: "update" as const,
+          path: `src/file-${String(index)}.ts`,
+        })),
+        id: "file-changes",
+        status: "completed",
+        type: "file_change",
+      },
+      {
+        id: "final-answer",
+        phase: "final_answer",
+        role: "assistant",
+        text: "全部完成。",
+        type: "message",
+      },
+    ];
+
+    const process = resolveCompletedTurnProcess(items, "completed");
+    expect(process.completedOperationCount).toBe(9_980);
+    expect(process.failedOperationCount).toBe(2);
+    expect(process.fileCount).toBe(36);
+    expect(process.hiddenItemIds).toHaveLength(9_983);
+    expect(process.recentOperationItemIds).toEqual([
+      ...Array.from({ length: 18 }, (_, index) => `command-${String(index + 9_962)}`),
+      "failed-tool-0",
+      "failed-tool-1",
+    ]);
+    expect(items).toHaveLength(9_984);
+  });
+
+  it("does not aggregate a running turn", () => {
+    const process = resolveCompletedTurnProcess(completedTurn.items, "running");
+
+    expect(process.hiddenItemIds).toHaveLength(0);
+    expect(process.recentOperationItemIds).toHaveLength(0);
+    expect(process.completedOperationCount).toBe(0);
+  });
+});
 
 describe("temporary task timeline", () => {
   it("renders a fixed scope name without a Project selector", () => {
@@ -1412,6 +1475,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("正在读取项目配置。");
     expect(markup).not.toContain("检查过程输出");
     expect(markup).toContain("检查完成。");
+    expect(markup).toContain("已完成 1 项操作");
     expect(markup).toContain('data-turn-processing-time=""');
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain('aria-label="展开执行过程"');
@@ -1451,11 +1515,11 @@ describe("TaskSnapshotTimeline", () => {
       },
     ];
 
-    expect(resolveCompletedTurnProcessItemIds(items, "completed")).toEqual([
+    expect(resolveCompletedTurnProcess(items, "completed").hiddenItemIds).toEqual([
       "commentary-message",
       "process-activity",
     ]);
-    expect(resolveCompletedTurnProcessItemIds(items, "running")).toEqual([]);
+    expect(resolveCompletedTurnProcess(items, "running").hiddenItemIds).toEqual([]);
   });
 
   it("does not render assistant actions while its turn is still running", () => {

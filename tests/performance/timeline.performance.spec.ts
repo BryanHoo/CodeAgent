@@ -56,6 +56,59 @@ function createLongHistoryResponse() {
   };
 }
 
+function createSingleLargeTurnResponse() {
+  const budget = performanceBudgets.singleLargeTurn;
+  const commands = Array.from({ length: budget.items }, (_, index) => {
+    const failed = index >= budget.items - budget.failedOperations;
+    return {
+      command: `large-operation-${String(index)}`,
+      cwd: "/workspace/CodeAgent",
+      exitCode: failed ? 1 : 0,
+      id: `large-command-${String(index)}`,
+      outputTruncated: false,
+      status: failed ? ("failed" as const) : ("completed" as const),
+      type: "command" as const,
+    };
+  });
+  return {
+    checkpoint: { sequence: 0, sessionId: "e2e-session" },
+    snapshot: {
+      ...taskSnapshot,
+      title: "Single 10,000 operation Turn",
+      turns: [
+        {
+          completedAt: timestamp,
+          error: null,
+          id: "single-large-turn",
+          items: [
+            ...commands,
+            {
+              changes: Array.from({ length: budget.files }, (_, index) => ({
+                diff: "+updated",
+                kind: "update" as const,
+                path: `src/large-file-${String(index)}.ts`,
+              })),
+              id: "large-file-changes",
+              status: "completed" as const,
+              type: "file_change" as const,
+            },
+            {
+              id: "large-final-answer",
+              phase: "final_answer" as const,
+              role: "assistant" as const,
+              text: "Large Turn completed.",
+              type: "message" as const,
+            },
+          ],
+          startedAt: timestamp,
+          status: "completed" as const,
+        },
+      ],
+      updatedAt: timestamp,
+    },
+  };
+}
+
 async function installBrowserProbes(
   page: Page,
   samples: number,
@@ -64,6 +117,8 @@ async function installBrowserProbes(
 ) {
   await page.addInitScript(
     ({ sampleCount, targetId, turnId }) => {
+      const encodeFrame = (frame: unknown) =>
+        new TextEncoder().encode(JSON.stringify(frame)).buffer;
       interface ProbeState {
         eventDurations: number[];
         hydrationAt: number;
@@ -169,7 +224,7 @@ async function installBrowserProbes(
             this.dispatchEvent(new Event("open"));
             this.dispatchEvent(
               new MessageEvent("message", {
-                data: JSON.stringify({
+                data: encodeFrame({
                   latestSequence: 0,
                   sessionId: "e2e-session",
                   type: "connection.ready",
@@ -216,7 +271,7 @@ async function installBrowserProbes(
             });
             this.dispatchEvent(
               new MessageEvent("message", {
-                data: JSON.stringify({
+                data: encodeFrame({
                   itemId: targetId,
                   payload: { delta: "x" },
                   provider: "codex",
@@ -392,4 +447,54 @@ test("measures Timeline DOM, paint, interaction, memory and realtime latency", a
   expect(stageLatency.endToEnd.p99).toBeLessThan(
     performanceBudgets.realtimePipeline.maxEndToEndP99Ms,
   );
+});
+
+test("bounds a collapsed 10,000 operation Turn", async ({ page }) => {
+  const budget = performanceBudgets.singleLargeTurn;
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: createSingleLargeTurnResponse() });
+  });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Performance.enable");
+  await cdp.send("HeapProfiler.enable");
+  await cdp.send("HeapProfiler.collectGarbage");
+  const baselineMetrics = (await cdp.send("Performance.getMetrics")).metrics;
+  const baselineHeap = metric(baselineMetrics, "JSHeapUsedSize");
+  const hydrationStartedAt = performance.now();
+
+  await page.goto("/p/code-agent/t/task-1");
+  const conversation = page.getByRole("log", { name: "会话内容" });
+  await expect(conversation.getByText("Large Turn completed.", { exact: true })).toBeVisible();
+  const firstRecentIndex = budget.items - budget.recentOperations;
+  await expect(
+    conversation.getByText(`large-operation-${String(firstRecentIndex - 1)}`, { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    conversation.getByText(`large-operation-${String(firstRecentIndex)}`, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    conversation.getByText(`large-operation-${String(budget.items - 1)}`, { exact: true }),
+  ).toBeVisible();
+  const completedOperations = budget.items - budget.failedOperations;
+  await expect(page.getByRole("button", { name: "展开执行过程" })).toContainText(
+    `已完成 ${completedOperations.toLocaleString("zh-CN")} 项操作 · ${String(budget.failedOperations)} 项失败 · ${String(budget.files)} 个文件`,
+  );
+  const hydrationMs = performance.now() - hydrationStartedAt;
+  const peakMetrics = (await cdp.send("Performance.getMetrics")).metrics;
+  const heapGrowth = metric(peakMetrics, "JSHeapUsedSize") - baselineHeap;
+  await cdp.send("HeapProfiler.collectGarbage");
+  const dom = await cdp.send("Memory.getDOMCounters");
+  const retainedMetrics = (await cdp.send("Performance.getMetrics")).metrics;
+  const gcRetainedBytes = metric(retainedMetrics, "JSHeapUsedSize") - baselineHeap;
+  console.info("Chromium single large Turn performance", {
+    domNodes: dom.nodes,
+    gcRetainedBytes,
+    heapGrowth,
+    hydrationMs,
+  });
+
+  expect(dom.nodes).toBeLessThan(budget.maxDomNodes);
+  expect(hydrationMs).toBeLessThan(budget.maxHydrationMs);
+  expect(heapGrowth).toBeLessThan(budget.maxHeapGrowthBytes);
+  expect(gcRetainedBytes).toBeLessThan(budget.maxGcRetainedBytes);
 });

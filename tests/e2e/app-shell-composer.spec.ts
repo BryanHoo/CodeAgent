@@ -455,7 +455,20 @@ test("shows processing state while an existing task turn is still starting", asy
   await expect(page.getByText("继续处理当前任务", { exact: true })).toBeVisible();
 });
 
-test("toggles the completed execution process from the processing time", async ({ page }) => {
+test("expands the complete execution process from its semantic summary", async ({ page }) => {
+  const commands = Array.from({ length: 205 }, (_, index) => {
+    const failed = index >= 203;
+    return {
+      command: `operation-${String(index)}`,
+      cwd: "/workspace/CodeAgent",
+      exitCode: failed ? 1 : 0,
+      id: `command-process-${String(index)}`,
+      output: failed ? "Failed" : "Passed",
+      outputTruncated: false,
+      status: failed ? ("failed" as const) : ("completed" as const),
+      type: "command" as const,
+    };
+  });
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -476,15 +489,16 @@ test("toggles the completed execution process from the processing time", async (
                   text: "正在读取项目配置。",
                   type: "message",
                 },
+                ...commands,
                 {
-                  command: "pnpm check",
-                  cwd: "/workspace/CodeAgent",
-                  exitCode: 0,
-                  id: "command-process-check",
-                  output: "Checks passed",
-                  outputTruncated: false,
+                  changes: Array.from({ length: 36 }, (_, index) => ({
+                    diff: "+updated",
+                    kind: "update" as const,
+                    path: `src/file-${String(index)}.ts`,
+                  })),
+                  id: "process-file-changes",
                   status: "completed",
-                  type: "command",
+                  type: "file_change",
                 },
                 {
                   id: "message-process-final",
@@ -507,20 +521,27 @@ test("toggles the completed execution process from the processing time", async (
 
   await expect(page.getByText("实现与检查已完成。", { exact: true })).toBeVisible();
   await expect(page.getByText("正在读取项目配置。", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("pnpm check", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("operation-0", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("operation-184", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("operation-185", { exact: true })).toBeVisible();
+  await expect(page.getByText("operation-204", { exact: true })).toBeVisible();
 
   const expandProcess = page.getByRole("button", { name: "展开执行过程" });
   await expect(expandProcess).toHaveAttribute("aria-expanded", "false");
+  await expect(expandProcess).toContainText("已完成 203 项操作 · 2 项失败 · 36 个文件");
   await expandProcess.click();
 
   await expect(page.getByText("正在读取项目配置。", { exact: true })).toBeVisible();
-  await expect(page.getByText("pnpm check", { exact: true })).toBeVisible();
+  await expect(page.getByText("operation-0", { exact: true })).toBeVisible();
+  await expect(page.getByText("operation-204", { exact: true })).toBeVisible();
+  await expect(page.getByText("实现与检查已完成。", { exact: true })).toBeVisible();
+
   const collapseProcess = page.getByRole("button", { name: "收起执行过程" });
   await expect(collapseProcess).toHaveAttribute("aria-expanded", "true");
   await collapseProcess.click();
 
-  await expect(page.getByText("正在读取项目配置。", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("pnpm check", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("operation-0", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("operation-204", { exact: true })).toBeVisible();
 });
 
 test("runs official task actions from the slash command menu", async ({ page }) => {
