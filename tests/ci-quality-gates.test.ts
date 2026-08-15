@@ -28,6 +28,9 @@ describe("CI 质量门禁", () => {
     expect(packageJson.scripts["check:ci:quality"]).toContain("pnpm run build");
     expect(packageJson.scripts["check:ci:quality"]).toContain("pnpm run bundle:check");
     expect(packageJson.scripts["check:ci:quality"]).toContain("pnpm run package:check");
+    expect(packageJson.scripts["check:rust"]).toMatch(
+      /^pnpm --filter @code-agent\/desktop prepare:codex && cargo fmt/u,
+    );
     expect(packageJson.scripts["protocol:rust:check"]).not.toContain("vitest");
     expect(packageJson.scripts["prepublishOnly"]).toBe("pnpm run check:ci");
 
