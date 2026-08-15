@@ -229,6 +229,20 @@ function measure(run: () => void): number {
   return performance.now() - startedAt;
 }
 
+function validateEventFrames(frames: readonly unknown[]): AgentEvent[] {
+  const events: AgentEvent[] = [];
+  for (const frame of frames) {
+    if (
+      checkEventStreamMessage(frame) &&
+      frame.type !== "connection.ready" &&
+      frame.type !== "resync.required"
+    ) {
+      events.push(frame);
+    }
+  }
+  return events;
+}
+
 it("profiles parse, validate, and append for 10,000 representative wire frames", () => {
   const frameCount = performanceBudgets.eventHotPath.frames;
   expect(frameCount).toBe(10_000);
@@ -240,21 +254,13 @@ it("profiles parse, validate, and append for 10,000 representative wire frames",
     parsedFrames = wireFrames.map((frame) => JSON.parse(frame) as unknown);
   });
 
-  let validFrames = 0;
-  const validatedEvents: AgentEvent[] = [];
+  // 热路径预算排除 V8 首次编译成本，并覆盖全部加权事件类型后再测量。
+  expect(validateEventFrames(parsedFrames)).toHaveLength(frameCount);
+  let validatedEvents: AgentEvent[] = [];
   const validateMs = measure(() => {
-    for (const frame of parsedFrames) {
-      if (
-        checkEventStreamMessage(frame) &&
-        frame.type !== "connection.ready" &&
-        frame.type !== "resync.required"
-      ) {
-        validatedEvents.push(frame);
-        validFrames += 1;
-      }
-    }
+    validatedEvents = validateEventFrames(parsedFrames);
   });
-  expect(validFrames).toBe(frameCount);
+  expect(validatedEvents).toHaveLength(frameCount);
   expect(validateMs).toBeLessThan(performanceBudgets.eventHotPath.maxValidateMs);
 
   const history = new ProjectEventHistory({

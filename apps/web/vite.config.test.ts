@@ -31,8 +31,8 @@ describe("Web Vite browser targets", () => {
 
   it("selects exactly one host transport at build time", () => {
     const desktopConfig = createViteConfig("desktop");
-    const webAliases = JSON.stringify(webConfig.resolve?.alias);
-    const desktopAliases = JSON.stringify(desktopConfig.resolve?.alias);
+    const webAliases = JSON.stringify(webConfig.resolve?.alias).replaceAll("\\\\", "/");
+    const desktopAliases = JSON.stringify(desktopConfig.resolve?.alias).replaceAll("\\\\", "/");
 
     expect(webAliases).toContain("packages/transport-http/src/index.ts");
     expect(webAliases).not.toContain("packages/transport-tauri/src/index.ts");

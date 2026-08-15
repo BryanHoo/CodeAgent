@@ -1,3 +1,6 @@
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -81,9 +84,11 @@ describe("loadNativeBinding", () => {
 
   it("resolves the workspace addon from the bundled CLI location", () => {
     const paths = resolveDevelopmentAddonPaths(
-      new URL("file:///workspace/apps/node-cli/dist/chunk.js"),
+      pathToFileURL(resolve("workspace/apps/node-cli/dist/chunk.js")),
     );
 
-    expect(paths).toContain("/workspace/packages/engine-node/native/code-agent-node-binding.node");
+    expect(paths).toContain(
+      resolve("workspace/packages/engine-node/native/code-agent-node-binding.node"),
+    );
   });
 });
