@@ -96,5 +96,15 @@
     "maxEndToEndP95Ms": 100,
     "maxEndToEndP99Ms": 200,
     "samples": 200
+  },
+  "singleLargeTurn": {
+    "failedOperations": 2,
+    "files": 36,
+    "items": 10000,
+    "maxDomNodes": 4000,
+    "maxGcRetainedBytes": 50331648,
+    "maxHeapGrowthBytes": 67108864,
+    "maxHydrationMs": 1500,
+    "recentOperations": 20
   }
 }

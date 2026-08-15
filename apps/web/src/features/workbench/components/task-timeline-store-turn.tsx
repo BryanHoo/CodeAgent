@@ -1,13 +1,15 @@
-import type { AgentItem, AgentTurn } from "@code-agent/protocol";
-import { useState } from "react";
+import type { AgentItem } from "@code-agent/protocol";
+import { useMemo, useState } from "react";
 import { useStore } from "zustand";
 
+import { i18n } from "../../../i18n/i18n.js";
 import { Message, type MessageFileReference } from "../../../shared/components/agent/message.js";
 import type { NormalizedAgentTurn, TaskStore } from "../../conversation/runtime/task-store.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { BuildPlanAction, ForkTaskAction } from "./task-timeline-contracts.js";
 import { ChangedFilesCard } from "./task-timeline-file-changes.js";
-import { RunningReplyStatus, shouldRenderTimelineItem } from "./task-timeline-running.js";
+import { resolveCompletedTurnProcess, type CompletedTurnProcess } from "./task-timeline-process.js";
+import { RunningReplyStatus } from "./task-timeline-running.js";
 import {
   StoredLiveFileChanges as LiveFileChanges,
   StoredRunningReplyStatus,
@@ -21,24 +23,37 @@ import {
   getMessageTimestamp,
 } from "./task-timeline-status.js";
 
-export function resolveCompletedTurnProcessItemIds(
-  items: readonly AgentItem[],
-  turnStatus: AgentTurn["status"],
-): string[] {
-  if (turnStatus === "running") return [];
-  const finalAnswerIndex = items.findLastIndex(
-    (item) => item.type === "message" && item.role === "assistant" && item.phase === "final_answer",
-  );
-  if (finalAnswerIndex < 0) return [];
+function formatProcessCount(value: number): string {
+  return value.toLocaleString(i18n.resolvedLanguage ?? "zh-CN");
+}
 
-  return items.slice(0, finalAnswerIndex).flatMap((item) => {
-    if (!shouldRenderTimelineItem(item)) return [];
-    if (item.type === "message") {
-      return item.role === "assistant" && item.phase === "commentary" ? [item.id] : [];
-    }
-    // Reasoning 摘要与运行操作都属于可折叠过程；File Change 继续由最终摘要统一展示。
-    return item.type === "file_change" || item.type === "review" ? [] : [item.id];
-  });
+function formatCompletedTurnProcessSummary(process: CompletedTurnProcess): string | undefined {
+  const parts: string[] = [];
+  if (process.completedOperationCount > 0) {
+    parts.push(
+      i18n.t("timeline.completedOperations", {
+        count: formatProcessCount(process.completedOperationCount),
+        ns: "conversation",
+      }),
+    );
+  }
+  if (process.failedOperationCount > 0) {
+    parts.push(
+      i18n.t("timeline.failedOperations", {
+        count: formatProcessCount(process.failedOperationCount),
+        ns: "conversation",
+      }),
+    );
+  }
+  if (process.fileCount > 0) {
+    parts.push(
+      i18n.t("timeline.processFiles", {
+        count: formatProcessCount(process.fileCount),
+        ns: "conversation",
+      }),
+    );
+  }
+  return parts.length === 0 ? undefined : parts.join(" · ");
 }
 
 function StoredAssistantGroup({
@@ -53,7 +68,9 @@ function StoredAssistantGroup({
   onReviewFileChanges,
   onToggleProcess,
   processExpanded,
-  processItemIds,
+  processHiddenItemIds,
+  processRecentOperationItemIds,
+  processSummary,
   processToggleAvailable,
   projectId,
   showProcessingTime,
@@ -73,7 +90,9 @@ function StoredAssistantGroup({
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
   onToggleProcess: () => void;
   processExpanded: boolean;
-  processItemIds: ReadonlySet<string>;
+  processHiddenItemIds: ReadonlySet<string>;
+  processRecentOperationItemIds: ReadonlySet<string>;
+  processSummary: string | undefined;
   processToggleAvailable: boolean;
   projectId: string;
   showProcessingTime: boolean;
@@ -89,9 +108,13 @@ function StoredAssistantGroup({
   const visibleItemIds =
     turn.status === "running" || processExpanded
       ? itemIds
-      : itemIds.filter((itemId) => !processItemIds.has(itemId));
+      : itemIds.filter(
+          (itemId) =>
+            !processHiddenItemIds.has(itemId) || processRecentOperationItemIds.has(itemId),
+        );
   if (turn.status !== "running") {
-    for (const itemId of visibleItemIds) {
+    // 复制文本与文件汇总继续消费完整 Store 数据，不受当前折叠展示影响。
+    for (const itemId of itemIds) {
       const item = itemStoresById.get(itemId)?.read();
       if (item?.type === "message" && item.role === "assistant") {
         assistantTextParts.push(item.text);
@@ -111,6 +134,7 @@ function StoredAssistantGroup({
           {...(processToggleAvailable
             ? { expanded: processExpanded, onToggle: onToggleProcess }
             : {})}
+          summary={processSummary}
         />
       ) : null}
       {visibleItemIds.length > 0 || liveFileChangesDiff !== undefined || showRunningShimmer ? (
@@ -182,22 +206,34 @@ export function StoreTurnTimelineSection({
   const turn = useStore(store, (state) => state.turnsById[turnId]);
   const itemIds = useStore(store, (state) => state.itemIdsByTurnId[turnId] ?? []);
   const turnDiff = useStore(store, (state) => state.turnDiffsById[turnId]);
+  const itemStoresById = store.getState().itemStoresById;
   const [processExpanded, setProcessExpanded] = useState(false);
+
+  const process = useMemo(() => {
+    if (turn === undefined || turn.status === "running") {
+      return resolveCompletedTurnProcess([], "running");
+    }
+    const items: AgentItem[] = [];
+    for (const itemId of itemIds) {
+      const item = store.getState().itemStoresById.get(itemId)?.peek();
+      if (item !== undefined) items.push(item);
+    }
+    return resolveCompletedTurnProcess(items, turn.status);
+  }, [itemIds, store, turn]);
+  const processHiddenItemIds = useMemo(
+    () => new Set(process.hiddenItemIds),
+    [process.hiddenItemIds],
+  );
+  const processRecentOperationItemIds = useMemo(
+    () => new Set(process.recentOperationItemIds),
+    [process.recentOperationItemIds],
+  );
   if (turn === undefined) return null;
 
   const latestSnapshotTimestamp = store.getState().snapshotMetadata?.updatedAt ?? "";
-  const itemStoresById = store.getState().itemStoresById;
   const timelineGroups = groupStoredTurnTimelineItems(itemIds, itemStoresById);
-  const processItemIds = new Set(
-    resolveCompletedTurnProcessItemIds(
-      itemIds.flatMap((itemId) => {
-        const item = itemStoresById.get(itemId)?.peek();
-        return item === undefined ? [] : [item];
-      }),
-      turn.status,
-    ),
-  );
-  const processToggleAvailable = processItemIds.size > 0;
+  const processSummary = formatCompletedTurnProcessSummary(process);
+  const processToggleAvailable = process.hiddenItemIds.length > 0;
   const firstAssistantGroupIndex = timelineGroups.findIndex((group) => group.type === "assistant");
   const hasAssistantItems = firstAssistantGroupIndex >= 0;
   const latestAssistantGroupIndex = timelineGroups.findLastIndex(
@@ -247,7 +283,9 @@ export function StoreTurnTimelineSection({
             onOpenSourceFile={onOpenSourceFile}
             onReviewFileChanges={onReviewFileChanges}
             processExpanded={processExpanded}
-            processItemIds={processItemIds}
+            processHiddenItemIds={processHiddenItemIds}
+            processRecentOperationItemIds={processRecentOperationItemIds}
+            processSummary={processSummary}
             processToggleAvailable={processToggleAvailable}
             projectId={projectId}
             showProcessingTime={groupIndex === firstAssistantGroupIndex}

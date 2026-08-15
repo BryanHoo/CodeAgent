@@ -187,8 +187,9 @@ export function TurnProcessingTime({
   expanded,
   onToggle,
   startedAt,
+  summary,
 }: Pick<AgentTurn, "completedAt" | "startedAt"> &
-  Readonly<{ expanded?: boolean; onToggle?: () => void }>) {
+  Readonly<{ expanded?: boolean; onToggle?: () => void; summary?: string | undefined }>) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -220,6 +221,7 @@ export function TurnProcessingTime({
     <>
       <span>{i18n.t("timeline.processing", { ns: "conversation" })}&nbsp;</span>
       <time dateTime={duration.dateTime}>{duration.label}</time>
+      {summary === undefined ? null : <span className="min-w-0 truncate">&nbsp;· {summary}</span>}
     </>
   );
   const className =
