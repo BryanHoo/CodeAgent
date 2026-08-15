@@ -2,10 +2,9 @@ use std::{collections::HashSet, path::Path};
 
 use crate::process::ProcessEnvironment;
 
-use super::{
-    Arguments, OpenApp, OpenCommand, OpenTarget, Platform, launch, map_launch_status,
-    resolve_commands, resolve_commands_with_environment,
-};
+#[cfg(unix)]
+use super::{Arguments, OpenApp, OpenCommand, launch, map_launch_status};
+use super::{OpenTarget, Platform, resolve_commands, resolve_commands_with_environment};
 
 fn existing(paths: &[&str]) -> impl Fn(&Path) -> bool {
     let paths = paths
