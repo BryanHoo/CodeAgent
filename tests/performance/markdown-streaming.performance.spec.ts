@@ -263,7 +263,8 @@ for (const budget of performanceBudgets.streamingMarkdown.cases) {
     const streamHeapGrowthBytes = metric(peakMetrics, "JSHeapUsedSize") - baselineHeap;
     await cdp.send("HeapProfiler.collectGarbage");
     await cdp.send("HeapProfiler.collectGarbage");
-    const gcRetainedBytes = metric(await collectMetrics(cdp), "JSHeapUsedSize") - blankHeap;
+    // GC 保留预算约束本次 stream 的增量，排除不同 Chromium/架构的应用基础堆差异。
+    const gcRetainedBytes = metric(await collectMetrics(cdp), "JSHeapUsedSize") - baselineHeap;
     const longTasks = await page.evaluate(() => {
       const state = Reflect.get(
         globalThis,

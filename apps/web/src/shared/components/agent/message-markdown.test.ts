@@ -59,8 +59,8 @@ describe("incremental message Markdown", () => {
     const blocks = parser(source);
 
     expect(blocks.join("")).toBe(source);
-    expect(blocks.length).toBeLessThan(20);
-    expect(Math.max(...blocks.map((block) => block.length))).toBeLessThan(10 * 1024);
+    expect(blocks.length).toBeLessThan(10);
+    expect(Math.max(...blocks.map((block) => block.length))).toBeLessThan(18 * 1024);
     expect(parsedLengths.reduce((total, length) => total + length, 0)).toBeLessThan(
       source.length * 3,
     );
