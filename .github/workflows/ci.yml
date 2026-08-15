@@ -33,15 +33,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      # 浏览器性能门禁只使用 Chromium；Linux runner 还需同步安装系统依赖。
-      - name: Install Chromium with Linux dependencies
-        if: matrix.os == 'ubuntu-latest'
-        run: pnpm exec playwright install --with-deps chromium
-      - name: Install Chromium on Windows
-        if: matrix.os == 'windows-latest'
-        run: pnpm exec playwright install chromium
-      - name: Run full quality gates
-        run: pnpm check:ci
+      - name: Run host quality gates
+        run: pnpm check:ci:host
       - name: Run Rust checks
         run: pnpm check:rust
       # 覆盖率阈值只在 Linux 执行，避免 Windows 矩阵重复生成报告。
@@ -51,6 +44,28 @@ jobs:
       # 只读展示质量门禁生成的机器报告，不再次分析 production 产物。
       - name: Show Web Bundle report
         run: pnpm run bundle:report
+
+  browser-performance:
+    name: Browser Performance
+    runs-on: macos-14
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # 绝对时延预算固定在同一 runner 类型，避免跨硬件波动稀释回归信号。
+      - name: Install Chromium
+        run: pnpm exec playwright install chromium
+      - name: Run browser performance gates
+        run: pnpm run test:performance:browser
 
   macos-smoke:
     name: macOS smoke
