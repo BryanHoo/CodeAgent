@@ -46,7 +46,6 @@ pub struct EventCheckpoint {
 pub struct PublishedEvent {
     frame: Arc<[u8]>,
     sequence: u64,
-    value: Arc<Value>,
 }
 
 impl PublishedEvent {
@@ -54,12 +53,6 @@ impl PublishedEvent {
     #[must_use]
     pub fn sequence(&self) -> u64 {
         self.sequence
-    }
-
-    /// 返回事件 JSON。
-    #[must_use]
-    pub fn value(&self) -> &Value {
-        &self.value
     }
 
     /// 返回可直接交付 Delivery 的序列化 frame。
@@ -378,7 +371,6 @@ impl AgentEventStream {
         let event = Arc::new(PublishedEvent {
             frame: Arc::from(frame),
             sequence,
-            value: Arc::new(value),
         });
         self.retain(state, event.clone());
         state.metrics.published_events += 1;
