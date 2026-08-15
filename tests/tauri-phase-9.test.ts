@@ -169,7 +169,21 @@ describe("Tauri Phase 9 updater contract", () => {
     expect(macosSmoke).not.toContain("spctl --assess");
     expect(linuxSmoke).toContain("xvfb-run");
     expect(linuxSmoke).toContain("apt-get install");
+    expect(linuxSmoke).toContain('setsid "$@"');
+    expect(linuxSmoke).toContain('kill -TERM -- "-${app_pid}"');
+    expect(linuxSmoke).toContain('kill -KILL -- "-${app_pid}"');
+    expect(linuxSmoke.match(/smoke_app "/gu)).toHaveLength(2);
     expect(windowsSmoke).not.toContain("verify-windows-signatures.ps1");
+    expect(windowsSmoke).toContain("Install-MsiArtifact");
+    expect(windowsSmoke).toContain("Install-NsisArtifact");
+    expect(windowsSmoke).toContain("Install-MsiArtifact -Artifact $msi");
+    expect(windowsSmoke).toContain("Install-NsisArtifact -Artifact $nsis");
+    expect(windowsSmoke).toContain("msiexec.exe");
+    expect(windowsSmoke).toContain("CloseMainWindow()");
+    expect(windowsSmoke).toContain("ArgumentList.Add");
+    expect(windowsSmoke).toContain("WaitForExit($nativeProcessTimeoutMs)");
+    expect(windowsSmoke).toContain("Kill($true)");
+    expect(windowsSmoke).not.toContain("Start-Process");
     expect(windowsSmoke).toContain("/S");
   });
 

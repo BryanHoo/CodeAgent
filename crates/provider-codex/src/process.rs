@@ -64,9 +64,22 @@ pub struct CodexProcessExit {
     pub signal: Option<i32>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SupervisorCommand {
     Terminate,
     Kill,
+}
+
+const UNIX_FORCED_SHUTDOWN_COMMANDS: [SupervisorCommand; 2] =
+    [SupervisorCommand::Terminate, SupervisorCommand::Kill];
+const WINDOWS_FORCED_SHUTDOWN_COMMANDS: [SupervisorCommand; 1] = [SupervisorCommand::Kill];
+
+fn forced_shutdown_commands(unix: bool) -> &'static [SupervisorCommand] {
+    if unix {
+        &UNIX_FORCED_SHUTDOWN_COMMANDS
+    } else {
+        &WINDOWS_FORCED_SHUTDOWN_COMMANDS
+    }
 }
 
 /// 运行中的 Codex App Server。
@@ -129,7 +142,7 @@ impl CodexAppServerProcess {
         }
     }
 
-    /// 幂等关闭：stdin 关闭 → SIGTERM → SIGKILL，每级等待 `shutdown_timeout`。
+    /// 幂等关闭：先关闭 stdin，再按平台升级终止并等待受跟踪任务。
     pub async fn close(&self) -> Result<(), CodeAgentError> {
         let mut done = self.close_done.lock().await;
         if *done {
@@ -165,18 +178,16 @@ impl CodexAppServerProcess {
         if self.exit_within(self.shutdown_timeout).await {
             return Ok(());
         }
-        let _ = self.control_tx.send(SupervisorCommand::Terminate).await;
-        if self.exit_within(self.shutdown_timeout).await {
-            return Ok(());
-        }
-        let _ = self.control_tx.send(SupervisorCommand::Kill).await;
-        if self.exit_within(self.shutdown_timeout).await {
-            return Ok(());
+        for command in forced_shutdown_commands(cfg!(unix)) {
+            let _ = self.control_tx.send(*command).await;
+            if self.exit_within(self.shutdown_timeout).await {
+                return Ok(());
+            }
         }
         Err(CodeAgentError::new(
             CodeAgentErrorCode::Timeout,
             format!(
-                "Codex App Server did not exit within {}ms after SIGKILL",
+                "Codex App Server did not exit within {}ms after forced termination",
                 self.shutdown_timeout.as_millis()
             ),
             None,
@@ -231,7 +242,7 @@ fn send_terminate_signal(child: &tokio::process::Child) {
 
 #[cfg(not(unix))]
 fn send_terminate_signal(child: &tokio::process::Child) {
-    // Windows 无 SIGTERM 等价语义，直接进入强制终止。
+    // Windows 关闭序列不会选择此阶段，保留分支以维持统一 supervisor 消息处理。
     let _ = child.id();
 }
 
@@ -409,7 +420,10 @@ pub async fn start_codex_app_server(
 mod tests {
     use serde_json::Value;
 
-    use super::{initialize_params, rpc_error_to_code_agent_error};
+    use super::{
+        SupervisorCommand, forced_shutdown_commands, initialize_params,
+        rpc_error_to_code_agent_error,
+    };
     use crate::CODEX_IGNORED_NOTIFICATION_METHODS;
     use crate::RpcClientError;
 
@@ -435,6 +449,19 @@ mod tests {
         assert_eq!(
             rpc_error_to_code_agent_error(&error).message(),
             "model is not available"
+        );
+    }
+
+    #[test]
+    fn forced_shutdown_commands_skip_unsupported_windows_terminate_wait() {
+        assert_eq!(forced_shutdown_commands(false), &[SupervisorCommand::Kill]);
+    }
+
+    #[test]
+    fn forced_shutdown_commands_preserve_unix_graceful_termination() {
+        assert_eq!(
+            forced_shutdown_commands(true),
+            &[SupervisorCommand::Terminate, SupervisorCommand::Kill]
         );
     }
 }
