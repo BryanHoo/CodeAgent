@@ -98,6 +98,15 @@ const readyMcpServer = {
 } as const satisfies AgentMcpServer;
 
 describe("WorkbenchInspector", () => {
+  it("does not render project open errors inside the Inspector", () => {
+    const markup = renderInspectorMarkup(
+      <WorkbenchInspector projectName="CodeAgent" projectPath="/workspace/CodeAgent" />,
+    );
+
+    expect(markup).not.toContain("open -a failed");
+    expect(markup).not.toContain("无法使用所选应用打开目标");
+  });
+
   it("renders the latest task plan as a plain status-aware queue at the bottom of context", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
@@ -378,23 +387,23 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain('aria-label="查看 Git 历史"');
   });
 
-  it("shows a non-blocking retry status and offers a manual refresh after Git detection fails", () => {
+  it("offers a project refresh without rendering Git errors in the Inspector", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
         gitStatus={gitStatus}
         gitStatusError={new Error("not a git repository")}
         onOpenProjectFile={() => undefined}
-        onRefreshGitStatus={() => undefined}
+        onRefreshProject={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
       />,
     );
 
-    expect(markup).toContain("Git 变更刷新失败，正在自动重试");
+    expect(markup).not.toContain("Git 变更刷新失败，正在自动重试");
+    expect(markup).not.toContain("not a git repository");
     expect(markup).toContain("2 个变更");
-    expect(markup).toContain("手动刷新");
-    expect(markup).toContain('aria-label="手动刷新 Git 变更"');
+    expect(markup).toContain('aria-label="刷新项目 CodeAgent"');
   });
 
   it("renders project file tree root loading and error states", () => {
@@ -423,7 +432,8 @@ describe("WorkbenchInspector", () => {
       />,
     );
     expect(loadingMarkup).toContain("正在读取项目文件...");
-    expect(errorMarkup).toContain("无法读取项目文件");
+    expect(errorMarkup).not.toContain("无法读取项目文件");
+    expect(errorMarkup).not.toContain("unavailable");
     expect(errorMarkup).toContain('aria-label="重新读取项目文件"');
     expect(errorMarkup).not.toContain("仅显示前 2000 个条目");
   });
@@ -644,8 +654,8 @@ describe("WorkbenchInspector", () => {
 
     expect(renderState({ mcpServersPending: true })).toContain("正在读取 MCP...");
     const errorMarkup = renderState({ mcpServersError: new Error("MCP unavailable") });
-    expect(errorMarkup).toContain("无法读取 MCP");
-    expect(errorMarkup).toContain("MCP unavailable");
+    expect(errorMarkup).not.toContain("无法读取 MCP");
+    expect(errorMarkup).not.toContain("MCP unavailable");
     expect(errorMarkup).not.toContain("查看错误日志");
     const retryErrorMarkup = renderInspectorMarkup(
       <WorkbenchInspector
@@ -656,8 +666,8 @@ describe("WorkbenchInspector", () => {
         tab="context"
       />,
     );
-    expect(retryErrorMarkup.match(/重新加载 MCP 失败/gu)).toHaveLength(1);
-    expect(retryErrorMarkup).toContain("config/mcpServer/reload failed");
+    expect(retryErrorMarkup).not.toContain("重新加载 MCP 失败");
+    expect(retryErrorMarkup).not.toContain("config/mcpServer/reload failed");
     expect(retryErrorMarkup).not.toContain("mcpServerStatus/list failed");
     const failedMarkup = renderState({
       mcpServers: [
@@ -675,9 +685,9 @@ describe("WorkbenchInspector", () => {
       ],
     });
     expect(failedMarkup).toContain("启动失败");
-    expect(failedMarkup).toContain("需要重新认证");
-    expect(failedMarkup).toContain("查看错误日志");
-    expect(failedMarkup).toContain("MCP startup timed out after 10s");
+    expect(failedMarkup).not.toContain("需要重新认证");
+    expect(failedMarkup).not.toContain("查看错误日志");
+    expect(failedMarkup).not.toContain("MCP startup timed out after 10s");
     expect(renderState({ mcpServers: [] })).toContain("当前任务没有可读取的 MCP");
   });
 });

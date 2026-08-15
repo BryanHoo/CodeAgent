@@ -1,0 +1,95 @@
+[
+  {
+    "method": "item/agentMessage/delta",
+    "params": {
+      "delta": "hello",
+      "itemId": "message-1",
+      "threadId": "task-1",
+      "turnId": "turn-1"
+    },
+    "expected": {
+      "itemId": "message-1",
+      "payload": { "delta": "hello" },
+      "taskId": "task-1",
+      "turnId": "turn-1",
+      "type": "message.delta"
+    }
+  },
+  {
+    "method": "turn/plan/updated",
+    "params": {
+      "explanation": "先检查，再修改。",
+      "plan": [
+        { "status": "inProgress", "step": "检查实现" },
+        { "status": "pending", "step": "补充测试" }
+      ],
+      "threadId": "task-1",
+      "turnId": "turn-1"
+    },
+    "expected": {
+      "payload": {
+        "plan": {
+          "explanation": "先检查，再修改。",
+          "steps": [
+            { "status": "in_progress", "text": "检查实现" },
+            { "status": "pending", "text": "补充测试" }
+          ]
+        }
+      },
+      "taskId": "task-1",
+      "turnId": "turn-1",
+      "type": "plan.updated"
+    }
+  },
+  {
+    "method": "thread/tokenUsage/updated",
+    "params": {
+      "threadId": "task-1",
+      "tokenUsage": {
+        "last": {
+          "cachedInputTokens": 4,
+          "inputTokens": 10,
+          "outputTokens": 6,
+          "reasoningOutputTokens": 2,
+          "totalTokens": 16
+        },
+        "modelContextWindow": 128000,
+        "total": {
+          "cachedInputTokens": 40,
+          "inputTokens": 100,
+          "outputTokens": 60,
+          "reasoningOutputTokens": 20,
+          "totalTokens": 160
+        }
+      },
+      "turnId": "turn-1"
+    },
+    "expected": {
+      "payload": {
+        "usage": {
+          "contextWindow": 128000,
+          "usedTokens": 16
+        }
+      },
+      "taskId": "task-1",
+      "turnId": "turn-1",
+      "type": "usage.updated"
+    }
+  },
+  {
+    "method": "warning",
+    "params": {
+      "message": "配置即将失效",
+      "threadId": "task-1"
+    },
+    "expected": {
+      "payload": {
+        "code": "runtime_warning",
+        "level": "warning",
+        "message": "配置即将失效"
+      },
+      "taskId": "task-1",
+      "type": "task.notice"
+    }
+  }
+]

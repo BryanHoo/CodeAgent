@@ -30,7 +30,7 @@ export function ComposerFileMenu({ props }: Readonly<{ props: WorkbenchComposerV
         {props.fileSearchPending ? (
           <PromptInputCommandEmpty>{t("composer.fileSearchLoading")}</PromptInputCommandEmpty>
         ) : props.fileSearchError !== null ? (
-          <PromptInputCommandEmpty>{t("composer.fileSearchFailed")}</PromptInputCommandEmpty>
+          <PromptInputCommandEmpty />
         ) : props.fileSearchResults.length === 0 ? (
           <PromptInputCommandEmpty>{t("composer.fileSearchEmpty")}</PromptInputCommandEmpty>
         ) : (

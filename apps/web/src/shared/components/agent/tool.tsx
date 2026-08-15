@@ -118,7 +118,7 @@ export function ToolHeader({ className = "", state, title, ...props }: ToolHeade
           />
         </summary>
       </TooltipTrigger>
-      <TooltipContent className="whitespace-pre-wrap break-all font-mono">{title}</TooltipContent>
+      <TooltipContent className="whitespace-pre-wrap break-words font-mono">{title}</TooltipContent>
     </Tooltip>
   );
 }

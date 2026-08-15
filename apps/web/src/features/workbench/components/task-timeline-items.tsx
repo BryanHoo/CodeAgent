@@ -1,9 +1,9 @@
-import { buildTaskAttachmentUrl } from "@code-agent/client";
 import type { AgentItem, AgentTurn } from "@code-agent/protocol";
 import { FileText, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 
 import { i18n } from "../../../i18n/i18n.js";
+import { codeAgentClient } from "../../../app/create-host-client.js";
 import { Attachments } from "../../../shared/components/agent/attachments.js";
 import { cn } from "../../../shared/lib/utils.js";
 import { Button } from "../../../shared/components/core/button.js";
@@ -59,6 +59,7 @@ import {
   getCommandLabel,
   getReviewMessageText,
   resolveMessageResponseRendering,
+  shouldRenderTimelineItem,
 } from "./task-timeline-running.js";
 import {
   SubagentToolItem,
@@ -89,6 +90,10 @@ export function TimelineItemContent({
   taskId: string;
   turnStatus: AgentTurn["status"];
 }>) {
+  if (!shouldRenderTimelineItem(item)) {
+    return null;
+  }
+
   switch (item.type) {
     case "message": {
       const attachments = item.attachments ?? [];
@@ -139,7 +144,13 @@ export function TimelineItemContent({
             aria-label={i18n.t("timeline.attachments", { ns: "conversation" })}
           >
             {attachments.map((attachment) => {
-              const attachmentUrl = buildTaskAttachmentUrl("", projectId, taskId, attachment.id);
+              const attachmentUrl = codeAgentClient.resolveAssetUrl({
+                attachmentId: attachment.id,
+                kind: "task-attachment",
+                path: attachment.id,
+                projectId,
+                taskId,
+              });
               if (attachment.kind === "image") {
                 return (
                   <MessageImageAttachment
@@ -214,28 +225,34 @@ export function TimelineItemContent({
       const commandOutput =
         item.output === RETAINED_COMMAND_OUTPUT_MARKER
           ? i18n.t("timeline.outputRetained", { ns: "conversation" })
-          : (item.output ?? item.cwd);
+          : item.output;
       const isStreamingCommand = turnStatus === "running" && item.status === "running";
       return (
         <Tool>
           <ToolHeader state={toToolState(item.status)} title={commandLabel} />
-          <ToolBody>
-            <Terminal isStreaming={isStreamingCommand} output={commandOutput}>
-              <TerminalHeader>
-                <TerminalTitle>{i18n.t("timeline.output", { ns: "conversation" })}</TerminalTitle>
-                <TerminalActions>
-                  <TerminalCopyButton />
-                </TerminalActions>
-              </TerminalHeader>
-              <TerminalContent>
-                {item.outputTruncated ? (
-                  <p className="mt-2 text-warning">
-                    {i18n.t("timeline.outputTruncated", { ns: "conversation" })}
-                  </p>
-                ) : null}
-              </TerminalContent>
-            </Terminal>
-          </ToolBody>
+          <ToolContent>
+            {/* 命令与工作目录属于调用输入，展开后必须和真实输出明确分区。 */}
+            <ToolInput input={{ command: item.command, cwd: item.cwd }} />
+          </ToolContent>
+          {commandOutput === undefined && !isStreamingCommand ? null : (
+            <ToolBody>
+              <Terminal isStreaming={isStreamingCommand} output={commandOutput ?? ""}>
+                <TerminalHeader>
+                  <TerminalTitle>{i18n.t("timeline.output", { ns: "conversation" })}</TerminalTitle>
+                  <TerminalActions>
+                    <TerminalCopyButton />
+                  </TerminalActions>
+                </TerminalHeader>
+                <TerminalContent>
+                  {item.outputTruncated ? (
+                    <p className="mt-2 text-warning">
+                      {i18n.t("timeline.outputTruncated", { ns: "conversation" })}
+                    </p>
+                  ) : null}
+                </TerminalContent>
+              </Terminal>
+            </ToolBody>
+          )}
         </Tool>
       );
     }

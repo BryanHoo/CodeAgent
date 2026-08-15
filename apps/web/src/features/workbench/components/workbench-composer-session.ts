@@ -16,6 +16,7 @@ import {
   useComposerDraftStore,
   type QueuedComposerPrompt,
 } from "../composer-draft-context.js";
+import { restoreQueuedPromptContent } from "../composer-queue.js";
 import {
   deriveComposerActions,
   deriveComposerInputAvailability,
@@ -85,14 +86,26 @@ export function useComposerSession({
   const composerScope = createComposerDraftScope(projectId, taskId);
   const composerDraftStore = useComposerDraftStore();
   const initialComposerDraft = composerDraftStore.read(composerScope);
+  const initialWaitingComposerPrompt = initialComposerDraft.queuedPrompts.find(
+    (prompt) => prompt.presentation === "composer",
+  );
+  const initialAttachments =
+    initialComposerDraft.attachments.length > 0
+      ? initialComposerDraft.attachments
+      : (initialWaitingComposerPrompt?.files ?? []);
+  const initialPromptContent =
+    initialComposerDraft.content.length > 0
+      ? initialComposerDraft.content
+      : initialWaitingComposerPrompt === undefined
+        ? []
+        : restoreQueuedPromptContent(initialWaitingComposerPrompt);
   const [settingsOverride, setSettingsOverride] = useState<{
     scope: string;
     settings: AgentTaskSettings;
   }>();
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
-  const [attachments, setAttachments] = useState<readonly PromptInputAttachment[]>(
-    initialComposerDraft.attachments,
-  );
+  const [attachments, setAttachments] =
+    useState<readonly PromptInputAttachment[]>(initialAttachments);
   const [attachmentPickerKind, setAttachmentPickerKind] = useState<HostFileKind>();
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
@@ -102,9 +115,7 @@ export function useComposerSession({
   const [commandNotice, setCommandNotice] = useState<string>();
   const [commandQuery, setCommandQuery] = useState("");
   const [commandSlashCommand, setCommandSlashCommand] = useState<PromptSlashCommand>();
-  const [promptContent, setPromptContent] = useState<PromptSkillContent>(
-    initialComposerDraft.content,
-  );
+  const [promptContent, setPromptContent] = useState<PromptSkillContent>(initialPromptContent);
   const [promptHistoryIndex, setPromptHistoryIndex] = useState<number | null>(null);
   const [composerModeState, setComposerModeState] =
     useState<Readonly<{ mode: ComposerMode; scope: string }>>();
@@ -126,7 +137,7 @@ export function useComposerSession({
   const commandMenuId = useId();
   const commandSurfaceRef = useRef<HTMLDivElement>(null);
   const skillEditorRef = useRef<PromptSkillEditorHandle>(null);
-  const promptHistoryDraftRef = useRef<PromptSkillContent>(initialComposerDraft.content);
+  const promptHistoryDraftRef = useRef<PromptSkillContent>(initialPromptContent);
   const previousRouteScopeRef = useRef(routeScope);
   const previousComposerScopeRef = useRef(composerScope);
   const submittedTurnId =
@@ -369,14 +380,27 @@ export function useComposerSession({
     if (composerScopeChanged) {
       previousComposerScopeRef.current = composerScope;
       const restoredDraft = composerDraftStore.read(composerScope);
+      const restoredWaitingPrompt = restoredDraft.queuedPrompts.find(
+        (prompt) => prompt.presentation === "composer",
+      );
+      const restoredContent =
+        restoredDraft.content.length > 0
+          ? restoredDraft.content
+          : restoredWaitingPrompt === undefined
+            ? []
+            : restoreQueuedPromptContent(restoredWaitingPrompt);
+      const restoredAttachments =
+        restoredDraft.attachments.length > 0
+          ? restoredDraft.attachments
+          : (restoredWaitingPrompt?.files ?? []);
       // 切换聊天时恢复对应草稿，同时保留编辑节点和焦点，避免重建原生 IME 会话。
-      setPromptContent(restoredDraft.content);
+      setPromptContent(restoredContent);
       setPromptHistoryIndex(null);
-      promptHistoryDraftRef.current = restoredDraft.content;
-      setAttachments(restoredDraft.attachments);
+      promptHistoryDraftRef.current = restoredContent;
+      setAttachments(restoredAttachments);
       setAttachmentPickerKind(undefined);
       setQueuedPrompts(restoredDraft.queuedPrompts);
-      skillEditorRef.current?.replace(restoredDraft.content);
+      skillEditorRef.current?.replace(restoredContent);
       setSettingsOverride(undefined);
       setComposerModeState(undefined);
       setActiveCommandIndex(0);

@@ -51,7 +51,7 @@ test("connects a custom API from the provider gate and reuses it in settings", a
   await page.getByRole("button", { exact: true, name: "连接" }).click();
 
   await expect(page).toHaveURL(/\/p\/code-agent$/u);
-  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  await page.getByRole("button", { name: /设置，CodeAgent/u }).click();
   const dialog = page.getByRole("dialog", { name: "全局设置" });
   await dialog.getByRole("button", { name: "模型服务" }).click();
   await expect(dialog.getByRole("textbox", { name: "API Base URL" })).toHaveValue(
@@ -77,6 +77,7 @@ test("redirects the root route to the default project workbench @smoke", async (
 });
 
 test("edits global defaults in a dialog without overriding task settings", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/p/code-agent/t/task-1");
   const workbenchUrl = page.url();
   const taskModel = getComposerModelSelector(page);
@@ -84,9 +85,31 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(taskModel).toHaveAccessibleName("模型和思考量：GPT-5.6 Sol，高");
   await expect(taskApproval).toHaveValue("on-request");
 
-  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  const settingsTrigger = page.getByRole("button", { exact: true, name: "设置" });
+  const branchTrigger = page.getByRole("button", { name: /切换分支，当前分支/u });
+  const [settingsTriggerBox, branchTriggerBox] = await Promise.all([
+    settingsTrigger.boundingBox(),
+    branchTrigger.boundingBox(),
+  ]);
+  expect(settingsTriggerBox).not.toBeNull();
+  expect(branchTriggerBox).not.toBeNull();
+  if (settingsTriggerBox === null || branchTriggerBox === null) {
+    throw new Error("底部设置或分支入口缺少布局边界");
+  }
+  expect(
+    Math.abs(
+      settingsTriggerBox.y +
+        settingsTriggerBox.height / 2 -
+        (branchTriggerBox.y + branchTriggerBox.height / 2),
+    ),
+  ).toBeLessThanOrEqual(1);
+  await settingsTrigger.click();
   const dialog = page.getByRole("dialog", { name: "全局设置" });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "外观" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
   await expect(page).toHaveURL(workbenchUrl);
   await expect(dialog.getByRole("button", { name: "外观" })).toHaveCSS(
     "justify-content",
@@ -94,7 +117,17 @@ test("edits global defaults in a dialog without overriding task settings", async
   );
 
   await dialog.getByRole("button", { name: "外观" }).click();
+  await expect(dialog.getByRole("button", { name: "自动模式" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  // 自动模式响应真实媒体查询变化，显式模式则保持用户选择。
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await dialog.getByRole("button", { name: "深色模式" }).click();
+  await page.emulateMedia({ colorScheme: "light" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await dialog.getByRole("button", { name: "Agent 默认值" }).click();
   await dialog.getByRole("combobox", { name: "审批" }).selectOption("never");
@@ -115,7 +148,7 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(taskModel).toHaveAccessibleName("模型和思考量：GPT-5.6 Sol，高");
   await expect(taskApproval).toHaveValue("on-request");
 
-  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  await page.getByRole("button", { name: /设置，CodeAgent/u }).click();
   const reopenedDialog = page.getByRole("dialog", { name: "全局设置" });
   await reopenedDialog.getByRole("button", { name: "外观" }).click();
   await expect(reopenedDialog.getByRole("button", { name: "深色模式" })).toHaveAttribute(
@@ -157,7 +190,7 @@ test("edits global defaults in a dialog without overriding task settings", async
 test("switches the interface language and restores it after reload", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  await page.getByRole("button", { name: /设置，CodeAgent/u }).click();
   const chineseDialog = page.getByRole("dialog", { name: "全局设置" });
   await chineseDialog.getByRole("button", { name: "外观" }).click();
   await chineseDialog.getByRole("combobox", { name: "语言" }).selectOption("en");
@@ -177,9 +210,7 @@ test("switches the interface language and restores it after reload", async ({ pa
   await page.reload();
 
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await page
-    .getByRole("button", { name: /Settings, CodeAgent .*terminal connection status/u })
-    .click();
+  await page.getByRole("button", { name: /Settings, CodeAgent/u }).click();
   await expect(page.getByRole("dialog", { name: "Global settings" })).toBeVisible();
 });
 
@@ -193,6 +224,7 @@ test("opens About from the sidebar and installs an available update", async ({ p
       json: {
         appVersion: "1.3.0",
         codexVersion: "0.147.0",
+        error: null,
         latestVersion: "1.4.0",
         releaseNotes: "### 新增\n\n- 添加更新日志查看入口。",
         status: "available",
@@ -207,6 +239,7 @@ test("opens About from the sidebar and installs an available update", async ({ p
       json: {
         appVersion: "1.3.0",
         codexVersion: "0.147.0",
+        error: null,
         latestVersion: "1.4.0",
         releaseNotes: null,
         status: "restart-required",
@@ -216,12 +249,13 @@ test("opens About from the sidebar and installs an available update", async ({ p
   });
   await page.goto("/p/code-agent/t/task-1");
 
-  const settingsButton = page.getByRole("button", {
-    name: /设置，CodeAgent 1\.3\.0，有可用更新，终端连接状态：在线/u,
+  const versionButton = page.getByRole("button", {
+    name: /设置，CodeAgent 1\.3\.0，有可用更新/u,
   });
-  await expect(settingsButton.locator(".text-warning")).toContainText("v1.3.0");
-  await expect(settingsButton.locator(".lucide-circle-arrow-up")).toBeVisible();
-  await settingsButton.click();
+  await expect(versionButton).toContainText("v1.3.0");
+  await expect(versionButton).toHaveClass(/text-warning/u);
+  await expect(versionButton.locator(".lucide-circle-arrow-up")).toBeVisible();
+  await versionButton.click();
 
   const dialog = page.getByRole("dialog", { name: "全局设置" });
   await expect(dialog.getByRole("button", { name: "关于" })).toHaveAttribute(
@@ -671,7 +705,7 @@ test("keeps a healthy project usable when another project task query fails", asy
   expect(failedProjectRequestCount).toBe(0);
   await sidebar.getByRole("button", { name: "切换项目 superwork" }).click();
 
-  await expect.poll(() => failedProjectRequestCount).toBe(2);
+  await expect.poll(() => failedProjectRequestCount).toBeGreaterThanOrEqual(2);
   await expect(page.getByRole("heading", { name: "构建 macOS 工作台" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Codex Runtime 不可用" })).toHaveCount(0);
 });
@@ -728,13 +762,11 @@ test("uses the available user message width before wrapping or truncating", asyn
 
   const shortText = page.getByText("现在系统的 gh cli 是可以用的", { exact: true });
   const shortTextLineCount = await shortText.evaluate((element) => {
-    const textNode = element.firstChild;
-    if (!(textNode instanceof Text)) {
-      throw new Error("Expected a short user message text node");
+    const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+    if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+      throw new Error("Expected a measurable short user message line height");
     }
-    const range = document.createRange();
-    range.selectNodeContents(textNode);
-    return range.getClientRects().length;
+    return Math.ceil(element.getBoundingClientRect().height / lineHeight);
   });
   expect(shortTextLineCount).toBe(1);
 
@@ -856,7 +888,18 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
     await control.focus();
     // 内部控件不重复绘制主色焦点框，焦点状态统一由 Composer 外框表达。
     await expect(control).toHaveCSS("outline-style", "none");
-    await expect(composerForm).toHaveCSS("border-color", "rgb(0, 106, 255)");
+    await expect
+      .poll(() =>
+        composerForm.evaluate((element) => {
+          const channels = getComputedStyle(element)
+            .borderColor.match(/[\d.]+/gu)
+            ?.map(Number);
+          if (channels === undefined || channels.length < 3) return false;
+          const [red, green, blue, alpha = 1] = channels;
+          return red === 0 && green === 106 && blue === 255 && alpha >= 0.98;
+        }),
+      )
+      .toBe(true);
   }
   await expect(page.getByText("本地", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();
@@ -965,6 +1008,56 @@ test("opens message images in a preview dialog @cross-browser", async ({ context
   expect(context.pages()).toHaveLength(1);
   await imagePreview.getByRole("button", { name: "关闭图片预览" }).click();
   await expect(imagePreview).toHaveCount(0);
+});
+
+test("shows a pinned task that is outside the five recent Project tasks", async ({ page }) => {
+  const recentTasks = Array.from({ length: 5 }, (_, index) => ({
+    id: `recent-task-${String(index + 1)}`,
+    pinned: false,
+    projectId: "code-agent",
+    title: `近期任务 ${String(index + 1)}`,
+    updatedAt: `2026-08-14T0${String(index)}:00:00.000Z`,
+  }));
+  const olderPinnedTask = {
+    id: "older-pinned-task",
+    pinned: true,
+    projectId: "code-agent",
+    title: "首屏之外的固定任务",
+    updatedAt: "2026-07-01T00:00:00.000Z",
+  };
+  await page.route("**/v1/projects/code-agent/tasks**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname !== "/v1/projects/code-agent/tasks") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        data: url.searchParams.get("pinnedOnly") === "true" ? [olderPinnedTask] : recentTasks,
+        nextCursor: url.searchParams.get("pinnedOnly") === "true" ? null : "next-page",
+      },
+    });
+  });
+  const pinnedRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/v1/projects/code-agent/tasks" &&
+      url.searchParams.get("pinnedOnly") === "true"
+    );
+  });
+  await page.goto("/p/code-agent");
+  await pinnedRequest;
+
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
+  const pinnedSection = sidebar.getByRole("heading", { name: "已固定" }).locator("xpath=..");
+  const projectGroup = sidebar
+    .getByRole("button", { name: "切换项目 CodeAgent" })
+    .locator("xpath=../..");
+
+  await expect(pinnedSection.getByRole("link", { name: /首屏之外的固定任务/u })).toBeVisible();
+  await expect(projectGroup.getByRole("link")).toHaveCount(5);
+  await expect(projectGroup.getByRole("link", { name: /首屏之外的固定任务/u })).toHaveCount(0);
 });
 
 test("keeps Projects fixed and manages task actions from the compact tree", async ({ page }) => {

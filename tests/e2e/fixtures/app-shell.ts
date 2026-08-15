@@ -415,7 +415,14 @@ export const projectFileSearchEntries = [
   { name: "package.json", path: "package.json" },
 ] as const;
 
-export const projectDirectoryListings = new Map<string | null, object>([
+type ProjectDirectoryFixture = Readonly<{
+  entries: readonly Readonly<{ name: string; path: string }>[];
+  parentPath: string | null;
+  path: string;
+  roots: readonly Readonly<{ name: string; path: string }>[];
+}>;
+
+export const projectDirectoryListings = new Map<string | null, ProjectDirectoryFixture>([
   [
     null,
     {
@@ -603,11 +610,16 @@ export async function mockAppShellApi(
     if (url.pathname === "/v1/access") {
       body = { authenticated: true, mode: "local", version: 1 };
     } else if (url.pathname === "/v1/health") {
-      body = { status: "ok", version: 1 };
+      body = {
+        runtime: { state: "ready" },
+        status: "ok",
+        version: 1,
+      };
     } else if (url.pathname === "/v1/app-info") {
       body = {
         appVersion: "1.3.0",
         codexVersion: "0.147.0",
+        error: null,
         latestVersion: "1.3.0",
         releaseNotes: null,
         status: "current",
@@ -701,12 +713,16 @@ export async function mockAppShellApi(
       });
       body = { task };
     } else if (url.pathname === "/v1/temporary/tasks") {
+      const visibleTemporaryTasks =
+        url.searchParams.get("pinnedOnly") === "true"
+          ? temporaryTasks.filter((task) => task.pinned)
+          : temporaryTasks;
       const pageLimit = Number(url.searchParams.get("limit") ?? "5");
       const pageOffset = Number(url.searchParams.get("cursor") ?? "0");
       const nextOffset = pageOffset + pageLimit;
       body = {
-        data: temporaryTasks.slice(pageOffset, nextOffset),
-        nextCursor: nextOffset < temporaryTasks.length ? String(nextOffset) : null,
+        data: visibleTemporaryTasks.slice(pageOffset, nextOffset),
+        nextCursor: nextOffset < visibleTemporaryTasks.length ? String(nextOffset) : null,
       };
     } else if (temporarySettingsMatch !== null) {
       const taskId = temporarySettingsMatch[1] ?? "";
@@ -771,7 +787,12 @@ export async function mockAppShellApi(
           {
             id: `temporary-assistant-${String(turnNumber)}`,
             role: "assistant" as const,
-            text: `临时回复：${input["text"]}`,
+            text:
+              input["text"] === "查看临时文件"
+                ? "[temporary-note.txt](/tmp/temporary-note.txt)"
+                : input["text"] === "查看二进制文件"
+                  ? "[unknown.bin](/tmp/unknown.bin)"
+                  : `临时回复：${input["text"]}`,
             type: "message" as const,
           },
         ],
@@ -780,6 +801,23 @@ export async function mockAppShellApi(
       };
       temporaryTurns.set(taskId, [...(temporaryTurns.get(taskId) ?? []), turn]);
       body = { taskId, turn };
+    } else if (url.pathname === "/v1/temporary/files/source") {
+      if (url.searchParams.get("path") === "/tmp/unknown.bin") {
+        await route.fulfill({
+          contentType: "application/json",
+          json: { code: "NOT_FOUND", message: "source file is invalid" },
+          status: 404,
+        });
+        return;
+      }
+      body = {
+        content: "temporary note\n",
+        nextCursor: null,
+        path: "/tmp/temporary-note.txt",
+      };
+    } else if (url.pathname === "/v1/temporary/open" && route.request().method() === "POST") {
+      const request = parseRequestRecord(route.request().postData());
+      body = { appId: request["appId"], path: request["path"] };
     } else if (temporaryTaskMatch !== null) {
       const taskId = temporaryTaskMatch[1] ?? "";
       const task = temporaryTasks.find((item) => item.id === taskId);
@@ -857,10 +895,14 @@ export async function mockAppShellApi(
       body = { data: routedProjects, nextCursor: null };
     } else if (url.pathname === "/v1/host-files") {
       const kind = url.searchParams.get("kind");
-      const fileNames =
+      const visibleFileNames =
         kind === "image"
           ? ["draft.png", "preserved.png", "screen.png", "task-draft.png"]
           : ["specification.pdf"];
+      const fileNames =
+        url.searchParams.get("showHidden") === "true"
+          ? [kind === "image" ? ".hidden.png" : ".hidden.pdf", ...visibleFileNames]
+          : visibleFileNames;
       body = {
         entries: fileNames.map((name) => ({
           name,
@@ -893,9 +935,19 @@ export async function mockAppShellApi(
       };
     } else if (url.pathname === "/v1/project-directories") {
       const path = url.searchParams.get("path");
-      body =
+      const listing =
         projectDirectoryListings.get(path) ??
-        ({ entries: [], parentPath: "/workspace", path, roots: [] } as const);
+        ({ entries: [], parentPath: "/workspace", path: path ?? "/workspace", roots: [] } as const);
+      body =
+        url.searchParams.get("showHidden") === "true" && path === null
+          ? {
+              ...listing,
+              entries: [
+                { name: ".hidden-project", path: "/workspace/.hidden-project" },
+                ...listing.entries,
+              ],
+            }
+          : listing;
     } else if (url.pathname === "/v1/projects" && route.request().method() === "POST") {
       const request = parseRequestRecord(route.request().postData());
       const rootPath = request["rootPath"];
@@ -1046,7 +1098,11 @@ export async function mockAppShellApi(
       body = { data: [], nextCursor: null };
     } else if (url.pathname.startsWith("/v1/projects/") && url.pathname.endsWith("/tasks")) {
       const projectId = url.pathname.split("/")[3];
-      const projectTasks = routedTasks.filter((task) => task.projectId === projectId);
+      const projectTasks = routedTasks.filter(
+        (task) =>
+          task.projectId === projectId &&
+          (url.searchParams.get("pinnedOnly") !== "true" || task.pinned),
+      );
       const pageLimit = Number(url.searchParams.get("limit") ?? "5");
       const pageOffset = Number(url.searchParams.get("cursor") ?? "0");
       const nextOffset = pageOffset + pageLimit;

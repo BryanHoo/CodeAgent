@@ -23,6 +23,7 @@ import {
   RunningReplyStatus,
   getReviewMessageText,
   resolveRunningOperation,
+  shouldRenderTimelineItem,
   type RunningOperation,
 } from "./task-timeline-running.js";
 import { MessageMetadata, getMessageTimestamp } from "./task-timeline-status.js";
@@ -124,6 +125,9 @@ export function groupStoredTurnTimelineItems(
 
   for (const itemId of itemIds) {
     const item = itemStoresById.get(itemId)?.peek();
+    if (item !== undefined && !shouldRenderTimelineItem(item)) {
+      continue;
+    }
     if (item?.type === "review" || (item?.type === "message" && item.role === "user")) {
       flushAssistantItems();
       groups.push({ itemId, type: "user" });

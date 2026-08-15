@@ -1,0 +1,35 @@
+[package]
+name = "code-agent-node-binding"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+performance-probe = []
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+code-agent-core.workspace = true
+code-agent-platform.workspace = true
+code-agent-protocol.workspace = true
+code-agent-provider-codex.workspace = true
+code-agent-runtime.workspace = true
+napi.workspace = true
+napi-derive.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+uuid.workspace = true
+
+[build-dependencies]
+napi-build.workspace = true
+
+# napi-rs 的导出宏会生成 Node-API FFI unsafe；本 crate 禁止手写 unsafe 的约束由 Phase 7 门禁执行。

@@ -36,7 +36,14 @@ describe("WorkbenchComposerView", () => {
   });
 
   it("优先展示队列文本、Skill 和附件摘要", () => {
-    const basePrompt = { files: [], id: "queue-1", skills: [] } as const;
+    const basePrompt = {
+      acknowledgedUserMessageIds: [],
+      deliveryState: "queued",
+      files: [],
+      id: "queue-1",
+      presentation: "queue",
+      skills: [],
+    } as const;
 
     expect(resolveQueuedPromptSummary({ ...basePrompt, text: "继续修复" }, "1 个附件")).toBe(
       "继续修复",
@@ -66,7 +73,6 @@ describe("WorkbenchComposerView", () => {
     const markup = renderToStaticMarkup(
       <TooltipProvider>
         <ComposerBranchSwitcher
-          branchCreateError={undefined}
           creatingBranch={undefined}
           gitStatus={{
             baseBranches: ["origin/main", "main"],
@@ -91,7 +97,6 @@ describe("WorkbenchComposerView", () => {
   it("聚合仓库模式只展示分支状态，不提供切换按钮", () => {
     const markup = renderToStaticMarkup(
       <ComposerBranchSwitcher
-        branchCreateError={undefined}
         creatingBranch={undefined}
         gitStatus={{
           baseBranches: [],

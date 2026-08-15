@@ -72,3 +72,48 @@ test("creates and restores a temporary task without exposing its internal projec
   expect(requestedPaths.some((path) => path.startsWith("/v1/projects/temporary"))).toBe(false);
   expect(requestedPaths.some((path) => path.startsWith("/v1/temporary"))).toBe(true);
 });
+
+test("opens source references from persisted temporary tasks", async ({ page }) => {
+  await mockAppShellApi(page);
+  const requestedUrls: URL[] = [];
+  page.on("request", (request) => {
+    requestedUrls.push(new URL(request.url()));
+  });
+  await page.goto("/temporary");
+
+  const input = page.getByRole("textbox", { name: "任务输入" });
+  await input.fill("查看临时文件");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await page.getByRole("button", { name: "temporary-note.txt" }).click();
+
+  await expect
+    .poll(() =>
+      requestedUrls
+        .map((url) => `${url.pathname}${url.search}`)
+        .filter((url) => url.includes("/files/")),
+    )
+    .toContain("/v1/temporary/files/source?path=%2Ftmp%2Ftemporary-note.txt");
+  const dialog = page.getByRole("dialog", { name: "temporary-note.txt" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("temporary note");
+});
+
+test("falls back to the system application for unknown binary references", async ({ page }) => {
+  await mockAppShellApi(page);
+  const systemOpenRequest = page.waitForRequest((request) => {
+    if (new URL(request.url()).pathname !== "/v1/temporary/open" || request.method() !== "POST") {
+      return false;
+    }
+    const body = parseRequestRecord(request.postData());
+    return body["appId"] === "system-default" && body["path"] === "/tmp/unknown.bin";
+  });
+  await page.goto("/temporary");
+
+  const input = page.getByRole("textbox", { name: "任务输入" });
+  await input.fill("查看二进制文件");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await page.getByRole("button", { name: "unknown.bin" }).click();
+
+  await systemOpenRequest;
+  await expect(page.getByRole("dialog", { name: "unknown.bin" })).toHaveCount(0);
+});

@@ -1,7 +1,5 @@
 # `@code-agent/server`
 
-维护 Fastify 应用装配、HTTP/WebSocket 交付、持久化适配和 Worker 生命周期。
+维护 Fastify 应用装配、HTTP/WebSocket 交付和静态资源生命周期。
 
-路由只负责输入输出适配，领域规则必须留在 Core；浏览器不得直接访问 Provider。
-
-Project 与 Agent 设置通过 Core Repository 端口接入 `SqliteStateRepository`。所有 `better-sqlite3` 同步操作都在独立 `worker_threads` Worker 中执行，Fastify 主线程不直接访问数据库。
+路由只负责输入输出适配，所有领域、Provider、SQLite、Git、文件与附件操作均通过具名 `CodeAgentEngine` port 进入 Rust Runtime。WebSocket 直接转发 native bridge 生成的序列化 frame，避免重复序列化。

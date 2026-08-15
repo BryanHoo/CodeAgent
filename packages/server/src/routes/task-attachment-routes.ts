@@ -1,5 +1,4 @@
 import { Buffer } from "node:buffer";
-import { Readable } from "node:stream";
 
 import {
   AgentMutationErrorSchema,
@@ -8,9 +7,12 @@ import {
 } from "@code-agent/protocol";
 import type { FastifyInstance } from "fastify";
 
-import { AttachmentNotFoundError } from "../attachment-store.js";
-import { ProjectOpenAppUnavailableError, ProjectOpenTargetInvalidError } from "../project-open.js";
-import { MutationHttpError, type ServerRouteContext } from "./context.js";
+import {
+  callEngine,
+  createReadRequestId,
+  readRequestId,
+  type ServerRouteContext,
+} from "./context.js";
 import {
   ErrorResponseSchema,
   IdempotencyHeadersSchema,
@@ -23,57 +25,39 @@ interface TaskAttachmentParams {
   taskId: string;
 }
 
+function mediaType(bytes: Uint8Array): string {
+  if (bytes[0] === 0x89 && bytes[1] === 0x50) return "image/png";
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) return "image/jpeg";
+  if (bytes[0] === 0x47 && bytes[1] === 0x49) return "image/gif";
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[8] === 0x57) return "image/webp";
+  return "application/octet-stream";
+}
+
 export function registerTaskAttachmentRoutes(
   app: FastifyInstance,
-  { attachmentStore, getProjectContext, projectOpenService, runIdempotent }: ServerRouteContext,
+  { engine }: ServerRouteContext,
 ): void {
   app.get<{ Params: TaskAttachmentParams }>(
     "/v1/projects/:projectId/tasks/:taskId/attachments/:attachmentId",
     {
-      schema: {
-        params: ProjectTaskAttachmentParamsSchema,
-        response: { 404: ErrorResponseSchema },
-      },
+      schema: { params: ProjectTaskAttachmentParamsSchema, response: { 404: ErrorResponseSchema } },
     },
     async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
-      let attachment = await context.provider.readTaskAttachment(
-        request.params.taskId,
-        request.params.attachmentId,
+      const bytes = await callEngine<Uint8Array>(() =>
+        engine.attachmentTaskRead(
+          createReadRequestId(),
+          request.params.projectId,
+          request.params.taskId,
+          request.params.attachmentId,
+        ),
       );
-      if (attachment === undefined) {
-        const task = await context.provider.readTask(request.params.taskId);
-        if (task?.projectId !== context.project.id) {
-          return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
-        }
-        try {
-          // Provider 历史尚未同步时，继续交付本次 Turn 保留的上传内容。
-          const stored = await attachmentStore.readSubmitted(
-            request.params.projectId,
-            request.params.attachmentId,
-          );
-          attachment = { ...stored.attachment, content: stored.content };
-        } catch (error) {
-          if (error instanceof AttachmentNotFoundError) {
-            return reply
-              .code(404)
-              .send({ code: "ATTACHMENT_NOT_FOUND", message: "Attachment not found" });
-          }
-          throw error;
-        }
-      }
-      // 随机 ID 已绑定 Project/Task；响应只交付已复验的附件正文，不暴露本地路径。
       return reply
         .header("cache-control", "private, max-age=300")
         .header("x-content-type-options", "nosniff")
-        .type(attachment.mediaType)
-        .send(Buffer.from(attachment.content));
+        .type(mediaType(bytes))
+        .send(Buffer.from(bytes));
     },
   );
-
   app.post<{
     Body: Record<string, never>;
     Headers: { "idempotency-key": string };
@@ -94,93 +78,16 @@ export function registerTaskAttachmentRoutes(
         },
       },
     },
-    async (request) =>
-      runIdempotent(
-        [
-          "open-task-attachment",
+    async (request) => {
+      await callEngine(() =>
+        engine.attachmentOpen(
+          readRequestId(request.headers),
           request.params.projectId,
           request.params.taskId,
           request.params.attachmentId,
-        ],
-        request.headers["idempotency-key"],
-        {},
-        async () => {
-          const projectContext = await getProjectContext(request.params.projectId);
-          if (projectContext === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const task = await projectContext.provider.readTask(request.params.taskId);
-          if (task?.projectId !== projectContext.project.id) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-
-          let attachment = await projectContext.provider.readTaskAttachment(
-            request.params.taskId,
-            request.params.attachmentId,
-          );
-          let attachmentKind = task.turns
-            .flatMap((turn) => turn.items)
-            .filter((item) => item.type === "message")
-            .flatMap((item) => item.attachments ?? [])
-            .find((item) => item.id === request.params.attachmentId)?.kind;
-          if (attachment === undefined) {
-            try {
-              const stored = await attachmentStore.readSubmitted(
-                request.params.projectId,
-                request.params.attachmentId,
-              );
-              attachment = { ...stored.attachment, content: stored.content };
-              attachmentKind = stored.attachment.kind;
-            } catch (error) {
-              if (error instanceof AttachmentNotFoundError) {
-                throw new MutationHttpError("INVALID_REQUEST", "Attachment not found", 404);
-              }
-              throw error;
-            }
-          }
-          if (attachmentKind !== "file") {
-            throw new MutationHttpError("INVALID_REQUEST", "Attachment cannot be opened", 400);
-          }
-
-          try {
-            // 系统应用只接收 Server 管理的短期副本，原始附件路径始终不进入 Web 契约。
-            const copy = await attachmentStore.add(request.params.projectId, {
-              content: Readable.from([Buffer.from(attachment.content)]),
-              kind: "file",
-              mediaType: attachment.mediaType,
-              name: attachment.name,
-            });
-            const [resolved] = await attachmentStore.resolve(request.params.projectId, [
-              copy.attachment.id,
-            ]);
-            if (resolved?.kind !== "file") {
-              throw new TypeError("Attachment copy is not a file");
-            }
-            await projectOpenService.open(
-              projectContext.project.rootPath,
-              "system-default",
-              resolved.path,
-            );
-          } catch (error) {
-            if (error instanceof ProjectOpenAppUnavailableError) {
-              throw new MutationHttpError(
-                "INVALID_REQUEST",
-                "System application is unavailable",
-                409,
-              );
-            }
-            if (error instanceof ProjectOpenTargetInvalidError || error instanceof TypeError) {
-              throw new MutationHttpError("INVALID_REQUEST", "Attachment cannot be opened", 400);
-            }
-            throw new MutationHttpError(
-              "PROVIDER_ERROR",
-              "Attachment could not be opened",
-              502,
-              true,
-            );
-          }
-          return { attachmentId: request.params.attachmentId, status: "opened" as const };
-        },
-      ),
+        ),
+      );
+      return { attachmentId: request.params.attachmentId, status: "opened" as const };
+    },
   );
 }

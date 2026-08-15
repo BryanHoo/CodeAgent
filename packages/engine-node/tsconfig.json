@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "lib": ["ES2024"],
+    "outDir": "../../.cache/types/engine-node",
+    "rootDir": "src",
+    "types": ["node"],
+    "tsBuildInfoFile": "../../.cache/types/engine-node.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [{ "path": "../protocol" }]
+}

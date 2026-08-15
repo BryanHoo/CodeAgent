@@ -1,44 +1,50 @@
 import {
+  AgentMutationErrorSchema,
+  AgentTaskSettingsResponseSchema,
+  AgentTaskSettingsSchema,
   CompactAgentTaskRequestSchema,
   CompactAgentTaskResponseSchema,
   ForkAgentTaskRequestSchema,
   ForkAgentTaskResponseSchema,
-  AgentMutationErrorSchema,
-  AgentTaskSettingsResponseSchema,
-  AgentTaskSettingsSchema,
-  ReviewAgentTaskRequestSchema,
-  ReviewAgentTaskResponseSchema,
   ReloadAgentMcpServersRequestSchema,
   ReloadAgentMcpServersResponseSchema,
+  ReviewAgentTaskRequestSchema,
+  ReviewAgentTaskResponseSchema,
   UploadAgentFeedbackRequestSchema,
   UploadAgentFeedbackResponseSchema,
   type AgentTaskSettings,
   type CompactAgentTaskRequest,
   type ForkAgentTaskRequest,
-  type ReviewAgentTaskRequest,
   type ReloadAgentMcpServersRequest,
+  type ReviewAgentTaskRequest,
   type UploadAgentFeedbackRequest,
 } from "@code-agent/protocol";
-import { MutationHttpError, toMcpProviderHttpError, type ServerRouteContext } from "./context.js";
+import type { FastifyInstance } from "fastify";
+
+import {
+  callEngine,
+  createReadRequestId,
+  readRequestId,
+  type ServerRouteContext,
+} from "./context.js";
 import {
   ErrorResponseSchema,
   IdempotencyHeadersSchema,
   ProjectTaskParamsSchema,
 } from "./schemas.js";
 
-import type { FastifyInstance } from "fastify";
-import { enforceTemporaryTaskSandboxMode } from "../temporary-task-routing.js";
+const mutationErrors = {
+  400: AgentMutationErrorSchema,
+  404: AgentMutationErrorSchema,
+  409: AgentMutationErrorSchema,
+  502: AgentMutationErrorSchema,
+  503: AgentMutationErrorSchema,
+} as const;
 
-export function registerTaskActionRoutes(app: FastifyInstance, context: ServerRouteContext): void {
-  const {
-    assertValidProjectDefaults,
-    getProjectContext,
-    listModels,
-    readEffectiveTaskSettings,
-    runIdempotent,
-    settingsRepository,
-  } = context;
-
+export function registerTaskActionRoutes(
+  app: FastifyInstance,
+  { engine }: ServerRouteContext,
+): void {
   app.get<{ Params: { projectId: string; taskId: string } }>(
     "/v1/projects/:projectId/tasks/:taskId/settings",
     {
@@ -47,21 +53,15 @@ export function registerTaskActionRoutes(app: FastifyInstance, context: ServerRo
         response: { 200: AgentTaskSettingsResponseSchema, 404: ErrorResponseSchema },
       },
     },
-    async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
-      const task = await context.provider.readTask(request.params.taskId);
-      if (task?.projectId !== context.project.id) {
-        return reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" });
-      }
-      return {
-        settings: await readEffectiveTaskSettings(request.params.projectId, request.params.taskId),
-      };
-    },
+    (request) =>
+      callEngine(() =>
+        engine.taskSettingsGet(
+          createReadRequestId(),
+          request.params.projectId,
+          request.params.taskId,
+        ),
+      ),
   );
-
   app.put<{
     Body: AgentTaskSettings;
     Headers: { "idempotency-key": string };
@@ -73,43 +73,19 @@ export function registerTaskActionRoutes(app: FastifyInstance, context: ServerRo
         body: AgentTaskSettingsSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectTaskParamsSchema,
-        response: {
-          200: AgentTaskSettingsResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: AgentTaskSettingsResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["update-task-settings", request.params.projectId, request.params.taskId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const context = await getProjectContext(request.params.projectId);
-          if (context === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-          const settings = enforceTemporaryTaskSandboxMode(request.params.projectId, request.body);
-          assertValidProjectDefaults(await listModels(), settings);
-          return {
-            settings: await settingsRepository.writeTaskSettings(
-              request.params.projectId,
-              request.params.taskId,
-              settings,
-            ),
-          };
-        },
+    (request) =>
+      callEngine(() =>
+        engine.taskSettingsUpdate(
+          readRequestId(request.headers),
+          request.params.projectId,
+          request.params.taskId,
+          request.body,
+        ),
       ),
   );
-
   app.post<{
     Body: ReloadAgentMcpServersRequest;
     Headers: { "idempotency-key": string };
@@ -121,39 +97,18 @@ export function registerTaskActionRoutes(app: FastifyInstance, context: ServerRo
         body: ReloadAgentMcpServersRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectTaskParamsSchema,
-        response: {
-          200: ReloadAgentMcpServersResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: ReloadAgentMcpServersResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["reload-task-mcp-servers", request.params.projectId, request.params.taskId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const projectContext = await getProjectContext(request.params.projectId);
-          if (projectContext === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const task = await projectContext.provider.readTask(request.params.taskId);
-          if (task?.projectId !== projectContext.project.id) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-          try {
-            return await projectContext.provider.reloadMcpServers(request.params.taskId);
-          } catch (error) {
-            throw toMcpProviderHttpError(error);
-          }
-        },
+    (request) =>
+      callEngine(() =>
+        engine.taskMcpReload(
+          readRequestId(request.headers),
+          request.params.projectId,
+          request.params.taskId,
+        ),
       ),
   );
-
   app.post<{
     Body: ReviewAgentTaskRequest;
     Headers: { "idempotency-key": string };
@@ -165,37 +120,21 @@ export function registerTaskActionRoutes(app: FastifyInstance, context: ServerRo
         body: ReviewAgentTaskRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectTaskParamsSchema,
-        response: {
-          201: ReviewAgentTaskResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 201: ReviewAgentTaskResponseSchema, ...mutationErrors },
       },
     },
     async (request, reply) => {
-      const turn = await runIdempotent(
-        ["review-task", request.params.projectId, request.params.taskId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const context = await getProjectContext(request.params.projectId);
-          if (context === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-          return context.provider.startReview(request.params.taskId, request.body.target);
-        },
+      const turn = await callEngine(() =>
+        engine.turnReviewStart(
+          readRequestId(request.headers),
+          request.params.projectId,
+          request.params.taskId,
+          request.body.target,
+        ),
       );
       return reply.code(201).send({ taskId: request.params.taskId, turn });
     },
   );
-
   app.post<{
     Body: CompactAgentTaskRequest;
     Headers: { "idempotency-key": string };
@@ -207,38 +146,20 @@ export function registerTaskActionRoutes(app: FastifyInstance, context: ServerRo
         body: CompactAgentTaskRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectTaskParamsSchema,
-        response: {
-          202: CompactAgentTaskResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 202: CompactAgentTaskResponseSchema, ...mutationErrors },
       },
     },
     async (request, reply) => {
-      const response = await runIdempotent(
-        ["compact-task", request.params.projectId, request.params.taskId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const context = await getProjectContext(request.params.projectId);
-          if (context === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-          await context.provider.compactTask(request.params.taskId);
-          return { status: "compacting" as const, taskId: request.params.taskId };
-        },
+      await callEngine(() =>
+        engine.taskCompact(
+          readRequestId(request.headers),
+          request.params.projectId,
+          request.params.taskId,
+        ),
       );
-      return reply.code(202).send(response);
+      return reply.code(202).send({ status: "compacting", taskId: request.params.taskId });
     },
   );
-
   app.post<{
     Body: ForkAgentTaskRequest;
     Headers: { "idempotency-key": string };
@@ -250,37 +171,20 @@ export function registerTaskActionRoutes(app: FastifyInstance, context: ServerRo
         body: ForkAgentTaskRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectTaskParamsSchema,
-        response: {
-          201: ForkAgentTaskResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 201: ForkAgentTaskResponseSchema, ...mutationErrors },
       },
     },
     async (request, reply) => {
-      const forkedTask = await runIdempotent(
-        ["fork-task", request.params.projectId, request.params.taskId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const context = await getProjectContext(request.params.projectId);
-          if (context === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-          return context.provider.forkTask(request.params.taskId);
-        },
+      const task = await callEngine(() =>
+        engine.taskFork(
+          readRequestId(request.headers),
+          request.params.projectId,
+          request.params.taskId,
+        ),
       );
-      return reply.code(201).send({ task: forkedTask });
+      return reply.code(201).send({ task });
     },
   );
-
   app.post<{
     Body: UploadAgentFeedbackRequest;
     Headers: { "idempotency-key": string };
@@ -292,33 +196,19 @@ export function registerTaskActionRoutes(app: FastifyInstance, context: ServerRo
         body: UploadAgentFeedbackRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectTaskParamsSchema,
-        response: {
-          200: UploadAgentFeedbackResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: UploadAgentFeedbackResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["feedback-task", request.params.projectId, request.params.taskId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const context = await getProjectContext(request.params.projectId);
-          if (context === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const task = await context.provider.readTask(request.params.taskId);
-          if (task?.projectId !== context.project.id) {
-            throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
-          }
-          await context.provider.uploadFeedback(request.params.taskId, request.body);
-          return { status: "sent" as const, taskId: request.params.taskId };
-        },
-      ),
+    async (request) => {
+      await callEngine(() =>
+        engine.taskFeedbackUpload(
+          readRequestId(request.headers),
+          request.params.projectId,
+          request.params.taskId,
+          request.body,
+        ),
+      );
+      return { status: "sent" as const, taskId: request.params.taskId };
+    },
   );
 }

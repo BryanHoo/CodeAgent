@@ -39,7 +39,7 @@ function TooltipContent({
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
         className={cn(
-          "pointer-events-none z-50 w-fit max-w-[calc(100vw-1rem)] whitespace-normal rounded-control bg-foreground px-2 py-1 text-meta text-raised shadow-floating",
+          "pointer-events-none z-50 w-64 max-w-[calc(100vw-1rem)] whitespace-normal break-words rounded-control bg-foreground px-2 py-1 text-meta text-raised shadow-floating",
           className,
         )}
         collisionPadding={collisionPadding}

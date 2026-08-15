@@ -2,8 +2,7 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       tag:
@@ -20,11 +19,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Publish GitHub release and npm package
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: npm
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14, target: darwin-arm64, bundles: dmg }
+          - { os: ubuntu-22.04, target: linux-x64-gnu, bundles: "deb,appimage" }
+          - { os: windows-2022, target: win32-x64-msvc, bundles: "msi,nsis" }
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
@@ -39,34 +44,293 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify release version
         shell: bash
         run: |
           package_version="$(node --print "require('./package.json').version")"
-          if [[ "v${package_version}" != "${RELEASE_TAG}" ]]; then
-            echo "Release tag ${RELEASE_TAG} does not match package version ${package_version}." >&2
+          test "v${package_version}" = "${RELEASE_TAG}" || {
+            echo "Release tag ${RELEASE_TAG} does not match ${package_version}." >&2
             exit 1
-          fi
-          git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}" >/dev/null
-      - name: Run quality gates
-        run: pnpm check
-      - name: Publish with provenance
+          }
+          pnpm run release:version:check
+      - name: Build and test npm artifacts
+        run: pnpm build && pnpm run package:check
+      - name: Prepare bundled Codex runtime
+        run: pnpm --filter @code-agent/desktop prepare:codex
+      - name: Build and upload Desktop (Preview / Unsigned)
+        uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: pnpm tauri
+          args: --bundles ${{ matrix.bundles }}
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: "CodeAgent ${{ env.RELEASE_TAG }} Beta (Desktop: Preview / Unsigned)"
+          generateReleaseNotes: true
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
+      - name: Verify macOS minimum system version
+        if: runner.os == 'macOS'
         shell: bash
         run: |
-          package_name="$(node --print "require('./package.json').name")"
-          package_version="$(node --print "require('./package.json').version")"
-          if npm view "${package_name}@${package_version}" version --json >/dev/null 2>&1; then
-            echo "${package_name}@${package_version} is already published; skipping pnpm publish."
-          else
-            # pnpm 负责转换 Workspace 协议，npm CLI 负责 Trusted Publisher OIDC 认证。
-            package_tarball="${RUNNER_TEMP}/code-agent-${package_version}.tgz"
-            pnpm pack --out "${package_tarball}"
-            npm publish "${package_tarball}" --access public --provenance
+          shopt -s nullglob
+          apps=(target/release/bundle/macos/*.app)
+          test "${#apps[@]}" -eq 1
+          app_bundle="${apps[0]}"
+          test "$(plutil -extract LSMinimumSystemVersion raw "${app_bundle}/Contents/Info.plist")" = "14.0"
+      - name: Verify Desktop artifact isolation
+        run: pnpm run desktop:artifact:check
+      - name: Pack npm artifacts
+        shell: bash
+        run: |
+          mkdir -p .artifacts
+          pnpm --dir "packages/node-binding-${{ matrix.target }}" pack --pack-destination ../../.artifacts
+          if [[ "${{ matrix.target }}" = "linux-x64-gnu" ]]; then
+            pnpm --dir apps/node-cli pack --pack-destination ../../.artifacts
           fi
-      - name: Create GitHub release
-        run: gh release create "${RELEASE_TAG}" --generate-notes --title "CodeAgent ${RELEASE_TAG}" --verify-tag
+          tar -czf ".artifacts/code-agent-desktop-${{ matrix.target }}.tar.gz" -C target/release/bundle .
+      - name: Upload npm artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: npm-${{ matrix.target }}
+          path: .artifacts/*.tgz
+          if-no-files-found: error
+          compression-level: 0
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: desktop-${{ matrix.target }}
+          path: .artifacts/code-agent-desktop-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+
+  updater-acceptance:
+    name: Updater bootstrap acceptance
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Install minisign
+        run: sudo apt-get update && sudo apt-get install -y minisign
+      - name: Download current draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .artifacts/updater
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > .artifacts/release.json
+          gh release download "${RELEASE_TAG}" --dir .artifacts/updater
+      - name: Verify updater metadata, signatures, and tamper rejection
+        shell: bash
+        run: >-
+          node tools/release/verify-updater-release.mjs
+          --artifacts .artifacts/updater
+          --config apps/desktop/src-tauri/tauri.conf.json
+          --manifest .artifacts/updater/latest.json
+          --release .artifacts/release.json
+          --tag "${RELEASE_TAG}"
+          --version "${RELEASE_TAG#v}"
+
+  smoke-hosted:
+    name: Smoke ${{ matrix.target }} on minimum OS
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14, target: darwin-arm64, script: smoke-desktop-macos.sh }
+          - { os: ubuntu-22.04, target: linux-x64-gnu, script: smoke-desktop-linux.sh }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - name: Install Ubuntu smoke dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Download npm artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: npm-*
+          path: .artifacts/npm
+          merge-multiple: true
+      - name: Download Desktop artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: desktop-${{ matrix.target }}
+          path: .artifacts/desktop
+      - name: Smoke packaged CLI
+        run: node tools/release/smoke-cli.mjs --artifacts .artifacts/npm --target ${{ matrix.target }}
+      - name: Smoke installed Desktop
+        shell: bash
+        run: >-
+          bash "tools/release/${{ matrix.script }}"
+          ".artifacts/desktop/code-agent-desktop-${{ matrix.target }}.tar.gz"
+
+  smoke-windows-10:
+    name: Smoke win32-x64-msvc on Windows 10
+    needs: build
+    runs-on: [self-hosted, Windows, X64, windows-10]
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - name: Download npm artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: npm-*
+          path: .artifacts/npm
+          merge-multiple: true
+      - name: Download Desktop artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: desktop-win32-x64-msvc
+          path: .artifacts/desktop
+      - name: Smoke packaged CLI
+        run: node tools/release/smoke-cli.mjs --artifacts .artifacts/npm --target win32-x64-msvc
+      - name: Smoke installed Desktop
+        shell: pwsh
+        run: >-
+          ./tools/release/smoke-desktop-windows.ps1
+          -ArchivePath .artifacts/desktop/code-agent-desktop-win32-x64-msvc.tar.gz
+
+  release-approval:
+    name: Approve updater acceptance
+    needs: [smoke-hosted, smoke-windows-10, updater-acceptance]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    environment: release
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Record approved release
+        shell: bash
+        run: |
+          test -n "${RELEASE_TAG}"
+          echo "Updater acceptance approved for ${RELEASE_TAG}."
+
+  publish:
+    name: Publish verified artifacts
+    needs: [build, release-approval]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Download npm artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: npm-*
+          path: .artifacts/npm
+          merge-multiple: true
+      - name: Download desktop artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: desktop-*
+          path: .artifacts/desktop
+          merge-multiple: true
+      - name: Verify complete artifact set
+        shell: bash
+        run: |
+          package_version="${RELEASE_TAG#v}"
+          targets=(darwin-arm64 linux-x64-gnu win32-x64-msvc)
+          for target in "${targets[@]}"; do
+            test -f ".artifacts/npm/bryanhu-code-agent-${target}-${package_version}.tgz" || exit 1
+          done
+          test -f ".artifacts/npm/bryanhu-code-agent-${package_version}.tgz" || exit 1
+          find .artifacts/npm .artifacts/desktop -type f -print0 | sort -z | xargs -0 shasum -a 256 > .artifacts/SHA256SUMS
+      - name: Resolve npm release channel
+        shell: bash
+        run: |
+          package_version="${RELEASE_TAG#v}"
+          npm_tag="latest"
+          if [[ "${package_version}" == *-* ]]; then npm_tag="beta"; fi
+          latest_before="$(npm view "@bryanhu/code-agent" dist-tags.latest --json | tr -d '"')"
+          test -n "${latest_before}"
+          echo "NPM_TAG=${npm_tag}" >> "${GITHUB_ENV}"
+          echo "NPM_LATEST_BEFORE=${latest_before}" >> "${GITHUB_ENV}"
+      - name: Publish native packages before the CLI
+        shell: bash
+        run: |
+          package_version="${RELEASE_TAG#v}"
+          npm_tag="${NPM_TAG}"
+          for target in darwin-arm64 linux-x64-gnu win32-x64-msvc; do
+            name="@bryanhu/code-agent-${target}"
+            tarball=".artifacts/npm/bryanhu-code-agent-${target}-${package_version}.tgz"
+            npm view "${name}@${package_version}" version --json >/dev/null 2>&1 || npm publish "${tarball}" --access public --provenance --tag "${npm_tag}"
+          done
+      - name: Publish main CLI package
+        shell: bash
+        run: |
+          package_version="${RELEASE_TAG#v}"
+          npm_tag="${NPM_TAG}"
+          npm view "@bryanhu/code-agent@${package_version}" version --json >/dev/null 2>&1 || npm publish ".artifacts/npm/bryanhu-code-agent-${package_version}.tgz" --access public --provenance --tag "${npm_tag}"
+      - name: Verify npm dist-tags
+        shell: bash
+        run: |
+          package_version="${RELEASE_TAG#v}"
+          if [[ "${NPM_TAG}" = "beta" ]]; then
+            beta_version="$(npm view "@bryanhu/code-agent" dist-tags.beta --json | tr -d '"')"
+            latest_after="$(npm view "@bryanhu/code-agent" dist-tags.latest --json | tr -d '"')"
+            test "${beta_version}" = "${package_version}"
+            test "${latest_after}" = "${NPM_LATEST_BEFORE}"
+          else
+            latest_after="$(npm view "@bryanhu/code-agent" dist-tags.latest --json | tr -d '"')"
+            test "${latest_after}" = "${package_version}"
+          fi
+      - name: Upload release checksums and Desktop archives
+        shell: bash
+        run: >-
+          gh release upload "${RELEASE_TAG}"
+          .artifacts/desktop/*.tar.gz .artifacts/SHA256SUMS
+          --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Promote verified GitHub Release
+        shell: bash
+        run: gh release edit "${RELEASE_TAG}" --draft=false
         env:
           GH_TOKEN: ${{ github.token }}

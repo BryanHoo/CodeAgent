@@ -76,7 +76,7 @@ function parseCodeCommentAttributes(source: string): CodeComment | null {
   };
 }
 
-export function parseCodeComments(markdown: string): ParsedCodeComments {
+export function parseCodeCommentFragment(markdown: string): ParsedCodeComments {
   const comments: CodeComment[] = [];
   const markdownWithoutDirectives = markdown.replace(
     CODE_COMMENT_DIRECTIVE_PATTERN,
@@ -93,7 +93,7 @@ export function parseCodeComments(markdown: string): ParsedCodeComments {
 
   return {
     comments,
-    markdown: markdownWithoutDirectives.replace(/\n{3,}/g, "\n\n").trim(),
+    markdown: markdownWithoutDirectives,
   };
 }
 

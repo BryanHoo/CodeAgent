@@ -41,6 +41,7 @@ describe("estimateRetainedBytes", () => {
     const value = { first: sharedValue, second: sharedValue };
 
     expect(getUtf8ByteLength("中文")).toBe(6);
+    expect(getUtf8ByteLength("A😀\ud800")).toBe(8);
     expect(estimateRetainedBytes(value)).toBeGreaterThan(6);
   });
 });

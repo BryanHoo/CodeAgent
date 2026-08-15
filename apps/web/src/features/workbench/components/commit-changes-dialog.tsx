@@ -49,6 +49,7 @@ import {
   SelectValue,
 } from "../../../shared/components/core/select.js";
 import { Sheet, SheetContent, SheetTitle } from "../../../shared/components/core/sheet.js";
+import { useErrorToast } from "../../../shared/errors/error-toast.js";
 import {
   Tooltip,
   TooltipContent,
@@ -57,6 +58,7 @@ import {
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentGitHistoryClient } from "../../projects/project-queries.js";
 import { CommitChangesTreeSection } from "./commit-changes-tree.js";
+import { CommitChangesResult } from "./commit-changes-result.js";
 import { GitHistoryList } from "./git-history-list.js";
 
 type CommitFileEntry = Readonly<{
@@ -115,12 +117,6 @@ export function collectCommitRepositories(status: ProjectGitStatus): readonly st
   return [...repositories].toSorted((left, right) => left.localeCompare(right, "en"));
 }
 
-function commitResultMessageKey(result: CommitProjectChangesResponse): string {
-  if (result.pushStatus === "failed") return "commit.commitCompletePushFailed";
-  if (result.pushStatus === "not_configured") return "commit.commitCompleteUpstreamMissing";
-  return result.pushStatus === "pushed" ? "commit.commitAndPushComplete" : "commit.commitComplete";
-}
-
 function createCommitContentState(identity: string, entries: readonly CommitFileEntry[]) {
   return {
     changesOpen: true,
@@ -151,6 +147,7 @@ export function CommitChangesDialog({
   selectedRepository = null,
 }: CommitChangesDialogProps) {
   const { t } = useTranslation("workbench");
+  useErrorToast(error);
   const entries = useMemo(() => collectCommitFileEntries(gitStatus), [gitStatus]);
   const contentIdentity = `${selectedRepository ?? "root"}:${gitStatus.snapshot}`;
   const [contentState, setContentState] = useState(() =>
@@ -266,21 +263,10 @@ export function CommitChangesDialog({
                 {t("commit.repositoryLoading")}
               </p>
             ) : null}
-            {repositories.length === 0 ? (
-              <p className="mt-1 text-caption text-danger" role="alert">
-                {t("commit.repositoryUnavailable")}
-              </p>
-            ) : null}
           </div>
         ) : null}
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden" data-slot="commit-sheet-body">
-          {error === null ? null : (
-            <p className="mx-3 mt-2 shrink-0 text-caption text-danger" role="alert">
-              {error.message}
-            </p>
-          )}
-
           {repositoryReady ? (
             <>
               <section className="shrink-0 px-3 py-2">
@@ -380,12 +366,7 @@ export function CommitChangesDialog({
                     </DropdownMenu>
                   </ButtonGroup>
                 ) : (
-                  <div className="mt-2" role="status">
-                    <p className="text-label font-medium">{t(commitResultMessageKey(result))}</p>
-                    <p className="mt-1 font-mono text-caption text-muted-foreground">
-                      {result.commitSha.slice(0, 7)}
-                    </p>
-                  </div>
+                  <CommitChangesResult result={result} />
                 )}
               </section>
 

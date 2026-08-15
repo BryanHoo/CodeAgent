@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "outDir": "../../.cache/types/transport-tauri",
+    "rootDir": "src",
+    "tsBuildInfoFile": "../../.cache/types/transport-tauri.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [{ "path": "../client" }]
+}

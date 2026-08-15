@@ -20,14 +20,55 @@ CodeAgent runs on your computer. You can use it locally or access it from anothe
 
 ## Requirements
 
-Before you begin, make sure you have:
+CodeAgent releases support these targets:
 
-- Node.js 24 or later
-- Chrome/Chromium 116+, Firefox 124+, or Safari 17.4+
+| System        | Architecture  | Desktop                                  | CLI         |
+| ------------- | ------------- | ---------------------------------------- | ----------- |
+| macOS 14+     | Apple Silicon | Preview / Unsigned `.dmg`                | Node.js 24+ |
+| Windows 10+   | x64           | Preview / Unsigned `.exe` or `.msi`      | Node.js 24+ |
+| Ubuntu 22.04+ | x64 glibc     | Preview / Unsigned `.deb` or `.AppImage` | Node.js 24+ |
+
+Intel macOS, Windows arm64, Linux arm64, musl Linux, and older systems are not supported release targets. Browser access to a running CLI also requires Chrome/Chromium 116+, Firefox 124+, or Safari 17.4+.
 
 CodeAgent includes the supported Codex CLI binary through `@openai/codex`; a separate Codex CLI installation is not required. To use another executable for diagnostics or startup, pass `--codex-bin <path>` or set `CODE_AGENT_CODEX_BIN`.
 
-## Quick Start
+## Desktop
+
+Download the installer for your system from [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases). Desktop includes its own runtime and does not require Node.js.
+
+Desktop is currently Preview / Unsigned on all three systems and does not have an operating-system code-signing certificate. macOS and Windows may display security warnings; continue only after confirming that the file came from the official Release page above. In-app update packages remain cryptographically signed with a separate key and are verified before installation.
+
+### macOS
+
+1. Download the Apple Silicon `.dmg`, open it, and drag CodeAgent into Applications.
+2. If the first launch says the developer cannot be verified or Apple cannot check the app for malicious software, close the alert.
+3. Open System Settings > Privacy & Security, scroll down to Security, and click Open Anyway.
+4. Authenticate with your login password or Touch ID, then click Open in the confirmation dialog. Future launches work normally from Applications.
+
+Open Anyway is available for a limited time after a launch attempt. See [Apple Support](https://support.apple.com/en-my/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac) for the full procedure.
+
+### Windows
+
+1. Download and start the x64 `.exe` (recommended) or `.msi` installer.
+2. If Microsoft Defender SmartScreen says "Windows protected your PC," confirm the release source, then select More info > Run anyway.
+3. Complete the installer and launch CodeAgent. Organization-managed devices may prohibit bypassing the warning; contact the administrator in that case.
+
+### Ubuntu
+
+After downloading the x64 `.deb`, run this from the download directory:
+
+```bash
+sudo apt install ./CodeAgent_*.deb
+```
+
+Alternatively, download the `.AppImage`, make it executable, and run it directly:
+
+```bash
+chmod +x ./CodeAgent_*.AppImage
+./CodeAgent_*.AppImage
+```
+
+## CLI Quick Start
 
 Run the latest version without installing it:
 

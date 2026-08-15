@@ -25,7 +25,7 @@
 - 当前项目要求用户预先在 Codex CLI 登录，尚未调用官方 `account/*` API。
 - Provider 模型通过 `model/list` 读取，Server 使用有界 TTL 缓存向 `/v1/models` 提供目录。
 - 全局设置、Project 默认值和 Task 设置依赖模型目录校验，Web 已有统一模型选择器。
-- CodeAgent 状态位于 `$CODEX_HOME/code-agent/state.sqlite3`；Codex 认证由 `CODEX_HOME` 下的官方凭证存储管理。
+- CodeAgent 状态位于 `~/.code-agent/state.sqlite3`；Codex 认证由 `CODEX_HOME` 下的官方凭证存储管理，两者互不改变对方的数据目录。
 - 官方文档规定 ChatGPT 登录使用 `account/login/start`，状态使用 `account/read`，退出使用 `account/logout`；自定义 Provider 使用用户级 `model_provider` 和 `model_providers.<id>` 配置。
 - 官方文档建议自定义 Provider 的密钥使用认证或环境变量，不建议将 bearer token 直接写入配置。`requires_openai_auth = true` 可复用 Codex 管理的 ChatGPT/API key 认证。
 

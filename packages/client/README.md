@@ -1,5 +1,5 @@
 # `@code-agent/client`
 
-维护 Web 使用的轻量 HTTP/WebSocket 客户端和协议解码边界，负责 Agent Event 校验、Sequence Gap 检测、重连与取消清理。
+维护宿主无关的 `CodeAgentClient` facade、领域 operation、结构化错误、Protocol Schema 校验、request ID 与显式取消协调。
 
-该包只依赖 Protocol，不得导入 Server、Core 或具体 Provider 实现。
+HTTP/WebSocket 实现位于 `@code-agent/transport-http`，Tauri IPC 实现位于 `@code-agent/transport-tauri`。该包只依赖 Protocol，不得导入任一 Transport、Server、Core 或具体 Provider 实现。

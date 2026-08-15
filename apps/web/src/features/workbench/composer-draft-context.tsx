@@ -1,12 +1,16 @@
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
-import type { AgentSkill } from "@code-agent/protocol";
+import type { AgentAttachment, AgentSkill } from "@code-agent/protocol";
 
 import type { PromptInputAttachment } from "../../shared/components/agent/prompt-input.js";
 import type { PromptSkillContent } from "./components/prompt-skill-editor.js";
 
 export type QueuedComposerPrompt = Readonly<{
+  acknowledgedUserMessageIds: readonly string[];
+  deliveryState: "awaiting_acknowledgement" | "queued";
+  deliveryTurnId?: string;
   files: readonly PromptInputAttachment[];
   id: string;
+  presentation: "composer" | "queue";
   skills: readonly AgentSkill[];
   text: string;
 }>;
@@ -23,6 +27,12 @@ const emptyComposerDraft: ComposerDraft = {
   queuedPrompts: [],
 };
 
+export type ComposerDraftStorage = Readonly<{
+  getItem: (key: string) => string | null;
+  removeItem: (key: string) => unknown;
+  setItem: (key: string, value: string) => unknown;
+}>;
+
 type ComposerDraftStore = Readonly<{
   clear: (scope: string) => void;
   dispose: () => void;
@@ -31,6 +41,7 @@ type ComposerDraftStore = Readonly<{
 }>;
 
 const ComposerDraftContext = createContext<ComposerDraftStore | undefined>(undefined);
+const COMPOSER_QUEUE_STORAGE_PREFIX = "code-agent.composer-queue.v1:";
 
 export function createComposerDraftScope(projectId: string, taskId?: string): string {
   return JSON.stringify([projectId, taskId ?? "draft"]);
@@ -68,15 +79,177 @@ function revokeRemovedDraftPreviews(previousDraft: ComposerDraft, nextDraft: Com
   }
 }
 
-export function createComposerDraftStore(): ComposerDraftStore {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parsePersistedAttachment(value: unknown): AgentAttachment | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value["id"] !== "string" ||
+    value["id"] === "" ||
+    (value["kind"] !== "file" && value["kind"] !== "image" && value["kind"] !== "text") ||
+    typeof value["mediaType"] !== "string" ||
+    value["mediaType"] === "" ||
+    typeof value["name"] !== "string" ||
+    value["name"] === "" ||
+    !Number.isInteger(value["size"]) ||
+    (value["size"] as number) <= 0
+  ) {
+    return undefined;
+  }
+  return {
+    id: value["id"],
+    kind: value["kind"],
+    mediaType: value["mediaType"],
+    name: value["name"],
+    size: value["size"] as number,
+  };
+}
+
+function parsePersistedQueuedPrompt(value: unknown): QueuedComposerPrompt | undefined {
+  if (!isRecord(value) || !Array.isArray(value["files"]) || !Array.isArray(value["skills"])) {
+    return undefined;
+  }
+  const files: PromptInputAttachment[] = [];
+  for (const file of value["files"]) {
+    const attachment = isRecord(file) ? parsePersistedAttachment(file["attachment"]) : undefined;
+    if (
+      !isRecord(file) ||
+      file["source"] !== "host" ||
+      attachment === undefined ||
+      typeof file["previewUrl"] !== "string" ||
+      Object.keys(file).some(
+        (key) =>
+          ![
+            "attachment",
+            "id",
+            "kind",
+            "mediaType",
+            "name",
+            "previewUrl",
+            "size",
+            "source",
+          ].includes(key),
+      )
+    ) {
+      return undefined;
+    }
+    files.push({ attachment, ...attachment, previewUrl: file["previewUrl"], source: "host" });
+  }
+  const skills: AgentSkill[] = [];
+  for (const skill of value["skills"]) {
+    if (
+      !isRecord(skill) ||
+      typeof skill["description"] !== "string" ||
+      typeof skill["displayName"] !== "string" ||
+      skill["displayName"] === "" ||
+      typeof skill["id"] !== "string" ||
+      skill["id"] === "" ||
+      typeof skill["name"] !== "string" ||
+      skill["name"] === "" ||
+      (skill["scope"] !== "admin" &&
+        skill["scope"] !== "repo" &&
+        skill["scope"] !== "system" &&
+        skill["scope"] !== "user")
+    ) {
+      return undefined;
+    }
+    skills.push(skill as AgentSkill);
+  }
+  if (
+    !Array.isArray(value["acknowledgedUserMessageIds"]) ||
+    !value["acknowledgedUserMessageIds"].every((id) => typeof id === "string") ||
+    (value["deliveryState"] !== "queued" &&
+      value["deliveryState"] !== "awaiting_acknowledgement") ||
+    (value["deliveryTurnId"] !== undefined &&
+      (typeof value["deliveryTurnId"] !== "string" || value["deliveryTurnId"] === "")) ||
+    typeof value["id"] !== "string" ||
+    value["id"] === "" ||
+    (value["presentation"] !== "queue" && value["presentation"] !== "composer") ||
+    typeof value["text"] !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    acknowledgedUserMessageIds: value["acknowledgedUserMessageIds"],
+    deliveryState: value["deliveryState"],
+    ...(typeof value["deliveryTurnId"] === "string"
+      ? { deliveryTurnId: value["deliveryTurnId"] }
+      : {}),
+    files,
+    id: value["id"],
+    presentation: value["presentation"],
+    skills,
+    text: value["text"],
+  };
+}
+
+function readPersistedQueue(
+  storage: ComposerDraftStorage | undefined,
+  scope: string,
+): readonly QueuedComposerPrompt[] {
+  try {
+    const raw = storage?.getItem(`${COMPOSER_QUEUE_STORAGE_PREFIX}${scope}`);
+    if (raw === undefined || raw === null) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed) || parsed["version"] !== 1 || !Array.isArray(parsed["queuedPrompts"])) {
+      return [];
+    }
+    const prompts = parsed["queuedPrompts"].map(parsePersistedQueuedPrompt);
+    const validPrompts = prompts.filter(
+      (prompt): prompt is QueuedComposerPrompt => prompt !== undefined,
+    );
+    return validPrompts.length === prompts.length ? validPrompts : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistQueue(
+  storage: ComposerDraftStorage | undefined,
+  scope: string,
+  queuedPrompts: readonly QueuedComposerPrompt[],
+): void {
+  if (storage === undefined) return;
+  const key = `${COMPOSER_QUEUE_STORAGE_PREFIX}${scope}`;
+  try {
+    if (queuedPrompts.length === 0) {
+      storage.removeItem(key);
+      return;
+    }
+    // 排队前已上传浏览器附件；持久层只接受可在刷新后继续发送的受管附件。
+    if (queuedPrompts.some((prompt) => prompt.files.some((file) => file.source !== "host"))) return;
+    storage.setItem(key, JSON.stringify({ queuedPrompts, version: 1 }));
+  } catch {
+    // 浏览器禁用或耗尽 Storage 时仍保留当前页面内的队列。
+  }
+}
+
+function resolveComposerDraftStorage(): ComposerDraftStorage | undefined {
+  return typeof window === "undefined" ? undefined : window.localStorage;
+}
+
+export function createComposerDraftStore(
+  storage: ComposerDraftStorage | undefined = resolveComposerDraftStorage(),
+): ComposerDraftStore {
   const drafts = new Map<string, ComposerDraft>();
-  const read = (scope: string) => drafts.get(scope) ?? emptyComposerDraft;
+  const read = (scope: string) => {
+    const cached = drafts.get(scope);
+    if (cached !== undefined) return cached;
+    const queuedPrompts = readPersistedQueue(storage, scope);
+    if (queuedPrompts.length === 0) return emptyComposerDraft;
+    const restoredDraft = { ...emptyComposerDraft, queuedPrompts };
+    drafts.set(scope, restoredDraft);
+    return restoredDraft;
+  };
   const clear = (scope: string) => {
     const draft = drafts.get(scope);
     if (draft !== undefined) {
       revokeDraftPreviews(draft);
       drafts.delete(scope);
     }
+    persistQueue(storage, scope, []);
   };
   const update = (scope: string, applyUpdate: (draft: ComposerDraft) => ComposerDraft) => {
     const previousDraft = read(scope);
@@ -87,6 +260,7 @@ export function createComposerDraftStore(): ComposerDraftStore {
     } else {
       drafts.set(scope, nextDraft);
     }
+    persistQueue(storage, scope, nextDraft.queuedPrompts);
   };
   const dispose = () => {
     drafts.forEach(revokeDraftPreviews);

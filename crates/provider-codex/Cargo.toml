@@ -1,0 +1,34 @@
+[package]
+name = "code-agent-provider-codex"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+code-agent-core.workspace = true
+code-agent-protocol.workspace = true
+data-encoding.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+uuid.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix.workspace = true
+
+# 仅用于集成测试的脚本化 Codex App Server 假进程。
+[[bin]]
+name = "fake-codex"
+path = "tests/bin/fake_codex.rs"
+
+[lints]
+workspace = true

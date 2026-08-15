@@ -1,8 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import webConfig, { supportedBrowserTargets } from "./vite.config.js";
+import { createViteConfig, resolveBuildTarget, supportedBrowserTargets } from "./vite.config.js";
+
+const webConfig = createViteConfig("web");
 
 describe("Web Vite browser targets", () => {
+  it("isolates web and desktop build outputs", () => {
+    expect(webConfig.build).toMatchObject({
+      emptyOutDir: true,
+      outDir: "../../dist/web",
+    });
+    expect(createViteConfig("desktop").build).toMatchObject({
+      emptyOutDir: true,
+      outDir: "../../dist/desktop",
+    });
+    expect(() => resolveBuildTarget("production")).toThrow(
+      "Unsupported CODE_AGENT_TARGET mode: production",
+    );
+  });
+
   it("locks the production build to the supported browser minimums", () => {
     expect(supportedBrowserTargets).toEqual(["chrome116", "firefox124", "safari17.4"]);
     expect(webConfig).toMatchObject({
@@ -11,6 +27,19 @@ describe("Web Vite browser targets", () => {
         target: ["chrome116", "firefox124", "safari17.4"],
       },
     });
+  });
+
+  it("selects exactly one host transport at build time", () => {
+    const desktopConfig = createViteConfig("desktop");
+    const webAliases = JSON.stringify(webConfig.resolve?.alias).replaceAll("\\\\", "/");
+    const desktopAliases = JSON.stringify(desktopConfig.resolve?.alias).replaceAll("\\\\", "/");
+
+    expect(webAliases).toContain("packages/transport-http/src/index.ts");
+    expect(webAliases).not.toContain("packages/transport-tauri/src/index.ts");
+    expect(desktopAliases).toContain("packages/transport-tauri/src/index.ts");
+    expect(desktopAliases).not.toContain("packages/transport-http/src/index.ts");
+    expect(webConfig.server?.proxy).toBeDefined();
+    expect(desktopConfig.server?.proxy).toBeUndefined();
   });
 
   it("isolates the oversized C++ macro grammar from its parent language chunk", () => {

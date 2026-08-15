@@ -4,13 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "dev": "vite --host 127.0.0.1",
+    "build": "pnpm run build:web",
+    "build:desktop": "vite build --mode desktop",
+    "build:web": "vite build --mode web",
+    "dev": "pnpm run dev:web",
+    "dev:desktop": "vite --host 127.0.0.1 --mode desktop",
+    "dev:web": "vite --host 127.0.0.1 --mode web",
     "preview": "vite preview"
   },
   "dependencies": {
     "@code-agent/client": "workspace:*",
     "@code-agent/protocol": "workspace:*",
+    "@code-agent/transport-http": "workspace:*",
+    "@code-agent/transport-tauri": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",

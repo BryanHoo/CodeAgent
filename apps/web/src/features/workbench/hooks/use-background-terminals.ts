@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 as createUuid } from "uuid";
 
-import { i18n } from "../../../i18n/i18n.js";
+import { normalizeError } from "../../../shared/errors/error-toast.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import type { CodeAgentBackgroundTerminalClient } from "../../projects/project-queries.js";
 
@@ -81,11 +81,7 @@ export function useBackgroundTerminals(
           idempotencyKeysRef.current.delete(terminalId);
           await refetchTerminals();
         } catch (error) {
-          setTerminalError(
-            error instanceof Error
-              ? error
-              : new Error(i18n.t("errors.stopTerminal", { ns: "conversation" })),
-          );
+          setTerminalError(normalizeError(error));
         }
       }),
     [refetchTerminals, terminateTerminalMutation],

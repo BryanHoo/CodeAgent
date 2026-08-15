@@ -1,9 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+
+import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
+
+const resolveAssetUrl = vi.hoisted(() =>
+  vi.fn(() => {
+    throw new Error("source preview must not resolve a project image URL");
+  }),
+);
+
+vi.mock("../../../app/create-host-client.js", () => ({
+  codeAgentClient: { resolveAssetUrl },
+}));
 
 import {
   getCodeLanguage,
   getNextSourceCursor,
   mergeProjectSourcePages,
+  ProjectSourceDialog,
   shouldLoadNextSourcePage,
 } from "./project-source-dialog.js";
 
@@ -21,6 +36,32 @@ describe("getCodeLanguage", () => {
 });
 
 describe("project source pagination", () => {
+  it("does not resolve a project image asset while rendering source text", () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["projects", "project-a", "source-file", "/tmp/main.ts"], {
+      pageParams: [undefined],
+      pages: [{ content: "export {};", nextCursor: null, path: "/tmp/main.ts" }],
+    });
+
+    expect(() =>
+      renderToStaticMarkup(
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <ProjectSourceDialog
+              client={{ readProjectSourceFile: vi.fn() }}
+              onClose={vi.fn()}
+              onOpenSystemDefault={vi.fn()}
+              previewKind="source"
+              projectId="project-a"
+              reference={{ lineNumber: null, path: "/tmp/main.ts" }}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>,
+      ),
+    ).not.toThrow();
+    expect(resolveAssetUrl).not.toHaveBeenCalled();
+  });
+
   it("merges loaded pages without losing content and exposes the final cursor", () => {
     expect(
       mergeProjectSourcePages([

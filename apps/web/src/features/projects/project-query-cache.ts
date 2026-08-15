@@ -1,9 +1,10 @@
 import type { CodeAgentClient } from "@code-agent/client";
-import type { AgentTask, ProjectPage } from "@code-agent/protocol";
+import type { AgentTask, Project, ProjectPage } from "@code-agent/protocol";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { i18n } from "../../i18n/i18n.js";
 import {
+  PROJECT_PINNED_TASKS_SOURCE_KEY,
   PROJECT_TASK_SEARCH_PAGE_SIZE,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
   codeAgentClient,
@@ -25,6 +26,27 @@ export function flattenProjectTaskPages(currentData: ProjectTaskInfiniteData | u
   }
 
   return [...taskById.values()];
+}
+
+export function cacheAddedProject(queryClient: QueryClient, project: Project) {
+  // 注册响应已经是权威结果，直接发布到侧栏；Project 下的重型状态继续按路由和展开状态懒加载。
+  queryClient.setQueryData<ProjectPage>(["projects"], (currentPage) => {
+    if (currentPage === undefined) {
+      return { data: [project], nextCursor: null };
+    }
+    const existingProjectIndex = currentPage.data.findIndex(
+      (currentProject) => currentProject.id === project.id,
+    );
+    if (existingProjectIndex < 0) {
+      return { ...currentPage, data: [...currentPage.data, project] };
+    }
+    return {
+      ...currentPage,
+      data: currentPage.data.map((currentProject, index) =>
+        index === existingProjectIndex ? project : currentProject,
+      ),
+    };
+  });
 }
 
 export function upsertProjectTaskInInfiniteData(
@@ -79,7 +101,7 @@ export function replaceProjectTaskInInfiniteData(
 }
 
 export function replaceProjectTaskInQueryCaches(queryClient: QueryClient, task: AgentTask) {
-  // 重命名和固定操作必须同步普通分页与已加载的全量搜索源。
+  // 重命名和固定操作必须同步普通分页、固定源与已加载的全量搜索源。
   queryClient.setQueryData<ProjectTaskInfiniteData>(
     ["projects", task.projectId, "tasks"],
     (currentData) => replaceProjectTaskInInfiniteData(currentData, task),
@@ -88,6 +110,16 @@ export function replaceProjectTaskInQueryCaches(queryClient: QueryClient, task: 
     ["projects", task.projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
     (currentTasks) =>
       currentTasks?.map((currentTask) => (currentTask.id === task.id ? task : currentTask)),
+  );
+  queryClient.setQueryData<readonly AgentTask[]>(
+    ["projects", task.projectId, "tasks", PROJECT_PINNED_TASKS_SOURCE_KEY],
+    (currentTasks) => {
+      if (currentTasks === undefined) {
+        return undefined;
+      }
+      const tasksWithoutTarget = currentTasks.filter((currentTask) => currentTask.id !== task.id);
+      return task.pinned ? [task, ...tasksWithoutTarget] : tasksWithoutTarget;
+    },
   );
 }
 
@@ -187,9 +219,10 @@ export function removeProjectTaskFromInfiniteData(
   };
 }
 
-export async function listProjectTasksForSearch(
+async function listProjectTasksByPage(
   projectId: string,
   client: Pick<CodeAgentClient, "listTasks">,
+  options: Readonly<{ pinnedOnly?: true }>,
   signal?: AbortSignal,
 ): Promise<readonly AgentTask[]> {
   const taskById = new Map<string, AgentTask>();
@@ -198,6 +231,7 @@ export async function listProjectTasksForSearch(
 
   for (;;) {
     const pageOptions = {
+      ...options,
       ...(cursor === undefined ? {} : { cursor }),
       limit: PROJECT_TASK_SEARCH_PAGE_SIZE,
     };
@@ -218,6 +252,32 @@ export async function listProjectTasksForSearch(
     requestedCursors.add(page.nextCursor);
     cursor = page.nextCursor;
   }
+}
+
+export function listProjectTasksForSearch(
+  projectId: string,
+  client: Pick<CodeAgentClient, "listTasks">,
+  signal?: AbortSignal,
+) {
+  return listProjectTasksByPage(projectId, client, {}, signal);
+}
+
+export function listPinnedProjectTasks(
+  projectId: string,
+  client: Pick<CodeAgentClient, "listTasks">,
+  signal?: AbortSignal,
+) {
+  return listProjectTasksByPage(projectId, client, { pinnedOnly: true }, signal);
+}
+
+export function projectPinnedTasksQueryOptions(
+  projectId: string,
+  client: Pick<CodeAgentClient, "listTasks"> = codeAgentClient,
+) {
+  return queryOptions({
+    queryFn: ({ signal }) => listPinnedProjectTasks(projectId, client, signal),
+    queryKey: ["projects", projectId, "tasks", PROJECT_PINNED_TASKS_SOURCE_KEY] as const,
+  });
 }
 
 export function projectTaskSearchSourceQueryOptions(
@@ -243,6 +303,10 @@ export async function removeArchivedProjectTaskAndRefill(
   );
   queryClient.setQueryData<readonly AgentTask[]>(
     [...projectTaskQueryKey, PROJECT_TASK_SEARCH_SOURCE_KEY],
+    (currentTasks) => currentTasks?.filter((task) => task.id !== taskId),
+  );
+  queryClient.setQueryData<readonly AgentTask[]>(
+    [...projectTaskQueryKey, PROJECT_PINNED_TASKS_SOURCE_KEY],
     (currentTasks) => currentTasks?.filter((task) => task.id !== taskId),
   );
 

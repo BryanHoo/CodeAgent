@@ -3,6 +3,7 @@ import type { AgentEvent, AgentTaskSnapshotResponse, EventCheckpoint } from "@co
 import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
 import { hasActiveProjectTask, type TaskActivityMap } from "./task-activity.js";
 import type { TaskStore } from "./task-store.js";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
 
 import {
   ProjectEventHistory,
@@ -24,6 +25,7 @@ export class ProjectEventRuntime {
   readonly #client: CodeAgentRuntimeClient;
   readonly #eventHistory: ProjectEventHistory;
   readonly #idleTimeoutMs: number;
+  readonly #onPerformanceSample: ProjectEventRuntimeOptions["onPerformanceSample"];
   readonly #projectId: string;
   readonly #snapshotRecovery: SnapshotRecoveryController<AgentTaskSnapshotResponse>;
   readonly #targets = new Map<TaskStore, TaskEventTarget>();
@@ -47,6 +49,7 @@ export class ProjectEventRuntime {
     this.#client = client;
     this.#callbacks = callbacks;
     this.#idleTimeoutMs = options.idleTimeoutMs;
+    this.#onPerformanceSample = options.onPerformanceSample;
     this.#eventHistory = new ProjectEventHistory({
       maxBytes: options.maxEventHistoryBytes,
       maxEvents: options.maxEventHistoryEvents,
@@ -77,9 +80,14 @@ export class ProjectEventRuntime {
     storeState.reconcile(response);
     let target = this.#targets.get(store);
     if (target === undefined) {
-      target = new TaskEventTarget(store, recoverSnapshot, (recoveredResponse, recoveredTarget) => {
-        this.#hydrateRecoveredSnapshot(recoveredResponse, store, recoveredTarget);
-      });
+      target = new TaskEventTarget(
+        store,
+        recoverSnapshot,
+        (recoveredResponse, recoveredTarget) => {
+          this.#hydrateRecoveredSnapshot(recoveredResponse, store, recoveredTarget);
+        },
+        this.#onPerformanceSample,
+      );
       this.#targets.set(store, target);
     } else {
       target.addConsumer(recoverSnapshot);
@@ -153,9 +161,9 @@ export class ProjectEventRuntime {
     this.#reevaluateIdleRelease();
   }
 
-  #appendEventHistory(event: AgentEvent): void {
+  #appendEventHistory(event: AgentEvent, wireBytes: number | undefined): void {
     // 有界历史用于补齐 Snapshot 请求期间到达的事件，超出预算后由 Snapshot 恢复兜底。
-    this.#eventHistory.append(event);
+    this.#eventHistory.append(event, wireBytes);
   }
 
   #assertSnapshotProject(response: AgentTaskSnapshotResponse): void {
@@ -209,9 +217,9 @@ export class ProjectEventRuntime {
           target.setError(error);
         }
       },
-      onEvent: (event) => {
+      onEvent: (event, wireBytes) => {
         this.#latestSequence = event.sequence;
-        this.#appendEventHistory(event);
+        this.#appendEventHistory(event, wireBytes);
         this.#callbacks.onActivityEvent(this.#projectId, event);
         // 先更新轻量 Activity，再只向同 taskId 的详细 Store 分发，避免重复解析和跨 Task 缓冲。
         for (const [store, target] of this.#targets) {
@@ -220,10 +228,13 @@ export class ProjectEventRuntime {
           }
         }
         if (event.type === "turn.completed" && !this.#hasTaskConsumers(event.taskId)) {
-          void this.#client.unsubscribeTask(this.#projectId, event.taskId).catch(() => undefined);
+          void this.#client.unsubscribeTask(this.#projectId, event.taskId).catch(showErrorToast);
         }
         this.#reevaluateIdleRelease();
       },
+      ...(this.#onPerformanceSample === undefined
+        ? {}
+        : { onPerformanceSample: this.#onPerformanceSample }),
       onResyncRequired: () => {
         this.#snapshotRecoveryRequired = true;
         this.#stopConnection();

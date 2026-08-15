@@ -7,7 +7,7 @@
 ## Rules
 
 - Access 状态先于 Project Snapshot、Query Cache 和 Event Runtime 初始化。Local 状态直接放行业务树；LAN 未认证状态只保留 `{ authenticated: false, mode: "lan", version: 1 }`，不得缓存访问密码。
-- Provider 连接状态必须在 Project Provider、Snapshot Query 和 Event Runtime 之前读取；只有 `connected` 才挂载业务树。官方登录仅在 `pending` 时轮询，完成、失败、取消或卸载后停止。
+- Runtime 就绪状态必须先于 Provider 连接状态、Project Provider、Snapshot Query 和 Event Runtime 读取；`starting` 时每 500ms 轮询统一 Health 契约，`ready` 后才启用 Provider 连接查询，`failed` 或 Health 请求失败后停止轮询并展示重试入口。只有 Provider `connected` 才挂载业务树；官方登录仅在 `pending` 时轮询，完成、失败、取消或卸载后停止。
 - 自定义 API key 只保留在连接面板的瞬时组件状态和当前 Client 调用栈；不得作为 TanStack Query/Mutation key、variables、data 或 error，也不得进入 Zustand、localStorage 或 URL。连接成功或失败后都必须清空输入值。
 - 任意 Client `401` 或 LAN 注销成功后必须立即清空 Query Cache 并卸载 Project Runtime、Composer Draft Provider 与 Router 业务树；Provider 清理必须关闭 WebSocket、释放附件 Blob URL 和内存草稿。刷新后的认证只从 HttpOnly Cookie 重新读取。
 - 瞬时 UI 状态默认保留在最近组件或功能内。
@@ -17,13 +17,15 @@
 - Global settings 与 Project 新 Task 默认设置使用 TanStack Query 独立缓存；Task Snapshot 必须直接携带 Server 校验后的完整 Task 设置。
 - Global settings、Project defaults 与 Task settings 只在用户事件中通过原子 `PUT` 更新完整对象；Mutation 按 Global、Project 或 Task 串行，成功后更新对应 Query/Snapshot 缓存。
 - 主题偏好属于浏览器本地状态，必须使用版本化存储并在 React 挂载前应用；不得混入 Global settings Query 或服务端持久化。
+- Project 注册成功后必须立即把 Mutation 返回的权威 Project 追加或替换到 `["projects"]` Query，并解除目录选择器的提交状态；不得通过 `["projects"]` 前缀失效等待 Task、Git、文件等子查询。进入新 Project 后只按当前路由与可见状态加载所需子查询。
 - Project 排序以 Server 返回的 `ProjectPage` 为长期真相源；拖动中的顺序只保留在 Sidebar Hook。释放后乐观更新 `["projects"]` Query，并通过串行完整顺序 Mutation 校准，失败时恢复提交前的完整页面。
 - 有效设置固定按 `Task > Project > Global` 解析；读取回退值不得隐式写入 Project 或 Task 记录。新 Task 创建时固化当时的完整有效设置，不得从其他 Task 继承任何设置。
-- Project Task 列表、Task Snapshot、Mutation 和实时订阅必须显式携带 `projectId`；Query Key 与连接状态按 Project 隔离，不能只用 `taskId` 作为跨项目身份。普通 Project Task Infinite Query 只允许为当前路由或侧栏已展开的 Project 激活；当前 Project 即使在侧栏收起也必须保持激活，未展开的非当前 Project 不得在首次加载时发起请求。Project Task 列表使用 Cursor Infinite Query，首屏固定 5 项且只有用户触发“显示更多”才读取单个下一页；归档后必须先移除缓存实体，再重新校准活动 Infinite Query，以服务端新 Cursor 边界补足最近 5 项。搜索使用独立的按 Project 全量 Task Query，仅在搜索词非空时启用，各 Project 可并行、单个 Project 内顺序追踪全部 Cursor；新建、固定、重命名和归档必须同步维护普通列表与已存在的搜索源缓存。
+- Project Task 列表、Task Snapshot、Mutation 和实时订阅必须显式携带 `projectId`；Query Key 与连接状态按 Project 隔离，不能只用 `taskId` 作为跨项目身份。普通 Project Task Infinite Query 只允许为当前路由或侧栏已展开的 Project 激活；当前 Project 即使在侧栏收起也必须保持激活，未展开的非当前 Project 不得在首次加载时发起请求。Project Task 列表使用 Cursor Infinite Query，首屏固定 5 项且只有用户触发“显示更多”才读取单个下一页；归档后必须先移除缓存实体，再重新校准活动 Infinite Query，以服务端新 Cursor 边界补足最近 5 项。固定栏目使用独立的 Provider 固定分区 Query，不得扫描普通历史页；搜索使用独立的按 Project 全量 Task Query，仅在搜索词非空时启用，各 Project 可并行、单个 Project 内顺序追踪全部 Cursor；新建、固定、重命名和归档必须同步维护普通列表与已存在的固定、搜索源缓存。
 - `sequence` 是 Runtime Session 内的事件顺序依据；断线恢复先刷新 Snapshot，再从检查点补发。
 - Task Snapshot 必须显式携带可空的结构化计划；`plan.updated` 以完整列表替换最新计划，只更新 Snapshot 元数据，不得重建 Timeline Item Store 或改变 Item 顺序。Inspector 在上下文顶部持续展示最新计划，并在当前 Task 首次拥有计划时自动选择上下文 Tab；用户手动选回其他 Tab 后，同一 Task 的步骤状态更新不得再次抢占选择。
 - Client 必须忽略 `sequence <= lastAppliedSequence` 的重复事件，并在更大缺口或 `sessionId` 变化时停止增量应用、请求 resync。
-- Delta 可在同一动画帧按 Item 与字段合并，但只能合并相邻同 Key 事件，不得跨其他 Item 重排首次出现顺序；Reasoning Summary 的 Key 必须包含 `sectionIndex`。Message、Reasoning、Command 与 Plan Delta 追加文本，Tool Progress、File Change 与 Turn Diff 状态快照只保留窗口内最新值；关键事件到达时先按 `sequence` 冲刷所有更早事件，再应用完整 Item/Turn 终态。
+- Delta 可在同一动画帧按 Item 与字段合并，每个 Task Store 每帧最多提交一次，但只能合并相邻同 Key 事件，不得跨其他 Item 重排首次出现顺序；Reasoning Summary 的 Key 必须包含 `sectionIndex`。Message、Reasoning、Command 与 Plan Delta 追加文本，Tool Progress、File Change 与 Turn Diff 状态快照只保留窗口内最新值；关键事件到达时先按 `sequence` 冲刷所有更早事件，再应用完整 Item/Turn 终态。
+- 性能门禁可通过显式注入且默认关闭的只读 Observer 采集 `transport_received` 与 `store_committed`；生产路径未注入时不得分配样本对象、保留历史或增加 Timeline Store 遍历。
 - `reconnecting`、`resync.required` 和 Session 变化触发 Snapshot refetch；旧订阅、Socket、Timer 和动画帧回调必须在替换或卸载时清理。
 - Snapshot 恢复必须使用明确状态机并在请求失败后有界退避重试；成功 Hydrate 权威 Snapshot 前始终保持非阻塞 `reconnecting`，底层 Socket 的 `connected` 不得提前解除恢复状态或放行增量事件。恢复期间保留已渲染 Timeline，成功后从 Snapshot checkpoint 回放保留事件。
 - Snapshot 请求错误优先于加载状态展示；WebSocket 成功恢复为 `connected` 后清除上一次连接尝试产生的瞬时错误。
@@ -35,7 +37,7 @@
 - Task Runtime 使用 `zustand/vanilla` 按 `projectId + taskId` 创建独立 Store；Turn、Item 与 Pending Request 必须分别保存有序 ID 和实体映射，Item 实体各自使用独立 Store。每次 Snapshot Hydrate 或 Reconcile 重建 Turn/Item 容器时必须基于当前值单调推进结构修订号，不能重置修订号或只依赖 Task 元数据变化触发兼容快照重建；否则 Task 仍为 `running` 但中间 Snapshot 暂缺乐观 Turn 时，会让已提交消息和运行状态持续空白。
 - 文本 Delta 只向目标 Item Store 的 Chunk 列表追加，并在同一事件批次结束后发布一次；不得替换 Task 的稳定 Item Map、既有 Turn、Item 顺序或其他实体引用。Reasoning Summary 切换 `sectionIndex` 时插入一个段落边界，但原始 `content` 只能留在协议状态，禁止传入展示组件。Item 组件只订阅对应 Item Store，终态事件再以权威完整字符串替换流式 Chunk。
 - Task 级 Warning 与 Model Verification Notice 最多保留最近 20 条；`guardian_warning` 与结构化 `approval_review` 表达同一次自动审批结果，不进入 Notice 列表，避免审批完成后在 Timeline 底部重复常驻。Notice 和 Turn Diff 属于瞬时状态，不写回重建 Snapshot。Timeline 使用项目设计令牌适配的 Agent 组件展示 Summary、Plan、Tool Progress、运行中文件集合、Hook 与模型状态，完成过程默认折叠。
-- 未选中 Task Store 采用 UTF-8 字节估算 LRU 回收：非活动 Store 合计最多 64 MiB、最多 20 份；仍有消费者的 Store 不得回收且不占非活动预算。最后一个消费者释放时从 Project Runtime 注销 Store 并发起 best-effort `thread/unsubscribe`，重新选中后必须从权威 Snapshot 校准，因此运行中、待审批或尚未 Hydrate 的非活动 Store 也可安全进入 LRU。
+- 未选中 Task Store 采用 UTF-8 字节估算 LRU 回收：非活动 Store 合计最多 64 MiB、最多 20 份；仍有消费者的 Store 不得回收且不占非活动预算。Store 必须在 Snapshot、事件和 Item 更新时增量维护保留字节估算，注册表使用保持 LRU 顺序的空闲索引和累计字节数；`acquire`、`release` 不得扫描、排序或物化全部 Store/Item。最后一个消费者释放时从 Project Runtime 注销 Store 并发起 best-effort `thread/unsubscribe`，重新选中后必须从权威 Snapshot 校准，因此运行中、待审批或尚未 Hydrate 的非活动 Store 也可安全进入 LRU。Node 性能门禁固定覆盖 20 个 Task、每个 10,000 Items 的完整切换，并同时限制耗时、切换期 Heap 增长和 GC 后保留 Heap。
 - Command Output 同时受单 Item 1 MiB / 10,000 行和单 Task 8 MiB 总预算约束；流式 Delta 只重新裁剪和计量目标 Command，总字节数与访问序号使用稳定 Map 按 Item 增量维护，只有超出 Task 预算时才遍历 LRU 索引并回收最久未更新的 Command Output。回收结果使用明确截断标记，界面高度限制不能代替 Payload 字节限制。
 - CodeBlock Token Cache 必须使用 24 MiB / 128 Entry 的字节 LRU，单份超过 512 KiB 的源码不进入缓存；Cache Key 只保存摘要并在命中时核验源码，禁止把完整源码直接作为长期 Map Key。
 - TanStack Query 全局非活动 `gcTime` 固定为 2 分钟，Task Snapshot 使用 30 秒；非活动完整 Snapshot 另受 48 MiB / 12 Entry 字节 LRU 约束。完整 Snapshot 与归一化 Store 不得同时作为无界长期缓存，归档时必须立即移除对应 Snapshot Query。
@@ -46,6 +48,7 @@
 - Sidebar 的轻量活动状态必须按 `projectId + taskId` 保存；切换当前 Task 或 Project 不能清除后台 Task 的运行或审批状态，只有对应 Task 的 Snapshot 或终态事件可以更新该行状态。Project 无 Task Store 消费者、无运行 Task、无待审批且连续 2 分钟未访问后必须关闭 Event Stream 并释放 Runtime；详细 Timeline Store 不得把完整历史复制到 Sidebar 状态。
 - Task 归档成功后必须清理 `taskActivity`、最近 Snapshot 恢复引用、非活动 Runtime Store 与 Task Snapshot Query；不可见 Task 收到 `turn.completed` 后再次尝试安全 unsubscribe，避免首次切换时因运行态跳过后永久保留 Thread。
 - Composer 只使用 `idle`、`submitting`、`running`、`reconnecting`、`failed` 五种状态；运行态来自活动 Turn，重连态暂停网络 Mutation，失败态保留草稿。
+- Composer 顺序消息按 `projectId + taskId` 使用版本化浏览器存储恢复；浏览器附件必须先上传并转换为受管附件元数据后才能进入可持久化队列。未发送项允许恢复到 Composer 编辑；`turn/start` 或 `turn/steer` 被底层接受后必须保留不可编辑的“等待发送”状态，实时或 Snapshot 中出现内容匹配且非 `submitted-user-*` 本地占位的权威 User Item 后移除；若 steer 的目标 Turn 先进入 `failed | interrupted`，确认窗口随 Turn 终态关闭并移除等待状态，禁止重复投递已接受内容。直接引导使用相同确认状态，并在确认前保留且锁定输入框。
 - 同一次用户动作在结果尚未确定前重试时必须复用原 `Idempotency-Key`；输入或目标变化后生成新 Key。
 - Git 提交弹窗的文件选择、可编辑 message 和部分成功结果属于瞬时 UI 状态；打开时按路径合并 staged/unstaged 记录并默认全选。生成与提交必须携带当前 Git `snapshot` 和所选路径；提交成功后失效 `['projects', projectId, 'git-status']`，push 失败或未配置 upstream 时保留 commit 成功结果，不得把它展示为整体失败。聚合子仓库模式必须禁用提交入口。
 - 中栏 Composer 底部的分支切换入口只消费共享 Git 状态中的本地 `branches` 候选；当前分支必须选中且不可重复提交，聚合子仓库、detached HEAD 或没有其他本地分支时只显示静态状态。切换使用同步单飞锁并携带当前 `snapshot`；Mutation 前先取消同 Project 的在途 Git 状态读取，成功后以 Server 返回的完整状态原子更新 `['projects', projectId, 'git-status']`，失败后失效该 Query 重新校准。

@@ -5,6 +5,7 @@ import type {
   AgentPromptInput,
   AgentSkill,
   AgentTask,
+  AgentTaskSnapshot,
   AgentTaskSettings,
 } from "@code-agent/protocol";
 import type { Dispatch, RefObject, SetStateAction } from "react";
@@ -14,8 +15,10 @@ import type {
   PromptInputAttachment,
   PromptInputMessage,
 } from "../../../shared/components/agent/prompt-input.js";
+import { normalizeError } from "../../../shared/errors/error-toast.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
 import type { QueuedComposerPrompt, useComposerDraftStore } from "../composer-draft-context.js";
+import { createAwaitingQueuedPrompt, createManagedPromptAttachments } from "../composer-queue.js";
 import {
   resolveComposerSubmitAction,
   resolveIdempotencyAttempt,
@@ -62,6 +65,7 @@ type ComposerSubmissionOptions = Readonly<{
   routeScope: string;
   selectedModel: AgentModel | undefined;
   selectedReasoningEffort: string | undefined;
+  snapshot?: Pick<AgentTaskSnapshot, "turns">;
   setAttachments: Dispatch<SetStateAction<readonly PromptInputAttachment[]>>;
   setPromptContent: Dispatch<SetStateAction<PromptSkillContent>>;
   setQueuedPrompts: Dispatch<SetStateAction<readonly QueuedComposerPrompt[]>>;
@@ -70,6 +74,14 @@ type ComposerSubmissionOptions = Readonly<{
   taskId: string | undefined;
   t: (key: string) => string;
   turnControlsDisabled: boolean;
+}>;
+
+export type ComposerSubmissionRequestOptions = Readonly<{
+  clearInputOnSuccess?: boolean;
+  forceAction?: "start" | "steer";
+  composerMode?: ComposerMode | null;
+  queuedPrompt?: QueuedComposerPrompt;
+  requestTimelineScroll?: boolean;
 }>;
 
 export function createComposerSubmission({
@@ -98,6 +110,7 @@ export function createComposerSubmission({
   routeScope,
   selectedModel,
   selectedReasoningEffort,
+  snapshot,
   setAttachments,
   setPromptContent,
   setQueuedPrompts,
@@ -123,12 +136,7 @@ export function createComposerSubmission({
   const performPromptSubmission = async (
     message: PromptInputMessage,
     promptSkills?: readonly AgentSkill[],
-    options: Readonly<{
-      clearInputOnSuccess?: boolean;
-      forceAction?: "start" | "steer";
-      composerMode?: ComposerMode | null;
-      requestTimelineScroll?: boolean;
-    }> = {},
+    options: ComposerSubmissionRequestOptions = {},
   ): Promise<boolean> => {
     const requestScope = routeScope;
     const text = message.text.trim();
@@ -164,33 +172,12 @@ export function createComposerSubmission({
       return false;
     }
 
-    if (action === "queue") {
-      const queuedPrompt: QueuedComposerPrompt = {
-        files: message.files,
-        id: createUuid(),
-        skills,
-        text,
-      };
-      const nextQueuedPrompts = [...queuedPrompts, queuedPrompt];
-      setQueuedPrompts(nextQueuedPrompts);
-      composerDraftStore.update(composerScope, (current) => ({
-        ...current,
-        attachments: [],
-        content: [],
-        queuedPrompts: nextQueuedPrompts,
-      }));
-      setPromptContent([]);
-      setAttachments([]);
-      skillEditorRef.current?.replace([]);
-      return true;
-    }
-
     // 排队项由调用方关闭置底请求，只有用户当前发出的即时消息改变阅读位置。
-    if (options.requestTimelineScroll !== false) {
+    if (action !== "queue" && options.requestTimelineScroll !== false) {
       onDirectSubmission?.();
     }
     // Notification 权限必须在提交手势内申请，不能等网络 Mutation 完成后再触发。
-    onRequestNotificationPermission();
+    if (action !== "queue") onRequestNotificationPermission();
     setIsSubmitting(true);
     setMutationError(null);
     let input: AgentPromptInput;
@@ -229,12 +216,38 @@ export function createComposerSubmission({
       };
     } catch (error) {
       if (isCurrentScope(requestScope)) {
-        setMutationError(
-          error instanceof Error ? error : new Error(t("composer.attachmentUploadFailed")),
-        );
+        setMutationError(normalizeError(error));
         setIsSubmitting(false);
       }
       return false;
+    }
+
+    const managedFiles = createManagedPromptAttachments(message.files, messageAttachments);
+    if (action === "queue") {
+      const queuedPrompt: QueuedComposerPrompt = {
+        acknowledgedUserMessageIds: [],
+        deliveryState: "queued",
+        files: managedFiles,
+        id: createUuid(),
+        presentation: "queue",
+        skills,
+        text,
+      };
+      const nextQueuedPrompts = [...queuedPrompts, queuedPrompt];
+      setQueuedPrompts(nextQueuedPrompts);
+      composerDraftStore.update(composerScope, (current) => ({
+        ...current,
+        attachments: [],
+        content: [],
+        queuedPrompts: nextQueuedPrompts,
+      }));
+      setPromptContent([]);
+      setAttachments([]);
+      skillEditorRef.current?.replace([]);
+      uploadedAttachments.current.clear();
+      uploadAttempts.current.clear();
+      setIsSubmitting(false);
+      return true;
     }
 
     if (action === "steer") {
@@ -246,6 +259,30 @@ export function createComposerSubmission({
         JSON.stringify({ input, taskId: activeTaskId, turnId: activeTurnId }),
       );
       steerTurnAttempt.current = steerAttempt;
+      const waitingPrompt = createAwaitingQueuedPrompt(
+        options.queuedPrompt ?? {
+          acknowledgedUserMessageIds: [],
+          deliveryState: "queued",
+          files: managedFiles,
+          id: createUuid(),
+          presentation: "composer",
+          skills,
+          text,
+        },
+        snapshot,
+        activeTurnId,
+      );
+      const waitingPrompts =
+        options.queuedPrompt === undefined
+          ? [...queuedPrompts, waitingPrompt]
+          : queuedPrompts.map((prompt) =>
+              prompt.id === options.queuedPrompt?.id ? waitingPrompt : prompt,
+            );
+      setQueuedPrompts(waitingPrompts);
+      composerDraftStore.update(composerScope, (current) => ({
+        ...current,
+        queuedPrompts: waitingPrompts,
+      }));
       try {
         await steerPromptTurn(
           client,
@@ -256,9 +293,6 @@ export function createComposerSubmission({
           steerAttempt.key,
         );
         if (isCurrentScope(requestScope)) {
-          if (options.clearInputOnSuccess !== false) {
-            clearComposerInput();
-          }
           steerTurnAttempt.current = undefined;
           uploadedAttachments.current.clear();
           uploadAttempts.current.clear();
@@ -266,6 +300,11 @@ export function createComposerSubmission({
         return true;
       } catch (error) {
         if (isCurrentScope(requestScope)) {
+          setQueuedPrompts(queuedPrompts);
+          composerDraftStore.update(composerScope, (current) => ({
+            ...current,
+            queuedPrompts,
+          }));
           setMutationError(error instanceof Error ? error : new Error("Prompt steering failed"));
         }
         return false;
@@ -292,6 +331,20 @@ export function createComposerSubmission({
         ? resolveIdempotencyAttempt(startTaskAttempt.current, projectId)
         : undefined;
     startTaskAttempt.current = taskAttempt;
+    const waitingPrompt =
+      options.queuedPrompt === undefined
+        ? undefined
+        : createAwaitingQueuedPrompt({ ...options.queuedPrompt, files: managedFiles }, snapshot);
+    if (waitingPrompt !== undefined) {
+      const waitingPrompts = queuedPrompts.map((prompt) =>
+        prompt.id === waitingPrompt.id ? waitingPrompt : prompt,
+      );
+      setQueuedPrompts(waitingPrompts);
+      composerDraftStore.update(composerScope, (current) => ({
+        ...current,
+        queuedPrompts: waitingPrompts,
+      }));
+    }
     try {
       const result = await startPromptTurn(client, {
         idempotencyKeys: {
@@ -313,7 +366,7 @@ export function createComposerSubmission({
         turnOptions,
       });
       if (isCurrentScope(requestScope)) {
-        if (options.clearInputOnSuccess !== false) {
+        if (options.queuedPrompt === undefined && options.clearInputOnSuccess !== false) {
           clearComposerInput();
         }
         if (turnOptions.goalMode === true) {
@@ -338,6 +391,13 @@ export function createComposerSubmission({
       return true;
     } catch (error) {
       if (isCurrentScope(requestScope)) {
+        if (waitingPrompt !== undefined) {
+          setQueuedPrompts(queuedPrompts);
+          composerDraftStore.update(composerScope, (current) => ({
+            ...current,
+            queuedPrompts,
+          }));
+        }
         setMutationError(error instanceof Error ? error : new Error("Prompt submission failed"));
       }
       return false;
@@ -351,12 +411,7 @@ export function createComposerSubmission({
   const submitPrompt = (
     message: PromptInputMessage,
     promptSkills?: readonly AgentSkill[],
-    options: Readonly<{
-      clearInputOnSuccess?: boolean;
-      forceAction?: "start" | "steer";
-      composerMode?: ComposerMode | null;
-      requestTimelineScroll?: boolean;
-    }> = {},
+    options: ComposerSubmissionRequestOptions = {},
   ): Promise<boolean> =>
     composerActionLock
       .run(() => performPromptSubmission(message, promptSkills, options))

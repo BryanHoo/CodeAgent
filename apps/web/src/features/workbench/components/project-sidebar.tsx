@@ -1,5 +1,4 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import type { AgentEventConnectionState } from "@code-agent/client";
 import {
   TEMPORARY_TASK_SCOPE_ID,
   type AgentTask,
@@ -11,6 +10,7 @@ import { PanelLeftClose, Search, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
 import { Button } from "../../../shared/components/core/button.js";
 import { Input } from "../../../shared/components/core/input.js";
 import {
@@ -19,11 +19,11 @@ import {
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
 import { useTranslation } from "../../../i18n/i18n.js";
-import { getPinnedTasks } from "../../projects/project-data.js";
 import {
   useProjectActions,
   useProjectActivity,
   useProjectData,
+  usePinnedProjectTasks,
   useProjectTaskSearch,
 } from "../../projects/project-context.js";
 import {
@@ -58,23 +58,21 @@ const primaryActionClassName =
 const primaryActionIconClassName = "size-4 shrink-0 text-muted-foreground";
 type ProjectSidebarProps = Readonly<{
   appInfo?: AppInfoResponse;
-  connectionState: AgentEventConnectionState;
   onClose: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (section: "about" | "appearance") => void;
   projectId?: string;
   taskId?: string;
 }>;
 
 export function ProjectSidebar({
   appInfo,
-  connectionState,
   onClose,
   onOpenSettings,
   projectId,
   taskId,
 }: ProjectSidebarProps) {
   const { t } = useTranslation("workbench");
-  const { client, error, isPending, projects, projectTaskStates, tasks } = useProjectData();
+  const { client, isPending, projects, projectTaskStates, tasks } = useProjectData();
   const {
     addProject,
     fetchNextProjectTaskPage,
@@ -89,8 +87,6 @@ export function ProjectSidebar({
     isProjectActionPending,
     isProjectOrderPending,
     isProjectAddPending,
-    projectActionError,
-    projectOrderError,
     taskActivity,
   } = useProjectActivity();
   const navigate = useNavigate();
@@ -117,20 +113,19 @@ export function ProjectSidebar({
   const [removingProject, setRemovingProject] = useState<Project | null>(null);
   const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false);
   const [hasSubmittedAddProject, setHasSubmittedAddProject] = useState(false);
-  const [hasSubmittedProjectAction, setHasSubmittedProjectAction] = useState(false);
-  const [taskActionError, setTaskActionError] = useState<string | null>(null);
   const pinMutation = useMutation(taskPinMutationOptions(client));
   const renameMutation = useMutation(taskRenameMutationOptions(client));
   const archiveMutation = useMutation(taskArchiveMutationOptions(client));
   const taskActionLockRef = useRef(createAsyncActionLock());
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const taskSearch = useProjectTaskSearch(normalizedQuery);
+  const pinnedTasks = usePinnedProjectTasks().filter(
+    (task) =>
+      normalizedQuery.length === 0 || task.title.toLocaleLowerCase().includes(normalizedQuery),
+  );
   const visibleTasks = normalizedQuery.length === 0 ? tasks : taskSearch.tasks;
   // 大列表只分组一次，Project 渲染不再重复扫描全部 Task。
   const tasksByProjectId = useMemo(() => groupTasksByProjectId(visibleTasks), [visibleTasks]);
-  const pinnedTasks = getPinnedTasks(visibleTasks);
-  const hasPendingTasks = [...projectTaskStates.values()].some((state) => state.isPending);
-  const hasTaskError = [...projectTaskStates.values()].some((state) => state.error !== null);
   const taskActionPending =
     pinMutation.isPending || renameMutation.isPending || archiveMutation.isPending;
   const {
@@ -246,7 +241,6 @@ export function ProjectSidebar({
 
   const pinTask = (task: AgentTask) =>
     taskActionLockRef.current.run(async () => {
-      setTaskActionError(null);
       try {
         const response = await pinMutation.mutateAsync({
           pinned: !task.pinned,
@@ -254,14 +248,13 @@ export function ProjectSidebar({
           taskId: task.id,
         });
         replaceTaskCache(response.task);
-      } catch {
-        setTaskActionError(t("sidebar.errorPinTask"));
+      } catch (error) {
+        showErrorToast(error);
       }
     });
 
   const renameTask = (task: AgentTask, title: string) =>
     taskActionLockRef.current.run(async () => {
-      setTaskActionError(null);
       try {
         const response = await renameMutation.mutateAsync({
           projectId: task.projectId,
@@ -270,14 +263,13 @@ export function ProjectSidebar({
         });
         replaceTaskCache(response.task);
         setRenamingTask(null);
-      } catch {
-        setTaskActionError(t("sidebar.errorRenameTask"));
+      } catch (error) {
+        showErrorToast(error);
       }
     });
 
   const archiveTask = (task: AgentTask) =>
     taskActionLockRef.current.run(async () => {
-      setTaskActionError(null);
       try {
         await archiveMutation.mutateAsync({ projectId: task.projectId, taskId: task.id });
         await removeArchivedProjectTaskAndRefill(queryClient, task.projectId, task.id);
@@ -293,30 +285,27 @@ export function ProjectSidebar({
         }
         removeRetainedTaskRuntime(task.projectId, task.id);
         // 归档后的 Runtime 清理由 Provider 判定安全性，失败不回滚已成功的归档。
-        void client.unsubscribeTask(task.projectId, task.id).catch(() => undefined);
-      } catch {
-        setTaskActionError(t("sidebar.errorArchiveTask"));
+        void client.unsubscribeTask(task.projectId, task.id).catch(showErrorToast);
+      } catch (error) {
+        showErrorToast(error);
       }
     });
 
   const closeProjectDialog = (targetProjectId: string) => {
     setRenamingProject(null);
     setRemovingProject(null);
-    setHasSubmittedProjectAction(false);
     requestAnimationFrame(() => {
       document.getElementById(`project-actions-${targetProjectId}`)?.focus();
     });
   };
 
   const submitProjectRename = async (project: Project, name: string) => {
-    setHasSubmittedProjectAction(true);
     if (await renameProject(project.id, name)) {
       closeProjectDialog(project.id);
     }
   };
 
   const confirmProjectRemoval = async (project: Project) => {
-    setHasSubmittedProjectAction(true);
     const remainingProjects = await removeProject(project.id);
     if (remainingProjects === undefined) {
       return;
@@ -381,13 +370,10 @@ export function ProjectSidebar({
 
       <ProjectSidebarTaskList
         archiveTask={archiveTask}
-        error={error}
         expandedProjects={expandedProjects}
         expandedTaskProjects={expandedTaskProjects}
         fetchNextProjectTaskPage={fetchNextProjectTaskPage}
         getProjectReorderProps={getProjectReorderProps}
-        hasPendingTasks={hasPendingTasks}
-        hasTaskError={hasTaskError}
         isPending={isPending}
         isProjectActionPending={isProjectActionPending}
         isProjectAddPending={isProjectAddPending}
@@ -401,11 +387,9 @@ export function ProjectSidebar({
           setIsProjectPickerOpen(true);
         }}
         onRemoveProject={(project) => {
-          setHasSubmittedProjectAction(false);
           setRemovingProject(project);
         }}
         onRenameProject={(project) => {
-          setHasSubmittedProjectAction(false);
           setRenamingProject(project);
         }}
         orderedProjects={orderedProjects}
@@ -413,12 +397,10 @@ export function ProjectSidebar({
         pinnedTasks={pinnedTasks}
         {...(projectId === undefined ? {} : { projectId })}
         projectOrderAnnouncement={projectOrderAnnouncement}
-        projectOrderError={projectOrderError}
         projectTaskStates={projectTaskStates}
         reorderingProjectId={reorderingProjectId}
         setExpandedTaskProjects={setExpandedTaskProjects}
         setRenamingTask={setRenamingTask}
-        taskActionError={taskActionError}
         taskActionPending={taskActionPending}
         taskActivity={taskActivity}
         {...(taskId === undefined ? {} : { taskId })}
@@ -456,7 +438,6 @@ export function ProjectSidebar({
 
       {renamingProject === null ? null : (
         <ProjectRenameDialog
-          error={hasSubmittedProjectAction ? (projectActionError?.message ?? null) : null}
           initialName={renamingProject.name}
           isPending={isProjectActionPending}
           key={renamingProject.id}
@@ -471,7 +452,6 @@ export function ProjectSidebar({
 
       {removingProject === null ? null : (
         <ProjectRemoveDialog
-          error={hasSubmittedProjectAction ? (projectActionError?.message ?? null) : null}
           isPending={isProjectActionPending}
           key={removingProject.id}
           onClose={() => {
@@ -484,11 +464,15 @@ export function ProjectSidebar({
         />
       )}
 
-      <div className="p-2">
+      <div className="px-2 pb-1">
         <SidebarSettingsButton
           {...(appInfo === undefined ? {} : { appInfo })}
-          connectionState={connectionState}
-          onOpen={onOpenSettings}
+          onOpenAbout={() => {
+            onOpenSettings("about");
+          }}
+          onOpenSettings={() => {
+            onOpenSettings("appearance");
+          }}
         />
       </div>
     </aside>

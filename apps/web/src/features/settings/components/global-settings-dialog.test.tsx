@@ -77,6 +77,7 @@ describe("GlobalSettingsDialog", () => {
     expect(markup).toContain("提交消息");
     expect(markup).toContain("应用集成");
     expect(markup).toContain("模型服务");
+    expect(markup).toContain('aria-label="自动模式" aria-pressed="true"');
     expect(markup).toContain('aria-label="浅色模式"');
     expect(markup).toContain('aria-label="深色模式"');
     expect(markup).toContain('aria-label="审批"');
@@ -132,6 +133,7 @@ describe("GlobalSettingsDialog", () => {
     const appInfo: AppInfoResponse = {
       appVersion: "1.3.0",
       codexVersion: "0.147.0",
+      error: null,
       latestVersion: "1.4.0",
       releaseNotes: "### 新增\n\n- 添加在线更新。",
       status: "available" as const,
@@ -190,6 +192,7 @@ describe("GlobalSettingsDialog", () => {
         appInfo={{
           appVersion: "1.3.0",
           codexVersion: "0.147.0",
+          error: null,
           latestVersion: "1.4.0",
           releaseNotes: "### 新增\n\n- 添加在线更新。",
           status: "available",
@@ -215,6 +218,7 @@ describe("GlobalSettingsDialog", () => {
     const available: AppInfoResponse = {
       appVersion: "1.3.0",
       codexVersion: "0.147.0",
+      error: null,
       latestVersion: "1.4.0",
       releaseNotes: "### 新增\n\n- 添加在线更新。",
       status: "available",
@@ -250,6 +254,7 @@ describe("GlobalSettingsDialog", () => {
         activeSection="about"
         appInfo={{
           ...available,
+          error: "offline",
           latestVersion: null,
           status: "check-failed",
           updateAvailable: false,
@@ -263,7 +268,7 @@ describe("GlobalSettingsDialog", () => {
 
     expect(updating).toContain("正在更新");
     expect(restartRequired).toContain("更新完成，重启 CodeAgent 后生效");
-    expect(checkFailed).toContain("无法检查更新");
+    expect(checkFailed).not.toContain("无法检查更新");
     expect(checkFailed).toContain("检查更新");
   });
 
@@ -319,6 +324,7 @@ describe("GlobalSettingsDialog", () => {
       expect(markup).toContain("Global settings");
       expect(markup).toContain("Approval policy");
       expect(markup).toContain("Reasoning effort");
+      expect(markup).toContain('aria-label="Automatic color mode"');
       expect(markup).toContain('aria-label="Language"');
       expect(markup).toContain("GPT-5.6 Sol");
       expect(markup).toContain(">High</option>");

@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "rootDir": "../..",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts", "tsup.config.ts"],
+  "references": [
+    { "path": "../../packages/engine-node" },
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/server" }
+  ]
+}

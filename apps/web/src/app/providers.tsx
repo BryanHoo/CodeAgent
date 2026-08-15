@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TEMPORARY_TASK_SCOPE_ID } from "@code-agent/protocol";
 import type { ReactNode } from "react";
 import { Toaster } from "sonner";
@@ -10,20 +10,31 @@ import {
   type AccessContextValue,
 } from "../features/access/access-context.js";
 import { PairingGate } from "../features/access/pairing-gate.js";
-import { codeAgentClient } from "../features/projects/project-queries.js";
+import { codeAgentClient, hostExternalUrlApi, hostNotificationApi } from "./create-host-client.js";
 import { createBrowserTaskNotifier } from "../features/notifications/browser-task-notifier.js";
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
 import { TooltipProvider } from "../shared/components/core/tooltip.js";
+import { normalizeError, showErrorToast, useErrorToast } from "../shared/errors/error-toast.js";
+import { HostExternalUrlProvider } from "../shared/host/host-external-url.js";
 import { useTranslation } from "../i18n/i18n.js";
 import { installInactiveSnapshotMemoryLimit } from "./snapshot-memory.js";
 import { router } from "./router.js";
 
 export const DEFAULT_QUERY_GC_TIME_MS = 2 * 60_000;
 
-export function createAppQueryClient() {
+type AppQueryClientOptions = Readonly<{
+  onError?: (error: Error) => void;
+}>;
+
+export function createAppQueryClient(options: AppQueryClientOptions = {}) {
+  const onError = (error: unknown) => {
+    (options.onError ?? showErrorToast)(normalizeError(error));
+  };
   const queryClient = new QueryClient({
+    mutationCache: new MutationCache({ onError }),
+    queryCache: new QueryCache({ onError }),
     defaultOptions: {
       queries: {
         gcTime: DEFAULT_QUERY_GC_TIME_MS,
@@ -38,6 +49,15 @@ export function createAppQueryClient() {
 }
 
 const queryClient = createAppQueryClient();
+const externalUrlApi = hostExternalUrlApi;
+const openHostExternalUrl =
+  externalUrlApi === undefined
+    ? undefined
+    : (url: string) => {
+        void externalUrlApi.open(url).catch((error: unknown) => {
+          showErrorToast(normalizeError(error));
+        });
+      };
 
 export function navigateToTaskFromNotification(projectId: string, taskId: string): void {
   // 交给 Router 完成应用内导航，避免整页刷新丢失瞬时弹窗状态。
@@ -48,6 +68,7 @@ export function navigateToTaskFromNotification(projectId: string, taskId: string
 
 const taskNotifier = createBrowserTaskNotifier({
   navigateToTask: navigateToTaskFromNotification,
+  nativeApi: hostNotificationApi,
 });
 
 type AppProvidersProps = Readonly<{
@@ -58,12 +79,13 @@ export function AccessControlledContent({
   access,
   children,
 }: Readonly<{ access: AccessContextValue; children: ReactNode }>) {
+  useErrorToast(access.error);
   if (access.status?.authenticated === true) {
     return children;
   }
   return (
     <PairingGate
-      error={access.error}
+      loadFailed={access.errorSource === "load"}
       loading={access.loading}
       onPair={access.pair}
       onRetry={access.retry}
@@ -99,13 +121,15 @@ export function AppProviders({ children }: AppProvidersProps) {
   // SPA 生命周期内复用同一个 QueryClient，避免导航时丢失服务端状态缓存。
   return (
     <I18nextProvider i18n={i18n}>
-      <TooltipProvider>
-        <QueryClientProvider client={queryClient}>
-          <AccessProvider client={codeAgentClient} queryClient={queryClient}>
-            <AppProviderContent>{children}</AppProviderContent>
-          </AccessProvider>
-        </QueryClientProvider>
-      </TooltipProvider>
+      <HostExternalUrlProvider open={openHostExternalUrl}>
+        <TooltipProvider>
+          <QueryClientProvider client={queryClient}>
+            <AccessProvider client={codeAgentClient} queryClient={queryClient}>
+              <AppProviderContent>{children}</AppProviderContent>
+            </AccessProvider>
+          </QueryClientProvider>
+        </TooltipProvider>
+      </HostExternalUrlProvider>
     </I18nextProvider>
   );
 }
