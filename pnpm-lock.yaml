@@ -309,6 +309,16 @@ importers:
       tsup:
         specifier: 'catalog:'
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.20)(supports-color@8.1.1)(tsx@4.23.12)(typescript@6.0.2)(yaml@2.9.0)
+    optionalDependencies:
+      '@bryanhu/code-agent-darwin-arm64':
+        specifier: 2.0.0-beta.1
+        version: link:../../packages/node-binding-darwin-arm64
+      '@bryanhu/code-agent-linux-x64-gnu':
+        specifier: 2.0.0-beta.1
+        version: link:../../packages/node-binding-linux-x64-gnu
+      '@bryanhu/code-agent-win32-x64-msvc':
+        specifier: 2.0.0-beta.1
+        version: link:../../packages/node-binding-win32-x64-msvc
 
   apps/web:
     dependencies:
