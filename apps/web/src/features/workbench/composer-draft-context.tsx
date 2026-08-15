@@ -7,6 +7,7 @@ import type { PromptSkillContent } from "./components/prompt-skill-editor.js";
 export type QueuedComposerPrompt = Readonly<{
   acknowledgedUserMessageIds: readonly string[];
   deliveryState: "awaiting_acknowledgement" | "queued";
+  deliveryTurnId?: string;
   files: readonly PromptInputAttachment[];
   id: string;
   presentation: "composer" | "queue";
@@ -161,6 +162,8 @@ function parsePersistedQueuedPrompt(value: unknown): QueuedComposerPrompt | unde
     !value["acknowledgedUserMessageIds"].every((id) => typeof id === "string") ||
     (value["deliveryState"] !== "queued" &&
       value["deliveryState"] !== "awaiting_acknowledgement") ||
+    (value["deliveryTurnId"] !== undefined &&
+      (typeof value["deliveryTurnId"] !== "string" || value["deliveryTurnId"] === "")) ||
     typeof value["id"] !== "string" ||
     value["id"] === "" ||
     (value["presentation"] !== "queue" && value["presentation"] !== "composer") ||
@@ -171,6 +174,9 @@ function parsePersistedQueuedPrompt(value: unknown): QueuedComposerPrompt | unde
   return {
     acknowledgedUserMessageIds: value["acknowledgedUserMessageIds"],
     deliveryState: value["deliveryState"],
+    ...(typeof value["deliveryTurnId"] === "string"
+      ? { deliveryTurnId: value["deliveryTurnId"] }
+      : {}),
     files,
     id: value["id"],
     presentation: value["presentation"],

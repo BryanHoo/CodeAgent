@@ -62,7 +62,8 @@ describe("ComposerDraftStore", () => {
       queuedPrompts: [
         {
           acknowledgedUserMessageIds: [],
-          deliveryState: "queued",
+          deliveryState: "awaiting_acknowledgement",
+          deliveryTurnId: "turn-running",
           files: [
             {
               attachment,
@@ -82,6 +83,8 @@ describe("ComposerDraftStore", () => {
 
     expect(createComposerDraftStore(storage).read(scope).queuedPrompts).toEqual([
       expect.objectContaining({
+        deliveryState: "awaiting_acknowledgement",
+        deliveryTurnId: "turn-running",
         files: [expect.objectContaining({ attachment, source: "host" })],
         id: "queued-persisted",
         text: "刷新后继续发送",

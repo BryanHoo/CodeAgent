@@ -5,7 +5,11 @@ import type { QueuedComposerPrompt } from "./composer-draft-context.js";
 import type { PromptSkillContent } from "./components/prompt-skill-editor.js";
 
 type QueueSnapshot = Readonly<{
-  turns: readonly Readonly<{ items: readonly AgentItem[] }>[];
+  turns: readonly Readonly<{
+    id?: string;
+    items: readonly AgentItem[];
+    status?: "completed" | "failed" | "interrupted" | "running";
+  }>[];
 }>;
 type UserMessage = Extract<AgentItem, { type: "message" }> & Readonly<{ role: "user" }>;
 
@@ -46,12 +50,23 @@ function matchingUserMessageIds(
 export function createAwaitingQueuedPrompt(
   prompt: QueuedComposerPrompt,
   snapshot: QueueSnapshot | undefined,
+  deliveryTurnId?: string,
 ): QueuedComposerPrompt {
   return {
     ...prompt,
     acknowledgedUserMessageIds: matchingUserMessageIds(prompt, snapshot),
     deliveryState: "awaiting_acknowledgement",
+    ...(deliveryTurnId === undefined ? {} : { deliveryTurnId }),
   };
+}
+
+function deliveryTurnFinishedWithoutAcknowledgement(
+  prompt: QueuedComposerPrompt,
+  snapshot: QueueSnapshot | undefined,
+): boolean {
+  if (prompt.deliveryTurnId === undefined || snapshot === undefined) return false;
+  const deliveryTurn = snapshot.turns.find((turn) => turn.id === prompt.deliveryTurnId);
+  return deliveryTurn?.status === "failed" || deliveryTurn?.status === "interrupted";
 }
 
 export function reconcileAcknowledgedQueuedPrompts(
@@ -62,19 +77,34 @@ export function reconcileAcknowledgedQueuedPrompts(
   prompts: readonly QueuedComposerPrompt[];
 }> {
   let acknowledgedComposerPrompt = false;
-  const remaining = prompts.filter((prompt) => {
-    if (prompt.deliveryState !== "awaiting_acknowledgement") return true;
+  let changed = false;
+  const remaining: QueuedComposerPrompt[] = [];
+  for (const prompt of prompts) {
+    if (prompt.deliveryState !== "awaiting_acknowledgement") {
+      remaining.push(prompt);
+      continue;
+    }
     const acknowledgedIds = new Set(prompt.acknowledgedUserMessageIds);
     const acknowledged = matchingUserMessageIds(prompt, snapshot).some(
       (itemId) => !acknowledgedIds.has(itemId),
     );
-    if (!acknowledged) return true;
+    if (acknowledged) {
+      changed = true;
+      acknowledgedComposerPrompt ||= prompt.presentation === "composer";
+      continue;
+    }
+    if (!deliveryTurnFinishedWithoutAcknowledgement(prompt, snapshot)) {
+      remaining.push(prompt);
+      continue;
+    }
+
+    changed = true;
+    // Turn 终态关闭了确认窗口；steer 已被服务端接受，不能因缺少 Item 再次重复投递。
     acknowledgedComposerPrompt ||= prompt.presentation === "composer";
-    return false;
-  });
+  }
   return {
     acknowledgedComposerPrompt,
-    prompts: remaining.length === prompts.length ? prompts : remaining,
+    prompts: changed ? remaining : prompts,
   };
 }
 

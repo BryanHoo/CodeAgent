@@ -121,4 +121,26 @@ describe("composer queue acknowledgement", () => {
       }),
     ).toEqual({ acknowledgedComposerPrompt: true, prompts: [] });
   });
+
+  it("settles an unacknowledged steer after its target turn is interrupted", () => {
+    const waitingPrompt = {
+      ...createAwaitingQueuedPrompt(queuedPrompt, undefined),
+      deliveryTurnId: "turn-running",
+    };
+
+    expect(
+      reconcileAcknowledgedQueuedPrompts([waitingPrompt], {
+        turns: [
+          {
+            id: "turn-running",
+            items: [],
+            status: "interrupted",
+          },
+        ],
+      }),
+    ).toEqual({
+      acknowledgedComposerPrompt: false,
+      prompts: [],
+    });
+  });
 });

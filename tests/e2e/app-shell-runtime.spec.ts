@@ -1250,6 +1250,57 @@ test("queues follow-up messages and can steer or cancel them during an active tu
   await expect(nextTurn).toHaveAttribute("data-status", "completed");
 });
 
+test("recovers a queued steer when its target turn is interrupted before acknowledgement", async ({
+  page,
+}) => {
+  await page.unroute("**/v1/**");
+  await page.goto("/p/code-agent");
+  const input = page.getByRole("textbox", { name: "任务输入" });
+  await input.fill("等待中断");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await expect(page.getByRole("button", { exact: true, name: "停止" })).toBeVisible();
+
+  await page.route("**/v1/projects/code-agent/tasks/*/turns/*/steer", async (route) => {
+    const pathParts = new URL(route.request().url()).pathname.split("/");
+    const payload = route.request().postDataJSON() as { taskId: string };
+    await route.fulfill({
+      contentType: "application/json",
+      json: { status: "accepted", taskId: payload.taskId, turnId: pathParts[7] ?? "" },
+      status: 202,
+    });
+  });
+  await input.fill("中断后继续发送");
+  await page.getByRole("button", { name: "排队消息" }).click();
+  await page.getByRole("button", { name: "立即引导：中断后继续发送" }).click();
+  await expect(page.getByText("等待发送", { exact: true })).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const queueKey = Array.from({ length: localStorage.length }, (_, index) =>
+          localStorage.key(index),
+        ).find((key) => key?.startsWith("code-agent.composer-queue."));
+        if (queueKey === undefined || queueKey === null) return undefined;
+        const persistedValue = localStorage.getItem(queueKey);
+        if (persistedValue === null) return undefined;
+        const persisted = JSON.parse(persistedValue) as {
+          queuedPrompts?: readonly { deliveryTurnId?: string }[];
+        };
+        return persisted.queuedPrompts?.[0]?.deliveryTurnId;
+      }),
+    )
+    .toBe("turn-action-1");
+
+  await page.getByRole("button", { exact: true, name: "停止" }).click();
+  await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "interrupted");
+  await expect(page.getByText("等待发送", { exact: true })).toHaveCount(0);
+
+  await input.fill("停止后再次发送");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  const nextTurn = page.getByLabel("Turn 2");
+  await expect(nextTurn.getByText("停止后再次发送", { exact: true })).toBeVisible();
+  await expect(nextTurn).toHaveAttribute("data-status", "completed");
+});
+
 test("submits a prompt and streams the completed reply @cross-browser", async ({ page }) => {
   await page.unroute("**/v1/**");
   await page.goto("/p/code-agent");
