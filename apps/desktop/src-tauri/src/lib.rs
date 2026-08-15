@@ -29,7 +29,7 @@ use lifecycle::DesktopLifecycle;
 use platform_adapters::{
     CodexSupervisor, DesktopHostPorts, DesktopProvider, start_codex_supervisor,
 };
-use process_environment::resolved_process_path;
+use process_environment::{immediate_process_path, resolved_process_path};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -52,23 +52,23 @@ pub fn run() {
             std::fs::create_dir_all(&data_root)?;
             let temporary_project_root = data_root.join("temporary-workspace");
             std::fs::create_dir_all(&temporary_project_root)?;
-            let database = PlatformDatabase::open(DatabaseOptions {
+            let database = PlatformDatabase::open_deferred(DatabaseOptions {
                 path: data_root.join("state.sqlite3"),
                 queue_capacity: 64,
                 request_timeout: Duration::from_secs(5),
             })?;
             let repository: Arc<dyn RepositoryPort> =
                 Arc::new(SqliteRepository::new(database.clone()));
-            let host_process_path = tauri::async_runtime::block_on(resolved_process_path());
+            let host_process_path = immediate_process_path();
             let host_environment = ProcessEnvironment::capture_with_path(host_process_path.clone());
+            let background_host_environment = host_environment.clone();
             let file: Arc<dyn FilePort> = Arc::new(PlatformFilePort::new(
                 database.clone(),
                 host_environment.clone(),
             ));
             let git: Arc<dyn GitPort> = Arc::new(GitCliService::new(database, host_environment));
-            let attachment: Arc<dyn AttachmentPort> = Arc::new(tauri::async_runtime::block_on(
-                AttachmentStore::new(data_root.join("attachments")),
-            )?);
+            let attachment: Arc<dyn AttachmentPort> =
+                Arc::new(AttachmentStore::new(data_root.join("attachments"))?);
             let host = Arc::new(DesktopHostPorts);
             let provider_slot = Arc::new(DesktopProvider::default());
             let provider: Arc<dyn ProviderPort> = provider_slot.clone();
@@ -104,14 +104,19 @@ pub fn run() {
 
             // Provider 启动失败只更新诊断，不能阻塞主窗口创建。
             let resource_directory = app.path().resource_dir()?;
-            tauri::async_runtime::spawn(start_codex_supervisor(
-                provider_slot,
-                supervisor,
-                env!("CARGO_PKG_VERSION").to_owned(),
-                resource_directory,
-                codex_home,
-                host_process_path,
-            ));
+            tauri::async_runtime::spawn(async move {
+                let host_process_path = resolved_process_path().await;
+                background_host_environment.replace_path(host_process_path.clone());
+                start_codex_supervisor(
+                    provider_slot,
+                    supervisor,
+                    env!("CARGO_PKG_VERSION").to_owned(),
+                    resource_directory,
+                    codex_home,
+                    host_process_path,
+                )
+                .await;
+            });
             Ok(())
         })
         .register_asynchronous_uri_scheme_protocol(

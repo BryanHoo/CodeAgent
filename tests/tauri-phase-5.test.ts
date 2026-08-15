@@ -88,6 +88,10 @@ describe("Tauri Phase 5 repository contract", () => {
 
     expect(desktop.match(/resolved_process_path\(/gu)).toHaveLength(1);
     expect(desktop).toContain("ProcessEnvironment::capture_with_path");
+    expect(desktop).toContain("immediate_process_path()");
+    expect(desktop).toContain(".replace_path(host_process_path.clone())");
+    expect(desktop).not.toContain("block_on(resolved_process_path())");
+    expect(desktop).not.toMatch(/block_on\(\s*AttachmentStore::new/u);
     expect(desktop).toMatch(
       /PlatformFilePort::new\(\s*database\.clone\(\),\s*host_environment\.clone\(\),?\s*\)/u,
     );

@@ -3,7 +3,7 @@ use std::{
     path::Path,
     process::Stdio,
     sync::{
-        Arc,
+        Arc, RwLock,
         atomic::{AtomicUsize, Ordering},
     },
     time::Duration,
@@ -16,6 +16,7 @@ use tokio::{
 };
 
 const MAX_OUTPUT_BYTES: usize = 10 * 1024 * 1024;
+type ProcessVariables = Arc<[(OsString, OsString)]>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum GitCommandKind {
@@ -39,7 +40,7 @@ pub struct ProcessOutput {
 
 #[derive(Clone, Debug)]
 pub struct ProcessEnvironment {
-    variables: Arc<[(OsString, OsString)]>,
+    variables: Arc<RwLock<ProcessVariables>>,
 }
 
 impl ProcessEnvironment {
@@ -58,25 +59,42 @@ impl ProcessEnvironment {
         K: Into<OsString>,
         V: Into<OsString>,
     {
+        let variables = variables
+            .into_iter()
+            .map(|(key, value)| (key.into(), value.into()))
+            .collect::<ProcessVariables>();
         Self {
-            variables: variables
-                .into_iter()
-                .map(|(key, value)| (key.into(), value.into()))
-                .collect(),
+            variables: Arc::new(RwLock::new(variables)),
         }
+    }
+
+    pub fn replace_path(&self, path: OsString) {
+        let variables = self.variables();
+        let updated = variables
+            .iter()
+            .filter(|(key, _)| !environment_key_matches(key, "PATH"))
+            .cloned()
+            .chain(std::iter::once((OsString::from("PATH"), path)))
+            .collect::<ProcessVariables>();
+        *self
+            .variables
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = updated;
     }
 
     pub(crate) fn apply(&self, command: &mut Command) {
         // 清空继承环境后应用快照，避免调用期间的进程环境变化绕过注入边界。
+        let variables = self.variables();
         command
             .env_clear()
-            .envs(self.variables.iter().map(|(key, value)| (key, value)));
+            .envs(variables.iter().map(|(key, value)| (key, value)));
     }
 
-    pub(crate) fn utf8_variables(&self) -> impl Iterator<Item = (&str, &str)> {
+    pub(crate) fn variables(&self) -> ProcessVariables {
         self.variables
-            .iter()
-            .filter_map(|(key, value)| Some((key.to_str()?, value.to_str()?)))
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 }
 
@@ -214,6 +232,7 @@ fn capacity(message: &'static str) -> CodeAgentError {
 
 #[cfg(all(test, unix))]
 mod tests {
+    use std::ffi::OsString;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::time::Duration;
@@ -226,6 +245,29 @@ mod tests {
     fn push_uses_a_longer_bounded_timeout() {
         assert_eq!(GitCommandKind::Local.timeout(), Duration::from_secs(10));
         assert_eq!(GitCommandKind::Push.timeout(), Duration::from_secs(45));
+    }
+
+    #[test]
+    fn cloned_environment_observes_replaced_path() {
+        let environment = ProcessEnvironment::from_variables([
+            ("PATH", "/inherited/bin"),
+            ("CODE_AGENT_TEST_MARKER", "preserved"),
+        ]);
+        let cloned = environment.clone();
+
+        environment.replace_path(OsString::from("/resolved/bin"));
+
+        let variables = cloned.variables();
+        assert!(
+            variables
+                .iter()
+                .any(|(key, value)| key == "PATH" && value == "/resolved/bin")
+        );
+        assert!(
+            variables
+                .iter()
+                .any(|(key, value)| { key == "CODE_AGENT_TEST_MARKER" && value == "preserved" })
+        );
     }
 
     #[tokio::test]

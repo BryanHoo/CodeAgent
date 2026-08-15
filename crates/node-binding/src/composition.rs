@@ -79,7 +79,6 @@ pub async fn open_runtime(options: NodeEngineOptions) -> napi::Result<NodeRuntim
     let git: Arc<dyn GitPort> = Arc::new(GitCliService::new(database.clone(), process_environment));
     let attachment: Arc<dyn AttachmentPort> = Arc::new(
         AttachmentStore::new(attachment_root)
-            .await
             .map_err(|error| napi::Error::from_reason(error.to_string()))?,
     );
     let process = Arc::new(

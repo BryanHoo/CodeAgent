@@ -12,6 +12,7 @@ function read(path: string): string {
 describe("Tauri Phase 4 repository contract", () => {
   it("owns SQLite on one dedicated thread with a bounded queue", () => {
     const database = read("crates/platform/src/database.rs");
+    const desktop = read("apps/desktop/src-tauri/src/lib.rs");
 
     expect(database).toContain('name("code-agent-sqlite"');
     expect(database).toContain("mpsc::sync_channel::<DatabaseJob>");
@@ -19,6 +20,8 @@ describe("Tauri Phase 4 repository contract", () => {
     expect(database).toContain("connection.backup");
     expect(database).toContain("PRAGMA foreign_key_check");
     expect(database).not.toContain("unbounded_channel");
+    expect(desktop).toContain("PlatformDatabase::open_deferred");
+    expect(desktop).not.toContain("PlatformDatabase::open(DatabaseOptions");
   });
 
   it("uses raw attachment IPC and opaque asset URLs without base64", () => {

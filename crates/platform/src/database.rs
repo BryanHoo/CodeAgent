@@ -11,7 +11,8 @@ use thiserror::Error;
 
 use crate::migrations::MIGRATIONS;
 
-type DatabaseJob = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
+type DatabaseJob =
+    Box<dyn for<'connection> FnOnce(Result<&'connection mut Connection, PlatformError>) + Send>;
 
 #[derive(Clone, Debug)]
 pub struct DatabaseOptions {
@@ -76,6 +77,12 @@ pub struct PlatformDatabase {
 
 impl PlatformDatabase {
     pub fn open(options: DatabaseOptions) -> Result<Self, PlatformError> {
+        let database = Self::open_deferred(options)?;
+        database.call(|_| Ok(()))?;
+        Ok(database)
+    }
+
+    pub fn open_deferred(options: DatabaseOptions) -> Result<Self, PlatformError> {
         if !options.path.is_absolute() {
             return Err(PlatformError::InvalidOptions(
                 "path must be absolute".to_owned(),
@@ -86,29 +93,12 @@ impl PlatformDatabase {
                 "queue capacity and timeout must be positive".to_owned(),
             ));
         }
-        if let Some(parent) = options.path.parent() {
-            fs::create_dir_all(parent)?;
-        }
 
         let (sender, receiver) = mpsc::sync_channel::<DatabaseJob>(options.queue_capacity);
-        let (ready_sender, ready_receiver) = mpsc::sync_channel(1);
         let path = options.path.clone();
         let join = thread::Builder::new()
             .name("code-agent-sqlite".to_owned())
-            .spawn(move || match open_connection(&path) {
-                Ok(mut connection) => {
-                    let _ = ready_sender.send(Ok(()));
-                    while let Ok(job) = receiver.recv() {
-                        job(&mut connection);
-                    }
-                }
-                Err(error) => {
-                    let _ = ready_sender.send(Err(error));
-                }
-            })?;
-        ready_receiver
-            .recv_timeout(options.request_timeout)
-            .map_err(|_| PlatformError::Timeout)??;
+            .spawn(move || run_database_worker(&path, receiver))?;
 
         Ok(Self {
             inner: Arc::new(DatabaseInner {
@@ -172,8 +162,8 @@ impl PlatformDatabase {
         F: FnOnce(&mut Connection) -> Result<T, PlatformError> + Send + 'static,
     {
         let (response_sender, response_receiver) = mpsc::sync_channel(1);
-        let job = Box::new(move |connection: &mut Connection| {
-            let _ = response_sender.send(operation(connection));
+        let job = Box::new(move |connection: Result<&mut Connection, PlatformError>| {
+            let _ = response_sender.send(connection.and_then(operation));
         });
         let sender = self
             .inner
@@ -194,7 +184,27 @@ impl PlatformDatabase {
     }
 }
 
+fn run_database_worker(path: &Path, receiver: mpsc::Receiver<DatabaseJob>) {
+    match open_connection(path) {
+        Ok(mut connection) => {
+            while let Ok(job) = receiver.recv() {
+                job(Ok(&mut connection));
+            }
+        }
+        Err(error) => {
+            let message = error.to_string();
+            // 初始化失败后仍消费有界队列，让每个请求立即得到同一可诊断错误。
+            while let Ok(job) = receiver.recv() {
+                job(Err(PlatformError::Worker(message.clone())));
+            }
+        }
+    }
+}
+
 fn open_connection(path: &Path) -> Result<Connection, PlatformError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
     let existed = path.metadata().is_ok_and(|metadata| metadata.len() > 0);
     let mut connection = Connection::open(path)?;
     connection.busy_timeout(Duration::from_millis(5_000))?;

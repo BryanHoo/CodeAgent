@@ -1,6 +1,7 @@
 //! SQLite、Git、文件系统与附件平台端口实现边界。
 
 mod attachment_open;
+mod attachment_root;
 mod attachment_validation;
 mod attachments;
 mod database;

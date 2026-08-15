@@ -3,8 +3,8 @@ use std::{collections::HashSet, path::Path};
 use crate::process::ProcessEnvironment;
 
 use super::{
-    Arguments, OpenApp, OpenCommand, OpenTarget, Platform, launch, resolve_commands,
-    resolve_commands_with_environment,
+    Arguments, OpenApp, OpenCommand, OpenTarget, Platform, launch, map_launch_status,
+    resolve_commands, resolve_commands_with_environment,
 };
 
 fn existing(paths: &[&str]) -> impl Fn(&Path) -> bool {
@@ -114,6 +114,26 @@ fn injected_environment_controls_linux_app_discovery() {
 }
 
 #[test]
+fn replaced_environment_controls_later_app_discovery() {
+    let environment = ProcessEnvironment::from_variables([("PATH", "/inherited-tools")]);
+    environment.replace_path("/resolved-tools".into());
+
+    let commands = resolve_commands_with_environment(
+        Platform::Linux,
+        &environment,
+        &existing(&["/resolved-tools/code"]),
+    );
+
+    assert_eq!(
+        commands
+            .iter()
+            .map(|command| command.app.id)
+            .collect::<Vec<_>>(),
+        ["visual-studio-code"]
+    );
+}
+
+#[test]
 fn detects_windows_apps_and_uses_broker_launch_semantics() {
     let commands = resolve_commands(
         Platform::Windows,
@@ -192,8 +212,8 @@ async fn broker_launch_does_not_report_a_fast_nonzero_proxy_exit() {
 }
 
 #[cfg(unix)]
-#[tokio::test]
-async fn observed_launch_preserves_process_stderr() {
+#[test]
+fn observed_launch_result_preserves_process_stderr() {
     let root = std::env::temp_dir().join(format!("code-agent-open-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).expect("create open fixture");
     let executable = root.join("failing-open");
@@ -208,26 +228,11 @@ async fn observed_launch_preserves_process_stderr() {
         .permissions();
     permissions.set_mode(0o755);
     std::fs::set_permissions(&executable, permissions).expect("make open fixture executable");
-    let command = OpenCommand {
-        app: OpenApp {
-            id: "test",
-            kind: "editor",
-            name: "Test",
-        },
-        program: executable.to_string_lossy().into_owned(),
-        arguments: Arguments::Absolute,
-        observe_early_exit: true,
-        file_only: false,
-    };
-
-    let error = launch(
-        &command,
-        &OpenTarget::directory("/tmp"),
-        Path::new("/tmp"),
-        None,
-    )
-    .await
-    .expect_err("failed launch must preserve stderr");
+    let output = std::process::Command::new(&executable)
+        .output()
+        .expect("run failing open fixture");
+    let error = map_launch_status(output.status, &output.stderr)
+        .expect_err("failed launch must preserve stderr");
 
     std::fs::remove_dir_all(root).expect("remove open fixture");
     assert_eq!(error.message(), "Unable to open target with selected app");

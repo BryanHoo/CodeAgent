@@ -20,6 +20,7 @@ use uuid::Uuid;
 
 use crate::{
     attachment_open::default_open_command,
+    attachment_root::AttachmentRoot,
     attachment_validation::{infer_media_type, validate_upload},
 };
 
@@ -86,20 +87,14 @@ struct AttachmentState {
 
 #[derive(Clone)]
 pub struct AttachmentStore {
-    root: Arc<PathBuf>,
+    root: Arc<AttachmentRoot>,
     state: Arc<Mutex<AttachmentState>>,
 }
 
 impl AttachmentStore {
-    pub async fn new(root: impl AsRef<Path>) -> Result<Self, CodeAgentError> {
-        tokio::fs::create_dir_all(root.as_ref())
-            .await
-            .map_err(|_| internal("attachment root could not be created"))?;
-        let root = tokio::fs::canonicalize(root.as_ref())
-            .await
-            .map_err(|_| internal("attachment root could not be resolved"))?;
+    pub fn new(root: impl AsRef<Path>) -> Result<Self, CodeAgentError> {
         Ok(Self {
-            root: Arc::new(root),
+            root: Arc::new(AttachmentRoot::new(root)?),
             state: Arc::new(Mutex::new(AttachmentState::default())),
         })
     }
@@ -111,7 +106,7 @@ impl AttachmentStore {
     ) -> Result<AgentAttachment, CodeAgentError> {
         validate_upload(&upload)?;
         let id = Uuid::new_v4().to_string();
-        let path = self.root.join(&id);
+        let path = self.root.resolve().await?.join(&id);
         let size = upload.bytes.len();
         let mut state = self.state.lock().await;
         if state.total_bytes.saturating_add(size) > MAX_TOTAL_BYTES {
@@ -235,7 +230,16 @@ impl AttachmentStore {
                 .collect::<Vec<_>>();
             remove_entries(&mut state, ids)
         };
-        remove_files(self.root.as_path(), entries).await
+        self.remove_files(entries).await
+    }
+
+    async fn remove_files(&self, entries: Vec<StoredAttachment>) -> Result<(), CodeAgentError> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+        self.root
+            .remove_files(entries.into_iter().map(|entry| entry.path).collect())
+            .await
     }
 }
 
@@ -250,21 +254,6 @@ fn remove_entries(state: &mut AttachmentState, ids: Vec<String>) -> Vec<StoredAt
         }
     }
     removed
-}
-
-async fn remove_files(root: &Path, entries: Vec<StoredAttachment>) -> Result<(), CodeAgentError> {
-    for entry in entries {
-        // path 只来自随机 ID，删除前仍验证位于 canonical 受管根内。
-        if entry.path.parent() != Some(root) {
-            return Err(internal("attachment cleanup escaped managed root"));
-        }
-        match tokio::fs::remove_file(entry.path).await {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(internal("attachment cleanup failed")),
-        }
-    }
-    Ok(())
 }
 
 #[async_trait]
@@ -380,7 +369,7 @@ impl AttachmentPort for AttachmentStore {
                 .collect::<Vec<_>>();
             remove_entries(&mut state, ids)
         };
-        remove_files(self.root.as_path(), entries).await
+        self.remove_files(entries).await
     }
 
     async fn read(

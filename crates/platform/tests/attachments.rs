@@ -6,13 +6,10 @@ use code_agent_protocol::{AgentAttachmentKind, ProjectId, TaskId};
 
 #[tokio::test]
 async fn attachment_store_enforces_content_and_project_ownership() {
-    let root = std::env::temp_dir().join(format!(
-        "code-agent-attachments-{}-{}",
-        std::process::id(),
-        std::thread::current().name().unwrap_or("test")
-    ));
-    fs::create_dir_all(&root).expect("attachment root");
-    let store = AttachmentStore::new(&root).await.expect("store");
+    let root =
+        std::env::temp_dir().join(format!("code-agent-attachments-{}", uuid::Uuid::new_v4()));
+    let store = AttachmentStore::new(&root).expect("store");
+    assert!(!root.exists());
     let attachment = store
         .add(
             "project-a",
@@ -25,6 +22,7 @@ async fn attachment_store_enforces_content_and_project_ownership() {
         )
         .await
         .expect("upload");
+    assert!(root.is_dir());
 
     assert_eq!(attachment.size.get(), 8);
     assert_eq!(
@@ -62,8 +60,7 @@ async fn attachment_store_should_bind_atomically_and_release_turn() {
         "code-agent-attachment-lifecycle-{}",
         uuid::Uuid::new_v4()
     ));
-    fs::create_dir_all(&root).expect("attachment root");
-    let store = AttachmentStore::new(&root).await.expect("store");
+    let store = AttachmentStore::new(&root).expect("store");
     let project_id = ProjectId::try_from("project-a").expect("project id");
     let task_id = TaskId::try_from("task-a").expect("task id");
     let context = PortRequestContext::new("attachment-lifecycle");
