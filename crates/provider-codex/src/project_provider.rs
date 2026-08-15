@@ -294,6 +294,14 @@ impl ProjectProviderPort for CodexProjectProvider {
         self.unsubscribe_task_impl(task_id).await
     }
 
+    async fn restore_task_subscription(
+        &self,
+        task_id: &str,
+        _context: &PortRequestContext,
+    ) -> Result<bool, CodeAgentError> {
+        self.restore_task_subscription_impl(task_id).await
+    }
+
     async fn start_turn(
         &self,
         task_id: &str,

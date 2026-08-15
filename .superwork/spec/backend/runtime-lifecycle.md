@@ -11,6 +11,7 @@
 - 使用参数数组、`shell: false` 和经过控制的环境变量；Secret 不进入参数或日志。
 - 子进程不消费输入时必须将 stdin 配置为 `ignore`；确需 `pipe` 写入时必须监听写端错误，避免进程提前退出产生未处理的 `EPIPE`。
 - 所有 RPC 设置超时；子进程退出时统一 Reject Pending RPC，并清理 Listener。
+- Desktop supervisor 必须持续监管 App Server；异常退出或握手失败后使用有上限指数退避重启，稳定运行后重置退避。新进程完成握手后必须重建已初始化 Project、恢复已知 Task 的 `thread/resume` 订阅，并让 Runtime 已持有的 Project 事件订阅继续接收新进程事件；应用关闭必须取消待重启计时，禁止再次拉起进程。
 - App Server 初始化必须启用 experimental API；后台终端只通过 `thread/backgroundTerminals/list` 获取，并在 Provider 边界把原生 `processId` 映射为不透明 Terminal ID。停止单个终端固定调用 `thread/backgroundTerminals/terminate`，不能用 `turn/interrupt` 代替。
 - JSONL 字节流必须跨 Buffer 分片保留 UTF-8 解码状态，不得逐块独立转码；完整帧和未完成 Buffer 必须按原始 UTF-8 字节分别执行 `64 MiB` 有界限制，以接收原生 `imageGeneration` 的单帧 Base64 结果，超限立即关闭连接；协议错误只能记录帧长度、类型或安全摘要，禁止携带原始帧内容。
 - JSONL 中同时包含 `id` 与 `method` 的合法帧按服务端请求分发，并使用原 `id` 返回结果；未支持的方法返回 `-32601`，非法参数返回 `-32602`，不得让 Codex 无限等待。

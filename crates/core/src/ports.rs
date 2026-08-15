@@ -449,6 +449,14 @@ pub trait ProjectProviderPort: Send + Sync {
         task_id: &str,
         context: &PortRequestContext,
     ) -> Result<String, CodeAgentError>;
+    /// Provider 进程重建后恢复已知 Task 的原生加载与事件订阅。
+    async fn restore_task_subscription(
+        &self,
+        task_id: &str,
+        context: &PortRequestContext,
+    ) -> Result<bool, CodeAgentError> {
+        Ok(self.read_task(task_id, context).await?.is_some())
+    }
     async fn start_turn(
         &self,
         task_id: &str,

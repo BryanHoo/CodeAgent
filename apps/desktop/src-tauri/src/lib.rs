@@ -1,6 +1,9 @@
 mod asset_protocol;
+mod codex_supervisor;
 mod command_error;
 mod commands;
+mod desktop_project_provider;
+mod desktop_provider;
 mod lifecycle;
 mod platform_adapters;
 mod process_environment;
