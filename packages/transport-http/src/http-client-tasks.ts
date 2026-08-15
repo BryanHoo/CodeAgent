@@ -5,6 +5,7 @@ import {
   AgentTaskPageSchema,
   AgentTaskSettingsResponseSchema,
   AgentTaskSnapshotResponseSchema,
+  AgentTurnPageSchema,
   ArchiveAgentTaskResponseSchema,
   CompactAgentTaskResponseSchema,
   ForkAgentTaskResponseSchema,
@@ -28,6 +29,7 @@ import {
   type AgentTaskSettingsResponse,
   type AgentTaskSnapshotResponse,
   type AgentTurnOptions,
+  type AgentTurnPage,
   type ArchiveAgentTaskResponse,
   type CompactAgentTaskResponse,
   type ForkAgentTaskResponse,
@@ -80,6 +82,16 @@ export class TaskHttpClient extends ProjectHttpClient {
     options: ReadOptions = {},
   ): Promise<AgentTaskSnapshotResponse> {
     return this.read(taskPath(projectId, taskId), AgentTaskSnapshotResponseSchema, options);
+  }
+
+  public async listTaskTurns(
+    projectId: string,
+    taskId: string,
+    cursor?: string,
+    options: ReadOptions = {},
+  ): Promise<AgentTurnPage> {
+    const path = appendQuery(`${taskPath(projectId, taskId)}/turns`, { cursor });
+    return this.read(path, AgentTurnPageSchema, options);
   }
 
   public getTaskAttachmentUrl(projectId: string, taskId: string, attachmentId: string): string {

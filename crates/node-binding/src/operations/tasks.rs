@@ -48,6 +48,25 @@ impl NodeEngine {
     }
 
     #[napi]
+    pub async fn task_turn_list(
+        &self,
+        request_id: String,
+        project: String,
+        task: String,
+        cursor: Option<String>,
+    ) -> napi::Result<Value> {
+        self.runtime()
+            .list_agent_task_turns(
+                &request_id,
+                &project_id(&project)?,
+                &task,
+                cursor.as_deref(),
+            )
+            .await
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
     pub async fn turn_start(
         &self,
         request_id: String,

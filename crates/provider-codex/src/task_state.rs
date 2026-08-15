@@ -248,6 +248,7 @@ pub(crate) fn empty_snapshot(task: Value) -> Value {
     snapshot["plan"] = Value::Null;
     snapshot["status"] = Value::String("idle".to_string());
     snapshot["turns"] = json!([]);
+    snapshot["turnsNextCursor"] = Value::Null;
     snapshot
 }
 

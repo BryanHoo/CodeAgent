@@ -218,6 +218,29 @@ describe("createCodeAgentServer", () => {
     await app.close();
   });
 
+  it("forwards task turn pagination cursors", async () => {
+    const page = { data: [], nextCursor: null };
+    const taskTurnList = vi.fn(() => Promise.resolve(page));
+    const app = await createCodeAgentServer(
+      createOptions(createEngine({ close: () => Promise.resolve(), taskTurnList })),
+    );
+
+    const response = await app.inject({
+      headers: { host: "localhost" },
+      url: "/v1/projects/code-agent/tasks/task-1/turns?cursor=older%2Fvalue",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(page);
+    expect(taskTurnList).toHaveBeenCalledWith(
+      expect.any(String),
+      "code-agent",
+      "task-1",
+      "older/value",
+    );
+    await app.close();
+  });
+
   it("preserves unknown engine error messages", async () => {
     const taskRead = vi.fn(() => Promise.reject(new Error("git: fatal: remote rejected")));
     const app = await createCodeAgentServer(

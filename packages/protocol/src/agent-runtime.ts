@@ -7,7 +7,12 @@ import {
   ProjectSchema,
   type Project,
 } from "./project-files.js";
-import { AgentSkillSchema, AgentTurnSchema, type AgentSkill } from "./agent-task.js";
+import {
+  AgentSkillSchema,
+  AgentTurnSchema,
+  type AgentSkill,
+  type AgentTurn,
+} from "./agent-task.js";
 import {
   AgentContextUsageSchema,
   AgentModelSchema,
@@ -382,6 +387,7 @@ export const AgentTaskSnapshotSchema = Type.Object(
     status: Type.Union([Type.Literal("idle"), Type.Literal("running"), Type.Literal("failed")]),
     title: Type.String({ minLength: 1 }),
     turns: Type.Array(AgentTurnSchema),
+    turnsNextCursor: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     updatedAt: DateTimeSchema,
   },
   { additionalProperties: false },
@@ -403,6 +409,9 @@ function createPageSchema<T extends TSchema>(itemSchema: T) {
     { additionalProperties: false },
   );
 }
+
+export const AgentTurnPageSchema = createPageSchema(AgentTurnSchema);
+export type AgentTurnPage = Page<AgentTurn>;
 
 export const ProjectPageSchema = createPageSchema(ProjectSchema);
 export type ProjectPage = Page<Project>;

@@ -54,6 +54,12 @@ const snapshot: RuntimeTaskSnapshot = {
   updatedAt: "2026-07-24T00:01:00.000Z",
 };
 
+const runtimeHistoryDefaults = {
+  hasPreviousTurns: false,
+  isLoadingPreviousTurns: false,
+  loadPreviousTurns: () => Promise.resolve(),
+};
+
 describe("completed turn process aggregation", () => {
   it("keeps a 10,000-operation turn intact while deriving its collapsed summary", () => {
     const completedCommands = Array.from({ length: 9_980 }, (_, index) => ({
@@ -100,11 +106,6 @@ describe("completed turn process aggregation", () => {
     expect(process.failedOperationCount).toBe(2);
     expect(process.fileCount).toBe(36);
     expect(process.hiddenItemIds).toHaveLength(9_983);
-    expect(process.recentOperationItemIds).toEqual([
-      ...Array.from({ length: 18 }, (_, index) => `command-${String(index + 9_962)}`),
-      "failed-tool-0",
-      "failed-tool-1",
-    ]);
     expect(items).toHaveLength(9_984);
   });
 
@@ -112,7 +113,6 @@ describe("completed turn process aggregation", () => {
     const process = resolveCompletedTurnProcess(completedTurn.items, "running");
 
     expect(process.hiddenItemIds).toHaveLength(0);
-    expect(process.recentOperationItemIds).toHaveLength(0);
     expect(process.completedOperationCount).toBe(0);
   });
 });
@@ -157,6 +157,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId="project-1"
         runtime={{
+          ...runtimeHistoryDefaults,
           connectionState: "closed",
           error: new Error("snapshot request failed"),
           isPending: false,
@@ -384,9 +385,13 @@ describe("TaskTimeline", () => {
         <TaskTimeline
           projectId={snapshot.projectId}
           runtime={{
+            ...runtimeHistoryDefaults,
             connectionState: "connected",
             error: null,
+            hasPreviousTurns: true,
             isPending: false,
+            isLoadingPreviousTurns: false,
+            loadPreviousTurns: () => Promise.resolve(),
             snapshot: runningSnapshot,
             store,
           }}
@@ -397,6 +402,7 @@ describe("TaskTimeline", () => {
       );
 
       expect(markup).toContain("5s");
+      expect(markup).toContain("加载更早消息");
       expect(markup).not.toContain("1m 5s");
       expect(markup.match(/aria-label="AI 回复正在运行"/gu)).toHaveLength(1);
     } finally {
@@ -441,6 +447,7 @@ describe("TaskTimeline", () => {
         <TaskTimeline
           projectId={snapshot.projectId}
           runtime={{
+            ...runtimeHistoryDefaults,
             connectionState: "connected",
             error: null,
             isPending: false,
@@ -502,6 +509,7 @@ describe("TaskTimeline", () => {
         <TaskTimeline
           projectId={snapshot.projectId}
           runtime={{
+            ...runtimeHistoryDefaults,
             connectionState: "connected",
             error: null,
             isPending: false,
@@ -602,6 +610,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={snapshot.projectId}
         runtime={{
+          ...runtimeHistoryDefaults,
           connectionState: "connected",
           error: null,
           isPending: false,
@@ -638,6 +647,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={startingSnapshot.projectId}
         runtime={{
+          ...runtimeHistoryDefaults,
           connectionState: "connecting",
           error: null,
           isPending: true,
@@ -673,6 +683,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={longSnapshot.projectId}
         runtime={{
+          ...runtimeHistoryDefaults,
           connectionState: "connected",
           error: null,
           isPending: false,
@@ -719,6 +730,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={snapshot.projectId}
         runtime={{
+          ...runtimeHistoryDefaults,
           connectionState: "connected",
           error: null,
           isPending: false,
@@ -855,6 +867,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={snapshot.projectId}
         runtime={{
+          ...runtimeHistoryDefaults,
           connectionState: "connected",
           error: null,
           isPending: false,
@@ -994,7 +1007,8 @@ describe("TaskSnapshotTimeline", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={messageSnapshot} />);
 
     expect(markup).toContain('data-turn-processing-time=""');
-    expect(markup).toContain("已处理");
+    expect(markup).toContain("已完成");
+    expect(markup).not.toContain("已处理");
     expect(markup).toContain('dateTime="PT5M7S"');
     expect(markup).toContain(">5m 7s</time>");
   });
@@ -1035,6 +1049,7 @@ describe("TaskSnapshotTimeline", () => {
         <TaskTimeline
           projectId={runningSnapshot.projectId}
           runtime={{
+            ...runtimeHistoryDefaults,
             connectionState: "connected",
             error: null,
             isPending: false,
@@ -1046,6 +1061,8 @@ describe("TaskSnapshotTimeline", () => {
       );
 
       expect(markup).toContain('data-turn-processing-time=""');
+      expect(markup).toContain("已处理");
+      expect(markup).not.toContain("已完成");
       expect(markup).toContain('dateTime="PT2M5S"');
       expect(markup).toContain(">2m 5s</time>");
     } finally {
@@ -1473,6 +1490,7 @@ describe("TaskSnapshotTimeline", () => {
     );
 
     expect(markup).not.toContain("正在读取项目配置。");
+    expect(markup).not.toContain("pnpm check");
     expect(markup).not.toContain("检查过程输出");
     expect(markup).toContain("检查完成。");
     expect(markup).toContain("已完成 1 项操作");

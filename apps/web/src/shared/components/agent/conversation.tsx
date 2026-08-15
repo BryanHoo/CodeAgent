@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, ChevronsUp, LoaderCircle } from "lucide-react";
 import {
   useCallback,
   createContext,
@@ -18,7 +18,10 @@ import {
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
-import { createConversationAutoScrollController } from "./conversation-scroll.js";
+import {
+  createConversationAutoScrollController,
+  preserveConversationPrependPosition,
+} from "./conversation-scroll.js";
 
 type ConversationProps = HTMLAttributes<HTMLDivElement> &
   Readonly<{
@@ -176,6 +179,57 @@ export function ConversationContent({ className = "", ...props }: ConversationCo
       className={`mx-auto flex w-full max-w-content flex-col px-4 py-6 sm:px-6 sm:py-7 ${className}`}
       {...props}
     />
+  );
+}
+
+export function ConversationHistoryLoader({
+  label,
+  loading,
+  loadingLabel,
+  onLoad,
+}: Readonly<{
+  label: string;
+  loading: boolean;
+  loadingLabel: string;
+  onLoad: () => Promise<void>;
+}>) {
+  const { containerRef } = useConversationContext();
+  const load = useCallback(async () => {
+    const container = containerRef.current;
+    const previous =
+      container === null
+        ? undefined
+        : { scrollHeight: container.scrollHeight, scrollTop: container.scrollTop };
+    await onLoad();
+    if (container === null || previous === undefined) {
+      return;
+    }
+    // 等待 React 提交和虚拟列表测量完成后，再恢复原首条可见消息的锚点。
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        preserveConversationPrependPosition(container, previous);
+      });
+    });
+  }, [containerRef, onLoad]);
+
+  return (
+    <div className="mx-auto flex w-full max-w-content justify-center px-4 pt-4 sm:px-6">
+      <Button
+        className="gap-1.5 text-muted-foreground"
+        disabled={loading}
+        onClick={() => void load()}
+        size="sm"
+        type="button"
+        variant="ghost"
+      >
+        {loading ? (
+          <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+        ) : (
+          <ChevronsUp aria-hidden="true" className="size-3.5" />
+        )}
+        {loading ? loadingLabel : label}
+      </Button>
+    </div>
   );
 }
 

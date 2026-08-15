@@ -4,6 +4,7 @@ import type {
   AgentItem,
   AgentTaskSnapshot,
   AgentTurn,
+  AgentTurnPage,
   EventCheckpoint,
   PendingRequest,
 } from "@code-agent/protocol";
@@ -59,6 +60,7 @@ export interface TaskStoreState {
   notices: readonly TaskNotice[];
   pendingRequestIds: readonly string[];
   pendingRequestsById: Readonly<Record<string, PendingRequest>>;
+  prependTurns: (cursor: string, page: AgentTurnPage) => void;
   projectId: string;
   reconcile: (response: TaskStoreHydrationResponse) => void;
   reconstructSnapshot: () => ReconstructedTaskSnapshot | undefined;

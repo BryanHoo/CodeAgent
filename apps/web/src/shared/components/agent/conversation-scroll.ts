@@ -7,6 +7,17 @@ export type ConversationScrollTarget = Pick<
 
 type AtBottomChangeHandler = (atBottom: boolean) => void;
 
+export function preserveConversationPrependPosition(
+  scrollTarget: ConversationScrollTarget,
+  previous: Readonly<{ scrollHeight: number; scrollTop: number }>,
+): void {
+  const prependedHeight = scrollTarget.scrollHeight - previous.scrollHeight;
+  if (prependedHeight <= 0) {
+    return;
+  }
+  scrollTarget.scrollTo({ behavior: "auto", top: previous.scrollTop + prependedHeight });
+}
+
 export function createConversationAutoScrollController(onAtBottomChange: AtBottomChangeHandler) {
   let conversationRendering = false;
   let lastObservedClientHeight: number | undefined;

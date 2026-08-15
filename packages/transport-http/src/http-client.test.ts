@@ -382,6 +382,32 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("builds task turn pagination requests and validates successful responses", async () => {
+    const page = {
+      data: [
+        {
+          completedAt: "2026-07-23T00:01:00.000Z",
+          error: null,
+          id: "turn-1",
+          items: [],
+          startedAt: "2026-07-23T00:00:00.000Z",
+          status: "completed" as const,
+        },
+      ],
+      nextCursor: null,
+    };
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(jsonResponse(page));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.listTaskTurns("project one", "task/1", "older/value")).resolves.toEqual(
+      page,
+    );
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/v1/projects/project%20one/tasks/task%2F1/turns?cursor=older%2Fvalue",
+    );
+  });
+
   it("requests only tasks in the pinned Provider section", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock.mockResolvedValue(

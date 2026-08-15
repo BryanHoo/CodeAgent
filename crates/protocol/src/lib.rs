@@ -90,6 +90,7 @@ pub enum ValueDefinition {
     AgentTaskSnapshot,
     AgentTaskSnapshotResponse,
     AgentTurn,
+    AgentTurnPage,
     EventStreamMessage,
     PendingRequest,
     ResolvePendingRequestRequest,
@@ -99,10 +100,11 @@ pub enum ValueDefinition {
 }
 
 impl ValueDefinition {
-    const ALL: [Self; 9] = [
+    const ALL: [Self; 10] = [
         Self::AgentTaskSnapshot,
         Self::AgentTaskSnapshotResponse,
         Self::AgentTurn,
+        Self::AgentTurnPage,
         Self::EventStreamMessage,
         Self::PendingRequest,
         Self::ResolvePendingRequestRequest,
@@ -118,6 +120,7 @@ impl ValueDefinition {
             Self::AgentTaskSnapshot => "AgentTaskSnapshot",
             Self::AgentTaskSnapshotResponse => "AgentTaskSnapshotResponse",
             Self::AgentTurn => "AgentTurn",
+            Self::AgentTurnPage => "AgentTurnPage",
             Self::EventStreamMessage => "EventStreamMessage",
             Self::PendingRequest => "PendingRequest",
             Self::ResolvePendingRequestRequest => "ResolvePendingRequestRequest",
@@ -274,6 +277,12 @@ mod tests {
         let turn = parse_protocol_value(ValueDefinition::AgentTurn, valid_turn_fixture())?;
         assert_eq!(turn["id"], "turn-1");
 
+        let turn_page = parse_protocol_value(
+            ValueDefinition::AgentTurnPage,
+            json!({ "data": [valid_turn_fixture()], "nextCursor": null }),
+        )?;
+        assert_eq!(turn_page["data"][0]["id"], "turn-1");
+
         let ready = parse_protocol_value(
             ValueDefinition::EventStreamMessage,
             json!({
@@ -374,6 +383,13 @@ mod tests {
         let mut broken_turn = valid_turn_fixture();
         broken_turn["status"] = json!("paused");
         assert!(parse_protocol_value(ValueDefinition::AgentTurn, broken_turn).is_err());
+        assert!(
+            parse_protocol_value(
+                ValueDefinition::AgentTurnPage,
+                json!({ "data": [valid_turn_fixture()] }),
+            )
+            .is_err()
+        );
 
         assert!(
             parse_protocol_value(

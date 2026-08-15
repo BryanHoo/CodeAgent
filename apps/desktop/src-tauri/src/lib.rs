@@ -177,6 +177,7 @@ pub fn run() {
             commands::tasks::task_review,
             commands::tasks::task_start,
             commands::tasks::task_unsubscribe,
+            commands::tasks::turn_list,
             commands::tasks::terminal_terminate,
             commands::tasks::terminals_list,
             commands::turns::pending_request_resolve,

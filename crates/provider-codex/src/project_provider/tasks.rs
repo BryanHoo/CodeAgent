@@ -12,6 +12,13 @@ use crate::{
     },
 };
 
+const TASK_TURN_PAGE_SIZE: u32 = 20;
+
+struct MappedTurnPage {
+    next_cursor: Option<String>,
+    turns: Vec<Value>,
+}
+
 impl CodexProjectProvider {
     pub(super) async fn start_task_impl(&self, input: Value) -> Result<Value, CodeAgentError> {
         let ephemeral = input
@@ -103,7 +110,7 @@ impl CodexProjectProvider {
             .client
             .request(
                 "thread/read",
-                Some(json!({ "includeTurns": true, "threadId": task_id })),
+                Some(json!({ "includeTurns": false, "threadId": task_id })),
             )
             .await
         {
@@ -126,26 +133,11 @@ impl CodexProjectProvider {
         }
         self.claim_task(task_id, false)?;
         self.task_state.materialized(task_id);
-        let native_turns = thread["turns"]
-            .as_array()
-            .ok_or_else(|| CodeAgentError::internal("Codex thread turns are invalid"))?;
-        let mut turns = map_history_turns(
-            &self.client,
-            &self.historical_attachments,
-            task_id,
-            native_turns,
-        )
-        .await?;
-        let transcript_skills = self.transcript_skills.read(task_id).await;
-        for turn in &mut turns {
-            if let Some(turn_id) = turn["id"].as_str()
-                && let Some(names) = transcript_skills.get(turn_id)
-            {
-                crate::mapping::message_skills::attach_turn_skills(turn, names);
-            }
-        }
+        let page = self.read_mapped_task_turns(task_id, None).await?;
+        let turns = page.turns;
         let mut snapshot = map_task(thread, self.project.id.as_str())?;
         snapshot["turns"] = json!(turns);
+        snapshot["turnsNextCursor"] = page.next_cursor.map_or(Value::Null, Value::String);
         let pending = self.pending.snapshot();
         self.task_state.enrich_snapshot(
             task_id,
@@ -157,6 +149,66 @@ impl CodexProjectProvider {
         self.task_state
             .sync_running(task_id, snapshot["status"] == "running");
         Ok(Some(snapshot))
+    }
+
+    pub(super) async fn list_task_turns_impl(
+        &self,
+        task_id: &str,
+        cursor: Option<&str>,
+    ) -> Result<Value, CodeAgentError> {
+        self.assert_task(task_id)?;
+        let page = self.read_mapped_task_turns(task_id, cursor).await?;
+        Ok(json!({
+            "data": page.turns,
+            "nextCursor": page.next_cursor
+        }))
+    }
+
+    async fn read_mapped_task_turns(
+        &self,
+        task_id: &str,
+        cursor: Option<&str>,
+    ) -> Result<MappedTurnPage, CodeAgentError> {
+        let mut params = json!({
+            "itemsView": "full",
+            "limit": TASK_TURN_PAGE_SIZE,
+            "sortDirection": "desc",
+            "threadId": task_id
+        });
+        if let Some(cursor) = cursor {
+            params["cursor"] = Value::String(cursor.to_owned());
+        }
+        let response = self.rpc("thread/turns/list", Some(params)).await?;
+        let native_turns = response["data"]
+            .as_array()
+            .ok_or_else(|| CodeAgentError::internal("thread/turns/list data is invalid"))?;
+        let mut turns = map_history_turns(
+            &self.client,
+            &self.historical_attachments,
+            task_id,
+            native_turns,
+        )
+        .await?;
+        // Codex 向后分页返回倒序页；公共时间线始终保持从旧到新的稳定顺序。
+        turns.reverse();
+        let transcript_skills = self.transcript_skills.read(task_id).await;
+        for turn in &mut turns {
+            if let Some(turn_id) = turn["id"].as_str()
+                && let Some(names) = transcript_skills.get(turn_id)
+            {
+                crate::mapping::message_skills::attach_turn_skills(turn, names);
+            }
+        }
+        let next_cursor = match response.get("nextCursor") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(cursor)) => Some(cursor.clone()),
+            Some(_) => {
+                return Err(CodeAgentError::internal(
+                    "thread/turns/list nextCursor is invalid",
+                ));
+            }
+        };
+        Ok(MappedTurnPage { next_cursor, turns })
     }
 
     pub(super) async fn pin_task_impl(

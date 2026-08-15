@@ -152,6 +152,7 @@ function createClientHarness() {
   let subscription: Parameters<CodeAgentRuntimeClient["subscribeEvents"]>[0] | undefined;
   const closeConnection = vi.fn();
   const client = {
+    listTaskTurns: vi.fn<CodeAgentRuntimeClient["listTaskTurns"]>(),
     readTask: vi.fn<CodeAgentRuntimeClient["readTask"]>(),
     subscribeEvents: vi.fn<CodeAgentRuntimeClient["subscribeEvents"]>((options) => {
       subscription = options;
