@@ -762,13 +762,11 @@ test("uses the available user message width before wrapping or truncating", asyn
 
   const shortText = page.getByText("现在系统的 gh cli 是可以用的", { exact: true });
   const shortTextLineCount = await shortText.evaluate((element) => {
-    const textNode = element.firstChild;
-    if (!(textNode instanceof Text)) {
-      throw new Error("Expected a short user message text node");
+    const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+    if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+      throw new Error("Expected a measurable short user message line height");
     }
-    const range = document.createRange();
-    range.selectNodeContents(textNode);
-    return range.getClientRects().length;
+    return Math.ceil(element.getBoundingClientRect().height / lineHeight);
   });
   expect(shortTextLineCount).toBe(1);
 
@@ -890,7 +888,18 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
     await control.focus();
     // 内部控件不重复绘制主色焦点框，焦点状态统一由 Composer 外框表达。
     await expect(control).toHaveCSS("outline-style", "none");
-    await expect(composerForm).toHaveCSS("border-color", "rgb(0, 106, 255)");
+    await expect
+      .poll(() =>
+        composerForm.evaluate((element) => {
+          const channels = getComputedStyle(element)
+            .borderColor.match(/[\d.]+/gu)
+            ?.map(Number);
+          if (channels === undefined || channels.length < 3) return false;
+          const [red, green, blue, alpha = 1] = channels;
+          return red === 0 && green === 106 && blue === 255 && alpha >= 0.98;
+        }),
+      )
+      .toBe(true);
   }
   await expect(page.getByText("本地", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeDisabled();

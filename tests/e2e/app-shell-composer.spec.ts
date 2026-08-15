@@ -2711,6 +2711,9 @@ test("keeps a streaming code block within the conversation and copies its code",
   const copyButton = page.locator('[data-streamdown="code-block-copy-button"]');
   await expect(copyButton).toBeVisible();
   await expect(copyButton).toBeEnabled();
+  const renderedCode = page.locator('[data-streamdown="code-block"] code');
+  // Streamdown 在低速 runner 上会分批提交文本，复制前必须等待 Context 中的完整代码稳定。
+  await expect.poll(() => renderedCode.textContent()).toBe(streamedCode);
   const conversation = page.getByRole("log", { name: "会话内容" });
   expect(await conversation.evaluate((element) => element.scrollWidth)).toBe(
     await conversation.evaluate((element) => element.clientWidth),
