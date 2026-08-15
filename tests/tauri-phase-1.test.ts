@@ -78,6 +78,7 @@ describe("Tauri Phase 1 repository contract", () => {
     };
     const tauriConfig = readRepositoryJson("apps/desktop/src-tauri/tauri.conf.json") as {
       build: { devUrl: string; frontendDist: string };
+      bundle: { icon: string[] };
     };
 
     expect(desktopPackage).toMatchObject({
@@ -94,6 +95,16 @@ describe("Tauri Phase 1 repository contract", () => {
       devUrl: "http://127.0.0.1:5173",
       frontendDist: "../../../dist/desktop",
     });
+    expect(tauriConfig.bundle.icon).toEqual([
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+    ]);
+    for (const iconPath of tauriConfig.bundle.icon) {
+      expect(existsSync(join(repositoryRoot, "apps/desktop/src-tauri", iconPath))).toBe(true);
+    }
     expect(rootPackage.scripts).toMatchObject({
       "build:desktop": "pnpm --filter @code-agent/desktop build",
       "build:desktop-ui": "pnpm --filter @code-agent/web build:desktop",
