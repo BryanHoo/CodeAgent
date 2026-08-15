@@ -6,8 +6,8 @@
 
 ### 工程
 
-- 将 Windows Desktop 标记为 Preview / Unsigned，移除证书与系统代码签名发布门禁，直接构建和发布未签名安装包。
-- 保留 updater 包签名、Windows 10 安装启动 smoke 和发布前人工验收。
+- 将 macOS、Windows 和 Linux Desktop 统一标记为 Preview / Unsigned，移除操作系统证书与代码签名发布门禁。
+- 添加三平台下载、安装和安全警告处理说明，保留 updater 包签名、最低系统 smoke 和发布前人工验收。
 
 ## [1.10.0] - 2026-08-12
 

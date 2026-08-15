@@ -458,6 +458,9 @@ importers:
       '@tauri-apps/api':
         specifier: 'catalog:'
         version: 2.11.1
+      uuid:
+        specifier: 'catalog:'
+        version: 14.0.1
 
 packages:
 

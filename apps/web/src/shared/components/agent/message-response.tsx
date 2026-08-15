@@ -13,6 +13,7 @@ import {
   UNC_FILE_REFERENCE_PREFIX,
 } from "./message-markdown.js";
 import { promptReferenceTokenClassName } from "./prompt-reference-token.js";
+import { useHostExternalUrl, type HostExternalUrlOpener } from "../../host/host-external-url.js";
 
 type MarkdownLinkProps = ComponentProps<"a"> & {
   node?: unknown;
@@ -31,6 +32,11 @@ interface MarkdownNode {
   value?: string;
 }
 
+type ExternalLinkClickEvent = Readonly<{
+  defaultPrevented: boolean;
+  preventDefault: () => void;
+}>;
+
 const MessageFileReferenceContext = createContext<
   ((reference: MessageFileReference) => void) | null
 >(null);
@@ -41,6 +47,25 @@ const LOCAL_FILE_REFERENCE_PATTERN =
 const PROMPT_FILE_REFERENCE_PREFIX = "/__code_agent_prompt_reference__/";
 const PROMPT_FILE_REFERENCE_PATTERN =
   /(^|\s)@(?<path>[^\s,!?;:，。！？；：、()[\]{}"'`]+)(?=$|\s|[,!?;:，。！？；：、()[\]{}"'`])/gu;
+
+export function handleExternalLinkClick(
+  event: ExternalLinkClickEvent,
+  href: string | undefined,
+  openExternalUrl: HostExternalUrlOpener | undefined,
+): void {
+  if (event.defaultPrevented || href === undefined || openExternalUrl === undefined) return;
+
+  try {
+    // Desktop 仅接管 Web URL；相对链接和其他协议继续由 Markdown 安全策略处理。
+    const protocol = new URL(href).protocol;
+    if (protocol !== "http:" && protocol !== "https:") return;
+  } catch {
+    return;
+  }
+
+  event.preventDefault();
+  openExternalUrl(href);
+}
 
 function decodeMarkdownFileReference(href: string): string {
   try {
@@ -134,11 +159,19 @@ function promptFileReferenceRemarkPlugin() {
   };
 }
 
-function MarkdownLink({ children, className = "", href, node, ...props }: MarkdownLinkProps) {
+function MarkdownLink({
+  children,
+  className = "",
+  href,
+  node,
+  onClick,
+  ...props
+}: MarkdownLinkProps) {
   // Streamdown 注入的语法树节点不能透传给原生元素。
   void node;
   const fileReference = getFileReferenceMetadata(href);
   const onOpenFileReference = useContext(MessageFileReferenceContext);
+  const openExternalUrl = useHostExternalUrl();
 
   if (fileReference !== null) {
     if (fileReference.prompt) {
@@ -227,6 +260,14 @@ function MarkdownLink({ children, className = "", href, node, ...props }: Markdo
     <a
       className={`font-medium text-brand underline decoration-current/35 underline-offset-2 transition-colors hover:text-brand-strong ${className}`}
       href={href}
+      onClick={
+        onClick === undefined && openExternalUrl === undefined
+          ? undefined
+          : (event) => {
+              onClick?.(event);
+              handleExternalLinkClick(event, href, openExternalUrl);
+            }
+      }
       rel="noopener noreferrer"
       target="_blank"
       {...props}

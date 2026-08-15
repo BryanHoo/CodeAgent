@@ -32,7 +32,6 @@ apps=("${mount_point}"/*.app)
 app_bundle="${apps[0]}"
 executable="${app_bundle}/Contents/MacOS/code-agent-desktop"
 [[ -x "${executable}" ]] || { echo "Desktop executable is missing: ${executable}" >&2; exit 1; }
-spctl --assess --type execute --verbose=4 "${app_bundle}"
 
 "${executable}" >"${work_root}/desktop.log" 2>&1 &
 app_pid="$!"
