@@ -24,7 +24,13 @@ describe("TauriCodeAgentTransport", () => {
 
     await transport.request(
       {
-        input: { body: "完成", tag: "task-1", title: "CodeAgent" },
+        input: {
+          body: "完成",
+          projectId: "project-1",
+          tag: "task-1",
+          taskId: "task-1",
+          title: "CodeAgent",
+        },
         name: "host.notification_show",
         output: {} as never,
       },
@@ -36,8 +42,10 @@ describe("TauriCodeAgentTransport", () => {
         command: "host_notification_show",
         payload: {
           body: "完成",
+          projectId: "project-1",
           requestId: "host-request",
           tag: "task-1",
+          taskId: "task-1",
           title: "CodeAgent",
         },
       },

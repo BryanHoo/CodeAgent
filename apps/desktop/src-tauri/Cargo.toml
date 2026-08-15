@@ -34,5 +34,8 @@ tauri-plugin-updater.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+mac-notification-sys.workspace = true
+
 [lints]
 workspace = true

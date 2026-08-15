@@ -22,7 +22,13 @@ export type TaskNotifier = Readonly<{
 }>;
 
 export type NativeNotificationApi = Readonly<{
-  show: (title: string, options: Readonly<{ body: string; tag: string }>) => Promise<void>;
+  onAction: (
+    listener: (target: Readonly<{ projectId: string; taskId: string }>) => void,
+  ) => Promise<() => void>;
+  show: (
+    title: string,
+    options: Readonly<{ body: string; projectId: string; tag: string; taskId: string }>,
+  ) => Promise<void>;
 }>;
 
 type BrowserTaskNotifierOptions = Readonly<{
@@ -126,6 +132,15 @@ class BrowserTaskNotifier implements TaskNotifier {
       (() => globalThis.document.visibilityState === "visible" && globalThis.document.hasFocus());
     this.#navigateToTask = options.navigateToTask ?? (() => undefined);
     this.#nativeApi = options.nativeApi;
+    if (this.#nativeApi !== undefined) {
+      // 原生通知由宿主激活窗口，Renderer 复用浏览器路径完成焦点与任务路由。
+      void this.#nativeApi
+        .onAction(({ projectId, taskId }) => {
+          this.#focusPage();
+          this.#navigateToTask(projectId, taskId);
+        })
+        .catch(showErrorToast);
+    }
   }
 
   public notify(projectId: string, event: AgentEvent, taskTitle: string): void {
@@ -165,7 +180,11 @@ class BrowserTaskNotifier implements TaskNotifier {
       const normalizedTaskTitle = taskTitle.trim() || "Task";
       if (this.#nativeApi !== undefined) {
         void this.#nativeApi
-          .show(`CodeAgent · ${normalizedTaskTitle}`, taskNotification)
+          .show(`CodeAgent · ${normalizedTaskTitle}`, {
+            ...taskNotification,
+            projectId,
+            taskId: event.taskId,
+          })
           .catch((error: unknown) => {
             showErrorToast(error);
             this.#showBrowserNotification(
