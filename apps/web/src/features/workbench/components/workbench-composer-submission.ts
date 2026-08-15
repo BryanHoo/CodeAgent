@@ -270,6 +270,7 @@ export function createComposerSubmission({
           text,
         },
         snapshot,
+        activeTurnId,
       );
       const waitingPrompts =
         options.queuedPrompt === undefined

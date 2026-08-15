@@ -219,9 +219,13 @@ describe("createComposerSubmission", () => {
     expect(harness.setQueuedPrompts).toHaveBeenCalledWith([
       expect.objectContaining({
         deliveryState: "awaiting_acknowledgement",
+        deliveryTurnId: "turn-1",
         presentation: "composer",
         text: "立即引导",
       }),
+    ]);
+    expect(harness.options.composerDraftStore.read("code-agent:draft").queuedPrompts).toEqual([
+      expect.objectContaining({ deliveryTurnId: "turn-1" }),
     ]);
     expect(harness.options.clearComposerInput).not.toHaveBeenCalled();
   });
