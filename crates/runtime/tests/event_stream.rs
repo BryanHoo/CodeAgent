@@ -8,11 +8,11 @@ use code_agent_runtime::{
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-fn event(value: Value) -> code_agent_protocol::RawProviderEvent {
+fn event(value: Value) -> code_agent_protocol::ProviderEvent {
     parse_provider_event(value).expect("valid provider event")
 }
 
-fn message_delta(item_id: &str, delta: &str) -> code_agent_protocol::RawProviderEvent {
+fn message_delta(item_id: &str, delta: &str) -> code_agent_protocol::ProviderEvent {
     event(json!({
         "itemId": item_id,
         "payload": { "delta": delta },
@@ -22,7 +22,7 @@ fn message_delta(item_id: &str, delta: &str) -> code_agent_protocol::RawProvider
     }))
 }
 
-fn completed() -> code_agent_protocol::RawProviderEvent {
+fn completed() -> code_agent_protocol::ProviderEvent {
     event(json!({
         "payload": {
             "turn": {
@@ -40,7 +40,7 @@ fn completed() -> code_agent_protocol::RawProviderEvent {
     }))
 }
 
-fn reasoning_delta(section_index: u64, delta: &str) -> code_agent_protocol::RawProviderEvent {
+fn reasoning_delta(section_index: u64, delta: &str) -> code_agent_protocol::ProviderEvent {
     event(json!({
         "itemId": "reasoning-1",
         "payload": {

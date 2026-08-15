@@ -6,7 +6,7 @@ use code_agent_protocol::{
     AgentAttachment, AgentAttachmentKind, AgentBackgroundTerminalPage, AgentCapabilities,
     AgentGlobalSettings, AgentMcpServerPage, AgentModelPage, AgentProjectDefaults,
     AgentProviderConnectionRecord, AgentSkillPage, AgentTaskPage, AgentTaskSettings, Project,
-    ProjectId, RawProviderEvent, TaskId,
+    ProjectId, ProviderEvent, TaskId,
 };
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -504,7 +504,7 @@ pub trait ProjectProviderPort: Send + Sync {
         &self,
         include_ephemeral: bool,
         context: &PortRequestContext,
-    ) -> Result<mpsc::Receiver<RawProviderEvent>, CodeAgentError>;
+    ) -> Result<mpsc::Receiver<ProviderEvent>, CodeAgentError>;
 }
 
 /// Git 宿主能力端口。

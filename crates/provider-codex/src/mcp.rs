@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use code_agent_core::CodeAgentError;
-use code_agent_protocol::{AgentMcpServerPage, RawProviderEvent, parse_provider_event};
+use code_agent_protocol::{AgentMcpServerPage, ProviderEvent, parse_provider_event};
 use serde_json::{Value, json};
 
 #[derive(Default)]
@@ -29,7 +29,7 @@ impl McpState {
         }
     }
 
-    pub(crate) fn update(&self, params: &Value) -> Result<RawProviderEvent, CodeAgentError> {
+    pub(crate) fn update(&self, params: &Value) -> Result<ProviderEvent, CodeAgentError> {
         let task_id = string(params, "threadId")?;
         let name = string(params, "name")?;
         let status = match string(params, "status")? {
@@ -237,6 +237,9 @@ mod tests {
             }))
             .expect("MCP status");
 
-        assert_eq!(event.as_value()["payload"]["error"], message);
+        assert_eq!(
+            event.to_value().expect("serialize event")["payload"]["error"],
+            message
+        );
     }
 }

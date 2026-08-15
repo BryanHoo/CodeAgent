@@ -151,7 +151,7 @@ async fn mcp_contract_should_page_merge_deduplicate_and_preserve_startup_failure
         .expect("event");
     assert_eq!(event.event_type(), "mcp_server.status_updated");
     assert_eq!(
-        event.as_value()["payload"]["error"],
+        event.mcp_status().expect("MCP status")["error"],
         "OAuth https://auth.example API_TOKEN=secret"
     );
 
@@ -263,8 +263,8 @@ async fn event_overflow_should_emit_terminal_error_and_close_subscription() {
     let last = last.expect("overflow event");
     assert_eq!(last.event_type(), "provider.error");
     assert_eq!(
-        last.as_value()["payload"]["message"],
-        "Provider event subscription overflowed"
+        last.provider_error_message(),
+        Some("Provider event subscription overflowed")
     );
 }
 

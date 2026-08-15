@@ -8,7 +8,7 @@ use code_agent_core::{
 };
 use code_agent_protocol::{
     AgentBackgroundTerminalPage, AgentMcpServerPage, AgentSkillPage, AgentTaskPage, Project,
-    RawProviderEvent,
+    ProviderEvent,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -35,7 +35,7 @@ const EVENT_CHANNEL_CAPACITY: usize = EVENT_SUBSCRIBER_CAPACITY + 1;
 
 struct Subscriber {
     include_ephemeral: bool,
-    sender: mpsc::Sender<RawProviderEvent>,
+    sender: mpsc::Sender<ProviderEvent>,
 }
 
 pub(crate) struct CodexProjectProvider {
@@ -468,7 +468,7 @@ impl ProjectProviderPort for CodexProjectProvider {
         &self,
         include_ephemeral: bool,
         _context: &PortRequestContext,
-    ) -> Result<mpsc::Receiver<RawProviderEvent>, CodeAgentError> {
+    ) -> Result<mpsc::Receiver<ProviderEvent>, CodeAgentError> {
         let (sender, receiver) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
         self.subscribers
             .lock()

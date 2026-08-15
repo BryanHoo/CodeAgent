@@ -3,8 +3,10 @@
 // 生成代码中的正则常量由 typify 产出，统一豁免 unwrap 提示。
 #[allow(clippy::unwrap_used)]
 mod generated;
+mod provider_event;
 
 pub use generated::*;
+pub use provider_event::{ProviderEvent, ProviderEventKind, ReasoningDeltaField};
 
 use std::sync::LazyLock;
 
@@ -21,57 +23,6 @@ static PROVIDER_EVENT_VALIDATOR: LazyLock<Result<Validator, String>> =
     LazyLock::new(|| build_validator("AgentProviderEvent").map_err(|error| error.to_string()));
 static TASK_SETTINGS_VALIDATOR: LazyLock<Result<Validator, String>> =
     LazyLock::new(|| build_validator("AgentTaskSettings").map_err(|error| error.to_string()));
-
-/// 已通过版本化 Provider Event Schema 校验的原始事件。
-#[derive(Clone, Debug, PartialEq)]
-pub struct RawProviderEvent(Value);
-
-impl RawProviderEvent {
-    /// 返回 Provider 事件判别值。
-    #[must_use]
-    pub fn event_type(&self) -> &str {
-        self.0["type"].as_str().unwrap_or_default()
-    }
-
-    /// 返回事件所属 Task ID。
-    #[must_use]
-    pub fn task_id(&self) -> &str {
-        self.0["taskId"].as_str().unwrap_or_default()
-    }
-
-    /// 返回事件所属 Turn ID；Task 级事件没有该字段。
-    #[must_use]
-    pub fn turn_id(&self) -> Option<&str> {
-        self.0["turnId"].as_str()
-    }
-
-    /// 返回事件所属 Item ID；Turn 或 Task 级事件没有该字段。
-    #[must_use]
-    pub fn item_id(&self) -> Option<&str> {
-        self.0["itemId"].as_str()
-    }
-
-    /// 返回已校验事件的 JSON 表示。
-    #[must_use]
-    pub fn as_value(&self) -> &Value {
-        &self.0
-    }
-
-    /// 消费并返回已校验事件的 JSON 表示。
-    #[must_use]
-    pub fn into_value(self) -> Value {
-        self.0
-    }
-
-    /// 向已验证的字符串 Delta 追加内容。
-    pub fn append_delta(&mut self, delta: &str) -> bool {
-        let Some(current) = self.0["payload"]["delta"].as_str() else {
-            return false;
-        };
-        self.0["payload"]["delta"] = Value::String(format!("{current}{delta}"));
-        true
-    }
-}
 
 /// Protocol JSON Schema 校验失败。
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -128,9 +79,9 @@ fn validate_with(
 }
 
 /// 校验并解析 Provider Event，禁止 Provider 携带 Runtime 传输字段。
-pub fn parse_provider_event(value: Value) -> Result<RawProviderEvent, ProtocolValidationError> {
+pub fn parse_provider_event(value: Value) -> Result<ProviderEvent, ProtocolValidationError> {
     validate_with(&PROVIDER_EVENT_VALIDATOR, &value)?;
-    Ok(RawProviderEvent(value))
+    serde_json::from_value(value).map_err(|error| ProtocolValidationError::new(error.to_string()))
 }
 
 /// typify 无法无损生成的复杂联合定义；运行时以内嵌 JSON Schema 校验后按 JSON 使用。
@@ -225,8 +176,8 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        CodeAgentError, ValueDefinition, parse_agent_task_settings, parse_protocol_value,
-        parse_provider_event,
+        CodeAgentError, ProviderEvent, ProviderEventKind, ValueDefinition,
+        parse_agent_task_settings, parse_protocol_value, parse_provider_event,
     };
 
     fn valid_settings_fixture() -> Value {
@@ -250,8 +201,27 @@ mod tests {
         });
         let event = parse_provider_event(fixture.clone())?;
 
-        assert_eq!(event.into_value(), fixture);
+        assert_eq!(event.into_value()?, fixture);
         Ok(())
+    }
+
+    #[test]
+    fn provider_event_should_construct_and_append_delta_without_json() {
+        let mut event = ProviderEvent::message_delta("task-1", "turn-1", "item-1", "hel");
+
+        assert_eq!(event.kind(), ProviderEventKind::MessageDelta);
+        assert!(event.append_delta("lo"));
+        assert_eq!(event.delta(), Some("hello"));
+        assert_eq!(
+            serde_json::to_value(event).expect("serialize provider event"),
+            json!({
+                "itemId": "item-1",
+                "payload": { "delta": "hello" },
+                "taskId": "task-1",
+                "turnId": "turn-1",
+                "type": "message.delta"
+            })
+        );
     }
 
     #[test]

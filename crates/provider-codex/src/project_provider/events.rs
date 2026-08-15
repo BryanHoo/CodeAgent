@@ -1,11 +1,11 @@
-use code_agent_protocol::RawProviderEvent;
+use code_agent_protocol::{ProviderEvent, ProviderEventKind};
 use serde_json::{Value, json};
 
 use super::CodexProjectProvider;
 
 impl CodexProjectProvider {
-    pub(crate) async fn publish(&self, event: RawProviderEvent) {
-        if event.event_type() == "turn.completed"
+    pub(crate) async fn publish(&self, event: ProviderEvent) {
+        if event.kind() == ProviderEventKind::TurnCompleted
             && let Some(turn_id) = event.turn_id()
         {
             for terminal in self.pending.expire_turn(event.task_id(), turn_id) {
@@ -18,7 +18,7 @@ impl CodexProjectProvider {
         self.broadcast(event);
     }
 
-    fn broadcast(&self, event: RawProviderEvent) {
+    fn broadcast(&self, event: ProviderEvent) {
         let ephemeral = self
             .ephemeral
             .lock()

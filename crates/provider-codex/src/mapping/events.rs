@@ -1,56 +1,22 @@
-use code_agent_protocol::{RawProviderEvent, parse_provider_event};
+use code_agent_protocol::{ProviderEvent, parse_provider_event};
 use serde_json::{Map, Value, json};
 
 use super::common::{
     CODEX_MAPPED_NOTIFICATION_METHODS, CodexMappingError, MAX_REALTIME_DIFF_BYTES,
     MAX_REALTIME_FILE_CHANGES, MAX_STATUS_TEXT_CHARS, boolean, bound_chars, bound_utf8_prefix,
-    field_string, map_file_change_kind, non_negative_integer, optional_string, record,
+    field_string, map_file_change_kind, optional_string, record,
 };
+use super::deltas::map_delta;
 use super::items::{ensure_started_item_running, map_codex_item};
+use super::plans::map_plan;
 use super::turns::{map_codex_turn, map_context_usage};
 
-fn validated(value: Value) -> Result<Option<RawProviderEvent>, CodexMappingError> {
+fn validated(value: Value) -> Result<Option<ProviderEvent>, CodexMappingError> {
     parse_provider_event(value).map(Some).map_err(Into::into)
 }
 
 fn turn_id<'a>(params: &'a Map<String, Value>, method: &str) -> Result<&'a str, CodexMappingError> {
     field_string(params, "turnId", &format!("Codex {method}"))
-}
-
-fn map_plan(params: &Map<String, Value>) -> Result<Value, CodexMappingError> {
-    let explanation = match params.get("explanation") {
-        None | Some(Value::Null) => Value::Null,
-        Some(Value::String(value)) => Value::String(value.clone()),
-        Some(_) => {
-            return Err(CodexMappingError(
-                "Codex plan explanation must be a string or null".to_string(),
-            ));
-        }
-    };
-    let steps = params
-        .get("plan")
-        .and_then(Value::as_array)
-        .ok_or_else(|| CodexMappingError("Codex plan must be an array".to_string()))?
-        .iter()
-        .map(|step| {
-            let step = record(step, "Codex plan step")?;
-            let status = match field_string(step, "status", "Codex plan step")? {
-                "inProgress" => "in_progress",
-                "pending" => "pending",
-                "completed" => "completed",
-                _ => {
-                    return Err(CodexMappingError(
-                        "Codex plan step status is invalid".to_string(),
-                    ));
-                }
-            };
-            Ok(json!({
-                "status": status,
-                "text": field_string(step, "step", "Codex plan step")?
-            }))
-        })
-        .collect::<Result<Vec<_>, CodexMappingError>>()?;
-    Ok(json!({ "explanation": explanation, "steps": steps }))
 }
 
 fn map_realtime_changes(value: &Value) -> Result<Value, CodexMappingError> {
@@ -305,7 +271,7 @@ fn approval_review_item(params: &Map<String, Value>) -> Result<Value, CodexMappi
 pub fn map_codex_notification(
     method: &str,
     value: &Value,
-) -> Result<Option<RawProviderEvent>, CodexMappingError> {
+) -> Result<Option<ProviderEvent>, CodexMappingError> {
     if !CODEX_MAPPED_NOTIFICATION_METHODS.contains(&method) {
         return Ok(None);
     }
@@ -409,20 +375,8 @@ pub fn map_codex_notification(
         }));
     }
 
-    let simple_delta_type = match method {
-        "item/agentMessage/delta" => Some("message.delta"),
-        "item/commandExecution/outputDelta" => Some("command.output_delta"),
-        "item/plan/delta" => Some("plan.delta"),
-        _ => None,
-    };
-    if let Some(event_type) = simple_delta_type {
-        return validated(json!({
-            "itemId": field_string(params, "itemId", &format!("Codex {method}"))?,
-            "payload": { "delta": field_string(params, "delta", &format!("Codex {method}"))? },
-            "taskId": task_id,
-            "turnId": turn_id,
-            "type": event_type
-        }));
+    if let Some(event) = map_delta(method, params, task_id, turn_id)? {
+        return Ok(Some(event));
     }
     if method == "item/mcpToolCall/progress" {
         return validated(json!({
@@ -452,31 +406,6 @@ pub fn map_codex_notification(
             "taskId": task_id,
             "turnId": turn_id,
             "type": "turn.diff_updated"
-        }));
-    }
-    if method.starts_with("item/reasoning/") {
-        let summary = method != "item/reasoning/textDelta";
-        let delta = if method == "item/reasoning/summaryPartAdded" {
-            ""
-        } else {
-            field_string(params, "delta", &format!("Codex {method}"))?
-        };
-        let mut payload = json!({
-            "delta": delta,
-            "field": if summary { "summary" } else { "content" }
-        });
-        if summary {
-            payload["sectionIndex"] = json!(non_negative_integer(
-                params.get("summaryIndex").unwrap_or(&Value::Null),
-                "Codex summary index",
-            )?);
-        }
-        return validated(json!({
-            "itemId": field_string(params, "itemId", &format!("Codex {method}"))?,
-            "payload": payload,
-            "taskId": task_id,
-            "turnId": turn_id,
-            "type": "reasoning.delta"
         }));
     }
     if method == "model/safetyBuffering/updated" {

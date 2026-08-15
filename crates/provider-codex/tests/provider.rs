@@ -543,7 +543,7 @@ async fn pending_approval_should_publish_and_round_trip_native_decision() {
         .expect("pending timeout")
         .expect("pending event");
     assert_eq!(event.event_type(), "pending_request.created");
-    let request_id = event.as_value()["payload"]["request"]["requestId"]
+    let request_id = event.pending_request().expect("pending request")["requestId"]
         .as_str()
         .expect("request id")
         .to_string();
@@ -677,11 +677,11 @@ async fn review_worker_notification_should_route_to_parent_task() {
     assert_eq!(started.event_type(), "turn.started");
     assert_eq!(started.turn_id(), Some("review-outer-turn"));
     assert_eq!(
-        started.as_value()["payload"]["turn"]["items"][0]["type"],
+        started.turn().expect("started turn")["items"][0]["type"],
         "review"
     );
     let event = events.recv().await.expect("review item event");
     assert_eq!(event.task_id(), "task-1");
     assert_eq!(event.turn_id(), Some("review-outer-turn"));
-    assert_eq!(event.as_value()["payload"]["item"]["phase"], "commentary");
+    assert_eq!(event.item().expect("review item")["phase"], "commentary");
 }
