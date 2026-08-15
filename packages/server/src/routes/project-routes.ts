@@ -1,70 +1,62 @@
-import { basename } from "node:path";
 import {
-  AddProjectResponseSchema,
   AddProjectRequestSchema,
+  AddProjectResponseSchema,
+  AgentMutationErrorSchema,
   AgentProjectDefaultsResponseSchema,
   AgentProjectDefaultsSchema,
   AgentSkillPageSchema,
-  AgentMutationErrorSchema,
   HostFileListingSchema,
   HostFileQuerySchema,
-  ProjectPageSchema,
+  OpenProjectRequestSchema,
+  OpenProjectResponseSchema,
   ProjectDirectoryListingSchema,
   ProjectDirectoryQuerySchema,
   ProjectOpenCapabilitiesResponseSchema,
-  OpenProjectRequestSchema,
-  OpenProjectResponseSchema,
+  ProjectPageSchema,
+  RemoveProjectRequestSchema,
+  RemoveProjectResponseSchema,
   RenameProjectRequestSchema,
   RenameProjectResponseSchema,
   ReorderProjectsRequestSchema,
   ReorderProjectsResponseSchema,
-  RemoveProjectRequestSchema,
-  RemoveProjectResponseSchema,
   type AddProjectRequest,
   type AgentProjectDefaults,
   type HostFileQuery,
-  type ProjectDirectoryQuery,
   type OpenProjectRequest,
+  type ProjectDirectoryQuery,
+  type RemoveProjectRequest,
   type RenameProjectRequest,
   type ReorderProjectsRequest,
-  type RemoveProjectRequest,
 } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
-import { HostFileBrowserError } from "../host-file-browser.js";
-import { ProjectOpenAppUnavailableError, ProjectOpenTargetInvalidError } from "../project-open.js";
-import { ProjectDirectoryBrowserError } from "../project-directory-browser.js";
-import { MutationHttpError, type ServerRouteContext } from "./context.js";
-import { ErrorResponseSchema, IdempotencyHeadersSchema, ProjectParamsSchema } from "./schemas.js";
 
 import { registerProjectFileRoutes } from "./project-file-routes.js";
 import { registerProjectGitRoutes } from "./project-git-routes.js";
+import {
+  callEngine,
+  createReadRequestId,
+  readRequestId,
+  type ServerRouteContext,
+} from "./context.js";
+import { ErrorResponseSchema, IdempotencyHeadersSchema, ProjectParamsSchema } from "./schemas.js";
+
+const mutationErrors = {
+  400: AgentMutationErrorSchema,
+  404: AgentMutationErrorSchema,
+  409: AgentMutationErrorSchema,
+  502: AgentMutationErrorSchema,
+  503: AgentMutationErrorSchema,
+} as const;
 
 export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = (
   app,
   context,
   done,
 ) => {
-  const {
-    assertValidProjectDefaults,
-    getProjectContext,
-    listModels,
-    projectContexts,
-    projectOpenService,
-    projectRepository,
-    readEffectiveProjectDefaults,
-    readHostFileDirectory,
-    readProjectDirectory,
-    releaseProjectContext,
-    runIdempotent,
-    resolveProjectDirectory,
-    settingsRepository,
-  } = context;
-
-  app.get("/v1/projects", { schema: { response: { 200: ProjectPageSchema } } }, async () => ({
-    data: await projectRepository.list(),
-    nextCursor: null,
-  }));
-
+  const { engine } = context;
+  app.get("/v1/projects", { schema: { response: { 200: ProjectPageSchema } } }, () =>
+    callEngine(() => engine.projectList(createReadRequestId())),
+  );
   app.get<{ Querystring: HostFileQuery }>(
     "/v1/host-files",
     {
@@ -73,18 +65,16 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         response: { 200: HostFileListingSchema, 400: AgentMutationErrorSchema },
       },
     },
-    async (request) => {
-      try {
-        return await readHostFileDirectory(request.query.kind, request.query.path);
-      } catch (error) {
-        if (error instanceof HostFileBrowserError) {
-          throw new MutationHttpError("INVALID_REQUEST", error.message, 400);
-        }
-        throw error;
-      }
-    },
+    (request) =>
+      callEngine(() =>
+        engine.hostFilesList(
+          createReadRequestId(),
+          request.query.kind,
+          request.query.path,
+          request.query.showHidden ?? false,
+        ),
+      ),
   );
-
   app.get<{ Querystring: ProjectDirectoryQuery }>(
     "/v1/project-directories",
     {
@@ -93,18 +83,15 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         response: { 200: ProjectDirectoryListingSchema, 400: AgentMutationErrorSchema },
       },
     },
-    async (request) => {
-      try {
-        return await readProjectDirectory(request.query.path);
-      } catch (error) {
-        if (error instanceof ProjectDirectoryBrowserError) {
-          throw new MutationHttpError("INVALID_REQUEST", error.message, 400);
-        }
-        throw error;
-      }
-    },
+    (request) =>
+      callEngine(() =>
+        engine.projectDirectoriesList(
+          createReadRequestId(),
+          request.query.path,
+          request.query.showHidden ?? false,
+        ),
+      ),
   );
-
   app.get<{ Params: { projectId: string } }>(
     "/v1/projects/:projectId/open-capabilities",
     {
@@ -113,15 +100,12 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         response: { 200: ProjectOpenCapabilitiesResponseSchema, 404: ErrorResponseSchema },
       },
     },
-    async (request, reply) => {
-      const project = await projectRepository.read(request.params.projectId);
-      if (project === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
-      return projectOpenService.getCapabilities();
-    },
+    (request) =>
+      callEngine(async () => {
+        await engine.projectRead(createReadRequestId(), request.params.projectId);
+        return engine.projectOpenCapabilities(createReadRequestId());
+      }),
   );
-
   app.post<{
     Body: OpenProjectRequest;
     Headers: { "idempotency-key": string };
@@ -133,90 +117,33 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         body: OpenProjectRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectParamsSchema,
-        response: {
-          200: OpenProjectResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: OpenProjectResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["open-project", request.params.projectId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const project = await projectRepository.read(request.params.projectId);
-          if (project === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          try {
-            await projectOpenService.open(project.rootPath, request.body.appId, request.body.path);
-          } catch (error) {
-            if (error instanceof ProjectOpenAppUnavailableError) {
-              throw new MutationHttpError(
-                "INVALID_REQUEST",
-                "Project open app is unavailable",
-                409,
-              );
-            }
-            if (error instanceof ProjectOpenTargetInvalidError) {
-              throw new MutationHttpError("INVALID_REQUEST", "Project open target is invalid", 400);
-            }
-            throw new MutationHttpError("PROVIDER_ERROR", "Project could not be opened", 502, true);
-          }
-          return request.body;
-        },
+    (request) =>
+      callEngine(() =>
+        engine.projectOpen(
+          readRequestId(request.headers),
+          request.params.projectId,
+          request.body.appId,
+          request.body.path,
+        ),
       ),
   );
-
-  app.put<{
-    Body: ReorderProjectsRequest;
-    Headers: { "idempotency-key": string };
-  }>(
+  app.put<{ Body: ReorderProjectsRequest; Headers: { "idempotency-key": string } }>(
     "/v1/projects/order",
     {
       schema: {
         body: ReorderProjectsRequestSchema,
         headers: IdempotencyHeadersSchema,
-        response: {
-          200: ReorderProjectsResponseSchema,
-          400: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: ReorderProjectsResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["reorder-projects"],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const projects = await projectRepository.list();
-          const storedProjectIds = new Set(projects.map((project) => project.id));
-          const containsCompleteProjectSet =
-            request.body.projectIds.length === projects.length &&
-            request.body.projectIds.every((projectId) => storedProjectIds.has(projectId));
-          if (!containsCompleteProjectSet) {
-            throw new MutationHttpError(
-              "INVALID_REQUEST",
-              "Project order must contain every project exactly once",
-              409,
-            );
-          }
-          return {
-            data: await projectRepository.reorder(request.body.projectIds),
-            nextCursor: null,
-          };
-        },
+    (request) =>
+      callEngine(() =>
+        engine.projectReorder(readRequestId(request.headers), request.body.projectIds),
       ),
   );
-
   app.get<{ Params: { projectId: string } }>(
     "/v1/projects/:projectId/skills",
     {
@@ -225,15 +152,9 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         response: { 200: AgentSkillPageSchema, 404: ErrorResponseSchema },
       },
     },
-    async (request, reply) => {
-      const context = await getProjectContext(request.params.projectId);
-      if (context === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
-      return context.provider.listSkills();
-    },
+    (request) =>
+      callEngine(() => engine.skillsList(createReadRequestId(), request.params.projectId)),
   );
-
   app.get<{ Params: { projectId: string } }>(
     "/v1/projects/:projectId/defaults",
     {
@@ -242,14 +163,9 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         response: { 200: AgentProjectDefaultsResponseSchema, 404: ErrorResponseSchema },
       },
     },
-    async (request, reply) => {
-      if ((await getProjectContext(request.params.projectId)) === undefined) {
-        return reply.code(404).send({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
-      }
-      return { settings: await readEffectiveProjectDefaults(request.params.projectId) };
-    },
+    (request) =>
+      callEngine(() => engine.projectDefaultsGet(createReadRequestId(), request.params.projectId)),
   );
-
   app.put<{
     Body: AgentProjectDefaults;
     Headers: { "idempotency-key": string };
@@ -261,73 +177,33 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         body: AgentProjectDefaultsSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectParamsSchema,
-        response: {
-          200: AgentProjectDefaultsResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: AgentProjectDefaultsResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["update-project-defaults", request.params.projectId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          if ((await getProjectContext(request.params.projectId)) === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          assertValidProjectDefaults(await listModels(), request.body);
-          return {
-            settings: await settingsRepository.writeProjectDefaults(
-              request.params.projectId,
-              request.body,
-            ),
-          };
-        },
+    (request) =>
+      callEngine(() =>
+        engine.projectDefaultsUpdate(
+          readRequestId(request.headers),
+          request.params.projectId,
+          request.body,
+        ),
       ),
   );
-
-  app.post<{
-    Body: AddProjectRequest;
-    Headers: { "idempotency-key": string };
-  }>(
+  app.post<{ Body: AddProjectRequest; Headers: { "idempotency-key": string } }>(
     "/v1/projects",
     {
       schema: {
         body: AddProjectRequestSchema,
         headers: IdempotencyHeadersSchema,
-        response: {
-          200: AddProjectResponseSchema,
-          400: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: AddProjectResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(["add-project"], request.headers["idempotency-key"], request.body, async () => {
-        let selectedPath: string;
-        try {
-          selectedPath = await resolveProjectDirectory(request.body.rootPath);
-        } catch (error) {
-          if (error instanceof ProjectDirectoryBrowserError) {
-            throw new MutationHttpError("INVALID_REQUEST", error.message, 400);
-          }
-          throw error;
-        }
-        const project = await projectRepository.register({
-          name: basename(selectedPath),
-          rootPath: selectedPath,
-        });
-        return { project };
-      }),
+    async (request) => ({
+      project: await callEngine(() =>
+        engine.projectAdd(readRequestId(request.headers), request.body.rootPath),
+      ),
+    }),
   );
-
   app.post<{
     Body: RenameProjectRequest;
     Headers: { "idempotency-key": string };
@@ -339,38 +215,19 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         body: RenameProjectRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectParamsSchema,
-        response: {
-          200: RenameProjectResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: RenameProjectResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["rename-project", request.params.projectId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          const project = await projectRepository.rename(
-            request.params.projectId,
-            request.body.name.trim(),
-          );
-          if (project === undefined) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          const existingContext = projectContexts.get(project.id);
-          if (existingContext !== undefined) {
-            projectContexts.set(project.id, { ...existingContext, project });
-          }
-          return { project };
-        },
+    async (request) => ({
+      project: await callEngine(() =>
+        engine.projectRename(
+          readRequestId(request.headers),
+          request.params.projectId,
+          request.body.name.trim(),
+        ),
       ),
+    }),
   );
-
   app.post<{
     Body: RemoveProjectRequest;
     Headers: { "idempotency-key": string };
@@ -382,31 +239,16 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
         body: RemoveProjectRequestSchema,
         headers: IdempotencyHeadersSchema,
         params: ProjectParamsSchema,
-        response: {
-          200: RemoveProjectResponseSchema,
-          400: AgentMutationErrorSchema,
-          404: AgentMutationErrorSchema,
-          409: AgentMutationErrorSchema,
-          502: AgentMutationErrorSchema,
-          503: AgentMutationErrorSchema,
-        },
+        response: { 200: RemoveProjectResponseSchema, ...mutationErrors },
       },
     },
-    async (request) =>
-      runIdempotent(
-        ["remove-project", request.params.projectId],
-        request.headers["idempotency-key"],
-        request.body,
-        async () => {
-          if (!(await projectRepository.remove(request.params.projectId))) {
-            throw new MutationHttpError("PROJECT_NOT_FOUND", "Project not found", 404);
-          }
-          await releaseProjectContext(request.params.projectId);
-          return { projectId: request.params.projectId, status: "removed" as const };
-        },
-      ),
+    async (request) => {
+      await callEngine(() =>
+        engine.projectRemove(readRequestId(request.headers), request.params.projectId),
+      );
+      return { projectId: request.params.projectId, status: "removed" as const };
+    },
   );
-
   registerProjectGitRoutes(app, context);
   registerProjectFileRoutes(app, context);
   done();

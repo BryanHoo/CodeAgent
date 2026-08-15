@@ -1,9 +1,9 @@
-import { buildTaskAttachmentUrl } from "@code-agent/client";
 import type { AgentMessageAttachment, AgentSkill, AgentTurn } from "@code-agent/protocol";
 import { FolderRoot, Paperclip, Sparkles } from "lucide-react";
 import { useMemo } from "react";
 
 import { i18n } from "../../../i18n/i18n.js";
+import { codeAgentClient } from "../../../app/create-host-client.js";
 import { InspectorSection } from "./workbench-inspector-sections.js";
 import { MessageImageAttachment } from "./message-image-attachment.js";
 import { MessageSourceAttachment } from "./message-source-attachment.js";
@@ -206,12 +206,13 @@ export function InspectorSources({
           <InspectorSourceRow
             {...(source.kind === "attachment" && projectId !== undefined && taskId !== undefined
               ? {
-                  attachmentUrl: buildTaskAttachmentUrl(
-                    "",
+                  attachmentUrl: codeAgentClient.resolveAssetUrl({
+                    attachmentId: source.attachment.id,
+                    kind: "task-attachment",
+                    path: source.attachment.id,
                     projectId,
                     taskId,
-                    source.attachment.id,
-                  ),
+                  }),
                 }
               : {})}
             key={source.id}

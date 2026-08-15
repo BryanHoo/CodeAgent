@@ -1,6 +1,8 @@
-import { CodeAgentClient } from "@code-agent/client";
+import type { CodeAgentClient } from "@code-agent/client";
 import type { AgentTaskPage, AgentTaskSnapshot } from "@code-agent/protocol";
 import type { InfiniteData } from "@tanstack/react-query";
+
+import { codeAgentClient } from "../../app/create-host-client.js";
 
 export type CodeAgentReadClient = Pick<CodeAgentClient, "listProjects" | "listTasks" | "readTask">;
 export type CodeAgentAccessClient = Pick<
@@ -31,7 +33,7 @@ export type CodeAgentProjectOpenClient = Pick<
 >;
 export type CodeAgentRuntimeClient = Pick<
   CodeAgentClient,
-  "readTask" | "subscribeEvents" | "unsubscribeTask"
+  "listTaskTurns" | "readTask" | "subscribeEvents" | "unsubscribeTask"
 >;
 export type CodeAgentBackgroundTerminalClient = Pick<
   CodeAgentClient,
@@ -99,10 +101,11 @@ export type CodeAgentSnapshotClient = Pick<CodeAgentClient, "readTask">;
 
 export const PROJECT_TASK_PAGE_SIZE = 5;
 export const PROJECT_TASK_SEARCH_PAGE_SIZE = 100;
+export const PROJECT_PINNED_TASKS_SOURCE_KEY = "pinned-source";
 export const PROJECT_TASK_SEARCH_SOURCE_KEY = "search-source";
 export const TASK_SNAPSHOT_GC_TIME_MS = 30_000;
 
-export const codeAgentClient = new CodeAgentClient();
+export { codeAgentClient };
 
 export type ProjectTaskInfiniteData = InfiniteData<AgentTaskPage, string | undefined>;
 export type TaskTitleSnapshot = Pick<

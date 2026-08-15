@@ -16,6 +16,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
+import { normalizeError, useErrorToast } from "../../../shared/errors/error-toast.js";
 import { cn } from "../../../shared/lib/utils.js";
 import { Button } from "../../../shared/components/core/button.js";
 import { Input } from "../../../shared/components/core/input.js";
@@ -259,8 +260,7 @@ export function ProviderConnectionPanelView({
       </div>
 
       {error === null ? null : (
-        <div className="mt-4 flex items-center justify-between gap-3 text-body-small" role="alert">
-          <p className="min-w-0 text-danger">{error}</p>
+        <div className="mt-4 flex justify-end">
           <Button
             aria-label={t("provider.retry")}
             className="shrink-0"
@@ -307,7 +307,6 @@ function openOfficialAuthUrl(authUrl: string): void {
 }
 
 export function ProviderConnectionPanel() {
-  const { t } = useTranslation("settings");
   const queryClient = useQueryClient();
   const connectionQuery = useQuery(providerConnectionQueryOptions());
   const officialLogin = useMutation(startOfficialProviderLoginMutationOptions(queryClient));
@@ -319,7 +318,7 @@ export function ProviderConnectionPanel() {
   const [models, setModels] = useState<readonly CustomModelDraft[]>([]);
   const nextModelKey = useRef(1);
   const [customPending, setCustomPending] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<Error | null>(null);
   const status = connectionQuery.data;
 
   useEffect(() => {
@@ -331,15 +330,14 @@ export function ProviderConnectionPanel() {
   const isBusy =
     officialLogin.isPending || cancelLogin.isPending || logout.isPending || customPending;
   const requestError =
-    localError ??
-    (connectionQuery.error ?? officialLogin.error ?? cancelLogin.error ?? logout.error)?.message ??
-    null;
+    localError ?? connectionQuery.error ?? officialLogin.error ?? cancelLogin.error ?? logout.error;
+  useErrorToast(requestError);
 
   return (
     <ProviderConnectionPanelView
       apiKey={apiKey}
       baseUrl={baseUrl}
-      error={requestError}
+      error={requestError?.message ?? null}
       isBusy={isBusy}
       mode={mode}
       models={models}
@@ -362,8 +360,8 @@ export function ProviderConnectionPanel() {
           .then(() => {
             setApiKey("");
           })
-          .catch(() => {
-            setLocalError(t("provider.errors.connect"));
+          .catch((error: unknown) => {
+            setLocalError(normalizeError(error));
           })
           .finally(() => {
             setApiKey("");
@@ -395,8 +393,8 @@ export function ProviderConnectionPanel() {
           .then((result) => {
             openOfficialAuthUrl(result.authUrl);
           })
-          .catch(() => {
-            setLocalError(t("provider.errors.login"));
+          .catch((error: unknown) => {
+            setLocalError(normalizeError(error));
           });
       }}
       status={status}

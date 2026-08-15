@@ -14,6 +14,7 @@ import {
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../core/button.js";
+import { normalizeError, showErrorToast } from "../../errors/error-toast.js";
 
 type TerminalContextValue = Readonly<{
   autoScroll: boolean;
@@ -171,7 +172,9 @@ export function TerminalCopyButton({
         setCopied(false);
       }, timeout);
     } catch (error) {
-      onError?.(error instanceof Error ? error : new Error("Unable to copy terminal output"));
+      const normalizedError = normalizeError(error);
+      showErrorToast(normalizedError);
+      onError?.(normalizedError);
     }
   };
 

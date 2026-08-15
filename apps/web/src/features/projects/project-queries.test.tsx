@@ -25,6 +25,7 @@ import {
   projectCommitChangesMutationOptions,
   projectCommitMessageMutationOptions,
   projectFileTreeQueryOptions,
+  projectPinnedTasksQueryOptions,
   projectReorderMutationOptions,
   listProjectTasksForSearch,
   projectTasksInfiniteQueryOptions,
@@ -34,10 +35,12 @@ import {
   taskSnapshotQueryOptions,
   taskSettingsMutationOptions,
   updateNewTaskTitleFromSnapshotInInfiniteData,
+  cacheAddedProject,
   flattenProjectTaskPages,
   removeProjectTaskFromInfiniteData,
   reorderProjectPage,
   replaceProjectTaskInInfiniteData,
+  replaceProjectTaskInQueryCaches,
   upsertProjectTaskInInfiniteData,
 } from "./project-queries.js";
 
@@ -119,6 +122,27 @@ const snapshotResponse = {
 };
 
 describe("project queries", () => {
+  it("publishes an added project without invalidating lazy project state", () => {
+    const addedProject = {
+      ...project,
+      id: "new-project",
+      name: "New Project",
+      rootPath: "/workspace/new-project",
+    };
+    const queryClient = new QueryClient();
+    const gitStatusKey = ["projects", project.id, "git-status"] as const;
+    queryClient.setQueryData(["projects"], { data: [project], nextCursor: null });
+    queryClient.setQueryData(gitStatusKey, { branch: "main" });
+
+    cacheAddedProject(queryClient, addedProject);
+
+    expect(queryClient.getQueryData(["projects"])).toEqual({
+      data: [project, addedProject],
+      nextCursor: null,
+    });
+    expect(queryClient.getQueryState(gitStatusKey)?.isInvalidated).toBe(false);
+  });
+
   it("inserts a created task immediately and replaces it when fresh metadata arrives", () => {
     const initialData = {
       pageParams: [undefined, "next-page"],
@@ -594,6 +618,7 @@ describe("project queries", () => {
           branch: "feat/commit",
           commitSha: "0123456789abcdef0123456789abcdef01234567",
           message: commitRequest.message,
+          pushError: null,
           pushStatus: "not_requested" as const,
         }),
       ),
@@ -684,6 +709,40 @@ describe("project queries", () => {
       cursor: "next-page",
       limit: 100,
     });
+  });
+
+  it("loads pinned tasks directly from the Provider section across pages", async () => {
+    const pinnedTask = { ...task, id: "task-pinned", pinned: true };
+    const olderPinnedTask = { ...pinnedTask, id: "task-pinned-older" };
+    const listTasks = vi
+      .fn<CodeAgentReadClient["listTasks"]>()
+      .mockResolvedValueOnce({ data: [pinnedTask], nextCursor: "pinned-next" })
+      .mockResolvedValueOnce({ data: [olderPinnedTask], nextCursor: null });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const options = projectPinnedTasksQueryOptions("code-agent", { listTasks });
+
+    await expect(queryClient.fetchQuery(options)).resolves.toEqual([pinnedTask, olderPinnedTask]);
+    expect(listTasks.mock.calls[0]?.slice(0, 2)).toEqual([
+      "code-agent",
+      { limit: 100, pinnedOnly: true },
+    ]);
+    expect(listTasks.mock.calls[1]?.slice(0, 2)).toEqual([
+      "code-agent",
+      { cursor: "pinned-next", limit: 100, pinnedOnly: true },
+    ]);
+    expect(listTasks.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
+    expect(listTasks.mock.calls[1]?.[2]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("adds a newly pinned task to the dedicated pinned cache", () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["projects", "code-agent", "tasks", "pinned-source"], []);
+
+    replaceProjectTaskInQueryCaches(queryClient, { ...task, pinned: true });
+
+    expect(queryClient.getQueryData(["projects", "code-agent", "tasks", "pinned-source"])).toEqual([
+      { ...task, pinned: true },
+    ]);
   });
 
   it("refetches the active first page after archive to keep five recent tasks visible", async () => {

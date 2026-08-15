@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+## [2.0.0-beta.1] - 2026-08-16
+
+### 新增
+
+- 添加基于 Tauri v2 的原生 Desktop 应用，让 macOS、Windows 和 Linux 通过真实 IPC 复用同一套 React 界面与 Rust Runtime。
+- 添加 Desktop 自动更新检查、发布说明、安装与重启流程，并继续使用内置 minisign 公钥验证 updater artifact。
+
+### 优化
+
+- 将 Desktop 从 Node/Fastify localhost 链路迁移为直接 Rust IPC、raw binary channel 与受管资源协议，减少进程、序列化和大文件内存开销。
+- 统一 CLI 与 Desktop 的协议、Provider、SQLite migrations 和有界生命周期，保持跨宿主行为一致。
+
+### 工程
+
+- 添加 feature 隔离的真实 Desktop IPC E2E，以及 macOS 14、Windows 10 和 Ubuntu 22.04 最低系统发布 smoke 门禁。
+- 添加 draft Release updater `bootstrap` 验收，自动检查三平台 metadata、合法签名和 artifact/signature 篡改拒绝。
+- 将三平台 Desktop 标记为 Preview / Unsigned，并将 SemVer prerelease npm 包限制在 `beta` dist-tag。
+
 ## [1.10.0] - 2026-08-12
 
 ### 新增
@@ -293,7 +311,8 @@ CodeAgent 首个稳定版本，集中发布本地 Coding Agent 工作台的完�
 - 使用官方 Codex CLI 登录状态，不在 Web 中读取或管理认证凭证。
 - 添加 Sandbox 与命令审批，并通过受控附件端点读取历史图片。
 
-[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v2.0.0-beta.1...HEAD
+[2.0.0-beta.1]: https://github.com/BryanHoo/CodeAgent/compare/v1.10.0...v2.0.0-beta.1
 [1.10.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/BryanHoo/CodeAgent/compare/v1.7.0...v1.8.0

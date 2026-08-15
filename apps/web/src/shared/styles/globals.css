@@ -494,6 +494,30 @@ a {
   pointer-events: none;
 }
 
+.sidebar-task-status-dot {
+  display: block;
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: currentColor;
+  border-radius: 9999px;
+}
+
+.sidebar-task-status-dot--pulse {
+  /* 仅改变透明度，以安静的呼吸节奏表达持续等待。 */
+  animation: sidebar-task-status-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes sidebar-task-status-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
 .group:hover > .task-actions,
 .group:focus-within > .task-actions {
   opacity: 1;
@@ -599,6 +623,11 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .sidebar-task-status-dot--pulse {
+    animation: none;
+    opacity: 1;
+  }
+
   .workbench-shell,
   .workbench-sidebar,
   .workbench-inspector {

@@ -7,6 +7,7 @@ import {
   ConnectionReadySchema,
   EventStreamMessageSchema,
   ResyncRequiredSchema,
+  checkEventStreamMessage,
 } from "./agent-event.js";
 
 const messageItem = {
@@ -35,6 +36,7 @@ const baseEvent = {
 } as const;
 
 const pendingRequest = {
+  additionalPermissions: null,
   availableDecisions: ["allow", "deny"],
   command: "pnpm check",
   createdAt: "2026-07-23T00:00:00.000Z",
@@ -220,6 +222,7 @@ describe("Agent Event v2 protocol", () => {
     ];
 
     expect(events.every((event) => Value.Check(AgentEventSchema, event))).toBe(true);
+    expect(events.every(checkEventStreamMessage)).toBe(true);
   });
 
   it("requires bounded realtime diff metadata and limits file change counts", () => {
@@ -376,6 +379,8 @@ describe("Agent Event v2 protocol", () => {
     expect(Value.Check(ResyncRequiredSchema, resync)).toBe(true);
     expect(Value.Check(EventStreamMessageSchema, ready)).toBe(true);
     expect(Value.Check(EventStreamMessageSchema, resync)).toBe(true);
+    expect(checkEventStreamMessage(ready)).toBe(true);
+    expect(checkEventStreamMessage(resync)).toBe(true);
     expect(Value.Check(AgentTaskSnapshotResponseSchema, response)).toBe(true);
     expect(
       Value.Check(AgentTaskSnapshotResponseSchema, {
@@ -429,6 +434,8 @@ describe("Agent Event v2 protocol", () => {
     expect(Value.Check(AgentEventSchema, { ...valid, version: 1 })).toBe(false);
     expect(Value.Check(AgentEventSchema, { ...valid, type: "native.delta" })).toBe(false);
     expect(Value.Check(AgentEventSchema, { ...valid, nativeItem: {} })).toBe(false);
+    expect(checkEventStreamMessage({ ...valid, nativeItem: {} })).toBe(false);
+    expect(checkEventStreamMessage({ ...valid, type: "native.delta" })).toBe(false);
     expect(
       Value.Check(ResyncRequiredSchema, {
         latestSequence: 1,

@@ -20,14 +20,55 @@ CodeAgent 运行在你的电脑上，既可以本机使用，也可以在可信�
 
 ## 使用前准备
 
-请先准备：
+CodeAgent 发布支持以下目标：
 
-- Node.js 24 或更高版本
-- Chrome/Chromium 116+、Firefox 124+ 或 Safari 17.4+
+| 系统          | 架构          | Desktop                                  | CLI         |
+| ------------- | ------------- | ---------------------------------------- | ----------- |
+| macOS 14+     | Apple Silicon | Preview / Unsigned `.dmg`                | Node.js 24+ |
+| Windows 10+   | x64           | Preview / Unsigned `.exe` 或 `.msi`      | Node.js 24+ |
+| Ubuntu 22.04+ | x64 glibc     | Preview / Unsigned `.deb` 或 `.AppImage` | Node.js 24+ |
+
+不支持 Intel macOS、Windows arm64、Linux arm64、musl Linux 和更早的系统。通过 CLI 浏览器模式访问时，还需要 Chrome/Chromium 116+、Firefox 124+ 或 Safari 17.4+。
 
 CodeAgent 通过 `@openai/codex` 自带受支持的 Codex CLI 二进制，无需单独安装。如需在诊断或启动时使用其他可执行文件，可传入 `--codex-bin <path>` 或设置 `CODE_AGENT_CODEX_BIN`。
 
-## 快速开始
+## Desktop
+
+请从 [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases) 下载当前系统的安装包。Desktop 自带运行时，不需要安装 Node.js。
+
+三个系统的 Desktop 当前均为 Preview / Unsigned，没有操作系统代码签名证书。macOS 和 Windows 可能显示安全警告；只有在确认文件来自上述官方 Release 页面后才继续。应用内更新包仍使用独立密钥进行加密签名，并在安装前验证来源。
+
+### macOS
+
+1. 下载 Apple Silicon 对应的 `.dmg`，打开后将 CodeAgent 拖入“应用程序”。
+2. 首次启动如果提示无法验证开发者或 Apple 无法检查 App 是否包含恶意软件，请关闭提示。
+3. 打开“系统设置 > 隐私与安全性”，向下滚动到“安全性”，点按“仍要打开”。
+4. 验证登录密码或 Touch ID，在再次出现的提示中点按“打开”。之后可正常从“应用程序”启动。
+
+“仍要打开”只会在尝试启动后的一段时间内出现。完整说明参见 [Apple 官方支持](https://support.apple.com/zh-cn/guide/mac-help/-mh40616/mac)。
+
+### Windows
+
+1. 下载 x64 `.exe`（推荐）或 `.msi` 并启动安装。
+2. 如果 Microsoft Defender SmartScreen 显示“Windows 已保护你的电脑”，请确认发布来源，然后点按“更多信息 > 仍要运行”。
+3. 按安装器提示完成安装并启动 CodeAgent。受组织策略管理的电脑可能不允许绕过警告，需要联系管理员。
+
+### Ubuntu
+
+下载 x64 `.deb` 后，在下载目录执行：
+
+```bash
+sudo apt install ./CodeAgent_*.deb
+```
+
+也可以下载 `.AppImage`，添加执行权限后直接运行：
+
+```bash
+chmod +x ./CodeAgent_*.AppImage
+./CodeAgent_*.AppImage
+```
+
+## CLI 快速开始
 
 无需安装，直接运行最新版本：
 

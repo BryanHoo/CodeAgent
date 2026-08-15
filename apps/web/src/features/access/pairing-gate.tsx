@@ -4,16 +4,14 @@ import { useState, type SubmitEvent } from "react";
 import { useTranslation } from "../../i18n/i18n.js";
 import { Button } from "../../shared/components/core/button.js";
 import { Input } from "../../shared/components/core/input.js";
-import type { AccessError } from "./access-context.js";
-
 export function PairingGate({
-  error,
+  loadFailed,
   loading,
   onPair,
   onRetry,
   pairing,
 }: Readonly<{
-  error: AccessError;
+  loadFailed: boolean;
   loading: boolean;
   onPair: (code: string) => Promise<void>;
   onRetry: () => void;
@@ -44,9 +42,8 @@ export function PairingGate({
           <p className="text-body-small text-muted-foreground" role="status">
             {t("access.checking")}
           </p>
-        ) : error === "load" ? (
-          <div className="space-y-4" role="alert">
-            <p className="text-body-small text-danger">{t("access.loadError")}</p>
+        ) : loadFailed ? (
+          <div className="space-y-4">
             <Button onClick={onRetry} size="lg" type="button" variant="secondary">
               <RotateCw aria-hidden="true" className="size-4" />
               {t("actions.retry")}
@@ -92,10 +89,6 @@ export function PairingGate({
             {pairing ? (
               <p className="text-meta text-muted-foreground" role="status">
                 {t("access.pairing")}
-              </p>
-            ) : error === "pairing" ? (
-              <p className="text-meta text-danger" role="alert">
-                {t("access.pairingError")}
               </p>
             ) : null}
           </form>

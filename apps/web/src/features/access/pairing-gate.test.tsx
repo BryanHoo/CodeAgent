@@ -7,10 +7,10 @@ import { PairingGate } from "./pairing-gate.js";
 describe("PairingGate", () => {
   beforeEach(() => changeAppLanguage("zh-CN"));
 
-  it("renders an accessible pairing form without exposing internal errors", () => {
+  it("keeps access errors out of the module while preserving the pairing form", () => {
     const markup = renderToStaticMarkup(
       <PairingGate
-        error="pairing"
+        loadFailed={false}
         loading={false}
         onPair={vi.fn()}
         onRetry={vi.fn()}
@@ -22,7 +22,8 @@ describe("PairingGate", () => {
     expect(markup).toContain('autoComplete="current-password"');
     expect(markup).toContain('aria-label="访问密码"');
     expect(markup).toContain('data-variant="embedded"');
-    expect(markup).toContain("无法完成配对，请检查访问密码后重试");
+    expect(markup).not.toContain("无法完成配对，请检查访问密码后重试");
     expect(markup).not.toContain("PAIRING_FAILED");
+    expect(markup).not.toContain('role="alert"');
   });
 });

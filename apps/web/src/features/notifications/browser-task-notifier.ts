@@ -1,6 +1,7 @@
 import type { AgentEvent } from "@code-agent/protocol";
 
 import { i18n } from "../../i18n/i18n.js";
+import { showErrorToast } from "../../shared/errors/error-toast.js";
 
 const MAX_FAILED_TURN_KEYS = 256;
 
@@ -20,11 +21,22 @@ export type TaskNotifier = Readonly<{
   requestPermission: () => Promise<void>;
 }>;
 
+export type NativeNotificationApi = Readonly<{
+  onAction: (
+    listener: (target: Readonly<{ projectId: string; taskId: string }>) => void,
+  ) => Promise<() => void>;
+  show: (
+    title: string,
+    options: Readonly<{ body: string; projectId: string; tag: string; taskId: string }>,
+  ) => Promise<void>;
+}>;
+
 type BrowserTaskNotifierOptions = Readonly<{
   api?: BrowserNotificationApi | undefined;
   focusPage?: (() => void) | undefined;
   isPageForeground?: (() => boolean) | undefined;
   navigateToTask?: ((projectId: string, taskId: string) => void) | undefined;
+  nativeApi?: NativeNotificationApi | undefined;
 }>;
 
 type TaskNotification = Readonly<{
@@ -105,6 +117,7 @@ class BrowserTaskNotifier implements TaskNotifier {
   readonly #focusPage: () => void;
   readonly #isPageForeground: () => boolean;
   readonly #navigateToTask: (projectId: string, taskId: string) => void;
+  readonly #nativeApi: NativeNotificationApi | undefined;
   #permissionRequest: Promise<void> | undefined;
 
   public constructor(options: BrowserTaskNotifierOptions) {
@@ -118,10 +131,23 @@ class BrowserTaskNotifier implements TaskNotifier {
       options.isPageForeground ??
       (() => globalThis.document.visibilityState === "visible" && globalThis.document.hasFocus());
     this.#navigateToTask = options.navigateToTask ?? (() => undefined);
+    this.#nativeApi = options.nativeApi;
+    if (this.#nativeApi !== undefined) {
+      // 原生通知由宿主激活窗口，Renderer 复用浏览器路径完成焦点与任务路由。
+      void this.#nativeApi
+        .onAction(({ projectId, taskId }) => {
+          this.#focusPage();
+          this.#navigateToTask(projectId, taskId);
+        })
+        .catch(showErrorToast);
+    }
   }
 
   public notify(projectId: string, event: AgentEvent, taskTitle: string): void {
-    if (this.#api?.getPermission() !== "granted" || this.#isPageForeground()) {
+    if (this.#nativeApi === undefined && this.#api === undefined) {
+      return;
+    }
+    if (this.#isPageForeground()) {
       return;
     }
 
@@ -152,23 +178,56 @@ class BrowserTaskNotifier implements TaskNotifier {
 
     try {
       const normalizedTaskTitle = taskTitle.trim() || "Task";
+      if (this.#nativeApi !== undefined) {
+        void this.#nativeApi
+          .show(`CodeAgent · ${normalizedTaskTitle}`, {
+            ...taskNotification,
+            projectId,
+            taskId: event.taskId,
+          })
+          .catch((error: unknown) => {
+            showErrorToast(error);
+            this.#showBrowserNotification(
+              normalizedTaskTitle,
+              taskNotification,
+              projectId,
+              event.taskId,
+            );
+          });
+        return;
+      }
+      this.#showBrowserNotification(normalizedTaskTitle, taskNotification, projectId, event.taskId);
+    } catch (error) {
+      showErrorToast(error);
+    }
+  }
+
+  #showBrowserNotification(
+    normalizedTaskTitle: string,
+    taskNotification: TaskNotification,
+    projectId: string,
+    taskId: string,
+  ): void {
+    if (this.#api?.getPermission() !== "granted") return;
+    try {
       const notification = this.#api.show(`CodeAgent · ${normalizedTaskTitle}`, {
         body: taskNotification.body,
-        data: { projectId, taskId: event.taskId },
+        data: { projectId, taskId },
         tag: taskNotification.tag,
       });
       notification.addClickListener(() => {
         notification.close();
         this.#focusPage();
-        this.#navigateToTask(projectId, event.taskId);
+        this.#navigateToTask(projectId, taskId);
       });
-    } catch {
-      // 系统通知属于增强能力，浏览器拒绝构造时不能中断实时事件处理。
+    } catch (error) {
+      showErrorToast(error);
     }
   }
 
   public requestPermission(): Promise<void> {
-    if (this.#api === undefined) {
+    // Desktop 权限由受控宿主命令处理，避免 Renderer 直接触发 Tauri plugin ACL。
+    if (this.#nativeApi !== undefined || this.#api === undefined) {
       return Promise.resolve();
     }
     if (this.#permissionRequest !== undefined) {
@@ -180,12 +239,13 @@ class BrowserTaskNotifier implements TaskNotifier {
         return Promise.resolve();
       }
       browserPermissionRequest = this.#api.requestPermission();
-    } catch {
+    } catch (error) {
+      showErrorToast(error);
       return Promise.resolve();
     }
     this.#permissionRequest = browserPermissionRequest
       .then(() => undefined)
-      .catch(() => undefined)
+      .catch(showErrorToast)
       .finally(() => {
         this.#permissionRequest = undefined;
       });

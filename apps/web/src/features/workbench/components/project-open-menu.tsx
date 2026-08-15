@@ -41,6 +41,7 @@ import {
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
 import { useTranslation } from "../../../i18n/i18n.js";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
 
 const appKindIcons = {
   editor: Code2,
@@ -80,7 +81,7 @@ function getProjectTargetName(path: string): string {
 
 function copyProjectTargetText(text: string) {
   // 菜单关闭不应等待系统剪贴板，失败时保留当前文件树状态。
-  void navigator.clipboard.writeText(text).catch(() => undefined);
+  void navigator.clipboard.writeText(text).catch(showErrorToast);
 }
 
 export function ProjectOpenContextMenuItems({

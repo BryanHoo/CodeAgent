@@ -80,7 +80,7 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
   expect(pinnedBox.y).toBeLessThan(projectsBox.y);
 });
 
-test("preserves the original sidebar control typography and dimensions", async ({ page }) => {
+test("preserves the compact sidebar control typography and dimensions", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
@@ -110,10 +110,16 @@ test("preserves the original sidebar control typography and dimensions", async (
     .poll(() => readControlStyle(page.locator("#global-settings-trigger")))
     .toMatchObject({
       display: "flex",
-      fontSize: "13px",
+      fontSize: "12px",
       fontWeight: "450",
       height: "36px",
       justifyContent: "flex-start",
+    });
+  await expect
+    .poll(() => readControlStyle(page.locator("#global-about-trigger")))
+    .toMatchObject({
+      fontSize: "12px",
+      height: "36px",
     });
   await expect
     .poll(() => readControlStyle(sidebar.getByRole("button", { name: "添加项目" })))
@@ -247,6 +253,41 @@ test("adds a folder through the Web project directory picker", async ({ page }) 
   ).toHaveCount(0);
 });
 
+test("navigates absolute paths and reveals hidden project folders on demand", async ({ page }) => {
+  const directoryRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/v1/project-directories") {
+      directoryRequests.push(request.url());
+    }
+  });
+  await page.goto("/p/code-agent");
+  await page.getByRole("button", { name: "添加项目" }).click();
+  const picker = page.getByRole("dialog", { name: "选择项目文件夹" });
+
+  await expect(picker.getByText(".hidden-project", { exact: true })).toHaveCount(0);
+  await picker.getByRole("button", { name: "显示隐藏文件" }).click();
+  await expect(picker.getByText(".hidden-project", { exact: true })).toBeVisible();
+
+  await page.setViewportSize({ height: 720, width: 320 });
+  await expect
+    .poll(() =>
+      picker.evaluate(
+        (element) =>
+          element.scrollWidth <= element.clientWidth &&
+          document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    )
+    .toBe(true);
+
+  const pathInput = picker.getByRole("textbox", { name: "绝对路径" });
+  await pathInput.fill("/workspace/AddedProject");
+  await pathInput.press("Enter");
+  await expect(pathInput).toHaveValue("/workspace/AddedProject");
+  await expect
+    .poll(() => directoryRequests.some((url) => url.includes("path=%2Fworkspace%2FAddedProject")))
+    .toBe(true);
+});
+
 test("keeps the Web directory picker open after add failure", async ({ page }) => {
   const pageErrors: Error[] = [];
   page.on("pageerror", (error) => {
@@ -270,7 +311,10 @@ test("keeps the Web directory picker open after add failure", async ({ page }) =
   await picker.getByRole("button", { exact: true, name: "AddedProject" }).click();
   await picker.getByRole("button", { name: "添加此文件夹" }).click();
 
-  await expect(picker.getByRole("alert")).toContainText("无法添加所选文件夹");
+  await expect(picker.getByRole("alert")).toHaveCount(0);
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "Project picker failed" }),
+  ).toBeVisible();
   await expect(picker).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
@@ -588,7 +632,9 @@ test("toggles project tasks from the project name without navigation", async ({ 
 test("loads tasks only for the current or expanded projects", async ({ page }) => {
   let superworkTaskRequests = 0;
   await page.route("**/v1/projects/superwork/tasks?*", async (route) => {
-    superworkTaskRequests += 1;
+    if (new URL(route.request().url()).searchParams.get("pinnedOnly") !== "true") {
+      superworkTaskRequests += 1;
+    }
     await route.fallback();
   });
 
@@ -609,7 +655,10 @@ test("loads one project task page only after showing more", async ({ page }) => 
   const taskListRequests: URL[] = [];
   page.on("request", (request) => {
     const requestUrl = new URL(request.url());
-    if (requestUrl.pathname === "/v1/projects/code-agent/tasks") {
+    if (
+      requestUrl.pathname === "/v1/projects/code-agent/tasks" &&
+      requestUrl.searchParams.get("pinnedOnly") !== "true"
+    ) {
       taskListRequests.push(requestUrl);
     }
   });
@@ -644,7 +693,10 @@ test("keeps project add buttons visible after opening a task", async ({ page }) 
   await page.goto("/p/code-agent/t/task-1");
 
   const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
-  await sidebar.getByRole("link", { name: longTask.title }).click();
+  await sidebar
+    .getByTestId("project-tree-scroll")
+    .getByRole("link", { name: longTask.title })
+    .click();
 
   const layout = await sidebar.evaluate((element) => {
     const sidebarRect = element.getBoundingClientRect();

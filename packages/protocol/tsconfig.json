@@ -5,7 +5,8 @@
     "emitDeclarationOnly": true,
     "outDir": "../../.cache/types/protocol",
     "rootDir": "src",
-    "tsBuildInfoFile": "../../.cache/types/protocol.tsbuildinfo"
+    "tsBuildInfoFile": "../../.cache/types/protocol.tsbuildinfo",
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"]
 }

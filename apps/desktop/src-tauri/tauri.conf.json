@@ -1,0 +1,61 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CodeAgent",
+  "version": "../../../package.json",
+  "identifier": "com.bryanhu.codeagent",
+  "build": {
+    "beforeDevCommand": {
+      "cwd": "../../..",
+      "script": "pnpm --filter @code-agent/web dev:desktop",
+      "wait": false
+    },
+    "beforeBuildCommand": {
+      "cwd": "../../..",
+      "script": "pnpm run build:desktop-ui"
+    },
+    "devUrl": "http://127.0.0.1:5173",
+    "frontendDist": "../../../dist/desktop"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "CodeAgent",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "capabilities": ["main-capability"],
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; img-src 'self' data: blob: codeagent-asset: http://codeagent-asset.localhost; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "externalBin": [],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "14.0"
+    },
+    "resources": {
+      "resources/codex-runtime/": "codex-runtime/"
+    },
+    "targets": "all"
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://github.com/BryanHoo/CodeAgent/releases/latest/download/latest.json"],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM2NUNCRUY0RDA0NDkxMTkKUldRWmtVVFE5TDVjeHJ3Z1RReUFPZVhJN2dpUUl5cUQwYWcwamFJWG4xc3RRMmNFR2treko4enIK"
+    }
+  }
+}

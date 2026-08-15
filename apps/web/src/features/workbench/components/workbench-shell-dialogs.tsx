@@ -35,11 +35,13 @@ export function WorkbenchShellDialogs({
     gitStatusQuery,
     gitHistoryOpen,
     globalSettingsMutation,
+    globalSettingsInitialSection,
     globalSettingsOpen,
     globalSettingsQuery,
     models,
     modelsQuery,
     openFileDiff,
+    openSystemFileReference,
     projectOpenCapabilitiesQuery,
     projectRuntime,
     queryClient,
@@ -55,7 +57,6 @@ export function WorkbenchShellDialogs({
     setGitHistoryOpen,
     setSourceFileSelection,
     setSubagentDialogSelection,
-    taskRenameError,
     taskRenameOpen,
     title,
   } = context;
@@ -111,12 +112,13 @@ export function WorkbenchShellDialogs({
           projectId={projectId}
         />
       ) : null}
-      {!projectToolsEnabled || selectedSourceFile === null ? null : (
+      {selectedSourceFile === null ? null : (
         <ProjectSourceDialog
           client={client}
           onClose={() => {
             setSourceFileSelection(null);
           }}
+          onOpenSystemDefault={openSystemFileReference}
           projectId={projectId}
           previewKind={selectedSourceFile.kind}
           reference={selectedSourceFile.reference}
@@ -132,7 +134,6 @@ export function WorkbenchShellDialogs({
       />
       {taskRenameOpen && taskId !== undefined ? (
         <TaskRenameDialog
-          error={taskRenameError}
           initialTitle={title}
           isPending={renameMutation.isPending}
           key={`${projectId}:${taskId}`}
@@ -157,14 +158,20 @@ export function WorkbenchShellDialogs({
               modelsQuery.isPending ||
               (projectToolsEnabled && projectOpenCapabilitiesQuery.isPending)
             }
-            initialSection="about"
+            initialSection={globalSettingsInitialSection}
             isAppInfoPending={appInfoQuery.isPending}
             isAppUpdatePending={appUpdateMutation.isPending}
             models={models}
             onClose={() => {
               setGlobalSettingsOpen(false);
               requestAnimationFrame(() => {
-                document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
+                document
+                  .querySelector<HTMLButtonElement>(
+                    globalSettingsInitialSection === "about"
+                      ? "#global-about-trigger"
+                      : "#global-settings-trigger",
+                  )
+                  ?.focus();
               });
             }}
             onLogoutAccess={access.logout}

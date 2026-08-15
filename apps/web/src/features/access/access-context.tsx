@@ -11,11 +11,13 @@ import {
 } from "react";
 
 import type { CodeAgentAccessClient } from "../projects/project-queries.js";
+import { normalizeError } from "../../shared/errors/error-toast.js";
 
-export type AccessError = "load" | "pairing" | null;
+export type AccessErrorSource = "load" | "pairing" | null;
 
 export type AccessState = Readonly<{
-  error: AccessError;
+  error: Error | null;
+  errorSource: AccessErrorSource;
   loading: boolean;
   pairing: boolean;
   status?: AccessStatusResponse;
@@ -30,6 +32,7 @@ export type AccessContextValue = AccessState &
 
 const INITIAL_ACCESS_STATE: AccessState = {
   error: null,
+  errorSource: null,
   loading: true,
   pairing: false,
 };
@@ -73,33 +76,43 @@ export class AccessSessionController {
 
   public async load(): Promise<void> {
     const generation = (this.#generation += 1);
-    this.#setState({ ...this.#state, error: null, loading: true });
+    this.#setState({ ...this.#state, error: null, errorSource: null, loading: true });
     try {
       const status = await this.#client.getAccessStatus();
       if (generation === this.#generation) {
-        this.#setState({ error: null, loading: false, pairing: false, status });
+        this.#setState({ error: null, errorSource: null, loading: false, pairing: false, status });
       }
-    } catch {
+    } catch (error) {
       if (generation === this.#generation) {
-        this.#setState({ ...this.#state, error: "load", loading: false });
+        this.#setState({
+          ...this.#state,
+          error: normalizeError(error),
+          errorSource: "load",
+          loading: false,
+        });
       }
     }
   }
 
   public async pair(code: string): Promise<void> {
-    this.#setState({ ...this.#state, error: null, pairing: true });
+    this.#setState({ ...this.#state, error: null, errorSource: null, pairing: true });
     try {
       const status = await this.#client.pairAccess(code);
-      this.#setState({ error: null, loading: false, pairing: false, status });
-    } catch {
-      this.#setState({ ...this.#state, error: "pairing", pairing: false });
+      this.#setState({ error: null, errorSource: null, loading: false, pairing: false, status });
+    } catch (error) {
+      this.#setState({
+        ...this.#state,
+        error: normalizeError(error),
+        errorSource: "pairing",
+        pairing: false,
+      });
     }
   }
 
   public async logout(): Promise<void> {
     const status = await this.#client.logoutAccess();
     this.#queryClient.clear();
-    this.#setState({ error: null, loading: false, pairing: false, status });
+    this.#setState({ error: null, errorSource: null, loading: false, pairing: false, status });
   }
 
   #clearAuthenticatedState(): void {
@@ -107,6 +120,7 @@ export class AccessSessionController {
     this.#queryClient.clear();
     this.#setState({
       error: null,
+      errorSource: null,
       loading: false,
       pairing: false,
       status: { authenticated: false, mode: "lan", version: 1 },

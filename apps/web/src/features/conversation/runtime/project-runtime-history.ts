@@ -13,18 +13,31 @@ export type ActivityListener = () => void;
 export type RecoverTaskSnapshot = () => Promise<AgentTaskSnapshotResponse | undefined>;
 export type TaskRecoveryState = "disposed" | "ready" | "recovering" | "waiting_to_retry";
 
+export type RealtimePerformanceSample = Readonly<{
+  at: number;
+  point: "store_committed" | "transport_received";
+  sequence: number;
+}>;
+export type RealtimePerformanceObserver = (sample: RealtimePerformanceSample) => void;
+
+declare global {
+  var __CODE_AGENT_PERFORMANCE_OBSERVER__: RealtimePerformanceObserver | undefined;
+}
+
 export type ProjectEventRuntimeOptions = Required<
   Pick<
     ProjectRuntimeManagerOptions,
     "idleTimeoutMs" | "maxEventHistoryBytes" | "maxEventHistoryEvents"
   >
->;
+> &
+  Pick<ProjectRuntimeManagerOptions, "onPerformanceSample">;
 
 export type ProjectRuntimeManagerOptions = Readonly<{
   idleTimeoutMs?: number;
   maxEventHistoryBytes?: number;
   maxEventHistoryEvents?: number;
   onMcpServerStatusChanged?: (projectId: string, taskId: string) => void;
+  onPerformanceSample?: RealtimePerformanceObserver;
   onProjectGitActivity?: (
     projectId: string,
     taskId: string,
@@ -68,8 +81,12 @@ export class ProjectEventHistory {
     return this.#floorSequence;
   }
 
-  public append(event: AgentEvent): void {
-    const retainedBytes = estimateRetainedBytes(event);
+  public append(event: AgentEvent, wireBytes: number | undefined): void {
+    // 网络事件直接复用 Transport 已知的 wire 大小；内部事件才执行保守对象估算。
+    const retainedBytes = wireBytes ?? estimateRetainedBytes(event);
+    if (!Number.isSafeInteger(retainedBytes) || retainedBytes < 0) {
+      throw new RangeError("Project Event history wireBytes must be a non-negative safe integer");
+    }
     if (retainedBytes > this.#maxBytes || this.#maxEvents === 0) {
       this.reset(event.sequence);
       return;

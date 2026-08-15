@@ -1,11 +1,19 @@
 import { File } from "lucide-react";
-import { createContext, memo, useContext, useMemo, type ComponentProps } from "react";
+import { createContext, memo, useContext, useMemo, useRef, type ComponentProps } from "react";
 import { Block, Streamdown, StreamdownContext, type BlockProps, type Components } from "streamdown";
 
 import { Button } from "../core/button.js";
-import { CodeComments, parseCodeComments } from "./code-comments.js";
+import { CodeComments } from "./code-comments.js";
 import type { MessageFileReference } from "./message.js";
+import {
+  createIncrementalMarkdownBlockParser,
+  createIncrementalMarkdownProcessor,
+  processMessageMarkdown,
+  RELATIVE_FILE_REFERENCE_PREFIX,
+  UNC_FILE_REFERENCE_PREFIX,
+} from "./message-markdown.js";
 import { promptReferenceTokenClassName } from "./prompt-reference-token.js";
+import { useHostExternalUrl, type HostExternalUrlOpener } from "../../host/host-external-url.js";
 
 type MarkdownLinkProps = ComponentProps<"a"> & {
   node?: unknown;
@@ -24,6 +32,11 @@ interface MarkdownNode {
   value?: string;
 }
 
+type ExternalLinkClickEvent = Readonly<{
+  defaultPrevented: boolean;
+  preventDefault: () => void;
+}>;
+
 const MessageFileReferenceContext = createContext<
   ((reference: MessageFileReference) => void) | null
 >(null);
@@ -31,17 +44,28 @@ const MessageFileReferenceContext = createContext<
 // Agent 输出使用“绝对路径:行号”表达文件定位；渲染时拆出行号，避免把路径暴露给用户。
 const LOCAL_FILE_REFERENCE_PATTERN =
   /^(?<path>(?:\/|[a-z]:[\\/]|\\\\).+?\.[a-z0-9]+?)(?::(?<line>\d+)(?::\d+)?)?$/i;
-const WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN =
-  /(?<=\]\()(?:[a-z]:[\\/]|\\\\)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
-const UNC_FILE_REFERENCE_PREFIX = "/__code_agent_unc__/";
-const RELATIVE_FILE_REFERENCE_PREFIX = "/__code_agent_relative__/";
 const PROMPT_FILE_REFERENCE_PREFIX = "/__code_agent_prompt_reference__/";
 const PROMPT_FILE_REFERENCE_PATTERN =
   /(^|\s)@(?<path>[^\s,!?;:，。！？；：、()[\]{}"'`]+)(?=$|\s|[,!?;:，。！？；：、()[\]{}"'`])/gu;
-const RELATIVE_MARKDOWN_FILE_REFERENCE_PATTERN =
-  /(?<=\]\()(?![a-z][a-z0-9+.-]*:|\/|#)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
-const LOCAL_MARKDOWN_FILE_REFERENCE_PATTERN =
-  /(?<=\]\()\/(?!\/)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
+
+export function handleExternalLinkClick(
+  event: ExternalLinkClickEvent,
+  href: string | undefined,
+  openExternalUrl: HostExternalUrlOpener | undefined,
+): void {
+  if (event.defaultPrevented || href === undefined || openExternalUrl === undefined) return;
+
+  try {
+    // Desktop 仅接管 Web URL；相对链接和其他协议继续由 Markdown 安全策略处理。
+    const protocol = new URL(href).protocol;
+    if (protocol !== "http:" && protocol !== "https:") return;
+  } catch {
+    return;
+  }
+
+  event.preventDefault();
+  openExternalUrl(href);
+}
 
 function decodeMarkdownFileReference(href: string): string {
   try {
@@ -135,30 +159,19 @@ function promptFileReferenceRemarkPlugin() {
   };
 }
 
-function normalizeMarkdownFileReferences(markdown: string): string {
-  // 先统一本地路径形式，再编码 Markdown 目标中不允许裸写的空白字符。
-  return markdown
-    .replace(WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN, (reference) => {
-      const normalizedReference = reference.replaceAll("\\", "/");
-      if (/^[a-z]:/i.test(normalizedReference)) {
-        return `/${normalizedReference}`;
-      }
-      return `${UNC_FILE_REFERENCE_PREFIX}${normalizedReference.slice(2)}`;
-    })
-    .replace(
-      RELATIVE_MARKDOWN_FILE_REFERENCE_PATTERN,
-      (reference) => `${RELATIVE_FILE_REFERENCE_PREFIX}${reference}`,
-    )
-    .replace(LOCAL_MARKDOWN_FILE_REFERENCE_PATTERN, (reference) =>
-      reference.replaceAll(" ", "%20").replaceAll("\t", "%09"),
-    );
-}
-
-function MarkdownLink({ children, className = "", href, node, ...props }: MarkdownLinkProps) {
+function MarkdownLink({
+  children,
+  className = "",
+  href,
+  node,
+  onClick,
+  ...props
+}: MarkdownLinkProps) {
   // Streamdown 注入的语法树节点不能透传给原生元素。
   void node;
   const fileReference = getFileReferenceMetadata(href);
   const onOpenFileReference = useContext(MessageFileReferenceContext);
+  const openExternalUrl = useHostExternalUrl();
 
   if (fileReference !== null) {
     if (fileReference.prompt) {
@@ -247,6 +260,14 @@ function MarkdownLink({ children, className = "", href, node, ...props }: Markdo
     <a
       className={`font-medium text-brand underline decoration-current/35 underline-offset-2 transition-colors hover:text-brand-strong ${className}`}
       href={href}
+      onClick={
+        onClick === undefined && openExternalUrl === undefined
+          ? undefined
+          : (event) => {
+              onClick?.(event);
+              handleExternalLinkClick(event, href, openExternalUrl);
+            }
+      }
       rel="noopener noreferrer"
       target="_blank"
       {...props}
@@ -260,6 +281,12 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown> & {
   onOpenFileReference?: (reference: MessageFileReference) => void;
   promptFileReferences?: boolean;
 };
+
+const messageResponseControls = {
+  code: { copy: true, download: false },
+  mermaid: false,
+  table: false,
+} as const;
 
 function InteractiveMessageBlock(props: BlockProps) {
   const streamdownContext = useContext(StreamdownContext);
@@ -280,32 +307,56 @@ function MessageResponseContent({
   children,
   className = "",
   components,
+  mode = "streaming",
   onOpenFileReference,
+  parseIncompleteMarkdown = false,
+  parseMarkdownIntoBlocksFn,
   promptFileReferences = false,
   remarkPlugins,
   ...props
 }: MessageResponseProps) {
-  const parsedResponse = parseCodeComments(children ?? "");
-  const normalizedMarkdown = normalizeMarkdownFileReferences(parsedResponse.markdown);
-  const markdownComponents: Components = {
-    ...components,
-    a: MarkdownLink,
-  };
-  const resolvedRemarkPlugins = promptFileReferences
-    ? [promptFileReferenceRemarkPlugin, ...(remarkPlugins ?? [])]
-    : remarkPlugins;
+  const incrementalProcessorRef =
+    useRef<ReturnType<typeof createIncrementalMarkdownProcessor>>(undefined);
+  const incrementalProcessor =
+    incrementalProcessorRef.current ?? createIncrementalMarkdownProcessor();
+  incrementalProcessorRef.current = incrementalProcessor;
+  const parsedResponse = useMemo(
+    () =>
+      mode === "streaming"
+        ? incrementalProcessor.process(children ?? "")
+        : processMessageMarkdown(children ?? ""),
+    [children, incrementalProcessor, mode],
+  );
+  const markdownComponents = useMemo<Components>(
+    () => ({ ...components, a: MarkdownLink }),
+    [components],
+  );
+  const incrementalBlockParser = useMemo(
+    () => createIncrementalMarkdownBlockParser(parseMarkdownIntoBlocksFn),
+    [parseMarkdownIntoBlocksFn],
+  );
+  const resolvedRemarkPlugins = useMemo(
+    () =>
+      promptFileReferences
+        ? [promptFileReferenceRemarkPlugin, ...(remarkPlugins ?? [])]
+        : remarkPlugins,
+    [promptFileReferences, remarkPlugins],
+  );
 
   return (
     <MessageFileReferenceContext.Provider value={onOpenFileReference ?? null}>
       <Streamdown
         className={`size-full break-words [&_blockquote]:border-l-2 [&_blockquote]:border-separator [&_blockquote]:pl-3 [&_code]:font-mono [&_code]:text-body-small [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_pre]:overflow-x-auto [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 ${className}`}
-        controls={{ code: { copy: true, download: false }, mermaid: false, table: false }}
+        controls={messageResponseControls}
         {...props}
         BlockComponent={InteractiveMessageBlock}
         components={markdownComponents}
+        mode={mode}
+        parseIncompleteMarkdown={parseIncompleteMarkdown}
+        parseMarkdownIntoBlocksFn={incrementalBlockParser}
         {...(resolvedRemarkPlugins === undefined ? {} : { remarkPlugins: resolvedRemarkPlugins })}
       >
-        {normalizedMarkdown}
+        {parsedResponse.markdown}
       </Streamdown>
       <CodeComments comments={parsedResponse.comments} />
     </MessageFileReferenceContext.Provider>

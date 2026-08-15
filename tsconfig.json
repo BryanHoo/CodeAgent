@@ -2,12 +2,15 @@
   "files": [],
   "references": [
     { "path": "./tsconfig.node.json" },
+    { "path": "./apps/node-cli" },
     { "path": "./packages/protocol" },
-    { "path": "./packages/core" },
-    { "path": "./packages/provider-codex" },
+    { "path": "./packages/engine-node" },
     { "path": "./packages/server" },
     { "path": "./packages/client" },
+    { "path": "./packages/transport-http" },
+    { "path": "./packages/transport-tauri" },
     { "path": "./apps/web" },
-    { "path": "./tests" }
+    { "path": "./tests" },
+    { "path": "./tools" }
   ]
 }

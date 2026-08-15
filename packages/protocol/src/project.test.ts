@@ -23,6 +23,7 @@ import {
   AgentTaskSettingsResponseSchema,
   AgentTaskSettingsSchema,
   AgentTurnOptionsSchema,
+  AgentTurnPageSchema,
   AddProjectRequestSchema,
   AddProjectResponseSchema,
   ArchiveAgentTaskRequestSchema,
@@ -52,6 +53,8 @@ import {
   GenerateCommitMessageResponseSchema,
   HostFileListingSchema,
   HostFileQuerySchema,
+  HostNotificationRequestSchema,
+  HostNotificationResponseSchema,
   ImportHostAttachmentRequestSchema,
   ProjectPageSchema,
   ProjectDirectoryListingSchema,
@@ -103,6 +106,30 @@ import {
 } from "./project.js";
 
 describe("project protocol", () => {
+  it("requires a native notification navigation target", () => {
+    expect(
+      Value.Check(HostNotificationRequestSchema, {
+        body: "Task 已完成",
+        projectId: "project-1",
+        tag: "project-1:task-1:turn-1:terminal",
+        taskId: "task-1",
+        title: "CodeAgent · Task",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(HostNotificationRequestSchema, {
+        body: "Task 已完成",
+        tag: "project-1:task-1:turn-1:terminal",
+        title: "CodeAgent · Task",
+      }),
+    ).toBe(false);
+  });
+
+  it("validates native host notification results", () => {
+    expect(Value.Check(HostNotificationResponseSchema, { status: "shown" })).toBe(true);
+    expect(Value.Check(HostNotificationResponseSchema, { status: "denied" })).toBe(true);
+  });
+
   it("defines a stable public scope for temporary tasks", () => {
     expect(TEMPORARY_TASK_SCOPE_ID).toBe("temporary");
     expect(TEMPORARY_TASK_API_PATH).toBe("/v1/temporary");
@@ -125,6 +152,8 @@ describe("project protocol", () => {
 
   it("validates host directory queries and listings", () => {
     expect(Value.Check(ProjectDirectoryQuerySchema, {})).toBe(true);
+    expect(Value.Check(ProjectDirectoryQuerySchema, { showHidden: true })).toBe(true);
+    expect(Value.Check(ProjectDirectoryQuerySchema, { showHidden: "true" })).toBe(false);
     expect(Value.Check(ProjectDirectoryQuerySchema, { path: "/Users/bryan/Develop" })).toBe(true);
     expect(Value.Check(ProjectDirectoryQuerySchema, { path: "C:\\Users\\bryan\\Develop" })).toBe(
       true,
@@ -152,6 +181,8 @@ describe("project protocol", () => {
 
   it("validates host attachment file queries, listings, and imports", () => {
     expect(Value.Check(HostFileQuerySchema, { kind: "image" })).toBe(true);
+    expect(Value.Check(HostFileQuerySchema, { kind: "image", showHidden: true })).toBe(true);
+    expect(Value.Check(HostFileQuerySchema, { kind: "image", showHidden: "true" })).toBe(false);
     expect(
       Value.Check(HostFileQuerySchema, {
         kind: "file",
@@ -346,7 +377,29 @@ describe("project protocol", () => {
         branch: "feat/commit",
         commitSha: "0123456789abcdef0123456789abcdef01234567",
         message: "feat(git): 添加选择文件提交",
+        pushError: null,
         pushStatus: "pushed",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(CommitProjectChangesResponseSchema, {
+        branch: "feat/commit",
+        commitSha: "0123456789abcdef0123456789abcdef01234567",
+        message: "feat(git): 添加选择文件提交",
+        pushError: null,
+        pushStatus: "failed",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CommitProjectChangesResponseSchema, {
+        branch: "feat/commit",
+        commitSha: "0123456789abcdef0123456789abcdef01234567",
+        message: "feat(git): 添加选择文件提交",
+        pushError: {
+          code: "provider_failure",
+          message: "remote: Permission to repository denied",
+        },
+        pushStatus: "failed",
       }),
     ).toBe(true);
 
@@ -567,7 +620,7 @@ describe("project protocol", () => {
     ).toBe(false);
   });
 
-  it("validates paginated projects and tasks", () => {
+  it("validates paginated projects, tasks, and turns", () => {
     expect(
       Value.Check(ProjectPageSchema, {
         data: [
@@ -595,6 +648,22 @@ describe("project protocol", () => {
         nextCursor: "next-page",
       }),
     ).toBe(true);
+    expect(
+      Value.Check(AgentTurnPageSchema, {
+        data: [
+          {
+            completedAt: "2026-07-23T00:01:00.000Z",
+            error: null,
+            id: "turn-1",
+            items: [],
+            startedAt: "2026-07-23T00:00:00.000Z",
+            status: "completed",
+          },
+        ],
+        nextCursor: "older-turns",
+      }),
+    ).toBe(true);
+    expect(Value.Check(AgentTurnPageSchema, { data: [] })).toBe(false);
   });
 
   it("describes Git branches with staged and unstaged file changes", () => {
@@ -962,7 +1031,13 @@ describe("project protocol", () => {
               type: "tool",
             },
             { id: "item-6", text: "1. 定义协议", type: "plan" },
-            { detail: "上下文已压缩", id: "item-7", label: "压缩上下文", type: "activity" },
+            {
+              detail: "上下文已压缩",
+              id: "item-7",
+              label: "压缩上下文",
+              type: "activity",
+              visibility: "running_only",
+            },
           ],
           startedAt: "2026-07-23T00:00:00.000Z",
           status: "completed",
@@ -1147,6 +1222,7 @@ describe("project protocol", () => {
     } as const;
     const commandRequest = {
       ...identity,
+      additionalPermissions: null,
       availableDecisions: ["allow", "allow_for_session", "deny"],
       command: "pnpm check",
       cwd: "/workspace/CodeAgent",
@@ -1181,9 +1257,33 @@ describe("project protocol", () => {
       requestId: "string:input-1",
       type: "user_input",
     } as const;
+    const permissionsRequest = {
+      ...identity,
+      cwd: "/workspace/CodeAgent",
+      environmentId: "local",
+      permissions: {
+        fileSystem: {
+          entries: [
+            { access: "read", path: { path: "/workspace/input", type: "path" } },
+            { access: "write", path: { pattern: "/tmp/code-agent-*", type: "glob_pattern" } },
+            {
+              access: "read",
+              path: { type: "special", value: { kind: "project_roots", subpath: "docs" } },
+            },
+          ],
+          globScanMaxDepth: 4,
+          read: ["/workspace/legacy-read"],
+          write: ["/workspace/legacy-write"],
+        },
+        network: { enabled: true },
+      },
+      reason: "需要读取输入并访问网络",
+      requestId: "number:9",
+      type: "permissions_approval",
+    } as const;
 
     expect(
-      [commandRequest, fileRequest, inputRequest].every((request) =>
+      [commandRequest, fileRequest, inputRequest, permissionsRequest].every((request) =>
         Value.Check(PendingRequestSchema, request),
       ),
     ).toBe(true);
@@ -1224,6 +1324,52 @@ describe("project protocol", () => {
         type: commandRequest.type,
       }),
     ).toBe(true);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: permissionsRequest.itemId,
+        projectId: permissionsRequest.projectId,
+        resolution: {
+          permissions: {
+            fileSystem: {
+              entries: [permissionsRequest.permissions.fileSystem.entries[0]],
+              globScanMaxDepth: 4,
+              read: null,
+              write: null,
+            },
+            network: null,
+          },
+          scope: "session",
+        },
+        taskId: permissionsRequest.taskId,
+        turnId: permissionsRequest.turnId,
+        type: permissionsRequest.type,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(PendingRequestSchema, {
+        ...permissionsRequest,
+        permissions: {
+          ...permissionsRequest.permissions,
+          fileSystem: {
+            ...permissionsRequest.permissions.fileSystem,
+            entries: [{ access: "execute", path: { path: "/workspace/input", type: "path" } }],
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: permissionsRequest.itemId,
+        projectId: permissionsRequest.projectId,
+        resolution: {
+          permissions: { fileSystem: null, network: null },
+          scope: "global",
+        },
+        taskId: permissionsRequest.taskId,
+        turnId: permissionsRequest.turnId,
+        type: permissionsRequest.type,
+      }),
+    ).toBe(false);
     expect(
       Value.Check(ResolvePendingRequestRequestSchema, {
         itemId: inputRequest.itemId,
@@ -1272,7 +1418,13 @@ describe("project protocol", () => {
   });
 
   it("validates health and capability responses", () => {
-    expect(Value.Check(HealthResponseSchema, { status: "ok", version: 1 })).toBe(true);
+    expect(
+      Value.Check(HealthResponseSchema, {
+        runtime: { state: "ready" },
+        status: "ok",
+        version: 1,
+      }),
+    ).toBe(true);
     expect(
       Value.Check(AgentCapabilitiesSchema, {
         feedback: { upload: true },
@@ -1410,7 +1562,7 @@ describe("project protocol", () => {
           {
             authStatus: null,
             description: null,
-            error: "MCP startup timed out after 10s",
+            error: `MCP startup timed out after 10s\n${"x".repeat(8_192)}`,
             failureReason: null,
             name: "chrome-devtools",
             status: "failed",

@@ -6,6 +6,10 @@ npm-debug.log*
 
 # 构建与 TypeScript 产物
 dist/
+target/
+apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/binaries/
+apps/desktop/src-tauri/resources/codex-runtime/
 .cache/
 .artifacts/
 .vite/
@@ -13,6 +17,7 @@ dist/
 .rollup.cache/
 *.tsbuildinfo
 *.tgz
+packages/node-binding-*/code-agent-node-binding.node
 
 # 测试与覆盖率
 coverage/

@@ -293,6 +293,20 @@ test("keeps composer attachment icons aligned with the compact toolbar", async (
   await expect(imageMenuIcon).toHaveCSS("height", "16px");
 });
 
+test("uses the shared attachment picker and reveals hidden files on demand", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+  await page.getByRole("button", { name: "添加图片或文件" }).click();
+  await page.getByRole("menuitem", { name: "添加图片" }).click();
+  const picker = page.getByRole("dialog", { name: "选择本机图片" });
+
+  await expect(picker.getByRole("textbox", { name: "绝对路径" })).toHaveValue(
+    "/Users/bryan/Attachments",
+  );
+  await expect(picker.getByText(".hidden.png", { exact: true })).toHaveCount(0);
+  await picker.getByRole("button", { name: "显示隐藏文件" }).click();
+  await expect(picker.getByText(".hidden.png", { exact: true })).toBeVisible();
+});
+
 test("undoes text pasted into the composer", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
@@ -441,7 +455,20 @@ test("shows processing state while an existing task turn is still starting", asy
   await expect(page.getByText("继续处理当前任务", { exact: true })).toBeVisible();
 });
 
-test("toggles the completed execution process from the processing time", async ({ page }) => {
+test("expands the complete execution process from its semantic summary", async ({ page }) => {
+  const commands = Array.from({ length: 205 }, (_, index) => {
+    const failed = index >= 203;
+    return {
+      command: `operation-${String(index)}`,
+      cwd: "/workspace/CodeAgent",
+      exitCode: failed ? 1 : 0,
+      id: `command-process-${String(index)}`,
+      output: failed ? "Failed" : "Passed",
+      outputTruncated: false,
+      status: failed ? ("failed" as const) : ("completed" as const),
+      type: "command" as const,
+    };
+  });
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -462,15 +489,16 @@ test("toggles the completed execution process from the processing time", async (
                   text: "正在读取项目配置。",
                   type: "message",
                 },
+                ...commands,
                 {
-                  command: "pnpm check",
-                  cwd: "/workspace/CodeAgent",
-                  exitCode: 0,
-                  id: "command-process-check",
-                  output: "Checks passed",
-                  outputTruncated: false,
+                  changes: Array.from({ length: 36 }, (_, index) => ({
+                    diff: "+updated",
+                    kind: "update" as const,
+                    path: `src/file-${String(index)}.ts`,
+                  })),
+                  id: "process-file-changes",
                   status: "completed",
-                  type: "command",
+                  type: "file_change",
                 },
                 {
                   id: "message-process-final",
@@ -493,20 +521,27 @@ test("toggles the completed execution process from the processing time", async (
 
   await expect(page.getByText("实现与检查已完成。", { exact: true })).toBeVisible();
   await expect(page.getByText("正在读取项目配置。", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("pnpm check", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("operation-0", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("operation-184", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("operation-185", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("operation-204", { exact: true })).toHaveCount(0);
 
   const expandProcess = page.getByRole("button", { name: "展开执行过程" });
   await expect(expandProcess).toHaveAttribute("aria-expanded", "false");
+  await expect(expandProcess).toContainText("已完成 203 项操作 · 2 项失败 · 36 个文件");
   await expandProcess.click();
 
   await expect(page.getByText("正在读取项目配置。", { exact: true })).toBeVisible();
-  await expect(page.getByText("pnpm check", { exact: true })).toBeVisible();
+  await expect(page.getByText("operation-0", { exact: true })).toBeVisible();
+  await expect(page.getByText("operation-204", { exact: true })).toBeVisible();
+  await expect(page.getByText("实现与检查已完成。", { exact: true })).toBeVisible();
+
   const collapseProcess = page.getByRole("button", { name: "收起执行过程" });
   await expect(collapseProcess).toHaveAttribute("aria-expanded", "true");
   await collapseProcess.click();
 
-  await expect(page.getByText("正在读取项目配置。", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("pnpm check", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("operation-0", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("operation-204", { exact: true })).toHaveCount(0);
 });
 
 test("runs official task actions from the slash command menu", async ({ page }) => {
@@ -640,10 +675,25 @@ test("runs official task actions from the slash command menu", async ({ page }) 
   );
   // 浏览器快捷键跟随运行平台，确保 macOS、Linux 和 Windows 都能完成全选复制。
   const primaryModifier = process.platform === "darwin" ? "Meta" : "Control";
+  await page.evaluate(() => {
+    const capture = window as Window & { __codeAgentCopiedText?: string };
+    capture.__codeAgentCopiedText = "";
+    document.addEventListener(
+      "copy",
+      (event) => {
+        capture.__codeAgentCopiedText = event.clipboardData?.getData("text/plain") ?? "";
+      },
+      { once: true },
+    );
+  });
   await prompt.press(`${primaryModifier}+a`);
   await prompt.press(`${primaryModifier}+c`);
   await expect
-    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .poll(() =>
+      page.evaluate(
+        () => (window as Window & { __codeAgentCopiedText?: string }).__codeAgentCopiedText,
+      ),
+    )
     .toBe("说明 $review-security $documentation-writer");
   const skillColors = await selectedSkill.evaluate((element) => {
     const probe = document.createElement("span");
@@ -1089,6 +1139,45 @@ test("project file tree opens changed, source, image, and system files by shared
   await fileTree.getByRole("treeitem", { name: "100%完成 后续工作交接.pptx" }).click();
   await systemOpenRequest;
   await expect(page.getByRole("dialog", { name: "100%完成 后续工作交接.pptx" })).toHaveCount(0);
+});
+
+test("project root refreshes loaded file tree directories and Git status", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
+  const fileTree = inspector.getByRole("tree", { name: "项目文件" });
+  const docsRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/v1/projects/code-agent/files/tree" &&
+      url.searchParams.get("path") === "docs"
+    );
+  });
+  await fileTree.getByRole("treeitem", { name: "docs" }).click();
+  await docsRequest;
+  await expect(fileTree.getByRole("treeitem", { name: "architecture-design.md" })).toBeVisible();
+
+  const refreshedRoot = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/v1/projects/code-agent/files/tree" && !url.searchParams.has("path");
+  });
+  const refreshedDocs = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/v1/projects/code-agent/files/tree" &&
+      url.searchParams.get("path") === "docs"
+    );
+  });
+  const refreshedGit = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === "/v1/projects/code-agent/git/status",
+  );
+  const rootTreeItem = fileTree.getByRole("treeitem", { name: "CodeAgent" }).first();
+  await rootTreeItem.hover();
+  const refreshButton = rootTreeItem.getByRole("button", { name: "刷新项目 CodeAgent" });
+  await expect(refreshButton).toHaveCSS("pointer-events", "auto");
+  await refreshButton.click();
+
+  await Promise.all([refreshedRoot, refreshedDocs, refreshedGit]);
 });
 
 test("project file tree context menu and ellipsis share target actions", async ({ page }) => {
@@ -1903,6 +1992,10 @@ test("generates a message and commits only selected files", async ({ page }) => 
         branch: "feat/review-targets",
         commitSha: "0123456789abcdef0123456789abcdef01234567",
         message: commitRequest["message"],
+        pushError: {
+          code: "provider_failure",
+          message: "remote: Permission to repository denied",
+        },
         pushStatus: "failed",
       },
       status: 201,
@@ -2106,7 +2199,11 @@ test("generates a message and commits only selected files", async ({ page }) => 
   );
   await page.getByRole("menuitem", { name: "提交并推送" }).click();
 
-  await expect(dialog.getByText("提交已完成，但推送失败")).toBeVisible();
+  await expect(dialog.getByText("提交已完成", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("remote: Permission to repository denied")).toHaveCount(0);
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "remote: Permission to repository denied" }),
+  ).toBeVisible();
   expect(messageRequest).toEqual({ expectedSnapshot: snapshot, paths: ["package.json"] });
   expect(commitRequest).toEqual({
     action: "commit_and_push",
@@ -2213,6 +2310,7 @@ for (const scenario of [
           branch: "feat/review-targets",
           commitSha: "0123456789abcdef0123456789abcdef01234567",
           message: request["message"],
+          pushError: null,
           pushStatus: scenario.pushStatus,
         },
         status: 201,
@@ -2613,12 +2711,19 @@ test("keeps a streaming code block within the conversation and copies its code",
   const copyButton = page.locator('[data-streamdown="code-block-copy-button"]');
   await expect(copyButton).toBeVisible();
   await expect(copyButton).toBeEnabled();
+  const renderedCode = page.locator('[data-streamdown="code-block"] code');
+  // Streamdown 在低速 runner 上会分批提交文本，复制前必须等待 Context 中的完整代码稳定。
+  await expect.poll(() => renderedCode.textContent()).toBe(streamedCode);
   const conversation = page.getByRole("log", { name: "会话内容" });
   expect(await conversation.evaluate((element) => element.scrollWidth)).toBe(
     await conversation.evaluate((element) => element.clientWidth),
   );
   await copyButton.click();
   await expect
-    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-    .toBe(`${streamedCode}\n`);
+    .poll(async () => {
+      const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+      // Windows 剪贴板会规范化或移除代码块的单个尾换行，只比较实际代码内容。
+      return clipboardText.replace(/\r\n/gu, "\n").replace(/\n$/u, "");
+    })
+    .toBe(streamedCode);
 });

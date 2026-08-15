@@ -9,6 +9,7 @@ import { TaskTimeline } from "./task-timeline.js";
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
 import { Dialog, DialogContent, DialogTitle } from "../../../shared/components/core/dialog.js";
+import { useErrorToast } from "../../../shared/errors/error-toast.js";
 
 type SubagentOutputDialogProps = Readonly<{
   onClose: () => void;
@@ -58,11 +59,12 @@ function OpenSubagentOutputDialog({
 }: Readonly<Omit<SubagentOutputDialogProps, "selection"> & { selection: SubagentSelection }>) {
   const { t } = useTranslation("workbench");
   const runtime = useTaskRuntime(projectId, selection.taskId, projectRuntime);
+  useErrorToast(runtime.error);
 
   const titleId = "subagent-output-dialog-title";
   let content;
   if (runtime.error !== null) {
-    content = <SubagentOutputState message={t("subagentOutput.error")} role="alert" />;
+    content = null;
   } else if (runtime.isPending || runtime.snapshot === undefined) {
     content = <SubagentOutputState message={t("subagentOutput.loading")} role="status" />;
   } else {

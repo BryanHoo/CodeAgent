@@ -1,11 +1,14 @@
 import type { AgentEvent, AgentTurn, PendingRequest } from "@code-agent/protocol";
-import { describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createBrowserTaskNotifier,
   type BrowserNotificationApi,
   type BrowserNotificationHandle,
 } from "./browser-task-notifier.js";
+
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 function createTurnCompletedEvent(
   status: Extract<AgentTurn["status"], "completed" | "failed" | "interrupted">,
@@ -83,11 +86,22 @@ function createPendingRequestEvent(type: PendingRequest["type"]): AgentEvent {
     case "command_approval":
       request = {
         ...common,
+        additionalPermissions: null,
         availableDecisions: ["allow", "deny"],
         command: "pnpm check",
         cwd: "/workspace/CodeAgent",
         networkAccess: null,
         reason: null,
+        type,
+      };
+      break;
+    case "permissions_approval":
+      request = {
+        ...common,
+        cwd: "/workspace/CodeAgent",
+        environmentId: "local",
+        permissions: { fileSystem: null, network: { enabled: true } },
+        reason: "需要网络访问",
         type,
       };
       break;
@@ -157,6 +171,65 @@ function createHarness(
 }
 
 describe("browser task notifier", () => {
+  beforeEach(() => {
+    vi.mocked(toast.error).mockClear();
+  });
+
+  it("uses the native host notification adapter when available", () => {
+    const show = vi.fn(() => Promise.resolve());
+    const onAction = vi.fn(() => Promise.resolve(() => undefined));
+    const notifier = createBrowserTaskNotifier({
+      nativeApi: { onAction, show },
+      isPageForeground: () => false,
+    });
+
+    notifier.notify("project-1", createTurnCompletedEvent("completed"), "完善通知功能");
+
+    expect(show).toHaveBeenCalledWith("CodeAgent · 完善通知功能", {
+      body: "Task 已完成",
+      projectId: "project-1",
+      tag: "project-1:task-1:turn-1:terminal",
+      taskId: "task-1",
+    });
+  });
+
+  it("focuses and navigates when a native notification action is received", () => {
+    let actionListener: ((target: { projectId: string; taskId: string }) => void) | undefined;
+    const focusPage = vi.fn();
+    const navigateToTask = vi.fn();
+    createBrowserTaskNotifier({
+      focusPage,
+      navigateToTask,
+      nativeApi: {
+        onAction(listener) {
+          actionListener = listener;
+          return Promise.resolve(() => undefined);
+        },
+        show: vi.fn(() => Promise.resolve()),
+      },
+    });
+
+    actionListener?.({ projectId: "project / 1", taskId: "task / 1" });
+
+    expect(focusPage).toHaveBeenCalledOnce();
+    expect(navigateToTask).toHaveBeenCalledWith("project / 1", "task / 1");
+  });
+
+  it("skips browser permission requests when native host notifications are available", async () => {
+    const harness = createHarness("default");
+    const notifier = createBrowserTaskNotifier({
+      api: harness.api,
+      nativeApi: {
+        onAction: vi.fn(() => Promise.resolve(() => undefined)),
+        show: vi.fn(() => Promise.resolve()),
+      },
+    });
+
+    await notifier.requestPermission();
+
+    expect(harness.api.requestPermission).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["completed", "Task 已完成"],
     ["interrupted", "Task 已中断，无法继续"],
@@ -175,6 +248,7 @@ describe("browser task notifier", () => {
   it.each([
     ["command_approval", "Task 等待审批"],
     ["file_change_approval", "Task 等待审批"],
+    ["permissions_approval", "Task 等待审批"],
     ["user_input", "Task 等待输入"],
   ] as const)("maps a %s request to an actionable notification", (type, body) => {
     const harness = createHarness();
@@ -248,5 +322,25 @@ describe("browser task notifier", () => {
     });
 
     await expect(harness.notifier.requestPermission()).resolves.toBeUndefined();
+    expect(toast.error).toHaveBeenCalledWith("Notification permission is unavailable");
+  });
+
+  it("reports a native notification failure before using the browser fallback", async () => {
+    const harness = createHarness();
+    const notifier = createBrowserTaskNotifier({
+      api: harness.api,
+      isPageForeground: () => false,
+      nativeApi: {
+        onAction: vi.fn(() => Promise.resolve(() => undefined)),
+        show: vi.fn(() => Promise.reject(new Error("native notification channel closed"))),
+      },
+    });
+
+    notifier.notify("project-1", createTurnCompletedEvent("completed"), "完善通知功能");
+
+    await vi.waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("native notification channel closed");
+    });
+    expect(harness.api.show).toHaveBeenCalledOnce();
   });
 });

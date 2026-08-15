@@ -16,6 +16,7 @@ import {
 } from "react";
 
 import { i18n } from "../../i18n/i18n.js";
+import { normalizeError, showErrorToast } from "../../shared/errors/error-toast.js";
 import { createAsyncActionLock } from "../../shared/utils/async-action-lock.js";
 import { createProjectRuntimeManager } from "../conversation/runtime/project-runtime.js";
 import type { TaskNotifier } from "../notifications/browser-task-notifier.js";
@@ -34,6 +35,7 @@ import {
 import { ProjectGitStatusCoordinator } from "./project-git-status-coordinator.js";
 import {
   capabilitiesQueryOptions,
+  cacheAddedProject,
   codeAgentClient,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
   projectRemoveMutationOptions,
@@ -68,8 +70,10 @@ export function ProjectProvider({
   );
   const projectRuntime = useMemo(() => {
     const taskMetadataSyncs = new Map<string, Promise<void>>();
+    const onPerformanceSample = globalThis.__CODE_AGENT_PERFORMANCE_OBSERVER__;
     return createProjectRuntimeManager(client, {
       ...(taskNotifier === undefined ? {} : { taskNotifier }),
+      ...(onPerformanceSample === undefined ? {} : { onPerformanceSample }),
       onMcpServerStatusChanged(projectId, taskId) {
         // 官方通知只携带启动状态，重新读取清单以补齐工具数、认证和版本元数据。
         void queryClient.invalidateQueries({
@@ -125,7 +129,7 @@ export function ProjectProvider({
         const syncKey = `${projectId}\u0000${taskId}`;
         // 同一 Task 串行同步，避免 Turn 终态复用仍在进行的流式 Snapshot 请求。
         const sync = (taskMetadataSyncs.get(syncKey) ?? Promise.resolve())
-          .catch(() => undefined)
+          .catch(showErrorToast)
           .then(syncTaskMetadata);
         taskMetadataSyncs.set(syncKey, sync);
         const clearCompletedSync = () => {
@@ -278,14 +282,12 @@ export function ProjectProvider({
         setAddProjectError(null);
         try {
           const response = await client.addProject(rootPath);
-          await queryClient.invalidateQueries({ queryKey: ["projects"] });
+          cacheAddedProject(queryClient, response.project);
           return response.project;
         } catch (error) {
-          const normalizedError =
-            error instanceof Error
-              ? error
-              : new Error(i18n.t("errors.addProject", { ns: "conversation" }));
+          const normalizedError = normalizeError(error);
           setAddProjectError(normalizedError);
+          showErrorToast(normalizedError);
           // 错误已进入可见状态，避免按钮事件产生未处理的 Promise rejection。
           return undefined;
         } finally {
@@ -300,9 +302,9 @@ export function ProjectProvider({
         const currentPage = queryClient.getQueryData<ProjectPage>(["projects"]);
         const optimisticPage = reorderProjectPage(currentPage, projectIds);
         if (optimisticPage === undefined) {
-          setProjectOrderError(
-            new Error(i18n.t("errors.reorderProjectChanged", { ns: "conversation" })),
-          );
+          const error = new Error(i18n.t("errors.reorderProjectChanged", { ns: "conversation" }));
+          setProjectOrderError(error);
+          showErrorToast(error);
           return false;
         }
 
@@ -315,11 +317,7 @@ export function ProjectProvider({
           return true;
         } catch (error) {
           queryClient.setQueryData<ProjectPage>(["projects"], currentPage);
-          setProjectOrderError(
-            error instanceof Error
-              ? error
-              : new Error(i18n.t("errors.reorderProject", { ns: "conversation" })),
-          );
+          setProjectOrderError(normalizeError(error));
           return false;
         }
       })) ?? false,
@@ -342,8 +340,8 @@ export function ProjectProvider({
                 },
           );
           return true;
-        } catch {
-          setProjectActionError(new Error(i18n.t("errors.renameProject", { ns: "conversation" })));
+        } catch (error) {
+          setProjectActionError(normalizeError(error));
           return false;
         }
       })) ?? false,
@@ -368,8 +366,8 @@ export function ProjectProvider({
             currentPage === undefined ? undefined : { ...currentPage, data: remainingProjects },
           );
           return remainingProjects;
-        } catch {
-          setProjectActionError(new Error(i18n.t("errors.deleteProject", { ns: "conversation" })));
+        } catch (error) {
+          setProjectActionError(normalizeError(error));
           return undefined;
         }
       }),

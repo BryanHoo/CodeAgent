@@ -29,7 +29,7 @@ export const AgentProviderAccountSchema = Type.Union([
 
 export const AgentProviderPendingLoginSchema = Type.Object(
   {
-    error: Type.Union([Type.String({ maxLength: 1_000 }), Type.Null()]),
+    error: Type.Union([Type.String(), Type.Null()]),
     loginId: Type.String({ maxLength: 256, minLength: 1 }),
     state: Type.Union([Type.Literal("pending"), Type.Literal("failed")]),
   },

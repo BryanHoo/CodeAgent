@@ -1,10 +1,18 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { buildProjectImageFileUrl } from "@code-agent/client";
 import type { ProjectSourceFile } from "@code-agent/protocol";
 import { Code2, Eye, FileCode2, Image, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type UIEvent,
+} from "react";
 
-import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
+import type { CodeAgentSourceFileClient } from "../../projects/project-query-contracts.js";
+import { codeAgentClient } from "../../../app/create-host-client.js";
 import {
   CodeBlock,
   CodeBlockActions,
@@ -28,8 +36,9 @@ import { useTranslation } from "../../../i18n/i18n.js";
 export { getCodeLanguage } from "../../../shared/components/agent/code-languages.js";
 
 type ProjectSourceDialogProps = Readonly<{
-  client: CodeAgentWorkbenchClient;
+  client: CodeAgentSourceFileClient;
   onClose: () => void;
+  onOpenSystemDefault: (reference: MessageFileReference) => void;
   previewKind: "image" | "source";
   projectId: string;
   reference: MessageFileReference | null;
@@ -46,7 +55,7 @@ type SourceHeaderProps = Readonly<{
   previewKind: "image" | "source";
   sourcePath: string;
   titleId: string;
-  sourceStatus: "error" | "loading" | "partial" | null;
+  sourceStatus: "loading" | "partial" | null;
 }>;
 
 function SourceHeader({
@@ -82,16 +91,11 @@ function SourceHeader({
         </div>
       </CodeBlockTitle>
       {sourceStatus === null ? null : (
-        <span
-          className={`shrink-0 text-label ${sourceStatus === "error" ? "text-danger" : "text-warning"}`}
-          role={sourceStatus === "error" ? "alert" : "status"}
-        >
+        <span className="shrink-0 text-label text-warning" role="status">
           {t(
             sourceStatus === "loading"
               ? "projectDialog.loadingMoreSource"
-              : sourceStatus === "error"
-                ? "projectDialog.loadMoreSourceError"
-                : "projectDialog.sourcePartial",
+              : "projectDialog.sourcePartial",
           )}
         </span>
       )}
@@ -165,15 +169,27 @@ export function mergeProjectSourcePages(
 export function ProjectSourceDialog({
   client,
   onClose,
+  onOpenSystemDefault,
   previewKind,
   projectId,
   reference,
 }: ProjectSourceDialogProps) {
   const { t } = useTranslation("workbench");
   const contentRef = useRef<HTMLDivElement>(null);
+  const systemFallbackPathRef = useRef<string | null>(null);
   // 渲染状态绑定源文件路径，切换文件或关闭弹窗后必须回到原始内容。
   const [renderedMarkdownPath, setRenderedMarkdownPath] = useState<string | null>(null);
-  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const handleClose = useCallback(() => {
+    setRenderedMarkdownPath(null);
+    onClose();
+  }, [onClose]);
+  const openWithSystemDefault = useCallback(() => {
+    if (reference === null || systemFallbackPathRef.current === reference.path) return;
+    // 同一次预览失败只回退一次，系统打开继续复用控制器的单飞与错误 toast。
+    systemFallbackPathRef.current = reference.path;
+    handleClose();
+    onOpenSystemDefault(reference);
+  }, [handleClose, onOpenSystemDefault, reference]);
   const sourceQuery = useInfiniteQuery({
     enabled: reference !== null && previewKind === "source",
     getNextPageParam: (
@@ -201,8 +217,10 @@ export function ProjectSourceDialog({
   );
 
   useEffect(() => {
-    setImageLoadFailed(false);
-  }, [previewKind, reference?.path]);
+    if (previewKind === "source" && sourceQuery.error !== null) {
+      openWithSystemDefault();
+    }
+  }, [openWithSystemDefault, previewKind, sourceQuery.error]);
 
   useEffect(() => {
     const lineNumber = reference?.lineNumber;
@@ -243,23 +261,26 @@ export function ProjectSourceDialog({
   const sourcePath = sourceData?.path ?? reference.path;
   const sourceContent = sourceData?.content ?? "";
   const fileName = getFileName(sourcePath);
-  const imageUrl = buildProjectImageFileUrl("", projectId, reference.path);
+  const imageUrl =
+    previewKind === "image"
+      ? codeAgentClient.resolveAssetUrl({
+          kind: "project-image",
+          path: reference.path,
+          projectId,
+        })
+      : undefined;
   const sourceLanguage = getCodeLanguage(sourcePath);
   const isMarkdown = sourceLanguage === "markdown" || sourceLanguage === "mdx";
   const canRenderMarkdown = isMarkdown && sourceData?.nextCursor === null;
   const showRenderedMarkdown = canRenderMarkdown && renderedMarkdownPath === sourcePath;
   const titleId = "project-source-dialog-title";
-  const handleClose = () => {
-    setRenderedMarkdownPath(null);
-    onClose();
-  };
   const sourceStatus: SourceHeaderProps["sourceStatus"] =
     sourceData === undefined
       ? null
       : isFetchingNextSourcePage
         ? "loading"
         : sourceQuery.isFetchNextPageError
-          ? "error"
+          ? null
           : hasNextSourcePage
             ? "partial"
             : null;
@@ -310,21 +331,13 @@ export function ProjectSourceDialog({
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">
               <SourceHeader {...headerProps} />
               <div className="grid min-h-0 place-items-center overflow-auto p-4 sm:p-6">
-                {imageLoadFailed ? (
-                  <div className="text-body-small text-danger" role="alert">
-                    {t("projectDialog.loadImageError")}
-                  </div>
-                ) : (
-                  <img
-                    alt={fileName}
-                    className="max-h-full max-w-full object-contain"
-                    decoding="async"
-                    onError={() => {
-                      setImageLoadFailed(true);
-                    }}
-                    src={imageUrl}
-                  />
-                )}
+                <img
+                  alt={fileName}
+                  className="max-h-full max-w-full object-contain"
+                  decoding="async"
+                  onError={openWithSystemDefault}
+                  src={imageUrl}
+                />
               </div>
             </div>
           ) : sourceData === undefined && sourceQuery.isPending ? (
@@ -340,12 +353,7 @@ export function ProjectSourceDialog({
           ) : sourceData === undefined && sourceQuery.error !== null ? (
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
               <SourceHeader {...headerProps} />
-              <div
-                className="grid min-h-48 place-items-center text-body-small text-danger"
-                role="alert"
-              >
-                {t("projectDialog.loadSourceError")}
-              </div>
+              <div />
             </div>
           ) : showRenderedMarkdown ? (
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-content">

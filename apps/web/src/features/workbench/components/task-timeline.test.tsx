@@ -7,11 +7,11 @@ import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import type { RuntimeTaskSnapshot } from "../../conversation/runtime/task-runtime.js";
 import { createTaskStore } from "../../conversation/runtime/task-store.js";
 import {
-  resolveCompletedTurnProcessItemIds,
   resolveMessageResponseRendering,
   TaskSnapshotTimeline,
   TaskTimeline,
 } from "./task-timeline.js";
+import { resolveCompletedTurnProcess } from "./task-timeline-process.js";
 import { getUserMessageCopyText, LiveFileChanges } from "./task-timeline-store-items.js";
 
 function renderToStaticMarkup(children: ReactNode) {
@@ -54,6 +54,69 @@ const snapshot: RuntimeTaskSnapshot = {
   updatedAt: "2026-07-24T00:01:00.000Z",
 };
 
+const runtimeHistoryDefaults = {
+  hasPreviousTurns: false,
+  isLoadingPreviousTurns: false,
+  loadPreviousTurns: () => Promise.resolve(),
+};
+
+describe("completed turn process aggregation", () => {
+  it("keeps a 10,000-operation turn intact while deriving its collapsed summary", () => {
+    const completedCommands = Array.from({ length: 9_980 }, (_, index) => ({
+      command: `command-${String(index)}`,
+      cwd: "/workspace/CodeAgent",
+      exitCode: 0,
+      id: `command-${String(index)}`,
+      output: "done",
+      outputTruncated: false,
+      status: "completed" as const,
+      type: "command" as const,
+    }));
+    const failedTools = Array.from({ length: 2 }, (_, index) => ({
+      id: `failed-tool-${String(index)}`,
+      name: `failed-tool-${String(index)}`,
+      output: "failed",
+      status: "failed" as const,
+      type: "tool" as const,
+    }));
+    const items: RuntimeTaskSnapshot["turns"][number]["items"] = [
+      ...completedCommands,
+      ...failedTools,
+      {
+        changes: Array.from({ length: 36 }, (_, index) => ({
+          diff: "+updated",
+          kind: "update" as const,
+          path: `src/file-${String(index)}.ts`,
+        })),
+        id: "file-changes",
+        status: "completed",
+        type: "file_change",
+      },
+      {
+        id: "final-answer",
+        phase: "final_answer",
+        role: "assistant",
+        text: "全部完成。",
+        type: "message",
+      },
+    ];
+
+    const process = resolveCompletedTurnProcess(items, "completed");
+    expect(process.completedOperationCount).toBe(9_980);
+    expect(process.failedOperationCount).toBe(2);
+    expect(process.fileCount).toBe(36);
+    expect(process.hiddenItemIds).toHaveLength(9_983);
+    expect(items).toHaveLength(9_984);
+  });
+
+  it("does not aggregate a running turn", () => {
+    const process = resolveCompletedTurnProcess(completedTurn.items, "running");
+
+    expect(process.hiddenItemIds).toHaveLength(0);
+    expect(process.completedOperationCount).toBe(0);
+  });
+});
+
 describe("temporary task timeline", () => {
   it("renders a fixed scope name without a Project selector", () => {
     const markup = renderToStaticMarkup(
@@ -89,6 +152,26 @@ describe("LiveFileChanges", () => {
 });
 
 describe("TaskTimeline", () => {
+  it("does not render Runtime errors inside the Timeline", () => {
+    const markup = renderToStaticMarkup(
+      <TaskTimeline
+        projectId="project-1"
+        runtime={{
+          ...runtimeHistoryDefaults,
+          connectionState: "closed",
+          error: new Error("snapshot request failed"),
+          isPending: false,
+          snapshot: undefined,
+          store: undefined,
+        }}
+        taskId="task-1"
+      />,
+    );
+
+    expect(markup).not.toContain("snapshot request failed");
+    expect(markup).not.toContain("无法加载会话");
+  });
+
   it("renders automatic approval review results in the assistant timeline", () => {
     const approvalReviewSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
@@ -302,9 +385,13 @@ describe("TaskTimeline", () => {
         <TaskTimeline
           projectId={snapshot.projectId}
           runtime={{
+            ...runtimeHistoryDefaults,
             connectionState: "connected",
             error: null,
+            hasPreviousTurns: true,
             isPending: false,
+            isLoadingPreviousTurns: false,
+            loadPreviousTurns: () => Promise.resolve(),
             snapshot: runningSnapshot,
             store,
           }}
@@ -315,6 +402,7 @@ describe("TaskTimeline", () => {
       );
 
       expect(markup).toContain("5s");
+      expect(markup).toContain("加载更早消息");
       expect(markup).not.toContain("1m 5s");
       expect(markup.match(/aria-label="AI 回复正在运行"/gu)).toHaveLength(1);
     } finally {
@@ -359,6 +447,7 @@ describe("TaskTimeline", () => {
         <TaskTimeline
           projectId={snapshot.projectId}
           runtime={{
+            ...runtimeHistoryDefaults,
             connectionState: "connected",
             error: null,
             isPending: false,
@@ -420,6 +509,7 @@ describe("TaskTimeline", () => {
         <TaskTimeline
           projectId={snapshot.projectId}
           runtime={{
+            ...runtimeHistoryDefaults,
             connectionState: "connected",
             error: null,
             isPending: false,
@@ -520,6 +610,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={snapshot.projectId}
         runtime={{
+          ...runtimeHistoryDefaults,
           connectionState: "connected",
           error: null,
           isPending: false,
@@ -556,6 +647,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={startingSnapshot.projectId}
         runtime={{
+          ...runtimeHistoryDefaults,
           connectionState: "connecting",
           error: null,
           isPending: true,
@@ -591,6 +683,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={longSnapshot.projectId}
         runtime={{
+          ...runtimeHistoryDefaults,
           connectionState: "connected",
           error: null,
           isPending: false,
@@ -637,6 +730,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={snapshot.projectId}
         runtime={{
+          ...runtimeHistoryDefaults,
           connectionState: "connected",
           error: null,
           isPending: false,
@@ -773,6 +867,7 @@ describe("TaskTimeline", () => {
       <TaskTimeline
         projectId={snapshot.projectId}
         runtime={{
+          ...runtimeHistoryDefaults,
           connectionState: "connected",
           error: null,
           isPending: false,
@@ -912,7 +1007,8 @@ describe("TaskSnapshotTimeline", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={messageSnapshot} />);
 
     expect(markup).toContain('data-turn-processing-time=""');
-    expect(markup).toContain("已处理");
+    expect(markup).toContain("已完成");
+    expect(markup).not.toContain("已处理");
     expect(markup).toContain('dateTime="PT5M7S"');
     expect(markup).toContain(">5m 7s</time>");
   });
@@ -953,6 +1049,7 @@ describe("TaskSnapshotTimeline", () => {
         <TaskTimeline
           projectId={runningSnapshot.projectId}
           runtime={{
+            ...runtimeHistoryDefaults,
             connectionState: "connected",
             error: null,
             isPending: false,
@@ -964,6 +1061,8 @@ describe("TaskSnapshotTimeline", () => {
       );
 
       expect(markup).toContain('data-turn-processing-time=""');
+      expect(markup).toContain("已处理");
+      expect(markup).not.toContain("已完成");
       expect(markup).toContain('dateTime="PT2M5S"');
       expect(markup).toContain(">2m 5s</time>");
     } finally {
@@ -1189,6 +1288,32 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("contain-intrinsic-size:auto_300px");
   });
 
+  it("renders every item inside one Turn without nested virtualization", () => {
+    const pathologicalSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          ...completedTurn,
+          completedAt: null,
+          items: Array.from({ length: 1_000 }, (_, index) => ({
+            id: `tool-pathological-${String(index)}`,
+            input: { index },
+            name: `pathological_tool_${String(index)}`,
+            status: "completed" as const,
+            type: "tool" as const,
+          })),
+          status: "running",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={pathologicalSnapshot} />);
+    expect(markup).not.toContain('data-conversation-nested-virtual-list=""');
+    expect(markup).toContain("pathological_tool_0");
+    expect(markup).toContain("pathological_tool_999");
+  });
+
   it("renders only the raw failed turn error after its partial assistant reply", () => {
     const failedSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
@@ -1365,8 +1490,10 @@ describe("TaskSnapshotTimeline", () => {
     );
 
     expect(markup).not.toContain("正在读取项目配置。");
+    expect(markup).not.toContain("pnpm check");
     expect(markup).not.toContain("检查过程输出");
     expect(markup).toContain("检查完成。");
+    expect(markup).toContain("已完成 1 项操作");
     expect(markup).toContain('data-turn-processing-time=""');
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain('aria-label="展开执行过程"');
@@ -1406,11 +1533,11 @@ describe("TaskSnapshotTimeline", () => {
       },
     ];
 
-    expect(resolveCompletedTurnProcessItemIds(items, "completed")).toEqual([
+    expect(resolveCompletedTurnProcess(items, "completed").hiddenItemIds).toEqual([
       "commentary-message",
       "process-activity",
     ]);
-    expect(resolveCompletedTurnProcessItemIds(items, "running")).toEqual([]);
+    expect(resolveCompletedTurnProcess(items, "running").hiddenItemIds).toEqual([]);
   });
 
   it("does not render assistant actions while its turn is still running", () => {
@@ -1673,16 +1800,46 @@ describe("TaskSnapshotTimeline", () => {
           completedAt: null,
           items: [
             {
-              id: "activity-context-compaction",
-              label: "上下文压缩",
-              status: "completed",
-              type: "activity",
-            },
-            {
               id: "message-after-compaction",
               role: "assistant",
               text: "继续处理当前任务。",
               type: "message",
+            },
+            {
+              id: "activity-context-compaction",
+              label: "上下文压缩",
+              status: "completed",
+              type: "activity",
+              visibility: "running_only",
+            },
+          ],
+          status: "running",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningSnapshot} />);
+
+    expect(markup).not.toContain("上下文压缩");
+    expect(markup).toContain('aria-label="AI 回复正在运行"');
+    expect(markup).not.toContain('aria-label="AI 回复正在运行：上下文压缩"');
+  });
+
+  it("shows context compaction only while the activity is running", () => {
+    const runningSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          ...completedTurn,
+          completedAt: null,
+          items: [
+            {
+              id: "activity-context-compaction",
+              label: "上下文压缩",
+              status: "running",
+              type: "activity",
+              visibility: "running_only",
             },
           ],
           status: "running",
@@ -1693,8 +1850,39 @@ describe("TaskSnapshotTimeline", () => {
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningSnapshot} />);
 
     expect(markup).toContain("上下文压缩");
-    expect(markup).toContain('aria-label="AI 回复正在运行"');
-    expect(markup).not.toContain('aria-label="AI 回复正在运行：上下文压缩"');
+    expect(markup).toContain('aria-label="AI 回复正在运行：上下文压缩"');
+  });
+
+  it("does not retain completed context compaction after the final answer", () => {
+    const completedSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              id: "message-final-before-compaction",
+              phase: "final_answer",
+              role: "assistant",
+              text: "任务已经完成。",
+              type: "message",
+            },
+            {
+              id: "activity-context-compaction",
+              label: "上下文压缩",
+              status: "completed",
+              type: "activity",
+              visibility: "running_only",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={completedSnapshot} />);
+
+    expect(markup).toContain("任务已经完成。");
+    expect(markup).not.toContain("上下文压缩");
   });
 
   it("defers completed generic tool input and output until the tool is opened", () => {

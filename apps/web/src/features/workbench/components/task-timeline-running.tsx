@@ -23,6 +23,16 @@ export type RunningOperation = Readonly<{
   type: "command" | "operation";
 }>;
 
+export function shouldRenderTimelineItem(item: AgentItem): boolean {
+  // 仅运行期可见的活动在完成事件到达后立即退出时间线，不能回放为当前操作。
+  return (
+    item.type !== "activity" ||
+    item.visibility !== "running_only" ||
+    item.status === "pending" ||
+    item.status === "running"
+  );
+}
+
 export function getCommandLabel(command: string): string {
   return command === PENDING_COMMAND_LABEL
     ? i18n.t("timeline.commandPending", { ns: "conversation" })
@@ -78,6 +88,7 @@ export function resolveRunningOperation(
   const recentItem = items.findLast(
     ({ item, itemIndex }) =>
       itemIndex > latestAssistantMessageIndex &&
+      shouldRenderTimelineItem(item) &&
       (item.type === "command" || item.type === "tool" || item.type === "activity"),
   )?.item;
   if (recentItem?.type === "command") {

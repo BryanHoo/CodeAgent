@@ -19,6 +19,12 @@ import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.j
 import { Button } from "../../../shared/components/core/button.js";
 import { Input } from "../../../shared/components/core/input.js";
 import { useTranslation } from "../../../i18n/i18n.js";
+import { useErrorToast } from "../../../shared/errors/error-toast.js";
+import {
+  allPermissionKeys,
+  PermissionRequestDetails,
+  selectPermissionProfile,
+} from "./permission-request-details.js";
 
 export type PendingRequestResolution = ResolvePendingRequestRequest["resolution"];
 
@@ -52,6 +58,7 @@ type ApprovalRequest = Extract<
 >;
 type CommandApprovalRequest = Extract<PendingRequest, { type: "command_approval" }>;
 type UserInputRequest = Extract<PendingRequest, { type: "user_input" }>;
+type PermissionsApprovalRequest = Extract<PendingRequest, { type: "permissions_approval" }>;
 
 function approvalState(request: PendingRequest, submitting: boolean): ConfirmationState {
   if (request.status === "expired") return "approval-expired";
@@ -81,7 +88,8 @@ function ApprovalRequestCard({
 }: Omit<PendingRequestCardProps, "request"> & { request: ApprovalRequest }) {
   const { t } = useTranslation("workbench");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  useErrorToast(error);
   const [attempt, setAttempt] = useState<PendingRequestResolutionAttempt>();
   const allowButtonRef = useRef<HTMLButtonElement>(null);
   const resolutionLockRef = useRef(createAsyncActionLock());
@@ -119,8 +127,8 @@ function ApprovalRequestCard({
       setError(null);
       try {
         await onResolve(request, resolution, nextAttempt.key);
-      } catch {
-        setError(t("pending.requestFailed"));
+      } catch (error) {
+        setError(error instanceof Error ? error : new Error(String(error)));
         setSubmitting(false);
       }
     });
@@ -130,6 +138,14 @@ function ApprovalRequestCard({
       <ConfirmationTitle>{title}</ConfirmationTitle>
       <ConfirmationRequest>
         <pre className="whitespace-pre-wrap font-mono text-meta">{detail}</pre>
+        {request.type === "command_approval" && request.additionalPermissions !== null ? (
+          <>
+            <p className="mt-2 text-label font-medium text-foreground">
+              {t("pending.additionalPermissions")}
+            </p>
+            <PermissionRequestDetails profile={request.additionalPermissions} />
+          </>
+        ) : null}
         {request.reason === null ? null : (
           <p className="mt-2 text-label text-muted-foreground">{request.reason}</p>
         )}
@@ -141,11 +157,6 @@ function ApprovalRequestCard({
           {!interactive ? (
             <p className="mt-2 text-label text-muted-foreground">{t("pending.previousPending")}</p>
           ) : null}
-          {error === null ? null : (
-            <p className="mt-2 text-label text-danger" role="alert">
-              {error}
-            </p>
-          )}
           <ConfirmationActions>
             {request.availableDecisions.includes("deny") ? (
               <ConfirmationAction
@@ -181,6 +192,105 @@ function ApprovalRequestCard({
   );
 }
 
+function PermissionsApprovalRequestCard({
+  interactive,
+  onResolve,
+  request,
+}: Omit<PendingRequestCardProps, "request"> & { request: PermissionsApprovalRequest }) {
+  const { t } = useTranslation("workbench");
+  const [selected, setSelected] = useState(() => allPermissionKeys(request.permissions));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  useErrorToast(error);
+  const [attempt, setAttempt] = useState<PendingRequestResolutionAttempt>();
+  const allowButtonRef = useRef<HTMLButtonElement>(null);
+  const resolutionLockRef = useRef(createAsyncActionLock());
+  const canSubmit = interactive && request.status === "pending" && !submitting;
+  const hasSelection = selected.size > 0;
+
+  useEffect(() => {
+    if (canSubmit && hasSelection) allowButtonRef.current?.focus();
+  }, [canSubmit, hasSelection, request.requestId]);
+
+  const resolve = (scope: "session" | "turn", granted: ReadonlySet<string>) =>
+    resolutionLockRef.current.run(async () => {
+      if (!canSubmit) return;
+      const resolution = {
+        permissions: selectPermissionProfile(request.permissions, granted),
+        scope,
+      } as const;
+      const nextAttempt = resolvePendingRequestAttempt(attempt, resolution);
+      setAttempt(nextAttempt);
+      setSubmitting(true);
+      setError(null);
+      try {
+        await onResolve(request, resolution, nextAttempt.key);
+      } catch (error) {
+        setError(error instanceof Error ? error : new Error(String(error)));
+        setSubmitting(false);
+      }
+    });
+
+  const toggle = (key: string) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  return (
+    <Confirmation approval={{ id: request.requestId }} state={approvalState(request, submitting)}>
+      <ConfirmationTitle>{t("pending.permissionsApproval")}</ConfirmationTitle>
+      <ConfirmationRequest>
+        <p className="break-all font-mono text-meta text-foreground">{request.cwd}</p>
+        {request.reason === null ? null : (
+          <p className="mt-2 text-label text-muted-foreground">{request.reason}</p>
+        )}
+        <PermissionRequestDetails
+          disabled={!canSubmit}
+          onToggle={toggle}
+          profile={request.permissions}
+          selected={selected}
+        />
+      </ConfirmationRequest>
+      {request.status === "expired" ? (
+        <ConfirmationRejected>{t("pending.expired")}</ConfirmationRejected>
+      ) : (
+        <>
+          {!interactive ? (
+            <p className="mt-2 text-label text-muted-foreground">{t("pending.previousPending")}</p>
+          ) : null}
+          <ConfirmationActions>
+            <ConfirmationAction
+              disabled={!canSubmit}
+              onClick={() => void resolve("turn", new Set())}
+              tone="danger"
+            >
+              {t("pending.deny")}
+            </ConfirmationAction>
+            <ConfirmationAction
+              disabled={!canSubmit || !hasSelection}
+              onClick={() => void resolve("session", selected)}
+            >
+              {t("pending.allowSession")}
+            </ConfirmationAction>
+            <ConfirmationAction
+              disabled={!canSubmit || !hasSelection}
+              onClick={() => void resolve("turn", selected)}
+              ref={allowButtonRef}
+              tone="primary"
+            >
+              {t("pending.allow")}
+            </ConfirmationAction>
+          </ConfirmationActions>
+        </>
+      )}
+    </Confirmation>
+  );
+}
+
 type Answers = Record<string, string>;
 
 function UserInputRequestCard({
@@ -191,7 +301,8 @@ function UserInputRequestCard({
   const { t } = useTranslation("workbench");
   const [answers, setAnswers] = useState<Answers>({});
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  useErrorToast(error);
   const [attempt, setAttempt] = useState<PendingRequestResolutionAttempt>();
   const resolutionLockRef = useRef(createAsyncActionLock());
   const complete = request.questions.every(
@@ -213,8 +324,8 @@ function UserInputRequestCard({
       setAttempt(nextAttempt);
       try {
         await onResolve(request, resolution, nextAttempt.key);
-      } catch {
-        setError(t("pending.answerFailed"));
+      } catch (error) {
+        setError(error instanceof Error ? error : new Error(String(error)));
         setSubmitting(false);
       }
     });
@@ -325,11 +436,6 @@ function UserInputRequestCard({
       {!interactive ? (
         <p className="mt-3 text-label text-muted-foreground">{t("pending.previousPending")}</p>
       ) : null}
-      {error === null ? null : (
-        <p className="mt-3 text-label text-danger" role="alert">
-          {error}
-        </p>
-      )}
       <div className="mt-3 flex justify-end">
         <Button disabled={!canSubmit} size="compact" type="submit">
           {t("pending.submitAnswers")}
@@ -347,6 +453,15 @@ export function PendingRequestCard(props: PendingRequestCardProps) {
   if (props.request.type === "user_input") {
     return (
       <UserInputRequestCard
+        interactive={props.interactive}
+        onResolve={props.onResolve}
+        request={props.request}
+      />
+    );
+  }
+  if (props.request.type === "permissions_approval") {
+    return (
+      <PermissionsApprovalRequestCard
         interactive={props.interactive}
         onResolve={props.onResolve}
         request={props.request}

@@ -21,6 +21,7 @@ import {
 import { useTaskRuntime } from "../../conversation/runtime/use-task-runtime.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { useProjectActions, useProjectData } from "../../projects/project-context.js";
+import type { SettingsSectionId } from "../../settings/components/global-settings-fields.js";
 import {
   appInfoQueryOptions,
   appUpdateMutationOptions,
@@ -39,7 +40,6 @@ import {
 } from "../../projects/project-queries.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
 import type { CommitChangesLauncherHandle } from "./commit-changes-launcher.js";
-import { deriveProjectSidebarConnectionState } from "./project-sidebar.js";
 import { collectSubagents, type SubagentSelection } from "./subagent.js";
 import type {
   ProjectFileTreeDirectoryState,
@@ -133,7 +133,6 @@ export function useWorkbenchShellRuntime({
     },
   });
   const modelsQuery = useQuery(modelsQueryOptions(client));
-  const mcpServersQuery = useQuery(mcpServersQueryOptions(projectId, taskId, client));
   const mcpServersReloadMutation = useMutation({
     ...mcpServersReloadMutationOptions(projectId, taskId, client),
     onSuccess(response) {
@@ -213,16 +212,21 @@ export function useWorkbenchShellRuntime({
           ),
     [taskLaunchState],
   );
+  // 历史 Task 必须先通过 Snapshot 确认 Project 归属，再读取依赖已加载 Task 的资源。
+  const taskResourcesReady = runtime.snapshot !== undefined || startingSnapshot !== undefined;
+  const mcpServersQuery = useQuery(
+    mcpServersQueryOptions(projectId, taskId, client, taskResourcesReady),
+  );
   const projectTaskState = projectTaskStates.get(projectId);
-  const sidebarConnectionState = deriveProjectSidebarConnectionState({
-    hasActiveTask: taskId !== undefined,
-    projectDataFailed: error !== null || (projectTaskState?.error ?? null) !== null,
-    projectDataPending: isPending || projectTaskState?.isPending === true,
-    taskConnectionState: runtime.connectionState,
-  });
   const isTaskRunning =
     runtime.snapshot?.status === "running" || startingSnapshot?.status === "running";
-  const backgroundTerminals = useBackgroundTerminals(client, projectId, taskId, isTaskRunning);
+  const backgroundTerminals = useBackgroundTerminals(
+    client,
+    projectId,
+    taskId,
+    isTaskRunning,
+    taskResourcesReady,
+  );
   const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, client, !temporary));
   const [fileTreeExpansion, setFileTreeExpansion] = useState(() => ({
     paths: new Set<string>(),
@@ -277,8 +281,9 @@ export function useWorkbenchShellRuntime({
     taskId: string;
   }>();
   const [taskRenameOpen, setTaskRenameOpen] = useState(false);
-  const [taskRenameError, setTaskRenameError] = useState<string | null>(null);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+  const [globalSettingsInitialSection, setGlobalSettingsInitialSection] =
+    useState<SettingsSectionId>("appearance");
   const [gitHistoryOpen, setGitHistoryOpen] = useState(false);
   const [fileDiffSelection, setFileDiffSelection] = useState<{
     change: AgentFileChange;
@@ -375,6 +380,7 @@ export function useWorkbenchShellRuntime({
     gitStatusQuery,
     gitHistoryOpen,
     globalSettingsMutation,
+    globalSettingsInitialSection,
     globalSettingsOpen,
     globalSettingsQuery,
     handleNewChatSubmissionStateChange,
@@ -415,6 +421,7 @@ export function useWorkbenchShellRuntime({
     setFileDiffSelection,
     setFileReviewSelection,
     setFileTreeExpansion,
+    setGlobalSettingsInitialSection,
     setGlobalSettingsOpen,
     setGitHistoryOpen,
     setInspectorOpen,
@@ -425,9 +432,7 @@ export function useWorkbenchShellRuntime({
     setSidebarWidth,
     setSourceFileSelection,
     setSubagentDialogSelection,
-    setTaskRenameError,
     setTaskRenameOpen,
-    sidebarConnectionState,
     sidebarOpen,
     sidebarWidth,
     skillsQuery,
@@ -435,7 +440,6 @@ export function useWorkbenchShellRuntime({
     subagents,
     taskLaunchState,
     temporary,
-    taskRenameError,
     taskRenameOpen,
     tasks,
     t,

@@ -1,4 +1,9 @@
-import type { AgentEvent, AgentTaskSnapshotResponse, PendingRequest } from "@code-agent/protocol";
+import type {
+  AgentEvent,
+  AgentTaskSnapshotResponse,
+  AgentTurnPage,
+  PendingRequest,
+} from "@code-agent/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -85,6 +90,7 @@ function createPendingRequest<Status extends PendingRequest["status"] = "pending
   status: Status = "pending" as Status,
 ): PendingRequest & Readonly<{ status: Status }> {
   return {
+    additionalPermissions: null,
     availableDecisions: ["allow", "deny"],
     command: "pnpm test",
     createdAt: timestamp,
@@ -103,6 +109,42 @@ function createPendingRequest<Status extends PendingRequest["status"] = "pending
 }
 
 describe("task store", () => {
+  it("prepends older turn pages without overwriting live turns", () => {
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ turnsNextCursor: "older-page" }),
+    );
+    const page: AgentTurnPage = {
+      data: [
+        {
+          completedAt: timestamp,
+          error: null,
+          id: "turn-old",
+          items: [{ id: "message-old", role: "assistant", text: "更早回复", type: "message" }],
+          startedAt: timestamp,
+          status: "completed",
+        },
+        {
+          completedAt: null,
+          error: null,
+          id: "turn-running",
+          items: [{ id: "message-running", role: "assistant", text: "过期内容", type: "message" }],
+          startedAt: timestamp,
+          status: "running",
+        },
+      ],
+      nextCursor: null,
+    };
+
+    store.getState().prependTurns("older-page", page);
+
+    const state = store.getState();
+    expect(state.turnIds).toEqual(["turn-old", "turn-completed", "turn-running"]);
+    expect(state.getItem("message-running")).toMatchObject({ text: "开始" });
+    expect(state.getItem("message-old")).toMatchObject({ text: "更早回复" });
+    expect(state.snapshotMetadata?.turnsNextCursor).toBeNull();
+  });
+
   it("applies streamed plan, reasoning sections, tool progress, file changes, and turn diff", () => {
     const store = createTaskStore(
       { projectId: "project-1", taskId: "task-1" },
@@ -497,6 +539,46 @@ describe("task store", () => {
     expect(store.getState().getItem("realtime-assistant-id")).toMatchObject({
       text: "正在处理完成",
     });
+  });
+
+  it("reconciles a skill-only user message when the snapshot changes its id", () => {
+    const liveMessage = {
+      id: "realtime-skill-message",
+      role: "user" as const,
+      skills: [{ name: "git-commit" }],
+      text: "",
+      type: "message" as const,
+    };
+    const liveTurn = {
+      completedAt: null,
+      error: null,
+      id: "turn-running",
+      items: [liveMessage],
+      startedAt: timestamp,
+      status: "running" as const,
+    };
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ turns: [liveTurn] }),
+    );
+
+    store.getState().reconcile(
+      createResponse({
+        turns: [
+          {
+            ...liveTurn,
+            items: [{ ...liveMessage, id: "snapshot-skill-message" }],
+          },
+        ],
+      }),
+    );
+
+    expect(store.getState().itemIdsByTurnId["turn-running"]).toEqual(["realtime-skill-message"]);
+    expect(store.getState().getItem("realtime-skill-message")).toMatchObject({
+      skills: [{ name: "git-commit" }],
+      text: "",
+    });
+    expect(store.getState().getItem("snapshot-skill-message")).toBeUndefined();
   });
 
   it("matches later commentary after unmatched and omitted snapshot messages", () => {
@@ -1676,5 +1758,32 @@ describe("task store registry", () => {
 
     expect(registry.peek("project-1", "task-1")).toBeUndefined();
     expect(registry.peek("project-1", "task-2")).toBeDefined();
+  });
+
+  it("evicts an inactive store when its retained byte estimate grows", () => {
+    const firstStore = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ id: "task-1", title: "first" }),
+    );
+    const secondStore = createTaskStore(
+      { projectId: "project-1", taskId: "task-2" },
+      createResponse({ id: "task-2", title: "second" }),
+    );
+    const initialBudget =
+      estimateTaskStoreRetainedBytes(firstStore) + estimateTaskStoreRetainedBytes(secondStore) + 1;
+    const registry = createTaskStoreRegistry({
+      createStore: (identity) => (identity.taskId === "task-1" ? firstStore : secondStore),
+      maxRetainedBytes: initialBudget,
+      maxRetainedStores: 2,
+    });
+
+    registry.acquire("project-1", "task-1");
+    registry.release("project-1", "task-1");
+    registry.acquire("project-1", "task-2");
+    registry.release("project-1", "task-2");
+    firstStore.getState().hydrate(createResponse({ id: "task-1", title: "x".repeat(10_000) }));
+
+    expect(registry.peek("project-1", "task-1")).toBeUndefined();
+    expect(registry.peek("project-1", "task-2")).toBe(secondStore);
   });
 });

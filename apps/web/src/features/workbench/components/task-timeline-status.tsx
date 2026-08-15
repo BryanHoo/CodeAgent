@@ -5,6 +5,11 @@ import { v4 as createUuid } from "uuid";
 
 import { getCurrentLanguage, i18n } from "../../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import {
+  normalizeError,
+  showErrorToast,
+  useErrorToast,
+} from "../../../shared/errors/error-toast.js";
 
 import { MessageAction, MessageActions } from "../../../shared/components/agent/message.js";
 import { Task, TaskTrigger, type TaskStatus } from "../../../shared/components/agent/task.js";
@@ -182,8 +187,9 @@ export function TurnProcessingTime({
   expanded,
   onToggle,
   startedAt,
+  summary,
 }: Pick<AgentTurn, "completedAt" | "startedAt"> &
-  Readonly<{ expanded?: boolean; onToggle?: () => void }>) {
+  Readonly<{ expanded?: boolean; onToggle?: () => void; summary?: string | undefined }>) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -213,8 +219,14 @@ export function TurnProcessingTime({
 
   const content = (
     <>
-      <span>{i18n.t("timeline.processing", { ns: "conversation" })}&nbsp;</span>
+      <span>
+        {i18n.t(completedAt === null ? "timeline.processing" : "timeline.completed", {
+          ns: "conversation",
+        })}
+        &nbsp;
+      </span>
       <time dateTime={duration.dateTime}>{duration.label}</time>
+      {summary === undefined ? null : <span className="min-w-0 truncate">&nbsp;· {summary}</span>}
     </>
   );
   const className =
@@ -268,13 +280,14 @@ export function MessageMetadata({
   timestamp?: string;
 }>) {
   const [copiedText, setCopiedText] = useState<string | null>(null);
-  const [forkError, setForkError] = useState(false);
+  const [forkError, setForkError] = useState<Error | null>(null);
   const [forkPending, setForkPending] = useState(false);
   const forkIdempotencyKeyRef = useRef<string | null>(null);
   const messageActionLockRef = useRef(createAsyncActionLock());
   const copied = copiedText === text;
   const messageDate = timestamp === undefined ? undefined : new Date(timestamp);
   const locale = getCurrentLanguage();
+  useErrorToast(forkError);
 
   const copyMessage = () =>
     messageActionLockRef.current.run(async () => {
@@ -282,8 +295,9 @@ export function MessageMetadata({
         // 只在明确点击时访问 Clipboard，避免渲染阶段触发浏览器权限请求。
         await navigator.clipboard.writeText(text);
         setCopiedText(text);
-      } catch {
+      } catch (error) {
         setCopiedText(null);
+        showErrorToast(error);
       }
     });
 
@@ -294,12 +308,12 @@ export function MessageMetadata({
       }
       forkIdempotencyKeyRef.current ??= createUuid();
       setForkPending(true);
-      setForkError(false);
+      setForkError(null);
       try {
         // 重试复用同一幂等键，避免响应丢失时重复创建任务。
         await onForkTask(forkIdempotencyKeyRef.current);
-      } catch {
-        setForkError(true);
+      } catch (error) {
+        setForkError(normalizeError(error));
       } finally {
         setForkPending(false);
       }
@@ -332,20 +346,14 @@ export function MessageMetadata({
         <MessageAction
           disabled={forkPending}
           label={
-            forkError
-              ? i18n.t("timeline.forkFailed", { ns: "conversation" })
-              : forkPending
-                ? i18n.t("timeline.forking", { ns: "conversation" })
-                : i18n.t("timeline.fork", { ns: "conversation" })
+            forkPending
+              ? i18n.t("timeline.forking", { ns: "conversation" })
+              : i18n.t("timeline.fork", { ns: "conversation" })
           }
           onClick={() => {
             void forkTask();
           }}
-          tooltip={
-            forkError
-              ? i18n.t("timeline.forkFailed", { ns: "conversation" })
-              : i18n.t("timeline.fork", { ns: "conversation" })
-          }
+          tooltip={i18n.t("timeline.fork", { ns: "conversation" })}
         >
           <GitFork className="size-3.5" aria-hidden="true" />
         </MessageAction>

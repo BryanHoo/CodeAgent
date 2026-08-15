@@ -3,6 +3,8 @@ import { PanelLeft, PanelRight, Pencil } from "lucide-react";
 import { useRef, type CSSProperties } from "react";
 
 import { Button } from "../../../shared/components/core/button.js";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
+import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { RuntimeUnavailable } from "../../../shared/components/core/runtime-unavailable.js";
 import {
   Tooltip,
@@ -37,6 +39,7 @@ export function WorkbenchShellLayout({
   temporary: boolean;
 }>) {
   const composerRef = useRef<WorkbenchComposerHandle>(null);
+  const projectRefreshLockRef = useRef(createAsyncActionLock());
   const {
     appInfoQuery,
     backgroundTerminals,
@@ -86,6 +89,7 @@ export function WorkbenchShellLayout({
     retry,
     runtime,
     setFileTreeExpansion,
+    setGlobalSettingsInitialSection,
     setGlobalSettingsOpen,
     setGitHistoryOpen,
     setInspectorOpen,
@@ -94,9 +98,7 @@ export function WorkbenchShellLayout({
     setSidebarOpen,
     setSidebarWidth,
     setSubagentDialogSelection,
-    setTaskRenameError,
     setTaskRenameOpen,
-    sidebarConnectionState,
     sidebarOpen,
     sidebarWidth,
     skillsQuery,
@@ -123,9 +125,9 @@ export function WorkbenchShellLayout({
     >
       <ProjectSidebar
         {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
-        connectionState={sidebarConnectionState}
         onClose={closeSidebar}
-        onOpenSettings={() => {
+        onOpenSettings={(section) => {
+          setGlobalSettingsInitialSection(section);
           setGlobalSettingsOpen(true);
         }}
         projectId={projectId}
@@ -205,7 +207,6 @@ export function WorkbenchShellLayout({
                   className="group flex max-w-full items-center gap-1 rounded-control px-1 py-0.5 text-left hover:bg-control-hover focus-visible:shadow-focus"
                   id="workbench-task-title-rename"
                   onClick={() => {
-                    setTaskRenameError(null);
                     setTaskRenameOpen(true);
                   }}
                   type="button"
@@ -413,9 +414,9 @@ export function WorkbenchShellLayout({
           onOpenFileDiff={openFileDiff}
           onOpenProjectPath={(appId, path) => {
             projectPathOpenMutation.reset();
-            void projectPathOpenLockRef.current.run(() =>
-              projectPathOpenMutation.mutateAsync({ appId, path }),
-            );
+            void projectPathOpenLockRef.current
+              .run(() => projectPathOpenMutation.mutateAsync({ appId, path }))
+              .catch(showErrorToast);
           }}
           onOpenProjectFile={(path) => {
             openMessageFileReference({ lineNumber: null, path });
@@ -428,8 +429,13 @@ export function WorkbenchShellLayout({
           onReferenceProjectPath={(entry) => {
             composerRef.current?.referenceProjectPath(entry);
           }}
-          onRefreshGitStatus={() => {
-            void refreshProjectGitStatus(projectId);
+          onRefreshProject={() => {
+            void projectRefreshLockRef.current.run(async () => {
+              await Promise.all([
+                refreshProjectGitStatus(projectId),
+                ...fileTreeQueries.map((query) => query.refetch()),
+              ]);
+            });
           }}
           onCommitChanges={() => {
             commitChangesLauncherRef.current?.open();
@@ -448,7 +454,6 @@ export function WorkbenchShellLayout({
           projectName={projectName}
           projectId={projectId}
           projectOpenApps={projectOpenCapabilitiesQuery.data?.apps ?? []}
-          projectOpenError={projectPathOpenMutation.error}
           projectOpenPending={projectPathOpenMutation.isPending}
           projectPath={projectPath}
           skills={skillsQuery.data?.data ?? []}

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { PendingRequestCard, resolvePendingRequestAttempt } from "./pending-request.js";
+import { selectPermissionProfile } from "./permission-request-details.js";
 
 const identity = {
   createdAt: "2026-07-23T00:00:00.000Z",
@@ -33,6 +34,15 @@ describe("PendingRequestCard", () => {
   it("renders approval actions and disables queued requests", () => {
     const request: PendingRequest = {
       ...identity,
+      additionalPermissions: {
+        fileSystem: {
+          entries: [{ access: "read", path: { path: "/workspace/private-input", type: "path" } }],
+          globScanMaxDepth: null,
+          read: null,
+          write: null,
+        },
+        network: null,
+      },
       availableDecisions: ["allow", "allow_for_session", "deny"],
       command: "pnpm check",
       cwd: "/workspace/CodeAgent",
@@ -51,6 +61,9 @@ describe("PendingRequestCard", () => {
     expect(active).toContain("本次会话允许");
     expect(active).toContain("允许");
     expect(active).toContain("拒绝");
+    expect(active).toContain("附加权限");
+    expect(active).toContain("/workspace/private-input");
+    expect(active).not.toContain('type="checkbox"');
     expect(active).toMatch(/class="[^"]*bg-danger[^"]*"[^>]*>拒绝<\/button>/);
     expect(active).toMatch(/class="[^"]*bg-brand[^"]*"[^>]*>允许<\/button>/);
     expect(queued).toContain("等待处理前一项");
@@ -60,6 +73,7 @@ describe("PendingRequestCard", () => {
   it("renders managed network approvals with their target", () => {
     const request: PendingRequest = {
       ...identity,
+      additionalPermissions: null,
       availableDecisions: ["allow", "deny"],
       command: null,
       cwd: null,
@@ -147,5 +161,55 @@ describe("PendingRequestCard", () => {
     expect(markup).toContain("请求已过期");
     expect(markup).not.toContain(">允许<");
     expect(markup).not.toContain(">拒绝<");
+  });
+
+  it("renders granular permissions and builds only the selected grant subset", () => {
+    const request: PendingRequest = {
+      ...identity,
+      cwd: "/workspace/CodeAgent",
+      environmentId: "local",
+      permissions: {
+        fileSystem: {
+          entries: [
+            { access: "read", path: { path: "/workspace/input", type: "path" } },
+            { access: "write", path: { pattern: "/tmp/code-agent-*", type: "glob_pattern" } },
+          ],
+          globScanMaxDepth: 3,
+          read: ["/workspace/legacy-read"],
+          write: null,
+        },
+        network: { enabled: true },
+      },
+      reason: "需要额外权限",
+      requestId: "number:11",
+      type: "permissions_approval",
+    };
+    const markup = renderToStaticMarkup(
+      <PendingRequestCard interactive onResolve={vi.fn()} request={request} />,
+    );
+
+    expect(markup).toContain("权限请求");
+    expect(markup).toContain("网络访问");
+    expect(markup).toContain("/workspace/input");
+    expect(markup).toContain("/tmp/code-agent-*");
+    expect(markup.match(/type="checkbox"/g)).toHaveLength(4);
+    expect(markup.match(/checked=""/g)).toHaveLength(4);
+    expect(markup).toContain("本次会话允许");
+
+    expect(selectPermissionProfile(request.permissions, new Set(["fileSystem.entries.0"]))).toEqual(
+      {
+        fileSystem: {
+          entries: [request.permissions.fileSystem?.entries?.[0]],
+          globScanMaxDepth: 3,
+          read: null,
+          write: null,
+        },
+        network: null,
+      },
+    );
+    expect(selectPermissionProfile(request.permissions, new Set())).toEqual({
+      fileSystem: null,
+      network: null,
+    });
   });
 });

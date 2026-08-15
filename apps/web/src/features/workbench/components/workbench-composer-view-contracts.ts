@@ -30,8 +30,6 @@ export type WorkbenchComposerViewProps = Readonly<{
   attachments: readonly PromptInputAttachment[];
   attachmentsDisabled: boolean;
   baseBranches: readonly string[];
-  branchCreateError: string | undefined;
-  branchSwitchError: string | undefined;
   canInterrupt: boolean;
   canSteer: boolean;
   canSubmit: boolean;
@@ -44,6 +42,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   contextUsage: AgentContextUsage | null | undefined;
   creatingBranch: string | undefined;
   draftInputDisabled: boolean;
+  editQueuedPrompt: (queuedPrompt: QueuedComposerPrompt) => void;
   filteredCommands: readonly PromptCommandItem[];
   filteredSkills: readonly AgentSkill[];
   fileMenuOpen: boolean;
@@ -100,6 +99,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   switchingBranch: string | undefined;
   taskId: string | undefined;
   turnControlsDisabled: boolean;
+  waitingForAcknowledgement: boolean;
 }>;
 
 export function resolveQueuedPromptSummary(

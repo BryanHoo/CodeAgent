@@ -20,7 +20,58 @@ test("shows a task error when the initial snapshot request fails", async ({ page
 
   await page.goto("/p/code-agent/t/task-1");
 
-  await expect(page.getByRole("alert", { name: "会话内容" })).toHaveText("无法加载任务历史");
+  await expect(page.getByText("Snapshot failed", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("log", { name: "会话内容" }).getByText("Snapshot failed"),
+  ).toHaveCount(0);
+});
+
+test("waits for an old task snapshot before loading task-scoped resources", async ({ page }) => {
+  let releaseSnapshot: (() => void) | undefined;
+  const snapshotBlocked = new Promise<void>((resolve) => {
+    releaseSnapshot = resolve;
+  });
+  let signalSnapshotRequestStarted: (() => void) | undefined;
+  const snapshotRequestStarted = new Promise<void>((resolve) => {
+    signalSnapshotRequestStarted = resolve;
+  });
+  let mcpRequestCount = 0;
+  let terminalRequestCount = 0;
+
+  await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
+    signalSnapshotRequestStarted?.();
+    await snapshotBlocked;
+    await route.fulfill({ contentType: "application/json", json: taskSnapshotResponse });
+  });
+  await page.route("**/v1/projects/code-agent/tasks/task-1/mcp-servers", async (route) => {
+    mcpRequestCount += 1;
+    await route.fulfill({ contentType: "application/json", json: { data: [] } });
+  });
+  await page.route("**/v1/projects/code-agent/tasks/task-1/background-terminals", async (route) => {
+    terminalRequestCount += 1;
+    await route.fulfill({ contentType: "application/json", json: { data: [] } });
+  });
+
+  await page.goto("/p/code-agent/t/task-1");
+  await snapshotRequestStarted;
+  const taskResourceRequestedBeforeSnapshot =
+    mcpRequestCount + terminalRequestCount > 0
+      ? true
+      : await page
+          .waitForRequest(
+            (request) =>
+              /\/(?:mcp-servers|background-terminals)$/u.test(new URL(request.url()).pathname),
+            { timeout: 500 },
+          )
+          .then(
+            () => true,
+            () => false,
+          );
+  expect(taskResourceRequestedBeforeSnapshot).toBe(false);
+
+  releaseSnapshot?.();
+  await expect.poll(() => mcpRequestCount).toBe(1);
+  await expect.poll(() => terminalRequestCount).toBe(1);
 });
 
 test("keeps retrying Snapshot recovery and applies later realtime events", async ({ page }) => {
@@ -48,6 +99,8 @@ test("keeps retrying Snapshot recovery and applies later realtime events", async
     });
   });
   await page.addInitScript(() => {
+    const encodeFrame = (frame: unknown) => new TextEncoder().encode(JSON.stringify(frame)).buffer;
+
     class ResyncWebSocket extends EventTarget {
       static connectionCount = 0;
       public readonly bufferedAmount = 0;
@@ -108,7 +161,7 @@ test("keeps retrying Snapshot recovery and applies later realtime events", async
                   },
                 ];
           for (const message of messages) {
-            this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(message) }));
+            this.dispatchEvent(new MessageEvent("message", { data: encodeFrame(message) }));
           }
         });
       }
@@ -159,6 +212,7 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
     });
   });
   await page.addInitScript(() => {
+    const encodeFrame = (frame: unknown) => new TextEncoder().encode(JSON.stringify(frame)).buffer;
     let connectionCount = 0;
 
     class BurstingWebSocket extends EventTarget {
@@ -177,7 +231,7 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
           this.dispatchEvent(new Event("open"));
           this.dispatchEvent(
             new MessageEvent("message", {
-              data: JSON.stringify({
+              data: encodeFrame({
                 latestSequence: 1_001,
                 sessionId: "e2e-session",
                 type: "connection.ready",
@@ -191,7 +245,7 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
           for (let sequence = 1; sequence <= 1_001; sequence += 1) {
             this.dispatchEvent(
               new MessageEvent("message", {
-                data: JSON.stringify({
+                data: encodeFrame({
                   itemId: `item-${String(sequence % 2)}`,
                   payload: { delta: "x" },
                   provider: "codex",
@@ -250,6 +304,7 @@ test("clears transient realtime errors after the WebSocket reconnects @cross-bro
     });
   });
   await page.addInitScript(() => {
+    const encodeFrame = (frame: unknown) => new TextEncoder().encode(JSON.stringify(frame)).buffer;
     let connectionCount = 0;
     sessionStorage.setItem("__testWebSocketConnections", String(connectionCount));
     sessionStorage.setItem("__testWebSocketFailed", "false");
@@ -273,7 +328,7 @@ test("clears transient realtime errors after the WebSocket reconnects @cross-bro
           const sendReady = () => {
             this.dispatchEvent(
               new MessageEvent("message", {
-                data: JSON.stringify({
+                data: encodeFrame({
                   latestSequence: 0,
                   sessionId: "e2e-session",
                   type: "connection.ready",
@@ -382,6 +437,7 @@ test("opens a completed file change diff while the turn is still running", async
     });
   });
   await page.addInitScript(() => {
+    const encodeFrame = (frame: unknown) => new TextEncoder().encode(JSON.stringify(frame)).buffer;
     type FileChangeEventWindow = Window & {
       __emitFileChangeEvent?: (event: unknown) => void;
     };
@@ -393,14 +449,14 @@ test("opens a completed file change diff while the turn is still running", async
       public constructor() {
         super();
         (window as FileChangeEventWindow).__emitFileChangeEvent = (event) => {
-          this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(event) }));
+          this.dispatchEvent(new MessageEvent("message", { data: encodeFrame(event) }));
         };
         queueMicrotask(() => {
           this.readyState = 1;
           this.dispatchEvent(new Event("open"));
           this.dispatchEvent(
             new MessageEvent("message", {
-              data: JSON.stringify({
+              data: encodeFrame({
                 latestSequence: 0,
                 sessionId: "e2e-session",
                 type: "connection.ready",
@@ -548,6 +604,7 @@ test("updates a running background task title and clears attention after enterin
     });
   });
   await page.addInitScript(() => {
+    const encodeFrame = (frame: unknown) => new TextEncoder().encode(JSON.stringify(frame)).buffer;
     type SidebarEventEmitterWindow = Window & {
       __emitSidebarTaskEvent?: (event: unknown) => void;
     };
@@ -564,7 +621,7 @@ test("updates a running background task title and clears attention after enterin
         (window as SidebarEventEmitterWindow).__emitSidebarTaskEvent = (event) => {
           this.dispatchEvent(
             new MessageEvent("message", {
-              data: JSON.stringify(event),
+              data: encodeFrame(event),
             }),
           );
         };
@@ -576,7 +633,7 @@ test("updates a running background task title and clears attention after enterin
           this.dispatchEvent(new Event("open"));
           this.dispatchEvent(
             new MessageEvent("message", {
-              data: JSON.stringify({
+              data: encodeFrame({
                 latestSequence: 0,
                 sessionId: "e2e-session",
                 type: "connection.ready",
@@ -608,9 +665,10 @@ test("updates a running background task title and clears attention after enterin
 
   await page.goto("/p/code-agent/t/task-1");
   const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
-  const backgroundTask = sidebar.getByRole("link", { name: /优化输入框交互/ });
-  const completedTask = sidebar.locator('a[href="/p/code-agent/t/markdown"]');
-  const failedTask = sidebar.getByRole("link", { name: /完善 Runtime 状态/ });
+  const projectTree = sidebar.getByTestId("project-tree-scroll");
+  const backgroundTask = projectTree.getByRole("link", { name: /优化输入框交互/ });
+  const completedTask = projectTree.locator('a[href="/p/code-agent/t/markdown"]');
+  const failedTask = projectTree.getByRole("link", { name: /完善 Runtime 状态/ });
   await expect
     .poll(() =>
       page.evaluate(
@@ -654,6 +712,7 @@ test("updates a running background task title and clears attention after enterin
     itemId: "approval-input-design",
     payload: {
       request: {
+        additionalPermissions: null,
         availableDecisions: ["allow", "deny"],
         command: "pnpm check",
         createdAt: "2026-07-29T00:00:01.000Z",
@@ -680,7 +739,13 @@ test("updates a running background task title and clears attention after enterin
     version: 2,
   });
 
-  await expect(backgroundTask.getByRole("status", { name: "任务等待审批" })).toBeVisible();
+  const approvalStatus = backgroundTask.getByRole("status", { name: "任务等待审批" });
+  await expect(approvalStatus).toBeVisible();
+  await expect(approvalStatus).toHaveCSS("color", "rgb(178, 89, 0)");
+  await expect(approvalStatus.locator(".sidebar-task-status-dot")).toHaveCSS(
+    "animation-duration",
+    "2.4s",
+  );
   await backgroundTask.click();
   await expect(backgroundTask.getByRole("status", { name: "任务等待审批" })).toHaveCount(0);
 
@@ -710,7 +775,13 @@ test("updates a running background task title and clears attention after enterin
     type: "turn.started",
     version: 2,
   });
-  await expect(completedTask.getByRole("status", { name: "任务运行中" })).toBeVisible();
+  const runningStatus = completedTask.getByRole("status", { name: "任务运行中" });
+  await expect(runningStatus).toBeVisible();
+  await expect(runningStatus).toHaveCSS("color", "rgb(0, 106, 255)");
+  await expect(runningStatus.locator(".sidebar-task-status-dot")).toHaveCSS(
+    "animation-duration",
+    "2.4s",
+  );
   await emitTaskEvent({
     itemId: "markdown-assistant",
     payload: { delta: "正在回复" },
@@ -746,7 +817,13 @@ test("updates a running background task title and clears attention after enterin
     version: 2,
   });
 
-  await expect(completedTask.getByRole("status", { name: "AI 回复已完成" })).toBeVisible();
+  const completedStatus = completedTask.getByRole("status", { name: "AI 回复已完成" });
+  await expect(completedStatus).toBeVisible();
+  await expect(completedStatus).toHaveCSS("color", "rgb(40, 169, 72)");
+  await expect(completedStatus.locator(".sidebar-task-status-dot")).toHaveCSS(
+    "animation-name",
+    "none",
+  );
   await expect(completedTask).toContainText("后台任务正式标题");
 
   await completedTask.click();
@@ -792,7 +869,13 @@ test("updates a running background task title and clears attention after enterin
     type: "provider.error",
     version: 2,
   });
-  await expect(failedTask.getByRole("status", { name: "AI 回复未完成" })).toBeVisible();
+  const failedStatus = failedTask.getByRole("status", { name: "AI 回复未完成" });
+  await expect(failedStatus).toBeVisible();
+  await expect(failedStatus).toHaveCSS("color", "rgb(235, 0, 29)");
+  await expect(failedStatus.locator(".sidebar-task-status-dot")).toHaveCSS(
+    "animation-name",
+    "none",
+  );
 
   await failedTask.click();
   await expect(failedTask.getByRole("status", { name: "AI 回复未完成" })).toHaveCount(0);
@@ -801,6 +884,7 @@ test("updates a running background task title and clears attention after enterin
 test("restores network approvals from the task snapshot after refresh", async ({ page }) => {
   let resolutionCount = 0;
   const pendingRequest = {
+    additionalPermissions: null,
     availableDecisions: ["allow", "deny"],
     command: "pnpm check",
     createdAt: "2026-07-23T00:00:00.000Z",
@@ -999,6 +1083,8 @@ test("shows MCP startup diagnostics and manually retries the current task", asyn
   });
 
   await page.goto("/p/code-agent/t/task-1");
+  const startupError = "MCP startup timed out after 10s\nProcess exited with code 1";
+  await expect(page.getByRole("listitem").filter({ hasText: startupError })).toBeVisible();
   await page.getByRole("tab", { name: "上下文" }).click();
   const mcp = page.getByRole("region", { name: "MCP" });
   const reloadIcon = mcp.getByRole("button", { name: "重新加载 MCP" }).locator("svg");
@@ -1008,14 +1094,9 @@ test("shows MCP startup diagnostics and manually retries the current task", asyn
   await expect(mcp.getByText("启动失败", { exact: true })).toBeVisible();
   await expect(mcp.getByText("已就绪", { exact: false })).toBeVisible();
   await expect(mcp.getByText("Provider-only MCP description", { exact: true })).toHaveCount(0);
-  await expect(mcp.getByText("需要重新认证", { exact: true })).toBeVisible();
-  const logButton = mcp.getByRole("button", { name: "查看错误日志" });
-  await expect(logButton).toHaveCSS("display", "inline-flex");
-  await expect
-    .poll(() => logButton.locator("svg").evaluate((icon) => icon.getBoundingClientRect().width))
-    .toBeLessThanOrEqual(16);
-  await logButton.click();
-  await expect(mcp.getByText("MCP startup timed out after 10s", { exact: false })).toBeVisible();
+  await expect(mcp.getByText("需要重新认证", { exact: true })).toHaveCount(0);
+  await expect(mcp.getByRole("button", { name: "查看错误日志" })).toHaveCount(0);
+  await expect(mcp.getByText(startupError, { exact: true })).toHaveCount(0);
   await mcp.getByRole("button", { name: "重新加载 MCP" }).click();
   await expect.poll(() => retries).toBe(1);
   await expect(mcp.getByText("正在启动", { exact: true })).toBeVisible();
@@ -1049,29 +1130,33 @@ test("shows original Codex MCP request errors once", async ({ page }) => {
   await page.getByRole("tab", { name: "上下文" }).click();
   const mcp = page.getByRole("region", { name: "MCP" });
   await expect(
-    mcp.getByText("mcpServerStatus/list failed: MCP server `docs` executable was not found"),
+    page.getByText("mcpServerStatus/list failed: MCP server `docs` executable was not found"),
   ).toBeVisible();
-  await expect(mcp.getByText("PROVIDER_ERROR · HTTP 502")).toBeVisible();
+  await expect(
+    mcp.getByText("mcpServerStatus/list failed: MCP server `docs` executable was not found"),
+  ).toHaveCount(0);
+  await expect(mcp.getByText("PROVIDER_ERROR · HTTP 502")).toHaveCount(0);
   await expect(mcp.getByRole("button", { name: "查看错误日志" })).toHaveCount(0);
 
   await mcp.getByRole("button", { name: "重新加载 MCP" }).click();
   await expect(
-    mcp.getByText("config/mcpServer/reload failed: transport channel closed"),
+    page.getByText("config/mcpServer/reload failed: transport channel closed"),
   ).toBeVisible();
-  await expect(mcp.getByText("mcpServerStatus/list failed", { exact: false })).toHaveCount(0);
-  await expect(mcp.getByText("重新加载 MCP 失败", { exact: true })).toHaveCount(1);
+  await expect(mcp.getByText("config/mcpServer/reload failed", { exact: false })).toHaveCount(0);
+  await expect(mcp.getByText("重新加载 MCP 失败", { exact: true })).toHaveCount(0);
 });
 
 test("queues follow-up messages and can steer or cancel them during an active turn", async ({
   page,
 }) => {
+  let followUpBehavior: "queue" | "steer" = "queue";
   await page.unroute("**/v1/**");
   await page.route("**/v1/settings", async (route) => {
     const response = await route.fetch();
     const body = (await response.json()) as { settings: Record<string, unknown> };
     await route.fulfill({
       response,
-      json: { settings: { ...body.settings, followUpBehavior: "queue" } },
+      json: { settings: { ...body.settings, followUpBehavior } },
     });
   });
   await page.goto("/p/code-agent");
@@ -1103,7 +1188,14 @@ test("queues follow-up messages and can steer or cancel them during an active tu
   await expect(page.getByText("先补充失败测试", { exact: true })).toBeVisible();
   const queuedList = page.getByRole("list", { name: "已排队消息" });
   expect(await queuedList.evaluate((element) => element.closest("form") === null)).toBe(true);
-  const steerQueued = page.getByRole("button", { name: "立即引导：先补充失败测试" });
+  await page.getByRole("button", { name: "编辑排队消息：先补充失败测试" }).click();
+  await expect(input).toHaveText("先补充失败测试");
+  await expect(queuedList).toHaveCount(0);
+  await input.fill("先补充失败测试并覆盖确认状态");
+  await queueMessage.click();
+  const steerQueued = page.getByRole("button", {
+    name: "立即引导：先补充失败测试并覆盖确认状态",
+  });
   await expect(steerQueued).toBeEnabled();
   await steerQueued.hover();
   await expect(page.getByRole("tooltip")).toHaveText("立即作为引导发送");
@@ -1111,10 +1203,44 @@ test("queues follow-up messages and can steer or cancel them during an active tu
   await expect
     .poll(() => steerPayload)
     .toEqual({
-      input: { attachments: [], skills: [], text: "先补充失败测试", type: "prompt" },
+      input: {
+        attachments: [],
+        skills: [],
+        text: "先补充失败测试并覆盖确认状态",
+        type: "prompt",
+      },
       taskId: expect.stringMatching(/^task-action-\d+$/u),
     });
-  await expect(page.getByText("先补充失败测试", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("先补充失败测试并覆盖确认状态", { exact: true })).toBeVisible();
+  await expect(page.getByText("等待发送", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "编辑排队消息：先补充失败测试并覆盖确认状态" }),
+  ).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByText("先补充失败测试并覆盖确认状态", { exact: true })).toBeVisible();
+  await expect(page.getByText("等待发送", { exact: true })).toBeVisible();
+
+  await page.evaluate(() => {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith("code-agent.composer-queue.")) localStorage.removeItem(key);
+    }
+  });
+  followUpBehavior = "steer";
+  await page.reload();
+  await input.fill("直接引导等待确认");
+  await page.getByRole("button", { name: "发送引导" }).click();
+  await expect(input).toHaveText("直接引导等待确认");
+  await expect(input).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByText("等待发送", { exact: true })).toBeVisible();
+
+  await page.evaluate(() => {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith("code-agent.composer-queue.")) localStorage.removeItem(key);
+    }
+  });
+  followUpBehavior = "queue";
+  await page.reload();
 
   await input.fill("无需继续的消息");
   await queueMessage.click();
@@ -1129,6 +1255,61 @@ test("queues follow-up messages and can steer or cancel them during an active tu
   await page.getByRole("button", { name: "停止" }).click();
   const nextTurn = page.getByLabel("Turn 2");
   await expect(nextTurn.getByText("自动续发消息", { exact: true })).toBeVisible();
+  await expect(nextTurn).toHaveAttribute("data-status", "completed");
+});
+
+test("recovers a queued steer when its target turn is interrupted before acknowledgement", async ({
+  page,
+}) => {
+  await page.unroute("**/v1/**");
+  await page.goto("/p/code-agent");
+  const input = page.getByRole("textbox", { name: "任务输入" });
+  await input.fill("等待中断");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  await expect(page.getByRole("button", { exact: true, name: "停止" })).toBeVisible();
+
+  let steerTurnId: string | undefined;
+  await page.route("**/v1/projects/code-agent/tasks/*/turns/*/steer", async (route) => {
+    const pathParts = new URL(route.request().url()).pathname.split("/");
+    const payload = route.request().postDataJSON() as { taskId: string };
+    steerTurnId = pathParts[7];
+    await route.fulfill({
+      contentType: "application/json",
+      json: { status: "accepted", taskId: payload.taskId, turnId: steerTurnId ?? "" },
+      status: 202,
+    });
+  });
+  await input.fill("中断后继续发送");
+  await page.getByRole("button", { name: "排队消息" }).click();
+  await page.getByRole("button", { name: "立即引导：中断后继续发送" }).click();
+  await expect(page.getByText("等待发送", { exact: true })).toBeVisible();
+  await expect.poll(() => steerTurnId).toMatch(/^turn-action-\d+$/u);
+  const expectedDeliveryTurnId = steerTurnId;
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const queueKey = Array.from({ length: localStorage.length }, (_, index) =>
+          localStorage.key(index),
+        ).find((key) => key?.startsWith("code-agent.composer-queue."));
+        if (queueKey === undefined || queueKey === null) return undefined;
+        const persistedValue = localStorage.getItem(queueKey);
+        if (persistedValue === null) return undefined;
+        const persisted = JSON.parse(persistedValue) as {
+          queuedPrompts?: readonly { deliveryTurnId?: string }[];
+        };
+        return persisted.queuedPrompts?.[0]?.deliveryTurnId;
+      }),
+    )
+    .toBe(expectedDeliveryTurnId);
+
+  await page.getByRole("button", { exact: true, name: "停止" }).click();
+  await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "interrupted");
+  await expect(page.getByText("等待发送", { exact: true })).toHaveCount(0);
+
+  await input.fill("停止后再次发送");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  const nextTurn = page.getByLabel("Turn 2");
+  await expect(nextTurn.getByText("停止后再次发送", { exact: true })).toBeVisible();
   await expect(nextTurn).toHaveAttribute("data-status", "completed");
 });
 
@@ -1191,7 +1372,7 @@ test("shows the latest raw Codex operation throughout a running turn", async ({ 
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
 });
 
-test("shows the complete truncated command title on hover and focus", async ({ page }) => {
+test("shows wrapped command details and input in a fixed-width tooltip", async ({ page }) => {
   const command =
     "pnpm exec vitest run apps/web/src/features/workbench/components/task-timeline.test.tsx --testNamePattern tool-command-title-tooltip";
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
@@ -1209,6 +1390,7 @@ test("shows the complete truncated command title on hover and focus", async ({ p
                 command,
                 cwd: "/workspace/CodeAgent",
                 id: "command-with-truncated-title",
+                output: "268 passed",
                 outputTruncated: false,
                 status: "completed",
                 type: "command",
@@ -1224,24 +1406,42 @@ test("shows the complete truncated command title on hover and focus", async ({ p
 
   // 等待异步 Markdown 升级完成，避免前序内容重排在 Tooltip 延迟期间取消 hover。
   await expect(page.getByRole("link", { name: "OpenAI" })).toBeVisible();
-  const commandTitle = page.getByText(command, { exact: true });
+  const commandSummary = page.locator("summary").filter({ hasText: command });
+  const commandDetails = commandSummary.locator("..");
+  const commandTitle = commandSummary.getByText(command, { exact: true });
   await expect(commandTitle).toBeVisible();
   expect(await commandTitle.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(
     true,
   );
 
+  await commandSummary.click();
+  await expect(commandDetails.getByText("参数", { exact: true })).toBeVisible();
+  await expect(commandDetails.locator("pre").first()).toContainText(command);
+  await expect(commandDetails.locator("pre").first()).toContainText("/workspace/CodeAgent");
+  await expect(commandDetails.getByText("输出", { exact: true })).toBeVisible();
+  await expect(commandDetails.locator('[data-terminal=""]')).toContainText("268 passed");
+  await commandSummary.click();
+
   await commandTitle.hover();
   const tooltip = page.getByRole("tooltip");
   await expect(tooltip).toHaveText(command);
+  await expect(tooltip).toHaveCSS("width", "256px");
+  expect(
+    await tooltip.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    })),
+  ).toMatchObject({ clientWidth: 256, scrollWidth: 256 });
   expect(await tooltip.evaluate((element) => element.closest("details") === null)).toBe(true);
 
   await page.mouse.move(0, 0);
   await expect(tooltip).toHaveCount(0);
-  await commandTitle.locator("..").focus();
+  await page.getByRole("textbox", { name: "任务输入" }).focus();
+  await commandSummary.focus();
   await expect(page.getByRole("tooltip")).toHaveText(command);
 });
 
-test("keeps long runtime activity details within the conversation", async ({ page }) => {
+test("keeps long automatic approval details within the conversation", async ({ page }) => {
   const historicalTurn = taskSnapshot.turns[0];
   if (historicalTurn === undefined) {
     throw new Error("Expected the task fixture to contain a turn");
@@ -1265,11 +1465,14 @@ test("keeps long runtime activity details within the conversation", async ({ pag
               completedAt: null,
               items: [
                 {
-                  detail: longDetail,
-                  id: "activity-long-detail",
-                  label: "长执行详情",
-                  status: "running",
-                  type: "activity",
+                  action: { detail: longDetail, type: "command" },
+                  id: "approval-review-long-detail",
+                  rationale: "用户明确要求执行该命令",
+                  riskLevel: "low",
+                  status: "in_progress",
+                  targetItemId: "command-long-detail",
+                  type: "approval_review",
+                  userAuthorization: "high",
                 },
               ],
               status: "running",
@@ -1282,9 +1485,10 @@ test("keeps long runtime activity details within the conversation", async ({ pag
   await page.setViewportSize({ height: 720, width: 1_280 });
   await page.goto("/p/code-agent/t/task-1");
 
-  await page.getByText("长执行详情", { exact: true }).click();
+  const approvalReview = page.locator("[data-ai-task]").filter({ hasText: "自动审批：审批中" });
+  await approvalReview.getByText("自动审批：审批中", { exact: true }).click();
   const conversation = page.getByRole("log", { name: "会话内容" });
-  await expect(page.getByText(longDetail, { exact: true })).toBeVisible();
+  await expect(approvalReview).toContainText(longDetail);
   expect(await conversation.evaluate((element) => element.scrollWidth)).toBe(
     await conversation.evaluate((element) => element.clientWidth),
   );
@@ -1302,6 +1506,22 @@ test("allows a command approval and completes the turn", async ({ page }) => {
   const allow = page.getByRole("button", { exact: true, name: "允许" });
   await expect(allow).toBeFocused();
   await page.keyboard.press("Enter");
+
+  await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
+});
+
+test("grants a selected permission subset for the current session", async ({ page }) => {
+  await page.unroute("**/v1/**");
+  await page.goto("/p/code-agent");
+
+  await page.getByRole("textbox", { name: "任务输入" }).fill("审批权限");
+  await page.getByRole("button", { exact: true, name: "提交" }).click();
+  const approval = page.getByRole("region", { name: "权限请求请求" });
+  await expect(approval).toBeVisible();
+  await expect(approval.getByRole("checkbox")).toHaveCount(3);
+  await approval.getByRole("checkbox", { name: /\/tmp\/code-agent-/ }).uncheck();
+  await approval.getByRole("button", { exact: true, name: "本次会话允许" }).click();
 
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
@@ -1407,7 +1627,10 @@ test("preserves the prompt draft when submission fails", async ({ page }) => {
   await prompt.fill("失败后保留这段草稿");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
 
-  await expect(page.getByRole("alert")).toHaveText("操作失败，请重试");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "Agent provider request failed" }),
+  ).toBeVisible();
   await expect(prompt).toHaveAttribute("data-serialized-value", "失败后保留这段草稿");
   await expect(page.getByText("preserved.png", { exact: true })).toBeVisible();
 });

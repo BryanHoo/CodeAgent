@@ -1,9 +1,14 @@
 import type { AgentEventConnectionState } from "@code-agent/client";
 import type { AgentEvent, AgentTaskSnapshotResponse } from "@code-agent/protocol";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
 import { AgentEventBuffer } from "./task-runtime.js";
 import type { TaskStore } from "./task-store.js";
 
-import type { RecoverTaskSnapshot, TaskRecoveryState } from "./project-runtime-history.js";
+import type {
+  RealtimePerformanceObserver,
+  RecoverTaskSnapshot,
+  TaskRecoveryState,
+} from "./project-runtime-history.js";
 import {
   SNAPSHOT_RECOVERY_RETRY_INITIAL_MS,
   SNAPSHOT_RECOVERY_RETRY_MAX_MS,
@@ -89,7 +94,8 @@ export class SnapshotRecoveryController<T> {
     let recovery: Promise<T | undefined>;
     try {
       recovery = Promise.resolve(this.#recoverSnapshot());
-    } catch {
+    } catch (error) {
+      showErrorToast(error);
       if (recoveryGeneration === this.#recoveryGeneration) {
         this.#scheduleRecoveryRetry();
       }
@@ -110,7 +116,8 @@ export class SnapshotRecoveryController<T> {
         // 只允许当前代次的权威 Snapshot 完成恢复，过期请求不能覆盖新连接基线。
         this.#onRecovered(response);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        showErrorToast(error);
         if (
           this.#recoveryState === "recovering" &&
           recoveryGeneration === this.#recoveryGeneration
@@ -129,6 +136,7 @@ export class TaskEventTarget {
   ) => void;
   readonly #recoverSnapshots = new Set<RecoverTaskSnapshot>();
   readonly #recovery: SnapshotRecoveryController<AgentTaskSnapshotResponse>;
+  readonly #onPerformanceSample: RealtimePerformanceObserver | undefined;
   readonly #store: TaskStore;
   #frameId: number | undefined;
 
@@ -136,10 +144,12 @@ export class TaskEventTarget {
     store: TaskStore,
     recoverSnapshot: RecoverTaskSnapshot,
     onRecoveredSnapshot: (response: AgentTaskSnapshotResponse, target: TaskEventTarget) => void,
+    onPerformanceSample?: RealtimePerformanceObserver,
   ) {
     this.#store = store;
     this.#recoverSnapshots.add(recoverSnapshot);
     this.#onRecoveredSnapshot = onRecoveredSnapshot;
+    this.#onPerformanceSample = onPerformanceSample;
     this.#recovery = new SnapshotRecoveryController(
       async () => this.#recoverSnapshots.values().next().value?.(),
       (response) => {
@@ -189,12 +199,12 @@ export class TaskEventTarget {
       }
       this.#frameId ??= requestAnimationFrame(() => {
         this.#frameId = undefined;
-        this.#store.getState().applyEvents(this.#buffer.drain());
+        this.#commit(this.#buffer.drain());
       });
       return;
     }
     this.#flushThrough(event.sequence);
-    this.#store.getState().applyEvents([event]);
+    this.#commit([event]);
   }
 
   public dispose(): void {
@@ -236,6 +246,15 @@ export class TaskEventTarget {
       cancelAnimationFrame(this.#frameId);
       this.#frameId = undefined;
     }
-    this.#store.getState().applyEvents(this.#buffer.flushThrough(sequence));
+    this.#commit(this.#buffer.flushThrough(sequence));
+  }
+
+  #commit(events: readonly AgentEvent[]): void {
+    this.#store.getState().applyEvents(events);
+    if (this.#onPerformanceSample === undefined || events.length === 0) return;
+    const at = performance.now();
+    for (const event of events) {
+      this.#onPerformanceSample({ at, point: "store_committed", sequence: event.sequence });
+    }
   }
 }

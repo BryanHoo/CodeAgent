@@ -16,7 +16,7 @@ jobs:
   quality:
     name: Quality (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -33,8 +33,19 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Install Linux desktop dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Run quality gates
-        run: pnpm check
+        run: pnpm check:ci:quality
+      # 绝对宿主性能预算固定在 Linux runner；Windows 继续覆盖完整功能与编译检查。
+      - name: Run host performance gates
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm run test:performance:host
+      - name: Run Rust checks
+        run: pnpm check:rust
       # 覆盖率阈值只在 Linux 执行，避免 Windows 矩阵重复生成报告。
       - name: Enforce coverage thresholds
         if: matrix.os == 'ubuntu-latest'
@@ -43,9 +54,9 @@ jobs:
       - name: Show Web Bundle report
         run: pnpm run bundle:report
 
-  macos-smoke:
-    name: macOS smoke
-    runs-on: macos-latest
+  browser-performance:
+    name: Browser Performance
+    runs-on: macos-14
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -59,29 +70,57 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      # 在真实 Darwin runner 上验证 Web 目录浏览、原生 Codex 包解析与宿主命令分支，不重复完整 E2E。
+      # 绝对浏览器预算固定在已校准的 macOS 14 runner，避免硬件代际差异稀释回归信号。
+      - name: Install Chromium
+        run: pnpm exec playwright install chromium
+      - name: Run browser performance gates
+        run: pnpm run test:performance:browser
+
+  macos-smoke:
+    name: macOS smoke
+    runs-on: macos-14
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # 在真实 Darwin runner 上验证 CLI 宿主命令和 native loader，不重复完整 E2E。
       - name: Run macOS smoke tests
-        run: |
-          test_files=(
-            packages/server/src/project-directory-browser.test.ts
-            apps/web/src/features/projects/components/project-directory-picker-dialog.test.tsx
-            src/system-browser.test.ts
-            packages/server/src/project-open.test.ts
-            packages/provider-codex/src/binary.test.ts
-          )
-          # Vitest 会忽略不存在的过滤项，运行前必须逐项校验。
-          for test_file in "${test_files[@]}"; do
-            if [[ ! -f "${test_file}" ]]; then
-              echo "::error file=${test_file}::Missing macOS smoke test file"
-              exit 1
-            fi
-          done
-          pnpm exec vitest run "${test_files[@]}"
+        run: pnpm exec vitest run apps/node-cli/src/system-browser.test.ts packages/engine-node/src/native-binding.test.ts
+      - name: Build current native addon
+        run: pnpm run build:native
+
+  desktop-ipc-e2e:
+    name: Desktop IPC E2E
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run real Desktop IPC test
+        run: pnpm test:desktop-ipc
 
   e2e:
     name: E2E (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:

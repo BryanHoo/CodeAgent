@@ -32,7 +32,7 @@ import {
 import { Context, ContextTrigger, formatContextUsage } from "./context.js";
 import { FileTree, FileTreeFile, FileTreeFolder } from "./file-tree.js";
 import { Message, MessageAction, MessageContent } from "./message.js";
-import { MessageResponse } from "./message-response.js";
+import { MessageResponse, handleExternalLinkClick } from "./message-response.js";
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -406,6 +406,19 @@ info`,
     expect(markup).toContain('target="_blank"');
     expect(markup).toContain('rel="noopener noreferrer"');
     expect(markup).not.toContain('href="javascript:');
+  });
+
+  it("delegates safe external link clicks only when a host opener exists", () => {
+    const openExternalUrl = vi.fn();
+    const desktopEvent = { defaultPrevented: false, preventDefault: vi.fn() };
+    const webEvent = { defaultPrevented: false, preventDefault: vi.fn() };
+
+    handleExternalLinkClick(desktopEvent, "https://example.com/docs", openExternalUrl);
+    handleExternalLinkClick(webEvent, "https://example.com/docs", undefined);
+
+    expect(desktopEvent.preventDefault).toHaveBeenCalledOnce();
+    expect(openExternalUrl).toHaveBeenCalledExactlyOnceWith("https://example.com/docs");
+    expect(webEvent.preventDefault).not.toHaveBeenCalled();
   });
 
   it("renders Markdown file references with the project brand treatment", () => {

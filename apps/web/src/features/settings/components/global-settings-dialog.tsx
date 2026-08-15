@@ -5,7 +5,7 @@ import type {
   AppInfoResponse,
   ProjectOpenApp,
 } from "@code-agent/protocol";
-import { Moon, Settings, Sun, X } from "lucide-react";
+import { Settings, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../shared/components/core/button.js";
@@ -14,7 +14,8 @@ import { Tooltip } from "../../../shared/components/core/tooltip.js";
 import { TooltipContent } from "../../../shared/components/core/tooltip.js";
 import { TooltipTrigger } from "../../../shared/components/core/tooltip.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
-import { changeAppLanguage, getCurrentLanguage, useTranslation } from "../../../i18n/i18n.js";
+import { showErrorToast } from "../../../shared/errors/error-toast.js";
+import { useTranslation } from "../../../i18n/i18n.js";
 import {
   applyThemePreference,
   saveThemePreference,
@@ -26,7 +27,6 @@ import {
   SettingsField,
   SettingsPanel,
   SettingsSelect,
-  ThemeButton,
   settingsSections,
   type SettingsSectionId,
 } from "./global-settings-fields.js";
@@ -40,6 +40,7 @@ import {
 } from "./global-settings-model.js";
 import { GlobalSettingsAbout } from "./global-settings-about.js";
 import { GlobalSettingsAccess } from "./global-settings-access.js";
+import { GlobalSettingsAppearance } from "./global-settings-appearance.js";
 import { ProviderConnectionPanel } from "../../provider-connection/components/provider-connection-panel.js";
 export { resolveGlobalSettingsModel } from "./global-settings-model.js";
 type GlobalSettingsDialogProps = Readonly<{
@@ -90,7 +91,6 @@ export function GlobalSettingsDialog({
     () => settings ?? createFallbackSettings(models),
   );
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
-  const [saveError, setSaveError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const selectedModel = models.find((model) => model.id === draft.model);
   const selectedCommitModel = models.find((model) => model.id === draft.commitMessageModel);
@@ -112,7 +112,11 @@ export function GlobalSettingsDialog({
     // 外观偏好属于浏览器本地状态，选择后立即应用，不依赖服务端保存。
     if (typeof window !== "undefined") {
       saveThemePreference(nextTheme, window.localStorage);
-      applyThemePreference(nextTheme, document.documentElement);
+      applyThemePreference(
+        nextTheme,
+        document.documentElement,
+        window.matchMedia("(prefers-color-scheme: dark)").matches,
+      );
     }
   };
 
@@ -141,13 +145,12 @@ export function GlobalSettingsDialog({
               return;
             }
             void saveLockRef.current.run(async () => {
-              setSaveError(false);
               setIsSaving(true);
               try {
                 await onSave(draft);
                 onClose();
-              } catch {
-                setSaveError(true);
+              } catch (error) {
+                showErrorToast(error);
               } finally {
                 setIsSaving(false);
               }
@@ -228,11 +231,7 @@ export function GlobalSettingsDialog({
                   <ProviderConnectionPanel />
                 </section>
               ) : activeSection === "about" ? null : error !== null ? (
-                <div
-                  className="flex min-h-40 flex-col items-center justify-center gap-3"
-                  role="alert"
-                >
-                  <p className="text-body-small text-danger">{t("errors.load")}</p>
+                <div className="flex min-h-40 flex-col items-center justify-center gap-3">
                   <Button
                     variant="ghost"
                     className="h-8 rounded-control bg-control px-3 text-body-small font-medium hover:bg-control-hover"
@@ -251,46 +250,11 @@ export function GlobalSettingsDialog({
                 </div>
               ) : (
                 <>
-                  <SettingsPanel
+                  <GlobalSettingsAppearance
                     activeSection={activeSection}
-                    id="appearance"
-                    title={t("sections.appearance")}
-                  >
-                    <SettingsField label={t("appearance.colorMode")}>
-                      <div className="grid grid-cols-2 rounded-control bg-control p-0.5">
-                        <ThemeButton
-                          ariaLabel={t("appearance.lightMode")}
-                          icon={Sun}
-                          label={t("appearance.light")}
-                          onClick={() => {
-                            selectTheme("light");
-                          }}
-                          selected={theme === "light"}
-                        />
-                        <ThemeButton
-                          ariaLabel={t("appearance.darkMode")}
-                          icon={Moon}
-                          label={t("appearance.dark")}
-                          onClick={() => {
-                            selectTheme("dark");
-                          }}
-                          selected={theme === "dark"}
-                        />
-                      </div>
-                    </SettingsField>
-                    <SettingsField label={t("appearance.language")}>
-                      <SettingsSelect
-                        aria-label={t("appearance.language")}
-                        onChange={(event) => {
-                          void changeAppLanguage(event.currentTarget.value as "en" | "zh-CN");
-                        }}
-                        value={getCurrentLanguage()}
-                      >
-                        <option value="zh-CN">{t("languages.zhCN")}</option>
-                        <option value="en">{t("languages.en")}</option>
-                      </SettingsSelect>
-                    </SettingsField>
-                  </SettingsPanel>
+                    onSelectTheme={selectTheme}
+                    theme={theme}
+                  />
 
                   {accessMode === "lan" ? (
                     <GlobalSettingsAccess
@@ -469,11 +433,6 @@ export function GlobalSettingsDialog({
           </div>
 
           <footer className="flex min-h-14 items-center justify-end gap-2 px-4 shadow-[0_-1px_0_var(--ui-color-separator)] sm:px-5">
-            {saveError ? (
-              <p className="mr-auto text-meta text-danger" role="alert">
-                {t("errors.save")}
-              </p>
-            ) : null}
             <Button
               variant="ghost"
               className="h-8 rounded-control px-3 text-body-small text-muted-foreground hover:bg-control-hover hover:text-foreground disabled:opacity-50"

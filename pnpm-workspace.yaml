@@ -3,13 +3,16 @@ packages:
   - "packages/*"
 
 allowBuilds:
-  # SQLite Adapter 通过独立 Worker 加载原生驱动。
-  better-sqlite3: true
   # esbuild 是 Vite、Vitest 与 tsup 的构建器，只允许其安装本机二进制。
+  # Desktop IPC 使用 embedded provider，不执行外部浏览器驱动下载脚本。
+  edgedriver: false
   esbuild: true
+  geckodriver: false
 
 catalog:
   "@eslint/js": 10.0.1
+  "@tauri-apps/cli": 2.11.4
+  "@tauri-apps/api": 2.11.1
   "@fastify/compress": 9.1.0
   "@fastify/cookie": 11.1.2
   "@fastify/multipart": 10.1.0
@@ -24,12 +27,10 @@ catalog:
   "@types/node": 24.13.3
   "@types/react": 19.2.17
   "@types/react-dom": 19.2.3
-  "@types/better-sqlite3": 7.6.13
   "@types/ws": 8.18.1
   "@vitejs/plugin-react": 6.0.3
   "@vitest/coverage-v8": 4.1.10
   anser: 2.3.5
-  better-sqlite3: 13.0.2
   class-variance-authority: 0.7.1
   clsx: 2.1.1
   dependency-cruiser: 18.1.0
@@ -37,9 +38,7 @@ catalog:
   eslint-config-prettier: 10.1.8
   fastify: 5.10.0
   globals: 17.7.0
-  ignore: 7.0.6
   lucide-react: 1.25.0
-  pino: 10.3.1
   prettier: 3.9.6
   react: 19.2.8
   react-dom: 19.2.8
@@ -56,7 +55,6 @@ catalog:
   tailwind-merge: 3.6.0
   tw-animate-css: 1.4.0
   shiki: 4.3.1
-  simple-git: 3.36.0
   "@pierre/diffs": 1.2.12
   zustand: 5.0.14
   sonner: 2.0.7
@@ -65,6 +63,14 @@ catalog:
   eslint-plugin-jsx-a11y: 6.10.2
   eslint-plugin-react-hooks: 7.1.1
   react-i18next: 17.0.11
+  "@wdio/cli": 9.30.1
+  "@wdio/globals": 9.29.1
+  "@wdio/local-runner": 9.30.1
+  "@wdio/mocha-framework": 9.30.1
+  "@wdio/tauri-service": 1.3.0
+  webdriverio: 9.30.0
+  "@wdio/types": 9.29.1
+  "@types/mocha": 10.0.10
 
 catalogMode: strict
 cleanupUnusedCatalogs: true
@@ -73,7 +79,7 @@ linkWorkspacePackages: false
 # 显式设置最小发布时间，启用严格年龄校验，避免回退到新发布版本。
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
-  - "@openai/codex@0.147.0-darwin-arm64 || 0.147.0-darwin-x64 || 0.147.0-linux-arm64 || 0.147.0-linux-x64 || 0.147.0-win32-arm64 || 0.147.0-win32-x64 || 0.147.0"
+  - "@openai/codex@0.147.0-darwin-arm64 || 0.147.0-linux-arm64 || 0.147.0-linux-x64 || 0.147.0-win32-arm64 || 0.147.0-win32-x64 || 0.147.0"
   - prettier@3.9.6
   - react-dom@19.2.8
   - react@19.2.8

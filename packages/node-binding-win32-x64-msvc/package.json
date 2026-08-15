@@ -1,0 +1,19 @@
+{
+  "name": "@bryanhu/code-agent-win32-x64-msvc",
+  "version": "2.0.0-beta.1",
+  "private": false,
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "code-agent-node-binding.node",
+  "files": [
+    "code-agent-node-binding.node"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}

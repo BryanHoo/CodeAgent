@@ -13,6 +13,7 @@ import { createTaskStore } from "../../conversation/runtime/task-store.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { PendingRequestResolution } from "./pending-request.js";
+import { useErrorToast } from "../../../shared/errors/error-toast.js";
 
 import { EmptyTimeline, TimelineState } from "./task-timeline-status.js";
 import { TurnProcessingTime } from "./task-timeline-status.js";
@@ -20,7 +21,6 @@ import { RunningReplyStatus } from "./task-timeline-running.js";
 import { TaskStoreTimeline } from "./task-timeline-store.js";
 
 export { resolveMessageResponseRendering } from "./task-timeline-running.js";
-export { resolveCompletedTurnProcessItemIds } from "./task-timeline-store.js";
 type ForkTaskAction = (idempotencyKey: string) => Promise<void>;
 type BuildPlanAction = () => Promise<boolean>;
 
@@ -158,9 +158,10 @@ function ActiveTaskTimeline({
   submissionTurnId: string | undefined;
   startingSnapshot: RuntimeTaskSnapshot | undefined;
 }>) {
+  useErrorToast(runtime.error);
   if (runtime.error !== null) {
-    return (
-      <TimelineState message={i18n.t("timeline.loadError", { ns: "conversation" })} role="alert" />
+    return startingSnapshot === undefined ? null : (
+      <TaskSnapshotTimeline connected={false} snapshot={startingSnapshot} />
     );
   }
   if (runtime.isPending || runtime.snapshot === undefined) {
@@ -188,12 +189,15 @@ function ActiveTaskTimeline({
       ) : null}
       <TaskStoreTimeline
         connected={runtime.connectionState === "connected"}
+        hasPreviousTurns={runtime.hasPreviousTurns}
+        isLoadingPreviousTurns={runtime.isLoadingPreviousTurns}
         {...(onBuildPlan === undefined ? {} : { onBuildPlan })}
         {...(onForkTask === undefined ? {} : { onForkTask })}
         onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
         onReviewFileChanges={onReviewFileChanges}
         onResolvePendingRequest={onResolvePendingRequest}
+        onLoadPreviousTurns={runtime.loadPreviousTurns}
         {...(scrollToBottomSignal === undefined ? {} : { scrollToBottomSignal })}
         store={runtime.store}
         {...(submissionStartedAt === undefined ? {} : { submissionStartedAt })}

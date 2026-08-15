@@ -12,7 +12,6 @@ import {
 } from "../../../shared/components/core/dialog.js";
 
 type ProjectRemoveDialogProps = Readonly<{
-  error?: string | null;
   isPending: boolean;
   onClose: () => void;
   onRemove: () => void;
@@ -20,7 +19,6 @@ type ProjectRemoveDialogProps = Readonly<{
 }>;
 
 export function ProjectRemoveDialog({
-  error = null,
   isPending,
   onClose,
   onRemove,
@@ -53,11 +51,6 @@ export function ProjectRemoveDialog({
             {t("projectDialog.removeDescription", { name: project.name })}
           </DialogDescription>
         </DialogHeader>
-        {error === null ? null : (
-          <p className="text-meta text-danger" role="alert">
-            {error}
-          </p>
-        )}
         <DialogFooter>
           <Button
             className="h-8 rounded-control px-3 text-body-small text-muted-foreground hover:bg-control-hover hover:text-foreground"

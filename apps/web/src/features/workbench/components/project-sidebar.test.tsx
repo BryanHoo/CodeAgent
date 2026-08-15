@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -6,10 +8,9 @@ import { DropdownMenu } from "../../../shared/components/core/dropdown-menu.js";
 import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { requestNextProjectTaskPage } from "../../projects/project-context.js";
 import {
-  deriveProjectSidebarConnectionState,
   getProjectTaskPaginationControl,
-  getProjectSidebarConnectionStatus,
   groupTasksByProjectId,
+  shouldShowProjectTaskEmptyState,
   ProjectActionMenu,
   ProjectActions,
   ProjectPickerButton,
@@ -86,6 +87,30 @@ describe("Project task pagination", () => {
     await expect(requestNextProjectTaskPage(new Map(), "missing-project")).resolves.toBeUndefined();
   });
 
+  it("does not show the empty state before an expanded Project task query settles", () => {
+    expect(shouldShowProjectTaskEmptyState(undefined, 0, "")).toBe(false);
+    expect(
+      shouldShowProjectTaskEmptyState(
+        {
+          error: null,
+          isPending: true,
+        },
+        0,
+        "",
+      ),
+    ).toBe(false);
+    expect(
+      shouldShowProjectTaskEmptyState(
+        {
+          error: null,
+          isPending: false,
+        },
+        0,
+        "",
+      ),
+    ).toBe(true);
+  });
+
   it("separates local expansion, remote loading, retry, and collapse actions", () => {
     expect(
       getProjectTaskPaginationControl({
@@ -135,67 +160,6 @@ describe("Project task pagination", () => {
   });
 });
 
-describe("ProjectSidebar connection status", () => {
-  it("uses the active task terminal connection state", () => {
-    for (const connectionState of ["closed", "connected", "connecting", "reconnecting"] as const) {
-      expect(
-        deriveProjectSidebarConnectionState({
-          hasActiveTask: true,
-          projectDataFailed: true,
-          projectDataPending: true,
-          taskConnectionState: connectionState,
-        }),
-      ).toBe(connectionState);
-    }
-  });
-
-  it("derives an HTTP runtime status before a task terminal exists", () => {
-    expect(
-      deriveProjectSidebarConnectionState({
-        hasActiveTask: false,
-        projectDataFailed: false,
-        projectDataPending: true,
-        taskConnectionState: "connecting",
-      }),
-    ).toBe("connecting");
-    expect(
-      deriveProjectSidebarConnectionState({
-        hasActiveTask: false,
-        projectDataFailed: false,
-        projectDataPending: false,
-        taskConnectionState: "connecting",
-      }),
-    ).toBe("connected");
-    expect(
-      deriveProjectSidebarConnectionState({
-        hasActiveTask: false,
-        projectDataFailed: true,
-        projectDataPending: false,
-        taskConnectionState: "connecting",
-      }),
-    ).toBe("closed");
-  });
-
-  it("maps every transport state to a visible status", () => {
-    expect(getProjectSidebarConnectionStatus("connected")).toEqual({
-      labelKey: "sidebar.connection.online",
-      toneClassName: "text-diff-added",
-    });
-    expect(getProjectSidebarConnectionStatus("connecting")).toEqual({
-      labelKey: "sidebar.connection.connecting",
-      toneClassName: "text-warning",
-    });
-    expect(getProjectSidebarConnectionStatus("reconnecting")).toEqual({
-      labelKey: "sidebar.connection.reconnecting",
-      toneClassName: "text-warning",
-    });
-    expect(getProjectSidebarConnectionStatus("closed")).toEqual({
-      labelKey: "sidebar.connection.offline",
-      toneClassName: "text-danger",
-    });
-  });
-});
-
 describe("ProjectPickerButton", () => {
   it("opens the Web directory picker without exposing native picker state", () => {
     const markup = renderToStaticMarkup(
@@ -214,57 +178,41 @@ describe("SidebarSettingsButton", () => {
   const appInfo = {
     appVersion: "1.3.0",
     codexVersion: "0.147.0",
+    error: null,
     latestVersion: "1.3.0",
     releaseNotes: null,
     status: "current" as const,
     updateAvailable: false,
   };
 
-  it("renders every connection status in Chinese", async () => {
+  it("renders the version without a connection status in Chinese", async () => {
     await changeAppLanguage("zh-CN");
-    const cases = [
-      ["connected", "在线"],
-      ["connecting", "正在连接"],
-      ["reconnecting", "正在重新连接"],
-      ["closed", "离线"],
-    ] as const;
+    const markup = renderToStaticMarkup(
+      <SidebarSettingsButton appInfo={appInfo} onOpenAbout={vi.fn()} onOpenSettings={vi.fn()} />,
+    );
 
-    for (const [connectionState, label] of cases) {
-      const markup = renderToStaticMarkup(
-        <SidebarSettingsButton
-          appInfo={appInfo}
-          connectionState={connectionState}
-          onOpen={vi.fn()}
-        />,
-      );
-      expect(markup).toContain(`CodeAgent 1.3.0，终端连接状态：${label}`);
-      expect(markup).toContain("v1.3.0");
-      expect(markup).toContain(`>${label}</span>`);
-      expect(markup).not.toContain("href=");
-    }
+    expect(markup).toContain('aria-label="设置"');
+    expect(markup).toContain('aria-label="设置，CodeAgent 1.3.0"');
+    expect(markup.match(/<button/gu)).toHaveLength(2);
+    expect(markup.match(/text-label/gu)).toHaveLength(3);
+    expect(markup).not.toContain("text-body-small");
+    expect(markup).toContain("v1.3.0");
+    expect(markup).not.toContain("在线");
+    expect(markup).not.toContain("lucide-wifi");
+    expect(markup).not.toContain("href=");
   });
 
-  it("renders every connection status in English", async () => {
+  it("renders the version without a connection status in English", async () => {
     await changeAppLanguage("en");
     try {
-      const cases = [
-        ["connected", "Online"],
-        ["connecting", "Connecting"],
-        ["reconnecting", "Reconnecting"],
-        ["closed", "Offline"],
-      ] as const;
+      const markup = renderToStaticMarkup(
+        <SidebarSettingsButton appInfo={appInfo} onOpenAbout={vi.fn()} onOpenSettings={vi.fn()} />,
+      );
 
-      for (const [connectionState, label] of cases) {
-        const markup = renderToStaticMarkup(
-          <SidebarSettingsButton
-            appInfo={appInfo}
-            connectionState={connectionState}
-            onOpen={vi.fn()}
-          />,
-        );
-        expect(markup).toContain(`CodeAgent 1.3.0, terminal connection status: ${label}`);
-        expect(markup).toContain(`>${label}</span>`);
-      }
+      expect(markup).toContain('aria-label="Settings"');
+      expect(markup).toContain('aria-label="Settings, CodeAgent 1.3.0"');
+      expect(markup).not.toContain("Online");
+      expect(markup).not.toContain("lucide-wifi");
     } finally {
       await changeAppLanguage("zh-CN");
     }
@@ -281,14 +229,14 @@ describe("SidebarSettingsButton", () => {
           status: "available",
           updateAvailable: true,
         }}
-        connectionState="connected"
-        onOpen={vi.fn()}
+        onOpenAbout={vi.fn()}
+        onOpenSettings={vi.fn()}
       />,
     );
 
-    expect(markup).toContain("CodeAgent 1.3.0，有可用更新，终端连接状态：在线");
+    expect(markup).toContain("设置，CodeAgent 1.3.0，有可用更新");
     expect(markup).toContain("lucide-circle-arrow-up");
-    expect(markup).toContain('class="text-warning"');
+    expect(markup).toMatch(/class="[^"]*text-warning/u);
   });
 });
 
@@ -393,29 +341,57 @@ describe("Project folder actions", () => {
 });
 
 describe("TaskStatusIndicator", () => {
-  it("replaces the task age with an accessible spinner while running", () => {
+  it("uses a slow opacity pulse with a reduced-motion fallback", () => {
+    const styles = readFileSync(
+      new URL("../../../shared/styles/globals.css", import.meta.url),
+      "utf8",
+    );
+    const dotRule = /\.sidebar-task-status-dot\s*\{(?<declarations>[^}]*)\}/u.exec(styles);
+    const pulseRule = /\.sidebar-task-status-dot--pulse\s*\{(?<declarations>[^}]*)\}/u.exec(styles);
+
+    expect(pulseRule?.groups?.["declarations"]).toContain(
+      "animation: sidebar-task-status-pulse 2.4s ease-in-out infinite",
+    );
+    expect(dotRule?.groups?.["declarations"]).toContain("width: 0.5rem");
+    expect(dotRule?.groups?.["declarations"]).toContain("height: 0.5rem");
+    expect(pulseRule?.groups?.["declarations"]).not.toMatch(
+      /(?:^|\n)\s*(?:border|transform|will-change)\s*:/u,
+    );
+    expect(styles).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.sidebar-task-status-dot--pulse\s*\{[\s\S]*?animation: none/u,
+    );
+  });
+
+  it("replaces the task age with an accessible low-cost activity indicator while running", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator attention={null} isRunning updatedAt="2026-07-23T00:01:00.000Z" />,
     );
 
     expect(markup).toContain('aria-label="任务运行中"');
-    expect(markup).toContain("animate-spin");
+    expect(markup).toContain("-mr-2");
+    expect(markup).toContain("w-7");
+    expect(markup).toContain("justify-center");
+    expect(markup).toContain("text-brand");
+    expect(markup).toContain("sidebar-task-status-dot");
+    expect(markup).toContain("sidebar-task-status-dot--pulse");
+    expect(markup).not.toContain("sidebar-task-spinner");
+    expect(markup).not.toContain("<svg");
     expect(markup).not.toContain("task-age");
   });
 
-  it("shows a primary approval icon instead of the running spinner while awaiting approval", () => {
+  it("shows a pulsing warning dot while awaiting approval", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator attention="approval" isRunning updatedAt="2026-07-23T00:01:00.000Z" />,
     );
 
     expect(markup).toContain('aria-label="任务等待审批"');
-    expect(markup).toContain("text-brand");
-    expect(markup).toContain("lucide-shield-question-mark");
-    expect(markup).not.toContain("animate-spin");
+    expect(markup).toContain("text-warning");
+    expect(markup).toContain("sidebar-task-status-dot--pulse");
+    expect(markup).not.toContain("<svg");
     expect(markup).not.toContain("task-age");
   });
 
-  it("shows an accessible completed reply marker before the task age", () => {
+  it("shows a static green dot after a completed reply", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator
         attention="completed"
@@ -426,11 +402,13 @@ describe("TaskStatusIndicator", () => {
 
     expect(markup).toContain('aria-label="AI 回复已完成"');
     expect(markup).toContain("text-diff-added");
-    expect(markup).toContain("lucide-circle-check");
+    expect(markup).toContain("sidebar-task-status-dot");
+    expect(markup).not.toContain("sidebar-task-status-dot--pulse");
+    expect(markup).not.toContain("<svg");
     expect(markup).not.toContain("task-age");
   });
 
-  it("shows an accessible unfinished reply marker before the task age", () => {
+  it("shows a static red dot after a failed or interrupted reply", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator
         attention="failed"
@@ -441,7 +419,9 @@ describe("TaskStatusIndicator", () => {
 
     expect(markup).toContain('aria-label="AI 回复未完成"');
     expect(markup).toContain("text-danger");
-    expect(markup).toContain("lucide-circle-alert");
+    expect(markup).toContain("sidebar-task-status-dot");
+    expect(markup).not.toContain("sidebar-task-status-dot--pulse");
+    expect(markup).not.toContain("<svg");
     expect(markup).not.toContain("task-age");
   });
 

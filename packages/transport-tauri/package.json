@@ -1,0 +1,20 @@
+{
+  "name": "@code-agent/transport-tauri",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@code-agent/client": "workspace:*",
+    "@code-agent/protocol": "workspace:*",
+    "@sinclair/typebox": "catalog:",
+    "@tauri-apps/api": "catalog:",
+    "uuid": "catalog:"
+  }
+}

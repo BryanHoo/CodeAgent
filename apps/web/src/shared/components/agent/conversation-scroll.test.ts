@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createConversationAutoScrollController } from "./conversation-scroll.js";
+import {
+  createConversationAutoScrollController,
+  preserveConversationPrependPosition,
+} from "./conversation-scroll.js";
 
 type ScrollTarget = Parameters<
   ReturnType<typeof createConversationAutoScrollController>["handleScroll"]
@@ -24,6 +27,18 @@ function createScrollTarget({
 }
 
 describe("conversation auto scroll", () => {
+  it("preserves the visible anchor when older content is prepended", () => {
+    const scrollTarget = createScrollTarget({ scrollHeight: 1_000, scrollTop: 120 });
+
+    scrollTarget.scrollHeight = 1_650;
+    preserveConversationPrependPosition(scrollTarget, {
+      scrollHeight: 1_000,
+      scrollTop: 120,
+    });
+
+    expect(scrollTarget.scrollTo).toHaveBeenCalledWith({ behavior: "auto", top: 770 });
+  });
+
   it("follows new content while the user remains at the bottom", () => {
     const onAtBottomChange = vi.fn();
     const controller = createConversationAutoScrollController(onAtBottomChange);
@@ -90,6 +105,19 @@ describe("conversation auto scroll", () => {
 
     expect(onAtBottomChange).toHaveBeenLastCalledWith(false);
     expect(scrollTarget.scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("ignores the scroll event emitted by a programmatic bottom adjustment", () => {
+    const onAtBottomChange = vi.fn();
+    const controller = createConversationAutoScrollController(onAtBottomChange);
+    const scrollTarget = createScrollTarget();
+
+    controller.handleConversationChange(scrollTarget);
+    scrollTarget.scrollTo.mockClear();
+    controller.handleScroll(scrollTarget, false);
+
+    expect(scrollTarget.scrollTo).not.toHaveBeenCalled();
+    expect(onAtBottomChange).toHaveBeenLastCalledWith(true);
   });
 
   it("pauses after the user scrolls away and resumes after they return to the bottom", () => {

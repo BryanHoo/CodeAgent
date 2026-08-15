@@ -91,19 +91,16 @@ export function MessageSourceAttachment({
                 }}
               />
             </header>
-            <div
-              className={`grid min-h-0 place-items-center text-body-small ${
-                sourceQuery.error === null ? "text-muted-foreground" : "text-danger"
-              }`}
-              role={sourceQuery.error === null ? "status" : "alert"}
-            >
-              {i18n.t(
-                sourceQuery.error === null
-                  ? "projectDialog.loadingSource"
-                  : "projectDialog.loadSourceError",
-                { ns: "workbench" },
-              )}
-            </div>
+            {sourceQuery.error === null ? (
+              <div
+                className="grid min-h-0 place-items-center text-body-small text-muted-foreground"
+                role="status"
+              >
+                {i18n.t("projectDialog.loadingSource", { ns: "workbench" })}
+              </div>
+            ) : (
+              <div />
+            )}
           </section>
         ) : (
           <CodeBlock

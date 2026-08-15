@@ -1,0 +1,11 @@
+//! CodeAgent 宿主无关领域模型与端口。
+
+mod error;
+mod ports;
+
+pub use error::{AgentMutationErrorCode, CodeAgentError, CodeAgentErrorCode};
+pub use ports::{
+    AttachmentBytes, AttachmentPort, ClockPort, FilePort, GitPort, ManagedAttachment,
+    PortRequestContext, ProjectProviderPort, ProjectRepositoryPort, ProviderPort, RepositoryPort,
+    UpdatePort,
+};

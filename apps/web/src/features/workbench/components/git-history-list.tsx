@@ -103,9 +103,6 @@ export function GitHistoryContent({
         </p>
       ) : query.error !== null ? (
         <div className="flex min-h-48 flex-col items-center justify-center gap-3 px-5 text-center">
-          <p className="text-body-small text-danger">
-            {i18n.t("gitHistory.loadError", { ns: "conversation" })}
-          </p>
           <Button onClick={() => void query.refetch()} type="button" variant="outline">
             {i18n.t("gitHistory.retry", { ns: "conversation" })}
           </Button>

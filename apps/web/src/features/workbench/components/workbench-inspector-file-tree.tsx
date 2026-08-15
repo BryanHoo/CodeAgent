@@ -199,12 +199,9 @@ function ProjectFileTreeDirectoryChildren({
     return (
       <div
         aria-selected="false"
-        className="flex min-h-7 items-center gap-2 px-1.5 text-caption text-diff-removed"
+        className="flex min-h-7 items-center justify-end gap-2 px-1.5"
         role="treeitem"
       >
-        <span className="min-w-0 flex-1 truncate">
-          {i18n.t("inspector.readFolderError", { name, ns: "conversation" })}
-        </span>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
