@@ -16,6 +16,7 @@ const IGNORED_DIRECTORIES: &[&str] = &[
     "node_modules",
     "target",
 ];
+const IGNORED_FILES: &[&str] = &[".DS_Store"];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ProjectTreeEntryKind {
@@ -40,6 +41,10 @@ pub(crate) struct ProjectTreeEntry {
 
 pub(crate) fn is_ignored_directory_name(name: &str) -> bool {
     IGNORED_DIRECTORIES.contains(&name)
+}
+
+pub(crate) fn is_ignored_file_name(name: &str) -> bool {
+    IGNORED_FILES.contains(&name)
 }
 
 pub(crate) fn validate_directory_path(path: Option<&str>) -> Result<(), PlatformError> {
@@ -92,6 +97,7 @@ pub(crate) async fn read_directory_entries(
         let name = child.file_name();
         if file_type.is_symlink()
             || (file_type.is_dir() && name.to_str().is_some_and(is_ignored_directory_name))
+            || (file_type.is_file() && name.to_str().is_some_and(is_ignored_file_name))
         {
             continue;
         }
@@ -157,10 +163,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn directory_entries_should_keep_paths_listed_by_gitignore() {
+    async fn directory_entries_should_keep_gitignored_paths_and_skip_platform_metadata() {
         let root = test_root("gitignore");
         fs::create_dir_all(root.join("generated/nested")).expect("generated directory");
         fs::create_dir_all(root.join("node_modules/package")).expect("dependency directory");
+        fs::write(root.join(".DS_Store"), "finder metadata").expect("platform metadata");
         fs::write(root.join(".gitignore"), "generated/\n").expect("ignore rules");
         fs::write(root.join("generated/kept.txt"), "kept").expect("kept file");
         fs::write(root.join("README.md"), "readme").expect("root file");

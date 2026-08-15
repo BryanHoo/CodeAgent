@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -118,47 +118,20 @@ describe("Tauri Phase 9 updater contract", () => {
     );
   });
 
-  it("signs and verifies Windows release artifacts with Azure Artifact Signing", () => {
+  it("publishes Windows Desktop as Preview / Unsigned without a signing gate", () => {
     const config = readJson("apps/desktop/src-tauri/tauri.conf.json") as {
       bundle?: { windows?: { signCommand?: string } };
     };
-    const signingScript = read("apps/desktop/scripts/sign-windows.ps1");
-    const verificationScript = read("tools/release/verify-windows-signatures.ps1");
     const workflow = read(".github/workflows/release.yml");
-    const requiredAzureSettings = [
-      "AZURE_CLIENT_ID",
-      "AZURE_CLIENT_SECRET",
-      "AZURE_TENANT_ID",
-      "AZURE_ARTIFACT_SIGNING_ENDPOINT",
-      "AZURE_ARTIFACT_SIGNING_ACCOUNT",
-      "AZURE_ARTIFACT_SIGNING_PROFILE",
-    ];
 
-    expect(config.bundle?.windows?.signCommand).toContain("sign-windows.ps1");
-    expect(signingScript).toContain("signtool.exe");
-    expect(signingScript).toContain("Azure.CodeSigning.Dlib.dll");
-    expect(signingScript).toContain('"/dlib"');
-    expect(signingScript).toContain('"/dmdf"');
-    expect(signingScript).toContain('"http://timestamp.acs.microsoft.com/"');
-    expect(signingScript).toContain("[System.IO.Path]::GetFullPath");
-    for (const setting of requiredAzureSettings) {
-      expect(signingScript).toContain(setting);
-      expect(workflow).toContain(`${setting}: \${{ secrets.${setting} }}`);
-    }
-    expect(workflow).toContain("nuget install Microsoft.ArtifactSigning.Client -Version 1.0.128");
+    expect(config.bundle?.windows?.signCommand).toBeUndefined();
+    expect(existsSync(resolve(root, "apps/desktop/scripts/sign-windows.ps1"))).toBe(false);
+    expect(existsSync(resolve(root, "tools/release/verify-windows-signatures.ps1"))).toBe(false);
+    expect(workflow).toContain("Build and upload Windows Desktop (Preview / Unsigned)");
+    expect(workflow).toContain("Windows Desktop: Preview / Unsigned");
+    expect(workflow).not.toMatch(/AZURE_|Artifact Signing|Authenticode/u);
     expect(workflow).toContain(
-      "nuget install Microsoft.Windows.SDK.BuildTools -Version 10.0.28000.2526",
-    );
-    expect(workflow).toContain("Verify Windows Authenticode signatures");
-    expect(workflow).toContain("tools/release/verify-windows-signatures.ps1");
-    expect(verificationScript).toContain("Get-AuthenticodeSignature");
-    expect(verificationScript).toContain("[System.Management.Automation.SignatureStatus]::Valid");
-    expect(verificationScript).toContain("TimeStamperCertificate");
-    expect(workflow.indexOf("Build and upload Desktop artifacts")).toBeLessThan(
-      workflow.indexOf("Verify Windows Authenticode signatures"),
-    );
-    expect(workflow.indexOf("Verify Windows Authenticode signatures")).toBeLessThan(
-      workflow.indexOf("Pack npm artifacts"),
+      "TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}",
     );
   });
 
@@ -186,7 +159,7 @@ describe("Tauri Phase 9 updater contract", () => {
     expect(macosSmoke).toContain("spctl --assess");
     expect(linuxSmoke).toContain("xvfb-run");
     expect(linuxSmoke).toContain("apt-get install");
-    expect(windowsSmoke).toContain("verify-windows-signatures.ps1");
+    expect(windowsSmoke).not.toContain("verify-windows-signatures.ps1");
     expect(windowsSmoke).toContain("/S");
   });
 
@@ -246,10 +219,13 @@ describe("Tauri Phase 9 updater contract", () => {
     }
     expect(readme).toContain("https://github.com/BryanHoo/CodeAgent/releases");
     expect(chineseReadme).toContain("https://github.com/BryanHoo/CodeAgent/releases");
-    expect(releaseGuide).toContain("AZURE_ARTIFACT_SIGNING_ENDPOINT");
+    expect(readme).toContain("Preview / Unsigned");
+    expect(chineseReadme).toContain("Preview / Unsigned");
+    expect(releaseGuide).toContain("Preview / Unsigned");
+    expect(releaseGuide).not.toMatch(/AZURE_|Artifact Signing|Authenticode/u);
     expect(releaseGuide).toContain("self-hosted, Windows, X64, windows-10");
     expect(releaseGuide).toContain('gh release edit "${RELEASE_TAG}" --draft=false');
-    expect(migrationPlan).toContain("发布门禁已实现，正式 tag 验收待执行");
+    expect(migrationPlan).toContain("Windows Desktop 暂以 Preview / Unsigned 发布");
     expect(migrationPlan).not.toContain("Windows 签名和 Linux clean VM 验证待完成");
   });
 

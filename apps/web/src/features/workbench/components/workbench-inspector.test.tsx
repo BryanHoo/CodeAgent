@@ -387,14 +387,14 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain('aria-label="查看 Git 历史"');
   });
 
-  it("offers a manual refresh without rendering Git errors in the Inspector", () => {
+  it("offers a project refresh without rendering Git errors in the Inspector", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
         gitStatus={gitStatus}
         gitStatusError={new Error("not a git repository")}
         onOpenProjectFile={() => undefined}
-        onRefreshGitStatus={() => undefined}
+        onRefreshProject={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
       />,
@@ -403,8 +403,7 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain("Git 变更刷新失败，正在自动重试");
     expect(markup).not.toContain("not a git repository");
     expect(markup).toContain("2 个变更");
-    expect(markup).toContain("手动刷新");
-    expect(markup).toContain('aria-label="手动刷新 Git 变更"');
+    expect(markup).toContain('aria-label="刷新项目 CodeAgent"');
   });
 
   it("renders project file tree root loading and error states", () => {

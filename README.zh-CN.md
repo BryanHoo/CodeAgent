@@ -20,13 +20,13 @@ CodeAgent 运行在你的电脑上，既可以本机使用，也可以在可信�
 
 ## 使用前准备
 
-CodeAgent 正式版本支持以下目标：
+CodeAgent 发布支持以下目标：
 
-| 系统          | 架构          | Desktop               | CLI         |
-| ------------- | ------------- | --------------------- | ----------- |
-| macOS 14+     | Apple Silicon | `.dmg`                | Node.js 24+ |
-| Windows 10+   | x64           | NSIS `.exe` 或 `.msi` | Node.js 24+ |
-| Ubuntu 22.04+ | x64 glibc     | `.deb` 或 `.AppImage` | Node.js 24+ |
+| 系统          | 架构          | Desktop                             | CLI         |
+| ------------- | ------------- | ----------------------------------- | ----------- |
+| macOS 14+     | Apple Silicon | `.dmg`                              | Node.js 24+ |
+| Windows 10+   | x64           | Preview / Unsigned `.exe` 或 `.msi` | Node.js 24+ |
+| Ubuntu 22.04+ | x64 glibc     | `.deb` 或 `.AppImage`               | Node.js 24+ |
 
 不支持 Intel macOS、Windows arm64、Linux arm64、musl Linux 和更早的系统。通过 CLI 浏览器模式访问时，还需要 Chrome/Chromium 116+、Firefox 124+ 或 Safari 17.4+。
 
@@ -34,7 +34,7 @@ CodeAgent 通过 `@openai/codex` 自带受支持的 Codex CLI 二进制，无需
 
 ## Desktop
 
-请从 [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases) 下载当前系统的安装包。Desktop 自带运行时，不需要安装 Node.js；正式安装包经过系统签名，应用只会安装通过签名验证的更新。
+请从 [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases) 下载当前系统的安装包。Desktop 自带运行时，不需要安装 Node.js。Windows Desktop 当前为 Preview / Unsigned，尚未通过正式代码签名门禁，安装时可能触发 Microsoft Defender SmartScreen 警告；Desktop 更新包仍会进行加密签名并在安装前验证来源。
 
 ## CLI 快速开始
 

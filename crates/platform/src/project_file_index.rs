@@ -9,7 +9,7 @@ use ignore::{DirEntry, Error, ParallelVisitor, ParallelVisitorBuilder, WalkBuild
 
 use crate::{
     PlatformError,
-    project_tree::{MAX_PROJECT_FILE_DEPTH, is_ignored_directory_name},
+    project_tree::{MAX_PROJECT_FILE_DEPTH, is_ignored_directory_name, is_ignored_file_name},
 };
 
 pub(crate) const MAX_PROJECT_FILE_SEARCH_RESULTS: usize = 50;
@@ -209,6 +209,9 @@ fn collect_file(root: &Path, entry: DirEntry, local: &mut Vec<IndexedProjectFile
     if !file_type.is_file() || file_type.is_symlink() {
         return WalkState::Continue;
     }
+    if entry.file_name().to_str().is_some_and(is_ignored_file_name) {
+        return WalkState::Continue;
+    }
     let Ok(relative) = entry.path().strip_prefix(root) else {
         return WalkState::Continue;
     };
@@ -295,6 +298,7 @@ mod tests {
         let root = test_root("boundaries");
         fs::create_dir_all(root.join("kept")).expect("kept directory");
         fs::create_dir_all(root.join("target/debug")).expect("target directory");
+        fs::write(root.join(".DS_Store"), "finder metadata").expect("platform metadata");
         fs::write(root.join(".gitignore"), "kept/hidden.rs\n").expect("ignore file");
         fs::write(root.join("kept/hidden.rs"), "").expect("kept file");
         fs::write(root.join("target/debug/hidden.rs"), "").expect("generated file");
@@ -307,6 +311,7 @@ mod tests {
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].path.as_ref(), "kept/hidden.rs");
+        assert!(index.search(".DS_Store").is_empty());
         fs::remove_dir_all(root).expect("remove root");
     }
 

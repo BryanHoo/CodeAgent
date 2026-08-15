@@ -73,7 +73,7 @@ type WorkbenchInspectorProps = Readonly<{
   onOpenSubagent?: (selection: SubagentSelection) => void;
   onReloadMcpServers?: () => void;
   onRefreshFileTreeDirectory?: (directoryPath: string | null) => void;
-  onRefreshGitStatus?: () => void;
+  onRefreshProject?: () => void;
   onCommitChanges?: () => void;
   onClose?: () => void;
   onTerminateBackgroundTerminal?: (terminalId: string) => Promise<void>;
@@ -121,7 +121,7 @@ export function WorkbenchInspector({
   onOpenSubagent = () => undefined,
   onReloadMcpServers = () => undefined,
   onRefreshFileTreeDirectory = () => undefined,
-  onRefreshGitStatus = () => undefined,
+  onRefreshProject = () => undefined,
   onCommitChanges = () => undefined,
   onClose,
   onTerminateBackgroundTerminal = () => Promise.resolve(),
@@ -163,6 +163,8 @@ export function WorkbenchInspector({
     () => new Map(fileTreeDirectories.map((state) => [state.path, state])),
     [fileTreeDirectories],
   );
+  const projectRefreshing =
+    gitStatusRefreshing || fileTreeDirectories.some((state) => state.isFetching);
   const rootFileTreeState = fileTreeDirectoryStates.get(null);
   const projectFileName = getProjectFileName(projectPath);
   const projectRootName = projectFileName === "" ? projectName : projectFileName;
@@ -333,30 +335,7 @@ export function WorkbenchInspector({
               </div>
             ) : null}
             <div className="flex min-h-0 flex-1 flex-col">
-              {gitStatusError !== null ? (
-                <div className="mx-2.5 mb-2 flex items-center justify-end rounded-control bg-control px-2 py-2">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        aria-label={i18n.t("inspector.refreshGit", { ns: "conversation" })}
-                        disabled={gitStatusRefreshing}
-                        onClick={onRefreshGitStatus}
-                        size="icon-sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <RefreshCw
-                          aria-hidden="true"
-                          className={`size-3.5 ${gitStatusRefreshing ? "animate-spin" : ""}`}
-                        />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {i18n.t("inspector.refreshGit", { ns: "conversation" })}
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              ) : gitStatusPending && gitStatus === undefined ? (
+              {gitStatusPending && gitStatus === undefined ? (
                 <p className="mb-2 px-4 text-caption text-muted-foreground">
                   {i18n.t("inspector.gitLoading", { ns: "conversation" })}
                 </p>
@@ -370,17 +349,15 @@ export function WorkbenchInspector({
                         ns: "conversation",
                       })}
                       className="inline-flex h-8 items-center gap-1.5 rounded-control bg-control px-3 text-label font-medium text-foreground transition-colors hover:bg-raised disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={rootFileTreeState.isFetching}
-                      onClick={() => {
-                        onRefreshFileTreeDirectory(null);
-                      }}
+                      disabled={projectRefreshing}
+                      onClick={onRefreshProject}
                       type="button"
                     >
                       <RefreshCw
                         aria-hidden="true"
-                        className={`size-3.5 ${rootFileTreeState.isFetching ? "animate-spin" : ""}`}
+                        className={`size-3.5 ${projectRefreshing ? "animate-spin" : ""}`}
                       />
-                      {rootFileTreeState.isFetching
+                      {projectRefreshing
                         ? i18n.t("inspector.reading", { ns: "conversation" })
                         : i18n.t("inspector.refreshProjectFiles", { ns: "conversation" })}
                     </Button>
@@ -439,6 +416,33 @@ export function WorkbenchInspector({
                         path={projectPath}
                         trailing={
                           <FileTreeActions>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  aria-label={i18n.t("inspector.refreshProject", {
+                                    name: projectRootName,
+                                    ns: "conversation",
+                                  })}
+                                  className="size-5 shrink-0 opacity-0 transition-opacity group-hover/file-tree-node:opacity-100 group-focus-within/file-tree-node:opacity-100 focus-visible:opacity-100"
+                                  disabled={projectRefreshing}
+                                  onClick={onRefreshProject}
+                                  size="embedded"
+                                  type="button"
+                                  variant="embedded"
+                                >
+                                  <RefreshCw
+                                    aria-hidden="true"
+                                    className={`size-3.5 ${projectRefreshing ? "animate-spin" : ""}`}
+                                  />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="left">
+                                {i18n.t("inspector.refreshProject", {
+                                  name: projectRootName,
+                                  ns: "conversation",
+                                })}
+                              </TooltipContent>
+                            </Tooltip>
                             <ProjectOpenDropdownMenu
                               apps={projectOpenApps}
                               isPending={projectOpenPending}

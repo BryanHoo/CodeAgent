@@ -87,43 +87,6 @@ jobs:
           chmod 600 "${key_path}"
           test -s "${key_path}"
           echo "APPLE_API_KEY_PATH=${key_path}" >> "${GITHUB_ENV}"
-      - name: Validate Windows signing configuration
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
-          AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
-          AZURE_ARTIFACT_SIGNING_PROFILE: ${{ secrets.AZURE_ARTIFACT_SIGNING_PROFILE }}
-        run: |
-          $requiredSettings = @(
-            "AZURE_CLIENT_ID",
-            "AZURE_CLIENT_SECRET",
-            "AZURE_TENANT_ID",
-            "AZURE_ARTIFACT_SIGNING_ENDPOINT",
-            "AZURE_ARTIFACT_SIGNING_ACCOUNT",
-            "AZURE_ARTIFACT_SIGNING_PROFILE"
-          )
-          foreach ($setting in $requiredSettings) {
-            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($setting))) {
-              throw "Missing required GitHub Actions secret: $setting"
-            }
-          }
-      - name: Install pinned Artifact Signing tools
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $toolRoot = Join-Path $env:RUNNER_TEMP "artifact-signing-tools"
-          nuget install Microsoft.ArtifactSigning.Client -Version 1.0.128 -ExcludeVersion -DirectDownload -NonInteractive -OutputDirectory (Join-Path $toolRoot "client")
-          if ($LASTEXITCODE -ne 0) { throw "Failed to install Microsoft.ArtifactSigning.Client" }
-          nuget install Microsoft.Windows.SDK.BuildTools -Version 10.0.28000.2526 -ExcludeVersion -DirectDownload -NonInteractive -OutputDirectory (Join-Path $toolRoot "sdk")
-          if ($LASTEXITCODE -ne 0) { throw "Failed to install Microsoft.Windows.SDK.BuildTools" }
-          if ($null -eq (dotnet --list-runtimes | Select-String "^Microsoft.NETCore.App 8\.")) {
-            throw "Artifact Signing requires the .NET 8 runtime"
-          }
-          "ARTIFACT_SIGNING_TOOL_ROOT=$toolRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Build and upload signed macOS Desktop artifacts
         if: runner.os == 'macOS'
         uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
@@ -142,7 +105,7 @@ jobs:
           tauriScript: pnpm tauri
           args: --bundles ${{ matrix.bundles }}
           tagName: ${{ env.RELEASE_TAG }}
-          releaseName: CodeAgent ${{ env.RELEASE_TAG }}
+          releaseName: "CodeAgent ${{ env.RELEASE_TAG }} (Windows Desktop: Preview / Unsigned)"
           generateReleaseNotes: true
           releaseDraft: true
           prerelease: false
@@ -160,31 +123,25 @@ jobs:
           tauriScript: pnpm tauri
           args: --bundles ${{ matrix.bundles }}
           tagName: ${{ env.RELEASE_TAG }}
-          releaseName: CodeAgent ${{ env.RELEASE_TAG }}
+          releaseName: "CodeAgent ${{ env.RELEASE_TAG }} (Windows Desktop: Preview / Unsigned)"
           generateReleaseNotes: true
           releaseDraft: true
           prerelease: false
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
-      - name: Build and upload signed Windows Desktop artifacts
+      - name: Build and upload Windows Desktop (Preview / Unsigned)
         if: runner.os == 'Windows'
         uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
-          AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
-          AZURE_ARTIFACT_SIGNING_PROFILE: ${{ secrets.AZURE_ARTIFACT_SIGNING_PROFILE }}
         with:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
           args: --bundles ${{ matrix.bundles }}
           tagName: ${{ env.RELEASE_TAG }}
-          releaseName: CodeAgent ${{ env.RELEASE_TAG }}
+          releaseName: "CodeAgent ${{ env.RELEASE_TAG }} (Windows Desktop: Preview / Unsigned)"
           generateReleaseNotes: true
           releaseDraft: true
           prerelease: false
@@ -214,10 +171,6 @@ jobs:
           xcrun stapler validate "${app_bundle}"
           spctl --assess --type execute --verbose=4 "${app_bundle}"
           spctl --assess --type open --context context:primary-signature --verbose=4 "${dmg_bundle}"
-      - name: Verify Windows Authenticode signatures
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ./tools/release/verify-windows-signatures.ps1
       - name: Verify Desktop artifact isolation
         run: pnpm run desktop:artifact:check
       - name: Pack npm artifacts
