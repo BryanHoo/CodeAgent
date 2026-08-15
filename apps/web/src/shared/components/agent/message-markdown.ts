@@ -15,8 +15,8 @@ const RELATIVE_MARKDOWN_FILE_REFERENCE_PATTERN =
   /(?<=\]\()(?![a-z][a-z0-9+.-]*:|\/|#)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
 const LOCAL_MARKDOWN_FILE_REFERENCE_PATTERN =
   /(?<=\]\()\/(?!\/)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
-// 16 KiB 在保持尾部增量解析有界的同时，减少超长消息的 React 块状态与保留内存。
-const MARKDOWN_BLOCK_BATCH_BYTES = 16 * 1024;
+// 12 KiB 平衡尾部增量解析 CPU 与超长消息的 React 块状态保留内存。
+const MARKDOWN_BLOCK_BATCH_BYTES = 12 * 1024;
 const CACHE_GUARD_CHARACTERS = 64;
 
 type MarkdownBlockParser = (markdown: string) => string[];
