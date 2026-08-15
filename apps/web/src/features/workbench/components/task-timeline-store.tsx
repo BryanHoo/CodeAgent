@@ -6,6 +6,7 @@ import { i18n } from "../../../i18n/i18n.js";
 
 import {
   Conversation,
+  ConversationHistoryLoader,
   ConversationScrollButton,
   ConversationVirtualList,
 } from "../../../shared/components/agent/conversation.js";
@@ -92,10 +93,13 @@ export function StorePendingRequestList({
 
 export function TaskStoreTimeline({
   connected,
+  hasPreviousTurns = false,
+  isLoadingPreviousTurns = false,
   onBuildPlan,
   onForkTask,
   onOpenFileDiff,
   onOpenSourceFile,
+  onLoadPreviousTurns = () => Promise.resolve(),
   onReviewFileChanges,
   onResolvePendingRequest,
   scrollToBottomSignal,
@@ -104,10 +108,13 @@ export function TaskStoreTimeline({
   submissionTurnId,
 }: Readonly<{
   connected: boolean;
+  hasPreviousTurns?: boolean;
+  isLoadingPreviousTurns?: boolean;
   onBuildPlan?: BuildPlanAction;
   onForkTask?: ForkTaskAction;
   onOpenFileDiff: (change: AgentFileChange) => void;
   onOpenSourceFile: (reference: MessageFileReference) => void;
+  onLoadPreviousTurns?: () => Promise<void>;
   onReviewFileChanges: (changes: readonly AgentFileChange[]) => void;
   onResolvePendingRequest: (
     request: PendingRequest,
@@ -153,7 +160,13 @@ export function TaskStoreTimeline({
     submissionStartedAt !== undefined &&
     (submissionHandoffState === "awaiting-turn" || submissionHandoffState === "awaiting-assistant");
   const hasNotices = notices.length > 0;
-  if (turnIds.length === 0 && !hasVisiblePendingRequest && !showPendingSubmission && !hasNotices) {
+  if (
+    turnIds.length === 0 &&
+    !hasPreviousTurns &&
+    !hasVisiblePendingRequest &&
+    !showPendingSubmission &&
+    !hasNotices
+  ) {
     return (
       <TimelineState message={i18n.t("timeline.noHistory", { ns: "conversation" })} role="status" />
     );
@@ -166,6 +179,14 @@ export function TaskStoreTimeline({
       conversationId={`${projectId}:${taskId}`}
       {...(scrollToBottomSignal === undefined ? {} : { scrollToBottomSignal })}
     >
+      {hasPreviousTurns ? (
+        <ConversationHistoryLoader
+          label={i18n.t("timeline.loadEarlier", { ns: "conversation" })}
+          loading={isLoadingPreviousTurns}
+          loadingLabel={i18n.t("timeline.loadingEarlier", { ns: "conversation" })}
+          onLoad={onLoadPreviousTurns}
+        />
+      ) : null}
       <ConversationVirtualList
         {...(hasVisiblePendingRequest || showPendingSubmission || hasNotices
           ? {

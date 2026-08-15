@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { showErrorToast } from "../../../shared/errors/error-toast.js";
 
@@ -18,10 +18,29 @@ const emptyTaskStore = createTaskStore({ projectId: "", taskId: "" });
 export type TaskRuntimeView = Readonly<{
   connectionState: "closed" | "connected" | "connecting" | "reconnecting";
   error: Error | null;
+  hasPreviousTurns: boolean;
   isPending: boolean;
+  isLoadingPreviousTurns: boolean;
+  loadPreviousTurns: () => Promise<void>;
   snapshot: ReconstructedTaskSnapshot | undefined;
   store: TaskStore | undefined;
 }>;
+
+type TaskTurnPageClient = Pick<ProjectRuntimeManager["client"], "listTaskTurns">;
+
+export async function loadPreviousTaskTurns(
+  client: TaskTurnPageClient,
+  store: TaskStore,
+): Promise<boolean> {
+  const state = store.getState();
+  const cursor = state.snapshotMetadata?.turnsNextCursor;
+  if (cursor === undefined || cursor === null) {
+    return false;
+  }
+  const page = await client.listTaskTurns(state.projectId, state.taskId, cursor);
+  store.getState().prependTurns(cursor, page);
+  return true;
+}
 
 export function useTaskRuntime(
   projectId: string,
@@ -39,6 +58,8 @@ export function useTaskRuntime(
     enabled: taskId !== undefined,
   });
   const [store, setStore] = useState<TaskStore>();
+  const historyLoadsRef = useRef(new Map<string, Promise<boolean>>());
+  const [loadingHistoryKey, setLoadingHistoryKey] = useState<string>();
   const subscribedStore = store ?? emptyTaskStore;
   const connectionState = useStore(subscribedStore, (state) => state.connectionState);
   const runtimeError = useStore(subscribedStore, (state) => state.error);
@@ -51,6 +72,10 @@ export function useTaskRuntime(
   );
   const taskPlan = useStore(subscribedStore, (state) => state.snapshotMetadata?.plan);
   const taskPinned = useStore(subscribedStore, (state) => state.snapshotMetadata?.pinned);
+  const turnsNextCursor = useStore(
+    subscribedStore,
+    (state) => state.snapshotMetadata?.turnsNextCursor,
+  );
   const itemStructureRevision = useStore(subscribedStore, (state) => state.itemStructureRevision);
 
   useEffect(() => {
@@ -105,6 +130,7 @@ export function useTaskRuntime(
     void taskSettings;
     void taskStatus;
     void taskTitle;
+    void turnsNextCursor;
     return activeRuntime?.getState().reconstructSnapshot();
   }, [
     activeRuntime,
@@ -115,19 +141,55 @@ export function useTaskRuntime(
     taskSettings,
     taskStatus,
     taskTitle,
+    turnsNextCursor,
   ]);
   const isRuntimePending =
     error === null && (taskQueryPending || activeRuntime === undefined || !hasHydratedSnapshot);
+  const activeTaskKey = taskId === undefined ? undefined : `${projectId}\u0000${taskId}`;
+  const loadPreviousTurns = useCallback(async () => {
+    if (activeRuntime === undefined || activeTaskKey === undefined) {
+      return;
+    }
+    const existing = historyLoadsRef.current.get(activeTaskKey);
+    if (existing !== undefined) {
+      await existing;
+      return;
+    }
+    const pending = loadPreviousTaskTurns(client, activeRuntime);
+    historyLoadsRef.current.set(activeTaskKey, pending);
+    setLoadingHistoryKey(activeTaskKey);
+    try {
+      await pending;
+    } catch (loadError) {
+      showErrorToast(loadError);
+    } finally {
+      historyLoadsRef.current.delete(activeTaskKey);
+      setLoadingHistoryKey((current) => (current === activeTaskKey ? undefined : current));
+    }
+  }, [activeRuntime, activeTaskKey, client]);
 
   return useMemo(
     () => ({
       connectionState: activeRuntime === undefined ? "connecting" : connectionState,
       error,
+      hasPreviousTurns: turnsNextCursor !== undefined && turnsNextCursor !== null,
       isPending: isRuntimePending,
+      isLoadingPreviousTurns: loadingHistoryKey === activeTaskKey,
+      loadPreviousTurns,
       snapshot,
       store: activeRuntime,
     }),
-    [activeRuntime, connectionState, error, isRuntimePending, snapshot],
+    [
+      activeRuntime,
+      activeTaskKey,
+      connectionState,
+      error,
+      isRuntimePending,
+      loadPreviousTurns,
+      loadingHistoryKey,
+      snapshot,
+      turnsNextCursor,
+    ],
   );
 }
 

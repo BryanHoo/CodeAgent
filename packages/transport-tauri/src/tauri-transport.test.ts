@@ -119,6 +119,36 @@ describe("TauriCodeAgentTransport", () => {
     ]);
   });
 
+  it("maps task turn pagination to the Tauri command", async () => {
+    const calls: { command: string; payload: unknown }[] = [];
+    mockIPC((command, payload) => {
+      calls.push({ command, payload });
+      return { data: [], nextCursor: null };
+    });
+    const transport = new TauriCodeAgentTransport();
+
+    await transport.request(
+      {
+        input: { cursor: "older/value", projectId: "project-1", taskId: "task-1" },
+        name: "turns.list",
+        output: {} as never,
+      },
+      { requestId: "turn-page-request" },
+    );
+
+    expect(calls).toEqual([
+      {
+        command: "turn_list",
+        payload: {
+          cursor: "older/value",
+          projectId: "project-1",
+          requestId: "turn-page-request",
+          taskId: "task-1",
+        },
+      },
+    ]);
+  });
+
   it("maps the app update mutation with stable request identities", async () => {
     const calls: { command: string; payload: unknown }[] = [];
     mockIPC((command, payload) => {

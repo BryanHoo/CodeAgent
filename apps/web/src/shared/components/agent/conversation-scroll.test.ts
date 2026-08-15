@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createConversationAutoScrollController } from "./conversation-scroll.js";
+import {
+  createConversationAutoScrollController,
+  preserveConversationPrependPosition,
+} from "./conversation-scroll.js";
 
 type ScrollTarget = Parameters<
   ReturnType<typeof createConversationAutoScrollController>["handleScroll"]
@@ -24,6 +27,18 @@ function createScrollTarget({
 }
 
 describe("conversation auto scroll", () => {
+  it("preserves the visible anchor when older content is prepended", () => {
+    const scrollTarget = createScrollTarget({ scrollHeight: 1_000, scrollTop: 120 });
+
+    scrollTarget.scrollHeight = 1_650;
+    preserveConversationPrependPosition(scrollTarget, {
+      scrollHeight: 1_000,
+      scrollTop: 120,
+    });
+
+    expect(scrollTarget.scrollTo).toHaveBeenCalledWith({ behavior: "auto", top: 770 });
+  });
+
   it("follows new content while the user remains at the bottom", () => {
     const onAtBottomChange = vi.fn();
     const controller = createConversationAutoScrollController(onAtBottomChange);

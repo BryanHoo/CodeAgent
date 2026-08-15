@@ -400,6 +400,24 @@ impl CodeAgentRuntime {
         }
     }
 
+    /// 按不透明 Cursor 读取 Task 的更早 Turn 页。
+    pub async fn list_agent_task_turns(
+        &self,
+        request_id: &str,
+        project_id: &ProjectId,
+        task_id: &str,
+        cursor: Option<&str>,
+    ) -> Result<Value, CodeAgentError> {
+        let operation = self.begin_operation(request_id).await?;
+        let context = self.project_context(project_id, &operation).await?;
+        let page = context
+            .provider
+            .list_task_turns(task_id, cursor, &operation)
+            .await?;
+        parse_protocol_value(ValueDefinition::AgentTurnPage, page)
+            .map_err(|error| CodeAgentError::internal(error.to_string()))
+    }
+
     /// 启动 Task Turn。
     pub async fn start_agent_turn(
         &self,

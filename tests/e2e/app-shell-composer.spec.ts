@@ -523,8 +523,8 @@ test("expands the complete execution process from its semantic summary", async (
   await expect(page.getByText("正在读取项目配置。", { exact: true })).toHaveCount(0);
   await expect(page.getByText("operation-0", { exact: true })).toHaveCount(0);
   await expect(page.getByText("operation-184", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("operation-185", { exact: true })).toBeVisible();
-  await expect(page.getByText("operation-204", { exact: true })).toBeVisible();
+  await expect(page.getByText("operation-185", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("operation-204", { exact: true })).toHaveCount(0);
 
   const expandProcess = page.getByRole("button", { name: "展开执行过程" });
   await expect(expandProcess).toHaveAttribute("aria-expanded", "false");
@@ -541,7 +541,7 @@ test("expands the complete execution process from its semantic summary", async (
   await collapseProcess.click();
 
   await expect(page.getByText("operation-0", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("operation-204", { exact: true })).toBeVisible();
+  await expect(page.getByText("operation-204", { exact: true })).toHaveCount(0);
 });
 
 test("runs official task actions from the slash command menu", async ({ page }) => {

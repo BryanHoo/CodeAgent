@@ -34,6 +34,7 @@ describe("Rust Runtime 协议 Schema", () => {
       "AgentTaskSnapshot",
       "AgentTaskSnapshotResponse",
       "AgentTurn",
+      "AgentTurnPage",
       "CancelProviderLoginRequest",
       "CodeAgentError",
       "ConfigureCustomProviderRequest",

@@ -4,6 +4,7 @@ import {
   AgentMutationErrorSchema,
   AgentTaskPageSchema,
   AgentTaskSnapshotResponseSchema,
+  AgentTurnPageSchema,
   ArchiveAgentTaskRequestSchema,
   ArchiveAgentTaskResponseSchema,
   PinAgentTaskRequestSchema,
@@ -33,6 +34,7 @@ import {
   ProjectTaskParamsSchema,
   ProjectTaskTerminalParamsSchema,
   TaskPageQuerySchema,
+  TaskTurnPageQuerySchema,
 } from "./schemas.js";
 
 const mutationErrors = {
@@ -101,6 +103,28 @@ export const registerTaskRoutes: FastifyPluginCallback<ServerRouteContext> = (
         ? reply.code(404).send({ code: "TASK_NOT_FOUND", message: "Task not found" })
         : result;
     },
+  );
+  app.get<{
+    Params: { projectId: string; taskId: string };
+    Querystring: { cursor?: string };
+  }>(
+    "/v1/projects/:projectId/tasks/:taskId/turns",
+    {
+      schema: {
+        params: ProjectTaskParamsSchema,
+        querystring: TaskTurnPageQuerySchema,
+        response: { 200: AgentTurnPageSchema, 404: ErrorResponseSchema },
+      },
+    },
+    (request) =>
+      callEngine(() =>
+        engine.taskTurnList(
+          createReadRequestId(),
+          request.params.projectId,
+          request.params.taskId,
+          request.query.cursor,
+        ),
+      ),
   );
   app.get<{ Params: { projectId: string; taskId: string } }>(
     "/v1/projects/:projectId/tasks/:taskId/mcp-servers",

@@ -21,6 +21,7 @@ import {
   AgentSkillPageSchema,
   AgentTaskPageSchema,
   AgentTaskSnapshotSchema,
+  AgentTurnPageSchema,
   PendingRequestSchema,
   ResolvePendingRequestRequestSchema,
 } from "./agent-runtime.js";
@@ -153,6 +154,7 @@ export function createRustRuntimeSchemaDocument(): RustRuntimeSchemaDocument {
     AgentTaskSnapshot: AgentTaskSnapshotSchema,
     AgentTaskSnapshotResponse: AgentTaskSnapshotResponseSchema,
     AgentTurn: AgentTurnSchema,
+    AgentTurnPage: AgentTurnPageSchema,
     CancelProviderLoginRequest: CancelProviderLoginRequestSchema,
     CodeAgentError: CodeAgentErrorSchema,
     ConfigureCustomProviderRequest: ConfigureCustomProviderRequestSchema,

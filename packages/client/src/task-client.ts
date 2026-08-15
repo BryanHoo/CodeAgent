@@ -4,6 +4,7 @@ import {
   AgentTaskPageSchema,
   AgentTaskSettingsResponseSchema,
   AgentTaskSnapshotResponseSchema,
+  AgentTurnPageSchema,
   ArchiveAgentTaskResponseSchema,
   CompactAgentTaskResponseSchema,
   ForkAgentTaskResponseSchema,
@@ -53,6 +54,18 @@ export class CodeAgentClient extends ProjectCodeAgentClient {
   public readTask(projectId: string, taskId: string, options: ReadOptions = {}) {
     return this.read(
       { input: { projectId, taskId }, name: "tasks.read", output: AgentTaskSnapshotResponseSchema },
+      options,
+    );
+  }
+
+  public listTaskTurns(
+    projectId: string,
+    taskId: string,
+    cursor?: string,
+    options: ReadOptions = {},
+  ) {
+    return this.read(
+      { input: { cursor, projectId, taskId }, name: "turns.list", output: AgentTurnPageSchema },
       options,
     );
   }

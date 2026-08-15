@@ -69,7 +69,6 @@ function StoredAssistantGroup({
   onToggleProcess,
   processExpanded,
   processHiddenItemIds,
-  processRecentOperationItemIds,
   processSummary,
   processToggleAvailable,
   projectId,
@@ -91,7 +90,6 @@ function StoredAssistantGroup({
   onToggleProcess: () => void;
   processExpanded: boolean;
   processHiddenItemIds: ReadonlySet<string>;
-  processRecentOperationItemIds: ReadonlySet<string>;
   processSummary: string | undefined;
   processToggleAvailable: boolean;
   projectId: string;
@@ -108,10 +106,7 @@ function StoredAssistantGroup({
   const visibleItemIds =
     turn.status === "running" || processExpanded
       ? itemIds
-      : itemIds.filter(
-          (itemId) =>
-            !processHiddenItemIds.has(itemId) || processRecentOperationItemIds.has(itemId),
-        );
+      : itemIds.filter((itemId) => !processHiddenItemIds.has(itemId));
   if (turn.status !== "running") {
     // 复制文本与文件汇总继续消费完整 Store 数据，不受当前折叠展示影响。
     for (const itemId of itemIds) {
@@ -224,10 +219,6 @@ export function StoreTurnTimelineSection({
     () => new Set(process.hiddenItemIds),
     [process.hiddenItemIds],
   );
-  const processRecentOperationItemIds = useMemo(
-    () => new Set(process.recentOperationItemIds),
-    [process.recentOperationItemIds],
-  );
   if (turn === undefined) return null;
 
   const latestSnapshotTimestamp = store.getState().snapshotMetadata?.updatedAt ?? "";
@@ -284,7 +275,6 @@ export function StoreTurnTimelineSection({
             onReviewFileChanges={onReviewFileChanges}
             processExpanded={processExpanded}
             processHiddenItemIds={processHiddenItemIds}
-            processRecentOperationItemIds={processRecentOperationItemIds}
             processSummary={processSummary}
             processToggleAvailable={processToggleAvailable}
             projectId={projectId}

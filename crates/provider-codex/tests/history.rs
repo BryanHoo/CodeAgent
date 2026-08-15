@@ -39,32 +39,23 @@ async fn project_provider_should_read_execution_snapshot_without_runtime_setting
     let (read, mut write) = tokio::io::split(server);
     let mut read = BufReader::new(read);
     let scenario = tokio::spawn(async move {
-        let mut line = String::new();
-        read.read_line(&mut line).await.expect("read frame");
-        let request: Value = serde_json::from_str(&line).expect("valid frame");
-        assert_eq!(request["method"], "thread/read");
-        write
-            .write_all(
-                format!(
-                    "{}\n",
-                    json!({
-                        "id": request["id"],
-                        "result": { "thread": {
-                            "createdAt": 1_754_956_800,
-                            "cwd": "/workspace",
-                            "id": "task-1",
-                            "name": null,
-                            "preview": "历史任务",
-                            "section": null,
-                            "turns": [],
-                            "updatedAt": 1_754_956_801
-                        } }
-                    })
-                )
-                .as_bytes(),
-            )
-            .await
-            .expect("write response");
+        let request = read_frame(&mut read).await;
+        respond_task_snapshot(
+            &mut read,
+            &mut write,
+            &request,
+            json!({
+                "createdAt": 1_754_956_800,
+                "cwd": "/workspace",
+                "id": "task-1",
+                "name": null,
+                "preview": "历史任务",
+                "section": null,
+                "turns": [],
+                "updatedAt": 1_754_956_801
+            }),
+        )
+        .await;
     });
 
     let snapshot = provider
@@ -76,6 +67,142 @@ async fn project_provider_should_read_execution_snapshot_without_runtime_setting
     assert_eq!(snapshot["id"], "task-1");
     assert_eq!(snapshot["title"], "历史任务");
     assert!(snapshot.get("settings").is_none());
+    scenario.await.expect("scenario");
+}
+
+#[tokio::test]
+async fn project_provider_should_bootstrap_snapshot_from_latest_turn_page() {
+    let (runtime, server) = runtime();
+    let provider = runtime
+        .for_project(project(), &PortRequestContext::new("project"))
+        .await
+        .expect("project provider");
+    let (read, mut write) = tokio::io::split(server);
+    let mut read = BufReader::new(read);
+    let scenario = tokio::spawn(async move {
+        let metadata = read_frame(&mut read).await;
+        assert_eq!(metadata["method"], "thread/read");
+        assert_eq!(metadata["params"]["includeTurns"], false);
+        respond(
+            &mut write,
+            &metadata,
+            json!({ "thread": {
+                "createdAt": 1_754_956_800,
+                "cwd": "/workspace",
+                "id": "task-1",
+                "name": null,
+                "preview": "历史任务",
+                "section": null,
+                "updatedAt": 1_754_956_804
+            } }),
+        )
+        .await;
+
+        let turns = read_frame(&mut read).await;
+        assert_eq!(turns["method"], "thread/turns/list");
+        assert_eq!(turns["params"]["threadId"], "task-1");
+        assert_eq!(turns["params"]["limit"], 20);
+        assert_eq!(turns["params"]["sortDirection"], "desc");
+        assert_eq!(turns["params"]["itemsView"], "full");
+        respond(
+            &mut write,
+            &turns,
+            json!({
+                "data": [
+                    {
+                        "completedAt": 1_754_956_804,
+                        "error": null,
+                        "id": "turn-2",
+                        "items": [],
+                        "startedAt": 1_754_956_803,
+                        "status": "completed"
+                    },
+                    {
+                        "completedAt": 1_754_956_802,
+                        "error": null,
+                        "id": "turn-1",
+                        "items": [],
+                        "startedAt": 1_754_956_801,
+                        "status": "completed"
+                    }
+                ],
+                "nextCursor": "older-turns"
+            }),
+        )
+        .await;
+    });
+
+    let snapshot = provider
+        .read_task("task-1", &PortRequestContext::new("read"))
+        .await
+        .expect("read task")
+        .expect("snapshot");
+
+    assert_eq!(snapshot["turns"][0]["id"], "turn-1");
+    assert_eq!(snapshot["turns"][1]["id"], "turn-2");
+    assert_eq!(snapshot["turnsNextCursor"], "older-turns");
+    scenario.await.expect("scenario");
+}
+
+#[tokio::test]
+async fn project_provider_should_list_older_turn_page_from_cursor() {
+    let (runtime, server) = runtime();
+    let provider = runtime
+        .for_project(project(), &PortRequestContext::new("project"))
+        .await
+        .expect("project provider");
+    let (read, mut write) = tokio::io::split(server);
+    let mut read = BufReader::new(read);
+    let scenario = tokio::spawn(async move {
+        let tasks = read_frame(&mut read).await;
+        respond(
+            &mut write,
+            &tasks,
+            json!({ "data": [{
+                "createdAt": 1_754_956_800,
+                "cwd": "/workspace",
+                "id": "task-1",
+                "name": null,
+                "preview": "历史任务",
+                "section": null,
+                "updatedAt": 1_754_956_804
+            }], "nextCursor": null }),
+        )
+        .await;
+
+        let turns = read_frame(&mut read).await;
+        assert_eq!(turns["method"], "thread/turns/list");
+        assert_eq!(turns["params"]["cursor"], "older-turns");
+        respond(
+            &mut write,
+            &turns,
+            json!({ "data": [{
+                "completedAt": 1_754_956_802,
+                "error": null,
+                "id": "turn-1",
+                "items": [],
+                "startedAt": 1_754_956_801,
+                "status": "completed"
+            }], "nextCursor": null }),
+        )
+        .await;
+    });
+
+    provider
+        .list_tasks(json!({}), &PortRequestContext::new("list"))
+        .await
+        .expect("list tasks");
+    let page = provider
+        .list_task_turns(
+            "task-1",
+            Some("older-turns"),
+            &PortRequestContext::new("turns"),
+        )
+        .await
+        .expect("list turns");
+
+    assert_eq!(page["data"].as_array().map(Vec::len), Some(1));
+    assert!(page["nextCursor"].is_null());
     scenario.await.expect("scenario");
 }
 
@@ -124,10 +251,11 @@ async fn historical_snapshot_should_restore_skills_from_rollout_transcript() {
     let mut read = BufReader::new(read);
     let scenario = tokio::spawn(async move {
         let request = read_frame(&mut read).await;
-        respond(
+        respond_task_snapshot(
+            &mut read,
             &mut write,
             &request,
-            json!({ "thread": {
+            json!({
                 "createdAt": 1_754_956_800,
                 "cwd": "/workspace",
                 "id": task_id,
@@ -147,7 +275,7 @@ async fn historical_snapshot_should_restore_skills_from_rollout_transcript() {
                     "status": "completed"
                 }],
                 "updatedAt": 1_754_956_802
-            } }),
+            }),
         )
         .await;
     });
@@ -178,10 +306,11 @@ async fn historical_snapshot_should_merge_expanded_skill_messages_without_transc
     let mut read = BufReader::new(read);
     let scenario = tokio::spawn(async move {
         let request = read_frame(&mut read).await;
-        respond(
+        respond_task_snapshot(
+            &mut read,
             &mut write,
             &request,
-            json!({ "thread": {
+            json!({
                 "createdAt": 1_754_956_800,
                 "cwd": "/workspace",
                 "id": "task-1",
@@ -216,7 +345,7 @@ async fn historical_snapshot_should_merge_expanded_skill_messages_without_transc
                     "status": "completed"
                 }],
                 "updatedAt": 1_754_956_802
-            } }),
+            }),
         )
         .await;
     });
@@ -245,6 +374,29 @@ async fn respond(writer: &mut tokio::io::WriteHalf<DuplexStream>, request: &Valu
         .write_all(format!("{}\n", json!({ "id": request["id"], "result": result })).as_bytes())
         .await
         .expect("write response");
+}
+
+async fn respond_task_snapshot(
+    reader: &mut BufReader<tokio::io::ReadHalf<DuplexStream>>,
+    writer: &mut tokio::io::WriteHalf<DuplexStream>,
+    request: &Value,
+    mut thread: Value,
+) {
+    assert_eq!(request["method"], "thread/read");
+    assert_eq!(request["params"]["includeTurns"], false);
+    let mut turns = thread
+        .as_object_mut()
+        .and_then(|thread| thread.remove("turns"))
+        .and_then(|turns| turns.as_array().cloned())
+        .unwrap_or_default();
+    respond(writer, request, json!({ "thread": thread })).await;
+
+    let page = read_frame(reader).await;
+    assert_eq!(page["method"], "thread/turns/list");
+    assert_eq!(page["params"]["itemsView"], "full");
+    assert_eq!(page["params"]["sortDirection"], "desc");
+    turns.reverse();
+    respond(writer, &page, json!({ "data": turns, "nextCursor": null })).await;
 }
 
 #[tokio::test]
@@ -514,10 +666,11 @@ async fn historical_task_should_match_project_through_a_symbolic_link() {
     let cwd = real_root.to_string_lossy().to_string();
     let scenario = tokio::spawn(async move {
         let request = read_frame(&mut read).await;
-        respond(
+        respond_task_snapshot(
+            &mut read,
             &mut write,
             &request,
-            json!({ "thread": {
+            json!({
                 "createdAt": 1_754_956_800,
                 "cwd": cwd,
                 "id": "task-1",
@@ -526,7 +679,7 @@ async fn historical_task_should_match_project_through_a_symbolic_link() {
                 "section": null,
                 "turns": [],
                 "updatedAt": 1_754_956_801
-            } }),
+            }),
         )
         .await;
     });
@@ -640,10 +793,11 @@ async fn task_snapshot_should_merge_live_usage_plan_status_and_pending_requests(
         let (read, mut write) = tokio::io::split(server);
         let mut read = BufReader::new(read);
         let request = read_frame(&mut read).await;
-        respond(
+        respond_task_snapshot(
+            &mut read,
             &mut write,
             &request,
-            json!({ "thread": {
+            json!({
                 "createdAt": 1_754_956_800,
                 "cwd": "/workspace",
                 "id": "task-1",
@@ -653,7 +807,7 @@ async fn task_snapshot_should_merge_live_usage_plan_status_and_pending_requests(
                 "status": { "type": "active" },
                 "turns": [],
                 "updatedAt": 1_754_956_802
-            } }),
+            }),
         )
         .await;
     };
@@ -680,10 +834,11 @@ async fn task_snapshot_should_merge_subagent_review_worker_history() {
     let mut read = BufReader::new(read);
     let scenario = tokio::spawn(async move {
         let parent_read = read_frame(&mut read).await;
-        respond(
+        respond_task_snapshot(
+            &mut read,
             &mut write,
             &parent_read,
-            json!({ "thread": {
+            json!({
                 "createdAt": 1_754_956_800,
                 "cwd": "/workspace",
                 "id": "task-1",
@@ -704,7 +859,7 @@ async fn task_snapshot_should_merge_subagent_review_worker_history() {
                     "status": "completed"
                 }],
                 "updatedAt": 1_754_956_801
-            } }),
+            }),
         )
         .await;
         let workers = read_frame(&mut read).await;
@@ -717,12 +872,13 @@ async fn task_snapshot_should_merge_subagent_review_worker_history() {
         )
         .await;
         let worker_read = read_frame(&mut read).await;
+        assert_eq!(worker_read["method"], "thread/turns/list");
+        assert_eq!(worker_read["params"]["limit"], 1);
+        assert_eq!(worker_read["params"]["itemsView"], "full");
         respond(
             &mut write,
             &worker_read,
-            json!({ "thread": {
-                "id": "review-worker-1",
-                "turns": [{
+            json!({ "data": [{
                     "completedAt": null,
                     "error": null,
                     "id": "review-worker-turn",
@@ -744,8 +900,7 @@ async fn task_snapshot_should_merge_subagent_review_worker_history() {
                     }],
                     "startedAt": 1_754_956_801,
                     "status": "inProgress"
-                }]
-            } }),
+                }], "nextCursor": null }),
         )
         .await;
     });
@@ -783,10 +938,11 @@ async fn historical_local_image_should_return_readable_attachment_metadata() {
     let path = image_path.to_string_lossy().to_string();
     let scenario = tokio::spawn(async move {
         let request = read_frame(&mut read).await;
-        respond(
+        respond_task_snapshot(
+            &mut read,
             &mut write,
             &request,
-            json!({ "thread": {
+            json!({
                 "createdAt": 1_754_956_800,
                 "cwd": "/workspace",
                 "id": "task-1",
@@ -809,7 +965,7 @@ async fn historical_local_image_should_return_readable_attachment_metadata() {
                     "status": "completed"
                 }],
                 "updatedAt": 1_754_956_802
-            } }),
+            }),
         )
         .await;
         let terminals = read_frame(&mut read).await;
@@ -931,7 +1087,7 @@ async fn historical_inline_generated_and_text_attachments_should_be_stable_and_r
     let scenario = tokio::spawn(async move {
         for _ in 0..2 {
             let request = read_frame(&mut read).await;
-            respond(&mut write, &request, json!({ "thread": thread })).await;
+            respond_task_snapshot(&mut read, &mut write, &request, thread.clone()).await;
         }
     });
 

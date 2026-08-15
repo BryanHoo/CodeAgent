@@ -1,4 +1,9 @@
-import type { AgentEvent, AgentTaskSnapshotResponse, PendingRequest } from "@code-agent/protocol";
+import type {
+  AgentEvent,
+  AgentTaskSnapshotResponse,
+  AgentTurnPage,
+  PendingRequest,
+} from "@code-agent/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -104,6 +109,42 @@ function createPendingRequest<Status extends PendingRequest["status"] = "pending
 }
 
 describe("task store", () => {
+  it("prepends older turn pages without overwriting live turns", () => {
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({ turnsNextCursor: "older-page" }),
+    );
+    const page: AgentTurnPage = {
+      data: [
+        {
+          completedAt: timestamp,
+          error: null,
+          id: "turn-old",
+          items: [{ id: "message-old", role: "assistant", text: "更早回复", type: "message" }],
+          startedAt: timestamp,
+          status: "completed",
+        },
+        {
+          completedAt: null,
+          error: null,
+          id: "turn-running",
+          items: [{ id: "message-running", role: "assistant", text: "过期内容", type: "message" }],
+          startedAt: timestamp,
+          status: "running",
+        },
+      ],
+      nextCursor: null,
+    };
+
+    store.getState().prependTurns("older-page", page);
+
+    const state = store.getState();
+    expect(state.turnIds).toEqual(["turn-old", "turn-completed", "turn-running"]);
+    expect(state.getItem("message-running")).toMatchObject({ text: "开始" });
+    expect(state.getItem("message-old")).toMatchObject({ text: "更早回复" });
+    expect(state.snapshotMetadata?.turnsNextCursor).toBeNull();
+  });
+
   it("applies streamed plan, reasoning sections, tool progress, file changes, and turn diff", () => {
     const store = createTaskStore(
       { projectId: "project-1", taskId: "task-1" },

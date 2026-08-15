@@ -465,16 +465,10 @@ test("bounds a collapsed 10,000 operation Turn", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
   const conversation = page.getByRole("log", { name: "会话内容" });
   await expect(conversation.getByText("Large Turn completed.", { exact: true })).toBeVisible();
-  const firstRecentIndex = budget.items - budget.recentOperations;
-  await expect(
-    conversation.getByText(`large-operation-${String(firstRecentIndex - 1)}`, { exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    conversation.getByText(`large-operation-${String(firstRecentIndex)}`, { exact: true }),
-  ).toBeVisible();
+  await expect(conversation.getByText("large-operation-0", { exact: true })).toHaveCount(0);
   await expect(
     conversation.getByText(`large-operation-${String(budget.items - 1)}`, { exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   const completedOperations = budget.items - budget.failedOperations;
   await expect(page.getByRole("button", { name: "展开执行过程" })).toContainText(
     `已完成 ${completedOperations.toLocaleString("zh-CN")} 项操作 · ${String(budget.failedOperations)} 项失败 · ${String(budget.files)} 个文件`,

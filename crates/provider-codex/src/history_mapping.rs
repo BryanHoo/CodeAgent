@@ -47,15 +47,20 @@ pub(crate) async fn map_history_turns(
             .ok_or_else(|| CodeAgentError::internal("review worker thread id is invalid"))?;
         let response = client
             .request(
-                "thread/read",
-                Some(json!({ "includeTurns": true, "threadId": worker_id })),
+                "thread/turns/list",
+                Some(json!({
+                    "itemsView": "full",
+                    "limit": 1,
+                    "sortDirection": "desc",
+                    "threadId": worker_id
+                })),
             )
             .await
             .map_err(|error| rpc_error_to_code_agent_error(&error))?;
-        let turns = response["thread"]["turns"]
+        let turns = response["data"]
             .as_array()
             .ok_or_else(|| CodeAgentError::internal("review worker turns are invalid"))?;
-        worker_turns.push(turns.last().cloned());
+        worker_turns.push(turns.first().cloned());
     }
 
     let mut mapped = Vec::with_capacity(parent_turns.len());

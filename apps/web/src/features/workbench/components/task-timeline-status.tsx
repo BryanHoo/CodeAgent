@@ -219,7 +219,12 @@ export function TurnProcessingTime({
 
   const content = (
     <>
-      <span>{i18n.t("timeline.processing", { ns: "conversation" })}&nbsp;</span>
+      <span>
+        {i18n.t(completedAt === null ? "timeline.processing" : "timeline.completed", {
+          ns: "conversation",
+        })}
+        &nbsp;
+      </span>
       <time dateTime={duration.dateTime}>{duration.label}</time>
       {summary === undefined ? null : <span className="min-w-0 truncate">&nbsp;· {summary}</span>}
     </>

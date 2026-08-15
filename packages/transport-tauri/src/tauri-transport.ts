@@ -68,6 +68,7 @@ const OPERATION_COMMANDS: Readonly<Record<string, string>> = {
   "terminals.list": "terminals_list",
   "terminals.terminate": "terminal_terminate",
   "turns.interrupt": "turn_interrupt",
+  "turns.list": "turn_list",
   "turns.start": "turn_start",
   "turns.steer": "turn_steer",
   "task_settings.get": "task_settings_get",

@@ -107,6 +107,12 @@ export const TaskPageQuerySchema = {
   type: "object",
 } as const;
 
+export const TaskTurnPageQuerySchema = {
+  additionalProperties: false,
+  properties: { cursor: { minLength: 1, type: "string" } },
+  type: "object",
+} as const;
+
 export const SourceFileQuerySchema = {
   additionalProperties: false,
   properties: { path: { minLength: 1, type: "string" } },

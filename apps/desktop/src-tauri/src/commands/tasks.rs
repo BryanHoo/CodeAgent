@@ -79,6 +79,25 @@ pub async fn task_read(
 }
 
 #[tauri::command]
+pub async fn turn_list(
+    request_id: String,
+    project_id: String,
+    task_id: String,
+    cursor: Option<String>,
+    runtime: State<'_, Arc<CodeAgentRuntime>>,
+) -> Result<Value, CommandError> {
+    runtime
+        .list_agent_task_turns(
+            &request_id,
+            &project(&project_id)?,
+            &task_id,
+            cursor.as_deref(),
+        )
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
 pub async fn task_pin(
     request_id: String,
     idempotency_key: String,

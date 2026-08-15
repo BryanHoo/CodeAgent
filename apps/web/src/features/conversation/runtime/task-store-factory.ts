@@ -1,6 +1,7 @@
 import { createStore } from "zustand/vanilla";
 
 import {
+  createTaskItemStore,
   normalizeSnapshot,
   updateCommandOutputBudget,
   type TaskItemStore,
@@ -127,6 +128,76 @@ export function createTaskStore(
           connectionState: "connecting",
           error: null,
           estimatedRetainedBytes: retainedBytesTracker.replace(normalizedData),
+        };
+      });
+    },
+    prependTurns(cursor, page) {
+      if (page.nextCursor === cursor) {
+        throw new Error("Task turn page returned a repeated cursor");
+      }
+      const changedItemStores = new Set<TaskItemStore>();
+      set((state) => {
+        if (state.snapshotMetadata?.turnsNextCursor !== cursor) {
+          return state;
+        }
+        const turnsById = { ...state.turnsById };
+        const itemIdsByTurnId = { ...state.itemIdsByTurnId };
+        const itemTurnIdsById = { ...state.itemTurnIdsById };
+        const itemStoresById = new Map(state.itemStoresById);
+        const prependedTurnIds: string[] = [];
+        const touchedItemIds: string[] = [];
+
+        for (const turn of page.data) {
+          // Cursor 页可能与实时边界重叠；已存在的 Turn 保留当前权威状态。
+          if (turnsById[turn.id] !== undefined) {
+            continue;
+          }
+          const { items, ...normalizedTurn } = turn;
+          const itemIds = items.map((item) => item.id);
+          for (const item of items) {
+            const existingTurnId = itemTurnIdsById[item.id];
+            if (existingTurnId !== undefined) {
+              throw new Error(`Agent item ${item.id} is shared by multiple turns`);
+            }
+            const itemStore = createTaskItemStore(item);
+            itemTurnIdsById[item.id] = turn.id;
+            itemStoresById.set(item.id, itemStore);
+            changedItemStores.add(itemStore);
+            touchedItemIds.push(item.id);
+          }
+          prependedTurnIds.push(turn.id);
+          turnsById[turn.id] = normalizedTurn;
+          itemIdsByTurnId[turn.id] = itemIds;
+        }
+
+        const boundedCommandOutputs = updateCommandOutputBudget({
+          previousBudget: {
+            ...state,
+            commandOutputAccessByItemId: new Map(state.commandOutputAccessByItemId),
+            commandOutputBytesByItemId: new Map(state.commandOutputBytesByItemId),
+          },
+          changedItemStores,
+          sourceItemStoresById: itemStoresById,
+          touchedItemIds,
+        });
+        const nextState = {
+          ...state,
+          ...boundedCommandOutputs,
+          itemIdsByTurnId,
+          itemStoresById,
+          itemStructureRevision:
+            state.itemStructureRevision + (prependedTurnIds.length === 0 ? 0 : 1),
+          itemTurnIdsById,
+          snapshotMetadata: {
+            ...state.snapshotMetadata,
+            turnsNextCursor: page.nextCursor,
+          },
+          turnIds: [...prependedTurnIds, ...state.turnIds],
+          turnsById,
+        };
+        return {
+          ...nextState,
+          estimatedRetainedBytes: retainedBytesTracker.update(state, nextState, changedItemStores),
         };
       });
     },

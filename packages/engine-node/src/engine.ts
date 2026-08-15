@@ -138,6 +138,7 @@ export interface CodeAgentEngine extends NativeEventEngine {
   taskMcpServers(requestId: string, projectId: string, taskId: string): JsonResult;
   taskPin(requestId: string, projectId: string, taskId: string, pinned: boolean): JsonResult;
   taskRead(requestId: string, projectId: string, taskId: string): JsonResult;
+  taskTurnList(requestId: string, projectId: string, taskId: string, cursor?: string): JsonResult;
   taskRename(requestId: string, projectId: string, taskId: string, title: string): JsonResult;
   taskSettingsGet(requestId: string, projectId: string, taskId: string): JsonResult;
   taskSettingsUpdate(

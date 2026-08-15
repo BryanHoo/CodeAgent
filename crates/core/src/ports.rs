@@ -398,6 +398,16 @@ pub trait ProjectProviderPort: Send + Sync {
         task_id: &str,
         context: &PortRequestContext,
     ) -> Result<Option<Value>, CodeAgentError>;
+    async fn list_task_turns(
+        &self,
+        _task_id: &str,
+        _cursor: Option<&str>,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        Err(CodeAgentError::internal(
+            "provider task turn pagination is unavailable",
+        ))
+    }
     /// 读取 Provider 历史快照授权的附件字节。
     async fn read_task_attachment(
         &self,

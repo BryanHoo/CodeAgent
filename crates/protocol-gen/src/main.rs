@@ -33,6 +33,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "AgentTaskSnapshot",
         "AgentTaskSnapshotResponse",
         "AgentTurn",
+        "AgentTurnPage",
         "EventStreamMessage",
         "PendingRequest",
         "ResolvePendingRequestRequest",

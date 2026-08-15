@@ -232,6 +232,15 @@ impl ProjectProviderPort for CodexProjectProvider {
         self.read_task_impl(task_id).await
     }
 
+    async fn list_task_turns(
+        &self,
+        task_id: &str,
+        cursor: Option<&str>,
+        _context: &PortRequestContext,
+    ) -> Result<Value, CodeAgentError> {
+        self.list_task_turns_impl(task_id, cursor).await
+    }
+
     async fn pin_task(
         &self,
         task_id: &str,

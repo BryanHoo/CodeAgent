@@ -23,6 +23,7 @@ import {
   AgentTaskSettingsResponseSchema,
   AgentTaskSettingsSchema,
   AgentTurnOptionsSchema,
+  AgentTurnPageSchema,
   AddProjectRequestSchema,
   AddProjectResponseSchema,
   ArchiveAgentTaskRequestSchema,
@@ -619,7 +620,7 @@ describe("project protocol", () => {
     ).toBe(false);
   });
 
-  it("validates paginated projects and tasks", () => {
+  it("validates paginated projects, tasks, and turns", () => {
     expect(
       Value.Check(ProjectPageSchema, {
         data: [
@@ -647,6 +648,22 @@ describe("project protocol", () => {
         nextCursor: "next-page",
       }),
     ).toBe(true);
+    expect(
+      Value.Check(AgentTurnPageSchema, {
+        data: [
+          {
+            completedAt: "2026-07-23T00:01:00.000Z",
+            error: null,
+            id: "turn-1",
+            items: [],
+            startedAt: "2026-07-23T00:00:00.000Z",
+            status: "completed",
+          },
+        ],
+        nextCursor: "older-turns",
+      }),
+    ).toBe(true);
+    expect(Value.Check(AgentTurnPageSchema, { data: [] })).toBe(false);
   });
 
   it("describes Git branches with staged and unstaged file changes", () => {
