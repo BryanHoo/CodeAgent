@@ -47,7 +47,7 @@
 - CI 在 Ubuntu 与 Windows 完整门禁之外，必须保留 macOS 轻量 smoke，覆盖 CLI 宿主命令、native loader 和当前平台 addon 构建。
 - 发布必须先使用 `pnpm pack` 生成 tarball，将 `catalog:` 和 `workspace:` 协议转换为 npm 可安装版本；先发布所有 native packages，再通过 npm CLI 发布主包，以完成 Trusted Publisher OIDC 认证。
 - macOS Release 必须通过 Developer ID Application 签名、Tauri notarization/stapling、`codesign`、`spctl` 与最低系统版本检查；Apple 证书和 App Store Connect API 私钥只能来自 GitHub Secrets，失败产物必须保留在 draft Release 且不得公开。
-- Windows Release 必须在 Tauri bundler 内完成 Azure Authenticode 和时间戳签名；发布 artifact 必须通过 Windows 签名 API 复验，不得在 updater 签名后修改 installer。
+- Windows Desktop 当前必须以 Preview / Unsigned 发布，不配置系统代码签名命令或证书门禁；Release 标题和用户文档必须明确未签名状态，但 updater artifact 仍必须生成并验证 `.sig`。
 - 发布 artifact 必须在 macOS 14 Apple Silicon、Ubuntu 22.04 x64 和 Windows 10 x64 clean runner 完成 CLI、安装与启动 smoke；上一正式版本升级和篡改 updater 签名拒绝由受保护的 `release` Environment 审批，全部通过后才能发布 npm 和公开 GitHub Release。
 - 原生运行时依赖不得因包含 `binding.gyp` 且缺少显式安装钩子而触发 npm 隐式 `node-gyp rebuild`；`package:check` 必须拒绝此类依赖。
 - Web 与 Node 发布构建不得生成或打包 `.map` 源码映射，`package:check` 必须拒绝含 `.map` 的发布清单。

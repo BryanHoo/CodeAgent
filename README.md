@@ -22,11 +22,11 @@ CodeAgent runs on your computer. You can use it locally or access it from anothe
 
 CodeAgent releases support these targets:
 
-| System        | Architecture  | Desktop               | CLI         |
-| ------------- | ------------- | --------------------- | ----------- |
-| macOS 14+     | Apple Silicon | `.dmg`                | Node.js 24+ |
-| Windows 10+   | x64           | NSIS `.exe` or `.msi` | Node.js 24+ |
-| Ubuntu 22.04+ | x64 glibc     | `.deb` or `.AppImage` | Node.js 24+ |
+| System        | Architecture  | Desktop                             | CLI         |
+| ------------- | ------------- | ----------------------------------- | ----------- |
+| macOS 14+     | Apple Silicon | `.dmg`                              | Node.js 24+ |
+| Windows 10+   | x64           | Preview / Unsigned `.exe` or `.msi` | Node.js 24+ |
+| Ubuntu 22.04+ | x64 glibc     | `.deb` or `.AppImage`               | Node.js 24+ |
 
 Intel macOS, Windows arm64, Linux arm64, musl Linux, and older systems are not supported release targets. Browser access to a running CLI also requires Chrome/Chromium 116+, Firefox 124+, or Safari 17.4+.
 
@@ -34,7 +34,7 @@ CodeAgent includes the supported Codex CLI binary through `@openai/codex`; a sep
 
 ## Desktop
 
-Download the installer for your system from [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases). Desktop includes its own runtime and does not require Node.js. Release installers are signed, and Desktop verifies signed updates before installing them.
+Download the installer for your system from [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases). Desktop includes its own runtime and does not require Node.js. Windows Desktop is currently released as Preview / Unsigned, has not passed a production code-signing gate, and may trigger a Microsoft Defender SmartScreen warning. Desktop update packages remain cryptographically signed and are verified before installation.
 
 ## CLI Quick Start
 

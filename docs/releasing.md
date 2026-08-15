@@ -41,12 +41,6 @@ GitHub 必须存在 `npm` Environment。工作流使用 OIDC 和 npm provenance�
 | `APPLE_API_ISSUER`                   | App Store Connect API Issuer ID。                      |
 | `APPLE_API_KEY`                      | App Store Connect API Key ID。                         |
 | `APPLE_API_PRIVATE_KEY`              | `AuthKey_*.p8` 文件完整内容。                          |
-| `AZURE_CLIENT_ID`                    | Azure Artifact Signing 应用的 Client ID。              |
-| `AZURE_CLIENT_SECRET`                | Azure 应用凭据，只供 Windows 签名 job 使用。           |
-| `AZURE_TENANT_ID`                    | Azure Directory Tenant ID。                            |
-| `AZURE_ARTIFACT_SIGNING_ENDPOINT`    | Artifact Signing account endpoint。                    |
-| `AZURE_ARTIFACT_SIGNING_ACCOUNT`     | Artifact Signing account name。                        |
-| `AZURE_ARTIFACT_SIGNING_PROFILE`     | Artifact Signing certificate profile。                 |
 
 公钥已提交到 `apps/desktop/src-tauri/tauri.conf.json`。私钥不得提交到仓库、Artifact 或日志；本地 updater 私钥固定使用 `~/.tauri/code-agent-updater.key`，必须另行存入受控密码库并保留离线备份。丢失私钥后，已安装版本将无法验证后续更新。
 
@@ -60,9 +54,9 @@ openssl base64 -A -in DeveloperIDApplication.p12 -out certificate-base64.txt
 
 `APPLE_SIGNING_IDENTITY` 必须使用 `security find-identity -v -p codesigning` 显示的完整 `Developer ID Application: Organization Name (TEAMID)`。Tauri 配置显式启用 Hardened Runtime、要求 `minimumSystemVersion: "14.0"`，并在 `Entitlements.plist` 中将 `com.apple.security.app-sandbox` 固定为 `false`。macOS 系统 App Sandbox 必须保持关闭，任务与命令隔离由 Codex 自己的 `sandboxPolicy` 独立控制；当前 Desktop 也不启用 JIT、unsigned executable memory、禁用 library validation 或调试 entitlement。
 
-Windows 使用 Azure Artifact Signing。Workflow 固定安装 `Microsoft.ArtifactSigning.Client 1.0.128` 与 `Microsoft.Windows.SDK.BuildTools 10.0.28000.2526`，Tauri 在 bundler 内通过 `apps/desktop/scripts/sign-windows.ps1` 以 `SignTool + Azure.CodeSigning.Dlib.dll` 签名 CodeAgent 主程序和安装器，再生成 updater 签名。签名固定使用 SHA-256 和 Microsoft Artifact Signing RSA 时间戳；构建后 `tools/release/verify-windows-signatures.ps1` 要求主程序、NSIS 和 MSI 的 Authenticode 状态为 `Valid` 且存在时间戳。任何 Azure 配置、.NET 8 runtime 或签名工具缺失都会终止 Windows build。
+Windows Desktop 当前按 Preview / Unsigned 发布。Workflow 直接构建未签名的 NSIS 和 MSI，不读取证书配置，也不执行系统代码签名门禁；GitHub Release 标题必须包含 `Windows Desktop: Preview / Unsigned`。安装时可能出现 Microsoft Defender SmartScreen 警告，这是当前预览状态的已知限制。
 
-Updater 签名只验证更新包来源，不替代 macOS Developer ID signing/notarization 或 Windows Authenticode。公开正式 Release 前必须同时通过系统签名门禁。
+Updater 签名只验证更新包来源，不等同于操作系统代码签名。Windows 安装包虽然未签名，updater artifact 和 `.sig` 仍必须由 `TAURI_SIGNING_PRIVATE_KEY` 生成并通过内置公钥验证；macOS 仍必须通过 Developer ID signing、notarization 和 Gatekeeper 门禁。
 
 本地执行 `pnpm build:desktop` 时，构建脚本优先使用当前环境的 `TAURI_SIGNING_PRIVATE_KEY`；未设置时自动使用 `~/.tauri/code-agent-updater.key`。无密码私钥会显式传递空的 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`，无需在本地 shell 重复配置。GitHub Actions Secret 只在工作流内生效，不会同步到本地环境。
 
@@ -70,7 +64,7 @@ Updater 签名只验证更新包来源，不替代 macOS Developer ID signing/no
 
 1. 同时更新根 `package.json`、`apps/node-cli/package.json` 和三个平台 `package.json` 的版本。
 2. 更新 `CHANGELOG.md`，将 `Unreleased` 内容移入对应版本并填写日期。
-3. 确认 updater、Apple 和 Azure 签名材料已进入 GitHub Secrets，`release` Environment 与 Windows 10 runner 已配置，并运行版本与完整门禁：
+3. 确认 updater 与 Apple 签名材料已进入 GitHub Secrets，`release` Environment 与 Windows 10 runner 已配置，并运行版本与完整门禁：
 
 ```bash
 pnpm check:ci
@@ -94,9 +88,9 @@ git push origin "v${RELEASE_VERSION}"
 `.github/workflows/release.yml` 在三个原生 runner 上并行执行以下步骤：
 
 1. 校验 tag、根版本、CLI、native packages、Cargo workspace 和 Tauri 版本一致。
-2. 通过固定 SHA 的 `tauri-action` 分别构建 DMG、DEB/AppImage 和 MSI/NSIS，使用 `TAURI_SIGNING_PRIVATE_KEY` 生成 updater artifact 和 `.sig`；macOS 额外完成 Developer ID 签名、公证和 stapling，Windows 在 bundler 内完成 Azure Authenticode。
+2. 通过固定 SHA 的 `tauri-action` 分别构建 DMG、DEB/AppImage 和 MSI/NSIS，使用 `TAURI_SIGNING_PRIVATE_KEY` 生成 updater artifact 和 `.sig`；macOS 额外完成 Developer ID 签名、公证和 stapling，Windows 直接生成 Preview / Unsigned 安装包。
 3. 将各平台安装包、updater artifact、签名和合并后的 `latest.json` 上传到同一个 draft GitHub Release。
-4. 在 macOS 14 Apple Silicon、Ubuntu 22.04 x64 和 Windows 10 x64 clean runner 安装 CLI 与 Desktop，执行 CLI doctor、系统签名和有界启动 smoke。
+4. 在 macOS 14 Apple Silicon、Ubuntu 22.04 x64 和 Windows 10 x64 clean runner 安装 CLI 与 Desktop，执行 CLI doctor、macOS 系统签名验证和有界启动 smoke。
 5. 等待 `release` Environment 审批人确认上一正式版本升级和篡改 updater 签名拒绝 smoke。
 6. 先发布三个 native packages，再发布主 CLI 包，并向 draft Release 补充 Desktop 归档与 `SHA256SUMS`。
 7. 执行 `gh release edit "${RELEASE_TAG}" --draft=false` 公开已验收 Release，使 Desktop updater 可以发现新版本。
@@ -129,7 +123,7 @@ GitHub 的 `/releases/latest/` 不返回 draft。自动最低系统 smoke 通过
 - GitHub Release 创建失败：不修改制品，重跑 publish Job；工作流会复用已发布 npm 版本。
 - Apple secret 缺失：补齐同名 Repository Actions Secret 后重跑 macOS build Job；不得把值写进 workflow、仓库文件或 Artifact。
 - macOS 签名、公证、stapling 或 Gatekeeper 验证失败：保持 Release 为 draft，检查 Developer ID identity、证书链和 App Store Connect API Key 后重跑；不得上传未验收产物替换签名制品。
-- Azure secret、Authenticode 或时间戳检查失败：保持 Release 为 draft，检查 Artifact Signing account、profile、应用权限和证书状态；不得跳过 Windows 签名脚本。
+- Windows Preview 安装被 SmartScreen 拦截：确认安装包来自当前 GitHub Release 并核对 `SHA256SUMS`；在签名方案正式启用前不得对外宣称已通过系统代码签名门禁。
 - Windows 10 runner 不在线或快照不干净：恢复 runner 后重跑 smoke；不得用 Windows Server 结果手动放行。
 - `release` Environment 验收失败：拒绝审批并保持 draft，修复后使用同 tag 重新构建和验收；不得先发布 npm。
 - GitHub Release promotion 失败：npm 包保持原版本，Release 保持 draft；确认同 tag Release 唯一存在后重跑 publish Job。

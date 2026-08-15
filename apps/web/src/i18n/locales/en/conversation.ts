@@ -111,7 +111,7 @@ export const conversation = {
     readFolderError: "Failed to load folder {{name}}",
     reading: "Loading",
     refreshFolder: "Reload folder {{name}}",
-    refreshGit: "Refresh Git changes",
+    refreshProject: "Refresh project {{name}}",
     refreshProjectFiles: "Reload project files",
     commitChanges: "Commit {{count}} uncommitted changes",
     source: "Sources",

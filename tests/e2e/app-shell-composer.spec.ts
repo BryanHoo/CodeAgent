@@ -1141,6 +1141,45 @@ test("project file tree opens changed, source, image, and system files by shared
   await expect(page.getByRole("dialog", { name: "100%完成 后续工作交接.pptx" })).toHaveCount(0);
 });
 
+test("project root refreshes loaded file tree directories and Git status", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
+  const fileTree = inspector.getByRole("tree", { name: "项目文件" });
+  const docsRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/v1/projects/code-agent/files/tree" &&
+      url.searchParams.get("path") === "docs"
+    );
+  });
+  await fileTree.getByRole("treeitem", { name: "docs" }).click();
+  await docsRequest;
+  await expect(fileTree.getByRole("treeitem", { name: "architecture-design.md" })).toBeVisible();
+
+  const refreshedRoot = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/v1/projects/code-agent/files/tree" && !url.searchParams.has("path");
+  });
+  const refreshedDocs = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/v1/projects/code-agent/files/tree" &&
+      url.searchParams.get("path") === "docs"
+    );
+  });
+  const refreshedGit = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === "/v1/projects/code-agent/git/status",
+  );
+  const rootTreeItem = fileTree.getByRole("treeitem", { name: "CodeAgent" }).first();
+  await rootTreeItem.hover();
+  const refreshButton = rootTreeItem.getByRole("button", { name: "刷新项目 CodeAgent" });
+  await expect(refreshButton).toHaveCSS("pointer-events", "auto");
+  await refreshButton.click();
+
+  await Promise.all([refreshedRoot, refreshedDocs, refreshedGit]);
+});
+
 test("project file tree context menu and ellipsis share target actions", async ({ page }) => {
   let turnRequest: Record<string, unknown> | undefined;
   await page.route("**/v1/projects/code-agent/tasks/task-1/turns", async (route) => {

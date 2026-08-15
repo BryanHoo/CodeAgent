@@ -37,10 +37,7 @@ try {
     throw "Expected one installed CodeAgent executable; found $($productExecutables.Count)"
   }
 
-  # 复用构建期门禁，同时验证最低系统实际安装后的主程序。
-  & (Join-Path $PSScriptRoot "verify-windows-signatures.ps1") `
-    -BundleRoot $bundleRoot `
-    -ProductExecutable $productExecutables[0].FullName
+  # 未签名 Preview 版本仍必须通过最低系统的安装与有界启动验证。
   $desktopProcess = Start-Process -FilePath $productExecutables[0].FullName -PassThru
   Start-Sleep -Seconds 15
   if ($desktopProcess.HasExited) {

@@ -4,6 +4,7 @@ import { useRef, type CSSProperties } from "react";
 
 import { Button } from "../../../shared/components/core/button.js";
 import { showErrorToast } from "../../../shared/errors/error-toast.js";
+import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import { RuntimeUnavailable } from "../../../shared/components/core/runtime-unavailable.js";
 import {
   Tooltip,
@@ -38,6 +39,7 @@ export function WorkbenchShellLayout({
   temporary: boolean;
 }>) {
   const composerRef = useRef<WorkbenchComposerHandle>(null);
+  const projectRefreshLockRef = useRef(createAsyncActionLock());
   const {
     appInfoQuery,
     backgroundTerminals,
@@ -427,8 +429,13 @@ export function WorkbenchShellLayout({
           onReferenceProjectPath={(entry) => {
             composerRef.current?.referenceProjectPath(entry);
           }}
-          onRefreshGitStatus={() => {
-            void refreshProjectGitStatus(projectId);
+          onRefreshProject={() => {
+            void projectRefreshLockRef.current.run(async () => {
+              await Promise.all([
+                refreshProjectGitStatus(projectId),
+                ...fileTreeQueries.map((query) => query.refetch()),
+              ]);
+            });
           }}
           onCommitChanges={() => {
             commitChangesLauncherRef.current?.open();

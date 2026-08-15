@@ -111,7 +111,7 @@ export const conversation = {
     readFolderError: "无法读取文件夹 {{name}}",
     reading: "正在读取",
     refreshFolder: "重新读取文件夹 {{name}}",
-    refreshGit: "手动刷新 Git 变更",
+    refreshProject: "刷新项目 {{name}}",
     refreshProjectFiles: "重新读取项目文件",
     commitChanges: "提交 {{count}} 个未提交变更",
     source: "来源",

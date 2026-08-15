@@ -329,7 +329,7 @@ Tauri 实现：
 - Phase 6：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-6-desktop-security.md`。
 - Phase 7：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-7-node-engine.md`。
 - Phase 8：已完成，执行记录见 `.superwork/plans/2026-08-13-tauri-phase-8-release-workspace.md`。
-- Phase 9：进行中；签名 Updater、macOS Developer ID、Windows Authenticode 和三平台最低系统 smoke 发布门禁已实现，正式 tag 验收待执行。
+- Phase 9：进行中；签名 Updater、macOS Developer ID 和三平台最低系统 smoke 发布门禁已实现，Windows Desktop 暂以 Preview / Unsigned 发布，正式 tag 验收待执行。
 
 Phase 4–8 的持续仓库契约统一由 `pnpm test` 收集；Rust、Desktop artifact 和发布结构检查只在对应边界改动时额外触发。
 
@@ -530,19 +530,19 @@ Phase 4–8 的持续仓库契约统一由 `pnpm test` 收集；Rust、Desktop a
 实施项：
 
 - macOS 14+ Apple Silicon 配置 Developer ID、Hardened Runtime、最小权限 entitlements、签名、notarization 和 Gatekeeper 门禁。
-- Windows 配置 OV/EV code signing 和时间戳服务。
+- Windows 暂不配置代码签名，直接发布明确标记为 Preview / Unsigned 的安装包。
 - Linux 在最低支持系统上构建，验证 WebKitGTK 4.1、glibc 和安装依赖。
 - 配置 `tauri-plugin-updater`、HTTPS endpoint、public key 和 updater capability。
-- CI secret 只保存 updater private key、Apple/Windows 签名材料，不写入仓库或构建日志。
+- CI secret 只保存 updater private key 和 Apple 签名材料，不写入仓库或构建日志。
 - 先发布 native npm packages，再发布主 CLI；Desktop artifacts 上传同一个 GitHub Release。
-- Release 创建为 draft，全部平台安装、签名和 smoke 通过后再公开。
+- Release 创建为 draft，全部平台安装与 smoke、macOS 系统签名和 updater 签名通过后再公开。
 
 验收项：
 
-- macOS Gatekeeper、Windows SmartScreen/签名检查和 Linux clean VM 安装通过。
+- macOS Gatekeeper、Windows 10 未签名安装与启动 smoke 和 Linux clean VM 安装通过。
 - Updater 验证合法签名、拒绝篡改 artifact，并能从前一正式版本升级。
 - npm、Desktop 和 updater metadata 版本一致。
-- GitHub Release 包含 checksum、签名、目标架构和最低系统说明。
+- GitHub Release 包含 checksum、updater 签名、目标架构、最低系统说明和 Windows Preview / Unsigned 标识。
 
 ## 10. Vite 双目标构建
 
@@ -605,7 +605,7 @@ CODE_AGENT_TARGET=desktop
 | Tauri frontend     | Vitest `mockIPC`                  | Command mapping、errors、cleanup、AbortSignal       |
 | Web E2E            | Playwright                        | 浏览器和 LAN 用户流程                               |
 | Desktop E2E        | WebdriverIO `@wdio/tauri-service` | 真正 IPC、窗口、启动、文件选择、更新 smoke          |
-| Packaging          | clean VM                          | 安装、启动、签名、Codex binary、更新                |
+| Packaging          | clean VM                          | 安装、启动、macOS 签名、Windows 未签名提示、更新    |
 
 测试分配原则：
 
@@ -658,7 +658,7 @@ pnpm test:e2e
 - [ ] Production 禁用 DevTools，CSP 不包含无必要的 `unsafe-eval`。
 - [x] updater 只使用 HTTPS、签名 artifact 和受保护 private key。
 - [x] macOS 仅发布 14+ Apple Silicon artifact，并在 release runner 验证 Developer ID、notarization ticket 和 Gatekeeper。
-- [x] Windows 发布门禁通过 Azure Artifact Signing 生成带时间戳 Authenticode，并要求 Windows 10 clean runner 验证安装与启动。
+- [x] Windows Desktop 以 Preview / Unsigned 构建，并要求 Windows 10 clean runner 验证安装与启动。
 - [ ] npm、Cargo 和 GitHub Actions 同时执行依赖审计与 lockfile 校验。
 
 ## 15. 可观测性与故障诊断
@@ -682,7 +682,7 @@ pnpm test:e2e
 | N-API panic 或 Tokio Runtime 管理错误    | 所有边界返回 `Result`，catch unwind 只作最后保护，不使用全局 `panic=abort`          |
 | Tauri/Node 功能短期漂移                  | 以 Transport contract 和同一个 Rust Runtime 收敛；每个切片迁完即删除旧实现          |
 | 安装包被 Codex binary 主导               | 分项记录包体积；不重复打包 Node Runtime；按目标架构单独发布                         |
-| 发布矩阵显著增加 CI 时间                 | PR 使用分层门禁，完整签名和 installer 测试只在 release/daily workflow 执行          |
+| 发布矩阵显著增加 CI 时间                 | PR 使用分层门禁，macOS 完整签名和 installer 测试只在 release/daily workflow 执行    |
 
 ## 17. 完成定义
 
@@ -697,7 +697,7 @@ pnpm test:e2e
 - [ ] 附件和图片全链路不使用 base64，不暴露宿主绝对路径。
 - [ ] 当前 SQLite 数据升级、备份、故障恢复和完整性检查通过。
 - [ ] macOS、Windows、Linux 安装、Codex 启动、Git/文件操作和更新通过 clean VM smoke。
-- [ ] 性能预算、bundle budget、native package 和签名门禁进入 CI。
+- [ ] 性能预算、bundle budget、native package、macOS 签名与 Windows Preview 门禁进入 CI。
 - [ ] npm 包和所有 Desktop artifacts 可由同一 tag 重现。
 - [ ] `docs/releasing.md`、README 安装方式和故障诊断已更新。
 
