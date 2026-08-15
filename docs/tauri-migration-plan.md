@@ -19,9 +19,9 @@
 
 ### 2.1 本轮范围
 
-- macOS `aarch64`、`x86_64`。
-- Windows `x86_64`，在 Codex 和 CI Runner 验证稳定后增加 `aarch64`。
-- Linux `x86_64-unknown-linux-gnu`，在目标发行版验证后增加 `aarch64`。
+- macOS 14+ `aarch64-apple-darwin`。
+- Windows 10+ `x86_64-pc-windows-msvc`。
+- Ubuntu 22.04+ `x86_64-unknown-linux-gnu`。
 - 当前项目、任务、消息、审批、设置、Provider、Git、文件、附件和更新功能。
 - 当前 SQLite 用户数据的原位迁移。
 - Node CLI、浏览器 Web 和可信 LAN 模式继续维护。
@@ -329,7 +329,7 @@ Tauri 实现：
 - Phase 6：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-6-desktop-security.md`。
 - Phase 7：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-7-node-engine.md`。
 - Phase 8：已完成，执行记录见 `.superwork/plans/2026-08-13-tauri-phase-8-release-workspace.md`。
-- Phase 9：进行中；签名 Updater 与 macOS 14+ Apple Silicon Developer ID 签名、公证门禁已完成，Windows 签名和 Linux clean VM 验证待完成。
+- Phase 9：进行中；签名 Updater、macOS Developer ID、Windows Authenticode 和三平台最低系统 smoke 发布门禁已实现，正式 tag 验收待执行。
 
 Phase 4–8 的持续仓库契约统一由 `pnpm test` 收集；Rust、Desktop artifact 和发布结构检查只在对应边界改动时额外触发。
 
@@ -641,7 +641,7 @@ pnpm test:e2e
 | ----------- | -------------------------- | ------------------------------------- |
 | macOS arm64 | `aarch64-apple-darwin`     | `.app`、`.dmg`、updater artifact      |
 | Windows x64 | `x86_64-pc-windows-msvc`   | `.msi`、NSIS `.exe`、updater artifact |
-| Linux x64   | `x86_64-unknown-linux-gnu` | `.deb`、`.rpm`、`.AppImage`           |
+| Linux x64   | `x86_64-unknown-linux-gnu` | `.deb`、`.AppImage`                   |
 
 发布时分别构建 `code-agent-desktop` 和 `code-agent-node-binding`，不要使用 `cargo build --workspace --all-features` 生成发布产物，避免宿主 feature 合并进入错误 artifact。
 
@@ -658,6 +658,7 @@ pnpm test:e2e
 - [ ] Production 禁用 DevTools，CSP 不包含无必要的 `unsafe-eval`。
 - [x] updater 只使用 HTTPS、签名 artifact 和受保护 private key。
 - [x] macOS 仅发布 14+ Apple Silicon artifact，并在 release runner 验证 Developer ID、notarization ticket 和 Gatekeeper。
+- [x] Windows 发布门禁通过 Azure Artifact Signing 生成带时间戳 Authenticode，并要求 Windows 10 clean runner 验证安装与启动。
 - [ ] npm、Cargo 和 GitHub Actions 同时执行依赖审计与 lockfile 校验。
 
 ## 15. 可观测性与故障诊断

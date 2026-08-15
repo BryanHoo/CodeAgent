@@ -365,3 +365,29 @@ async fn runtime_shutdown_should_be_idempotent_and_reject_new_operations() {
             .is_err()
     );
 }
+
+#[tokio::test]
+async fn event_subscription_should_spawn_from_host_thread_without_current_runtime() {
+    let runtime = Arc::new(build_runtime());
+    let thread_runtime = Arc::clone(&runtime);
+    let task_runtime = tokio::runtime::Handle::current();
+    let project_id = ProjectId::try_from("project-1").expect("project id");
+
+    let result = std::thread::spawn(move || {
+        thread_runtime.start_project_event_subscription(
+            &task_runtime,
+            "request-1".to_owned(),
+            project_id,
+            String::new(),
+            0,
+            |_| std::future::ready(true),
+        )
+    })
+    .join();
+
+    assert!(
+        result.is_ok(),
+        "subscription panicked outside its Tokio runtime"
+    );
+    runtime.shutdown().await.expect("shutdown");
+}

@@ -12,6 +12,7 @@ use crate::{
 pub(crate) struct NodeEngineInner {
     gate: ShutdownGate,
     host: NodeRuntimeHost,
+    runtime_handle: tokio::runtime::Handle,
 }
 
 #[napi]
@@ -27,16 +28,22 @@ impl NodeEngine {
     pub(crate) fn runtime_arc(&self) -> Arc<code_agent_runtime::CodeAgentRuntime> {
         self.inner.host.runtime.clone()
     }
+
+    pub(crate) fn runtime_handle(&self) -> &tokio::runtime::Handle {
+        &self.inner.runtime_handle
+    }
 }
 
 #[napi]
 impl NodeEngine {
     #[napi(factory)]
     pub async fn open(options: NodeEngineOptions) -> napi::Result<Self> {
+        let runtime_handle = tokio::runtime::Handle::current();
         Ok(Self {
             inner: Arc::new(NodeEngineInner {
                 gate: ShutdownGate::default(),
                 host: open_runtime(options).await?,
+                runtime_handle,
             }),
         })
     }

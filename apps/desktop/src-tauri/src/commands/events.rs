@@ -35,6 +35,7 @@ pub async fn event_subscribe(
     let project_id = project(&project_id)?;
     let runtime = runtime.inner().clone();
     let subscription_id = runtime.start_project_event_subscription(
+        &tokio::runtime::Handle::current(),
         request_id,
         project_id,
         session_id,

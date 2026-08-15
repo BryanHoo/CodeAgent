@@ -127,6 +127,7 @@ impl NodeEngine {
         let callback = Arc::new(callback);
         let id = runtime
             .start_project_event_subscription(
+                self.runtime_handle(),
                 request_id,
                 project,
                 session_id,
