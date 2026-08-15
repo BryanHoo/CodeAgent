@@ -56,7 +56,7 @@ jobs:
 
   browser-performance:
     name: Browser Performance
-    runs-on: macos-15
+    runs-on: macos-14
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -70,7 +70,7 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      # 绝对浏览器预算固定在项目原生支持的 Apple Silicon runner，避免跨架构差异稀释回归信号。
+      # 绝对浏览器预算固定在已校准的 macOS 14 runner，避免硬件代际差异稀释回归信号。
       - name: Install Chromium
         run: pnpm exec playwright install chromium
       - name: Run browser performance gates

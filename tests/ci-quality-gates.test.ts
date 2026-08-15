@@ -67,7 +67,7 @@ describe("CI 质量门禁", () => {
         run: pnpm run test:coverage`);
     expect(workflow.match(/run: pnpm run test:coverage/g)).toHaveLength(1);
     expect(workflow).toContain("name: Browser Performance");
-    expect(workflow).toContain("runs-on: macos-15");
+    expect(workflow).toContain("runs-on: macos-14");
     expect(workflow).toContain("run: pnpm run test:performance:browser");
   });
 
