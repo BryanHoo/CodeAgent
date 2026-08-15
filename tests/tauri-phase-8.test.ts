@@ -87,6 +87,14 @@ describe("Tauri Phase 8 repository contract", () => {
     expect(manifest.scripts?.["tauri:phase8:check"]).toBeUndefined();
   });
 
+  it("validates the packed native addon in a disposable child process", () => {
+    const verifier = read("tools/verify-package.mjs");
+
+    expect(verifier).toContain("function validateNativeAddon(path)");
+    expect(verifier).toContain("validateNativeAddon(join(installedNative");
+    expect(verifier).not.toContain("createRequire");
+  });
+
   it("builds the three verified native and desktop release targets", () => {
     const workflow = read(".github/workflows/release.yml");
 

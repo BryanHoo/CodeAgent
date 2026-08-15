@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -37,6 +36,22 @@ function pack(workspaceRoot, destination) {
   const manifest = Array.isArray(value) ? value[0] : value;
   if (!manifest?.filename) throw new Error(`Pack output is invalid for ${workspaceRoot}`);
   return manifest;
+}
+
+function validateNativeAddon(path) {
+  // 在短生命周期子进程加载 DLL，确保 Windows 清理临时目录前已释放文件句柄。
+  run(
+    process.execPath,
+    [
+      "-e",
+      `const binding = require(process.argv[1]);
+if (typeof binding.addonVersion !== "function" || typeof binding.NodeEngine?.open !== "function") {
+  throw new Error("Packed native addon exports are invalid");
+}`,
+      path,
+    ],
+    root,
+  );
 }
 
 const packRoot = mkdtempSync(join(tmpdir(), "code-agent-pack-check-"));
@@ -113,15 +128,7 @@ try {
     process.stderr.write(cliResult.stderr);
     throw new Error("Packed CLI is not executable");
   }
-  const binding = createRequire(import.meta.url)(
-    join(installedNative, "code-agent-node-binding.node"),
-  );
-  if (
-    typeof binding.addonVersion !== "function" ||
-    typeof binding.NodeEngine?.open !== "function"
-  ) {
-    throw new Error("Packed native addon exports are invalid");
-  }
+  validateNativeAddon(join(installedNative, "code-agent-node-binding.node"));
 
   process.stdout.write(`Packages verified: ${cliManifest.filename}, ${nativeManifest.filename}\n`);
 } finally {
