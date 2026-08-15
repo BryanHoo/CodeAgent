@@ -1,6 +1,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Runtime, plugin::PermissionState};
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_opener::OpenerExt;
 
 #[cfg(target_os = "macos")]
 use tauri::{Emitter, Manager};
@@ -17,6 +18,20 @@ const MAX_NOTIFICATION_TARGET_CHARS: usize = 256;
 #[derive(Debug, Serialize)]
 pub struct HostNotificationResponse {
     status: &'static str,
+}
+
+#[tauri::command]
+pub fn host_external_url_open<R: Runtime>(
+    request_id: String,
+    url: String,
+    app: AppHandle<R>,
+) -> Result<(), CommandError> {
+    validate_request_id(&request_id)?;
+    // 在 Rust 边界复验协议，避免向 Renderer 暴露通用 shell 或 opener capability。
+    let url = validate_external_url(&url)?;
+    app.opener()
+        .open_url(url.as_str(), None::<&str>)
+        .map_err(|error| CommandError::internal(error.to_string()))
 }
 
 #[cfg(any(target_os = "macos", test))]
@@ -78,6 +93,15 @@ fn validate_request_id(request_id: &str) -> Result<(), CommandError> {
         return Err(CommandError::invalid_input("requestId 不能为空"));
     }
     Ok(())
+}
+
+fn validate_external_url(url: &str) -> Result<tauri::Url, CommandError> {
+    let parsed = tauri::Url::parse(url)
+        .map_err(|_| CommandError::invalid_input("外部链接必须是有效 URL"))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(CommandError::invalid_input("外部链接仅支持 http 或 https"));
+    }
+    Ok(parsed)
 }
 
 fn validate_notification(
@@ -150,7 +174,8 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        HostNotificationAction, notification_id, validate_notification, validate_request_id,
+        HostNotificationAction, notification_id, validate_external_url, validate_notification,
+        validate_request_id,
     };
 
     #[test]
@@ -184,5 +209,13 @@ mod tests {
         );
         assert_eq!(notification_id("task-1"), notification_id("task-1"));
         assert_ne!(notification_id("task-1"), notification_id("task-2"));
+    }
+
+    #[test]
+    fn accepts_only_external_web_urls() {
+        assert!(validate_external_url("https://example.com/docs").is_ok());
+        assert!(validate_external_url("http://example.com").is_ok());
+        assert!(validate_external_url("javascript:alert(1)").is_err());
+        assert!(validate_external_url("/relative/path").is_err());
     }
 }

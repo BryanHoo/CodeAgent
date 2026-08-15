@@ -1,7 +1,9 @@
 export { TauriCodeAgentTransport } from "./tauri-transport.js";
 
 import type { CodeAgentClient } from "@code-agent/client";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { v4 as uuid } from "uuid";
 
 import { TauriCodeAgentTransport } from "./tauri-transport.js";
 
@@ -20,8 +22,20 @@ export type HostNotificationApi = Readonly<{
   ) => Promise<void>;
 }>;
 
+export type HostExternalUrlApi = Readonly<{
+  open: (url: string) => Promise<void>;
+}>;
+
 export function createHostTransport(): TauriCodeAgentTransport {
   return new TauriCodeAgentTransport();
+}
+
+export function createHostExternalUrlApi(): HostExternalUrlApi {
+  return {
+    open(url) {
+      return invoke("host_external_url_open", { requestId: uuid(), url });
+    },
+  };
 }
 
 export function createHostNotificationApi(client: CodeAgentClient): HostNotificationApi {

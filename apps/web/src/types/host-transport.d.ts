@@ -14,7 +14,12 @@ declare module "@code-agent/host-transport" {
     ) => Promise<void>;
   }>;
 
+  export type HostExternalUrlApi = Readonly<{
+    open: (url: string) => Promise<void>;
+  }>;
+
   export function createHostTransport(): CodeAgentTransport;
+  export function createHostExternalUrlApi(): HostExternalUrlApi | undefined;
   export function createHostNotificationApi(
     client: CodeAgentClient,
   ): HostNotificationApi | undefined;

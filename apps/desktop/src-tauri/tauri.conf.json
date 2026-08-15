@@ -45,8 +45,6 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "entitlements": "./Entitlements.plist",
-      "hardenedRuntime": true,
       "minimumSystemVersion": "14.0"
     },
     "resources": {

@@ -10,6 +10,8 @@ export function createHostTransport(): HttpCodeAgentTransport {
   return new HttpCodeAgentTransport();
 }
 
+export const createHostExternalUrlApi: () => undefined = () => undefined;
+
 export const createHostNotificationApi: (client: CodeAgentClient) => undefined = () => {
   // Web 宿主不提供原生通知能力，Composition Root 直接使用 Browser Notification。
   return undefined;

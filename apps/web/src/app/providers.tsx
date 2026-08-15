@@ -10,13 +10,14 @@ import {
   type AccessContextValue,
 } from "../features/access/access-context.js";
 import { PairingGate } from "../features/access/pairing-gate.js";
-import { codeAgentClient, hostNotificationApi } from "./create-host-client.js";
+import { codeAgentClient, hostExternalUrlApi, hostNotificationApi } from "./create-host-client.js";
 import { createBrowserTaskNotifier } from "../features/notifications/browser-task-notifier.js";
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
 import { TooltipProvider } from "../shared/components/core/tooltip.js";
 import { normalizeError, showErrorToast, useErrorToast } from "../shared/errors/error-toast.js";
+import { HostExternalUrlProvider } from "../shared/host/host-external-url.js";
 import { useTranslation } from "../i18n/i18n.js";
 import { installInactiveSnapshotMemoryLimit } from "./snapshot-memory.js";
 import { router } from "./router.js";
@@ -48,6 +49,15 @@ export function createAppQueryClient(options: AppQueryClientOptions = {}) {
 }
 
 const queryClient = createAppQueryClient();
+const externalUrlApi = hostExternalUrlApi;
+const openHostExternalUrl =
+  externalUrlApi === undefined
+    ? undefined
+    : (url: string) => {
+        void externalUrlApi.open(url).catch((error: unknown) => {
+          showErrorToast(normalizeError(error));
+        });
+      };
 
 export function navigateToTaskFromNotification(projectId: string, taskId: string): void {
   // 交给 Router 完成应用内导航，避免整页刷新丢失瞬时弹窗状态。
@@ -111,13 +121,15 @@ export function AppProviders({ children }: AppProvidersProps) {
   // SPA 生命周期内复用同一个 QueryClient，避免导航时丢失服务端状态缓存。
   return (
     <I18nextProvider i18n={i18n}>
-      <TooltipProvider>
-        <QueryClientProvider client={queryClient}>
-          <AccessProvider client={codeAgentClient} queryClient={queryClient}>
-            <AppProviderContent>{children}</AppProviderContent>
-          </AccessProvider>
-        </QueryClientProvider>
-      </TooltipProvider>
+      <HostExternalUrlProvider open={openHostExternalUrl}>
+        <TooltipProvider>
+          <QueryClientProvider client={queryClient}>
+            <AccessProvider client={codeAgentClient} queryClient={queryClient}>
+              <AppProviderContent>{children}</AppProviderContent>
+            </AccessProvider>
+          </QueryClientProvider>
+        </TooltipProvider>
+      </HostExternalUrlProvider>
     </I18nextProvider>
   );
 }

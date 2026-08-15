@@ -17,25 +17,23 @@ interface UpdaterSigningModule {
 }
 
 describe("Tauri Phase 9 updater contract", () => {
-  it("enables the hardened runtime while explicitly disabling App Sandbox", () => {
+  it("keeps the macOS minimum version without certificate signing configuration", () => {
     const config = readJson("apps/desktop/src-tauri/tauri.conf.json") as {
       bundle?: {
         macOS?: {
           entitlements?: string;
           hardenedRuntime?: boolean;
           minimumSystemVersion?: string;
+          signingIdentity?: string;
         };
       };
     };
-    const entitlements = read("apps/desktop/src-tauri/Entitlements.plist");
 
-    expect(config.bundle?.macOS).toEqual({
-      entitlements: "./Entitlements.plist",
-      hardenedRuntime: true,
-      minimumSystemVersion: "14.0",
-    });
-    expect(entitlements).toMatch(/<key>com\.apple\.security\.app-sandbox<\/key>\s*<false\/>/u);
-    expect(entitlements).not.toContain("<true/>");
+    expect(config.bundle?.macOS).toEqual({ minimumSystemVersion: "14.0" });
+    expect(config.bundle?.macOS?.signingIdentity).toBeUndefined();
+    expect(config.bundle?.macOS?.entitlements).toBeUndefined();
+    expect(config.bundle?.macOS?.hardenedRuntime).toBeUndefined();
+    expect(existsSync(resolve(root, "apps/desktop/src-tauri/Entitlements.plist"))).toBe(false);
   });
 
   it("uses a signed HTTPS GitHub Release updater", () => {
@@ -89,9 +87,15 @@ describe("Tauri Phase 9 updater contract", () => {
     );
   });
 
-  it("signs, notarizes, and verifies Apple Silicon release artifacts", () => {
+  it("publishes all Desktop installers as Preview / Unsigned without system certificates", () => {
+    const config = readJson("apps/desktop/src-tauri/tauri.conf.json") as {
+      bundle?: {
+        macOS?: { signingIdentity?: string };
+        windows?: { signCommand?: string };
+      };
+    };
     const workflow = read(".github/workflows/release.yml");
-    const requiredSecrets = [
+    const forbiddenAppleInputs = [
       "APPLE_CERTIFICATE",
       "APPLE_CERTIFICATE_PASSWORD",
       "APPLE_SIGNING_IDENTITY",
@@ -100,36 +104,19 @@ describe("Tauri Phase 9 updater contract", () => {
       "APPLE_API_PRIVATE_KEY",
     ];
 
-    for (const secret of requiredSecrets) {
-      expect(workflow).toContain(`${secret}: \${{ secrets.${secret} }}`);
+    for (const input of forbiddenAppleInputs) {
+      expect(workflow).not.toContain(input);
     }
-    expect(workflow).toContain('key_path="${RUNNER_TEMP}/app-store-connect-private-key.p8"');
-    expect(workflow).toContain('chmod 600 "${key_path}"');
-    expect(workflow).toContain("APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}");
-    expect(workflow).toContain("codesign --verify --deep --strict --verbose=2");
-    expect(workflow).toContain('codesign -d --entitlements "${signed_entitlements}" --xml');
-    expect(workflow).toContain("com.apple.security.app-sandbox");
-    expect(workflow).toContain('grep -qx "true"');
-    expect(workflow).toContain("xcrun stapler validate");
-    expect(workflow).toContain("spctl --assess --type execute --verbose=4");
-    expect(workflow).toContain("spctl --assess --type open --context context:primary-signature");
-    expect(workflow.indexOf("Verify macOS signatures and notarization")).toBeLessThan(
-      workflow.indexOf("Pack npm artifacts"),
-    );
-  });
 
-  it("publishes Windows Desktop as Preview / Unsigned without a signing gate", () => {
-    const config = readJson("apps/desktop/src-tauri/tauri.conf.json") as {
-      bundle?: { windows?: { signCommand?: string } };
-    };
-    const workflow = read(".github/workflows/release.yml");
-
+    expect(config.bundle?.macOS?.signingIdentity).toBeUndefined();
     expect(config.bundle?.windows?.signCommand).toBeUndefined();
     expect(existsSync(resolve(root, "apps/desktop/scripts/sign-windows.ps1"))).toBe(false);
     expect(existsSync(resolve(root, "tools/release/verify-windows-signatures.ps1"))).toBe(false);
-    expect(workflow).toContain("Build and upload Windows Desktop (Preview / Unsigned)");
-    expect(workflow).toContain("Windows Desktop: Preview / Unsigned");
-    expect(workflow).not.toMatch(/AZURE_|Artifact Signing|Authenticode/u);
+    expect(workflow).toContain("Build and upload Desktop (Preview / Unsigned)");
+    expect(workflow).toContain("Desktop: Preview / Unsigned");
+    expect(workflow).not.toMatch(
+      /AZURE_|Artifact Signing|Authenticode|codesign|notarization|stapler|spctl/u,
+    );
     expect(workflow).toContain(
       "TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}",
     );
@@ -156,7 +143,7 @@ describe("Tauri Phase 9 updater contract", () => {
     expect(cliSmoke).toContain('"doctor"');
     expect(cliSmoke).toContain('"--help"');
     expect(macosSmoke).toContain("hdiutil attach");
-    expect(macosSmoke).toContain("spctl --assess");
+    expect(macosSmoke).not.toContain("spctl --assess");
     expect(linuxSmoke).toContain("xvfb-run");
     expect(linuxSmoke).toContain("apt-get install");
     expect(windowsSmoke).not.toContain("verify-windows-signatures.ps1");
@@ -185,22 +172,34 @@ describe("Tauri Phase 9 updater contract", () => {
     );
   });
 
-  it("documents the macOS 14 Apple Silicon signing and notarization runbook", () => {
+  it("documents the unsigned Desktop release boundary and platform installation steps", () => {
+    const readme = read("README.md");
+    const chineseReadme = read("README.zh-CN.md");
     const releaseGuide = read("docs/releasing.md");
     const migrationPlan = read("docs/tauri-migration-plan.md");
     const engineeringGuide = read(".superwork/spec/guides/index.md");
 
     expect(releaseGuide).toContain("macOS 14+");
-    expect(releaseGuide).toContain("Developer ID Application");
-    expect(releaseGuide).toContain("APPLE_API_PRIVATE_KEY");
-    expect(releaseGuide).toContain("codesign --verify --deep --strict");
-    expect(releaseGuide).toContain("xcrun stapler validate");
-    expect(releaseGuide).toContain("spctl --assess");
+    expect(releaseGuide).toContain("Preview / Unsigned");
+    expect(releaseGuide).toContain("TAURI_SIGNING_PRIVATE_KEY");
+    expect(releaseGuide).not.toMatch(/APPLE_|Developer ID|codesign|stapler|spctl/u);
     expect(releaseGuide).not.toContain("macOS Intel");
+    expect(readme).toContain("Privacy & Security");
+    expect(readme).toContain("Open Anyway");
+    expect(readme).toContain("More info");
+    expect(readme).toContain("Run anyway");
+    expect(readme).toContain("chmod +x");
+    expect(chineseReadme).toContain("隐私与安全性");
+    expect(chineseReadme).toContain("仍要打开");
+    expect(chineseReadme).toContain("更多信息");
+    expect(chineseReadme).toContain("仍要运行");
+    expect(chineseReadme).toContain("chmod +x");
     expect(migrationPlan).toContain("Phase 9：进行中");
+    expect(migrationPlan).toContain("三平台 Desktop 暂以 Preview / Unsigned 发布");
     expect(migrationPlan).not.toContain("macOS x64");
     expect(migrationPlan).not.toContain("x86_64-apple-darwin");
     expect(engineeringGuide).toContain("macOS 14+");
+    expect(engineeringGuide).toContain("三平台 Desktop");
   });
 
   it("documents the supported Desktop and CLI release matrix", () => {
@@ -225,7 +224,7 @@ describe("Tauri Phase 9 updater contract", () => {
     expect(releaseGuide).not.toMatch(/AZURE_|Artifact Signing|Authenticode/u);
     expect(releaseGuide).toContain("self-hosted, Windows, X64, windows-10");
     expect(releaseGuide).toContain('gh release edit "${RELEASE_TAG}" --draft=false');
-    expect(migrationPlan).toContain("Windows Desktop 暂以 Preview / Unsigned 发布");
+    expect(migrationPlan).toContain("三平台 Desktop 暂以 Preview / Unsigned 发布");
     expect(migrationPlan).not.toContain("Windows 签名和 Linux clean VM 验证待完成");
   });
 
