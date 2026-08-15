@@ -69,6 +69,7 @@ impl PlatformFilePort {
                     .optional()?
                     .ok_or_else(|| PlatformError::Worker("project not found".to_owned()))
             })
+            .await
             .map_err(map_error)?;
         PlatformFileService::new(root).await.map_err(map_error)
     }

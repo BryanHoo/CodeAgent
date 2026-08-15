@@ -60,6 +60,7 @@ impl RepositoryPort for SqliteRepository {
                     .map(|project| serde_json::to_value(project).map_err(PlatformError::from))
                     .transpose()
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -79,6 +80,7 @@ impl RepositoryPort for SqliteRepository {
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(projects)
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -107,6 +109,7 @@ impl RepositoryPort for SqliteRepository {
                     PlatformError::Worker("project identity conflicts with another root".to_owned())
                 })
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -131,6 +134,7 @@ impl RepositoryPort for SqliteRepository {
                     PlatformError::Worker("temporary project identity conflict".to_owned())
                 })
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -181,6 +185,7 @@ impl RepositoryPort for SqliteRepository {
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(data)
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -202,6 +207,7 @@ impl RepositoryPort for SqliteRepository {
                 }
                 Ok(())
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -238,6 +244,7 @@ impl RepositoryPort for SqliteRepository {
                     )
                     .map_err(PlatformError::from)
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -257,6 +264,7 @@ impl RepositoryPort for SqliteRepository {
                     .optional()
                     .map_err(PlatformError::from)
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -279,6 +287,7 @@ impl RepositoryPort for SqliteRepository {
                 )?;
                 Ok(stored)
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -301,6 +310,7 @@ impl RepositoryPort for SqliteRepository {
                     .optional()
                     .map_err(PlatformError::from)
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -325,6 +335,7 @@ impl RepositoryPort for SqliteRepository {
                 )?;
                 Ok(stored)
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -349,6 +360,7 @@ impl RepositoryPort for SqliteRepository {
                     .optional()
                     .map_err(PlatformError::from)
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -375,6 +387,7 @@ impl RepositoryPort for SqliteRepository {
                 )?;
                 Ok(stored)
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -394,6 +407,7 @@ impl RepositoryPort for SqliteRepository {
                     .optional()
                     .map_err(PlatformError::from)
             })
+            .await
             .map_err(map_platform_error)
     }
 
@@ -416,6 +430,7 @@ impl RepositoryPort for SqliteRepository {
                 )?;
                 Ok(stored)
             })
+            .await
             .map_err(map_platform_error)
     }
 }

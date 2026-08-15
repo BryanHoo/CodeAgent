@@ -25,6 +25,7 @@ async fn repository_should_preserve_project_order_and_hide_temporary_projects() 
         queue_capacity: 8,
         request_timeout: Duration::from_secs(2),
     })
+    .await
     .expect("database must open");
     let repository = SqliteRepository::new(database.clone());
     let context = PortRequestContext::new("projects-test");

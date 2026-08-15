@@ -8,6 +8,7 @@ use std::{
 
 use rusqlite::{Connection, OptionalExtension, params};
 use thiserror::Error;
+use tokio::sync::oneshot;
 
 use crate::migrations::MIGRATIONS;
 
@@ -76,9 +77,9 @@ pub struct PlatformDatabase {
 }
 
 impl PlatformDatabase {
-    pub fn open(options: DatabaseOptions) -> Result<Self, PlatformError> {
+    pub async fn open(options: DatabaseOptions) -> Result<Self, PlatformError> {
         let database = Self::open_deferred(options)?;
-        database.call(|_| Ok(()))?;
+        database.call(|_| Ok(())).await?;
         Ok(database)
     }
 
@@ -109,7 +110,7 @@ impl PlatformDatabase {
         })
     }
 
-    pub fn diagnose(&self) -> Result<DatabaseDiagnostics, PlatformError> {
+    pub async fn diagnose(&self) -> Result<DatabaseDiagnostics, PlatformError> {
         self.call(|connection| {
             let journal_mode = connection.query_row("PRAGMA journal_mode", [], |row| row.get(0))?;
             let foreign_keys =
@@ -133,6 +134,7 @@ impl PlatformDatabase {
                 migration_version,
             })
         })
+        .await
     }
 
     pub fn close(&self) -> Result<(), PlatformError> {
@@ -156,12 +158,13 @@ impl PlatformDatabase {
         Ok(())
     }
 
-    pub(crate) fn call<T, F>(&self, operation: F) -> Result<T, PlatformError>
+    pub(crate) async fn call<T, F>(&self, operation: F) -> Result<T, PlatformError>
     where
         T: Send + 'static,
         F: FnOnce(&mut Connection) -> Result<T, PlatformError> + Send + 'static,
     {
-        let (response_sender, response_receiver) = mpsc::sync_channel(1);
+        // SQLite 仍由唯一 owner thread 串行执行，oneshot 只异步唤醒调用方，不占用 Tokio worker。
+        let (response_sender, response_receiver) = oneshot::channel();
         let job = Box::new(move |connection: Result<&mut Connection, PlatformError>| {
             let _ = response_sender.send(connection.and_then(operation));
         });
@@ -178,9 +181,10 @@ impl PlatformDatabase {
             }
             mpsc::TrySendError::Disconnected(_) => PlatformError::Closed,
         })?;
-        response_receiver
-            .recv_timeout(self.inner.request_timeout)
+        tokio::time::timeout(self.inner.request_timeout, response_receiver)
+            .await
             .map_err(|_| PlatformError::Timeout)?
+            .map_err(|_| PlatformError::Worker("database worker dropped response".to_owned()))?
     }
 }
 
@@ -278,4 +282,60 @@ fn verify_integrity(connection: &Connection) -> Result<(), PlatformError> {
         return Err(PlatformError::Worker("foreign key check failed".to_owned()));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        time::Duration,
+    };
+
+    use super::{DatabaseOptions, PlatformDatabase};
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn database_call_should_not_block_tokio_worker() {
+        let directory = std::env::temp_dir().join(format!(
+            "code-agent-platform-async-call-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock must follow unix epoch")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).expect("temporary database directory must be created");
+        let database = PlatformDatabase::open_deferred(DatabaseOptions {
+            path: directory.join("state.sqlite3"),
+            queue_capacity: 4,
+            request_timeout: Duration::from_secs(2),
+        })
+        .expect("database must open");
+        let timer_fired = Arc::new(AtomicBool::new(false));
+
+        let database_operation = async {
+            database
+                .call(|_| {
+                    std::thread::sleep(Duration::from_millis(100));
+                    Ok(())
+                })
+                .await
+                .expect("database operation must succeed");
+            assert!(
+                timer_fired.load(Ordering::Acquire),
+                "Tokio timer must run while the database owner thread is busy"
+            );
+        };
+        let timer = async {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            timer_fired.store(true, Ordering::Release);
+        };
+
+        tokio::join!(database_operation, timer);
+        database.close().expect("database must close cleanly");
+        fs::remove_dir_all(directory).expect("temporary database directory must be removed");
+    }
 }

@@ -102,6 +102,7 @@ async fn repository_should_read_project_defaults_after_version_12_migration() {
         queue_capacity: 8,
         request_timeout: Duration::from_secs(2),
     })
+    .await
     .expect("version 12 database must migrate");
     let repository = SqliteRepository::new(database.clone());
     let project_id = ProjectId::from_str("shared-project").expect("project id must parse");
@@ -134,6 +135,7 @@ async fn repository_should_round_trip_all_persisted_settings() {
         queue_capacity: 8,
         request_timeout: Duration::from_secs(2),
     })
+    .await
     .expect("database must open");
     let repository = SqliteRepository::new(database.clone());
     let context = PortRequestContext::new("settings-test");

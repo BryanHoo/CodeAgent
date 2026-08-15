@@ -15,8 +15,8 @@ fn temporary_database_path(name: &str) -> PathBuf {
     directory.join("state.sqlite3")
 }
 
-#[test]
-fn database_should_configure_and_migrate_on_dedicated_thread() {
+#[tokio::test(flavor = "current_thread")]
+async fn database_should_configure_and_migrate_on_dedicated_thread() {
     let path = temporary_database_path("migrate");
     let database = PlatformDatabase::open_deferred(DatabaseOptions {
         path: path.clone(),
@@ -25,7 +25,7 @@ fn database_should_configure_and_migrate_on_dedicated_thread() {
     })
     .expect("database must open");
 
-    let diagnostics = database.diagnose().expect("diagnostics must succeed");
+    let diagnostics = database.diagnose().await.expect("diagnostics must succeed");
 
     assert_eq!(diagnostics.migration_version, 13);
     assert_eq!(diagnostics.journal_mode, "wal");
@@ -33,14 +33,14 @@ fn database_should_configure_and_migrate_on_dedicated_thread() {
     assert_eq!(diagnostics.integrity_check, "ok");
     assert!(diagnostics.foreign_key_check);
     database.close().expect("database must close cleanly");
-    assert!(database.diagnose().is_err());
+    assert!(database.diagnose().await.is_err());
 
     fs::remove_dir_all(path.parent().expect("database must have parent"))
         .expect("temporary database directory must be removed");
 }
 
-#[test]
-fn database_should_backup_existing_state_before_migration() {
+#[tokio::test(flavor = "current_thread")]
+async fn database_should_backup_existing_state_before_migration() {
     let path = temporary_database_path("backup");
     {
         let connection = rusqlite::Connection::open(&path).expect("legacy database must open");
@@ -57,6 +57,7 @@ fn database_should_backup_existing_state_before_migration() {
         queue_capacity: 4,
         request_timeout: Duration::from_secs(2),
     })
+    .await
     .expect("database must open");
     database.close().expect("database must close cleanly");
 
@@ -71,8 +72,8 @@ fn database_should_backup_existing_state_before_migration() {
         .expect("temporary database directory must be removed");
 }
 
-#[test]
-fn deferred_database_should_report_worker_initialization_failure_on_first_request() {
+#[tokio::test(flavor = "current_thread")]
+async fn deferred_database_should_report_worker_initialization_failure_on_first_request() {
     let path = temporary_database_path("deferred-failure");
     let directory = path
         .parent()
@@ -88,6 +89,7 @@ fn deferred_database_should_report_worker_initialization_failure_on_first_reques
 
     let error = database
         .diagnose()
+        .await
         .expect_err("first request must receive the worker initialization failure");
     assert!(matches!(error, PlatformError::Worker(_)));
     database
