@@ -859,6 +859,26 @@ input.on("line", (line) => {
     return;
   }
 
+  if ((realtimeScenario || actionScenario) && message.method === "thread/turns/list") {
+    const threadId = message.params?.threadId;
+    const thread =
+      threadId === "task-realtime"
+        ? parentRealtimeThread
+        : threadId === "frontend-analysis"
+          ? subagentThread
+          : actionThreads.get(threadId);
+    if (thread === undefined) {
+      send({
+        error: { code: -32600, message: `thread not loaded: ${String(threadId)}` },
+        id: message.id,
+      });
+      return;
+    }
+    // Codex 的历史接口按新到旧返回，Runtime 再统一转换为时间线顺序。
+    send({ id: message.id, result: { data: [...thread.turns].reverse(), nextCursor: null } });
+    return;
+  }
+
   if (
     realtimeScenario &&
     message.method === "thread/read" &&
