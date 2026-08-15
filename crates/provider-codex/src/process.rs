@@ -18,6 +18,21 @@ use crate::rpc::{JsonlRpcClient, JsonlRpcClientOptions, RpcClientError, RpcIncom
 const APP_SERVER_ARGUMENTS: [&str; 3] = ["app-server", "--listen", "stdio://"];
 const MAX_STDERR_BYTES: usize = 8_192;
 
+fn initialize_params(app_version: &str) -> serde_json::Value {
+    json!({
+        "capabilities": {
+            "experimentalApi": true,
+            // 在 App Server 端抑制未消费通知，避免进入 JSONL 热路径。
+            "optOutNotificationMethods": crate::CODEX_IGNORED_NOTIFICATION_METHODS,
+        },
+        "clientInfo": {
+            "name": "code_agent",
+            "title": "CodeAgent",
+            "version": app_version,
+        }
+    })
+}
+
 /// Codex App Server 启动选项。
 #[derive(Clone, Debug)]
 pub struct CodexAppServerOptions {
@@ -373,17 +388,7 @@ pub async fn start_codex_app_server(
 
     let handshake = process
         .client()
-        .request(
-            "initialize",
-            Some(json!({
-                "capabilities": { "experimentalApi": true },
-                "clientInfo": {
-                    "name": "code_agent",
-                    "title": "CodeAgent",
-                    "version": options.app_version,
-                }
-            })),
-        )
+        .request("initialize", Some(initialize_params(&options.app_version)))
         .await;
     match handshake {
         Ok(_) => {
@@ -404,8 +409,19 @@ pub async fn start_codex_app_server(
 mod tests {
     use serde_json::Value;
 
-    use super::rpc_error_to_code_agent_error;
+    use super::{initialize_params, rpc_error_to_code_agent_error};
+    use crate::CODEX_IGNORED_NOTIFICATION_METHODS;
     use crate::RpcClientError;
+
+    #[test]
+    fn initialize_should_opt_out_ignored_notifications() {
+        let params = initialize_params("1.2.3");
+
+        assert_eq!(
+            params["capabilities"]["optOutNotificationMethods"],
+            serde_json::json!(CODEX_IGNORED_NOTIFICATION_METHODS)
+        );
+    }
 
     #[test]
     fn rpc_response_error_preserves_codex_message() {
