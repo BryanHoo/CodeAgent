@@ -341,6 +341,8 @@ test("measures Timeline DOM, paint, interaction, memory and realtime latency", a
 
   await page.evaluate(() => {
     const state = Reflect.get(globalThis, "__CODE_AGENT_PERFORMANCE_STATE__") as BrowserProbeState;
+    // hydration 已由独立预算约束；此处只统计 realtime 发布阶段产生的 Long Task。
+    state.longTasks.length = 0;
     state.start();
   });
   await expect
