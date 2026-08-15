@@ -17,14 +17,28 @@ const MAX_SHELL_OUTPUT_BYTES: u64 = 64 * 1024;
 #[cfg(unix)]
 const PATH_MARKER: &[u8] = b"CODE_AGENT_PATH=";
 
+pub fn immediate_process_path() -> OsString {
+    build_process_path(None)
+}
+
 pub async fn resolved_process_path() -> OsString {
+    #[cfg(unix)]
+    {
+        let shell_path = login_shell_path().await;
+        build_process_path(shell_path.as_deref())
+    }
+    #[cfg(not(unix))]
+    {
+        immediate_process_path()
+    }
+}
+
+fn build_process_path(shell_path: Option<&OsStr>) -> OsString {
     let inherited_path = std::env::var_os("PATH").unwrap_or_default();
     let inherited = std::env::split_paths(&inherited_path).collect::<Vec<_>>();
     let mut discovered = environment_tool_directories();
-
-    #[cfg(unix)]
-    if let Some(shell_path) = login_shell_path().await {
-        discovered.extend(std::env::split_paths(OsStr::new(&shell_path)));
+    if let Some(shell_path) = shell_path {
+        discovered.extend(std::env::split_paths(shell_path));
     }
     discovered.extend(common_tool_directories());
 

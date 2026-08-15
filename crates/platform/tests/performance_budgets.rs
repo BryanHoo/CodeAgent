@@ -45,6 +45,10 @@ fn budget(value: &Value, section: &str, key: &str) -> u64 {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "serializes process-wide RSS and wall-clock performance measurements"
+)]
 async fn attachment_store_should_write_maximum_file_without_copying_input() {
     let _guard = TEST_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     let budgets = budgets();
@@ -52,9 +56,7 @@ async fn attachment_store_should_write_maximum_file_without_copying_input() {
     let input = vec![b'x'; bytes];
     let rss_baseline = resident_set_bytes();
     let root = TempRoot::new("attachment-performance");
-    let store = AttachmentStore::new(&root.0)
-        .await
-        .expect("attachment store");
+    let store = AttachmentStore::new(&root.0).expect("attachment store");
 
     let started_at = Instant::now();
     let attachment = store
@@ -85,6 +87,10 @@ async fn attachment_store_should_write_maximum_file_without_copying_input() {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "serializes process-wide RSS and wall-clock performance measurements"
+)]
 async fn git_status_should_bound_large_multi_repository_worktree() {
     let _guard = TEST_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     let budgets = budgets();

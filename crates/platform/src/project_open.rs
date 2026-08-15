@@ -1,4 +1,4 @@
-use std::{path::Path, process::Stdio, sync::Arc, time::Duration};
+use std::{path::Path, process::Stdio, time::Duration};
 
 use code_agent_core::{CodeAgentError, CodeAgentErrorCode};
 use serde_json::{Value, json};
@@ -118,26 +118,21 @@ pub(crate) struct OpenCommand {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ProjectOpenService {
-    commands: Arc<[OpenCommand]>,
     environment: ProcessEnvironment,
     platform: Platform,
 }
 
 impl ProjectOpenService {
     pub(crate) fn new(environment: ProcessEnvironment) -> Self {
-        let platform = Platform::current();
-        let commands =
-            resolve_commands_with_environment(platform, &environment, &default_path_exists);
         Self {
-            commands: commands.into(),
             environment,
-            platform,
+            platform: Platform::current(),
         }
     }
 
     pub(crate) fn capabilities(&self) -> Value {
         let apps = self
-            .commands
+            .commands()
             .iter()
             .map(|command| {
                 json!({ "id": command.app.id, "kind": command.app.kind, "name": command.app.name })
@@ -152,8 +147,8 @@ impl ProjectOpenService {
         project_root: &Path,
         app_id: &str,
     ) -> Result<(), CodeAgentError> {
-        let command = self
-            .commands
+        let commands = self.commands();
+        let command = commands
             .iter()
             .find(|command| command.app.id == app_id)
             .ok_or_else(|| {
@@ -171,6 +166,10 @@ impl ProjectOpenService {
             ));
         }
         launch(command, target, project_root, Some(&self.environment)).await
+    }
+
+    fn commands(&self) -> Vec<OpenCommand> {
+        resolve_commands_with_environment(self.platform, &self.environment, &default_path_exists)
     }
 }
 
@@ -323,7 +322,11 @@ fn resolve_commands_with_environment(
     environment: &ProcessEnvironment,
     path_exists: &impl Fn(&Path) -> bool,
 ) -> Vec<OpenCommand> {
-    let variables = environment.utf8_variables().collect::<Vec<_>>();
+    let snapshot = environment.variables();
+    let variables = snapshot
+        .iter()
+        .filter_map(|(key, value)| Some((key.to_str()?, value.to_str()?)))
+        .collect::<Vec<_>>();
     resolve_commands(platform, &variables, path_exists)
 }
 
@@ -406,10 +409,17 @@ async fn launch(
             .map_err(|error| CodeAgentError::internal(error.to_string()))?,
         None => Vec::new(),
     };
+    map_launch_status(status, &stderr)
+}
+
+fn map_launch_status(
+    status: std::process::ExitStatus,
+    stderr: &[u8],
+) -> Result<(), CodeAgentError> {
     if status.success() {
         Ok(())
     } else {
-        let message = String::from_utf8_lossy(&stderr).trim().to_owned();
+        let message = String::from_utf8_lossy(stderr).trim().to_owned();
         Err(CodeAgentError::internal(if message.is_empty() {
             status.to_string()
         } else {

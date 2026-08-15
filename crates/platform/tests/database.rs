@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf, time::Duration};
 
-use code_agent_platform::{DatabaseOptions, PlatformDatabase};
+use code_agent_platform::{DatabaseOptions, PlatformDatabase, PlatformError};
 
 fn temporary_database_path(name: &str) -> PathBuf {
     let directory = std::env::temp_dir().join(format!(
@@ -18,7 +18,7 @@ fn temporary_database_path(name: &str) -> PathBuf {
 #[test]
 fn database_should_configure_and_migrate_on_dedicated_thread() {
     let path = temporary_database_path("migrate");
-    let database = PlatformDatabase::open(DatabaseOptions {
+    let database = PlatformDatabase::open_deferred(DatabaseOptions {
         path: path.clone(),
         queue_capacity: 4,
         request_timeout: Duration::from_secs(2),
@@ -69,4 +69,30 @@ fn database_should_backup_existing_state_before_migration() {
 
     fs::remove_dir_all(path.parent().expect("database must have parent"))
         .expect("temporary database directory must be removed");
+}
+
+#[test]
+fn deferred_database_should_report_worker_initialization_failure_on_first_request() {
+    let path = temporary_database_path("deferred-failure");
+    let directory = path
+        .parent()
+        .expect("database path must have parent")
+        .to_path_buf();
+
+    let database = PlatformDatabase::open_deferred(DatabaseOptions {
+        path: directory.clone(),
+        queue_capacity: 4,
+        request_timeout: Duration::from_secs(2),
+    })
+    .expect("deferred open must return before worker initialization");
+
+    let error = database
+        .diagnose()
+        .expect_err("first request must receive the worker initialization failure");
+    assert!(matches!(error, PlatformError::Worker(_)));
+    database
+        .close()
+        .expect("failed database must close cleanly");
+
+    fs::remove_dir_all(directory).expect("temporary database directory must be removed");
 }
