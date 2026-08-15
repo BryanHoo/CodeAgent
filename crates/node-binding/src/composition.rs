@@ -59,15 +59,12 @@ pub async fn open_runtime(options: NodeEngineOptions) -> napi::Result<NodeRuntim
     let codex_path = absolute_path(&options.codex_path, "codexPath")?;
     tokio::fs::create_dir_all(&temporary_workspace).await?;
 
-    let database = tokio::task::spawn_blocking(move || {
-        PlatformDatabase::open(DatabaseOptions {
-            path: database_path,
-            queue_capacity: 64,
-            request_timeout: Duration::from_secs(5),
-        })
+    let database = PlatformDatabase::open(DatabaseOptions {
+        path: database_path,
+        queue_capacity: 64,
+        request_timeout: Duration::from_secs(5),
     })
     .await
-    .map_err(|error| napi::Error::from_reason(error.to_string()))?
     .map_err(|error| napi::Error::from_reason(error.to_string()))?;
     let repository: Arc<dyn RepositoryPort> = Arc::new(SqliteRepository::new(database.clone()));
     let process_environment =

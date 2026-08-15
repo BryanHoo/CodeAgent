@@ -114,6 +114,7 @@ async fn git_status_should_bound_large_multi_repository_worktree() {
         queue_capacity: 8,
         request_timeout: Duration::from_secs(10),
     })
+    .await
     .expect("database");
     let registry = SqliteRepository::new(database.clone());
     let project = registry

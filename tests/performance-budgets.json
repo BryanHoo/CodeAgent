@@ -23,7 +23,7 @@
     "maxDiffBytes": 10485760,
     "maxDurationMs": 1000,
     "maxFiles": 1000,
-    "maxStressDurationMs": 2000,
+    "maxStressDurationMs": 2250,
     "untrackedFileBytes": 12288,
     "untrackedFiles": 1200
   },

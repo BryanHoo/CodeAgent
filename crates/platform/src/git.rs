@@ -61,6 +61,7 @@ impl GitCliService {
                     .optional()?
                     .ok_or_else(|| PlatformError::Worker("project not found".to_owned()))
             })
+            .await
             .map_err(map_platform_error)?;
         tokio::fs::canonicalize(root).await.map_err(|_| {
             not_found("project root was not found")

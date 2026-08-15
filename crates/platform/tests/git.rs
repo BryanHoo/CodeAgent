@@ -27,6 +27,7 @@ async fn git_service_reads_and_mutates_only_registered_repository() {
         queue_capacity: 8,
         request_timeout: Duration::from_secs(2),
     })
+    .await
     .expect("database");
     let registry = SqliteRepository::new(database.clone());
     let project = registry
@@ -176,6 +177,7 @@ async fn git_service_aggregates_and_operates_on_immediate_child_repositories() {
         queue_capacity: 8,
         request_timeout: Duration::from_secs(2),
     })
+    .await
     .expect("database");
     let registry = SqliteRepository::new(database.clone());
     let project = registry

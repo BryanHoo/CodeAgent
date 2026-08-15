@@ -56,10 +56,12 @@ impl NodeEngine {
 
     #[napi]
     pub async fn diagnose(&self) -> napi::Result<NodeEngineDiagnostic> {
-        let database = self.inner.host.database.clone();
-        let diagnostics = tokio::task::spawn_blocking(move || database.diagnose())
+        let diagnostics = self
+            .inner
+            .host
+            .database
+            .diagnose()
             .await
-            .map_err(|error| napi::Error::from_reason(error.to_string()))?
             .map_err(|error| napi::Error::from_reason(error.to_string()))?;
         Ok(NodeEngineDiagnostic {
             codex_version: self.inner.host.process.version().version.clone(),

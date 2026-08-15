@@ -104,8 +104,8 @@ fn create_fixture(path: &PathBuf, version: usize) {
     }
 }
 
-#[test]
-fn every_historical_database_should_upgrade_without_losing_rows() {
+#[tokio::test(flavor = "current_thread")]
+async fn every_historical_database_should_upgrade_without_losing_rows() {
     for version in 1..=MIGRATIONS.len() {
         let path = fixture_path(version);
         create_fixture(&path, version);
@@ -115,9 +115,11 @@ fn every_historical_database_should_upgrade_without_losing_rows() {
             queue_capacity: 4,
             request_timeout: Duration::from_secs(2),
         })
+        .await
         .expect("historical fixture must upgrade");
         let diagnostics = database
             .diagnose()
+            .await
             .expect("upgraded database must be healthy");
         assert_eq!(diagnostics.migration_version, 13);
         database.close().expect("upgraded database must close");
