@@ -20,14 +20,23 @@ CodeAgent 运行在你的电脑上，既可以本机使用，也可以在可信�
 
 ## 使用前准备
 
-请先准备：
+CodeAgent 正式版本支持以下目标：
 
-- Node.js 24 或更高版本
-- Chrome/Chromium 116+、Firefox 124+ 或 Safari 17.4+
+| 系统          | 架构          | Desktop               | CLI         |
+| ------------- | ------------- | --------------------- | ----------- |
+| macOS 14+     | Apple Silicon | `.dmg`                | Node.js 24+ |
+| Windows 10+   | x64           | NSIS `.exe` 或 `.msi` | Node.js 24+ |
+| Ubuntu 22.04+ | x64 glibc     | `.deb` 或 `.AppImage` | Node.js 24+ |
+
+不支持 Intel macOS、Windows arm64、Linux arm64、musl Linux 和更早的系统。通过 CLI 浏览器模式访问时，还需要 Chrome/Chromium 116+、Firefox 124+ 或 Safari 17.4+。
 
 CodeAgent 通过 `@openai/codex` 自带受支持的 Codex CLI 二进制，无需单独安装。如需在诊断或启动时使用其他可执行文件，可传入 `--codex-bin <path>` 或设置 `CODE_AGENT_CODEX_BIN`。
 
-## 快速开始
+## Desktop
+
+请从 [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases) 下载当前系统的安装包。Desktop 自带运行时，不需要安装 Node.js；正式安装包经过系统签名，应用只会安装通过签名验证的更新。
+
+## CLI 快速开始
 
 无需安装，直接运行最新版本：
 

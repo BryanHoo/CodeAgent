@@ -90,10 +90,12 @@ describe("Tauri Phase 8 repository contract", () => {
   it("builds the three verified native and desktop release targets", () => {
     const workflow = read(".github/workflows/release.yml");
 
-    expect(workflow).toContain("target: darwin-arm64");
+    expect(workflow).toContain("os: macos-14, target: darwin-arm64, bundles: dmg");
+    expect(workflow).toContain('os: ubuntu-22.04, target: linux-x64-gnu, bundles: "deb,appimage"');
+    expect(workflow).toContain('os: windows-2022, target: win32-x64-msvc, bundles: "msi,nsis"');
     expect(workflow).not.toContain("target: darwin-x64");
-    expect(workflow).toContain("target: linux-x64-gnu");
-    expect(workflow).toContain("target: win32-x64-msvc");
+    expect(workflow).not.toContain("bundles: rpm");
+    expect(workflow).toContain("args: --bundles ${{ matrix.bundles }}");
     expect(workflow).toContain("Publish native packages before the CLI");
     expect(workflow.indexOf("Publish native packages before the CLI")).toBeLessThan(
       workflow.indexOf("Publish main CLI package"),

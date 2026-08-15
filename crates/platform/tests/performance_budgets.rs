@@ -45,6 +45,10 @@ fn budget(value: &Value, section: &str, key: &str) -> u64 {
 }
 
 #[tokio::test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "performance budgets require release optimizations"
+)]
 #[expect(
     clippy::await_holding_lock,
     reason = "serializes process-wide RSS and wall-clock performance measurements"
@@ -87,6 +91,10 @@ async fn attachment_store_should_write_maximum_file_without_copying_input() {
 }
 
 #[tokio::test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "performance budgets require release optimizations"
+)]
 #[expect(
     clippy::await_holding_lock,
     reason = "serializes process-wide RSS and wall-clock performance measurements"

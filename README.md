@@ -20,14 +20,23 @@ CodeAgent runs on your computer. You can use it locally or access it from anothe
 
 ## Requirements
 
-Before you begin, make sure you have:
+CodeAgent releases support these targets:
 
-- Node.js 24 or later
-- Chrome/Chromium 116+, Firefox 124+, or Safari 17.4+
+| System        | Architecture  | Desktop               | CLI         |
+| ------------- | ------------- | --------------------- | ----------- |
+| macOS 14+     | Apple Silicon | `.dmg`                | Node.js 24+ |
+| Windows 10+   | x64           | NSIS `.exe` or `.msi` | Node.js 24+ |
+| Ubuntu 22.04+ | x64 glibc     | `.deb` or `.AppImage` | Node.js 24+ |
+
+Intel macOS, Windows arm64, Linux arm64, musl Linux, and older systems are not supported release targets. Browser access to a running CLI also requires Chrome/Chromium 116+, Firefox 124+, or Safari 17.4+.
 
 CodeAgent includes the supported Codex CLI binary through `@openai/codex`; a separate Codex CLI installation is not required. To use another executable for diagnostics or startup, pass `--codex-bin <path>` or set `CODE_AGENT_CODEX_BIN`.
 
-## Quick Start
+## Desktop
+
+Download the installer for your system from [GitHub Releases](https://github.com/BryanHoo/CodeAgent/releases). Desktop includes its own runtime and does not require Node.js. Release installers are signed, and Desktop verifies signed updates before installing them.
+
+## CLI Quick Start
 
 Run the latest version without installing it:
 

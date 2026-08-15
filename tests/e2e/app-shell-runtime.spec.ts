@@ -99,6 +99,8 @@ test("keeps retrying Snapshot recovery and applies later realtime events", async
     });
   });
   await page.addInitScript(() => {
+    const encodeFrame = (frame: unknown) => new TextEncoder().encode(JSON.stringify(frame)).buffer;
+
     class ResyncWebSocket extends EventTarget {
       static connectionCount = 0;
       public readonly bufferedAmount = 0;
@@ -159,7 +161,7 @@ test("keeps retrying Snapshot recovery and applies later realtime events", async
                   },
                 ];
           for (const message of messages) {
-            this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(message) }));
+            this.dispatchEvent(new MessageEvent("message", { data: encodeFrame(message) }));
           }
         });
       }
@@ -210,6 +212,7 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
     });
   });
   await page.addInitScript(() => {
+    const encodeFrame = (frame: unknown) => new TextEncoder().encode(JSON.stringify(frame)).buffer;
     let connectionCount = 0;
 
     class BurstingWebSocket extends EventTarget {
@@ -228,7 +231,7 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
           this.dispatchEvent(new Event("open"));
           this.dispatchEvent(
             new MessageEvent("message", {
-              data: JSON.stringify({
+              data: encodeFrame({
                 latestSequence: 1_001,
                 sessionId: "e2e-session",
                 type: "connection.ready",
@@ -242,7 +245,7 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
           for (let sequence = 1; sequence <= 1_001; sequence += 1) {
             this.dispatchEvent(
               new MessageEvent("message", {
-                data: JSON.stringify({
+                data: encodeFrame({
                   itemId: `item-${String(sequence % 2)}`,
                   payload: { delta: "x" },
                   provider: "codex",
@@ -301,6 +304,7 @@ test("clears transient realtime errors after the WebSocket reconnects @cross-bro
     });
   });
   await page.addInitScript(() => {
+    const encodeFrame = (frame: unknown) => new TextEncoder().encode(JSON.stringify(frame)).buffer;
     let connectionCount = 0;
     sessionStorage.setItem("__testWebSocketConnections", String(connectionCount));
     sessionStorage.setItem("__testWebSocketFailed", "false");
@@ -324,7 +328,7 @@ test("clears transient realtime errors after the WebSocket reconnects @cross-bro
           const sendReady = () => {
             this.dispatchEvent(
               new MessageEvent("message", {
-                data: JSON.stringify({
+                data: encodeFrame({
                   latestSequence: 0,
                   sessionId: "e2e-session",
                   type: "connection.ready",
@@ -433,6 +437,7 @@ test("opens a completed file change diff while the turn is still running", async
     });
   });
   await page.addInitScript(() => {
+    const encodeFrame = (frame: unknown) => new TextEncoder().encode(JSON.stringify(frame)).buffer;
     type FileChangeEventWindow = Window & {
       __emitFileChangeEvent?: (event: unknown) => void;
     };
@@ -444,14 +449,14 @@ test("opens a completed file change diff while the turn is still running", async
       public constructor() {
         super();
         (window as FileChangeEventWindow).__emitFileChangeEvent = (event) => {
-          this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(event) }));
+          this.dispatchEvent(new MessageEvent("message", { data: encodeFrame(event) }));
         };
         queueMicrotask(() => {
           this.readyState = 1;
           this.dispatchEvent(new Event("open"));
           this.dispatchEvent(
             new MessageEvent("message", {
-              data: JSON.stringify({
+              data: encodeFrame({
                 latestSequence: 0,
                 sessionId: "e2e-session",
                 type: "connection.ready",
@@ -599,6 +604,7 @@ test("updates a running background task title and clears attention after enterin
     });
   });
   await page.addInitScript(() => {
+    const encodeFrame = (frame: unknown) => new TextEncoder().encode(JSON.stringify(frame)).buffer;
     type SidebarEventEmitterWindow = Window & {
       __emitSidebarTaskEvent?: (event: unknown) => void;
     };
@@ -615,7 +621,7 @@ test("updates a running background task title and clears attention after enterin
         (window as SidebarEventEmitterWindow).__emitSidebarTaskEvent = (event) => {
           this.dispatchEvent(
             new MessageEvent("message", {
-              data: JSON.stringify(event),
+              data: encodeFrame(event),
             }),
           );
         };
@@ -627,7 +633,7 @@ test("updates a running background task title and clears attention after enterin
           this.dispatchEvent(new Event("open"));
           this.dispatchEvent(
             new MessageEvent("message", {
-              data: JSON.stringify({
+              data: encodeFrame({
                 latestSequence: 0,
                 sessionId: "e2e-session",
                 type: "connection.ready",
@@ -1260,12 +1266,14 @@ test("recovers a queued steer when its target turn is interrupted before acknowl
   await page.getByRole("button", { exact: true, name: "提交" }).click();
   await expect(page.getByRole("button", { exact: true, name: "停止" })).toBeVisible();
 
+  let steerTurnId: string | undefined;
   await page.route("**/v1/projects/code-agent/tasks/*/turns/*/steer", async (route) => {
     const pathParts = new URL(route.request().url()).pathname.split("/");
     const payload = route.request().postDataJSON() as { taskId: string };
+    steerTurnId = pathParts[7];
     await route.fulfill({
       contentType: "application/json",
-      json: { status: "accepted", taskId: payload.taskId, turnId: pathParts[7] ?? "" },
+      json: { status: "accepted", taskId: payload.taskId, turnId: steerTurnId ?? "" },
       status: 202,
     });
   });
@@ -1273,6 +1281,8 @@ test("recovers a queued steer when its target turn is interrupted before acknowl
   await page.getByRole("button", { name: "排队消息" }).click();
   await page.getByRole("button", { name: "立即引导：中断后继续发送" }).click();
   await expect(page.getByText("等待发送", { exact: true })).toBeVisible();
+  await expect.poll(() => steerTurnId).toMatch(/^turn-action-\d+$/u);
+  const expectedDeliveryTurnId = steerTurnId;
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -1288,7 +1298,7 @@ test("recovers a queued steer when its target turn is interrupted before acknowl
         return persisted.queuedPrompts?.[0]?.deliveryTurnId;
       }),
     )
-    .toBe("turn-action-1");
+    .toBe(expectedDeliveryTurnId);
 
   await page.getByRole("button", { exact: true, name: "停止" }).click();
   await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "interrupted");

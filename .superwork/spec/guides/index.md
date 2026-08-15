@@ -27,7 +27,7 @@
 - Provider 差异通过 Capability 或 `extensions` 表达，原始 Provider 结构不得泄漏到 Web。
 - 项目命令使用 pnpm，Python 命令使用 `python3`；内部依赖使用 `workspace:*`，共享外部版本使用 `catalog:`。
 - 根 `package.json` 是唯一产品版本源；CLI、native packages、Cargo workspace 与 Tauri config 必须由 `release:version:check` 保持一致。
-- macOS Desktop 和 CLI 仅支持 macOS 14+ Apple Silicon；不得声明、解析、构建或发布 `darwin-x64` 产品 artifact。
+- Desktop 和 CLI 仅支持 macOS 14+ Apple Silicon、Windows 10+ x64 与 Ubuntu 22.04+ x64 glibc；不得声明、解析、构建或发布 `darwin-x64`、Windows/Linux arm64 或 musl 产品 artifact。
 - macOS Desktop 必须显式保持 `com.apple.security.app-sandbox = false`，发布门禁必须检查最终签名 entitlement；系统 App Sandbox 与 Codex `sandboxPolicy` 相互独立，任务隔离只由 Codex 控制。
 - 子进程使用参数数组和 `shell: false`；路径、等待与资源清理必须跨平台且有界。
 - Rust Runtime 只依赖 Core/Protocol ports；操作、幂等、事件与订阅队列必须有界，关闭使用协作取消并等待全部受跟踪任务。
@@ -47,6 +47,8 @@
 - CI 在 Ubuntu 与 Windows 完整门禁之外，必须保留 macOS 轻量 smoke，覆盖 CLI 宿主命令、native loader 和当前平台 addon 构建。
 - 发布必须先使用 `pnpm pack` 生成 tarball，将 `catalog:` 和 `workspace:` 协议转换为 npm 可安装版本；先发布所有 native packages，再通过 npm CLI 发布主包，以完成 Trusted Publisher OIDC 认证。
 - macOS Release 必须通过 Developer ID Application 签名、Tauri notarization/stapling、`codesign`、`spctl` 与最低系统版本检查；Apple 证书和 App Store Connect API 私钥只能来自 GitHub Secrets，失败产物必须保留在 draft Release 且不得公开。
+- Windows Release 必须在 Tauri bundler 内完成 Azure Authenticode 和时间戳签名；发布 artifact 必须通过 Windows 签名 API 复验，不得在 updater 签名后修改 installer。
+- 发布 artifact 必须在 macOS 14 Apple Silicon、Ubuntu 22.04 x64 和 Windows 10 x64 clean runner 完成 CLI、安装与启动 smoke；上一正式版本升级和篡改 updater 签名拒绝由受保护的 `release` Environment 审批，全部通过后才能发布 npm 和公开 GitHub Release。
 - 原生运行时依赖不得因包含 `binding.gyp` 且缺少显式安装钩子而触发 npm 隐式 `node-gyp rebuild`；`package:check` 必须拒绝此类依赖。
 - Web 与 Node 发布构建不得生成或打包 `.map` 源码映射，`package:check` 必须拒绝含 `.map` 的发布清单。
 - `.agents/**` 属于代理技能资产，不进入产品 Prettier 与 ESLint 门禁；相关改动使用技能自身校验。

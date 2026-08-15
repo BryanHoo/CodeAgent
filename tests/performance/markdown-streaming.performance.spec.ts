@@ -60,6 +60,8 @@ function createSnapshot(initialMarkdown: string) {
 async function installStreamingMarkdownProbe(page: Page, chunks: readonly string[]) {
   await page.addInitScript(
     ({ deltas, itemId, turnId }) => {
+      const encodeFrame = (frame: unknown) =>
+        new TextEncoder().encode(JSON.stringify(frame)).buffer;
       interface ProbeState {
         longTasks: number[];
         publishedChunks: number;
@@ -108,7 +110,7 @@ async function installStreamingMarkdownProbe(page: Page, chunks: readonly string
             this.dispatchEvent(new Event("open"));
             this.dispatchEvent(
               new MessageEvent("message", {
-                data: JSON.stringify({
+                data: encodeFrame({
                   latestSequence: 0,
                   sessionId: "e2e-session",
                   type: "connection.ready",
@@ -144,7 +146,7 @@ async function installStreamingMarkdownProbe(page: Page, chunks: readonly string
           const sequence = this.nextChunk + 1;
           this.dispatchEvent(
             new MessageEvent("message", {
-              data: JSON.stringify({
+              data: encodeFrame({
                 itemId,
                 payload: { delta },
                 provider: "codex",

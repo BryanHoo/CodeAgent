@@ -118,6 +118,100 @@ describe("Tauri Phase 9 updater contract", () => {
     );
   });
 
+  it("signs and verifies Windows release artifacts with Azure Artifact Signing", () => {
+    const config = readJson("apps/desktop/src-tauri/tauri.conf.json") as {
+      bundle?: { windows?: { signCommand?: string } };
+    };
+    const signingScript = read("apps/desktop/scripts/sign-windows.ps1");
+    const verificationScript = read("tools/release/verify-windows-signatures.ps1");
+    const workflow = read(".github/workflows/release.yml");
+    const requiredAzureSettings = [
+      "AZURE_CLIENT_ID",
+      "AZURE_CLIENT_SECRET",
+      "AZURE_TENANT_ID",
+      "AZURE_ARTIFACT_SIGNING_ENDPOINT",
+      "AZURE_ARTIFACT_SIGNING_ACCOUNT",
+      "AZURE_ARTIFACT_SIGNING_PROFILE",
+    ];
+
+    expect(config.bundle?.windows?.signCommand).toContain("sign-windows.ps1");
+    expect(signingScript).toContain("signtool.exe");
+    expect(signingScript).toContain("Azure.CodeSigning.Dlib.dll");
+    expect(signingScript).toContain('"/dlib"');
+    expect(signingScript).toContain('"/dmdf"');
+    expect(signingScript).toContain('"http://timestamp.acs.microsoft.com/"');
+    expect(signingScript).toContain("[System.IO.Path]::GetFullPath");
+    for (const setting of requiredAzureSettings) {
+      expect(signingScript).toContain(setting);
+      expect(workflow).toContain(`${setting}: \${{ secrets.${setting} }}`);
+    }
+    expect(workflow).toContain("nuget install Microsoft.ArtifactSigning.Client -Version 1.0.128");
+    expect(workflow).toContain(
+      "nuget install Microsoft.Windows.SDK.BuildTools -Version 10.0.28000.2526",
+    );
+    expect(workflow).toContain("Verify Windows Authenticode signatures");
+    expect(workflow).toContain("tools/release/verify-windows-signatures.ps1");
+    expect(verificationScript).toContain("Get-AuthenticodeSignature");
+    expect(verificationScript).toContain("[System.Management.Automation.SignatureStatus]::Valid");
+    expect(verificationScript).toContain("TimeStamperCertificate");
+    expect(workflow.indexOf("Build and upload Desktop artifacts")).toBeLessThan(
+      workflow.indexOf("Verify Windows Authenticode signatures"),
+    );
+    expect(workflow.indexOf("Verify Windows Authenticode signatures")).toBeLessThan(
+      workflow.indexOf("Pack npm artifacts"),
+    );
+  });
+
+  it("smokes CLI and Desktop artifacts on every minimum supported system", () => {
+    const workflow = read(".github/workflows/release.yml");
+    const cliSmoke = read("tools/release/smoke-cli.mjs");
+    const macosSmoke = read("tools/release/smoke-desktop-macos.sh");
+    const linuxSmoke = read("tools/release/smoke-desktop-linux.sh");
+    const windowsSmoke = read("tools/release/smoke-desktop-windows.ps1");
+
+    expect(workflow).toContain("smoke-hosted:");
+    expect(workflow).toContain("os: macos-14");
+    expect(workflow).toContain("os: ubuntu-22.04");
+    expect(workflow).toContain("smoke-windows-10:");
+    expect(workflow).toContain("runs-on: [self-hosted, Windows, X64, windows-10]");
+    expect(workflow).toContain("needs: build");
+    expect(workflow).toContain("node tools/release/smoke-cli.mjs");
+    expect(workflow).toContain("script: smoke-desktop-macos.sh");
+    expect(workflow).toContain("script: smoke-desktop-linux.sh");
+    expect(workflow).toContain('bash "tools/release/${{ matrix.script }}"');
+    expect(workflow).toContain("tools/release/smoke-desktop-windows.ps1");
+    expect(cliSmoke).toContain('"doctor"');
+    expect(cliSmoke).toContain('"--help"');
+    expect(macosSmoke).toContain("hdiutil attach");
+    expect(macosSmoke).toContain("spctl --assess");
+    expect(linuxSmoke).toContain("xvfb-run");
+    expect(linuxSmoke).toContain("apt-get install");
+    expect(windowsSmoke).toContain("verify-windows-signatures.ps1");
+    expect(windowsSmoke).toContain("/S");
+  });
+
+  it("publishes npm and promotes the draft only after every smoke passes", () => {
+    const releaseWorkflow = read(".github/workflows/release.yml");
+    const ciWorkflow = read(".github/workflows/ci.yml");
+    const approvalJob = releaseWorkflow.slice(
+      releaseWorkflow.indexOf("  release-approval:"),
+      releaseWorkflow.indexOf("  publish:"),
+    );
+    const publishJob = releaseWorkflow.slice(releaseWorkflow.indexOf("  publish:"));
+
+    expect(ciWorkflow).toContain("runs-on: macos-14");
+    expect(approvalJob).toContain("needs: [smoke-hosted, smoke-windows-10]");
+    expect(approvalJob).toContain("environment: release");
+    expect(publishJob).toContain("needs: [build, release-approval]");
+    expect(publishJob).toContain('gh release edit "${RELEASE_TAG}" --draft=false');
+    expect(publishJob.indexOf("Publish native packages before the CLI")).toBeLessThan(
+      publishJob.indexOf("Publish main CLI package"),
+    );
+    expect(publishJob.indexOf("Publish main CLI package")).toBeLessThan(
+      publishJob.indexOf('gh release edit "${RELEASE_TAG}" --draft=false'),
+    );
+  });
+
   it("documents the macOS 14 Apple Silicon signing and notarization runbook", () => {
     const releaseGuide = read("docs/releasing.md");
     const migrationPlan = read("docs/tauri-migration-plan.md");
@@ -134,6 +228,29 @@ describe("Tauri Phase 9 updater contract", () => {
     expect(migrationPlan).not.toContain("macOS x64");
     expect(migrationPlan).not.toContain("x86_64-apple-darwin");
     expect(engineeringGuide).toContain("macOS 14+");
+  });
+
+  it("documents the supported Desktop and CLI release matrix", () => {
+    const readme = read("README.md");
+    const chineseReadme = read("README.zh-CN.md");
+    const releaseGuide = read("docs/releasing.md");
+    const migrationPlan = read("docs/tauri-migration-plan.md");
+    const engineeringGuide = read(".superwork/spec/guides/index.md");
+    const supportMarkers = ["macOS 14+", "Windows 10+", "Ubuntu 22.04+"];
+
+    for (const marker of supportMarkers) {
+      expect(readme).toContain(marker);
+      expect(chineseReadme).toContain(marker);
+      expect(releaseGuide).toContain(marker);
+      expect(engineeringGuide).toContain(marker);
+    }
+    expect(readme).toContain("https://github.com/BryanHoo/CodeAgent/releases");
+    expect(chineseReadme).toContain("https://github.com/BryanHoo/CodeAgent/releases");
+    expect(releaseGuide).toContain("AZURE_ARTIFACT_SIGNING_ENDPOINT");
+    expect(releaseGuide).toContain("self-hosted, Windows, X64, windows-10");
+    expect(releaseGuide).toContain('gh release edit "${RELEASE_TAG}" --draft=false');
+    expect(migrationPlan).toContain("发布门禁已实现，正式 tag 验收待执行");
+    expect(migrationPlan).not.toContain("Windows 签名和 Linux clean VM 验证待完成");
   });
 
   it("resolves updater signing credentials for CI and local Desktop builds", async () => {
