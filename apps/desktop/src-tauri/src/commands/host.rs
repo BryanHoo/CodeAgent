@@ -2,15 +2,29 @@ use serde::Serialize;
 use tauri::{AppHandle, Runtime, plugin::PermissionState};
 use tauri_plugin_notification::NotificationExt;
 
+#[cfg(target_os = "macos")]
+use tauri::{Emitter, Manager};
+
 use crate::command_error::CommandError;
 
+#[cfg(target_os = "macos")]
+const HOST_NOTIFICATION_ACTION_EVENT: &str = "host-notification-action";
 const MAX_NOTIFICATION_TITLE_CHARS: usize = 120;
 const MAX_NOTIFICATION_BODY_CHARS: usize = 512;
 const MAX_NOTIFICATION_TAG_CHARS: usize = 128;
+const MAX_NOTIFICATION_TARGET_CHARS: usize = 256;
 
 #[derive(Debug, Serialize)]
 pub struct HostNotificationResponse {
     status: &'static str,
+}
+
+#[cfg(any(target_os = "macos", test))]
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HostNotificationAction {
+    project_id: String,
+    task_id: String,
 }
 
 #[tauri::command]
@@ -19,10 +33,12 @@ pub async fn host_notification_show<R: Runtime>(
     title: String,
     body: String,
     tag: String,
+    project_id: String,
+    task_id: String,
     app: AppHandle<R>,
 ) -> Result<HostNotificationResponse, CommandError> {
     validate_request_id(&request_id)?;
-    validate_notification(&title, &body, &tag)?;
+    validate_notification(&title, &body, &tag, &project_id, &task_id)?;
     let notification = app.notification();
     let permission = match notification.permission_state() {
         Ok(PermissionState::Prompt | PermissionState::PromptWithRationale) => notification
@@ -34,6 +50,19 @@ pub async fn host_notification_show<R: Runtime>(
     if permission != PermissionState::Granted {
         return Ok(HostNotificationResponse { status: "denied" });
     }
+
+    #[cfg(target_os = "macos")]
+    show_actionable_notification(
+        app,
+        title,
+        body,
+        HostNotificationAction {
+            project_id,
+            task_id,
+        },
+    );
+
+    #[cfg(not(target_os = "macos"))]
     notification
         .builder()
         .id(notification_id(&tag))
@@ -51,18 +80,63 @@ fn validate_request_id(request_id: &str) -> Result<(), CommandError> {
     Ok(())
 }
 
-fn validate_notification(title: &str, body: &str, tag: &str) -> Result<(), CommandError> {
+fn validate_notification(
+    title: &str,
+    body: &str,
+    tag: &str,
+    project_id: &str,
+    task_id: &str,
+) -> Result<(), CommandError> {
     let valid =
         |value: &str, maximum: usize| !value.trim().is_empty() && value.chars().count() <= maximum;
     if !valid(title, MAX_NOTIFICATION_TITLE_CHARS)
         || !valid(body, MAX_NOTIFICATION_BODY_CHARS)
         || !valid(tag, MAX_NOTIFICATION_TAG_CHARS)
+        || !valid(project_id, MAX_NOTIFICATION_TARGET_CHARS)
+        || !valid(task_id, MAX_NOTIFICATION_TARGET_CHARS)
     {
         return Err(CommandError::invalid_input("通知内容无效"));
     }
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn show_actionable_notification<R: Runtime>(
+    app: AppHandle<R>,
+    title: String,
+    body: String,
+    action: HostNotificationAction,
+) {
+    // macOS 插件展示层不暴露点击回调；在阻塞线程等待系统响应，避免占用 Runtime worker。
+    let _notification_task = tauri::async_runtime::spawn_blocking(move || {
+        let mut notification = mac_notification_sys::Notification::new();
+        notification
+            .title(&title)
+            .message(&body)
+            .wait_for_click(true);
+        match notification.send() {
+            Ok(mac_notification_sys::NotificationResponse::Click) => {
+                activate_notification_target(&app, action);
+            }
+            Ok(_) => {}
+            Err(error) => eprintln!("CodeAgent notification failed: {error}"),
+        }
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn activate_notification_target<R: Runtime>(app: &AppHandle<R>, action: HostNotificationAction) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+    if let Err(error) = app.emit_to("main", HOST_NOTIFICATION_ACTION_EVENT, action) {
+        eprintln!("CodeAgent notification action failed: {error}");
+    }
+}
+
+#[cfg(any(not(target_os = "macos"), test))]
 fn notification_id(tag: &str) -> i32 {
     // 使用稳定的 FNV-1a 映射，使同一任务的系统通知可以覆盖更新。
     let hash = tag.as_bytes().iter().fold(2_166_136_261_u32, |hash, byte| {
@@ -73,13 +147,41 @@ fn notification_id(tag: &str) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{notification_id, validate_notification, validate_request_id};
+    use serde_json::json;
+
+    use super::{
+        HostNotificationAction, notification_id, validate_notification, validate_request_id,
+    };
+
+    #[test]
+    fn serializes_notification_action_target_for_renderer() {
+        let action = HostNotificationAction {
+            project_id: "project-1".to_owned(),
+            task_id: "task-1".to_owned(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(action).expect("notification action should serialize"),
+            json!({ "projectId": "project-1", "taskId": "task-1" })
+        );
+    }
 
     #[test]
     fn rejects_invalid_host_command_input() {
         assert!(validate_request_id(" ").is_err());
-        assert!(validate_notification("CodeAgent", "完成", "task-1").is_ok());
-        assert!(validate_notification("CodeAgent", &"x".repeat(513), "task-1").is_err());
+        assert!(
+            validate_notification("CodeAgent", "完成", "task-1", "project-1", "task-1").is_ok()
+        );
+        assert!(
+            validate_notification(
+                "CodeAgent",
+                &"x".repeat(513),
+                "task-1",
+                "project-1",
+                "task-1"
+            )
+            .is_err()
+        );
         assert_eq!(notification_id("task-1"), notification_id("task-1"));
         assert_ne!(notification_id("task-1"), notification_id("task-2"));
     }

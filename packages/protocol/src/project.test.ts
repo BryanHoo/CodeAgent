@@ -52,6 +52,7 @@ import {
   GenerateCommitMessageResponseSchema,
   HostFileListingSchema,
   HostFileQuerySchema,
+  HostNotificationRequestSchema,
   HostNotificationResponseSchema,
   ImportHostAttachmentRequestSchema,
   ProjectPageSchema,
@@ -104,6 +105,25 @@ import {
 } from "./project.js";
 
 describe("project protocol", () => {
+  it("requires a native notification navigation target", () => {
+    expect(
+      Value.Check(HostNotificationRequestSchema, {
+        body: "Task 已完成",
+        projectId: "project-1",
+        tag: "project-1:task-1:turn-1:terminal",
+        taskId: "task-1",
+        title: "CodeAgent · Task",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(HostNotificationRequestSchema, {
+        body: "Task 已完成",
+        tag: "project-1:task-1:turn-1:terminal",
+        title: "CodeAgent · Task",
+      }),
+    ).toBe(false);
+  });
+
   it("validates native host notification results", () => {
     expect(Value.Check(HostNotificationResponseSchema, { status: "shown" })).toBe(true);
     expect(Value.Check(HostNotificationResponseSchema, { status: "denied" })).toBe(true);

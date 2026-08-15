@@ -32,7 +32,7 @@
 - 子进程使用参数数组和 `shell: false`；路径、等待与资源清理必须跨平台且有界。
 - Rust Runtime 只依赖 Core/Protocol ports；操作、幂等、事件与订阅队列必须有界，关闭使用协作取消并等待全部受跟踪任务。
 - Desktop SQLite 由单独 owner thread 和有界 `sync_channel` 持有；附件使用 raw IPC 与受管 opaque asset protocol，Renderer capability 不授予任意 fs/shell。
-- Desktop 与 Web 的目录/文件选择统一使用 Web FileTree Dialog，通过严格 Protocol、Client 和宿主 Transport 按需读取目录；禁止原生系统文件选择器，Renderer 不直接获得 dialog、notification、fs 或 shell capability。系统通知继续通过严格 Tauri plugin API。
+- Desktop 与 Web 的目录/文件选择统一使用 Web FileTree Dialog，通过严格 Protocol、Client 和宿主 Transport 按需读取目录；禁止原生系统文件选择器，Renderer 不直接获得 dialog、notification、fs 或 shell capability。系统通知只允许通过严格 Tauri host command 调用。
 - Desktop 只允许打包本地 origin 导航，生产 CSP 不使用 `unsafe-eval`；single-instance 只聚焦主窗口，退出按订阅、Runtime、Codex 子进程顺序幂等关闭。Tauri Command 错误必须返回稳定 `code`、原始 `message`、`retryable` 与非空 `correlationId`，Transport 和 Web 不得替换或吞掉底层错误消息。
 
 ## Verification Checklist

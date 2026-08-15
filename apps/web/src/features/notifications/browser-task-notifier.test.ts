@@ -166,8 +166,9 @@ describe("browser task notifier", () => {
 
   it("uses the native host notification adapter when available", () => {
     const show = vi.fn(() => Promise.resolve());
+    const onAction = vi.fn(() => Promise.resolve(() => undefined));
     const notifier = createBrowserTaskNotifier({
-      nativeApi: { show },
+      nativeApi: { onAction, show },
       isPageForeground: () => false,
     });
 
@@ -175,15 +176,42 @@ describe("browser task notifier", () => {
 
     expect(show).toHaveBeenCalledWith("CodeAgent · 完善通知功能", {
       body: "Task 已完成",
+      projectId: "project-1",
       tag: "project-1:task-1:turn-1:terminal",
+      taskId: "task-1",
     });
+  });
+
+  it("focuses and navigates when a native notification action is received", () => {
+    let actionListener: ((target: { projectId: string; taskId: string }) => void) | undefined;
+    const focusPage = vi.fn();
+    const navigateToTask = vi.fn();
+    createBrowserTaskNotifier({
+      focusPage,
+      navigateToTask,
+      nativeApi: {
+        onAction(listener) {
+          actionListener = listener;
+          return Promise.resolve(() => undefined);
+        },
+        show: vi.fn(() => Promise.resolve()),
+      },
+    });
+
+    actionListener?.({ projectId: "project / 1", taskId: "task / 1" });
+
+    expect(focusPage).toHaveBeenCalledOnce();
+    expect(navigateToTask).toHaveBeenCalledWith("project / 1", "task / 1");
   });
 
   it("skips browser permission requests when native host notifications are available", async () => {
     const harness = createHarness("default");
     const notifier = createBrowserTaskNotifier({
       api: harness.api,
-      nativeApi: { show: vi.fn(() => Promise.resolve()) },
+      nativeApi: {
+        onAction: vi.fn(() => Promise.resolve(() => undefined)),
+        show: vi.fn(() => Promise.resolve()),
+      },
     });
 
     await notifier.requestPermission();
@@ -291,6 +319,7 @@ describe("browser task notifier", () => {
       api: harness.api,
       isPageForeground: () => false,
       nativeApi: {
+        onAction: vi.fn(() => Promise.resolve(() => undefined)),
         show: vi.fn(() => Promise.reject(new Error("native notification channel closed"))),
       },
     });

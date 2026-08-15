@@ -591,6 +591,7 @@ dependencies = [
  "code-agent-protocol",
  "code-agent-provider-codex",
  "code-agent-runtime",
+ "mac-notification-sys",
  "percent-encoding",
  "serde",
  "serde_json",

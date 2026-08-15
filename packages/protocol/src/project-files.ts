@@ -150,7 +150,9 @@ export type HostFileListing = Readonly<Static<typeof HostFileListingSchema>>;
 export const HostNotificationRequestSchema = Type.Object(
   {
     body: Type.String({ maxLength: 512, minLength: 1 }),
+    projectId: Type.String({ maxLength: 256, minLength: 1 }),
     tag: Type.String({ maxLength: 128, minLength: 1 }),
+    taskId: Type.String({ maxLength: 256, minLength: 1 }),
     title: Type.String({ maxLength: 120, minLength: 1 }),
   },
   { additionalProperties: false },
