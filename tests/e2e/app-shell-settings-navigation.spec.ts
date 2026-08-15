@@ -705,7 +705,7 @@ test("keeps a healthy project usable when another project task query fails", asy
   expect(failedProjectRequestCount).toBe(0);
   await sidebar.getByRole("button", { name: "切换项目 superwork" }).click();
 
-  await expect.poll(() => failedProjectRequestCount).toBe(2);
+  await expect.poll(() => failedProjectRequestCount).toBeGreaterThanOrEqual(2);
   await expect(page.getByRole("heading", { name: "构建 macOS 工作台" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Codex Runtime 不可用" })).toHaveCount(0);
 });

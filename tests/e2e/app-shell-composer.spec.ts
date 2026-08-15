@@ -2720,6 +2720,10 @@ test("keeps a streaming code block within the conversation and copies its code",
   );
   await copyButton.click();
   await expect
-    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-    .toBe(`${streamedCode}\n`);
+    .poll(async () => {
+      const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+      // Windows 剪贴板会规范化或移除代码块的单个尾换行，只比较实际代码内容。
+      return clipboardText.replace(/\r\n/gu, "\n").replace(/\n$/u, "");
+    })
+    .toBe(streamedCode);
 });
