@@ -13,14 +13,18 @@ describe("CI 质量门禁", () => {
     expect(packageJson.scripts["check"]).toBe(
       "pnpm run format:check && pnpm run lint && pnpm run lint:architecture && pnpm run typecheck && pnpm run test",
     );
-    expect(packageJson.scripts["check:ci"]).toContain("pnpm run check");
-    expect(packageJson.scripts["check:ci"]).toContain("pnpm run audit:prod");
-    expect(packageJson.scripts["check:ci"]).toContain("pnpm run codex:schema:check");
-    expect(packageJson.scripts["check:ci"]).toContain("pnpm run protocol:rust:check");
-    expect(packageJson.scripts["check:ci"]).toContain("pnpm run test:performance");
-    expect(packageJson.scripts["check:ci"]).toContain("pnpm run build");
-    expect(packageJson.scripts["check:ci"]).toContain("pnpm run bundle:check");
-    expect(packageJson.scripts["check:ci"]).toContain("pnpm run package:check");
+    expect(packageJson.scripts["check:ci"]).toBe(
+      "pnpm run check:ci:host && pnpm run test:performance:browser",
+    );
+    expect(packageJson.scripts["check:ci:host"]).toContain("pnpm run check");
+    expect(packageJson.scripts["check:ci:host"]).toContain("pnpm run audit:prod");
+    expect(packageJson.scripts["check:ci:host"]).toContain("pnpm run codex:schema:check");
+    expect(packageJson.scripts["check:ci:host"]).toContain("pnpm run protocol:rust:check");
+    expect(packageJson.scripts["check:ci:host"]).toContain("pnpm run test:performance:host");
+    expect(packageJson.scripts["test:performance"]).toContain("pnpm run test:performance:host");
+    expect(packageJson.scripts["check:ci:host"]).toContain("pnpm run build");
+    expect(packageJson.scripts["check:ci:host"]).toContain("pnpm run bundle:check");
+    expect(packageJson.scripts["check:ci:host"]).toContain("pnpm run package:check");
     expect(packageJson.scripts["protocol:rust:check"]).not.toContain("vitest");
     expect(packageJson.scripts["prepublishOnly"]).toBe("pnpm run check:ci");
 
@@ -37,20 +41,23 @@ describe("CI 质量门禁", () => {
     };
     const workflow = readFileSync(join(process.cwd(), ".github/workflows/ci.yml"), "utf8");
     const qualityJobStart = workflow.indexOf("\n  quality:\n");
-    const qualityJobEnd = workflow.indexOf("\n  macos-smoke:\n", qualityJobStart);
+    const qualityJobEnd = workflow.indexOf("\n  browser-performance:\n", qualityJobStart);
 
     expect(packageJson.scripts["test:coverage"]).toContain("--coverage");
     expect(qualityJobStart).toBeGreaterThanOrEqual(0);
     expect(qualityJobEnd).toBeGreaterThan(qualityJobStart);
 
     const qualityJob = workflow.slice(qualityJobStart, qualityJobEnd);
-    expect(qualityJob).toContain(`      - name: Run full quality gates
-        run: pnpm check:ci`);
+    expect(qualityJob).toContain(`      - name: Run host quality gates
+        run: pnpm check:ci:host`);
     expect(qualityJob).not.toContain("run: pnpm check\n");
     // 条件必须绑定矩阵 OS，避免 Windows 重复生成覆盖率报告。
     expect(qualityJob).toContain(`      - name: Enforce coverage thresholds
         if: matrix.os == 'ubuntu-latest'
         run: pnpm run test:coverage`);
     expect(workflow.match(/run: pnpm run test:coverage/g)).toHaveLength(1);
+    expect(workflow).toContain("name: Browser Performance");
+    expect(workflow).toContain("runs-on: macos-14");
+    expect(workflow).toContain("run: pnpm run test:performance:browser");
   });
 });
