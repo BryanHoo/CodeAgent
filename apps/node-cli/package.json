@@ -1,6 +1,6 @@
 {
   "name": "@bryanhu/code-agent",
-  "version": "1.10.0",
+  "version": "2.0.0-beta.1",
   "private": false,
   "description": "通过 Web 操作本地 Coding Agent 的应用",
   "type": "module",
@@ -45,9 +45,9 @@
     "tsup": "catalog:"
   },
   "optionalDependencies": {
-    "@bryanhu/code-agent-darwin-arm64": "1.10.0",
-    "@bryanhu/code-agent-linux-x64-gnu": "1.10.0",
-    "@bryanhu/code-agent-win32-x64-msvc": "1.10.0"
+    "@bryanhu/code-agent-darwin-arm64": "2.0.0-beta.1",
+    "@bryanhu/code-agent-linux-x64-gnu": "2.0.0-beta.1",
+    "@bryanhu/code-agent-win32-x64-msvc": "2.0.0-beta.1"
   },
   "license": "MIT"
 }

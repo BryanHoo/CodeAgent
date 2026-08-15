@@ -47,7 +47,7 @@
 - CI 在 Ubuntu 与 Windows 完整门禁之外，必须保留 macOS 轻量 smoke，覆盖 CLI 宿主命令、native loader 和当前平台 addon 构建。
 - 发布必须先使用 `pnpm pack` 生成 tarball，将 `catalog:` 和 `workspace:` 协议转换为 npm 可安装版本；先发布所有 native packages，再通过 npm CLI 发布主包，以完成 Trusted Publisher OIDC 认证。
 - 三平台 Desktop 当前必须以 Preview / Unsigned 发布，不配置操作系统代码签名证书、签名命令或证书门禁；Release 标题和用户文档必须明确未签名状态，但 updater artifact 仍必须生成并验证 `.sig`。
-- 发布 artifact 必须在 macOS 14 Apple Silicon、Ubuntu 22.04 x64 和 Windows 10 x64 clean runner 完成 CLI、安装与启动 smoke；上一正式版本升级和篡改 updater 签名拒绝由受保护的 `release` Environment 审批，全部通过后才能发布 npm 和公开 GitHub Release。
+- 发布 artifact 必须在 macOS 14 Apple Silicon、Ubuntu 22.04 x64 和 Windows 10 x64 clean runner 完成 CLI、安装与启动 smoke；首个公开 Desktop 版本执行 updater 首发 bootstrap，后续版本再验证上一公开版本原位升级，全部通过受保护的 `release` Environment 后才能发布 npm 和公开 GitHub Release。
 - 原生运行时依赖不得因包含 `binding.gyp` 且缺少显式安装钩子而触发 npm 隐式 `node-gyp rebuild`；`package:check` 必须拒绝此类依赖。
 - Web 与 Node 发布构建不得生成或打包 `.map` 源码映射，`package:check` 必须拒绝含 `.map` 的发布清单。
 - `.agents/**` 属于代理技能资产，不进入产品 Prettier 与 ESLint 门禁；相关改动使用技能自身校验。

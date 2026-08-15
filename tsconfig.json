@@ -10,6 +10,7 @@
     { "path": "./packages/transport-http" },
     { "path": "./packages/transport-tauri" },
     { "path": "./apps/web" },
-    { "path": "./tests" }
+    { "path": "./tests" },
+    { "path": "./tools" }
   ]
 }

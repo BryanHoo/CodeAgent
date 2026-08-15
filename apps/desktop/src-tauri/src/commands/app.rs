@@ -54,6 +54,11 @@ pub struct DiagnosticsResponse {
 #[tauri::command]
 pub async fn app_info(app: AppHandle, request_id: String) -> Result<AppInfoResponse, CommandError> {
     validate_request_id(&request_id)?;
+    #[cfg(feature = "desktop-e2e")]
+    if request_id == "desktop-ipc-e2e" {
+        // IPC E2E 只隔离 updater 网络请求，命令注册、参数校验与响应序列化仍走真实链路。
+        return Ok(app_info_response(Ok(None)));
+    }
     let updater = match app.updater() {
         Ok(updater) => updater,
         Err(error) => return Ok(app_info_response(Err(error.to_string()))),

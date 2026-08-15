@@ -12,9 +12,9 @@
       "@code-agent/transport-http": ["../packages/transport-http/src/index.ts"]
     },
     "tsBuildInfoFile": "../.cache/types/tests.tsbuildinfo",
-    "types": ["node", "@playwright/test", "vitest"]
+    "types": ["node", "@playwright/test", "@wdio/globals/types", "mocha", "vitest"]
   },
-  "include": ["e2e/**/*.ts", "performance/**/*.ts", "*.test.ts"],
+  "include": ["desktop-ipc/**/*.ts", "e2e/**/*.ts", "performance/**/*.ts", "*.test.ts"],
   "references": [
     { "path": "../packages/protocol" },
     { "path": "../packages/engine-node" },

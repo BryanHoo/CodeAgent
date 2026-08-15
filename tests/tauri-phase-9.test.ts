@@ -68,6 +68,29 @@ describe("Tauri Phase 9 updater contract", () => {
     expect(capability.permissions).toContain("updater:default");
   });
 
+  it("runs a feature-isolated real Desktop IPC end-to-end test", () => {
+    const rootManifest = readJson("package.json") as {
+      scripts?: Record<string, string>;
+    };
+    const desktopCargo = read("apps/desktop/src-tauri/Cargo.toml");
+    const desktopLibrary = read("apps/desktop/src-tauri/src/lib.rs");
+    const ciWorkflow = read(".github/workflows/ci.yml");
+    const wdioConfigPath = "tests/desktop-ipc/wdio.conf.ts";
+    const ipcSpecPath = "tests/desktop-ipc/app-info.e2e.ts";
+
+    expect(rootManifest.scripts?.["test:desktop-ipc"]).toContain("wdio");
+    expect(desktopCargo).toContain('desktop-e2e = ["dep:tauri-plugin-wdio-webdriver"]');
+    expect(desktopCargo).toContain("tauri-plugin-wdio-webdriver = {");
+    expect(desktopCargo).toContain("optional = true");
+    expect(desktopLibrary).toContain('#[cfg(feature = "desktop-e2e")]');
+    expect(desktopLibrary).toContain("tauri_plugin_wdio_webdriver::init()");
+    expect(existsSync(resolve(root, wdioConfigPath))).toBe(true);
+    expect(existsSync(resolve(root, ipcSpecPath))).toBe(true);
+    expect(ciWorkflow).toContain("desktop-ipc-e2e:");
+    expect(ciWorkflow).toContain("name: Desktop IPC E2E");
+    expect(ciWorkflow).toContain("pnpm test:desktop-ipc");
+  });
+
   it("publishes signed updater metadata and artifacts to GitHub Releases", () => {
     const workflow = read(".github/workflows/release.yml");
     const releaseGuide = read("docs/releasing.md");
@@ -160,7 +183,7 @@ describe("Tauri Phase 9 updater contract", () => {
     const publishJob = releaseWorkflow.slice(releaseWorkflow.indexOf("  publish:"));
 
     expect(ciWorkflow).toContain("runs-on: macos-14");
-    expect(approvalJob).toContain("needs: [smoke-hosted, smoke-windows-10]");
+    expect(approvalJob).toContain("needs: [smoke-hosted, smoke-windows-10, updater-acceptance]");
     expect(approvalJob).toContain("environment: release");
     expect(publishJob).toContain("needs: [build, release-approval]");
     expect(publishJob).toContain('gh release edit "${RELEASE_TAG}" --draft=false');
@@ -170,6 +193,49 @@ describe("Tauri Phase 9 updater contract", () => {
     expect(publishJob.indexOf("Publish main CLI package")).toBeLessThan(
       publishJob.indexOf('gh release edit "${RELEASE_TAG}" --draft=false'),
     );
+  });
+
+  it("gates beta publishing on automated updater bootstrap acceptance", () => {
+    const workflow = read(".github/workflows/release.yml");
+    const releaseGuide = read("docs/releasing.md");
+    const runnerScript = read("tools/release/register-windows-runner.ps1");
+    const approvalJob = workflow.slice(
+      workflow.indexOf("  release-approval:"),
+      workflow.indexOf("  publish:"),
+    );
+    const publishJob = workflow.slice(workflow.indexOf("  publish:"));
+
+    expect(workflow).toContain("updater-acceptance:");
+    expect(workflow).toContain("node tools/release/verify-updater-release.mjs");
+    expect(approvalJob).toContain("needs: [smoke-hosted, smoke-windows-10, updater-acceptance]");
+    expect(publishJob).toContain('npm_tag="beta"');
+    expect(publishJob).toContain('--tag "${npm_tag}"');
+    expect(publishJob).toContain('npm view "@bryanhu/code-agent" dist-tags.latest');
+    expect(publishJob).toContain('npm view "@bryanhu/code-agent" dist-tags.beta');
+    expect(runnerScript).toContain("Windows 10");
+    expect(runnerScript).toContain("windows-10");
+    expect(runnerScript).toContain("Is64BitOperatingSystem");
+    expect(releaseGuide).toContain("bootstrap");
+    expect(releaseGuide).toContain("npm `beta`");
+  });
+
+  it("declares the 2.0 beta release version without claiming completed smoke", () => {
+    const manifest = readJson("package.json") as { version?: string };
+    const changelog = read("CHANGELOG.md");
+    const migrationPlan = read("docs/tauri-migration-plan.md");
+    const engineeringGuide = read(".superwork/spec/guides/index.md");
+
+    expect(manifest.version).toBe("2.0.0-beta.1");
+    expect(changelog).toContain("## [2.0.0-beta.1] - 2026-08-16");
+    expect(changelog).toContain(
+      "[Unreleased]: https://github.com/BryanHoo/CodeAgent/compare/v2.0.0-beta.1...HEAD",
+    );
+    expect(changelog).toContain(
+      "[2.0.0-beta.1]: https://github.com/BryanHoo/CodeAgent/compare/v1.10.0...v2.0.0-beta.1",
+    );
+    expect(changelog).not.toContain("三端 smoke 已通过");
+    expect(migrationPlan).toContain("首发 bootstrap");
+    expect(engineeringGuide).toContain("首发 bootstrap");
   });
 
   it("documents the unsigned Desktop release boundary and platform installation steps", () => {

@@ -329,7 +329,7 @@ Tauri 实现：
 - Phase 6：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-6-desktop-security.md`。
 - Phase 7：已完成，执行记录见 `.superwork/plans/2026-08-12-tauri-phase-7-node-engine.md`。
 - Phase 8：已完成，执行记录见 `.superwork/plans/2026-08-13-tauri-phase-8-release-workspace.md`。
-- Phase 9：进行中；签名 Updater 和三平台最低系统 smoke 发布门禁已实现，三平台 Desktop 暂以 Preview / Unsigned 发布，正式 tag 验收待执行。
+- Phase 9：进行中；`2.0.0-beta.1` 的签名 Updater、首发 bootstrap 和三平台最低系统 smoke 发布门禁已实现，三平台 Desktop 暂以 Preview / Unsigned 发布，正式 tag 验收待执行。
 
 Phase 4–8 的持续仓库契约统一由 `pnpm test` 收集；Rust、Desktop artifact 和发布结构检查只在对应边界改动时额外触发。
 
@@ -539,7 +539,7 @@ Phase 4–8 的持续仓库契约统一由 `pnpm test` 收集；Rust、Desktop a
 验收项：
 
 - macOS、Windows 10 未签名安装与启动 smoke 和 Linux clean VM 安装通过。
-- Updater 验证合法签名、拒绝篡改 artifact，并能从前一正式版本升级。
+- 首个公开 Desktop 版本执行 updater 首发 bootstrap，验证三平台 metadata、合法签名和篡改拒绝；后续版本再从前一公开版本验证原位升级。
 - npm、Desktop 和 updater metadata 版本一致。
 - GitHub Release 包含 checksum、updater 签名、目标架构、最低系统说明和三平台 Preview / Unsigned 标识。
 
