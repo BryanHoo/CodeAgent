@@ -275,7 +275,7 @@ async fn canonical_path_identity(path: &str) -> PathBuf {
     };
     #[cfg(windows)]
     {
-        return PathBuf::from(normalized.to_string_lossy().to_lowercase());
+        PathBuf::from(normalized.to_string_lossy().to_lowercase())
     }
     #[cfg(not(windows))]
     {

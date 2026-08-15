@@ -32,9 +32,19 @@ test("pairs real browsers, persists the cookie, and invalidates it on logout @cr
   await expect(page.getByRole("button", { name: "切换项目 CodeAgent" })).toHaveCount(0);
 
   await codeInput.fill(LAN_PAIRING_CODE);
+  const pairingResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/v1/access/pair" && response.request().method() === "POST";
+  });
   await page.getByRole("button", { name: "配对" }).click();
+  const pairingResponse = await pairingResponsePromise;
   await expect(page.getByRole("button", { name: "切换项目 CodeAgent" })).toBeVisible();
   await expect.poll(() => sockets.length).toBeGreaterThan(0);
+
+  // WebKit 在非 HTTPS 测试源上会重写 cookie jar 的 sameSite 表示，原始响应头才是安全属性真值。
+  const sessionCookieHeader = await pairingResponse.headerValue("set-cookie");
+  expect(sessionCookieHeader).toContain("HttpOnly");
+  expect(sessionCookieHeader).toContain("SameSite=Strict");
 
   // 配对后的远程 Web 必须直接通过 Server API 浏览宿主目录，不依赖浏览器所在机器的原生选择器。
   const directoryListingResponse = page.waitForResponse((response) => {
@@ -55,7 +65,6 @@ test("pairs real browsers, persists the cookie, and invalidates it on logout @cr
     expect.objectContaining({
       httpOnly: true,
       name: "codeagent_session",
-      sameSite: "Strict",
       secure: false,
     }),
   );
