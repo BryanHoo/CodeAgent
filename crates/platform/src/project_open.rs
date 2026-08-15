@@ -16,6 +16,7 @@ const LAUNCH_EXIT_GRACE: Duration = Duration::from_millis(500);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Platform {
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     MacOs,
     Linux,
     Windows,

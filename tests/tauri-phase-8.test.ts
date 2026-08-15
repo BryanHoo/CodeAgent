@@ -83,7 +83,7 @@ describe("Tauri Phase 8 repository contract", () => {
     const manifest = readJson("package.json") as { scripts?: Record<string, string> };
 
     expect(manifest.scripts?.["release:version:check"]).toContain("verify-release-versions.mjs");
-    expect(manifest.scripts?.["check:ci:host"]).toContain("release:version:check");
+    expect(manifest.scripts?.["check:ci:quality"]).toContain("release:version:check");
     expect(manifest.scripts?.["tauri:phase8:check"]).toBeUndefined();
   });
 

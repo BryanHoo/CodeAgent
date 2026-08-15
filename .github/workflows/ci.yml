@@ -16,7 +16,7 @@ jobs:
   quality:
     name: Quality (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -33,8 +33,17 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Run host quality gates
-        run: pnpm check:ci:host
+      - name: Install Linux desktop dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Run quality gates
+        run: pnpm check:ci:quality
+      # 绝对宿主性能预算固定在 Linux runner；Windows 继续覆盖完整功能与编译检查。
+      - name: Run host performance gates
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm run test:performance:host
       - name: Run Rust checks
         run: pnpm check:rust
       # 覆盖率阈值只在 Linux 执行，避免 Windows 矩阵重复生成报告。
@@ -47,7 +56,7 @@ jobs:
 
   browser-performance:
     name: Browser Performance
-    runs-on: macos-15-intel
+    runs-on: macos-15
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -61,7 +70,7 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      # 绝对时延预算固定在标准 4 核 Intel runner，避免 ARM 小规格 runner 的资源波动稀释回归信号。
+      # 绝对浏览器预算固定在项目原生支持的 Apple Silicon runner，避免跨架构差异稀释回归信号。
       - name: Install Chromium
         run: pnpm exec playwright install chromium
       - name: Run browser performance gates
@@ -111,7 +120,7 @@ jobs:
   e2e:
     name: E2E (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
