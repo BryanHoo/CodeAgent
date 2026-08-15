@@ -89,6 +89,7 @@ const attachment = {
 };
 
 const pendingRequest: PendingRequest = {
+  additionalPermissions: null,
   availableDecisions: ["allow", "deny"],
   command: "pnpm check",
   createdAt: "2026-07-23T00:02:00.000Z",

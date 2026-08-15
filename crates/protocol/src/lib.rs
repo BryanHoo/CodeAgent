@@ -288,6 +288,7 @@ mod tests {
         let pending = parse_protocol_value(
             ValueDefinition::PendingRequest,
             json!({
+                "additionalPermissions": null,
                 "availableDecisions": ["allow", "deny"],
                 "command": "ls",
                 "createdAt": "2026-08-12T00:00:00.000Z",

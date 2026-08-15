@@ -31,6 +31,7 @@ const completedTurn = {
   status: "completed",
 } as const;
 const pendingRequest = {
+  additionalPermissions: null,
   availableDecisions: ["allow", "deny"],
   command: "pnpm check",
   createdAt: timestamp,

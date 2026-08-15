@@ -271,6 +271,24 @@ fn map_resolution(
             Some(answer_item(request, answers)),
         ));
     }
+    if request["type"] == "permissions_approval" {
+        let permissions = input
+            .pointer("/resolution/permissions")
+            .ok_or_else(|| invalid("permission resolution is invalid"))?;
+        validate_permission_subset(&request["permissions"], permissions)?;
+        let scope = input
+            .pointer("/resolution/scope")
+            .and_then(Value::as_str)
+            .filter(|scope| matches!(*scope, "turn" | "session"))
+            .ok_or_else(|| invalid("permission resolution scope is invalid"))?;
+        return Ok((
+            json!({
+                "permissions": native_permission_grant(permissions),
+                "scope": scope
+            }),
+            None,
+        ));
+    }
     let decision = input
         .pointer("/resolution/decision")
         .and_then(Value::as_str)
@@ -289,6 +307,73 @@ fn map_resolution(
         _ => return Err(invalid("approval decision is invalid")),
     };
     Ok((json!({ "decision": native }), None))
+}
+
+fn validate_permission_subset(requested: &Value, granted: &Value) -> Result<(), CodeAgentError> {
+    for key in ["network", "fileSystem"] {
+        let grant = &granted[key];
+        if grant.is_null() {
+            continue;
+        }
+        let request = &requested[key];
+        if request.is_null() {
+            return Err(permission_mismatch());
+        }
+        if key == "network" {
+            if grant != request {
+                return Err(permission_mismatch());
+            }
+        } else {
+            validate_file_system_subset(request, grant)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_file_system_subset(requested: &Value, granted: &Value) -> Result<(), CodeAgentError> {
+    if granted["globScanMaxDepth"] != requested["globScanMaxDepth"] {
+        return Err(permission_mismatch());
+    }
+    for key in ["read", "write", "entries"] {
+        let selected = &granted[key];
+        if selected.is_null() {
+            continue;
+        }
+        let available = requested[key].as_array().ok_or_else(permission_mismatch)?;
+        let selected = selected.as_array().ok_or_else(permission_mismatch)?;
+        if selected
+            .iter()
+            .any(|candidate| !available.iter().any(|value| value == candidate))
+        {
+            return Err(permission_mismatch());
+        }
+    }
+    Ok(())
+}
+
+fn native_permission_grant(permissions: &Value) -> Value {
+    let mut native = Map::new();
+    if !permissions["network"].is_null() {
+        native.insert("network".to_string(), permissions["network"].clone());
+    }
+    if let Some(file_system) = permissions["fileSystem"].as_object() {
+        let mut selected = Map::new();
+        for key in ["read", "write"] {
+            selected.insert(key.to_string(), file_system[key].clone());
+        }
+        for key in ["globScanMaxDepth", "entries"] {
+            if !file_system[key].is_null() {
+                selected.insert(key.to_string(), file_system[key].clone());
+            }
+        }
+        native.insert("fileSystem".to_string(), Value::Object(selected));
+    }
+    Value::Object(native)
+}
+
+fn permission_mismatch() -> CodeAgentError {
+    conflict("granted permissions exceed the requested permissions")
+        .with_mutation_code(AgentMutationErrorCode::PendingRequestMismatch)
 }
 
 fn validate_answers(request: &Value, answers: &Map<String, Value>) -> Result<(), CodeAgentError> {

@@ -99,6 +99,7 @@ function createProviderErrorEvent(taskId: string, willRetry: boolean): AgentEven
 
 function createApprovalRequest(requestId: string): AgentTaskSnapshot["pendingRequests"][number] {
   return {
+    additionalPermissions: null,
     availableDecisions: ["allow", "deny"],
     command: "pnpm check",
     createdAt: "2026-07-27T00:00:00.000Z",
@@ -113,6 +114,24 @@ function createApprovalRequest(requestId: string): AgentTaskSnapshot["pendingReq
     taskId: "task-a",
     turnId: "turn-task-a",
     type: "command_approval",
+  };
+}
+
+function createPermissionRequest(requestId: string): AgentTaskSnapshot["pendingRequests"][number] {
+  return {
+    createdAt: "2026-07-27T00:00:00.000Z",
+    cwd: "/workspace/CodeAgent",
+    environmentId: "local",
+    expiresAt: null,
+    itemId: `item-${requestId}`,
+    permissions: { fileSystem: null, network: { enabled: true } },
+    projectId: "code-agent",
+    reason: "需要网络访问",
+    requestId,
+    status: "pending",
+    taskId: "task-a",
+    turnId: "turn-task-a",
+    type: "permissions_approval",
   };
 }
 
@@ -248,7 +267,7 @@ describe("task activity registry", () => {
 
   it("tracks multiple approval requests independently", () => {
     const firstRequest = createApprovalRequest("approval-1");
-    const secondRequest = createApprovalRequest("approval-2");
+    const secondRequest = createPermissionRequest("approval-2");
     let activity: TaskActivityMap = new Map();
     activity = recordTaskActivitySnapshot(
       activity,

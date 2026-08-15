@@ -123,6 +123,87 @@ async fn approval_resolution_should_use_nested_public_resolution_and_publish_ter
 }
 
 #[tokio::test]
+async fn permission_resolution_should_return_only_selected_session_grants() {
+    let (runtime, server) = runtime();
+    let provider = runtime
+        .for_project(project(), &PortRequestContext::new("project"))
+        .await
+        .expect("provider");
+    let mut server = start_task(&provider, server).await;
+    let mut events = provider
+        .subscribe_events(false, &PortRequestContext::new("events"))
+        .await
+        .expect("events");
+    server
+        .write_all(format!("{}\n", permission_request()).as_bytes())
+        .await
+        .expect("request");
+    let created = recv_event(&mut events, "created").await;
+    let request_id = created.pending_request().expect("pending request")["requestId"]
+        .as_str()
+        .expect("request id")
+        .to_owned();
+
+    let input = json!({
+        "itemId": "permission-1", "projectId": "project-1", "requestId": request_id,
+        "resolution": {
+            "permissions": {
+                "fileSystem": {
+                    "entries": [{
+                        "access": "read",
+                        "path": { "path": "/workspace/input", "type": "path" }
+                    }],
+                    "globScanMaxDepth": 3,
+                    "read": null,
+                    "write": null
+                },
+                "network": null
+            },
+            "scope": "session"
+        },
+        "taskId": "task-1", "turnId": "turn-1", "type": "permissions_approval"
+    });
+    let mut expanded = input.clone();
+    expanded["resolution"]["permissions"]["fileSystem"]["entries"][0]["path"]["path"] =
+        json!("/workspace/not-requested");
+    let error = provider
+        .resolve_pending_request(expanded, &PortRequestContext::new("reject-expanded"))
+        .await
+        .expect_err("expanded permission grant must fail");
+    assert!(
+        error
+            .to_string()
+            .contains("exceed the requested permissions")
+    );
+
+    let resolve_context = PortRequestContext::new("resolve");
+    let resolution = provider.resolve_pending_request(input, &resolve_context);
+    let native = async {
+        let (read, _write) = tokio::io::split(server);
+        read_frame(&mut BufReader::new(read)).await
+    };
+    let (resolved, native) = tokio::join!(resolution, native);
+    assert_eq!(
+        native["result"],
+        json!({
+            "permissions": {
+                "fileSystem": {
+                    "entries": [{
+                        "access": "read",
+                        "path": { "path": "/workspace/input", "type": "path" }
+                    }],
+                    "globScanMaxDepth": 3,
+                    "read": null,
+                    "write": null
+                }
+            },
+            "scope": "session"
+        })
+    );
+    assert_eq!(resolved.expect("resolved")["status"], "resolved");
+}
+
+#[tokio::test]
 async fn identical_concurrent_resolution_should_reuse_one_native_response() {
     let (runtime, server) = runtime();
     let provider = runtime
@@ -302,6 +383,34 @@ fn approval_request() -> Value {
             "command": "pnpm check", "cwd": "/workspace", "itemId": "command-1",
             "networkApprovalContext": null, "reason": null,
             "startedAtMs": 1_754_956_802_000_i64, "threadId": "task-1", "turnId": "turn-1"
+        }
+    })
+}
+
+fn permission_request() -> Value {
+    json!({
+        "id": 11, "method": "item/permissions/requestApproval", "params": {
+            "cwd": "/workspace", "environmentId": "local", "itemId": "permission-1",
+            "permissions": {
+                "fileSystem": {
+                    "entries": [
+                        {
+                            "access": "read",
+                            "path": { "path": "/workspace/input", "type": "path" }
+                        },
+                        {
+                            "access": "write",
+                            "path": { "pattern": "/tmp/code-agent-*", "type": "glob_pattern" }
+                        }
+                    ],
+                    "globScanMaxDepth": 3,
+                    "read": null,
+                    "write": null
+                },
+                "network": { "enabled": true }
+            },
+            "reason": "需要额外权限", "startedAtMs": 1_754_956_802_000_i64,
+            "threadId": "task-1", "turnId": "turn-1"
         }
     })
 }

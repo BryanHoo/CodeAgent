@@ -86,11 +86,22 @@ function createPendingRequestEvent(type: PendingRequest["type"]): AgentEvent {
     case "command_approval":
       request = {
         ...common,
+        additionalPermissions: null,
         availableDecisions: ["allow", "deny"],
         command: "pnpm check",
         cwd: "/workspace/CodeAgent",
         networkAccess: null,
         reason: null,
+        type,
+      };
+      break;
+    case "permissions_approval":
+      request = {
+        ...common,
+        cwd: "/workspace/CodeAgent",
+        environmentId: "local",
+        permissions: { fileSystem: null, network: { enabled: true } },
+        reason: "需要网络访问",
         type,
       };
       break;
@@ -237,6 +248,7 @@ describe("browser task notifier", () => {
   it.each([
     ["command_approval", "Task 等待审批"],
     ["file_change_approval", "Task 等待审批"],
+    ["permissions_approval", "Task 等待审批"],
     ["user_input", "Task 等待输入"],
   ] as const)("maps a %s request to an actionable notification", (type, body) => {
     const harness = createHarness();

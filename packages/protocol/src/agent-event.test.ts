@@ -36,6 +36,7 @@ const baseEvent = {
 } as const;
 
 const pendingRequest = {
+  additionalPermissions: null,
   availableDecisions: ["allow", "deny"],
   command: "pnpm check",
   createdAt: "2026-07-23T00:00:00.000Z",

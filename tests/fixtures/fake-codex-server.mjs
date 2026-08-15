@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createInterface } from "node:readline";
+import { isDeepStrictEqual } from "node:util";
 
 const args = process.argv.slice(2);
 
@@ -42,6 +43,20 @@ function pendingRequestParams(
   if (kind === "command") {
     return {
       ...identity,
+      additionalPermissions: {
+        fileSystem: {
+          entries: [
+            {
+              access: "read",
+              path: { path: "/workspace/command-input", type: "path" },
+            },
+          ],
+          globScanMaxDepth: null,
+          read: null,
+          write: null,
+        },
+        network: null,
+      },
       availableDecisions: ["accept", "acceptForSession", "decline"],
       command: "pnpm check",
       cwd: "/workspace/CodeAgent",
@@ -55,6 +70,33 @@ function pendingRequestParams(
       grantRoot: "/workspace/CodeAgent",
       reason: "需要修改文件",
       startedAtMs: 1_753_228_801_000,
+    };
+  }
+  if (kind === "permissions") {
+    return {
+      ...identity,
+      cwd: "/workspace/CodeAgent",
+      environmentId: "local",
+      permissions: {
+        fileSystem: {
+          entries: [
+            {
+              access: "read",
+              path: { path: "/workspace/input", type: "path" },
+            },
+            {
+              access: "write",
+              path: { pattern: "/tmp/code-agent-*", type: "glob_pattern" },
+            },
+          ],
+          globScanMaxDepth: 3,
+          read: null,
+          write: null,
+        },
+        network: { enabled: true },
+      },
+      reason: "需要读取输入并访问网络",
+      startedAtMs: 1_753_228_801_500,
     };
   }
   return {
@@ -88,7 +130,9 @@ function sendPendingRequest(
       ? "item/commandExecution/requestApproval"
       : kind === "file"
         ? "item/fileChange/requestApproval"
-        : "item/tool/requestUserInput";
+        : kind === "permissions"
+          ? "item/permissions/requestApproval"
+          : "item/tool/requestUserInput";
   pendingServerRequests.set(requestId, {
     completeOnResolve,
     kind,
@@ -584,6 +628,37 @@ input.on("line", (line) => {
     const pending = pendingServerRequests.get(message.id);
     pendingServerRequests.delete(message.id);
     pendingServerResponses.push({ id: message.id, result: message.result });
+    if (
+      pending.kind === "permissions" &&
+      !isDeepStrictEqual(message.result, {
+        permissions: {
+          fileSystem: {
+            entries: [
+              {
+                access: "read",
+                path: { path: "/workspace/input", type: "path" },
+              },
+            ],
+            globScanMaxDepth: 3,
+            read: null,
+            write: null,
+          },
+          network: { enabled: true },
+        },
+        scope: "session",
+      })
+    ) {
+      send({
+        method: "error",
+        params: {
+          error: { message: "unexpected permission approval response" },
+          threadId: pending.threadId,
+          turnId: pending.turnId,
+          willRetry: false,
+        },
+      });
+      return;
+    }
     send({
       method: "serverRequest/resolved",
       params: { requestId: message.id, threadId: pending.threadId },
@@ -744,7 +819,7 @@ input.on("line", (line) => {
 
   if (pendingRequestScenario && message.method === "trigger/pending") {
     const kind = message.params?.kind;
-    if (kind !== "command" && kind !== "file" && kind !== "user_input") {
+    if (kind !== "command" && kind !== "file" && kind !== "permissions" && kind !== "user_input") {
       send({ error: { code: -32602, message: "invalid pending request kind" }, id: message.id });
       return;
     }
@@ -874,9 +949,11 @@ input.on("line", (line) => {
       ? "command"
       : prompt.includes("审批文件")
         ? "file"
-        : prompt.includes("用户输入")
-          ? "user_input"
-          : undefined;
+        : prompt.includes("审批权限")
+          ? "permissions"
+          : prompt.includes("用户输入")
+            ? "user_input"
+            : undefined;
     if (pendingKind !== undefined) {
       const requestId = `fake-${pendingKind}-${String(nextPendingRequest)}`;
       nextPendingRequest += 1;
