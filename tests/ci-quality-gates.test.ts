@@ -67,4 +67,18 @@ describe("CI 质量门禁", () => {
     expect(workflow).toContain("runs-on: macos-15");
     expect(workflow).toContain("run: pnpm run test:performance:browser");
   });
+
+  it("所有浏览器测试入口均准备原生 Fake Codex 启动器", () => {
+    const packageJson = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+
+    expect(packageJson.scripts["prepare:e2e-fixtures"]).toBe(
+      "node ./tools/prepare-e2e-fixtures.mjs",
+    );
+    expect(packageJson.scripts["test:e2e"]).toContain("pnpm run prepare:e2e-fixtures");
+    expect(packageJson.scripts["test:performance:browser"]).toContain(
+      "pnpm run prepare:e2e-fixtures",
+    );
+  });
 });
