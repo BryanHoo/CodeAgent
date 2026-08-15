@@ -52,11 +52,14 @@ describe("Tauri Phase 7 repository contract", () => {
 
   it("uses a bounded weak nonblocking N-API event bridge", () => {
     const events = read("crates/node-binding/src/events.rs");
+    const subscription = read("crates/runtime/src/event_subscription.rs");
 
     expect(events).toContain("max_queue_size::<1>()");
     expect(events).toContain("weak::<true>()");
-    expect(events).toContain("callback.call_async(bytes)");
-    expect(events).toContain("event.frame().to_vec()");
+    expect(events).toContain("callback.call_async(bytes.to_vec())");
+    expect(events).toContain("start_project_event_subscription");
+    expect(events).not.toMatch(/EventReplay|project_event_checkpoint|SubscriberSignal/u);
+    expect(subscription).toContain("event.shared_frame()");
     expect(events).not.toContain("ThreadsafeFunctionCallMode::Blocking");
   });
 

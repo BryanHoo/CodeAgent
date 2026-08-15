@@ -1,9 +1,6 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::Arc;
 
-use code_agent_runtime::{EventReplay, SubscriberSignal};
+use code_agent_runtime::CodeAgentRuntime;
 use napi::{
     Status,
     bindgen_prelude::{Buffer, Function},
@@ -11,51 +8,16 @@ use napi::{
 };
 use napi_derive::napi;
 use serde_json::json;
-use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 
 use crate::{NodeEngine, operations::project_id};
 
 type EventCallback = ThreadsafeFunction<Vec<u8>, (), Buffer, Status, false, true, 1>;
 const MAX_BRIDGE_FRAME_BYTES: usize = 1024 * 1024;
 
-#[derive(Default)]
-pub struct EventSubscriptions {
-    active: Mutex<HashMap<String, CancellationToken>>,
-}
-
-impl EventSubscriptions {
-    fn insert(&self, id: String, cancellation: CancellationToken) {
-        if let Ok(mut active) = self.active.lock() {
-            active.insert(id, cancellation);
-        }
-    }
-
-    fn remove(&self, id: &str) -> bool {
-        self.active
-            .lock()
-            .ok()
-            .and_then(|mut active| active.remove(id))
-            .is_some_and(|token| {
-                token.cancel();
-                true
-            })
-    }
-
-    pub fn close(&self) {
-        if let Ok(mut active) = self.active.lock() {
-            for (_, token) in active.drain() {
-                token.cancel();
-            }
-        }
-    }
-}
-
 #[napi]
 pub struct NodeEventSubscription {
-    cancellation: CancellationToken,
     id: String,
-    registry: Arc<EventSubscriptions>,
+    runtime: Arc<CodeAgentRuntime>,
 }
 
 #[napi]
@@ -67,19 +29,17 @@ impl NodeEventSubscription {
 
     #[napi]
     pub fn unsubscribe(&self) -> bool {
-        self.cancellation.cancel();
-        self.registry.remove(&self.id)
+        self.runtime.cancel_event_subscription(&self.id)
     }
 }
 
-fn frame(value: serde_json::Value) -> Vec<u8> {
-    serde_json::to_vec(&value).unwrap_or_else(|_| {
-        b"{\"type\":\"resync.required\",\"reason\":\"sequence_gap\",\"version\":2}".to_vec()
-    })
+#[cfg(any(feature = "performance-probe", test))]
+fn frame(value: serde_json::Value) -> Arc<[u8]> {
+    Arc::from(serde_json::to_vec(&value).unwrap_or_default())
 }
 
-async fn send(callback: &EventCallback, bytes: Vec<u8>) -> bool {
-    bytes.len() <= MAX_BRIDGE_FRAME_BYTES && callback.call_async(bytes).await.is_ok()
+async fn send(callback: &EventCallback, bytes: Arc<[u8]>) -> bool {
+    bytes.len() <= MAX_BRIDGE_FRAME_BYTES && callback.call_async(bytes.to_vec()).await.is_ok()
 }
 
 #[cfg(feature = "performance-probe")]
@@ -163,123 +123,22 @@ impl NodeEngine {
             .weak::<true>()
             .max_queue_size::<1>()
             .build_callback(|context| Ok(Buffer::from(context.value)))?;
-        let cancellation = CancellationToken::new();
-        let id = Uuid::new_v4().to_string();
-        let registry = self.event_subscriptions();
-        registry.insert(id.clone(), cancellation.clone());
-
         let runtime = self.runtime_arc();
-        let task_id = id.clone();
-        let task_registry = registry.clone();
-        let task_cancellation = cancellation.clone();
-        self.tokio_handle().spawn(async move {
-            let result = async {
-                // 先订阅实时队列，再固定 checkpoint 和读取 replay，避免初始化窗口丢事件。
-                let mut subscription = runtime
-                    .subscribe_project_events(&format!("{request_id}:live"), &project)
-                    .await?;
-                let checkpoint = runtime
-                    .project_event_checkpoint(&format!("{request_id}:checkpoint"), &project)
-                    .await?;
-                // HTTP WebSocket 只携带 sequence；空 session 使用当前 checkpoint，
-                // 客户端仍会依据 connection.ready 校验自身 snapshot session。
-                let replay_session = if session_id.is_empty() {
-                    checkpoint.session_id.as_ref()
-                } else {
-                    &session_id
-                };
-                let replay = runtime
-                    .replay_project_events(&request_id, &project, replay_session, after_sequence)
-                    .await?;
+        let callback = Arc::new(callback);
+        let id = runtime
+            .start_project_event_subscription(
+                request_id,
+                project,
+                session_id,
+                after_sequence,
+                move |frame| {
+                    let callback = Arc::clone(&callback);
+                    async move { send(&callback, frame).await }
+                },
+            )
+            .map_err(crate::errors::to_napi_error)?;
 
-                match replay {
-                    EventReplay::Events(events) => {
-                        if !send(
-                            &callback,
-                            frame(json!({
-                                "latestSequence": checkpoint.sequence,
-                                "sessionId": checkpoint.session_id.as_ref(),
-                                "type": "connection.ready", "version": 2
-                            })),
-                        )
-                        .await
-                        {
-                            return Ok::<(), code_agent_core::CodeAgentError>(());
-                        }
-                        for event in events
-                            .into_iter()
-                            .filter(|event| event.sequence() <= checkpoint.sequence)
-                        {
-                            if !send(&callback, event.frame().to_vec()).await {
-                                return Ok(());
-                            }
-                        }
-                    }
-                    EventReplay::Resync {
-                        latest_sequence,
-                        reason,
-                    } => {
-                        let _ = send(
-                            &callback,
-                            frame(json!({
-                                "latestSequence": latest_sequence, "reason": reason,
-                                "sessionId": checkpoint.session_id.as_ref(),
-                                "type": "resync.required", "version": 2
-                            })),
-                        )
-                        .await;
-                        return Ok(());
-                    }
-                }
-
-                loop {
-                    tokio::select! {
-                        _ = task_cancellation.cancelled() => break,
-                        signal = subscription.signal.changed() => {
-                            if signal.is_err() || *subscription.signal.borrow() == SubscriberSignal::ResyncRequired {
-                                let latest = runtime
-                                    .project_event_checkpoint(&format!("{request_id}:resync"), &project)
-                                    .await
-                                    .unwrap_or(checkpoint.clone());
-                                let _ = send(&callback, frame(json!({
-                                    "latestSequence": latest.sequence, "reason": "sequence_gap",
-                                    "sessionId": latest.session_id.as_ref(),
-                                    "type": "resync.required", "version": 2
-                                }))).await;
-                                break;
-                            }
-                        }
-                        event = subscription.events.recv() => {
-                            let Some(event) = event else { break };
-                            if event.sequence() > checkpoint.sequence
-                                && !send(&callback, event.frame().to_vec()).await
-                            {
-                                break;
-                            }
-                        }
-                    }
-                }
-                Ok(())
-            }
-            .await;
-            if result.is_err() {
-                let _ = send(
-                    &callback,
-                    frame(json!({
-                        "latestSequence": 0, "reason": "sequence_gap", "sessionId": "",
-                        "type": "resync.required", "version": 2
-                    })),
-                )
-                .await;
-            }
-            task_registry.remove(&task_id);
-        });
-
-        Ok(NodeEventSubscription {
-            cancellation,
-            id,
-            registry,
-        })
+        Ok(NodeEventSubscription { id, runtime })
     }
 }
 

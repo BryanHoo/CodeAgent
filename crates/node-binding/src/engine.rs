@@ -1,20 +1,17 @@
 use std::sync::Arc;
 
+use code_agent_runtime::ShutdownGate;
 use napi_derive::napi;
 
 use crate::{
     composition::{NodeRuntimeHost, open_runtime},
     errors::to_napi_error,
-    events::EventSubscriptions,
-    operations::ShutdownGate,
     types::{NodeEngineDiagnostic, NodeEngineOptions, NodeProcessExit},
 };
 
 pub(crate) struct NodeEngineInner {
-    events: Arc<EventSubscriptions>,
     gate: ShutdownGate,
     host: NodeRuntimeHost,
-    tokio: tokio::runtime::Handle,
 }
 
 #[napi]
@@ -23,20 +20,12 @@ pub struct NodeEngine {
 }
 
 impl NodeEngine {
-    pub(crate) fn event_subscriptions(&self) -> Arc<EventSubscriptions> {
-        self.inner.events.clone()
-    }
-
     pub(crate) fn runtime(&self) -> &code_agent_runtime::CodeAgentRuntime {
         &self.inner.host.runtime
     }
 
     pub(crate) fn runtime_arc(&self) -> Arc<code_agent_runtime::CodeAgentRuntime> {
         self.inner.host.runtime.clone()
-    }
-
-    pub(crate) fn tokio_handle(&self) -> &tokio::runtime::Handle {
-        &self.inner.tokio
     }
 }
 
@@ -46,10 +35,8 @@ impl NodeEngine {
     pub async fn open(options: NodeEngineOptions) -> napi::Result<Self> {
         Ok(Self {
             inner: Arc::new(NodeEngineInner {
-                events: Arc::new(EventSubscriptions::default()),
                 gate: ShutdownGate::default(),
                 host: open_runtime(options).await?,
-                tokio: tokio::runtime::Handle::current(),
             }),
         })
     }
@@ -92,7 +79,6 @@ impl NodeEngine {
             self.inner.gate.wait_closed().await;
             return Ok(());
         }
-        self.inner.events.close();
         let runtime_result = self.inner.host.runtime.shutdown().await;
         let process_result = self.inner.host.process.close().await;
         self.inner.gate.finish();

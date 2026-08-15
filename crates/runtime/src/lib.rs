@@ -5,11 +5,13 @@ mod commit_message;
 mod control;
 mod effective_settings;
 mod event_stream;
+mod event_subscription;
 mod idempotency;
 mod project_context;
 mod prompt;
 mod provider_connection;
 mod settings_validation;
+mod shutdown;
 
 use std::{
     collections::HashMap,
@@ -46,6 +48,7 @@ use commit_message::{
     COMMIT_MESSAGE_CLEANUP_TIMEOUT, COMMIT_MESSAGE_TIMEOUT, build_commit_message_prompt,
     generation_error, read_generated_message, read_generation_settings, response, start_turn_input,
 };
+use event_subscription::SubscriptionRegistry;
 
 pub use builder::{CodeAgentRuntimeBuilder, RuntimeOptions};
 pub use control::{OperationGuard, OperationRegistry};
@@ -54,6 +57,7 @@ pub use event_stream::{
     EventStreamOptions, EventSubscription, PublishedEvent, SubscriberSignal,
 };
 pub use idempotency::IdempotencyRegistry;
+pub use shutdown::ShutdownGate;
 
 struct RuntimePorts {
     attachment: Arc<dyn AttachmentPort>,
@@ -78,6 +82,7 @@ pub struct AttachmentUploadInput {
 pub struct CodeAgentRuntime {
     accepting: AtomicBool,
     idempotency: IdempotencyRegistry,
+    event_subscriptions: Arc<SubscriptionRegistry>,
     operations: OperationRegistry,
     options: RuntimeOptions,
     ports: RuntimePorts,
@@ -108,6 +113,7 @@ impl CodeAgentRuntime {
                 options.idempotency_capacity,
                 options.idempotency_ttl,
             ),
+            event_subscriptions: Arc::new(SubscriptionRegistry::new(options.operation_capacity)),
             operations: OperationRegistry::new(options.operation_capacity),
             options,
             ports: RuntimePorts {
@@ -1900,6 +1906,7 @@ impl CodeAgentRuntime {
         // 注册表在同一临界区内停止接收并取消活动项，避免关闭竞态。
         self.operations.close().await;
         self.idempotency.close().await;
+        self.event_subscriptions.close();
         let project_contexts = {
             let mut contexts = self.project_contexts.lock().await;
             contexts
