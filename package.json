@@ -57,7 +57,7 @@
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
     "test:desktop-ipc": "pnpm --filter @code-agent/desktop prepare:codex && pnpm --filter @code-agent/desktop exec tauri build --debug --features desktop-e2e --bundles app --config ../../tests/desktop-ipc/tauri.e2e.conf.json --ci --no-sign && wdio run ./tests/desktop-ipc/wdio.conf.ts",
-    "test:e2e": "pnpm build && playwright test",
+    "test:e2e": "pnpm build && node ./tools/prepare-e2e-fixtures.mjs && playwright test",
     "test:performance": "pnpm run test:performance:host && pnpm run test:performance:browser",
     "test:performance:browser": "pnpm build && playwright test --config playwright.performance.config.ts",
     "test:performance:host": "pnpm run test:performance:node && pnpm run test:performance:rust",

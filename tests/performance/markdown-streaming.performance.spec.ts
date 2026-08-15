@@ -240,11 +240,28 @@ for (const budget of performanceBudgets.streamingMarkdown.cases) {
       )
       .toBe(chunks.length);
     await expect(conversation.getByText(completionMarker, { exact: true })).toBeVisible();
+    // 等待最终 Markdown 的异步高亮与绘制结束，再采集稳定态 CPU 和内存数据。
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              requestIdleCallback(
+                () => {
+                  resolve();
+                },
+                { timeout: 1_000 },
+              );
+            });
+          });
+        }),
+    );
 
     const peakMetrics = await collectMetrics(cdp);
     const cpuDurationMs = (metric(peakMetrics, "TaskDuration") - baselineCpu) * 1_000;
     const heapUsedBytes = metric(peakMetrics, "JSHeapUsedSize") - blankHeap;
     const streamHeapGrowthBytes = metric(peakMetrics, "JSHeapUsedSize") - baselineHeap;
+    await cdp.send("HeapProfiler.collectGarbage");
     await cdp.send("HeapProfiler.collectGarbage");
     const gcRetainedBytes = metric(await collectMetrics(cdp), "JSHeapUsedSize") - blankHeap;
     const longTasks = await page.evaluate(() => {
