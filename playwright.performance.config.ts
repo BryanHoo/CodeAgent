@@ -11,7 +11,8 @@ export default defineConfig({
   use: {
     ...devices["Desktop Chrome"],
     locale: "zh-CN",
-    trace: "retain-on-failure",
+    // 性能采样必须关闭 trace，避免追踪器把自身 CPU 与内存计入被测页面。
+    trace: "off",
   },
   workers: 1,
 });
