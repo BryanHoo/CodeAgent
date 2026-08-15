@@ -29,7 +29,12 @@ fn notification_mapping_should_match_shared_fixtures() {
             .expect("fixture should map")
             .expect("fixture should produce an event");
 
-        assert_eq!(event.as_value(), &fixture.expected, "{}", fixture.method);
+        assert_eq!(
+            event.to_value().expect("serialize event"),
+            fixture.expected,
+            "{}",
+            fixture.method
+        );
     }
 }
 
@@ -50,8 +55,8 @@ fn phase5_realtime_path_should_match_shared_delivery_fixture() {
             )
             .expect("map notification")
             .expect("mapped event")
-            .as_value()
-            .clone()
+            .into_value()
+            .expect("serialize event")
         })
         .collect::<Vec<_>>();
 
@@ -277,7 +282,7 @@ fn realtime_diff_should_be_bounded_on_utf8_boundary() {
     )
     .expect("diff should map")
     .expect("diff should produce an event");
-    let mapped = event.as_value();
+    let mapped = event.to_value().expect("serialize event");
 
     assert!(
         mapped["payload"]["diff"]
@@ -380,5 +385,8 @@ fn automatic_approval_review_should_map_to_stream_item() {
     .expect("review should produce an event");
 
     assert_eq!(event.event_type(), "item.completed");
-    assert_eq!(event.as_value()["payload"]["item"]["status"], "approved");
+    assert_eq!(
+        event.item().and_then(|item| item["status"].as_str()),
+        Some("approved")
+    );
 }

@@ -15,7 +15,7 @@ use code_agent_core::{
 use code_agent_protocol::{
     AgentAttachment, AgentBackgroundTerminalPage, AgentCapabilities, AgentGlobalSettings,
     AgentMcpServerPage, AgentModelPage, AgentProviderConnectionRecord, AgentSkillPage,
-    AgentTaskPage, Project, ProjectId, RawProviderEvent, TaskId,
+    AgentTaskPage, Project, ProjectId, ProviderEvent, TaskId,
 };
 use code_agent_runtime::{CodeAgentRuntime, CodeAgentRuntimeBuilder, RuntimeOptions};
 use serde_json::{Value, json};
@@ -313,7 +313,7 @@ impl ProjectProviderPort for FakePorts {
         &self,
         _include_ephemeral: bool,
         _context: &PortRequestContext,
-    ) -> Result<mpsc::Receiver<RawProviderEvent>, CodeAgentError> {
+    ) -> Result<mpsc::Receiver<ProviderEvent>, CodeAgentError> {
         let (_sender, receiver) = mpsc::channel(1);
         Ok(receiver)
     }

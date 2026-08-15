@@ -1,9 +1,11 @@
 //! Codex 原生协议到 CodeAgent 公共领域协议的纯映射层。
 
 mod common;
+mod deltas;
 mod events;
 mod items;
 pub(crate) mod message_skills;
+mod plans;
 mod server_requests;
 mod turns;
 

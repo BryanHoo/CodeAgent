@@ -12,15 +12,14 @@ use code_agent_core::{
 use code_agent_protocol::{
     AgentBackgroundTerminalPage, AgentCapabilities, AgentGlobalSettings, AgentMcpServerPage,
     AgentModelPage, AgentProjectDefaults, AgentSkillPage, AgentTaskPage, AgentTaskSettings,
-    GenerateCommitMessageRequest, Project, ProjectId, RawProviderEvent, TaskId,
-    parse_provider_event,
+    GenerateCommitMessageRequest, Project, ProjectId, ProviderEvent, TaskId, parse_provider_event,
 };
 use code_agent_runtime::{CodeAgentRuntime, CodeAgentRuntimeBuilder, EventReplay, RuntimeOptions};
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, mpsc};
 
 struct FakeProjectProvider {
-    event_subscribers: Mutex<Vec<(bool, mpsc::Sender<RawProviderEvent>)>>,
+    event_subscribers: Mutex<Vec<(bool, mpsc::Sender<ProviderEvent>)>>,
     fail_start_turn: AtomicBool,
     start_task_input: Mutex<Option<Value>>,
     start_turn_input: Mutex<Option<Value>>,
@@ -29,7 +28,7 @@ struct FakeProjectProvider {
 }
 
 impl FakeProjectProvider {
-    async fn publish(&self, event: RawProviderEvent, ephemeral: bool) {
+    async fn publish(&self, event: ProviderEvent, ephemeral: bool) {
         self.event_subscribers
             .lock()
             .await
@@ -267,7 +266,7 @@ impl ProjectProviderPort for FakeProjectProvider {
         &self,
         include_ephemeral: bool,
         _context: &PortRequestContext,
-    ) -> Result<mpsc::Receiver<RawProviderEvent>, CodeAgentError> {
+    ) -> Result<mpsc::Receiver<ProviderEvent>, CodeAgentError> {
         self.subscription_modes.lock().await.push(include_ephemeral);
         let (sender, receiver) = mpsc::channel(8);
         self.event_subscribers

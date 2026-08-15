@@ -28,8 +28,8 @@ use code_agent_protocol::{
     AgentAttachment, AgentAttachmentKind, AgentBackgroundTerminalPage, AgentCapabilities,
     AgentGlobalSettings, AgentMcpServerPage, AgentModelPage, AgentProjectDefaults,
     AgentProviderConnectionRecord, AgentSkillPage, AgentTaskPage, AgentTaskSettings,
-    GenerateCommitMessageRequest, GenerateCommitMessageResponse, Project, ProjectId, TaskId,
-    ValueDefinition, parse_protocol_value,
+    GenerateCommitMessageRequest, GenerateCommitMessageResponse, Project, ProjectId,
+    ProviderEventKind, TaskId, ValueDefinition, parse_protocol_value,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
@@ -219,9 +219,8 @@ impl CodeAgentRuntime {
                         _ = forwarding_cancellation.cancelled() => break,
                         event = events.recv() => {
                             let Some(event) = event else { break };
-                            if event.event_type() == "provider.error"
-                                && event.as_value()["payload"]["message"]
-                                    == "Provider event subscription overflowed"
+                            if event.provider_error_message()
+                                == Some("Provider event subscription overflowed")
                             {
                                 forwarding_stream.require_resync().await;
                                 break;
@@ -1128,24 +1127,23 @@ impl CodeAgentRuntime {
                                 }
                                 event = ephemeral_events.recv() => {
                                     let event = event.ok_or_else(|| generation_error("Commit message event subscription closed"))?;
-                                    let value = event.as_value();
-                                    if value["taskId"] != task_id {
+                                    if event.task_id() != task_id {
                                         continue;
                                     }
-                                    match value["type"].as_str() {
-                                        Some("item.completed") if value["payload"]["item"]["type"] == "message" && value["payload"]["item"]["role"] == "assistant" => {
-                                            if let (Some(id), Some(text)) = (value["turnId"].as_str(), value["payload"]["item"]["text"].as_str()) {
+                                    match event.kind() {
+                                        ProviderEventKind::ItemCompleted if event.item().is_some_and(|item| item["type"] == "message" && item["role"] == "assistant") => {
+                                            if let (Some(id), Some(text)) = (event.turn_id(), event.item().and_then(|item| item["text"].as_str())) {
                                                 completed_messages.insert(id.to_owned(), text.to_owned());
                                             }
                                         }
-                                        Some("turn.completed") => {
+                                        ProviderEventKind::TurnCompleted => {
                                             turn_finished = true;
-                                            let turn = &value["payload"]["turn"];
+                                            let turn = event.turn().ok_or_else(|| generation_error("Codex returned an invalid completed turn"))?;
                                             let text = turn["id"].as_str().and_then(|id| completed_messages.get(id)).map(String::as_str);
                                             return read_generated_message(turn, text);
                                         }
-                                        Some("provider.error") if value["payload"]["willRetry"] == Value::Bool(false) => {
-                                            return Err(generation_error(value["payload"]["message"].as_str().unwrap_or("Codex could not generate a commit message")));
+                                        ProviderEventKind::ProviderError if event.provider_error_will_retry() == Some(false) => {
+                                            return Err(generation_error(event.provider_error_message().unwrap_or("Codex could not generate a commit message")));
                                         }
                                         _ => {}
                                     }

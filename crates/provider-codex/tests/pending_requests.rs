@@ -38,9 +38,9 @@ async fn read_frame(reader: &mut BufReader<tokio::io::ReadHalf<DuplexStream>>) -
 }
 
 async fn recv_event(
-    events: &mut tokio::sync::mpsc::Receiver<code_agent_protocol::RawProviderEvent>,
+    events: &mut tokio::sync::mpsc::Receiver<code_agent_protocol::ProviderEvent>,
     label: &str,
-) -> code_agent_protocol::RawProviderEvent {
+) -> code_agent_protocol::ProviderEvent {
     tokio::time::timeout(std::time::Duration::from_secs(1), events.recv())
         .await
         .unwrap_or_else(|_| panic!("{label} event timeout"))
@@ -95,7 +95,7 @@ async fn approval_resolution_should_use_nested_public_resolution_and_publish_ter
         .await
         .expect("request");
     let created = recv_event(&mut events, "created").await;
-    let request_id = created.as_value()["payload"]["request"]["requestId"]
+    let request_id = created.pending_request().expect("pending request")["requestId"]
         .as_str()
         .expect("request id")
         .to_owned();
@@ -139,7 +139,7 @@ async fn identical_concurrent_resolution_should_reuse_one_native_response() {
         .await
         .expect("request");
     let created = recv_event(&mut events, "created").await;
-    let request_id = created.as_value()["payload"]["request"]["requestId"]
+    let request_id = created.pending_request().expect("pending request")["requestId"]
         .as_str()
         .expect("request id");
     let input = json!({
@@ -189,7 +189,7 @@ async fn user_input_should_map_answers_and_redact_secret_message() {
         .await
         .expect("request");
     let created = recv_event(&mut events, "created").await;
-    let request_id = created.as_value()["payload"]["request"]["requestId"]
+    let request_id = created.pending_request().expect("pending request")["requestId"]
         .as_str()
         .expect("request id")
         .to_owned();
@@ -219,10 +219,16 @@ async fn user_input_should_map_answers_and_redact_secret_message() {
     let answer = recv_event(&mut events, "answer").await;
     assert_eq!(answer.event_type(), "item.completed");
     assert_eq!(
-        answer.as_value()["payload"]["item"]["text"],
+        answer.item().expect("answer item")["text"],
         "- 模式: 继续\n- 密钥: ******"
     );
-    assert!(!answer.as_value().to_string().contains("top-secret"));
+    assert!(
+        !answer
+            .to_value()
+            .expect("serialize answer")
+            .to_string()
+            .contains("top-secret")
+    );
 }
 
 #[tokio::test]

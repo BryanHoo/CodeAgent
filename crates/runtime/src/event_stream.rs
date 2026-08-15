@@ -2,7 +2,7 @@ use std::{collections::VecDeque, sync::Arc, time::Duration};
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use code_agent_core::{CodeAgentError, CodeAgentErrorCode};
-use code_agent_protocol::RawProviderEvent;
+use code_agent_protocol::{ProviderEvent, ProviderEventKind, ReasoningDeltaField};
 use serde_json::Value;
 use tokio::{
     sync::{Mutex, mpsc, watch},
@@ -12,15 +12,6 @@ use tokio_util::sync::CancellationToken;
 
 /// 首个 Delta 直发后的 trailing 合并窗口。
 pub const DEFAULT_COALESCING_WINDOW: Duration = Duration::from_millis(8);
-
-const APPEND_EVENT_TYPES: [&str; 4] = [
-    "command.output_delta",
-    "message.delta",
-    "plan.delta",
-    "reasoning.delta",
-];
-const REPLACE_EVENT_TYPES: [&str; 3] =
-    ["file_change.updated", "tool.progress", "turn.diff_updated"];
 
 /// Event Stream 数量与字节预算。
 #[derive(Clone)]
@@ -146,7 +137,7 @@ struct EventStreamState {
     history_floor_sequence: u64,
     metrics: EventStreamMetrics,
     next_subscriber_id: u64,
-    pending: Vec<RawProviderEvent>,
+    pending: Vec<ProviderEvent>,
     retained: VecDeque<RetainedEvent>,
     retained_bytes: usize,
     sequence: u64,
@@ -193,7 +184,7 @@ impl AgentEventStream {
     }
 
     /// 发布 Provider Event；关键事件先冲刷更早 Delta。
-    pub async fn publish(&self, event: RawProviderEvent) {
+    pub async fn publish(&self, event: ProviderEvent) {
         let mut state = self.state.lock().await;
         if state.closed {
             return;
@@ -359,10 +350,12 @@ impl AgentEventStream {
         }
     }
 
-    fn publish_now(&self, state: &mut EventStreamState, event: RawProviderEvent) {
+    fn publish_now(&self, state: &mut EventStreamState, event: ProviderEvent) {
+        let Ok(mut value) = event.into_value() else {
+            return;
+        };
         state.sequence += 1;
         let sequence = state.sequence;
-        let mut value = event.into_value();
         if let Some(object) = value.as_object_mut() {
             object.insert(
                 "provider".to_owned(),
@@ -436,38 +429,36 @@ impl AgentEventStream {
     }
 }
 
-fn is_coalesced_event(event: &RawProviderEvent) -> bool {
-    APPEND_EVENT_TYPES.contains(&event.event_type())
-        || REPLACE_EVENT_TYPES.contains(&event.event_type())
+fn is_coalesced_event(event: &ProviderEvent) -> bool {
+    event.kind().is_coalesced()
 }
 
 #[derive(Eq, PartialEq)]
 struct CoalescingKey<'a> {
-    event_type: &'a str,
-    field: Option<&'a str>,
+    event_kind: ProviderEventKind,
+    field: Option<ReasoningDeltaField>,
     item_id: Option<&'a str>,
     section_index: Option<u64>,
     task_id: &'a str,
     turn_id: Option<&'a str>,
 }
 
-fn coalescing_key(event: &RawProviderEvent) -> CoalescingKey<'_> {
+fn coalescing_key(event: &ProviderEvent) -> CoalescingKey<'_> {
     CoalescingKey {
-        event_type: event.event_type(),
-        field: event.as_value()["payload"]["field"].as_str(),
+        event_kind: event.kind(),
+        field: event.reasoning_field(),
         item_id: event.item_id(),
-        section_index: event.as_value()["payload"]["sectionIndex"].as_u64(),
+        section_index: event.section_index(),
         task_id: event.task_id(),
         turn_id: event.turn_id(),
     }
 }
 
-fn merge_event(previous: &mut RawProviderEvent, current: RawProviderEvent) {
-    if APPEND_EVENT_TYPES.contains(&current.event_type()) {
-        let delta = current.as_value()["payload"]["delta"]
-            .as_str()
-            .unwrap_or_default();
-        previous.append_delta(delta);
+fn merge_event(previous: &mut ProviderEvent, current: ProviderEvent) {
+    if current.kind().appends_delta() {
+        if let Some(delta) = current.delta() {
+            previous.append_delta(delta);
+        }
     } else {
         *previous = current;
     }

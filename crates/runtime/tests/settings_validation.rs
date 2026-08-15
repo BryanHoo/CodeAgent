@@ -12,7 +12,7 @@ use code_agent_core::{
 use code_agent_protocol::{
     AgentAttachment, AgentBackgroundTerminalPage, AgentCapabilities, AgentGlobalSettings,
     AgentMcpServerPage, AgentModelPage, AgentProjectDefaults, AgentSkillPage, AgentTaskPage,
-    AgentTaskSettings, Project, ProjectId, RawProviderEvent, TaskId,
+    AgentTaskSettings, Project, ProjectId, ProviderEvent, TaskId,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -326,7 +326,7 @@ impl ProjectProviderPort for FakeProjectProvider {
         &self,
         _include_ephemeral: bool,
         _context: &PortRequestContext,
-    ) -> Result<mpsc::Receiver<RawProviderEvent>, CodeAgentError> {
+    ) -> Result<mpsc::Receiver<ProviderEvent>, CodeAgentError> {
         let (_sender, receiver) = mpsc::channel(1);
         Ok(receiver)
     }

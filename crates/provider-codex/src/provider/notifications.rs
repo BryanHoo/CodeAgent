@@ -148,7 +148,9 @@ pub(super) async fn route_notification(inner: Arc<ProviderInner>, notification: 
             && let Some(turn_id) = event.turn_id().map(str::to_owned)
             && let Some(item) = inner.reviews.target_item(task_id, &turn_id)
         {
-            let mut value = event.as_value().clone();
+            let Ok(mut value) = event.to_value() else {
+                return;
+            };
             value["payload"]["turn"]["items"] = json!([item]);
             if let Ok(mapped) = code_agent_protocol::parse_provider_event(value) {
                 event = mapped;
@@ -161,7 +163,9 @@ pub(super) async fn route_notification(inner: Arc<ProviderInner>, notification: 
             && let Some(turn_id) = event.turn_id().map(str::to_owned)
             && let Some(item) = inner.reviews.target_item(task_id, &turn_id)
         {
-            let mut value = event.as_value().clone();
+            let Ok(mut value) = event.to_value() else {
+                return;
+            };
             value["itemId"] = item["id"].clone();
             value["payload"]["item"] = item;
             if let Ok(mapped) = code_agent_protocol::parse_provider_event(value) {

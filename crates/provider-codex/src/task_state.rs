@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use chrono::{DateTime, SecondsFormat};
 use code_agent_core::CodeAgentError;
-use code_agent_protocol::RawProviderEvent;
+use code_agent_protocol::{ProviderEvent, ProviderEventKind};
 use serde_json::{Value, json};
 
 use crate::{PendingCodexRequest, RpcClientError};
@@ -93,25 +93,24 @@ impl TaskState {
         tasks
     }
 
-    pub(crate) fn observe(&self, event: &RawProviderEvent) {
+    pub(crate) fn observe(&self, event: &ProviderEvent) {
         let task_id = event.task_id();
-        let value = event.as_value();
-        match event.event_type() {
-            "usage.updated" => {
-                if let Some(usage) = value.pointer("/payload/usage")
+        match event.kind() {
+            ProviderEventKind::UsageUpdated => {
+                if let Some(usage) = event.usage()
                     && let Ok(mut cache) = self.context_usage.lock()
                 {
                     cache.insert(task_id.to_string(), usage.clone());
                 }
             }
-            "plan.updated" => {
-                if let Some(plan) = value.pointer("/payload/plan")
+            ProviderEventKind::PlanUpdated => {
+                if let Some(plan) = event.plan()
                     && let Ok(mut cache) = self.plans.lock()
                 {
                     cache.insert(task_id.to_string(), plan.clone());
                 }
             }
-            "turn.started" => {
+            ProviderEventKind::TurnStarted => {
                 if let Ok(mut running) = self.running.lock() {
                     running.insert(task_id.to_string());
                 }
@@ -119,13 +118,14 @@ impl TaskState {
                     failed.remove(task_id);
                 }
             }
-            "turn.completed" => {
+            ProviderEventKind::TurnCompleted => {
                 if let Ok(mut running) = self.running.lock() {
                     running.remove(task_id);
                 }
                 if let Ok(mut failed) = self.failed.lock() {
-                    if value
-                        .pointer("/payload/turn/status")
+                    if event
+                        .turn()
+                        .and_then(|turn| turn.get("status"))
                         .and_then(Value::as_str)
                         == Some("failed")
                     {
