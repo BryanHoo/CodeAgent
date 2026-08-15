@@ -57,7 +57,7 @@ describe("Tauri Phase 5 repository contract", () => {
     const prepareScript = read("apps/desktop/scripts/prepare-codex-binary.mjs");
     const artifactCheck = read("tools/verify-desktop-artifact.mjs");
     const desktop = read("apps/desktop/src-tauri/src/lib.rs");
-    const platformAdapters = read("apps/desktop/src-tauri/src/platform_adapters.rs");
+    const codexSupervisor = read("apps/desktop/src-tauri/src/codex_supervisor.rs");
     const tauriConfig = JSON.parse(read("apps/desktop/src-tauri/tauri.conf.json")) as {
       bundle: { externalBin: string[]; resources: Record<string, string> };
     };
@@ -76,9 +76,9 @@ describe("Tauri Phase 5 repository contract", () => {
     expect(artifactCheck).toContain('"codex-path"');
     expect(artifactCheck).toContain("npx.exe");
     expect(desktop).toContain("resource_dir()");
-    expect(platformAdapters).toContain("desktop_codex_environment");
-    expect(platformAdapters).toContain('"PATH".to_string()');
-    expect(platformAdapters).toContain('join("codex-path")');
+    expect(codexSupervisor).toContain("desktop_codex_environment");
+    expect(codexSupervisor).toContain('"PATH".to_string()');
+    expect(codexSupervisor).toContain('join("codex-path")');
     expect(desktop).toContain("resolved_process_path");
   });
 

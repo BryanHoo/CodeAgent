@@ -20,6 +20,70 @@ struct MappedTurnPage {
 }
 
 impl CodexProjectProvider {
+    fn rollback_task_claim(&self, task_id: &str) {
+        if let Ok(mut tasks) = self.tasks.lock() {
+            tasks.remove(task_id);
+        }
+        let project_id = self.project.id.as_str();
+        if let Ok(mut owners) = self.owners.lock()
+            && owners.get(task_id).map(String::as_str) == Some(project_id)
+        {
+            owners.remove(task_id);
+        }
+    }
+
+    pub(super) async fn restore_task_subscription_impl(
+        &self,
+        task_id: &str,
+    ) -> Result<bool, CodeAgentError> {
+        // resume 可能在响应前立即推送通知，必须先恢复路由归属以免丢失首批事件。
+        let already_claimed = self.has_task(task_id);
+        self.claim_task(task_id, false)?;
+        let response = match self
+            .client
+            .request("thread/resume", Some(json!({ "threadId": task_id })))
+            .await
+        {
+            Ok(response) => response,
+            Err(error) if is_thread_not_loaded(&error) || is_thread_not_materialized(&error) => {
+                self.rollback_task_claim(task_id);
+                return Ok(false);
+            }
+            Err(error) => {
+                if !already_claimed {
+                    self.rollback_task_claim(task_id);
+                }
+                return Err(rpc_error_to_code_agent_error(&error));
+            }
+        };
+        let thread = &response["thread"];
+        if thread["id"] != task_id {
+            if !already_claimed {
+                self.rollback_task_claim(task_id);
+            }
+            return Err(CodeAgentError::internal(
+                "thread/resume returned a different thread",
+            ));
+        }
+        let Some(cwd) = thread["cwd"].as_str() else {
+            if !already_claimed {
+                self.rollback_task_claim(task_id);
+            }
+            return Err(CodeAgentError::internal("Codex thread cwd is invalid"));
+        };
+        if !same_canonical_path(cwd, self.project.root_path.as_str()).await {
+            if !already_claimed {
+                self.rollback_task_claim(task_id);
+            }
+            return Ok(false);
+        }
+        self.resumed
+            .lock()
+            .map_err(|_| CodeAgentError::internal("resume registry is poisoned"))?
+            .insert(task_id.to_owned());
+        Ok(true)
+    }
+
     pub(super) async fn start_task_impl(&self, input: Value) -> Result<Value, CodeAgentError> {
         let ephemeral = input
             .get("ephemeral")
