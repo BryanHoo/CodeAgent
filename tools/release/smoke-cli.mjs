@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -83,8 +83,10 @@ try {
   if (!help.includes("Usage: code-agent")) {
     throw new Error("Installed CLI help output is invalid");
   }
+  const codexHome = join(installRoot, "codex-home");
+  mkdirSync(codexHome, { recursive: true });
   run(executable, ["doctor"], {
-    env: { ...process.env, CODEX_HOME: join(installRoot, "codex-home") },
+    env: { ...process.env, CODEX_HOME: codexHome },
   });
   process.stdout.write(`CLI release smoke passed for ${target}.\n`);
 } finally {
