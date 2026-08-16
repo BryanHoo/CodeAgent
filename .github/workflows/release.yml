@@ -27,7 +27,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-14, target: darwin-arm64, bundles: dmg }
+          - { os: macos-14, target: darwin-arm64, bundles: app,dmg }
           - { os: ubuntu-22.04, target: linux-x64-gnu, bundles: "deb,appimage" }
           - { os: windows-2022, target: win32-x64-msvc, bundles: nsis }
     env:

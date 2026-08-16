@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   constants,
   accessSync,
@@ -68,6 +68,23 @@ const extractArchive = (archivePath, destination) => {
     execFileSync("tar", ["-xzf", archivePath, "-C", destination], { stdio: "pipe" });
     return;
   }
+  if (archivePath.endsWith(".zip")) {
+    if (process.platform === "win32") {
+      const result = spawnSync(
+        "powershell",
+        [
+          "-NoProfile",
+          "-Command",
+          `Expand-Archive -LiteralPath '${archivePath.replaceAll("'", "''")}' -DestinationPath '${destination.replaceAll("'", "''")}' -Force`,
+        ],
+        { stdio: "pipe" },
+      );
+      if (result.status !== 0) {
+        throw new Error(`Failed to extract ${archivePath}`);
+      }
+      return;
+    }
+  }
   execFileSync("tar", ["-xf", archivePath, "-C", destination], { stdio: "pipe" });
 };
 
@@ -115,10 +132,19 @@ const discoverBundledRuntimeDirectories = () => {
       ? readdirSync(nsisDirectory).find((entry) => entry.endsWith(".nsis.zip"))
       : undefined;
     if (nsisArchive !== undefined) {
-      return withTemporaryDirectory((directory) => {
+      const fromArchive = withTemporaryDirectory((directory) => {
         extractArchive(join(nsisDirectory, nsisArchive), directory);
         return findCodexRuntimeDirectories(directory);
       });
+      if (fromArchive.length > 0) return fromArchive;
+    }
+
+    const installer = existsSync(nsisDirectory)
+      ? readdirSync(nsisDirectory).find((entry) => entry.endsWith("-setup.exe"))
+      : undefined;
+    const stagedRuntime = resolve("apps/desktop/src-tauri/resources/codex-runtime");
+    if (installer !== undefined && existsSync(join(stagedRuntime, "codex-package.json"))) {
+      return [stagedRuntime];
     }
   }
 
