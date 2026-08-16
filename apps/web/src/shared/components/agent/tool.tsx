@@ -17,7 +17,6 @@ import {
 } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../core/tooltip.js";
 import { CodeBlock } from "./code-block.js";
 
 export type ToolState =
@@ -96,30 +95,25 @@ export function ToolHeader({ className = "", state, title, ...props }: ToolHeade
   const { t } = useTranslation("conversation");
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <summary
-          className={`flex min-h-9 cursor-pointer list-none items-center gap-2 text-label text-foreground [&::-webkit-details-marker]:hidden ${className}`}
-          {...props}
-        >
-          <Wrench className="size-3.5 text-muted-foreground" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
-          <span
-            className={`inline-flex items-center gap-1 ${
-              state === "output-error" ? "text-danger" : "text-muted-foreground"
-            }`}
-          >
-            {presentation.icon}
-            {t(presentation.labelKey)}
-          </span>
-          <ChevronRight
-            className="size-3.5 text-muted-foreground transition-transform group-open/tool:rotate-90"
-            aria-hidden="true"
-          />
-        </summary>
-      </TooltipTrigger>
-      <TooltipContent className="whitespace-pre-wrap break-words font-mono">{title}</TooltipContent>
-    </Tooltip>
+    <summary
+      className={`flex min-h-9 cursor-pointer list-none items-center gap-2 text-label text-foreground [&::-webkit-details-marker]:hidden ${className}`}
+      {...props}
+    >
+      <Wrench className="size-3.5 text-muted-foreground" aria-hidden="true" />
+      <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
+      <span
+        className={`inline-flex items-center gap-1 ${
+          state === "output-error" ? "text-danger" : "text-muted-foreground"
+        }`}
+      >
+        {presentation.icon}
+        {t(presentation.labelKey)}
+      </span>
+      <ChevronRight
+        className="size-3.5 text-muted-foreground transition-transform group-open/tool:rotate-90"
+        aria-hidden="true"
+      />
+    </summary>
   );
 }
 

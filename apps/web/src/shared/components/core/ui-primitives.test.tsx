@@ -135,6 +135,15 @@ describe("项目核心组件", () => {
     expect(dialogMarkup).toContain('data-slot="dialog-trigger"');
   });
 
+  it("caps tooltip width without forcing a fixed content width", () => {
+    const source = readFileSync(new URL("./tooltip.tsx", import.meta.url), "utf8");
+    const classLine =
+      source.match(/TooltipPrimitive\.Content[\s\S]*?className=\{cn\(\s*"([^"]+)"/)?.[1] ?? "";
+
+    expect(classLine).toContain("max-w-64");
+    expect(classLine.split(/\s+/)).not.toContain("w-64");
+  });
+
   it("keeps dialog content inside the dynamic viewport", () => {
     const markup = renderToStaticMarkup(
       <Dialog open>
