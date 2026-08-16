@@ -217,11 +217,6 @@ impl ProviderEvent {
         }
     }
 
-    /// 消费并转换为最终传输边界使用的 JSON 对象。
-    pub fn into_value(self) -> Result<Value, serde_json::Error> {
-        serde_json::to_value(self)
-    }
-
     /// 借用事件并转换为低频边界适配使用的 JSON 对象。
     pub fn to_value(&self) -> Result<Value, serde_json::Error> {
         serde_json::to_value(self)

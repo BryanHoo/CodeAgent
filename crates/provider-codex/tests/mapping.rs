@@ -55,7 +55,7 @@ fn phase5_realtime_path_should_match_shared_delivery_fixture() {
             )
             .expect("map notification")
             .expect("mapped event")
-            .into_value()
+            .to_value()
             .expect("serialize event")
         })
         .collect::<Vec<_>>();

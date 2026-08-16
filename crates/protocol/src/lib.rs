@@ -204,7 +204,7 @@ mod tests {
         });
         let event = parse_provider_event(fixture.clone())?;
 
-        assert_eq!(event.into_value()?, fixture);
+        assert_eq!(serde_json::to_value(event)?, fixture);
         Ok(())
     }
 

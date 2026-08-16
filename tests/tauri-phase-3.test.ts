@@ -51,8 +51,10 @@ describe("Tauri Phase 3 repository contract", () => {
     expect(schemaSource).toContain('"sequence"');
     expect(schemaSource).toContain('"sessionId"');
     expect(schemaSource).toContain("Type.Omit");
-    expect(eventStream).toContain('object.insert("sequence"');
-    expect(eventStream).toContain('"sessionId".to_owned()');
-    expect(eventStream).toContain('object.insert("version"');
+    expect(eventStream).toContain("#[serde(flatten)]");
+    expect(eventStream).toContain("event: &'a ProviderEvent");
+    expect(eventStream).toContain("serde_json::to_vec(&envelope)");
+    expect(eventStream).not.toContain("event.into_value()");
+    expect(eventStream).not.toContain("object.insert(");
   });
 });

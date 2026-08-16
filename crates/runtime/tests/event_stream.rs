@@ -98,6 +98,31 @@ async fn event_stream_should_publish_first_delta_without_waiting_for_flush_windo
 }
 
 #[tokio::test]
+async fn event_stream_should_serialize_provider_event_and_transport_envelope_together() {
+    let stream = AgentEventStream::new(options()).expect("stream");
+    let mut subscriber = stream.subscribe().await.expect("subscriber");
+
+    stream.publish(message_delta("item-a", "visible")).await;
+
+    let published = subscriber.events.recv().await.expect("published event");
+    assert_eq!(
+        published_value(&published),
+        json!({
+            "itemId": "item-a",
+            "payload": { "delta": "visible" },
+            "provider": "fake",
+            "sequence": 1,
+            "sessionId": "session-1",
+            "taskId": "task-1",
+            "timestamp": "1970-01-01T00:00:00.000Z",
+            "turnId": "turn-1",
+            "type": "message.delta",
+            "version": 2
+        })
+    );
+}
+
+#[tokio::test]
 async fn event_stream_should_coalesce_adjacent_delta_and_flush_before_terminal() {
     let stream = AgentEventStream::new(options()).expect("stream");
     let mut subscriber = stream.subscribe().await.expect("subscriber");

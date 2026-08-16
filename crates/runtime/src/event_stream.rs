@@ -3,7 +3,7 @@ use std::{collections::VecDeque, sync::Arc, time::Duration};
 use chrono::{DateTime, SecondsFormat, Utc};
 use code_agent_core::{CodeAgentError, CodeAgentErrorCode};
 use code_agent_protocol::{ProviderEvent, ProviderEventKind, ReasoningDeltaField};
-use serde_json::Value;
+use serde::Serialize;
 use tokio::{
     sync::{Mutex, Notify, mpsc, watch},
     time::sleep,
@@ -139,6 +139,19 @@ struct EventStreamState {
     retained_bytes: usize,
     sequence: u64,
     subscribers: Vec<(u64, Subscriber)>,
+}
+
+// 性能关键路径直接将领域事件与传输字段写入最终 buffer，避免构造并修改 Value tree。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProviderEventEnvelope<'a> {
+    #[serde(flatten)]
+    event: &'a ProviderEvent,
+    provider: &'a str,
+    sequence: u64,
+    session_id: &'a str,
+    timestamp: &'a str,
+    version: u8,
 }
 
 /// 有界、按序且支持恢复的 Project Agent Event Stream。
@@ -365,30 +378,20 @@ impl AgentEventStream {
     }
 
     fn publish_now(&self, state: &mut EventStreamState, event: ProviderEvent) {
-        let Ok(mut value) = event.into_value() else {
+        let sequence = state.sequence + 1;
+        let timestamp = (self.options.now)().to_rfc3339_opts(SecondsFormat::Millis, true);
+        let envelope = ProviderEventEnvelope {
+            event: &event,
+            provider: &self.options.provider,
+            sequence,
+            session_id: &self.options.session_id,
+            timestamp: &timestamp,
+            version: 2,
+        };
+        let Ok(frame) = serde_json::to_vec(&envelope) else {
             return;
         };
-        state.sequence += 1;
-        let sequence = state.sequence;
-        if let Some(object) = value.as_object_mut() {
-            object.insert(
-                "provider".to_owned(),
-                Value::String(self.options.provider.to_string()),
-            );
-            object.insert("sequence".to_owned(), Value::from(sequence));
-            object.insert(
-                "sessionId".to_owned(),
-                Value::String(self.options.session_id.to_string()),
-            );
-            object.insert(
-                "timestamp".to_owned(),
-                Value::String((self.options.now)().to_rfc3339_opts(SecondsFormat::Millis, true)),
-            );
-            object.insert("version".to_owned(), Value::from(2));
-        }
-        let Ok(frame) = serde_json::to_vec(&value) else {
-            return;
-        };
+        state.sequence = sequence;
         let event = Arc::new(PublishedEvent {
             frame: Arc::from(frame),
             sequence,
