@@ -54,6 +54,7 @@
     "protocol:rust:check": "cargo run -p code-agent-protocol-gen --locked -- --check schemas/code-agent-runtime.schema.json crates/protocol/src/generated.rs",
     "protocol:rust:generate": "node ./tools/generate-rust-protocol.mjs",
     "release:version:check": "node ./tools/verify-release-versions.mjs",
+    "release:smoke:linux:docker": "bash tools/release/run-linux-desktop-smoke-docker.sh",
     "start": "pnpm run build && node ./apps/node-cli/dist/cli.js start",
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
