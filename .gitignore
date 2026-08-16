@@ -18,6 +18,7 @@ apps/desktop/src-tauri/resources/codex-runtime/
 *.tsbuildinfo
 *.tgz
 packages/node-binding-*/code-agent-node-binding.node
+packages/engine-node/native/code-agent-node-binding.node
 
 # 测试与覆盖率
 coverage/

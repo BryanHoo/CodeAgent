@@ -20,6 +20,7 @@ await Promise.all(
     "packages/node-binding-darwin-arm64/code-agent-node-binding.node",
     "packages/node-binding-linux-x64-gnu/code-agent-node-binding.node",
     "packages/node-binding-win32-x64-msvc/code-agent-node-binding.node",
+    "packages/engine-node/native/code-agent-node-binding.node",
     "tests/tsconfig.tsbuildinfo",
   ].map((path) => rm(path, { force: true, recursive: true })),
 );

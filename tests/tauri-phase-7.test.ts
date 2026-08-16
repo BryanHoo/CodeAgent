@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -36,6 +37,31 @@ describe("Tauri Phase 7 repository contract", () => {
     expect(manifest.scripts?.["build:native"]).toContain("build-native-addon.mjs");
     expect(manifest.scripts?.["tauri:phase7:check"]).toBeUndefined();
     expect(vitestConfig).toContain('"tests/*.test.ts"');
+  });
+
+  it("tunes workspace release builds for smaller native artifacts", () => {
+    const cargo = read("Cargo.toml");
+
+    expect(cargo).toContain("[profile.release]");
+    expect(cargo).toMatch(/opt-level\s*=\s*3/);
+    expect(cargo).toMatch(/lto\s*=\s*"thin"/);
+    expect(cargo).toMatch(/codegen-units\s*=\s*1/);
+    expect(cargo).toMatch(/panic\s*=\s*"abort"/);
+    expect(cargo).toMatch(/strip\s*=\s*"symbols"/);
+  });
+
+  it("keeps the workspace native addon out of version control", () => {
+    const gitignore = read(".gitignore");
+    const tracked = execSync(
+      "git ls-files packages/engine-node/native/code-agent-node-binding.node",
+      {
+        cwd: root,
+        encoding: "utf8",
+      },
+    ).trim();
+
+    expect(gitignore).toContain("packages/engine-node/native/code-agent-node-binding.node");
+    expect(tracked).toBe("");
   });
 
   it("exposes a named Node Engine lifecycle without a generic dispatcher", () => {
