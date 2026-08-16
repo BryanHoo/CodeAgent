@@ -154,7 +154,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p .artifacts/updater
-          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > .artifacts/release.json
+          release_id="$(gh release view "${RELEASE_TAG}" --json databaseId --jq .databaseId)"
+          test -n "${release_id}"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" > .artifacts/release.json
           gh release download "${RELEASE_TAG}" --dir .artifacts/updater
       - name: Verify updater metadata, signatures, and tamper rejection
         shell: bash
