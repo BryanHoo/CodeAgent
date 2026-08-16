@@ -19,7 +19,7 @@
 | ---------------- | ------------------------------------ | ------------------ |
 | `darwin-arm64`   | `.dmg`、updater artifact、`.sig`     | Preview / Unsigned |
 | `linux-x64-gnu`  | `.deb`、`.AppImage`                  | Preview / Unsigned |
-| `win32-x64-msvc` | NSIS `.exe`、`.msi`、updater、`.sig` | Preview / Unsigned |
+| `win32-x64-msvc` | NSIS `.exe`、updater、`.sig`（SemVer prerelease 仅发布 NSIS，不含 `.msi`） | Preview / Unsigned |
 
 ## 发布前配置
 

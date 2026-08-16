@@ -29,7 +29,7 @@ jobs:
         include:
           - { os: macos-14, target: darwin-arm64, bundles: dmg }
           - { os: ubuntu-22.04, target: linux-x64-gnu, bundles: "deb,appimage" }
-          - { os: windows-2022, target: win32-x64-msvc, bundles: "msi,nsis" }
+          - { os: windows-2022, target: win32-x64-msvc, bundles: nsis }
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
@@ -87,6 +87,21 @@ jobs:
         run: |
           shopt -s nullglob
           apps=(target/release/bundle/macos/*.app)
+          mount_point=""
+          if [[ "${#apps[@]}" -ne 1 ]]; then
+            dmgs=(target/release/bundle/dmg/*.dmg)
+            test "${#dmgs[@]}" -eq 1
+            mount_point="$(mktemp -d)"
+            cleanup() {
+              if [[ -n "${mount_point}" ]]; then
+                hdiutil detach "${mount_point}" -quiet 2>/dev/null || true
+                rmdir "${mount_point}" 2>/dev/null || true
+              fi
+            }
+            trap cleanup EXIT
+            hdiutil attach "${dmgs[0]}" -nobrowse -readonly -mountpoint "${mount_point}" >/dev/null
+            apps=("${mount_point}"/*.app)
+          fi
           test "${#apps[@]}" -eq 1
           app_bundle="${apps[0]}"
           test "$(plutil -extract LSMinimumSystemVersion raw "${app_bundle}/Contents/Info.plist")" = "14.0"
@@ -95,24 +110,24 @@ jobs:
       - name: Pack npm artifacts
         shell: bash
         run: |
-          mkdir -p .artifacts
-          pnpm --dir "packages/node-binding-${{ matrix.target }}" pack --pack-destination ../../.artifacts
+          mkdir -p .artifacts/npm .artifacts/desktop
+          pnpm --dir "packages/node-binding-${{ matrix.target }}" pack --pack-destination ../../.artifacts/npm
           if [[ "${{ matrix.target }}" = "linux-x64-gnu" ]]; then
-            pnpm --dir apps/node-cli pack --pack-destination ../../.artifacts
+            pnpm --dir apps/node-cli pack --pack-destination ../../.artifacts/npm
           fi
-          tar -czf ".artifacts/code-agent-desktop-${{ matrix.target }}.tar.gz" -C target/release/bundle .
+          tar -czf ".artifacts/desktop/code-agent-desktop-${{ matrix.target }}.tar.gz" -C target/release/bundle .
       - name: Upload npm artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: npm-${{ matrix.target }}
-          path: .artifacts/*.tgz
+          path: .artifacts/npm/
           if-no-files-found: error
           compression-level: 0
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: desktop-${{ matrix.target }}
-          path: .artifacts/code-agent-desktop-${{ matrix.target }}.tar.gz
+          path: .artifacts/desktop/code-agent-desktop-${{ matrix.target }}.tar.gz
           if-no-files-found: error
 
   updater-acceptance:
