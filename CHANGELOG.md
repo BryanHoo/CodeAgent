@@ -18,7 +18,7 @@
 
 ### 工程
 
-- 添加 feature 隔离的真实 Desktop IPC E2E，以及 macOS 14、Windows 10 和 Ubuntu 22.04 最低系统发布 smoke 门禁。
+- 添加 feature 隔离的真实 Desktop IPC E2E，以及 macOS 14 与 Ubuntu 22.04 最低系统发布 smoke 门禁；Windows Desktop 在 hosted runner 构建，首发 Beta 不将 Windows 10 自托管 runner 安装 smoke 作为发布门禁。
 - 添加 draft Release updater `bootstrap` 验收，自动检查三平台 metadata、合法签名和 artifact/signature 篡改拒绝。
 - 将三平台 Desktop 标记为 Preview / Unsigned，并将 SemVer prerelease npm 包限制在 `beta` dist-tag。
 

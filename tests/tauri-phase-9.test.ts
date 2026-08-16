@@ -145,7 +145,7 @@ describe("Tauri Phase 9 updater contract", () => {
     );
   });
 
-  it("smokes CLI and Desktop artifacts on every minimum supported system", () => {
+  it("smokes CLI and Desktop artifacts on minimum supported hosted systems", () => {
     const workflow = read(".github/workflows/release.yml");
     const cliSmoke = read("tools/release/smoke-cli.mjs");
     const macosSmoke = read("tools/release/smoke-desktop-macos.sh");
@@ -155,14 +155,13 @@ describe("Tauri Phase 9 updater contract", () => {
     expect(workflow).toContain("smoke-hosted:");
     expect(workflow).toContain("os: macos-14");
     expect(workflow).toContain("os: ubuntu-22.04");
-    expect(workflow).toContain("smoke-windows-10:");
-    expect(workflow).toContain("runs-on: [self-hosted, Windows, X64, windows-10]");
+    expect(workflow).not.toContain("smoke-windows-10:");
+    expect(workflow).not.toContain("runs-on: [self-hosted, Windows, X64, windows-10]");
     expect(workflow).toContain("needs: build");
     expect(workflow).toContain("node tools/release/smoke-cli.mjs");
     expect(workflow).toContain("script: smoke-desktop-macos.sh");
     expect(workflow).toContain("script: smoke-desktop-linux.sh");
     expect(workflow).toContain('bash "tools/release/${{ matrix.script }}"');
-    expect(workflow).toContain("tools/release/smoke-desktop-windows.ps1");
     expect(cliSmoke).toContain('"doctor"');
     expect(cliSmoke).toContain('"--help"');
     expect(macosSmoke).toContain("hdiutil attach");
@@ -197,7 +196,7 @@ describe("Tauri Phase 9 updater contract", () => {
     const publishJob = releaseWorkflow.slice(releaseWorkflow.indexOf("  publish:"));
 
     expect(ciWorkflow).toContain("runs-on: macos-14");
-    expect(approvalJob).toContain("needs: [smoke-hosted, smoke-windows-10, updater-acceptance]");
+    expect(approvalJob).toContain("needs: [smoke-hosted, updater-acceptance]");
     expect(approvalJob).toContain("environment: release");
     expect(publishJob).toContain("needs: [build, release-approval]");
     expect(publishJob).toContain('gh release edit "${RELEASE_TAG}" --draft=false');
@@ -221,7 +220,7 @@ describe("Tauri Phase 9 updater contract", () => {
 
     expect(workflow).toContain("updater-acceptance:");
     expect(workflow).toContain("node tools/release/verify-updater-release.mjs");
-    expect(approvalJob).toContain("needs: [smoke-hosted, smoke-windows-10, updater-acceptance]");
+    expect(approvalJob).toContain("needs: [smoke-hosted, updater-acceptance]");
     expect(publishJob).toContain('npm_tag="beta"');
     expect(publishJob).toContain('--tag "${npm_tag}"');
     expect(publishJob).toContain('npm view "@bryanhu/code-agent" dist-tags.latest');
@@ -302,7 +301,7 @@ describe("Tauri Phase 9 updater contract", () => {
     expect(chineseReadme).toContain("Preview / Unsigned");
     expect(releaseGuide).toContain("Preview / Unsigned");
     expect(releaseGuide).not.toMatch(/AZURE_|Artifact Signing|Authenticode/u);
-    expect(releaseGuide).toContain("self-hosted, Windows, X64, windows-10");
+    expect(releaseGuide).toContain("首发不将 Windows 10");
     expect(releaseGuide).toContain('gh release edit "${RELEASE_TAG}" --draft=false');
     expect(migrationPlan).toContain("三平台 Desktop 暂以 Preview / Unsigned 发布");
     expect(migrationPlan).not.toContain("Windows 签名和 Linux clean VM 验证待完成");

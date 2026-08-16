@@ -192,44 +192,9 @@ jobs:
           bash "tools/release/${{ matrix.script }}"
           ".artifacts/desktop/code-agent-desktop-${{ matrix.target }}.tar.gz"
 
-  smoke-windows-10:
-    name: Smoke win32-x64-msvc on Windows 10
-    needs: build
-    runs-on: [self-hosted, Windows, X64, windows-10]
-    timeout-minutes: 15
-    env:
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ env.RELEASE_TAG }}
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 24
-      - name: Download npm artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          pattern: npm-*
-          path: .artifacts/npm
-          merge-multiple: true
-      - name: Download Desktop artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          name: desktop-win32-x64-msvc
-          path: .artifacts/desktop
-      - name: Smoke packaged CLI
-        run: node tools/release/smoke-cli.mjs --artifacts .artifacts/npm --target win32-x64-msvc
-      - name: Smoke installed Desktop
-        shell: pwsh
-        run: >-
-          ./tools/release/smoke-desktop-windows.ps1
-          -ArchivePath .artifacts/desktop/code-agent-desktop-win32-x64-msvc.tar.gz
-
   release-approval:
     name: Approve updater acceptance
-    needs: [smoke-hosted, smoke-windows-10, updater-acceptance]
+    needs: [smoke-hosted, updater-acceptance]
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     environment: release

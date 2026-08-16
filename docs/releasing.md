@@ -23,9 +23,9 @@
 
 ## 发布前配置
 
-GitHub 必须存在 `npm` Environment。工作流使用 OIDC 和 npm provenance，不保存长期 npm Token。另建受保护的 `release` Environment 并配置 Required reviewers；审批人只有在三端 smoke 和自动 updater 验收全部通过后才能放行。
+GitHub 必须存在 `npm` Environment。工作流使用 OIDC 和 npm provenance，不保存长期 npm Token。另建受保护的 `release` Environment 并配置 Required reviewers；审批人只有在 macOS/Linux 最低系统 smoke 和自动 updater 验收全部通过后才能放行。
 
-配置一台每次 job 前恢复干净快照的 Windows 10 x64 自托管 runner，并添加 `self-hosted, Windows, X64, windows-10` 标签。先按 GitHub 仓库 Settings 页面解压当前 Actions runner，再以管理员 PowerShell 运行 `tools/release/register-windows-runner.ps1`；Windows Server runner 只负责可复现构建，不替代 Windows 10 最低系统验收。
+Windows Desktop 在 `windows-2022` hosted runner 上构建；`2.0.0-beta.1` 首发不将 Windows 10 x64 自托管 runner 安装 smoke 作为发布门禁。后续稳定版可恢复 `tools/release/register-windows-runner.ps1` 注册的 `self-hosted, Windows, X64, windows-10` runner 验收。
 
 Repository Actions Secrets 只需要 updater 密钥：
 
@@ -45,7 +45,7 @@ Updater 签名只验证更新包来源，不等同于操作系统代码签名。
 ## 发布步骤
 
 1. 在 `main` 上更新版本、`CHANGELOG.md` 和文档，确保工作区干净。
-2. 确认 updater 密钥已进入 GitHub Secrets，`release` Environment 与 Windows 10 runner 已配置。
+2. 确认 updater 密钥已进入 GitHub Secrets，`release` Environment 已配置。
 3. 运行版本与完整门禁：
 
    ```bash
@@ -70,7 +70,7 @@ Updater 签名只验证更新包来源，不等同于操作系统代码签名。
 1. 校验 tag 与根版本一致，构建并检查 npm artifacts。
 2. 通过固定 SHA 的 `tauri-action` 分别构建 DMG、DEB/AppImage 和 MSI/NSIS；三端都不读取操作系统证书，统一生成 Preview / Unsigned 安装包。
 3. 使用 `TAURI_SIGNING_PRIVATE_KEY` 生成 updater artifact 和 `.sig`，将安装包、更新器 metadata 与签名上传到同一个 draft GitHub Release。
-4. 在 macOS 14 Apple Silicon、Ubuntu 22.04 x64 和 Windows 10 x64 clean runner 安装 CLI 与 Desktop，执行 CLI doctor 和有界启动 smoke。macOS 额外检查 `LSMinimumSystemVersion` 为 `14.0`。
+4. 在 macOS 14 Apple Silicon 与 Ubuntu 22.04 x64 clean runner 安装 CLI 与 Desktop，执行 CLI doctor 和有界启动 smoke。macOS 额外检查 `LSMinimumSystemVersion` 为 `14.0`。Windows 安装包在 `windows-2022` 构建，首发 Beta 不在 Windows 10 自托管 runner 上执行安装 smoke。
 5. 自动验证 `latest.json` 三平台覆盖、内置公钥合法签名，以及 artifact/signature 篡改均被拒绝。
 6. 等待 `release` Environment 审批，按 native packages 在前、CLI 主包在后的顺序发布 npm。SemVer prerelease 只进入 npm `beta`，不得移动 `latest`，随后执行：
 
@@ -104,7 +104,7 @@ Desktop 固定从 `https://github.com/BryanHoo/CodeAgent/releases/latest/downloa
 - macOS Preview 安装被系统阻止：确认 DMG 来自当前 GitHub Release，再按 README 的“隐私与安全性 > 仍要打开”步骤复验；不得将此结果误报为系统签名通过。
 - Windows Preview 安装被 SmartScreen 拦截：确认安装包来自当前 GitHub Release，再按 README 的“更多信息 > 仍要运行”步骤复验；受组织策略管理的 runner 必须先调整发布验收策略。
 - Linux 安装失败：在 Ubuntu 22.04 clean runner 分别复验 `.deb` 依赖安装和 `.AppImage` 执行权限，不得用更高版本发行版替代最低系统验收。
-- Windows 10 runner 不在线或快照不干净：恢复 runner 后重跑 smoke；不得用 Windows Server 结果手动放行。
+- Windows 10 自托管 runner 不在线：首发 Beta 不依赖该门禁；后续恢复 runner 后可重新启用 `smoke-windows-10` job。
 - `release` Environment 验收失败：拒绝审批并保持 draft，修复后使用同 tag 重新构建和验收；不得先发布 npm。
 - GitHub Release promotion 失败：npm 包保持原版本，Release 保持 draft；确认同 tag Release 唯一存在后重跑 publish Job。
 - updater 签名失败：确认 `TAURI_SIGNING_PRIVATE_KEY` 内容完整且与仓库公钥匹配；不得生成或替换新密钥后直接发布。
