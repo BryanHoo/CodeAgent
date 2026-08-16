@@ -9,6 +9,7 @@ use ignore::{DirEntry, Error, ParallelVisitor, ParallelVisitorBuilder, WalkBuild
 
 use crate::{
     PlatformError,
+    project_file_index_budget::{IndexBuildBudget, IndexBudgetTracker},
     project_tree::{MAX_PROJECT_FILE_DEPTH, is_ignored_directory_name, is_ignored_file_name},
 };
 
@@ -33,6 +34,7 @@ struct IndexedProjectFile {
 pub(crate) struct ProjectFileIndex {
     entries: Box<[IndexedProjectFile]>,
     estimated_bytes: usize,
+    truncated: bool,
 }
 
 impl ProjectFileIndex {
@@ -40,9 +42,17 @@ impl ProjectFileIndex {
         root: &Path,
         context: &PortRequestContext,
     ) -> Result<Arc<Self>, PlatformError> {
+        Self::build_with_budget(root, context, IndexBuildBudget::production()).await
+    }
+
+    pub(crate) async fn build_with_budget(
+        root: &Path,
+        context: &PortRequestContext,
+        budget: IndexBuildBudget,
+    ) -> Result<Arc<Self>, PlatformError> {
         let root = root.to_owned();
         let context = context.clone();
-        tokio::task::spawn_blocking(move || build_index(&root, &context))
+        tokio::task::spawn_blocking(move || build_index(&root, &context, budget))
             .await
             .map_err(|error| PlatformError::Worker(format!("file index worker failed: {error}")))?
             .map(Arc::new)
@@ -88,15 +98,21 @@ impl ProjectFileIndex {
     pub(crate) fn estimated_bytes(&self) -> usize {
         self.estimated_bytes
     }
+
+    pub(crate) fn is_truncated(&self) -> bool {
+        self.truncated
+    }
 }
 
 fn build_index(
     root: &Path,
     context: &PortRequestContext,
+    budget: IndexBuildBudget,
 ) -> Result<ProjectFileIndex, PlatformError> {
     if context.is_cancelled() {
         return Err(PlatformError::Cancelled);
     }
+    let tracker = Arc::new(IndexBudgetTracker::new(&budget));
     let mut builder = WalkBuilder::new(root);
     builder
         .standard_filters(false)
@@ -111,6 +127,7 @@ fn build_index(
         context: context.clone(),
         root,
         state: Arc::clone(&collected),
+        tracker: Arc::clone(&tracker),
     });
 
     if context.is_cancelled() {
@@ -130,6 +147,7 @@ fn build_index(
     Ok(ProjectFileIndex {
         entries: entries.into_boxed_slice(),
         estimated_bytes,
+        truncated: tracker.truncated(),
     })
 }
 
@@ -143,6 +161,7 @@ struct IndexVisitorBuilder {
     context: PortRequestContext,
     root: PathBuf,
     state: Arc<Mutex<IndexBuildState>>,
+    tracker: Arc<IndexBudgetTracker>,
 }
 
 impl<'s> ParallelVisitorBuilder<'s> for IndexVisitorBuilder {
@@ -152,6 +171,7 @@ impl<'s> ParallelVisitorBuilder<'s> for IndexVisitorBuilder {
             entries: Vec::new(),
             root: self.root.clone(),
             state: Arc::clone(&self.state),
+            tracker: Arc::clone(&self.tracker),
         })
     }
 }
@@ -161,15 +181,16 @@ struct IndexVisitor {
     entries: Vec<IndexedProjectFile>,
     root: PathBuf,
     state: Arc<Mutex<IndexBuildState>>,
+    tracker: Arc<IndexBudgetTracker>,
 }
 
 impl ParallelVisitor for IndexVisitor {
     fn visit(&mut self, entry: Result<DirEntry, Error>) -> WalkState {
-        if self.context.is_cancelled() {
+        if self.tracker.should_stop(self.context.is_cancelled()) {
             return WalkState::Quit;
         }
         match entry {
-            Ok(entry) => collect_file(&self.root, entry, &mut self.entries),
+            Ok(entry) => collect_file(&self.root, entry, &mut self.entries, &self.tracker),
             Err(error) => {
                 set_first_error(&self.state, error.to_string());
                 WalkState::Quit
@@ -191,7 +212,12 @@ impl Drop for IndexVisitor {
     }
 }
 
-fn collect_file(root: &Path, entry: DirEntry, local: &mut Vec<IndexedProjectFile>) -> WalkState {
+fn collect_file(
+    root: &Path,
+    entry: DirEntry,
+    local: &mut Vec<IndexedProjectFile>,
+    tracker: &IndexBudgetTracker,
+) -> WalkState {
     let Some(file_type) = entry.file_type() else {
         return WalkState::Continue;
     };
@@ -216,7 +242,7 @@ fn collect_file(root: &Path, entry: DirEntry, local: &mut Vec<IndexedProjectFile
         return WalkState::Continue;
     };
     let name = entry.file_name().to_string_lossy().into_owned();
-    local.push(IndexedProjectFile {
+    let indexed = IndexedProjectFile {
         name_length: name.chars().count(),
         normalized_name: name.to_lowercase().into_boxed_str(),
         name: name.into_boxed_str(),
@@ -224,7 +250,12 @@ fn collect_file(root: &Path, entry: DirEntry, local: &mut Vec<IndexedProjectFile
             .to_string_lossy()
             .replace('\\', "/")
             .into_boxed_str(),
-    });
+    };
+    let entry_bytes = index_entry_bytes(&indexed);
+    if !tracker.try_reserve(entry_bytes) {
+        return WalkState::Quit;
+    }
+    local.push(indexed);
     WalkState::Continue
 }
 
@@ -253,11 +284,12 @@ fn index_entry_bytes(entry: &IndexedProjectFile) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::{fs, path::PathBuf, time::Instant};
 
     use code_agent_core::PortRequestContext;
 
     use super::ProjectFileIndex;
+    use crate::project_file_index_budget::IndexBuildBudget;
 
     fn test_root(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -343,6 +375,29 @@ mod tests {
                 .any(|entry| entry.name.as_ref() == "depth-match.rs")
         );
         assert!(index.search("outside-match").is_empty());
+        fs::remove_dir_all(root).expect("remove root");
+    }
+
+    #[tokio::test]
+    async fn build_should_stop_at_entry_budget_and_mark_truncated() {
+        let root = test_root("entry-budget");
+        fs::create_dir_all(&root).expect("root");
+        for index in 0..40 {
+            fs::write(root.join(format!("file-{index:02}.rs")), "").expect("file");
+        }
+        let context = PortRequestContext::new("index-entry-budget-test");
+        let budget = IndexBuildBudget {
+            max_entries: 10,
+            max_bytes: usize::MAX,
+            deadline: Instant::now() + std::time::Duration::from_secs(30),
+        };
+
+        let index = ProjectFileIndex::build_with_budget(&root, &context, budget)
+            .await
+            .expect("file index");
+
+        assert!(index.is_truncated());
+        assert_eq!(index.entry_count(), 10);
         fs::remove_dir_all(root).expect("remove root");
     }
 }

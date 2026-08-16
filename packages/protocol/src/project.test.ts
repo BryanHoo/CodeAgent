@@ -939,8 +939,14 @@ describe("project protocol", () => {
     expect(
       Value.Check(ProjectFileSearchPageSchema, {
         data: [{ name: "index.ts", path: "src/index.ts" }],
+        truncated: false,
       }),
     ).toBe(true);
+    expect(
+      Value.Check(ProjectFileSearchPageSchema, {
+        data: [{ name: "index.ts", path: "src/index.ts" }],
+      }),
+    ).toBe(false);
     expect(
       Value.Check(ProjectFileSearchPageSchema, {
         data: [{ name: "outside.ts", path: "/tmp/outside.ts" }],

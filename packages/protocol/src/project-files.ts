@@ -33,7 +33,10 @@ export const ProjectFileSearchEntrySchema = Type.Object(
 export type ProjectFileSearchEntry = Readonly<Static<typeof ProjectFileSearchEntrySchema>>;
 
 export const ProjectFileSearchPageSchema = Type.Object(
-  { data: Type.Array(ProjectFileSearchEntrySchema, { maxItems: 50 }) },
+  {
+    data: Type.Array(ProjectFileSearchEntrySchema, { maxItems: 50 }),
+    truncated: Type.Boolean(),
+  },
   { additionalProperties: false },
 );
 

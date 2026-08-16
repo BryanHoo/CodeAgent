@@ -243,7 +243,7 @@ impl FilePort for PlatformFilePort {
             .into_iter()
             .map(|entry| json!({ "name": entry.name, "path": entry.path }))
             .collect::<Vec<_>>();
-        Ok(json!({ "data": data }))
+        Ok(json!({ "data": data, "truncated": index.is_truncated() }))
     }
 
     async fn release_project(

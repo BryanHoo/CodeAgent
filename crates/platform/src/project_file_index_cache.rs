@@ -12,12 +12,16 @@ use code_agent_core::PortRequestContext;
 use tokio::sync::{Mutex, Notify};
 use tokio_util::task::TaskTracker;
 
-use crate::{PlatformError, project_file_index::ProjectFileIndex};
+use crate::{
+    PlatformError,
+    project_file_index::ProjectFileIndex,
+    project_file_index_budget::{MAX_INDEX_BYTES, MAX_INDEX_ENTRIES},
+};
 
 const CACHE_TTL: Duration = Duration::from_secs(30);
 const MAX_CACHED_PROJECTS: usize = 8;
-const MAX_CACHED_ENTRIES: usize = 250_000;
-const MAX_CACHED_BYTES: usize = 64 * 1024 * 1024;
+const MAX_CACHED_ENTRIES: usize = MAX_INDEX_ENTRIES;
+const MAX_CACHED_BYTES: usize = MAX_INDEX_BYTES;
 const BUILD_STOP_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Debug)]
@@ -353,6 +357,36 @@ mod tests {
     use code_agent_core::PortRequestContext;
 
     use super::ProjectFileIndexCache;
+
+    #[tokio::test]
+    async fn cache_should_reuse_truncated_index_within_budget() {
+        let root = std::env::temp_dir().join(format!(
+            "code-agent-project-file-cache-truncated-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("root");
+        for index in 0..30 {
+            fs::write(root.join(format!("file-{index:02}.rs")), "").expect("file");
+        }
+        let cache = ProjectFileIndexCache::new();
+        let context = PortRequestContext::new("cache-truncated-test");
+
+        let first = cache
+            .get_or_build("project-truncated", &root, &context)
+            .await
+            .expect("first index");
+        let second = cache
+            .get_or_build("project-truncated", &root, &context)
+            .await
+            .expect("second index");
+
+        assert!(Arc::ptr_eq(&first, &second));
+        assert!(first.entry_count() <= crate::project_file_index_budget::MAX_INDEX_ENTRIES);
+        assert!(first.estimated_bytes() <= crate::project_file_index_budget::MAX_INDEX_BYTES);
+
+        cache.close().await.expect("close index cache");
+        fs::remove_dir_all(root).expect("remove root");
+    }
 
     #[tokio::test]
     async fn cache_should_reuse_index_until_project_is_released() {

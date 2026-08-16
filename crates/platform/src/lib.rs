@@ -12,6 +12,7 @@ mod migrations;
 mod path_policy;
 mod process;
 mod project_file_index;
+mod project_file_index_budget;
 mod project_file_index_cache;
 mod project_open;
 mod project_tree;

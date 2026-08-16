@@ -851,7 +851,7 @@ describe("CodeAgentClient", () => {
   });
 
   it("searches and validates project file references", async () => {
-    const page = { data: [{ name: "index.ts", path: "src/index.ts" }] };
+    const page = { data: [{ name: "index.ts", path: "src/index.ts" }], truncated: false };
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(page));
     const client = new CodeAgentClient({ fetch: fetchMock });
 
@@ -861,7 +861,7 @@ describe("CodeAgentClient", () => {
     );
 
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({ data: [{ name: "outside.ts", path: "/tmp/outside.ts" }] }),
+      jsonResponse({ data: [{ name: "outside.ts", path: "/tmp/outside.ts" }], truncated: false }),
     );
     await expect(client.searchProjectFiles("project one", "outside")).rejects.toThrow(
       "CodeAgent response does not match the protocol schema",
