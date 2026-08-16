@@ -19,6 +19,7 @@ mod project_root_cache;
 mod project_tree;
 mod repository;
 mod repository_support;
+mod temporary_workspace;
 
 pub use attachments::{AttachmentContent, AttachmentKind, AttachmentStore, AttachmentUpload};
 pub use database::{DatabaseDiagnostics, DatabaseOptions, PlatformDatabase, PlatformError};
@@ -29,3 +30,4 @@ pub use path_policy::CanonicalPathPolicy;
 pub use process::ProcessEnvironment;
 pub use project_root_cache::ProjectRootCache;
 pub use repository::SqliteRepository;
+pub use temporary_workspace::ensure_temporary_workspace;

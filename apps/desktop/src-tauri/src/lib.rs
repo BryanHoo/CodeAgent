@@ -59,9 +59,7 @@ pub fn run() {
         .setup(|app| {
             let codex_home = codex_home(app)?;
             let data_root = code_agent_data_root(&app.path().home_dir()?);
-            std::fs::create_dir_all(&data_root)?;
             let temporary_project_root = data_root.join("temporary-workspace");
-            std::fs::create_dir_all(&temporary_project_root)?;
             let database = PlatformDatabase::open_deferred(DatabaseOptions {
                 path: data_root.join("state.sqlite3"),
                 queue_capacity: 64,

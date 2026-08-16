@@ -9,9 +9,19 @@ function read(path: string): string {
   return readFileSync(join(repositoryRoot, path), "utf8");
 }
 
+function readDatabaseSources(): string {
+  return readdirSync(join(repositoryRoot, "crates/platform/src/database"), {
+    recursive: true,
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".rs"))
+    .map((entry) => readFileSync(join(entry.parentPath, entry.name), "utf8"))
+    .join("\n");
+}
+
 describe("Tauri Phase 4 repository contract", () => {
   it("owns SQLite on one dedicated thread with a bounded queue", () => {
-    const database = read("crates/platform/src/database.rs");
+    const database = readDatabaseSources();
     const desktop = read("apps/desktop/src-tauri/src/lib.rs");
 
     expect(database).toContain('name("code-agent-sqlite"');
@@ -22,6 +32,7 @@ describe("Tauri Phase 4 repository contract", () => {
     expect(database).not.toContain("unbounded_channel");
     expect(desktop).toContain("PlatformDatabase::open_deferred");
     expect(desktop).not.toContain("PlatformDatabase::open(DatabaseOptions");
+    expect(desktop).not.toMatch(/setup\([\s\S]*?std::fs::create_dir_all/u);
   });
 
   it("uses raw attachment IPC and opaque asset URLs without base64", () => {

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use std::path::Path;
 use code_agent_core::{
     AgentMutationErrorCode, CodeAgentError, CodeAgentErrorCode, PortRequestContext, RepositoryPort,
 };
@@ -17,6 +18,7 @@ use crate::{
         create_project_id, deserialize_protocol_json, normalized_name, project_from_row,
         read_project_by_root, serialize_protocol,
     },
+    temporary_workspace::ensure_temporary_workspace,
 };
 
 #[derive(Clone)]
@@ -132,7 +134,10 @@ impl RepositoryPort for SqliteRepository {
         context: &PortRequestContext,
     ) -> Result<Project, CodeAgentError> {
         ensure_active(context)?;
-        let root_path = root_path.to_owned();
+        let root_path = ensure_temporary_workspace(Path::new(root_path))
+            .await?
+            .to_string_lossy()
+            .into_owned();
         let project_id = create_project_id("Temporary", &root_path);
         let project = self.database
             .call(move |connection| {

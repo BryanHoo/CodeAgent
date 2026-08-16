@@ -42,8 +42,20 @@ async fn repository_should_preserve_project_order_and_hide_temporary_projects() 
         .register_project("/workspace/beta", "Beta", created_at, &context)
         .await
         .expect("beta must register");
+    let temporary_root = std::env::temp_dir().join(format!(
+        "code-agent-temporary-project-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock must follow unix epoch")
+            .as_nanos()
+    ));
     repository
-        .ensure_temporary_project("/workspace/temp", created_at, &context)
+        .ensure_temporary_project(
+            temporary_root.to_string_lossy().as_ref(),
+            created_at,
+            &context,
+        )
         .await
         .expect("temporary project must register");
 
