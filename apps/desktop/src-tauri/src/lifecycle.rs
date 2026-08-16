@@ -2,17 +2,23 @@ use std::sync::Arc;
 
 use code_agent_runtime::{CodeAgentRuntime, ShutdownGate};
 
-use crate::platform_adapters::CodexSupervisor;
+use crate::{commands::events::EventDeliveryRegistry, platform_adapters::CodexSupervisor};
 
 pub struct DesktopLifecycle {
+    event_deliveries: Arc<EventDeliveryRegistry>,
     gate: ShutdownGate,
     runtime: Arc<CodeAgentRuntime>,
     supervisor: Arc<CodexSupervisor>,
 }
 
 impl DesktopLifecycle {
-    pub fn new(runtime: Arc<CodeAgentRuntime>, supervisor: Arc<CodexSupervisor>) -> Self {
+    pub fn new(
+        event_deliveries: Arc<EventDeliveryRegistry>,
+        runtime: Arc<CodeAgentRuntime>,
+        supervisor: Arc<CodexSupervisor>,
+    ) -> Self {
         Self {
+            event_deliveries,
             gate: ShutdownGate::default(),
             runtime,
             supervisor,
@@ -25,7 +31,8 @@ impl DesktopLifecycle {
             return;
         }
 
-        // Runtime 先取消交付订阅并关闭操作树，再释放 Codex 子进程。
+        // 先唤醒并清空 mailbox 等待者，再取消 Runtime 交付订阅。
+        self.event_deliveries.close_all();
         if let Err(error) = self.runtime.shutdown().await {
             eprintln!("CodeAgent Desktop failed to shut down cleanly: {error}");
         }

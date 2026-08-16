@@ -4,6 +4,7 @@ mod command_error;
 mod commands;
 mod desktop_project_provider;
 mod desktop_provider;
+mod event_mailbox;
 mod lifecycle;
 mod platform_adapters;
 mod process_environment;
@@ -27,6 +28,7 @@ use tauri::{
     plugin::{Builder as PluginBuilder, TauriPlugin},
 };
 
+use commands::events::EventDeliveryRegistry;
 use lifecycle::DesktopLifecycle;
 use platform_adapters::{
     CodexSupervisor, DesktopHostPorts, DesktopProvider, start_codex_supervisor,
@@ -98,11 +100,17 @@ pub fn run() {
             .update(update)
             .build();
             let supervisor = Arc::new(CodexSupervisor::default());
+            let event_deliveries = Arc::new(EventDeliveryRegistry::new());
             app.manage(Arc::new(runtime));
             let runtime = app.state::<Arc<CodeAgentRuntime>>().inner().clone();
             app.manage(provider_slot.clone());
             app.manage(supervisor.clone());
-            app.manage(Arc::new(DesktopLifecycle::new(runtime, supervisor.clone())));
+            app.manage(event_deliveries.clone());
+            app.manage(Arc::new(DesktopLifecycle::new(
+                event_deliveries,
+                runtime,
+                supervisor.clone(),
+            )));
 
             // Provider 启动失败只更新诊断，不能阻塞主窗口创建。
             let resource_directory = app.path().resource_dir()?;
@@ -135,6 +143,7 @@ pub fn run() {
             commands::attachments::attachment_open,
             commands::attachments::attachment_upload,
             commands::events::event_subscribe,
+            commands::events::event_pull,
             commands::events::event_unsubscribe,
             commands::events::project_context_release,
             commands::files::file_search,

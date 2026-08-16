@@ -133,6 +133,7 @@ describe("Tauri Phase 5 repository contract", () => {
       "turn_interrupt",
       "pending_request_resolve",
       "event_subscribe",
+      "event_pull",
       "event_unsubscribe",
       "git_commit_message_generate",
     ];
@@ -144,16 +145,25 @@ describe("Tauri Phase 5 repository contract", () => {
 
   it("uses Tauri Channel envelopes and keeps Runtime host-independent", () => {
     const events = read("apps/desktop/src-tauri/src/commands/events.rs");
+    const mailbox = read("apps/desktop/src-tauri/src/event_mailbox.rs");
+    const lifecycle = read("apps/desktop/src-tauri/src/lifecycle.rs");
     const subscription = read("crates/runtime/src/event_subscription.rs");
     const runtimeManifest = read("crates/runtime/Cargo.toml");
 
-    expect(events).toContain("ipc::{Channel, InvokeResponseBody}");
-    expect(events).toContain("Channel<InvokeResponseBody>");
+    expect(events).toContain("Channel<EventAvailable>");
+    expect(events).toContain("event_pull");
+    expect(events).toContain("Response::new");
     expect(events).toContain("start_leased_project_event_subscription");
     expect(events).toContain("release_project_context_lease");
+    expect(events).not.toContain("std::future::ready");
+    expect(events).not.toContain("InvokeResponseBody::Json");
     expect(events).not.toContain("event.value().clone()");
     expect(events).not.toContain('"connection.ready"');
     expect(events).not.toContain('"resync.required"');
+    expect(events).toContain("event.available");
+    expect(mailbox).toContain("MAILBOX_MAX_EVENTS: usize = 64");
+    expect(mailbox).toContain("MAILBOX_MAX_BYTES: usize = 256 * 1024");
+    expect(lifecycle).toContain("close_all");
     expect(subscription).toContain('"connection.ready"');
     expect(subscription).toContain('"resync.required"');
     expect(subscription).not.toMatch(/tauri|napi/u);

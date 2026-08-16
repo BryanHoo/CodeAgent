@@ -265,11 +265,23 @@ describe("TauriCodeAgentTransport", () => {
     const events: { event: unknown; wireBytes: number | undefined }[] = [];
     const calls: { command: string; payload: unknown }[] = [];
     let channelId = 0;
+    const liveEvent = providerEvent(4, "session-1");
     mockIPC((command, payload) => {
       calls.push({ command, payload });
       if (command === "event_subscribe") {
         channelId = readChannelId((payload as { channel: unknown }).channel);
         return { subscriptionId: "subscription-1" };
+      }
+      if (command === "event_pull") {
+        return encodePullBatch([
+          {
+            latestSequence: 3,
+            sessionId: "session-1",
+            type: "connection.ready",
+            version: 2,
+          },
+          liveEvent,
+        ]);
       }
       return true;
     });
@@ -285,19 +297,24 @@ describe("TauriCodeAgentTransport", () => {
     await vi.waitFor(() => {
       expect(channelId).toBeGreaterThan(0);
     });
-    sendChannel(channelId, 0, {
-      latestSequence: 3,
-      sessionId: "session-1",
-      type: "connection.ready",
-      version: 2,
+    sendChannel(channelId, 0, { type: "event.available" });
+    await vi.waitFor(() => {
+      expect(states).toEqual(["connecting", "connected"]);
     });
-    sendChannel(channelId, 1, providerEvent(4, "session-1"));
-    expect(states).toEqual(["connecting", "connected"]);
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ event: providerEvent(4, "session-1"), wireBytes: undefined });
+    expect(events[0]).toMatchObject({
+      event: liveEvent,
+      wireBytes: new TextEncoder().encode(JSON.stringify(liveEvent)).byteLength,
+    });
+    const pullCall = calls.find((call) => call.command === "event_pull");
+    expect(pullCall?.payload).toEqual({
+      maxBytes: 256 * 1024,
+      maxEvents: 64,
+      subscriptionId: "subscription-1",
+    });
 
     unsubscribe();
-    sendChannel(channelId, 2, providerEvent(5, "session-1"));
+    sendChannel(channelId, 1, { type: "event.available" });
     await vi.waitFor(() => {
       expect(calls).toContainEqual({
         command: "event_unsubscribe",
@@ -388,6 +405,17 @@ describe("TauriCodeAgentTransport", () => {
         channelId = readChannelId((payload as { channel: unknown }).channel);
         return { subscriptionId: "subscription-gap" };
       }
+      if (command === "event_pull") {
+        return encodePullBatch([
+          {
+            latestSequence: 0,
+            sessionId: "session-gap",
+            type: "connection.ready",
+            version: 2,
+          },
+          providerEvent(2, "session-gap"),
+        ]);
+      }
       return true;
     });
     const transport = new TauriCodeAgentTransport();
@@ -401,22 +429,29 @@ describe("TauriCodeAgentTransport", () => {
     await vi.waitFor(() => {
       expect(channelId).toBeGreaterThan(0);
     });
-    sendChannel(channelId, 0, {
-      latestSequence: 0,
-      sessionId: "session-gap",
-      type: "connection.ready",
-      version: 2,
+    sendChannel(channelId, 0, { type: "event.available" });
+    await vi.waitFor(() => {
+      expect(resyncs).toEqual([
+        expect.objectContaining({ latestSequence: 2, reason: "sequence_gap" }),
+      ]);
     });
-    sendChannel(channelId, 1, providerEvent(2, "session-gap"));
-    expect(resyncs).toEqual([
-      expect.objectContaining({ latestSequence: 2, reason: "sequence_gap" }),
-    ]);
 
     let serverChannelId = 0;
     mockIPC((command, payload) => {
       if (command === "event_subscribe") {
         serverChannelId = readChannelId((payload as { channel: unknown }).channel);
         return { subscriptionId: "subscription-server" };
+      }
+      if (command === "event_pull") {
+        return encodePullBatch([
+          {
+            latestSequence: 8,
+            reason: "event_retention_exceeded",
+            sessionId: "session-gap",
+            type: "resync.required",
+            version: 2,
+          },
+        ]);
       }
       return true;
     });
@@ -430,14 +465,94 @@ describe("TauriCodeAgentTransport", () => {
     await vi.waitFor(() => {
       expect(serverChannelId).toBeGreaterThan(0);
     });
-    sendChannel(serverChannelId, 0, {
-      latestSequence: 8,
-      reason: "event_retention_exceeded",
-      sessionId: "session-gap",
-      type: "resync.required",
-      version: 2,
+    sendChannel(serverChannelId, 0, { type: "event.available" });
+    await vi.waitFor(() => {
+      expect(resyncs.at(-1)).toMatchObject({ reason: "event_retention_exceeded" });
     });
-    expect(resyncs.at(-1)).toMatchObject({ reason: "event_retention_exceeded" });
+  });
+
+  it("keeps a single in-flight pull and continues after a full budget batch", async () => {
+    const events: number[] = [];
+    const pulls: unknown[] = [];
+    let channelId = 0;
+    let pullCount = 0;
+    mockIPC((command, payload) => {
+      if (command === "event_subscribe") {
+        channelId = readChannelId((payload as { channel: unknown }).channel);
+        return { subscriptionId: "subscription-budget" };
+      }
+      if (command === "event_pull") {
+        pulls.push(payload);
+        pullCount += 1;
+        if (pullCount === 1) {
+          return encodePullBatch([
+            {
+              latestSequence: 0,
+              sessionId: "session-budget",
+              type: "connection.ready",
+              version: 2,
+            },
+            ...Array.from({ length: 64 }, (_, index) => providerEvent(index + 1, "session-budget")),
+          ]);
+        }
+        if (pullCount === 2) {
+          return encodePullBatch([providerEvent(65, "session-budget")]);
+        }
+        return encodePullBatch([]);
+      }
+      return true;
+    });
+    const transport = new TauriCodeAgentTransport();
+    transport.subscribeEvents({
+      afterSequence: 0,
+      onEvent: (event) => events.push(event.sequence),
+      onResyncRequired: vi.fn(),
+      projectId: "project-a",
+      sessionId: "session-budget",
+    });
+    await vi.waitFor(() => {
+      expect(channelId).toBeGreaterThan(0);
+    });
+    sendChannel(channelId, 0, { type: "event.available" });
+    sendChannel(channelId, 1, { type: "event.available" });
+    await vi.waitFor(() => {
+      expect(events.at(-1)).toBe(65);
+    });
+    expect(events).toHaveLength(65);
+    expect(pulls).toHaveLength(2);
+  });
+
+  it("stops pulling after an empty batch until the next notify", async () => {
+    const pulls: number[] = [];
+    let channelId = 0;
+    mockIPC((command, payload) => {
+      if (command === "event_subscribe") {
+        channelId = readChannelId((payload as { channel: unknown }).channel);
+        return { subscriptionId: "subscription-idle" };
+      }
+      if (command === "event_pull") {
+        pulls.push(1);
+        return encodePullBatch([]);
+      }
+      return true;
+    });
+    const transport = new TauriCodeAgentTransport();
+    transport.subscribeEvents({
+      afterSequence: 0,
+      onEvent: vi.fn(),
+      onResyncRequired: vi.fn(),
+      projectId: "project-a",
+      sessionId: "session-idle",
+    });
+    await vi.waitFor(() => {
+      expect(channelId).toBeGreaterThan(0);
+    });
+    sendChannel(channelId, 0, { type: "event.available" });
+    await vi.waitFor(() => {
+      expect(pulls).toHaveLength(1);
+    });
+    await Promise.resolve();
+    expect(pulls).toHaveLength(1);
   });
 
   it("invokes explicit host cancellation", async () => {
@@ -616,6 +731,26 @@ describe("TauriCodeAgentTransport", () => {
     expect(window).not.toHaveProperty("__TAURI_INTERNALS__");
   });
 });
+
+const PULL_BATCH_MAGIC = 0x4341_4550;
+
+function encodePullBatch(frames: object[]): Uint8Array {
+  const encoded = frames.map((frame) => new TextEncoder().encode(JSON.stringify(frame)));
+  let size = 8;
+  for (const bytes of encoded) size += 4 + bytes.length;
+  const out = new Uint8Array(size);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, PULL_BATCH_MAGIC, true);
+  view.setUint32(4, encoded.length, true);
+  let offset = 8;
+  for (const bytes of encoded) {
+    view.setUint32(offset, bytes.length, true);
+    offset += 4;
+    out.set(bytes, offset);
+    offset += bytes.length;
+  }
+  return out;
+}
 
 function sendChannel(id: number, index: number, message: unknown): void {
   (
