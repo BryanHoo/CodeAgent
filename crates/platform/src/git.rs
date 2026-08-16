@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 use code_agent_core::{AgentMutationErrorCode, CodeAgentError, GitPort, PortRequestContext};
 use code_agent_protocol::ProjectId;
-use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 
+use crate::project_root_cache::ProjectRootCache;
 use crate::{
     PlatformDatabase, PlatformError, ProcessEnvironment,
     process::{GitCommandKind, execute_git},
@@ -30,6 +30,7 @@ const MAX_DIFF_BYTES: usize = 512 * 1024;
 pub struct GitCliService {
     database: PlatformDatabase,
     environment: ProcessEnvironment,
+    root_cache: ProjectRootCache,
 }
 
 #[derive(Debug)]
@@ -41,32 +42,34 @@ struct ChildRepository {
 impl GitCliService {
     #[must_use]
     pub fn new(database: PlatformDatabase, environment: ProcessEnvironment) -> Self {
+        Self::with_root_cache(database, environment, ProjectRootCache::new())
+    }
+
+    #[must_use]
+    pub fn with_root_cache(
+        database: PlatformDatabase,
+        environment: ProcessEnvironment,
+        root_cache: ProjectRootCache,
+    ) -> Self {
         Self {
             database,
             environment,
+            root_cache,
         }
     }
 
     async fn project_root(&self, project_id: &ProjectId) -> Result<PathBuf, CodeAgentError> {
-        let project_id = project_id.to_string();
-        let root = self
-            .database
-            .call(move |connection| {
-                connection
-                    .query_row(
-                        "SELECT root_path FROM projects WHERE id = ?1",
-                        [project_id],
-                        |row| row.get::<_, String>(0),
-                    )
-                    .optional()?
-                    .ok_or_else(|| PlatformError::Worker("project not found".to_owned()))
-            })
+        self.root_cache
+            .policy_for(&self.database, project_id.as_str())
             .await
-            .map_err(map_platform_error)?;
-        tokio::fs::canonicalize(root).await.map_err(|_| {
-            not_found("project root was not found")
-                .with_mutation_code(AgentMutationErrorCode::ProjectNotFound)
-        })
+            .map(|policy| policy.root().to_owned())
+            .map_err(|error| match error {
+                PlatformError::Worker(ref message) if message == "project not found" => {
+                    map_platform_error(error)
+                }
+                _ => not_found("project root was not found")
+                    .with_mutation_code(AgentMutationErrorCode::ProjectNotFound),
+            })
     }
 
     async fn repository_root(

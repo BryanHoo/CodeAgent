@@ -8,7 +8,7 @@ use code_agent_core::{
 };
 use code_agent_platform::{
     AttachmentStore, DatabaseOptions, GitCliService, PlatformDatabase, PlatformFilePort,
-    ProcessEnvironment, SqliteRepository,
+    ProcessEnvironment, ProjectRootCache, SqliteRepository,
 };
 use code_agent_provider_codex::{
     CodexAppServerOptions, CodexAppServerProcess, CodexRuntimeProvider, start_codex_app_server,
@@ -66,14 +66,21 @@ pub async fn open_runtime(options: NodeEngineOptions) -> napi::Result<NodeRuntim
     })
     .await
     .map_err(|error| napi::Error::from_reason(error.to_string()))?;
-    let repository: Arc<dyn RepositoryPort> = Arc::new(SqliteRepository::new(database.clone()));
+    let root_cache = ProjectRootCache::new();
+    let repository: Arc<dyn RepositoryPort> =
+        Arc::new(SqliteRepository::with_root_cache(database.clone(), root_cache.clone()));
     let process_environment =
         ProcessEnvironment::capture_with_path(std::env::var_os("PATH").unwrap_or_default());
-    let file: Arc<dyn FilePort> = Arc::new(PlatformFilePort::new(
+    let file: Arc<dyn FilePort> = Arc::new(PlatformFilePort::with_root_cache(
         database.clone(),
         process_environment.clone(),
+        root_cache.clone(),
     ));
-    let git: Arc<dyn GitPort> = Arc::new(GitCliService::new(database.clone(), process_environment));
+    let git: Arc<dyn GitPort> = Arc::new(GitCliService::with_root_cache(
+        database.clone(),
+        process_environment,
+        root_cache,
+    ));
     let attachment: Arc<dyn AttachmentPort> = Arc::new(
         AttachmentStore::new(attachment_root)
             .map_err(|error| napi::Error::from_reason(error.to_string()))?,

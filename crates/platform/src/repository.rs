@@ -12,6 +12,7 @@ use serde_json::Value;
 
 use crate::{
     PlatformDatabase, PlatformError,
+    project_root_cache::ProjectRootCache,
     repository_support::{
         create_project_id, deserialize_protocol_json, normalized_name, project_from_row,
         read_project_by_root, serialize_protocol,
@@ -21,12 +22,21 @@ use crate::{
 #[derive(Clone)]
 pub struct SqliteRepository {
     database: PlatformDatabase,
+    root_cache: ProjectRootCache,
 }
 
 impl SqliteRepository {
     #[must_use]
     pub fn new(database: PlatformDatabase) -> Self {
-        Self { database }
+        Self::with_root_cache(database, ProjectRootCache::new())
+    }
+
+    #[must_use]
+    pub fn with_root_cache(database: PlatformDatabase, root_cache: ProjectRootCache) -> Self {
+        Self {
+            database,
+            root_cache,
+        }
     }
 }
 
@@ -95,7 +105,7 @@ impl RepositoryPort for SqliteRepository {
         let root_path = root_path.to_owned();
         let name = normalized_name(name, &root_path);
         let project_id = create_project_id(&name, &root_path);
-        self.database
+        let project = self.database
             .call(move |connection| {
                 connection.execute(
                     "INSERT OR IGNORE INTO projects
@@ -110,7 +120,9 @@ impl RepositoryPort for SqliteRepository {
                 })
             })
             .await
-            .map_err(map_platform_error)
+            .map_err(map_platform_error)?;
+        self.root_cache.invalidate(project.id.as_str()).await;
+        Ok(project)
     }
 
     async fn ensure_temporary_project(
@@ -122,7 +134,7 @@ impl RepositoryPort for SqliteRepository {
         ensure_active(context)?;
         let root_path = root_path.to_owned();
         let project_id = create_project_id("Temporary", &root_path);
-        self.database
+        let project = self.database
             .call(move |connection| {
                 connection.execute(
                     "INSERT OR IGNORE INTO projects
@@ -135,7 +147,9 @@ impl RepositoryPort for SqliteRepository {
                 })
             })
             .await
-            .map_err(map_platform_error)
+            .map_err(map_platform_error)?;
+        self.root_cache.invalidate(project.id.as_str()).await;
+        Ok(project)
     }
 
     async fn reorder_projects(
@@ -196,6 +210,7 @@ impl RepositoryPort for SqliteRepository {
     ) -> Result<(), CodeAgentError> {
         ensure_active(context)?;
         let project_id = project_id.to_string();
+        let invalidate_id = project_id.clone();
         self.database
             .call(move |connection| {
                 let changed = connection.execute(
@@ -208,7 +223,9 @@ impl RepositoryPort for SqliteRepository {
                 Ok(())
             })
             .await
-            .map_err(map_platform_error)
+            .map_err(map_platform_error)?;
+        self.root_cache.invalidate(&invalidate_id).await;
+        Ok(())
     }
 
     async fn rename_project(

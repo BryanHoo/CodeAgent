@@ -20,7 +20,7 @@ use code_agent_core::{
 };
 use code_agent_platform::{
     AttachmentStore, DatabaseOptions, GitCliService, PlatformDatabase, PlatformFilePort,
-    ProcessEnvironment, SqliteRepository,
+    ProcessEnvironment, ProjectRootCache, SqliteRepository,
 };
 use code_agent_runtime::{CodeAgentRuntime, CodeAgentRuntimeBuilder, RuntimeOptions};
 use tauri::{
@@ -67,16 +67,22 @@ pub fn run() {
                 queue_capacity: 64,
                 request_timeout: Duration::from_secs(5),
             })?;
+            let root_cache = ProjectRootCache::new();
             let repository: Arc<dyn RepositoryPort> =
-                Arc::new(SqliteRepository::new(database.clone()));
+                Arc::new(SqliteRepository::with_root_cache(database.clone(), root_cache.clone()));
             let host_process_path = immediate_process_path();
             let host_environment = ProcessEnvironment::capture_with_path(host_process_path.clone());
             let background_host_environment = host_environment.clone();
-            let file: Arc<dyn FilePort> = Arc::new(PlatformFilePort::new(
+            let file: Arc<dyn FilePort> = Arc::new(PlatformFilePort::with_root_cache(
                 database.clone(),
                 host_environment.clone(),
+                root_cache.clone(),
             ));
-            let git: Arc<dyn GitPort> = Arc::new(GitCliService::new(database, host_environment));
+            let git: Arc<dyn GitPort> = Arc::new(GitCliService::with_root_cache(
+                database,
+                host_environment,
+                root_cache,
+            ));
             let attachment: Arc<dyn AttachmentPort> =
                 Arc::new(AttachmentStore::new(data_root.join("attachments"))?);
             let host = Arc::new(DesktopHostPorts);

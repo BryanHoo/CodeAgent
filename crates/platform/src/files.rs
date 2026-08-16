@@ -5,13 +5,13 @@ use code_agent_core::{
     AgentMutationErrorCode, CodeAgentError, CodeAgentErrorCode, FilePort, PortRequestContext,
 };
 use code_agent_protocol::ProjectId;
-use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use crate::host_file_browser::browse_directory;
 use crate::project_file_index_cache::ProjectFileIndexCache;
 use crate::project_open::{OpenTarget, ProjectOpenService};
+use crate::project_root_cache::ProjectRootCache;
 use crate::project_tree::{read_directory_entries, validate_directory_path};
 use crate::{CanonicalPathPolicy, PlatformDatabase, PlatformError, ProcessEnvironment};
 
@@ -43,42 +43,43 @@ pub struct PlatformFilePort {
     database: PlatformDatabase,
     file_indexes: ProjectFileIndexCache,
     project_open: ProjectOpenService,
+    root_cache: ProjectRootCache,
 }
 
 impl PlatformFilePort {
     #[must_use]
     pub fn new(database: PlatformDatabase, environment: ProcessEnvironment) -> Self {
+        Self::with_root_cache(database, environment, ProjectRootCache::new())
+    }
+
+    #[must_use]
+    pub fn with_root_cache(
+        database: PlatformDatabase,
+        environment: ProcessEnvironment,
+        root_cache: ProjectRootCache,
+    ) -> Self {
         Self {
             database,
             file_indexes: ProjectFileIndexCache::new(),
             project_open: ProjectOpenService::new(environment),
+            root_cache,
         }
     }
 
     async fn service(&self, project_id: &ProjectId) -> Result<PlatformFileService, CodeAgentError> {
-        let project_id = project_id.to_string();
-        let root = self
-            .database
-            .call(move |connection| {
-                connection
-                    .query_row(
-                        "SELECT root_path FROM projects WHERE id = ?1",
-                        [project_id],
-                        |row| row.get::<_, String>(0),
-                    )
-                    .optional()?
-                    .ok_or_else(|| PlatformError::Worker("project not found".to_owned()))
-            })
+        let policy = self
+            .root_cache
+            .policy_for(&self.database, project_id.as_str())
             .await
             .map_err(map_error)?;
-        PlatformFileService::new(root).await.map_err(map_error)
+        Ok(PlatformFileService { policy })
     }
 }
 
 impl PlatformFileService {
     pub async fn new(root: impl AsRef<Path>) -> Result<Self, PlatformError> {
         Ok(Self {
-            policy: CanonicalPathPolicy::new(root).await?,
+            policy: crate::CanonicalPathPolicy::new(root).await?,
         })
     }
 
@@ -255,11 +256,13 @@ impl FilePort for PlatformFilePort {
             .release_project(project_id.as_str())
             .await
             .map_err(map_error)?;
+        self.root_cache.invalidate(project_id.as_str()).await;
         Ok(())
     }
 
     async fn close(&self) -> Result<(), CodeAgentError> {
         self.file_indexes.close().await.map_err(map_error)?;
+        self.root_cache.clear().await;
         Ok(())
     }
 

@@ -93,9 +93,11 @@ describe("Tauri Phase 5 repository contract", () => {
     expect(desktop).not.toContain("block_on(resolved_process_path())");
     expect(desktop).not.toMatch(/block_on\(\s*AttachmentStore::new/u);
     expect(desktop).toMatch(
-      /PlatformFilePort::new\(\s*database\.clone\(\),\s*host_environment\.clone\(\),?\s*\)/u,
+      /PlatformFilePort::with_root_cache\(\s*database\.clone\(\),\s*host_environment\.clone\(\),\s*root_cache\.clone\(\),?\s*\)/u,
     );
-    expect(desktop).toContain("GitCliService::new(database, host_environment)");
+    expect(desktop).toMatch(
+      /GitCliService::with_root_cache\(\s*database,\s*host_environment,\s*root_cache,?\s*\)/u,
+    );
     expect(platformAdapters).not.toContain("resolved_process_path");
   });
 
