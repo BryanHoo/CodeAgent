@@ -1,4 +1,15 @@
-import { constants, accessSync, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  constants,
+  accessSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { extname, join, relative, resolve } from "node:path";
 
 const bundleRoot = resolve("target/release/bundle");
@@ -9,30 +20,112 @@ if (!existsSync(bundleRoot)) {
 const forbiddenNames = ["node", "node.exe", "code-agent-node-binding.node"];
 const forbiddenContent = ["fastify", "@fastify/websocket", "node:child_process"];
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
-const bundledRuntimeDirectories = [];
 const textExtensions = new Set([".html", ".js", ".json", ".txt"]);
-const visit = (directory) => {
-  if (directory.endsWith("codex-runtime") && existsSync(join(directory, "codex-package.json"))) {
-    bundledRuntimeDirectories.push(directory);
-  }
+
+const findCodexRuntimeDirectories = (root) => {
+  const directories = [];
+  const visit = (directory) => {
+    if (directory.endsWith("codex-runtime") && existsSync(join(directory, "codex-package.json"))) {
+      directories.push(directory);
+    }
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isDirectory()) visit(join(directory, entry.name));
+    }
+  };
+  visit(root);
+  return directories;
+};
+
+const scanForForbiddenArtifacts = (directory) => {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     if (forbiddenNames.includes(entry.name.toLowerCase())) {
       throw new Error(`Desktop bundle contains forbidden runtime: ${path}`);
     }
     if (entry.isDirectory()) {
-      visit(path);
-    } else {
-      if (textExtensions.has(extname(entry.name)) && statSync(path).size <= 16 * 1024 * 1024) {
-        const content = readFileSync(path, "utf8");
-        const marker = forbiddenContent.find((value) => content.includes(value));
-        if (marker !== undefined) throw new Error(`Desktop bundle contains ${marker}: ${path}`);
-      }
+      scanForForbiddenArtifacts(path);
+      continue;
+    }
+    if (textExtensions.has(extname(entry.name)) && statSync(path).size <= 16 * 1024 * 1024) {
+      const content = readFileSync(path, "utf8");
+      const marker = forbiddenContent.find((value) => content.includes(value));
+      if (marker !== undefined) throw new Error(`Desktop bundle contains ${marker}: ${path}`);
     }
   }
 };
 
-visit(bundleRoot);
+const withTemporaryDirectory = (callback) => {
+  const directory = mkdtempSync(join(tmpdir(), "code-agent-artifact-"));
+  try {
+    return callback(directory);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+const extractArchive = (archivePath, destination) => {
+  if (archivePath.endsWith(".tar.gz")) {
+    execFileSync("tar", ["-xzf", archivePath, "-C", destination], { stdio: "pipe" });
+    return;
+  }
+  execFileSync("tar", ["-xf", archivePath, "-C", destination], { stdio: "pipe" });
+};
+
+const discoverBundledRuntimeDirectories = () => {
+  const fromBundle = findCodexRuntimeDirectories(bundleRoot);
+  if (fromBundle.length > 0) return fromBundle;
+
+  if (process.platform === "darwin") {
+    const macosDirectory = join(bundleRoot, "macos");
+    const appArchive = existsSync(macosDirectory)
+      ? readdirSync(macosDirectory).find(
+          (entry) => entry.endsWith(".app.tar.gz") && !entry.endsWith(".sig"),
+        )
+      : undefined;
+    if (appArchive !== undefined) {
+      return withTemporaryDirectory((directory) => {
+        extractArchive(join(macosDirectory, appArchive), directory);
+        return findCodexRuntimeDirectories(directory);
+      });
+    }
+
+    const dmgDirectory = join(bundleRoot, "dmg");
+    const dmg = existsSync(dmgDirectory)
+      ? readdirSync(dmgDirectory).find((entry) => entry.endsWith(".dmg"))
+      : undefined;
+    if (dmg !== undefined) {
+      return withTemporaryDirectory((mountPoint) => {
+        execFileSync(
+          "hdiutil",
+          ["attach", join(dmgDirectory, dmg), "-nobrowse", "-readonly", "-mountpoint", mountPoint],
+          { stdio: "pipe" },
+        );
+        try {
+          return findCodexRuntimeDirectories(mountPoint);
+        } finally {
+          execFileSync("hdiutil", ["detach", mountPoint, "-quiet"], { stdio: "pipe" });
+        }
+      });
+    }
+  }
+
+  if (process.platform === "win32") {
+    const nsisDirectory = join(bundleRoot, "nsis");
+    const nsisArchive = existsSync(nsisDirectory)
+      ? readdirSync(nsisDirectory).find((entry) => entry.endsWith(".nsis.zip"))
+      : undefined;
+    if (nsisArchive !== undefined) {
+      return withTemporaryDirectory((directory) => {
+        extractArchive(join(nsisDirectory, nsisArchive), directory);
+        return findCodexRuntimeDirectories(directory);
+      });
+    }
+  }
+
+  return [];
+};
+
+scanForForbiddenArtifacts(bundleRoot);
 
 const preparedRuntime = resolve("apps/desktop/src-tauri/resources/codex-runtime");
 if (!existsSync(preparedRuntime)) {
@@ -58,12 +151,13 @@ const collectRuntimeFiles = (directory) => {
   }
 };
 collectRuntimeFiles(preparedRuntime);
+
+const bundledRuntimeDirectories = discoverBundledRuntimeDirectories();
 if (bundledRuntimeDirectories.length === 0) {
   throw new Error("Desktop bundle is missing the canonical Codex runtime package");
 }
 
 for (const runtimeDirectory of bundledRuntimeDirectories) {
-  // 逐项校验官方 package，平台新增沙箱或 Shell 资源时不能静默漏包。
   for (const relativePath of runtimeFiles) {
     const source = join(preparedRuntime, relativePath);
     const path = join(runtimeDirectory, relativePath);
@@ -81,8 +175,7 @@ for (const runtimeDirectory of bundledRuntimeDirectories) {
     ...(process.platform === "win32" ? [`${runtimeManifest.pathDir}/npx.exe`] : []),
   ];
   for (const relativePath of requiredExecutables) {
-    const path = join(runtimeDirectory, relativePath);
-    accessSync(path, constants.X_OK);
+    accessSync(join(runtimeDirectory, relativePath), constants.X_OK);
   }
 }
 process.stdout.write("Desktop artifact isolation verified.\n");
