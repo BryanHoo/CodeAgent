@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { changeAppLanguage } from "../../../i18n/i18n.js";
 import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
 import { GlobalSettingsDialog, resolveGlobalSettingsModel } from "./global-settings-dialog.js";
-import { GlobalSettingsAbout } from "./global-settings-about.js";
+import { GlobalSettingsAbout, resolveAppInfoToastError } from "./global-settings-about.js";
 import { AppReleaseNotesDialog } from "./app-release-notes-dialog.js";
 
 function renderSettingsDialog(children: ReactNode): string {
@@ -268,8 +268,33 @@ describe("GlobalSettingsDialog", () => {
 
     expect(updating).toContain("正在更新");
     expect(restartRequired).toContain("更新完成，重启 CodeAgent 后生效");
-    expect(checkFailed).not.toContain("无法检查更新");
+    expect(checkFailed).toContain("无法检查更新");
     expect(checkFailed).toContain("检查更新");
+  });
+
+  it("does not surface update-check failures as toast errors", () => {
+    expect(
+      resolveAppInfoToastError({
+        appVersion: "1.3.0",
+        codexVersion: "0.147.0",
+        error: "Could not fetch a valid release JSON from the remote",
+        latestVersion: null,
+        releaseNotes: null,
+        status: "check-failed",
+        updateAvailable: false,
+      }),
+    ).toBeNull();
+    expect(
+      resolveAppInfoToastError({
+        appVersion: "1.3.0",
+        codexVersion: "0.147.0",
+        error: "GitHub returned 503",
+        latestVersion: "1.4.0",
+        releaseNotes: null,
+        status: "available",
+        updateAvailable: true,
+      })?.message,
+    ).toBe("GitHub returned 503");
   });
 
   it("renders detailed release notes in a dedicated dialog", () => {

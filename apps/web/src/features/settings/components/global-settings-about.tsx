@@ -9,6 +9,12 @@ import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.j
 import { AppReleaseNotesDialog } from "./app-release-notes-dialog.js";
 import { SettingsField, SettingsPanel, type SettingsSectionId } from "./global-settings-fields.js";
 
+export function resolveAppInfoToastError(appInfo?: AppInfoResponse): Error | null {
+  if (appInfo?.error === undefined || appInfo.error === null) return null;
+  if (appInfo.status === "check-failed") return null;
+  return new Error(appInfo.error);
+}
+
 export function GlobalSettingsAbout({
   activeSection,
   appInfo,
@@ -35,11 +41,7 @@ export function GlobalSettingsAbout({
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const updating = isUpdating || isUpdatePending === true;
-  const appInfoError = useMemo(
-    () =>
-      appInfo?.error === null || appInfo?.error === undefined ? null : new Error(appInfo.error),
-    [appInfo?.error],
-  );
+  const appInfoError = useMemo(() => resolveAppInfoToastError(appInfo), [appInfo]);
   useErrorToast(error);
   useErrorToast(appInfoError);
   useErrorToast(updateError);
@@ -90,20 +92,20 @@ export function GlobalSettingsAbout({
           </SettingsField>
           <SettingsField alignStart label={t("about.update")}>
             <div className="flex min-w-0 flex-wrap items-center gap-2 py-2">
-              {appInfo.status === "check-failed" ? null : (
-                <p
-                  className={`shrink-0 text-body-small ${
-                    appInfo.status === "available" ? "text-warning" : "text-muted-foreground"
-                  }`}
-                  role="status"
-                >
-                  {appInfo.status === "available" && appInfo.latestVersion !== null
+              <p
+                className={`shrink-0 text-body-small ${
+                  appInfo.status === "available" ? "text-warning" : "text-muted-foreground"
+                }`}
+                role="status"
+              >
+                {appInfo.status === "check-failed"
+                  ? t("errors.updateCheck")
+                  : appInfo.status === "available" && appInfo.latestVersion !== null
                     ? t("about.available", { version: appInfo.latestVersion })
                     : appInfo.status === "restart-required"
                       ? t("about.restartRequired")
                       : t("about.current")}
-                </p>
-              )}
+              </p>
               <Button
                 disabled={isChecking}
                 onClick={() => void checkForUpdates()}

@@ -59,6 +59,10 @@ pub async fn app_info(app: AppHandle, request_id: String) -> Result<AppInfoRespo
         // IPC E2E 只隔离 updater 网络请求，命令注册、参数校验与响应序列化仍走真实链路。
         return Ok(app_info_response(Ok(None)));
     }
+    if cfg!(debug_assertions) {
+        // 本地开发构建没有可用的签名 release manifest，跳过 updater 避免误报检查失败。
+        return Ok(app_info_response(Ok(None)));
+    }
     let updater = match app.updater() {
         Ok(updater) => updater,
         Err(error) => return Ok(app_info_response(Err(error.to_string()))),
