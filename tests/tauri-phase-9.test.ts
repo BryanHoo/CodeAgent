@@ -169,7 +169,8 @@ describe("Tauri Phase 9 updater contract", () => {
     expect(macosSmoke).not.toContain("spctl --assess");
     expect(linuxSmoke).toContain("xvfb-run");
     expect(linuxSmoke).toContain("apt-get install");
-    expect(linuxSmoke).toContain("pgrep -x");
+    expect(linuxSmoke).toContain("pgrep -f");
+    expect(linuxSmoke).toContain("desktop_process_pattern='/code-agent-desktop$'");
     expect(linuxSmoke).toContain('CODEX_HOME="${codex_home}"');
     expect(linuxSmoke.match(/smoke_launch "/gu)).toHaveLength(2);
     expect(windowsSmoke).not.toContain("verify-windows-signatures.ps1");
