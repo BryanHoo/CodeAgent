@@ -8,6 +8,7 @@ mod event_stream;
 mod event_subscription;
 mod idempotency;
 mod project_context;
+mod project_event_subscription;
 mod prompt;
 mod provider_connection;
 mod settings_validation;
@@ -37,11 +38,12 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
-use tokio::sync::OnceCell;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use uuid::Uuid;
 
-use project_context::ProjectRuntimeContext;
+use project_context::{
+    ProjectContextHandle, ProjectContextRegistry, ProjectContextRelease, ProjectRuntimeContext,
+};
 use prompt::resolve_prompt;
 
 use commit_message::{
@@ -86,7 +88,7 @@ pub struct CodeAgentRuntime {
     operations: OperationRegistry,
     options: RuntimeOptions,
     ports: RuntimePorts,
-    project_contexts: Mutex<HashMap<ProjectId, Arc<OnceCell<Arc<ProjectRuntimeContext>>>>>,
+    project_contexts: ProjectContextRegistry,
     shutdown: CancellationToken,
     shutdown_lock: Mutex<()>,
     tasks: TaskTracker,
@@ -125,7 +127,7 @@ impl CodeAgentRuntime {
                 repository,
                 _update: update,
             },
-            project_contexts: Mutex::new(HashMap::new()),
+            project_contexts: ProjectContextRegistry::new(),
             shutdown: CancellationToken::new(),
             shutdown_lock: Mutex::new(()),
             tasks: TaskTracker::new(),
@@ -151,114 +153,133 @@ impl CodeAgentRuntime {
         &self,
         project_id: &ProjectId,
         context: &PortRequestContext,
+    ) -> Result<ProjectContextHandle, CodeAgentError> {
+        self.project_context_with_lease(project_id, context, None)
+            .await
+    }
+
+    async fn project_context_with_lease(
+        &self,
+        project_id: &ProjectId,
+        context: &PortRequestContext,
+        lease_id: Option<&str>,
+    ) -> Result<ProjectContextHandle, CodeAgentError> {
+        loop {
+            let slot = self.project_contexts.slot(project_id).await;
+            if let Some(context_handle) = slot
+                .acquire(
+                    lease_id,
+                    self.initialize_project_context(project_id, context),
+                )
+                .await?
+            {
+                return Ok(context_handle);
+            }
+            slot.wait_until_released().await;
+        }
+    }
+
+    async fn initialize_project_context(
+        &self,
+        project_id: &ProjectId,
+        context: &PortRequestContext,
     ) -> Result<Arc<ProjectRuntimeContext>, CodeAgentError> {
-        let cell = {
-            let mut contexts = self.project_contexts.lock().await;
-            contexts
-                .entry(project_id.clone())
-                .or_insert_with(|| Arc::new(OnceCell::new()))
-                .clone()
-        };
-        cell.get_or_try_init(|| async {
-            let value = self
+        let value = self
+            .ports
+            .repository
+            .read_project(project_id, context)
+            .await?;
+        let value = if let Some(value) = value {
+            value
+        } else if project_id.as_str() == "temporary" {
+            let root = self
+                .options
+                .temporary_project_root
+                .as_ref()
+                .ok_or_else(|| {
+                    CodeAgentError::internal("temporary project root is not configured")
+                })?;
+            let project = self
                 .ports
                 .repository
-                .read_project(project_id, context)
-                .await?;
-            let value = if let Some(value) = value {
-                value
-            } else if project_id.as_str() == "temporary" {
-                let root = self
-                    .options
-                    .temporary_project_root
-                    .as_ref()
-                    .ok_or_else(|| {
-                        CodeAgentError::internal("temporary project root is not configured")
-                    })?;
-                let project = self
-                    .ports
-                    .repository
-                    .ensure_temporary_project(
-                        root.to_string_lossy().as_ref(),
-                        self.ports.clock.now(),
-                        context,
-                    )
-                    .await?;
-                serde_json::to_value(project)
-                    .map_err(|error| CodeAgentError::internal(error.to_string()))?
-            } else {
-                return Err(CodeAgentError::new(
-                    CodeAgentErrorCode::NotFound,
-                    "project was not found",
-                    None,
+                .ensure_temporary_project(
+                    root.to_string_lossy().as_ref(),
+                    self.ports.clock.now(),
+                    context,
                 )
-                .with_mutation_code(AgentMutationErrorCode::ProjectNotFound));
-            };
-            let project: Project = serde_json::from_value(value)
-                .map_err(|error| CodeAgentError::internal(error.to_string()))?;
-            let provider = self
-                .ports
-                .provider
-                .for_project(project.clone(), context)
                 .await?;
-            let capabilities = self.ports.provider.capabilities(context).await?;
-            let stream = Arc::new(AgentEventStream::new(EventStreamOptions {
-                capacity: 1_000,
-                max_event_bytes: 1_048_576,
-                max_retained_bytes: 4 * 1_048_576,
-                now: Arc::new(|| {
-                    chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now())
-                }),
-                provider: Arc::from(capabilities.provider.as_str()),
-                session_id: Arc::from(Uuid::new_v4().to_string()),
-                subscriber_capacity: 256,
-            })?);
-            let cancellation = self.shutdown.child_token();
-            let mut events = provider.subscribe_events(false, context).await?;
-            let forwarding_stream = Arc::clone(&stream);
-            let forwarding_cancellation = cancellation.clone();
-            let forwarding_attachment = Arc::clone(&self.ports.attachment);
-            let forwarding_project_id = project.id.clone();
-            self.tasks.spawn(async move {
-                loop {
-                    tokio::select! {
-                        _ = forwarding_cancellation.cancelled() => break,
-                        event = events.recv() => {
-                            let Some(event) = event else { break };
-                            if event.provider_error_message()
-                                == Some("Provider event subscription overflowed")
-                            {
-                                forwarding_stream.require_resync().await;
-                                break;
-                            }
-                            if event.event_type() == "turn.completed"
-                                && let Some(turn_id) = event.turn_id()
-                            {
-                                let cleanup = PortRequestContext::new(format!(
-                                    "release-turn-{turn_id}"
-                                ));
-                                let _ = forwarding_attachment
-                                    .release_turn(&forwarding_project_id, turn_id, &cleanup)
-                                    .await;
-                            }
-                            forwarding_stream.publish(event).await;
+            serde_json::to_value(project)
+                .map_err(|error| CodeAgentError::internal(error.to_string()))?
+        } else {
+            return Err(CodeAgentError::new(
+                CodeAgentErrorCode::NotFound,
+                "project was not found",
+                None,
+            )
+            .with_mutation_code(AgentMutationErrorCode::ProjectNotFound));
+        };
+        let project: Project = serde_json::from_value(value)
+            .map_err(|error| CodeAgentError::internal(error.to_string()))?;
+        let provider = self
+            .ports
+            .provider
+            .for_project(project.clone(), context)
+            .await?;
+        let capabilities = self.ports.provider.capabilities(context).await?;
+        let stream = Arc::new(AgentEventStream::new(EventStreamOptions {
+            capacity: 1_000,
+            max_event_bytes: 1_048_576,
+            max_retained_bytes: 4 * 1_048_576,
+            now: Arc::new(|| chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now())),
+            provider: Arc::from(capabilities.provider.as_str()),
+            session_id: Arc::from(Uuid::new_v4().to_string()),
+            subscriber_capacity: 256,
+        })?);
+        let cancellation = self.shutdown.child_token();
+        let mut events = provider.subscribe_events(false, context).await?;
+        let forwarding_stream = Arc::clone(&stream);
+        let forwarding_cancellation = cancellation.clone();
+        let forwarding_attachment = Arc::clone(&self.ports.attachment);
+        let forwarding_project_id = project.id.clone();
+        let context_tasks = TaskTracker::new();
+        context_tasks.spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = forwarding_cancellation.cancelled() => break,
+                    event = events.recv() => {
+                        let Some(event) = event else { break };
+                        if event.provider_error_message()
+                            == Some("Provider event subscription overflowed")
+                        {
+                            forwarding_stream.require_resync().await;
+                            break;
                         }
+                        if event.event_type() == "turn.completed"
+                            && let Some(turn_id) = event.turn_id()
+                        {
+                            let cleanup = PortRequestContext::new(format!(
+                                "release-turn-{turn_id}"
+                            ));
+                            let _ = forwarding_attachment
+                                .release_turn(&forwarding_project_id, turn_id, &cleanup)
+                                .await;
+                        }
+                        forwarding_stream.publish(event).await;
                     }
                 }
-            });
-            let flush_stream = Arc::clone(&stream);
-            let flush_cancellation = cancellation.clone();
-            self.tasks.spawn(async move {
-                flush_stream.run_flush_loop(flush_cancellation).await;
-            });
-            Ok::<Arc<ProjectRuntimeContext>, CodeAgentError>(Arc::new(ProjectRuntimeContext::new(
-                stream,
-                provider,
-                cancellation,
-            )))
-        })
-        .await
-        .cloned()
+            }
+        });
+        let flush_stream = Arc::clone(&stream);
+        let flush_cancellation = cancellation.clone();
+        context_tasks.spawn(async move {
+            flush_stream.run_flush_loop(flush_cancellation).await;
+        });
+        Ok(Arc::new(ProjectRuntimeContext::new(
+            stream,
+            provider,
+            cancellation,
+            context_tasks,
+        )))
     }
 
     /// 注册一个可取消操作；关闭开始后拒绝新操作。
@@ -1048,18 +1069,7 @@ impl CodeAgentRuntime {
         request_id: &str,
     ) -> Result<Vec<(ProjectId, EventStreamMetrics)>, CodeAgentError> {
         let _operation = self.begin_operation(request_id).await?;
-        // 仅在 Map 锁内复制上下文，避免逐个读取指标时阻塞 Project 生命周期操作。
-        let contexts = self
-            .project_contexts
-            .lock()
-            .await
-            .iter()
-            .filter_map(|(project_id, cell)| {
-                cell.get()
-                    .cloned()
-                    .map(|context| (project_id.clone(), context))
-            })
-            .collect::<Vec<_>>();
+        let contexts = self.project_contexts.ready_contexts().await;
         let mut metrics = Vec::with_capacity(contexts.len());
         for (project_id, context) in contexts {
             metrics.push((project_id, context.event_stream.metrics().await));
@@ -1221,24 +1231,73 @@ impl CodeAgentRuntime {
         project_id: &ProjectId,
     ) -> Result<(), CodeAgentError> {
         let operation = self.begin_operation(request_id).await?;
-        let cell = self.project_contexts.lock().await.remove(project_id);
-
-        self.ports
-            .file
-            .release_project(project_id, &operation)
+        self.release_project_context_inner(project_id, None, &operation, true)
             .await?;
+        Ok(())
+    }
 
-        if let Some(context) = cell.and_then(|cell| cell.get().cloned()) {
-            context.close().await?;
-            self.ports
-                .provider
-                .release_project(project_id, &operation)
-                .await
-        } else {
-            self.ports
-                .provider
-                .release_project(project_id, &operation)
-                .await
+    /// 释放指定前端 lease；存在更新 lease 时保留当前 Project Context。
+    pub async fn release_project_context_lease(
+        &self,
+        request_id: &str,
+        project_id: &ProjectId,
+        lease_id: &str,
+    ) -> Result<bool, CodeAgentError> {
+        let operation = self.begin_operation(request_id).await?;
+        self.release_project_context_inner(project_id, Some(lease_id), &operation, true)
+            .await
+    }
+
+    async fn release_project_context_inner(
+        &self,
+        project_id: &ProjectId,
+        lease_id: Option<&str>,
+        operation: &PortRequestContext,
+        release_files: bool,
+    ) -> Result<bool, CodeAgentError> {
+        match self
+            .project_contexts
+            .begin_release(project_id, lease_id)
+            .await
+        {
+            ProjectContextRelease::Retained => Ok(false),
+            ProjectContextRelease::Ignored if lease_id.is_some() => Ok(false),
+            ProjectContextRelease::Ignored => {
+                if release_files {
+                    self.ports
+                        .file
+                        .release_project(project_id, operation)
+                        .await?;
+                }
+                self.ports
+                    .provider
+                    .release_project(project_id, operation)
+                    .await?;
+                Ok(true)
+            }
+            ProjectContextRelease::Claimed(claim) => {
+                let close_result = match claim.context.as_ref() {
+                    Some(context) => context.close().await,
+                    None => Ok(()),
+                };
+                let file_result = if release_files {
+                    self.ports.file.release_project(project_id, operation).await
+                } else {
+                    Ok(())
+                };
+                let provider_result = self
+                    .ports
+                    .provider
+                    .release_project(project_id, operation)
+                    .await;
+                self.project_contexts
+                    .finish_release(project_id, &claim)
+                    .await;
+                close_result?;
+                file_result?;
+                provider_result?;
+                Ok(true)
+            }
         }
     }
 
@@ -1348,19 +1407,8 @@ impl CodeAgentRuntime {
             idempotency_key,
             &json!({}),
             |operation| async move {
-                if let Some(runtime_context) = self
-                    .project_contexts
-                    .lock()
-                    .await
-                    .remove(project_id)
-                    .and_then(|cell| cell.get().cloned())
-                {
-                    runtime_context.close().await?;
-                    self.ports
-                        .provider
-                        .release_project(project_id, &operation)
-                        .await?;
-                }
+                self.release_project_context_inner(project_id, None, &operation, false)
+                    .await?;
                 self.ports
                     .repository
                     .remove_project(project_id, &operation)
@@ -1925,21 +1973,9 @@ impl CodeAgentRuntime {
         self.operations.close().await;
         self.idempotency.close().await;
         self.event_subscriptions.close();
-        let project_contexts = {
-            let mut contexts = self.project_contexts.lock().await;
-            contexts
-                .drain()
-                .filter_map(|(project_id, cell)| {
-                    cell.get().cloned().map(|context| (project_id, context))
-                })
-                .collect::<Vec<_>>()
-        };
         let shutdown_context = PortRequestContext::new("runtime-shutdown");
-        for (project_id, context) in project_contexts {
-            context.close().await?;
-            self.ports
-                .provider
-                .release_project(&project_id, &shutdown_context)
+        for project_id in self.project_contexts.project_ids().await {
+            self.release_project_context_inner(&project_id, None, &shutdown_context, false)
                 .await?;
         }
         self.shutdown.cancel();

@@ -213,6 +213,32 @@ async fn event_stream_should_flush_delta_on_default_window() {
 }
 
 #[tokio::test]
+async fn event_stream_should_start_flush_timer_only_when_delta_is_pending() {
+    let stream = Arc::new(AgentEventStream::new(options()).expect("stream"));
+    let mut subscriber = stream.subscribe().await.expect("subscriber");
+    let shutdown = CancellationToken::new();
+    let flush_stream = Arc::clone(&stream);
+    let flush_shutdown = shutdown.clone();
+    let flush_task = tokio::spawn(async move {
+        flush_stream.run_flush_loop(flush_shutdown).await;
+    });
+
+    stream.publish(message_delta("item-a", "leading")).await;
+    subscriber.events.recv().await.expect("leading delta");
+    tokio::time::sleep(DEFAULT_COALESCING_WINDOW * 3).await;
+
+    stream.publish(message_delta("item-a", "pending")).await;
+    assert!(subscriber.events.try_recv().is_err());
+    let trailing = tokio::time::timeout(DEFAULT_COALESCING_WINDOW * 3, subscriber.events.recv())
+        .await
+        .expect("flush timer elapsed")
+        .expect("trailing delta");
+    assert_eq!(published_value(&trailing)["payload"]["delta"], "pending");
+    shutdown.cancel();
+    flush_task.await.expect("flush task");
+}
+
+#[tokio::test]
 async fn event_stream_should_require_resync_for_session_and_retention_gaps() {
     let mut constrained = options();
     constrained.capacity = 1;

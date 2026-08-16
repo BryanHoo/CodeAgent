@@ -308,6 +308,41 @@ describe("TauriCodeAgentTransport", () => {
     expect(events).toHaveLength(1);
   });
 
+  it("uses one Project Context lease for event subscription and release", async () => {
+    const calls: { command: string; payload: unknown }[] = [];
+    mockIPC((command, payload) => {
+      calls.push({ command, payload });
+      return command === "event_subscribe" ? { subscriptionId: "subscription-lease" } : true;
+    });
+    const transport = new TauriCodeAgentTransport();
+    const leaseId = "lease-project-a";
+
+    const unsubscribe = transport.subscribeEvents({
+      afterSequence: 0,
+      onEvent: vi.fn(),
+      onResyncRequired: vi.fn(),
+      projectContextLeaseId: leaseId,
+      projectId: "project-a",
+      sessionId: "session-lease",
+    });
+    await vi.waitFor(() => {
+      expect(calls[0]).toMatchObject({
+        command: "event_subscribe",
+        payload: { leaseId, projectId: "project-a" },
+      });
+    });
+
+    unsubscribe();
+    await transport.releaseProjectContext("project-a", leaseId);
+
+    const releaseCall = calls.find((call) => call.command === "project_context_release");
+    expect(releaseCall).toMatchObject({
+      command: "project_context_release",
+      payload: { leaseId, projectId: "project-a" },
+    });
+    expect(typeof (releaseCall?.payload as { requestId?: unknown }).requestId).toBe("string");
+  });
+
   it("reports event unsubscribe errors without rewriting them", async () => {
     let channelId = 0;
     mockIPC((command, payload) => {

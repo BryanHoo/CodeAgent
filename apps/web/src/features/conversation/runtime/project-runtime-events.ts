@@ -27,6 +27,7 @@ export class ProjectEventRuntime {
   readonly #idleTimeoutMs: number;
   readonly #onPerformanceSample: ProjectEventRuntimeOptions["onPerformanceSample"];
   readonly #projectId: string;
+  readonly #projectContextLeaseId = crypto.randomUUID();
   readonly #snapshotRecovery: SnapshotRecoveryController<AgentTaskSnapshotResponse>;
   readonly #targets = new Map<TaskStore, TaskEventTarget>();
   #connectionCleanup: (() => void) | undefined;
@@ -129,6 +130,9 @@ export class ProjectEventRuntime {
     }
     this.#targets.clear();
     this.#clearEventHistory();
+    void this.#client
+      .releaseProjectContext(this.#projectId, this.#projectContextLeaseId)
+      .catch(showErrorToast);
   }
 
   public forgetTask(taskId: string): void {
@@ -244,6 +248,7 @@ export class ProjectEventRuntime {
         }
         this.#requestSnapshotRecovery();
       },
+      projectContextLeaseId: this.#projectContextLeaseId,
       projectId: this.#projectId,
       sessionId: checkpoint.sessionId,
     });

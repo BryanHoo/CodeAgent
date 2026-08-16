@@ -81,6 +81,7 @@ export function startTauriEventSubscription(options: SubscribeAgentEventsOptions
   void invoke<{ subscriptionId: string }>("event_subscribe", {
     afterSequence: options.afterSequence,
     channel,
+    leaseId: options.projectContextLeaseId ?? crypto.randomUUID(),
     projectId: options.projectId,
     requestId: crypto.randomUUID(),
     sessionId: options.sessionId,

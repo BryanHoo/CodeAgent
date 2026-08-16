@@ -92,7 +92,7 @@ describe("Tauri Phase 6 repository contract", () => {
     expect(lifecycle).not.toContain("compare_exchange");
     expect(shutdown).toContain("compare_exchange");
     expect(runtime.indexOf("event_subscriptions.close()")).toBeLessThan(
-      runtime.indexOf("let project_contexts"),
+      runtime.indexOf("for project_id in self.project_contexts.project_ids().await"),
     );
     expect(lifecycle.indexOf("runtime.shutdown")).toBeLessThan(
       lifecycle.indexOf("supervisor.close"),

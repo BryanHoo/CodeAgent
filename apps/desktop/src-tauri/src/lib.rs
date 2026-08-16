@@ -136,6 +136,7 @@ pub fn run() {
             commands::attachments::attachment_upload,
             commands::events::event_subscribe,
             commands::events::event_unsubscribe,
+            commands::events::project_context_release,
             commands::files::file_search,
             commands::files::file_source_read,
             commands::files::file_tree,

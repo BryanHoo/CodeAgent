@@ -151,9 +151,11 @@ function createMcpServerStatusUpdatedEvent(taskId: string, sequence: number): Ag
 function createClientHarness() {
   let subscription: Parameters<CodeAgentRuntimeClient["subscribeEvents"]>[0] | undefined;
   const closeConnection = vi.fn();
+  const releaseProjectContext = vi.fn(() => Promise.resolve());
   const client = {
     listTaskTurns: vi.fn<CodeAgentRuntimeClient["listTaskTurns"]>(),
     readTask: vi.fn<CodeAgentRuntimeClient["readTask"]>(),
+    releaseProjectContext,
     subscribeEvents: vi.fn<CodeAgentRuntimeClient["subscribeEvents"]>((options) => {
       subscription = options;
       return closeConnection;
@@ -169,6 +171,7 @@ function createClientHarness() {
   return {
     client,
     closeConnection,
+    releaseProjectContext,
     connectionState(
       state: Parameters<
         NonNullable<Parameters<CodeAgentRuntimeClient["subscribeEvents"]>[0]["onConnectionState"]>
@@ -408,6 +411,12 @@ describe("project runtime manager", () => {
 
     vi.advanceTimersByTime(1);
     expect(harness.closeConnection).toHaveBeenCalledTimes(1);
+    const subscription = harness.client.subscribeEvents.mock.calls[0]?.[0];
+    expect(subscription?.projectContextLeaseId).toEqual(expect.any(String));
+    expect(harness.releaseProjectContext).toHaveBeenCalledWith(
+      "project-1",
+      subscription?.projectContextLeaseId,
+    );
     manager.dispose();
   });
 

@@ -66,6 +66,7 @@ export interface SubscribeAgentEventsOptions {
   onEvent: (event: AgentEvent, wireBytes: number | undefined) => void;
   onPerformanceSample?: (sample: AgentEventPerformanceSample) => void;
   onResyncRequired: (message: ResyncRequired) => void;
+  projectContextLeaseId?: string;
   projectId: string;
   reconnectDelayMs?: number;
   sessionId: string;
@@ -81,6 +82,7 @@ export type AssetReference = Readonly<{
 
 export interface CodeAgentTransport {
   cancel(requestId: string): Promise<void>;
+  releaseProjectContext?(projectId: string, leaseId: string): Promise<void>;
   request(operation: CodeAgentOperation, context: CodeAgentRequestContext): Promise<unknown>;
   resolveAssetUrl(reference: AssetReference): string;
   subscribeEvents(options: SubscribeAgentEventsOptions): () => void;

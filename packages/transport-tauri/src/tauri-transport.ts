@@ -156,6 +156,18 @@ export class TauriCodeAgentTransport implements CodeAgentTransport {
     });
   }
 
+  public releaseProjectContext(projectId: string, leaseId: string): Promise<void> {
+    return invoke("project_context_release", {
+      leaseId,
+      projectId,
+      requestId: crypto.randomUUID(),
+    })
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        throw normalizeCodeAgentError(error);
+      });
+  }
+
   public resolveAssetUrl(reference: AssetReference): string {
     const segments = [reference.kind, reference.projectId];
     if (reference.kind === "task-attachment") {

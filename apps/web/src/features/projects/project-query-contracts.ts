@@ -33,7 +33,7 @@ export type CodeAgentProjectOpenClient = Pick<
 >;
 export type CodeAgentRuntimeClient = Pick<
   CodeAgentClient,
-  "listTaskTurns" | "readTask" | "subscribeEvents" | "unsubscribeTask"
+  "listTaskTurns" | "readTask" | "releaseProjectContext" | "subscribeEvents" | "unsubscribeTask"
 >;
 export type CodeAgentBackgroundTerminalClient = Pick<
   CodeAgentClient,

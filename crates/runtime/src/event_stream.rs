@@ -5,8 +5,8 @@ use code_agent_core::{CodeAgentError, CodeAgentErrorCode};
 use code_agent_protocol::{ProviderEvent, ProviderEventKind, ReasoningDeltaField};
 use serde_json::Value;
 use tokio::{
-    sync::{Mutex, mpsc, watch},
-    time::{Instant, MissedTickBehavior},
+    sync::{Mutex, Notify, mpsc, watch},
+    time::sleep,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -143,6 +143,7 @@ struct EventStreamState {
 
 /// 有界、按序且支持恢复的 Project Agent Event Stream。
 pub struct AgentEventStream {
+    flush_requested: Notify,
     options: EventStreamOptions,
     state: Mutex<EventStreamState>,
 }
@@ -164,6 +165,7 @@ impl AgentEventStream {
             ));
         }
         Ok(Self {
+            flush_requested: Notify::new(),
             options,
             state: Mutex::new(EventStreamState {
                 closed: false,
@@ -208,6 +210,10 @@ impl AgentEventStream {
             state.metrics.coalesced_events += 1;
         } else {
             state.pending.push(event);
+            // 只在 pending 从空变为非空时启动一个 trailing timer。
+            if state.pending.len() == 1 {
+                self.flush_requested.notify_one();
+            }
         }
     }
 
@@ -217,18 +223,25 @@ impl AgentEventStream {
         self.flush_locked(&mut state);
     }
 
-    /// 按默认 trailing 窗口冲刷 Delta，关闭信号到达时执行最后一次冲刷。
+    /// 仅在存在待合并 Delta 时启动 one-shot timer，关闭时执行最后一次冲刷。
     pub async fn run_flush_loop(&self, shutdown: CancellationToken) {
-        let start = Instant::now() + DEFAULT_COALESCING_WINDOW;
-        let mut interval = tokio::time::interval_at(start, DEFAULT_COALESCING_WINDOW);
-        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
         loop {
             tokio::select! {
                 _ = shutdown.cancelled() => {
                     self.flush().await;
                     return;
                 }
-                _ = interval.tick() => self.flush_trailing().await,
+                _ = self.flush_requested.notified() => {}
+            }
+            if !self.has_pending().await {
+                continue;
+            }
+            tokio::select! {
+                _ = shutdown.cancelled() => {
+                    self.flush().await;
+                    return;
+                }
+                _ = sleep(DEFAULT_COALESCING_WINDOW) => self.flush_trailing().await,
             }
         }
     }
@@ -337,6 +350,10 @@ impl AgentEventStream {
         self.flush_locked(&mut state);
         // 持续输入保持合并态；连续一个空窗口后，下一段输入才重新直发首条。
         state.coalescing_window_open = had_pending;
+    }
+
+    async fn has_pending(&self) -> bool {
+        !self.state.lock().await.pending.is_empty()
     }
 
     fn flush_locked(&self, state: &mut EventStreamState) {

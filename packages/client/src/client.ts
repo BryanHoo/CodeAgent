@@ -209,6 +209,10 @@ export class TransportCodeAgentClient {
     return this.transport.resolveAssetUrl(reference);
   }
 
+  public releaseProjectContext(projectId: string, leaseId: string): Promise<void> {
+    return this.transport.releaseProjectContext?.(projectId, leaseId) ?? Promise.resolve();
+  }
+
   public subscribeEvents(options: SubscribeAgentEventsOptions): () => void {
     return this.transport.subscribeEvents(options);
   }

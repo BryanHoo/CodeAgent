@@ -27,6 +27,7 @@ fn send_frame(channel: &Channel<InvokeResponseBody>, frame: &[u8]) -> bool {
 pub async fn event_subscribe(
     request_id: String,
     project_id: String,
+    lease_id: String,
     after_sequence: u64,
     session_id: String,
     channel: Channel<InvokeResponseBody>,
@@ -34,16 +35,36 @@ pub async fn event_subscribe(
 ) -> Result<EventSubscribeResponse, CommandError> {
     let project_id = project(&project_id)?;
     let runtime = runtime.inner().clone();
-    let subscription_id = runtime.start_project_event_subscription(
+    let subscription_id = runtime.start_leased_project_event_subscription(
         &tokio::runtime::Handle::current(),
         request_id,
         project_id,
+        lease_id,
         session_id,
         after_sequence,
         move |frame| std::future::ready(send_frame(&channel, &frame)),
     )?;
 
     Ok(EventSubscribeResponse { subscription_id })
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProjectContextReleaseResponse {
+    released: bool,
+}
+
+#[tauri::command]
+pub async fn project_context_release(
+    request_id: String,
+    project_id: String,
+    lease_id: String,
+    runtime: State<'_, Arc<CodeAgentRuntime>>,
+) -> Result<ProjectContextReleaseResponse, CommandError> {
+    let project_id = project(&project_id)?;
+    let released = runtime
+        .release_project_context_lease(&request_id, &project_id, &lease_id)
+        .await?;
+    Ok(ProjectContextReleaseResponse { released })
 }
 
 #[tauri::command]

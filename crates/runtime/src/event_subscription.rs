@@ -5,13 +5,11 @@ use std::{
 };
 
 use code_agent_core::{CodeAgentError, CodeAgentErrorCode};
-use code_agent_protocol::ProjectId;
 use serde_json::json;
-use tokio::runtime::Handle;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::{AgentEventStream, CodeAgentRuntime, EventCheckpoint, EventReplay, SubscriberSignal};
+use crate::{AgentEventStream, EventCheckpoint, EventReplay, SubscriberSignal};
 
 struct SubscriptionRegistryState {
     accepting: bool,
@@ -117,58 +115,6 @@ impl SubscriptionRegistration {
 impl Drop for SubscriptionRegistration {
     fn drop(&mut self) {
         self.registry.remove(&self.id);
-    }
-}
-
-impl CodeAgentRuntime {
-    /// 启动由 Runtime 完整驱动的 Project 事件订阅。
-    pub fn start_project_event_subscription<F, Fut>(
-        self: &Arc<Self>,
-        task_runtime: &Handle,
-        request_id: String,
-        project_id: ProjectId,
-        session_id: String,
-        after_sequence: u64,
-        send: F,
-    ) -> Result<String, CodeAgentError>
-    where
-        F: FnMut(Arc<[u8]>) -> Fut + Send + 'static,
-        Fut: Future<Output = bool> + Send + 'static,
-    {
-        let registration = self.event_subscriptions.register()?;
-        let subscription_id = registration.id().to_owned();
-        let runtime = Arc::downgrade(self);
-        self.tasks.spawn_on(
-            async move {
-                let Some(runtime) = runtime.upgrade() else {
-                    return;
-                };
-                let stream = async {
-                    let operation = runtime.begin_operation(&request_id).await?;
-                    let context = runtime.project_context(&project_id, &operation).await?;
-                    Ok::<Arc<AgentEventStream>, CodeAgentError>(Arc::clone(&context.event_stream))
-                }
-                .await;
-                drop(runtime);
-                if let Ok(stream) = stream {
-                    let _ = drive_event_subscription(
-                        stream,
-                        &session_id,
-                        after_sequence,
-                        registration.cancellation().clone(),
-                        send,
-                    )
-                    .await;
-                }
-            },
-            task_runtime,
-        );
-        Ok(subscription_id)
-    }
-
-    /// 取消交付订阅；不存在时幂等返回 `false`。
-    pub fn cancel_event_subscription(&self, subscription_id: &str) -> bool {
-        self.event_subscriptions.cancel(subscription_id)
     }
 }
 

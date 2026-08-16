@@ -149,7 +149,8 @@ describe("Tauri Phase 5 repository contract", () => {
 
     expect(events).toContain("ipc::{Channel, InvokeResponseBody}");
     expect(events).toContain("Channel<InvokeResponseBody>");
-    expect(events).toContain("start_project_event_subscription");
+    expect(events).toContain("start_leased_project_event_subscription");
+    expect(events).toContain("release_project_context_lease");
     expect(events).not.toContain("event.value().clone()");
     expect(events).not.toContain('"connection.ready"');
     expect(events).not.toContain('"resync.required"');

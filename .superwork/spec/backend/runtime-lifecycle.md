@@ -67,6 +67,7 @@
 - 用户临时聊天必须通过 `/v1/temporary/**` 访问内部作用域，`/v1/projects/temporary/**` 即使经过 URL 编码也必须返回资源不存在。创建必须调用不带 `ephemeral` 的 `thread/start`；Snapshot、设置更新和 Turn 参数必须完整保留普通 `AgentTaskSettings`，不得覆写审批、Sandbox、模型或思考量。temporary API 允许 Task、Turn、Attachment、Event、Skill、MCP、后台终端，以及 AI 文件引用所需的受控源码读取、图片读取和 `system-default` 单文件打开；Web 不得借该作用域请求 Git、文件树、目录打开、Project defaults 或其他 Project Mutation，也不得展示内部 Project 根路径。
 - Server 启动不得枚举项目并预建 Runtime；Project Runtime Context 只在首次 Project API 或 WebSocket 访问时激活。已激活 Context 必须先从进程内缓存解析，只有缓存未命中时才读取 Project Repository。Project 重命名成功后同步刷新缓存中的展示信息；Project 删除成功后必须释放事件订阅和 Context 缓存，后续访问重新读取 Repository 并返回资源不存在，不能复用已删除 Runtime。
 - 同一 Project 的首次 Runtime Context 初始化必须按 Project ID 复用进行中的 Promise；异步读取 Project Repository 返回后再次检查 Context 缓存，确保并发请求只创建一个 Event Stream 和一份 Provider 事件订阅。初始化成功、资源不存在或失败后都必须清理进行中条目，并使用并发 `inject` 测试覆盖该行为。
+- Desktop Project Event Runtime 必须持有唯一 Context lease，并在前端空闲释放时通过 Tauri Transport 显式归还。Rust 按 Project 串行初始化与释放，释放等待活动 Context Handle 归还；旧 lease 不能释放已有更新 lease 的 Context，释放完成前到达的新初始化必须等待并创建新一代 Context。
 - Project 删除和 Server 关闭必须通过 Runtime 的显式 `releaseProject` 端口统一释放 Project Provider、原始 Provider、Task Owner、Pending Request 定时器、Task 运行状态和历史附件授权；Server 同时清理该 Project 未消费或 Turn 占用中的上传附件，且不得影响其他 Project。
 - Project 与 Codex Thread 的 `cwd` 归属必须按真实路径比较；Windows 路径忽略大小写，Linux 符号链接解析到同一实体，不能仅比较原始路径字符串。
 - Linux 系统目录选择器在某个桌面启动器缺失或无法连接桌面会话时必须继续尝试下一个启动器，全部不可用后再回退终端输入；用户取消选择不得触发回退。
@@ -78,7 +79,7 @@
 - Provider 连接只允许持久化 `official | custom` 模式、自定义 Base URL、已验证的有界模型目录和更新时间；API key、登录 URL、登录 ID、`allow_for_session` 和可操作 Pending Approval 不得持久化，进程重启后不得恢复可操作 `pending`。
 - WebSocket 客户端使用独立有界队列，慢客户端不能阻塞 Provider；`bufferedAmount` 超过 `256 KiB` 时向 Event Stream 发出软背压信号，超过 `1 MiB` 时以 `1013` 关闭连接并要求刷新 Snapshot。
 - Event Stream 指标必须以 O(1) 更新并暴露 Rust 发送队列 `queueHighWaterMark`；WebSocket Delivery 必须记录连接生命周期内的 `maxBufferedAmount`，不能通过遍历历史事件补算高水位。
-- 每个 Project 创建独立 Event Stream Session，Provider 不分配传输序号。Server 在分配单调 `sequence` 前，按 `taskId + turnId + itemId + type + field` 合并 `message.delta`、`reasoning.delta` 和 `command.output_delta`：每段连续输入的首个可合并事件必须立即发布，后续事件使用不超过 `8ms` 的 trailing 窗口；只要上一窗口存在 trailing 数据就保持合并态，连续一个空窗口后才允许下一段输入重新直发首条。缓冲队列只能合并相邻同 Key 事件，不得跨其他 Item 重排 A-B-A 交错输入。
+- 每个 Project 创建独立 Event Stream Session，Provider 不分配传输序号。Server 在分配单调 `sequence` 前，按 `taskId + turnId + itemId + type + field` 合并 `message.delta`、`reasoning.delta` 和 `command.output_delta`：每段连续输入的首个可合并事件必须立即发布，后续事件使用不超过 `8ms` 的 trailing 窗口；只有 pending Delta 从空变为非空时才启动 one-shot timer，空闲时不得周期唤醒。缓冲队列只能合并相邻同 Key 事件，不得跨其他 Item 重排 A-B-A 交错输入。
 - 非 Delta 事件、Snapshot checkpoint、事件回放和 Runtime 关闭前必须立即冲刷所有更早 Delta；不同 key 按首次进入窗口的顺序分配连续 `sequence`，关键终态不得越过待发送 Delta。
 - Event Stream 使用固定数组环形缓冲区，每个 Project 最多保留 `1,000` 条、合计 `4 MiB` 的已发布事件，单事件最多保留 `1 MiB`；容量按序列化 UTF-8 字节计量并从最旧事件开始淘汰。同一 Event 对象的 Frame 与字节长度必须只序列化一次，并通过弱引用结果供保留预算和全部 WebSocket 客户端复用。回放必须按 `sequence` 升序返回，跨越已淘汰或因单事件超限而未保留的序列时发送 `resync.required`。
 - `/v1/projects/:projectId/events` 首帧发送 `connection.ready`，只补发 `afterSequence` 之后仍在缓存窗口内的事件；过期或超前序号发送 `resync.required`。

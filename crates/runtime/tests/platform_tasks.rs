@@ -646,6 +646,126 @@ async fn project_context_should_initialize_once_and_forward_events() {
 }
 
 #[tokio::test]
+async fn project_context_release_should_wait_for_active_event_subscription() {
+    let fake = FakePorts::new();
+    let runtime = Arc::new(runtime(fake.clone()));
+    let project_id = ProjectId::try_from("project-1").expect("project id");
+    let subscription_id = runtime
+        .start_leased_project_event_subscription(
+            &tokio::runtime::Handle::current(),
+            "subscribe".to_owned(),
+            project_id.clone(),
+            "lease-active".to_owned(),
+            String::new(),
+            0,
+            |_| std::future::ready(true),
+        )
+        .expect("start subscription");
+    while fake.for_project_calls.load(Ordering::SeqCst) == 0 {
+        tokio::task::yield_now().await;
+    }
+
+    let release_runtime = Arc::clone(&runtime);
+    let release_project_id = project_id.clone();
+    let mut release = tokio::spawn(async move {
+        release_runtime
+            .release_project_context_lease("release-active", &release_project_id, "lease-active")
+            .await
+    });
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), &mut release)
+            .await
+            .is_err()
+    );
+
+    assert!(runtime.cancel_event_subscription(&subscription_id));
+    release
+        .await
+        .expect("release task")
+        .expect("release context");
+    assert_eq!(fake.release_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn stale_project_context_lease_should_not_release_a_new_subscription() {
+    let fake = FakePorts::new();
+    let runtime = Arc::new(runtime(fake.clone()));
+    let project_id = ProjectId::try_from("project-1").expect("project id");
+    let first_subscription = runtime
+        .start_leased_project_event_subscription(
+            &tokio::runtime::Handle::current(),
+            "subscribe-first".to_owned(),
+            project_id.clone(),
+            "lease-first".to_owned(),
+            String::new(),
+            0,
+            |_| std::future::ready(true),
+        )
+        .expect("first subscription");
+    let second_subscription = runtime
+        .start_leased_project_event_subscription(
+            &tokio::runtime::Handle::current(),
+            "subscribe-second".to_owned(),
+            project_id.clone(),
+            "lease-second".to_owned(),
+            String::new(),
+            0,
+            |_| std::future::ready(true),
+        )
+        .expect("second subscription");
+    while fake.for_project_calls.load(Ordering::SeqCst) == 0 {
+        tokio::task::yield_now().await;
+    }
+    tokio::task::yield_now().await;
+
+    assert!(runtime.cancel_event_subscription(&first_subscription));
+    let released = runtime
+        .release_project_context_lease("release-first", &project_id, "lease-first")
+        .await
+        .expect("release first lease");
+    assert!(!released);
+    assert_eq!(fake.release_calls.load(Ordering::SeqCst), 0);
+
+    assert!(runtime.cancel_event_subscription(&second_subscription));
+    let released = runtime
+        .release_project_context_lease("release-second", &project_id, "lease-second")
+        .await
+        .expect("release second lease");
+    assert!(released);
+    assert_eq!(fake.release_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn forced_project_context_release_should_close_an_active_subscription() {
+    let fake = FakePorts::new();
+    let runtime = Arc::new(runtime(fake.clone()));
+    let project_id = ProjectId::try_from("project-1").expect("project id");
+    runtime
+        .start_leased_project_event_subscription(
+            &tokio::runtime::Handle::current(),
+            "subscribe-force".to_owned(),
+            project_id.clone(),
+            "lease-force".to_owned(),
+            String::new(),
+            0,
+            |_| std::future::ready(true),
+        )
+        .expect("active subscription");
+    while fake.for_project_calls.load(Ordering::SeqCst) == 0 {
+        tokio::task::yield_now().await;
+    }
+
+    tokio::time::timeout(
+        Duration::from_millis(100),
+        runtime.release_project_context("release-force", &project_id),
+    )
+    .await
+    .expect("forced release should not wait for renderer cleanup")
+    .expect("force release");
+    assert_eq!(fake.release_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn task_snapshot_should_merge_persisted_settings_and_flushed_checkpoint() {
     let fake = FakePorts::new();
     let runtime = runtime(fake.clone());
