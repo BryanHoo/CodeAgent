@@ -79,4 +79,30 @@ describe("verifyUpdaterRelease", () => {
       }),
     ).rejects.toThrow(/linux-x86_64/u);
   });
+
+  it("decodes base64 updater signatures from latest.json", async () => {
+    const fixture = createFixture();
+    const validSigLine = "RUQZkUTQ9L5cxiRFypDyr0zMYw359y4Pt4D+AS2SBG";
+    const encoded = Buffer.from(`untrusted comment: test\n${validSigLine}\n`).toString("base64");
+    for (const platform of Object.keys(fixture.manifest.platforms)) {
+      fixture.manifest.platforms[platform].signature = encoded;
+    }
+
+    const calls: string[] = [];
+    await verifyUpdaterRelease({
+      ...fixture,
+      expectedTag: "v2.0.0-beta.1",
+      expectedVersion: "2.0.0-beta.1",
+      verifySignature: ({ artifactPath, signaturePath }) => {
+        const signature = readFileSync(signaturePath, "utf8");
+        calls.push(signature);
+        const sigLine = signature
+          .split(/\r?\n/u)
+          .find((line) => /^[A-Za-z0-9+/=]{40,}$/u.test(line));
+        return readFileSync(artifactPath, "utf8").startsWith("signed-") && sigLine === validSigLine;
+      },
+    });
+
+    expect(calls[0]).toContain("untrusted comment: test");
+  });
 });

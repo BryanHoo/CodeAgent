@@ -1,5 +1,6 @@
 import {
   copyFileSync,
+  existsSync,
   mkdtempSync,
   openSync,
   readSync,
@@ -65,6 +66,26 @@ function tamperSignature(signature) {
   return signature.replace(/[A-Za-z0-9]/u, (value) => (value === "A" ? "B" : "A"));
 }
 
+function readSignatureContents(signature) {
+  const trimmed = signature.trim();
+  if (trimmed.includes("untrusted comment")) {
+    return trimmed.endsWith("\n") ? trimmed : `${trimmed}\n`;
+  }
+  const decoded = Buffer.from(trimmed, "base64").toString("utf8");
+  if (decoded.includes("untrusted comment")) {
+    return decoded.endsWith("\n") ? decoded : `${decoded}\n`;
+  }
+  return trimmed.endsWith("\n") ? trimmed : `${trimmed}\n`;
+}
+
+function resolveSignatureContents(artifactDirectory, assetName, entrySignature) {
+  const detachedPath = join(artifactDirectory, `${assetName}.sig`);
+  if (existsSync(detachedPath)) {
+    return readSignatureContents(readFileSync(detachedPath, "utf8"));
+  }
+  return readSignatureContents(entrySignature);
+}
+
 export async function verifyUpdaterRelease({
   artifactDirectory,
   expectedTag,
@@ -102,9 +123,14 @@ export async function verifyUpdaterRelease({
       const signaturePath = join(workspace, `${platform}.sig`);
       const tamperedArtifactPath = join(workspace, `${platform}.tampered`);
       const tamperedSignaturePath = join(workspace, `${platform}.tampered.sig`);
-      writeFileSync(signaturePath, entry.signature);
+      const signatureContents = resolveSignatureContents(
+        artifactDirectory,
+        basename(artifactPath),
+        entry.signature,
+      );
+      writeFileSync(signaturePath, signatureContents);
       tamperArtifact(artifactPath, tamperedArtifactPath);
-      writeFileSync(tamperedSignaturePath, tamperSignature(entry.signature));
+      writeFileSync(tamperedSignaturePath, tamperSignature(signatureContents));
 
       const verify = (candidateArtifactPath, candidateSignaturePath) =>
         verifySignature({

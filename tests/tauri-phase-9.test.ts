@@ -165,6 +165,7 @@ describe("Tauri Phase 9 updater contract", () => {
     expect(cliSmoke).toContain('"doctor"');
     expect(cliSmoke).toContain('"--help"');
     expect(macosSmoke).toContain("hdiutil attach");
+    expect(macosSmoke).toContain('open -n -a "${app_bundle}"');
     expect(macosSmoke).not.toContain("spctl --assess");
     expect(linuxSmoke).toContain("xvfb-run");
     expect(linuxSmoke).toContain("apt-get install");

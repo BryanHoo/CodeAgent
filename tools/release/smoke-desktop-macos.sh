@@ -5,14 +5,11 @@ archive="${1:?Desktop archive path is required}"
 work_root="$(mktemp -d)"
 mount_point="${work_root}/mounted"
 extract_root="${work_root}/extracted-app"
+codex_home="${work_root}/codex-home"
 mounted=0
-app_pid=""
 
 cleanup() {
-  if [[ -n "${app_pid}" ]] && kill -0 "${app_pid}" 2>/dev/null; then
-    kill -TERM "${app_pid}" 2>/dev/null || true
-    wait "${app_pid}" 2>/dev/null || true
-  fi
+  pkill -x code-agent-desktop 2>/dev/null || true
   if [[ "${mounted}" -eq 1 ]]; then
     hdiutil detach "${mount_point}" -quiet || true
   fi
@@ -20,7 +17,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "${mount_point}" "${work_root}/bundle" "${extract_root}"
+mkdir -p "${mount_point}" "${work_root}/bundle" "${extract_root}" "${codex_home}"
 tar -xzf "${archive}" -C "${work_root}/bundle"
 shopt -s nullglob
 
@@ -53,11 +50,16 @@ fi
 executable="${app_bundle}/Contents/MacOS/code-agent-desktop"
 [[ -x "${executable}" ]] || { echo "Desktop executable is missing: ${executable}" >&2; exit 1; }
 
-"${executable}" >"${work_root}/desktop.log" 2>&1 &
-app_pid="$!"
+# 通过 .app 启动，避免直接执行 Mach-O 时 Tauri 无法解析 home/resource 路径。
+open -n -a "${app_bundle}" --env "CODEX_HOME=${codex_home}" >/dev/null
 for _ in {1..20}; do
-  kill -0 "${app_pid}" 2>/dev/null || { cat "${work_root}/desktop.log" >&2; exit 1; }
+  if pgrep -x code-agent-desktop >/dev/null; then
+    pkill -x code-agent-desktop || true
+    echo "macOS Desktop release smoke passed."
+    exit 0
+  fi
   sleep 1
 done
 
-echo "macOS Desktop release smoke passed."
+echo "Desktop app did not stay alive after launch." >&2
+exit 1
