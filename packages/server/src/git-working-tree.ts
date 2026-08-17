@@ -16,10 +16,31 @@ import {
   mapWithConcurrency,
   parsePorcelainStatus,
   readTrackedFileChanges,
+  resolveChangeKind,
   type GitFileChange,
   type GitWorkingTreeChanges,
   type WorkingTreeEntry,
 } from "./git-working-tree-diff.js";
+
+const BRANCH_CACHE_TTL_MS = 60_000;
+const MAX_BRANCH_CACHE_ENTRIES = 128;
+
+type BranchCandidates = Readonly<{
+  localRefsOutput: string;
+  refsOutput: string;
+  remoteHeadOutput: string;
+}>;
+
+type BranchCacheEntry = Readonly<{
+  expiresAt: number;
+  value: Promise<BranchCandidates>;
+}>;
+
+const branchCandidatesByRepository = new Map<string, BranchCacheEntry>();
+
+export function invalidateGitBranchCache(repositoryRoot: string): void {
+  branchCandidatesByRepository.delete(repositoryRoot);
+}
 
 async function hasGitMetadata(repositoryRoot: string): Promise<boolean> {
   try {
@@ -126,6 +147,7 @@ async function materializeRepositoryWorkingTreeStatus(
   entries: readonly WorkingTreeEntry[],
   gitCommandExecutor: GitCommandExecutor,
   budget: WorkingTreeReadBudget,
+  includeDiff: boolean,
 ): Promise<GitWorkingTreeChanges> {
   const stagedEntries = entries.filter(
     (entry) => entry.indexStatus !== " " && entry.indexStatus !== "?" && entry.indexStatus !== "!",
@@ -139,6 +161,22 @@ async function materializeRepositoryWorkingTreeStatus(
   const untrackedEntries = entries.filter(
     (entry) => entry.indexStatus === "?" && entry.workingTreeStatus === "?",
   );
+
+  if (!includeDiff) {
+    // 周期刷新只保留文件位置和类型，禁止启动 Diff 命令或读取未跟踪文件正文。
+    return {
+      staged: stagedEntries.map((entry) => ({
+        diff: "",
+        kind: resolveChangeKind(entry.indexStatus),
+        path: entry.path,
+      })),
+      unstaged: [...trackedUnstagedEntries, ...untrackedEntries].map((entry) => ({
+        diff: "",
+        kind: resolveChangeKind(entry.workingTreeStatus),
+        path: entry.path,
+      })),
+    };
+  }
 
   // 同一仓库仍批量读取 tracked Diff；共享限流器同时约束多个子仓库的进程峰值。
   const [rawStaged, rawTrackedUnstaged] = await Promise.all([
@@ -168,30 +206,58 @@ async function readRepositoryBranches(
   repositoryRoot: string,
   gitCommandExecutor: GitCommandExecutor,
 ): Promise<Pick<ProjectGitStatus, "baseBranches" | "branch" | "branches">> {
-  const [branchOutput, localRefsOutput, refsOutput, remoteHeadOutput] = await Promise.all([
-    readOptionalGit(repositoryRoot, ["branch", "--show-current"], gitCommandExecutor),
-    readOptionalGit(
-      repositoryRoot,
-      ["for-each-ref", "--format=%(refname:short)", "refs/heads"],
-      gitCommandExecutor,
-    ),
-    readOptionalGit(
-      repositoryRoot,
-      ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"],
-      gitCommandExecutor,
-    ),
-    readOptionalGit(
-      repositoryRoot,
-      ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
-      gitCommandExecutor,
-    ),
+  const branchOutputPromise = readOptionalGit(
+    repositoryRoot,
+    ["branch", "--show-current"],
+    gitCommandExecutor,
+  );
+  const now = Date.now();
+  let cachedCandidates = branchCandidatesByRepository.get(repositoryRoot);
+  if (cachedCandidates === undefined || cachedCandidates.expiresAt <= now) {
+    const value = Promise.all([
+      readOptionalGit(
+        repositoryRoot,
+        ["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+        gitCommandExecutor,
+      ),
+      readOptionalGit(
+        repositoryRoot,
+        ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"],
+        gitCommandExecutor,
+      ),
+      readOptionalGit(
+        repositoryRoot,
+        ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
+        gitCommandExecutor,
+      ),
+    ]).then(([localRefsOutput, refsOutput, remoteHeadOutput]) => ({
+      localRefsOutput,
+      refsOutput,
+      remoteHeadOutput,
+    }));
+    cachedCandidates = { expiresAt: now + BRANCH_CACHE_TTL_MS, value };
+    branchCandidatesByRepository.set(repositoryRoot, cachedCandidates);
+    // 缓存只服务活跃仓库；达到上限时按插入顺序淘汰最早条目。
+    if (branchCandidatesByRepository.size > MAX_BRANCH_CACHE_ENTRIES) {
+      const oldestRepository = branchCandidatesByRepository.keys().next().value;
+      if (oldestRepository !== undefined) branchCandidatesByRepository.delete(oldestRepository);
+    }
+    void value.catch(() => {
+      if (branchCandidatesByRepository.get(repositoryRoot)?.value === value) {
+        branchCandidatesByRepository.delete(repositoryRoot);
+      }
+    });
+  }
+  const [branchOutput, { localRefsOutput, refsOutput, remoteHeadOutput }] = await Promise.all([
+    branchOutputPromise,
+    cachedCandidates.value,
   ]);
   const branch = branchOutput.trim() || null;
   const localBranches = [...new Set(localRefsOutput.split("\n").map((ref) => ref.trim()))]
     .filter((ref) => ref !== "")
     .toSorted((left, right) => left.localeCompare(right));
-  if (branch !== null && localBranches.includes(branch)) {
-    localBranches.splice(localBranches.indexOf(branch), 1);
+  if (branch !== null) {
+    if (localBranches.includes(branch)) localBranches.splice(localBranches.indexOf(branch), 1);
     localBranches.unshift(branch);
   }
   const branches = [...new Set(refsOutput.split("\n").map((ref) => ref.trim()))]
@@ -221,6 +287,7 @@ async function readImmediateChildRepositoryStatuses(
   projectRoot: string,
   gitCommandExecutor: GitCommandExecutor,
   budget: WorkingTreeReadBudget,
+  includeDiff: boolean,
 ): Promise<GitWorkingTreeChanges | undefined> {
   const childDirectories = (await readdir(projectRoot, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
@@ -263,6 +330,7 @@ async function readImmediateChildRepositoryStatuses(
         selectedEntries,
         gitCommandExecutor,
         budget,
+        includeDiff,
       );
       staged.push(...status.staged.map((change) => prefixRepositoryPath(repository.name, change)));
       unstaged.push(
@@ -277,6 +345,7 @@ async function readImmediateChildRepositoryStatuses(
 export async function readGitWorkingTreeStatus(
   projectRoot: string,
   gitCommandExecutor: GitCommandExecutor = executeGit,
+  options: Readonly<{ includeDiff?: boolean }> = {},
 ): Promise<ProjectGitStatus> {
   if (!isAbsolute(projectRoot)) {
     throw new TypeError("Project root must be absolute");
@@ -305,6 +374,7 @@ export async function readGitWorkingTreeStatus(
       budget.takeEntries(entries),
       limitedGitCommandExecutor,
       budget,
+      options.includeDiff === true,
     );
     repositoryBranches = branches;
   } else {
@@ -313,6 +383,7 @@ export async function readGitWorkingTreeStatus(
       resolvedProjectRoot,
       limitedGitCommandExecutor,
       budget,
+      options.includeDiff === true,
     );
     if (childStatus === undefined) {
       // 非 Git 是可恢复的 Project 状态，手动刷新时仍需允许重新探测仓库。
@@ -328,9 +399,33 @@ export async function readGitWorkingTreeStatus(
     left.path.localeCompare(right.path);
   const staged = status.staged.toSorted(comparePaths);
   const unstaged = status.unstaged.toSorted(comparePaths);
-  const snapshot = createHash("sha256")
-    .update(JSON.stringify({ branch: repositoryBranches.branch, repositoryMode, staged, unstaged }))
-    .digest("hex");
+  const snapshotHash = createHash("sha256");
+  snapshotHash
+    .update(repositoryBranches.branch ?? "")
+    .update("\0")
+    .update(repositoryMode);
+  const fingerprintChanges = async (
+    location: "staged" | "unstaged",
+    changes: readonly GitFileChange[],
+  ) =>
+    mapWithConcurrency(changes, MAX_FILE_IO_CONCURRENCY, async (change) => {
+      let metadata = "missing";
+      try {
+        const stats = await lstat(join(resolvedProjectRoot, change.path), { bigint: true });
+        metadata = [stats.mode, stats.size, stats.mtimeNs, stats.ctimeNs].join(":");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      return `${location}\0${change.kind}\0${change.path}\0${metadata}\0`;
+    });
+  // 只哈希稳定的小字段和文件活动元数据，避免把完整 Diff 复制进 JSON 字符串。
+  for (const fingerprint of await fingerprintChanges("staged", staged)) {
+    snapshotHash.update(fingerprint);
+  }
+  for (const fingerprint of await fingerprintChanges("unstaged", unstaged)) {
+    snapshotHash.update(fingerprint);
+  }
+  const snapshot = snapshotHash.digest("hex");
   return {
     ...repositoryBranches,
     repositoryMode,
@@ -346,5 +441,7 @@ export async function readProjectGitStatus(
   gitCommandExecutor: GitCommandExecutor = executeGit,
 ): Promise<ProjectGitStatus> {
   const repositoryRoot = await resolveProjectGitRepositoryRoot(projectRoot, query.repository);
-  return readGitWorkingTreeStatus(repositoryRoot, gitCommandExecutor);
+  return readGitWorkingTreeStatus(repositoryRoot, gitCommandExecutor, {
+    includeDiff: query.includeDiff === true,
+  });
 }

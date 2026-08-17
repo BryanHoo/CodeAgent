@@ -209,7 +209,9 @@ describe("server performance acceptance", () => {
     };
 
     const startedAt = performance.now();
-    const status = await readGitWorkingTreeStatus(projectRoot, executeGit);
+    const status = await readGitWorkingTreeStatus(projectRoot, executeGit, {
+      includeDiff: true,
+    });
     const durationMs = performance.now() - startedAt;
 
     expect(status.staged).toHaveLength(stagedPaths.length);

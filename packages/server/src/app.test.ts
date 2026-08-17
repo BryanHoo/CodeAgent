@@ -1998,6 +1998,7 @@ describe("CodeAgent Server", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ message: "feat(git): 生成提交信息", snapshot });
     expect(readProjectGitStatus).toHaveBeenCalledWith(project.rootPath, {
+      includeDiff: true,
       repository: "frontend",
     });
     expect(providerHarness.startTask).toHaveBeenCalledWith({ ephemeral: true });

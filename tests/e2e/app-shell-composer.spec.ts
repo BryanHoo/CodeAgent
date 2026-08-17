@@ -1829,7 +1829,7 @@ test("opens file diffs and review from the timeline while keeping Inspector comm
       },
     });
   });
-  await page.route("**/v1/projects/code-agent/git/status", async (route) => {
+  await page.route("**/v1/projects/code-agent/git/status*", async (route) => {
     // 此用例使用两个不同目录的文件，覆盖紧凑树路径与四方向导航，避免改变全局 Fixture。
     await route.fulfill({
       contentType: "application/json",
@@ -1951,7 +1951,7 @@ test("generates a message and commits only selected files", async ({ page }) => 
   let messageRequest: Record<string, unknown> | undefined;
   let commitRequest: Record<string, unknown> | undefined;
   let commitIdempotencyKey: string | undefined;
-  await page.route("**/v1/projects/code-agent/git/status", async (route) => {
+  await page.route("**/v1/projects/code-agent/git/status*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -2279,7 +2279,7 @@ for (const scenario of [
   { actionName: "提交并推送", pushStatus: "pushed", toastMessage: "提交并推送成功" },
 ] as const) {
   test(`${scenario.actionName}成功后关闭弹窗并显示 toast`, async ({ page }) => {
-    await page.route("**/v1/projects/code-agent/git/status", async (route) => {
+    await page.route("**/v1/projects/code-agent/git/status*", async (route) => {
       await route.fulfill({ contentType: "application/json", json: projectGitStatus });
     });
     await page.route("**/v1/projects/code-agent/git/commits", async (route) => {

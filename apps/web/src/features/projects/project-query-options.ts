@@ -271,6 +271,30 @@ export function projectGitStatusQueryOptions(
   });
 }
 
+export function projectGitDetailedStatusQueryOptions(
+  projectId: string,
+  repository: string | null,
+  snapshot: string,
+  enabled: boolean,
+  client: CodeAgentGitStatusClient = codeAgentClient,
+) {
+  return queryOptions({
+    enabled,
+    queryFn: ({ signal }) =>
+      client.getProjectGitStatus(
+        projectId,
+        {
+          includeDiff: true,
+          ...(repository === null ? {} : { repository }),
+        },
+        { signal },
+      ),
+    // 详情只服务触发它的仓库快照，状态变化后不会复用旧 Diff。
+    queryKey: ["projects", projectId, "git-status-detail", repository, snapshot] as const,
+    retry: 1,
+  });
+}
+
 export function projectGitRepositoryStatusQueryOptions(
   projectId: string,
   repository: string | null,
@@ -282,7 +306,7 @@ export function projectGitRepositoryStatusQueryOptions(
     queryFn: ({ signal }) =>
       repository === null
         ? Promise.reject(new Error("Git repository is not selected"))
-        : client.getProjectGitStatus(projectId, { repository }, { signal }),
+        : client.getProjectGitStatus(projectId, { includeDiff: true, repository }, { signal }),
     queryKey: ["projects", projectId, "git-status", repository] as const,
     retry: 1,
   });

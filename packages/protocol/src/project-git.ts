@@ -54,7 +54,10 @@ export const ProjectGitStatusSchema = Type.Object(
 export type ProjectGitStatus = Readonly<Static<typeof ProjectGitStatusSchema>>;
 
 export const ProjectGitStatusQuerySchema = Type.Object(
-  { repository: Type.Optional(GitChildRepositorySchema) },
+  {
+    includeDiff: Type.Optional(Type.Boolean()),
+    repository: Type.Optional(GitChildRepositorySchema),
+  },
   { additionalProperties: false },
 );
 

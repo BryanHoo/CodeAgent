@@ -2,6 +2,8 @@ import { TEMPORARY_TASK_SANDBOX_MODE } from "@code-agent/protocol";
 import { PanelLeft, PanelRight, Pencil } from "lucide-react";
 import { useRef, type CSSProperties } from "react";
 
+import type { AgentFileChange } from "../../diff/file-change.js";
+import { notifyActionError } from "../../notifications/action-notifications.js";
 import { Button } from "../../../shared/components/core/button.js";
 import { RuntimeUnavailable } from "../../../shared/components/core/runtime-unavailable.js";
 import {
@@ -18,6 +20,7 @@ import type { useWorkbenchShellController } from "./workbench-shell-controller.j
 import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
 import { ActiveTaskWorkbench } from "./workbench-shell-active-task.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
+import { loadProjectGitFileDiff } from "../project-git-file-diff.js";
 
 const sidebarWidthLimits = { default: 288, maximum: 400, minimum: 220 } as const;
 const inspectorWidthLimits = { default: 288, maximum: 480, minimum: 260 } as const;
@@ -79,6 +82,7 @@ export function WorkbenchShellLayout({
     projectPath,
     projectPathOpenLockRef,
     projectPathOpenMutation,
+    queryClient,
     taskAttachmentOpenMutation,
     projectTaskState,
     projects,
@@ -108,6 +112,13 @@ export function WorkbenchShellLayout({
     workbenchShellRef,
     t,
   } = context;
+  const openProjectFileDiff = (change: AgentFileChange) => {
+    void loadProjectGitFileDiff(queryClient, client, projectId, gitStatusQuery.data, change)
+      .then(openFileDiff)
+      .catch((error: unknown) => {
+        notifyActionError(error instanceof Error ? error : new Error("Git diff is unavailable"));
+      });
+  };
   return (
     <div
       className="workbench-shell h-full min-h-0 overflow-hidden bg-window"
@@ -422,7 +433,7 @@ export function WorkbenchShellLayout({
           onReloadMcpServers={() => {
             mcpServersReloadMutation.mutate();
           }}
-          onOpenFileDiff={openFileDiff}
+          onOpenFileDiff={openProjectFileDiff}
           onOpenProjectPath={(appId, path) => {
             projectPathOpenMutation.reset();
             void projectPathOpenLockRef.current

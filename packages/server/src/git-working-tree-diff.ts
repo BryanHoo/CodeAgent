@@ -141,7 +141,7 @@ export function parsePorcelainStatus(
   return entries;
 }
 
-function resolveChangeKind(status: string): GitFileChange["kind"] {
+export function resolveChangeKind(status: string): GitFileChange["kind"] {
   if (status === "A" || status === "?") {
     return "create";
   }

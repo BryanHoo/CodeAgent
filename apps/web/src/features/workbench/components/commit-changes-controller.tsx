@@ -31,6 +31,8 @@ type SelectedGitCommit = Readonly<{
 
 type CommitChangesControllerProps = Readonly<{
   client: CodeAgentWorkbenchClient;
+  detailsError?: Error | null;
+  detailsPending?: boolean;
   gitStatus: ProjectGitStatus;
   onClose: () => void;
   onOpenFileDiff: (change: AgentFileChange) => void;
@@ -46,6 +48,8 @@ function getCommitSuccessMessageKey(result: CommitProjectChangesResponse): strin
 
 export function CommitChangesController({
   client,
+  detailsError = null,
+  detailsPending = false,
   gitStatus,
   onClose,
   onOpenFileDiff,
@@ -89,11 +93,11 @@ export function CommitChangesController({
       <CommitChangesDialog
         client={client}
         commitReviewOpen={selectedCommit !== undefined}
-        error={repositoryStatusQuery.error}
+        error={detailsError ?? repositoryStatusQuery.error}
         gitStatus={activeGitStatus}
         isCommitting={commitMutation.isPending}
         isGenerating={messageMutation.isPending}
-        isRepositoryLoading={repositoryStatusQuery.isFetching}
+        isRepositoryLoading={detailsPending || repositoryStatusQuery.isFetching}
         onClose={close}
         onCommit={async (request) => {
           const response = await commitMutation.mutateAsync(request);

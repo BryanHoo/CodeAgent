@@ -50,6 +50,10 @@ afterEach(() => {
 });
 
 describe("ProjectGitStatusCoordinator", () => {
+  it("uses a 60 second fallback polling interval", () => {
+    expect(PROJECT_GIT_STATUS_POLL_INTERVAL_MS).toBe(60_000);
+  });
+
   it("uses one Project polling cycle across multiple running Tasks and stops after the final refresh", async () => {
     vi.useFakeTimers();
     const { coordinator, getProjectGitStatus } = createHarness();

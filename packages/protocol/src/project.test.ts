@@ -672,9 +672,12 @@ describe("project protocol", () => {
     ).toBe(false);
   });
 
-  it("validates an optional repository for Git status reads", () => {
+  it("validates Git status detail and repository selectors", () => {
     expect(Value.Check(ProjectGitStatusQuerySchema, {})).toBe(true);
-    expect(Value.Check(ProjectGitStatusQuerySchema, { repository: "frontend" })).toBe(true);
+    expect(
+      Value.Check(ProjectGitStatusQuerySchema, { includeDiff: true, repository: "frontend" }),
+    ).toBe(true);
+    expect(Value.Check(ProjectGitStatusQuerySchema, { includeDiff: "true" })).toBe(false);
     expect(Value.Check(ProjectGitStatusQuerySchema, { repository: "packages/server" })).toBe(false);
     expect(Value.Check(ProjectGitStatusQuerySchema, { repository: "../server" })).toBe(false);
   });

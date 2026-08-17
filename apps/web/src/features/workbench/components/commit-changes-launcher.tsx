@@ -1,8 +1,14 @@
 import type { ProjectGitStatus } from "@code-agent/protocol";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 import type { AgentFileChange } from "../../diff/file-change.js";
-import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
+import { notifyActionError } from "../../notifications/action-notifications.js";
+import {
+  projectGitDetailedStatusQueryOptions,
+  type CodeAgentWorkbenchClient,
+} from "../../projects/project-queries.js";
+import { loadProjectGitFileDiff } from "../project-git-file-diff.js";
 import { CommitChangesController } from "./commit-changes-controller.js";
 
 export type CommitChangesLauncherHandle = Readonly<{
@@ -21,6 +27,16 @@ export const CommitChangesLauncher = forwardRef<
   CommitChangesLauncherProps
 >(function CommitChangesLauncher(props, ref) {
   const [isOpen, setIsOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const detailsQuery = useQuery(
+    projectGitDetailedStatusQueryOptions(
+      props.projectId,
+      null,
+      props.gitStatus.snapshot,
+      isOpen && props.gitStatus.repositoryMode === "root",
+      props.client,
+    ),
+  );
   const shouldRestoreFocusRef = useRef(false);
   const open = useCallback(() => {
     setIsOpen(true);
@@ -40,5 +56,22 @@ export const CommitChangesLauncher = forwardRef<
     }
   }, [isOpen]);
 
-  return isOpen ? <CommitChangesController {...props} onClose={close} /> : null;
+  const gitStatus =
+    props.gitStatus.repositoryMode === "root"
+      ? (detailsQuery.data ?? props.gitStatus)
+      : props.gitStatus;
+  return isOpen ? (
+    <CommitChangesController
+      {...props}
+      detailsError={detailsQuery.error}
+      detailsPending={detailsQuery.isFetching}
+      gitStatus={gitStatus}
+      onClose={close}
+      onOpenFileDiff={(change) => {
+        void loadProjectGitFileDiff(queryClient, props.client, props.projectId, gitStatus, change)
+          .then(props.onOpenFileDiff)
+          .catch(notifyActionError);
+      }}
+    />
+  ) : null;
 });

@@ -363,6 +363,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         request.body,
         async () => {
           const status = await readProjectGitStatus(context.project.rootPath, {
+            includeDiff: true,
             ...(request.body.repository === undefined
               ? {}
               : { repository: request.body.repository }),

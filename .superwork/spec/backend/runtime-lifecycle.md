@@ -83,7 +83,7 @@
 - 所有 Agent Mutation 必须校验非空 `Idempotency-Key`；同操作、同 Key、同 Payload 复用进行中或成功结果，不同 Payload 返回冲突，失败结果不缓存。
 - Git message 生成与 commit/commit+push 同样必须使用 `Idempotency-Key` 并复验 `expectedSnapshot`；每个 Project 同时只允许一个 Git Mutation，冲突请求返回稳定错误。用户 message 原样交给 Git，Codex 生成只提供可编辑候选。
 - Codex 用户动作 RPC 与 Git 状态、历史、审核、分支、提交和 push 的已知调用边界必须保留底层非空 `Error.message` 或 Git stderr，并通过结构化 HTTP 错误原样返回；只有底层没有可用文本时才使用稳定 fallback。通用未知 Server `500` 继续脱敏，不能借透传要求暴露任意内部异常。
-- Git Working Tree 状态、分支和 diff 等后台只读子进程必须继承受控环境并设置 `GIT_OPTIONAL_LOCKS=0`，避免周期读取刷新索引或争用可选锁；每次读取最多并发 4 个 Git 命令、处理 1,000 个变更文件并返回合计 10 MiB Diff，未跟踪文件读取最多并发 8 个；每个仓库的 staged 与 unstaged Diff 必须分别批量读取并按文件拆分，禁止按变更文件启动子进程；Git Mutation 不得复用该环境约束。
+- Git Working Tree 状态、分支和 Diff 等后台只读子进程必须继承受控环境并设置 `GIT_OPTIONAL_LOCKS=0`，避免周期读取刷新索引或争用可选锁；周期状态读取禁止执行 Diff 命令或读取未跟踪文件正文，详细请求每次最多并发 4 个 Git 命令、处理 1,000 个变更文件并返回合计 10 MiB Diff，未跟踪文件读取最多并发 8 个；每个仓库的 staged 与 unstaged Diff 必须分别批量读取并按文件拆分，禁止按变更文件启动子进程；本地与远端分支候选缓存最多保留 128 个仓库并使用 60 秒 TTL，Git Mutation 后必须主动失效对应缓存；Git Mutation 不得复用该环境约束。
 - 后台终端读取必须先验证 Project/Task 归属；Project Provider 只在 Runtime Owner 缓存缺失时读取一次 Task，持续轮询不得重复映射完整历史。已持久化但未加载到当前 App Server 的历史 Task 将原生 `-32600 thread not found` 归一化为空终端列表，其他 Provider 错误继续上抛；单终端停止是幂等 Mutation，即使进程在请求到达前自然退出也返回已终止语义。
 - Task 创建在 Provider 成功但设置持久化失败时必须保留有界恢复状态；同 `Idempotency-Key` 重试只补齐持久化，不得再次调用 Provider 创建 Task。
 - 成功的幂等结果缓存必须同时设置容量上限和过期时间；进行中的请求不得淘汰，Runtime 关闭时清空全部条目。

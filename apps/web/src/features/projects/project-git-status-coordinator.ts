@@ -3,7 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { recordInternalWarning } from "../notifications/internal-diagnostics.js";
 import { type CodeAgentGitStatusClient, projectGitStatusQueryOptions } from "./project-queries.js";
 
-export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 10_000;
+export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 60_000;
 export const PROJECT_GIT_STATUS_FILE_CHANGE_DEBOUNCE_MS = 300;
 export const PROJECT_GIT_STATUS_RETRY_BASE_MS = 1_000;
 export const PROJECT_GIT_STATUS_RETRY_MAX_MS = 30_000;

@@ -38,6 +38,7 @@ describe("readGitWorkingTreeStatus", () => {
     );
     try {
       await mkdir(join(projectRoot, ".git"));
+      let refReads = 0;
       const executeGit = (_root: string, arguments_: readonly string[]) => {
         if (arguments_[0] === "status") {
           return Promise.resolve("");
@@ -46,9 +47,11 @@ describe("readGitWorkingTreeStatus", () => {
           return Promise.resolve("feat/review\n");
         }
         if (arguments_[0] === "for-each-ref" && !arguments_.includes("refs/remotes")) {
+          refReads += 1;
           return Promise.resolve("feat/review\nmain\nrelease\n");
         }
         if (arguments_[0] === "for-each-ref") {
+          refReads += 1;
           return Promise.resolve(
             "main\nfeat/review\norigin/HEAD\norigin/main\norigin/release\nrelease\n",
           );
@@ -64,6 +67,39 @@ describe("readGitWorkingTreeStatus", () => {
         branch: "feat/review",
         branches: ["feat/review", "main", "release"],
       });
+      await readGitWorkingTreeStatus(projectRoot, executeGit);
+      expect(refReads).toBe(2);
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("returns tracked metadata without reading diffs unless details are requested", async () => {
+    const projectRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "code-agent-git-status-test-")),
+    );
+    try {
+      await mkdir(join(projectRoot, ".git"));
+      await writeFile(join(projectRoot, "tracked.txt"), "changed\n");
+      const diffCommands: string[][] = [];
+      const executeGit = (_root: string, arguments_: readonly string[]) => {
+        if (arguments_[0] === "status") return Promise.resolve(" M tracked.txt\0");
+        if (arguments_[0] === "branch") return Promise.resolve("main\n");
+        if (arguments_[0] === "for-each-ref" || arguments_[0] === "symbolic-ref") {
+          return Promise.resolve("");
+        }
+        diffCommands.push([...arguments_]);
+        return Promise.resolve(createGitDiffOutput(["tracked.txt"], "changed"));
+      };
+
+      const summary = await readProjectGitStatus(projectRoot, {}, executeGit);
+      expect(summary.unstaged).toEqual([{ diff: "", kind: "update", path: "tracked.txt" }]);
+      expect(diffCommands).toHaveLength(0);
+
+      const detailed = await readProjectGitStatus(projectRoot, { includeDiff: true }, executeGit);
+      expect(detailed.unstaged[0]?.diff).toContain("+changed");
+      expect(detailed.snapshot).toBe(summary.snapshot);
+      expect(diffCommands).toHaveLength(1);
     } finally {
       await rm(projectRoot, { force: true, recursive: true });
     }
@@ -94,7 +130,9 @@ describe("readGitWorkingTreeStatus", () => {
         return Promise.resolve(createGitDiffOutput(paths, `${location} version`));
       };
 
-      const status = await readGitWorkingTreeStatus(projectRoot, executeGit);
+      const status = await readGitWorkingTreeStatus(projectRoot, executeGit, {
+        includeDiff: true,
+      });
 
       expect(status.staged.map((change) => change.path)).toEqual(["partial.txt", "staged.txt"]);
       expect(status.unstaged.map((change) => change.path)).toEqual([
@@ -143,7 +181,9 @@ describe("readGitWorkingTreeStatus", () => {
         return Promise.resolve(createGitDiffOutput(paths, location));
       };
 
-      const status = await readGitWorkingTreeStatus(projectRoot, executeGit);
+      const status = await readGitWorkingTreeStatus(projectRoot, executeGit, {
+        includeDiff: true,
+      });
 
       expect(diffCommands).toHaveLength(2);
       expect(diffCommands.filter((arguments_) => arguments_.includes("--cached"))).toHaveLength(1);
@@ -295,6 +335,7 @@ describe("readGitWorkingTreeStatus", () => {
       let awaitText = "second";
       const first = await readGitWorkingTreeStatus(projectRoot, executeGit);
       awaitText = "third";
+      await writeFile(join(projectRoot, "tracked.txt"), "third\n");
       const second = await readGitWorkingTreeStatus(projectRoot, executeGit);
 
       expect(first.snapshot).not.toBe(second.snapshot);

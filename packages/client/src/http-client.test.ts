@@ -561,10 +561,10 @@ describe("CodeAgentClient", () => {
     const client = new CodeAgentClient({ fetch: fetchMock });
 
     await expect(
-      client.getProjectGitStatus("project one", { repository: "frontend" }),
+      client.getProjectGitStatus("project one", { includeDiff: true, repository: "frontend" }),
     ).resolves.toEqual(gitStatus);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "/v1/projects/project%20one/git/status?repository=frontend",
+      "/v1/projects/project%20one/git/status?includeDiff=true&repository=frontend",
     );
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ staged: [], unstaged: [] }));

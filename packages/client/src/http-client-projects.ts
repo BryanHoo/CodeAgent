@@ -237,6 +237,7 @@ export class ProjectHttpClient extends CodeAgentTransport {
   ): Promise<ProjectGitStatus> {
     return this.read(
       appendQuery(`/v1/projects/${encodeURIComponent(projectId)}/git/status`, {
+        includeDiff: query.includeDiff === true ? "true" : undefined,
         repository: query.repository,
       }),
       ProjectGitStatusSchema,

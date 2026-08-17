@@ -9,7 +9,7 @@ import type {
 
 import { executeGit, type GitCommandExecutor } from "./git-command.js";
 import { originalErrorMessage } from "./error-message.js";
-import { readGitWorkingTreeStatus } from "./git-working-tree.js";
+import { invalidateGitBranchCache, readGitWorkingTreeStatus } from "./git-working-tree.js";
 
 export type GitBranchErrorCode =
   | "ALREADY_ACTIVE"
@@ -70,6 +70,7 @@ export async function switchProjectBranch(
       originalErrorMessage(error, "Git branch switch failed"),
     );
   }
+  invalidateGitBranchCache(repositoryRoot);
   return readStatus(repositoryRoot, gitCommandExecutor);
 }
 
@@ -119,5 +120,6 @@ export async function createProjectBranch(
       originalErrorMessage(error, "Git branch creation failed"),
     );
   }
+  invalidateGitBranchCache(repositoryRoot);
   return readStatus(repositoryRoot, gitCommandExecutor);
 }
