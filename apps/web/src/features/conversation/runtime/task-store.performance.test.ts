@@ -66,6 +66,21 @@ function createDeltaEvents(taskId: string, count: number): AgentEvent[] {
   }));
 }
 
+function createCommandDeltaEvents(taskId: string, count: number): AgentEvent[] {
+  return Array.from({ length: count }, (_, index) => ({
+    itemId: "command-performance",
+    payload: { delta: "x" },
+    provider: "codex",
+    sequence: index + 1,
+    sessionId: "session-performance",
+    taskId,
+    timestamp,
+    turnId: "turn-performance",
+    type: "command.output_delta" as const,
+    version: 2 as const,
+  }));
+}
+
 function createLongHistoryResponse(): AgentTaskSnapshotResponse {
   const { items, itemsPerTurn } = performanceBudgets.longHistory;
   const turnCount = items / itemsPerTurn;
@@ -173,6 +188,60 @@ describe("TaskStore performance", () => {
     expect(listener).toHaveBeenCalledOnce();
     expect(store.getState().getItem("message-performance")).toMatchObject({
       text: "x".repeat(performanceBudgets.delta.clientEvents),
+    });
+    expect(durationMs).toBeLessThan(performanceBudgets.delta.maxClientReplayMs);
+  });
+
+  it("replays 50,000 command deltas without materializing accumulated output", () => {
+    const response = createResponse("task-command-performance");
+    const activeTurn = response.snapshot.turns[0];
+    if (activeTurn === undefined) {
+      throw new Error("Expected the performance turn");
+    }
+    const commandResponse: AgentTaskSnapshotResponse = {
+      ...response,
+      snapshot: {
+        ...response.snapshot,
+        turns: [
+          {
+            ...activeTurn,
+            items: [
+              {
+                command: "stream-output",
+                cwd: "/workspace",
+                id: "command-performance",
+                output: "",
+                outputTruncated: false,
+                status: "running",
+                type: "command",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const store = createTaskStore(
+      { projectId: commandResponse.snapshot.projectId, taskId: commandResponse.snapshot.id },
+      commandResponse,
+    );
+    const itemStore = store.getState().itemStoresById.get("command-performance");
+    if (itemStore === undefined) {
+      throw new Error("Expected the performance command item store");
+    }
+    const readSpy = vi.spyOn(itemStore, "read");
+    const events = createCommandDeltaEvents(
+      commandResponse.snapshot.id,
+      performanceBudgets.delta.clientEvents,
+    );
+
+    const startedAt = performance.now();
+    store.getState().applyEvents(events);
+    const durationMs = performance.now() - startedAt;
+
+    expect(readSpy).not.toHaveBeenCalled();
+    expect(itemStore.readCommandOutput()).toMatchObject({
+      outputBytes: performanceBudgets.delta.clientEvents,
+      outputTruncated: false,
     });
     expect(durationMs).toBeLessThan(performanceBudgets.delta.maxClientReplayMs);
   });

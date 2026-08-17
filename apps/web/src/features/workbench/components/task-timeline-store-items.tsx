@@ -166,9 +166,13 @@ export function StoredTimelineItemContentValue({
   taskId: string;
   turnStatus: AgentTurn["status"];
 }>) {
-  const item = useTaskItem(itemStore);
+  useStore(itemStore, (state) => state.revision);
+  const baseItem = itemStore.peek();
+  const item = baseItem.type === "command" ? baseItem : itemStore.read();
+  const commandOutput = baseItem.type === "command" ? itemStore.readCommandOutput() : undefined;
   return (
     <TimelineItemContent
+      {...(commandOutput === undefined ? {} : { commandOutput })}
       isLastTurnItem={isLastTurnItem}
       item={item}
       {...(onBuildPlan === undefined ? {} : { onBuildPlan })}

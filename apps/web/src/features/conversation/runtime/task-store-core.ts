@@ -9,15 +9,14 @@ import type {
 } from "@code-agent/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
-const MAX_COMMAND_OUTPUT_BYTES = 1_048_576;
-const MAX_COMMAND_OUTPUT_LINES = 10_000;
+import { CommandOutputBuffer, type CommandOutputView } from "./command-output-buffer.js";
+
 export const MAX_TASK_COMMAND_OUTPUT_BYTES = 8 * 1_048_576;
 export const MAX_RETAINED_TASK_RUNTIME_BYTES = 64 * 1_048_576;
 export const MAX_RETAINED_TERMINAL_REQUESTS = 20;
 export const MAX_RETAINED_TASK_NOTICES = 20;
 export const PENDING_COMMAND_LABEL = "__CODE_AGENT_PENDING_COMMAND__";
 export const RETAINED_COMMAND_OUTPUT_MARKER = "__CODE_AGENT_RETAINED_COMMAND_OUTPUT__";
-const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
 const retainedCommandOutputMarkerBytes = textEncoder.encode(
   RETAINED_COMMAND_OUTPUT_MARKER,
@@ -84,19 +83,33 @@ export interface TaskItemStore extends StoreApi<TaskItemStoreState> {
   peek: () => AgentItem;
   publish: () => void;
   read: () => AgentItem;
+  readCommandOutput: () => CommandOutputView | undefined;
   replace: (item: AgentItem) => void;
 }
 
-type StreamedTextField = "content" | "output" | "plan" | "summary" | "text";
+type StreamedTextField = "content" | "plan" | "summary" | "text";
+
+function createBaseItem(item: AgentItem): AgentItem {
+  if (item.type !== "command" || item.output === RETAINED_COMMAND_OUTPUT_MARKER) {
+    return item;
+  }
+  const baseCommand = { ...item };
+  delete baseCommand.output;
+  return baseCommand;
+}
 
 export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
-  let baseItem = initialItem;
+  let baseItem = createBaseItem(initialItem);
   // Delta 热路径只追加 Chunk；完整字符串仅在目标 Item 被读取时延迟物化并缓存。
   const chunksByField = new Map<StreamedTextField, string[]>();
   let contentGeneration = 0;
-  let materializedGeneration = 0;
-  let materializedItem = initialItem;
+  let materializedGeneration = initialItem.type === "command" ? -1 : 0;
+  let materializedItem = baseItem;
   let summarySectionIndex: number | undefined;
+  let commandOutputBuffer =
+    initialItem.type === "command"
+      ? new CommandOutputBuffer(initialItem.output, initialItem.outputTruncated)
+      : undefined;
   const store = createStore<TaskItemStoreState>()(() => ({ revision: 0 }));
 
   function appendChunk(field: StreamedTextField, delta: string): void {
@@ -149,7 +162,8 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
       if (baseItem.type !== "command") {
         return false;
       }
-      appendChunk("output", event.payload.delta);
+      commandOutputBuffer?.append(event.payload.delta);
+      contentGeneration += 1;
       return true;
     },
     peek: (): AgentItem => baseItem,
@@ -183,9 +197,13 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
           };
         }
       } else if (baseItem.type === "command") {
-        const chunks = chunksByField.get("output");
-        if (chunks !== undefined) {
-          nextItem = { ...baseItem, output: [baseItem.output ?? "", ...chunks].join("") };
+        const commandOutput = commandOutputBuffer?.getView();
+        if (commandOutput !== undefined) {
+          nextItem = {
+            ...baseItem,
+            ...(commandOutput.hasOutput ? { output: commandOutput.materialize() } : {}),
+            outputTruncated: commandOutput.outputTruncated,
+          };
         }
       } else if (baseItem.type === "plan") {
         const chunks = chunksByField.get("plan");
@@ -197,10 +215,17 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
       materializedGeneration = contentGeneration;
       return materializedItem;
     },
+    readCommandOutput(): CommandOutputView | undefined {
+      return commandOutputBuffer?.getView();
+    },
     replace(item: AgentItem): void {
-      baseItem = item;
+      baseItem = createBaseItem(item);
       chunksByField.clear();
       summarySectionIndex = undefined;
+      commandOutputBuffer =
+        item.type === "command"
+          ? new CommandOutputBuffer(item.output, item.outputTruncated)
+          : undefined;
       contentGeneration += 1;
     },
   });
@@ -328,61 +353,6 @@ export function normalizeSnapshot(response: TaskStoreHydrationResponse): Normali
   };
 }
 
-function sliceUtf8Tail(
-  encodedValue: Uint8Array,
-  maxBytes: number,
-): Readonly<{
-  output: string;
-  outputBytes: number;
-}> {
-  let startIndex = Math.max(0, encodedValue.length - maxBytes);
-
-  // 跳过 UTF-8 续字节，避免截断后产生乱码。
-  while (startIndex < encodedValue.length) {
-    const currentByte = encodedValue[startIndex];
-    if (currentByte === undefined || (currentByte & 0xc0) !== 0x80) {
-      break;
-    }
-    startIndex += 1;
-  }
-  const retainedValue = encodedValue.subarray(startIndex);
-  return {
-    output: textDecoder.decode(retainedValue),
-    outputBytes: retainedValue.byteLength,
-  };
-}
-
-function boundCommandOutput(value: string): Readonly<{
-  output: string;
-  outputBytes: number;
-  outputTruncated: boolean;
-}> {
-  let output = value;
-  let outputTruncated = false;
-  let newlineCount = 0;
-
-  for (let characterIndex = output.length - 1; characterIndex >= 0; characterIndex -= 1) {
-    if (output.charCodeAt(characterIndex) !== 10) {
-      continue;
-    }
-    newlineCount += 1;
-    if (newlineCount === MAX_COMMAND_OUTPUT_LINES) {
-      output = output.slice(characterIndex + 1);
-      outputTruncated = true;
-      break;
-    }
-  }
-
-  const encodedOutput = textEncoder.encode(output);
-  if (encodedOutput.byteLength <= MAX_COMMAND_OUTPUT_BYTES) {
-    return { output, outputBytes: encodedOutput.byteLength, outputTruncated };
-  }
-  return {
-    ...sliceUtf8Tail(encodedOutput, MAX_COMMAND_OUTPUT_BYTES),
-    outputTruncated: true,
-  };
-}
-
 type CommandOutputBudgetState = Pick<
   TaskStoreState,
   | "commandOutputAccessByItemId"
@@ -415,30 +385,18 @@ export function updateCommandOutputBudget(
   for (const itemId of new Set(input.touchedItemIds)) {
     const previousOutputBytes = commandOutputBytesByItemId.get(itemId) ?? 0;
     const itemStore = input.sourceItemStoresById.get(itemId);
-    const item = itemStore?.read();
-    if (itemStore === undefined || item?.type !== "command" || item.output === undefined) {
+    const commandOutput = itemStore?.readCommandOutput();
+    if (!commandOutput?.hasOutput) {
       commandOutputAccessByItemId.delete(itemId);
       commandOutputBytesByItemId.delete(itemId);
       commandOutputBytes -= previousOutputBytes;
       continue;
     }
 
-    const boundedOutput = boundCommandOutput(item.output);
-    if (
-      boundedOutput.output !== item.output ||
-      (boundedOutput.outputTruncated && !item.outputTruncated)
-    ) {
-      itemStore.replace({
-        ...item,
-        output: boundedOutput.output,
-        outputTruncated: item.outputTruncated || boundedOutput.outputTruncated,
-      });
-      input.changedItemStores?.add(itemStore);
-    }
     commandOutputAccessSequence += 1;
     commandOutputAccessByItemId.set(itemId, commandOutputAccessSequence);
-    commandOutputBytesByItemId.set(itemId, boundedOutput.outputBytes);
-    commandOutputBytes += boundedOutput.outputBytes - previousOutputBytes;
+    commandOutputBytesByItemId.set(itemId, commandOutput.outputBytes);
+    commandOutputBytes += commandOutput.outputBytes - previousOutputBytes;
   }
 
   if (commandOutputBytes <= MAX_TASK_COMMAND_OUTPUT_BYTES) {
@@ -461,8 +419,8 @@ export function updateCommandOutputBudget(
       break;
     }
     const itemStore = input.sourceItemStoresById.get(itemId);
-    const item = itemStore?.read();
-    if (itemStore === undefined || item?.type !== "command" || item.output === undefined) {
+    const item = itemStore?.peek();
+    if (itemStore === undefined || item?.type !== "command") {
       continue;
     }
     const previousOutputBytes = commandOutputBytesByItemId.get(itemId) ?? 0;

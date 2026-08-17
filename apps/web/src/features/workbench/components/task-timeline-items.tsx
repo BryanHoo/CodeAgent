@@ -46,6 +46,7 @@ import {
   ToolOutput,
 } from "../../../shared/components/agent/tool.js";
 import { RETAINED_COMMAND_OUTPUT_MARKER } from "../../conversation/runtime/task-store.js";
+import type { CommandOutputView } from "../../conversation/runtime/command-output-buffer.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import { MessageFileAttachment } from "./message-file-attachment.js";
 import { MessageImageAttachment } from "./message-image-attachment.js";
@@ -71,6 +72,7 @@ import {
 const preservedUserMessageClassName = "whitespace-pre-wrap!";
 
 export function TimelineItemContent({
+  commandOutput,
   isLastTurnItem,
   item,
   onBuildPlan,
@@ -80,6 +82,7 @@ export function TimelineItemContent({
   taskId,
   turnStatus,
 }: Readonly<{
+  commandOutput?: CommandOutputView;
   isLastTurnItem: boolean;
   item: AgentItem;
   onBuildPlan?: BuildPlanAction;
@@ -211,10 +214,13 @@ export function TimelineItemContent({
       return <ApprovalReviewItem item={item} />;
     case "command": {
       const commandLabel = getCommandLabel(item.command);
-      const commandOutput =
+      const renderedCommandOutput =
         item.output === RETAINED_COMMAND_OUTPUT_MARKER
           ? i18n.t("timeline.outputRetained", { ns: "conversation" })
-          : (item.output ?? item.cwd);
+          : commandOutput?.hasOutput
+            ? commandOutput
+            : (item.output ?? item.cwd);
+      const outputTruncated = commandOutput?.outputTruncated ?? item.outputTruncated;
       const isStreamingCommand = turnStatus === "running" && item.status === "running";
       return (
         <Tool>
@@ -223,7 +229,7 @@ export function TimelineItemContent({
             <div className="mb-2 space-y-4">
               {/* 命令文本与工作目录共同构成调用输入，展开后必须完整展示。 */}
               <ToolInput input={{ command: item.command, cwd: item.cwd }} />
-              <Terminal isStreaming={isStreamingCommand} output={commandOutput}>
+              <Terminal isStreaming={isStreamingCommand} output={renderedCommandOutput}>
                 <TerminalHeader>
                   <TerminalTitle>{i18n.t("timeline.output", { ns: "conversation" })}</TerminalTitle>
                   <TerminalActions>
@@ -231,7 +237,7 @@ export function TimelineItemContent({
                   </TerminalActions>
                 </TerminalHeader>
                 <TerminalContent>
-                  {item.outputTruncated ? (
+                  {outputTruncated ? (
                     <p className="mt-2 text-warning">
                       {i18n.t("timeline.outputTruncated", { ns: "conversation" })}
                     </p>

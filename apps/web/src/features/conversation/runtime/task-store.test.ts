@@ -951,9 +951,10 @@ describe("task store", () => {
     expect(state.commandOutputBytes).toBeLessThanOrEqual(MAX_TASK_COMMAND_OUTPUT_BYTES);
     expect(state.getItem("command-0")).toMatchObject({ outputTruncated: true });
     expect(state.getItem("command-8")).toMatchObject({ output: commandOutput });
+    expect(state.itemStoresById.get("command-8")?.peek()).not.toHaveProperty("output");
   });
 
-  it("does not rescan untouched command output for an in-budget delta", () => {
+  it("only scans and encodes the appended command output chunk", () => {
     const untouchedOutput = `untouched-${"x".repeat(1_000)}`;
     const store = createTaskStore(
       { projectId: "project-1", taskId: "task-1" },
@@ -990,6 +991,11 @@ describe("task store", () => {
       }),
     );
     const encodeSpy = vi.spyOn(TextEncoder.prototype, "encode");
+    const activeItemStore = store.getState().itemStoresById.get("command-active");
+    if (activeItemStore === undefined) {
+      throw new Error("Expected active command item store");
+    }
+    const readSpy = vi.spyOn(activeItemStore, "read");
     const previousCommandAccess = store.getState().commandOutputAccessByItemId;
     const previousCommandBytes = store.getState().commandOutputBytesByItemId;
 
@@ -1004,7 +1010,8 @@ describe("task store", () => {
     ]);
 
     try {
-      expect(encodeSpy.mock.calls.map(([value]) => value)).toEqual(["active-delta"]);
+      expect(encodeSpy.mock.calls.map(([value]) => value)).toEqual(["-delta"]);
+      expect(readSpy).not.toHaveBeenCalled();
       expect(store.getState().commandOutputAccessByItemId).toBe(previousCommandAccess);
       expect(store.getState().commandOutputBytesByItemId).toBe(previousCommandBytes);
       expect(store.getState().getItem("command-active")).toMatchObject({
@@ -1012,6 +1019,7 @@ describe("task store", () => {
       });
     } finally {
       encodeSpy.mockRestore();
+      readSpy.mockRestore();
     }
   });
 

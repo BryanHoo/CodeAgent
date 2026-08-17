@@ -13,12 +13,16 @@ import {
 } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
+import { materializeChunkedText, type ChunkedText } from "../../lib/chunked-text.js";
 import { Button } from "../core/button.js";
+import { createIncrementalAnsiParser } from "./terminal-ansi.js";
+
+type TerminalOutput = string | ChunkedText;
 
 type TerminalContextValue = Readonly<{
   autoScroll: boolean;
   isStreaming: boolean;
-  output: string;
+  output: TerminalOutput;
 }>;
 
 const TerminalContext = createContext<TerminalContextValue | null>(null);
@@ -46,8 +50,14 @@ function toAnsiStyle(entry: Anser.AnserJsonEntry): CSSProperties {
   };
 }
 
-function AnsiOutput({ output }: Readonly<{ output: string }>) {
-  const entries = useMemo(() => Anser.ansiToJson(output, { remove_empty: true }), [output]);
+function AnsiOutput({ output }: Readonly<{ output: TerminalOutput }>) {
+  const incrementalParserRef = useRef(createIncrementalAnsiParser());
+  const entries = useMemo(() => {
+    if (typeof output === "string") {
+      return Anser.ansiToJson(output, { remove_empty: true });
+    }
+    return incrementalParserRef.current.parse(output.chunks, output.startIndex);
+  }, [output]);
 
   return (
     <span className="block whitespace-pre-wrap break-words">
@@ -77,7 +87,7 @@ function useTerminalContext(): TerminalContextValue {
 export type TerminalProps = HTMLAttributes<HTMLDivElement> & {
   autoScroll?: boolean;
   isStreaming?: boolean;
-  output: string;
+  output: TerminalOutput;
 };
 
 export function Terminal({
@@ -161,7 +171,7 @@ export function TerminalCopyButton({
   const copyOutput = async () => {
     try {
       // 历史输出只允许复制，不提供清空或编辑入口。
-      await navigator.clipboard.writeText(output);
+      await navigator.clipboard.writeText(materializeChunkedText(output));
       setCopied(true);
       onCopy?.();
       if (resetTimerRef.current !== null) {
