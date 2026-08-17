@@ -1,4 +1,4 @@
-import type { EventStreamMessage } from "@code-agent/protocol";
+import type { AgentEvent, EventStreamMessage } from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
 import type { WebSocket } from "ws";
 import { sendEventStreamMessage } from "../event-socket-sender.js";
@@ -107,17 +107,33 @@ export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
 
       // checkpoint getter 会同步冲刷待发送增量，必须在注册连接监听器前读取。
       const checkpoint = eventStream.checkpoint;
+      const initializationEvents: AgentEvent[] = [];
+      let isInitializing = true;
       // 同步建立实时订阅并挂载清理回调，避免补发与实时事件之间出现空窗。
       unsubscribe = eventStream.subscribe((event) => {
+        if (isInitializing) {
+          initializationEvents.push(event);
+          return;
+        }
         send(event);
       });
-      send({
+      const readySent = send({
         latestSequence: checkpoint.sequence,
         sessionId: checkpoint.sessionId,
         type: "connection.ready",
         version: 2,
       });
+      if (!readySent) {
+        return;
+      }
       for (const event of replay.events) {
+        if (!send(event)) {
+          return;
+        }
+      }
+      // 初始化期间同步到达的实时事件必须排在 ready 和 replay 之后。
+      isInitializing = false;
+      for (const event of initializationEvents) {
         if (!send(event)) {
           return;
         }

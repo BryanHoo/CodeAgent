@@ -179,6 +179,13 @@ export class AgentEventStream {
       return;
     }
 
+    if (this.#flushTimer === undefined) {
+      // 每个批次的首个 Delta 直接交付，窗口只合并随后到达的高频事件。
+      this.#publishNow(event);
+      this.#scheduleFlush();
+      return;
+    }
+
     const previousIndex = this.#pendingDeltas.length - 1;
     const previous = this.#pendingDeltas[previousIndex];
     if (previous === undefined || coalescingKey(previous) !== coalescingKey(event)) {
@@ -188,7 +195,6 @@ export class AgentEventStream {
       this.#pendingDeltas[previousIndex] = mergeCoalescedEvent(previous, event);
       this.#coalescedEvents += 1;
     }
-    this.#scheduleFlush();
   }
 
   public noteBackpressure(): void {

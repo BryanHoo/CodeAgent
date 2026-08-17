@@ -58,7 +58,7 @@ describe("AgentEventStream", () => {
     stream.close();
   });
 
-  it("coalesces matching deltas before assigning a sequence", () => {
+  it("publishes the first delta immediately and coalesces subsequent deltas", () => {
     vi.useFakeTimers();
     const stream = new AgentEventStream({
       now: () => new Date("2026-07-23T00:00:00.000Z"),
@@ -69,30 +69,41 @@ describe("AgentEventStream", () => {
     stream.subscribe(listener);
 
     stream.publish(deltaEvent);
+    expect(listener).toHaveBeenCalledOnce();
     stream.publish({ ...deltaEvent, payload: { delta: "更新" } });
-
-    expect(listener).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(15);
-    expect(listener).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(1);
+    stream.publish({ ...deltaEvent, payload: { delta: "完成" } });
 
     expect(listener).toHaveBeenCalledOnce();
-    expect(listener).toHaveBeenCalledWith({
-      ...deltaEvent,
-      payload: { delta: "实时更新" },
-      provider: "codex",
-      sequence: 1,
-      sessionId: "runtime-1",
-      timestamp: "2026-07-23T00:00:00.000Z",
-      version: 2,
-    });
+    vi.advanceTimersByTime(15);
+    expect(listener).toHaveBeenCalledOnce();
+    vi.advanceTimersByTime(1);
+
+    expect(listener.mock.calls.map(([event]) => event)).toEqual([
+      {
+        ...deltaEvent,
+        provider: "codex",
+        sequence: 1,
+        sessionId: "runtime-1",
+        timestamp: "2026-07-23T00:00:00.000Z",
+        version: 2,
+      },
+      {
+        ...deltaEvent,
+        payload: { delta: "更新完成" },
+        provider: "codex",
+        sequence: 2,
+        sessionId: "runtime-1",
+        timestamp: "2026-07-23T00:00:00.000Z",
+        version: 2,
+      },
+    ]);
     expect(stream.metrics).toEqual({
       backpressureSignals: 0,
       coalescedEvents: 1,
       pendingDeltas: 0,
-      providerEventsReceived: 2,
-      publishedEvents: 1,
-      retainedEvents: 1,
+      providerEventsReceived: 3,
+      publishedEvents: 2,
+      retainedEvents: 2,
       retentionEvictions: 0,
     });
   });
@@ -149,8 +160,9 @@ describe("AgentEventStream", () => {
     vi.advanceTimersByTime(16);
 
     expect(listener.mock.calls.map(([event]) => event)).toMatchObject([
-      { payload: { delta: "第一第二" }, sequence: 1, type: "plan.delta" },
-      { payload: { diff: "latest diff" }, sequence: 2, type: "turn.diff_updated" },
+      { payload: { delta: "第一" }, sequence: 1, type: "plan.delta" },
+      { payload: { delta: "第二" }, sequence: 2, type: "plan.delta" },
+      { payload: { diff: "latest diff" }, sequence: 3, type: "turn.diff_updated" },
     ]);
   });
 
@@ -180,7 +192,7 @@ describe("AgentEventStream", () => {
     ]);
   });
 
-  it("uses the pressure window for the next delta batch", () => {
+  it("publishes the first delta immediately and uses pressure window for the trailing batch", () => {
     vi.useFakeTimers();
     const stream = new AgentEventStream({ provider: "codex", sessionId: "runtime-1" });
     const listener = vi.fn<(event: AgentEvent) => void>();
@@ -188,11 +200,13 @@ describe("AgentEventStream", () => {
 
     stream.noteBackpressure();
     stream.publish(deltaEvent);
+    expect(listener).toHaveBeenCalledOnce();
+    stream.publish({ ...deltaEvent, payload: { delta: "后续" } });
     vi.advanceTimersByTime(31);
-    expect(listener).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledOnce();
     vi.advanceTimersByTime(1);
 
-    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledTimes(2);
     expect(stream.metrics.backpressureSignals).toBe(1);
   });
 

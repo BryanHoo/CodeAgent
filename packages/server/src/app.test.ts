@@ -3893,7 +3893,7 @@ describe("CodeAgent Server", () => {
       type: "message.delta",
     });
     await vi.waitFor(() => {
-      expect(messages).toHaveLength(2);
+      expect(messages).toHaveLength(3);
     });
 
     expect(messages[0]).toMatchObject({
@@ -3903,12 +3903,18 @@ describe("CodeAgent Server", () => {
     });
     expect(typeof (messages[0] as { sessionId: unknown }).sessionId).toBe("string");
     expect(messages[1]).toMatchObject({
-      payload: { delta: "实时更新" },
+      payload: { delta: "实时" },
       sequence: 1,
       type: "message.delta",
       version: 2,
     });
     expect(typeof (messages[1] as { sessionId: unknown }).sessionId).toBe("string");
+    expect(messages[2]).toMatchObject({
+      payload: { delta: "更新" },
+      sequence: 2,
+      type: "message.delta",
+      version: 2,
+    });
 
     const metricsResponse = await app.inject({ method: "GET", url: "/v1/metrics/events" });
     expect(metricsResponse.statusCode).toBe(200);
@@ -3917,12 +3923,12 @@ describe("CodeAgent Server", () => {
         {
           activeClients: 1,
           backpressureSignals: 0,
-          coalescedEvents: 1,
+          coalescedEvents: 0,
           pendingDeltas: 0,
           projectId: "code-agent",
           providerEventsReceived: 2,
-          publishedEvents: 1,
-          retainedEvents: 1,
+          publishedEvents: 2,
+          retainedEvents: 2,
           retentionEvictions: 0,
           slowClientDisconnects: 0,
         },

@@ -186,14 +186,22 @@ export class TaskEventTarget {
       return;
     }
     if (isDeltaEvent(event)) {
+      if (this.#frameId === undefined) {
+        // 当前帧的首个 Delta 立即进入 Store，避免再叠加一帧首字延迟。
+        this.#frameId = requestAnimationFrame(() => {
+          this.#frameId = undefined;
+          const pendingEvents = this.#buffer.drain();
+          if (pendingEvents.length > 0) {
+            this.#store.getState().applyEvents(pendingEvents);
+          }
+        });
+        this.#store.getState().applyEvents([event]);
+        return;
+      }
       if (!this.#buffer.push(event)) {
         this.requestRecovery();
         return;
       }
-      this.#frameId ??= requestAnimationFrame(() => {
-        this.#frameId = undefined;
-        this.#store.getState().applyEvents(this.#buffer.drain());
-      });
       return;
     }
     this.#flushThrough(event.sequence);

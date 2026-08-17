@@ -77,19 +77,19 @@ describe("server performance acceptance", () => {
     const checkpoint = stream.checkpoint;
     const durationMs = performance.now() - startedAt;
 
-    expect(checkpoint.sequence).toBe(1);
-    expect(listener).toHaveBeenCalledOnce();
-    expect(listener).toHaveBeenCalledWith(
+    expect(checkpoint.sequence).toBe(2);
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        payload: { delta: "x".repeat(performanceBudgets.delta.serverEvents) },
+        payload: { delta: "x".repeat(performanceBudgets.delta.serverEvents - 1) },
       }),
     );
     expect(stream.metrics).toMatchObject({
       backpressureSignals: 1,
-      coalescedEvents: performanceBudgets.delta.serverEvents - 1,
+      coalescedEvents: performanceBudgets.delta.serverEvents - 2,
       pendingDeltas: 0,
       providerEventsReceived: performanceBudgets.delta.serverEvents,
-      publishedEvents: 1,
+      publishedEvents: 2,
     });
     expect(durationMs).toBeLessThan(performanceBudgets.delta.maxServerPublishMs);
     stream.close();

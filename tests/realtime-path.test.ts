@@ -191,6 +191,7 @@ describe("Realtime Path", () => {
       "turn.started",
       "item.started",
       "message.delta",
+      "message.delta",
       "item.completed",
       "command.output_delta",
       "item.completed",
@@ -199,9 +200,12 @@ describe("Realtime Path", () => {
       "turn.completed",
       "provider.error",
     ]);
-    expect(events.find((event) => event.type === "message.delta")).toMatchObject({
-      payload: { delta: "Realtime connected" },
-    });
+    expect(
+      events
+        .filter((event) => event.type === "message.delta")
+        .map((event) => event.payload.delta)
+        .join(""),
+    ).toBe("Realtime connected");
     expect(events.find((event) => event.type === "item.started")).toMatchObject({
       payload: {
         item: {
@@ -288,6 +292,7 @@ describe("Realtime Path", () => {
       "turn.started",
       "item.completed",
       "message.delta",
+      "message.delta",
       "item.completed",
       "usage.updated",
       "turn.completed",
@@ -296,9 +301,12 @@ describe("Realtime Path", () => {
       { payload: { item: { role: "user", text: "完成流式回复", type: "message" } } },
       { payload: { item: { role: "assistant", text: "流式回复完成", type: "message" } } },
     ]);
-    expect(events.find((event) => event.type === "message.delta")).toMatchObject({
-      payload: { delta: "流式回复完成" },
-    });
+    expect(
+      events
+        .filter((event) => event.type === "message.delta")
+        .map((event) => event.payload.delta)
+        .join(""),
+    ).toBe("流式回复完成");
     expect(models.data).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "gpt-5.6-sol", isDefault: true })]),
     );
