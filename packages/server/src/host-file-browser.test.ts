@@ -29,8 +29,10 @@ describe("host file browser", () => {
     const homePath = await createTemporaryDirectory();
     const outsidePath = await createTemporaryDirectory();
     await Promise.all([
+      mkdir(join(homePath, ".config")),
       mkdir(join(homePath, "zeta")),
       mkdir(join(homePath, "Alpha")),
+      writeFile(join(homePath, ".hidden.png"), "hidden image bytes"),
       writeFile(join(homePath, "README.md"), "# CodeAgent\n"),
       writeFile(join(homePath, "screen.PNG"), "image bytes"),
       writeFile(join(homePath, "archive.zip"), "unsupported"),
@@ -53,6 +55,17 @@ describe("host file browser", () => {
         { name: "Alpha", type: "directory" },
         { name: "zeta", type: "directory" },
         { name: "README.md", type: "file" },
+      ],
+    });
+    await expect(
+      readHostFileDirectory("image", homePath, { includeHidden: true }),
+    ).resolves.toMatchObject({
+      entries: [
+        { name: ".config", type: "directory" },
+        { name: "Alpha", type: "directory" },
+        { name: "zeta", type: "directory" },
+        { name: ".hidden.png", type: "file" },
+        { name: "screen.PNG", type: "file" },
       ],
     });
   });

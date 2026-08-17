@@ -66,6 +66,11 @@ import {
   type ReadOptions,
 } from "./http-client-transport.js";
 
+export type ListFilesystemEntriesOptions = ReadOptions &
+  Readonly<{
+    includeHidden?: boolean;
+  }>;
+
 export class ProjectHttpClient extends CodeAgentTransport {
   public async listSkills(projectId: string, options: ReadOptions = {}): Promise<AgentSkillPage> {
     return this.read(`${projectPath(projectId)}/skills`, AgentSkillPageSchema, options);
@@ -103,10 +108,13 @@ export class ProjectHttpClient extends CodeAgentTransport {
 
   public async listProjectDirectories(
     path?: string,
-    options: ReadOptions = {},
+    options: ListFilesystemEntriesOptions = {},
   ): Promise<ProjectDirectoryListing> {
     return this.read(
-      appendQuery("/v1/project-directories", { path }),
+      appendQuery("/v1/project-directories", {
+        path,
+        includeHidden: options.includeHidden === true ? "true" : undefined,
+      }),
       ProjectDirectoryListingSchema,
       options,
     );
@@ -115,9 +123,17 @@ export class ProjectHttpClient extends CodeAgentTransport {
   public async listHostFiles(
     kind: HostFileKind,
     path?: string,
-    options: ReadOptions = {},
+    options: ListFilesystemEntriesOptions = {},
   ): Promise<HostFileListing> {
-    return this.read(appendQuery("/v1/host-files", { kind, path }), HostFileListingSchema, options);
+    return this.read(
+      appendQuery("/v1/host-files", {
+        kind,
+        path,
+        includeHidden: options.includeHidden === true ? "true" : undefined,
+      }),
+      HostFileListingSchema,
+      options,
+    );
   }
 
   public async reorderProjects(

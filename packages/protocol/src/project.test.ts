@@ -126,6 +126,18 @@ describe("project protocol", () => {
   it("validates host directory queries and listings", () => {
     expect(Value.Check(ProjectDirectoryQuerySchema, {})).toBe(true);
     expect(Value.Check(ProjectDirectoryQuerySchema, { path: "/Users/bryan/Develop" })).toBe(true);
+    expect(
+      Value.Check(ProjectDirectoryQuerySchema, {
+        includeHidden: true,
+        path: "/Users/bryan/Develop",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ProjectDirectoryQuerySchema, {
+        includeHidden: "true",
+        path: "/Users/bryan/Develop",
+      }),
+    ).toBe(false);
     expect(Value.Check(ProjectDirectoryQuerySchema, { path: "C:\\Users\\bryan\\Develop" })).toBe(
       true,
     );
@@ -154,10 +166,12 @@ describe("project protocol", () => {
     expect(Value.Check(HostFileQuerySchema, { kind: "image" })).toBe(true);
     expect(
       Value.Check(HostFileQuerySchema, {
+        includeHidden: true,
         kind: "file",
         path: "C:\\Users\\bryan\\Documents",
       }),
     ).toBe(true);
+    expect(Value.Check(HostFileQuerySchema, { includeHidden: "true", kind: "file" })).toBe(false);
     expect(Value.Check(HostFileQuerySchema, { kind: "text" })).toBe(false);
     expect(Value.Check(HostFileQuerySchema, { kind: "file", path: "relative/path" })).toBe(false);
     expect(Value.Check(HostFileQuerySchema, { extra: true, kind: "file" })).toBe(false);

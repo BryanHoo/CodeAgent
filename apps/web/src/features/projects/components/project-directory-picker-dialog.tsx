@@ -1,6 +1,6 @@
 import type { ProjectDirectoryListing } from "@code-agent/protocol";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { ArrowUp, FolderPlus, LoaderCircle, RotateCcw } from "lucide-react";
+import { FolderPlus, LoaderCircle, RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
@@ -14,20 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../shared/components/core/dialog.js";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../shared/components/core/select.js";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../../../shared/components/core/tooltip.js";
-import { findActiveFilesystemRoot } from "../../../shared/lib/filesystem-roots.js";
 import type { CodeAgentProjectDirectoryClient } from "../project-queries.js";
+import { FilesystemPickerToolbar } from "./filesystem-picker-toolbar.js";
 
 export type ProjectDirectoryState = Readonly<{
   data?: ProjectDirectoryListing;
@@ -165,16 +153,16 @@ export function ProjectDirectoryPickerDialog({
 }: ProjectDirectoryPickerDialogProps) {
   const { t } = useTranslation("workbench");
   const [rootPath, setRootPath] = useState<string>();
+  const [pathDraft, setPathDraft] = useState<string>();
+  const [includeHidden, setIncludeHidden] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const [selectedPath, setSelectedPath] = useState<string>();
   const rootQuery = useQuery({
-    queryFn: ({ signal }) => client.listProjectDirectories(rootPath, { signal }),
-    queryKey: ["project-directories", rootPath ?? null] as const,
+    queryFn: ({ signal }) => client.listProjectDirectories(rootPath, { includeHidden, signal }),
+    queryKey: ["project-directories", rootPath ?? null, includeHidden] as const,
     staleTime: 30_000,
   });
   const listing = rootQuery.data;
-  const activeRootPath =
-    listing === undefined ? undefined : findActiveFilesystemRoot(listing.roots, listing.path)?.path;
   const activeSelectedPath = selectedPath ?? listing?.path;
   const canAdd = listing !== undefined && activeSelectedPath !== undefined;
   const expandedDirectoryPaths = useMemo(() => [...expandedPaths], [expandedPaths]);
@@ -182,8 +170,8 @@ export function ProjectDirectoryPickerDialog({
   const directoryQueries = useQueries({
     queries: expandedDirectoryPaths.map((path) => ({
       queryFn: ({ signal }: { signal: AbortSignal }) =>
-        client.listProjectDirectories(path, { signal }),
-      queryKey: ["project-directories", path] as const,
+        client.listProjectDirectories(path, { includeHidden, signal }),
+      queryKey: ["project-directories", path, includeHidden] as const,
       staleTime: 30_000,
     })),
   });
@@ -196,18 +184,34 @@ export function ProjectDirectoryPickerDialog({
       path,
     };
   });
+  const displayedPath = pathDraft ?? rootPath ?? listing?.path ?? "";
   const navigateToParent = () => {
     const parentPath = listing?.parentPath;
     if (parentPath === null || parentPath === undefined) return;
     // 切换浏览根目录时同步清空旧分支状态，避免把另一层级的选择和展开形态带入新树。
     setRootPath(parentPath);
+    setPathDraft(undefined);
     setExpandedPaths(new Set());
-    setSelectedPath(parentPath);
+    setSelectedPath(undefined);
   };
   const navigateToRoot = (path: string) => {
     setRootPath(path);
+    setPathDraft(undefined);
     setExpandedPaths(new Set());
-    setSelectedPath(path);
+    setSelectedPath(undefined);
+  };
+  const navigateToPath = () => {
+    const path = displayedPath.trim();
+    if (path.length === 0) return;
+    // 手动导航先清除旧选择，等待 Server 返回规范化后的可添加目录。
+    setRootPath(path);
+    setPathDraft(undefined);
+    setExpandedPaths(new Set());
+    setSelectedPath(undefined);
+  };
+  const toggleHiddenDirectories = () => {
+    setIncludeHidden((current) => !current);
+    setSelectedPath(undefined);
   };
 
   return (
@@ -234,50 +238,26 @@ export function ProjectDirectoryPickerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex min-h-10 items-center gap-2 border-y border-separator bg-panel px-3 sm:px-4">
-          {listing === undefined || listing.roots.length < 2 ? null : (
-            <Select
-              onValueChange={navigateToRoot}
-              {...(activeRootPath === undefined ? {} : { value: activeRootPath })}
-            >
-              <SelectTrigger
-                aria-label={t("projectPicker.filesystemRoot")}
-                className="h-8 min-w-20 px-2 font-mono"
-                size="sm"
-              >
-                <SelectValue placeholder={t("projectPicker.filesystemRoot")} />
-              </SelectTrigger>
-              <SelectContent position="popper">
-                {listing.roots.map((root) => (
-                  <SelectItem key={root.path} value={root.path}>
-                    {root.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label={t("projectPicker.parent")}
-                disabled={listing?.parentPath === null || listing === undefined}
-                onClick={navigateToParent}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <ArrowUp aria-hidden="true" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t("projectPicker.parent")}</TooltipContent>
-          </Tooltip>
-          <p
-            className="min-w-0 flex-1 truncate font-mono text-caption text-muted-foreground"
-            title={listing?.path}
-          >
-            {listing?.path ?? t("projectPicker.resolvingPath")}
-          </p>
-        </div>
+        <FilesystemPickerToolbar
+          disabled={isAdding}
+          includeHidden={includeHidden}
+          labels={{
+            filesystemRoot: t("projectPicker.filesystemRoot"),
+            goToPath: t("projectPicker.goToPath"),
+            hideHidden: t("projectPicker.hideHidden"),
+            parent: t("projectPicker.parent"),
+            pathLabel: t("projectPicker.pathLabel"),
+            pathPlaceholder: t("projectPicker.pathPlaceholder"),
+            showHidden: t("projectPicker.showHidden"),
+          }}
+          listing={listing}
+          onNavigateParent={navigateToParent}
+          onNavigatePath={navigateToPath}
+          onNavigateRoot={navigateToRoot}
+          onPathChange={setPathDraft}
+          onToggleHidden={toggleHiddenDirectories}
+          path={displayedPath}
+        />
 
         <div className="min-h-0 overflow-y-auto px-3 py-2 sm:px-4">
           {rootQuery.isPending ? (

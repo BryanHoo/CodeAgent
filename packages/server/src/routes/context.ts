@@ -165,8 +165,15 @@ export interface ServerRouteContext {
     query: string,
     signal?: AbortSignal,
   ) => Promise<ProjectFileSearchPage>;
-  readonly readHostFileDirectory: (kind: HostFileKind, path?: string) => Promise<HostFileListing>;
-  readonly readProjectDirectory: (path?: string) => Promise<ProjectDirectoryListing>;
+  readonly readHostFileDirectory: (
+    kind: HostFileKind,
+    path?: string,
+    options?: Readonly<{ includeHidden?: boolean }>,
+  ) => Promise<HostFileListing>;
+  readonly readProjectDirectory: (
+    path?: string,
+    options?: Readonly<{ includeHidden?: boolean }>,
+  ) => Promise<ProjectDirectoryListing>;
   readonly readImageFile: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
   readonly readProjectGitStatus: (
     projectRoot: string,

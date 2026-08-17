@@ -14,7 +14,7 @@ export {
   type ReadOptions,
   type UnauthorizedListener,
 } from "./http-client-transport.js";
-export { ProjectHttpClient } from "./http-client-projects.js";
+export { ProjectHttpClient, type ListFilesystemEntriesOptions } from "./http-client-projects.js";
 export { TaskHttpClient } from "./http-client-tasks.js";
 
 import { TaskHttpClient } from "./http-client-tasks.js";

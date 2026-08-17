@@ -18,6 +18,7 @@ export {
   type CodeAgentRequestTimeouts,
   type CodeAgentClientOptions,
   type ListTasksOptions,
+  type ListFilesystemEntriesOptions,
   type MutationOptions,
   type PendingRequestResolution,
   type ReadOptions,

@@ -1360,7 +1360,7 @@ describe("CodeAgent Server", () => {
 
     const listing = await app.inject({
       method: "GET",
-      url: "/v1/project-directories?path=%2FUsers%2Fbryan%2FDevelop",
+      url: "/v1/project-directories?path=%2FUsers%2Fbryan%2FDevelop&includeHidden=true",
     });
     const response = await app.inject({
       headers: { "idempotency-key": "add-project" },
@@ -1371,7 +1371,9 @@ describe("CodeAgent Server", () => {
 
     expect(listing.statusCode).toBe(200);
     expect(listing.json()).toMatchObject({ path: "/Users/bryan/Develop" });
-    expect(readProjectDirectory).toHaveBeenCalledWith("/Users/bryan/Develop");
+    expect(readProjectDirectory).toHaveBeenCalledWith("/Users/bryan/Develop", {
+      includeHidden: true,
+    });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ project: selectedProject });
     expect(resolveProjectDirectory).toHaveBeenCalledWith(selectedPath);
@@ -1406,7 +1408,7 @@ describe("CodeAgent Server", () => {
 
     const files = await app.inject({
       method: "GET",
-      url: "/v1/host-files?kind=image&path=%2FUsers%2Fbryan%2FPictures",
+      url: "/v1/host-files?kind=image&path=%2FUsers%2Fbryan%2FPictures&includeHidden=true",
     });
     const importRequest = {
       headers: { "idempotency-key": "import-host-image" },
@@ -1442,7 +1444,9 @@ describe("CodeAgent Server", () => {
 
     expect(files.statusCode).toBe(200);
     expect(files.json()).toEqual(listing);
-    expect(readHostFileDirectory).toHaveBeenCalledWith("image", "/Users/bryan/Pictures");
+    expect(readHostFileDirectory).toHaveBeenCalledWith("image", "/Users/bryan/Pictures", {
+      includeHidden: true,
+    });
     expect(imported.statusCode).toBe(201);
     expect(imported.json()).toMatchObject({
       attachment: { kind: "image", mediaType: "image/png", name: "screen.png", size: 68 },

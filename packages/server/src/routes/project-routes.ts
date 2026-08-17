@@ -75,7 +75,11 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     },
     async (request) => {
       try {
-        return await readHostFileDirectory(request.query.kind, request.query.path);
+        return await readHostFileDirectory(request.query.kind, request.query.path, {
+          ...(request.query.includeHidden === undefined
+            ? {}
+            : { includeHidden: request.query.includeHidden }),
+        });
       } catch (error) {
         if (error instanceof HostFileBrowserError) {
           throw new MutationHttpError("INVALID_REQUEST", error.message, 400);
@@ -95,7 +99,11 @@ export const registerProjectRoutes: FastifyPluginCallback<ServerRouteContext> = 
     },
     async (request) => {
       try {
-        return await readProjectDirectory(request.query.path);
+        return await readProjectDirectory(request.query.path, {
+          ...(request.query.includeHidden === undefined
+            ? {}
+            : { includeHidden: request.query.includeHidden }),
+        });
       } catch (error) {
         if (error instanceof ProjectDirectoryBrowserError) {
           throw new MutationHttpError("INVALID_REQUEST", error.message, 400);

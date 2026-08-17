@@ -56,6 +56,7 @@ export type HostAttachmentSource = Readonly<{
 type HostFileBrowserOptions = Readonly<{
   filesystemRoots?: typeof listFilesystemRoots;
   homePath?: string;
+  includeHidden?: boolean;
 }>;
 
 function toHostFileError(error: unknown): HostFileBrowserError {
@@ -134,6 +135,7 @@ export async function readHostFileDirectory(
   const entries = children
     .filter(
       (child) =>
+        (options.includeHidden === true || !child.name.startsWith(".")) &&
         !child.isSymbolicLink() &&
         (child.isDirectory() ||
           (child.isFile() && mediaTypeFor(kind, join(path, child.name)) !== undefined)),

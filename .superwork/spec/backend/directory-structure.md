@@ -20,6 +20,7 @@
 - Project 文件树只通过固定的只读端点读取已配置根目录；端点可接收经过严格校验的 Project 相对目录，每次只返回该目录的直接子项，不提供绝对路径或文件系统透传。目录解析必须沿根目录逐层应用任意层级的 `.gitignore`，不依赖根目录是否为 Git 仓库或是否存在根级规则，同时跳过符号链接、`.git` 与大型生成目录，并保留固定目录深度限制，不设置条目数量上限。
 - Project 文件搜索必须复用文件树的 Project 根目录、分层 `.gitignore`、生成目录、符号链接和深度边界，只按文件名匹配并稳定返回最多 `50` 个 Project 相对普通文件。Composer 选择结果必须序列化为可见的 `@<project-relative-path>` 文本并随普通文本提交；文件夹不得进入引用入口，浏览器协议和 Provider 不再建立结构化文件 `mention`。
 - Project 目录选择与 Composer 宿主附件选择的目录响应必须携带可切换的文件系统根目录；Windows 必须稳定列出所有实际可访问盘符，使两个选择器均可跨盘浏览。Composer 宿主附件选择只通过固定的 `GET /v1/host-files` 浏览 CodeAgent 运行设备；端点从宿主主目录或严格校验的绝对目录开始，仅列出真实直接子目录和当前 `file | image` 种类支持的普通文件，跳过符号链接。确认选择后由 `POST /v1/projects/:projectId/attachments/:kind/host` 重新解析文件并流式写入统一 `AttachmentStore`，待提交预览只允许通过 `GET /v1/projects/:projectId/attachments/:attachmentId` 和随机附件 ID 读取，不能向 Web 或 Turn 透传宿主绝对路径，也不能建立第二套存储。
+- `GET /v1/project-directories` 与 `GET /v1/host-files` 默认过滤名称以 `.` 开头的直接子项；只有严格布尔查询参数 `includeHidden=true` 才允许列出这些隐藏项。项目目录接口仍只列真实直接子目录，宿主文件接口不得放宽符号链接、普通文件、附件种类或绝对路径校验。
 - Project 宿主打开能力只返回固定白名单中的具体应用 ID、名称与类别；普通打开菜单提交 Project 相对路径并拒绝符号链接和越界目标，AI 文件引用的显式绝对路径允许指向 Project 外的本机可读文件或目录。Server 按宿主实际可执行程序或应用包过滤目录，并使用参数数组和 `shell: false` 启动。文件交给编辑器或工具，文件管理器定位文件或打开其父目录，终端固定在文件父目录启动；`system-default` 只允许文件目标，并调用宿主系统的默认关联应用。
 - Task 历史附件的读取与系统打开统一放在独立附件路由模块；系统打开必须先验证 Project、Task、随机附件 ID 和 `file` 类型，再把受权内容复制到 Server 管理的临时文件并复用 Project `system-default` 打开服务，不能向浏览器返回或记录该路径。
 - Project 图片预览只允许 GIF、JPEG、PNG、WebP 的有效内容签名和有界普通文件；相对路径限制在 Project 内，显式绝对路径允许读取 Project 外目标。响应固定使用受检媒体类型与 `nosniff`，路径缺失、不可读、超限或签名不匹配统一返回不可用。

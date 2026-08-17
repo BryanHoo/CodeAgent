@@ -433,6 +433,15 @@ export const projectDirectoryListings = new Map<string | null, object>([
     "/workspace/AddedProject",
     { entries: [], parentPath: "/workspace", path: "/workspace/AddedProject", roots: [] },
   ],
+  [
+    "/workspace/ProjectVault",
+    {
+      entries: [{ name: "VisibleProject", path: "/workspace/ProjectVault/VisibleProject" }],
+      parentPath: "/workspace",
+      path: "/workspace/ProjectVault",
+      roots: [],
+    },
+  ],
 ]);
 
 export const taskSnapshot = {
@@ -857,18 +866,27 @@ export async function mockAppShellApi(
       body = { data: routedProjects, nextCursor: null };
     } else if (url.pathname === "/v1/host-files") {
       const kind = url.searchParams.get("kind");
-      const fileNames =
-        kind === "image"
-          ? ["draft.png", "preserved.png", "screen.png", "task-draft.png"]
-          : ["specification.pdf"];
+      const requestedPath = url.searchParams.get("path") ?? "/Users/bryan/Attachments";
+      const includeHidden = url.searchParams.get("includeHidden") === "true";
+      const visibleFileNames =
+        requestedPath === "/Users/bryan/HiddenDocs"
+          ? ["notes.pdf"]
+          : kind === "image"
+            ? ["draft.png", "preserved.png", "screen.png", "task-draft.png"]
+            : ["specification.pdf"];
+      // 仅在显式查询时返回点号文件，保持 fixture 与宿主浏览接口的默认行为一致。
+      const fileNames = includeHidden
+        ? [`.secret.${kind === "image" ? "png" : "pdf"}`, ...visibleFileNames]
+        : visibleFileNames;
+      const parentPath = requestedPath.split("/").slice(0, -1).join("/") || "/";
       body = {
         entries: fileNames.map((name) => ({
           name,
-          path: `/Users/bryan/Attachments/${name}`,
+          path: `${requestedPath}/${name}`,
           type: "file",
         })),
-        parentPath: "/Users/bryan",
-        path: "/Users/bryan/Attachments",
+        parentPath,
+        path: requestedPath,
         roots: [],
       };
     } else if (
@@ -893,9 +911,19 @@ export async function mockAppShellApi(
       };
     } else if (url.pathname === "/v1/project-directories") {
       const path = url.searchParams.get("path");
+      const listing = projectDirectoryListings.get(path);
       body =
-        projectDirectoryListings.get(path) ??
-        ({ entries: [], parentPath: "/workspace", path, roots: [] } as const);
+        path === "/workspace/ProjectVault" && url.searchParams.get("includeHidden") === "true"
+          ? {
+              entries: [
+                { name: ".HiddenProject", path: "/workspace/ProjectVault/.HiddenProject" },
+                { name: "VisibleProject", path: "/workspace/ProjectVault/VisibleProject" },
+              ],
+              parentPath: "/workspace",
+              path,
+              roots: [],
+            }
+          : (listing ?? ({ entries: [], parentPath: "/workspace", path, roots: [] } as const));
     } else if (url.pathname === "/v1/projects" && route.request().method() === "POST") {
       const request = parseRequestRecord(route.request().postData());
       const rootPath = request["rootPath"];

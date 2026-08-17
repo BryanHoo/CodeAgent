@@ -247,6 +247,42 @@ test("adds a folder through the Web project directory picker", async ({ page }) 
   ).toHaveCount(0);
 });
 
+test("navigates absolute paths and toggles hidden folders in the project directory picker", async ({
+  page,
+}) => {
+  const directoryRequests: URL[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/v1/project-directories") directoryRequests.push(url);
+  });
+  await page.goto("/p/code-agent");
+  await page.getByRole("button", { name: "添加项目" }).click();
+  const picker = page.getByRole("dialog", { name: "选择项目文件夹" });
+  const pathInput = picker.getByRole("textbox", { name: "绝对目录路径" });
+  await pathInput.fill("/workspace/ProjectVault");
+  await pathInput.press("Enter");
+
+  await expect(picker.getByRole("button", { exact: true, name: "VisibleProject" })).toBeVisible();
+  await expect(picker.getByRole("button", { exact: true, name: ".HiddenProject" })).toHaveCount(0);
+  const hiddenToggle = picker.getByRole("button", { name: "显示隐藏文件夹" });
+  await expect(hiddenToggle).toHaveAttribute("aria-pressed", "false");
+  await hiddenToggle.click();
+  await expect(picker.getByRole("button", { exact: true, name: ".HiddenProject" })).toBeVisible();
+  await expect(picker.getByRole("button", { name: "隐藏隐藏文件夹" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect
+    .poll(() =>
+      directoryRequests.some(
+        (url) =>
+          url.searchParams.get("path") === "/workspace/ProjectVault" &&
+          url.searchParams.get("includeHidden") === "true",
+      ),
+    )
+    .toBe(true);
+});
+
 test("keeps the Web directory picker open after add failure", async ({ page }) => {
   const pageErrors: Error[] = [];
   page.on("pageerror", (error) => {

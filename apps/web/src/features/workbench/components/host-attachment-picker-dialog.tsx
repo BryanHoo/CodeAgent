@@ -1,7 +1,7 @@
 import { buildProjectAttachmentUrl } from "@code-agent/client";
 import type { HostFileKind, HostFileListing } from "@code-agent/protocol";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { ArrowUp, FilePlus2, ImagePlus, LoaderCircle, RotateCcw } from "lucide-react";
+import { FilePlus2, ImagePlus, LoaderCircle, RotateCcw } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
@@ -20,20 +20,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../shared/components/core/dialog.js";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../shared/components/core/select.js";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../../../shared/components/core/tooltip.js";
-import { findActiveFilesystemRoot } from "../../../shared/lib/filesystem-roots.js";
 import type { CodeAgentHostAttachmentClient } from "../../projects/project-queries.js";
+import { FilesystemPickerToolbar } from "../../projects/components/filesystem-picker-toolbar.js";
 import { resolveIdempotencyAttempt, type IdempotencyAttempt } from "../composer-state.js";
 
 export type HostFileDirectoryState = Readonly<{
@@ -167,6 +155,8 @@ export function HostAttachmentPickerDialog({
 }: HostAttachmentPickerDialogProps) {
   const { t } = useTranslation("workbench");
   const [rootPath, setRootPath] = useState<string>();
+  const [pathDraft, setPathDraft] = useState<string>();
+  const [includeHidden, setIncludeHidden] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const [selectedPath, setSelectedPath] = useState<string>();
   const [importError, setImportError] = useState<Error | null>(null);
@@ -174,19 +164,17 @@ export function HostAttachmentPickerDialog({
   const importLockRef = useRef(false);
   const importAttemptRef = useRef<IdempotencyAttempt | undefined>(undefined);
   const rootQuery = useQuery({
-    queryFn: ({ signal }) => client.listHostFiles(kind, rootPath, { signal }),
-    queryKey: ["host-files", kind, rootPath ?? null] as const,
+    queryFn: ({ signal }) => client.listHostFiles(kind, rootPath, { includeHidden, signal }),
+    queryKey: ["host-files", kind, rootPath ?? null, includeHidden] as const,
     staleTime: 30_000,
   });
   const listing = rootQuery.data;
-  const activeRootPath =
-    listing === undefined ? undefined : findActiveFilesystemRoot(listing.roots, listing.path)?.path;
   const expandedDirectoryPaths = useMemo(() => [...expandedPaths], [expandedPaths]);
   const directoryQueries = useQueries({
     queries: expandedDirectoryPaths.map((path) => ({
       queryFn: ({ signal }: { signal: AbortSignal }) =>
-        client.listHostFiles(kind, path, { signal }),
-      queryKey: ["host-files", kind, path] as const,
+        client.listHostFiles(kind, path, { includeHidden, signal }),
+      queryKey: ["host-files", kind, path, includeHidden] as const,
       staleTime: 30_000,
     })),
   });
@@ -210,19 +198,37 @@ export function HostAttachmentPickerDialog({
       ),
     [directoryStates, listing],
   );
+  const displayedPath = pathDraft ?? rootPath ?? listing?.path ?? "";
 
   const navigateToParent = () => {
     const parentPath = listing?.parentPath;
     if (parentPath === null || parentPath === undefined) return;
     // 切换浏览根目录时丢弃上一层的选择，避免确认不可见文件。
     setRootPath(parentPath);
+    setPathDraft(undefined);
     setExpandedPaths(new Set());
     setSelectedPath(undefined);
     setImportError(null);
   };
   const navigateToRoot = (path: string) => {
     setRootPath(path);
+    setPathDraft(undefined);
     setExpandedPaths(new Set());
+    setSelectedPath(undefined);
+    setImportError(null);
+  };
+  const navigateToPath = () => {
+    const path = displayedPath.trim();
+    if (path.length === 0) return;
+    // 手动导航与树导航保持同一状态重置规则，避免确认旧目录中的文件。
+    setRootPath(path);
+    setPathDraft(undefined);
+    setExpandedPaths(new Set());
+    setSelectedPath(undefined);
+    setImportError(null);
+  };
+  const toggleHiddenFiles = () => {
+    setIncludeHidden((current) => !current);
     setSelectedPath(undefined);
     setImportError(null);
   };
@@ -290,50 +296,26 @@ export function HostAttachmentPickerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex min-h-10 items-center gap-2 border-y border-separator bg-panel px-3 sm:px-4">
-          {listing === undefined || listing.roots.length < 2 ? null : (
-            <Select
-              onValueChange={navigateToRoot}
-              {...(activeRootPath === undefined ? {} : { value: activeRootPath })}
-            >
-              <SelectTrigger
-                aria-label={t("hostAttachmentPicker.filesystemRoot")}
-                className="h-8 min-w-20 px-2 font-mono"
-                size="sm"
-              >
-                <SelectValue placeholder={t("hostAttachmentPicker.filesystemRoot")} />
-              </SelectTrigger>
-              <SelectContent position="popper">
-                {listing.roots.map((root) => (
-                  <SelectItem key={root.path} value={root.path}>
-                    {root.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label={t("hostAttachmentPicker.parent")}
-                disabled={listing?.parentPath === null || listing === undefined}
-                onClick={navigateToParent}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <ArrowUp aria-hidden="true" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t("hostAttachmentPicker.parent")}</TooltipContent>
-          </Tooltip>
-          <p
-            className="min-w-0 flex-1 truncate font-mono text-caption text-muted-foreground"
-            title={listing?.path}
-          >
-            {listing?.path ?? t("hostAttachmentPicker.resolvingPath")}
-          </p>
-        </div>
+        <FilesystemPickerToolbar
+          disabled={isImporting}
+          includeHidden={includeHidden}
+          labels={{
+            filesystemRoot: t("hostAttachmentPicker.filesystemRoot"),
+            goToPath: t("hostAttachmentPicker.goToPath"),
+            hideHidden: t("hostAttachmentPicker.hideHidden"),
+            parent: t("hostAttachmentPicker.parent"),
+            pathLabel: t("hostAttachmentPicker.pathLabel"),
+            pathPlaceholder: t("hostAttachmentPicker.pathPlaceholder"),
+            showHidden: t("hostAttachmentPicker.showHidden"),
+          }}
+          listing={listing}
+          onNavigateParent={navigateToParent}
+          onNavigatePath={navigateToPath}
+          onNavigateRoot={navigateToRoot}
+          onPathChange={setPathDraft}
+          onToggleHidden={toggleHiddenFiles}
+          path={displayedPath}
+        />
 
         <div className="min-h-0 overflow-y-auto px-3 py-2 sm:px-4">
           {rootQuery.isPending ? (

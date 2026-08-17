@@ -293,6 +293,56 @@ test("keeps composer attachment icons aligned with the compact toolbar", async (
   await expect(imageMenuIcon).toHaveCSS("height", "16px");
 });
 
+test("navigates absolute paths and toggles hidden files in the host file picker", async ({
+  page,
+}) => {
+  const hostFileQueries: URL[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/v1/host-files") hostFileQueries.push(url);
+  });
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/p/code-agent/t/task-1");
+
+  await page.getByRole("button", { name: "添加图片或文件" }).click();
+  await page.getByRole("menuitem", { name: "添加文件" }).click();
+  const dialog = page.getByRole("dialog", { name: "选择本机文件" });
+  const pathInput = dialog.getByRole("textbox", { name: "绝对目录路径" });
+  await expect(pathInput).toHaveValue("/Users/bryan/Attachments");
+  await expect(dialog.getByRole("treeitem", { name: ".secret.pdf", exact: true })).toHaveCount(0);
+
+  await pathInput.fill("/Users/bryan/HiddenDocs");
+  await pathInput.press("Enter");
+  await expect(dialog.getByRole("treeitem", { name: "notes.pdf", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "显示隐藏文件" }).click();
+  await expect(dialog.getByRole("treeitem", { name: ".secret.pdf", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "隐藏隐藏文件" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  expect(
+    hostFileQueries.some(
+      (url) =>
+        url.searchParams.get("path") === "/Users/bryan/HiddenDocs" &&
+        url.searchParams.get("includeHidden") === null,
+    ),
+  ).toBe(true);
+  expect(
+    hostFileQueries.some(
+      (url) =>
+        url.searchParams.get("path") === "/Users/bryan/HiddenDocs" &&
+        url.searchParams.get("includeHidden") === "true",
+    ),
+  ).toBe(true);
+  const toolbar = pathInput.locator("..").locator("..");
+  const toolbarMetrics = await toolbar.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(toolbarMetrics.scrollWidth).toBeLessThanOrEqual(toolbarMetrics.clientWidth);
+});
+
 test("undoes text pasted into the composer", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 

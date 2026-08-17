@@ -68,7 +68,10 @@ export const ProjectDirectoryPathSchema = Type.String({
 export type ProjectDirectoryPath = Static<typeof ProjectDirectoryPathSchema>;
 
 export const ProjectDirectoryQuerySchema = Type.Object(
-  { path: Type.Optional(ProjectDirectoryPathSchema) },
+  {
+    includeHidden: Type.Optional(Type.Boolean()),
+    path: Type.Optional(ProjectDirectoryPathSchema),
+  },
   { additionalProperties: false },
 );
 
@@ -112,6 +115,7 @@ export type HostFileKind = Static<typeof HostFileKindSchema>;
 
 export const HostFileQuerySchema = Type.Object(
   {
+    includeHidden: Type.Optional(Type.Boolean()),
     kind: HostFileKindSchema,
     path: Type.Optional(ProjectDirectoryPathSchema),
   },

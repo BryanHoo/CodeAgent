@@ -199,10 +199,14 @@ describe("CodeAgentClient", () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock
       .mockResolvedValueOnce(jsonResponse(listing))
+      .mockResolvedValueOnce(jsonResponse(listing))
       .mockResolvedValueOnce(jsonResponse({ project }));
     const client = new CodeAgentClient({ fetch: fetchMock });
 
     await expect(client.listProjectDirectories(listing.path)).resolves.toEqual(listing);
+    await expect(
+      client.listProjectDirectories(listing.path, { includeHidden: true }),
+    ).resolves.toEqual(listing);
     await expect(
       client.addProject(project.rootPath, { idempotencyKey: "project-key" }),
     ).resolves.toEqual({
@@ -211,8 +215,11 @@ describe("CodeAgentClient", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       "/v1/project-directories?path=%2FUsers%2Fbryan%2FDevelop",
     );
-    expect(fetchMock.mock.calls[1]?.[0]).toBe("/v1/projects");
-    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "/v1/project-directories?path=%2FUsers%2Fbryan%2FDevelop&includeHidden=true",
+    );
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("/v1/projects");
+    expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
       body: JSON.stringify({ rootPath: project.rootPath }),
       method: "POST",
     });
@@ -232,7 +239,9 @@ describe("CodeAgentClient", () => {
       .mockResolvedValueOnce(jsonResponse({ attachment }));
     const client = new CodeAgentClient({ fetch: fetchMock });
 
-    await expect(client.listHostFiles("image", listing.path)).resolves.toEqual(listing);
+    await expect(
+      client.listHostFiles("image", listing.path, { includeHidden: true }),
+    ).resolves.toEqual(listing);
     await expect(
       client.importHostAttachment("code agent", "image", selectedPath, {
         idempotencyKey: "host-image-key",
@@ -240,7 +249,7 @@ describe("CodeAgentClient", () => {
     ).resolves.toEqual({ attachment });
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "/v1/host-files?kind=image&path=%2FUsers%2Fbryan%2FPictures",
+      "/v1/host-files?kind=image&path=%2FUsers%2Fbryan%2FPictures&includeHidden=true",
     );
     expect(fetchMock.mock.calls[1]?.[0]).toBe("/v1/projects/code%20agent/attachments/image/host");
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({

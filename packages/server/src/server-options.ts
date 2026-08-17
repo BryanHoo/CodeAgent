@@ -86,7 +86,10 @@ export interface CreateCodeAgentServerOptions {
     query: string,
     signal?: AbortSignal,
   ) => Promise<ProjectFileSearchPage>;
-  readProjectDirectory?: (path?: string) => Promise<ProjectDirectoryListing>;
+  readProjectDirectory?: (
+    path?: string,
+    options?: Readonly<{ includeHidden?: boolean }>,
+  ) => Promise<ProjectDirectoryListing>;
   readProjectImageFile?: (projectRoot: string, path: string) => Promise<ProjectImageFile>;
   readProjectSourceFile?: (
     projectRoot: string,

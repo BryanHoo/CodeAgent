@@ -35,6 +35,10 @@ describe("HostAttachmentPickerDialog", () => {
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain("选择本机图片");
     expect(markup).toContain("正在读取文件");
+    expect(markup).toContain('aria-label="绝对目录路径"');
+    expect(markup).toContain('aria-label="前往此路径"');
+    expect(markup).toContain('aria-label="显示隐藏文件"');
+    expect(markup).toContain('aria-pressed="false"');
   });
 
   it("renders supported files, lazy directory children, and failed-branch retry state", () => {
@@ -89,7 +93,7 @@ describe("HostAttachmentPickerDialog", () => {
   it("renders a drive selector when multiple Windows filesystem roots are available", async () => {
     await changeAppLanguage("zh-CN");
     const queryClient = new QueryClient();
-    queryClient.setQueryData<HostFileListing>(["host-files", "image", null], {
+    queryClient.setQueryData<HostFileListing>(["host-files", "image", null, false], {
       entries: [],
       parentPath: null,
       path: "D:\\",

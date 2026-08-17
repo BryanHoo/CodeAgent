@@ -23,6 +23,7 @@ export class ProjectDirectoryBrowserError extends Error {
 type ProjectDirectoryBrowserOptions = Readonly<{
   filesystemRoots?: typeof listFilesystemRoots;
   homePath?: string;
+  includeHidden?: boolean;
 }>;
 
 function toDirectoryError(error: unknown): ProjectDirectoryBrowserError {
@@ -88,7 +89,12 @@ export async function readProjectDirectory(
 
   // 浏览接口只暴露真实直接子目录；文件和符号链接不会进入可递归展开的目录树。
   const entries = children
-    .filter((child) => child.isDirectory() && !child.isSymbolicLink())
+    .filter(
+      (child) =>
+        (options.includeHidden === true || !child.name.startsWith(".")) &&
+        child.isDirectory() &&
+        !child.isSymbolicLink(),
+    )
     .sort(compareDirectories)
     .map((child) => ({ name: child.name, path: join(path, child.name) }));
   const parentPath = dirname(path);

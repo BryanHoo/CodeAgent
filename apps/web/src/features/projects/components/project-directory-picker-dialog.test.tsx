@@ -37,6 +37,10 @@ describe("ProjectDirectoryPickerDialog", () => {
     expect(markup).toContain("选择项目文件夹");
     expect(markup).toContain('role="status"');
     expect(markup).toContain("正在读取文件夹");
+    expect(markup).toContain('aria-label="绝对目录路径"');
+    expect(markup).toContain('aria-label="前往此路径"');
+    expect(markup).toContain('aria-label="显示隐藏文件夹"');
+    expect(markup).toContain('aria-pressed="false"');
   });
 
   it("renders lazy directory children and a retry action for a failed branch", () => {
@@ -88,7 +92,7 @@ describe("ProjectDirectoryPickerDialog", () => {
   it("renders a drive selector when multiple Windows filesystem roots are available", async () => {
     await changeAppLanguage("zh-CN");
     const queryClient = new QueryClient();
-    queryClient.setQueryData<ProjectDirectoryListing>(["project-directories", null], {
+    queryClient.setQueryData<ProjectDirectoryListing>(["project-directories", null, false], {
       entries: [],
       parentPath: null,
       path: "D:\\",

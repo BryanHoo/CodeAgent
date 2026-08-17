@@ -31,12 +31,25 @@ describe("project directory browser", () => {
     await Promise.all([
       mkdir(join(homePath, "zeta")),
       mkdir(join(homePath, "Alpha")),
+      mkdir(join(homePath, ".hidden")),
       writeFile(join(homePath, "README.md"), "# ignored\n"),
       symlink(outsidePath, join(homePath, "linked-directory")),
     ]);
 
     await expect(readProjectDirectory(undefined, { homePath })).resolves.toEqual({
       entries: [
+        { name: "Alpha", path: join(homePath, "Alpha") },
+        { name: "zeta", path: join(homePath, "zeta") },
+      ],
+      parentPath: dirname(homePath),
+      path: homePath,
+      roots: [],
+    });
+    await expect(
+      readProjectDirectory(undefined, { homePath, includeHidden: true }),
+    ).resolves.toEqual({
+      entries: [
+        { name: ".hidden", path: join(homePath, ".hidden") },
         { name: "Alpha", path: join(homePath, "Alpha") },
         { name: "zeta", path: join(homePath, "zeta") },
       ],
