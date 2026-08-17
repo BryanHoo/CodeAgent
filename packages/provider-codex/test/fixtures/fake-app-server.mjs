@@ -26,6 +26,7 @@ let realtimeRunning = false;
 let subagentRealtimeRunning = false;
 let nextActionTask = 1;
 let nextActionTurn = 1;
+let nextSteerMessage = 1;
 const actionThreads = new Map();
 const pendingServerRequests = new Map();
 const pendingServerResponses = [];
@@ -891,6 +892,54 @@ input.on("line", (line) => {
     } else if (!prompt.includes("中断")) {
       setTimeout(() => completeActionTurn(threadId, turnId), 120);
     }
+    return;
+  }
+
+  if (actionScenario && message.method === "turn/steer") {
+    const threadId = message.params?.threadId;
+    const turnId = message.params?.expectedTurnId;
+    const thread = actionThreads.get(threadId);
+    const runningTurn = thread?.turns.find((turn) => turn.id === turnId);
+    if (thread === undefined || runningTurn === undefined || runningTurn.status !== "inProgress") {
+      send({ error: { code: -32600, message: "turn not found" }, id: message.id });
+      return;
+    }
+    send({ id: message.id, result: { turnId } });
+    const messageId = `${turnId}-steer-${String(nextSteerMessage)}`;
+    nextSteerMessage += 1;
+    setTimeout(() => {
+      const currentThread = actionThreads.get(threadId);
+      const currentTurn = currentThread?.turns.find((turn) => turn.id === turnId);
+      if (
+        currentThread === undefined ||
+        currentTurn === undefined ||
+        currentTurn.status !== "inProgress"
+      ) {
+        return;
+      }
+      const assistantMessage = {
+        id: messageId,
+        memoryCitation: null,
+        phase: null,
+        text: "已收到引导",
+        type: "agentMessage",
+      };
+      actionThreads.set(
+        threadId,
+        actionThread(
+          threadId,
+          currentThread.turns.map((turn) =>
+            turn.id === turnId
+              ? actionTurn(turnId, "inProgress", [...currentTurn.items, assistantMessage])
+              : turn,
+          ),
+        ),
+      );
+      send({
+        method: "item/agentMessage/delta",
+        params: { delta: assistantMessage.text, itemId: messageId, threadId, turnId },
+      });
+    }, 750);
     return;
   }
 

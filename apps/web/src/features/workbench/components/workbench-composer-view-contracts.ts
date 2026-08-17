@@ -44,6 +44,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   contextUsage: AgentContextUsage | null | undefined;
   creatingBranch: string | undefined;
   draftInputDisabled: boolean;
+  editQueuedPrompt: (queuedPrompt: QueuedComposerPrompt) => void;
   filteredCommands: readonly PromptCommandItem[];
   filteredSkills: readonly AgentSkill[];
   fileMenuOpen: boolean;

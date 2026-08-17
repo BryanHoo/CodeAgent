@@ -8,7 +8,7 @@ import {
   MAX_AGENT_IMAGE_TOTAL_BYTES,
   type AgentSandboxMode,
 } from "@code-agent/protocol";
-import { Folder, History, SendHorizontal, X } from "lucide-react";
+import { Folder, History, LoaderCircle, Pencil, SendHorizontal, X } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Context, ContextTrigger } from "../../../shared/components/agent/context.js";
@@ -96,44 +96,76 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                   <span className="min-w-0 flex-1 truncate text-label text-foreground">
                     {summary}
                   </span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        aria-label={t("composer.steerNow", { summary })}
-                        className="hover:text-brand"
-                        disabled={
-                          !props.canSteer || props.activeTurnId === undefined || props.isSubmitting
-                        }
-                        onClick={() => {
-                          props.steerQueuedPrompt(queuedPrompt);
-                        }}
-                        size="icon-sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <SendHorizontal aria-hidden="true" className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("composer.steerNowTooltip")}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        aria-label={t("composer.cancelQueued", { summary })}
-                        className="hover:text-danger"
-                        disabled={props.isSubmitting}
-                        onClick={() => {
-                          props.removeQueuedPrompt(queuedPrompt.id);
-                        }}
-                        size="icon-sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <X aria-hidden="true" className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("composer.cancelQueuedTooltip")}</TooltipContent>
-                  </Tooltip>
+                  {queuedPrompt.status === "awaiting-response" ? (
+                    <span
+                      aria-label={t("composer.waitingToSend")}
+                      className="inline-flex shrink-0 items-center gap-1 text-caption text-muted-foreground"
+                      role="status"
+                    >
+                      <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+                      {t("composer.waitingToSend")}
+                    </span>
+                  ) : (
+                    <>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            aria-label={t("composer.editQueued", { summary })}
+                            disabled={props.isSubmitting}
+                            onClick={() => {
+                              props.editQueuedPrompt(queuedPrompt);
+                            }}
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Pencil aria-hidden="true" className="size-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t("composer.editQueuedTooltip")}</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            aria-label={t("composer.steerNow", { summary })}
+                            className="hover:text-brand"
+                            disabled={
+                              !props.canSteer ||
+                              props.activeTurnId === undefined ||
+                              props.isSubmitting
+                            }
+                            onClick={() => {
+                              props.steerQueuedPrompt(queuedPrompt);
+                            }}
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <SendHorizontal aria-hidden="true" className="size-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t("composer.steerNowTooltip")}</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            aria-label={t("composer.cancelQueued", { summary })}
+                            className="hover:text-danger"
+                            disabled={props.isSubmitting}
+                            onClick={() => {
+                              props.removeQueuedPrompt(queuedPrompt.id);
+                            }}
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <X aria-hidden="true" className="size-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t("composer.cancelQueuedTooltip")}</TooltipContent>
+                      </Tooltip>
+                    </>
+                  )}
                 </div>
               );
             })}

@@ -61,6 +61,8 @@ export const workbench = {
     cancelPlanMode: "取消计划模式",
     cancelQueued: "取消排队：{{summary}}",
     cancelQueuedTooltip: "取消排队",
+    editQueued: "编辑排队消息：{{summary}}",
+    editQueuedTooltip: "编辑排队消息",
     commandGroup: "命令",
     commandInput: "输入命令",
     commandNoMatch: "没有匹配的 Skill 或命令",
@@ -113,6 +115,7 @@ export const workbench = {
     taskInput: "任务输入",
     taskRunning: "任务运行中",
     uncommittedChangesMissing: "未发现可用的基础分支",
+    waitingToSend: "等待发送",
     followUpPlaceholder: "输入后续要求",
   },
   openMenu: {

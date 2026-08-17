@@ -56,6 +56,9 @@ function createHarness(overrides: Partial<ComposerSubmissionOptions> = {}) {
   const startTurn = vi.fn<ComposerSubmissionOptions["client"]["startTurn"]>(() =>
     Promise.resolve({ taskId: task.id, turn }),
   );
+  const steerTurn = vi.fn<ComposerSubmissionOptions["client"]["steerTurn"]>(() =>
+    Promise.resolve({ status: "accepted", taskId: "task-1", turnId: "turn-1" }),
+  );
   const draftStore = createComposerDraftStore();
   const skillEditor = {
     focus: vi.fn(),
@@ -85,7 +88,8 @@ function createHarness(overrides: Partial<ComposerSubmissionOptions> = {}) {
     canSteer: false,
     canSubmit: true,
     clearComposerInput: vi.fn(),
-    client: { startTask, startTurn },
+    activeAssistantMessages: [],
+    client: { startTask, startTurn, steerTurn },
     composerDraftStore: draftStore,
     composerMode: undefined,
     composerScope: "code-agent:draft",
@@ -93,6 +97,7 @@ function createHarness(overrides: Partial<ComposerSubmissionOptions> = {}) {
     followUpBehavior: "queue",
     onDirectSubmission: vi.fn(),
     onGoalStarted: vi.fn(),
+    onSteerAccepted: vi.fn(),
     onRequestNotificationPermission: vi.fn(),
     onTaskCreated,
     onTaskStarted,
@@ -126,6 +131,7 @@ function createHarness(overrides: Partial<ComposerSubmissionOptions> = {}) {
     skillEditor,
     startTask,
     startTurn,
+    steerTurn,
     submit: createComposerSubmission(options),
   };
 }
@@ -157,12 +163,38 @@ describe("createComposerSubmission", () => {
 
     expect(submitted).toBe(true);
     expect(harness.setQueuedPrompts).toHaveBeenCalledWith([
-      expect.objectContaining({ files: [], skills: [], text: "排队处理" }),
+      expect.objectContaining({ files: [], skills: [], status: "queued", text: "排队处理" }),
     ]);
     expect(harness.setPromptContent).toHaveBeenCalledWith([]);
     expect(harness.setAttachments).toHaveBeenCalledWith([]);
     expect(harness.skillEditor.replace).toHaveBeenCalledWith([]);
     expect(harness.startTurn).not.toHaveBeenCalled();
+  });
+
+  it("keeps a directly accepted steer visible until the assistant responds", async () => {
+    const onSteerAccepted = vi.fn();
+    const harness = createHarness({
+      activeAssistantMessages: [{ id: "assistant-before", textLength: 4 }],
+      activeTaskId: "task-1",
+      activeTurnId: "turn-1",
+      canSteer: true,
+      followUpBehavior: "steer",
+      onSteerAccepted,
+      state: "running",
+      taskId: "task-1",
+    });
+
+    const submitted = await harness.submit({ files: [], text: "补充失败测试" });
+
+    expect(submitted).toBe(true);
+    expect(harness.steerTurn).toHaveBeenCalledOnce();
+    expect(onSteerAccepted).toHaveBeenCalledWith({
+      assistantMessages: [{ id: "assistant-before", textLength: 4 }],
+      files: [],
+      skills: [],
+      text: "补充失败测试",
+      turnId: "turn-1",
+    });
   });
 
   it("creates a new Task and starts its first Turn with one submission", async () => {

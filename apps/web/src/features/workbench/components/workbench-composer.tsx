@@ -1,8 +1,13 @@
 import type { AgentTaskSettings } from "@code-agent/protocol";
-import { useEffect, useEffectEvent, useImperativeHandle } from "react";
+import { useEffect, useImperativeHandle } from "react";
+import { v4 as createUuid } from "uuid";
 
 import { useTranslation } from "../../../i18n/i18n.js";
-import type { QueuedComposerPrompt } from "../composer-draft-context.js";
+import {
+  getTaskStoreAssistantMessageCheckpoints,
+  getTurnAssistantMessageCheckpoints,
+  retainAcceptedSteerPrompt,
+} from "../composer-queue-state.js";
 import {
   interruptPromptTurn,
   resolveComposerSubmitAction,
@@ -11,6 +16,7 @@ import {
 import { HostAttachmentPickerDialog } from "./host-attachment-picker-dialog.js";
 import { isPromptSkillContentEmpty } from "./prompt-skill-editor.js";
 import { useWorkbenchBranchSwitch } from "../hooks/use-workbench-branch-switch.js";
+import { useComposerQueue } from "../hooks/use-composer-queue.js";
 import { createComposerCommands } from "./workbench-composer-commands.js";
 import type { WorkbenchComposerProps } from "./workbench-composer-contracts.js";
 import { useComposerSession } from "./workbench-composer-session.js";
@@ -210,6 +216,10 @@ export function WorkbenchComposer({
   }, [closeCommandMenu, closeFileMenu, commandMenuOpen, commandSurfaceRef, fileMenuOpen]);
 
   const submitPrompt = createComposerSubmission({
+    activeAssistantMessages:
+      runtime?.store === undefined
+        ? getTurnAssistantMessageCheckpoints(runtime?.snapshot, activeTurnId)
+        : getTaskStoreAssistantMessageCheckpoints(runtime.store.getState(), activeTurnId),
     activeSettings,
     activeTaskId,
     activeTurnId,
@@ -225,6 +235,9 @@ export function WorkbenchComposer({
     onDirectSubmission,
     onGoalStarted: () => {
       setComposerModeState(undefined);
+    },
+    onSteerAccepted: (accepted) => {
+      replaceQueuedPrompts(retainAcceptedSteerPrompt(queuedPrompts, accepted, createUuid));
     },
     onRequestNotificationPermission,
     onTaskCreated,
@@ -258,48 +271,22 @@ export function WorkbenchComposer({
     referenceProjectPath,
   }));
 
-  const submitQueuedPrompt = useEffectEvent(
-    (queuedPrompt: QueuedComposerPrompt, queuedScope: string) => {
-      void submitPrompt(
-        { files: queuedPrompt.files, text: queuedPrompt.text },
-        queuedPrompt.skills,
-        {
-          clearInputOnSuccess: false,
-          forceAction: "start",
-          requestTimelineScroll: false,
-        },
-      ).then((sent) => {
-        if (sent && isCurrentScope(queuedScope)) {
-          replaceQueuedPrompts(queuedPrompts.filter((prompt) => prompt.id !== queuedPrompt.id));
-        }
-      });
-    },
-  );
-
-  useEffect(() => {
-    const queuedScope = routeScope;
-    const queuedPrompt = queuedPrompts[0];
-    if (
-      queuedPrompt === undefined ||
-      activeTurnId !== undefined ||
-      activeTaskId === undefined ||
-      isSubmitting ||
-      connectionState !== "connected" ||
-      autoStartedQueueIds.current.has(queuedPrompt.id)
-    ) {
-      return;
-    }
-    autoStartedQueueIds.current.add(queuedPrompt.id);
-    submitQueuedPrompt(queuedPrompt, queuedScope);
-  }, [
+  const { editQueuedPrompt, removeQueuedPrompt, steerQueuedPrompt } = useComposerQueue({
     activeTaskId,
     activeTurnId,
     autoStartedQueueIds,
     connectionState,
+    handleAttachmentsChange,
+    isCurrentScope,
     isSubmitting,
     queuedPrompts,
+    replacePromptContent: session.replacePromptContent,
+    replaceQueuedPrompts,
     routeScope,
-  ]);
+    runtime,
+    skillEditorRef,
+    submitPrompt,
+  });
 
   const {
     executePromptCommand,
@@ -350,25 +337,6 @@ export function WorkbenchComposer({
     });
   };
 
-  const removeQueuedPrompt = (queuedPromptId: string) => {
-    replaceQueuedPrompts(queuedPrompts.filter((prompt) => prompt.id !== queuedPromptId));
-  };
-
-  const steerQueuedPrompt = async (queuedPrompt: QueuedComposerPrompt) => {
-    const sent = await submitPrompt(
-      { files: queuedPrompt.files, text: queuedPrompt.text },
-      queuedPrompt.skills,
-      {
-        clearInputOnSuccess: false,
-        forceAction: "steer",
-        requestTimelineScroll: false,
-      },
-    );
-    if (sent && isCurrentScope(routeScope)) {
-      removeQueuedPrompt(queuedPrompt.id);
-    }
-  };
-
   const hasComposerInput = !isPromptSkillContentEmpty(promptContent) || attachmentCount > 0;
   const submitAction = resolveComposerSubmitAction(
     state,
@@ -415,6 +383,7 @@ export function WorkbenchComposer({
       modelsError={modelsError}
       modelsPending={modelsPending}
       mutationError={mutationError}
+      editQueuedPrompt={editQueuedPrompt}
       onComposerModeRemove={() => {
         setComposerModeState(undefined);
       }}

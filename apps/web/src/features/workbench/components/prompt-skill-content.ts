@@ -18,6 +18,19 @@ export function createPromptSkillContent(text = ""): PromptSkillContent {
   return text === "" ? [] : [{ text, type: "text" }];
 }
 
+export function createPromptSkillContentFromSubmission(
+  text: string,
+  skills: readonly AgentSkill[],
+): PromptSkillContent {
+  return normalizePromptSkillContent([
+    ...skills.flatMap((skill) => [
+      { skill, type: "skill" as const },
+      { text: " ", type: "text" as const },
+    ]),
+    ...(text === "" ? [] : [{ text, type: "text" as const }]),
+  ]);
+}
+
 export function normalizePromptSkillContent(
   parts: readonly PromptSkillContentPart[],
 ): PromptSkillContent {

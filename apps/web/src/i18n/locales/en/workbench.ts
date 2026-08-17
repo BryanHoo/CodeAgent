@@ -61,6 +61,8 @@ export const workbench = {
     cancelPlanMode: "Cancel plan mode",
     cancelQueued: "Cancel queued message: {{summary}}",
     cancelQueuedTooltip: "Cancel queued message",
+    editQueued: "Edit queued message: {{summary}}",
+    editQueuedTooltip: "Edit queued message",
     commandGroup: "Commands",
     commandInput: "Command input",
     commandNoMatch: "No matching Skill or command",
@@ -113,6 +115,7 @@ export const workbench = {
     taskInput: "Task input",
     taskRunning: "Task is running",
     uncommittedChangesMissing: "No uncommitted changes available",
+    waitingToSend: "Waiting to send",
     followUpPlaceholder: "Enter follow-up instructions",
   },
   openMenu: {

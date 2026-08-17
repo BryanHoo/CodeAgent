@@ -16,6 +16,7 @@ import type {
 } from "../../../shared/components/agent/prompt-input.js";
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
 import type { QueuedComposerPrompt, useComposerDraftStore } from "../composer-draft-context.js";
+import type { AcceptedSteerPrompt } from "../composer-queue-state.js";
 import {
   resolveComposerSubmitAction,
   resolveIdempotencyAttempt,
@@ -37,6 +38,7 @@ import {
 } from "./workbench-composer-contracts.js";
 
 type ComposerSubmissionOptions = Readonly<{
+  activeAssistantMessages: readonly Readonly<{ id: string; textLength: number }>[];
   activeSettings: AgentTaskSettings;
   activeTaskId: string | undefined;
   activeTurnId: string | undefined;
@@ -56,6 +58,7 @@ type ComposerSubmissionOptions = Readonly<{
   pendingTask: AgentTask | undefined;
   composerMode: ComposerMode | undefined;
   onGoalStarted: () => void;
+  onSteerAccepted: (prompt: AcceptedSteerPrompt) => void;
   projectId: string;
   promptContent: PromptSkillContent;
   queuedPrompts: readonly QueuedComposerPrompt[];
@@ -73,6 +76,7 @@ type ComposerSubmissionOptions = Readonly<{
 }>;
 
 export function createComposerSubmission({
+  activeAssistantMessages,
   activeSettings,
   activeTaskId,
   activeTurnId,
@@ -92,6 +96,7 @@ export function createComposerSubmission({
   pendingTask,
   composerMode,
   onGoalStarted,
+  onSteerAccepted,
   projectId,
   promptContent,
   queuedPrompts,
@@ -127,6 +132,7 @@ export function createComposerSubmission({
       clearInputOnSuccess?: boolean;
       forceAction?: "start" | "steer";
       composerMode?: ComposerMode | null;
+      queuedPromptId?: string;
       requestTimelineScroll?: boolean;
     }> = {},
   ): Promise<boolean> => {
@@ -169,6 +175,7 @@ export function createComposerSubmission({
         files: message.files,
         id: createUuid(),
         skills,
+        status: "queued",
         text,
       };
       const nextQueuedPrompts = [...queuedPrompts, queuedPrompt];
@@ -256,6 +263,14 @@ export function createComposerSubmission({
           steerAttempt.key,
         );
         if (isCurrentScope(requestScope)) {
+          onSteerAccepted({
+            assistantMessages: activeAssistantMessages,
+            files: message.files,
+            ...(options.queuedPromptId === undefined ? {} : { id: options.queuedPromptId }),
+            skills,
+            text,
+            turnId: activeTurnId,
+          });
           if (options.clearInputOnSuccess !== false) {
             clearComposerInput();
           }
@@ -355,6 +370,7 @@ export function createComposerSubmission({
       clearInputOnSuccess?: boolean;
       forceAction?: "start" | "steer";
       composerMode?: ComposerMode | null;
+      queuedPromptId?: string;
       requestTimelineScroll?: boolean;
     }> = {},
   ): Promise<boolean> =>
