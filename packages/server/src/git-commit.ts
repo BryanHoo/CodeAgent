@@ -7,6 +7,7 @@ import type {
 } from "@code-agent/protocol";
 
 import { createGitEnvironment } from "./git-command.js";
+import { originalErrorMessage } from "./error-message.js";
 import { readGitWorkingTreeStatus, resolveProjectGitRepositoryRoot } from "./git-working-tree.js";
 
 const MAX_GIT_OUTPUT_BYTES = 10 * 1024 * 1024;
@@ -32,7 +33,7 @@ class GitCommandError extends Error {
     public readonly exitCode: number | null,
     public readonly stderr: string,
   ) {
-    super("Git command failed");
+    super(stderr.length > 0 ? stderr : `Git command failed with exit code ${String(exitCode)}`);
     this.name = "GitCommandError";
   }
 }
@@ -123,11 +124,17 @@ export async function commitSelectedProjectChanges(
   const repositoryRoot = await resolveProjectGitRepositoryRoot(
     projectRoot,
     request.repository,
-  ).catch(() => {
-    throw new GitCommitError("GIT_REPOSITORY_UNAVAILABLE", "Git repository is unavailable");
+  ).catch((error: unknown) => {
+    throw new GitCommitError(
+      "GIT_REPOSITORY_UNAVAILABLE",
+      originalErrorMessage(error, "Git repository is unavailable"),
+    );
   });
-  const status = await readGitWorkingTreeStatus(repositoryRoot).catch(() => {
-    throw new GitCommitError("GIT_REPOSITORY_UNAVAILABLE", "Git repository is unavailable");
+  const status = await readGitWorkingTreeStatus(repositoryRoot).catch((error: unknown) => {
+    throw new GitCommitError(
+      "GIT_REPOSITORY_UNAVAILABLE",
+      originalErrorMessage(error, "Git repository is unavailable"),
+    );
   });
   if (status.repositoryMode !== "root") {
     throw new GitCommitError(
@@ -160,8 +167,11 @@ export async function commitSelectedProjectChanges(
 
   if (untrackedPaths.length > 0) {
     await executeGit(repositoryRoot, ["add", "--intent-to-add", "--", ...untrackedPaths]).catch(
-      () => {
-        throw new GitCommitError("GIT_COMMIT_FAILED", "Selected files could not be prepared");
+      (error: unknown) => {
+        throw new GitCommitError(
+          "GIT_COMMIT_FAILED",
+          originalErrorMessage(error, "Selected files could not be prepared"),
+        );
       },
     );
   }
@@ -172,15 +182,16 @@ export async function commitSelectedProjectChanges(
       ["commit", "--only", "--file=-", "--", ...selectedPaths],
       request.message,
     );
-  } catch {
+  } catch (error) {
     if (untrackedPaths.length > 0) {
       await executeGit(repositoryRoot, ["reset", "--", ...untrackedPaths]).catch(() => undefined);
     }
-    throw new GitCommitError("GIT_COMMIT_FAILED", "Git commit failed");
+    throw new GitCommitError("GIT_COMMIT_FAILED", originalErrorMessage(error, "Git commit failed"));
   }
 
   const commitSha = (await executeGit(repositoryRoot, ["rev-parse", "HEAD"])).stdout.trim();
   let pushStatus: CommitProjectChangesResponse["pushStatus"] = "not_requested";
+  let pushError: string | null = null;
   if (request.action === "commit_and_push") {
     try {
       await executeGit(repositoryRoot, [
@@ -192,11 +203,13 @@ export async function commitSelectedProjectChanges(
       try {
         await executeGit(repositoryRoot, ["push"]);
         pushStatus = "pushed";
-      } catch {
+      } catch (error) {
         pushStatus = "failed";
+        pushError = originalErrorMessage(error, "Git push failed");
       }
-    } catch {
+    } catch (error) {
       pushStatus = "not_configured";
+      pushError = originalErrorMessage(error, "Git upstream is not configured");
     }
   }
 
@@ -204,6 +217,7 @@ export async function commitSelectedProjectChanges(
     branch: status.branch,
     commitSha,
     message: request.message,
+    pushError,
     pushStatus,
   };
 }

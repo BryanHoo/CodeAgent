@@ -13,6 +13,7 @@ import {
 import { i18n } from "../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../shared/utils/async-action-lock.js";
 import { createProjectRuntimeManager } from "../conversation/runtime/project-runtime.js";
+import { notifyActionError, notifyActionSuccess } from "../notifications/action-notifications.js";
 import type { TaskNotifier } from "../notifications/browser-task-notifier.js";
 import {
   ProjectActionsContext,
@@ -122,10 +123,7 @@ export function ProjectProvider({
       },
     });
   }, [client, gitStatusCoordinator, queryClient, taskNotifier]);
-  const [addProjectError, setAddProjectError] = useState<Error | null>(null);
   const [isProjectAddPending, setIsProjectAddPending] = useState(false);
-  const [projectOrderError, setProjectOrderError] = useState<Error | null>(null);
-  const [projectActionError, setProjectActionError] = useState<Error | null>(null);
   const [projectTaskResults, setProjectTaskResults] = useState<
     ReadonlyMap<string, ProjectTaskQueryResult>
   >(() => new Map());
@@ -260,18 +258,13 @@ export function ProjectProvider({
     (rootPath: string) =>
       addProjectLockRef.current.run(async () => {
         setIsProjectAddPending(true);
-        setAddProjectError(null);
         try {
           const response = await client.addProject(rootPath);
           await queryClient.invalidateQueries({ queryKey: ["projects"] });
+          notifyActionSuccess();
           return response.project;
         } catch (error) {
-          const normalizedError =
-            error instanceof Error
-              ? error
-              : new Error(i18n.t("errors.addProject", { ns: "conversation" }));
-          setAddProjectError(normalizedError);
-          // 错误已进入可见状态，避免按钮事件产生未处理的 Promise rejection。
+          notifyActionError(error);
           return undefined;
         } finally {
           setIsProjectAddPending(false);
@@ -285,26 +278,20 @@ export function ProjectProvider({
         const currentPage = queryClient.getQueryData<ProjectPage>(["projects"]);
         const optimisticPage = reorderProjectPage(currentPage, projectIds);
         if (optimisticPage === undefined) {
-          setProjectOrderError(
+          notifyActionError(
             new Error(i18n.t("errors.reorderProjectChanged", { ns: "conversation" })),
           );
           return false;
         }
 
-        setProjectOrderError(null);
         // 拖动释放后立即更新列表；服务端失败时恢复提交前的完整快照。
         queryClient.setQueryData<ProjectPage>(["projects"], optimisticPage);
         try {
           const response = await mutateProjectOrder(projectIds);
           queryClient.setQueryData<ProjectPage>(["projects"], response);
           return true;
-        } catch (error) {
+        } catch {
           queryClient.setQueryData<ProjectPage>(["projects"], currentPage);
-          setProjectOrderError(
-            error instanceof Error
-              ? error
-              : new Error(i18n.t("errors.reorderProject", { ns: "conversation" })),
-          );
           return false;
         }
       })) ?? false,
@@ -313,7 +300,6 @@ export function ProjectProvider({
   const renameProject = useCallback(
     async (projectId: string, name: string) =>
       (await projectActionLockRef.current.run(async () => {
-        setProjectActionError(null);
         try {
           const response = await mutateProjectRename({ name, projectId });
           queryClient.setQueryData<ProjectPage>(["projects"], (currentPage) =>
@@ -328,7 +314,6 @@ export function ProjectProvider({
           );
           return true;
         } catch {
-          setProjectActionError(new Error(i18n.t("errors.renameProject", { ns: "conversation" })));
           return false;
         }
       })) ?? false,
@@ -337,7 +322,6 @@ export function ProjectProvider({
   const removeProject = useCallback(
     (projectId: string) =>
       projectActionLockRef.current.run(async () => {
-        setProjectActionError(null);
         try {
           await mutateProjectRemove(projectId);
           // 先停止该 Project 的请求和实时连接，再从列表移除，避免旧响应回填缓存。
@@ -354,14 +338,20 @@ export function ProjectProvider({
           );
           return remainingProjects;
         } catch {
-          setProjectActionError(new Error(i18n.t("errors.deleteProject", { ns: "conversation" })));
           return undefined;
         }
       }),
     [gitStatusCoordinator, mutateProjectRemove, projectRuntime, queryClient],
   );
   const refreshProjectGitStatus = useCallback(
-    (projectId: string) => gitStatusCoordinator.refreshProject(projectId),
+    async (projectId: string) => {
+      try {
+        await gitStatusCoordinator.refreshProject(projectId);
+        notifyActionSuccess();
+      } catch (error) {
+        notifyActionError(error);
+      }
+    },
     [gitStatusCoordinator],
   );
   const retry = useCallback(async () => {
@@ -432,19 +422,13 @@ export function ProjectProvider({
   );
   const activityValue = useMemo<ProjectActivityContextValue>(
     () => ({
-      addProjectError,
       isProjectActionPending: isProjectRenamePending || isProjectRemovePending,
       isProjectOrderPending,
       isProjectAddPending,
-      projectActionError,
-      projectOrderError,
       taskActivity,
     }),
     [
-      addProjectError,
       isProjectAddPending,
-      projectActionError,
-      projectOrderError,
       isProjectOrderPending,
       isProjectRemovePending,
       isProjectRenamePending,

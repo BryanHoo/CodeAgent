@@ -59,7 +59,6 @@ type GlobalSettingsDialogProps = Readonly<{
   onRetryAppInfo?: () => unknown;
   onSave: (settings: AgentGlobalSettings) => Promise<void>;
   onUpdate?: (version: string) => Promise<void>;
-  updateError?: Error | null;
   settings?: AgentGlobalSettings;
 }>;
 
@@ -81,7 +80,6 @@ export function GlobalSettingsDialog({
   onSave,
   onUpdate = () => Promise.resolve(),
   settings,
-  updateError = null,
 }: GlobalSettingsDialogProps) {
   const { t } = useTranslation("settings");
   const saveLockRef = useRef(createAsyncActionLock());
@@ -90,7 +88,6 @@ export function GlobalSettingsDialog({
     () => settings ?? createFallbackSettings(models),
   );
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
-  const [saveError, setSaveError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const selectedModel = models.find((model) => model.id === draft.model);
   const selectedCommitModel = models.find((model) => model.id === draft.commitMessageModel);
@@ -141,13 +138,12 @@ export function GlobalSettingsDialog({
               return;
             }
             void saveLockRef.current.run(async () => {
-              setSaveError(false);
               setIsSaving(true);
               try {
                 await onSave(draft);
                 onClose();
               } catch {
-                setSaveError(true);
+                // 根级 MutationCache 已统一展示失败 toast，Dialog 只保留可重试草稿。
               } finally {
                 setIsSaving(false);
               }
@@ -219,7 +215,6 @@ export function GlobalSettingsDialog({
                 isUpdatePending={isAppUpdatePending}
                 onRetry={onRetryAppInfo}
                 onUpdate={onUpdate}
-                updateError={updateError}
               />
 
               {activeSection === "provider" ? (
@@ -469,11 +464,6 @@ export function GlobalSettingsDialog({
           </div>
 
           <footer className="flex min-h-14 items-center justify-end gap-2 px-4 shadow-[0_-1px_0_var(--ui-color-separator)] sm:px-5">
-            {saveError ? (
-              <p className="mr-auto text-meta text-danger" role="alert">
-                {t("errors.save")}
-              </p>
-            ) : null}
             <Button
               variant="ghost"
               className="h-8 rounded-control px-3 text-body-small text-muted-foreground hover:bg-control-hover hover:text-foreground disabled:opacity-50"

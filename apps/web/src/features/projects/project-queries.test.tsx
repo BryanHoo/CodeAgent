@@ -337,7 +337,7 @@ describe("project queries", () => {
       "code-agent",
       "packages/server",
       sha,
-      "src/index.ts",
+      "index.ts",
       true,
       client,
     );
@@ -361,7 +361,7 @@ describe("project queries", () => {
       "git-commit-diff",
       "packages/server",
       sha,
-      "src/index.ts",
+      "index.ts",
     ]);
     expect(getProjectGitCommitFileDiff.mock.calls[0]?.[2]?.signal).toBeInstanceOf(AbortSignal);
     unsubscribe();
@@ -595,6 +595,7 @@ describe("project queries", () => {
           branch: "feat/commit",
           commitSha: "0123456789abcdef0123456789abcdef01234567",
           message: commitRequest.message,
+          pushError: null,
           pushStatus: "not_requested" as const,
         }),
       ),
@@ -856,7 +857,7 @@ describe("project queries", () => {
       "读取真实历史",
       "模型服务不可用",
       "pnpm check",
-      "src/index.ts",
+      "index.ts",
       "filesystem/read_file",
       "1. 定义协议",
       "上下文压缩",

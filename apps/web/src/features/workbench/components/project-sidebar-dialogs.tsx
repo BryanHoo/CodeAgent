@@ -7,10 +7,7 @@ import { ProjectRenameDialog } from "./project-rename-dialog.js";
 import { TaskRenameDialog } from "./task-rename-dialog.js";
 
 type ProjectSidebarDialogsProps = Readonly<{
-  addProjectError: Error | null;
   client: ComponentProps<typeof ProjectDirectoryPickerDialog>["client"];
-  hasSubmittedAddProject: boolean;
-  hasSubmittedProjectAction: boolean;
   isProjectActionPending: boolean;
   isProjectAddPending: boolean;
   isProjectPickerOpen: boolean;
@@ -21,7 +18,6 @@ type ProjectSidebarDialogsProps = Readonly<{
   onRemoveProject: (project: Project) => void;
   onRenameProject: (project: Project, name: string) => void;
   onRenameTask: (task: AgentTask, title: string) => void;
-  projectActionError: Error | null;
   removingProject: Project | null;
   renamingProject: Project | null;
   renamingTask: AgentTask | null;
@@ -29,10 +25,7 @@ type ProjectSidebarDialogsProps = Readonly<{
 }>;
 
 export function ProjectSidebarDialogs({
-  addProjectError,
   client,
-  hasSubmittedAddProject,
-  hasSubmittedProjectAction,
   isProjectActionPending,
   isProjectAddPending,
   isProjectPickerOpen,
@@ -43,7 +36,6 @@ export function ProjectSidebarDialogs({
   onRemoveProject,
   onRenameProject,
   onRenameTask,
-  projectActionError,
   removingProject,
   renamingProject,
   renamingTask,
@@ -65,7 +57,6 @@ export function ProjectSidebarDialogs({
 
       {isProjectPickerOpen ? (
         <ProjectDirectoryPickerDialog
-          addError={hasSubmittedAddProject ? addProjectError : null}
           client={client}
           isAdding={isProjectAddPending}
           onAdd={onAddProject}
@@ -75,7 +66,6 @@ export function ProjectSidebarDialogs({
 
       {renamingProject === null ? null : (
         <ProjectRenameDialog
-          error={hasSubmittedProjectAction ? (projectActionError?.message ?? null) : null}
           initialName={renamingProject.name}
           isPending={isProjectActionPending}
           key={renamingProject.id}
@@ -90,7 +80,6 @@ export function ProjectSidebarDialogs({
 
       {removingProject === null ? null : (
         <ProjectRemoveDialog
-          error={hasSubmittedProjectAction ? (projectActionError?.message ?? null) : null}
           isPending={isProjectActionPending}
           key={removingProject.id}
           onClose={() => {

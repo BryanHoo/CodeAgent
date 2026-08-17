@@ -11,6 +11,7 @@ import type {
 } from "@code-agent/protocol";
 
 import { executeGit, type GitCommandExecutor } from "./git-command.js";
+import { originalErrorMessage } from "./error-message.js";
 import {
   GitRepositorySelectionError,
   resolveProjectGitRepositoryRoot,
@@ -102,7 +103,10 @@ export async function readProjectGitCommitFiles(
     if (error instanceof GitCommitReviewError) {
       throw error;
     }
-    throw new GitCommitReviewError("UNAVAILABLE", "Git commit files are unavailable");
+    throw new GitCommitReviewError(
+      "UNAVAILABLE",
+      originalErrorMessage(error, "Git commit files are unavailable"),
+    );
   }
 }
 
@@ -137,7 +141,10 @@ export async function readProjectGitCommitFileDiff(
       query.path,
     ]);
     return truncateUtf8(output);
-  } catch {
-    throw new GitCommitReviewError("UNAVAILABLE", "Git commit file diff is unavailable");
+  } catch (error) {
+    throw new GitCommitReviewError(
+      "UNAVAILABLE",
+      originalErrorMessage(error, "Git commit file diff is unavailable"),
+    );
   }
 }

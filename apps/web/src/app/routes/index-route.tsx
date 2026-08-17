@@ -134,7 +134,6 @@ function IndexPage() {
               globalSettingsMutation.mutateAsync(settings).then(() => undefined)
             }
             onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
-            updateError={appUpdateMutation.error}
             {...(globalSettingsQuery.data === undefined
               ? {}
               : { settings: globalSettingsQuery.data.settings })}

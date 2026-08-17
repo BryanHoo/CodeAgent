@@ -93,10 +93,6 @@ export function PairingGate({
               <p className="text-meta text-muted-foreground" role="status">
                 {t("access.pairing")}
               </p>
-            ) : error === "pairing" ? (
-              <p className="text-meta text-danger" role="alert">
-                {t("access.pairingError")}
-              </p>
             ) : null}
           </form>
         )}

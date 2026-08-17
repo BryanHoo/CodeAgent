@@ -61,7 +61,6 @@ type WorkbenchInspectorProps = Readonly<{
   mcpServersPending?: boolean;
   mcpServersRetryAvailable?: boolean;
   mcpServersRefreshing?: boolean;
-  mcpServersRetryError?: Error | null;
   mcpServersRetrying?: boolean;
   onFileTreeExpandedChange?: (expandedPaths: Set<string>) => void;
   onOpenFileDiff?: (change: AgentFileChange) => void;
@@ -80,7 +79,6 @@ type WorkbenchInspectorProps = Readonly<{
   projectName: string;
   projectId?: string;
   projectOpenApps?: readonly ProjectOpenApp[];
-  projectOpenError?: Error | null;
   projectOpenPending?: boolean;
   projectPath: string;
   skills?: readonly AgentSkill[];
@@ -88,7 +86,6 @@ type WorkbenchInspectorProps = Readonly<{
   tab?: WorkbenchInspectorTab;
   task?: Pick<AgentTaskSnapshot, "turns"> & Partial<Pick<AgentTaskSnapshot, "plan">>;
   taskId?: string;
-  terminalMutationError?: Error | null;
   terminatingTerminalId?: string | null;
 }>;
 
@@ -110,7 +107,6 @@ export function WorkbenchInspector({
   mcpServersPending = false,
   mcpServersRetryAvailable = true,
   mcpServersRefreshing = false,
-  mcpServersRetryError = null,
   mcpServersRetrying = false,
   onFileTreeExpandedChange = () => undefined,
   onOpenFileDiff = () => undefined,
@@ -129,7 +125,6 @@ export function WorkbenchInspector({
   projectId,
   projectName,
   projectOpenApps = [],
-  projectOpenError = null,
   projectOpenPending = false,
   projectPath,
   skills = [],
@@ -137,7 +132,6 @@ export function WorkbenchInspector({
   tab = "changes",
   task,
   taskId,
-  terminalMutationError = null,
   terminatingTerminalId = null,
 }: WorkbenchInspectorProps) {
   useTranslation("conversation");
@@ -186,7 +180,6 @@ export function WorkbenchInspector({
         <BackgroundTerminalSection
           error={backgroundTerminalsError}
           isPending={backgroundTerminalsPending}
-          mutationError={terminalMutationError}
           onTerminate={onTerminateBackgroundTerminal}
           terminals={backgroundTerminals}
           terminatingTerminalId={terminatingTerminalId}
@@ -202,7 +195,6 @@ export function WorkbenchInspector({
         isRefreshing={mcpServersRefreshing}
         isRetrying={mcpServersRetrying}
         onRetry={onReloadMcpServers}
-        retryError={mcpServersRetryError}
         servers={mcpServers}
       />
       <InspectorSources
@@ -486,14 +478,6 @@ export function WorkbenchInspector({
           contextContent
         )}
       </div>
-      {projectOpenError === null ? null : (
-        <p
-          className="absolute bottom-3 right-3 z-40 w-60 rounded-control bg-danger-soft px-2 py-1.5 text-meta text-danger shadow-floating"
-          role="alert"
-        >
-          {i18n.t("inspector.openFailed", { ns: "conversation" })}
-        </p>
-      )}
     </aside>
   );
 }

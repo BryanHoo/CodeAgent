@@ -3,6 +3,10 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import {
+  notifyActionError,
+  notifyActionSuccess,
+} from "../../notifications/action-notifications.js";
 import type { WorkbenchComposerProps } from "../components/workbench-composer-contracts.js";
 
 const gitStatusQueryKey = (projectId: string) => ["projects", projectId, "git-status"] as const;
@@ -59,7 +63,6 @@ export async function createComposerBranch(
 
 type WorkbenchBranchSwitchOptions = Readonly<{
   client: WorkbenchComposerProps["client"];
-  failureMessage: string;
   gitStatus: ProjectGitStatus | undefined;
   isCurrentScope: (scope: string) => boolean;
   projectId: string;
@@ -68,7 +71,6 @@ type WorkbenchBranchSwitchOptions = Readonly<{
 
 export function useWorkbenchBranchSwitch({
   client,
-  failureMessage,
   gitStatus,
   isCurrentScope,
   projectId,
@@ -76,15 +78,11 @@ export function useWorkbenchBranchSwitch({
 }: WorkbenchBranchSwitchOptions) {
   const queryClient = useQueryClient();
   const branchSwitchLockRef = useRef(createAsyncActionLock());
-  const [branchSwitchError, setBranchSwitchError] = useState<string>();
-  const [branchCreateError, setBranchCreateError] = useState<string>();
   const [creatingBranch, setCreatingBranch] = useState<string>();
   const [switchingBranch, setSwitchingBranch] = useState<string>();
 
   useEffect(() => {
     // 路由切换后清理旧作用域的瞬时状态，旧请求只允许更新其 Project Query。
-    setBranchSwitchError(undefined);
-    setBranchCreateError(undefined);
     setCreatingBranch(undefined);
     setSwitchingBranch(undefined);
   }, [routeScope]);
@@ -95,15 +93,13 @@ export function useWorkbenchBranchSwitch({
       return;
     }
     await branchSwitchLockRef.current.run(async () => {
-      setBranchSwitchError(undefined);
-      setBranchCreateError(undefined);
       setSwitchingBranch(branch);
       try {
-        await switchComposerBranch(client, queryClient, projectId, gitStatus, branch);
-      } catch {
-        if (isCurrentScope(requestScope)) {
-          setBranchSwitchError(failureMessage);
+        if (await switchComposerBranch(client, queryClient, projectId, gitStatus, branch)) {
+          notifyActionSuccess();
         }
+      } catch (error) {
+        notifyActionError(error);
         await queryClient
           .invalidateQueries({ exact: true, queryKey: gitStatusQueryKey(projectId) })
           .catch(() => undefined);
@@ -121,14 +117,21 @@ export function useWorkbenchBranchSwitch({
       return false;
     }
     const created = await branchSwitchLockRef.current.run(async () => {
-      setBranchCreateError(undefined);
       setCreatingBranch(branch);
       try {
-        return await createComposerBranch(client, queryClient, projectId, gitStatus, branch);
-      } catch {
-        if (isCurrentScope(requestScope)) {
-          setBranchCreateError(failureMessage);
+        const created = await createComposerBranch(
+          client,
+          queryClient,
+          projectId,
+          gitStatus,
+          branch,
+        );
+        if (created) {
+          notifyActionSuccess();
         }
+        return created;
+      } catch (error) {
+        notifyActionError(error);
         await queryClient
           .invalidateQueries({ exact: true, queryKey: gitStatusQueryKey(projectId) })
           .catch(() => undefined);
@@ -143,8 +146,6 @@ export function useWorkbenchBranchSwitch({
   };
 
   return {
-    branchCreateError,
-    branchSwitchError,
     createBranch,
     creatingBranch,
     switchBranch,

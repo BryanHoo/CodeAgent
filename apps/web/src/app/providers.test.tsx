@@ -17,6 +17,7 @@ describe("createAppQueryClient", () => {
     expect(queryDefaults?.retry).toBe(1);
     expect(queryDefaults?.staleTime).toBe(30_000);
     expect(queryDefaults?.refetchOnWindowFocus).toBe(false);
+    expect(queryClient.getMutationCache()).toBeDefined();
   });
 
   it("routes notification clicks inside the current application", () => {

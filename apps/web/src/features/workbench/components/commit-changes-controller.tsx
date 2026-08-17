@@ -9,6 +9,10 @@ import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 import {
+  notifyActionError,
+  notifyActionSuccess,
+} from "../../notifications/action-notifications.js";
+import {
   projectCommitChangesMutationOptions,
   projectCommitMessageMutationOptions,
   projectGitRepositoryStatusQueryOptions,
@@ -30,7 +34,6 @@ type CommitChangesControllerProps = Readonly<{
   gitStatus: ProjectGitStatus;
   onClose: () => void;
   onOpenFileDiff: (change: AgentFileChange) => void;
-  onSuccess: (message: string) => void;
   projectId: string;
 }>;
 
@@ -46,13 +49,15 @@ export function CommitChangesController({
   gitStatus,
   onClose,
   onOpenFileDiff,
-  onSuccess,
   projectId,
 }: CommitChangesControllerProps) {
   const { t } = useTranslation("workbench");
   const queryClient = useQueryClient();
   const messageMutation = useMutation(projectCommitMessageMutationOptions(projectId, client));
-  const commitMutation = useMutation(projectCommitChangesMutationOptions(projectId, client));
+  const commitMutation = useMutation({
+    ...projectCommitChangesMutationOptions(projectId, client),
+    meta: { actionNotification: { successMessage: false } },
+  });
   const repositories = useMemo(() => collectCommitRepositories(gitStatus), [gitStatus]);
   const [result, setResult] = useState<CommitProjectChangesResponse | null>(null);
   const [selectedRepository, setSelectedRepository] = useState<string | null>(null);
@@ -84,7 +89,7 @@ export function CommitChangesController({
       <CommitChangesDialog
         client={client}
         commitReviewOpen={selectedCommit !== undefined}
-        error={repositoryStatusQuery.error ?? commitMutation.error ?? messageMutation.error}
+        error={repositoryStatusQuery.error}
         gitStatus={activeGitStatus}
         isCommitting={commitMutation.isPending}
         isGenerating={messageMutation.isPending}
@@ -101,10 +106,11 @@ export function CommitChangesController({
           const successMessageKey = getCommitSuccessMessageKey(response);
           if (successMessageKey !== null) {
             // 完整成功立即结束提交流程；toast 由常驻 Launcher 持有，关闭弹窗后仍可见。
-            onSuccess(t(successMessageKey));
+            notifyActionSuccess(t(successMessageKey));
             close();
             return;
           }
+          notifyActionError(new Error(response.pushError ?? t("commit.commitCompletePushFailed")));
           setResult(response);
         }}
         onGenerateMessage={async (request) => {

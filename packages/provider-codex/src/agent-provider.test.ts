@@ -207,6 +207,9 @@ describe("CodexAgentProvider", () => {
     const provider = createCodexAgentProvider({ client: rpc, logger: { warn }, project });
     const events: AgentProviderEvent[] = [];
     provider.subscribeEvents((event) => events.push(event));
+    provider.subscribeEvents(() => {
+      throw new Error("listener private state");
+    });
     await provider.listTasks();
 
     provider.receiveNotification("future/notification", {
@@ -256,9 +259,20 @@ describe("CodexAgentProvider", () => {
         },
         "Codex notification dropped",
       ],
+      [
+        {
+          codexVersion: "0.147.0",
+          diagnosticCode: "event_listener_failed",
+          eventType: "message.delta",
+          projectId: "code-agent",
+          taskId: "task-1",
+        },
+        "Codex event listener failed",
+      ],
     ]);
     expect(JSON.stringify(warn.mock.calls)).not.toContain("unknown-secret-body");
     expect(JSON.stringify(warn.mock.calls)).not.toContain("invalid-secret-body");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("listener private state");
     expect(events).toEqual([
       {
         itemId: "item-1",

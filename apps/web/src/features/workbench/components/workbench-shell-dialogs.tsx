@@ -55,7 +55,6 @@ export function WorkbenchShellDialogs({
     setGitHistoryOpen,
     setSourceFileSelection,
     setSubagentDialogSelection,
-    taskRenameError,
     taskRenameOpen,
     title,
   } = context;
@@ -132,7 +131,6 @@ export function WorkbenchShellDialogs({
       />
       {taskRenameOpen && taskId !== undefined ? (
         <TaskRenameDialog
-          error={taskRenameError}
           initialTitle={title}
           isPending={renameMutation.isPending}
           key={`${projectId}:${taskId}`}
@@ -180,7 +178,6 @@ export function WorkbenchShellDialogs({
               globalSettingsMutation.mutateAsync(settings).then(() => undefined)
             }
             onUpdate={(version) => appUpdateMutation.mutateAsync(version).then(() => undefined)}
-            updateError={appUpdateMutation.error}
             {...(globalSettingsQuery.data === undefined
               ? {}
               : { settings: globalSettingsQuery.data.settings })}

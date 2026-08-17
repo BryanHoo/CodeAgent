@@ -102,7 +102,7 @@ describe("switchProjectBranch", () => {
     expect(executeGit).not.toHaveBeenCalled();
   });
 
-  it("maps Git command failures without exposing their output", async () => {
+  it("preserves Git command failure output", async () => {
     const projectRoot = await createRepositoryRoot();
     const status = {
       baseBranches: ["origin/main"],
@@ -121,7 +121,7 @@ describe("switchProjectBranch", () => {
         () => Promise.reject(new Error("fatal: /private/worktree conflict")),
         () => Promise.resolve(status),
       ),
-    ).rejects.toEqual(new GitBranchError("SWITCH_FAILED", "Git branch switch failed"));
+    ).rejects.toEqual(new GitBranchError("SWITCH_FAILED", "fatal: /private/worktree conflict"));
   });
 });
 
@@ -222,6 +222,6 @@ describe("createProjectBranch", () => {
         executeGit,
         () => Promise.resolve(status),
       ),
-    ).rejects.toEqual(new GitBranchError("CREATE_FAILED", "Git branch creation failed"));
+    ).rejects.toEqual(new GitBranchError("CREATE_FAILED", "fatal: cannot lock ref /private/path"));
   });
 });

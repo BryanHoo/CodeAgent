@@ -412,6 +412,21 @@ export class CodeAgentTransport {
           errorBody as AgentMutationError,
         );
       }
+      try {
+        const errorBody: unknown = await response.json();
+        if (
+          typeof errorBody === "object" &&
+          errorBody !== null &&
+          "message" in errorBody &&
+          typeof errorBody.message === "string" &&
+          errorBody.message.length > 0
+        ) {
+          throw new CodeAgentHttpError(response.status, response.statusText, errorBody.message);
+        }
+      } catch (error) {
+        if (error instanceof CodeAgentHttpError) throw error;
+        // 无结构错误响应继续使用 HTTP 状态 fallback。
+      }
       throw new CodeAgentHttpError(response.status, response.statusText);
     }
 

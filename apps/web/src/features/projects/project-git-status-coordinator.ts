@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import { recordInternalWarning } from "../notifications/internal-diagnostics.js";
 import { type CodeAgentGitStatusClient, projectGitStatusQueryOptions } from "./project-queries.js";
 
 export const PROJECT_GIT_STATUS_POLL_INTERVAL_MS = 10_000;
@@ -93,7 +94,7 @@ export class ProjectGitStatusCoordinator {
       state.activeTaskIds.add(taskId);
       if (wasInactive || wasRecovering) {
         this.#clearRetryTimer(state);
-        void this.#requestRefresh(state);
+        this.#requestBackgroundRefresh(state);
       } else {
         this.#ensurePolling(state);
       }
@@ -114,7 +115,7 @@ export class ProjectGitStatusCoordinator {
       this.#clearPollingTimer(state);
     }
     // Turn 终态始终补读一次；最后一个 Task 的状态只在该请求完成后释放。
-    void this.#requestRefresh(state);
+    this.#requestBackgroundRefresh(state);
   }
 
   public async refreshProject(projectId: string): Promise<void> {
@@ -167,7 +168,7 @@ export class ProjectGitStatusCoordinator {
     }
     state.pollingTimer = setInterval(() => {
       if (this.#isPageVisible()) {
-        void this.#requestRefresh(state);
+        this.#requestBackgroundRefresh(state);
       }
     }, this.#pollIntervalMs);
   }
@@ -201,29 +202,26 @@ export class ProjectGitStatusCoordinator {
       return state.inFlight;
     }
 
-    const refresh = this.#queryClient
-      .fetchQuery({
-        ...projectGitStatusQueryOptions(state.projectId, this.#client),
-        retry: false,
-        staleTime: 0,
+    const queryOptions = projectGitStatusQueryOptions(state.projectId, this.#client);
+    const refresh = this.#client
+      .getProjectGitStatus(state.projectId)
+      .then((status) => {
+        this.#queryClient.setQueryData(queryOptions.queryKey, status);
+        state.consecutiveFailures = 0;
       })
-      .then(
-        () => {
-          state.consecutiveFailures = 0;
-        },
-        () => {
-          state.consecutiveFailures += 1;
-          this.#clearPollingTimer(state);
-        },
-      )
-      .then(() => {
+      .catch((error: unknown) => {
+        state.consecutiveFailures += 1;
+        this.#clearPollingTimer(state);
+        throw error;
+      })
+      .finally(() => {
         if (state.closed || this.#disposed) {
           return;
         }
         state.inFlight = undefined;
         if (state.refreshPending) {
           state.refreshPending = false;
-          void this.#requestRefresh(state);
+          this.#requestBackgroundRefresh(state);
           return;
         }
         if (state.activeTaskIds.size > 0) {
@@ -242,11 +240,17 @@ export class ProjectGitStatusCoordinator {
     return refresh;
   }
 
+  #requestBackgroundRefresh(state: ProjectPollingState): void {
+    void this.#requestRefresh(state).catch((error: unknown) => {
+      recordInternalWarning("git_status_poll_failed", error, { projectId: state.projectId });
+    });
+  }
+
   #scheduleFileChangeRefresh(state: ProjectPollingState): void {
     this.#clearFileChangeTimer(state);
     state.fileChangeTimer = setTimeout(() => {
       state.fileChangeTimer = undefined;
-      void this.#requestRefresh(state);
+      this.#requestBackgroundRefresh(state);
     }, this.#fileChangeDebounceMs);
   }
 
@@ -266,7 +270,7 @@ export class ProjectGitStatusCoordinator {
     state.retryTimer = setTimeout(() => {
       state.retryTimer = undefined;
       if (this.#isPageVisible()) {
-        void this.#requestRefresh(state);
+        this.#requestBackgroundRefresh(state);
       } else {
         this.#scheduleRetry(state);
       }

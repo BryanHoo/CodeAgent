@@ -11,8 +11,9 @@ import {
 } from "react";
 
 import type { CodeAgentAccessClient } from "../projects/project-queries.js";
+import { notifyActionError, notifyActionSuccess } from "../notifications/action-notifications.js";
 
-export type AccessError = "load" | "pairing" | null;
+export type AccessError = "load" | null;
 
 export type AccessState = Readonly<{
   error: AccessError;
@@ -91,15 +92,23 @@ export class AccessSessionController {
     try {
       const status = await this.#client.pairAccess(code);
       this.#setState({ error: null, loading: false, pairing: false, status });
-    } catch {
-      this.#setState({ ...this.#state, error: "pairing", pairing: false });
+      notifyActionSuccess();
+    } catch (error) {
+      this.#setState({ ...this.#state, error: null, pairing: false });
+      notifyActionError(error);
     }
   }
 
   public async logout(): Promise<void> {
-    const status = await this.#client.logoutAccess();
-    this.#queryClient.clear();
-    this.#setState({ error: null, loading: false, pairing: false, status });
+    try {
+      const status = await this.#client.logoutAccess();
+      this.#queryClient.clear();
+      this.#setState({ error: null, loading: false, pairing: false, status });
+      notifyActionSuccess();
+    } catch (error) {
+      notifyActionError(error);
+      throw error;
+    }
   }
 
   #clearAuthenticatedState(): void {

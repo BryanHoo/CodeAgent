@@ -25,7 +25,9 @@ test("pairs real browsers, persists the cookie, and invalidates it on logout @cr
   await expect(codeInput).toHaveCSS("outline-style", "none");
   await codeInput.fill("wrong-pairing-code");
   await page.getByRole("button", { name: "配对" }).click();
-  await expect(page.getByRole("alert")).toContainText("无法完成配对");
+  await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveText(
+    "Pairing request failed",
+  );
   await expect(page.getByRole("button", { name: "切换项目 CodeAgent" })).toHaveCount(0);
 
   await codeInput.fill(LAN_PAIRING_CODE);

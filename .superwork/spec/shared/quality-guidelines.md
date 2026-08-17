@@ -8,6 +8,8 @@
 
 - 网络 Access 契约必须独立于 Codex 账号和 Provider 类型，使用严格版本化 Schema 定义 `local | lan` 状态、配对、注销及 `ACCESS_DENIED`、`PAIRING_FAILED`、`PAIRING_RATE_LIMITED` 错误。Protocol、Client、Server 与 Web 消费者必须同步更新。
 - Client 所有 Fetch 必须显式使用 `credentials: "same-origin"`；LAN 访问密码只能进入 `POST /v1/access/pair` JSON Body。`401` 通知不得吞掉或改写原 HTTP 或 Mutation 错误。
+- Codex 与 Git 已知调用边界的非空原始 `Error.message` 或 Git stderr 必须经 Server、Protocol 和 Client 保持不变并到达 Web 动作通知；Git commit 后 push 失败使用可空 `pushError` 表达部分成功原因。底层无可用文本时才允许稳定 fallback，通用未知 `500` 继续脱敏。
+- 后台轮询、WebSocket 恢复、事件订阅者隔离、通知增强能力和 best-effort 清理失败只记录安全诊断码与必要身份字段，不得进入 Protocol 业务响应、Task 错误、组件错误状态或用户 toast；日志不得包含 Prompt、Secret、命令输出、文件正文或未知拒绝对象的序列化内容。
 - Project、Task 等 Protocol 类型必须有对应 JSON Schema 或明确生成来源，运行时边界不得只依赖 TypeScript 类型。
 - 用户临时 Task 使用固定 Protocol scope 和 `/v1/temporary/**` 公共路径；Client、Server 与 Web 不得暴露内部 Project ID、名称或 `${CODEX_HOME}/code-agent/temporary-workspace`。其 Codex Thread 必须持久化并完整遵循普通 `AgentTaskSettings`，审批、Skill、MCP、后台终端及流式消息中的源码预览、图片预览和宿主系统文件打开不得被临时作用域额外限制；Sandbox 固定为 `danger-full-access`，Web 不显示选择器，Server 必须覆盖其他输入值。直接 `/v1/projects/temporary/**` 访问以及 Project 文件树、文件搜索、Git、目录打开、Project defaults 和其他 Project Mutation 必须被拒绝或不发起。
 - 应用信息和更新必须使用严格 `AppInfoResponse`、`InstallAppUpdateRequest` 与 `InstallAppUpdateResponse` Schema；Client 必须校验 CodeAgent/Codex/current/latest/status 和可空更新日志字段。仅在有可用更新时读取对应 Git tag 的有界 `CHANGELOG.md` 版本段落，日志读取失败不得掩盖更新状态。更新请求只接受目标 SemVer 并携带 `Idempotency-Key`，Server 必须区分无可用更新、检查失败与安装失败，Web 不得根据版本字符串自行执行包管理命令。

@@ -95,7 +95,6 @@ export function WorkbenchShellLayout({
     setSidebarOpen,
     setSidebarWidth,
     setSubagentDialogSelection,
-    setTaskRenameError,
     setTaskRenameOpen,
     sidebarConnectionState,
     sidebarOpen,
@@ -206,7 +205,6 @@ export function WorkbenchShellLayout({
                   className="group flex max-w-full items-center gap-1 rounded-control px-1 py-0.5 text-left hover:bg-control-hover focus-visible:shadow-focus"
                   id="workbench-task-title-rename"
                   onClick={() => {
-                    setTaskRenameError(null);
                     setTaskRenameOpen(true);
                   }}
                   type="button"
@@ -231,9 +229,9 @@ export function WorkbenchShellLayout({
               isPending={projectPathOpenMutation.isPending}
               onSelect={(appId) => {
                 projectPathOpenMutation.reset();
-                void projectPathOpenLockRef.current.run(() =>
-                  projectPathOpenMutation.mutateAsync({ appId, path: undefined }),
-                );
+                void projectPathOpenLockRef.current
+                  .run(() => projectPathOpenMutation.mutateAsync({ appId, path: undefined }))
+                  .catch(() => undefined);
               }}
             />
             <Tooltip key={inspectorOpen ? "inspector-open" : "inspector-closed"}>
@@ -400,7 +398,6 @@ export function WorkbenchShellLayout({
           mcpServersPending={taskId !== undefined && mcpServersQuery.isPending}
           mcpServersRetryAvailable={taskId !== undefined}
           mcpServersRefreshing={mcpServersQuery.isFetching && !mcpServersQuery.isPending}
-          mcpServersRetryError={mcpServersReloadMutation.error}
           mcpServersRetrying={mcpServersReloadMutation.isPending}
           key={`${projectId}:${taskId ?? "draft"}`}
           onClose={closeInspector}
@@ -428,9 +425,9 @@ export function WorkbenchShellLayout({
           onOpenFileDiff={openFileDiff}
           onOpenProjectPath={(appId, path) => {
             projectPathOpenMutation.reset();
-            void projectPathOpenLockRef.current.run(() =>
-              projectPathOpenMutation.mutateAsync({ appId, path }),
-            );
+            void projectPathOpenLockRef.current
+              .run(() => projectPathOpenMutation.mutateAsync({ appId, path }))
+              .catch(() => undefined);
           }}
           onOpenProjectFile={(path) => {
             openMessageFileReference({ lineNumber: null, path });
@@ -463,13 +460,11 @@ export function WorkbenchShellLayout({
           projectName={projectName}
           projectId={projectId}
           projectOpenApps={projectOpenCapabilitiesQuery.data?.apps ?? []}
-          projectOpenError={projectPathOpenMutation.error}
           projectOpenPending={projectPathOpenMutation.isPending}
           projectPath={projectPath}
           skills={skillsQuery.data?.data ?? []}
           subagents={subagents}
           tab={temporary ? "context" : inspectorTab}
-          terminalMutationError={backgroundTerminals.terminalError}
           terminatingTerminalId={backgroundTerminals.terminatingTerminalId}
           {...(inspectorTask === undefined ? {} : { task: inspectorTask })}
           {...(taskId === undefined ? {} : { taskId })}

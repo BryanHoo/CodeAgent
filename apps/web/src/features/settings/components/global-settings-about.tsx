@@ -17,7 +17,6 @@ export function GlobalSettingsAbout({
   isUpdatePending,
   onRetry,
   onUpdate,
-  updateError,
 }: Readonly<{
   activeSection: SettingsSectionId;
   appInfo?: AppInfoResponse;
@@ -26,7 +25,6 @@ export function GlobalSettingsAbout({
   isUpdatePending?: boolean;
   onRetry: () => unknown;
   onUpdate: (version: string) => Promise<void>;
-  updateError?: Error | null;
 }>) {
   const { t } = useTranslation("settings");
   const updateLockRef = useRef(createAsyncActionLock());
@@ -34,9 +32,7 @@ export function GlobalSettingsAbout({
   const [isChecking, setIsChecking] = useState(false);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [updateFailed, setUpdateFailed] = useState(false);
   const updating = isUpdating || isUpdatePending === true;
-  const updateHasFailed = updateFailed || (updateError !== null && updateError !== undefined);
   const checkForUpdates = () =>
     checkLockRef.current.run(async () => {
       setIsChecking(true);
@@ -88,23 +84,21 @@ export function GlobalSettingsAbout({
               <p
                 className={cn(
                   "shrink-0 text-body-small",
-                  appInfo.status === "available" && !updateHasFailed
+                  appInfo.status === "available"
                     ? "text-warning"
-                    : appInfo.status === "check-failed" || updateHasFailed
+                    : appInfo.status === "check-failed"
                       ? "text-danger"
                       : "text-muted-foreground",
                 )}
-                role={appInfo.status === "check-failed" || updateHasFailed ? "alert" : "status"}
+                role={appInfo.status === "check-failed" ? "alert" : "status"}
               >
-                {updateHasFailed
-                  ? t("errors.update")
-                  : appInfo.status === "available" && appInfo.latestVersion !== null
-                    ? t("about.available", { version: appInfo.latestVersion })
-                    : appInfo.status === "restart-required"
-                      ? t("about.restartRequired")
-                      : appInfo.status === "check-failed"
-                        ? t("errors.updateCheck")
-                        : t("about.current")}
+                {appInfo.status === "available" && appInfo.latestVersion !== null
+                  ? t("about.available", { version: appInfo.latestVersion })
+                  : appInfo.status === "restart-required"
+                    ? t("about.restartRequired")
+                    : appInfo.status === "check-failed"
+                      ? t("errors.updateCheck")
+                      : t("about.current")}
               </p>
               <Button
                 disabled={isChecking}
@@ -143,12 +137,11 @@ export function GlobalSettingsAbout({
                       const version = appInfo.latestVersion;
                       if (version === null) return;
                       void updateLockRef.current.run(async () => {
-                        setUpdateFailed(false);
                         setIsUpdating(true);
                         try {
                           await onUpdate(version);
                         } catch {
-                          setUpdateFailed(true);
+                          // 根级 MutationCache 已展示更新失败，保留当前版本状态供用户重试。
                         } finally {
                           setIsUpdating(false);
                         }

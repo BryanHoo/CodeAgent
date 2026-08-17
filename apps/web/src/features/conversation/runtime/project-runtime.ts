@@ -3,6 +3,7 @@ import {
   createBrowserTaskNotifier,
   type TaskNotifier,
 } from "../../notifications/browser-task-notifier.js";
+import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
 import {
   clearTaskAttention,
@@ -146,7 +147,9 @@ export class ProjectRuntimeManager {
   }
 
   public requestNotificationPermission(): Promise<void> {
-    return this.#taskNotifier.requestPermission().catch(() => undefined);
+    return this.#taskNotifier.requestPermission().catch((error: unknown) => {
+      recordInternalWarning("notification_permission_failed", error);
+    });
   }
 
   public rememberTaskTitles(tasks: readonly Pick<AgentTask, "id" | "projectId" | "title">[]): void {
@@ -214,11 +217,18 @@ export class ProjectRuntimeManager {
             // 标题由 Provider 在 Turn 结束时生成，后台 Task 也必须通知列表读取最新元数据。
             this.#onTaskMetadataChanged(eventProjectId, event.taskId, "turn_completed");
           }
-          this.#taskNotifier.notify(
-            eventProjectId,
-            event,
-            this.#taskTitles.get(createProjectTaskKey(eventProjectId, event.taskId)) ?? "Task",
-          );
+          try {
+            this.#taskNotifier.notify(
+              eventProjectId,
+              event,
+              this.#taskTitles.get(createProjectTaskKey(eventProjectId, event.taskId)) ?? "Task",
+            );
+          } catch (error) {
+            recordInternalWarning("task_notification_failed", error, {
+              projectId: eventProjectId,
+              taskId: event.taskId,
+            });
+          }
           this.#updateTaskActivity(
             reduceTaskActivityEvent(
               this.#taskActivity,

@@ -8,6 +8,7 @@ import type {
 } from "@code-agent/protocol";
 
 import { executeGit, type GitCommandExecutor } from "./git-command.js";
+import { originalErrorMessage } from "./error-message.js";
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
 
 export type GitBranchErrorCode =
@@ -63,8 +64,11 @@ export async function switchProjectBranch(
 
   try {
     await gitCommandExecutor(repositoryRoot, ["switch", "--no-guess", request.branch]);
-  } catch {
-    throw new GitBranchError("SWITCH_FAILED", "Git branch switch failed");
+  } catch (error) {
+    throw new GitBranchError(
+      "SWITCH_FAILED",
+      originalErrorMessage(error, "Git branch switch failed"),
+    );
   }
   return readStatus(repositoryRoot, gitCommandExecutor);
 }
@@ -101,13 +105,19 @@ export async function createProjectBranch(
     if (checkedBranch.trim() !== request.branch) {
       throw new Error("Git branch name was expanded");
     }
-  } catch {
-    throw new GitBranchError("INVALID_BRANCH_NAME", "Git branch name is invalid");
+  } catch (error) {
+    throw new GitBranchError(
+      "INVALID_BRANCH_NAME",
+      originalErrorMessage(error, "Git branch name is invalid"),
+    );
   }
   try {
     await gitCommandExecutor(repositoryRoot, ["switch", "-c", request.branch]);
-  } catch {
-    throw new GitBranchError("CREATE_FAILED", "Git branch creation failed");
+  } catch (error) {
+    throw new GitBranchError(
+      "CREATE_FAILED",
+      originalErrorMessage(error, "Git branch creation failed"),
+    );
   }
   return readStatus(repositoryRoot, gitCommandExecutor);
 }

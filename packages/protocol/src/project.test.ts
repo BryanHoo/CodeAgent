@@ -360,6 +360,7 @@ describe("project protocol", () => {
         branch: "feat/commit",
         commitSha: "0123456789abcdef0123456789abcdef01234567",
         message: "feat(git): 添加选择文件提交",
+        pushError: null,
         pushStatus: "pushed",
       }),
     ).toBe(true);
@@ -391,6 +392,7 @@ describe("project protocol", () => {
         branch: null,
         commitSha: "not-a-sha",
         message: "fix(git): 修复提交",
+        pushError: null,
         pushStatus: "unknown",
       }),
     ).toBe(false);

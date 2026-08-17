@@ -137,7 +137,6 @@ export function ProjectDirectoryTree({
 }
 
 type ProjectDirectoryPickerDialogProps = Readonly<{
-  addError: Error | null;
   client: CodeAgentProjectDirectoryClient;
   isAdding: boolean;
   onAdd: (path: string) => Promise<void> | void;
@@ -145,7 +144,6 @@ type ProjectDirectoryPickerDialogProps = Readonly<{
 }>;
 
 export function ProjectDirectoryPickerDialog({
-  addError,
   client,
   isAdding,
   onAdd,
@@ -308,11 +306,6 @@ export function ProjectDirectoryPickerDialog({
             >
               {activeSelectedPath ?? t("projectPicker.noSelection")}
             </p>
-            {addError === null ? null : (
-              <p className="text-meta text-danger" role="alert">
-                {t("projectPicker.addError")}
-              </p>
-            )}
           </div>
           <DialogFooter className="w-full flex-col-reverse sm:w-auto sm:flex-row">
             <Button

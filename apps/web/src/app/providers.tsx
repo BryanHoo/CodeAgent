@@ -12,6 +12,7 @@ import {
 import { PairingGate } from "../features/access/pairing-gate.js";
 import { codeAgentClient } from "../features/projects/project-queries.js";
 import { createBrowserTaskNotifier } from "../features/notifications/browser-task-notifier.js";
+import { createActionMutationCache } from "../features/notifications/action-notifications.js";
 import { ProviderConnectionGate } from "../features/provider-connection/components/provider-connection-gate.js";
 import { ComposerDraftProvider } from "../features/workbench/composer-draft-context.js";
 import { I18nextProvider, i18n } from "../i18n/i18n.js";
@@ -24,6 +25,7 @@ export const DEFAULT_QUERY_GC_TIME_MS = 2 * 60_000;
 
 export function createAppQueryClient() {
   const queryClient = new QueryClient({
+    mutationCache: createActionMutationCache(),
     defaultOptions: {
       queries: {
         gcTime: DEFAULT_QUERY_GC_TIME_MS,

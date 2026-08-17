@@ -67,6 +67,7 @@ describe("commitSelectedProjectChanges", () => {
     expect(result).toMatchObject({
       branch: "main",
       message: "feat(git): 提交选择文件",
+      pushError: null,
       pushStatus: "not_requested",
     });
     expect(result.commitSha).toMatch(/^[a-f0-9]{40}$/u);
@@ -121,14 +122,14 @@ describe("commitSelectedProjectChanges", () => {
     await writeFile(join(root, "selected.txt"), "changed\n");
     const status = await readGitWorkingTreeStatus(root);
 
-    await expect(
-      commitSelectedProjectChanges(root, {
-        action: "commit_and_push",
-        expectedSnapshot: status.snapshot,
-        message: "fix(git): 修复提交",
-        paths: ["selected.txt"],
-      }),
-    ).resolves.toMatchObject({ pushStatus: "not_configured" });
+    const result = await commitSelectedProjectChanges(root, {
+      action: "commit_and_push",
+      expectedSnapshot: status.snapshot,
+      message: "fix(git): 修复提交",
+      paths: ["selected.txt"],
+    });
+    expect(result.pushError).toContain("upstream");
+    expect(result.pushStatus).toBe("not_configured");
     await expect(runGit(root, "log", "-1", "--pretty=%s")).resolves.toMatchObject({
       stdout: "fix(git): 修复提交\n",
     });

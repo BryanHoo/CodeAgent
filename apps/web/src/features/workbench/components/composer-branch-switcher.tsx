@@ -18,7 +18,6 @@ import {
 import { CreateBranchDialog } from "./create-branch-dialog.js";
 
 type ComposerBranchSwitcherProps = Readonly<{
-  branchCreateError: string | undefined;
   creatingBranch: string | undefined;
   gitStatus: ProjectGitStatus | undefined;
   onBranchChange: (branch: string) => void;
@@ -27,7 +26,6 @@ type ComposerBranchSwitcherProps = Readonly<{
 }>;
 
 export function ComposerBranchSwitcher({
-  branchCreateError,
   creatingBranch,
   gitStatus,
   onBranchChange,
@@ -115,7 +113,6 @@ export function ComposerBranchSwitcher({
       </DropdownMenu>
       {createDialogOpen ? (
         <CreateBranchDialog
-          error={branchCreateError}
           isPending={creatingBranch !== undefined}
           onClose={() => {
             setCreateDialogOpen(false);

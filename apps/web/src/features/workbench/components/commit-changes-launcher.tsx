@@ -1,6 +1,5 @@
 import type { ProjectGitStatus } from "@code-agent/protocol";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { toast } from "sonner";
 
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
@@ -30,10 +29,6 @@ export const CommitChangesLauncher = forwardRef<
     shouldRestoreFocusRef.current = true;
     setIsOpen(false);
   }, []);
-  const showSuccessToast = useCallback((message: string) => {
-    // 全局通知宿主独立于按需弹窗，关闭提交流程后仍能完整展示成功反馈。
-    toast.success(message);
-  }, []);
 
   useImperativeHandle(ref, () => ({ open }), [open]);
 
@@ -45,7 +40,5 @@ export const CommitChangesLauncher = forwardRef<
     }
   }, [isOpen]);
 
-  return isOpen ? (
-    <CommitChangesController {...props} onClose={close} onSuccess={showSuccessToast} />
-  ) : null;
+  return isOpen ? <CommitChangesController {...props} onClose={close} /> : null;
 });

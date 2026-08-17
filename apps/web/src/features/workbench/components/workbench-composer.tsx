@@ -109,7 +109,6 @@ export function WorkbenchComposer({
     closeFileMenu,
     commandMenuId,
     commandMenuOpen,
-    commandNotice,
     commandSurfaceRef,
     composerMode,
     composerController,
@@ -128,7 +127,6 @@ export function WorkbenchComposer({
     handlePromptChange,
     isSubmitting,
     menuItemCount,
-    mutationError,
     navigatePromptHistory,
     pendingTask,
     promptContent,
@@ -166,15 +164,10 @@ export function WorkbenchComposer({
     setSettingsOverride({ scope: requestScope, settings: nextSettings });
     setMutationError(null);
     // 设置写回由用户事件直接触发，避免 effect 重放或并发渲染造成重复请求。
-    void Promise.resolve(onSettingsChange(nextSettings, field)).catch((error: unknown) => {
-      if (isCurrentScope(requestScope)) {
-        setMutationError(error instanceof Error ? error : new Error("Settings update failed"));
-      }
-    });
+    void Promise.resolve(onSettingsChange(nextSettings, field)).catch(() => undefined);
   };
   const branchMutation = useWorkbenchBranchSwitch({
     client,
-    failureMessage: t("composer.branchSwitchFailed"),
     gitStatus,
     isCurrentScope,
     projectId,
@@ -354,14 +347,11 @@ export function WorkbenchComposer({
       attachments={attachments}
       attachmentsDisabled={attachmentsDisabled}
       baseBranches={baseBranches}
-      branchCreateError={branchMutation.branchCreateError}
-      branchSwitchError={branchMutation.branchSwitchError}
       canInterrupt={canInterrupt}
       canSteer={canSteer}
       canSubmit={canSubmit}
       commandMenuId={commandMenuId}
       commandMenuOpen={commandMenuOpen}
-      commandNotice={commandNotice}
       commandSurfaceRef={commandSurfaceRef}
       composerMode={composerMode}
       composerScope={composerScope}
@@ -382,7 +372,6 @@ export function WorkbenchComposer({
       models={models}
       modelsError={modelsError}
       modelsPending={modelsPending}
-      mutationError={mutationError}
       editQueuedPrompt={editQueuedPrompt}
       onComposerModeRemove={() => {
         setComposerModeState(undefined);

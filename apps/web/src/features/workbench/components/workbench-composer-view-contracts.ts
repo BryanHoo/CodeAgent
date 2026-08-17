@@ -30,14 +30,11 @@ export type WorkbenchComposerViewProps = Readonly<{
   attachments: readonly PromptInputAttachment[];
   attachmentsDisabled: boolean;
   baseBranches: readonly string[];
-  branchCreateError: string | undefined;
-  branchSwitchError: string | undefined;
   canInterrupt: boolean;
   canSteer: boolean;
   canSubmit: boolean;
   commandMenuId: string;
   commandMenuOpen: boolean;
-  commandNotice: string | undefined;
   commandSurfaceRef: RefObject<HTMLDivElement | null>;
   composerMode: ComposerMode | undefined;
   composerScope: string;
@@ -59,7 +56,6 @@ export type WorkbenchComposerViewProps = Readonly<{
   models: readonly AgentModel[];
   modelsError: Error | null;
   modelsPending: boolean;
-  mutationError: Error | null;
   onAttachmentsChange: (files: readonly PromptInputAttachment[]) => void;
   onBranchCreate: (branch: string) => Promise<boolean>;
   onBranchChange: (branch: string) => void;

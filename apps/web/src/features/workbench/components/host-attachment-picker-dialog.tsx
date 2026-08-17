@@ -6,6 +6,10 @@ import { useMemo, useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import {
+  notifyActionError,
+  notifyActionSuccess,
+} from "../../notifications/action-notifications.js";
+import {
   FileTree,
   FileTreeFile,
   FileTreeFolder,
@@ -159,7 +163,6 @@ export function HostAttachmentPickerDialog({
   const [includeHidden, setIncludeHidden] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const [selectedPath, setSelectedPath] = useState<string>();
-  const [importError, setImportError] = useState<Error | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const importLockRef = useRef(false);
   const importAttemptRef = useRef<IdempotencyAttempt | undefined>(undefined);
@@ -208,14 +211,12 @@ export function HostAttachmentPickerDialog({
     setPathDraft(undefined);
     setExpandedPaths(new Set());
     setSelectedPath(undefined);
-    setImportError(null);
   };
   const navigateToRoot = (path: string) => {
     setRootPath(path);
     setPathDraft(undefined);
     setExpandedPaths(new Set());
     setSelectedPath(undefined);
-    setImportError(null);
   };
   const navigateToPath = () => {
     const path = displayedPath.trim();
@@ -225,18 +226,15 @@ export function HostAttachmentPickerDialog({
     setPathDraft(undefined);
     setExpandedPaths(new Set());
     setSelectedPath(undefined);
-    setImportError(null);
   };
   const toggleHiddenFiles = () => {
     setIncludeHidden((current) => !current);
     setSelectedPath(undefined);
-    setImportError(null);
   };
   const importSelectedFile = async () => {
     if (selectedPath === undefined || importLockRef.current) return;
     importLockRef.current = true;
     setIsImporting(true);
-    setImportError(null);
     // 同一路径失败重试必须复用幂等键，切换文件后再创建新的导入尝试。
     const attempt = resolveIdempotencyAttempt(
       importAttemptRef.current,
@@ -258,8 +256,9 @@ export function HostAttachmentPickerDialog({
         source: "host",
       });
       importAttemptRef.current = undefined;
+      notifyActionSuccess();
     } catch (error) {
-      setImportError(error instanceof Error ? error : new Error("Host attachment import failed"));
+      notifyActionError(error);
     } finally {
       importLockRef.current = false;
       setIsImporting(false);
@@ -353,7 +352,6 @@ export function HostAttachmentPickerDialog({
               onSelect={(path) => {
                 if (filePaths.has(path)) {
                   setSelectedPath(path);
-                  setImportError(null);
                 }
               }}
               {...(selectedPath === undefined ? {} : { selectedPath })}
@@ -370,11 +368,6 @@ export function HostAttachmentPickerDialog({
             >
               {selectedPath ?? t("hostAttachmentPicker.noSelection")}
             </p>
-            {importError === null ? null : (
-              <p className="text-meta text-danger" role="alert">
-                {t("hostAttachmentPicker.importError")}
-              </p>
-            )}
           </div>
           <DialogFooter className="w-full flex-col-reverse sm:w-auto sm:flex-row">
             <Button

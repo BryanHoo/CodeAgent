@@ -5,7 +5,6 @@ import {
   buildProjectAttachmentUrl,
   buildProjectImageFileUrl,
   CodeAgentClient,
-  CodeAgentHttpError,
   CodeAgentMutationError,
   CodeAgentResponseError,
 } from "./http-client.js";
@@ -731,6 +730,7 @@ describe("CodeAgentClient", () => {
           branch: "feat/commit",
           commitSha: "0123456789abcdef0123456789abcdef01234567",
           message: commitRequest.message,
+          pushError: null,
           pushStatus: "pushed",
         }),
       );
@@ -904,7 +904,10 @@ describe("CodeAgentClient", () => {
     fetchMock.mockResolvedValue(jsonResponse({ message: "failed" }, { status: 500 }));
     const client = new CodeAgentClient({ fetch: fetchMock });
 
-    await expect(client.getHealth()).rejects.toBeInstanceOf(CodeAgentHttpError);
+    await expect(client.getHealth()).rejects.toMatchObject({
+      message: "failed",
+      name: "CodeAgentHttpError",
+    });
   });
 
   it("reads and atomically updates project defaults and task settings", async () => {

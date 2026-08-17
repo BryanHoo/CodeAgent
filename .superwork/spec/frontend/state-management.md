@@ -16,6 +16,7 @@
 - 高扇出 React Provider 必须按只读数据、稳定操作和高频活动状态拆分 Context，消费者只通过专用 Hook 订阅所需边界；每个 Provider value 及派生数组、Map 必须保持引用稳定，Mutation Pending 或单个活动状态变化不得使无关数据/操作消费者重新渲染。
 - Global settings 与 Project 新 Task 默认设置使用 TanStack Query 独立缓存；Task Snapshot 必须直接携带 Server 校验后的完整 Task 设置。
 - Global settings、Project defaults 与 Task settings 只在用户事件中通过原子 `PUT` 更新完整对象；Mutation 按 Global、Project 或 Task 串行，成功后更新对应 Query/Snapshot 缓存。
+- TanStack `MutationCache` 是网络 Mutation 动作通知的唯一默认入口：成功发送一次根级成功 toast，失败发送一次保留 `Error.message` 的根级错误 toast；内部后台任务必须显式绕过该通道。非 Mutation 用户动作通过同一通知服务发布，组件局部状态只保存输入校验、数据加载和业务执行状态。
 - 主题偏好属于浏览器本地状态，必须使用版本化存储并在 React 挂载前应用；不得混入 Global settings Query 或服务端持久化。
 - Project 排序以 Server 返回的 `ProjectPage` 为长期真相源；拖动中的顺序只保留在 Sidebar Hook。释放后乐观更新 `["projects"]` Query，并通过串行完整顺序 Mutation 校准，失败时恢复提交前的完整页面。
 - 有效设置固定按 `Task > Project > Global` 解析；读取回退值不得隐式写入 Project 或 Task 记录。新 Task 创建时固化当时的完整有效设置，不得从其他 Task 继承任何设置。
@@ -26,7 +27,7 @@
 - Delta 可在同一动画帧按 Item 与字段合并，但只能合并相邻同 Key 事件，不得跨其他 Item 重排首次出现顺序；Reasoning Summary 的 Key 必须包含 `sectionIndex`。Message、Reasoning、Command 与 Plan Delta 追加文本，Tool Progress、File Change 与 Turn Diff 状态快照只保留窗口内最新值；关键事件到达时先按 `sequence` 冲刷所有更早事件，再应用完整 Item/Turn 终态。
 - `reconnecting`、`resync.required` 和 Session 变化触发 Snapshot refetch；旧订阅、Socket、Timer 和动画帧回调必须在替换或卸载时清理。
 - Snapshot 恢复必须使用明确状态机并在请求失败后有界退避重试；成功 Hydrate 权威 Snapshot 前始终保持非阻塞 `reconnecting`，底层 Socket 的 `connected` 不得提前解除恢复状态或放行增量事件。恢复期间保留已渲染 Timeline，成功后从 Snapshot checkpoint 回放保留事件。
-- Snapshot 请求错误优先于加载状态展示；WebSocket 成功恢复为 `connected` 后清除上一次连接尝试产生的瞬时错误。
+- Snapshot 请求错误优先于加载状态展示；WebSocket 连接失败、恢复重试和清理失败属于内部循环，只写带诊断码的控制台日志并通过连接状态表达恢复过程，不写入 Task 错误或动作 toast。
 - `provider.error` 标记 `willRetry` 时只作为当前 Turn 的临时提示；后续收到新的 Message、Reasoning 或 Command Delta 即清除。不可重试错误继续保留到权威终态，不能因部分回复或缺少错误文本的终态被覆盖。
 - Approval、Error 和 Terminal State 不得因合并或反压丢失。
 - `interrupted` Turn 的终态 Payload 可能只包含部分 Item；同 ID 终态实体覆盖流式实体，但缺失的已展示 Item 必须保留，停止操作不得清空已生成回复。
@@ -42,7 +43,7 @@
 - Client HTTP 请求固定使用有界策略：携带 TanStack Query `signal` 的读取同时受调用方取消和 30 秒超时控制，普通直接读取使用 15 秒超时，幂等 Mutation 使用 60 秒超时并允许显式取消；三类请求都必须在 Fetch 边界组合 `AbortSignal.timeout()`。
 - 全量 Snapshot 重建只允许用于低频兼容读取、Mutation 输入或恢复边界，不得作为每个 Delta 的 React 订阅结果。
 - 每个 Project 只允许一个客户端 Project Runtime 和一条 Event Stream；统一完成协议解析、Session/Sequence 校验，并向 Sidebar Activity 与该 Project 内已注册的 Task Store 扇出。Project Runtime 使用最多 2,048 条、4 MiB 的固定容量环形事件历史，以 O(1) 追加和头部淘汰补齐 Snapshot 读取期间的事件，不得通过 `Array.shift()` 反复移动大数组；历史不足时必须重新读取 Snapshot。
-- 每个 Project 只允许一个 Git 状态协调器；任一 Task 运行时每 10 秒执行一次兜底刷新，页面隐藏时跳过周期刷新。完成的 `file_change` Item 触发 300ms 防抖刷新，每个 `turn.completed` 必须最终刷新；最后一个活动 Task 完成后先最终刷新再停止周期调度。同一 Project 的并发刷新必须串行合并，失败后使用带上限和抖动的指数退避自动重试并展示非阻塞提示，成功后恢复正常周期。
+- 每个 Project 只允许一个 Git 状态协调器；任一 Task 运行时每 10 秒执行一次兜底刷新，页面隐藏时跳过周期刷新。完成的 `file_change` Item 触发 300ms 防抖刷新，每个 `turn.completed` 必须最终刷新；最后一个活动 Task 完成后先最终刷新再停止周期调度。同一 Project 的并发刷新必须串行合并，失败后使用带上限和抖动的指数退避自动重试，只记录安全控制台诊断且不得把 Query 改为错误状态，成功后原子写入共享 Query 并恢复正常周期；用户手动刷新仍通过动作 toast 反馈。
 - Sidebar 的轻量活动状态必须按 `projectId + taskId` 保存；切换当前 Task 或 Project 不能清除后台 Task 的运行或审批状态，只有对应 Task 的 Snapshot 或终态事件可以更新该行状态。Project 无 Task Store 消费者、无运行 Task、无待审批且连续 2 分钟未访问后必须关闭 Event Stream 并释放 Runtime；详细 Timeline Store 不得把完整历史复制到 Sidebar 状态。
 - Task 归档成功后必须清理 `taskActivity`、最近 Snapshot 恢复引用、非活动 Runtime Store 与 Task Snapshot Query；不可见 Task 收到 `turn.completed` 后再次尝试安全 unsubscribe，避免首次切换时因运行态跳过后永久保留 Thread。
 - Composer 只使用 `idle`、`submitting`、`running`、`reconnecting`、`failed` 五种状态；运行态来自活动 Turn，重连态暂停网络 Mutation，失败态保留草稿。

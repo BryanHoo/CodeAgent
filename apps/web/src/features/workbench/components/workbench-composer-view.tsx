@@ -256,16 +256,6 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
               skills={props.skills}
               scope={props.composerScope}
             />
-            {props.mutationError === null ? null : (
-              <p className="px-1 pb-1 text-label text-danger" role="alert">
-                {t("composer.operationFailed")}
-              </p>
-            )}
-            {props.commandNotice === undefined ? null : (
-              <p className="px-1 pb-1 text-label text-muted-foreground" role="status">
-                {props.commandNotice}
-              </p>
-            )}
           </PromptInputBody>
           <PromptInputFooter className="max-workbench:gap-0.5">
             <PromptInputTools className="max-workbench:shrink-0 max-workbench:gap-0.5">
@@ -373,7 +363,6 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
           <>
             <div className="flex min-w-0 shrink items-center gap-0.5">
               <ComposerBranchSwitcher
-                branchCreateError={props.branchCreateError}
                 creatingBranch={props.creatingBranch}
                 gitStatus={props.gitStatus}
                 onBranchChange={props.onBranchChange}
@@ -400,11 +389,6 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
           <ContextTrigger />
         </Context>
       </div>
-      {props.branchSwitchError === undefined ? null : (
-        <p className="mx-auto mt-1 w-full max-w-content px-1 text-caption text-danger" role="alert">
-          {props.branchSwitchError}
-        </p>
-      )}
     </section>
   );
 }

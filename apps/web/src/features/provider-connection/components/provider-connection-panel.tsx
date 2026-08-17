@@ -16,6 +16,10 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
+import {
+  notifyActionError,
+  notifyActionSuccess,
+} from "../../notifications/action-notifications.js";
 import { cn } from "../../../shared/lib/utils.js";
 import { Button } from "../../../shared/components/core/button.js";
 import { Input } from "../../../shared/components/core/input.js";
@@ -307,7 +311,6 @@ function openOfficialAuthUrl(authUrl: string): void {
 }
 
 export function ProviderConnectionPanel() {
-  const { t } = useTranslation("settings");
   const queryClient = useQueryClient();
   const connectionQuery = useQuery(providerConnectionQueryOptions());
   const officialLogin = useMutation(startOfficialProviderLoginMutationOptions(queryClient));
@@ -319,7 +322,6 @@ export function ProviderConnectionPanel() {
   const [models, setModels] = useState<readonly CustomModelDraft[]>([]);
   const nextModelKey = useRef(1);
   const [customPending, setCustomPending] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
   const status = connectionQuery.data;
 
   useEffect(() => {
@@ -330,10 +332,7 @@ export function ProviderConnectionPanel() {
 
   const isBusy =
     officialLogin.isPending || cancelLogin.isPending || logout.isPending || customPending;
-  const requestError =
-    localError ??
-    (connectionQuery.error ?? officialLogin.error ?? cancelLogin.error ?? logout.error)?.message ??
-    null;
+  const requestError = connectionQuery.error?.message ?? null;
 
   return (
     <ProviderConnectionPanelView
@@ -352,18 +351,18 @@ export function ProviderConnectionPanel() {
       onBaseUrlChange={setBaseUrl}
       onCancelLogin={() => {
         const loginId = status?.pendingLogin?.loginId;
-        if (loginId !== undefined) void cancelLogin.mutateAsync(loginId);
+        if (loginId !== undefined) void cancelLogin.mutateAsync(loginId).catch(() => undefined);
       }}
       onConfigureCustom={() => {
-        setLocalError(null);
         setCustomPending(true);
         const input = createCustomProviderInput({ apiKey, baseUrl, models });
         void configureCustomProvider(input, queryClient)
           .then(() => {
             setApiKey("");
+            notifyActionSuccess();
           })
-          .catch(() => {
-            setLocalError(t("provider.errors.connect"));
+          .catch((error: unknown) => {
+            notifyActionError(error);
           })
           .finally(() => {
             setApiKey("");
@@ -371,7 +370,7 @@ export function ProviderConnectionPanel() {
           });
       }}
       onLogout={() => {
-        void logout.mutateAsync();
+        void logout.mutateAsync().catch(() => undefined);
       }}
       onModelChange={(key, field, value) => {
         setModels((current) =>
@@ -379,7 +378,6 @@ export function ProviderConnectionPanel() {
         );
       }}
       onModeChange={(nextMode) => {
-        setLocalError(null);
         setMode(nextMode);
       }}
       onRetry={() => {
@@ -389,15 +387,16 @@ export function ProviderConnectionPanel() {
         setModels((current) => current.filter((model) => model.key !== key));
       }}
       onStartOfficialLogin={() => {
-        setLocalError(null);
         void officialLogin
           .mutateAsync()
           .then((result) => {
-            openOfficialAuthUrl(result.authUrl);
+            try {
+              openOfficialAuthUrl(result.authUrl);
+            } catch (error) {
+              notifyActionError(error);
+            }
           })
-          .catch(() => {
-            setLocalError(t("provider.errors.login"));
-          });
+          .catch(() => undefined);
       }}
       status={status}
     />

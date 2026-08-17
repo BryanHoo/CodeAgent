@@ -20,6 +20,7 @@ import type {
   Project,
 } from "@code-agent/protocol";
 import { MAX_AGENT_IMAGE_BYTES } from "@code-agent/protocol";
+import { RpcResponseError } from "@code-agent/provider-codex";
 import { Buffer } from "node:buffer";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -2142,6 +2143,7 @@ describe("CodeAgent Server", () => {
         branch: "feat/commit",
         commitSha: "0123456789abcdef0123456789abcdef01234567",
         message: "feat(git): 提交选择文件",
+        pushError: "fatal: remote rejected",
         pushStatus: "failed" as const,
       }),
     );
@@ -2182,6 +2184,7 @@ describe("CodeAgent Server", () => {
       branch: string;
       commitSha: string;
       message: string;
+      pushError: null;
       pushStatus: "not_requested";
     }) => void;
     const commitProjectChanges = vi.fn(
@@ -2190,6 +2193,7 @@ describe("CodeAgent Server", () => {
           branch: string;
           commitSha: string;
           message: string;
+          pushError: null;
           pushStatus: "not_requested";
         }>((resolve) => {
           resolveCommit = resolve;
@@ -2225,6 +2229,7 @@ describe("CodeAgent Server", () => {
       branch: "feat/commit",
       commitSha: "0123456789abcdef0123456789abcdef01234567",
       message: payload.message,
+      pushError: null,
       pushStatus: "not_requested",
     });
 
@@ -3758,9 +3763,11 @@ describe("CodeAgent Server", () => {
     expect(startTurn).toHaveBeenCalledTimes(1);
   });
 
-  it("normalizes provider failures without caching them", async () => {
+  it("preserves provider failures without caching them", async () => {
     const { app, startTask } = await createHarness();
-    startTask.mockRejectedValueOnce(new Error("native RPC details"));
+    startTask.mockRejectedValueOnce(
+      new RpcResponseError({ code: -32_000, data: null, message: "native RPC details" }),
+    );
     const request = {
       headers: { "idempotency-key": "retry-task" },
       method: "POST" as const,
@@ -3774,11 +3781,33 @@ describe("CodeAgent Server", () => {
     expect(failed.statusCode).toBe(502);
     expect(failed.json()).toEqual({
       code: "PROVIDER_ERROR",
-      message: "Agent provider request failed",
+      message: "native RPC details",
       retryable: true,
     });
     expect(retried.statusCode).toBe(201);
     expect(startTask).toHaveBeenCalledTimes(2);
+  });
+
+  it("sanitizes non-Codex implementation failures in idempotent actions", async () => {
+    const { app, startTask } = await createHarness();
+    startTask.mockRejectedValueOnce(new Error("/private/database.sqlite is locked"));
+
+    const response = await app.inject({
+      headers: { "idempotency-key": "internal-failure" },
+      method: "POST",
+      payload: {
+        input: { attachments: [], skills: [], text: "start", type: "prompt" },
+        options: turnOptions,
+      },
+      url: "/v1/projects/code-agent/tasks",
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      code: "PROVIDER_ERROR",
+      message: "Agent provider request failed",
+      retryable: true,
+    });
   });
 
   it("captures the checkpoint after reading a task snapshot", async () => {

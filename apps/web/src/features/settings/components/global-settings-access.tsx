@@ -14,7 +14,6 @@ export function GlobalSettingsAccess({
 }>) {
   const { t } = useTranslation("settings");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [logoutError, setLogoutError] = useState(false);
 
   return (
     <SettingsPanel activeSection={activeSection} id="access" title={t("sections.access")}>
@@ -26,12 +25,9 @@ export function GlobalSettingsAccess({
             disabled={isLoggingOut || onLogout === undefined}
             onClick={() => {
               if (onLogout === undefined) return;
-              setLogoutError(false);
               setIsLoggingOut(true);
               void onLogout()
-                .catch(() => {
-                  setLogoutError(true);
-                })
+                .catch(() => undefined)
                 .finally(() => {
                   setIsLoggingOut(false);
                 });
@@ -42,11 +38,6 @@ export function GlobalSettingsAccess({
             <LogOut aria-hidden="true" data-icon="inline-start" />
             {isLoggingOut ? t("access.loggingOut") : t("access.logout")}
           </Button>
-          {logoutError ? (
-            <p className="text-meta text-danger" role="alert">
-              {t("errors.logout")}
-            </p>
-          ) : null}
         </div>
       </SettingsField>
     </SettingsPanel>

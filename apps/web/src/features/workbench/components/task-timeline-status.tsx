@@ -1,10 +1,14 @@
 import type { AgentItem, AgentItemStatus, AgentTurn, Project } from "@code-agent/protocol";
-import { Check, ChevronRight, Copy, GitFork, MessageSquareCode } from "lucide-react";
+import { ChevronRight, Copy, GitFork, MessageSquareCode } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { v4 as createUuid } from "uuid";
 
 import { getCurrentLanguage, i18n } from "../../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import {
+  notifyActionError,
+  notifyActionSuccess,
+} from "../../notifications/action-notifications.js";
 
 import { MessageAction, MessageActions } from "../../../shared/components/agent/message.js";
 import { Task, TaskTrigger, type TaskStatus } from "../../../shared/components/agent/task.js";
@@ -267,12 +271,9 @@ export function MessageMetadata({
   text: string;
   timestamp?: string;
 }>) {
-  const [copiedText, setCopiedText] = useState<string | null>(null);
-  const [forkError, setForkError] = useState(false);
   const [forkPending, setForkPending] = useState(false);
   const forkIdempotencyKeyRef = useRef<string | null>(null);
   const messageActionLockRef = useRef(createAsyncActionLock());
-  const copied = copiedText === text;
   const messageDate = timestamp === undefined ? undefined : new Date(timestamp);
   const locale = getCurrentLanguage();
 
@@ -281,9 +282,9 @@ export function MessageMetadata({
       try {
         // 只在明确点击时访问 Clipboard，避免渲染阶段触发浏览器权限请求。
         await navigator.clipboard.writeText(text);
-        setCopiedText(text);
-      } catch {
-        setCopiedText(null);
+        notifyActionSuccess();
+      } catch (error) {
+        notifyActionError(error);
       }
     });
 
@@ -294,12 +295,12 @@ export function MessageMetadata({
       }
       forkIdempotencyKeyRef.current ??= createUuid();
       setForkPending(true);
-      setForkError(false);
       try {
         // 重试复用同一幂等键，避免响应丢失时重复创建任务。
         await onForkTask(forkIdempotencyKeyRef.current);
-      } catch {
-        setForkError(true);
+        notifyActionSuccess();
+      } catch (error) {
+        notifyActionError(error);
       } finally {
         setForkPending(false);
       }
@@ -308,44 +309,26 @@ export function MessageMetadata({
   return (
     <MessageActions className="mt-2 text-label text-muted-foreground">
       <MessageAction
-        label={
-          copied
-            ? i18n.t("timeline.copied", { ns: "conversation" })
-            : i18n.t("timeline.copyMessage", { ns: "conversation" })
-        }
+        label={i18n.t("timeline.copyMessage", { ns: "conversation" })}
         onClick={() => {
           void copyMessage();
         }}
-        tooltip={
-          copied
-            ? i18n.t("timeline.copied", { ns: "conversation" })
-            : i18n.t("timeline.copyMessage", { ns: "conversation" })
-        }
+        tooltip={i18n.t("timeline.copyMessage", { ns: "conversation" })}
       >
-        {copied ? (
-          <Check className="size-3.5" aria-hidden="true" />
-        ) : (
-          <Copy className="size-3.5" aria-hidden="true" />
-        )}
+        <Copy className="size-3.5" aria-hidden="true" />
       </MessageAction>
       {onForkTask === undefined ? null : (
         <MessageAction
           disabled={forkPending}
           label={
-            forkError
-              ? i18n.t("timeline.forkFailed", { ns: "conversation" })
-              : forkPending
-                ? i18n.t("timeline.forking", { ns: "conversation" })
-                : i18n.t("timeline.fork", { ns: "conversation" })
+            forkPending
+              ? i18n.t("timeline.forking", { ns: "conversation" })
+              : i18n.t("timeline.fork", { ns: "conversation" })
           }
           onClick={() => {
             void forkTask();
           }}
-          tooltip={
-            forkError
-              ? i18n.t("timeline.forkFailed", { ns: "conversation" })
-              : i18n.t("timeline.fork", { ns: "conversation" })
-          }
+          tooltip={i18n.t("timeline.fork", { ns: "conversation" })}
         >
           <GitFork className="size-3.5" aria-hidden="true" />
         </MessageAction>

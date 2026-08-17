@@ -282,12 +282,14 @@ describe("CommitChangesDialog", () => {
           branch: "feat/commit",
           commitSha: "0123456789abcdef0123456789abcdef01234567",
           message: "feat(git): 提交选择文件",
+          pushError: "fatal: unable to access remote repository",
           pushStatus: "failed",
         }}
       />,
     );
 
-    expect(markup).toContain("提交已完成，但推送失败");
+    expect(markup).not.toContain("提交已完成，但推送失败");
+    expect(markup).not.toContain("fatal: unable to access remote repository");
     expect(markup).toContain("0123456");
   });
 });

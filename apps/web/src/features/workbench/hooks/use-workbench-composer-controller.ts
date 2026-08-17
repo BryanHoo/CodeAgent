@@ -2,6 +2,7 @@ import type { AgentAttachment, AgentTask } from "@code-agent/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
+import { notifyActionError } from "../../notifications/action-notifications.js";
 import type { PromptCommandAction } from "../components/prompt-command.js";
 import type { IdempotencyAttempt } from "../composer-state.js";
 
@@ -17,7 +18,7 @@ export function useWorkbenchComposerController(
   onSubmissionStateChange?: (submitting: boolean) => void,
 ) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [mutationError, setMutationError] = useState<Error | null>(null);
+  const [mutationError, setMutationErrorState] = useState<Error | null>(null);
   const [pendingTaskState, setPendingTaskState] = useState<{
     scope: string;
     task: AgentTask;
@@ -59,22 +60,32 @@ export function useWorkbenchComposerController(
     [],
   );
 
-  const reset = useCallback((clearTaskState: boolean) => {
-    setIsSubmitting(false);
-    setMutationError(null);
-    if (clearTaskState) {
-      setPendingTaskState(undefined);
-      setSubmittedTurnState(undefined);
+  const setMutationError = useCallback((error: Error | null) => {
+    setMutationErrorState(error);
+    if (error !== null) {
+      notifyActionError(error);
     }
-    startTaskAttempt.current = undefined;
-    startTurnAttempt.current = undefined;
-    steerTurnAttempt.current = undefined;
-    interruptAttempt.current = undefined;
-    autoStartedQueueIds.current.clear();
-    uploadedAttachments.current.clear();
-    uploadAttempts.current.clear();
-    commandAttempts.current.clear();
   }, []);
+
+  const reset = useCallback(
+    (clearTaskState: boolean) => {
+      setIsSubmitting(false);
+      setMutationError(null);
+      if (clearTaskState) {
+        setPendingTaskState(undefined);
+        setSubmittedTurnState(undefined);
+      }
+      startTaskAttempt.current = undefined;
+      startTurnAttempt.current = undefined;
+      steerTurnAttempt.current = undefined;
+      interruptAttempt.current = undefined;
+      autoStartedQueueIds.current.clear();
+      uploadedAttachments.current.clear();
+      uploadAttempts.current.clear();
+      commandAttempts.current.clear();
+    },
+    [setMutationError],
+  );
 
   return {
     actionLock,

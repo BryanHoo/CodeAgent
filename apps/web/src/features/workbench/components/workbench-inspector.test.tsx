@@ -650,15 +650,14 @@ describe("WorkbenchInspector", () => {
     const retryErrorMarkup = renderInspectorMarkup(
       <WorkbenchInspector
         mcpServersError={new Error("mcpServerStatus/list failed")}
-        mcpServersRetryError={new Error("config/mcpServer/reload failed")}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         tab="context"
       />,
     );
-    expect(retryErrorMarkup.match(/重新加载 MCP 失败/gu)).toHaveLength(1);
-    expect(retryErrorMarkup).toContain("config/mcpServer/reload failed");
-    expect(retryErrorMarkup).not.toContain("mcpServerStatus/list failed");
+    expect(retryErrorMarkup).toContain("无法读取 MCP");
+    expect(retryErrorMarkup).toContain("mcpServerStatus/list failed");
+    expect(retryErrorMarkup).not.toContain("重新加载 MCP 失败");
     const failedMarkup = renderState({
       mcpServers: [
         {

@@ -730,7 +730,9 @@ test("runs official task actions from the slash command menu", async ({ page }) 
 
   await prompt.fill("/压缩");
   await prompt.press("Enter");
-  await expect(page.getByRole("status").filter({ hasText: "正在压缩上下文" })).toBeVisible();
+  await expect(page.locator('[data-sonner-toast][data-type="success"]')).toHaveText(
+    "正在压缩上下文",
+  );
   await expect
     .poll(() => commandRequests.map((request) => request.path))
     .toContain("/v1/projects/code-agent/tasks/task-1/compact");
@@ -1958,6 +1960,7 @@ test("generates a message and commits only selected files", async ({ page }) => 
         branch: "feat/review-targets",
         commitSha: "0123456789abcdef0123456789abcdef01234567",
         message: commitRequest["message"],
+        pushError: "fatal: remote rejected",
         pushStatus: "failed",
       },
       status: 201,
@@ -2161,7 +2164,9 @@ test("generates a message and commits only selected files", async ({ page }) => 
   );
   await page.getByRole("menuitem", { name: "提交并推送" }).click();
 
-  await expect(dialog.getByText("提交已完成，但推送失败")).toBeVisible();
+  await expect(dialog.getByText("提交已完成，但推送失败")).toHaveCount(0);
+  const pushErrorToast = page.locator('[data-sonner-toast][data-type="error"]');
+  await expect(pushErrorToast).toHaveText("fatal: remote rejected");
   expect(messageRequest).toEqual({ expectedSnapshot: snapshot, paths: ["package.json"] });
   expect(commitRequest).toEqual({
     action: "commit_and_push",
@@ -2268,6 +2273,7 @@ for (const scenario of [
           branch: "feat/review-targets",
           commitSha: "0123456789abcdef0123456789abcdef01234567",
           message: request["message"],
+          pushError: null,
           pushStatus: scenario.pushStatus,
         },
         status: 201,

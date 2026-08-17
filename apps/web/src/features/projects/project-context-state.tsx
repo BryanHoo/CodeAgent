@@ -79,12 +79,9 @@ export type ProjectActionsContextValue = Readonly<{
 }>;
 
 export type ProjectActivityContextValue = Readonly<{
-  addProjectError: Error | null;
   isProjectActionPending: boolean;
   isProjectOrderPending: boolean;
   isProjectAddPending: boolean;
-  projectActionError: Error | null;
-  projectOrderError: Error | null;
   taskActivity: TaskActivityMap;
 }>;
 

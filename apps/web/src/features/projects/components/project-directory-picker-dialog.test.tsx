@@ -19,7 +19,6 @@ describe("ProjectDirectoryPickerDialog", () => {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <ProjectDirectoryPickerDialog
-            addError={null}
             client={{
               listProjectDirectories: vi.fn(
                 (): Promise<ProjectDirectoryListing> => new Promise(() => undefined),
@@ -105,7 +104,6 @@ describe("ProjectDirectoryPickerDialog", () => {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <ProjectDirectoryPickerDialog
-            addError={null}
             client={{ listProjectDirectories: vi.fn() }}
             isAdding={false}
             onAdd={vi.fn()}

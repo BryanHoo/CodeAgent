@@ -36,14 +36,12 @@ import {
 export function BackgroundTerminalSection({
   error,
   isPending,
-  mutationError,
   onTerminate,
   terminals,
   terminatingTerminalId,
 }: Readonly<{
   error: Error | null;
   isPending: boolean;
-  mutationError: Error | null;
   onTerminate: (terminalId: string) => Promise<void>;
   terminals: readonly AgentBackgroundTerminal[];
   terminatingTerminalId: string | null;
@@ -115,11 +113,6 @@ export function BackgroundTerminalSection({
             })}
           </div>
         )}
-        {mutationError === null ? null : (
-          <p className="px-2 pt-1 text-caption text-diff-removed" role="alert">
-            {i18n.t("inspector.terminalStopRetry", { ns: "conversation" })}
-          </p>
-        )}
       </section>
     </InspectorSection>
   );
@@ -187,7 +180,6 @@ export function McpServerSection({
   isRefreshing,
   isRetrying,
   onRetry,
-  retryError,
   servers,
 }: Readonly<{
   canRetry: boolean;
@@ -196,15 +188,11 @@ export function McpServerSection({
   isRefreshing: boolean;
   isRetrying: boolean;
   onRetry: () => void;
-  retryError: Error | null;
   servers: readonly AgentMcpServer[];
 }>) {
   const reloadLabel = i18n.t(isRetrying ? "inspector.mcpReloading" : "inspector.mcpReload", {
     ns: "conversation",
   });
-  const requestError = retryError ?? error;
-  const requestErrorTitleKey =
-    retryError === null ? "inspector.mcpError" : "inspector.mcpRetryError";
   return (
     <InspectorSection
       action={
@@ -237,8 +225,8 @@ export function McpServerSection({
           <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
           {i18n.t("inspector.mcpLoading", { ns: "conversation" })}
         </p>
-      ) : requestError !== null && servers.length === 0 ? (
-        <McpRequestErrorState error={requestError} titleKey={requestErrorTitleKey} />
+      ) : error !== null && servers.length === 0 ? (
+        <McpRequestErrorState error={error} titleKey="inspector.mcpError" />
       ) : servers.length === 0 ? (
         <p className="px-2 py-2 text-caption text-muted-foreground">
           {i18n.t("inspector.mcpEmpty", { ns: "conversation" })}
@@ -252,9 +240,6 @@ export function McpServerSection({
             <McpServerRow key={server.name} server={server} />
           ))}
         </div>
-      )}
-      {retryError === null || servers.length === 0 ? null : (
-        <McpRequestErrorState error={retryError} titleKey="inspector.mcpRetryError" />
       )}
     </InspectorSection>
   );

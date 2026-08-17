@@ -14,6 +14,8 @@ export const common = {
     retry: "重试",
   },
   app: {
+    actionFailed: "操作失败",
+    actionSucceeded: "操作成功",
     loadingProjects: "正在加载项目",
     noProjects: "尚未添加项目",
     notificationRegion: "通知",

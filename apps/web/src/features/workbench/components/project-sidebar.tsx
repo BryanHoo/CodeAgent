@@ -82,15 +82,8 @@ export function ProjectSidebar({
     renameProject,
     setExpandedProjectTaskIds,
   } = useProjectActions();
-  const {
-    addProjectError,
-    isProjectActionPending,
-    isProjectOrderPending,
-    isProjectAddPending,
-    projectActionError,
-    projectOrderError,
-    taskActivity,
-  } = useProjectActivity();
+  const { isProjectActionPending, isProjectOrderPending, isProjectAddPending, taskActivity } =
+    useProjectActivity();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [preferenceStorage] = useState(getProjectSidebarPreferenceStorage);
@@ -114,9 +107,6 @@ export function ProjectSidebar({
   const [renamingProject, setRenamingProject] = useState<Project | null>(null);
   const [removingProject, setRemovingProject] = useState<Project | null>(null);
   const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false);
-  const [hasSubmittedAddProject, setHasSubmittedAddProject] = useState(false);
-  const [hasSubmittedProjectAction, setHasSubmittedProjectAction] = useState(false);
-  const [taskActionError, setTaskActionError] = useState<string | null>(null);
   const pinMutation = useMutation(taskPinMutationOptions(client));
   const renameMutation = useMutation(taskRenameMutationOptions(client));
   const archiveMutation = useMutation(taskArchiveMutationOptions(client));
@@ -220,11 +210,9 @@ export function ProjectSidebar({
   };
 
   const addSelectedProject = async (rootPath: string) => {
-    setHasSubmittedAddProject(true);
     const project = await addProject(rootPath);
     if (project !== undefined) {
       setIsProjectPickerOpen(false);
-      setHasSubmittedAddProject(false);
       updateExpandedProjects((current) => new Set(current).add(project.id));
       await navigate({ params: { projectId: project.id }, to: "/p/$projectId" });
     }
@@ -250,7 +238,6 @@ export function ProjectSidebar({
 
   const pinTask = (task: AgentTask) =>
     taskActionLockRef.current.run(async () => {
-      setTaskActionError(null);
       try {
         const response = await pinMutation.mutateAsync({
           pinned: !task.pinned,
@@ -259,13 +246,12 @@ export function ProjectSidebar({
         });
         replaceTaskCache(response.task);
       } catch {
-        setTaskActionError(t("sidebar.errorPinTask"));
+        // 根级 MutationCache 已展示失败 toast。
       }
     });
 
   const renameTask = (task: AgentTask, title: string) =>
     taskActionLockRef.current.run(async () => {
-      setTaskActionError(null);
       try {
         const response = await renameMutation.mutateAsync({
           projectId: task.projectId,
@@ -275,13 +261,12 @@ export function ProjectSidebar({
         replaceTaskCache(response.task);
         setRenamingTask(null);
       } catch {
-        setTaskActionError(t("sidebar.errorRenameTask"));
+        // 根级 MutationCache 已展示失败 toast。
       }
     });
 
   const archiveTask = (task: AgentTask) =>
     taskActionLockRef.current.run(async () => {
-      setTaskActionError(null);
       try {
         await archiveMutation.mutateAsync({ projectId: task.projectId, taskId: task.id });
         await removeArchivedProjectTaskAndRefill(queryClient, task.projectId, task.id);
@@ -299,28 +284,25 @@ export function ProjectSidebar({
         // 归档后的 Runtime 清理由 Provider 判定安全性，失败不回滚已成功的归档。
         void client.unsubscribeTask(task.projectId, task.id).catch(() => undefined);
       } catch {
-        setTaskActionError(t("sidebar.errorArchiveTask"));
+        // 根级 MutationCache 已展示失败 toast。
       }
     });
 
   const closeProjectDialog = (targetProjectId: string) => {
     setRenamingProject(null);
     setRemovingProject(null);
-    setHasSubmittedProjectAction(false);
     requestAnimationFrame(() => {
       document.getElementById(`project-actions-${targetProjectId}`)?.focus();
     });
   };
 
   const submitProjectRename = async (project: Project, name: string) => {
-    setHasSubmittedProjectAction(true);
     if (await renameProject(project.id, name)) {
       closeProjectDialog(project.id);
     }
   };
 
   const confirmProjectRemoval = async (project: Project) => {
-    setHasSubmittedProjectAction(true);
     const remainingProjects = await removeProject(project.id);
     if (remainingProjects === undefined) {
       return;
@@ -401,15 +383,12 @@ export function ProjectSidebar({
         }}
         onOpenProjectDraft={openProjectDraft}
         onOpenProjectPicker={() => {
-          setHasSubmittedAddProject(false);
           setIsProjectPickerOpen(true);
         }}
         onRemoveProject={(project) => {
-          setHasSubmittedProjectAction(false);
           setRemovingProject(project);
         }}
         onRenameProject={(project) => {
-          setHasSubmittedProjectAction(false);
           setRenamingProject(project);
         }}
         orderedProjects={orderedProjects}
@@ -417,12 +396,10 @@ export function ProjectSidebar({
         pinnedTasks={pinnedTasks}
         {...(projectId === undefined ? {} : { projectId })}
         projectOrderAnnouncement={projectOrderAnnouncement}
-        projectOrderError={projectOrderError}
         projectTaskStates={projectTaskStates}
         reorderingProjectId={reorderingProjectId}
         setExpandedTaskProjects={setExpandedTaskProjects}
         setRenamingTask={setRenamingTask}
-        taskActionError={taskActionError}
         taskActionPending={taskActionPending}
         taskActivity={taskActivity}
         {...(taskId === undefined ? {} : { taskId })}
@@ -432,10 +409,7 @@ export function ProjectSidebar({
       />
 
       <ProjectSidebarDialogs
-        addProjectError={addProjectError}
         client={client}
-        hasSubmittedAddProject={hasSubmittedAddProject}
-        hasSubmittedProjectAction={hasSubmittedProjectAction}
         isProjectActionPending={isProjectActionPending}
         isProjectAddPending={isProjectAddPending}
         isProjectPickerOpen={isProjectPickerOpen}
@@ -444,7 +418,6 @@ export function ProjectSidebar({
         onCloseProjectPicker={() => {
           if (!isProjectAddPending) {
             setIsProjectPickerOpen(false);
-            setHasSubmittedAddProject(false);
           }
         }}
         onCloseTaskRename={() => {
@@ -459,7 +432,6 @@ export function ProjectSidebar({
         onRenameTask={(task, title) => {
           void renameTask(task, title);
         }}
-        projectActionError={projectActionError}
         removingProject={removingProject}
         renamingProject={renamingProject}
         renamingTask={renamingTask}

@@ -1,6 +1,7 @@
 import type { AgentEvent } from "@code-agent/protocol";
 
 import { i18n } from "../../i18n/i18n.js";
+import { recordInternalWarning } from "./internal-diagnostics.js";
 
 const MAX_FAILED_TURN_KEYS = 256;
 
@@ -162,8 +163,11 @@ class BrowserTaskNotifier implements TaskNotifier {
         this.#focusPage();
         this.#navigateToTask(projectId, event.taskId);
       });
-    } catch {
-      // 系统通知属于增强能力，浏览器拒绝构造时不能中断实时事件处理。
+    } catch (error) {
+      recordInternalWarning("browser_notification_show_failed", error, {
+        projectId,
+        taskId: event.taskId,
+      });
     }
   }
 
@@ -180,12 +184,15 @@ class BrowserTaskNotifier implements TaskNotifier {
         return Promise.resolve();
       }
       browserPermissionRequest = this.#api.requestPermission();
-    } catch {
+    } catch (error) {
+      recordInternalWarning("notification_permission_failed", error);
       return Promise.resolve();
     }
     this.#permissionRequest = browserPermissionRequest
       .then(() => undefined)
-      .catch(() => undefined)
+      .catch((error: unknown) => {
+        recordInternalWarning("notification_permission_failed", error);
+      })
       .finally(() => {
         this.#permissionRequest = undefined;
       });

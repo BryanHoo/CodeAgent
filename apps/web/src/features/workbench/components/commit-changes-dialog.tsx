@@ -115,12 +115,6 @@ export function collectCommitRepositories(status: ProjectGitStatus): readonly st
   return [...repositories].toSorted((left, right) => left.localeCompare(right, "en"));
 }
 
-function commitResultMessageKey(result: CommitProjectChangesResponse): string {
-  if (result.pushStatus === "failed") return "commit.commitCompletePushFailed";
-  if (result.pushStatus === "not_configured") return "commit.commitCompleteUpstreamMissing";
-  return result.pushStatus === "pushed" ? "commit.commitAndPushComplete" : "commit.commitComplete";
-}
-
 function createCommitContentState(identity: string, entries: readonly CommitFileEntry[]) {
   return {
     changesOpen: true,
@@ -381,8 +375,7 @@ export function CommitChangesDialog({
                   </ButtonGroup>
                 ) : (
                   <div className="mt-2" role="status">
-                    <p className="text-label font-medium">{t(commitResultMessageKey(result))}</p>
-                    <p className="mt-1 font-mono text-caption text-muted-foreground">
+                    <p className="font-mono text-caption text-muted-foreground">
                       {result.commitSha.slice(0, 7)}
                     </p>
                   </div>

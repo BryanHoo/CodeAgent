@@ -212,7 +212,6 @@ export async function configureServerDelivery(
         retryable: false,
       });
     }
-    // 未知异常只在服务端完成日志中保留诊断类型，禁止把路径或依赖错误透传给 Web。
     return reply.code(explicitStatusCode).send({
       code: "INTERNAL_ERROR",
       message: "Internal server error",

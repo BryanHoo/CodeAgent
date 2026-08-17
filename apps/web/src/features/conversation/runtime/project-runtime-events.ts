@@ -1,5 +1,6 @@
 import type { AgentEventConnectionState } from "@code-agent/client";
 import type { AgentEvent, AgentTaskSnapshotResponse, EventCheckpoint } from "@code-agent/protocol";
+import { recordInternalWarning } from "../../notifications/internal-diagnostics.js";
 import type { CodeAgentRuntimeClient } from "../../projects/project-queries.js";
 import { hasActiveProjectTask, type TaskActivityMap } from "./task-activity.js";
 import type { TaskStore } from "./task-store.js";
@@ -205,9 +206,7 @@ export class ProjectEventRuntime {
         }
       },
       onError: (error) => {
-        for (const target of this.#targets.values()) {
-          target.setError(error);
-        }
+        recordInternalWarning("event_connection_failed", error, { projectId: this.#projectId });
       },
       onEvent: (event) => {
         this.#latestSequence = event.sequence;
@@ -220,7 +219,14 @@ export class ProjectEventRuntime {
           }
         }
         if (event.type === "turn.completed" && !this.#hasTaskConsumers(event.taskId)) {
-          void this.#client.unsubscribeTask(this.#projectId, event.taskId).catch(() => undefined);
+          void this.#client
+            .unsubscribeTask(this.#projectId, event.taskId)
+            .catch((error: unknown) => {
+              recordInternalWarning("task_unsubscribe_failed", error, {
+                projectId: this.#projectId,
+                taskId: event.taskId,
+              });
+            });
         }
         this.#reevaluateIdleRelease();
       },
@@ -329,7 +335,13 @@ export class ProjectEventRuntime {
   #stopConnection(): void {
     const cleanup = this.#connectionCleanup;
     this.#connectionCleanup = undefined;
-    cleanup?.();
+    try {
+      cleanup?.();
+    } catch (error) {
+      recordInternalWarning("event_connection_cleanup_failed", error, {
+        projectId: this.#projectId,
+      });
+    }
     this.#connectionState = "closed";
   }
 

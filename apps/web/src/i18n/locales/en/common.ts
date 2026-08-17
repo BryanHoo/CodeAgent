@@ -14,6 +14,8 @@ export const common = {
     retry: "Retry",
   },
   app: {
+    actionFailed: "Action failed",
+    actionSucceeded: "Action completed",
     loadingProjects: "Loading projects",
     noProjects: "No projects added",
     notificationRegion: "Notifications",

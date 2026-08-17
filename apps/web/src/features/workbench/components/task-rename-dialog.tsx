@@ -13,7 +13,6 @@ import {
 import { Input } from "../../../shared/components/core/input.js";
 
 type TaskRenameDialogProps = Readonly<{
-  error?: string | null;
   initialTitle: string;
   isPending: boolean;
   onClose: () => void;
@@ -21,7 +20,6 @@ type TaskRenameDialogProps = Readonly<{
 }>;
 
 export function TaskRenameDialog({
-  error = null,
   initialTitle,
   isPending,
   onClose,
@@ -72,11 +70,6 @@ export function TaskRenameDialog({
             }}
             value={title}
           />
-          {error === null ? null : (
-            <p className="mt-2 text-meta text-danger" role="alert">
-              {error}
-            </p>
-          )}
           <DialogFooter>
             <Button disabled={isPending} onClick={onClose} type="button" variant="ghost">
               {t("actions.cancel")}

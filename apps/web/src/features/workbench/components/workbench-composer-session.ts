@@ -99,7 +99,6 @@ export function useComposerSession({
   const [fileMention, setFileMention] = useState<PromptFileMention>();
   const [fileQuery, setFileQuery] = useState("");
   const [reviewMenuMode, setReviewMenuMode] = useState<"branches" | "scopes" | null>(null);
-  const [commandNotice, setCommandNotice] = useState<string>();
   const [commandQuery, setCommandQuery] = useState("");
   const [commandSlashCommand, setCommandSlashCommand] = useState<PromptSlashCommand>();
   const [promptContent, setPromptContent] = useState<PromptSkillContent>(
@@ -300,7 +299,6 @@ export function useComposerSession({
         ...current,
         content: nextContent,
       }));
-      setCommandNotice(undefined);
       const nextFileMention = resolvePromptFileMention(serializedText, cursorOffset);
       if (
         projectToolsEnabled &&
@@ -385,7 +383,6 @@ export function useComposerSession({
       setFileMention(undefined);
       setFileQuery("");
       setReviewMenuMode(null);
-      setCommandNotice(undefined);
       setCommandQuery("");
       setCommandSlashCommand(undefined);
     }
@@ -412,7 +409,6 @@ export function useComposerSession({
     closeFileMenu,
     commandMenuId,
     commandMenuOpen,
-    commandNotice,
     commandSlashCommand,
     commandSurfaceRef,
     composerController,
@@ -456,7 +452,6 @@ export function useComposerSession({
     setFileMenuOpen,
     setFileMention,
     setFileQuery,
-    setCommandNotice,
     setCommandQuery,
     setCommandSlashCommand,
     setIsSubmitting,

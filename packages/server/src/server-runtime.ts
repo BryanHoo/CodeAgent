@@ -23,6 +23,7 @@ import {
 } from "@code-agent/protocol";
 import { LogController, type FastifyReply, type FastifyRequest } from "fastify";
 import type { GitCommitError } from "./git-commit.js";
+import { originalErrorMessage } from "./error-message.js";
 import { MutationHttpError } from "./routes/context.js";
 
 export const MULTIPART_ENVELOPE_BYTES = 64 * 1024;
@@ -411,7 +412,7 @@ export async function generateCommitMessageWithCodex(
     }
     throw new MutationHttpError(
       "COMMIT_MESSAGE_GENERATION_FAILED",
-      "Codex could not generate a commit message",
+      originalErrorMessage(error, "Codex could not generate a commit message"),
       502,
       true,
     );

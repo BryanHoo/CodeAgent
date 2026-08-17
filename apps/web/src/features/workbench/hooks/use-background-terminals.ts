@@ -1,9 +1,8 @@
 import type { AgentBackgroundTerminal } from "@code-agent/protocol";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { v4 as createUuid } from "uuid";
 
-import { i18n } from "../../../i18n/i18n.js";
 import { createAsyncActionLock } from "../../../shared/utils/async-action-lock.js";
 import type { CodeAgentBackgroundTerminalClient } from "../../projects/project-queries.js";
 
@@ -19,7 +18,6 @@ export function getBackgroundTerminalPollInterval(
 export type BackgroundTerminalView = Readonly<{
   error: Error | null;
   isPending: boolean;
-  terminalError: Error | null;
   terminals: readonly AgentBackgroundTerminal[];
   terminatingTerminalId: string | null;
   terminateTerminal: (terminalId: string) => Promise<void>;
@@ -35,7 +33,6 @@ export function useBackgroundTerminals(
   const previousTaskRunningRef = useRef(isTaskRunning);
   const idempotencyKeysRef = useRef(new Map<string, string>());
   const terminateLockRef = useRef(createAsyncActionLock());
-  const [terminalError, setTerminalError] = useState<Error | null>(null);
   const terminalsQuery = useQuery({
     enabled: enabled && taskId !== undefined,
     queryFn: ({ signal }) => {
@@ -75,17 +72,12 @@ export function useBackgroundTerminals(
   const terminateTerminal = useCallback(
     (terminalId: string) =>
       terminateLockRef.current.run(async () => {
-        setTerminalError(null);
         try {
           await terminateTerminalMutation(terminalId);
           idempotencyKeysRef.current.delete(terminalId);
           await refetchTerminals();
-        } catch (error) {
-          setTerminalError(
-            error instanceof Error
-              ? error
-              : new Error(i18n.t("errors.stopTerminal", { ns: "conversation" })),
-          );
+        } catch {
+          // 根级 MutationCache 已展示失败 toast，终端列表保持原状态供重试。
         }
       }),
     [refetchTerminals, terminateTerminalMutation],
@@ -94,7 +86,6 @@ export function useBackgroundTerminals(
   return {
     error: terminalsQuery.error,
     isPending: terminalsQuery.isPending,
-    terminalError,
     terminals: terminalsQuery.data?.data ?? [],
     terminatingTerminalId:
       terminateMutation.isPending && typeof terminateMutation.variables === "string"

@@ -17,6 +17,11 @@ import {
 import { CodexAgentProviderTasks } from "./agent-provider-tasks.js";
 import { assertProjectThread } from "./agent-provider-base.js";
 import {
+  warnDroppedCodexNotification,
+  warnEventListenerFailure,
+  warnServerRequestRejectionFailure,
+} from "./agent-provider-diagnostics.js";
+import {
   isCommentaryAgentMessage,
   isFinalAgentMessage,
   isReviewerFailureFallback,
@@ -192,17 +197,7 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
     method: string,
     params: unknown,
   ): void {
-    // 原始通知可能包含 Prompt、命令或文件正文，诊断日志只保留关联身份。
-    this.logger.warn(
-      {
-        codexVersion: SUPPORTED_CODEX_VERSION,
-        diagnosticCode,
-        method,
-        projectId: this.project.id,
-        taskId: readTaskId(params) ?? null,
-      },
-      "Codex notification dropped",
-    );
+    warnDroppedCodexNotification(this.logger, this.project.id, diagnosticCode, method, params);
   }
 
   protected hasTaskLifecycleObligations(taskId: string): boolean {
@@ -251,8 +246,9 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
   }
 
   protected rejectServerRequest(serverRequest: RpcServerRequest, error: RpcErrorPayload): void {
-    // 写入失败会由 RPC Client 关闭连接；此处不制造未处理的异步拒绝。
-    void this.client.rejectServerRequest(serverRequest.id, error).catch(() => undefined);
+    void this.client.rejectServerRequest(serverRequest.id, error).catch(() => {
+      warnServerRequestRejectionFailure(this.logger, this.project.id, serverRequest);
+    });
   }
 
   protected activatePendingRequest(entry: PendingCodexRequest): void {
@@ -366,7 +362,7 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
       try {
         listener(event);
       } catch {
-        // 一个订阅者失败不能阻塞其他交付边界。
+        warnEventListenerFailure(this.logger, this.project.id, event);
       }
     };
     const isEphemeral = this.runtime.ephemeralTaskIds.has(event.taskId);

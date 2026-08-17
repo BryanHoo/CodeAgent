@@ -182,6 +182,12 @@ function createClientHarness() {
       }
       onConnectionState(state);
     },
+    connectionError(error: Error) {
+      if (subscription === undefined) {
+        throw new Error("Project event subscription has not started");
+      }
+      subscription.onError?.(error);
+    },
     emit(event: AgentEvent) {
       if (subscription === undefined) {
         throw new Error("Project event subscription has not started");
@@ -212,6 +218,7 @@ function createTaskNotifier() {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("project runtime manager", () => {
@@ -232,6 +239,56 @@ describe("project runtime manager", () => {
       expect.objectContaining({ taskId: "task-1", type: "turn.completed" }),
       "完善通知功能",
     );
+    manager.dispose();
+  });
+
+  it("logs browser notification isolation failures without interrupting Project events", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const harness = createClientHarness();
+    const taskNotifier = createTaskNotifier();
+    taskNotifier.requestPermission.mockRejectedValueOnce(new Error("permission API failed"));
+    taskNotifier.notify.mockImplementationOnce(() => {
+      throw new Error("notification constructor failed");
+    });
+    const manager = createProjectRuntimeManager(harness.client, { taskNotifier });
+    manager.observeSnapshot(createSnapshotResponse("task-1"));
+
+    await manager.requestNotificationPermission();
+    harness.emit(createTurnCompletedEvent("task-1", 1));
+
+    expect(warn).toHaveBeenCalledWith("CodeAgent internal warning", {
+      diagnosticCode: "notification_permission_failed",
+      errorMessage: "permission API failed",
+    });
+    expect(warn).toHaveBeenCalledWith("CodeAgent internal warning", {
+      diagnosticCode: "task_notification_failed",
+      errorMessage: "notification constructor failed",
+      projectId: "project-1",
+      taskId: "task-1",
+    });
+    expect(getTaskActivity(manager.getTaskActivity(), "project-1", "task-1").attention).toBe(
+      "completed",
+    );
+    manager.dispose();
+    warn.mockRestore();
+  });
+
+  it("logs realtime transport failures without publishing them as Task errors", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const harness = createClientHarness();
+    const manager = createProjectRuntimeManager(harness.client);
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" });
+    const detach = manager.attachTaskStore(createSnapshotResponse("task-1"), store, vi.fn());
+
+    harness.connectionError(new Error("socket failed"));
+
+    expect(store.getState().error).toBeNull();
+    expect(warn).toHaveBeenCalledWith("CodeAgent internal warning", {
+      diagnosticCode: "event_connection_failed",
+      errorMessage: "socket failed",
+      projectId: "project-1",
+    });
+    detach();
     manager.dispose();
   });
 
@@ -684,6 +741,7 @@ describe("project runtime manager", () => {
 
   it("retries Snapshot recovery without Task Store consumers and resumes Project events", async () => {
     vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const harness = createClientHarness();
     const manager = createProjectRuntimeManager(harness.client);
     harness.client.readTask
@@ -695,6 +753,10 @@ describe("project runtime manager", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(harness.client.readTask).toHaveBeenCalledTimes(1);
     expect(harness.client.subscribeEvents).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith("CodeAgent internal warning", {
+      diagnosticCode: "snapshot_recovery_failed",
+      errorMessage: "Snapshot recovery failed",
+    });
 
     await vi.advanceTimersByTimeAsync(999);
     expect(harness.client.readTask).toHaveBeenCalledTimes(1);

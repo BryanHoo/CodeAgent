@@ -1,6 +1,7 @@
 import type { AgentReviewTarget, AgentSkill } from "@code-agent/protocol";
 
 import type { CodeAgentMutationClient } from "../../projects/project-queries.js";
+import { notifyActionSuccess } from "../../notifications/action-notifications.js";
 import { resolveIdempotencyAttempt, startTaskReview } from "../composer-state.js";
 import { getPromptCommandAvailability, type PromptCommandItem } from "./prompt-command.js";
 import { insertPromptSkill, removePromptSlashCommand } from "./prompt-skill-editor.js";
@@ -50,7 +51,6 @@ export function createComposerCommands({
     selectActiveFileReference,
     setActiveCommandIndex,
     setCommandMenuOpen,
-    setCommandNotice,
     setCommandQuery,
     setCommandSlashCommand,
     setComposerModeState,
@@ -101,14 +101,12 @@ export function createComposerCommands({
       );
       setComposerModeState({ mode: command.action, scope: routeScope });
       closeCommandMenu();
-      setCommandNotice(undefined);
       focusEditor(slashCommand.start);
       return;
     }
 
     setCommandQuery("");
     setCommandSlashCommand(undefined);
-    setCommandNotice(undefined);
     replacePromptContent([]);
 
     if (command.action === "review") {
@@ -148,7 +146,7 @@ export function createComposerCommands({
         if (command.action === "compact") {
           await client.compactTask(projectId, activeTaskId, { idempotencyKey: attempt.key });
           if (isCurrentScope(requestScope)) {
-            setCommandNotice(t("composer.compacting"));
+            notifyActionSuccess(t("composer.compacting"));
           }
         } else {
           const response = await client.forkTask(projectId, activeTaskId, {
@@ -176,7 +174,6 @@ export function createComposerCommands({
       const requestScope = routeScope;
       onRequestNotificationPermission();
       closeCommandMenu();
-      setCommandNotice(undefined);
       setIsSubmitting(true);
       setMutationError(null);
       const attempt = resolveIdempotencyAttempt(
@@ -201,7 +198,7 @@ export function createComposerCommands({
         if (isCurrentScope(requestScope)) {
           commandAttempts.current.delete("review");
           setSubmittedTurnState({ scope: requestScope, turnId: response.turn.id });
-          setCommandNotice(t("composer.reviewStarted"));
+          notifyActionSuccess(t("composer.reviewStarted"));
           if (taskId === undefined) {
             const startedTask = response.createdTask ?? pendingTask;
             if (startedTask !== undefined) {
@@ -233,7 +230,6 @@ export function createComposerCommands({
     setCommandMenuOpen(false);
     setCommandQuery("");
     setCommandSlashCommand(undefined);
-    setCommandNotice(undefined);
     focusEditor(cursorPosition);
   };
 

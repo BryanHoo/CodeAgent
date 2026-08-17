@@ -29,6 +29,7 @@ import { GitCommitError } from "../git-commit.js";
 import { GitHistoryError } from "../git-history.js";
 import { GitCommitReviewError } from "../git-commit-review.js";
 import { GitRepositorySelectionError } from "../git-working-tree.js";
+import { originalErrorMessage } from "../error-message.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import { ErrorResponseSchema, IdempotencyHeadersSchema, ProjectParamsSchema } from "./schemas.js";
 
@@ -113,10 +114,9 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
             message: error.message,
           });
         }
-        // Git 和文件系统错误在 HTTP 边界统一收敛，避免向页面泄露本机路径细节。
         return reply.code(500).send({
           code: "GIT_STATUS_UNAVAILABLE",
-          message: "Git working tree status is unavailable",
+          message: originalErrorMessage(error, "Git working tree status is unavailable"),
         });
       }
     },
@@ -150,10 +150,9 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
         if (error instanceof GitHistoryError && error.code === "REPOSITORY_NOT_FOUND") {
           return reply.code(404).send({ code: "GIT_REPOSITORY_NOT_FOUND", message: error.message });
         }
-        // Git 与文件系统错误在边界统一收敛，不能回传宿主绝对路径。
         return reply.code(500).send({
           code: "GIT_HISTORY_UNAVAILABLE",
-          message: "Git history is unavailable",
+          message: originalErrorMessage(error, "Git history is unavailable"),
         });
       }
     },
@@ -168,7 +167,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     }
     return reply.code(500).send({
       code: "GIT_COMMIT_REVIEW_UNAVAILABLE",
-      message: "Git commit review is unavailable",
+      message: originalErrorMessage(error, "Git commit review is unavailable"),
     });
   };
 
@@ -267,7 +266,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
             }
             throw new MutationHttpError(
               "GIT_BRANCH_SWITCH_FAILED",
-              "Git branch switch failed",
+              originalErrorMessage(error, "Git branch switch failed"),
               502,
               true,
             );
@@ -320,7 +319,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
             }
             throw new MutationHttpError(
               "GIT_BRANCH_CREATE_FAILED",
-              "Git branch creation failed",
+              originalErrorMessage(error, "Git branch creation failed"),
               502,
               true,
             );
@@ -367,10 +366,10 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
             ...(request.body.repository === undefined
               ? {}
               : { repository: request.body.repository }),
-          }).catch(() => {
+          }).catch((error: unknown) => {
             throw new MutationHttpError(
               "GIT_REPOSITORY_UNAVAILABLE",
-              "Git repository is unavailable",
+              originalErrorMessage(error, "Git repository is unavailable"),
               409,
             );
           });
@@ -433,7 +432,11 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
             if (error instanceof GitCommitError) {
               throw toGitCommitHttpError(error);
             }
-            throw new MutationHttpError("GIT_COMMIT_FAILED", "Git commit failed", 502);
+            throw new MutationHttpError(
+              "GIT_COMMIT_FAILED",
+              originalErrorMessage(error, "Git commit failed"),
+              502,
+            );
           } finally {
             activeGitMutations.delete(request.params.projectId);
           }

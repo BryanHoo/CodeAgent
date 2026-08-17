@@ -42,12 +42,10 @@ type ProjectSidebarTaskListProps = Readonly<{
   pinnedTasks: readonly AgentTask[];
   projectId?: string;
   projectOrderAnnouncement: string;
-  projectOrderError: Error | null;
   projectTaskStates: ReadonlyMap<string, ProjectTaskListState>;
   reorderingProjectId: string | null;
   setExpandedTaskProjects: Dispatch<SetStateAction<ReadonlySet<string>>>;
   setRenamingTask: Dispatch<SetStateAction<AgentTask | null>>;
-  taskActionError: string | null;
   taskActionPending: boolean;
   taskActivity: TaskActivityMap;
   taskId?: string;
@@ -79,12 +77,10 @@ export function ProjectSidebarTaskList({
   pinnedTasks,
   projectId,
   projectOrderAnnouncement,
-  projectOrderError,
   projectTaskStates,
   reorderingProjectId,
   setExpandedTaskProjects,
   setRenamingTask,
-  taskActionError,
   taskActionPending,
   taskActivity,
   taskId,
@@ -168,19 +164,9 @@ export function ProjectSidebarTaskList({
               {t("sidebar.errorLoadTasks")}
             </p>
           )}
-          {taskActionError === null ? null : (
-            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              {taskActionError}
-            </p>
-          )}
           {taskSearch.error === null ? null : (
             <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
               {t("sidebar.errorSearchTasks")}
-            </p>
-          )}
-          {projectOrderError === null ? null : (
-            <p className="px-2 py-1.5 text-meta leading-5 text-danger" role="alert">
-              {t("sidebar.errorProjectOrder")}
             </p>
           )}
           <p aria-live="polite" className="sr-only">

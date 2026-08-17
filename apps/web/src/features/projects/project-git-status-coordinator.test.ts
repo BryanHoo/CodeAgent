@@ -36,6 +36,7 @@ function createHarness(isPageVisible: () => boolean = () => true) {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("ProjectGitStatusCoordinator", () => {
@@ -108,6 +109,7 @@ describe("ProjectGitStatusCoordinator", () => {
 
   it("retries failed polling automatically and resumes the normal interval after success", async () => {
     vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const getProjectGitStatus = vi
       .fn<CodeAgentGitStatusClient["getProjectGitStatus"]>()
       .mockRejectedValueOnce(new Error("Git unavailable"))
@@ -120,9 +122,17 @@ describe("ProjectGitStatusCoordinator", () => {
     );
 
     coordinator.handleActivity("project-1", "task-1", "turn_started");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryState(["projects", "project-1", "git-status"])).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith("CodeAgent internal warning", {
+      diagnosticCode: "git_status_poll_failed",
+      errorMessage: "Git unavailable",
+      projectId: "project-1",
+    });
+
     await vi.advanceTimersByTimeAsync(1_000);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
-
     await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(3);
     coordinator.dispose();
