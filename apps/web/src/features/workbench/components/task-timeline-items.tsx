@@ -339,7 +339,11 @@ export function TimelineItemContent({
         </Plan>
       );
     }
-    case "activity":
+    case "activity": {
+      // 瞬时活动仅承载运行状态，完成事件到达后立即退出时间线。
+      if (item.transient === true && item.status !== "pending" && item.status !== "running") {
+        return null;
+      }
       return (
         <Task
           collapsible={item.detail !== undefined}
@@ -353,6 +357,7 @@ export function TimelineItemContent({
           )}
         </Task>
       );
+    }
     case "runtime_status": {
       const status = toTaskStatus(item.status);
       if (item.kind === "safety_buffering") {

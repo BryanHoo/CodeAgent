@@ -93,6 +93,7 @@ export const AgentActivityItemSchema = Type.Object(
     id: Type.String({ minLength: 1 }),
     label: Type.String({ minLength: 1 }),
     status: Type.Optional(AgentItemStatusSchema),
+    transient: Type.Optional(Type.Boolean()),
     type: Type.Literal("activity"),
   },
   { additionalProperties: false },

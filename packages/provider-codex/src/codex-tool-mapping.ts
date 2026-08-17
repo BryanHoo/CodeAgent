@@ -86,7 +86,11 @@ export function mapToolItem(item: Record<string, unknown>, id: string, name: str
   };
 }
 
-export function createActivityItem(id: string, label: string, detail?: string): AgentItem {
+export function createActivityItem(
+  id: string,
+  label: string,
+  detail?: string,
+): Extract<AgentItem, { type: "activity" }> {
   return detail === undefined
     ? { id, label, type: "activity" }
     : { detail, id, label, type: "activity" };

@@ -20,7 +20,7 @@ import { RunningReplyStatus } from "./task-timeline-running.js";
 import { TaskStoreTimeline } from "./task-timeline-store.js";
 
 export { resolveMessageResponseRendering } from "./task-timeline-running.js";
-export { resolveCompletedTurnProcessItemIds } from "./task-timeline-store.js";
+export { resolveCompletedTurnProcessItemIds } from "./task-timeline-process.js";
 type ForkTaskAction = (idempotencyKey: string) => Promise<void>;
 type BuildPlanAction = () => Promise<boolean>;
 

@@ -1,4 +1,4 @@
-import type { AgentItem, AgentTurn, PendingRequest } from "@code-agent/protocol";
+import type { PendingRequest } from "@code-agent/protocol";
 import { AlertTriangle, Info } from "lucide-react";
 import { useState } from "react";
 import { useStore } from "zustand";
@@ -21,6 +21,7 @@ import { PendingRequestCard, type PendingRequestResolution } from "./pending-req
 
 import type { BuildPlanAction, ForkTaskAction } from "./task-timeline-contracts.js";
 import { ChangedFilesCard } from "./task-timeline-file-changes.js";
+import { resolveCompletedTurnProcessItemIds } from "./task-timeline-process.js";
 import { RunningReplyStatus } from "./task-timeline-running.js";
 import {
   StoredLiveFileChanges as LiveFileChanges,
@@ -37,28 +38,6 @@ import {
 } from "./task-timeline-status.js";
 
 const getTurnIdKey = (turnId: string) => turnId;
-export function resolveCompletedTurnProcessItemIds(
-  items: readonly AgentItem[],
-  turnStatus: AgentTurn["status"],
-): string[] {
-  if (turnStatus === "running") {
-    return [];
-  }
-  const finalAnswerIndex = items.findLastIndex(
-    (item) => item.type === "message" && item.role === "assistant" && item.phase === "final_answer",
-  );
-  if (finalAnswerIndex < 0) {
-    return [];
-  }
-
-  return items.slice(0, finalAnswerIndex).flatMap((item) => {
-    if (item.type === "message") {
-      return item.role === "assistant" && item.phase === "commentary" ? [item.id] : [];
-    }
-    // Reasoning 摘要与运行操作都属于可折叠过程；File Change 继续由最终摘要统一展示。
-    return item.type === "file_change" || item.type === "review" ? [] : [item.id];
-  });
-}
 export function StoredAssistantGroup({
   itemIds,
   lastTurnItemId,

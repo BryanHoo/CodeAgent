@@ -273,7 +273,8 @@ export function mapAgentItem(
         type: "message",
       };
     case "contextCompaction":
-      return createActivityItem(id, "上下文压缩");
+      // 上下文压缩只描述当前运行阶段，完成后不应作为历史结果保留。
+      return { ...createActivityItem(id, "上下文压缩"), transient: true };
     default:
       // 未知原生对象不向上透传，只保留定位协议漂移所需的类型名称。
       return {

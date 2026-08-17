@@ -1708,7 +1708,7 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("已运行");
   });
 
-  it("does not replay completed context compaction after assistant streaming resumes", () => {
+  it("hides transient context compaction after assistant streaming resumes", () => {
     const runningSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       status: "running",
@@ -1721,6 +1721,7 @@ describe("TaskSnapshotTimeline", () => {
               id: "activity-context-compaction",
               label: "上下文压缩",
               status: "completed",
+              transient: true,
               type: "activity",
             },
             {
@@ -1737,9 +1738,68 @@ describe("TaskSnapshotTimeline", () => {
 
     const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningSnapshot} />);
 
-    expect(markup).toContain("上下文压缩");
+    expect(markup).not.toContain("上下文压缩");
     expect(markup).toContain('aria-label="AI 回复正在运行"');
     expect(markup).not.toContain('aria-label="AI 回复正在运行：上下文压缩"');
+  });
+
+  it("shows transient context compaction only while it is running", () => {
+    const runningSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      status: "running",
+      turns: [
+        {
+          ...completedTurn,
+          completedAt: null,
+          items: [
+            {
+              id: "activity-context-compaction",
+              label: "上下文压缩",
+              status: "running",
+              transient: true,
+              type: "activity",
+            },
+          ],
+          status: "running",
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={runningSnapshot} />);
+
+    expect(markup).toContain('aria-label="AI 回复正在运行：上下文压缩"');
+    expect(markup).toContain("正在运行 上下文压缩");
+  });
+
+  it("does not retain transient context compaction after the turn completes", () => {
+    const completedSnapshot: RuntimeTaskSnapshot = {
+      ...snapshot,
+      turns: [
+        {
+          ...completedTurn,
+          items: [
+            {
+              id: "activity-context-compaction",
+              label: "上下文已压缩",
+              transient: true,
+              type: "activity",
+            },
+            {
+              id: "message-after-compaction",
+              phase: "final_answer",
+              role: "assistant",
+              text: "处理完成。",
+              type: "message",
+            },
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(<TaskSnapshotTimeline snapshot={completedSnapshot} />);
+
+    expect(markup).toContain("处理完成。");
+    expect(markup).not.toContain("上下文已压缩");
   });
 
   it("defers completed generic tool input and output until the tool is opened", () => {

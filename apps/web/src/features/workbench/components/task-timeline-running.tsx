@@ -78,7 +78,9 @@ export function resolveRunningOperation(
   const recentItem = items.findLast(
     ({ item, itemIndex }) =>
       itemIndex > latestAssistantMessageIndex &&
-      (item.type === "command" || item.type === "tool" || item.type === "activity"),
+      (item.type === "command" ||
+        item.type === "tool" ||
+        (item.type === "activity" && item.transient !== true)),
   )?.item;
   if (recentItem?.type === "command") {
     return { label: getCommandLabel(recentItem.command), type: "command" };

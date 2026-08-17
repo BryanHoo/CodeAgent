@@ -3482,6 +3482,16 @@ describe("CodexAgentProvider", () => {
       threadId: "task-1",
       turnId: "turn-1",
     });
+    rpc.emitNotification("item/started", {
+      item: { id: "context-compaction", type: "contextCompaction" },
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+    rpc.emitNotification("item/completed", {
+      item: { id: "context-compaction", type: "contextCompaction" },
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
 
     expect(events).toMatchObject([
       {
@@ -3508,6 +3518,25 @@ describe("CodexAgentProvider", () => {
           item: { label: "查看图片", status: "running", type: "activity" },
         },
         type: "item.started",
+      },
+      {
+        itemId: "context-compaction",
+        payload: {
+          item: {
+            label: "上下文压缩",
+            status: "running",
+            transient: true,
+            type: "activity",
+          },
+        },
+        type: "item.started",
+      },
+      {
+        itemId: "context-compaction",
+        payload: {
+          item: { label: "上下文压缩", transient: true, type: "activity" },
+        },
+        type: "item.completed",
       },
     ]);
   });
@@ -4136,7 +4165,7 @@ describe("CodexAgentProvider", () => {
               type: "tool",
             },
             { id: "i7", text: "1. 定义协议", type: "plan" },
-            { id: "i8", label: "上下文压缩", type: "activity" },
+            { id: "i8", label: "上下文压缩", transient: true, type: "activity" },
             {
               detail: "未识别的活动类型: futureItem",
               id: "i9",
