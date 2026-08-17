@@ -443,6 +443,12 @@ export function WorkbenchShellLayout({
           onRefreshGitStatus={() => {
             void refreshProjectGitStatus(projectId);
           }}
+          onRefreshProject={() =>
+            Promise.all([
+              refreshProjectGitStatus(projectId),
+              ...fileTreeQueries.map((query) => query.refetch()),
+            ])
+          }
           onCommitChanges={() => {
             commitChangesLauncherRef.current?.open();
           }}

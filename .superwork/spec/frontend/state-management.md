@@ -43,7 +43,7 @@
 - Client HTTP 请求固定使用有界策略：携带 TanStack Query `signal` 的读取同时受调用方取消和 30 秒超时控制，普通直接读取使用 15 秒超时，幂等 Mutation 使用 60 秒超时并允许显式取消；三类请求都必须在 Fetch 边界组合 `AbortSignal.timeout()`。
 - 全量 Snapshot 重建只允许用于低频兼容读取、Mutation 输入或恢复边界，不得作为每个 Delta 的 React 订阅结果。
 - 每个 Project 只允许一个客户端 Project Runtime 和一条 Event Stream；统一完成协议解析、Session/Sequence 校验，并向 Sidebar Activity 与该 Project 内已注册的 Task Store 扇出。Project Runtime 使用最多 2,048 条、4 MiB 的固定容量环形事件历史，以 O(1) 追加和头部淘汰补齐 Snapshot 读取期间的事件，不得通过 `Array.shift()` 反复移动大数组；历史不足时必须重新读取 Snapshot。
-- 每个 Project 只允许一个 Git 状态协调器；任一 Task 运行时每 10 秒执行一次兜底刷新，页面隐藏时跳过周期刷新。完成的 `file_change` Item 触发 300ms 防抖刷新，每个 `turn.completed` 必须最终刷新；最后一个活动 Task 完成后先最终刷新再停止周期调度。同一 Project 的并发刷新必须串行合并，失败后使用带上限和抖动的指数退避自动重试，只记录安全控制台诊断且不得把 Query 改为错误状态，成功后原子写入共享 Query 并恢复正常周期；用户手动刷新仍通过动作 toast 反馈。
+- 每个 Project 只允许一个 Git 状态协调器；任一 Task 运行时每 10 秒执行一次兜底刷新，页面隐藏时跳过周期刷新。完成的 `file_change` Item 触发 300ms 防抖刷新，每个 `turn.completed` 必须最终刷新；最后一个活动 Task 完成后先最终刷新再停止周期调度。同一 Project 的并发刷新必须串行合并，失败后使用带上限和抖动的指数退避自动重试，只记录安全控制台诊断且不得把 Query 改为错误状态，成功后原子写入共享 Query 并恢复正常周期。识别到 `repositoryMode: "none"` 后必须立即停止该 Project 的周期、文件变更与失败重试调度，后续 Task 活动不得自动探测；用户手动刷新必须始终重新探测，并可在 Project 变为 Git 仓库后恢复活动 Task 的单一轮询周期，动作结果继续通过 toast 反馈。
 - Sidebar 的轻量活动状态必须按 `projectId + taskId` 保存；切换当前 Task 或 Project 不能清除后台 Task 的运行或审批状态，只有对应 Task 的 Snapshot 或终态事件可以更新该行状态。Project 无 Task Store 消费者、无运行 Task、无待审批且连续 2 分钟未访问后必须关闭 Event Stream 并释放 Runtime；详细 Timeline Store 不得把完整历史复制到 Sidebar 状态。
 - Task 归档成功后必须清理 `taskActivity`、最近 Snapshot 恢复引用、非活动 Runtime Store 与 Task Snapshot Query；不可见 Task 收到 `turn.completed` 后再次尝试安全 unsubscribe，避免首次切换时因运行态跳过后永久保留 Thread。
 - Composer 只使用 `idle`、`submitting`、`running`、`reconnecting`、`failed` 五种状态；运行态来自活动 Turn，重连态暂停网络 Mutation，失败态保留草稿。

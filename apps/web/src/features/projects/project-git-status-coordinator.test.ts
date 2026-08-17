@@ -19,6 +19,16 @@ const gitStatus: ProjectGitStatus = {
   unstaged: [],
 };
 
+const nonGitStatus: ProjectGitStatus = {
+  baseBranches: [],
+  branch: null,
+  branches: [],
+  repositoryMode: "none",
+  snapshot: "b".repeat(64),
+  staged: [],
+  unstaged: [],
+};
+
 function createHarness(isPageVisible: () => boolean = () => true) {
   const getProjectGitStatus = vi.fn<CodeAgentGitStatusClient["getProjectGitStatus"]>(() =>
     Promise.resolve(gitStatus),
@@ -104,6 +114,33 @@ describe("ProjectGitStatusCoordinator", () => {
     coordinator.handleActivity("project-1", "task-1", "turn_completed");
     await vi.advanceTimersByTimeAsync(0);
     expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
+  it("stops automatic polling for non-Git projects and resumes only after manual detection", async () => {
+    vi.useFakeTimers();
+    const getProjectGitStatus = vi
+      .fn<CodeAgentGitStatusClient["getProjectGitStatus"]>()
+      .mockResolvedValueOnce(nonGitStatus)
+      .mockResolvedValueOnce(gitStatus)
+      .mockResolvedValueOnce(nonGitStatus);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const coordinator = new ProjectGitStatusCoordinator(queryClient, { getProjectGitStatus });
+
+    coordinator.handleActivity("project-1", "task-1", "turn_started");
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS * 2);
+    coordinator.handleActivity("project-1", "task-1", "file_changed");
+    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_FILE_CHANGE_DEBOUNCE_MS);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(1);
+
+    await coordinator.refreshProject("project-1");
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(PROJECT_GIT_STATUS_POLL_INTERVAL_MS * 2);
+    expect(getProjectGitStatus).toHaveBeenCalledTimes(3);
+    expect(queryClient.getQueryData(["projects", "project-1", "git-status"])).toEqual(nonGitStatus);
     coordinator.dispose();
   });
 

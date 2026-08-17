@@ -1143,7 +1143,9 @@ test("project file tree opens changed, source, image, and system files by shared
   await expect(page.getByRole("dialog", { name: "100%完成 后续工作交接.pptx" })).toHaveCount(0);
 });
 
-test("project file tree context menu and ellipsis share target actions", async ({ page }) => {
+test("project file tree refresh, context menu, and ellipsis share target actions", async ({
+  page,
+}) => {
   let turnRequest: Record<string, unknown> | undefined;
   await page.route("**/v1/projects/code-agent/tasks/task-1/turns", async (route) => {
     turnRequest = parseRequestRecord(route.request().postData());
@@ -1184,6 +1186,21 @@ test("project file tree context menu and ellipsis share target actions", async (
   });
   const rootTreeItem = fileTree.getByRole("treeitem", { name: "CodeAgent" }).first();
   await expect(rootTreeItem).toHaveAttribute("aria-expanded", "true");
+  const rootRefresh = rootTreeItem.getByRole("button", { name: "刷新项目 CodeAgent" });
+  const rootTreeRefreshRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/v1/projects/code-agent/files/tree" && !url.searchParams.has("path");
+  });
+  const gitRefreshRequest = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === "/v1/projects/code-agent/git/status",
+  );
+  await expect(rootRefresh).toHaveClass(/opacity-0/u);
+  await expect(rootRefresh.locator("svg")).toHaveCSS("width", "14px");
+  await expect(rootRefresh.locator("svg")).toHaveCSS("height", "14px");
+  await rootTreeItem.locator(":scope > div").first().hover();
+  await expect(rootRefresh).toHaveCSS("opacity", "1");
+  await rootRefresh.click();
+  await Promise.all([rootTreeRefreshRequest, gitRefreshRequest]);
   await rootTreeItem
     .getByRole("button", { exact: true, name: "CodeAgent" })
     .click({ button: "right" });

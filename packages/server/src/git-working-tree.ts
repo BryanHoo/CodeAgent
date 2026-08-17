@@ -315,10 +315,13 @@ export async function readGitWorkingTreeStatus(
       budget,
     );
     if (childStatus === undefined) {
-      throw new Error("Project root is not a Git repository");
+      // 非 Git 是可恢复的 Project 状态，手动刷新时仍需允许重新探测仓库。
+      status = { staged: [], unstaged: [] };
+      repositoryMode = "none";
+    } else {
+      status = childStatus;
+      repositoryMode = "children";
     }
-    status = childStatus;
-    repositoryMode = "children";
   }
 
   const comparePaths = (left: GitFileChange, right: GitFileChange) =>

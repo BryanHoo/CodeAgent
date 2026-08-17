@@ -13,22 +13,19 @@ import { useMemo, useState } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
-import {
-  FileTree,
-  FileTreeActions,
-  FileTreeFolder,
-} from "../../../shared/components/agent/file-tree.js";
+import { FileTree, FileTreeFolder } from "../../../shared/components/agent/file-tree.js";
 import { Button } from "../../../shared/components/core/button.js";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
-import { ProjectOpenContextMenu, ProjectOpenDropdownMenu } from "./project-open-menu.js";
+import { ProjectOpenContextMenu } from "./project-open-menu.js";
 import type { SubagentContextEntry, SubagentSelection } from "./subagent.js";
 
 import {
   ProjectFileTreeNodes,
+  ProjectFileTreeRootActions,
   collectFileTreeChangeSummary,
   getProjectFileName,
   type ProjectFileTreeDirectoryState,
@@ -72,6 +69,7 @@ type WorkbenchInspectorProps = Readonly<{
   onReloadMcpServers?: () => void;
   onRefreshFileTreeDirectory?: (directoryPath: string | null) => void;
   onRefreshGitStatus?: () => void;
+  onRefreshProject?: () => unknown;
   onCommitChanges?: () => void;
   onClose?: () => void;
   onTerminateBackgroundTerminal?: (terminalId: string) => Promise<void>;
@@ -81,6 +79,7 @@ type WorkbenchInspectorProps = Readonly<{
   projectOpenApps?: readonly ProjectOpenApp[];
   projectOpenPending?: boolean;
   projectPath: string;
+  projectRefreshing?: boolean;
   skills?: readonly AgentSkill[];
   subagents?: readonly SubagentContextEntry[];
   tab?: WorkbenchInspectorTab;
@@ -118,6 +117,7 @@ export function WorkbenchInspector({
   onReloadMcpServers = () => undefined,
   onRefreshFileTreeDirectory = () => undefined,
   onRefreshGitStatus = () => undefined,
+  onRefreshProject = () => undefined,
   onCommitChanges = () => undefined,
   onClose,
   onTerminateBackgroundTerminal = () => Promise.resolve(),
@@ -127,6 +127,7 @@ export function WorkbenchInspector({
   projectOpenApps = [],
   projectOpenPending = false,
   projectPath,
+  projectRefreshing = false,
   skills = [],
   subagents = [],
   tab = "changes",
@@ -431,24 +432,21 @@ export function WorkbenchInspector({
                         name={projectRootName}
                         path={projectPath}
                         trailing={
-                          <FileTreeActions>
-                            <ProjectOpenDropdownMenu
-                              apps={projectOpenApps}
-                              isPending={projectOpenPending}
-                              onOpen={() => {
-                                setSelectedTreePath(projectPath);
-                              }}
-                              onReference={onReferenceProjectPath}
-                              onSelect={(appId) => {
-                                onOpenProjectPath(appId);
-                              }}
-                              target={{
-                                copyPath: projectPath,
-                                path: projectPath,
-                                type: "directory",
-                              }}
-                            />
-                          </FileTreeActions>
+                          <ProjectFileTreeRootActions
+                            onMenuOpen={() => {
+                              setSelectedTreePath(projectPath);
+                            }}
+                            onOpenProjectPath={(appId) => {
+                              onOpenProjectPath(appId);
+                            }}
+                            onReferenceProjectPath={onReferenceProjectPath}
+                            onRefreshProject={onRefreshProject}
+                            projectName={projectRootName}
+                            projectOpenApps={projectOpenApps}
+                            projectOpenPending={projectOpenPending}
+                            projectPath={projectPath}
+                            refreshing={projectRefreshing}
+                          />
                         }
                       >
                         <ProjectFileTreeNodes

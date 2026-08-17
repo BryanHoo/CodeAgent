@@ -633,6 +633,17 @@ describe("project protocol", () => {
     ).toBe(true);
     expect(
       Value.Check(ProjectGitStatusSchema, {
+        baseBranches: [],
+        branch: null,
+        branches: [],
+        repositoryMode: "none",
+        snapshot: "b".repeat(64),
+        staged: [],
+        unstaged: [],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ProjectGitStatusSchema, {
         staged: [],
         unstaged: [],
       }),

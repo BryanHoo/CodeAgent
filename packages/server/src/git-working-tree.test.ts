@@ -209,6 +209,31 @@ describe("readGitWorkingTreeStatus", () => {
     }
   });
 
+  it("returns an empty non-Git status when the project has no repositories", async () => {
+    const projectRoot = await realpath(
+      await mkdtemp(join(tmpdir(), "code-agent-git-status-test-")),
+    );
+    try {
+      await mkdir(join(projectRoot, "notes"));
+
+      const first = await readGitWorkingTreeStatus(projectRoot);
+      const second = await readGitWorkingTreeStatus(projectRoot);
+
+      expect(first).toEqual({
+        baseBranches: [],
+        branch: null,
+        branches: [],
+        repositoryMode: "none",
+        snapshot: second.snapshot,
+        staged: [],
+        unstaged: [],
+      });
+      expect(first.snapshot).toMatch(/^[a-f0-9]{64}$/u);
+    } finally {
+      await rm(projectRoot, { force: true, recursive: true });
+    }
+  });
+
   it("reads one selected immediate child repository with repository-relative paths", async () => {
     const projectRoot = await realpath(
       await mkdtemp(join(tmpdir(), "code-agent-git-status-test-")),

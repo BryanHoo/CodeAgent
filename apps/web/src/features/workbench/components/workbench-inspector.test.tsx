@@ -277,6 +277,7 @@ describe("WorkbenchInspector", () => {
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
         gitStatus={nestedGitStatus}
+        onRefreshProject={() => undefined}
         projectName="CodeAgent"
         projectOpenApps={[
           { id: "zed", kind: "editor", name: "Zed" },
@@ -289,6 +290,8 @@ describe("WorkbenchInspector", () => {
     expect(markup.match(/data-slot="context-menu-trigger"/gu)).toHaveLength(3);
     expect(markup.match(/data-slot="dropdown-menu-trigger"/gu)).toHaveLength(3);
     expect(markup).toContain('aria-label="/workspace/CodeAgent 的操作"');
+    expect(markup).toContain('aria-label="刷新项目 CodeAgent"');
+    expect(markup).toContain("lucide-refresh-cw size-3.5");
     expect(markup).toContain('aria-label="src 的操作"');
     expect(markup).toContain('aria-label="README.md 的操作"');
     expect(markup).toContain("group-hover/file-tree-node:opacity-100");
@@ -300,6 +303,24 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain('aria-label="收起文件夹 CodeAgent"');
     expect(markup).toContain("README.md");
     expect(markup).toContain("src");
+  });
+
+  it("keeps the project refresh action visible and disabled while refreshing", () => {
+    const markup = renderInspectorMarkup(
+      <WorkbenchInspector
+        fileTreeDirectories={fileTreeDirectories}
+        onRefreshProject={() => undefined}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        projectRefreshing
+      />,
+    );
+    const refreshButton = /<button[^>]*aria-label="刷新项目 CodeAgent"[^>]*>/u.exec(markup)?.[0];
+
+    expect(refreshButton).toBeDefined();
+    expect(refreshButton).toContain('disabled=""');
+    expect(refreshButton).toContain("opacity-100");
+    expect(markup).toContain("animate-spin");
   });
 
   it("moves Git change stats from the nearest collapsed ancestor to the visible file", () => {

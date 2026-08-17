@@ -39,7 +39,11 @@ export const ProjectGitStatusSchema = Type.Object(
     baseBranches: Type.Array(Type.String({ minLength: 1 }), { uniqueItems: true }),
     branch: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     branches: Type.Array(GitBranchNameSchema, { uniqueItems: true }),
-    repositoryMode: Type.Union([Type.Literal("root"), Type.Literal("children")]),
+    repositoryMode: Type.Union([
+      Type.Literal("root"),
+      Type.Literal("children"),
+      Type.Literal("none"),
+    ]),
     snapshot: GitSnapshotSchema,
     staged: Type.Array(ProjectGitFileChangeSchema),
     unstaged: Type.Array(ProjectGitFileChangeSchema),

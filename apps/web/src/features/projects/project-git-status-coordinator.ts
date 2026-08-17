@@ -25,9 +25,10 @@ interface ProjectPollingState {
   consecutiveFailures: number;
   fileChangeTimer: ReturnType<typeof setTimeout> | undefined;
   inFlight: Promise<void> | undefined;
+  isGitProject: boolean | undefined;
   pollingTimer: ReturnType<typeof setInterval> | undefined;
   projectId: string;
-  refreshPending: boolean;
+  refreshPending: "background" | "manual" | undefined;
   retryTimer: ReturnType<typeof setTimeout> | undefined;
 }
 
@@ -92,6 +93,9 @@ export class ProjectGitStatusCoordinator {
       const wasInactive = state.activeTaskIds.size === 0;
       const wasRecovering = state.consecutiveFailures > 0 || state.retryTimer !== undefined;
       state.activeTaskIds.add(taskId);
+      if (state.isGitProject === false) {
+        return;
+      }
       if (wasInactive || wasRecovering) {
         this.#clearRetryTimer(state);
         this.#requestBackgroundRefresh(state);
@@ -104,6 +108,9 @@ export class ProjectGitStatusCoordinator {
     if (reason === "file_changed") {
       state.activeTaskIds.add(taskId);
       this.#clearRetryTimer(state);
+      if (state.isGitProject === false) {
+        return;
+      }
       this.#scheduleFileChangeRefresh(state);
       return;
     }
@@ -113,6 +120,12 @@ export class ProjectGitStatusCoordinator {
     this.#clearRetryTimer(state);
     if (state.activeTaskIds.size === 0) {
       this.#clearPollingTimer(state);
+    }
+    if (state.isGitProject === false) {
+      if (state.activeTaskIds.size === 0) {
+        this.#projects.delete(state.projectId);
+      }
+      return;
     }
     // Turn 终态始终补读一次；最后一个 Task 的状态只在该请求完成后释放。
     this.#requestBackgroundRefresh(state);
@@ -124,7 +137,7 @@ export class ProjectGitStatusCoordinator {
     }
     const state = this.#getOrCreateState(projectId);
     this.#clearRetryTimer(state);
-    await this.#requestRefresh(state);
+    await this.#requestRefresh(state, "manual");
   }
 
   #clearFileChangeTimer(state: ProjectPollingState): void {
@@ -150,7 +163,7 @@ export class ProjectGitStatusCoordinator {
 
   #closeState(state: ProjectPollingState): void {
     state.closed = true;
-    state.refreshPending = false;
+    state.refreshPending = undefined;
     this.#clearFileChangeTimer(state);
     this.#clearPollingTimer(state);
     this.#clearRetryTimer(state);
@@ -159,6 +172,7 @@ export class ProjectGitStatusCoordinator {
   #ensurePolling(state: ProjectPollingState): void {
     if (
       state.closed ||
+      state.isGitProject !== true ||
       state.consecutiveFailures > 0 ||
       state.activeTaskIds.size === 0 ||
       state.pollingTimer !== undefined ||
@@ -184,21 +198,24 @@ export class ProjectGitStatusCoordinator {
       consecutiveFailures: 0,
       fileChangeTimer: undefined,
       inFlight: undefined,
+      isGitProject: undefined,
       pollingTimer: undefined,
       projectId,
-      refreshPending: false,
+      refreshPending: undefined,
       retryTimer: undefined,
     };
     this.#projects.set(projectId, state);
     return state;
   }
 
-  #requestRefresh(state: ProjectPollingState): Promise<void> {
+  #requestRefresh(state: ProjectPollingState, source: "background" | "manual"): Promise<void> {
     if (state.closed || this.#disposed) {
       return Promise.resolve();
     }
     if (state.inFlight !== undefined) {
-      state.refreshPending = true;
+      // 手动请求优先级更高，必须在当前读取结束后再次执行真实仓库探测。
+      state.refreshPending =
+        source === "manual" || state.refreshPending === "manual" ? "manual" : "background";
       return state.inFlight;
     }
 
@@ -208,6 +225,12 @@ export class ProjectGitStatusCoordinator {
       .then((status) => {
         this.#queryClient.setQueryData(queryOptions.queryKey, status);
         state.consecutiveFailures = 0;
+        state.isGitProject = status.repositoryMode !== "none";
+        if (!state.isGitProject) {
+          this.#clearFileChangeTimer(state);
+          this.#clearPollingTimer(state);
+          this.#clearRetryTimer(state);
+        }
       })
       .catch((error: unknown) => {
         state.consecutiveFailures += 1;
@@ -219,14 +242,20 @@ export class ProjectGitStatusCoordinator {
           return;
         }
         state.inFlight = undefined;
-        if (state.refreshPending) {
-          state.refreshPending = false;
-          this.#requestBackgroundRefresh(state);
+        const pendingSource = state.refreshPending;
+        state.refreshPending = undefined;
+        if (
+          pendingSource !== undefined &&
+          (pendingSource === "manual" || state.isGitProject !== false)
+        ) {
+          this.#requestBackgroundRefresh(state, pendingSource);
           return;
         }
         if (state.activeTaskIds.size > 0) {
           if (state.consecutiveFailures > 0) {
-            this.#scheduleRetry(state);
+            if (state.isGitProject !== false) {
+              this.#scheduleRetry(state);
+            }
           } else {
             this.#ensurePolling(state);
           }
@@ -240,8 +269,11 @@ export class ProjectGitStatusCoordinator {
     return refresh;
   }
 
-  #requestBackgroundRefresh(state: ProjectPollingState): void {
-    void this.#requestRefresh(state).catch((error: unknown) => {
+  #requestBackgroundRefresh(
+    state: ProjectPollingState,
+    source: "background" | "manual" = "background",
+  ): void {
+    void this.#requestRefresh(state, source).catch((error: unknown) => {
       recordInternalWarning("git_status_poll_failed", error, { projectId: state.projectId });
     });
   }
@@ -255,7 +287,12 @@ export class ProjectGitStatusCoordinator {
   }
 
   #scheduleRetry(state: ProjectPollingState): void {
-    if (state.closed || state.activeTaskIds.size === 0 || state.retryTimer !== undefined) {
+    if (
+      state.closed ||
+      state.isGitProject === false ||
+      state.activeTaskIds.size === 0 ||
+      state.retryTimer !== undefined
+    ) {
       return;
     }
     // 指数退避加入正负 20% 抖动，并保证最终延迟不超过上限。
