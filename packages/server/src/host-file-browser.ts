@@ -11,6 +11,7 @@ import {
   type HostFileListing,
 } from "@code-agent/protocol";
 
+import { classifyFilesystemEntries } from "./filesystem-entry-type.js";
 import { listFilesystemRoots } from "./filesystem-roots.js";
 
 const FILE_EXTENSIONS = new Set<string>(AGENT_FILE_EXTENSIONS);
@@ -79,9 +80,12 @@ function mediaTypeFor(kind: HostFileKind, path: string): AgentAttachmentMediaTyp
     : undefined;
 }
 
-function compareEntries(left: Dirent, right: Dirent): number {
-  if (left.isDirectory() !== right.isDirectory()) {
-    return left.isDirectory() ? -1 : 1;
+function compareEntries(
+  left: HostFileListing["entries"][number],
+  right: HostFileListing["entries"][number],
+): number {
+  if (left.type !== right.type) {
+    return left.type === "directory" ? -1 : 1;
   }
   return (
     left.name.localeCompare(right.name, "en", { sensitivity: "base" }) ||
@@ -124,28 +128,28 @@ export async function readHostFileDirectory(
     resolveHostDirectory(requestedPath, options),
     (options.filesystemRoots ?? listFilesystemRoots)(),
   ]);
-  let children: Dirent[];
+  let entries: HostFileListing["entries"];
   try {
-    children = await readdir(path, { withFileTypes: true });
+    const children: Dirent[] = await readdir(path, { withFileTypes: true });
+    const classifiedChildren = await classifyFilesystemEntries(
+      path,
+      children.filter((child) => options.includeHidden === true || !child.name.startsWith(".")),
+    );
+    entries = classifiedChildren
+      .flatMap(({ entry, type }): HostFileListing["entries"] => {
+        if (type === "directory") {
+          return [{ name: entry.name, path: join(path, entry.name), type }];
+        }
+        if (type === "file" && mediaTypeFor(kind, join(path, entry.name)) !== undefined) {
+          return [{ name: entry.name, path: join(path, entry.name), type }];
+        }
+        return [];
+      })
+      .sort(compareEntries);
   } catch (error) {
     throw toHostFileError(error);
   }
 
-  // 只暴露可继续浏览的真实目录，以及当前附件入口明确支持的普通文件。
-  const entries = children
-    .filter(
-      (child) =>
-        (options.includeHidden === true || !child.name.startsWith(".")) &&
-        !child.isSymbolicLink() &&
-        (child.isDirectory() ||
-          (child.isFile() && mediaTypeFor(kind, join(path, child.name)) !== undefined)),
-    )
-    .sort(compareEntries)
-    .map((child) => ({
-      name: child.name,
-      path: join(path, child.name),
-      type: child.isDirectory() ? ("directory" as const) : ("file" as const),
-    }));
   const parentPath = dirname(path);
   return { entries, parentPath: parentPath === path ? null : parentPath, path, roots };
 }

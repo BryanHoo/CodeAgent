@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join } from "node:path";
 
 import type { ProjectDirectoryListing } from "@code-agent/protocol";
 
+import { classifyFilesystemEntries } from "./filesystem-entry-type.js";
 import { listFilesystemRoots } from "./filesystem-roots.js";
 
 export type ProjectDirectoryBrowserErrorReason = "directory-unavailable" | "invalid-directory";
@@ -80,23 +81,22 @@ export async function readProjectDirectory(
     resolveProjectDirectory(requestedPath, options),
     (options.filesystemRoots ?? listFilesystemRoots)(),
   ]);
-  let children: Dirent[];
+  let entries: ProjectDirectoryListing["entries"];
   try {
-    children = await readdir(path, { withFileTypes: true });
+    const children: Dirent[] = await readdir(path, { withFileTypes: true });
+    const classifiedChildren = await classifyFilesystemEntries(
+      path,
+      children.filter((child) => options.includeHidden === true || !child.name.startsWith(".")),
+    );
+    entries = classifiedChildren
+      .filter(({ type }) => type === "directory")
+      .map(({ entry }) => entry)
+      .sort(compareDirectories)
+      .map((child) => ({ name: child.name, path: join(path, child.name) }));
   } catch (error) {
     throw toDirectoryError(error);
   }
 
-  // 浏览接口只暴露真实直接子目录；文件和符号链接不会进入可递归展开的目录树。
-  const entries = children
-    .filter(
-      (child) =>
-        (options.includeHidden === true || !child.name.startsWith(".")) &&
-        child.isDirectory() &&
-        !child.isSymbolicLink(),
-    )
-    .sort(compareDirectories)
-    .map((child) => ({ name: child.name, path: join(path, child.name) }));
   const parentPath = dirname(path);
   return {
     entries,
