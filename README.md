@@ -10,7 +10,7 @@ CodeAgent runs on your computer. You can use it locally or access it from anothe
 
 - Work with Codex in your browser and follow responses, commands, and file changes in real time
 - Organize tasks by project, with search, pin, rename, and archive actions
-- Start temporary tasks without adding a project
+- Start temporary tasks without adding a project, preview files, or add a project from the task
 - Attach images or files, reference project files with `@`, and use configured Skills and MCP servers
 - Sign in with ChatGPT or connect a custom OpenAI-compatible API
 - Load models from the active service and choose the model, reasoning effort, approval behavior, and file access level
@@ -68,7 +68,7 @@ Open CodeAgent, select **New task** in the sidebar, enter your request, and subm
 4. Enter the work you want completed, optionally add images, files, or a Skill, and submit it.
 5. Follow Codex responses, tool activity, and approval requests while it works.
 
-Project folders come from the computer running CodeAgent. When you connect from another device, the directory picker still shows files from the host computer. On Windows, use the drive selector to browse folders on any accessible drive.
+Project folders come from the computer running CodeAgent. When you connect from another device, the directory picker still shows files from the host computer. The picker accepts absolute paths and can show hidden items; on Windows, use the drive selector to browse folders on any accessible drive.
 
 Use a file tree item's `...` button or context menu to copy its name or project-relative path, open it with a supported application, or append it as a reference to the current composer draft.
 
@@ -79,6 +79,8 @@ The inspector's **Sources** section collects attachments used in the current tas
 Before submitting a message, use the controls below the composer to choose the model, reasoning effort, approval behavior, and file access level. Select Plan mode when you want to prepare an implementation plan, or Goal mode when you want Codex to continue working toward an objective.
 
 Type `@` to search for and reference a project file. CodeAgent sends the validated project-relative reference to Codex without exposing the host's absolute path. Use `Up` and `Down` at the first or last line to browse earlier prompts; returning past the newest entry restores your current draft.
+
+You can submit another message while the current turn is still running. Depending on the global setting, CodeAgent queues it as a follow-up or steers the current turn immediately; queued messages can be edited or canceled before they are sent.
 
 Type `/` at the beginning of the composer to access actions such as code review, context compaction, and continuing in a new task. Available actions depend on the current task. MCP status updates appear in real time while configured servers start or fail.
 
