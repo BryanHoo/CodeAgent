@@ -21,6 +21,7 @@ export type ParsedCodeComments = Readonly<{
 }>;
 
 const CODE_COMMENT_DIRECTIVE_PATTERN = /^::code-comment\{(.*)\}\s*$/gm;
+const CODE_COMMENT_DIRECTIVE_LINE_PATTERN = /^::code-comment\{(.*)\}\s*$/;
 const CODE_COMMENT_ATTRIBUTE_PATTERN = /([a-z]+)=(?:"((?:\\.|[^"\\])*)"|(\d+))/g;
 const PROJECT_RELATIVE_PATH_MARKERS = ["/apps/", "/packages/", "/src/", "/tests/", "/.superwork/"];
 const COMMENT_TOOLTIP_GAP = 8;
@@ -74,6 +75,11 @@ function parseCodeCommentAttributes(source: string): CodeComment | null {
     start: parseOptionalNumber("start"),
     title,
   };
+}
+
+export function parseCodeCommentDirective(source: string): CodeComment | null {
+  const attributes = CODE_COMMENT_DIRECTIVE_LINE_PATTERN.exec(source)?.[1];
+  return attributes === undefined ? null : parseCodeCommentAttributes(attributes);
 }
 
 export function parseCodeComments(markdown: string): ParsedCodeComments {

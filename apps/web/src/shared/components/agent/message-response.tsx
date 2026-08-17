@@ -3,8 +3,14 @@ import { createContext, memo, useContext, useMemo, type ComponentProps } from "r
 import { Block, Streamdown, StreamdownContext, type BlockProps, type Components } from "streamdown";
 
 import { Button } from "../core/button.js";
-import { CodeComments, parseCodeComments } from "./code-comments.js";
+import { CodeComments } from "./code-comments.js";
 import type { MessageFileReference } from "./message.js";
+import {
+  createIncrementalMarkdownBlockParser,
+  IncrementalMessageResponseProcessor,
+  RELATIVE_FILE_REFERENCE_PREFIX,
+  UNC_FILE_REFERENCE_PREFIX,
+} from "./message-response-processing.js";
 import { promptReferenceTokenClassName } from "./prompt-reference-token.js";
 
 type MarkdownLinkProps = ComponentProps<"a"> & {
@@ -31,17 +37,14 @@ const MessageFileReferenceContext = createContext<
 // Agent 输出使用“绝对路径:行号”表达文件定位；渲染时拆出行号，避免把路径暴露给用户。
 const LOCAL_FILE_REFERENCE_PATTERN =
   /^(?<path>(?:\/|[a-z]:[\\/]|\\\\).+?\.[a-z0-9]+?)(?::(?<line>\d+)(?::\d+)?)?$/i;
-const WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN =
-  /(?<=\]\()(?:[a-z]:[\\/]|\\\\)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
-const UNC_FILE_REFERENCE_PREFIX = "/__code_agent_unc__/";
-const RELATIVE_FILE_REFERENCE_PREFIX = "/__code_agent_relative__/";
 const PROMPT_FILE_REFERENCE_PREFIX = "/__code_agent_prompt_reference__/";
 const PROMPT_FILE_REFERENCE_PATTERN =
   /(^|\s)@(?<path>[^\s,!?;:，。！？；：、()[\]{}"'`]+)(?=$|\s|[,!?;:，。！？；：、()[\]{}"'`])/gu;
-const RELATIVE_MARKDOWN_FILE_REFERENCE_PATTERN =
-  /(?<=\]\()(?![a-z][a-z0-9+.-]*:|\/|#)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
-const LOCAL_MARKDOWN_FILE_REFERENCE_PATTERN =
-  /(?<=\]\()\/(?!\/)[^)\r\n]+?\.[a-z0-9]+(?::\d+(?::\d+)?)?(?=\))/gi;
+const MESSAGE_RESPONSE_CONTROLS = {
+  code: { copy: true, download: false },
+  mermaid: false,
+  table: false,
+} as const;
 
 function decodeMarkdownFileReference(href: string): string {
   try {
@@ -133,25 +136,6 @@ function promptFileReferenceRemarkPlugin() {
     };
     transform(tree);
   };
-}
-
-function normalizeMarkdownFileReferences(markdown: string): string {
-  // 先统一本地路径形式，再编码 Markdown 目标中不允许裸写的空白字符。
-  return markdown
-    .replace(WINDOWS_MARKDOWN_FILE_REFERENCE_PATTERN, (reference) => {
-      const normalizedReference = reference.replaceAll("\\", "/");
-      if (/^[a-z]:/i.test(normalizedReference)) {
-        return `/${normalizedReference}`;
-      }
-      return `${UNC_FILE_REFERENCE_PREFIX}${normalizedReference.slice(2)}`;
-    })
-    .replace(
-      RELATIVE_MARKDOWN_FILE_REFERENCE_PATTERN,
-      (reference) => `${RELATIVE_FILE_REFERENCE_PREFIX}${reference}`,
-    )
-    .replace(LOCAL_MARKDOWN_FILE_REFERENCE_PATTERN, (reference) =>
-      reference.replaceAll(" ", "%20").replaceAll("\t", "%09"),
-    );
 }
 
 function MarkdownLink({ children, className = "", href, node, ...props }: MarkdownLinkProps) {
@@ -281,31 +265,38 @@ function MessageResponseContent({
   className = "",
   components,
   onOpenFileReference,
+  parseMarkdownIntoBlocksFn,
   promptFileReferences = false,
   remarkPlugins,
   ...props
 }: MessageResponseProps) {
-  const parsedResponse = parseCodeComments(children ?? "");
-  const normalizedMarkdown = normalizeMarkdownFileReferences(parsedResponse.markdown);
-  const markdownComponents: Components = {
-    ...components,
-    a: MarkdownLink,
-  };
-  const resolvedRemarkPlugins = promptFileReferences
-    ? [promptFileReferenceRemarkPlugin, ...(remarkPlugins ?? [])]
-    : remarkPlugins;
+  const responseProcessor = useMemo(() => new IncrementalMessageResponseProcessor(), []);
+  const incrementalBlockParser = useMemo(() => createIncrementalMarkdownBlockParser(), []);
+  const parsedResponse = responseProcessor.process(children ?? "");
+  const markdownComponents: Components = useMemo(
+    () => ({ ...components, a: MarkdownLink }),
+    [components],
+  );
+  const resolvedRemarkPlugins = useMemo(
+    () =>
+      promptFileReferences
+        ? [promptFileReferenceRemarkPlugin, ...(remarkPlugins ?? [])]
+        : remarkPlugins,
+    [promptFileReferences, remarkPlugins],
+  );
 
   return (
     <MessageFileReferenceContext.Provider value={onOpenFileReference ?? null}>
       <Streamdown
         className={`size-full break-words [&_blockquote]:border-l-2 [&_blockquote]:border-separator [&_blockquote]:pl-3 [&_code]:font-mono [&_code]:text-body-small [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_pre]:overflow-x-auto [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 ${className}`}
-        controls={{ code: { copy: true, download: false }, mermaid: false, table: false }}
+        controls={MESSAGE_RESPONSE_CONTROLS}
         {...props}
         BlockComponent={InteractiveMessageBlock}
         components={markdownComponents}
+        parseMarkdownIntoBlocksFn={parseMarkdownIntoBlocksFn ?? incrementalBlockParser}
         {...(resolvedRemarkPlugins === undefined ? {} : { remarkPlugins: resolvedRemarkPlugins })}
       >
-        {normalizedMarkdown}
+        {parsedResponse.markdown}
       </Streamdown>
       <CodeComments comments={parsedResponse.comments} />
     </MessageFileReferenceContext.Provider>

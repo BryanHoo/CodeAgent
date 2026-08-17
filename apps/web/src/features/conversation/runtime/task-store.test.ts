@@ -212,6 +212,44 @@ describe("task store", () => {
     expect(store.getState().turnDiffsById["turn-running"]).toBeUndefined();
   });
 
+  it("tracks reasoning summary sections without materializing previous chunks", () => {
+    const store = createTaskStore(
+      { projectId: "project-1", taskId: "task-1" },
+      createResponse({
+        turns: [
+          {
+            completedAt: null,
+            error: null,
+            id: "turn-running",
+            items: [{ content: "", id: "reasoning-1", summary: "既有摘要", type: "reasoning" }],
+            startedAt: timestamp,
+            status: "running",
+          },
+        ],
+      }),
+    );
+    const itemStore = store.getState().itemStoresById.get("reasoning-1");
+    if (itemStore === undefined) {
+      throw new Error("Expected reasoning item store");
+    }
+    const readSpy = vi.spyOn(itemStore, "read");
+
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        itemId: "reasoning-1",
+        payload: { delta: "新增分段", field: "summary", sectionIndex: 1 },
+        turnId: "turn-running",
+        type: "reasoning.delta",
+      },
+    ]);
+
+    expect(readSpy).not.toHaveBeenCalled();
+    expect(store.getState().getItem("reasoning-1")).toMatchObject({
+      summary: "既有摘要\n\n新增分段",
+    });
+  });
+
   it("completes one turn without scanning every historical item store", () => {
     const store = createTaskStore(
       { projectId: "project-1", taskId: "task-1" },

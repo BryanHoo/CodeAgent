@@ -106,6 +106,7 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
   let materializedGeneration = initialItem.type === "command" ? -1 : 0;
   let materializedItem = baseItem;
   let summarySectionIndex: number | undefined;
+  let summaryLength = initialItem.type === "reasoning" ? initialItem.summary.length : 0;
   let commandOutputBuffer =
     initialItem.type === "command"
       ? new CommandOutputBuffer(initialItem.output, initialItem.outputTruncated)
@@ -118,6 +119,9 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
       chunksByField.set(field, [delta]);
     } else {
       chunks.push(delta);
+    }
+    if (field === "summary") {
+      summaryLength += delta.length;
     }
     contentGeneration += 1;
   }
@@ -136,14 +140,11 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
           return false;
         }
         if (event.payload.field === "summary" && event.payload.sectionIndex !== undefined) {
-          const currentSummary = [baseItem.summary, ...(chunksByField.get("summary") ?? [])].join(
-            "",
-          );
           const startsNewSection =
             summarySectionIndex === undefined
               ? event.payload.sectionIndex > 0
               : event.payload.sectionIndex !== summarySectionIndex;
-          if (startsNewSection && currentSummary.length > 0) {
+          if (startsNewSection && summaryLength > 0) {
             // Codex 只传分段索引；用空行保留摘要段落边界，避免不同主题粘连。
             appendChunk("summary", "\n\n");
           }
@@ -222,6 +223,7 @@ export function createTaskItemStore(initialItem: AgentItem): TaskItemStore {
       baseItem = createBaseItem(item);
       chunksByField.clear();
       summarySectionIndex = undefined;
+      summaryLength = item.type === "reasoning" ? item.summary.length : 0;
       commandOutputBuffer =
         item.type === "command"
           ? new CommandOutputBuffer(item.output, item.outputTruncated)
