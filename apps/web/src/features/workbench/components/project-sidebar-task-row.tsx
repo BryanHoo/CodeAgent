@@ -1,14 +1,5 @@
 import { TEMPORARY_TASK_SCOPE_ID, type AgentTask } from "@code-agent/protocol";
-import {
-  Archive,
-  CircleAlert,
-  CircleCheck,
-  Ellipsis,
-  LoaderCircle,
-  Pencil,
-  Pin,
-  ShieldQuestion,
-} from "lucide-react";
+import { Archive, Ellipsis, Pencil, Pin } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
@@ -28,6 +19,7 @@ type TaskLinkProps = Readonly<{
   attention: TaskAttention;
   icon?: ReactNode;
   isActionPending: boolean;
+  isAwaitingApproval: boolean;
   isRunning: boolean;
   onArchive: (task: AgentTask) => void;
   onPin: (task: AgentTask) => void;
@@ -46,6 +38,7 @@ export function TaskLink({
   attention,
   icon,
   isActionPending,
+  isAwaitingApproval,
   isRunning,
   onArchive,
   onPin,
@@ -72,6 +65,7 @@ export function TaskLink({
         <span className="min-w-0 flex-1 truncate">{task.title}</span>
         <TaskStatusIndicator
           attention={attention}
+          isAwaitingApproval={isAwaitingApproval}
           isRunning={isRunning}
           updatedAt={task.updatedAt}
         />
@@ -108,66 +102,72 @@ export function TaskLink({
 
 type TaskStatusIndicatorProps = Readonly<{
   attention: TaskAttention;
+  isAwaitingApproval: boolean;
   isRunning: boolean;
   updatedAt: string;
 }>;
 
-export function TaskStatusIndicator({ attention, isRunning, updatedAt }: TaskStatusIndicatorProps) {
+type TaskStatusPresentation = Readonly<{
+  animated: boolean;
+  label: string;
+  tone: string;
+}>;
+
+export function TaskStatusIndicator({
+  attention,
+  isAwaitingApproval,
+  isRunning,
+  updatedAt,
+}: TaskStatusIndicatorProps) {
   const { t } = useTranslation("workbench");
-  if (attention === "approval") {
-    return (
-      <span
-        aria-label={t("sidebar.taskApproval")}
-        className="task-status ml-auto inline-flex shrink-0 text-brand"
-        role="status"
-      >
-        <ShieldQuestion className="size-3.5" aria-hidden="true" />
-      </span>
-    );
+  // 审批等待会暂停正在运行的 Turn，因此必须优先于普通运行态展示。
+  let presentation: TaskStatusPresentation | null;
+  if (isAwaitingApproval || attention === "approval") {
+    presentation = {
+      animated: true,
+      label: t("sidebar.taskApproval"),
+      tone: "text-task-waiting",
+    };
+  } else if (isRunning) {
+    presentation = {
+      animated: true,
+      label: t("sidebar.taskRunning"),
+      tone: "text-task-running",
+    };
+  } else if (attention === "completed") {
+    presentation = {
+      animated: false,
+      label: t("sidebar.taskComplete"),
+      tone: "text-task-completed",
+    };
+  } else if (attention === "failed") {
+    presentation = {
+      animated: false,
+      label: t("sidebar.taskIncomplete"),
+      tone: "text-task-failed",
+    };
+  } else {
+    presentation = null;
   }
 
-  if (isRunning) {
+  if (presentation === null) {
     return (
-      <span
-        aria-label={t("sidebar.taskRunning")}
-        className="task-status ml-auto inline-flex shrink-0 text-subtle-foreground"
-        role="status"
-      >
-        {/* 动画放在 HTML 容器上，确保 SVG 图标在各浏览器中平滑旋转。 */}
-        <span className="inline-flex animate-spin" aria-hidden="true">
-          <LoaderCircle className="size-3.5" />
-        </span>
-      </span>
-    );
-  }
-
-  if (attention === "completed") {
-    return (
-      <span
-        aria-label={t("sidebar.taskComplete")}
-        className="task-status ml-auto inline-flex shrink-0 text-diff-added"
-        role="status"
-      >
-        <CircleCheck className="size-3.5" aria-hidden="true" />
-      </span>
-    );
-  }
-
-  if (attention === "failed") {
-    return (
-      <span
-        aria-label={t("sidebar.taskIncomplete")}
-        className="task-status ml-auto inline-flex shrink-0 text-danger"
-        role="status"
-      >
-        <CircleAlert className="size-3.5" aria-hidden="true" />
+      <span className="task-age task-status ml-auto shrink-0 text-caption text-subtle-foreground">
+        {formatTaskAge(updatedAt)}
       </span>
     );
   }
 
   return (
-    <span className="task-age task-status ml-auto shrink-0 text-caption text-subtle-foreground">
-      {formatTaskAge(updatedAt)}
+    <span
+      aria-label={presentation.label}
+      className={`task-status ml-auto inline-grid size-3.5 shrink-0 place-items-center ${presentation.tone}`}
+      role="status"
+    >
+      <span
+        aria-hidden="true"
+        className={`task-status-dot block size-2 rounded-full bg-current ${presentation.animated ? "task-status-dot--breathing" : ""}`}
+      />
     </span>
   );
 }

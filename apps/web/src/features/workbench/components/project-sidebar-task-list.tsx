@@ -129,6 +129,7 @@ export function ProjectSidebarTaskList({
                     icon={<Pin className="size-3.5" aria-hidden="true" />}
                     key={`${task.projectId}:${task.id}`}
                     isActionPending={taskActionPending}
+                    isAwaitingApproval={activity.isAwaitingApproval}
                     isRunning={activity.isRunning}
                     onArchive={(task) => void archiveTask(task)}
                     onPin={(task) => void pinTask(task)}
@@ -200,6 +201,7 @@ export function ProjectSidebarTaskList({
                       active={projectId === TEMPORARY_TASK_SCOPE_ID && task.id === taskId}
                       attention={activity.attention}
                       isActionPending={taskActionPending}
+                      isAwaitingApproval={activity.isAwaitingApproval}
                       isRunning={activity.isRunning}
                       key={`${task.projectId}:${task.id}`}
                       onArchive={(task) => void archiveTask(task)}
@@ -344,6 +346,7 @@ export function ProjectSidebarTaskList({
                             active={project.id === projectId && task.id === taskId}
                             attention={activity.attention}
                             isActionPending={taskActionPending}
+                            isAwaitingApproval={activity.isAwaitingApproval}
                             isRunning={activity.isRunning}
                             key={`${task.projectId}:${task.id}`}
                             onArchive={(task) => void archiveTask(task)}

@@ -27,6 +27,10 @@
   --ui-color-diff-added: light-dark(#28a948, #40c977);
   --ui-color-diff-removed: light-dark(#eb001d, #fa423e);
   --ui-color-warning: light-dark(#b25900, #ffb347);
+  --ui-color-task-running: light-dark(#3f8bdc, #5eabe9);
+  --ui-color-task-waiting: light-dark(#d19a2b, #e1ad43);
+  --ui-color-task-completed: light-dark(#48a765, #5dbd7a);
+  --ui-color-task-failed: light-dark(#db5660, #eb7070);
   --ui-color-danger: var(--ui-color-diff-removed);
   --ui-color-focus: var(--ui-color-accent);
   --ui-color-scrim: light-dark(rgb(23 23 23 / 0.16), rgb(0 0 0 / 0.52));
@@ -165,6 +169,10 @@
   --color-diff-added: var(--ui-color-diff-added);
   --color-diff-removed: var(--ui-color-diff-removed);
   --color-warning: var(--ui-color-warning);
+  --color-task-running: var(--ui-color-task-running);
+  --color-task-waiting: var(--ui-color-task-waiting);
+  --color-task-completed: var(--ui-color-task-completed);
+  --color-task-failed: var(--ui-color-task-failed);
   --color-danger: var(--ui-color-danger);
   --color-focus: var(--ui-color-focus);
   --color-scrim: var(--ui-color-scrim);
@@ -503,6 +511,34 @@ a {
 .group:hover .task-status,
 .group:focus-within .task-status {
   visibility: hidden;
+}
+
+/* 状态圆点保持纯色扁平外观，避免小尺寸下出现高光和浮起感。 */
+.task-status-dot {
+  opacity: 1;
+}
+
+.task-status-dot--breathing {
+  animation: task-status-breathe 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: opacity;
+}
+
+@keyframes task-status-breathe {
+  0%,
+  100% {
+    opacity: 0.68;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-status-dot--breathing {
+    animation: none;
+    opacity: 1;
+  }
 }
 
 @media (hover: none) {

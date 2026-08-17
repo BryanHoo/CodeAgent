@@ -473,10 +473,24 @@ test("opens a completed file change diff while the turn is still running", async
   await expect(dialog.locator(".file-diff-renderer")).toContainText("export const live = true;");
 });
 
-test("updates a running background task title and clears attention after entering", async ({
-  page,
-}) => {
+test("updates a running background task title and preserves blocking status", async ({ page }) => {
   let backgroundSnapshotReadCount = 0;
+  const approvalRequest = {
+    availableDecisions: ["allow", "deny"],
+    command: "pnpm check",
+    createdAt: "2026-07-29T00:00:01.000Z",
+    cwd: "/workspace/CodeAgent",
+    expiresAt: null,
+    itemId: "approval-input-design",
+    networkAccess: null,
+    projectId: "code-agent",
+    reason: null,
+    requestId: "approval-input-design",
+    status: "pending",
+    taskId: "input-design",
+    turnId: "turn-input-design",
+    type: "command_approval",
+  } as const;
   await page.route("**/v1/projects/code-agent/tasks?*", async (route) => {
     if (route.request().method() !== "GET") {
       await route.fallback();
@@ -539,8 +553,9 @@ test("updates a running background task title and clears attention after enterin
         snapshot: {
           ...taskSnapshot,
           id: "input-design",
+          pendingRequests: [approvalRequest],
           pinned: false,
-          status: "idle",
+          status: "running",
           title: "优化输入框交互",
           turns: [],
         },
@@ -653,22 +668,7 @@ test("updates a running background task title and clears attention after enterin
   await emitTaskEvent({
     itemId: "approval-input-design",
     payload: {
-      request: {
-        availableDecisions: ["allow", "deny"],
-        command: "pnpm check",
-        createdAt: "2026-07-29T00:00:01.000Z",
-        cwd: "/workspace/CodeAgent",
-        expiresAt: null,
-        itemId: "approval-input-design",
-        networkAccess: null,
-        projectId: "code-agent",
-        reason: null,
-        requestId: "approval-input-design",
-        status: "pending",
-        taskId: "input-design",
-        turnId: turn.id,
-        type: "command_approval",
-      },
+      request: approvalRequest,
     },
     provider: "codex",
     sequence: 2,
@@ -682,7 +682,9 @@ test("updates a running background task title and clears attention after enterin
 
   await expect(backgroundTask.getByRole("status", { name: "任务等待审批" })).toBeVisible();
   await backgroundTask.click();
-  await expect(backgroundTask.getByRole("status", { name: "任务等待审批" })).toHaveCount(0);
+  // Task 行获得焦点时会为操作按钮让位；焦点离开后仍需保留黄色等待标识。
+  await page.getByRole("log", { name: "会话内容" }).click({ position: { x: 12, y: 12 } });
+  await expect(backgroundTask.getByRole("status", { name: "任务等待审批" })).toBeVisible();
 
   const previousConnectionGeneration = await page.evaluate(() =>
     Number(sessionStorage.getItem("__sidebarEventConnectionGeneration") ?? "0"),
@@ -1330,13 +1332,14 @@ test("allows a command approval and completes the turn", async ({ page }) => {
   await page.getByRole("textbox", { name: "任务输入" }).fill("审批命令");
   await page.getByRole("button", { exact: true, name: "提交" }).click();
   await expect(page.getByRole("region", { name: "命令审批请求" })).toBeVisible();
-  // 当前 Task 已在用户视野内，审批提醒只保留在 Timeline，不重复占用 Sidebar 状态位。
-  await expect(page.getByRole("status", { name: "任务等待审批" })).toHaveCount(0);
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
+  await expect(sidebar.getByRole("status", { name: "任务等待审批" })).toBeVisible();
   const allow = page.getByRole("button", { exact: true, name: "允许" });
   await expect(allow).toBeFocused();
   await page.keyboard.press("Enter");
 
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
+  await expect(sidebar.getByRole("status", { name: "任务等待审批" })).toHaveCount(0);
   await expect(page.getByLabel("Turn 1")).toHaveAttribute("data-status", "completed");
 });
 

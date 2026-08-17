@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -393,55 +395,109 @@ describe("Project folder actions", () => {
 });
 
 describe("TaskStatusIndicator", () => {
-  it("replaces the task age with an accessible spinner while running", () => {
+  it("uses a slow breathing animation that respects reduced motion", () => {
+    const css = readFileSync(
+      new URL("../../../shared/styles/globals.css", import.meta.url),
+      "utf8",
+    );
+    const keyframes = css.slice(
+      css.indexOf("@keyframes task-status-breathe"),
+      css.indexOf(
+        "@media (prefers-reduced-motion: reduce)",
+        css.indexOf("@keyframes task-status-breathe"),
+      ),
+    );
+    const statusStyles = css.slice(
+      css.indexOf(".task-status-dot {"),
+      css.indexOf("@media (hover: none)"),
+    );
+
+    expect(css).toContain("@keyframes task-status-breathe");
+    expect(css).toContain("--ui-color-task-running: light-dark(#3f8bdc, #5eabe9);");
+    expect(css).toContain("--ui-color-task-waiting: light-dark(#d19a2b, #e1ad43);");
+    expect(css).toContain("--ui-color-task-completed: light-dark(#48a765, #5dbd7a);");
+    expect(css).toContain("--ui-color-task-failed: light-dark(#db5660, #eb7070);");
+    expect(css).toContain("animation: task-status-breathe 4s");
+    expect(keyframes).toContain("opacity: 0.68");
+    expect(keyframes).toContain("opacity: 1");
+    expect(keyframes).not.toContain("box-shadow");
+    expect(statusStyles).not.toContain("box-shadow");
+    expect(statusStyles).not.toContain("transform");
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.task-status-dot--breathing[\s\S]*?animation: none;/u,
+    );
+  });
+
+  it("shows a primary breathing dot while running", () => {
     const markup = renderToStaticMarkup(
-      <TaskStatusIndicator attention={null} isRunning updatedAt="2026-07-23T00:01:00.000Z" />,
+      <TaskStatusIndicator
+        attention={null}
+        isAwaitingApproval={false}
+        isRunning
+        updatedAt="2026-07-23T00:01:00.000Z"
+      />,
     );
 
     expect(markup).toContain('aria-label="任务运行中"');
-    expect(markup).toContain("animate-spin");
+    expect(markup).toContain("text-task-running");
+    expect(markup).toContain("task-status-dot--breathing");
+    expect(markup).toContain("size-2");
+    expect(markup).not.toContain("lucide-");
     expect(markup).not.toContain("task-age");
   });
 
-  it("shows a primary approval icon instead of the running spinner while awaiting approval", () => {
+  it("shows a yellow breathing dot while awaiting approval", () => {
     const markup = renderToStaticMarkup(
-      <TaskStatusIndicator attention="approval" isRunning updatedAt="2026-07-23T00:01:00.000Z" />,
+      <TaskStatusIndicator
+        attention={null}
+        isAwaitingApproval
+        isRunning
+        updatedAt="2026-07-23T00:01:00.000Z"
+      />,
     );
 
     expect(markup).toContain('aria-label="任务等待审批"');
-    expect(markup).toContain("text-brand");
-    expect(markup).toContain("lucide-shield-question-mark");
+    expect(markup).toContain("text-task-waiting");
+    expect(markup).toContain("task-status-dot--breathing");
+    expect(markup).toContain("size-2");
+    expect(markup).not.toContain("lucide-");
     expect(markup).not.toContain("animate-spin");
     expect(markup).not.toContain("task-age");
   });
 
-  it("shows an accessible completed reply marker before the task age", () => {
+  it("shows a static green dot when the reply completes", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator
         attention="completed"
+        isAwaitingApproval={false}
         isRunning={false}
         updatedAt="2026-07-23T00:01:00.000Z"
       />,
     );
 
     expect(markup).toContain('aria-label="AI 回复已完成"');
-    expect(markup).toContain("text-diff-added");
-    expect(markup).toContain("lucide-circle-check");
+    expect(markup).toContain("text-task-completed");
+    expect(markup).toContain("size-2");
+    expect(markup).not.toContain("task-status-dot--breathing");
+    expect(markup).not.toContain("lucide-");
     expect(markup).not.toContain("task-age");
   });
 
-  it("shows an accessible unfinished reply marker before the task age", () => {
+  it("shows a static red dot when the reply is interrupted", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator
         attention="failed"
+        isAwaitingApproval={false}
         isRunning={false}
         updatedAt="2026-07-23T00:01:00.000Z"
       />,
     );
 
     expect(markup).toContain('aria-label="AI 回复未完成"');
-    expect(markup).toContain("text-danger");
-    expect(markup).toContain("lucide-circle-alert");
+    expect(markup).toContain("text-task-failed");
+    expect(markup).toContain("size-2");
+    expect(markup).not.toContain("task-status-dot--breathing");
+    expect(markup).not.toContain("lucide-");
     expect(markup).not.toContain("task-age");
   });
 
@@ -449,6 +505,7 @@ describe("TaskStatusIndicator", () => {
     const markup = renderToStaticMarkup(
       <TaskStatusIndicator
         attention={null}
+        isAwaitingApproval={false}
         isRunning={false}
         updatedAt={new Date().toISOString()}
       />,
