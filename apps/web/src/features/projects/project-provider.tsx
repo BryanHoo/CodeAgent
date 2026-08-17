@@ -260,7 +260,24 @@ export function ProjectProvider({
         setIsProjectAddPending(true);
         try {
           const response = await client.addProject(rootPath);
-          await queryClient.invalidateQueries({ queryKey: ["projects"] });
+          // 注册响应已包含完整 Project，直接写入精确缓存，避免重取当前 Task 等无关查询。
+          queryClient.setQueryData<ProjectPage>(["projects"], (currentPage) => {
+            if (currentPage === undefined) {
+              return { data: [response.project], nextCursor: null };
+            }
+            const existingProjectIndex = currentPage.data.findIndex(
+              (project) => project.id === response.project.id,
+            );
+            if (existingProjectIndex < 0) {
+              return { ...currentPage, data: [...currentPage.data, response.project] };
+            }
+            return {
+              ...currentPage,
+              data: currentPage.data.map((project, index) =>
+                index === existingProjectIndex ? response.project : project,
+              ),
+            };
+          });
           notifyActionSuccess();
           return response.project;
         } catch (error) {

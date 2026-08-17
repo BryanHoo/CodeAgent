@@ -217,6 +217,11 @@ test("keeps the original sidebar logo and provides it as favicon", async ({ page
 test("adds a folder through the Web project directory picker", async ({ page }) => {
   let addProjectRequestCount = 0;
   let addedRootPath: unknown;
+  let delayCurrentTaskRefresh = false;
+  let releaseCurrentTaskRefresh: () => void = () => undefined;
+  const currentTaskRefreshGate = new Promise<void>((resolve) => {
+    releaseCurrentTaskRefresh = resolve;
+  });
   await page.route("**/v1/projects", async (route) => {
     if (route.request().method() === "POST") {
       addProjectRequestCount += 1;
@@ -224,7 +229,13 @@ test("adds a folder through the Web project directory picker", async ({ page }) 
     }
     await route.fallback();
   });
-  await page.goto("/p/code-agent");
+  await page.route("**/v1/projects/code-agent/tasks?*", async (route) => {
+    if (delayCurrentTaskRefresh) {
+      await currentTaskRefreshGate;
+    }
+    await route.fallback();
+  });
+  await page.goto("/p/code-agent/t/task-1");
 
   await page.getByRole("button", { name: "添加项目" }).click();
   const picker = page.getByRole("dialog", { name: "选择项目文件夹" });
@@ -235,18 +246,25 @@ test("adds a folder through the Web project directory picker", async ({ page }) 
 
   await page.getByRole("button", { name: "添加项目" }).click();
   await picker.getByRole("button", { exact: true, name: "AddedProject" }).click();
+  delayCurrentTaskRefresh = true;
   await picker.getByRole("button", { name: "添加此文件夹" }).evaluate((button) => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 
-  await expect(page).toHaveURL(/\/p\/added-project$/);
-  expect(addProjectRequestCount).toBe(1);
-  expect(addedRootPath).toBe("/workspace/AddedProject");
-  await expect(page.getByRole("heading", { name: "AddedProject" })).toBeVisible();
-  await expect(
-    page.getByRole("complementary", { name: "项目侧栏" }).getByRole("link", { name: "新聊天" }),
-  ).toHaveCount(0);
+  try {
+    await expect(picker).toBeHidden({ timeout: 500 });
+    await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-1$/);
+    expect(addProjectRequestCount).toBe(1);
+    expect(addedRootPath).toBe("/workspace/AddedProject");
+    await expect(
+      page.getByRole("complementary", { name: "项目侧栏" }).getByText("AddedProject", {
+        exact: true,
+      }),
+    ).toBeVisible();
+  } finally {
+    releaseCurrentTaskRefresh();
+  }
 });
 
 test("navigates absolute paths and toggles hidden folders in the project directory picker", async ({

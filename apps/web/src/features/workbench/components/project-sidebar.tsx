@@ -214,7 +214,6 @@ export function ProjectSidebar({
     if (project !== undefined) {
       setIsProjectPickerOpen(false);
       updateExpandedProjects((current) => new Set(current).add(project.id));
-      await navigate({ params: { projectId: project.id }, to: "/p/$projectId" });
     }
   };
 
