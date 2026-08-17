@@ -22,11 +22,14 @@ const buttonVariants = cva(
         default: "h-8 px-3",
         embedded: "h-auto p-0",
         sm: "h-7 px-2 text-label max-workbench:h-11",
+        toolbar: "h-6 px-2 text-label max-workbench:h-11 [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-9 px-4 text-body",
         icon: "inline-grid size-9 place-items-center px-0 max-workbench:size-11",
         "icon-compact": "inline-grid size-8 place-items-center px-0 max-workbench:size-11",
         "icon-sm":
           "inline-grid size-7 place-items-center px-0 max-workbench:size-11 [&_svg:not([class*='size-'])]:size-3.5",
+        "icon-toolbar":
+          "inline-grid size-6 place-items-center px-0 max-workbench:size-11 [&_svg:not([class*='size-'])]:size-3",
         "icon-lg": "inline-grid size-10 place-items-center px-0 max-workbench:size-11",
       },
       variant: {

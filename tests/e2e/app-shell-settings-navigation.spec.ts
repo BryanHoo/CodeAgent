@@ -321,24 +321,46 @@ test("uses global defaults throughout a new task composer", async ({ page }) => 
   await expect(getComposerModelSelector(page)).toHaveAccessibleName(
     "模型和思考量：GPT-5.6 Terra，中",
   );
+  await expect(page.getByRole("button", { name: "在 Finder 中打开" })).toBeVisible();
 });
 
-test("omits the project open module from the center toolbar", async ({ page }) => {
+test("opens the project from the center toolbar quick action", async ({ page }) => {
+  const openRequests: Record<string, unknown>[] = [];
+  await page.route("**/v1/projects/code-agent/open", async (route) => {
+    openRequests.push(parseRequestRecord(route.request().postData()));
+    await route.fallback();
+  });
   await page.goto("/p/code-agent/t/task-1");
 
-  const fileTree = page
-    .getByRole("complementary", { name: "运行环境" })
-    .getByRole("tree", { name: "项目文件" });
-  await fileTree
-    .getByRole("treeitem", { name: "CodeAgent" })
-    .first()
-    .getByRole("button", { exact: true, name: "CodeAgent" })
-    .click({ button: "right" });
-  await expect(page.getByRole("menu", { name: "~/Develop/person/CodeAgent 的操作" })).toBeVisible();
-  await page.keyboard.press("Escape");
+  const mainHeader = page.getByRole("main", { name: "任务时间线" }).locator(":scope > header");
+  const quickOpenButton = mainHeader.getByRole("button", { name: "在 Zed 中打开" });
+  const quickOpenMenuButton = mainHeader.getByRole("button", { name: "选择打开方式" });
+  await expect(quickOpenButton).toBeVisible();
+  await expect(quickOpenButton).toHaveCSS("height", "24px");
+  await expect(quickOpenButton.locator("svg")).toHaveCSS("width", "14px");
+  await expect(quickOpenMenuButton).toHaveCSS("height", "24px");
+  await expect(quickOpenMenuButton).toHaveCSS("width", "24px");
+  await quickOpenButton.click();
+  await expect.poll(() => openRequests).toEqual([{ appId: "zed" }]);
 
-  await expect(page.getByRole("button", { name: "在 Zed 中打开" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "选择打开方式" })).toHaveCount(0);
+  await quickOpenMenuButton.click();
+  const openMenu = page.getByRole("menu", { name: "选择打开方式" });
+  await expect(openMenu).toBeVisible();
+  const finderMenuItem = openMenu.getByRole("menuitem", { name: "Finder" });
+  await expect(finderMenuItem.locator("svg")).toHaveCSS("width", "16px");
+  await expect(finderMenuItem.locator("svg")).toHaveCSS("height", "16px");
+  await finderMenuItem.click();
+  await expect.poll(() => openRequests).toEqual([{ appId: "zed" }, { appId: "finder" }]);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(quickOpenButton).toBeVisible();
+  await expect(quickOpenButton).toHaveCSS("height", "44px");
+  await expect(quickOpenMenuButton).toHaveCSS("width", "44px");
+  const viewportMetrics = await page.evaluate(() => ({
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  }));
+  expect(viewportMetrics.documentWidth).toBeLessThanOrEqual(viewportMetrics.viewportWidth);
 });
 
 test("restores the project folder expansion preference after reload", async ({ page }) => {

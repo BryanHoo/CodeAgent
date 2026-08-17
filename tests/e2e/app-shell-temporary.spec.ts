@@ -41,6 +41,14 @@ test("creates and restores a temporary task without exposing its internal projec
   await expect(page).toHaveURL(/\/temporary\/t\/temporary-task-1$/u);
   await expect(page.getByText("解释这段临时需求", { exact: true })).toBeVisible();
   await expect(page.getByText("临时回复：解释这段临时需求", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "temporary-note.md" }).click();
+  const sourceDialog = page.getByRole("dialog", { name: "temporary-note.md" });
+  await expect(sourceDialog).toContainText("允许从临时任务打开");
+  await sourceDialog.getByRole("button", { name: "关闭源文件" }).click();
+  await page.getByRole("button", { name: "temporary-report.pdf" }).click();
+  await expect
+    .poll(() => requestedPaths.filter((path) => path === "/v1/temporary/open").length)
+    .toBe(1);
   await expect(approvalSelect).toHaveValue("auto-review");
   expect(temporaryTurnOptions?.["sandboxMode"]).toBe("danger-full-access");
   const inspector = page.getByRole("complementary", { name: "运行环境" });

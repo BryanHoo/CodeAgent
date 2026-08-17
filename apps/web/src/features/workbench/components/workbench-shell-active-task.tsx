@@ -170,7 +170,8 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         onBuildPlan={() => composerRef.current?.buildPlan() ?? Promise.resolve(false)}
         {...(capabilities?.tasks.fork === true ? { onForkTask: forkTask } : {})}
         {...(projectToolsEnabled ? { onOpenFileDiff } : {})}
-        {...(projectToolsEnabled ? { onOpenSourceFile } : {})}
+        // AI 消息文件引用是 Task 通用能力，临时 Task 也必须保留点击处理。
+        onOpenSourceFile={onOpenSourceFile}
         {...(projectToolsEnabled ? { onReviewFileChanges } : {})}
         onResolvePendingRequest={resolvePendingRequest}
         projectId={projectId}

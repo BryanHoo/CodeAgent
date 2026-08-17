@@ -777,6 +777,37 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("uses the public temporary scope for common file capabilities", async () => {
+    const capabilities = {
+      apps: [{ id: "system-default", kind: "system-default", name: "__SYSTEM_DEFAULT__" }],
+      platform: "darwin",
+    };
+    const sourceFile = { content: "# 临时记录\n", nextCursor: null, path: "/tmp/notes.md" };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(capabilities))
+      .mockResolvedValueOnce(jsonResponse(sourceFile))
+      .mockResolvedValueOnce(jsonResponse({ appId: "system-default", path: "/tmp/report.pdf" }));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await client.getProjectOpenCapabilities("temporary");
+    await client.readProjectSourceFile("temporary", "/tmp/notes.md");
+    await client.openProject(
+      "temporary",
+      { appId: "system-default", path: "/tmp/report.pdf" },
+      { idempotencyKey: "open-temporary-file" },
+    );
+
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      "/v1/temporary/open-capabilities",
+      "/v1/temporary/files/source?path=%2Ftmp%2Fnotes.md",
+      "/v1/temporary/open",
+    ]);
+    expect(buildProjectImageFileUrl("", "temporary", "/tmp/result.png")).toBe(
+      "/v1/temporary/files/image?path=%2Ftmp%2Fresult.png",
+    );
+  });
+
   it("reads and validates a project file tree directory", async () => {
     const fileTree = {
       entries: [{ path: "src/components/app.tsx", type: "file" }],

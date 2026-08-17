@@ -784,7 +784,7 @@ export async function mockAppShellApi(
           {
             id: `temporary-assistant-${String(turnNumber)}`,
             role: "assistant" as const,
-            text: `临时回复：${input["text"]}`,
+            text: `临时回复：${input["text"]}\n\n[temporary-note.md](/tmp/temporary-note.md)\n\n[temporary-report.pdf](/tmp/temporary-report.pdf)`,
             type: "message" as const,
           },
         ],
@@ -839,7 +839,7 @@ export async function mockAppShellApi(
       body = { data: skills, nextCursor: null };
     } else if (/^\/v1\/projects\/[^/]+\/tasks\/[^/]+\/mcp-servers$/u.test(url.pathname)) {
       body = { data: mcpServers };
-    } else if (/^\/v1\/projects\/[^/]+\/open-capabilities$/u.test(url.pathname)) {
+    } else if (/^\/v1\/(?:temporary|projects\/[^/]+)\/open-capabilities$/u.test(url.pathname)) {
       body = {
         apps: [
           { id: "zed", kind: "editor", name: "Zed" },
@@ -850,7 +850,7 @@ export async function mockAppShellApi(
         platform: "darwin",
       };
     } else if (
-      /^\/v1\/projects\/[^/]+\/open$/u.test(url.pathname) &&
+      /^\/v1\/(?:temporary|projects\/[^/]+)\/open$/u.test(url.pathname) &&
       route.request().method() === "POST"
     ) {
       const request = parseRequestRecord(route.request().postData());
@@ -971,6 +971,12 @@ export async function mockAppShellApi(
       const directoryPath = url.searchParams.get("path");
       // 文件树接口只返回当前目录的直接子项，用于验证点击目录后才按需加载。
       body = projectFileTreeByDirectory.get(directoryPath) ?? { entries: [], path: directoryPath };
+    } else if (url.pathname === "/v1/temporary/files/source") {
+      body = {
+        content: "# 临时文件\n\n允许从临时任务打开。\n",
+        nextCursor: null,
+        path: "/tmp/temporary-note.md",
+      };
     } else if (url.pathname === "/v1/projects/code-agent/files/source") {
       body =
         url.searchParams.get("cursor") === String(architectureSourceNextCursor)

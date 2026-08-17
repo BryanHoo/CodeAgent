@@ -13,6 +13,7 @@ import { ProjectSidebar } from "./project-sidebar.js";
 import { TaskTimeline } from "./task-timeline.js";
 import { WorkbenchComposer, type WorkbenchComposerHandle } from "./workbench-composer.js";
 import { WorkbenchPanelResizer } from "./workbench-panel-resizer.js";
+import { ProjectQuickOpenMenu } from "./project-open-menu.js";
 import type { useWorkbenchShellController } from "./workbench-shell-controller.js";
 import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
 import { ActiveTaskWorkbench } from "./workbench-shell-active-task.js";
@@ -221,6 +222,20 @@ export function WorkbenchShellLayout({
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
+            <ProjectQuickOpenMenu
+              apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
+              {...(globalSettings === undefined
+                ? {}
+                : { defaultOpenAppId: globalSettings.defaultOpenAppId })}
+              isDetecting={projectOpenCapabilitiesQuery.isPending}
+              isPending={projectPathOpenMutation.isPending}
+              onSelect={(appId) => {
+                projectPathOpenMutation.reset();
+                void projectPathOpenLockRef.current.run(() =>
+                  projectPathOpenMutation.mutateAsync({ appId, path: undefined }),
+                );
+              }}
+            />
             <Tooltip key={inspectorOpen ? "inspector-open" : "inspector-closed"}>
               <TooltipTrigger asChild>
                 <Button

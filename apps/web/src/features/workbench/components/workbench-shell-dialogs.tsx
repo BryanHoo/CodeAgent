@@ -111,7 +111,7 @@ export function WorkbenchShellDialogs({
           projectId={projectId}
         />
       ) : null}
-      {!projectToolsEnabled || selectedSourceFile === null ? null : (
+      {selectedSourceFile === null ? null : (
         <ProjectSourceDialog
           client={client}
           onClose={() => {
