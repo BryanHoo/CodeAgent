@@ -54,13 +54,11 @@ export const conversation = {
   inspector: {
     attachmentDetail: "Attachment",
     changeActions: "Change actions",
-    changeIndicator: "{{path}}, {{descendant}}{{additions}} additions, {{removals}} deletions",
     changeStats: "Change statistics",
     changes: "Project",
     commit: "Commit",
     context: "Context",
     contextSources: "Context sources",
-    descendant: "descendant ",
     emptyFolder: "Empty folder",
     fileTree: "Project files",
     gitChanges: "Uncommitted changes",

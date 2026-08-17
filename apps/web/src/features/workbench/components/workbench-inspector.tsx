@@ -26,7 +26,6 @@ import type { SubagentContextEntry, SubagentSelection } from "./subagent.js";
 import {
   ProjectFileTreeNodes,
   ProjectFileTreeRootActions,
-  collectFileTreeChangeSummary,
   getProjectFileName,
   type ProjectFileTreeDirectoryState,
 } from "./workbench-inspector-file-tree.js";
@@ -37,6 +36,7 @@ import {
 } from "./workbench-inspector-sections.js";
 import { InspectorSources } from "./workbench-inspector-sources.js";
 import { PlanSection } from "./workbench-inspector-plan.js";
+import { deriveInspectorGitChangeState } from "./workbench-inspector-git-status.js";
 
 export type { ProjectFileTreeDirectoryState } from "./workbench-inspector-file-tree.js";
 
@@ -50,6 +50,7 @@ type WorkbenchInspectorProps = Readonly<{
   expandedFileTreePaths?: Set<string>;
   fileTreeDirectories?: readonly ProjectFileTreeDirectoryState[];
   gitStatus?: ProjectGitStatus;
+  gitStatusDetails?: ProjectGitStatus | undefined;
   gitStatusError?: Error | null;
   gitStatusPending?: boolean;
   gitStatusRefreshing?: boolean;
@@ -98,6 +99,7 @@ export function WorkbenchInspector({
   expandedFileTreePaths = emptyExpandedFileTreePaths,
   fileTreeDirectories = [],
   gitStatus,
+  gitStatusDetails,
   gitStatusError = null,
   gitStatusPending = false,
   gitStatusRefreshing = false,
@@ -136,16 +138,12 @@ export function WorkbenchInspector({
   terminatingTerminalId = null,
 }: WorkbenchInspectorProps) {
   useTranslation("conversation");
-  const changeSummary = useMemo(() => {
-    const changes = [...(gitStatus?.unstaged ?? []), ...(gitStatus?.staged ?? [])];
-    return { changes, ...collectFileTreeChangeSummary(changes) };
-  }, [gitStatus]);
-  const allChanges = changeSummary.changes;
-  const fileChangesByPath = changeSummary.changesByPath;
-  const fileTreeChangeStats = changeSummary.statsByPath;
+  const { allChanges, changeStats, fileChangesByPath } = useMemo(
+    () => deriveInspectorGitChangeState(gitStatus, gitStatusDetails),
+    [gitStatus, gitStatusDetails],
+  );
   const [selectedTreePath, setSelectedTreePath] = useState<string>();
   const [projectRootExpanded, setProjectRootExpanded] = useState(true);
-  const { additions, removals } = changeSummary;
   const fileTreeDirectoryStates = useMemo(
     () => new Map(fileTreeDirectories.map((state) => [state.path, state])),
     [fileTreeDirectories],
@@ -292,8 +290,16 @@ export function WorkbenchInspector({
                         ns: "conversation",
                       })}
                     </span>
-                    <span className="font-medium text-diff-added">+{additions}</span>
-                    <span className="font-medium text-diff-removed">-{removals}</span>
+                    {changeStats === undefined ? null : (
+                      <>
+                        <span className="font-medium text-diff-added">
+                          +{changeStats.additions}
+                        </span>
+                        <span className="font-medium text-diff-removed">
+                          -{changeStats.removals}
+                        </span>
+                      </>
+                    )}
                   </p>
                 </div>
                 <div
@@ -450,10 +456,8 @@ export function WorkbenchInspector({
                         }
                       >
                         <ProjectFileTreeNodes
-                          changeStatsByPath={fileTreeChangeStats}
                           directoryStates={fileTreeDirectoryStates}
                           entries={rootFileTreeState?.data?.entries ?? []}
-                          expandedPaths={expandedFileTreePaths}
                           onContextMenuOpen={(path) => {
                             // 右键目标先进入文件树选中态，让菜单与当前操作对象保持一致。
                             setSelectedTreePath(path);

@@ -402,6 +402,7 @@ export function WorkbenchShellLayout({
           expandedFileTreePaths={expandedFileTreePaths}
           fileTreeDirectories={fileTreeDirectories}
           gitStatusError={gitStatusQuery.error}
+          gitStatusDetails={context.gitStatusDetailsQuery.data}
           gitStatusPending={gitStatusQuery.isPending}
           gitStatusRefreshing={gitStatusQuery.isFetching}
           mcpServers={mcpServersQuery.data?.data ?? []}

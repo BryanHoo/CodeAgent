@@ -37,6 +37,12 @@ const gitStatus = {
   ],
 };
 
+const lightweightGitStatus = {
+  ...gitStatus,
+  staged: gitStatus.staged.map((change) => ({ ...change, diff: "" })),
+  unstaged: gitStatus.unstaged.map((change) => ({ ...change, diff: "" })),
+};
+
 const nestedGitStatus = {
   baseBranches: ["origin/main"],
   branch: "feat/tree-status",
@@ -200,7 +206,8 @@ describe("WorkbenchInspector", () => {
         onOpenProjectFile={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
-        gitStatus={gitStatus}
+        gitStatus={lightweightGitStatus}
+        gitStatusDetails={gitStatus}
       />,
     );
 
@@ -295,10 +302,7 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain('aria-label="src 的操作"');
     expect(markup).toContain('aria-label="README.md 的操作"');
     expect(markup).toContain("group-hover/file-tree-node:opacity-100");
-    expect(markup).toContain(
-      "group-hover/file-tree-node:opacity-0 group-focus-within/file-tree-node:opacity-0",
-    );
-    expect(markup).toContain("absolute right-0 top-1/2 -translate-y-1/2");
+    expect(markup).not.toContain("group-hover/file-tree-node:opacity-0");
     expect(markup).toContain('role="treeitem"');
     expect(markup).toContain('aria-label="收起文件夹 CodeAgent"');
     expect(markup).toContain("README.md");
@@ -323,7 +327,7 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain("animate-spin");
   });
 
-  it("moves Git change stats from the nearest collapsed ancestor to the visible file", () => {
+  it("shows Git change stats only in the top summary module", () => {
     const renderInspector = (expandedFileTreePaths: Set<string>) =>
       renderInspectorMarkup(
         <WorkbenchInspector
@@ -335,46 +339,15 @@ describe("WorkbenchInspector", () => {
         />,
       );
 
-    const collapsedMarkup = renderInspector(new Set());
-    const srcExpandedMarkup = renderInspector(new Set(["src"]));
     const fileVisibleMarkup = renderInspector(new Set(["src", "src/components"]));
 
-    expect(collapsedMarkup).toContain('aria-label="src，后代新增 2 行，删除 1 行"');
-    expect(collapsedMarkup).not.toContain('aria-label="src/components，后代新增 2 行，删除 1 行"');
-    expect(srcExpandedMarkup).not.toContain('aria-label="src，后代新增 2 行，删除 1 行"');
-    expect(srcExpandedMarkup).toContain('aria-label="src/components，后代新增 2 行，删除 1 行"');
+    expect(fileVisibleMarkup).toMatch(
+      /aria-label="变更统计"[^>]*><span>1 个变更<\/span><span[^>]*>\+2<\/span><span[^>]*>-1<\/span>/u,
+    );
     expect(fileVisibleMarkup).not.toContain("后代新增");
-    expect(fileVisibleMarkup).toContain(
+    expect(fileVisibleMarkup).not.toContain(
       'aria-label="src/components/app.tsx，新增 2 行，删除 1 行"',
     );
-    expect(fileVisibleMarkup).toContain(
-      'aria-label="src/components/app.tsx，新增 2 行，删除 1 行"',
-    );
-  });
-
-  it("keeps stats on the deepest visible ancestor when the changed file is absent", () => {
-    const markup = renderInspectorMarkup(
-      <WorkbenchInspector
-        expandedFileTreePaths={new Set(["src", "src/components"])}
-        fileTreeDirectories={fileTreeDirectories}
-        gitStatus={{
-          ...nestedGitStatus,
-          unstaged: [
-            {
-              diff: "--- a/src/components/removed.tsx\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-old\n-content",
-              kind: "delete",
-              path: "src/components/removed.tsx",
-            },
-          ],
-        }}
-        projectName="CodeAgent"
-        projectPath="/workspace/CodeAgent"
-      />,
-    );
-
-    expect(markup).not.toContain("removed.tsx</span>");
-    expect(markup).toContain('aria-label="src/components，后代新增 0 行，删除 2 行"');
-    expect(markup).not.toContain('aria-label="src，后代新增 0 行，删除 2 行"');
   });
 
   it("omits the uncommitted changes module when the working tree is clean", () => {

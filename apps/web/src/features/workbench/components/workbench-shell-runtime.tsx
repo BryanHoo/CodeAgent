@@ -32,6 +32,7 @@ import {
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
   projectFileTreeQueryOptions,
+  projectGitDetailedStatusQueryOptions,
   projectGitStatusQueryOptions,
   projectOpenCapabilitiesQueryOptions,
   skillsQueryOptions,
@@ -305,6 +306,18 @@ export function useWorkbenchShellRuntime({
     planTaskKey !== null && inspectorTabState.planTaskKey !== planTaskKey
       ? "context"
       : inspectorTabState.tab;
+  const gitStatusDetailsQuery = useQuery(
+    projectGitDetailedStatusQueryOptions(
+      projectId,
+      null,
+      gitStatusQuery.data?.snapshot ?? "",
+      !temporary &&
+        inspectorOpen &&
+        inspectorTab === "changes" &&
+        (gitStatusQuery.data?.staged.length ?? 0) + (gitStatusQuery.data?.unstaged.length ?? 0) > 0,
+      client,
+    ),
+  );
   const setInspectorTab = useCallback(
     (tab: WorkbenchInspectorTab) => {
       setInspectorTabState({ planTaskKey, tab });
@@ -372,6 +385,7 @@ export function useWorkbenchShellRuntime({
     fileTreeQueries,
     getNewChatSubmissionStartedAt,
     gitStatusQuery,
+    gitStatusDetailsQuery,
     gitHistoryOpen,
     globalSettingsMutation,
     globalSettingsOpen,

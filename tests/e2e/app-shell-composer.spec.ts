@@ -1831,12 +1831,19 @@ test("opens file diffs and review from the timeline while keeping Inspector comm
   });
   await page.route("**/v1/projects/code-agent/git/status*", async (route) => {
     // 此用例使用两个不同目录的文件，覆盖紧凑树路径与四方向导航，避免改变全局 Fixture。
+    const detailedStatus = {
+      ...projectGitStatus,
+      unstaged: [...projectGitStatus.unstaged, reviewListChange],
+    };
+    const includeDiff = new URL(route.request().url()).searchParams.get("includeDiff") === "true";
     await route.fulfill({
       contentType: "application/json",
-      json: {
-        ...projectGitStatus,
-        unstaged: [...projectGitStatus.unstaged, reviewListChange],
-      },
+      json: includeDiff
+        ? detailedStatus
+        : {
+            ...detailedStatus,
+            unstaged: detailedStatus.unstaged.map((change) => ({ ...change, diff: "" })),
+          },
     });
   });
   page.on("console", (message) => {
@@ -1870,6 +1877,9 @@ test("opens file diffs and review from the timeline while keeping Inspector comm
   await expect(page.getByRole("button", { name: "审核 2 个未提交变更" })).toHaveCount(0);
   await expect(commitButton).toHaveText("提交");
   await expect(changeStats).toHaveText("2 个变更+2-1");
+  await expect(
+    page.getByRole("tree", { name: "项目文件" }).getByLabel("package.json，新增 1 行，删除 1 行"),
+  ).toHaveCount(0);
   const [statsBox, commitBox] = await Promise.all([
     changeStats.boundingBox(),
     commitButton.boundingBox(),

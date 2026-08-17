@@ -54,13 +54,11 @@ export const conversation = {
   inspector: {
     attachmentDetail: "附件",
     changeActions: "变更操作",
-    changeIndicator: "{{path}}，{{descendant}}新增 {{additions}} 行，删除 {{removals}} 行",
     changeStats: "变更统计",
     changes: "项目",
     commit: "提交",
     context: "上下文",
     contextSources: "上下文来源",
-    descendant: "后代",
     emptyFolder: "空文件夹",
     fileTree: "项目文件",
     gitChanges: "未提交变更",
