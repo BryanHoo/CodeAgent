@@ -1,6 +1,6 @@
 import { TEMPORARY_TASK_SCOPE_ID, type AgentTask, type Project } from "@code-agent/protocol";
 import { Folder, MessageSquareText, Pin, Plus } from "lucide-react";
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Button } from "../../../shared/components/core/button.js";
@@ -89,6 +89,8 @@ export function ProjectSidebarTaskList({
   toggleProject,
 }: ProjectSidebarTaskListProps) {
   const { t } = useTranslation("workbench");
+  // 临时任务与 Project 文件夹保持一致：标题控制列表可见性，“+”独立创建任务。
+  const [temporaryTasksExpanded, setTemporaryTasksExpanded] = useState(true);
   const temporaryTasks = tasksByProjectId.get(TEMPORARY_TASK_SCOPE_ID) ?? EMPTY_PROJECT_TASKS;
   const temporaryTaskState = projectTaskStates.get(TEMPORARY_TASK_SCOPE_ID);
   const showAllTemporaryTasks = expandedTaskProjects.has(TEMPORARY_TASK_SCOPE_ID);
@@ -178,77 +180,85 @@ export function ProjectSidebarTaskList({
             data-testid="project-tree-scroll"
           >
             <section className="mb-3 min-w-0" aria-labelledby="temporary-tasks-title">
-              <TemporaryTasksHeading onCreate={onOpenTemporaryDraft} />
-              <div className="min-w-0 space-y-0.5 pl-5">
-                {temporaryTaskPreview.tasks.map((task) => {
-                  const activity = getTaskActivity(taskActivity, task.projectId, task.id);
-                  return (
-                    <TaskLink
-                      active={projectId === TEMPORARY_TASK_SCOPE_ID && task.id === taskId}
-                      attention={activity.attention}
-                      isActionPending={taskActionPending}
-                      isAwaitingApproval={activity.isAwaitingApproval}
-                      isRunning={activity.isRunning}
-                      key={`${task.projectId}:${task.id}`}
-                      onArchive={(task) => void archiveTask(task)}
-                      onPin={(task) => void pinTask(task)}
-                      onRename={setRenamingTask}
-                      task={task}
-                    />
-                  );
-                })}
-                {temporaryPaginationControl === null ? null : (
-                  <Button
-                    variant="ghost"
-                    aria-expanded={showAllTemporaryTasks}
-                    className="flex h-7 w-full items-center rounded-control px-2 text-left text-meta font-medium text-subtle-foreground transition-colors hover:bg-control-hover hover:text-foreground"
-                    contentAlign="start"
-                    disabled={temporaryPaginationControl.disabled}
-                    onClick={() => {
-                      if (
-                        temporaryPaginationControl.action === "expand" ||
-                        temporaryPaginationControl.action === "expand-and-load"
-                      ) {
-                        setExpandedTaskProjects((current) =>
-                          new Set(current).add(TEMPORARY_TASK_SCOPE_ID),
-                        );
-                      } else if (temporaryPaginationControl.action === "collapse") {
-                        setExpandedTaskProjects((current) => {
-                          const next = new Set(current);
-                          next.delete(TEMPORARY_TASK_SCOPE_ID);
-                          return next;
-                        });
-                      }
-                      if (
-                        temporaryPaginationControl.action === "expand-and-load" ||
-                        temporaryPaginationControl.action === "load"
-                      ) {
-                        void fetchNextProjectTaskPage(TEMPORARY_TASK_SCOPE_ID).catch(
-                          () => undefined,
-                        );
-                      }
-                    }}
-                    type="button"
-                  >
-                    {temporaryPaginationControl.label}
-                  </Button>
-                )}
-                {temporaryTasks.length === 0 &&
-                normalizedQuery.length === 0 &&
-                temporaryTaskState?.isPending !== true ? (
-                  <p className="px-2 py-1.5 text-meta text-subtle-foreground">
-                    {t("sidebar.noTemporaryTasks")}
-                  </p>
-                ) : null}
-                {temporaryTasks.length === 0 &&
-                normalizedQuery.length > 0 &&
-                !taskSearch.isPending &&
-                taskSearch.error === null ? (
-                  <p className="px-2 py-1.5 text-meta text-subtle-foreground">
-                    {t("sidebar.noMatchingTasks")}
-                  </p>
-                ) : null}
-              </div>
+              <TemporaryTasksHeading
+                expanded={temporaryTasksExpanded}
+                onCreate={onOpenTemporaryDraft}
+                onToggle={() => {
+                  setTemporaryTasksExpanded((current) => !current);
+                }}
+              />
+              {temporaryTasksExpanded ? (
+                <div className="min-w-0 space-y-0.5 pl-5" id="temporary-tasks-content">
+                  {temporaryTaskPreview.tasks.map((task) => {
+                    const activity = getTaskActivity(taskActivity, task.projectId, task.id);
+                    return (
+                      <TaskLink
+                        active={projectId === TEMPORARY_TASK_SCOPE_ID && task.id === taskId}
+                        attention={activity.attention}
+                        isActionPending={taskActionPending}
+                        isAwaitingApproval={activity.isAwaitingApproval}
+                        isRunning={activity.isRunning}
+                        key={`${task.projectId}:${task.id}`}
+                        onArchive={(task) => void archiveTask(task)}
+                        onPin={(task) => void pinTask(task)}
+                        onRename={setRenamingTask}
+                        task={task}
+                      />
+                    );
+                  })}
+                  {temporaryPaginationControl === null ? null : (
+                    <Button
+                      variant="ghost"
+                      aria-expanded={showAllTemporaryTasks}
+                      className="flex h-7 w-full items-center rounded-control px-2 text-left text-meta font-medium text-subtle-foreground transition-colors hover:bg-control-hover hover:text-foreground"
+                      contentAlign="start"
+                      disabled={temporaryPaginationControl.disabled}
+                      onClick={() => {
+                        if (
+                          temporaryPaginationControl.action === "expand" ||
+                          temporaryPaginationControl.action === "expand-and-load"
+                        ) {
+                          setExpandedTaskProjects((current) =>
+                            new Set(current).add(TEMPORARY_TASK_SCOPE_ID),
+                          );
+                        } else if (temporaryPaginationControl.action === "collapse") {
+                          setExpandedTaskProjects((current) => {
+                            const next = new Set(current);
+                            next.delete(TEMPORARY_TASK_SCOPE_ID);
+                            return next;
+                          });
+                        }
+                        if (
+                          temporaryPaginationControl.action === "expand-and-load" ||
+                          temporaryPaginationControl.action === "load"
+                        ) {
+                          void fetchNextProjectTaskPage(TEMPORARY_TASK_SCOPE_ID).catch(
+                            () => undefined,
+                          );
+                        }
+                      }}
+                      type="button"
+                    >
+                      {temporaryPaginationControl.label}
+                    </Button>
+                  )}
+                  {temporaryTasks.length === 0 &&
+                  normalizedQuery.length === 0 &&
+                  temporaryTaskState?.isPending !== true ? (
+                    <p className="px-2 py-1.5 text-meta text-subtle-foreground">
+                      {t("sidebar.noTemporaryTasks")}
+                    </p>
+                  ) : null}
+                  {temporaryTasks.length === 0 &&
+                  normalizedQuery.length > 0 &&
+                  !taskSearch.isPending &&
+                  taskSearch.error === null ? (
+                    <p className="px-2 py-1.5 text-meta text-subtle-foreground">
+                      {t("sidebar.noMatchingTasks")}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </section>
             {orderedProjects.map((project) => {
               const projectTasks = tasksByProjectId.get(project.id) ?? EMPTY_PROJECT_TASKS;
@@ -405,17 +415,27 @@ export function ProjectSidebarTaskList({
   );
 }
 
-export function TemporaryTasksHeading({ onCreate }: Readonly<{ onCreate: () => void }>) {
+export function TemporaryTasksHeading({
+  expanded,
+  onCreate,
+  onToggle,
+}: Readonly<{ expanded: boolean; onCreate: () => void; onToggle: () => void }>) {
   const { t } = useTranslation("workbench");
   return (
-    <div className="flex h-8 items-center gap-1 pl-2 text-muted-foreground">
-      <h3
-        className="flex min-w-0 flex-1 items-center gap-2 text-body-small font-medium"
+    <div className="flex h-8 items-center gap-0.5 text-muted-foreground">
+      <Button
+        aria-controls="temporary-tasks-content"
+        aria-expanded={expanded}
+        className="h-8 min-w-0 flex-1 gap-2 rounded-control px-2 text-body-small font-medium"
+        contentAlign="start"
         id="temporary-tasks-title"
+        onClick={onToggle}
+        type="button"
+        variant="ghost"
       >
         <MessageSquareText className="size-4 shrink-0" aria-hidden="true" />
         <span className="truncate">{t("sidebar.temporaryTasks")}</span>
-      </h3>
+      </Button>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button

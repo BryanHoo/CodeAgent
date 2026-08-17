@@ -28,11 +28,12 @@ describe("Project task pagination", () => {
   it("offers a new task icon beside temporary tasks", () => {
     const markup = renderToStaticMarkup(
       <TooltipProvider>
-        <TemporaryTasksHeading onCreate={vi.fn()} />
+        <TemporaryTasksHeading expanded onCreate={vi.fn()} onToggle={vi.fn()} />
       </TooltipProvider>,
     );
 
     expect(markup).toContain("临时任务");
+    expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain('aria-label="新建任务"');
     expect(markup).toContain("lucide-plus");
   });

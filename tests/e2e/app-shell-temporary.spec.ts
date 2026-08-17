@@ -71,6 +71,13 @@ test("creates and restores a temporary task without exposing its internal projec
   await renameDialog.getByRole("button", { name: "保存" }).click();
   await expect(main.getByRole("heading", { name: "临时排查记录" })).toBeVisible();
 
+  const temporaryGroupToggle = temporaryGroup.getByRole("button", { name: "临时任务" });
+  await temporaryGroupToggle.click();
+  await expect(temporaryGroupToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(temporaryGroup.getByRole("link", { name: /临时排查记录/u })).toHaveCount(0);
+  await temporaryGroupToggle.click();
+  await expect(temporaryGroupToggle).toHaveAttribute("aria-expanded", "true");
+
   await temporaryGroup.getByRole("link", { name: /临时排查记录/u }).hover();
   await temporaryGroup.getByRole("button", { name: "打开 临时排查记录 的操作菜单" }).click();
   await page.getByRole("menuitem", { name: "归档" }).click();

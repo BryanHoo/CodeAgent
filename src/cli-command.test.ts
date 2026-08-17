@@ -2,13 +2,20 @@ import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ensureTemporaryWorkspace, runCli, type CliDependencies } from "./cli-command.js";
+import { STARTUP_UPDATE_APPLIED_ENV } from "./cli-startup-update.js";
 
 const temporaryDirectories: string[] = [];
 
+beforeEach(() => {
+  // CLI 测试默认模拟首次启动，不能继承调用测试进程时残留的重启标记。
+  vi.stubEnv(STARTUP_UPDATE_APPLIED_ENV, "0");
+});
+
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     temporaryDirectories.splice(0).map((path) => rm(path, { force: true, recursive: true })),
   );
@@ -413,6 +420,21 @@ describe("runCli", () => {
     expect(harness.dependencies.createStateRepository).not.toHaveBeenCalled();
     expect(harness.dependencies.startCodexAppServer).not.toHaveBeenCalled();
     expect(harness.stdout.join("")).toContain("CodeAgent 已更新到 1.3.0");
+  });
+
+  it("skips the startup update check in the restarted process", async () => {
+    vi.stubEnv(STARTUP_UPDATE_APPLIED_ENV, "1");
+    const harness = createHarness();
+    const controller = new AbortController();
+    const run = runCli(["start"], { ...harness.options, signal: controller.signal });
+
+    await vi.waitFor(() => {
+      expect(harness.serverListen).toHaveBeenCalledOnce();
+    });
+    expect(harness.dependencies.checkAppUpdate).not.toHaveBeenCalled();
+
+    controller.abort();
+    await expect(run).resolves.toBe(0);
   });
 
   it("warns and continues startup when the update check fails", async () => {
