@@ -24,6 +24,11 @@ import { readProjectImageFile } from "./project-image-file.js";
 import { readProjectSourceFile } from "./project-source-file.js";
 import { createProjectOpenService } from "./project-open.js";
 import { createProjectRuntimeContext } from "./project-runtime-context.js";
+import {
+  DEFAULT_PROJECT_RUNTIME_CLEANUP_INTERVAL_MS,
+  DEFAULT_PROJECT_RUNTIME_IDLE_TTL_MS,
+  ProjectRuntimeIdleReaper,
+} from "./project-runtime-idle-reaper.js";
 import { readProjectDirectory, resolveProjectDirectory } from "./project-directory-browser.js";
 import {
   MutationHttpError,
@@ -200,6 +205,7 @@ export async function createCodeAgentServer(
   const getProjectContext: ProjectContextResolver = async (projectId) => {
     const existing = projectContexts.get(projectId);
     if (existing !== undefined) {
+      projectRuntimeIdleReaper.touch(projectId);
       return existing;
     }
     return runSingleFlight(projectContextInitializations, projectId, async () => {
@@ -207,6 +213,7 @@ export async function createCodeAgentServer(
       const project = await options.projectRepository.read(projectId);
       const concurrentContext = projectContexts.get(projectId);
       if (concurrentContext !== undefined) {
+        projectRuntimeIdleReaper.touch(projectId);
         return concurrentContext;
       }
       if (project === undefined) {
@@ -219,6 +226,9 @@ export async function createCodeAgentServer(
           : { eventBufferSize: options.eventBufferSize }),
         eventProvider: capabilities.provider,
         ...(options.eventSessionId === undefined ? {} : { eventSessionId: options.eventSessionId }),
+        onActivity: () => {
+          projectRuntimeIdleReaper.touch(projectId);
+        },
         onAttachmentReleaseError: (error) => {
           app.log.warn({ error }, "Failed to release turn attachments");
         },
@@ -226,10 +236,12 @@ export async function createCodeAgentServer(
         provider: options.provider.forProject(project),
       });
       projectContexts.set(projectId, context);
+      projectRuntimeIdleReaper.touch(projectId);
       return context;
     });
   };
   const releaseProjectContext = async (projectId: string): Promise<void> => {
+    projectRuntimeIdleReaper.forget(projectId);
     const context = projectContexts.get(projectId);
     if (context !== undefined) {
       // 先断开事件交付，再释放 Provider 与附件，避免销毁期间继续发布 Project 事件。
@@ -242,6 +254,16 @@ export async function createCodeAgentServer(
       attachmentStore.releaseProject(projectId),
     ]);
   };
+  const projectRuntimeIdleReaper = new ProjectRuntimeIdleReaper({
+    cleanupIntervalMs:
+      options.projectRuntimeCleanupIntervalMs ?? DEFAULT_PROJECT_RUNTIME_CLEANUP_INTERVAL_MS,
+    contexts: projectContexts,
+    idleTtlMs: options.projectRuntimeIdleTtlMs ?? DEFAULT_PROJECT_RUNTIME_IDLE_TTL_MS,
+    onReleaseError: (error, projectId) => {
+      app.log.warn({ error, projectId }, "Failed to release idle Project runtime");
+    },
+    release: releaseProjectContext,
+  });
   const listModels = async (): Promise<readonly AgentModel[]> =>
     (await modelCatalogCache.read()).data;
   const readEffectiveGlobalSettings = async (
@@ -357,6 +379,7 @@ export async function createCodeAgentServer(
     ...(options.access === undefined ? {} : { access: options.access }),
     ...(options.allowedHosts === undefined ? {} : { allowedHosts: options.allowedHosts }),
     releaseResources: async () => {
+      await projectRuntimeIdleReaper.close();
       await Promise.all([...projectContexts.keys()].map(releaseProjectContext));
       await attachmentStore.dispose();
       activeGitMutations.clear();

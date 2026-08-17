@@ -1,15 +1,40 @@
 import { Buffer } from "node:buffer";
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CodexHistoricalAttachmentStore } from "./historical-attachment-store.js";
 
 const pngContent = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const pngDataUrl = `data:image/png;base64,${pngContent.toString("base64")}`;
+const stores: CodexHistoricalAttachmentStore[] = [];
+
+function createStore(
+  options: ConstructorParameters<typeof CodexHistoricalAttachmentStore>[0] = {},
+): Readonly<{ directory: string; store: CodexHistoricalAttachmentStore }> {
+  const directory = mkdtempSync(join(tmpdir(), "code-agent-history-test-"));
+  const store = new CodexHistoricalAttachmentStore({ attachmentDirectory: directory, ...options });
+  stores.push(store);
+  return { directory, store };
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+  for (const store of stores.splice(0)) {
+    store.dispose();
+  }
+});
 
 describe("CodexHistoricalAttachmentStore", () => {
   it("registers inline images as random metadata without exposing their data URL", async () => {
-    const store = new CodexHistoricalAttachmentStore({ createId: () => "history-random-1" });
+    const diskRead = vi.fn((path: string) => readFile(path));
+    const { directory, store } = createStore({
+      createId: () => "history-random-1",
+      readFile: diskRead,
+    });
 
     const attachment = store.addDataUrl("task-1", { name: "diagram.png", url: pngDataUrl }, 0);
 
@@ -21,6 +46,7 @@ describe("CodexHistoricalAttachmentStore", () => {
       size: pngContent.byteLength,
     });
     expect(attachment).not.toHaveProperty("url");
+    expect(readdirSync(directory)).toHaveLength(1);
     await expect(store.read("task-other", "history-random-1")).resolves.toBeUndefined();
     await expect(store.read("task-1", "history-random-1")).resolves.toMatchObject({
       content: pngContent,
@@ -28,6 +54,7 @@ describe("CodexHistoricalAttachmentStore", () => {
       name: "diagram.png",
       size: pngContent.byteLength,
     });
+    expect(diskRead).toHaveBeenCalledOnce();
   });
 
   it("defers local image body reads and revalidates the file asynchronously on demand", async () => {
@@ -110,10 +137,10 @@ describe("CodexHistoricalAttachmentStore", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("enforces entry, total-byte, TTL, and task cleanup bounds", async () => {
-    let now = 100;
+  it("evicts the least recently used entries by entry and byte budgets", async () => {
+    const now = 100;
     let nextId = 0;
-    const store = new CodexHistoricalAttachmentStore({
+    const { store } = createStore({
       clock: () => now,
       createId: () => `history-${String(++nextId)}`,
       maxEntries: 2,
@@ -126,13 +153,47 @@ describe("CodexHistoricalAttachmentStore", () => {
 
     expect(first).toBeDefined();
     expect(second).toBeDefined();
-    expect(store.addDataUrl("task-1", { name: "third.png", url: pngDataUrl }, 2)).toBeUndefined();
+    await expect(store.read("task-1", first?.id ?? "")).resolves.toBeDefined();
+    const third = store.addDataUrl("task-1", { name: "third.png", url: pngDataUrl }, 2);
+
+    expect(third).toBeDefined();
+    await expect(store.read("task-1", second?.id ?? "")).resolves.toBeUndefined();
+    await expect(store.read("task-1", first?.id ?? "")).resolves.toBeDefined();
+    await expect(store.read("task-1", third?.id ?? "")).resolves.toBeDefined();
     store.clearTask("task-1");
     await expect(store.read("task-1", first?.id ?? "")).resolves.toBeUndefined();
+  });
+
+  it("periodically deletes expired managed files while idle", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(100);
+    const { directory, store } = createStore({ cleanupIntervalMs: 10, ttlMs: 50 });
 
     const expiring = store.addDataUrl("task-2", { name: "expiring.png", url: pngDataUrl }, 0);
-    now = 151;
+    expect(readdirSync(directory)).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(readdirSync(directory)).toHaveLength(0);
     await expect(store.read("task-2", expiring?.id ?? "")).resolves.toBeUndefined();
+  });
+
+  it("disposes its timer and managed directory without deleting local source files", () => {
+    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+    const { directory, store } = createStore();
+    const localDirectory = mkdtempSync(join(tmpdir(), "code-agent-history-local-"));
+    const localPath = join(localDirectory, "source.png");
+    writeFileSync(localPath, pngContent);
+
+    store.addDataUrl("task-1", { url: pngDataUrl }, 0);
+    store.addLocalImage("task-1", localPath, 1);
+    store.dispose();
+
+    expect(existsSync(directory)).toBe(false);
+    expect(existsSync(localPath)).toBe(true);
+    expect(clearIntervalSpy).toHaveBeenCalled();
+    rmSync(localDirectory, { force: true, recursive: true });
+    clearIntervalSpy.mockRestore();
   });
 
   it("rejects invalid signatures and images over the per-file limit", () => {

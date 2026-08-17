@@ -909,7 +909,8 @@ describe("CodexAgentProvider", () => {
         threadId: "task-1",
         turnId: "turn-timed",
       });
-      expect(vi.getTimerCount()).toBe(1);
+      // 历史附件清理与 Pending Request 各持有一个受控 timer。
+      expect(vi.getTimerCount()).toBe(2);
 
       await runtime.releaseProject(project.id);
 

@@ -48,6 +48,8 @@ export interface CreateCodeAgentServerOptions {
   projectRepository: ProjectRepository;
   providerConnectionRepository: AgentProviderConnectionRepository;
   projectOpenService?: ProjectOpenService;
+  projectRuntimeCleanupIntervalMs?: number;
+  projectRuntimeIdleTtlMs?: number;
   provider: AgentRuntimeProvider;
   readAppInfo: () => Promise<AppInfoResponse>;
   settingsRepository: AgentSettingsRepository;

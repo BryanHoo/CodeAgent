@@ -237,7 +237,7 @@ export abstract class CodexAgentProviderBase {
     // Project 销毁后同步切断所有本地状态，避免定时器和监听器继续持有 Provider。
     this.eventListenersIncludingEphemeral.clear();
     this.eventListeners.clear();
-    this.historicalAttachments.clear();
+    this.historicalAttachments.dispose();
     this.pendingLifecycle.clear();
     this.runtime.clear();
     this.skillsById.clear();

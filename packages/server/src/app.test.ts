@@ -2778,6 +2778,46 @@ describe("CodeAgent Server", () => {
     expect(forProject).toHaveBeenCalledWith(project);
   });
 
+  it("releases an idle project runtime and rebuilds it on the next access", async () => {
+    const providerHarness = createProvider();
+    const forProject = vi.fn(() => providerHarness.provider);
+    const releaseProject = vi.fn(() => Promise.resolve());
+    const runtimeProvider: AgentRuntimeProvider = {
+      ...createRuntimeConnectionMethods(),
+      forProject,
+      getCapabilities: () => providerHarness.provider.getCapabilities(),
+      listModels: () => providerHarness.provider.listModels(),
+      readDefaultSettings: () => Promise.resolve({}),
+      releaseProject,
+    };
+    const app = await createCodeAgentServer(
+      createServerOptions(providerHarness.provider, {
+        projectRuntimeCleanupIntervalMs: 5,
+        projectRuntimeIdleTtlMs: 10,
+        provider: runtimeProvider,
+      }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const firstAccess = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks",
+    });
+    expect(firstAccess.statusCode).toBe(200);
+    expect(forProject).toHaveBeenCalledOnce();
+
+    await vi.waitFor(() => {
+      expect(releaseProject).toHaveBeenCalledOnce();
+    });
+
+    const secondAccess = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/tasks",
+    });
+    expect(secondAccess.statusCode).toBe(200);
+    expect(forProject).toHaveBeenCalledTimes(2);
+  });
+
   it("reads a structured task snapshot", async () => {
     const { app } = await createHarness();
     const response = await app.inject({

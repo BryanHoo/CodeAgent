@@ -13,6 +13,7 @@ export function createProjectRuntimeContext(
     eventBufferSize?: number;
     eventProvider: AgentEventStreamOptions["provider"];
     eventSessionId?: string;
+    onActivity: () => void;
     onAttachmentReleaseError: (error: unknown) => void;
     project: Project;
     provider: AgentProvider;
@@ -30,6 +31,7 @@ export function createProjectRuntimeContext(
     provider,
     transportMetrics: { activeClients: 0, slowClientDisconnects: 0 },
     unsubscribe: provider.subscribeEvents((event) => {
+      options.onActivity();
       if (event.type === "turn.completed") {
         // Turn 终态到达后异步释放上传附件，不阻塞事件发布链路。
         void attachmentStore

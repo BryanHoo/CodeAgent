@@ -1,8 +1,9 @@
 import { Buffer } from "node:buffer";
-import { randomUUID } from "node:crypto";
-import { closeSync, openSync, readSync, statSync } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
-import { basename, extname, isAbsolute } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, extname, isAbsolute, join } from "node:path";
 
 import type { AgentProviderAttachment } from "@code-agent/core";
 import {
@@ -15,14 +16,26 @@ import {
   type AgentMessageAttachment,
 } from "@code-agent/protocol";
 
+import {
+  detectImageMediaType,
+  imageExtensionsByMediaType,
+  imageMediaTypesByExtension,
+  normalizeAttachmentName,
+  readFileHeader,
+  readFileStats,
+  readFileStatsAsync,
+  type HistoricalFileStats,
+} from "./historical-attachment-files.js";
+
 const DEFAULT_ATTACHMENT_TTL_MS = 30 * 60 * 1_000;
+const DEFAULT_CLEANUP_INTERVAL_MS = 60_000;
 const DEFAULT_MAX_ENTRIES = MAX_AGENT_HISTORY_IMAGES;
 const DEFAULT_MAX_TOTAL_BYTES = MAX_AGENT_HISTORY_IMAGE_TOTAL_BYTES;
 const DATA_URL_PATTERN = /^data:(image\/(?:gif|jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/u;
 
-type HistoricalFileStats = Readonly<{ isFile: boolean; mtimeMs: number; size: number }>;
-
 export interface CodexHistoricalAttachmentStoreOptions {
+  attachmentDirectory?: string;
+  cleanupIntervalMs?: number;
   clock?: () => number;
   createId?: () => string;
   maxBytes?: number;
@@ -42,75 +55,13 @@ type StoredAttachmentBase = Readonly<{
 }>;
 
 type StoredAttachment =
-  | (StoredAttachmentBase & Readonly<{ content: Buffer; source: "inline" }>)
+  | (StoredAttachmentBase & Readonly<{ contentDigest: string; path: string; source: "managed" }>)
   | (StoredAttachmentBase & Readonly<{ mtimeMs: number; path: string; source: "local" }>);
 
-const imageMediaTypesByExtension: Readonly<Record<string, AgentImageMediaType>> = {
-  ".gif": "image/gif",
-  ".jpeg": "image/jpeg",
-  ".jpg": "image/jpeg",
-  ".png": "image/png",
-  ".webp": "image/webp",
-};
-
-const imageExtensionsByMediaType: Readonly<Record<AgentImageMediaType, string>> = {
-  "image/gif": ".gif",
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-};
-
-function detectImageMediaType(content: Uint8Array): AgentImageMediaType | undefined {
-  const header = Buffer.from(content.buffer, content.byteOffset, content.byteLength);
-  if (header.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
-    return "image/png";
-  }
-  if (header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) {
-    return "image/jpeg";
-  }
-  const gifHeader = header.subarray(0, 6).toString("ascii");
-  if (gifHeader === "GIF87a" || gifHeader === "GIF89a") {
-    return "image/gif";
-  }
-  if (
-    header.subarray(0, 4).toString("ascii") === "RIFF" &&
-    header.subarray(8, 12).toString("ascii") === "WEBP"
-  ) {
-    return "image/webp";
-  }
-  return undefined;
-}
-
-function normalizeAttachmentName(value: string | undefined, fallback: string): string {
-  const trimmedName = value?.trim();
-  return trimmedName === undefined || trimmedName.length === 0
-    ? fallback
-    : trimmedName.slice(0, 255);
-}
-
-function readFileHeader(path: string): Buffer {
-  const file = openSync(path, "r");
-  try {
-    const header = Buffer.alloc(12);
-    const bytesRead = readSync(file, header, 0, header.byteLength, 0);
-    return header.subarray(0, bytesRead);
-  } finally {
-    closeSync(file);
-  }
-}
-
-function readFileStats(path: string): HistoricalFileStats {
-  const stats = statSync(path);
-  return { isFile: stats.isFile(), mtimeMs: stats.mtimeMs, size: stats.size };
-}
-
-async function readFileStatsAsync(path: string): Promise<HistoricalFileStats> {
-  const stats = await stat(path);
-  return { isFile: stats.isFile(), mtimeMs: stats.mtimeMs, size: stats.size };
-}
-
 export class CodexHistoricalAttachmentStore {
+  readonly #attachmentDirectory: string;
   readonly #clock: () => number;
+  readonly #cleanupTimer: ReturnType<typeof setInterval>;
   readonly #createId: () => string;
   readonly #entries = new Map<string, StoredAttachment>();
   readonly #maxBytes: number;
@@ -121,6 +72,7 @@ export class CodexHistoricalAttachmentStore {
   readonly #readStats: (path: string) => Promise<HistoricalFileStats>;
   readonly #statFile: (path: string) => HistoricalFileStats;
   readonly #ttlMs: number;
+  #disposed = false;
   #totalBytes = 0;
 
   public constructor(options: CodexHistoricalAttachmentStoreOptions = {}) {
@@ -134,6 +86,25 @@ export class CodexHistoricalAttachmentStore {
     this.#readStats = options.readStats ?? readFileStatsAsync;
     this.#statFile = options.statFile ?? readFileStats;
     this.#ttlMs = options.ttlMs ?? DEFAULT_ATTACHMENT_TTL_MS;
+    const cleanupIntervalMs = options.cleanupIntervalMs ?? DEFAULT_CLEANUP_INTERVAL_MS;
+    for (const [name, value] of [
+      ["cleanupIntervalMs", cleanupIntervalMs],
+      ["maxBytes", this.#maxBytes],
+      ["maxEntries", this.#maxEntries],
+      ["maxTotalBytes", this.#maxTotalBytes],
+      ["ttlMs", this.#ttlMs],
+    ] as const) {
+      if (!Number.isSafeInteger(value) || value <= 0) {
+        throw new RangeError(`${name} must be a positive safe integer`);
+      }
+    }
+    this.#attachmentDirectory =
+      options.attachmentDirectory ?? mkdtempSync(join(tmpdir(), "code-agent-history-"));
+    mkdirSync(this.#attachmentDirectory, { recursive: true });
+    this.#cleanupTimer = setInterval(() => {
+      this.#pruneExpired();
+    }, cleanupIntervalMs);
+    this.#cleanupTimer.unref();
   }
 
   public addDataUrl(
@@ -187,31 +158,21 @@ export class CodexHistoricalAttachmentStore {
     mediaType: AgentImageMediaType,
     name: string,
   ): AgentMessageAttachment | undefined {
+    const contentDigest = createHash("sha256").update(content).digest("hex");
     for (const entry of this.#entries.values()) {
       if (
-        entry.source === "inline" &&
+        entry.source === "managed" &&
         entry.projectTaskId === taskId &&
         entry.attachment.mediaType === mediaType &&
         entry.attachment.name === name &&
-        entry.content.equals(content)
+        entry.attachment.size === content.byteLength &&
+        entry.contentDigest === contentDigest
       ) {
         // 重复 Snapshot 继续使用同一随机授权 ID，避免旧页面引用被后续读取立即作废。
         return this.#refresh(entry);
       }
     }
-    const attachment = this.#createAttachment("image", mediaType, name, content.byteLength);
-    if (attachment === undefined) {
-      return undefined;
-    }
-    this.#entries.set(attachment.id, {
-      attachment,
-      content,
-      expiresAt: this.#clock() + this.#ttlMs,
-      projectTaskId: taskId,
-      source: "inline",
-    });
-    this.#totalBytes += attachment.size;
-    return attachment;
+    return this.#addManagedAttachment(taskId, "image", mediaType, name, content, contentDigest);
   }
 
   #decodeBase64Image(encoded: string): Buffer | undefined {
@@ -267,6 +228,7 @@ export class CodexHistoricalAttachmentStore {
       if (attachment === undefined) {
         return undefined;
       }
+      this.#ensureCapacity(attachment.size);
       this.#entries.set(attachment.id, {
         attachment,
         expiresAt: this.#clock() + this.#ttlMs,
@@ -294,27 +256,52 @@ export class CodexHistoricalAttachmentStore {
       return undefined;
     }
     const name = normalizeAttachmentName(input.name, `Pasted text-${String(textIndex + 1)}.txt`);
+    const contentDigest = createHash("sha256").update(content).digest("hex");
     for (const entry of this.#entries.values()) {
       if (
-        entry.source === "inline" &&
+        entry.source === "managed" &&
         entry.projectTaskId === taskId &&
         entry.attachment.kind === "text" &&
         entry.attachment.name === name &&
-        entry.content.equals(content)
+        entry.attachment.size === content.byteLength &&
+        entry.contentDigest === contentDigest
       ) {
         return this.#refresh(entry);
       }
     }
-    const attachment = this.#createAttachment("text", "text/plain", name, content.byteLength);
+    return this.#addManagedAttachment(taskId, "text", "text/plain", name, content, contentDigest);
+  }
+
+  #addManagedAttachment(
+    taskId: string,
+    kind: AgentAttachmentKind,
+    mediaType: AgentAttachmentMediaType,
+    name: string,
+    content: Buffer,
+    contentDigest: string,
+  ): AgentMessageAttachment | undefined {
+    const attachment = this.#createAttachment(kind, mediaType, name, content.byteLength);
     if (attachment === undefined) {
+      return undefined;
+    }
+    this.#ensureCapacity(attachment.size);
+    const path = join(
+      this.#attachmentDirectory,
+      createHash("sha256").update(attachment.id).digest("hex"),
+    );
+    try {
+      // 授权 ID 和原始名称都不直接成为文件名，磁盘路径始终由 Store 控制。
+      writeFileSync(path, content, { flag: "wx" });
+    } catch {
       return undefined;
     }
     this.#entries.set(attachment.id, {
       attachment,
-      content,
+      contentDigest,
       expiresAt: this.#clock() + this.#ttlMs,
+      path,
       projectTaskId: taskId,
-      source: "inline",
+      source: "managed",
     });
     this.#totalBytes += attachment.size;
     return attachment;
@@ -329,28 +316,29 @@ export class CodexHistoricalAttachmentStore {
     if (entry?.projectTaskId !== taskId) {
       return undefined;
     }
-    if (entry.source === "inline") {
-      return { ...entry.attachment, content: entry.content };
-    }
     try {
-      // 正文读取前异步复验文件状态，避免历史附件请求阻塞 Node.js 事件循环。
-      const stats = await this.#readStats(entry.path);
-      if (
-        !stats.isFile ||
-        stats.size !== entry.attachment.size ||
-        stats.mtimeMs !== entry.mtimeMs
-      ) {
-        this.#delete(attachmentId);
-        return undefined;
+      if (entry.source === "local") {
+        // Codex 本地源文件在正文读取前复验，避免路径内容变化后继续沿用旧授权。
+        const stats = await this.#readStats(entry.path);
+        if (
+          !stats.isFile ||
+          stats.size !== entry.attachment.size ||
+          stats.mtimeMs !== entry.mtimeMs
+        ) {
+          this.#delete(attachmentId);
+          return undefined;
+        }
       }
       const content = await this.#readFile(entry.path);
       if (
         content.byteLength !== entry.attachment.size ||
-        detectImageMediaType(content) !== entry.attachment.mediaType
+        (entry.attachment.kind === "image" &&
+          detectImageMediaType(content) !== entry.attachment.mediaType)
       ) {
         this.#delete(attachmentId);
         return undefined;
       }
+      this.#touch(entry);
       return { ...entry.attachment, content };
     } catch {
       this.#delete(attachmentId);
@@ -367,16 +355,32 @@ export class CodexHistoricalAttachmentStore {
   }
 
   public clear(): void {
-    this.#entries.clear();
-    this.#totalBytes = 0;
+    for (const attachmentId of [...this.#entries.keys()]) {
+      this.#delete(attachmentId);
+    }
+  }
+
+  public dispose(): void {
+    if (this.#disposed) {
+      return;
+    }
+    this.#disposed = true;
+    clearInterval(this.#cleanupTimer);
+    this.clear();
+    rmSync(this.#attachmentDirectory, { force: true, recursive: true });
   }
 
   #refresh(entry: StoredAttachment): AgentMessageAttachment {
-    this.#entries.set(entry.attachment.id, {
+    this.#touch({
       ...entry,
       expiresAt: this.#clock() + this.#ttlMs,
     });
     return entry.attachment;
+  }
+
+  #touch(entry: StoredAttachment): void {
+    this.#entries.delete(entry.attachment.id);
+    this.#entries.set(entry.attachment.id, entry);
   }
 
   #createAttachment(
@@ -385,7 +389,7 @@ export class CodexHistoricalAttachmentStore {
     name: string,
     size: number,
   ): AgentMessageAttachment | undefined {
-    if (this.#entries.size >= this.#maxEntries || this.#totalBytes + size > this.#maxTotalBytes) {
+    if (this.#disposed || size > this.#maxTotalBytes) {
       return undefined;
     }
     const id = this.#createId();
@@ -400,6 +404,26 @@ export class CodexHistoricalAttachmentStore {
     if (entry !== undefined) {
       this.#entries.delete(attachmentId);
       this.#totalBytes -= entry.attachment.size;
+      if (entry.source === "managed") {
+        try {
+          unlinkSync(entry.path);
+        } catch {
+          // 文件可能已被外部临时目录清理；授权状态仍必须同步移除。
+        }
+      }
+    }
+  }
+
+  #ensureCapacity(incomingBytes: number): void {
+    while (
+      this.#entries.size >= this.#maxEntries ||
+      this.#totalBytes + incomingBytes > this.#maxTotalBytes
+    ) {
+      const leastRecentlyUsedId = this.#entries.keys().next().value;
+      if (leastRecentlyUsedId === undefined) {
+        return;
+      }
+      this.#delete(leastRecentlyUsedId);
     }
   }
 
