@@ -526,7 +526,7 @@ a {
 @keyframes task-status-breathe {
   0%,
   100% {
-    opacity: 0.68;
+    opacity: 0.4;
   }
 
   50% {

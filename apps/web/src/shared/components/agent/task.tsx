@@ -88,7 +88,6 @@ export function TaskTrigger({ className = "", suffix, title, ...props }: TaskTri
     <>
       <span
         className={`shrink-0 ${context.status === "error" ? "text-danger" : "text-muted-foreground"}`}
-        title={t(presentation.labelKey)}
       >
         {presentation.icon}
         <span className="sr-only">{t(presentation.labelKey)}</span>

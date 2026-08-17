@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup as renderReactToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -12,7 +12,9 @@ import {
   TaskSnapshotTimeline,
   TaskTimeline,
 } from "./task-timeline.js";
+import { FileChangeButton } from "./task-timeline-file-changes.js";
 import { getUserMessageCopyText, LiveFileChanges } from "./task-timeline-store-items.js";
+import { TimelineItemContent } from "./task-timeline-items.js";
 
 function renderToStaticMarkup(children: ReactNode) {
   return renderReactToStaticMarkup(<TooltipProvider>{children}</TooltipProvider>);
@@ -85,6 +87,20 @@ describe("LiveFileChanges", () => {
     expect(markup).toContain("+2");
     expect(markup).toContain("-1");
     expect(markup).not.toContain("实时文件变更");
+  });
+});
+
+describe("FileChangeButton", () => {
+  it("renders a file change without a native path tooltip", () => {
+    const markup = renderToStaticMarkup(
+      <FileChangeButton
+        change={{ diff: "@@ -1 +1 @@\n-old\n+new", kind: "update", path: "src/example.ts" }}
+        onOpen={vi.fn()}
+      />,
+    );
+
+    expect(markup).not.toContain('title="src/example.ts"');
+    expect(markup).toContain("example.ts");
   });
 });
 
@@ -1592,6 +1608,35 @@ describe("TaskSnapshotTimeline", () => {
     expect(markup).not.toContain("请检查日志");
     expect(markup).not.toContain("\u001B[31m");
     expect(markup).not.toContain("输出已截断，仅显示最新内容。");
+  });
+
+  it("renders command input before output when the tool is expanded", () => {
+    const commandElement = TimelineItemContent({
+      isLastTurnItem: true,
+      item: {
+        command: "pnpm check",
+        cwd: "/workspace/CodeAgent",
+        id: "command-expanded",
+        output: "268 passed",
+        outputTruncated: false,
+        status: "completed",
+        type: "command",
+      },
+      onOpenFileDiff: vi.fn(),
+      onOpenSourceFile: vi.fn(),
+      projectId: "code-agent",
+      taskId: "task-1",
+      turnStatus: "completed",
+    }) as ReactElement<{ children: ReactNode }>;
+
+    // 直接渲染 Tool 子节点，模拟用户展开后的延迟挂载内容。
+    const markup = renderToStaticMarkup(commandElement.props.children);
+
+    expect(markup).toContain("参数");
+    expect(markup).toContain("&quot;command&quot;: &quot;pnpm check&quot;");
+    expect(markup).toContain("&quot;cwd&quot;: &quot;/workspace/CodeAgent&quot;");
+    expect(markup).toContain("268 passed");
+    expect(markup.indexOf("参数")).toBeLessThan(markup.indexOf("268 passed"));
   });
 
   it("keeps a running command collapsed while preserving its visible running status", () => {

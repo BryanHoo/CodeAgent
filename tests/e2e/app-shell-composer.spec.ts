@@ -1233,6 +1233,11 @@ test("project file tree context menu and ellipsis share target actions", async (
   await expect(folderMenu.getByRole("menuitem", { name: "打开" })).toBeVisible();
   await expect(folderMenu.getByRole("menuitem", { name: "引用" })).toHaveCount(0);
   await expect(docsTreeItem).toHaveAttribute("aria-selected", "true");
+  await folderMenu.getByRole("menuitem", { name: "复制路径" }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe("~/Develop/person/CodeAgent/docs");
+  await docsTreeItem.click({ button: "right" });
   await folderMenu.getByRole("menuitem", { name: "打开" }).click();
   await expect(page.getByRole("menuitem", { name: "系统默认应用" })).toHaveCount(0);
   await selectOpenApp("Finder");

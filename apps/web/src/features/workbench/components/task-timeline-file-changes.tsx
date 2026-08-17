@@ -41,9 +41,7 @@ export function FileChangeButton({
     >
       <FilePenLine className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span className="shrink-0 text-muted-foreground">{operationLabel}</span>
-      <span className="min-w-0 truncate font-medium" title={change.path}>
-        {fileName}
-      </span>
+      <span className="min-w-0 truncate font-medium">{fileName}</span>
       <span className="ml-auto shrink-0 text-diff-added">+{additions}</span>
       <span className="shrink-0 text-diff-removed">-{removals}</span>
     </Button>

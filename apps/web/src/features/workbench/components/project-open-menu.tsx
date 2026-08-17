@@ -144,6 +144,7 @@ export function ProjectQuickOpenMenu({
 }
 
 export type ProjectOpenContextMenuTarget = Readonly<{
+  copyPath: string;
   path: string;
   reference?: ProjectFileSearchEntry;
   type: ProjectOpenTargetType;
@@ -160,6 +161,19 @@ type ProjectOpenContextMenuItemsProps = Readonly<{
 
 function getProjectTargetName(path: string): string {
   return path.split(/[\\/]/u).at(-1) ?? path;
+}
+
+export function getProjectTargetCopyPath(projectRootPath: string, targetPath: string): string {
+  const usesWindowsSeparator = projectRootPath.includes("\\") && !projectRootPath.includes("/");
+  const separator = usesWindowsSeparator ? "\\" : "/";
+  const rootPath = projectRootPath.replace(/[\\/]+$/u, "");
+  const relativePath = usesWindowsSeparator
+    ? targetPath.replace(/\//gu, "\\").replace(/^\\+/u, "")
+    : targetPath.replace(/\\/gu, "/").replace(/^\/+/u, "");
+
+  return relativePath === ""
+    ? rootPath || projectRootPath
+    : `${rootPath}${separator}${relativePath}`;
 }
 
 function copyProjectTargetText(text: string) {
@@ -191,7 +205,7 @@ export function ProjectOpenContextMenuItems({
       </ContextMenuItem>
       <ContextMenuItem
         onSelect={() => {
-          copyProjectTargetText(target.path);
+          copyProjectTargetText(target.copyPath);
         }}
       >
         <Copy aria-hidden="true" className="size-4 text-muted-foreground" />
@@ -296,7 +310,7 @@ export function ProjectOpenDropdownMenu({
         </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={() => {
-            copyProjectTargetText(target.path);
+            copyProjectTargetText(target.copyPath);
           }}
         >
           <Copy aria-hidden="true" className="size-4 text-muted-foreground" />

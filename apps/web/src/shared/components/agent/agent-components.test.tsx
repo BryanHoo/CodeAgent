@@ -50,6 +50,7 @@ import {
   isPromptInputNewlineShortcut,
 } from "./prompt-input.js";
 import { Shimmer } from "./shimmer.js";
+import { Task, TaskTrigger } from "./task.js";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "./tool.js";
 import { TooltipProvider } from "../core/tooltip.js";
 
@@ -221,15 +222,28 @@ describe("项目 Agent 组件", () => {
     expect(markup).not.toContain('title="复制消息"');
   });
 
-  it("composes the tool header with the shared tooltip trigger", () => {
+  it("renders tool headers without a tooltip", () => {
     const markup = renderWithTooltipProvider(
       <Tool>
         <ToolHeader state="output-available" title="读取完整命令" />
       </Tool>,
     );
 
-    expect(markup).toContain('data-slot="tooltip-trigger"');
+    expect(markup).not.toContain('data-slot="tooltip-trigger"');
+    expect(markup).not.toContain('title="读取完整命令"');
     expect(markup.match(/<summary/gu)).toHaveLength(1);
+  });
+
+  it("renders structured task status without a native tooltip", () => {
+    const markup = renderToStaticMarkup(
+      <Task status="in_progress">
+        <TaskTrigger title="正在修改文件" />
+      </Task>,
+    );
+
+    expect(markup).not.toContain("title=");
+    expect(markup).toContain("进行中");
+    expect(markup).toContain("正在修改文件");
   });
 
   it("only renders the visible Turn range in a long conversation", () => {

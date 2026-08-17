@@ -1226,7 +1226,7 @@ test("shows the latest raw Codex operation throughout a running turn", async ({ 
   await expect(page.getByText("流式回复完成", { exact: true })).toBeVisible();
 });
 
-test("shows the complete truncated command title on hover and focus", async ({ page }) => {
+test("does not show a tooltip for a truncated command title", async ({ page }) => {
   const command =
     "pnpm exec vitest run apps/web/src/features/workbench/components/task-timeline.test.tsx --testNamePattern tool-command-title-tooltip";
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
@@ -1257,7 +1257,7 @@ test("shows the complete truncated command title on hover and focus", async ({ p
   await page.setViewportSize({ height: 720, width: 640 });
   await page.goto("/p/code-agent/t/task-1");
 
-  // 等待异步 Markdown 升级完成，避免前序内容重排在 Tooltip 延迟期间取消 hover。
+  // 等待异步 Markdown 升级完成，确保 hover 与 focus 检查发生在稳定布局中。
   await expect(page.getByRole("link", { name: "OpenAI" })).toBeVisible();
   const commandTitle = page.getByText(command, { exact: true });
   await expect(commandTitle).toBeVisible();
@@ -1266,14 +1266,10 @@ test("shows the complete truncated command title on hover and focus", async ({ p
   );
 
   await commandTitle.hover();
-  const tooltip = page.getByRole("tooltip");
-  await expect(tooltip).toHaveText(command);
-  expect(await tooltip.evaluate((element) => element.closest("details") === null)).toBe(true);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
 
-  await page.mouse.move(0, 0);
-  await expect(tooltip).toHaveCount(0);
   await commandTitle.locator("..").focus();
-  await expect(page.getByRole("tooltip")).toHaveText(command);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
 });
 
 test("keeps long runtime activity details within the conversation", async ({ page }) => {

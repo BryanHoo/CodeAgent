@@ -418,7 +418,7 @@ describe("TaskStatusIndicator", () => {
     expect(css).toContain("--ui-color-task-completed: light-dark(#48a765, #5dbd7a);");
     expect(css).toContain("--ui-color-task-failed: light-dark(#db5660, #eb7070);");
     expect(css).toContain("animation: task-status-breathe 4s");
-    expect(keyframes).toContain("opacity: 0.68");
+    expect(keyframes).toContain("opacity: 0.4");
     expect(keyframes).toContain("opacity: 1");
     expect(keyframes).not.toContain("box-shadow");
     expect(statusStyles).not.toContain("box-shadow");

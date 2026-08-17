@@ -220,21 +220,25 @@ export function TimelineItemContent({
         <Tool>
           <ToolHeader state={toToolState(item.status)} title={commandLabel} />
           <ToolBody>
-            <Terminal isStreaming={isStreamingCommand} output={commandOutput}>
-              <TerminalHeader>
-                <TerminalTitle>{i18n.t("timeline.output", { ns: "conversation" })}</TerminalTitle>
-                <TerminalActions>
-                  <TerminalCopyButton />
-                </TerminalActions>
-              </TerminalHeader>
-              <TerminalContent>
-                {item.outputTruncated ? (
-                  <p className="mt-2 text-warning">
-                    {i18n.t("timeline.outputTruncated", { ns: "conversation" })}
-                  </p>
-                ) : null}
-              </TerminalContent>
-            </Terminal>
+            <div className="mb-2 space-y-4">
+              {/* 命令文本与工作目录共同构成调用输入，展开后必须完整展示。 */}
+              <ToolInput input={{ command: item.command, cwd: item.cwd }} />
+              <Terminal isStreaming={isStreamingCommand} output={commandOutput}>
+                <TerminalHeader>
+                  <TerminalTitle>{i18n.t("timeline.output", { ns: "conversation" })}</TerminalTitle>
+                  <TerminalActions>
+                    <TerminalCopyButton />
+                  </TerminalActions>
+                </TerminalHeader>
+                <TerminalContent>
+                  {item.outputTruncated ? (
+                    <p className="mt-2 text-warning">
+                      {i18n.t("timeline.outputTruncated", { ns: "conversation" })}
+                    </p>
+                  ) : null}
+                </TerminalContent>
+              </Terminal>
+            </div>
           </ToolBody>
         </Tool>
       );

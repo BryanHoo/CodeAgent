@@ -2,7 +2,22 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { ContextMenu } from "../../../shared/components/core/context-menu.js";
-import { getProjectOpenAppsForTarget, ProjectOpenContextMenuItems } from "./project-open-menu.js";
+import {
+  getProjectOpenAppsForTarget,
+  getProjectTargetCopyPath,
+  ProjectOpenContextMenuItems,
+} from "./project-open-menu.js";
+
+describe("getProjectTargetCopyPath", () => {
+  it("joins project-relative targets into native absolute paths", () => {
+    expect(getProjectTargetCopyPath("/workspace/CodeAgent", "docs/guide.md")).toBe(
+      "/workspace/CodeAgent/docs/guide.md",
+    );
+    expect(getProjectTargetCopyPath("C:\\workspace\\CodeAgent", "docs/guide.md")).toBe(
+      "C:\\workspace\\CodeAgent\\docs\\guide.md",
+    );
+  });
+});
 
 describe("ProjectOpenContextMenuItems", () => {
   it("renders copy, open, and reference commands as one target menu", () => {
@@ -17,6 +32,7 @@ describe("ProjectOpenContextMenuItems", () => {
           onReference={vi.fn()}
           onSelect={vi.fn()}
           target={{
+            copyPath: "/workspace/CodeAgent/README.md",
             path: "README.md",
             reference: { name: "README.md", path: "README.md" },
             type: "file",
@@ -44,7 +60,7 @@ describe("ProjectOpenContextMenuItems", () => {
           isPending={false}
           onReference={vi.fn()}
           onSelect={vi.fn()}
-          target={{ path: "src", type: "directory" }}
+          target={{ copyPath: "/workspace/CodeAgent/src", path: "src", type: "directory" }}
         />
       </ContextMenu>,
     );

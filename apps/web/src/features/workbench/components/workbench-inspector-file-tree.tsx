@@ -20,7 +20,11 @@ import {
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
 import { countFileChangeLines, type AgentFileChange } from "../../diff/file-change.js";
-import { ProjectOpenContextMenu, ProjectOpenDropdownMenu } from "./project-open-menu.js";
+import {
+  getProjectTargetCopyPath,
+  ProjectOpenContextMenu,
+  ProjectOpenDropdownMenu,
+} from "./project-open-menu.js";
 
 export type ProjectFileTreeDirectoryState = Readonly<{
   data?: ProjectFileTree;
@@ -45,6 +49,7 @@ type ProjectFileTreeNodesProps = Readonly<{
   onRefreshDirectory: (directoryPath: string | null) => void;
   projectOpenApps: readonly ProjectOpenApp[];
   projectOpenPending: boolean;
+  projectPath: string;
 }>;
 
 type FileTreeChangeStats = Readonly<{
@@ -181,6 +186,7 @@ function ProjectFileTreeDirectoryChildren({
   onRefreshDirectory,
   projectOpenApps,
   projectOpenPending,
+  projectPath,
 }: Readonly<{
   changeStatsByPath: ReadonlyMap<string, FileTreeChangeStats>;
   directoryPath: string;
@@ -192,6 +198,7 @@ function ProjectFileTreeDirectoryChildren({
   onRefreshDirectory: (directoryPath: string | null) => void;
   projectOpenApps: readonly ProjectOpenApp[];
   projectOpenPending: boolean;
+  projectPath: string;
 }>) {
   const state = directoryStates.get(directoryPath);
   const name = getProjectFileName(directoryPath);
@@ -262,6 +269,7 @@ function ProjectFileTreeDirectoryChildren({
       onRefreshDirectory={onRefreshDirectory}
       projectOpenApps={projectOpenApps}
       projectOpenPending={projectOpenPending}
+      projectPath={projectPath}
     />
   );
 }
@@ -277,6 +285,7 @@ export function ProjectFileTreeNodes({
   onRefreshDirectory,
   projectOpenApps,
   projectOpenPending,
+  projectPath,
 }: ProjectFileTreeNodesProps) {
   return entries.map((entry) => {
     const name = getProjectFileName(entry.path);
@@ -294,14 +303,20 @@ export function ProjectFileTreeNodes({
           stats={changeStats}
         />
       );
+    const copyPath = getProjectTargetCopyPath(projectPath, entry.path);
     const target =
       entry.type === "file"
         ? {
+            copyPath,
             path: entry.path,
             reference: { name, path: entry.path },
             type: "file" as const,
           }
-        : { path: entry.path, type: "directory" as const };
+        : {
+            copyPath,
+            path: entry.path,
+            type: "directory" as const,
+          };
     const trailing = (
       <FileTreeActions className="relative">
         <span className="transition-opacity group-hover/file-tree-node:opacity-0 group-focus-within/file-tree-node:opacity-0">
@@ -346,6 +361,7 @@ export function ProjectFileTreeNodes({
             onRefreshDirectory={onRefreshDirectory}
             projectOpenApps={projectOpenApps}
             projectOpenPending={projectOpenPending}
+            projectPath={projectPath}
           />
         </FileTreeFolder>
       </ProjectOpenContextMenu>

@@ -433,7 +433,7 @@ export function WorkbenchInspector({
                       onSelect={(appId) => {
                         onOpenProjectPath(appId);
                       }}
-                      target={{ path: projectPath, type: "directory" }}
+                      target={{ copyPath: projectPath, path: projectPath, type: "directory" }}
                     >
                       <FileTreeFolder
                         name={projectRootName}
@@ -450,7 +450,11 @@ export function WorkbenchInspector({
                               onSelect={(appId) => {
                                 onOpenProjectPath(appId);
                               }}
-                              target={{ path: projectPath, type: "directory" }}
+                              target={{
+                                copyPath: projectPath,
+                                path: projectPath,
+                                type: "directory",
+                              }}
                             />
                           </FileTreeActions>
                         }
@@ -469,6 +473,7 @@ export function WorkbenchInspector({
                           onRefreshDirectory={onRefreshFileTreeDirectory}
                           projectOpenApps={projectOpenApps}
                           projectOpenPending={projectOpenPending}
+                          projectPath={projectPath}
                         />
                       </FileTreeFolder>
                     </ProjectOpenContextMenu>
