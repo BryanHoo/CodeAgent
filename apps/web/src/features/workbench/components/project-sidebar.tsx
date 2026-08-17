@@ -24,6 +24,7 @@ import {
   useProjectActions,
   useProjectActivity,
   useProjectData,
+  usePinnedProjectTasks,
   useProjectTaskSearch,
 } from "../../projects/project-context.js";
 import {
@@ -41,11 +42,8 @@ import {
   resolveInitialExpandedProjectIds,
   writeExpandedProjectIds,
 } from "../project-sidebar-preferences.js";
-import { TaskRenameDialog } from "./task-rename-dialog.js";
-import { ProjectDirectoryPickerDialog } from "../../projects/components/project-directory-picker-dialog.js";
-import { ProjectRemoveDialog } from "./project-remove-dialog.js";
-import { ProjectRenameDialog } from "./project-rename-dialog.js";
 
+import { ProjectSidebarDialogs } from "./project-sidebar-dialogs.js";
 import { ProjectSidebarTaskList } from "./project-sidebar-task-list.js";
 import { SidebarSettingsButton } from "./project-sidebar-actions.js";
 import { groupTasksByProjectId } from "./project-sidebar-state.js";
@@ -125,12 +123,18 @@ export function ProjectSidebar({
   const taskActionLockRef = useRef(createAsyncActionLock());
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const taskSearch = useProjectTaskSearch(normalizedQuery);
+  const pinnedTaskQuery = usePinnedProjectTasks();
   const visibleTasks = normalizedQuery.length === 0 ? tasks : taskSearch.tasks;
   // 大列表只分组一次，Project 渲染不再重复扫描全部 Task。
   const tasksByProjectId = useMemo(() => groupTasksByProjectId(visibleTasks), [visibleTasks]);
-  const pinnedTasks = getPinnedTasks(visibleTasks);
-  const hasPendingTasks = [...projectTaskStates.values()].some((state) => state.isPending);
-  const hasTaskError = [...projectTaskStates.values()].some((state) => state.error !== null);
+  const pinnedTasks = getPinnedTasks(
+    normalizedQuery.length === 0 ? pinnedTaskQuery.tasks : visibleTasks,
+  );
+  const hasPendingTasks =
+    pinnedTaskQuery.isPending || [...projectTaskStates.values()].some((state) => state.isPending);
+  const hasTaskError =
+    pinnedTaskQuery.error !== null ||
+    [...projectTaskStates.values()].some((state) => state.error !== null);
   const taskActionPending =
     pinMutation.isPending || renameMutation.isPending || archiveMutation.isPending;
   const {
@@ -427,62 +431,40 @@ export function ProjectSidebar({
         toggleProject={toggleProject}
       />
 
-      {renamingTask === null ? null : (
-        <TaskRenameDialog
-          initialTitle={renamingTask.title}
-          isPending={renameMutation.isPending}
-          key={renamingTask.id}
-          onClose={() => {
-            setRenamingTask(null);
-          }}
-          onRename={(title) => void renameTask(renamingTask, title)}
-        />
-      )}
-
-      {isProjectPickerOpen ? (
-        <ProjectDirectoryPickerDialog
-          addError={hasSubmittedAddProject ? addProjectError : null}
-          client={client}
-          isAdding={isProjectAddPending}
-          onAdd={addSelectedProject}
-          onClose={() => {
-            if (!isProjectAddPending) {
-              setIsProjectPickerOpen(false);
-              setHasSubmittedAddProject(false);
-            }
-          }}
-        />
-      ) : null}
-
-      {renamingProject === null ? null : (
-        <ProjectRenameDialog
-          error={hasSubmittedProjectAction ? (projectActionError?.message ?? null) : null}
-          initialName={renamingProject.name}
-          isPending={isProjectActionPending}
-          key={renamingProject.id}
-          onClose={() => {
-            closeProjectDialog(renamingProject.id);
-          }}
-          onRename={(name) => {
-            void submitProjectRename(renamingProject, name);
-          }}
-        />
-      )}
-
-      {removingProject === null ? null : (
-        <ProjectRemoveDialog
-          error={hasSubmittedProjectAction ? (projectActionError?.message ?? null) : null}
-          isPending={isProjectActionPending}
-          key={removingProject.id}
-          onClose={() => {
-            closeProjectDialog(removingProject.id);
-          }}
-          onRemove={() => {
-            void confirmProjectRemoval(removingProject);
-          }}
-          project={removingProject}
-        />
-      )}
+      <ProjectSidebarDialogs
+        addProjectError={addProjectError}
+        client={client}
+        hasSubmittedAddProject={hasSubmittedAddProject}
+        hasSubmittedProjectAction={hasSubmittedProjectAction}
+        isProjectActionPending={isProjectActionPending}
+        isProjectAddPending={isProjectAddPending}
+        isProjectPickerOpen={isProjectPickerOpen}
+        onAddProject={addSelectedProject}
+        onCloseProjectDialog={closeProjectDialog}
+        onCloseProjectPicker={() => {
+          if (!isProjectAddPending) {
+            setIsProjectPickerOpen(false);
+            setHasSubmittedAddProject(false);
+          }
+        }}
+        onCloseTaskRename={() => {
+          setRenamingTask(null);
+        }}
+        onRemoveProject={(project) => {
+          void confirmProjectRemoval(project);
+        }}
+        onRenameProject={(project, name) => {
+          void submitProjectRename(project, name);
+        }}
+        onRenameTask={(task, title) => {
+          void renameTask(task, title);
+        }}
+        projectActionError={projectActionError}
+        removingProject={removingProject}
+        renamingProject={renamingProject}
+        renamingTask={renamingTask}
+        taskRenamePending={renameMutation.isPending}
+      />
 
       <div className="p-2">
         <SidebarSettingsButton

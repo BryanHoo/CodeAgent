@@ -2695,12 +2695,12 @@ describe("CodeAgent Server", () => {
     const { app, listTasks } = await createHarness();
     const response = await app.inject({
       method: "GET",
-      url: "/v1/projects/code-agent/tasks?cursor=cursor&limit=25",
+      url: "/v1/projects/code-agent/tasks?cursor=cursor&limit=25&pinned=true",
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ data: [task], nextCursor: "next" });
-    expect(listTasks).toHaveBeenCalledWith({ cursor: "cursor", limit: 25 });
+    expect(listTasks).toHaveBeenCalledWith({ cursor: "cursor", limit: 25, pinnedOnly: true });
   });
 
   it("initializes one project runtime for concurrent first requests", async () => {

@@ -63,7 +63,7 @@ export const DEFAULT_PROVIDER_LOGGER: CodexProviderLogger = pino({ level: "warn"
   component: "provider-codex",
 });
 
-const CODEX_PINNED_THREAD_SECTION_ID = "01984de2-8f74-7c91-a3b2-5c5e937cf318";
+export const CODEX_PINNED_THREAD_SECTION_ID = "01984de2-8f74-7c91-a3b2-5c5e937cf318";
 
 function isPinnedThreadSection(value: unknown): boolean {
   if (value === null) {

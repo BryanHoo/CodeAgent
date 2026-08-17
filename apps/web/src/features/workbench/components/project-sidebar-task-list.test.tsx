@@ -1,0 +1,71 @@
+import type { Project } from "@code-agent/protocol";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+
+import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
+import type { ProjectTaskListState } from "../../projects/project-context.js";
+import { ProjectSidebarTaskList } from "./project-sidebar-task-list.js";
+
+const project: Project = {
+  createdAt: "2026-08-17T00:00:00.000Z",
+  id: "code-agent",
+  name: "CodeAgent",
+  rootPath: "/workspace/CodeAgent",
+};
+
+const pendingTaskState: ProjectTaskListState = {
+  error: null,
+  hasNextPage: false,
+  isFetchingNextPage: false,
+  isPending: true,
+};
+
+describe("ProjectSidebarTaskList", () => {
+  it("does not render the Project empty state while its tasks are loading", () => {
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <ProjectSidebarTaskList
+          archiveTask={vi.fn()}
+          error={null}
+          expandedProjects={new Set([project.id])}
+          expandedTaskProjects={new Set()}
+          fetchNextProjectTaskPage={vi.fn(() => Promise.resolve())}
+          getProjectReorderProps={
+            vi.fn(() => ({})) as unknown as React.ComponentProps<
+              typeof ProjectSidebarTaskList
+            >["getProjectReorderProps"]
+          }
+          hasPendingTasks
+          hasTaskError={false}
+          isPending={false}
+          isProjectActionPending={false}
+          isProjectAddPending={false}
+          normalizedQuery=""
+          onOpenProjectDraft={vi.fn(() => Promise.resolve())}
+          onOpenProjectPicker={vi.fn()}
+          onOpenTemporaryDraft={vi.fn()}
+          onRemoveProject={vi.fn()}
+          onRenameProject={vi.fn()}
+          orderedProjects={[project]}
+          pinnedTasks={[]}
+          pinTask={vi.fn()}
+          projectOrderAnnouncement=""
+          projectOrderError={null}
+          projectTaskStates={new Map([[project.id, pendingTaskState]])}
+          reorderingProjectId={null}
+          setExpandedTaskProjects={vi.fn()}
+          setRenamingTask={vi.fn()}
+          taskActionError={null}
+          taskActionPending={false}
+          taskActivity={new Map()}
+          taskSearch={{ error: null, isPending: false }}
+          tasksByProjectId={new Map()}
+          toggleProject={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(markup).toContain("正在加载任务");
+    expect(markup).not.toContain("暂无任务");
+  });
+});

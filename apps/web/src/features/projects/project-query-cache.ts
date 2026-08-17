@@ -4,6 +4,7 @@ import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { i18n } from "../../i18n/i18n.js";
 import {
+  PROJECT_PINNED_TASKS_KEY,
   PROJECT_TASK_SEARCH_PAGE_SIZE,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
   codeAgentClient,
@@ -79,10 +80,19 @@ export function replaceProjectTaskInInfiniteData(
 }
 
 export function replaceProjectTaskInQueryCaches(queryClient: QueryClient, task: AgentTask) {
-  // 重命名和固定操作必须同步普通分页与已加载的全量搜索源。
+  // 重命名和固定操作必须同步普通分页、固定列表与已加载的全量搜索源。
   queryClient.setQueryData<ProjectTaskInfiniteData>(
     ["projects", task.projectId, "tasks"],
     (currentData) => replaceProjectTaskInInfiniteData(currentData, task),
+  );
+  queryClient.setQueryData<readonly AgentTask[]>(
+    ["projects", task.projectId, "tasks", PROJECT_PINNED_TASKS_KEY],
+    (currentTasks) =>
+      currentTasks === undefined
+        ? undefined
+        : task.pinned
+          ? [task, ...currentTasks.filter((currentTask) => currentTask.id !== task.id)]
+          : currentTasks.filter((currentTask) => currentTask.id !== task.id),
   );
   queryClient.setQueryData<readonly AgentTask[]>(
     ["projects", task.projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
@@ -170,6 +180,26 @@ export function updateNewTaskTitleFromSnapshotInTasks(
   );
 }
 
+export function updateTaskTitleInProjectListCaches(
+  queryClient: QueryClient,
+  snapshot: TaskTitleSnapshot,
+  options: TaskTitleUpdateOptions,
+) {
+  queryClient.setQueryData<ProjectTaskInfiniteData>(
+    ["projects", snapshot.projectId, "tasks"],
+    (currentData) => updateNewTaskTitleFromSnapshotInInfiniteData(currentData, snapshot, options),
+  );
+  for (const sourceKey of [PROJECT_PINNED_TASKS_KEY, PROJECT_TASK_SEARCH_SOURCE_KEY]) {
+    queryClient.setQueryData<readonly AgentTask[]>(
+      ["projects", snapshot.projectId, "tasks", sourceKey],
+      (currentTasks) =>
+        currentTasks === undefined
+          ? undefined
+          : updateNewTaskTitleFromSnapshotInTasks(currentTasks, snapshot, options),
+    );
+  }
+}
+
 export function removeProjectTaskFromInfiniteData(
   currentData: ProjectTaskInfiniteData | undefined,
   taskId: string,
@@ -187,9 +217,10 @@ export function removeProjectTaskFromInfiniteData(
   };
 }
 
-export async function listProjectTasksForSearch(
+async function listAllProjectTasks(
   projectId: string,
   client: Pick<CodeAgentClient, "listTasks">,
+  options: Readonly<{ pinned?: true }>,
   signal?: AbortSignal,
 ): Promise<readonly AgentTask[]> {
   const taskById = new Map<string, AgentTask>();
@@ -200,6 +231,7 @@ export async function listProjectTasksForSearch(
     const pageOptions = {
       ...(cursor === undefined ? {} : { cursor }),
       limit: PROJECT_TASK_SEARCH_PAGE_SIZE,
+      ...options,
     };
     const page =
       signal === undefined
@@ -218,6 +250,32 @@ export async function listProjectTasksForSearch(
     requestedCursors.add(page.nextCursor);
     cursor = page.nextCursor;
   }
+}
+
+export function listProjectTasksForSearch(
+  projectId: string,
+  client: Pick<CodeAgentClient, "listTasks">,
+  signal?: AbortSignal,
+) {
+  return listAllProjectTasks(projectId, client, {}, signal);
+}
+
+export function listPinnedProjectTasks(
+  projectId: string,
+  client: Pick<CodeAgentClient, "listTasks">,
+  signal?: AbortSignal,
+) {
+  return listAllProjectTasks(projectId, client, { pinned: true }, signal);
+}
+
+export function projectPinnedTasksQueryOptions(
+  projectId: string,
+  client: Pick<CodeAgentClient, "listTasks"> = codeAgentClient,
+) {
+  return queryOptions({
+    queryFn: ({ signal }) => listPinnedProjectTasks(projectId, client, signal),
+    queryKey: ["projects", projectId, "tasks", PROJECT_PINNED_TASKS_KEY] as const,
+  });
 }
 
 export function projectTaskSearchSourceQueryOptions(
@@ -240,6 +298,10 @@ export async function removeArchivedProjectTaskAndRefill(
   const projectTaskQueryKey = ["projects", projectId, "tasks"] as const;
   queryClient.setQueryData<ProjectTaskInfiniteData>(projectTaskQueryKey, (currentData) =>
     removeProjectTaskFromInfiniteData(currentData, taskId),
+  );
+  queryClient.setQueryData<readonly AgentTask[]>(
+    [...projectTaskQueryKey, PROJECT_PINNED_TASKS_KEY],
+    (currentTasks) => currentTasks?.filter((task) => task.id !== taskId),
   );
   queryClient.setQueryData<readonly AgentTask[]>(
     [...projectTaskQueryKey, PROJECT_TASK_SEARCH_SOURCE_KEY],

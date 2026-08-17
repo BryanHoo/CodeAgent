@@ -1,9 +1,4 @@
-import {
-  TEMPORARY_TASK_SCOPE_ID,
-  type AgentTask,
-  type Project,
-  type ProjectPage,
-} from "@code-agent/protocol";
+import { TEMPORARY_TASK_SCOPE_ID, type Project, type ProjectPage } from "@code-agent/protocol";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useCallback,
@@ -35,6 +30,7 @@ import { ProjectGitStatusCoordinator } from "./project-git-status-coordinator.js
 import {
   capabilitiesQueryOptions,
   codeAgentClient,
+  PROJECT_PINNED_TASKS_KEY,
   PROJECT_TASK_SEARCH_SOURCE_KEY,
   projectRemoveMutationOptions,
   projectRenameMutationOptions,
@@ -42,10 +38,8 @@ import {
   projectsQueryOptions,
   reorderProjectPage,
   taskSnapshotQueryOptions,
-  updateNewTaskTitleFromSnapshotInInfiniteData,
-  updateNewTaskTitleFromSnapshotInTasks,
+  updateTaskTitleInProjectListCaches,
   type CodeAgentWorkbenchClient,
-  type ProjectTaskInfiniteData,
 } from "./project-queries.js";
 
 const emptyProjects: readonly Project[] = [];
@@ -95,6 +89,10 @@ export function ProjectProvider({
                 exact: true,
                 queryKey: ["projects", projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
               }),
+              queryClient.invalidateQueries({
+                exact: true,
+                queryKey: ["projects", projectId, "tasks", PROJECT_PINNED_TASKS_KEY],
+              }),
             ]);
           }
           await queryClient.invalidateQueries({
@@ -105,22 +103,9 @@ export function ProjectProvider({
           const response = await queryClient.fetchQuery(
             taskSnapshotQueryOptions(projectId, taskId, client),
           );
-          queryClient.setQueryData<ProjectTaskInfiniteData>(
-            ["projects", projectId, "tasks"],
-            (currentData) =>
-              updateNewTaskTitleFromSnapshotInInfiniteData(currentData, response.snapshot, {
-                assistantReplyStarted: reason === "assistant_reply_started",
-              }),
-          );
-          queryClient.setQueryData<readonly AgentTask[]>(
-            ["projects", projectId, "tasks", PROJECT_TASK_SEARCH_SOURCE_KEY],
-            (currentTasks) =>
-              currentTasks === undefined
-                ? undefined
-                : updateNewTaskTitleFromSnapshotInTasks(currentTasks, response.snapshot, {
-                    assistantReplyStarted: reason === "assistant_reply_started",
-                  }),
-          );
+          updateTaskTitleInProjectListCaches(queryClient, response.snapshot, {
+            assistantReplyStarted: reason === "assistant_reply_started",
+          });
         };
         const syncKey = `${projectId}\u0000${taskId}`;
         // 同一 Task 串行同步，避免 Turn 终态复用仍在进行的流式 Snapshot 请求。

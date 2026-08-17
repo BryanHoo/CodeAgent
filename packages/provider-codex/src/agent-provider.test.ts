@@ -3886,7 +3886,9 @@ describe("CodexAgentProvider", () => {
         steer: true,
       },
     });
-    await expect(provider.listTasks({ cursor: "cursor", limit: 25 })).resolves.toEqual({
+    await expect(
+      provider.listTasks({ cursor: "cursor", limit: 25, pinnedOnly: true }),
+    ).resolves.toEqual({
       data: [
         {
           id: "task-1",
@@ -3905,6 +3907,7 @@ describe("CodexAgentProvider", () => {
           cursor: "cursor",
           cwd: "/workspace/CodeAgent",
           limit: 25,
+          sectionId: PINNED_THREAD_SECTION.id,
           sortDirection: "desc",
           sortKey: "updated_at",
         },

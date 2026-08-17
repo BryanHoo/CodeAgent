@@ -245,7 +245,9 @@ export function ProjectSidebarTaskList({
                     {temporaryPaginationControl.label}
                   </Button>
                 )}
-                {temporaryTasks.length === 0 && normalizedQuery.length === 0 ? (
+                {temporaryTasks.length === 0 &&
+                normalizedQuery.length === 0 &&
+                temporaryTaskState?.isPending !== true ? (
                   <p className="px-2 py-1.5 text-meta text-subtle-foreground">
                     {t("sidebar.noTemporaryTasks")}
                   </p>
@@ -387,7 +389,9 @@ export function ProjectSidebarTaskList({
                           {taskPaginationControl.label}
                         </Button>
                       )}
-                      {projectTasks.length === 0 && normalizedQuery.length === 0 ? (
+                      {projectTasks.length === 0 &&
+                      normalizedQuery.length === 0 &&
+                      projectTaskState?.isPending !== true ? (
                         <p className="px-2 py-1.5 text-meta text-subtle-foreground">
                           {t("sidebar.noTasks")}
                         </p>

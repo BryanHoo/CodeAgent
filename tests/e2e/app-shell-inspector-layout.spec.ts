@@ -67,6 +67,7 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
   const newAgentBox = await newAgent.boundingBox();
   const searchBox = await search.boundingBox();
   const pinnedBox = await sidebar.getByRole("heading", { name: "已固定" }).boundingBox();
+  const pinnedSection = sidebar.getByRole("heading", { name: "已固定" }).locator("xpath=..");
   const projectsBox = await sidebar.getByRole("heading", { name: "项目" }).boundingBox();
   expect(newAgentBox).not.toBeNull();
   expect(searchBox).not.toBeNull();
@@ -78,6 +79,7 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
   expect(searchBox.y).toBeLessThan(newAgentBox.y);
   expect(newAgentBox.y).toBeLessThan(pinnedBox.y);
   expect(pinnedBox.y).toBeLessThan(projectsBox.y);
+  await expect(pinnedSection.getByRole("link", { name: /补充 Protocol 契约/u })).toBeVisible();
 });
 
 test("preserves the original sidebar control typography and dimensions", async ({ page }) => {
@@ -623,8 +625,14 @@ test("toggles project tasks from the project name without navigation", async ({ 
 
 test("loads tasks only for the current or expanded projects", async ({ page }) => {
   let superworkTaskRequests = 0;
+  let superworkPinnedTaskRequests = 0;
   await page.route("**/v1/projects/superwork/tasks?*", async (route) => {
-    superworkTaskRequests += 1;
+    const requestUrl = new URL(route.request().url());
+    if (requestUrl.searchParams.get("pinned") === "true") {
+      superworkPinnedTaskRequests += 1;
+    } else {
+      superworkTaskRequests += 1;
+    }
     await route.fallback();
   });
 
@@ -632,6 +640,7 @@ test("loads tasks only for the current or expanded projects", async ({ page }) =
 
   const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
   await expect(sidebar.getByRole("link", { name: "优化输入框交互" })).toBeVisible();
+  await expect.poll(() => superworkPinnedTaskRequests).toBe(1);
   expect(superworkTaskRequests).toBe(0);
 
   await sidebar.getByRole("button", { name: "切换项目 superwork" }).click();
@@ -645,7 +654,10 @@ test("loads one project task page only after showing more", async ({ page }) => 
   const taskListRequests: URL[] = [];
   page.on("request", (request) => {
     const requestUrl = new URL(request.url());
-    if (requestUrl.pathname === "/v1/projects/code-agent/tasks") {
+    if (
+      requestUrl.pathname === "/v1/projects/code-agent/tasks" &&
+      requestUrl.searchParams.get("pinned") !== "true"
+    ) {
       taskListRequests.push(requestUrl);
     }
   });
@@ -656,14 +668,14 @@ test("loads one project task page only after showing more", async ({ page }) => 
   await expect.poll(() => taskListRequests.length).toBe(1);
   expect(taskListRequests[0]?.searchParams.get("limit")).toBe("5");
   expect(taskListRequests[0]?.searchParams.has("cursor")).toBe(false);
-  await expect(sidebar.getByRole("link", { name: "补充 Protocol 契约" })).toHaveCount(0);
+  await expect(sidebar.getByRole("link", { name: "优化 Client 请求" })).toHaveCount(0);
 
   await sidebar.getByRole("button", { name: "显示更多" }).click();
 
   await expect.poll(() => taskListRequests.length).toBe(2);
   expect(taskListRequests[1]?.searchParams.get("cursor")).toBe("5");
   expect(taskListRequests[1]?.searchParams.get("limit")).toBe("5");
-  await expect(sidebar.getByRole("link", { name: "补充 Protocol 契约" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "优化 Client 请求" })).toBeVisible();
 });
 
 test("keeps project add buttons visible after opening a task", async ({ page }) => {

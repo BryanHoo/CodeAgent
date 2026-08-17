@@ -27,6 +27,7 @@ import {
   projectFileTreeQueryOptions,
   projectReorderMutationOptions,
   listProjectTasksForSearch,
+  listPinnedProjectTasks,
   projectTasksInfiniteQueryOptions,
   removeArchivedProjectTaskAndRefill,
   type ProjectTaskInfiniteData,
@@ -683,6 +684,25 @@ describe("project queries", () => {
     expect(listTasks).toHaveBeenNthCalledWith(2, "code-agent", {
       cursor: "next-page",
       limit: 100,
+    });
+  });
+
+  it("loads only pinned tasks across every pinned page", async () => {
+    const secondTask = { ...task, id: "task-2", pinned: true, title: "较早固定任务" };
+    const listTasks = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [{ ...task, pinned: true }], nextCursor: "next-page" })
+      .mockResolvedValueOnce({ data: [secondTask], nextCursor: null });
+
+    await expect(listPinnedProjectTasks("code-agent", { listTasks })).resolves.toEqual([
+      { ...task, pinned: true },
+      secondTask,
+    ]);
+    expect(listTasks).toHaveBeenNthCalledWith(1, "code-agent", { limit: 100, pinned: true });
+    expect(listTasks).toHaveBeenNthCalledWith(2, "code-agent", {
+      cursor: "next-page",
+      limit: 100,
+      pinned: true,
     });
   });
 

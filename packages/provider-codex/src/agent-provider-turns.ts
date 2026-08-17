@@ -26,7 +26,7 @@ import {
   optionalString,
 } from "./codex-protocol-mapping.js";
 
-import { CodexAgentProviderBase } from "./agent-provider-base.js";
+import { CODEX_PINNED_THREAD_SECTION_ID, CodexAgentProviderBase } from "./agent-provider-base.js";
 import { isBackgroundTerminalThreadMissingError, mapAgentTask } from "./agent-provider-base.js";
 
 function mapCodexTurnSettings(options: AgentTurnOptions) {
@@ -368,6 +368,8 @@ export abstract class CodexAgentProviderTurns extends CodexAgentProviderBase {
         ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
         cwd: this.project.rootPath,
         ...(input.limit === undefined ? {} : { limit: input.limit }),
+        // 锁定版本用稳定 Pinned Section 过滤，保证固定任务先过滤再分页。
+        ...(input.pinnedOnly === true ? { sectionId: CODEX_PINNED_THREAD_SECTION_ID } : {}),
         sortDirection: "desc",
         sortKey: "updated_at",
       }),

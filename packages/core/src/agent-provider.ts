@@ -39,6 +39,7 @@ export type AgentRuntimeDefaultSettings = Readonly<{
 export type ListAgentTasksInput = Readonly<{
   cursor?: string;
   limit?: number;
+  pinnedOnly?: true;
 }>;
 
 export type StartAgentTaskOptions = Readonly<{

@@ -12,6 +12,7 @@ import type { ProjectRuntimeManager } from "../conversation/runtime/project-runt
 import type { TaskActivityMap } from "../conversation/runtime/task-activity.js";
 import {
   flattenProjectTaskPages,
+  projectPinnedTasksQueryOptions,
   projectTaskSearchSourceQueryOptions,
   projectTasksInfiniteQueryOptions,
   type CodeAgentWorkbenchClient,
@@ -205,4 +206,19 @@ export function useProjectTaskSearch(normalizedQuery: string) {
           .filter((task) => task.title.toLocaleLowerCase().includes(normalizedQuery));
 
   return { error, isPending, tasks } as const;
+}
+
+export function usePinnedProjectTasks() {
+  const { client, projects } = useProjectData();
+  const taskScopeIds = [TEMPORARY_TASK_SCOPE_ID, ...projects.map((project) => project.id)];
+  // 各 Project 并行读取原生固定列表，单个 Project 内由 Query 顺序追踪全部 Cursor。
+  const pinnedQueries = useQueries({
+    queries: taskScopeIds.map((projectId) => projectPinnedTasksQueryOptions(projectId, client)),
+  });
+
+  return {
+    error: pinnedQueries.find((query) => query.error !== null)?.error ?? null,
+    isPending: pinnedQueries.some((query) => query.isPending),
+    tasks: pinnedQueries.flatMap((query) => query.data ?? emptyTasks),
+  } as const;
 }

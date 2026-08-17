@@ -19,7 +19,7 @@
 - 主题偏好属于浏览器本地状态，必须使用版本化存储并在 React 挂载前应用；不得混入 Global settings Query 或服务端持久化。
 - Project 排序以 Server 返回的 `ProjectPage` 为长期真相源；拖动中的顺序只保留在 Sidebar Hook。释放后乐观更新 `["projects"]` Query，并通过串行完整顺序 Mutation 校准，失败时恢复提交前的完整页面。
 - 有效设置固定按 `Task > Project > Global` 解析；读取回退值不得隐式写入 Project 或 Task 记录。新 Task 创建时固化当时的完整有效设置，不得从其他 Task 继承任何设置。
-- Project Task 列表、Task Snapshot、Mutation 和实时订阅必须显式携带 `projectId`；Query Key 与连接状态按 Project 隔离，不能只用 `taskId` 作为跨项目身份。普通 Project Task Infinite Query 只允许为当前路由或侧栏已展开的 Project 激活；当前 Project 即使在侧栏收起也必须保持激活，未展开的非当前 Project 不得在首次加载时发起请求。Project Task 列表使用 Cursor Infinite Query，首屏固定 5 项且只有用户触发“显示更多”才读取单个下一页；归档后必须先移除缓存实体，再重新校准活动 Infinite Query，以服务端新 Cursor 边界补足最近 5 项。搜索使用独立的按 Project 全量 Task Query，仅在搜索词非空时启用，各 Project 可并行、单个 Project 内顺序追踪全部 Cursor；新建、固定、重命名和归档必须同步维护普通列表与已存在的搜索源缓存。
+- Project Task 列表、Task Snapshot、Mutation 和实时订阅必须显式携带 `projectId`；Query Key 与连接状态按 Project 隔离，不能只用 `taskId` 作为跨项目身份。普通 Project Task Infinite Query 只允许为当前路由或侧栏已展开的 Project 激活；当前 Project 即使在侧栏收起也必须保持激活，未展开的非当前 Project 不得在首次加载时发起请求。Project Task 列表使用 Cursor Infinite Query，首屏固定 5 项且只有用户触发“显示更多”才读取单个下一页；归档后必须先移除缓存实体，再重新校准活动 Infinite Query，以服务端新 Cursor 边界补足最近 5 项。固定栏目使用独立的按 Project 固定 Task Query，由 Server 在 Provider 分页前过滤并顺序读取固定结果的全部 Cursor，不得启用普通 Task 全量扫描；搜索使用独立的按 Project 全量 Task Query，仅在搜索词非空时启用，各 Project 可并行、单个 Project 内顺序追踪全部 Cursor。新建、固定、重命名和归档必须同步维护普通列表、固定列表与已存在的搜索源缓存。
 - `sequence` 是 Runtime Session 内的事件顺序依据；断线恢复先刷新 Snapshot，再从检查点补发。
 - Task Snapshot 必须显式携带可空的结构化计划；`plan.updated` 以完整列表替换最新计划，只更新 Snapshot 元数据，不得重建 Timeline Item Store 或改变 Item 顺序。Inspector 在上下文顶部持续展示最新计划，并在当前 Task 首次拥有计划时自动选择上下文 Tab；用户手动选回其他 Tab 后，同一 Task 的步骤状态更新不得再次抢占选择。
 - Client 必须忽略 `sequence <= lastAppliedSequence` 的重复事件，并在更大缺口或 `sessionId` 变化时停止增量应用、请求 resync。

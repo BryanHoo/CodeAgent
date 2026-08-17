@@ -384,10 +384,10 @@ describe("CodeAgentClient", () => {
     const client = new CodeAgentClient({ fetch: fetchMock });
 
     await expect(
-      client.listTasks("project one", { cursor: "next/value", limit: 25 }),
+      client.listTasks("project one", { cursor: "next/value", limit: 25, pinned: true }),
     ).resolves.toEqual({ data: [task], nextCursor: null });
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "/v1/projects/project%20one/tasks?cursor=next%2Fvalue&limit=25",
+      "/v1/projects/project%20one/tasks?cursor=next%2Fvalue&limit=25&pinned=true",
     );
   });
 
