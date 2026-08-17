@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 
 import { describe, expect, it, vi } from "vitest";
@@ -8,6 +11,7 @@ import {
   RpcProtocolError,
   RpcTimeoutError,
 } from "./jsonl-rpc-client.js";
+import { readStagedImage } from "./jsonl-frame-processor.js";
 import type { RpcResponseError } from "./jsonl-rpc-client.js";
 
 function createHarness(
@@ -15,6 +19,7 @@ function createHarness(
   options: Readonly<{
     maxBufferBytes?: number;
     maxFrameBytes?: number;
+    largeFrameThresholdBytes?: number;
     overloadRetry?: {
       baseDelayMs?: number;
       maxDelayMs?: number;
@@ -90,10 +95,15 @@ describe("JsonlRpcClient", () => {
     client.close();
   });
 
-  it("accepts bounded image generation notifications larger than 16 MiB", () => {
+  it("accepts bounded image generation notifications larger than 16 MiB", async () => {
     const { client, serverOutput } = createHarness();
     const onNotification = vi.fn();
-    client.onNotification(onNotification);
+    const received = new Promise<void>((resolve) => {
+      client.onNotification((notification) => {
+        onNotification(notification);
+        resolve();
+      });
+    });
     const result = "A".repeat(17 * 1_024 * 1_024);
 
     serverOutput.write(
@@ -107,9 +117,64 @@ describe("JsonlRpcClient", () => {
       })}\n`,
     );
 
+    await received;
     expect(onNotification).toHaveBeenCalledOnce();
     expect(client.closed).toBe(false);
     client.close();
+  });
+
+  it("keeps large-frame order and stages generated image Base64 in the worker", async () => {
+    const { client, serverOutput } = createHarness(1_000, { largeFrameThresholdBytes: 1 });
+    const notifications: unknown[] = [];
+    const received = new Promise<void>((resolve) => {
+      client.onNotification((notification) => {
+        notifications.push(notification);
+        if (notifications.length === 2) resolve();
+      });
+    });
+    const encoded = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString("base64");
+
+    serverOutput.write(
+      `${JSON.stringify({
+        method: "item/completed",
+        params: { item: { result: encoded, type: "imageGeneration" } },
+      })}\n${JSON.stringify({ method: "turn/completed", params: { id: "turn-1" } })}\n`,
+    );
+
+    await received;
+    const first = notifications[0] as { params: { item: Record<string, unknown> } };
+    const staged = readStagedImage(first.params.item);
+    expect(staged).toMatchObject({ mediaType: "image/png", size: 8 });
+    expect(existsSync(staged?.path ?? "")).toBe(true);
+    expect(first.params.item).not.toHaveProperty("result");
+    expect(notifications[1]).toMatchObject({ method: "turn/completed" });
+    client.close();
+  });
+
+  it("prefers a valid savedPath without returning redundant Base64 to the main thread", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "code-agent-jsonl-saved-path-"));
+    const savedPath = join(directory, "generated.png");
+    writeFileSync(savedPath, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const { client, serverOutput } = createHarness(1_000, { largeFrameThresholdBytes: 1 });
+    const received = new Promise<Record<string, unknown>>((resolve) => {
+      client.onNotification((notification) => {
+        resolve((notification.params as { item: Record<string, unknown> }).item);
+      });
+    });
+
+    serverOutput.write(
+      `${JSON.stringify({
+        method: "item/completed",
+        params: { item: { result: "redundant", savedPath, type: "imageGeneration" } },
+      })}\n`,
+    );
+
+    const item = await received;
+    expect(item).toMatchObject({ savedPath, type: "imageGeneration" });
+    expect(item).not.toHaveProperty("result");
+    expect(readStagedImage(item)).toBeUndefined();
+    client.close();
+    rmSync(directory, { force: true, recursive: true });
   });
 
   it("closes when a complete JSONL frame exceeds the UTF-8 byte limit", () => {

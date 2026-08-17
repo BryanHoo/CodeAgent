@@ -1,5 +1,14 @@
 import type { Readable, Writable } from "node:stream";
 
+import { JsonlFrameParseError, JsonlFrameProcessor } from "./jsonl-frame-processor.js";
+import {
+  RpcConnectionClosedError,
+  RpcProtocolError,
+  RpcResponseError,
+  RpcTimeoutError,
+  type RpcErrorPayload,
+} from "./jsonl-rpc-errors.js";
+import { isRecord, isRequestId, parseRpcError, writeRpcMessage } from "./jsonl-rpc-helpers.js";
 import {
   createRpcOverloadRetryPolicy,
   isExplicitlyUnqueuedOverload,
@@ -11,16 +20,27 @@ import { RpcPendingRequest } from "./rpc-pending-request.js";
 
 // 原生 imageGeneration 会把图片 Base64 放进单个 JSONL 帧，64 MiB 可覆盖最大图片并保留协议边界。
 const DEFAULT_MAX_JSONL_BYTES = 64 * 1_024 * 1_024;
+const DEFAULT_LARGE_FRAME_THRESHOLD_BYTES = 1 * 1_024 * 1_024;
 const EMPTY_BUFFER = Buffer.alloc(0);
+
+export {
+  RpcConnectionClosedError,
+  RpcProtocolError,
+  RpcResponseError,
+  RpcTimeoutError,
+} from "./jsonl-rpc-errors.js";
+export type { RpcErrorPayload } from "./jsonl-rpc-errors.js";
 
 export interface JsonlRpcClientOptions {
   input: Readable;
   output: Writable;
   defaultTimeoutMs?: number;
   closeOnInputEnd?: boolean;
+  largeFrameThresholdBytes?: number;
   maxFrameBytes?: number;
   maxBufferBytes?: number;
   overloadRetry?: RpcOverloadRetryOptions;
+  workerUrl?: URL;
 }
 
 export interface RpcNotification {
@@ -36,80 +56,16 @@ export interface RpcServerRequest {
   params: unknown;
 }
 
-export interface RpcErrorPayload {
-  code: number;
-  data: unknown;
-  message: string;
-}
-
 type NotificationListener = (notification: RpcNotification) => void;
 type ErrorListener = (error: Error) => void;
 type ServerRequestListener = (request: RpcServerRequest) => void;
-
-export class RpcConnectionClosedError extends Error {
-  public constructor(message = "RPC connection is closed") {
-    super(message);
-    this.name = "RpcConnectionClosedError";
-  }
-}
-
-export class RpcProtocolError extends Error {
-  public constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "RpcProtocolError";
-  }
-}
-
-export class RpcResponseError extends Error {
-  public readonly code: number;
-  public readonly data: unknown;
-
-  public constructor(error: RpcErrorPayload) {
-    super(error.message);
-    this.name = "RpcResponseError";
-    this.code = error.code;
-    this.data = error.data;
-  }
-}
-
-export class RpcTimeoutError extends Error {
-  public readonly method: string;
-  public readonly requestId: number;
-  public readonly timeoutMs: number;
-
-  public constructor(requestId: number, method: string, timeoutMs: number) {
-    super(`RPC request ${method} (${String(requestId)}) timed out after ${String(timeoutMs)}ms`);
-    this.name = "RpcTimeoutError";
-    this.method = method;
-    this.requestId = requestId;
-    this.timeoutMs = timeoutMs;
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isRequestId(value: unknown): value is RpcRequestId {
-  return typeof value === "string" || (typeof value === "number" && Number.isFinite(value));
-}
-
-function parseRpcError(value: unknown): RpcErrorPayload | null {
-  if (
-    !isRecord(value) ||
-    typeof value["code"] !== "number" ||
-    typeof value["message"] !== "string"
-  ) {
-    return null;
-  }
-  return { code: value["code"], data: value["data"], message: value["message"] };
-}
 
 export class JsonlRpcClient {
   readonly #defaultTimeoutMs: number;
   readonly #closeOnInputEnd: boolean;
   readonly #errorListeners = new Set<ErrorListener>();
   readonly #input: Readable;
+  readonly #largeFrameThresholdBytes: number;
   readonly #maxBufferBytes: number;
   readonly #maxFrameBytes: number;
   readonly #notificationListeners = new Set<NotificationListener>();
@@ -117,15 +73,24 @@ export class JsonlRpcClient {
   readonly #overloadRetryPolicy: RpcOverloadRetryPolicy;
   readonly #pending = new Map<number, RpcPendingRequest>();
   readonly #serverRequestListeners = new Set<ServerRequestListener>();
+  readonly #workerUrl: URL | undefined;
   #buffer = EMPTY_BUFFER;
   #closed = false;
+  #frameProcessor: JsonlFrameProcessor | undefined;
+  #frameQueue = Promise.resolve();
+  #inputEnded = false;
   #nextRequestId = 1;
+  #queuedFrameCount = 0;
 
   public constructor(options: JsonlRpcClientOptions) {
     this.#input = options.input;
     this.#output = options.output;
     this.#defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
     this.#closeOnInputEnd = options.closeOnInputEnd ?? true;
+    this.#largeFrameThresholdBytes = validatePositiveSafeInteger(
+      options.largeFrameThresholdBytes ?? DEFAULT_LARGE_FRAME_THRESHOLD_BYTES,
+      "largeFrameThresholdBytes",
+    );
     this.#maxFrameBytes = validatePositiveSafeInteger(
       options.maxFrameBytes ?? DEFAULT_MAX_JSONL_BYTES,
       "maxFrameBytes",
@@ -135,6 +100,7 @@ export class JsonlRpcClient {
       "maxBufferBytes",
     );
     this.#overloadRetryPolicy = createRpcOverloadRetryPolicy(options.overloadRetry);
+    this.#workerUrl = options.workerUrl;
 
     this.#input.on("data", this.#handleData);
     this.#input.on("end", this.#handleInputEnd);
@@ -225,7 +191,7 @@ export class JsonlRpcClient {
     this.#assertOpen();
     let pendingWrite: Promise<void>;
     try {
-      pendingWrite = this.#writeMessage(message);
+      pendingWrite = writeRpcMessage(this.#output, message, this.#defaultTimeoutMs);
     } catch (error) {
       const connectionError = this.#toConnectionError(error);
       this.#fail(connectionError);
@@ -254,6 +220,7 @@ export class JsonlRpcClient {
     }
     this.#pending.clear();
     this.#buffer = EMPTY_BUFFER;
+    this.#frameProcessor?.dispose();
     this.#notificationListeners.clear();
     this.#serverRequestListeners.clear();
     this.#errorListeners.clear();
@@ -321,10 +288,16 @@ export class JsonlRpcClient {
       );
       return;
     }
+    this.#inputEnded = true;
+    if (this.#queuedFrameCount > 0) return;
+    this.#finishInputEnd();
+  };
+
+  #finishInputEnd(): void {
     if (this.#closeOnInputEnd) {
       this.close(new RpcConnectionClosedError("RPC input stream ended"));
     }
-  };
+  }
 
   readonly #handleStreamError = (error: Error): void => {
     this.#fail(new RpcConnectionClosedError(`RPC stream failed: ${error.message}`));
@@ -339,6 +312,10 @@ export class JsonlRpcClient {
   }
 
   #handleFrame(frame: Buffer): boolean {
+    if (frame.length >= this.#largeFrameThresholdBytes || this.#queuedFrameCount > 0) {
+      this.#enqueueFrame(frame, frame.length >= this.#largeFrameThresholdBytes);
+      return true;
+    }
     const line = frame.toString("utf8");
     if (!line.trim()) {
       return true;
@@ -358,6 +335,47 @@ export class JsonlRpcClient {
     }
   }
 
+  #enqueueFrame(frame: Buffer, useWorker: boolean): void {
+    this.#queuedFrameCount += 1;
+    if (this.#queuedFrameCount === 1) this.#input.pause();
+    const task = this.#frameQueue.then(async () => {
+      if (this.#closed) return;
+      if (useWorker) {
+        this.#frameProcessor ??= new JsonlFrameProcessor({
+          ...(this.#workerUrl === undefined ? {} : { workerUrl: this.#workerUrl }),
+        });
+        const message = await this.#frameProcessor.parse(frame);
+        this.#handleMessage(message);
+        return;
+      }
+      this.#handleLine(frame.toString("utf8"), frame.length);
+    });
+    this.#frameQueue = task.catch(() => undefined);
+    void task
+      .catch((error: unknown) => {
+        this.#failQueuedFrame(error, frame.length);
+      })
+      .finally(() => {
+        this.#queuedFrameCount -= 1;
+        if (this.#queuedFrameCount === 0 && !this.#closed) {
+          if (this.#inputEnded) this.#finishInputEnd();
+          else this.#input.resume();
+        }
+      });
+  }
+
+  #failQueuedFrame(error: unknown, frameBytes: number): void {
+    const protocolError =
+      error instanceof RpcProtocolError
+        ? error
+        : error instanceof JsonlFrameParseError && error.code === "json_parse_failed"
+          ? new RpcProtocolError(
+              `Invalid JSONL frame (${String(frameBytes)} bytes; JSON parse failed)`,
+            )
+          : new RpcProtocolError(`RPC JSONL frame processing failed (${String(frameBytes)} bytes)`);
+    this.#fail(protocolError);
+  }
+
   #handleLine(line: string, frameBytes: number): void {
     let message: unknown;
     try {
@@ -368,6 +386,10 @@ export class JsonlRpcClient {
         `Invalid JSONL frame (${String(frameBytes)} bytes; JSON parse failed)`,
       );
     }
+    this.#handleMessage(message);
+  }
+
+  #handleMessage(message: unknown): void {
     if (!isRecord(message)) {
       throw new RpcProtocolError("RPC frame must be a JSON object");
     }
@@ -446,28 +468,6 @@ export class JsonlRpcClient {
     this.#pending.delete(id);
     pending.clearTimers();
     return true;
-  }
-
-  #writeMessage(message: unknown): Promise<void> {
-    const frame = `${JSON.stringify(message)}\n`;
-    return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(
-          new RpcConnectionClosedError(
-            `RPC write timed out after ${String(this.#defaultTimeoutMs)}ms`,
-          ),
-        );
-      }, this.#defaultTimeoutMs);
-      timer.unref();
-      this.#output.write(frame, "utf8", (error) => {
-        clearTimeout(timer);
-        if (error) {
-          reject(new RpcConnectionClosedError(`RPC write failed: ${error.message}`));
-          return;
-        }
-        resolve();
-      });
-    });
   }
 
   #assertOpen(): void {

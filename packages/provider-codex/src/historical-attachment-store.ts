@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, extname, isAbsolute, join } from "node:path";
@@ -26,6 +26,7 @@ import {
   readFileStatsAsync,
   type HistoricalFileStats,
 } from "./historical-attachment-files.js";
+import type { StagedImageAttachment } from "./jsonl-frame-processor.js";
 
 const DEFAULT_ATTACHMENT_TTL_MS = 30 * 60 * 1_000;
 const DEFAULT_CLEANUP_INTERVAL_MS = 60_000;
@@ -150,6 +151,57 @@ export class CodexHistoricalAttachmentStore {
       `生成图片-${String(imageIndex + 1)}${imageExtensionsByMediaType[mediaType]}`,
     );
     return this.#addInlineImage(taskId, content, mediaType, name);
+  }
+
+  public addStagedImage(
+    taskId: string,
+    staged: StagedImageAttachment,
+    imageIndex: number,
+    inputName?: string,
+  ): AgentMessageAttachment | undefined {
+    this.#pruneExpired();
+    if (staged.size > this.#maxBytes) return undefined;
+    const name = normalizeAttachmentName(
+      inputName,
+      `生成图片-${String(imageIndex + 1)}${imageExtensionsByMediaType[staged.mediaType]}`,
+    );
+    for (const entry of this.#entries.values()) {
+      if (
+        entry.source === "managed" &&
+        entry.projectTaskId === taskId &&
+        entry.attachment.mediaType === staged.mediaType &&
+        entry.attachment.name === name &&
+        entry.attachment.size === staged.size &&
+        entry.contentDigest === staged.contentDigest
+      ) {
+        try {
+          unlinkSync(staged.path);
+        } catch {
+          // 重复项已由 Store 持有，暂存文件清理失败不影响既有授权。
+        }
+        return this.#refresh(entry);
+      }
+    }
+    const attachment = this.#createAttachment("image", staged.mediaType, name, staged.size);
+    if (attachment === undefined) return undefined;
+    this.#ensureCapacity(attachment.size);
+    const path = this.#managedPath(attachment.id);
+    try {
+      // Worker 已完成正文验证和写盘；主线程只原子移动文件并登记授权元数据。
+      renameSync(staged.path, path);
+    } catch {
+      return undefined;
+    }
+    this.#entries.set(attachment.id, {
+      attachment,
+      contentDigest: staged.contentDigest,
+      expiresAt: this.#clock() + this.#ttlMs,
+      path,
+      projectTaskId: taskId,
+      source: "managed",
+    });
+    this.#totalBytes += attachment.size;
+    return attachment;
   }
 
   #addInlineImage(
@@ -285,10 +337,7 @@ export class CodexHistoricalAttachmentStore {
       return undefined;
     }
     this.#ensureCapacity(attachment.size);
-    const path = join(
-      this.#attachmentDirectory,
-      createHash("sha256").update(attachment.id).digest("hex"),
-    );
+    const path = this.#managedPath(attachment.id);
     try {
       // 授权 ID 和原始名称都不直接成为文件名，磁盘路径始终由 Store 控制。
       writeFileSync(path, content, { flag: "wx" });
@@ -397,6 +446,10 @@ export class CodexHistoricalAttachmentStore {
       return undefined;
     }
     return { id, kind, mediaType, name, size };
+  }
+
+  #managedPath(attachmentId: string): string {
+    return join(this.#attachmentDirectory, createHash("sha256").update(attachmentId).digest("hex"));
   }
 
   #delete(attachmentId: string): void {

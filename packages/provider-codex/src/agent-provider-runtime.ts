@@ -1,6 +1,7 @@
 import type { AgentProvider, AgentProviderEvent } from "@code-agent/core";
 import type { AgentMessageAttachment } from "@code-agent/protocol";
 import type { RpcErrorPayload, RpcServerRequest } from "./jsonl-rpc-client.js";
+import { readStagedImage, stagedImageName } from "./jsonl-frame-processor.js";
 import { SUPPORTED_CODEX_VERSION } from "./binary.js";
 import {
   CodexProtocolMappingError,
@@ -383,6 +384,11 @@ export class CodexAgentProviderEvents extends CodexAgentProviderTasks {
     part: Record<string, unknown>,
     imageIndex: number,
   ): AgentMessageAttachment | undefined {
+    const staged = readStagedImage(part);
+    if (staged !== undefined) {
+      const name = optionalString(part["name"]) ?? stagedImageName(part, imageIndex);
+      return this.historicalAttachments.addStagedImage(taskId, staged, imageIndex, name);
+    }
     if (part["type"] === "imageGeneration") {
       const savedPath = optionalString(part["savedPath"]);
       if (savedPath !== undefined) {

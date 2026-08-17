@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -95,6 +96,37 @@ describe("CodexHistoricalAttachmentStore", () => {
 
     completeRead?.(pngContent);
     await expect(pendingRead).resolves.toMatchObject({ content: pngContent });
+  });
+
+  it("adopts worker-staged images without decoding or rewriting their body", async () => {
+    const stagingDirectory = mkdtempSync(join(tmpdir(), "code-agent-history-staged-"));
+    const stagedPath = join(stagingDirectory, "generated.png");
+    writeFileSync(stagedPath, pngContent);
+    const { directory, store } = createStore({ createId: () => "history-staged-1" });
+
+    const attachment = store.addStagedImage(
+      "task-1",
+      {
+        contentDigest: createHash("sha256").update(pngContent).digest("hex"),
+        mediaType: "image/png",
+        path: stagedPath,
+        size: pngContent.byteLength,
+      },
+      0,
+    );
+
+    expect(attachment).toMatchObject({
+      id: "history-staged-1",
+      mediaType: "image/png",
+      name: "生成图片-1.png",
+      size: pngContent.byteLength,
+    });
+    expect(existsSync(stagedPath)).toBe(false);
+    expect(readdirSync(directory)).toHaveLength(1);
+    await expect(store.read("task-1", attachment?.id ?? "")).resolves.toMatchObject({
+      content: pngContent,
+    });
+    rmSync(stagingDirectory, { force: true, recursive: true });
   });
 
   it("rejects local images changed after registration", async () => {

@@ -81,6 +81,7 @@ try {
   const requiredFiles = [
     "CHANGELOG.md",
     "dist/cli.js",
+    "dist/codex-jsonl-frame-worker.js",
     "dist/server/index.js",
     "dist/sqlite-state-worker.js",
     "dist/web/index.html",
