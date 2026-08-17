@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CodeAgentClient } from "./http-client.js";
 
-const { decodeSpy } = vi.hoisted(() => ({ decodeSpy: vi.fn() }));
+const { checkSpy, decodeSpy } = vi.hoisted(() => ({
+  checkSpy: vi.fn(),
+  decodeSpy: vi.fn(),
+}));
 
 vi.mock("@sinclair/typebox/value", async (importOriginal) => {
   const original = await importOriginal<typeof TypeBoxValue>();
@@ -12,6 +15,10 @@ vi.mock("@sinclair/typebox/value", async (importOriginal) => {
     ...original,
     Value: {
       ...original.Value,
+      Check(...args: Parameters<typeof original.Value.Check>) {
+        checkSpy();
+        return original.Value.Check(...args);
+      },
       Decode(...args: Parameters<typeof original.Value.Decode>) {
         decodeSpy();
         return original.Value.Decode(...args);
@@ -69,7 +76,7 @@ const ready = {
   latestSequence: 3,
   sessionId: "runtime-1",
   type: "connection.ready",
-  version: 2,
+  version: 3,
 } as const;
 
 function messageEvent(sequence: number, delta = "实时"): AgentEvent {
@@ -87,8 +94,13 @@ function messageEvent(sequence: number, delta = "实时"): AgentEvent {
   };
 }
 
+function eventBatch(...events: AgentEvent[]) {
+  return { events, type: "events.batch", version: 3 } as const;
+}
+
 afterEach(() => {
   vi.useRealTimers();
+  checkSpy.mockClear();
   decodeSpy.mockClear();
 });
 
@@ -125,8 +137,7 @@ describe("CodeAgentClient realtime events", () => {
     expect(socket?.url).toBe("ws://127.0.0.1:3210/v1/projects/code-agent/events?afterSequence=3");
     socket?.open();
     socket?.receive(ready);
-    socket?.receive(messageEvent(3, "重复"));
-    socket?.receive(messageEvent(4));
+    socket?.receive(eventBatch(messageEvent(3, "重复"), messageEvent(4)));
 
     expect(events).toEqual([messageEvent(4)]);
     expect(states).toEqual(["connecting", "connected"]);
@@ -146,9 +157,11 @@ describe("CodeAgentClient realtime events", () => {
     });
     sockets[0]?.open();
     sockets[0]?.receive(ready);
-    sockets[0]?.receive(messageEvent(4));
+    checkSpy.mockClear();
+    sockets[0]?.receive(eventBatch(messageEvent(4), messageEvent(5)));
 
-    expect(onEvent).toHaveBeenCalledOnce();
+    expect(onEvent).toHaveBeenCalledTimes(2);
+    expect(checkSpy).toHaveBeenCalledOnce();
     expect(decodeSpy).not.toHaveBeenCalled();
   });
 
@@ -164,7 +177,7 @@ describe("CodeAgentClient realtime events", () => {
     });
     gapHarness.sockets[0]?.open();
     gapHarness.sockets[0]?.receive(ready);
-    gapHarness.sockets[0]?.receive(messageEvent(5));
+    gapHarness.sockets[0]?.receive(eventBatch(messageEvent(5)));
 
     expect(gapResync).toEqual([
       {
@@ -172,7 +185,7 @@ describe("CodeAgentClient realtime events", () => {
         reason: "sequence_gap",
         sessionId: "runtime-1",
         type: "resync.required",
-        version: 2,
+        version: 3,
       },
     ]);
 
@@ -214,7 +227,7 @@ describe("CodeAgentClient realtime events", () => {
       reason: "event_retention_exceeded",
       sessionId: "runtime-1",
       type: "resync.required",
-      version: 2,
+      version: 3,
     });
 
     expect(resyncs[0]).toMatchObject({ reason: "event_retention_exceeded" });
@@ -248,7 +261,7 @@ describe("CodeAgentClient realtime events", () => {
     });
     sockets[0]?.open();
     sockets[0]?.receive(ready);
-    sockets[0]?.receive(messageEvent(4));
+    sockets[0]?.receive(eventBatch(messageEvent(4)));
     sockets[0]?.serverClose();
 
     expect(states.at(-1)).toBe("reconnecting");
@@ -279,10 +292,31 @@ describe("CodeAgentClient realtime events", () => {
 
     unsubscribe();
     socket?.receive(ready);
-    socket?.receive(messageEvent(4));
+    socket?.receive(eventBatch(messageEvent(4)));
     socket?.dispatchEvent(new Event("error"));
 
     expect(onEvent).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("stops delivering the remaining batch after cancellation", () => {
+    const { client, sockets } = createHarness();
+    const events: AgentEvent[] = [];
+    let unsubscribe: () => void = () => undefined;
+    unsubscribe = client.subscribeEvents({
+      afterSequence: 3,
+      projectId: "code-agent",
+      onEvent: (event) => {
+        events.push(event);
+        unsubscribe();
+      },
+      onResyncRequired: vi.fn(),
+      sessionId: "runtime-1",
+    });
+    sockets[0]?.open();
+    sockets[0]?.receive(ready);
+    sockets[0]?.receive(eventBatch(messageEvent(4), messageEvent(5)));
+
+    expect(events).toEqual([messageEvent(4)]);
   });
 });

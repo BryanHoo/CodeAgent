@@ -33,7 +33,7 @@
 - Provider 只发布不含 `sessionId`、`sequence`、`timestamp` 和 `version` 的统一事件；Server Event Stream 统一分配这些传输字段。结构化 Item 的开始与完成分别使用 `item.started` 和 `item.completed`，并携带同一统一 Item 载荷供客户端按 ID 替换。`AgentActivityItem.transient` 表示只在活动阶段可见的过程状态，实时开始、完成与历史 Snapshot 必须保留同一标记，消费者不得把其终态恢复为持久历史结果。
 - Project 级 Provider 只发布已通过 Project 归属验证的 Task 事件，未知或其他目录的 `threadId` 不得进入 Event Stream。
 - Task Snapshot HTTP 响应必须同时返回同一 Event Stream 的 `{ sessionId, sequence }` checkpoint，Client 不得猜测恢复序号。
-- WebSocket 控制帧使用 `connection.ready` 和 `resync.required`；恢复原因只使用 Protocol 定义的判别值。
+- WebSocket 传输协议使用版本 3：控制帧使用 `connection.ready` 和 `resync.required`，事件帧使用非空 `events.batch` 并按原始 `sequence` 顺序携带最多 `64` 个版本 2 `AgentEvent`；恢复原因只使用 Protocol 定义的判别值，不再发送逐事件 Frame。
 - Provider 专有数据只进入诊断字段或 `extensions`，未知事件记录告警但不破坏事件循环。
 - Task Snapshot 必须保留归一化的 Turn 与 Tool 错误；Command Output 最多保留最新 `10,000` 行或 `1 MiB`，并携带截断状态。
 - Project 源文件预览必须返回已解析的相对或绝对路径、当前文本分段和可空的下一页字节游标；相对路径限制在 Project 根目录内，显式绝对路径允许读取 Project 外的本机文件。Server 必须解析真实路径并拒绝不可读目标、目录、越界游标和二进制文件，每页最多读取 `256 KiB`、最多返回 `4,000` 行，分页不得切断 UTF-8 字符或丢失源文件字节。Client 与 Web 必须使用游标按需加载，查看器仅在滚动接近底部或目标引用行尚未加载时读取后续页，并阻止重复游标循环。Project 图片预览允许相同的绝对路径范围，但只接受有界普通文件及 GIF、JPEG、PNG、WebP 的有效内容签名，响应必须设置受检媒体类型和 `nosniff`。

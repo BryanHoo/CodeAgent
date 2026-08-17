@@ -1,10 +1,15 @@
 import { Buffer } from "node:buffer";
 
-import type { EventStreamMessage } from "@code-agent/protocol";
+import {
+  MAX_EVENT_BATCH_SIZE,
+  type AgentEvent,
+  type EventBatch,
+  type EventStreamMessage,
+} from "@code-agent/protocol";
 
 const EVENT_SOCKET_SOFT_BACKPRESSURE_BYTES = 256 * 1_024;
 const EVENT_SOCKET_HARD_BACKPRESSURE_BYTES = 1_024 * 1_024;
-const serializedMessages = new WeakMap<EventStreamMessage, SerializedEventStreamMessage>();
+const serializedMessages = new WeakMap<object, SerializedEventStreamMessage>();
 
 export type SerializedEventStreamMessage = Readonly<{
   byteLength: number;
@@ -18,18 +23,26 @@ export interface EventStreamSocket {
   send: (data: string) => void;
 }
 
-export function serializeEventStreamMessage(
-  message: EventStreamMessage,
-): SerializedEventStreamMessage {
-  const cached = serializedMessages.get(message);
+function serializeEventStreamValue(value: object): SerializedEventStreamMessage {
+  const cached = serializedMessages.get(value);
   if (cached !== undefined) {
     return cached;
   }
-  const data = JSON.stringify(message);
+  const data = JSON.stringify(value);
   const serialized = { byteLength: Buffer.byteLength(data), data };
-  // WeakMap 只随 Event 对象存活，复用广播帧且不延长历史事件生命周期。
-  serializedMessages.set(message, serialized);
+  // WeakMap 只随协议对象存活，复用序列化结果且不延长事件生命周期。
+  serializedMessages.set(value, serialized);
   return serialized;
+}
+
+export function serializeEventStreamMessage(
+  message: EventStreamMessage,
+): SerializedEventStreamMessage {
+  return serializeEventStreamValue(message);
+}
+
+export function getSerializedAgentEventByteLength(event: AgentEvent): number {
+  return serializeEventStreamValue(event).byteLength;
 }
 
 export function sendEventStreamMessage(
@@ -51,5 +64,24 @@ export function sendEventStreamMessage(
     onSoftBackpressure();
   }
   socket.send(serializeEventStreamMessage(message).data);
+  return true;
+}
+
+export function sendEventStreamEvents(
+  socket: EventStreamSocket,
+  events: readonly AgentEvent[],
+  onSoftBackpressure: () => void,
+  onSlowClientDisconnect: () => void,
+): boolean {
+  for (let offset = 0; offset < events.length; offset += MAX_EVENT_BATCH_SIZE) {
+    const message: EventBatch = {
+      events: events.slice(offset, offset + MAX_EVENT_BATCH_SIZE),
+      type: "events.batch",
+      version: 3,
+    };
+    if (!sendEventStreamMessage(socket, message, onSoftBackpressure, onSlowClientDisconnect)) {
+      return false;
+    }
+  }
   return true;
 }

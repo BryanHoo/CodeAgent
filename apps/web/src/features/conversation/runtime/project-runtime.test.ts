@@ -203,7 +203,7 @@ function createClientHarness() {
         reason: "event_retention_exceeded",
         sessionId: "runtime-1",
         type: "resync.required",
-        version: 2,
+        version: 3,
       });
     },
   };

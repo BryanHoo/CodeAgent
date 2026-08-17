@@ -56,7 +56,7 @@ function createResyncRequired(
     reason,
     sessionId,
     type: "resync.required",
-    version: 2,
+    version: 3,
   };
 }
 
@@ -113,9 +113,10 @@ export function startAgentEventSubscription(
       createEventUrl(options.baseUrl, options.projectId, lastSequence),
     );
     socket = currentSocket;
+    const isCurrentConnection = () => active && socket === currentSocket;
 
     const onMessage = (event: MessageEvent) => {
-      if (!active || socket !== currentSocket) {
+      if (!isCurrentConnection()) {
         return;
       }
       let frame: unknown;
@@ -152,19 +153,29 @@ export function startAgentEventSubscription(
         failProtocol("CodeAgent event arrived before connection.ready");
         return;
       }
-      if (message.sessionId !== options.sessionId) {
-        stopForResync(createResyncRequired(message.sessionId, message.sequence, "session_changed"));
-        return;
+      for (const agentEvent of message.events) {
+        if (agentEvent.sessionId !== options.sessionId) {
+          stopForResync(
+            createResyncRequired(agentEvent.sessionId, agentEvent.sequence, "session_changed"),
+          );
+          return;
+        }
+        if (agentEvent.sequence <= lastSequence) {
+          continue;
+        }
+        if (agentEvent.sequence !== lastSequence + 1) {
+          stopForResync(
+            createResyncRequired(agentEvent.sessionId, agentEvent.sequence, "sequence_gap"),
+          );
+          return;
+        }
+        lastSequence = agentEvent.sequence;
+        // 批内仍逐事件交付，保持现有 Store 回调和 sequence 恢复语义。
+        options.onEvent(agentEvent);
+        if (!isCurrentConnection()) {
+          return;
+        }
       }
-      if (message.sequence <= lastSequence) {
-        return;
-      }
-      if (message.sequence !== lastSequence + 1) {
-        stopForResync(createResyncRequired(message.sessionId, message.sequence, "sequence_gap"));
-        return;
-      }
-      lastSequence = message.sequence;
-      options.onEvent(message);
     };
 
     const onError = () => {

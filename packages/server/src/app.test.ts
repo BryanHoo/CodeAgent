@@ -3927,8 +3927,15 @@ describe("CodeAgent Server", () => {
       type: "message.delta",
     });
     emitEvent({
-      itemId: "item-1",
+      itemId: "item-2",
       payload: { delta: "更新" },
+      taskId: "task-1",
+      turnId: "turn-1",
+      type: "message.delta",
+    });
+    emitEvent({
+      itemId: "item-3",
+      payload: { delta: "完成" },
       taskId: "task-1",
       turnId: "turn-1",
       type: "message.delta",
@@ -3940,21 +3947,24 @@ describe("CodeAgent Server", () => {
     expect(messages[0]).toMatchObject({
       latestSequence: 0,
       type: "connection.ready",
-      version: 2,
+      version: 3,
     });
     expect(typeof (messages[0] as { sessionId: unknown }).sessionId).toBe("string");
     expect(messages[1]).toMatchObject({
-      payload: { delta: "实时" },
-      sequence: 1,
-      type: "message.delta",
-      version: 2,
+      events: [{ payload: { delta: "实时" }, sequence: 1, type: "message.delta", version: 2 }],
+      type: "events.batch",
+      version: 3,
     });
-    expect(typeof (messages[1] as { sessionId: unknown }).sessionId).toBe("string");
+    expect(typeof (messages[1] as { events: [{ sessionId: unknown }] }).events[0].sessionId).toBe(
+      "string",
+    );
     expect(messages[2]).toMatchObject({
-      payload: { delta: "更新" },
-      sequence: 2,
-      type: "message.delta",
-      version: 2,
+      events: [
+        { payload: { delta: "更新" }, sequence: 2, type: "message.delta" },
+        { payload: { delta: "完成" }, sequence: 3, type: "message.delta" },
+      ],
+      type: "events.batch",
+      version: 3,
     });
 
     const metricsResponse = await app.inject({ method: "GET", url: "/v1/metrics/events" });
@@ -3967,9 +3977,9 @@ describe("CodeAgent Server", () => {
           coalescedEvents: 0,
           pendingDeltas: 0,
           projectId: "code-agent",
-          providerEventsReceived: 2,
-          publishedEvents: 2,
-          retainedEvents: 2,
+          providerEventsReceived: 3,
+          publishedEvents: 3,
+          retainedEvents: 3,
           retentionEvictions: 0,
           slowClientDisconnects: 0,
         },
@@ -4019,9 +4029,60 @@ describe("CodeAgent Server", () => {
       expect(messages).toHaveLength(2);
     });
     expect(messages).toMatchObject([
-      { latestSequence: 0, type: "connection.ready" },
-      { payload: { delta: "初始化增量" }, sequence: 1, type: "message.delta" },
+      { latestSequence: 0, type: "connection.ready", version: 3 },
+      {
+        events: [{ payload: { delta: "初始化增量" }, sequence: 1, type: "message.delta" }],
+        type: "events.batch",
+        version: 3,
+      },
     ]);
+    socket.terminate();
+  });
+
+  it("splits replay into ordered batches of at most 64 events", async () => {
+    const harness = createProvider();
+    const app = await createCodeAgentServer(createServerOptions(harness.provider));
+    closeCallbacks.push(() => app.close());
+    await app.inject({ method: "GET", url: "/v1/projects/code-agent/tasks" });
+
+    for (let index = 1; index <= 65; index += 1) {
+      harness.emitEvent({
+        itemId: `item-${String(index)}`,
+        payload: { delta: String(index) },
+        taskId: "task-1",
+        turnId: "turn-1",
+        type: "message.delta",
+      });
+    }
+
+    const messages: {
+      events?: { sequence: number }[];
+      type: string;
+    }[] = [];
+    const socket = await app.injectWS(
+      "/v1/projects/code-agent/events?afterSequence=0",
+      { headers: { host: "localhost", origin: "http://localhost" } },
+      {
+        onInit(webSocket) {
+          webSocket.on("message", (data: { toString(): string }) => {
+            messages.push(JSON.parse(data.toString()) as (typeof messages)[number]);
+          });
+        },
+      },
+    );
+
+    await vi.waitFor(() => {
+      expect(messages).toHaveLength(3);
+    });
+    expect(messages.map((message) => message.type)).toEqual([
+      "connection.ready",
+      "events.batch",
+      "events.batch",
+    ]);
+    expect(messages.slice(1).map((message) => message.events?.length)).toEqual([64, 1]);
+    expect(
+      messages.flatMap((message) => message.events ?? []).map((event) => event.sequence),
+    ).toEqual(Array.from({ length: 65 }, (_, index) => index + 1));
     socket.terminate();
   });
 
@@ -4062,7 +4123,11 @@ describe("CodeAgent Server", () => {
     await vi.waitFor(() => {
       expect(replayed).toHaveLength(2);
     });
-    expect(replayed[1]).toMatchObject({ payload: { delta: "2" }, sequence: 2 });
+    expect(replayed[1]).toMatchObject({
+      events: [{ payload: { delta: "2" }, sequence: 2 }],
+      type: "events.batch",
+      version: 3,
+    });
     replaySocket.terminate();
 
     const expired: unknown[] = [];

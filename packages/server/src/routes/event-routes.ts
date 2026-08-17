@@ -1,7 +1,11 @@
-import type { AgentEvent, EventStreamMessage } from "@code-agent/protocol";
+import {
+  MAX_EVENT_BATCH_SIZE,
+  type AgentEvent,
+  type EventStreamMessage,
+} from "@code-agent/protocol";
 import type { FastifyPluginCallback } from "fastify";
 import type { WebSocket } from "ws";
-import { sendEventStreamMessage } from "../event-socket-sender.js";
+import { sendEventStreamEvents, sendEventStreamMessage } from "../event-socket-sender.js";
 
 import { ACCESS_SESSION_COOKIE } from "./access-routes.js";
 import type { ServerRouteContext } from "./context.js";
@@ -63,6 +67,8 @@ export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
       const eventStream = context.eventStream;
       context.transportMetrics.activeClients += 1;
       let cleanedUp = false;
+      let liveFlushScheduled = false;
+      const liveEvents: AgentEvent[] = [];
       let unsubscribe: () => void = () => undefined;
       const cancelSessionExpiry =
         sessionExpiresAt === undefined || sessionExpiresAt === null
@@ -73,6 +79,7 @@ export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
           return;
         }
         cleanedUp = true;
+        liveEvents.length = 0;
         cancelSessionExpiry();
         unsubscribe();
         context.transportMetrics.activeClients -= 1;
@@ -90,6 +97,42 @@ export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
             context.transportMetrics.slowClientDisconnects += 1;
           },
         );
+      const sendEvents = (events: readonly AgentEvent[]): boolean =>
+        sendEventStreamEvents(
+          socket,
+          events,
+          () => {
+            eventStream.noteBackpressure();
+          },
+          () => {
+            context.transportMetrics.slowClientDisconnects += 1;
+          },
+        );
+      const flushLiveEvents = () => {
+        liveFlushScheduled = false;
+        if (cleanedUp || liveEvents.length === 0) {
+          return;
+        }
+        const events = liveEvents.splice(0);
+        sendEvents(events);
+      };
+      const enqueueLiveEvent = (event: AgentEvent) => {
+        liveEvents.push(event);
+        if (liveEvents.length >= MAX_EVENT_BATCH_SIZE) {
+          // 同步发布量达到协议上限时立即切帧，避免等待微任务期间无界积累。
+          flushLiveEvents();
+          return;
+        }
+        if (liveFlushScheduled) {
+          return;
+        }
+        liveFlushScheduled = true;
+        queueMicrotask(() => {
+          if (liveFlushScheduled) {
+            flushLiveEvents();
+          }
+        });
+      };
       const replay = eventStream.replayAfter(request.query.afterSequence);
       if (replay.type === "resync") {
         const sent = send({
@@ -97,7 +140,7 @@ export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
           reason: replay.reason,
           sessionId: eventStream.checkpoint.sessionId,
           type: "resync.required",
-          version: 2,
+          version: 3,
         });
         if (sent) {
           socket.close(1000, "Snapshot resync required");
@@ -115,28 +158,24 @@ export const registerEventRoutes: FastifyPluginCallback<ServerRouteContext> = (
           initializationEvents.push(event);
           return;
         }
-        send(event);
+        enqueueLiveEvent(event);
       });
       const readySent = send({
         latestSequence: checkpoint.sequence,
         sessionId: checkpoint.sessionId,
         type: "connection.ready",
-        version: 2,
+        version: 3,
       });
       if (!readySent) {
         return;
       }
-      for (const event of replay.events) {
-        if (!send(event)) {
-          return;
-        }
+      if (!sendEvents(replay.events)) {
+        return;
       }
       // 初始化期间同步到达的实时事件必须排在 ready 和 replay 之后。
       isInitializing = false;
-      for (const event of initializationEvents) {
-        if (!send(event)) {
-          return;
-        }
+      if (!sendEvents(initializationEvents)) {
+        return;
       }
     },
   );

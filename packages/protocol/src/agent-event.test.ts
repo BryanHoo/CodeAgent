@@ -5,7 +5,9 @@ import {
   AgentEventSchema,
   AgentTaskSnapshotResponseSchema,
   ConnectionReadySchema,
+  EventBatchSchema,
   EventStreamMessageSchema,
+  MAX_EVENT_BATCH_SIZE,
   ResyncRequiredSchema,
 } from "./agent-event.js";
 
@@ -337,14 +339,14 @@ describe("Agent Event v2 protocol", () => {
       latestSequence: 7,
       sessionId: "runtime-1",
       type: "connection.ready",
-      version: 2,
+      version: 3,
     };
     const resync = {
       latestSequence: 7,
       reason: "event_retention_exceeded",
       sessionId: "runtime-1",
       type: "resync.required",
-      version: 2,
+      version: 3,
     };
     const response = {
       checkpoint: { sequence: 7, sessionId: "runtime-1" },
@@ -386,6 +388,30 @@ describe("Agent Event v2 protocol", () => {
         },
       }),
     ).toBe(false);
+  });
+
+  it("validates bounded version 3 event batches", () => {
+    const event = {
+      ...baseEvent,
+      itemId: "item-1",
+      payload: { delta: "text" },
+      turnId: "turn-1",
+      type: "message.delta",
+    };
+    const batch = {
+      events: Array.from({ length: MAX_EVENT_BATCH_SIZE }, () => event),
+      type: "events.batch",
+      version: 3,
+    };
+
+    expect(Value.Check(EventBatchSchema, batch)).toBe(true);
+    expect(Value.Check(EventStreamMessageSchema, batch)).toBe(true);
+    expect(Value.Check(EventBatchSchema, { ...batch, events: [] })).toBe(false);
+    expect(Value.Check(EventBatchSchema, { ...batch, events: [...batch.events, event] })).toBe(
+      false,
+    );
+    expect(Value.Check(EventBatchSchema, { ...batch, extra: true })).toBe(false);
+    expect(Value.Check(EventStreamMessageSchema, event)).toBe(false);
   });
 
   it("rejects pending request lifecycle events with contradictory statuses", () => {
@@ -435,7 +461,7 @@ describe("Agent Event v2 protocol", () => {
         reason: "unknown",
         sessionId: "runtime-1",
         type: "resync.required",
-        version: 2,
+        version: 3,
       }),
     ).toBe(false);
   });

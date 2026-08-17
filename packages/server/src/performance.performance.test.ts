@@ -9,7 +9,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import performanceBudgets from "../../../tests/performance-budgets.json" with { type: "json" };
 import { AgentEventStream } from "./agent-event-stream.js";
 import { AttachmentStore } from "./attachment-store.js";
-import { sendEventStreamMessage, type EventStreamSocket } from "./event-socket-sender.js";
+import {
+  sendEventStreamEvents,
+  sendEventStreamMessage,
+  type EventStreamSocket,
+} from "./event-socket-sender.js";
 import { readGitWorkingTreeStatus } from "./git-working-tree.js";
 
 const fixedTimestamp = "2026-08-02T00:00:00.000Z";
@@ -108,7 +112,7 @@ describe("server performance acceptance", () => {
       latestSequence: 0,
       sessionId: "session-performance",
       type: "connection.ready",
-      version: 2,
+      version: 3,
     } satisfies EventStreamMessage;
     const stringify = vi.spyOn(JSON, "stringify");
     const stringifyCallsBefore = stringify.mock.calls.length;
@@ -134,6 +138,23 @@ describe("server performance acceptance", () => {
     expect(socket.send).toHaveBeenCalledTimes(performanceBudgets.slowWebSocket.messages);
     expect(slowClientDisconnect).toHaveBeenCalledOnce();
     expect(socket.close).toHaveBeenCalledWith(1013, "Client is too slow; refresh the snapshot");
+
+    socket.bufferedAmount = 0;
+    const events = Array.from({ length: 129 }, (_, index) => ({
+      ...createDeltaEvent(String(index)),
+      provider: "codex",
+      sequence: index + 1,
+      sessionId: "session-performance",
+      timestamp: fixedTimestamp,
+      version: 2 as const,
+    }));
+    expect(sendEventStreamEvents(socket, events, softBackpressure, slowClientDisconnect)).toBe(
+      true,
+    );
+    const batches = socket.send.mock.calls
+      .slice(-3)
+      .map(([data]) => JSON.parse(String(data)) as { events: AgentEvent[] });
+    expect(batches.map((batch) => batch.events.length)).toEqual([64, 64, 1]);
   });
 
   it("streams a 50 MiB attachment without retaining its payload on Heap", async () => {

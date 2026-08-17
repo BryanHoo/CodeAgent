@@ -70,14 +70,14 @@ test("keeps retrying Snapshot recovery and applies later realtime events", async
                     latestSequence: 0,
                     sessionId: "e2e-session",
                     type: "connection.ready",
-                    version: 2,
+                    version: 3,
                   },
                   {
                     latestSequence: 8,
                     reason: "event_retention_exceeded",
                     sessionId: "e2e-session",
                     type: "resync.required",
-                    version: 2,
+                    version: 3,
                   },
                 ]
               : [
@@ -85,26 +85,32 @@ test("keeps retrying Snapshot recovery and applies later realtime events", async
                     latestSequence: 8,
                     sessionId: "e2e-session",
                     type: "connection.ready",
-                    version: 2,
+                    version: 3,
                   },
                   {
-                    itemId: "message-recovered",
-                    payload: {
-                      item: {
-                        id: "message-recovered",
-                        role: "assistant",
-                        text: "恢复失败后收到的实时消息",
-                        type: "message",
+                    events: [
+                      {
+                        itemId: "message-recovered",
+                        payload: {
+                          item: {
+                            id: "message-recovered",
+                            role: "assistant",
+                            text: "恢复失败后收到的实时消息",
+                            type: "message",
+                          },
+                        },
+                        provider: "codex",
+                        sequence: 9,
+                        sessionId: "e2e-session",
+                        taskId: "task-1",
+                        timestamp: "2026-07-23T00:00:00.000Z",
+                        turnId: "turn-1",
+                        type: "item.completed",
+                        version: 2,
                       },
-                    },
-                    provider: "codex",
-                    sequence: 9,
-                    sessionId: "e2e-session",
-                    taskId: "task-1",
-                    timestamp: "2026-07-23T00:00:00.000Z",
-                    turnId: "turn-1",
-                    type: "item.completed",
-                    version: 2,
+                    ],
+                    type: "events.batch",
+                    version: 3,
                   },
                 ];
           for (const message of messages) {
@@ -181,27 +187,35 @@ test("refreshes the snapshot when the realtime delta buffer overflows", async ({
                 latestSequence: 1_001,
                 sessionId: "e2e-session",
                 type: "connection.ready",
-                version: 2,
+                version: 3,
               }),
             }),
           );
           if (!shouldSendBurst) {
             return;
           }
-          for (let sequence = 1; sequence <= 1_001; sequence += 1) {
+          const events = Array.from({ length: 1_001 }, (_, index) => {
+            const sequence = index + 1;
+            return {
+              itemId: `item-${String(sequence % 2)}`,
+              payload: { delta: "x" },
+              provider: "codex",
+              sequence,
+              sessionId: "e2e-session",
+              taskId: "task-1",
+              timestamp: "2026-07-23T00:00:00.000Z",
+              turnId: "turn-1",
+              type: "message.delta",
+              version: 2,
+            };
+          });
+          for (let offset = 0; offset < events.length; offset += 64) {
             this.dispatchEvent(
               new MessageEvent("message", {
                 data: JSON.stringify({
-                  itemId: `item-${String(sequence % 2)}`,
-                  payload: { delta: "x" },
-                  provider: "codex",
-                  sequence,
-                  sessionId: "e2e-session",
-                  taskId: "task-1",
-                  timestamp: "2026-07-23T00:00:00.000Z",
-                  turnId: "turn-1",
-                  type: "message.delta",
-                  version: 2,
+                  events: events.slice(offset, offset + 64),
+                  type: "events.batch",
+                  version: 3,
                 }),
               }),
             );
@@ -277,7 +291,7 @@ test("clears transient realtime errors after the WebSocket reconnects @cross-bro
                   latestSequence: 0,
                   sessionId: "e2e-session",
                   type: "connection.ready",
-                  version: 2,
+                  version: 3,
                 }),
               }),
             );
@@ -393,7 +407,11 @@ test("opens a completed file change diff while the turn is still running", async
       public constructor() {
         super();
         (window as FileChangeEventWindow).__emitFileChangeEvent = (event) => {
-          this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(event) }));
+          this.dispatchEvent(
+            new MessageEvent("message", {
+              data: JSON.stringify({ events: [event], type: "events.batch", version: 3 }),
+            }),
+          );
         };
         queueMicrotask(() => {
           this.readyState = 1;
@@ -404,7 +422,7 @@ test("opens a completed file change diff while the turn is still running", async
                 latestSequence: 0,
                 sessionId: "e2e-session",
                 type: "connection.ready",
-                version: 2,
+                version: 3,
               }),
             }),
           );
@@ -579,7 +597,7 @@ test("updates a running background task title and preserves blocking status", as
         (window as SidebarEventEmitterWindow).__emitSidebarTaskEvent = (event) => {
           this.dispatchEvent(
             new MessageEvent("message", {
-              data: JSON.stringify(event),
+              data: JSON.stringify({ events: [event], type: "events.batch", version: 3 }),
             }),
           );
         };
@@ -595,7 +613,7 @@ test("updates a running background task title and preserves blocking status", as
                 latestSequence: 0,
                 sessionId: "e2e-session",
                 type: "connection.ready",
-                version: 2,
+                version: 3,
               }),
             }),
           );

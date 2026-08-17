@@ -257,12 +257,28 @@ export const AgentEventSchema = Type.Union([
 
 export type AgentEvent = Readonly<Static<typeof AgentEventSchema>>;
 
+export const MAX_EVENT_BATCH_SIZE = 64;
+
+export const EventBatchSchema = Type.Object(
+  {
+    events: Type.Array(AgentEventSchema, {
+      maxItems: MAX_EVENT_BATCH_SIZE,
+      minItems: 1,
+    }),
+    type: Type.Literal("events.batch"),
+    version: Type.Literal(3),
+  },
+  { additionalProperties: false },
+);
+
+export type EventBatch = Readonly<Static<typeof EventBatchSchema>>;
+
 export const ConnectionReadySchema = Type.Object(
   {
     latestSequence: SequenceSchema,
     sessionId: SessionIdSchema,
     type: Type.Literal("connection.ready"),
-    version: Type.Literal(2),
+    version: Type.Literal(3),
   },
   { additionalProperties: false },
 );
@@ -279,7 +295,7 @@ export const ResyncRequiredSchema = Type.Object(
     ]),
     sessionId: SessionIdSchema,
     type: Type.Literal("resync.required"),
-    version: Type.Literal(2),
+    version: Type.Literal(3),
   },
   { additionalProperties: false },
 );
@@ -289,7 +305,7 @@ export type ResyncRequired = Readonly<Static<typeof ResyncRequiredSchema>>;
 export const EventStreamMessageSchema = Type.Union([
   ConnectionReadySchema,
   ResyncRequiredSchema,
-  AgentEventSchema,
+  EventBatchSchema,
 ]);
 
 export type EventStreamMessage = Readonly<Static<typeof EventStreamMessageSchema>>;
