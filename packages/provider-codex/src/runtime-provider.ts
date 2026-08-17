@@ -86,9 +86,9 @@ class CodexRuntimeProjectProvider implements AgentProvider {
     return this.#delegate.compactTask(taskId);
   }
 
-  public async forkTask(taskId: string): Promise<AgentTask> {
+  public async forkTask(taskId: string, lastTurnId?: string): Promise<AgentTask> {
     this.#runtime.assertTaskOwner(this.#project, taskId);
-    const task = await this.#delegate.forkTask(taskId);
+    const task = await this.#delegate.forkTask(taskId, lastTurnId);
     this.#runtime.claimTask(this.#project, task.id);
     return task;
   }

@@ -142,6 +142,7 @@ export function StoredAssistantGroup({
       ) : null}
       {turn.status !== "running" && assistantText.trim().length > 0 ? (
         <MessageMetadata
+          lastTurnId={turn.id}
           {...(onForkTask === undefined ? {} : { onForkTask })}
           text={assistantText}
           timestamp={getMessageTimestamp("assistant", turn, latestSnapshotTimestamp)}
@@ -237,11 +238,7 @@ export function StoreTurnTimelineSection({
             onToggleProcess={() => {
               setProcessExpanded((expanded) => !expanded);
             }}
-            {...(turn.status === "completed" &&
-            groupIndex === latestAssistantGroupIndex &&
-            onForkTask !== undefined
-              ? { onForkTask }
-              : {})}
+            {...(turn.status !== "running" && onForkTask !== undefined ? { onForkTask } : {})}
             onOpenSourceFile={onOpenSourceFile}
             onReviewFileChanges={onReviewFileChanges}
             projectId={projectId}
@@ -420,8 +417,6 @@ export function TaskStoreTimeline({
       <TimelineState message={i18n.t("timeline.noHistory", { ns: "conversation" })} role="status" />
     );
   }
-  const latestTurnId = turnIds.at(-1);
-
   return (
     <Conversation
       aria-label={i18n.t("timeline.conversation", { ns: "conversation" })}
@@ -455,12 +450,10 @@ export function TaskStoreTimeline({
         items={turnIds}
         renderItem={(turnId, turnIndex) => (
           <StoreTurnTimelineSection
-            {...(connected && turnId === latestTurnId && onBuildPlan !== undefined
+            {...(connected && turnId === turnIds.at(-1) && onBuildPlan !== undefined
               ? { onBuildPlan }
               : {})}
-            {...(connected && turnId === latestTurnId && onForkTask !== undefined
-              ? { onForkTask }
-              : {})}
+            {...(connected && onForkTask !== undefined ? { onForkTask } : {})}
             onOpenFileDiff={onOpenFileDiff}
             onOpenSourceFile={onOpenSourceFile}
             onReviewFileChanges={onReviewFileChanges}

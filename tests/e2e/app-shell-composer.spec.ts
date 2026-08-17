@@ -855,12 +855,15 @@ test("selects and submits a project file reference from an inline @ mention", as
   await expect(submittedMessage).toContainText("读取文件");
 });
 
-test("从最新 AI 回复复制任务", async ({ page }) => {
-  const forkRequests: string[] = [];
+test("从 AI 回复复制任务并保留到所属 Turn", async ({ page }) => {
+  const forkRequests: Readonly<{ body: Record<string, unknown>; path: string }>[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
     if (request.method() === "POST" && url.pathname.endsWith("/fork")) {
-      forkRequests.push(url.pathname);
+      forkRequests.push({
+        body: parseRequestRecord(request.postData()),
+        path: url.pathname,
+      });
     }
   });
   await page.goto("/p/code-agent/t/task-1");
@@ -876,7 +879,12 @@ test("从最新 AI 回复复制任务", async ({ page }) => {
 
   await latestReply.getByRole("button", { name: "复制任务" }).click();
 
-  await expect.poll(() => forkRequests).toContain("/v1/projects/code-agent/tasks/task-1/fork");
+  await expect
+    .poll(() => forkRequests)
+    .toContainEqual({
+      body: { lastTurnId: "turn-1" },
+      path: "/v1/projects/code-agent/tasks/task-1/fork",
+    });
   await expect(page).toHaveURL(/\/p\/code-agent\/t\/task-2$/u);
 });
 

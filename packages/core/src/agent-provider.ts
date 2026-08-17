@@ -112,7 +112,7 @@ export class PendingRequestResolutionError extends Error {
 export interface AgentProvider {
   archiveTask(taskId: string): Promise<void>;
   compactTask(taskId: string): Promise<void>;
-  forkTask(taskId: string): Promise<AgentTask>;
+  forkTask(taskId: string, lastTurnId?: string): Promise<AgentTask>;
   getCapabilities(): Promise<AgentCapabilities>;
   listModels(): Promise<AgentModelPage>;
   listMcpServers(taskId: string): Promise<AgentMcpServerPage>;

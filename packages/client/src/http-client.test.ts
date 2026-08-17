@@ -1180,7 +1180,12 @@ describe("CodeAgentClient", () => {
       { idempotencyKey: "review-key" },
     );
     await client.compactTask("code-agent", task.id, { idempotencyKey: "compact-key" });
-    await client.forkTask("code-agent", task.id, { idempotencyKey: "fork-key" });
+    await client.forkTask(
+      "code-agent",
+      task.id,
+      { lastTurnId: "turn-1" },
+      { idempotencyKey: "fork-key" },
+    );
     await client.uploadFeedback(
       "code-agent",
       task.id,
@@ -1197,6 +1202,7 @@ describe("CodeAgentClient", () => {
     expect(
       fetchMock.mock.calls.map((call) => new Headers(call[1]?.headers).get("idempotency-key")),
     ).toEqual(["review-key", "compact-key", "fork-key", "feedback-key"]);
+    expect(fetchMock.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({ lastTurnId: "turn-1" }));
   });
 
   it("sends typed task metadata mutations with idempotency keys", async () => {

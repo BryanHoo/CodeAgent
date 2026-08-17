@@ -49,6 +49,7 @@
 - Provider 模型目录和 Codex Project 有效沙盒配置分别是模型能力与 Project 沙盒默认值的真相源，持久层只保存统一设置值。CodeAgent 全局设置尚未持久化时，模型、思考量、审批策略、审批审核方和沙盒模式优先采用 Codex 当前用户配置，并对缺失或无效字段逐项使用项目默认值；全局设置持久化后必须完全优先于 Codex 后续配置变化。新 Task 继承当时有效的 Global 审批设置以及 Project 模型、思考量和沙盒默认值，会话级授权和 Pending Request 不得进入长期设置。
 - Task Snapshot 使用 `contextUsage` 保存最近一轮上下文用量，实时链路使用 `usage.updated` 同步更新；占用值必须来自 Provider 的最近一轮 Token Usage 与模型上下文窗口。
 - 运行能力独立声明 Task 的 `list`、`read`、`start`、`fork`，Turn 的 `start`、`steer`、`interrupt`、`review`、`compact`，Skill 的 `list`、`use`，以及 Feedback 的 `upload`；消费者不得通过 Provider 名称推断能力。
+- `ForkAgentTaskRequest` 只接受可选非空 `lastTurnId`；消息级 Fork 必须发送对应非运行中 Turn ID，整任务 Fork 必须省略该字段。Client、Fastify、Core 与 Provider 必须使用同一边界语义，Web 不得提交 Assistant Item ID 冒充 Turn ID。
 - `turn/steer` Mutation 必须携带统一 `AgentPromptInput`、路径中的活动 `taskId + turnId`、Body 中匹配的 `taskId` 和 `Idempotency-Key`；Server 必须确认 Turn 仍在运行。Provider 映射固定使用 `expectedTurnId`，不得接受模型、思考量、审批或沙盒覆盖，并必须校验返回的 Turn ID。
 - `POST /v1/projects/:projectId/tasks`、`POST /v1/projects/:projectId/tasks/:taskId/turns` 和 Project 作用域内的 Turn Mutation 必须携带 `Idempotency-Key`，并使用统一错误码表达缺失 Key、冲突、资源不存在和 Provider 失败。
 - Pending Request 使用 `command_approval`、`file_change_approval`、`user_input` 判别联合；Provider 必须在映射 User Input 前严格校验原生 `isBlocking` 为布尔值，缺失或非法值不得进入 Pending 生命周期；命令审批将受管网络目标归一化为可空的 `networkAccess`，保留 Host 与协议；Snapshot 只返回未解决请求，实时链路使用 `pending_request.created`、`pending_request.resolved`、`pending_request.expired` 同步生命周期。

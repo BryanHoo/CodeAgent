@@ -2661,7 +2661,7 @@ describe("CodexAgentProvider", () => {
       status: "running",
     });
     await expect(provider.compactTask("task-1")).resolves.toBeUndefined();
-    await expect(provider.forkTask("task-1")).resolves.toMatchObject({ id: "task-2" });
+    await expect(provider.forkTask("task-1", "turn-1")).resolves.toMatchObject({ id: "task-2" });
     await expect(
       provider.uploadFeedback("task-1", {
         classification: "other",
@@ -2685,7 +2685,10 @@ describe("CodexAgentProvider", () => {
         },
       },
       { method: "thread/compact/start", params: { threadId: "task-1" } },
-      { method: "thread/fork", params: { threadId: "task-1" } },
+      {
+        method: "thread/fork",
+        params: { lastTurnId: "turn-1", threadId: "task-1" },
+      },
       {
         method: "feedback/upload",
         params: {

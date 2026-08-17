@@ -261,11 +261,13 @@ export function getMessageTimestamp(
 }
 
 export function MessageMetadata({
+  lastTurnId,
   modeLabel,
   onForkTask,
   text,
   timestamp,
 }: Readonly<{
+  lastTurnId?: string;
   modeLabel?: string;
   onForkTask?: ForkTaskAction;
   text: string;
@@ -290,14 +292,14 @@ export function MessageMetadata({
 
   const forkTask = () =>
     messageActionLockRef.current.run(async () => {
-      if (onForkTask === undefined) {
+      if (lastTurnId === undefined || onForkTask === undefined) {
         return;
       }
       forkIdempotencyKeyRef.current ??= createUuid();
       setForkPending(true);
       try {
         // 重试复用同一幂等键，避免响应丢失时重复创建任务。
-        await onForkTask(forkIdempotencyKeyRef.current);
+        await onForkTask(lastTurnId, forkIdempotencyKeyRef.current);
         notifyActionSuccess();
       } catch (error) {
         notifyActionError(error);
@@ -317,7 +319,7 @@ export function MessageMetadata({
       >
         <Copy className="size-3.5" aria-hidden="true" />
       </MessageAction>
-      {onForkTask === undefined ? null : (
+      {lastTurnId === undefined || onForkTask === undefined ? null : (
         <MessageAction
           disabled={forkPending}
           label={

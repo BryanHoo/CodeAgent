@@ -149,9 +149,12 @@ export function createComposerCommands({
             notifyActionSuccess(t("composer.compacting"));
           }
         } else {
-          const response = await client.forkTask(projectId, activeTaskId, {
-            idempotencyKey: attempt.key,
-          });
+          const response = await client.forkTask(
+            projectId,
+            activeTaskId,
+            {},
+            { idempotencyKey: attempt.key },
+          );
           onTaskStarted(response.task);
         }
         if (isCurrentScope(requestScope)) {

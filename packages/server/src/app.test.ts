@@ -3398,7 +3398,7 @@ describe("CodeAgent Server", () => {
     const fork = await app.inject({
       headers: { "idempotency-key": "fork-key" },
       method: "POST",
-      payload: {},
+      payload: { lastTurnId: "turn-1" },
       url: "/v1/projects/code-agent/tasks/task-1/fork",
     });
     const feedback = await app.inject({
@@ -3421,7 +3421,7 @@ describe("CodeAgent Server", () => {
     expect(compactTask).toHaveBeenCalledWith("task-1");
     expect(fork.statusCode).toBe(201);
     expect(fork.json()).toMatchObject({ task: { id: "task-2" } });
-    expect(forkTask).toHaveBeenCalledWith("task-1");
+    expect(forkTask).toHaveBeenCalledWith("task-1", "turn-1");
     expect(feedback.statusCode).toBe(200);
     expect(feedback.json()).toEqual({ status: "sent", taskId: "task-1" });
     expect(uploadFeedback).toHaveBeenCalledWith("task-1", {

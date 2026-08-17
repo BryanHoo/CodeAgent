@@ -274,7 +274,7 @@ export function registerTaskActionRoutes(app: FastifyInstance, context: ServerRo
           if (task?.projectId !== context.project.id) {
             throw new MutationHttpError("TASK_NOT_FOUND", "Task not found", 404);
           }
-          return context.provider.forkTask(request.params.taskId);
+          return context.provider.forkTask(request.params.taskId, request.body.lastTurnId);
         },
       );
       return reply.code(201).send({ task: forkedTask });

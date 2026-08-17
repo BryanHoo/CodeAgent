@@ -987,12 +987,13 @@ describe("TaskSnapshotTimeline", () => {
     }
   });
 
-  it("offers task copy only beside the latest completed AI reply", () => {
+  it("offers task copy beside every terminal AI reply", () => {
     const messageSnapshot: RuntimeTaskSnapshot = {
       ...snapshot,
       turns: [
         {
           ...completedTurn,
+          status: "interrupted",
           id: "turn-older",
           items: [
             {
@@ -1023,8 +1024,8 @@ describe("TaskSnapshotTimeline", () => {
     );
 
     expect(markup.match(/aria-label="复制消息"/g)).toHaveLength(2);
-    expect(markup.match(/aria-label="复制任务"/g)).toHaveLength(1);
-    expect(markup.indexOf('aria-label="复制任务"')).toBeGreaterThan(markup.indexOf("最新的回复。"));
+    expect(markup.match(/aria-label="复制任务"/g)).toHaveLength(2);
+    expect(markup.indexOf('aria-label="复制任务"')).toBeGreaterThan(markup.indexOf("较早的回复。"));
   });
 
   it("renders one fixed review request instead of native review prompts", () => {

@@ -83,7 +83,10 @@ export const CompactAgentTaskResponseSchema = Type.Object(
 );
 export type CompactAgentTaskResponse = Readonly<Static<typeof CompactAgentTaskResponseSchema>>;
 
-export const ForkAgentTaskRequestSchema = Type.Object({}, { additionalProperties: false });
+export const ForkAgentTaskRequestSchema = Type.Object(
+  { lastTurnId: Type.Optional(Type.String({ minLength: 1 })) },
+  { additionalProperties: false },
+);
 export type ForkAgentTaskRequest = Readonly<Static<typeof ForkAgentTaskRequestSchema>>;
 
 export const ForkAgentTaskResponseSchema = Type.Object(

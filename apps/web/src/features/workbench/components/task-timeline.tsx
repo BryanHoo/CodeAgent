@@ -13,6 +13,7 @@ import { createTaskStore } from "../../conversation/runtime/task-store.js";
 import type { TaskRuntimeView } from "../../conversation/runtime/use-task-runtime.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
 import type { PendingRequestResolution } from "./pending-request.js";
+import type { ForkTaskAction } from "./task-timeline-contracts.js";
 
 import { EmptyTimeline, TimelineState } from "./task-timeline-status.js";
 import { TurnProcessingTime } from "./task-timeline-status.js";
@@ -21,7 +22,6 @@ import { TaskStoreTimeline } from "./task-timeline-store.js";
 
 export { resolveMessageResponseRendering } from "./task-timeline-running.js";
 export { resolveCompletedTurnProcessItemIds } from "./task-timeline-process.js";
-type ForkTaskAction = (idempotencyKey: string) => Promise<void>;
 type BuildPlanAction = () => Promise<boolean>;
 
 type TaskTimelineCommonProps = Readonly<{

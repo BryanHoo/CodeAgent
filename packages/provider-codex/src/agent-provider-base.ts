@@ -268,10 +268,13 @@ export abstract class CodexAgentProviderBase {
     );
   }
 
-  public async forkTask(taskId: string): Promise<AgentTask> {
+  public async forkTask(taskId: string, lastTurnId?: string): Promise<AgentTask> {
     this.assertKnownProjectTask(taskId);
     const response = expectRecord(
-      await this.client.request("thread/fork", { threadId: taskId }),
+      await this.client.request("thread/fork", {
+        ...(lastTurnId === undefined ? {} : { lastTurnId }),
+        threadId: taskId,
+      }),
       "thread/fork response",
     );
     const task = await mapAgentTask(

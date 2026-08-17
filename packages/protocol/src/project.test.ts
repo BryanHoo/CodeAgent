@@ -1357,6 +1357,8 @@ describe("project protocol", () => {
       Value.Check(CompactAgentTaskResponseSchema, { status: "compacting", taskId: "task-1" }),
     ).toBe(true);
     expect(Value.Check(ForkAgentTaskRequestSchema, {})).toBe(true);
+    expect(Value.Check(ForkAgentTaskRequestSchema, { lastTurnId: "turn-1" })).toBe(true);
+    expect(Value.Check(ForkAgentTaskRequestSchema, { lastTurnId: "" })).toBe(false);
     expect(Value.Check(ForkAgentTaskResponseSchema, { task })).toBe(true);
     expect(Value.Check(PinAgentTaskRequestSchema, { pinned: true })).toBe(true);
     expect(Value.Check(PinAgentTaskRequestSchema, { pinned: true, taskId: "task-2" })).toBe(false);

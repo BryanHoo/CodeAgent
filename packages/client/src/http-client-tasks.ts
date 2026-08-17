@@ -30,6 +30,7 @@ import {
   type AgentTurnOptions,
   type ArchiveAgentTaskResponse,
   type CompactAgentTaskResponse,
+  type ForkAgentTaskRequest,
   type ForkAgentTaskResponse,
   type HostFileKind,
   type InterruptAgentTurnResponse,
@@ -248,11 +249,12 @@ export class TaskHttpClient extends ProjectHttpClient {
   public async forkTask(
     projectId: string,
     taskId: string,
+    input: ForkAgentTaskRequest,
     options: MutationOptions = {},
   ): Promise<ForkAgentTaskResponse> {
     return this.mutation(
       `${taskPath(projectId, taskId)}/fork`,
-      {},
+      input,
       ForkAgentTaskResponseSchema,
       options,
     );
