@@ -406,6 +406,8 @@ export function applyAcceptedEvent(
         ...(currentTurn === undefined
           ? {}
           : replaceTurnItems(state, event.turnId, items, changedItemStores)),
+        // Notice 仅描述当前流式运行过程；Turn 终态到达后由最终回复或错误承载结果。
+        notices: [],
         snapshotMetadata: {
           ...snapshotMetadata,
           status: completedTurn.status === "failed" ? "failed" : "idle",

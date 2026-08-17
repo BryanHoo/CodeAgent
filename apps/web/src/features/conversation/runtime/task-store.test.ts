@@ -285,6 +285,45 @@ describe("task store", () => {
     expect(store.getState().notices.at(-1)?.payload.message).toBe("警告 24");
   });
 
+  it("clears transient task notices when the active turn completes", () => {
+    const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
+    store.getState().applyEvents([
+      {
+        ...eventEnvelope(11),
+        payload: {
+          code: "runtime_warning",
+          level: "warning",
+          message: "Runtime warning during streaming",
+        },
+        type: "task.notice",
+      },
+      {
+        ...eventEnvelope(12),
+        payload: {
+          turn: {
+            completedAt: timestamp,
+            error: null,
+            id: "turn-running",
+            items: [
+              {
+                id: "message-running",
+                role: "assistant",
+                text: "已完成",
+                type: "message",
+              },
+            ],
+            startedAt: timestamp,
+            status: "completed",
+          },
+        },
+        turnId: "turn-running",
+        type: "turn.completed",
+      },
+    ]);
+
+    expect(store.getState().notices).toEqual([]);
+  });
+
   it("does not retain guardian warnings duplicated by approval review items", () => {
     const store = createTaskStore({ projectId: "project-1", taskId: "task-1" }, createResponse());
     store.getState().applyEvents([
