@@ -51,7 +51,7 @@ test("connects a custom API from the provider gate and reuses it in settings", a
   await page.getByRole("button", { exact: true, name: "连接" }).click();
 
   await expect(page).toHaveURL(/\/p\/code-agent$/u);
-  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  await page.getByRole("button", { exact: true, name: "设置" }).click();
   const dialog = page.getByRole("dialog", { name: "全局设置" });
   await dialog.getByRole("button", { name: "模型服务" }).click();
   await expect(dialog.getByRole("textbox", { name: "API Base URL" })).toHaveValue(
@@ -76,6 +76,44 @@ test("redirects the root route to the default project workbench @smoke", async (
   await expect(page.getByRole("main", { name: "任务时间线" })).toBeVisible();
 });
 
+test("opens the requested settings section and aligns the sidebar footer with the branch row", async ({
+  page,
+}) => {
+  await page.goto("/p/code-agent/t/task-1");
+
+  const sidebar = page.getByRole("complementary", { name: "项目侧栏" });
+  const settingsTrigger = sidebar.getByRole("button", { exact: true, name: "设置" });
+  const branchTrigger = page.getByRole("button", { name: /切换分支，当前分支/u });
+  const [settingsTextBox, branchTextBox] = await Promise.all([
+    settingsTrigger.getByText("设置", { exact: true }).boundingBox(),
+    branchTrigger.getByText("feat/review-targets", { exact: true }).boundingBox(),
+  ]);
+  expect(settingsTextBox).not.toBeNull();
+  expect(branchTextBox).not.toBeNull();
+  if (settingsTextBox === null || branchTextBox === null) {
+    throw new Error("设置或分支文字缺少布局边界");
+  }
+  expect(
+    Math.abs(
+      settingsTextBox.y + settingsTextBox.height / 2 - (branchTextBox.y + branchTextBox.height / 2),
+    ),
+  ).toBeLessThanOrEqual(1);
+
+  await settingsTrigger.click();
+  const dialog = page.getByRole("dialog", { name: "全局设置" });
+  await expect(dialog.getByRole("button", { name: "外观" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await dialog.getByRole("button", { name: "关闭全局设置" }).click();
+
+  await sidebar.getByRole("button", { name: /关于，CodeAgent .*终端连接状态/u }).click();
+  await expect(dialog.getByRole("button", { name: "关于" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+});
+
 test("edits global defaults in a dialog without overriding task settings", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
   const workbenchUrl = page.url();
@@ -84,7 +122,7 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(taskModel).toHaveAccessibleName("模型和思考量：GPT-5.6 Sol，高");
   await expect(taskApproval).toHaveValue("on-request");
 
-  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  await page.getByRole("button", { exact: true, name: "设置" }).click();
   const dialog = page.getByRole("dialog", { name: "全局设置" });
   await expect(dialog).toBeVisible();
   await expect(page).toHaveURL(workbenchUrl);
@@ -115,7 +153,7 @@ test("edits global defaults in a dialog without overriding task settings", async
   await expect(taskModel).toHaveAccessibleName("模型和思考量：GPT-5.6 Sol，高");
   await expect(taskApproval).toHaveValue("on-request");
 
-  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  await page.getByRole("button", { exact: true, name: "设置" }).click();
   const reopenedDialog = page.getByRole("dialog", { name: "全局设置" });
   await reopenedDialog.getByRole("button", { name: "外观" }).click();
   await expect(reopenedDialog.getByRole("button", { name: "深色模式" })).toHaveAttribute(
@@ -157,7 +195,7 @@ test("edits global defaults in a dialog without overriding task settings", async
 test("switches the interface language and restores it after reload", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
-  await page.getByRole("button", { name: /设置，CodeAgent .*终端连接状态/u }).click();
+  await page.getByRole("button", { exact: true, name: "设置" }).click();
   const chineseDialog = page.getByRole("dialog", { name: "全局设置" });
   await chineseDialog.getByRole("button", { name: "外观" }).click();
   await chineseDialog.getByRole("combobox", { name: "语言" }).selectOption("en");
@@ -177,9 +215,7 @@ test("switches the interface language and restores it after reload", async ({ pa
   await page.reload();
 
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await page
-    .getByRole("button", { name: /Settings, CodeAgent .*terminal connection status/u })
-    .click();
+  await page.getByRole("button", { exact: true, name: "Settings" }).click();
   await expect(page.getByRole("dialog", { name: "Global settings" })).toBeVisible();
 });
 
@@ -217,7 +253,7 @@ test("opens About from the sidebar and installs an available update", async ({ p
   await page.goto("/p/code-agent/t/task-1");
 
   const settingsButton = page.getByRole("button", {
-    name: /设置，CodeAgent 1\.3\.0，有可用更新，终端连接状态：在线/u,
+    name: /关于，CodeAgent 1\.3\.0，有可用更新，终端连接状态：在线/u,
   });
   await expect(settingsButton.locator(".text-warning")).toContainText("v1.3.0");
   await expect(settingsButton.locator(".lucide-circle-arrow-up")).toBeVisible();
@@ -342,6 +378,7 @@ test("opens the project from the center toolbar quick action", async ({ page }) 
   await expect(quickOpenMenuButton).toHaveCSS("width", "24px");
   await quickOpenButton.click();
   await expect.poll(() => openRequests).toEqual([{ appId: "zed" }]);
+  await expect(page.locator('[data-sonner-toast][data-type="success"]')).toHaveCount(0);
 
   await quickOpenMenuButton.click();
   const openMenu = page.getByRole("menu", { name: "选择打开方式" });
@@ -351,6 +388,7 @@ test("opens the project from the center toolbar quick action", async ({ page }) 
   await expect(finderMenuItem.locator("svg")).toHaveCSS("height", "16px");
   await finderMenuItem.click();
   await expect.poll(() => openRequests).toEqual([{ appId: "zed" }, { appId: "finder" }]);
+  await expect(page.locator('[data-sonner-toast][data-type="success"]')).toHaveCount(0);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(quickOpenButton).toBeVisible();

@@ -45,7 +45,7 @@ import {
 
 import { ProjectSidebarDialogs } from "./project-sidebar-dialogs.js";
 import { ProjectSidebarTaskList } from "./project-sidebar-task-list.js";
-import { SidebarSettingsButton } from "./project-sidebar-actions.js";
+import { SidebarSettingsButton, type SidebarSettingsSection } from "./project-sidebar-actions.js";
 import { groupTasksByProjectId } from "./project-sidebar-state.js";
 export * from "./project-sidebar-actions.js";
 export * from "./project-sidebar-state.js";
@@ -58,7 +58,7 @@ type ProjectSidebarProps = Readonly<{
   appInfo?: AppInfoResponse;
   connectionState: AgentEventConnectionState;
   onClose: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (section: SidebarSettingsSection) => void;
   projectId?: string;
   taskId?: string;
 }>;

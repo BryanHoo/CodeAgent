@@ -69,16 +69,30 @@ test("orders persistent search, task actions, pinned tasks and projects in the s
   const pinnedBox = await sidebar.getByRole("heading", { name: "已固定" }).boundingBox();
   const pinnedSection = sidebar.getByRole("heading", { name: "已固定" }).locator("xpath=..");
   const projectsBox = await sidebar.getByRole("heading", { name: "项目" }).boundingBox();
+  const temporaryGroupBox = await sidebar.getByRole("region", { name: "临时任务" }).boundingBox();
+  const firstProjectBox = await sidebar
+    .getByRole("button", { name: "切换项目 CodeAgent" })
+    .boundingBox();
   expect(newAgentBox).not.toBeNull();
   expect(searchBox).not.toBeNull();
   expect(pinnedBox).not.toBeNull();
   expect(projectsBox).not.toBeNull();
-  if (newAgentBox === null || searchBox === null || pinnedBox === null || projectsBox === null) {
+  expect(temporaryGroupBox).not.toBeNull();
+  expect(firstProjectBox).not.toBeNull();
+  if (
+    newAgentBox === null ||
+    searchBox === null ||
+    pinnedBox === null ||
+    projectsBox === null ||
+    temporaryGroupBox === null ||
+    firstProjectBox === null
+  ) {
     throw new Error("项目侧栏导航项缺失");
   }
   expect(searchBox.y).toBeLessThan(newAgentBox.y);
   expect(newAgentBox.y).toBeLessThan(pinnedBox.y);
   expect(pinnedBox.y).toBeLessThan(projectsBox.y);
+  expect(firstProjectBox.y - (temporaryGroupBox.y + temporaryGroupBox.height)).toBe(0);
   await expect(pinnedSection.getByRole("link", { name: /补充 Protocol 契约/u })).toBeVisible();
 });
 

@@ -358,7 +358,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
           {t("composer.modelListFailed")}
         </p>
       )}
-      <div className="mx-auto mt-1.5 flex w-full max-w-content min-w-0 items-center gap-3 px-1 text-caption text-muted-foreground">
+      <div className="mx-auto mt-1.5 flex h-9 w-full max-w-content min-w-0 items-center gap-3 px-1 text-caption text-muted-foreground">
         {props.projectToolsEnabled ? (
           <>
             <div className="flex min-w-0 shrink items-center gap-0.5">

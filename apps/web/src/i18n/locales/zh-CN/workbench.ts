@@ -280,7 +280,7 @@ export const workbench = {
       online: "在线",
       reconnecting: "正在重新连接",
     },
-    connectionSettings: "设置，CodeAgent {{version}}{{update}}，终端连接状态：{{status}}",
+    aboutStatus: "关于，CodeAgent {{version}}{{update}}，终端连接状态：{{status}}",
     createInProject: "在 {{project}} 中新建任务",
     errorAddProject: "无法添加项目",
     errorArchiveTask: "无法归档任务",

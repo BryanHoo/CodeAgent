@@ -40,6 +40,7 @@ import {
 } from "../../projects/project-queries.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
 import type { CommitChangesLauncherHandle } from "./commit-changes-launcher.js";
+import type { SidebarSettingsSection } from "./project-sidebar-actions.js";
 import { deriveProjectSidebarConnectionState } from "./project-sidebar.js";
 import { collectSubagents, type SubagentSelection } from "./subagent.js";
 import type {
@@ -149,6 +150,8 @@ export function useWorkbenchShellRuntime({
     projectOpenCapabilitiesQueryOptions(projectId, client, !temporary),
   );
   const projectPathOpenMutation = useMutation({
+    // 外部应用已经提供明确的成功反馈，仅保留失败 toast。
+    meta: { actionNotification: { successMessage: false } },
     mutationFn: ({
       appId,
       path,
@@ -156,6 +159,7 @@ export function useWorkbenchShellRuntime({
       client.openProject(projectId, path === undefined ? { appId } : { appId, path }),
   });
   const taskAttachmentOpenMutation = useMutation({
+    meta: { actionNotification: { successMessage: false } },
     mutationFn: ({ attachmentId, taskId }: Readonly<{ attachmentId: string; taskId: string }>) =>
       client.openTaskAttachment(projectId, taskId, attachmentId),
   });
@@ -278,7 +282,9 @@ export function useWorkbenchShellRuntime({
     taskId: string;
   }>();
   const [taskRenameOpen, setTaskRenameOpen] = useState(false);
-  const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+  const [globalSettingsSection, setGlobalSettingsSection] = useState<SidebarSettingsSection | null>(
+    null,
+  );
   const [gitHistoryOpen, setGitHistoryOpen] = useState(false);
   const [fileDiffSelection, setFileDiffSelection] = useState<{
     change: AgentFileChange;
@@ -388,7 +394,7 @@ export function useWorkbenchShellRuntime({
     gitStatusDetailsQuery,
     gitHistoryOpen,
     globalSettingsMutation,
-    globalSettingsOpen,
+    globalSettingsSection,
     globalSettingsQuery,
     handleNewChatSubmissionStateChange,
     inspectorOpen,
@@ -428,7 +434,7 @@ export function useWorkbenchShellRuntime({
     setFileDiffSelection,
     setFileReviewSelection,
     setFileTreeExpansion,
-    setGlobalSettingsOpen,
+    setGlobalSettingsSection,
     setGitHistoryOpen,
     setInspectorOpen,
     setInspectorTab,

@@ -2179,6 +2179,7 @@ test("generates a message and commits only selected files", async ({ page }) => 
   await packageCheckbox.check();
   await generateMessageButton.click();
   await expect(messageInput).toHaveValue("feat(git): 生成选中文件提交");
+  await expect(page.locator('[data-sonner-toast][data-type="success"]')).toHaveCount(0);
   await messageInput.fill("feat(git): 提交选中文件\n\n保留提交正文");
   const messageMetrics = await messageInput.evaluate((element) => ({
     clientHeight: element.clientHeight,

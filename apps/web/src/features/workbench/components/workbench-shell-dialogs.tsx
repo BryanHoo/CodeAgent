@@ -35,7 +35,7 @@ export function WorkbenchShellDialogs({
     gitStatusQuery,
     gitHistoryOpen,
     globalSettingsMutation,
-    globalSettingsOpen,
+    globalSettingsSection,
     globalSettingsQuery,
     models,
     modelsQuery,
@@ -51,7 +51,7 @@ export function WorkbenchShellDialogs({
     selectedSubagent,
     setFileDiffSelection,
     setFileReviewSelection,
-    setGlobalSettingsOpen,
+    setGlobalSettingsSection,
     setGitHistoryOpen,
     setSourceFileSelection,
     setSubagentDialogSelection,
@@ -138,7 +138,7 @@ export function WorkbenchShellDialogs({
           onRename={(nextTitle) => void renameActiveTask(nextTitle)}
         />
       ) : null}
-      {globalSettingsOpen ? (
+      {globalSettingsSection === null ? null : (
         <Suspense fallback={null}>
           <LazyGlobalSettingsDialog
             {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
@@ -155,14 +155,18 @@ export function WorkbenchShellDialogs({
               modelsQuery.isPending ||
               (projectToolsEnabled && projectOpenCapabilitiesQuery.isPending)
             }
-            initialSection="about"
+            initialSection={globalSettingsSection}
             isAppInfoPending={appInfoQuery.isPending}
             isAppUpdatePending={appUpdateMutation.isPending}
             models={models}
             onClose={() => {
-              setGlobalSettingsOpen(false);
+              const triggerId =
+                globalSettingsSection === "about"
+                  ? "#global-settings-about-trigger"
+                  : "#global-settings-trigger";
+              setGlobalSettingsSection(null);
               requestAnimationFrame(() => {
-                document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
+                document.querySelector<HTMLButtonElement>(triggerId)?.focus();
               });
             }}
             onLogoutAccess={access.logout}
@@ -183,7 +187,7 @@ export function WorkbenchShellDialogs({
               : { settings: globalSettingsQuery.data.settings })}
           />
         </Suspense>
-      ) : null}
+      )}
     </>
   );
 }

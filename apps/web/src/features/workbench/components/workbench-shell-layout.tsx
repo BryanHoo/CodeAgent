@@ -91,7 +91,7 @@ export function WorkbenchShellLayout({
     retry,
     runtime,
     setFileTreeExpansion,
-    setGlobalSettingsOpen,
+    setGlobalSettingsSection,
     setGitHistoryOpen,
     setInspectorOpen,
     setInspectorTab,
@@ -136,8 +136,8 @@ export function WorkbenchShellLayout({
         {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
         connectionState={sidebarConnectionState}
         onClose={closeSidebar}
-        onOpenSettings={() => {
-          setGlobalSettingsOpen(true);
+        onOpenSettings={(section) => {
+          setGlobalSettingsSection(section);
         }}
         projectId={projectId}
         {...(taskId === undefined && pendingTaskSelection?.projectId === projectId

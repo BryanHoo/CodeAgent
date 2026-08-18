@@ -280,8 +280,7 @@ export const workbench = {
       online: "Online",
       reconnecting: "Reconnecting",
     },
-    connectionSettings:
-      "Settings, CodeAgent {{version}}{{update}}, terminal connection status: {{status}}",
+    aboutStatus: "About, CodeAgent {{version}}{{update}}, terminal connection status: {{status}}",
     createInProject: "Create a task in {{project}}",
     errorAddProject: "Unable to add project",
     errorArchiveTask: "Unable to archive task",

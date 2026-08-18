@@ -14,7 +14,10 @@ import { loadGlobalSettingsDialog } from "../../features/settings/components/glo
 import { useTranslation } from "../../i18n/i18n.js";
 import { useAccess } from "../../features/access/access-context.js";
 import { RuntimeUnavailable } from "../../shared/components/core/runtime-unavailable.js";
-import { ProjectSidebar } from "../../features/workbench/components/project-sidebar.js";
+import {
+  ProjectSidebar,
+  type SidebarSettingsSection,
+} from "../../features/workbench/components/project-sidebar.js";
 import {
   getProjectSidebarPreferenceStorage,
   readExpandedProjectIds,
@@ -54,7 +57,9 @@ function IndexPage() {
       queryClient.setQueryData(["settings"], response);
     },
   });
-  const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+  const [globalSettingsSection, setGlobalSettingsSection] = useState<SidebarSettingsSection | null>(
+    null,
+  );
   const [initialSavedExpandedProjectIds] = useState(() =>
     readExpandedProjectIds(getProjectSidebarPreferenceStorage()),
   );
@@ -101,20 +106,20 @@ function IndexPage() {
         {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
         connectionState="connected"
         onClose={() => undefined}
-        onOpenSettings={() => {
-          setGlobalSettingsOpen(true);
+        onOpenSettings={(section) => {
+          setGlobalSettingsSection(section);
         }}
       />
       <main className="grid min-h-0 min-w-0 place-items-center bg-content text-sm text-muted-foreground">
         {t("app.noProjects")}
       </main>
-      {globalSettingsOpen ? (
+      {globalSettingsSection === null ? null : (
         <Suspense fallback={null}>
           <LazyGlobalSettingsDialog
             {...(access.status === undefined ? {} : { accessMode: access.status.mode })}
             {...(appInfoQuery.data === undefined ? {} : { appInfo: appInfoQuery.data })}
             appInfoError={appInfoQuery.error}
-            initialSection="about"
+            initialSection={globalSettingsSection}
             apps={[]}
             error={globalSettingsQuery.error ?? modelsQuery.error}
             isPending={globalSettingsQuery.isPending || modelsQuery.isPending}
@@ -122,9 +127,13 @@ function IndexPage() {
             isAppUpdatePending={appUpdateMutation.isPending}
             models={modelsQuery.data?.data ?? []}
             onClose={() => {
-              setGlobalSettingsOpen(false);
+              const triggerId =
+                globalSettingsSection === "about"
+                  ? "#global-settings-about-trigger"
+                  : "#global-settings-trigger";
+              setGlobalSettingsSection(null);
               requestAnimationFrame(() => {
-                document.querySelector<HTMLButtonElement>("#global-settings-trigger")?.focus();
+                document.querySelector<HTMLButtonElement>(triggerId)?.focus();
               });
             }}
             onLogoutAccess={access.logout}
@@ -139,7 +148,7 @@ function IndexPage() {
               : { settings: globalSettingsQuery.data.settings })}
           />
         </Suspense>
-      ) : null}
+      )}
     </div>
   );
 }

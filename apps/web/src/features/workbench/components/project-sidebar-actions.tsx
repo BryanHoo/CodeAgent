@@ -27,6 +27,8 @@ import {
 } from "../../../shared/components/core/tooltip.js";
 import { getProjectSidebarConnectionStatus } from "./project-sidebar-state.js";
 
+export type SidebarSettingsSection = "about" | "appearance";
+
 export function ProjectPickerButton({
   disabled,
   onOpen,
@@ -137,7 +139,7 @@ export function SidebarSettingsButton({
 }: Readonly<{
   appInfo?: AppInfoResponse;
   connectionState: AgentEventConnectionState;
-  onOpen: () => void;
+  onOpen: (section: SidebarSettingsSection) => void;
 }>) {
   const { t } = useTranslation("workbench");
   const connectionStatus = getProjectSidebarConnectionStatus(connectionState);
@@ -145,37 +147,52 @@ export function SidebarSettingsButton({
   const appVersion = appInfo?.appVersion ?? "…";
   const updateAvailable = appInfo?.updateAvailable === true;
   return (
-    <Button
-      variant="ghost"
-      aria-label={t("sidebar.connectionSettings", {
-        status: connectionStatusLabel,
-        update: updateAvailable ? t("sidebar.updateAvailableLabel") : "",
-        version: appVersion,
-      })}
-      className="flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body-small text-muted-foreground transition-colors hover:bg-control-hover hover:text-foreground"
-      contentAlign="start"
-      id="global-settings-trigger"
-      onClick={onOpen}
-      type="button"
-    >
-      <Settings className="size-4" aria-hidden="true" />
-      {t("sidebar.settings")}
-      <span aria-live="polite" className="ml-auto inline-flex items-center gap-1 text-caption">
-        <span className={updateAvailable ? "text-warning" : "text-muted-foreground"}>
-          {updateAvailable ? (
-            <CircleArrowUp aria-hidden="true" className="mr-1 inline size-3" />
-          ) : null}
-          v{appVersion}
+    <div className="flex h-9 w-full items-stretch text-body-small text-muted-foreground">
+      <Button
+        aria-label={t("sidebar.settings")}
+        className="h-full min-w-0 flex-1 gap-2.5 rounded-r-none px-2.5"
+        contentAlign="start"
+        id="global-settings-trigger"
+        onClick={() => {
+          onOpen("appearance");
+        }}
+        type="button"
+        variant="ghost"
+      >
+        <Settings className="size-4" aria-hidden="true" />
+        {t("sidebar.settings")}
+      </Button>
+      <Button
+        aria-label={t("sidebar.aboutStatus", {
+          status: connectionStatusLabel,
+          update: updateAvailable ? t("sidebar.updateAvailableLabel") : "",
+          version: appVersion,
+        })}
+        className="h-full gap-1 rounded-l-none px-2.5 text-caption"
+        id="global-settings-about-trigger"
+        onClick={() => {
+          onOpen("about");
+        }}
+        type="button"
+        variant="ghost"
+      >
+        <span aria-live="polite" className="inline-flex items-center gap-1">
+          <span className={updateAvailable ? "text-warning" : "text-muted-foreground"}>
+            {updateAvailable ? (
+              <CircleArrowUp aria-hidden="true" className="mr-1 inline size-3" />
+            ) : null}
+            v{appVersion}
+          </span>
+          <span aria-hidden="true" className="text-muted-foreground">
+            ·
+          </span>
+          <span className={`inline-flex items-center gap-1 ${connectionStatus.toneClassName}`}>
+            <ProjectSidebarConnectionIcon connectionState={connectionState} />
+            {connectionStatusLabel}
+          </span>
         </span>
-        <span aria-hidden="true" className="text-muted-foreground">
-          ·
-        </span>
-        <span className={`inline-flex items-center gap-1 ${connectionStatus.toneClassName}`}>
-          <ProjectSidebarConnectionIcon connectionState={connectionState} />
-          {connectionStatusLabel}
-        </span>
-      </span>
-    </Button>
+      </Button>
+    </div>
   );
 }
 

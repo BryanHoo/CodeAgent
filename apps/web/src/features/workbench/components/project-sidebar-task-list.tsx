@@ -179,7 +179,7 @@ export function ProjectSidebarTaskList({
             className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-3"
             data-testid="project-tree-scroll"
           >
-            <section className="mb-3 min-w-0" aria-labelledby="temporary-tasks-title">
+            <section className="min-w-0" aria-labelledby="temporary-tasks-title">
               <TemporaryTasksHeading
                 expanded={temporaryTasksExpanded}
                 onCreate={onOpenTemporaryDraft}

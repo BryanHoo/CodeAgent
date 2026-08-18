@@ -409,6 +409,8 @@ export function projectCommitMessageMutationOptions(
   client: Pick<CodeAgentClient, "generateCommitMessage"> = codeAgentClient,
 ) {
   return mutationOptions({
+    // 生成结果会直接回填提交信息，仅失败时需要额外通知。
+    meta: { actionNotification: { successMessage: false } },
     mutationFn: (request: GenerateCommitMessageRequest) =>
       client.generateCommitMessage(projectId, request),
     mutationKey: ["projects", projectId, "git", "commit-message"] as const,
