@@ -120,18 +120,10 @@ async function resolveDirectoryContext(projectRoot: string, directoryPath: strin
   const segments = parseDirectorySegments(directoryPath);
   let absoluteDirectory = resolvedProjectRoot;
   let relativeDirectory = "";
-  let ignoreScopes: readonly IgnoreScope[] = [];
-  const rootIgnoreScope = await readIgnoreScope(absoluteDirectory, relativeDirectory);
-  if (rootIgnoreScope !== undefined) {
-    ignoreScopes = [rootIgnoreScope];
-  }
 
   for (const segment of segments) {
     const nextRelativeDirectory = joinProjectPath(relativeDirectory, segment);
-    if (
-      ignoredDirectories.has(segment) ||
-      isIgnoredByScopes(nextRelativeDirectory, true, ignoreScopes)
-    ) {
+    if (ignoredDirectories.has(segment)) {
       throw new TypeError("Project file tree directory is not available");
     }
     const nextAbsoluteDirectory = resolve(absoluteDirectory, segment);
@@ -141,20 +133,16 @@ async function resolveDirectoryContext(projectRoot: string, directoryPath: strin
     }
     absoluteDirectory = nextAbsoluteDirectory;
     relativeDirectory = nextRelativeDirectory;
-    const localIgnoreScope = await readIgnoreScope(absoluteDirectory, relativeDirectory);
-    if (localIgnoreScope !== undefined) {
-      ignoreScopes = [...ignoreScopes, localIgnoreScope];
-    }
   }
 
-  return { absoluteDirectory, ignoreScopes, relativeDirectory };
+  return { absoluteDirectory, relativeDirectory };
 }
 
 export async function readProjectFileTree(
   projectRoot: string,
   directoryPath?: string,
 ): Promise<ProjectFileTree> {
-  const { absoluteDirectory, ignoreScopes, relativeDirectory } = await resolveDirectoryContext(
+  const { absoluteDirectory, relativeDirectory } = await resolveDirectoryContext(
     projectRoot,
     directoryPath,
   );
@@ -173,9 +161,6 @@ export async function readProjectFileTree(
       continue;
     }
     const path = joinProjectPath(relativeDirectory, child.name);
-    if (isIgnoredByScopes(path, type === "directory", ignoreScopes)) {
-      continue;
-    }
     entries.push({ path, type });
   }
 
@@ -211,6 +196,8 @@ export async function readProjectFileSearch(
 ): Promise<ProjectFileSearchPage> {
   const normalizedQuery = query.toLocaleLowerCase();
   const root = await resolveDirectoryContext(projectRoot, undefined);
+  const rootIgnoreScope = await readIgnoreScope(root.absoluteDirectory, root.relativeDirectory);
+  const rootIgnoreScopes = rootIgnoreScope === undefined ? [] : [rootIgnoreScope];
   const matches: RankedProjectFile[] = [];
 
   const addMatch = (entry: ProjectFileSearchEntry) => {
@@ -264,6 +251,6 @@ export async function readProjectFileSearch(
     }
   };
 
-  await visit(root.absoluteDirectory, root.relativeDirectory, root.ignoreScopes, 0);
+  await visit(root.absoluteDirectory, root.relativeDirectory, rootIgnoreScopes, 0);
   return { data: matches.map((match) => match.entry) };
 }

@@ -24,7 +24,7 @@
 - Git message 生成、commit 和 commit+push 使用独立严格 Mutation Schema 与 `Idempotency-Key`，请求携带同一 `expectedSnapshot` 和无重复的 Project 相对路径；响应必须区分未请求、已推送、推送失败和未配置 upstream，不能把 commit 后 push 失败归一化为整体失败。
 - Git 分支切换使用严格 `SwitchProjectBranchRequest` 与 `Idempotency-Key`，请求只携带本地分支精确名称和 `expectedSnapshot`，响应返回完整 `ProjectGitStatus`。Server 必须区分当前分支、分支不存在、状态冲突、只读仓库和执行失败，不得接受命令、远端引用或隐式创建分支。
 - Git 分支创建使用独立严格 `CreateProjectBranchRequest` 与 `Idempotency-Key`，请求只携带待创建的本地分支精确名称和 `expectedSnapshot`，响应返回创建后已切换分支的完整 `ProjectGitStatus`。Server 必须区分名称无效、分支已存在、状态冲突、只读仓库和执行失败，使用 Git 原生分支名规则终检，不得接受命令、路径或远端引用。
-- `ProjectFileTree` 必须返回目标 Project 相对目录 `path` 及其直接目录/文件条目，不包含 `truncated` 或条目数量上限；可选目录查询必须拒绝绝对路径、点路径、反斜杠和额外字段。Server 必须沿已注册 Project 根目录逐层应用任意层级的 `.gitignore`，不依赖根目录是否为 Git 仓库或是否存在根级规则；同时跳过符号链接、`.git`、`node_modules`、构建与覆盖率目录，并将目录深度限制为 `20` 层，Client 与 Fastify 必须使用同一严格 Schema。
+- `ProjectFileTree` 必须返回目标 Project 相对目录 `path` 及其直接目录/文件条目，不包含 `truncated` 或条目数量上限；可选目录查询必须拒绝绝对路径、点路径、反斜杠和额外字段。Server 不得使用 `.gitignore` 隐藏文件或目录，并必须允许查询被任意层级规则匹配的目录；同时跳过符号链接、`.git`、`node_modules`、构建与覆盖率目录，并将目录深度限制为 `20` 层。Project 文件搜索继续逐层应用 `.gitignore`，Client 与 Fastify 必须使用同一严格 Schema。
 - Project 文件名搜索使用严格 `ProjectFileSearchQuery`、`ProjectFileSearchPage` 和最多 `50` 项的 Project 相对普通文件结果；Protocol、Client、Fastify 与 Web 必须同步校验。Composer 必须把选择结果序列化为普通正文中的 `@<project-relative-path>`，使 start、steer、实时用户消息与 Codex 接收同一可见路径文本；`AgentPromptInput` 不提供独立文件引用字段，也不接受文件夹引用。
 - Project 排序使用携带 `Idempotency-Key` 的 `PUT /v1/projects/order`，请求必须包含无重复的完整 Project ID 集合；Server 校验集合后在 SQLite 事务中原子替换顺序，新注册 Project 追加到末尾。
 - Agent Event 保持版本字段、单调 `sequence` 和可判别事件类型。

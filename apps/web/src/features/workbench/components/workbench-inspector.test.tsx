@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
 import { TooltipProvider } from "../../../shared/components/core/tooltip.js";
-import { WorkbenchInspector, type ProjectFileTreeDirectoryState } from "./workbench-inspector.js";
+import { WorkbenchInspector } from "./workbench-inspector.js";
 
 function renderInspectorMarkup(children: ReactNode): string {
   return renderToStaticMarkup(
@@ -59,38 +59,6 @@ const nestedGitStatus = {
   ],
 };
 
-const fileTree = {
-  entries: [
-    { path: "src", type: "directory" as const },
-    { path: "README.md", type: "file" as const },
-  ],
-  path: null,
-};
-
-const fileTreeDirectories: readonly ProjectFileTreeDirectoryState[] = [
-  { data: fileTree, error: null, isFetching: false, isPending: false, path: null },
-  {
-    data: {
-      entries: [{ path: "src/components", type: "directory" as const }],
-      path: "src",
-    },
-    error: null,
-    isFetching: false,
-    isPending: false,
-    path: "src",
-  },
-  {
-    data: {
-      entries: [{ path: "src/components/app.tsx", type: "file" as const }],
-      path: "src/components",
-    },
-    error: null,
-    isFetching: false,
-    isPending: false,
-    path: "src/components",
-  },
-];
-
 const readyMcpServer = {
   authStatus: "oAuth",
   description: "Semantic repository search",
@@ -110,6 +78,18 @@ function readInspectorTabLabels(markup: string): string[] {
 }
 
 describe("WorkbenchInspector", () => {
+  it("mounts the headless project file tree in the project tab", () => {
+    const markup = renderInspectorMarkup(
+      <WorkbenchInspector
+        projectId="project-1"
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+      />,
+    );
+
+    expect(markup).toContain('data-project-file-tree=""');
+  });
+
   it("renders the latest task plan as a plain status-aware queue at the bottom of context", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
@@ -210,7 +190,6 @@ describe("WorkbenchInspector", () => {
   it("renders the uncommitted change summary in context and removes it from project", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
-        fileTreeDirectories={fileTreeDirectories}
         onOpenProjectFile={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
@@ -222,7 +201,6 @@ describe("WorkbenchInspector", () => {
     );
     const projectMarkup = renderInspectorMarkup(
       <WorkbenchInspector
-        fileTreeDirectories={fileTreeDirectories}
         gitStatus={lightweightGitStatus}
         gitStatusDetails={gitStatus}
         projectName="CodeAgent"
@@ -266,12 +244,8 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain(">历史</span></button>");
     expect(markup).toContain(">上下文</span></button>");
     expect(projectMarkup).toContain('aria-label="项目文件"');
-    expect(projectMarkup).toContain('aria-label="收起文件夹 CodeAgent"');
     expect(projectMarkup).toContain(">CodeAgent</span>");
-    expect(projectMarkup).toContain("src");
-    expect(projectMarkup).toContain('aria-label="展开文件夹 src"');
-    expect(projectMarkup).toContain("README.md");
-    expect(projectMarkup).not.toContain("components");
+    expect(projectMarkup).toContain('data-project-file-tree=""');
     expect(markup).not.toContain('aria-label="Git 变更文件"');
     expect(markup).not.toContain("未暂存");
     expect(markup).not.toContain("已暂存");
@@ -335,83 +309,11 @@ describe("WorkbenchInspector", () => {
     expect(commitButton).not.toContain(' disabled=""');
   });
 
-  it("renders loaded directory children only while their folders are expanded", () => {
-    const srcExpandedMarkup = renderInspectorMarkup(
-      <WorkbenchInspector
-        expandedFileTreePaths={new Set(["src"])}
-        fileTreeDirectories={fileTreeDirectories}
-        projectName="CodeAgent"
-        projectPath="/workspace/CodeAgent"
-      />,
-    );
-    const componentsExpandedMarkup = renderInspectorMarkup(
-      <WorkbenchInspector
-        expandedFileTreePaths={new Set(["src", "src/components"])}
-        fileTreeDirectories={fileTreeDirectories}
-        projectName="CodeAgent"
-        projectPath="/workspace/CodeAgent"
-      />,
-    );
-
-    expect(srcExpandedMarkup).toContain('aria-label="展开文件夹 components"');
-    expect(srcExpandedMarkup).not.toContain("app.tsx");
-    expect(componentsExpandedMarkup).toContain("app.tsx");
-  });
-
-  it("uses context-menu and hover action triggers for project files and folders", () => {
-    const markup = renderInspectorMarkup(
-      <WorkbenchInspector
-        fileTreeDirectories={fileTreeDirectories}
-        gitStatus={nestedGitStatus}
-        onRefreshProject={() => undefined}
-        projectName="CodeAgent"
-        projectOpenApps={[
-          { id: "zed", kind: "editor", name: "Zed" },
-          { id: "finder", kind: "file-manager", name: "Finder" },
-        ]}
-        projectPath="/workspace/CodeAgent"
-      />,
-    );
-
-    expect(markup.match(/data-slot="context-menu-trigger"/gu)).toHaveLength(3);
-    expect(markup.match(/data-slot="dropdown-menu-trigger"/gu)).toHaveLength(3);
-    expect(markup).toContain('aria-label="/workspace/CodeAgent 的操作"');
-    expect(markup).toContain('aria-label="刷新项目 CodeAgent"');
-    expect(markup).toContain("lucide-refresh-cw size-3.5");
-    expect(markup).toContain('aria-label="src 的操作"');
-    expect(markup).toContain('aria-label="README.md 的操作"');
-    expect(markup).toContain("group-hover/file-tree-node:opacity-100");
-    expect(markup).not.toContain("group-hover/file-tree-node:opacity-0");
-    expect(markup).toContain('role="treeitem"');
-    expect(markup).toContain('aria-label="收起文件夹 CodeAgent"');
-    expect(markup).toContain("README.md");
-    expect(markup).toContain("src");
-  });
-
-  it("keeps the project refresh action visible and disabled while refreshing", () => {
-    const markup = renderInspectorMarkup(
-      <WorkbenchInspector
-        fileTreeDirectories={fileTreeDirectories}
-        onRefreshProject={() => undefined}
-        projectName="CodeAgent"
-        projectPath="/workspace/CodeAgent"
-        projectRefreshing
-      />,
-    );
-    const refreshButton = /<button[^>]*aria-label="刷新项目 CodeAgent"[^>]*>/u.exec(markup)?.[0];
-
-    expect(refreshButton).toBeDefined();
-    expect(refreshButton).toContain('disabled=""');
-    expect(refreshButton).toContain("opacity-100");
-    expect(markup).toContain("animate-spin");
-  });
-
   it("shows only aggregate Git change stats in context", () => {
     const renderInspector = (expandedFileTreePaths: Set<string>) =>
       renderInspectorMarkup(
         <WorkbenchInspector
           expandedFileTreePaths={expandedFileTreePaths}
-          fileTreeDirectories={fileTreeDirectories}
           gitStatus={nestedGitStatus}
           projectName="CodeAgent"
           projectPath="/workspace/CodeAgent"
@@ -433,7 +335,6 @@ describe("WorkbenchInspector", () => {
   it("omits the uncommitted changes module when the working tree is clean", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
-        fileTreeDirectories={fileTreeDirectories}
         onOpenProjectFile={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
@@ -443,7 +344,6 @@ describe("WorkbenchInspector", () => {
     );
     const projectMarkup = renderInspectorMarkup(
       <WorkbenchInspector
-        fileTreeDirectories={fileTreeDirectories}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         tab="project"
@@ -455,7 +355,6 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain(">提交</button>");
     expect(markup).not.toContain(">项目文件</span>");
     expect(projectMarkup).toContain(">CodeAgent</span>");
-    expect(projectMarkup).toContain("README.md");
     expect(markup).not.toContain("workbench-shell.tsx");
     expect(markup).not.toContain('id="workbench-git-history"');
     expect(markup).not.toContain('aria-label="查看 Git 历史"');
@@ -464,7 +363,6 @@ describe("WorkbenchInspector", () => {
   it("shows a non-blocking retry status and offers a manual refresh after Git detection fails", () => {
     const projectMarkup = renderInspectorMarkup(
       <WorkbenchInspector
-        fileTreeDirectories={fileTreeDirectories}
         gitStatus={gitStatus}
         gitStatusError={new Error("not a git repository")}
         onOpenProjectFile={() => undefined}
@@ -489,35 +387,17 @@ describe("WorkbenchInspector", () => {
     expect(projectMarkup).toContain('aria-label="手动刷新 Git 变更"');
   });
 
-  it("renders project file tree root loading and error states", () => {
+  it("renders the project file tree root loading state", () => {
     const loadingMarkup = renderInspectorMarkup(
       <WorkbenchInspector
-        fileTreeDirectories={[{ error: null, isFetching: true, isPending: true, path: null }]}
         onOpenProjectFile={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
       />,
     );
-    const errorMarkup = renderInspectorMarkup(
-      <WorkbenchInspector
-        fileTreeDirectories={[
-          {
-            error: new Error("unavailable"),
-            isFetching: false,
-            isPending: false,
-            path: null,
-          },
-        ]}
-        onOpenProjectFile={() => undefined}
-        onRefreshFileTreeDirectory={() => undefined}
-        projectName="CodeAgent"
-        projectPath="/workspace/CodeAgent"
-      />,
-    );
-    expect(loadingMarkup).toContain("正在读取项目文件...");
-    expect(errorMarkup).toContain("无法读取项目文件");
-    expect(errorMarkup).toContain('aria-label="重新读取项目文件"');
-    expect(errorMarkup).not.toContain("仅显示前 2000 个条目");
+    expect(loadingMarkup).toContain('aria-label="正在读取项目文件..."');
+    expect(loadingMarkup).toContain("CodeAgent");
+    expect(loadingMarkup).toContain("animate-spin");
   });
 
   it("lists every subagent in context and exposes output dialog triggers", () => {

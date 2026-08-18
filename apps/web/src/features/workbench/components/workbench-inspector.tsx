@@ -9,26 +9,17 @@ import type {
   ProjectOpenAppId,
 } from "@code-agent/protocol";
 import { RefreshCw } from "lucide-react";
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useMemo } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
-import { FileTree, FileTreeFolder } from "../../../shared/components/agent/file-tree.js";
 import { Button } from "../../../shared/components/core/button.js";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
-import { ProjectOpenContextMenu } from "./project-open-menu.js";
 import type { SubagentContextEntry, SubagentSelection } from "./subagent.js";
-
-import {
-  ProjectFileTreeNodes,
-  ProjectFileTreeRootActions,
-  getProjectFileName,
-  type ProjectFileTreeDirectoryState,
-} from "./workbench-inspector-file-tree.js";
 import {
   BackgroundTerminalSection,
   McpServerSection,
@@ -42,13 +33,12 @@ import {
   WorkbenchInspectorHeader,
   type WorkbenchInspectorTab,
 } from "./workbench-inspector-tabs.js";
-import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
+import { codeAgentClient, type CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
+import { WorkbenchProjectFileTree } from "./workbench-project-file-tree.js";
 import {
   deriveWorkbenchInspectorActivation,
   getAvailableWorkbenchInspectorTabs,
 } from "../workbench-inspector-activation.js";
-
-export type { ProjectFileTreeDirectoryState } from "./workbench-inspector-file-tree.js";
 
 const emptyExpandedFileTreePaths = new Set<string>();
 const emptyFileChangesByPath = new Map<string, AgentFileChange>();
@@ -62,14 +52,12 @@ const LazyWorkbenchInspectorChanges = lazy(async () => {
   const module = await import("./workbench-inspector-changes.js");
   return { default: module.WorkbenchInspectorChanges };
 });
-
 type WorkbenchInspectorProps = Readonly<{
   backgroundTerminals?: readonly AgentBackgroundTerminal[];
   backgroundTerminalsError?: Error | null;
   backgroundTerminalsPending?: boolean;
   contextOnly?: boolean;
   expandedFileTreePaths?: Set<string>;
-  fileTreeDirectories?: readonly ProjectFileTreeDirectoryState[];
   gitStatus?: ProjectGitStatus;
   gitStatusDetails?: ProjectGitStatus | undefined;
   gitStatusDetailsError?: Error | null;
@@ -92,7 +80,6 @@ type WorkbenchInspectorProps = Readonly<{
   onReferenceProjectPath?: (entry: ProjectFileSearchEntry) => void;
   onOpenSubagent?: (selection: SubagentSelection) => void;
   onReloadMcpServers?: () => void;
-  onRefreshFileTreeDirectory?: (directoryPath: string | null) => void;
   onRefreshGitStatus?: () => void;
   onRefreshProject?: () => unknown;
   onCommitChanges?: () => void;
@@ -121,7 +108,6 @@ export function WorkbenchInspector({
   backgroundTerminalsPending = false,
   contextOnly = false,
   expandedFileTreePaths = emptyExpandedFileTreePaths,
-  fileTreeDirectories = [],
   gitStatus,
   gitStatusDetails,
   gitStatusDetailsError = null,
@@ -144,7 +130,6 @@ export function WorkbenchInspector({
   onReferenceProjectPath = () => undefined,
   onOpenSubagent = () => undefined,
   onReloadMcpServers = () => undefined,
-  onRefreshFileTreeDirectory = () => undefined,
   onRefreshGitStatus = () => undefined,
   onRefreshProject = () => undefined,
   onCommitChanges = () => undefined,
@@ -184,40 +169,7 @@ export function WorkbenchInspector({
           },
     [activeTab, gitStatus, gitStatusDetails],
   );
-  const [selectedTreePath, setSelectedTreePath] = useState<string>();
-  const [projectRootExpanded, setProjectRootExpanded] = useState(true);
-  const fileTreeDirectoryStates = useMemo<Map<string | null, ProjectFileTreeDirectoryState>>(
-    () =>
-      activeTab === "project"
-        ? new Map(fileTreeDirectories.map((state) => [state.path, state]))
-        : new Map<string | null, ProjectFileTreeDirectoryState>(),
-    [activeTab, fileTreeDirectories],
-  );
-  const rootFileTreeState = fileTreeDirectoryStates.get(null);
-  const projectFileName = getProjectFileName(projectPath);
-  const projectRootName = projectFileName === "" ? projectName : projectFileName;
-  const visibleExpandedFileTreePaths = useMemo(() => {
-    if (activeTab !== "project") return emptyExpandedFileTreePaths;
-    const paths = new Set(expandedFileTreePaths);
-    if (projectRootExpanded) {
-      paths.add(projectPath);
-    }
-    return paths;
-  }, [activeTab, expandedFileTreePaths, projectPath, projectRootExpanded]);
-  const filePaths = useMemo(
-    () =>
-      activeTab === "project"
-        ? new Set(
-            fileTreeDirectories.flatMap(
-              (state) =>
-                state.data?.entries
-                  .filter((entry) => entry.type === "file")
-                  .map((entry) => entry.path) ?? [],
-            ),
-          )
-        : new Set<string>(),
-    [activeTab, fileTreeDirectories],
-  );
+  const projectRootName = projectPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? projectName;
   const isGitProject = gitStatus !== undefined && gitStatus.repositoryMode !== "none";
   const contextContent = (
     <div className="h-full space-y-5 overflow-y-auto p-2.5">
@@ -315,126 +267,24 @@ export function WorkbenchInspector({
                   {i18n.t("inspector.gitLoading", { ns: "conversation" })}
                 </p>
               ) : null}
-              <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2.5">
-                {rootFileTreeState?.error !== null && rootFileTreeState?.error !== undefined ? (
-                  <div className="flex flex-col items-center px-2 py-5 text-center">
-                    <p className="text-label text-diff-removed">
-                      {i18n.t("inspector.projectFilesError", { ns: "conversation" })}
-                    </p>
-                    <Button
-                      variant="ghost"
-                      aria-label={i18n.t("inspector.refreshProjectFiles", {
-                        ns: "conversation",
-                      })}
-                      className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-control bg-control px-3 text-label font-medium text-foreground transition-colors hover:bg-raised disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={rootFileTreeState.isFetching}
-                      onClick={() => {
-                        onRefreshFileTreeDirectory(null);
-                      }}
-                      type="button"
-                    >
-                      <RefreshCw
-                        aria-hidden="true"
-                        className={`size-3.5 ${rootFileTreeState.isFetching ? "animate-spin" : ""}`}
-                      />
-                      {rootFileTreeState.isFetching
-                        ? i18n.t("inspector.reading", { ns: "conversation" })
-                        : i18n.t("inspector.refreshProjectFiles", { ns: "conversation" })}
-                    </Button>
-                  </div>
-                ) : rootFileTreeState?.isPending === true &&
-                  rootFileTreeState.data === undefined ? (
-                  <p className="px-2 py-5 text-center text-label text-muted-foreground">
-                    {i18n.t("inspector.projectFilesLoading", { ns: "conversation" })}
-                  </p>
-                ) : (rootFileTreeState?.data?.entries.length ?? 0) === 0 ? (
-                  <p className="px-2 py-5 text-center text-label text-muted-foreground">
-                    {i18n.t("inspector.projectFilesEmpty", { ns: "conversation" })}
-                  </p>
-                ) : (
-                  <FileTree
-                    aria-label={i18n.t("inspector.fileTree", { ns: "conversation" })}
-                    expanded={visibleExpandedFileTreePaths}
-                    onExpandedChange={(nextExpandedPaths) => {
-                      // 项目根节点仅用于界面分组，不能进入后端的相对目录查询集合。
-                      setProjectRootExpanded(nextExpandedPaths.has(projectPath));
-                      const directoryPaths = new Set(nextExpandedPaths);
-                      directoryPaths.delete(projectPath);
-                      onFileTreeExpandedChange(directoryPaths);
-                    }}
-                    onSelect={(path) => {
-                      if (path === projectPath) {
-                        return;
-                      }
-                      if (!filePaths.has(path)) {
-                        return;
-                      }
-                      setSelectedTreePath(path);
-                      const fileChange = fileChangesByPath.get(path);
-                      if (fileChange === undefined) {
-                        onOpenProjectFile(path);
-                      } else {
-                        onOpenFileDiff(fileChange);
-                      }
-                    }}
-                    {...(selectedTreePath === undefined ? {} : { selectedPath: selectedTreePath })}
-                  >
-                    <ProjectOpenContextMenu
-                      apps={projectOpenApps}
-                      isPending={projectOpenPending}
-                      onOpen={() => {
-                        setSelectedTreePath(projectPath);
-                      }}
-                      onReference={onReferenceProjectPath}
-                      onSelect={(appId) => {
-                        onOpenProjectPath(appId);
-                      }}
-                      target={{
-                        absolutePath: projectPath,
-                        path: projectPath,
-                        relativePath: ".",
-                        type: "directory",
-                      }}
-                    >
-                      <FileTreeFolder
-                        name={projectRootName}
-                        path={projectPath}
-                        trailing={
-                          <ProjectFileTreeRootActions
-                            onMenuOpen={() => {
-                              setSelectedTreePath(projectPath);
-                            }}
-                            onOpenProjectPath={(appId) => {
-                              onOpenProjectPath(appId);
-                            }}
-                            onReferenceProjectPath={onReferenceProjectPath}
-                            onRefreshProject={onRefreshProject}
-                            projectName={projectRootName}
-                            projectOpenApps={projectOpenApps}
-                            projectOpenPending={projectOpenPending}
-                            projectPath={projectPath}
-                            refreshing={projectRefreshing}
-                          />
-                        }
-                      >
-                        <ProjectFileTreeNodes
-                          directoryStates={fileTreeDirectoryStates}
-                          entries={rootFileTreeState?.data?.entries ?? []}
-                          onContextMenuOpen={(path) => {
-                            // 右键目标先进入文件树选中态，让菜单与当前操作对象保持一致。
-                            setSelectedTreePath(path);
-                          }}
-                          onOpenProjectPath={onOpenProjectPath}
-                          onReferenceProjectPath={onReferenceProjectPath}
-                          onRefreshDirectory={onRefreshFileTreeDirectory}
-                          projectOpenApps={projectOpenApps}
-                          projectOpenPending={projectOpenPending}
-                          projectPath={projectPath}
-                        />
-                      </FileTreeFolder>
-                    </ProjectOpenContextMenu>
-                  </FileTree>
-                )}
+              <div className="min-h-0 flex-1 px-2.5 pb-2.5">
+                <WorkbenchProjectFileTree
+                  client={gitClient ?? codeAgentClient}
+                  expandedPaths={expandedFileTreePaths}
+                  fileChangesByPath={fileChangesByPath}
+                  onExpandedPathsChange={onFileTreeExpandedChange}
+                  onOpenFileDiff={onOpenFileDiff}
+                  onOpenProjectFile={onOpenProjectFile}
+                  onOpenProjectPath={onOpenProjectPath}
+                  onReferenceProjectPath={onReferenceProjectPath}
+                  onRefreshProject={onRefreshProject}
+                  projectId={projectId ?? projectName}
+                  projectName={projectRootName}
+                  projectOpenApps={projectOpenApps}
+                  projectOpenPending={projectOpenPending}
+                  projectPath={projectPath}
+                  projectRefreshing={projectRefreshing}
+                />
               </div>
             </div>
           </div>

@@ -49,9 +49,6 @@ export function WorkbenchShellLayout({
     draftSettings,
     error,
     expandedFileTreePaths,
-    fileTreeDirectories,
-    fileTreeDirectoryPaths,
-    fileTreeQueries,
     gitStatusQuery,
     globalSettings,
     globalSettingsQuery,
@@ -390,7 +387,6 @@ export function WorkbenchShellLayout({
           backgroundTerminalsPending={backgroundTerminals.isPending}
           contextOnly={temporary}
           expandedFileTreePaths={expandedFileTreePaths}
-          fileTreeDirectories={fileTreeDirectories}
           gitStatusError={gitStatusQuery.error}
           gitStatusDetails={context.gitStatusDetailsQuery.data}
           gitStatusDetailsError={context.gitStatusDetailsQuery.error}
@@ -407,22 +403,7 @@ export function WorkbenchShellLayout({
           key={`${projectId}:${taskId ?? "draft"}`}
           onClose={closeInspector}
           onFileTreeExpandedChange={(nextExpandedPaths) => {
-            setFileTreeExpansion((current) => {
-              const previousPaths =
-                current.projectId === projectId ? current.paths : new Set<string>();
-              const collapsedPaths = [...previousPaths].filter(
-                (path) => !nextExpandedPaths.has(path),
-              );
-              return {
-                paths: new Set(
-                  [...nextExpandedPaths].filter(
-                    (path) =>
-                      !collapsedPaths.some((collapsedPath) => path.startsWith(`${collapsedPath}/`)),
-                  ),
-                ),
-                projectId,
-              };
-            });
+            setFileTreeExpansion({ paths: new Set(nextExpandedPaths), projectId });
           }}
           onReloadMcpServers={() => {
             mcpServersReloadMutation.mutate();
@@ -448,19 +429,10 @@ export function WorkbenchShellLayout({
           onRefreshGitStatus={() => {
             void refreshProjectGitStatus(projectId);
           }}
-          onRefreshProject={() =>
-            Promise.all([
-              refreshProjectGitStatus(projectId),
-              ...fileTreeQueries.map((query) => query.refetch()),
-            ])
-          }
+          onRefreshProject={() => refreshProjectGitStatus(projectId)}
           onCommitChanges={() => {
             setInspectorTab("changes");
             setInspectorOpen(true);
-          }}
-          onRefreshFileTreeDirectory={(directoryPath) => {
-            const directoryIndex = fileTreeDirectoryPaths.indexOf(directoryPath);
-            void fileTreeQueries[directoryIndex]?.refetch();
           }}
           onTerminateBackgroundTerminal={backgroundTerminals.terminateTerminal}
           onTabChange={setInspectorTab}

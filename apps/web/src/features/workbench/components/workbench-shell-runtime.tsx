@@ -6,7 +6,7 @@ import type {
   AgentTurn,
   ProjectOpenAppId,
 } from "@code-agent/protocol";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -31,7 +31,6 @@ import {
   modelsQueryOptions,
   projectDefaultsMutationOptions,
   projectDefaultsQueryOptions,
-  projectFileTreeQueryOptions,
   projectGitDetailedStatusQueryOptions,
   projectGitStatusQueryOptions,
   projectOpenCapabilitiesQueryOptions,
@@ -43,10 +42,7 @@ import type { SidebarSettingsSection } from "./project-sidebar-actions.js";
 import { deriveProjectSidebarConnectionState } from "./project-sidebar.js";
 import { getProjectFileManagerApp } from "./project-open-menu.js";
 import { collectSubagents, type SubagentSelection } from "./subagent.js";
-import type {
-  ProjectFileTreeDirectoryState,
-  WorkbenchInspectorTab,
-} from "./workbench-inspector.js";
+import type { WorkbenchInspectorTab } from "./workbench-inspector.js";
 import { deriveWorkbenchInspectorActivation } from "../workbench-inspector-activation.js";
 import { useWorkbenchPanelLayout } from "./workbench-panel-layout.js";
 
@@ -280,32 +276,6 @@ export function useWorkbenchShellRuntime({
     fileTreeExpansion.projectId === projectId
       ? fileTreeExpansion.paths
       : emptyExpandedFileTreePaths;
-  const fileTreeDirectoryPaths = useMemo<readonly (string | null)[]>(
-    () => [null, ...expandedFileTreePaths],
-    [expandedFileTreePaths],
-  );
-  const fileTreeQueries = useQueries({
-    queries: fileTreeDirectoryPaths.map((directoryPath) =>
-      projectFileTreeQueryOptions(
-        projectId,
-        directoryPath,
-        client,
-        !temporary && inspectorActivation.project,
-      ),
-    ),
-  });
-  const fileTreeDirectories: readonly ProjectFileTreeDirectoryState[] = fileTreeDirectoryPaths.map(
-    (path, index) => {
-      const query = fileTreeQueries[index];
-      return {
-        ...(query?.data === undefined ? {} : { data: query.data }),
-        error: query?.error ?? null,
-        isFetching: query?.isFetching ?? false,
-        isPending: query?.isPending ?? true,
-        path,
-      };
-    },
-  );
   const {
     beginSubmission: beginNewChatSubmission,
     getStartedAt: getNewChatSubmissionStartedAt,
@@ -413,9 +383,6 @@ export function useWorkbenchShellRuntime({
     expandedFileTreePaths,
     fileDiffSelection,
     fileReviewSelection,
-    fileTreeDirectories,
-    fileTreeDirectoryPaths,
-    fileTreeQueries,
     getNewChatSubmissionStartedAt,
     gitStatusQuery,
     gitStatusDetailsQuery,

@@ -42,7 +42,7 @@ const turn: Awaited<ReturnType<ComposerSubmissionOptions["client"]["startTurn"]>
 };
 
 function createHarness(overrides: Partial<ComposerSubmissionOptions> = {}) {
-  const promptContent = createPromptSkillContent("提交内容");
+  const promptContent = overrides.promptContent ?? createPromptSkillContent("提交内容");
   const setAttachments = vi.fn();
   const setIsSubmitting = vi.fn();
   const setMutationError = vi.fn();
@@ -138,7 +138,10 @@ function createHarness(overrides: Partial<ComposerSubmissionOptions> = {}) {
 
 describe("createComposerSubmission", () => {
   it("rejects an empty Goal objective before starting a mutation", async () => {
-    const harness = createHarness({ composerMode: "goal" });
+    const harness = createHarness({
+      composerMode: "goal",
+      promptContent: createPromptSkillContent("   "),
+    });
 
     const submitted = await harness.submit({ files: [], text: "   " });
 
@@ -155,6 +158,7 @@ describe("createComposerSubmission", () => {
       activeTaskId: "task-1",
       activeTurnId: "turn-1",
       canSteer: true,
+      promptContent: createPromptSkillContent("排队处理"),
       state: "running",
       taskId: "task-1",
     });
@@ -180,6 +184,7 @@ describe("createComposerSubmission", () => {
       canSteer: true,
       followUpBehavior: "steer",
       onSteerAccepted,
+      promptContent: createPromptSkillContent("补充失败测试"),
       state: "running",
       taskId: "task-1",
     });
@@ -226,5 +231,21 @@ describe("createComposerSubmission", () => {
       scope: "code-agent:draft",
       turnId: turn.id,
     });
+  });
+
+  it("submits the live multiline editor text when the form value is stale", async () => {
+    const harness = createHarness();
+    harness.skillEditor.getContent.mockReturnValue(createPromptSkillContent("第一行\n第二行"));
+
+    const submitted = await harness.submit({ files: [], text: "第一行" });
+
+    expect(submitted).toBe(true);
+    expect(harness.startTurn).toHaveBeenCalledWith(
+      "code-agent",
+      task.id,
+      { attachments: [], skills: [], text: "第一行\n第二行", type: "prompt" },
+      settings,
+      expect.any(Object),
+    );
   });
 });

@@ -137,7 +137,12 @@ export function createComposerSubmission({
     }> = {},
   ): Promise<boolean> => {
     const requestScope = routeScope;
-    const text = message.text.trim();
+    // 直接提交读取编辑器实时快照，避免 React 隐藏字段尚未提交时丢失 Windows 换行。
+    const livePromptSubmission =
+      promptSkills === undefined
+        ? toPromptSkillSubmission(skillEditorRef.current?.getContent() ?? promptContent)
+        : undefined;
+    const text = (livePromptSubmission?.text ?? message.text).trim();
     const requestedComposerMode =
       options.composerMode === null ? undefined : (options.composerMode ?? composerMode);
     if (requestedComposerMode === "goal" && (text.length === 0 || text.length > 4_000)) {
@@ -148,10 +153,7 @@ export function createComposerSubmission({
       );
       return false;
     }
-    const promptSubmission = toPromptSkillSubmission(
-      skillEditorRef.current?.getContent() ?? promptContent,
-    );
-    const skills = promptSkills ?? promptSubmission.skills;
+    const skills = promptSkills ?? livePromptSubmission?.skills ?? [];
     const hasInput = text !== "" || message.files.length > 0 || skills.length > 0;
     const action =
       options.forceAction ??

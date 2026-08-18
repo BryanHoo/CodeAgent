@@ -23,7 +23,30 @@ async function createTemporaryProject() {
 }
 
 describe("readProjectFileTree", () => {
-  it("applies nested gitignore rules when the project root is not a Git repository", async () => {
+  it("lists files and directories matched by gitignore rules", async () => {
+    const projectRoot = await createTemporaryProject();
+    await mkdir(join(projectRoot, "ignored-directory"));
+    await Promise.all([
+      writeFile(join(projectRoot, ".gitignore"), "ignored-directory/\n*.log\n"),
+      writeFile(join(projectRoot, "ignored-directory", "secret.txt"), "secret\n"),
+      writeFile(join(projectRoot, "debug.log"), "debug\n"),
+    ]);
+
+    await expect(readProjectFileTree(projectRoot)).resolves.toEqual({
+      entries: [
+        { path: "ignored-directory", type: "directory" },
+        { path: ".gitignore", type: "file" },
+        { path: "debug.log", type: "file" },
+      ],
+      path: null,
+    });
+    await expect(readProjectFileTree(projectRoot, "ignored-directory")).resolves.toEqual({
+      entries: [{ path: "ignored-directory/secret.txt", type: "file" }],
+      path: "ignored-directory",
+    });
+  });
+
+  it("lists entries matched by nested gitignore rules outside a Git repository", async () => {
     const projectRoot = await createTemporaryProject();
     await mkdir(join(projectRoot, "packages", "client", "generated"), { recursive: true });
     await Promise.all([
@@ -45,43 +68,12 @@ describe("readProjectFileTree", () => {
     });
     await expect(readProjectFileTree(projectRoot, "packages/client")).resolves.toEqual({
       entries: [
+        { path: "packages/client/generated", type: "directory" },
         { path: "packages/client/.gitignore", type: "file" },
+        { path: "packages/client/debug.log", type: "file" },
         { path: "packages/client/visible.ts", type: "file" },
       ],
       path: "packages/client",
-    });
-  });
-
-  it("omits files and directories ignored by root and nested gitignore rules", async () => {
-    const projectRoot = await createTemporaryProject();
-    await Promise.all([
-      mkdir(join(projectRoot, "ignored-directory")),
-      mkdir(join(projectRoot, "src", "generated"), { recursive: true }),
-    ]);
-    await Promise.all([
-      writeFile(join(projectRoot, ".gitignore"), "ignored-directory/\n*.log\n"),
-      writeFile(join(projectRoot, "ignored-directory", "secret.txt"), "secret\n"),
-      writeFile(join(projectRoot, "debug.log"), "debug\n"),
-      writeFile(join(projectRoot, "README.md"), "# Project\n"),
-      writeFile(join(projectRoot, "src", ".gitignore"), "generated/\n"),
-      writeFile(join(projectRoot, "src", "generated", "client.ts"), "export {};\n"),
-      writeFile(join(projectRoot, "src", "visible.ts"), "export {};\n"),
-    ]);
-
-    await expect(readProjectFileTree(projectRoot)).resolves.toEqual({
-      entries: [
-        { path: "src", type: "directory" },
-        { path: ".gitignore", type: "file" },
-        { path: "README.md", type: "file" },
-      ],
-      path: null,
-    });
-    await expect(readProjectFileTree(projectRoot, "src")).resolves.toEqual({
-      entries: [
-        { path: "src/.gitignore", type: "file" },
-        { path: "src/visible.ts", type: "file" },
-      ],
-      path: "src",
     });
   });
 

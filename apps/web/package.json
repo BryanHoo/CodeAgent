@@ -11,6 +11,8 @@
   "dependencies": {
     "@code-agent/client": "workspace:*",
     "@code-agent/protocol": "workspace:*",
+    "@headless-tree/core": "catalog:",
+    "@headless-tree/react": "catalog:",
     "@pierre/diffs": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",

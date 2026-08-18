@@ -134,7 +134,7 @@ describe("Web Bundle 预算门禁", () => {
       budgets: {
         initialGzipBytes: 280 * 1024,
         maxAsyncGzipBytes: 200 * 1024,
-        workbenchReadyGzipBytes: 340 * 1024,
+        workbenchReadyGzipBytes: 345 * 1024,
         workbenchReadyRequestCount: 20,
       },
       passed: true,

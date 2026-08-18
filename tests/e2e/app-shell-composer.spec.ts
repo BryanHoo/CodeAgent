@@ -1250,6 +1250,37 @@ test("project file tree opens changed, source, image, and system files by shared
   await expect(page.getByRole("dialog", { name: "100%完成 后续工作交接.pptx" })).toHaveCount(0);
 });
 
+test("project file tree virtualizes 10,000 files and keeps keyboard navigation usable", async ({
+  page,
+}) => {
+  await page.route("**/v1/projects/code-agent/files/tree*", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        entries: Array.from({ length: 10_000 }, (_, index) => ({
+          path: `file-${String(index).padStart(5, "0")}.ts`,
+          type: "file",
+        })),
+        path: null,
+      },
+    });
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
+  await inspector.getByRole("tab", { name: "项目" }).click();
+  const fileTree = inspector.getByRole("tree", { name: "项目文件" });
+  const root = fileTree.getByRole("treeitem", { name: "CodeAgent" });
+  await expect(root).toHaveAttribute("aria-expanded", "true");
+  await expect(fileTree.getByRole("treeitem", { name: "file-00000.ts" })).toBeVisible();
+  expect(await fileTree.getByRole("treeitem").count()).toBeLessThanOrEqual(40);
+
+  await root.focus();
+  await root.press("End");
+  await expect(fileTree.getByRole("treeitem", { name: "file-09999.ts" })).toBeFocused();
+  expect(await fileTree.getByRole("treeitem").count()).toBeLessThanOrEqual(40);
+});
+
 test("project file tree refresh, context menu, and ellipsis share target actions", async ({
   page,
 }) => {
@@ -1309,9 +1340,7 @@ test("project file tree refresh, context menu, and ellipsis share target actions
   await expect(rootRefresh).toHaveCSS("opacity", "1");
   await rootRefresh.click();
   await Promise.all([rootTreeRefreshRequest, gitRefreshRequest]);
-  await rootTreeItem
-    .getByRole("button", { exact: true, name: "CodeAgent" })
-    .click({ button: "right" });
+  await rootTreeItem.click({ button: "right" });
   const rootMenu = page.getByRole("menu", { name: "~/Develop/person/CodeAgent 的操作" });
   await expect(rootMenu.getByRole("menuitem", { name: "复制名称" })).toBeVisible();
   await expect(rootMenu.getByRole("menuitem", { name: "复制相对路径" })).toBeVisible();
@@ -1319,21 +1348,15 @@ test("project file tree refresh, context menu, and ellipsis share target actions
   await expect(rootMenu.getByRole("menuitem", { name: "引用" })).toHaveCount(0);
   await rootMenu.getByRole("menuitem", { name: "复制名称" }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("CodeAgent");
-  await rootTreeItem
-    .getByRole("button", { exact: true, name: "CodeAgent" })
-    .click({ button: "right" });
+  await rootTreeItem.click({ button: "right" });
   await rootMenu.getByRole("menuitem", { name: "复制相对路径" }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(".");
-  await rootTreeItem
-    .getByRole("button", { exact: true, name: "CodeAgent" })
-    .click({ button: "right" });
+  await rootTreeItem.click({ button: "right" });
   await rootMenu.getByRole("menuitem", { name: "复制绝对路径" }).click();
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toBe("~/Develop/person/CodeAgent");
-  await rootTreeItem
-    .getByRole("button", { exact: true, name: "CodeAgent" })
-    .click({ button: "right" });
+  await rootTreeItem.click({ button: "right" });
   await rootMenu.getByRole("menuitem", { name: "打开" }).click();
   await selectOpenApp("Finder");
   await rootRequest;
@@ -1348,16 +1371,7 @@ test("project file tree refresh, context menu, and ellipsis share target actions
   });
   const docsTreeItem = fileTree.getByRole("treeitem", { name: "docs" });
   const docsExpandButton = docsTreeItem.getByRole("button", { name: "展开文件夹 docs" });
-  const docsNameButton = docsTreeItem.getByRole("button", { exact: true, name: "docs" });
-  const [docsExpandBox, docsNameBox] = await Promise.all([
-    docsExpandButton.boundingBox(),
-    docsNameButton.boundingBox(),
-  ]);
-  expect(docsExpandBox).not.toBeNull();
-  expect(docsNameBox).not.toBeNull();
-  expect((docsNameBox?.x ?? 0) - ((docsExpandBox?.x ?? 0) + (docsExpandBox?.width ?? 0))).toBe(4);
-  await expect(docsNameButton).toHaveCSS("padding-left", "0px");
-  await expect(docsNameButton).toHaveCSS("padding-right", "0px");
+  await expect(docsExpandButton).toBeVisible();
   await docsTreeItem.click({ button: "right" });
   const folderMenu = page.getByRole("menu", { name: "docs 的操作" });
   await expect(folderMenu).toBeVisible();
@@ -1391,11 +1405,7 @@ test("project file tree refresh, context menu, and ellipsis share target actions
   const folderAction = docsTreeItem.getByRole("button", { name: "docs 的操作" });
   await expect(folderAction).toHaveClass(/opacity-0/u);
   await docsTreeItem.hover();
-  await expect(docsTreeItem.locator(":scope > div").first()).toHaveCSS(
-    "background-color",
-    "rgba(23, 23, 23, 0.075)",
-  );
-  await expect(docsNameButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(docsTreeItem).toHaveCSS("background-color", "rgba(23, 23, 23, 0.075)");
   await expect(folderAction).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(folderAction).toHaveCSS("opacity", "1");
   await folderAction.click();

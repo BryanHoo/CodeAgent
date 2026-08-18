@@ -21,6 +21,12 @@ catalogs:
     '@fastify/websocket':
       specifier: 11.3.0
       version: 11.3.0
+    '@headless-tree/core':
+      specifier: 1.7.0
+      version: 1.7.0
+    '@headless-tree/react':
+      specifier: 1.7.0
+      version: 1.7.0
     '@openai/codex':
       specifier: 0.147.0
       version: 0.147.0
@@ -251,6 +257,12 @@ importers:
       '@code-agent/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@headless-tree/core':
+        specifier: 'catalog:'
+        version: 1.7.0
+      '@headless-tree/react':
+        specifier: 'catalog:'
+        version: 1.7.0(@headless-tree/core@1.7.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@pierre/diffs':
         specifier: 'catalog:'
         version: 1.2.12(@shikijs/themes@4.3.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -774,6 +786,16 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
+
+  '@headless-tree/core@1.7.0':
+    resolution: {integrity: sha512-LxcX7LNepwfOPrZcs4PNfDwCzbi326uCAX5jYBfw94jI+pZQA7ANaE/No3LW0XFgcBcQtK/G2bInbVEhLF1C/Q==}
+
+  '@headless-tree/react@1.7.0':
+    resolution: {integrity: sha512-hcnG4mpTP98KVWZYqKsXNOoiv7ZQqZVM2jWwzEWtF+VDSz+1O/juMI+/Q0G4lZM+ez07/tmBBWjvZub/mLAUXQ==}
+    peerDependencies:
+      '@headless-tree/core': '*'
+      react: '*'
+      react-dom: '*'
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -5111,6 +5133,14 @@ snapshots:
       react-dom: 19.2.8(react@19.2.8)
 
   '@floating-ui/utils@0.2.12': {}
+
+  '@headless-tree/core@1.7.0': {}
+
+  '@headless-tree/react@1.7.0(@headless-tree/core@1.7.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      '@headless-tree/core': 1.7.0
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
 
   '@humanfs/core@0.19.2':
     dependencies:
