@@ -47,6 +47,7 @@ import type {
   ProjectFileTreeDirectoryState,
   WorkbenchInspectorTab,
 } from "./workbench-inspector.js";
+import { deriveWorkbenchInspectorActivation } from "../workbench-inspector-activation.js";
 import { useWorkbenchPanelLayout } from "./workbench-panel-layout.js";
 
 const emptyExpandedFileTreePaths = new Set<string>();
@@ -120,6 +121,35 @@ export function useWorkbenchShellRuntime({
   } = useProjectActions();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const {
+    inspectorMaximumWidth,
+    inspectorOpen,
+    inspectorWidth,
+    setInspectorOpen,
+    setInspectorWidth,
+    setSidebarOpen,
+    setSidebarWidth,
+    sidebarOpen,
+    sidebarWidth,
+    workbenchShellRef,
+  } = useWorkbenchPanelLayout();
+  const inspectorScopeKey = `${projectId}:${taskId ?? "draft"}`;
+  const defaultInspectorTab: WorkbenchInspectorTab = taskId === undefined ? "project" : "context";
+  const [inspectorTabState, setInspectorTabState] = useState<{
+    scopeKey: string;
+    tab: WorkbenchInspectorTab;
+  }>({ scopeKey: inspectorScopeKey, tab: defaultInspectorTab });
+  // 标签选择绑定当前路由身份；Task 首屏进入上下文，草稿页仍以项目浏览为主。
+  const inspectorTab =
+    inspectorTabState.scopeKey === inspectorScopeKey ? inspectorTabState.tab : defaultInspectorTab;
+  const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, client, !temporary));
+  const inspectorActivation = deriveWorkbenchInspectorActivation({
+    contextOnly: temporary,
+    gitStatus: gitStatusQuery.data,
+    inspectorOpen,
+    requestedTab: inspectorTab,
+    taskId,
+  });
   const appInfoQuery = useQuery(appInfoQueryOptions(client));
   const appUpdateMutation = useMutation({
     ...appUpdateMutationOptions(client),
@@ -128,7 +158,9 @@ export function useWorkbenchShellRuntime({
     },
   });
   const modelsQuery = useQuery(modelsQueryOptions(client));
-  const mcpServersQuery = useQuery(mcpServersQueryOptions(projectId, taskId, client));
+  const mcpServersQuery = useQuery(
+    mcpServersQueryOptions(projectId, taskId, client, inspectorActivation.context),
+  );
   const mcpServersReloadMutation = useMutation({
     ...mcpServersReloadMutationOptions(projectId, taskId, client),
     onSuccess(response) {
@@ -233,8 +265,13 @@ export function useWorkbenchShellRuntime({
   });
   const isTaskRunning =
     runtime.snapshot?.status === "running" || startingSnapshot?.status === "running";
-  const backgroundTerminals = useBackgroundTerminals(client, projectId, taskId, isTaskRunning);
-  const gitStatusQuery = useQuery(projectGitStatusQueryOptions(projectId, client, !temporary));
+  const backgroundTerminals = useBackgroundTerminals(
+    client,
+    projectId,
+    taskId,
+    isTaskRunning,
+    inspectorActivation.context,
+  );
   const [fileTreeExpansion, setFileTreeExpansion] = useState(() => ({
     paths: new Set<string>(),
     projectId,
@@ -249,7 +286,12 @@ export function useWorkbenchShellRuntime({
   );
   const fileTreeQueries = useQueries({
     queries: fileTreeDirectoryPaths.map((directoryPath) =>
-      projectFileTreeQueryOptions(projectId, directoryPath, client, !temporary),
+      projectFileTreeQueryOptions(
+        projectId,
+        directoryPath,
+        client,
+        !temporary && inspectorActivation.project,
+      ),
     ),
   });
   const fileTreeDirectories: readonly ProjectFileTreeDirectoryState[] = fileTreeDirectoryPaths.map(
@@ -264,24 +306,6 @@ export function useWorkbenchShellRuntime({
       };
     },
   );
-  const {
-    inspectorMaximumWidth,
-    inspectorOpen,
-    inspectorWidth,
-    setInspectorOpen,
-    setInspectorWidth,
-    setSidebarOpen,
-    setSidebarWidth,
-    sidebarOpen,
-    sidebarWidth,
-    workbenchShellRef,
-  } = useWorkbenchPanelLayout();
-  const inspectorScopeKey = `${projectId}:${taskId ?? "draft"}`;
-  const defaultInspectorTab: WorkbenchInspectorTab = taskId === undefined ? "project" : "context";
-  const [inspectorTabState, setInspectorTabState] = useState<{
-    scopeKey: string;
-    tab: WorkbenchInspectorTab;
-  }>({ scopeKey: inspectorScopeKey, tab: defaultInspectorTab });
   const {
     beginSubmission: beginNewChatSubmission,
     getStartedAt: getNewChatSubmissionStartedAt,
@@ -315,17 +339,15 @@ export function useWorkbenchShellRuntime({
     selection: SubagentSelection;
   } | null>(null);
 
-  // 标签选择绑定当前路由身份；Task 首屏进入上下文，草稿页仍以项目浏览为主。
-  const inspectorTab =
-    inspectorTabState.scopeKey === inspectorScopeKey ? inspectorTabState.tab : defaultInspectorTab;
   const gitStatusDetailsQuery = useQuery(
     projectGitDetailedStatusQueryOptions(
       projectId,
       null,
       gitStatusQuery.data?.snapshot ?? "",
       !temporary &&
-        inspectorOpen &&
-        (inspectorTab === "context" || inspectorTab === "project" || inspectorTab === "changes") &&
+        (inspectorActivation.context ||
+          inspectorActivation.project ||
+          inspectorActivation.changes) &&
         (gitStatusQuery.data?.staged.length ?? 0) + (gitStatusQuery.data?.unstaged.length ?? 0) > 0,
       client,
     ),

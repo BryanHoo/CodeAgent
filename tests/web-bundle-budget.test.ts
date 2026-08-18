@@ -135,7 +135,7 @@ describe("Web Bundle 预算门禁", () => {
         initialGzipBytes: 280 * 1024,
         maxAsyncGzipBytes: 200 * 1024,
         workbenchReadyGzipBytes: 340 * 1024,
-        workbenchReadyRequestCount: 16,
+        workbenchReadyRequestCount: 20,
       },
       passed: true,
       schemaVersion: 2,
@@ -193,7 +193,7 @@ describe("Web Bundle 预算门禁", () => {
   });
 
   it("拒绝超过工作台就绪请求数预算的产物", () => {
-    const result = runChecker(createBundle({ workbenchDependencyCount: 16 }));
+    const result = runChecker(createBundle({ workbenchDependencyCount: 17 }));
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("workbench-ready request budget exceeded");

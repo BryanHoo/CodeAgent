@@ -15,6 +15,15 @@ export function getBackgroundTerminalPollInterval(
   return isTaskRunning || terminalCount > 0 ? BACKGROUND_TERMINAL_POLL_INTERVAL_MS : false;
 }
 
+export function shouldRefreshBackgroundTerminals(
+  enabled: boolean,
+  previousTaskRunning: boolean,
+  isTaskRunning: boolean,
+  taskId: string | undefined,
+): boolean {
+  return enabled && taskId !== undefined && previousTaskRunning !== isTaskRunning;
+}
+
 export type BackgroundTerminalView = Readonly<{
   error: Error | null;
   isPending: boolean;
@@ -61,13 +70,19 @@ export function useBackgroundTerminals(
   const terminateTerminalMutation = terminateMutation.mutateAsync;
 
   useEffect(() => {
-    if (previousTaskRunningRef.current === isTaskRunning || taskId === undefined) {
+    const shouldRefresh = shouldRefreshBackgroundTerminals(
+      enabled,
+      previousTaskRunningRef.current,
+      isTaskRunning,
+      taskId,
+    );
+    previousTaskRunningRef.current = isTaskRunning;
+    if (!shouldRefresh) {
       return;
     }
-    previousTaskRunningRef.current = isTaskRunning;
     // Turn 终态到达时立即读取一次，不能把仍存活的后台终端随回复一起清除。
     void refetchTerminals();
-  }, [isTaskRunning, refetchTerminals, taskId]);
+  }, [enabled, isTaskRunning, refetchTerminals, taskId]);
 
   const terminateTerminal = useCallback(
     (terminalId: string) =>

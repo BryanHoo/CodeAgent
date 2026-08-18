@@ -9,7 +9,7 @@ import type {
   ProjectOpenAppId,
 } from "@code-agent/protocol";
 import { RefreshCw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
 import type { AgentFileChange } from "../../diff/file-change.js";
@@ -38,17 +38,30 @@ import { InspectorSources } from "./workbench-inspector-sources.js";
 import { PlanSection } from "./workbench-inspector-plan.js";
 import { deriveInspectorGitChangeState } from "./workbench-inspector-git-status.js";
 import { InspectorGitChangesSection } from "./workbench-inspector-git-changes.js";
-import { GitHistoryPanel } from "./git-history-panel.js";
-import { WorkbenchInspectorChanges } from "./workbench-inspector-changes.js";
 import {
   WorkbenchInspectorHeader,
   type WorkbenchInspectorTab,
 } from "./workbench-inspector-tabs.js";
 import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
+import {
+  deriveWorkbenchInspectorActivation,
+  getAvailableWorkbenchInspectorTabs,
+} from "../workbench-inspector-activation.js";
 
 export type { ProjectFileTreeDirectoryState } from "./workbench-inspector-file-tree.js";
 
 const emptyExpandedFileTreePaths = new Set<string>();
+const emptyFileChangesByPath = new Map<string, AgentFileChange>();
+
+// 次级 Git 面板只在用户首次选择对应标签时下载和执行。
+const LazyGitHistoryPanel = lazy(async () => {
+  const module = await import("./git-history-panel.js");
+  return { default: module.GitHistoryPanel };
+});
+const LazyWorkbenchInspectorChanges = lazy(async () => {
+  const module = await import("./workbench-inspector-changes.js");
+  return { default: module.WorkbenchInspectorChanges };
+});
 
 type WorkbenchInspectorProps = Readonly<{
   backgroundTerminals?: readonly AgentBackgroundTerminal[];
@@ -152,47 +165,60 @@ export function WorkbenchInspector({
   terminatingTerminalId = null,
 }: WorkbenchInspectorProps) {
   useTranslation("conversation");
+  const availableTabs = getAvailableWorkbenchInspectorTabs(taskId, gitStatus);
+  const { activeTab } = deriveWorkbenchInspectorActivation({
+    contextOnly,
+    gitStatus,
+    inspectorOpen: true,
+    requestedTab: tab,
+    taskId,
+  });
   const { changeStats, displayChanges, fileChangesByPath } = useMemo(
-    () => deriveInspectorGitChangeState(gitStatus, gitStatusDetails),
-    [gitStatus, gitStatusDetails],
+    () =>
+      activeTab === "context" || activeTab === "project"
+        ? deriveInspectorGitChangeState(gitStatus, gitStatusDetails)
+        : {
+            changeStats: undefined,
+            displayChanges: [],
+            fileChangesByPath: emptyFileChangesByPath,
+          },
+    [activeTab, gitStatus, gitStatusDetails],
   );
   const [selectedTreePath, setSelectedTreePath] = useState<string>();
   const [projectRootExpanded, setProjectRootExpanded] = useState(true);
-  const fileTreeDirectoryStates = useMemo(
-    () => new Map(fileTreeDirectories.map((state) => [state.path, state])),
-    [fileTreeDirectories],
+  const fileTreeDirectoryStates = useMemo<Map<string | null, ProjectFileTreeDirectoryState>>(
+    () =>
+      activeTab === "project"
+        ? new Map(fileTreeDirectories.map((state) => [state.path, state]))
+        : new Map<string | null, ProjectFileTreeDirectoryState>(),
+    [activeTab, fileTreeDirectories],
   );
   const rootFileTreeState = fileTreeDirectoryStates.get(null);
   const projectFileName = getProjectFileName(projectPath);
   const projectRootName = projectFileName === "" ? projectName : projectFileName;
   const visibleExpandedFileTreePaths = useMemo(() => {
+    if (activeTab !== "project") return emptyExpandedFileTreePaths;
     const paths = new Set(expandedFileTreePaths);
     if (projectRootExpanded) {
       paths.add(projectPath);
     }
     return paths;
-  }, [expandedFileTreePaths, projectPath, projectRootExpanded]);
+  }, [activeTab, expandedFileTreePaths, projectPath, projectRootExpanded]);
   const filePaths = useMemo(
     () =>
-      new Set(
-        fileTreeDirectories.flatMap(
-          (state) =>
-            state.data?.entries
-              .filter((entry) => entry.type === "file")
-              .map((entry) => entry.path) ?? [],
-        ),
-      ),
-    [fileTreeDirectories],
+      activeTab === "project"
+        ? new Set(
+            fileTreeDirectories.flatMap(
+              (state) =>
+                state.data?.entries
+                  .filter((entry) => entry.type === "file")
+                  .map((entry) => entry.path) ?? [],
+            ),
+          )
+        : new Set<string>(),
+    [activeTab, fileTreeDirectories],
   );
   const isGitProject = gitStatus !== undefined && gitStatus.repositoryMode !== "none";
-  const hasGitChanges = isGitProject && gitStatus.staged.length + gitStatus.unstaged.length > 0;
-  const availableTabs: WorkbenchInspectorTab[] = [];
-  // 标签只反映当前真实可用能力，并保持用户要求的固定扫描顺序。
-  if (taskId !== undefined) availableTabs.push("context");
-  availableTabs.push("project");
-  if (hasGitChanges) availableTabs.push("changes");
-  if (isGitProject) availableTabs.push("history");
-  const activeTab = contextOnly ? "context" : availableTabs.includes(tab) ? tab : "project";
   const contextContent = (
     <div className="h-full space-y-5 overflow-y-auto p-2.5">
       {isGitProject && displayChanges.length > 0 ? (
@@ -408,21 +434,25 @@ export function WorkbenchInspector({
             </div>
           </div>
         ) : activeTab === "changes" ? (
-          <WorkbenchInspectorChanges
-            client={gitClient}
-            detailsError={gitStatusDetailsError}
-            detailsPending={gitStatusDetailsPending}
-            detailsStatus={gitStatusDetails}
-            gitStatus={gitStatus}
-            gitStatusError={gitStatusError}
-            onOpenFileDiff={onOpenFileDiff}
-            projectId={projectId}
-          />
+          <Suspense fallback={null}>
+            <LazyWorkbenchInspectorChanges
+              client={gitClient}
+              detailsError={gitStatusDetailsError}
+              detailsPending={gitStatusDetailsPending}
+              detailsStatus={gitStatusDetails}
+              gitStatus={gitStatus}
+              gitStatusError={gitStatusError}
+              onOpenFileDiff={onOpenFileDiff}
+              projectId={projectId}
+            />
+          </Suspense>
         ) : activeTab === "history" && projectId !== undefined ? (
-          <GitHistoryPanel
-            {...(gitClient === undefined ? {} : { client: gitClient })}
-            projectId={projectId}
-          />
+          <Suspense fallback={null}>
+            <LazyGitHistoryPanel
+              {...(gitClient === undefined ? {} : { client: gitClient })}
+              projectId={projectId}
+            />
+          </Suspense>
         ) : (
           contextContent
         )}
