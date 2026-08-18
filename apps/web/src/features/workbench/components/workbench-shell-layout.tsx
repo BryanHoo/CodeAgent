@@ -117,10 +117,6 @@ export function WorkbenchShellLayout({
         notifyActionError(error instanceof Error ? error : new Error("Git diff is unavailable"));
       });
   };
-  const openGitHistory = () => {
-    setInspectorTab("history");
-    setInspectorOpen(true);
-  };
   return (
     <div
       className="workbench-shell h-full min-h-0 overflow-hidden bg-window"
@@ -309,7 +305,6 @@ export function WorkbenchShellLayout({
                 globalSettingsQuery.isPending
               }
               onSettingsChange={updateDraftSettings}
-              onOpenGitHistory={openGitHistory}
               onOpenProjectPath={openProjectFolder}
               onRequestNotificationPermission={requestNotificationPermission}
               onDirectSubmission={beginNewChatSubmission}
@@ -337,7 +332,6 @@ export function WorkbenchShellLayout({
             modelsError={modelsQuery.error}
             modelsPending={modelsQuery.isPending}
             onRequestNotificationPermission={requestNotificationPermission}
-            onOpenGitHistory={openGitHistory}
             onOpenProjectPath={openProjectFolder}
             onTaskStarted={handleTaskStarted}
             projectId={projectId}

@@ -277,10 +277,11 @@ export function useWorkbenchShellRuntime({
     workbenchShellRef,
   } = useWorkbenchPanelLayout();
   const inspectorScopeKey = `${projectId}:${taskId ?? "draft"}`;
+  const defaultInspectorTab: WorkbenchInspectorTab = taskId === undefined ? "project" : "context";
   const [inspectorTabState, setInspectorTabState] = useState<{
     scopeKey: string;
     tab: WorkbenchInspectorTab;
-  }>({ scopeKey: inspectorScopeKey, tab: "project" });
+  }>({ scopeKey: inspectorScopeKey, tab: defaultInspectorTab });
   const {
     beginSubmission: beginNewChatSubmission,
     getStartedAt: getNewChatSubmissionStartedAt,
@@ -314,9 +315,9 @@ export function useWorkbenchShellRuntime({
     selection: SubagentSelection;
   } | null>(null);
 
-  // 标签选择绑定当前路由身份；进入新建页或另一个 Task 时始终从项目页开始。
+  // 标签选择绑定当前路由身份；Task 首屏进入上下文，草稿页仍以项目浏览为主。
   const inspectorTab =
-    inspectorTabState.scopeKey === inspectorScopeKey ? inspectorTabState.tab : "project";
+    inspectorTabState.scopeKey === inspectorScopeKey ? inspectorTabState.tab : defaultInspectorTab;
   const gitStatusDetailsQuery = useQuery(
     projectGitDetailedStatusQueryOptions(
       projectId,
@@ -324,7 +325,7 @@ export function useWorkbenchShellRuntime({
       gitStatusQuery.data?.snapshot ?? "",
       !temporary &&
         inspectorOpen &&
-        (inspectorTab === "project" || inspectorTab === "changes") &&
+        (inspectorTab === "context" || inspectorTab === "project" || inspectorTab === "changes") &&
         (gitStatusQuery.data?.staged.length ?? 0) + (gitStatusQuery.data?.unstaged.length ?? 0) > 0,
       client,
     ),

@@ -77,7 +77,7 @@ test("creates and switches to a branch from the composer footer", async ({ page 
   });
 });
 
-test("opens current-branch Git history beside the composer branch", async ({ page }) => {
+test("opens current-branch Git history from the inspector tab", async ({ page }) => {
   const historyRequests: string[] = [];
   const commitFileRequests: string[] = [];
   const commitDiffRequests: string[] = [];
@@ -144,22 +144,13 @@ test("opens current-branch Git history beside the composer branch", async ({ pag
   await page.goto("/p/code-agent/t/task-1");
 
   const branchTrigger = page.getByRole("button", { name: /切换分支，当前分支/u });
-  const historyTrigger = page.getByRole("button", { name: "查看 Git 历史" });
-  await expect(historyTrigger).toBeVisible();
-  const branchBox = await branchTrigger.boundingBox();
-  const historyBox = await historyTrigger.boundingBox();
-  expect(historyBox?.x).toBeGreaterThan(branchBox?.x ?? 0);
-  expect(historyBox?.y).toBe(branchBox?.y);
-  expect(
-    (historyBox?.x ?? 0) - ((branchBox?.x ?? 0) + (branchBox?.width ?? 0)),
-  ).toBeLessThanOrEqual(4);
-  await expect(historyTrigger).toHaveCSS("height", "24px");
-  await expect(historyTrigger.locator("svg")).toHaveCSS("width", "12px");
+  const inspector = page.locator(".workbench-inspector");
+  const historyTab = inspector.getByRole("tab", { name: "历史" });
+  await expect(page.getByRole("button", { name: "查看 Git 历史" })).toHaveCount(0);
   await expect(branchTrigger.locator("svg").first()).toHaveCSS("width", "12px");
   expect(historyRequests).toEqual([]);
-  await historyTrigger.click();
+  await historyTab.click();
 
-  const inspector = page.locator(".workbench-inspector");
   await expect(inspector).toBeVisible();
   await expect(inspector).toHaveAttribute("aria-label", "运行环境");
   await expect(inspector.getByRole("tab", { name: "历史" })).toHaveAttribute(
@@ -221,7 +212,7 @@ test("opens current-branch Git history beside the composer branch", async ({ pag
 
   await inspector.getByRole("tab", { name: "项目" }).click();
   await expect(inspector.locator('[data-slot="git-history-panel"]')).toHaveCount(0);
-  await historyTrigger.click();
+  await historyTab.click();
   await expect(inspector.getByRole("tab", { name: "历史" })).toHaveAttribute(
     "aria-selected",
     "true",
@@ -229,7 +220,7 @@ test("opens current-branch Git history beside the composer branch", async ({ pag
 
   await page.setViewportSize({ width: 320, height: 568 });
   await expect(inspector).not.toBeVisible();
-  await historyTrigger.click();
+  await page.getByRole("button", { name: "展开上下文面板" }).click();
   await expect(inspector).toBeVisible();
   expect(await inspector.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
     true,
@@ -271,9 +262,8 @@ test("paginates a single repository inside the history content", async ({ page }
     });
   });
   await page.goto("/p/code-agent/t/task-1");
-  await page.getByRole("button", { name: "查看 Git 历史" }).click();
-
   const inspector = page.locator(".workbench-inspector");
+  await inspector.getByRole("tab", { name: "历史" }).click();
   const content = inspector.locator('[data-slot="git-history-content"]');
   const loadMore = content.getByRole("button", { name: "加载更多" });
   await expect(inspector.getByRole("tab", { name: "历史" })).toHaveAttribute(
@@ -1157,6 +1147,7 @@ test("project file tree opens changed, source, image, and system files by shared
   await page.goto("/p/code-agent/t/task-1");
 
   const inspector = page.getByRole("complementary", { name: "运行环境" });
+  await inspector.getByRole("tab", { name: "项目" }).click();
   const fileTree = inspector.getByRole("tree", { name: "项目文件" });
   await expect(fileTree).toBeVisible();
   await expect(fileTree.getByRole("treeitem", { name: "architecture-design.md" })).toHaveCount(0);
@@ -1234,6 +1225,7 @@ test("project file tree refresh, context menu, and ellipsis share target actions
   await page.goto("/p/code-agent/t/task-1");
 
   const inspector = page.getByRole("complementary", { name: "运行环境" });
+  await inspector.getByRole("tab", { name: "项目" }).click();
   const fileTree = inspector.getByRole("tree", { name: "项目文件" });
   const selectOpenApp = async (name: string) => {
     const item = page.getByRole("menuitem", { name });
@@ -1241,7 +1233,7 @@ test("project file tree refresh, context menu, and ellipsis share target actions
     await item.focus();
     await item.press("Enter");
   };
-  await expect(page.getByRole("button", { name: "在 Zed 中打开" })).toHaveCount(0);
+  await expect(fileTree.getByRole("button", { name: "在 Zed 中打开" })).toHaveCount(0);
 
   const rootRequest = page.waitForRequest((request) => {
     if (!/^\/v1\/projects\/code-agent\/open$/u.test(new URL(request.url()).pathname)) {
@@ -1645,7 +1637,9 @@ test("submits host attachments, approval policy, model, and reasoning effort thr
 
   await expect(prompt).toHaveAttribute("data-serialized-value", "");
   await expect(prompt.locator("[data-prompt-skill-id]")).toHaveCount(0);
-  await expect(page.getByText("screen.png", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("region", { name: "消息编辑器" }).getByText("screen.png", { exact: true }),
+  ).toHaveCount(0);
   await expect(page.locator('[data-message-skill="documentation-writer"]')).toBeVisible();
   expect(importRequest?.url).toMatch(/\/attachments\/image\/host$/u);
   expect(importRequest?.body).toEqual({ path: "/Users/bryan/Attachments/screen.png" });
@@ -1924,6 +1918,11 @@ test("opens file diffs and review from the timeline while keeping Inspector comm
   });
   await page.goto("/p/code-agent/t/task-1");
 
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
+  const contextTab = inspector.getByRole("tab", { name: "上下文" });
+  const projectTab = inspector.getByRole("tab", { name: "项目" });
+  await expect(contextTab).toHaveAttribute("aria-selected", "true");
+
   await expect(page.getByRole("region", { name: "本次修改了 2 个文件" })).toHaveCSS(
     "margin-top",
     "16px",
@@ -1938,14 +1937,22 @@ test("opens file diffs and review from the timeline while keeping Inspector comm
 
   const changedFiles = page.getByRole("region", { name: "本次修改了 2 个文件" });
   const timelineReviewButton = changedFiles.getByRole("button", { name: "审核", exact: true });
-  const commitButton = page.getByRole("button", { name: "提交 2 个未提交变更" });
-  const changeStats = page.getByLabel("变更统计");
+  const gitChanges = inspector.getByRole("region", { name: "未提交变更" });
+  const commitButton = gitChanges.getByRole("button", { name: "提交 2 个未提交变更" });
+  const changeStats = gitChanges.getByLabel("变更统计");
   await expect(page.getByRole("button", { name: "审核 2 个未提交变更" })).toHaveCount(0);
   await expect(commitButton).toHaveText("提交");
   await expect(changeStats).toHaveText("2 个变更+2-1");
+  await expect(gitChanges.getByRole("tree", { name: "变更文件导航" })).toHaveCount(0);
+  await expect(gitChanges.getByText("package.json", { exact: true })).toHaveCount(0);
+  await projectTab.click();
+  await expect(inspector.getByRole("region", { name: "未提交变更" })).toHaveCount(0);
   await expect(
-    page.getByRole("tree", { name: "项目文件" }).getByLabel("package.json，新增 1 行，删除 1 行"),
+    inspector
+      .getByRole("tree", { name: "项目文件" })
+      .getByLabel("package.json，新增 1 行，删除 1 行"),
   ).toHaveCount(0);
+  await contextTab.click();
   const [statsBox, commitBox] = await Promise.all([
     changeStats.boundingBox(),
     commitButton.boundingBox(),

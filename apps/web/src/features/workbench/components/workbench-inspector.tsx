@@ -37,11 +37,10 @@ import {
 import { InspectorSources } from "./workbench-inspector-sources.js";
 import { PlanSection } from "./workbench-inspector-plan.js";
 import { deriveInspectorGitChangeState } from "./workbench-inspector-git-status.js";
+import { InspectorGitChangesSection } from "./workbench-inspector-git-changes.js";
 import { GitHistoryPanel } from "./git-history-panel.js";
 import { WorkbenchInspectorChanges } from "./workbench-inspector-changes.js";
 import {
-  projectInspectorTabs,
-  taskInspectorTabs,
   WorkbenchInspectorHeader,
   type WorkbenchInspectorTab,
 } from "./workbench-inspector-tabs.js";
@@ -153,7 +152,7 @@ export function WorkbenchInspector({
   terminatingTerminalId = null,
 }: WorkbenchInspectorProps) {
   useTranslation("conversation");
-  const { allChanges, changeStats, fileChangesByPath } = useMemo(
+  const { changeStats, displayChanges, fileChangesByPath } = useMemo(
     () => deriveInspectorGitChangeState(gitStatus, gitStatusDetails),
     [gitStatus, gitStatusDetails],
   );
@@ -185,19 +184,24 @@ export function WorkbenchInspector({
       ),
     [fileTreeDirectories],
   );
-  const availableTabs = taskId === undefined ? projectInspectorTabs : taskInspectorTabs;
-  // 新建 Task 尚无持久化上下文，路由切换时将失效的上下文选择收敛回项目页。
-  const activeTab = contextOnly
-    ? "context"
-    : tab === "context" && taskId !== undefined
-      ? "context"
-      : tab === "changes"
-        ? "changes"
-        : tab === "history"
-          ? "history"
-          : "project";
+  const isGitProject = gitStatus !== undefined && gitStatus.repositoryMode !== "none";
+  const hasGitChanges = isGitProject && gitStatus.staged.length + gitStatus.unstaged.length > 0;
+  const availableTabs: WorkbenchInspectorTab[] = [];
+  // 标签只反映当前真实可用能力，并保持用户要求的固定扫描顺序。
+  if (taskId !== undefined) availableTabs.push("context");
+  availableTabs.push("project");
+  if (hasGitChanges) availableTabs.push("changes");
+  if (isGitProject) availableTabs.push("history");
+  const activeTab = contextOnly ? "context" : availableTabs.includes(tab) ? tab : "project";
   const contextContent = (
     <div className="h-full space-y-5 overflow-y-auto p-2.5">
+      {isGitProject && displayChanges.length > 0 ? (
+        <InspectorGitChangesSection
+          changeCount={displayChanges.length}
+          changeStats={changeStats}
+          onCommitChanges={onCommitChanges}
+        />
+      ) : null}
       {backgroundTerminals.length > 0 ||
       backgroundTerminalsPending ||
       backgroundTerminalsError !== null ? (
@@ -251,60 +255,6 @@ export function WorkbenchInspector({
       <div className="min-h-0 overflow-hidden" role={contextOnly ? undefined : "tabpanel"}>
         {activeTab === "project" ? (
           <div className="flex h-full min-h-0 flex-col">
-            {/* 工作区干净时省略整个摘要模块，把空间完整留给项目文件。 */}
-            {allChanges.length > 0 ? (
-              <div
-                aria-label={i18n.t("inspector.gitChangesAria", { ns: "conversation" })}
-                className="flex w-full items-center justify-between gap-2 px-2.5 pb-3 pt-2.5"
-                role="group"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-foreground">
-                    {i18n.t("inspector.gitChanges", { ns: "conversation" })}
-                  </p>
-                  <p
-                    aria-label={i18n.t("inspector.changeStats", { ns: "conversation" })}
-                    className="mt-0.5 flex items-center gap-1.5 text-caption text-muted-foreground"
-                  >
-                    <span>
-                      {i18n.t("inspector.gitChangesCount", {
-                        count: allChanges.length,
-                        ns: "conversation",
-                      })}
-                    </span>
-                    {changeStats === undefined ? null : (
-                      <>
-                        <span className="font-medium text-diff-added">
-                          +{changeStats.additions}
-                        </span>
-                        <span className="font-medium text-diff-removed">
-                          -{changeStats.removals}
-                        </span>
-                      </>
-                    )}
-                  </p>
-                </div>
-                <div
-                  aria-label={i18n.t("inspector.changeActions", { ns: "conversation" })}
-                  className="flex shrink-0 items-center justify-end gap-1.5"
-                  role="group"
-                >
-                  <Button
-                    variant="ghost"
-                    aria-label={i18n.t("inspector.commitChanges", {
-                      count: allChanges.length,
-                      ns: "conversation",
-                    })}
-                    className="h-7 shrink-0 rounded-control bg-control px-2.5 text-label font-medium text-foreground transition-colors hover:bg-control-hover focus-visible:shadow-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-control"
-                    id="workbench-commit-changes"
-                    onClick={onCommitChanges}
-                    type="button"
-                  >
-                    {i18n.t("inspector.commit", { ns: "conversation" })}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
             <div className="flex min-h-0 flex-1 flex-col">
               {gitStatusError !== null ? (
                 <div className="mx-2.5 mb-2 flex items-center gap-2 rounded-control bg-control px-2 py-2">

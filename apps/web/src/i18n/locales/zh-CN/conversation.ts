@@ -53,7 +53,6 @@ export const conversation = {
   },
   inspector: {
     attachmentDetail: "附件",
-    changeActions: "变更操作",
     changeStats: "变更统计",
     changes: "变更",
     commit: "提交",
@@ -62,7 +61,6 @@ export const conversation = {
     emptyFolder: "空文件夹",
     fileTree: "项目文件",
     gitChanges: "未提交变更",
-    gitChangesAria: "未提交变更摘要",
     gitChangesCount: "{{count}} 个变更",
     gitChangesRetrying: "Git 变更刷新失败，正在自动重试",
     gitLoading: "正在读取 Git 变更...",
@@ -96,7 +94,6 @@ export const conversation = {
     mcpToolCount: "{{count}} 个工具",
     mcpVersion: "版本 {{version}}",
     openFailed: "无法使用所选应用打开目标",
-    openGitHistory: "查看 Git 历史",
     plan: "计划",
     planStatus: {
       completed: "已完成",

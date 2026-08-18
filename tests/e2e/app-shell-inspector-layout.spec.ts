@@ -2,6 +2,7 @@ import {
   chooseHostAttachment,
   expect,
   parseRequestRecord,
+  projectGitStatus,
   projects,
   taskSnapshot,
   tasks,
@@ -10,7 +11,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test("keeps project selected until the user opens task context", async ({ page }) => {
+test("defaults task context and keeps user-controlled tab selection", async ({ page }) => {
   let snapshotRequestCount = 0;
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     snapshotRequestCount += 1;
@@ -38,21 +39,25 @@ test("keeps project selected until the user opens task context", async ({ page }
   const inspector = page.getByRole("complementary", { name: "运行环境" });
   const projectTab = inspector.getByRole("tab", { name: "项目" });
   const contextTab = inspector.getByRole("tab", { name: "上下文" });
-  await expect(projectTab).toHaveAttribute("aria-selected", "true");
-  const selectedStyle = await projectTab.evaluate((element) => {
+  await expect
+    .poll(() => inspector.locator('[role="tablist"]').first().getByRole("tab").allTextContents())
+    .toEqual(["上下文", "项目", "变更", "历史"]);
+  await expect(contextTab).toHaveCSS("height", "24px");
+  await expect(contextTab.locator("svg")).toHaveCSS("width", "14px");
+  await expect(contextTab).toHaveAttribute("aria-selected", "true");
+  const selectedStyle = await contextTab.evaluate((element) => {
     const style = getComputedStyle(element);
     return { backgroundColor: style.backgroundColor, color: style.color };
   });
-  await contextTab.hover();
+  await projectTab.hover();
   await expect
     .poll(() =>
-      contextTab.evaluate((element) => {
+      projectTab.evaluate((element) => {
         const style = getComputedStyle(element);
         return { backgroundColor: style.backgroundColor, color: style.color };
       }),
     )
     .toEqual(selectedStyle);
-  await contextTab.click();
   const plan = inspector.getByRole("region", { name: "计划" });
   await expect(plan).toBeVisible();
   await expect(plan.getByText("定义计划协议")).toBeVisible();
@@ -71,11 +76,45 @@ test("shows context only after a task has been created", async ({ page }) => {
   await expect(inspector.getByRole("tab", { name: "上下文" })).toHaveCount(0);
 
   await page.goto("/p/code-agent/t/task-1");
-  await expect(inspector.getByRole("tab", { name: "项目" })).toHaveAttribute(
+  await expect(inspector.getByRole("tab", { name: "上下文" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
-  await expect(inspector.getByRole("tab", { name: "上下文" })).toBeVisible();
+  await expect(inspector.getByRole("tab", { name: "项目" })).toBeVisible();
+});
+
+test("shows Git tabs only for repositories and pending changes", async ({ page }) => {
+  let detailedStatusRequestCount = 0;
+  let gitStatus: typeof projectGitStatus = {
+    ...projectGitStatus,
+    repositoryMode: "none",
+    staged: [],
+    unstaged: [],
+  };
+  await page.route("**/v1/projects/code-agent/git/status*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("includeDiff") === "true") {
+      detailedStatusRequestCount += 1;
+    }
+    await route.fulfill({ contentType: "application/json", json: gitStatus });
+  });
+
+  await page.goto("/p/code-agent");
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
+  const readTabs = () =>
+    inspector.locator('[role="tablist"]').first().getByRole("tab").allTextContents();
+  await expect.poll(readTabs).toEqual(["项目"]);
+
+  gitStatus = { ...projectGitStatus, staged: [], unstaged: [] };
+  await page.goto("/p/code-agent/t/task-1");
+  await expect.poll(readTabs).toEqual(["上下文", "项目", "历史"]);
+
+  gitStatus = { ...projectGitStatus };
+  await page.reload();
+  await expect.poll(readTabs).toEqual(["上下文", "项目", "变更", "历史"]);
+
+  detailedStatusRequestCount = 0;
+  await page.goto("/p/code-agent");
+  await expect.poll(() => detailedStatusRequestCount).toBeGreaterThan(0);
 });
 
 test("orders persistent search, task actions, pinned tasks and projects in the sidebar", async ({
@@ -923,9 +962,9 @@ test("resizes desktop workbench panels within bounds", async ({ page }) => {
 
   await expect(sidebarResizer).toHaveAttribute("aria-valuemin", "220");
   await expect(sidebarResizer).toHaveAttribute("aria-valuemax", "400");
-  await expect(inspectorResizer).toHaveAttribute("aria-valuemin", "260");
+  await expect(inspectorResizer).toHaveAttribute("aria-valuemin", "320");
   await expect(inspectorResizer).toHaveAttribute("aria-valuemax", "576");
-  expect((await inspector.boundingBox())?.width).toBe(288);
+  expect((await inspector.boundingBox())?.width).toBe(320);
 
   const sidebarResizerBox = await sidebarResizer.boundingBox();
   expect(sidebarResizerBox).not.toBeNull();
@@ -964,15 +1003,15 @@ test("resizes desktop workbench panels within bounds", async ({ page }) => {
   await page.mouse.down();
   await page.mouse.move(1400, 100);
   await page.mouse.up();
-  expect((await inspector.boundingBox())?.width).toBe(260);
+  expect((await inspector.boundingBox())?.width).toBe(320);
 });
 
-test("uses the original inspector default on laptop-sized screens", async ({ page }) => {
+test("uses the 320px inspector default on laptop-sized screens", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/p/code-agent/t/task-1");
 
   const inspector = page.getByRole("complementary", { name: "运行环境" });
-  expect((await inspector.boundingBox())?.width).toBe(288);
+  expect((await inspector.boundingBox())?.width).toBe(320);
   await expect(inspector.getByRole("heading", { name: "运行环境" })).toHaveCount(0);
   await expect(inspector.getByRole("tab", { name: "项目" })).toBeVisible();
   await expect(inspector.getByRole("tab", { name: "上下文" })).toBeVisible();

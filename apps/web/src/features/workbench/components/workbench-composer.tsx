@@ -56,7 +56,6 @@ export function WorkbenchComposer({
   modelsError,
   modelsPending,
   onDirectSubmission,
-  onOpenGitHistory,
   onOpenProjectPath,
   onRequestNotificationPermission,
   onSettingsChange,
@@ -392,7 +391,6 @@ export function WorkbenchComposer({
       onInterrupt={() => {
         void interruptTurn();
       }}
-      onOpenGitHistory={onOpenGitHistory}
       onOpenProjectPath={onOpenProjectPath}
       onOpenReviewBranches={() => {
         setActiveCommandIndex(0);

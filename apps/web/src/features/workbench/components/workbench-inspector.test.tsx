@@ -103,6 +103,12 @@ const readyMcpServer = {
   version: "1.2.0",
 } as const satisfies AgentMcpServer;
 
+function readInspectorTabLabels(markup: string): string[] {
+  return [...markup.matchAll(/role="tab"[^>]*>.*?<span>([^<]+)<\/span><\/button>/gsu)].map(
+    (match) => match[1] ?? "",
+  );
+}
+
 describe("WorkbenchInspector", () => {
   it("renders the latest task plan as a plain status-aware queue at the bottom of context", () => {
     const markup = renderInspectorMarkup(
@@ -201,7 +207,7 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain("pnpm dev");
   });
 
-  it("integrates inline change stats with the commit action", () => {
+  it("renders the uncommitted change summary in context and removes it from project", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
@@ -210,22 +216,36 @@ describe("WorkbenchInspector", () => {
         projectPath="/workspace/CodeAgent"
         gitStatus={lightweightGitStatus}
         gitStatusDetails={gitStatus}
+        tab="context"
+        taskId="task-1"
+      />,
+    );
+    const projectMarkup = renderInspectorMarkup(
+      <WorkbenchInspector
+        fileTreeDirectories={fileTreeDirectories}
+        gitStatus={lightweightGitStatus}
+        gitStatusDetails={gitStatus}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        tab="project"
+        taskId="task-1"
       />,
     );
 
     expect(markup).toContain("2 个变更");
-    expect(markup).toContain('aria-label="未提交变更摘要"');
+    expect(markup).toContain('aria-label="未提交变更"');
     expect(markup).toContain('aria-label="变更统计"');
-    expect(markup).toContain('aria-label="变更操作"');
-    expect(markup).not.toContain('aria-label="审核 2 个未提交变更"');
     expect(markup).toContain('aria-label="提交 2 个未提交变更"');
-    expect(markup).not.toContain('aria-haspopup="dialog"');
-    expect(markup).not.toContain(">审核</button>");
     expect(markup).toContain(">提交</button>");
     expect(markup).toMatch(
       /aria-label="变更统计"[^>]*><span>2 个变更<\/span><span[^>]*>\+3<\/span><span[^>]*>-1<\/span>/u,
     );
-    expect(markup).toMatch(/<button[^>]*bg-control[^>]*aria-label="提交 2 个未提交变更"/u);
+    expect(markup).not.toContain('aria-label="变更文件导航"');
+    expect(markup).not.toContain('aria-label="package.json，新增 2 行，删除 1 行"');
+    expect(markup).not.toContain('aria-label="new-file.ts，新增 1 行，删除 0 行"');
+    expect(projectMarkup).not.toContain('aria-label="未提交变更"');
+    expect(projectMarkup).not.toContain('aria-label="变更统计"');
+    expect(projectMarkup).not.toContain('aria-label="提交 2 个未提交变更"');
     expect(markup).not.toContain("bg-brand");
     expect(markup).toContain('aria-label="运行环境"');
     expect(markup).not.toContain(">运行环境</h2>");
@@ -236,19 +256,19 @@ describe("WorkbenchInspector", () => {
     expect(selectedTabClassName?.split(" ")).toContain("bg-control-hover");
     expect(selectedTabClassName?.split(" ")).toContain("text-foreground");
     expect(markup).not.toContain("shadow-toolbar");
-    expect(markup).toContain("lucide-folder-tree");
+    expect(markup).toContain("lucide-braces");
+    expect(projectMarkup).toContain("lucide-folder-tree");
     expect(markup).toContain(">项目</span></button>");
     expect(markup).toContain(">变更</span></button>");
     expect(markup).toContain(">历史</span></button>");
-    expect(markup).not.toContain(">上下文</span></button>");
-    expect(markup).toContain('aria-label="项目文件"');
-    expect(markup).toContain('role="tree"');
-    expect(markup).toContain('aria-label="收起文件夹 CodeAgent"');
-    expect(markup).toContain(">CodeAgent</span>");
-    expect(markup).toContain("src");
-    expect(markup).toContain('aria-label="展开文件夹 src"');
-    expect(markup).toContain("README.md");
-    expect(markup).not.toContain("components");
+    expect(markup).toContain(">上下文</span></button>");
+    expect(projectMarkup).toContain('aria-label="项目文件"');
+    expect(projectMarkup).toContain('aria-label="收起文件夹 CodeAgent"');
+    expect(projectMarkup).toContain(">CodeAgent</span>");
+    expect(projectMarkup).toContain("src");
+    expect(projectMarkup).toContain('aria-label="展开文件夹 src"');
+    expect(projectMarkup).toContain("README.md");
+    expect(projectMarkup).not.toContain("components");
     expect(markup).not.toContain('aria-label="Git 变更文件"');
     expect(markup).not.toContain("未暂存");
     expect(markup).not.toContain("已暂存");
@@ -256,20 +276,44 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain(">项目文件</span>");
   });
 
-  it("shows the context tab only after a task exists", () => {
+  it("orders tabs by context, project, changes and history when all are available", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
+        gitStatus={lightweightGitStatus}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         taskId="task-1"
       />,
     );
 
-    expect(markup).toContain(">项目</span></button>");
-    expect(markup).toContain(">变更</span></button>");
-    expect(markup).toContain(">上下文</span></button>");
-    expect(markup).toContain(">历史</span></button>");
+    expect(readInspectorTabLabels(markup)).toEqual(["上下文", "项目", "变更", "历史"]);
     expect(markup).toContain("lucide-braces");
+    expect(markup).toContain('data-size="toolbar"');
+  });
+
+  it("shows Git tabs only for repositories and hides changes for a clean worktree", () => {
+    const cleanGitStatus = { ...gitStatus, staged: [], unstaged: [] };
+    const cleanMarkup = renderInspectorMarkup(
+      <WorkbenchInspector
+        gitStatus={cleanGitStatus}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        tab="changes"
+        taskId="task-1"
+      />,
+    );
+    const nonGitMarkup = renderInspectorMarkup(
+      <WorkbenchInspector
+        gitStatus={{ ...cleanGitStatus, repositoryMode: "none" }}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        taskId="task-1"
+      />,
+    );
+
+    expect(readInspectorTabLabels(cleanMarkup)).toEqual(["上下文", "项目", "历史"]);
+    expect(cleanMarkup).toMatch(/aria-selected="true"[^>]*>.*?<span>项目<\/span>/su);
+    expect(readInspectorTabLabels(nonGitMarkup)).toEqual(["上下文", "项目"]);
   });
 
   it("shows the commit entry for immediate child Git repositories", () => {
@@ -278,6 +322,8 @@ describe("WorkbenchInspector", () => {
         gitStatus={{ ...gitStatus, repositoryMode: "children" }}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
+        tab="context"
+        taskId="task-1"
       />,
     );
     const commitButton = /<button[^>]*id="workbench-commit-changes"[^>]*>/u.exec(markup)?.[0];
@@ -357,7 +403,7 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain("animate-spin");
   });
 
-  it("shows Git change stats only in the top summary module", () => {
+  it("shows only aggregate Git change stats in context", () => {
     const renderInspector = (expandedFileTreePaths: Set<string>) =>
       renderInspectorMarkup(
         <WorkbenchInspector
@@ -366,6 +412,8 @@ describe("WorkbenchInspector", () => {
           gitStatus={nestedGitStatus}
           projectName="CodeAgent"
           projectPath="/workspace/CodeAgent"
+          tab="context"
+          taskId="task-1"
         />,
       );
 
@@ -375,9 +423,8 @@ describe("WorkbenchInspector", () => {
       /aria-label="变更统计"[^>]*><span>1 个变更<\/span><span[^>]*>\+2<\/span><span[^>]*>-1<\/span>/u,
     );
     expect(fileVisibleMarkup).not.toContain("后代新增");
-    expect(fileVisibleMarkup).not.toContain(
-      'aria-label="src/components/app.tsx，新增 2 行，删除 1 行"',
-    );
+    expect(fileVisibleMarkup).not.toContain('aria-label="变更文件导航"');
+    expect(fileVisibleMarkup).not.toContain("src/components/app.tsx");
   });
 
   it("omits the uncommitted changes module when the working tree is clean", () => {
@@ -387,23 +434,32 @@ describe("WorkbenchInspector", () => {
         onOpenProjectFile={() => undefined}
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
+        tab="context"
+        taskId="task-1"
+      />,
+    );
+    const projectMarkup = renderInspectorMarkup(
+      <WorkbenchInspector
+        fileTreeDirectories={fileTreeDirectories}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        tab="project"
       />,
     );
 
-    expect(markup).not.toContain('aria-label="未提交变更摘要"');
-    expect(markup).not.toContain('aria-label="变更操作"');
+    expect(markup).not.toContain('aria-label="未提交变更"');
     expect(markup).not.toContain(">审核</button>");
     expect(markup).not.toContain(">提交</button>");
     expect(markup).not.toContain(">项目文件</span>");
-    expect(markup).toContain(">CodeAgent</span>");
-    expect(markup).toContain("README.md");
+    expect(projectMarkup).toContain(">CodeAgent</span>");
+    expect(projectMarkup).toContain("README.md");
     expect(markup).not.toContain("workbench-shell.tsx");
     expect(markup).not.toContain('id="workbench-git-history"');
     expect(markup).not.toContain('aria-label="查看 Git 历史"');
   });
 
   it("shows a non-blocking retry status and offers a manual refresh after Git detection fails", () => {
-    const markup = renderInspectorMarkup(
+    const projectMarkup = renderInspectorMarkup(
       <WorkbenchInspector
         fileTreeDirectories={fileTreeDirectories}
         gitStatus={gitStatus}
@@ -414,11 +470,20 @@ describe("WorkbenchInspector", () => {
         projectPath="/workspace/CodeAgent"
       />,
     );
+    const contextMarkup = renderInspectorMarkup(
+      <WorkbenchInspector
+        gitStatus={gitStatus}
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        tab="context"
+        taskId="task-1"
+      />,
+    );
 
-    expect(markup).toContain("Git 变更刷新失败，正在自动重试");
-    expect(markup).toContain("2 个变更");
-    expect(markup).toContain("手动刷新");
-    expect(markup).toContain('aria-label="手动刷新 Git 变更"');
+    expect(projectMarkup).toContain("Git 变更刷新失败，正在自动重试");
+    expect(contextMarkup).toContain("2 个变更");
+    expect(projectMarkup).toContain("手动刷新");
+    expect(projectMarkup).toContain('aria-label="手动刷新 Git 变更"');
   });
 
   it("renders project file tree root loading and error states", () => {

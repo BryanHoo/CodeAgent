@@ -8,7 +8,7 @@ import {
   MAX_AGENT_IMAGE_TOTAL_BYTES,
   type AgentSandboxMode,
 } from "@code-agent/protocol";
-import { Folder, History, LoaderCircle, Pencil, SendHorizontal, X } from "lucide-react";
+import { Folder, LoaderCircle, Pencil, SendHorizontal, X } from "lucide-react";
 
 import { useTranslation } from "../../../i18n/i18n.js";
 import { Context, ContextTrigger } from "../../../shared/components/agent/context.js";
@@ -50,28 +50,6 @@ import {
 } from "./workbench-composer-view-contracts.js";
 export { ComposerModeTag } from "./workbench-composer-toolbar.js";
 export * from "./workbench-composer-view-contracts.js";
-
-export function ComposerGitHistoryButton({ onOpen }: Readonly<{ onOpen: () => void }>) {
-  const { t } = useTranslation("conversation");
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          aria-haspopup="dialog"
-          aria-label={t("inspector.openGitHistory")}
-          className="inline-grid size-6 shrink-0 place-items-center rounded-control text-muted-foreground hover:bg-control-hover hover:text-foreground"
-          id="workbench-git-history"
-          onClick={onOpen}
-          type="button"
-          variant="ghost"
-        >
-          <History aria-hidden="true" className="size-3" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{t("inspector.openGitHistory")}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 export function ComposerProjectPathButton({
   disabled,
@@ -402,7 +380,6 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                 onBranchCreate={props.onBranchCreate}
                 switchingBranch={props.switchingBranch}
               />
-              <ComposerGitHistoryButton onOpen={props.onOpenGitHistory} />
             </div>
             <div className="min-w-0 flex-1">
               <ComposerProjectPathButton

@@ -10,18 +10,6 @@ import {
 
 export type WorkbenchInspectorTab = "project" | "changes" | "context" | "history";
 
-export const projectInspectorTabs: readonly WorkbenchInspectorTab[] = [
-  "project",
-  "changes",
-  "history",
-];
-export const taskInspectorTabs: readonly WorkbenchInspectorTab[] = [
-  "project",
-  "changes",
-  "context",
-  "history",
-];
-
 const tabIcons = {
   project: FolderTree,
   changes: GitCommitHorizontal,
@@ -39,13 +27,13 @@ export function WorkbenchInspectorTabs({
   onTabChange: (tab: WorkbenchInspectorTab) => void;
 }>) {
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" role="tablist">
+    <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto" role="tablist">
       {availableTabs.map((value) => {
         const Icon = tabIcons[value];
         return (
           <Button
             aria-selected={activeTab === value}
-            className={`rounded-surface ${
+            className={`rounded-control ${
               activeTab === value ? "bg-control-hover text-foreground" : ""
             }`}
             key={value}
@@ -53,7 +41,7 @@ export function WorkbenchInspectorTabs({
               onTabChange(value);
             }}
             role="tab"
-            size="compact"
+            size="toolbar"
             type="button"
             variant="ghost"
           >

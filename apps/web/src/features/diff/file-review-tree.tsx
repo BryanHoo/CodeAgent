@@ -177,11 +177,13 @@ export function ReviewFileTreeNavigation({
     >
       <ReviewFileTreeNodes
         fileLabel={(node) =>
-          t("diff.fileStats", {
-            additions: node.additions,
-            path: node.path,
-            removals: node.removals,
-          })
+          showStats
+            ? t("diff.fileStats", {
+                additions: node.additions,
+                path: node.path,
+                removals: node.removals,
+              })
+            : node.path
         }
         nodes={nodes}
         showStats={showStats}

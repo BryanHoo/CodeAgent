@@ -5,8 +5,8 @@ export const inspectorOverlayQuery = "(max-width: 1100px)";
 
 export const sidebarWidthLimits = { default: 288, maximum: 400, minimum: 220 } as const;
 export const inspectorWidthLimits = {
-  default: 288,
-  minimum: 260,
+  default: 320,
+  minimum: 320,
 } as const;
 
 function shouldOpenDesktopPanel(query: string) {

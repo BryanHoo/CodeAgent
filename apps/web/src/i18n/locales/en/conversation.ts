@@ -53,7 +53,6 @@ export const conversation = {
   },
   inspector: {
     attachmentDetail: "Attachment",
-    changeActions: "Change actions",
     changeStats: "Change statistics",
     changes: "Changes",
     commit: "Commit",
@@ -62,7 +61,6 @@ export const conversation = {
     emptyFolder: "Empty folder",
     fileTree: "Project files",
     gitChanges: "Uncommitted changes",
-    gitChangesAria: "Uncommitted changes summary",
     gitChangesCount: "{{count}} changes",
     gitChangesRetrying: "Git change refresh failed. Retrying automatically",
     gitLoading: "Loading Git changes...",
@@ -96,7 +94,6 @@ export const conversation = {
     mcpToolCount: "{{count}} tools",
     mcpVersion: "Version {{version}}",
     openFailed: "The selected application could not open the target",
-    openGitHistory: "View Git history",
     plan: "Plan",
     planStatus: {
       completed: "Completed",
