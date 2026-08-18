@@ -380,6 +380,19 @@ export const projectGitStatus = {
   unstaged: [{ diff: packageJsonDiff, kind: "update", path: "package.json" }],
 };
 
+export const projectGitWorktrees = [
+  {
+    branch: "feat/review-targets",
+    current: true,
+    path: "/workspace/CodeAgent",
+  },
+  {
+    branch: "feat/worktree-review",
+    current: false,
+    path: "/workspace/CodeAgent-worktree-review",
+  },
+];
+
 export const projectFileTreeByDirectory = new Map<string | null, object>([
   [
     null,
@@ -530,6 +543,7 @@ export async function mockAppShellApi(
   let temporaryTasks: (typeof tasks)[number][] = [];
   const temporaryTurns = new Map<string, (typeof taskSnapshot.turns)[number][]>();
   let routedProjectGitStatus = { ...projectGitStatus };
+  const routedProjectGitWorktrees = [...projectGitWorktrees];
   const projectDefaults = new Map(
     projects.map((project) => [
       project.id,
@@ -1005,6 +1019,56 @@ export async function mockAppShellApi(
               nextCursor: architectureSourceNextCursor,
               path: "docs/architecture-design.md",
             };
+    } else if (
+      url.pathname === "/v1/projects/code-agent/git/worktrees" &&
+      route.request().method() === "GET"
+    ) {
+      body = { worktrees: routedProjectGitWorktrees };
+    } else if (
+      url.pathname === "/v1/projects/code-agent/git/worktrees" &&
+      route.request().method() === "POST"
+    ) {
+      const request = parseRequestRecord(route.request().postData());
+      const branch = request["branch"];
+      if (
+        typeof branch !== "string" ||
+        request["expectedSnapshot"] !== routedProjectGitStatus.snapshot
+      ) {
+        throw new Error("Invalid worktree creation request");
+      }
+      const worktree = {
+        branch,
+        current: false,
+        path: "/workspace/CodeAgent-composer-worktree",
+      };
+      const project = {
+        createdAt: "2026-08-18T00:00:00.000Z",
+        id: "code-agent-composer-worktree",
+        name: "CodeAgent-composer-worktree",
+        rootPath: worktree.path,
+      };
+      routedProjectGitWorktrees.push(worktree);
+      routedProjects = [...routedProjects, project];
+      body = { project, worktree };
+    } else if (
+      url.pathname === "/v1/projects/code-agent/git/worktree" &&
+      route.request().method() === "POST"
+    ) {
+      const request = parseRequestRecord(route.request().postData());
+      const worktree = routedProjectGitWorktrees.find(
+        (candidate) => candidate.path === request["path"] && !candidate.current,
+      );
+      if (worktree === undefined) throw new Error("Invalid worktree switch request");
+      const project = {
+        createdAt: "2026-08-18T00:00:00.000Z",
+        id: "code-agent-worktree-review",
+        name: "CodeAgent-worktree-review",
+        rootPath: worktree.path,
+      };
+      if (!routedProjects.some((candidate) => candidate.id === project.id)) {
+        routedProjects = [...routedProjects, project];
+      }
+      body = { project, worktree };
     } else if (
       url.pathname === "/v1/projects/code-agent/git/branch" &&
       route.request().method() === "POST"

@@ -38,6 +38,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCodeAgentServer } from "./app.js";
 import { AgentEventStream } from "./agent-event-stream.js";
 import { GitBranchError } from "./git-branch.js";
+import { GitWorktreeError } from "./git-worktree.js";
 import type { ProjectOpenService } from "./project-open.js";
 import { normalizeAllowedHost } from "./server-delivery.js";
 
@@ -1897,6 +1898,106 @@ describe("CodeAgent Server", () => {
     expect(repeated.json()).toEqual(createdStatus);
     expect(createProjectBranch).toHaveBeenCalledOnce();
     expect(createProjectBranch).toHaveBeenCalledWith(project.rootPath, request);
+  });
+
+  it("lists, creates, registers, and switches project worktrees idempotently", async () => {
+    const { provider } = createProvider();
+    const worktree = {
+      branch: "feat/worktree",
+      current: false,
+      path: "/workspace/CodeAgent-feat-worktree",
+    };
+    const targetProject = {
+      createdAt: "2026-08-18T00:00:00.000Z",
+      id: "code-agent-feat-worktree",
+      name: "CodeAgent-feat-worktree",
+      rootPath: worktree.path,
+    };
+    const readProjectWorktrees = vi.fn(() => Promise.resolve({ worktrees: [worktree] }));
+    const createProjectWorktree = vi.fn(() => Promise.resolve(worktree));
+    const resolveProjectWorktree = vi.fn(() => Promise.resolve(worktree));
+    const options = createServerOptions(provider, {
+      createProjectWorktree,
+      readProjectWorktrees,
+      resolveProjectWorktree,
+    });
+    const register = vi.fn(() => Promise.resolve(targetProject));
+    const app = await createCodeAgentServer({
+      ...options,
+      projectRepository: { ...options.projectRepository, register },
+    });
+    closeCallbacks.push(() => app.close());
+    const createRequest = {
+      branch: worktree.branch,
+      expectedSnapshot: "a".repeat(64),
+    };
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/v1/projects/code-agent/git/worktrees",
+    });
+    const created = await app.inject({
+      headers: { "idempotency-key": "create-worktree" },
+      method: "POST",
+      payload: createRequest,
+      url: "/v1/projects/code-agent/git/worktrees",
+    });
+    const repeated = await app.inject({
+      headers: { "idempotency-key": "create-worktree" },
+      method: "POST",
+      payload: createRequest,
+      url: "/v1/projects/code-agent/git/worktrees",
+    });
+    const switched = await app.inject({
+      headers: { "idempotency-key": "switch-worktree" },
+      method: "POST",
+      payload: { path: worktree.path },
+      url: "/v1/projects/code-agent/git/worktree",
+    });
+
+    expect(listed.json()).toEqual({ worktrees: [worktree] });
+    expect(created.json()).toEqual({ project: targetProject, worktree });
+    expect(repeated.json()).toEqual({ project: targetProject, worktree });
+    expect(switched.json()).toEqual({ project: targetProject, worktree });
+    expect(createProjectWorktree).toHaveBeenCalledOnce();
+    expect(createProjectWorktree).toHaveBeenCalledWith(project.rootPath, createRequest);
+    expect(resolveProjectWorktree).toHaveBeenCalledWith(project.rootPath, worktree.path);
+    expect(register).toHaveBeenCalledTimes(2);
+  });
+
+  it("maps invalid worktree switches and creation failures", async () => {
+    const { provider } = createProvider();
+    const createProjectWorktree = vi
+      .fn()
+      .mockRejectedValue(new GitWorktreeError("CREATE_FAILED", "fatal: worktree path is locked"));
+    const resolveProjectWorktree = vi
+      .fn()
+      .mockRejectedValue(new GitWorktreeError("WORKTREE_NOT_FOUND", "Git worktree was not found"));
+    const app = await createCodeAgentServer(
+      createServerOptions(provider, { createProjectWorktree, resolveProjectWorktree }),
+    );
+    closeCallbacks.push(() => app.close());
+
+    const created = await app.inject({
+      headers: { "idempotency-key": "create-worktree-failed" },
+      method: "POST",
+      payload: { branch: "feat/worktree", expectedSnapshot: "a".repeat(64) },
+      url: "/v1/projects/code-agent/git/worktrees",
+    });
+    const switched = await app.inject({
+      headers: { "idempotency-key": "switch-worktree-missing" },
+      method: "POST",
+      payload: { path: "/workspace/missing" },
+      url: "/v1/projects/code-agent/git/worktree",
+    });
+
+    expect(created.statusCode).toBe(502);
+    expect(created.json()).toMatchObject({
+      code: "GIT_WORKTREE_CREATE_FAILED",
+      message: "fatal: worktree path is locked",
+    });
+    expect(switched.statusCode).toBe(409);
+    expect(switched.json()).toMatchObject({ code: "GIT_WORKTREE_NOT_FOUND" });
   });
 
   it("generates a selected-file commit message through an ephemeral read-only turn", async () => {

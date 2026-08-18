@@ -77,6 +77,56 @@ test("creates and switches to a branch from the composer footer", async ({ page 
   });
 });
 
+test("switches to an existing worktree from the composer footer", async ({ page }) => {
+  let switchRequest: Record<string, unknown> | undefined;
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() === "POST" && url.pathname === "/v1/projects/code-agent/git/worktree") {
+      switchRequest = parseRequestRecord(request.postData());
+    }
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  await page.getByRole("button", { name: "切换分支，当前分支 feat/review-targets" }).click();
+  const worktreeItem = page.getByRole("menuitem", { name: /feat\/worktree-review/u });
+  await expect(worktreeItem).toContainText("/workspace/CodeAgent-worktree-review");
+  const responsePromise = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/v1/projects/code-agent/git/worktree",
+  );
+  await worktreeItem.click();
+
+  await expect(responsePromise.then((response) => response.json())).resolves.toMatchObject({
+    project: { id: "code-agent-worktree-review" },
+  });
+
+  await expect(page).toHaveURL(/\/p\/code-agent-worktree-review$/u);
+  expect(switchRequest).toEqual({ path: "/workspace/CodeAgent-worktree-review" });
+});
+
+test("creates and switches to a worktree from the composer footer", async ({ page }) => {
+  let createRequest: Record<string, unknown> | undefined;
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() === "POST" && url.pathname === "/v1/projects/code-agent/git/worktrees") {
+      createRequest = parseRequestRecord(request.postData());
+    }
+  });
+  await page.goto("/p/code-agent/t/task-1");
+
+  await page.getByRole("button", { name: "切换分支，当前分支 feat/review-targets" }).click();
+  await page.getByRole("menuitem", { name: "新建 worktree" }).click();
+  const dialog = page.getByRole("dialog", { name: "新建 worktree" });
+  await expect(dialog).toContainText("在仓库同级目录创建 worktree 并切换");
+  await dialog.getByRole("textbox", { name: "分支名称" }).fill("feat/composer-worktree");
+  await dialog.getByRole("button", { name: "创建并切换" }).click();
+
+  await expect(page).toHaveURL(/\/p\/code-agent-composer-worktree$/u);
+  expect(createRequest).toEqual({
+    branch: "feat/composer-worktree",
+    expectedSnapshot: projectGitStatus.snapshot,
+  });
+});
+
 test("opens current-branch Git history from the inspector tab", async ({ page }) => {
   const historyRequests: string[] = [];
   const commitFileRequests: string[] = [];

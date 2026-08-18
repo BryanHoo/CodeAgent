@@ -1,5 +1,5 @@
 import type { CodeAgentClient } from "@code-agent/client";
-import type { AgentTask, ProjectPage } from "@code-agent/protocol";
+import type { AgentTask, Project, ProjectPage } from "@code-agent/protocol";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { i18n } from "../../i18n/i18n.js";
@@ -26,6 +26,25 @@ export function flattenProjectTaskPages(currentData: ProjectTaskInfiniteData | u
   }
 
   return [...taskById.values()];
+}
+
+export function upsertProjectInPage(
+  currentPage: ProjectPage | undefined,
+  project: Project,
+): ProjectPage {
+  if (currentPage === undefined) {
+    return { data: [project], nextCursor: null };
+  }
+  const projectIndex = currentPage.data.findIndex((candidate) => candidate.id === project.id);
+  if (projectIndex < 0) {
+    return { ...currentPage, data: [...currentPage.data, project] };
+  }
+  return {
+    ...currentPage,
+    data: currentPage.data.map((candidate, index) =>
+      index === projectIndex ? project : candidate,
+    ),
+  };
 }
 
 export function upsertProjectTaskInInfiniteData(

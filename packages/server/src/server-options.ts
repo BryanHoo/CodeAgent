@@ -9,6 +9,7 @@ import type {
   CommitProjectChangesRequest,
   CommitProjectChangesResponse,
   CreateProjectBranchRequest,
+  CreateProjectWorktreeRequest,
   HostFileKind,
   HostFileListing,
   InstallAppUpdateResponse,
@@ -23,8 +24,11 @@ import type {
   ProjectGitCommitFilesQuery,
   ProjectGitStatus,
   ProjectGitStatusQuery,
+  ProjectGitWorktree,
+  ProjectGitWorktreePage,
   ProjectSourceFile,
   SwitchProjectBranchRequest,
+  SwitchProjectWorktreeRequest,
 } from "@code-agent/protocol";
 
 import type { CodeAgentAccessOptions } from "./access-control.js";
@@ -61,6 +65,15 @@ export interface CreateCodeAgentServerOptions {
     projectRoot: string,
     request: CreateProjectBranchRequest,
   ) => Promise<ProjectGitStatus>;
+  createProjectWorktree?: (
+    projectRoot: string,
+    request: CreateProjectWorktreeRequest,
+  ) => Promise<ProjectGitWorktree>;
+  readProjectWorktrees?: (projectRoot: string) => Promise<ProjectGitWorktreePage>;
+  resolveProjectWorktree?: (
+    projectRoot: string,
+    path: SwitchProjectWorktreeRequest["path"],
+  ) => Promise<ProjectGitWorktree>;
   readProjectGitStatus?: (
     projectRoot: string,
     query?: ProjectGitStatusQuery,

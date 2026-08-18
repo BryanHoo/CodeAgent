@@ -24,7 +24,9 @@ import {
 } from "./workbench-composer.js";
 import {
   createComposerBranch,
+  createComposerWorktree,
   switchComposerBranch,
+  switchComposerWorktree,
 } from "../hooks/use-workbench-branch-switch.js";
 
 const task = {
@@ -556,5 +558,79 @@ describe("WorkbenchComposer", () => {
       ),
     ).resolves.toBe(false);
     expect(client.createProjectBranch).not.toHaveBeenCalled();
+  });
+
+  it("creates a worktree and writes its target project into shared caches", async () => {
+    const queryClient = new QueryClient();
+    const status = {
+      baseBranches: ["origin/main"],
+      branch: "main",
+      branches: ["main"],
+      repositoryMode: "root" as const,
+      snapshot: "a".repeat(64),
+      staged: [],
+      unstaged: [],
+    };
+    const response = {
+      project: {
+        createdAt: "2026-08-18T00:00:00.000Z",
+        id: "code-agent-worktree",
+        name: "CodeAgent-feat-review",
+        rootPath: "/workspace/CodeAgent-feat-review",
+      },
+      worktree: {
+        branch: "feat/review",
+        current: false,
+        path: "/workspace/CodeAgent-feat-review",
+      },
+    };
+    const client = { createProjectWorktree: vi.fn(() => Promise.resolve(response)) };
+
+    await expect(
+      createComposerWorktree(client, queryClient, "code-agent", status, " feat/review "),
+    ).resolves.toEqual(response.project);
+
+    expect(client.createProjectWorktree).toHaveBeenCalledWith("code-agent", {
+      branch: "feat/review",
+      expectedSnapshot: status.snapshot,
+    });
+    expect(queryClient.getQueryData(["projects"])).toEqual({
+      data: [response.project],
+      nextCursor: null,
+    });
+    expect(queryClient.getQueryData(["projects", "code-agent", "git-worktrees"])).toEqual({
+      worktrees: [response.worktree],
+    });
+  });
+
+  it("switches only to a listed non-current worktree", async () => {
+    const queryClient = new QueryClient();
+    const worktree = {
+      branch: "feat/review",
+      current: false,
+      path: "/workspace/CodeAgent-feat-review",
+    };
+    const response = {
+      project: {
+        createdAt: "2026-08-18T00:00:00.000Z",
+        id: "code-agent-worktree",
+        name: "CodeAgent-feat-review",
+        rootPath: worktree.path,
+      },
+      worktree,
+    };
+    const client = { switchProjectWorktree: vi.fn(() => Promise.resolve(response)) };
+
+    await expect(
+      switchComposerWorktree(client, queryClient, "code-agent", [worktree], worktree.path),
+    ).resolves.toEqual(response.project);
+    await expect(
+      switchComposerWorktree(client, queryClient, "code-agent", [worktree], "/workspace/missing"),
+    ).resolves.toBeUndefined();
+
+    expect(client.switchProjectWorktree).toHaveBeenCalledOnce();
+    expect(client.switchProjectWorktree).toHaveBeenCalledWith("code-agent", {
+      path: worktree.path,
+    });
   });
 });

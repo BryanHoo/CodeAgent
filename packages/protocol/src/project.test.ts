@@ -47,6 +47,7 @@ import {
   TEMPORARY_TASK_SANDBOX_MODE,
   TEMPORARY_TASK_SCOPE_ID,
   HealthResponseSchema,
+  CreateProjectWorktreeRequestSchema,
   CreateProjectBranchRequestSchema,
   GenerateCommitMessageRequestSchema,
   GenerateCommitMessageResponseSchema,
@@ -67,7 +68,10 @@ import {
   ProjectGitCommitFilesQuerySchema,
   ProjectGitStatusQuerySchema,
   ProjectGitStatusSchema,
+  ProjectGitWorktreePageSchema,
+  ProjectWorktreeMutationResponseSchema,
   SwitchProjectBranchRequestSchema,
+  SwitchProjectWorktreeRequestSchema,
   ProjectFileTreeSchema,
   ProjectSourceFileQuerySchema,
   ProjectOpenAppSchema,
@@ -462,6 +466,49 @@ describe("project protocol", () => {
         branch: "feat/create-branch",
         command: "checkout -B main",
         expectedSnapshot,
+      }),
+    ).toBe(false);
+  });
+
+  it("strictly validates project worktree queries and mutations", () => {
+    const expectedSnapshot = "a".repeat(64);
+    const worktree = {
+      branch: "feat/worktree",
+      current: false,
+      path: "/workspace/CodeAgent-feat-worktree",
+    };
+    const project = {
+      createdAt: "2026-08-18T00:00:00.000Z",
+      id: "code-agent-feat-worktree",
+      name: "CodeAgent-feat-worktree",
+      rootPath: worktree.path,
+    };
+
+    expect(Value.Check(ProjectGitWorktreePageSchema, { worktrees: [worktree] })).toBe(true);
+    expect(
+      Value.Check(ProjectGitWorktreePageSchema, {
+        worktrees: [{ ...worktree, command: "status" }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CreateProjectWorktreeRequestSchema, {
+        branch: worktree.branch,
+        expectedSnapshot,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(CreateProjectWorktreeRequestSchema, {
+        branch: "",
+        expectedSnapshot,
+      }),
+    ).toBe(false);
+    expect(Value.Check(SwitchProjectWorktreeRequestSchema, { path: worktree.path })).toBe(true);
+    expect(Value.Check(SwitchProjectWorktreeRequestSchema, { path: "relative/path" })).toBe(false);
+    expect(Value.Check(ProjectWorktreeMutationResponseSchema, { project, worktree })).toBe(true);
+    expect(
+      Value.Check(ProjectWorktreeMutationResponseSchema, {
+        project,
+        worktree: { ...worktree, path: "relative/path" },
       }),
     ).toBe(false);
   });
@@ -1722,7 +1769,14 @@ describe("project protocol", () => {
         retryable: true,
       }),
     ).toBe(true);
-    for (const code of ["ACCESS_DENIED", "PAIRING_FAILED", "PAIRING_RATE_LIMITED"]) {
+    for (const code of [
+      "ACCESS_DENIED",
+      "PAIRING_FAILED",
+      "PAIRING_RATE_LIMITED",
+      "GIT_WORKTREE_ALREADY_ACTIVE",
+      "GIT_WORKTREE_CREATE_FAILED",
+      "GIT_WORKTREE_NOT_FOUND",
+    ]) {
       expect(
         Value.Check(AgentMutationErrorSchema, {
           code,

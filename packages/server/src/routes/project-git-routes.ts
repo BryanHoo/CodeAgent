@@ -32,6 +32,7 @@ import { GitRepositorySelectionError } from "../git-working-tree.js";
 import { originalErrorMessage } from "../error-message.js";
 import { MutationHttpError, type ServerRouteContext } from "./context.js";
 import { ErrorResponseSchema, IdempotencyHeadersSchema, ProjectParamsSchema } from "./schemas.js";
+import { registerProjectGitWorktreeRoutes } from "./project-git-worktree-routes.js";
 
 import type { FastifyInstance, FastifyReply } from "fastify";
 
@@ -74,6 +75,7 @@ export function registerProjectGitRoutes(app: FastifyInstance, context: ServerRo
     switchProjectBranch,
     toGitCommitHttpError,
   } = context;
+  registerProjectGitWorktreeRoutes(app, context);
 
   const assertGitMutationAvailable = (projectId: string) => {
     if (activeGitMutations.has(projectId)) {

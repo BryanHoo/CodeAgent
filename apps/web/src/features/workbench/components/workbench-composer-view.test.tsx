@@ -67,6 +67,7 @@ describe("WorkbenchComposerView", () => {
       <TooltipProvider>
         <ComposerBranchSwitcher
           creatingBranch={undefined}
+          creatingWorktree={undefined}
           gitStatus={{
             baseBranches: ["origin/main", "main"],
             branch: "feat/review",
@@ -78,7 +79,13 @@ describe("WorkbenchComposerView", () => {
           }}
           onBranchChange={() => undefined}
           onBranchCreate={() => Promise.resolve(true)}
+          onWorktreeChange={() => undefined}
+          onWorktreeCreate={() => Promise.resolve(true)}
           switchingBranch={undefined}
+          switchingWorktree={undefined}
+          worktrees={[]}
+          worktreesError={null}
+          worktreesPending={false}
         />
       </TooltipProvider>,
     );
@@ -91,6 +98,7 @@ describe("WorkbenchComposerView", () => {
     const markup = renderToStaticMarkup(
       <ComposerBranchSwitcher
         creatingBranch={undefined}
+        creatingWorktree={undefined}
         gitStatus={{
           baseBranches: [],
           branch: null,
@@ -102,7 +110,13 @@ describe("WorkbenchComposerView", () => {
         }}
         onBranchChange={() => undefined}
         onBranchCreate={() => Promise.resolve(true)}
+        onWorktreeChange={() => undefined}
+        onWorktreeCreate={() => Promise.resolve(true)}
         switchingBranch={undefined}
+        switchingWorktree={undefined}
+        worktrees={[]}
+        worktreesError={null}
+        worktreesPending={false}
       />,
     );
 

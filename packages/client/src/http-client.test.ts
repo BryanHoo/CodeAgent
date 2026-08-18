@@ -708,6 +708,65 @@ describe("CodeAgentClient", () => {
     );
   });
 
+  it("lists, creates, and switches project worktrees through validated routes", async () => {
+    const worktree = {
+      branch: "feat/worktree",
+      current: false,
+      path: "/workspace/CodeAgent-feat-worktree",
+    };
+    const page = { worktrees: [worktree] };
+    const response = {
+      project: {
+        createdAt: "2026-08-18T00:00:00.000Z",
+        id: "code-agent-feat-worktree",
+        name: "CodeAgent-feat-worktree",
+        rootPath: worktree.path,
+      },
+      worktree,
+    };
+    const createRequest = {
+      branch: worktree.branch,
+      expectedSnapshot: "a".repeat(64),
+    };
+    const switchRequest = { path: worktree.path };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(page))
+      .mockResolvedValueOnce(jsonResponse(response))
+      .mockResolvedValueOnce(jsonResponse(response));
+    const client = new CodeAgentClient({ fetch: fetchMock });
+
+    await expect(client.listProjectWorktrees("project one")).resolves.toEqual(page);
+    await expect(
+      client.createProjectWorktree("project one", createRequest, {
+        idempotencyKey: "create-worktree-key",
+      }),
+    ).resolves.toEqual(response);
+    await expect(
+      client.switchProjectWorktree("project one", switchRequest, {
+        idempotencyKey: "switch-worktree-key",
+      }),
+    ).resolves.toEqual(response);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/v1/projects/project%20one/git/worktrees");
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBeUndefined();
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/v1/projects/project%20one/git/worktrees");
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      body: JSON.stringify(createRequest),
+      method: "POST",
+    });
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("/v1/projects/project%20one/git/worktree");
+    expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
+      body: JSON.stringify(switchRequest),
+      method: "POST",
+    });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ worktrees: [{ path: "relative/path" }] }));
+    await expect(client.listProjectWorktrees("project one")).rejects.toThrow(
+      "CodeAgent response does not match the protocol schema",
+    );
+  });
+
   it("generates a commit message and commits selected files with idempotency", async () => {
     const snapshot = "a".repeat(64);
     const generationRequest = {

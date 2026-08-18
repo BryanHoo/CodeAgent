@@ -53,7 +53,14 @@ export type WorkbenchComposerProps = Readonly<{
   composerRef?: Ref<WorkbenchComposerHandle>;
   capabilities: AgentCapabilities | undefined;
   client: CodeAgentMutationClient &
-    Pick<CodeAgentGitMutationClient, "createProjectBranch" | "switchProjectBranch"> &
+    Pick<
+      CodeAgentGitMutationClient,
+      | "createProjectBranch"
+      | "createProjectWorktree"
+      | "listProjectWorktrees"
+      | "switchProjectBranch"
+      | "switchProjectWorktree"
+    > &
     CodeAgentProjectFileSearchClient;
   fixedSandboxMode?: AgentSandboxMode;
   followUpBehavior: AgentGlobalSettings["followUpBehavior"];

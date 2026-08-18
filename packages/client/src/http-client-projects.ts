@@ -6,6 +6,7 @@ import {
   AgentSkillPageSchema,
   CommitProjectChangesResponseSchema,
   type CreateProjectBranchRequest,
+  type CreateProjectWorktreeRequest,
   GenerateCommitMessageResponseSchema,
   HostFileListingSchema,
   OpenProjectResponseSchema,
@@ -16,6 +17,8 @@ import {
   ProjectGitCommitFileDiffSchema,
   ProjectGitCommitFilesPageSchema,
   ProjectGitStatusSchema,
+  ProjectGitWorktreePageSchema,
+  ProjectWorktreeMutationResponseSchema,
   ProjectOpenCapabilitiesResponseSchema,
   ProjectPageSchema,
   ProjectSourceFileSchema,
@@ -47,10 +50,13 @@ import {
   type ProjectGitCommitFilesQuery,
   type ProjectGitStatus,
   type ProjectGitStatusQuery,
+  type ProjectGitWorktreePage,
   type ProjectOpenCapabilitiesResponse,
   type ProjectPage,
   type ProjectSourceFile,
   type SwitchProjectBranchRequest,
+  type SwitchProjectWorktreeRequest,
+  type ProjectWorktreeMutationResponse,
   type RemoveProjectResponse,
   type RenameProjectResponse,
   type ReloadAgentMcpServersResponse,
@@ -314,6 +320,43 @@ export class ProjectHttpClient extends CodeAgentTransport {
       `${projectPath(projectId)}/git/branches`,
       request,
       ProjectGitStatusSchema,
+      options,
+    );
+  }
+
+  public async listProjectWorktrees(
+    projectId: string,
+    options: ReadOptions = {},
+  ): Promise<ProjectGitWorktreePage> {
+    return this.read(
+      `${projectPath(projectId)}/git/worktrees`,
+      ProjectGitWorktreePageSchema,
+      options,
+    );
+  }
+
+  public async createProjectWorktree(
+    projectId: string,
+    request: CreateProjectWorktreeRequest,
+    options: MutationOptions = {},
+  ): Promise<ProjectWorktreeMutationResponse> {
+    return this.mutation(
+      `${projectPath(projectId)}/git/worktrees`,
+      request,
+      ProjectWorktreeMutationResponseSchema,
+      options,
+    );
+  }
+
+  public async switchProjectWorktree(
+    projectId: string,
+    request: SwitchProjectWorktreeRequest,
+    options: MutationOptions = {},
+  ): Promise<ProjectWorktreeMutationResponse> {
+    return this.mutation(
+      `${projectPath(projectId)}/git/worktree`,
+      request,
+      ProjectWorktreeMutationResponseSchema,
       options,
     );
   }

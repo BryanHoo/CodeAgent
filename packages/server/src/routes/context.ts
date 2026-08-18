@@ -22,6 +22,7 @@ import type {
   CommitProjectChangesRequest,
   CommitProjectChangesResponse,
   CreateProjectBranchRequest,
+  CreateProjectWorktreeRequest,
   GenerateCommitMessageRequest,
   HostFileKind,
   HostFileListing,
@@ -38,8 +39,11 @@ import type {
   ProjectGitCommitFilesQuery,
   ProjectGitStatus,
   ProjectGitStatusQuery,
+  ProjectGitWorktree,
+  ProjectGitWorktreePage,
   ProjectSourceFile,
   SwitchProjectBranchRequest,
+  SwitchProjectWorktreeRequest,
 } from "@code-agent/protocol";
 
 import type { AgentEventStream } from "../agent-event-stream.js";
@@ -183,6 +187,15 @@ export interface ServerRouteContext {
     projectRoot: string,
     request: CreateProjectBranchRequest,
   ) => Promise<ProjectGitStatus>;
+  readonly createProjectWorktree: (
+    projectRoot: string,
+    request: CreateProjectWorktreeRequest,
+  ) => Promise<ProjectGitWorktree>;
+  readonly readProjectWorktrees: (projectRoot: string) => Promise<ProjectGitWorktreePage>;
+  readonly resolveProjectWorktree: (
+    projectRoot: string,
+    path: SwitchProjectWorktreeRequest["path"],
+  ) => Promise<ProjectGitWorktree>;
   readonly readProjectGitHistory: (
     projectRoot: string,
     query: ProjectGitHistoryQuery,

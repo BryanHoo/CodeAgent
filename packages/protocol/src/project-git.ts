@@ -1,6 +1,11 @@
 import { Type, type Static } from "@sinclair/typebox";
 
-import { ProjectFileReferencePathSchema, ProjectRelativePathSchema } from "./project-files.js";
+import {
+  ProjectDirectoryPathSchema,
+  ProjectFileReferencePathSchema,
+  ProjectRelativePathSchema,
+  ProjectSchema,
+} from "./project-files.js";
 
 export const AgentFileChangeSchema = Type.Object(
   {
@@ -175,6 +180,49 @@ export const CreateProjectBranchRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 export type CreateProjectBranchRequest = Readonly<Static<typeof CreateProjectBranchRequestSchema>>;
+
+export const ProjectGitWorktreeSchema = Type.Object(
+  {
+    branch: Type.Union([GitBranchNameSchema, Type.Null()]),
+    current: Type.Boolean(),
+    path: ProjectDirectoryPathSchema,
+  },
+  { additionalProperties: false },
+);
+export type ProjectGitWorktree = Readonly<Static<typeof ProjectGitWorktreeSchema>>;
+
+export const ProjectGitWorktreePageSchema = Type.Object(
+  { worktrees: Type.Array(ProjectGitWorktreeSchema, { maxItems: 256 }) },
+  { additionalProperties: false },
+);
+export type ProjectGitWorktreePage = Readonly<Static<typeof ProjectGitWorktreePageSchema>>;
+
+export const CreateProjectWorktreeRequestSchema = Type.Object(
+  {
+    branch: GitBranchNameSchema,
+    expectedSnapshot: GitSnapshotSchema,
+  },
+  { additionalProperties: false },
+);
+export type CreateProjectWorktreeRequest = Readonly<
+  Static<typeof CreateProjectWorktreeRequestSchema>
+>;
+
+export const SwitchProjectWorktreeRequestSchema = Type.Object(
+  { path: ProjectDirectoryPathSchema },
+  { additionalProperties: false },
+);
+export type SwitchProjectWorktreeRequest = Readonly<
+  Static<typeof SwitchProjectWorktreeRequestSchema>
+>;
+
+export const ProjectWorktreeMutationResponseSchema = Type.Object(
+  { project: ProjectSchema, worktree: ProjectGitWorktreeSchema },
+  { additionalProperties: false },
+);
+export type ProjectWorktreeMutationResponse = Readonly<
+  Static<typeof ProjectWorktreeMutationResponseSchema>
+>;
 
 export const GenerateCommitMessageRequestSchema = Type.Object(
   {

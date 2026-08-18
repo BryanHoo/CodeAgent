@@ -15,6 +15,7 @@ import { commitSelectedProjectChanges } from "./git-commit.js";
 import { readProjectGitCommitFileDiff, readProjectGitCommitFiles } from "./git-commit-review.js";
 import { buildCommitMessagePrompt } from "./git-commit-message.js";
 import * as gitBranch from "./git-branch.js";
+import * as gitWorktree from "./git-worktree.js";
 import { readProjectGitHistory } from "./git-history.js";
 import { readProjectGitStatus as readGitProjectStatus } from "./git-working-tree.js";
 import { readHostFileDirectory, resolveHostAttachment } from "./host-file-browser.js";
@@ -400,6 +401,7 @@ export async function createCodeAgentServer(
     capabilities,
     commitProjectChanges,
     createProjectBranch: options.createProjectBranch ?? gitBranch.createProjectBranch,
+    createProjectWorktree: options.createProjectWorktree ?? gitWorktree.createProjectWorktree,
     fingerprintPayload,
     generateCommitMessageWithCodex,
     getProjectContext,
@@ -429,6 +431,7 @@ export async function createCodeAgentServer(
     readProjectGitCommitFileDiff:
       options.readProjectGitCommitFileDiff ?? readProjectGitCommitFileDiff,
     readProjectGitStatus,
+    readProjectWorktrees: options.readProjectWorktrees ?? gitWorktree.readProjectWorktrees,
     readSourceFile,
     releaseProjectContext,
     resolveProviderTurnInput,
@@ -439,6 +442,7 @@ export async function createCodeAgentServer(
     taskFromSnapshot,
     taskStartRecoveries,
     switchProjectBranch: options.switchProjectBranch ?? gitBranch.switchProjectBranch,
+    resolveProjectWorktree: options.resolveProjectWorktree ?? gitWorktree.resolveProjectWorktree,
     toGitCommitHttpError,
     toPendingRequestHttpError,
   };

@@ -358,6 +358,7 @@ export function WorkbenchComposer({
       composerScope={composerScope}
       contextUsage={contextUsage}
       creatingBranch={branchMutation.creatingBranch}
+      creatingWorktree={branchMutation.creatingWorktree}
       draftInputDisabled={draftInputDisabled}
       filteredCommands={filteredCommands}
       filteredSkills={filteredSkills}
@@ -382,6 +383,10 @@ export function WorkbenchComposer({
       onBranchChange={(branch) => {
         void branchMutation.switchBranch(branch);
       }}
+      onWorktreeChange={(path) => {
+        void branchMutation.switchWorktree(path);
+      }}
+      onWorktreeCreate={branchMutation.createWorktree}
       onExecuteCommand={(command) => {
         void executePromptCommand(command);
       }}
@@ -427,8 +432,12 @@ export function WorkbenchComposer({
       }}
       submitAction={submitAction}
       switchingBranch={branchMutation.switchingBranch}
+      switchingWorktree={branchMutation.switchingWorktree}
       taskId={taskId}
       turnControlsDisabled={turnControlsDisabled}
+      worktrees={branchMutation.worktrees}
+      worktreesError={branchMutation.worktreesError}
+      worktreesPending={branchMutation.worktreesPending}
     />
   );
   if (attachmentPickerKind === undefined) {

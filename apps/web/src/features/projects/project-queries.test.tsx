@@ -41,6 +41,7 @@ import {
   reorderProjectPage,
   replaceProjectTaskInInfiniteData,
   upsertProjectTaskInInfiniteData,
+  upsertProjectInPage,
 } from "./project-queries.js";
 
 const project = {
@@ -121,6 +122,28 @@ const snapshotResponse = {
 };
 
 describe("project queries", () => {
+  it("inserts or replaces a worktree project without changing sibling order", () => {
+    const worktreeProject = {
+      ...project,
+      id: "code-agent-worktree",
+      name: "CodeAgent-worktree",
+      rootPath: "/workspace/CodeAgent-worktree",
+    };
+    const page = { data: [project], nextCursor: null };
+
+    expect(upsertProjectInPage(undefined, worktreeProject)).toEqual({
+      data: [worktreeProject],
+      nextCursor: null,
+    });
+    expect(upsertProjectInPage(page, worktreeProject).data).toEqual([project, worktreeProject]);
+    expect(
+      upsertProjectInPage(
+        { data: [project, worktreeProject], nextCursor: null },
+        { ...worktreeProject, name: "Review worktree" },
+      ).data,
+    ).toEqual([project, { ...worktreeProject, name: "Review worktree" }]);
+  });
+
   it("inserts a created task immediately and replaces it when fresh metadata arrives", () => {
     const initialData = {
       pageParams: [undefined, "next-page"],

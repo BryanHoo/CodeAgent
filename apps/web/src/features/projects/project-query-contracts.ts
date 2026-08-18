@@ -15,7 +15,13 @@ export type CodeAgentGitCommitReviewClient = Pick<
 >;
 export type CodeAgentGitMutationClient = Pick<
   CodeAgentClient,
-  "commitProjectChanges" | "createProjectBranch" | "generateCommitMessage" | "switchProjectBranch"
+  | "commitProjectChanges"
+  | "createProjectBranch"
+  | "createProjectWorktree"
+  | "generateCommitMessage"
+  | "listProjectWorktrees"
+  | "switchProjectBranch"
+  | "switchProjectWorktree"
 >;
 export type CodeAgentFileTreeClient = Pick<CodeAgentClient, "listProjectFiles">;
 export type CodeAgentProjectFileSearchClient = Pick<CodeAgentClient, "searchProjectFiles">;
