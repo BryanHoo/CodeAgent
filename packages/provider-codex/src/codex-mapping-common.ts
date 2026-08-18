@@ -3,11 +3,9 @@ import type {
   AgentBackgroundTerminal,
   AgentSandboxMode,
   AgentSkillPage,
-  PendingApprovalDecision,
   PendingRequest,
-  Project,
 } from "@code-agent/protocol";
-import type { RpcRequestId, RpcServerRequest } from "./jsonl-rpc-client.js";
+import type { RpcRequestId } from "./jsonl-rpc-client.js";
 
 export class CodexProtocolMappingError extends Error {
   public constructor(message: string) {
@@ -113,13 +111,13 @@ export const CODEX_NOTIFICATION_METHODS: ReadonlySet<string> = new Set([
 
 export interface PendingCodexRequest {
   denyDecision?: "cancel" | "decline";
+  nativePermissionProfile?: Readonly<{
+    fileSystem: Record<string, unknown> | null;
+    network: Readonly<{ enabled: boolean | null }> | null;
+  }>;
   providerRequestId: RpcRequestId;
   request: PendingRequest & { status: "pending" };
 }
-
-type NetworkAccess = NonNullable<
-  Extract<PendingRequest, { type: "command_approval" }>["networkAccess"]
->;
 type PendingUserInputQuestion = Extract<
   PendingRequest,
   { type: "user_input" }
@@ -210,10 +208,6 @@ export function mapBackgroundTerminal(value: unknown): AgentBackgroundTerminal {
   };
 }
 
-function optionalNullableString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
 export function expectBoolean(value: unknown, context: string): boolean {
   if (typeof value !== "boolean") {
     throw new CodexProtocolMappingError(`${context} must be a boolean`);
@@ -260,60 +254,6 @@ export function requestIdKey(id: RpcRequestId): string {
   return `${typeof id}:${String(id)}`;
 }
 
-function toDateTimeMs(value: unknown, context: string): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new CodexProtocolMappingError(`${context} must be a Unix timestamp in milliseconds`);
-  }
-  return new Date(value).toISOString();
-}
-
-function mapApprovalDecisions(value: unknown): {
-  availableDecisions: PendingApprovalDecision[];
-  denyDecision: "cancel" | "decline";
-} {
-  const nativeDecisions = Array.isArray(value)
-    ? value.filter((decision): decision is string => typeof decision === "string")
-    : ["accept", "acceptForSession", "decline"];
-  const availableDecisions: PendingApprovalDecision[] = [];
-  if (nativeDecisions.includes("accept")) {
-    availableDecisions.push("allow");
-  }
-  if (nativeDecisions.includes("acceptForSession")) {
-    availableDecisions.push("allow_for_session");
-  }
-  if (nativeDecisions.includes("decline") || nativeDecisions.includes("cancel")) {
-    availableDecisions.push("deny");
-  }
-  if (availableDecisions.length === 0) {
-    throw new CodexProtocolMappingError("Codex approval has no supported decisions");
-  }
-  return {
-    availableDecisions,
-    denyDecision: nativeDecisions.includes("decline") ? "decline" : "cancel",
-  };
-}
-
-function isNetworkApprovalProtocol(value: unknown): value is NetworkAccess["protocol"] {
-  return value === "http" || value === "https" || value === "socks5Tcp" || value === "socks5Udp";
-}
-
-function mapNetworkApprovalContext(value: unknown): NetworkAccess | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-  // 只向上暴露用户做网络授权所需的稳定目标信息。
-  const context = expectRecord(value, "Codex network approval context");
-  const host = expectString(context["host"], "Codex network approval host");
-  const protocol = context["protocol"];
-  if (host.length === 0) {
-    throw new CodexProtocolMappingError("Codex network approval host must not be empty");
-  }
-  if (!isNetworkApprovalProtocol(protocol)) {
-    throw new CodexProtocolMappingError("Codex network approval protocol is invalid");
-  }
-  return { host, protocol };
-}
-
 function isConfirmationOptions(options: readonly { label: string }[]): boolean {
   if (options.length !== 2) {
     return false;
@@ -328,7 +268,7 @@ function isConfirmationOptions(options: readonly { label: string }[]): boolean {
   ].some((pair) => pair.every((label) => labels.has(label)));
 }
 
-function mapUserInputQuestions(value: unknown): PendingUserInputQuestion[] {
+export function mapUserInputQuestions(value: unknown): PendingUserInputQuestion[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > 3) {
     throw new CodexProtocolMappingError("Codex user input questions must contain 1 to 3 items");
   }
@@ -394,93 +334,6 @@ export function userInputAnswersMatchRequest(
     }
     return question.options.some((option) => option.label === answer);
   });
-}
-
-export function mapCodexServerRequest(
-  serverRequest: RpcServerRequest,
-  project: Project,
-): PendingCodexRequest | undefined {
-  if (
-    serverRequest.method !== "item/commandExecution/requestApproval" &&
-    serverRequest.method !== "item/fileChange/requestApproval" &&
-    serverRequest.method !== "item/tool/requestUserInput"
-  ) {
-    return undefined;
-  }
-  const params = expectRecord(serverRequest.params, `Codex ${serverRequest.method} params`);
-  const taskId = expectString(params["threadId"], `Codex ${serverRequest.method} threadId`);
-  const turnId = expectString(params["turnId"], `Codex ${serverRequest.method} turnId`);
-  const itemId = expectString(params["itemId"], `Codex ${serverRequest.method} itemId`);
-  const requestId = requestIdKey(serverRequest.id);
-
-  if (serverRequest.method === "item/tool/requestUserInput") {
-    // 0.147.0 起阻塞语义必须显式声明，避免旧请求形状静默进入 Pending 生命周期。
-    expectBoolean(params["isBlocking"], "Codex user input isBlocking");
-    const autoResolutionMs = params["autoResolutionMs"] ?? null;
-    if (
-      autoResolutionMs !== null &&
-      (typeof autoResolutionMs !== "number" ||
-        !Number.isInteger(autoResolutionMs) ||
-        autoResolutionMs < 0)
-    ) {
-      throw new CodexProtocolMappingError("Codex user input autoResolutionMs is invalid");
-    }
-    const createdAtMs = Date.now();
-    return {
-      providerRequestId: serverRequest.id,
-      request: {
-        createdAt: new Date(createdAtMs).toISOString(),
-        expiresAt:
-          autoResolutionMs === null ? null : new Date(createdAtMs + autoResolutionMs).toISOString(),
-        itemId,
-        projectId: project.id,
-        questions: mapUserInputQuestions(params["questions"]),
-        requestId,
-        status: "pending",
-        taskId,
-        turnId,
-        type: "user_input",
-      },
-    };
-  }
-
-  const decisions = mapApprovalDecisions(params["availableDecisions"]);
-  const identity = {
-    createdAt: toDateTimeMs(params["startedAtMs"], `Codex ${serverRequest.method} startedAtMs`),
-    expiresAt: null,
-    itemId,
-    projectId: project.id,
-    requestId,
-    status: "pending" as const,
-    taskId,
-    turnId,
-  };
-  if (serverRequest.method === "item/commandExecution/requestApproval") {
-    return {
-      denyDecision: decisions.denyDecision,
-      providerRequestId: serverRequest.id,
-      request: {
-        ...identity,
-        availableDecisions: decisions.availableDecisions,
-        command: optionalNullableString(params["command"]),
-        cwd: optionalNullableString(params["cwd"]),
-        networkAccess: mapNetworkApprovalContext(params["networkApprovalContext"]),
-        reason: optionalNullableString(params["reason"]),
-        type: "command_approval",
-      },
-    };
-  }
-  return {
-    denyDecision: decisions.denyDecision,
-    providerRequestId: serverRequest.id,
-    request: {
-      ...identity,
-      availableDecisions: decisions.availableDecisions,
-      grantRoot: optionalNullableString(params["grantRoot"]),
-      reason: optionalNullableString(params["reason"]),
-      type: "file_change_approval",
-    },
-  };
 }
 
 export function toDateTime(value: unknown, context: string): string {

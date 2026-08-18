@@ -102,20 +102,29 @@ describe("CodexAppServerProcess", () => {
     const decisions = {
       command: { decision: "acceptForSession" },
       file: { decision: "decline" },
+      permissions: {
+        permissions: { network: { enabled: true } },
+        scope: "session",
+      },
       user_input: { answers: { mode: { answers: ["继续"] } } },
     } as const;
     const received: string[] = [];
     const responseWrites: Promise<void>[] = [];
     const unsubscribe = runtime.client.onServerRequest((request) => {
       const kind = request.id.toString().split("-")[1];
-      if (kind !== "command" && kind !== "file" && kind !== "user_input") {
+      if (
+        kind !== "command" &&
+        kind !== "file" &&
+        kind !== "permissions" &&
+        kind !== "user_input"
+      ) {
         throw new Error("Unexpected Fake App Server request id");
       }
       received.push(kind);
       responseWrites.push(runtime.client.respondToServerRequest(request.id, decisions[kind]));
     });
 
-    for (const kind of ["command", "file", "user_input"] as const) {
+    for (const kind of ["command", "file", "user_input", "permissions"] as const) {
       await runtime.client.request("trigger/pending", { kind });
     }
     await Promise.all(responseWrites);
@@ -125,11 +134,12 @@ describe("CodexAppServerProcess", () => {
           { id: "fake-command-1", result: decisions.command },
           { id: "fake-file-2", result: decisions.file },
           { id: "fake-user_input-3", result: decisions.user_input },
+          { id: "fake-permissions-4", result: decisions.permissions },
         ],
       });
     });
 
-    expect(received).toEqual(["command", "file", "user_input"]);
+    expect(received).toEqual(["command", "file", "user_input", "permissions"]);
     unsubscribe();
   });
 

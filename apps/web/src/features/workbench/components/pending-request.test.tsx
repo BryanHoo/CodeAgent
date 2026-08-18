@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { PendingRequestCard, resolvePendingRequestAttempt } from "./pending-request.js";
+import { createPermissionApprovalResolution } from "./permission-approval-request.js";
 
 const identity = {
   createdAt: "2026-07-23T00:00:00.000Z",
@@ -16,6 +17,57 @@ const identity = {
 } as const;
 
 describe("PendingRequestCard", () => {
+  it("renders granular permissions and builds a selected session grant", () => {
+    const request: Extract<PendingRequest, { type: "permissions_approval" }> = {
+      ...identity,
+      cwd: "/workspace/CodeAgent",
+      environmentId: "local",
+      permissions: {
+        fileSystem: {
+          entries: [
+            {
+              access: "write",
+              path: { type: "glob", value: "/workspace/CodeAgent/*.log" },
+            },
+            {
+              access: "deny",
+              path: { kind: "tmpdir", path: null, subpath: null, type: "special" },
+            },
+          ],
+          globScanMaxDepth: 4,
+          read: ["/workspace/CodeAgent/src"],
+          write: null,
+        },
+        network: { enabled: true },
+      },
+      reason: "需要安装依赖并写入日志",
+      type: "permissions_approval",
+    };
+
+    expect(createPermissionApprovalResolution(["network"], "session")).toEqual({
+      grantedPermissions: ["network"],
+      scope: "session",
+    });
+    expect(createPermissionApprovalResolution([], "turn")).toEqual({
+      grantedPermissions: [],
+      scope: "turn",
+    });
+
+    const markup = renderToStaticMarkup(
+      <PendingRequestCard interactive onResolve={vi.fn()} request={request} />,
+    );
+    expect(markup).toContain("权限审批");
+    expect(markup).toContain("网络访问");
+    expect(markup).toContain("文件系统");
+    expect(markup).toContain("/workspace/CodeAgent/src");
+    expect(markup).toContain("/workspace/CodeAgent/*.log");
+    expect(markup).toContain("系统临时目录");
+    expect(markup).toContain("本轮允许");
+    expect(markup).toContain("本次会话允许");
+    expect(markup.match(/data-slot="checkbox"/gu)?.length).toBe(2);
+    expect(markup.match(/data-state="checked"/gu)?.length).toBe(4);
+  });
+
   it("reuses the idempotency key while retrying the same resolution", () => {
     const createKey = vi
       .fn()
@@ -33,6 +85,20 @@ describe("PendingRequestCard", () => {
   it("renders approval actions and disables queued requests", () => {
     const request: PendingRequest = {
       ...identity,
+      additionalPermissions: {
+        fileSystem: {
+          entries: [
+            {
+              access: "write",
+              path: { type: "path", value: "/workspace/CodeAgent/.cache" },
+            },
+          ],
+          globScanMaxDepth: null,
+          read: null,
+          write: ["/workspace/CodeAgent/.cache"],
+        },
+        network: { enabled: true },
+      },
       availableDecisions: ["allow", "allow_for_session", "deny"],
       command: "pnpm check",
       cwd: "/workspace/CodeAgent",
@@ -48,6 +114,9 @@ describe("PendingRequestCard", () => {
     );
 
     expect(active).toContain("命令审批");
+    expect(active).toContain("额外权限");
+    expect(active).toContain("网络访问");
+    expect(active).toContain("/workspace/CodeAgent/.cache");
     expect(active).toContain("本次会话允许");
     expect(active).toContain("允许");
     expect(active).toContain("拒绝");

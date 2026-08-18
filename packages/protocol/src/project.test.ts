@@ -1183,6 +1183,15 @@ describe("project protocol", () => {
     } as const;
     const commandRequest = {
       ...identity,
+      additionalPermissions: {
+        fileSystem: {
+          entries: [],
+          globScanMaxDepth: null,
+          read: ["/workspace/CodeAgent/src"],
+          write: null,
+        },
+        network: { enabled: true },
+      },
       availableDecisions: ["allow", "allow_for_session", "deny"],
       command: "pnpm check",
       cwd: "/workspace/CodeAgent",
@@ -1217,9 +1226,31 @@ describe("project protocol", () => {
       requestId: "string:input-1",
       type: "user_input",
     } as const;
+    const permissionRequest = {
+      ...identity,
+      cwd: "/workspace/CodeAgent",
+      environmentId: "local",
+      permissions: {
+        fileSystem: {
+          entries: [
+            {
+              access: "write",
+              path: { type: "glob", value: "/workspace/CodeAgent/*.log" },
+            },
+          ],
+          globScanMaxDepth: 4,
+          read: ["/workspace/CodeAgent/src"],
+          write: ["/workspace/CodeAgent/.cache"],
+        },
+        network: { enabled: true },
+      },
+      reason: "需要安装依赖并写入缓存",
+      requestId: "string:permissions-1",
+      type: "permissions_approval",
+    } as const;
 
     expect(
-      [commandRequest, fileRequest, inputRequest].every((request) =>
+      [commandRequest, fileRequest, inputRequest, permissionRequest].every((request) =>
         Value.Check(PendingRequestSchema, request),
       ),
     ).toBe(true);
@@ -1260,6 +1291,26 @@ describe("project protocol", () => {
         type: commandRequest.type,
       }),
     ).toBe(true);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: permissionRequest.itemId,
+        projectId: permissionRequest.projectId,
+        resolution: { grantedPermissions: ["network"], scope: "session" },
+        taskId: permissionRequest.taskId,
+        turnId: permissionRequest.turnId,
+        type: permissionRequest.type,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ResolvePendingRequestRequestSchema, {
+        itemId: permissionRequest.itemId,
+        projectId: permissionRequest.projectId,
+        resolution: { grantedPermissions: ["network", "network"], scope: "turn" },
+        taskId: permissionRequest.taskId,
+        turnId: permissionRequest.turnId,
+        type: permissionRequest.type,
+      }),
+    ).toBe(false);
     expect(
       Value.Check(ResolvePendingRequestRequestSchema, {
         itemId: inputRequest.itemId,

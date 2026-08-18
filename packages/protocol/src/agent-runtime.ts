@@ -116,9 +116,88 @@ export const PendingUserInputQuestionSchema = Type.Union([
   ),
 ]);
 
+export const FileChangeApprovalPendingRequestSchema = Type.Object(
+  {
+    ...PendingRequestIdentityProperties,
+    availableDecisions: Type.Array(PendingApprovalDecisionSchema, { minItems: 1 }),
+    grantRoot: Type.Union([Type.String(), Type.Null()]),
+    reason: Type.Union([Type.String(), Type.Null()]),
+    type: Type.Literal("file_change_approval"),
+  },
+  { additionalProperties: false },
+);
+
+export const PendingPermissionCategorySchema = Type.Union([
+  Type.Literal("network"),
+  Type.Literal("file_system"),
+]);
+
+const PendingPermissionAccessSchema = Type.Union([
+  Type.Literal("read"),
+  Type.Literal("write"),
+  Type.Literal("deny"),
+]);
+
+const PendingPermissionPathSchema = Type.Union([
+  Type.Object(
+    { type: Type.Literal("path"), value: Type.String({ minLength: 1 }) },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { type: Type.Literal("glob"), value: Type.String({ minLength: 1 }) },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      kind: Type.Union([
+        Type.Literal("root"),
+        Type.Literal("minimal"),
+        Type.Literal("project_roots"),
+        Type.Literal("tmpdir"),
+        Type.Literal("slash_tmp"),
+        Type.Literal("unknown"),
+      ]),
+      path: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      subpath: Type.Union([Type.String(), Type.Null()]),
+      type: Type.Literal("special"),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+const PendingFileSystemPermissionsSchema = Type.Object(
+  {
+    entries: Type.Array(
+      Type.Object(
+        { access: PendingPermissionAccessSchema, path: PendingPermissionPathSchema },
+        { additionalProperties: false },
+      ),
+    ),
+    globScanMaxDepth: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+    read: Type.Union([Type.Array(Type.String({ minLength: 1 })), Type.Null()]),
+    write: Type.Union([Type.Array(Type.String({ minLength: 1 })), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+const PendingPermissionProfileSchema = Type.Object(
+  {
+    fileSystem: Type.Union([PendingFileSystemPermissionsSchema, Type.Null()]),
+    network: Type.Union([
+      Type.Object(
+        { enabled: Type.Union([Type.Boolean(), Type.Null()]) },
+        { additionalProperties: false },
+      ),
+      Type.Null(),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
 export const CommandApprovalPendingRequestSchema = Type.Object(
   {
     ...PendingRequestIdentityProperties,
+    additionalPermissions: Type.Optional(Type.Union([PendingPermissionProfileSchema, Type.Null()])),
     availableDecisions: Type.Array(PendingApprovalDecisionSchema, { minItems: 1 }),
     command: Type.Union([Type.String(), Type.Null()]),
     cwd: Type.Union([Type.String(), Type.Null()]),
@@ -129,13 +208,14 @@ export const CommandApprovalPendingRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const FileChangeApprovalPendingRequestSchema = Type.Object(
+export const PermissionApprovalPendingRequestSchema = Type.Object(
   {
     ...PendingRequestIdentityProperties,
-    availableDecisions: Type.Array(PendingApprovalDecisionSchema, { minItems: 1 }),
-    grantRoot: Type.Union([Type.String(), Type.Null()]),
+    cwd: Type.String({ minLength: 1 }),
+    environmentId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    permissions: PendingPermissionProfileSchema,
     reason: Type.Union([Type.String(), Type.Null()]),
-    type: Type.Literal("file_change_approval"),
+    type: Type.Literal("permissions_approval"),
   },
   { additionalProperties: false },
 );
@@ -152,6 +232,7 @@ export const UserInputPendingRequestSchema = Type.Object(
 export const PendingRequestSchema = Type.Union([
   CommandApprovalPendingRequestSchema,
   FileChangeApprovalPendingRequestSchema,
+  PermissionApprovalPendingRequestSchema,
   UserInputPendingRequestSchema,
 ]);
 
@@ -165,6 +246,10 @@ function createPendingRequestStatusSchema<TStatus extends "expired" | "pending" 
     ),
     Type.Object(
       { ...FileChangeApprovalPendingRequestSchema.properties, status: Type.Literal(status) },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      { ...PermissionApprovalPendingRequestSchema.properties, status: Type.Literal(status) },
       { additionalProperties: false },
     ),
     Type.Object(
@@ -194,6 +279,16 @@ const UserInputResolutionSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+const PermissionApprovalResolutionSchema = Type.Object(
+  {
+    grantedPermissions: Type.Array(PendingPermissionCategorySchema, {
+      maxItems: 2,
+      uniqueItems: true,
+    }),
+    scope: Type.Union([Type.Literal("turn"), Type.Literal("session")]),
+  },
+  { additionalProperties: false },
+);
 
 export const ResolvePendingRequestRequestSchema = Type.Union([
   Type.Object(
@@ -209,6 +304,14 @@ export const ResolvePendingRequestRequestSchema = Type.Union([
       ...PendingRequestResolutionIdentityProperties,
       resolution: ApprovalResolutionSchema,
       type: Type.Literal("file_change_approval"),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...PendingRequestResolutionIdentityProperties,
+      resolution: PermissionApprovalResolutionSchema,
+      type: Type.Literal("permissions_approval"),
     },
     { additionalProperties: false },
   ),
@@ -233,6 +336,12 @@ export const ResolvePendingRequestResponseSchema = Type.Object(
 
 export type ResolvePendingRequestResponse = Readonly<
   Static<typeof ResolvePendingRequestResponseSchema>
+>;
+export type PermissionApprovalPendingRequest = Readonly<
+  Static<typeof PermissionApprovalPendingRequestSchema>
+>;
+export type PermissionApprovalResolution = Readonly<
+  Static<typeof PermissionApprovalResolutionSchema>
 >;
 
 export const AgentPlanStepStatusSchema = Type.Union([

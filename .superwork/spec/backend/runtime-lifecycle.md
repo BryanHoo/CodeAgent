@@ -44,6 +44,7 @@
 - 非重试 `provider.error` 已确认的错误原因不能被随后缺少错误文本的 `turn/completed` 清除；Web Runtime 合并终态时必须保留该失败原因，允许已产生的部分回复与错误共同展示。
 - Codex Server Request 只有在 Task 已通过当前 Project 归属验证后才能进入可解决集合；读取期间到达的请求先暂存，原生终态到达时立即清理，归属验证成功后再提升，其他 Project 的请求直接丢弃；归属已确认后即使 Snapshot 映射失败，也不得删除仍在等待响应的请求。
 - Pending Request 在本地解决、原生 `serverRequest/resolved` 或 Turn 终止时只产生一次终态；Snapshot 不保留 `resolved` 或 `expired` 请求。
+- App Server Server Request 必须同时处理 `item/commandExecution/requestApproval`、`item/fileChange/requestApproval`、`item/tool/requestUserInput` 与 `item/permissions/requestApproval`。权限审批只响应原请求中用户选中的网络或文件系统子树；拒绝使用空 `permissions` 与 `scope: "turn"`，会话授权使用 `scope: "session"` 且只保留在当前 Codex Session，不写入 CodeAgent 长期设置。命令审批的可选 `additionalPermissions` 必须经过同一严格权限映射后展示，但仍使用命令审批决策响应。
 - 带 `autoResolutionMs` 的 User Input 到期时使用空答案响应 Codex 并发布 `expired` 终态；手动响应写入失败不得取消自动过期，只有响应确认成功或其他终态才能清理对应定时器。
 - User Input 手动响应确认成功后，Provider 必须在 `pending_request.resolved` 之后发布同一 Turn 的用户 Message Item，按问题顺序展示回答供实时 Timeline 渲染；`isSecret` 回答只能显示固定遮罩，不能进入事件、日志或前端状态。
 

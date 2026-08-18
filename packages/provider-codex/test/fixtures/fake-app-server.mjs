@@ -58,6 +58,29 @@ function pendingRequestParams(
       startedAtMs: 1_753_228_801_000,
     };
   }
+  if (kind === "permissions") {
+    return {
+      ...identity,
+      cwd: "/workspace/CodeAgent",
+      environmentId: "local",
+      permissions: {
+        fileSystem: {
+          entries: [
+            {
+              access: "write",
+              path: { path: "/workspace/CodeAgent/.cache", type: "path" },
+            },
+          ],
+          globScanMaxDepth: 4,
+          read: null,
+          write: null,
+        },
+        network: { enabled: true },
+      },
+      reason: "需要访问网络并写入缓存",
+      startedAtMs: 1_753_228_802_000,
+    };
+  }
   return {
     ...identity,
     autoResolutionMs: 30_000,
@@ -89,7 +112,9 @@ function sendPendingRequest(
       ? "item/commandExecution/requestApproval"
       : kind === "file"
         ? "item/fileChange/requestApproval"
-        : "item/tool/requestUserInput";
+        : kind === "permissions"
+          ? "item/permissions/requestApproval"
+          : "item/tool/requestUserInput";
   pendingServerRequests.set(requestId, {
     completeOnResolve,
     kind,
@@ -745,7 +770,7 @@ input.on("line", (line) => {
 
   if (pendingRequestScenario && message.method === "trigger/pending") {
     const kind = message.params?.kind;
-    if (kind !== "command" && kind !== "file" && kind !== "user_input") {
+    if (kind !== "command" && kind !== "file" && kind !== "permissions" && kind !== "user_input") {
       send({ error: { code: -32602, message: "invalid pending request kind" }, id: message.id });
       return;
     }
@@ -875,9 +900,11 @@ input.on("line", (line) => {
       ? "command"
       : prompt.includes("审批文件")
         ? "file"
-        : prompt.includes("用户输入")
-          ? "user_input"
-          : undefined;
+        : prompt.includes("审批权限")
+          ? "permissions"
+          : prompt.includes("用户输入")
+            ? "user_input"
+            : undefined;
     if (pendingKind !== undefined) {
       const requestId = `fake-${pendingKind}-${String(nextPendingRequest)}`;
       nextPendingRequest += 1;

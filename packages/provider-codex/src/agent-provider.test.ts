@@ -1331,6 +1331,79 @@ describe("CodexAgentProvider", () => {
     });
   });
 
+  it("grants a requested permission subset for the Codex session", async () => {
+    const rpc = new FakeRpcClient([
+      { data: [nativeThread()], nextCursor: null },
+      { thread: nativeThread({ status: { type: "active" } }) },
+    ]);
+    const provider = createCodexAgentProvider({ client: rpc, project });
+    await provider.listTasks();
+
+    rpc.emitServerRequest("permissions-1", "item/permissions/requestApproval", {
+      cwd: "/workspace/CodeAgent",
+      environmentId: "local",
+      itemId: "permission-item-1",
+      permissions: {
+        fileSystem: {
+          entries: [
+            {
+              access: "write",
+              path: { path: "/workspace/CodeAgent/.cache", type: "path" },
+            },
+          ],
+          globScanMaxDepth: 4,
+          read: null,
+          write: null,
+        },
+        network: { enabled: true },
+      },
+      reason: "需要访问网络并写入缓存",
+      startedAtMs: 1_776_643_200_000,
+      threadId: "task-1",
+      turnId: "turn-1",
+    });
+
+    const request = (await provider.readTask("task-1"))?.pendingRequests[0];
+    expect(request).toMatchObject({
+      permissions: {
+        fileSystem: {
+          entries: [
+            {
+              access: "write",
+              path: { type: "path", value: "/workspace/CodeAgent/.cache" },
+            },
+          ],
+          globScanMaxDepth: 4,
+          read: null,
+          write: null,
+        },
+        network: { enabled: true },
+      },
+      requestId: "string:permissions-1",
+      type: "permissions_approval",
+    });
+    if (request?.type !== "permissions_approval") {
+      throw new Error("Expected a pending permission approval");
+    }
+
+    await provider.resolvePendingRequest({
+      itemId: request.itemId,
+      projectId: request.projectId,
+      requestId: request.requestId,
+      resolution: { grantedPermissions: ["network"], scope: "session" },
+      taskId: request.taskId,
+      turnId: request.turnId,
+      type: request.type,
+    });
+
+    expect(rpc.serverResponses).toEqual([
+      {
+        id: "permissions-1",
+        result: { permissions: { network: { enabled: true } }, scope: "session" },
+      },
+    ]);
+  });
+
   it("reuses matching concurrent resolutions and rejects conflicting decisions", async () => {
     let releaseResponse: () => void = () => undefined;
     const responseGate = new Promise<void>((resolve) => {

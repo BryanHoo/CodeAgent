@@ -14,7 +14,6 @@ import type {
   AgentTask,
   Project,
 } from "@code-agent/protocol";
-import pino from "pino";
 import {
   RpcResponseError,
   type RpcErrorPayload,
@@ -28,6 +27,7 @@ import { TaskRuntimeState } from "./task-runtime-state.js";
 import { normalizedPathIdentity } from "./runtime-owner-registry.js";
 import { mapCodexProjectStateNotification } from "./agent-provider-notifications.js";
 import { warnDroppedCodexNotification } from "./agent-provider-diagnostics.js";
+import { DEFAULT_PROVIDER_LOGGER, type CodexProviderLogger } from "./agent-provider-logger.js";
 import {
   CodexProtocolMappingError,
   type CodexSkill,
@@ -56,14 +56,6 @@ export interface CreateCodexRuntimeProviderOptions {
   fetch?: typeof globalThis.fetch;
   logger?: CodexProviderLogger;
 }
-
-export interface CodexProviderLogger {
-  warn(fields: Readonly<Record<string, unknown>>, message: string): void;
-}
-
-export const DEFAULT_PROVIDER_LOGGER: CodexProviderLogger = pino({ level: "warn" }).child({
-  component: "provider-codex",
-});
 
 export const CODEX_PINNED_THREAD_SECTION_ID = "01984de2-8f74-7c91-a3b2-5c5e937cf318";
 

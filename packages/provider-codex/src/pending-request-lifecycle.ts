@@ -123,7 +123,28 @@ export class PendingRequestLifecycle {
 
     let answerItem: UserInputAnswerItem | undefined;
     let result: unknown;
-    if (input.type === "user_input") {
+    if (input.type === "permissions_approval") {
+      if (request.type !== "permissions_approval" || entry.nativePermissionProfile === undefined) {
+        throw new PendingRequestResolutionError("mismatch", "Pending request type does not match");
+      }
+      const granted = input.resolution.grantedPermissions;
+      const nativePermissions: Record<string, unknown> = {};
+      for (const category of granted) {
+        const nativeCategory =
+          category === "network"
+            ? entry.nativePermissionProfile.network
+            : entry.nativePermissionProfile.fileSystem;
+        if (nativeCategory === null) {
+          throw new PendingRequestResolutionError(
+            "mismatch",
+            "Granted permission was not requested",
+          );
+        }
+        nativePermissions[category === "network" ? "network" : "fileSystem"] = nativeCategory;
+      }
+      // 原生协议只接受请求权限的子集；空集合表示拒绝且不扩大 Sandbox。
+      result = { permissions: nativePermissions, scope: input.resolution.scope };
+    } else if (input.type === "user_input") {
       if (request.type !== "user_input") {
         throw new PendingRequestResolutionError("mismatch", "Pending request type does not match");
       }
@@ -143,7 +164,7 @@ export class PendingRequestLifecycle {
       };
       answerItem = createUserInputAnswerItem(request, input.resolution.answers);
     } else {
-      if (request.type === "user_input") {
+      if (request.type === "user_input" || request.type === "permissions_approval") {
         throw new PendingRequestResolutionError("mismatch", "Pending request type does not match");
       }
       const decision = input.resolution.decision;

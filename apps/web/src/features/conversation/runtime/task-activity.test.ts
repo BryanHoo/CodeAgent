@@ -116,6 +116,24 @@ function createApprovalRequest(requestId: string): AgentTaskSnapshot["pendingReq
   };
 }
 
+function createPermissionRequest(requestId: string): AgentTaskSnapshot["pendingRequests"][number] {
+  return {
+    createdAt: "2026-07-27T00:00:00.000Z",
+    cwd: "/workspace/CodeAgent",
+    environmentId: null,
+    expiresAt: null,
+    itemId: `item-${requestId}`,
+    permissions: { fileSystem: null, network: { enabled: true } },
+    projectId: "code-agent",
+    reason: null,
+    requestId,
+    status: "pending",
+    taskId: "task-a",
+    turnId: "turn-task-a",
+    type: "permissions_approval",
+  };
+}
+
 describe("task activity registry", () => {
   it("keeps a running task visible when another task becomes active", () => {
     let activity: TaskActivityMap = new Map();
@@ -272,6 +290,18 @@ describe("task activity registry", () => {
 
     expect(getTaskActivity(activity, "code-agent", "task-a").isAwaitingApproval).toBe(true);
     expect(getTaskActivity(activity, "code-agent", "task-a").attention).toBe("approval");
+  });
+
+  it("treats granular permission requests as approvals", () => {
+    const activity = recordTaskActivitySnapshot(
+      new Map(),
+      createSnapshot("task-a", "running", [createPermissionRequest("permissions-1")]),
+    );
+
+    expect(getTaskActivity(activity, "code-agent", "task-a")).toMatchObject({
+      attention: "approval",
+      isAwaitingApproval: true,
+    });
   });
 
   it("clears a stale approval marker when the authoritative snapshot has no request", () => {

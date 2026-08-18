@@ -38,12 +38,8 @@ import { RuntimeOwnerRegistry, isSameResolvedPath } from "./runtime-owner-regist
 import { CodexProtocolMappingError, expectRecord } from "./codex-protocol-mapping.js";
 
 import { CodexAgentProvider } from "./agent-provider-runtime.js";
-import {
-  DEFAULT_PROVIDER_LOGGER,
-  type CodexProviderLogger,
-  type CodexRpcClient,
-  type CreateCodexRuntimeProviderOptions,
-} from "./agent-provider-base.js";
+import type { CodexRpcClient, CreateCodexRuntimeProviderOptions } from "./agent-provider-base.js";
+import { DEFAULT_PROVIDER_LOGGER, type CodexProviderLogger } from "./agent-provider-logger.js";
 import { readReviewWorkerThread, readTaskId } from "./agent-provider-notifications.js";
 import { CodexProviderConnectionService } from "./provider-connection.js";
 

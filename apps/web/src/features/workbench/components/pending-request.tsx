@@ -23,6 +23,10 @@ import {
   notifyActionError,
   notifyActionSuccess,
 } from "../../notifications/action-notifications.js";
+import {
+  FileSystemPermissionDetails,
+  PermissionApprovalRequestCard,
+} from "./permission-approval-request.js";
 
 export type PendingRequestResolution = ResolvePendingRequestRequest["resolution"];
 
@@ -133,6 +137,26 @@ function ApprovalRequestCard({
       <ConfirmationTitle>{title}</ConfirmationTitle>
       <ConfirmationRequest>
         <pre className="whitespace-pre-wrap font-mono text-meta">{detail}</pre>
+        {request.type === "command_approval" && request.additionalPermissions != null ? (
+          <div className="mt-3 space-y-2 border-t border-border pt-2">
+            <p className="text-label font-medium text-foreground">
+              {t("pending.additionalPermissions")}
+            </p>
+            {request.additionalPermissions.network === null ? null : (
+              <p className="text-label text-muted-foreground">{t("pending.networkPermission")}</p>
+            )}
+            {request.additionalPermissions.fileSystem === null ? null : (
+              <div>
+                <p className="text-label text-muted-foreground">
+                  {t("pending.fileSystemPermission")}
+                </p>
+                <FileSystemPermissionDetails
+                  permissions={request.additionalPermissions.fileSystem}
+                />
+              </div>
+            )}
+          </div>
+        ) : null}
         {request.reason === null ? null : (
           <p className="mt-2 text-label text-muted-foreground">{request.reason}</p>
         )}
@@ -339,6 +363,15 @@ export function PendingRequestCard(props: PendingRequestCardProps) {
   if (props.request.type === "user_input") {
     return (
       <UserInputRequestCard
+        interactive={props.interactive}
+        onResolve={props.onResolve}
+        request={props.request}
+      />
+    );
+  }
+  if (props.request.type === "permissions_approval") {
+    return (
+      <PermissionApprovalRequestCard
         interactive={props.interactive}
         onResolve={props.onResolve}
         request={props.request}

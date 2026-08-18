@@ -9,6 +9,7 @@ import type {
   AgentProviderConnectionRecord,
   AgentProjectDefaults,
   AgentTaskSettings,
+  PendingRequest,
 } from "@code-agent/protocol";
 import {
   CodexAppServerProcess,
@@ -314,6 +315,108 @@ describe("Realtime Path", () => {
       payload: { turn: { status: "completed" } },
       type: "turn.completed",
     });
+  });
+
+  it("resolves a session-scoped filesystem permission through the full mutation path", async () => {
+    const runtime = await startFakeAppServer("agent-actions");
+    const provider = createCodexRuntimeProvider({ client: runtime.client });
+    const server = await createCodeAgentServer({
+      ...createServerOptions(provider),
+      eventSessionId: "permission-approval-session",
+    });
+    servers.push(server);
+    const baseUrl = await server.listen({ host: "127.0.0.1", port: 0 });
+    const client = createRealtimeClient(baseUrl);
+    const created = await client.startTask(project.id, { idempotencyKey: "create-permission" });
+    const snapshot = await client.readTask(project.id, created.task.id);
+    const events: AgentEvent[] = [];
+
+    let resolvePending!: (
+      request: Extract<PendingRequest, { type: "permissions_approval" }>,
+    ) => void;
+    const pending = new Promise<Extract<PendingRequest, { type: "permissions_approval" }>>(
+      (resolve) => {
+        resolvePending = resolve;
+      },
+    );
+    const completed = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Timed out waiting for permission approval lifecycle"));
+      }, 2_000);
+      const unsubscribe = client.subscribeEvents({
+        afterSequence: snapshot.checkpoint.sequence,
+        projectId: project.id,
+        onError: reject,
+        onEvent(event) {
+          if (event.taskId !== created.task.id) return;
+          events.push(event);
+          if (
+            event.type === "pending_request.created" &&
+            event.payload.request.type === "permissions_approval"
+          ) {
+            resolvePending(event.payload.request);
+          }
+          if (event.type === "turn.completed") {
+            clearTimeout(timeout);
+            unsubscribe();
+            resolve();
+          }
+        },
+        onResyncRequired(message) {
+          reject(new Error(`Unexpected resync: ${message.reason}`));
+        },
+        sessionId: snapshot.checkpoint.sessionId,
+      });
+    });
+
+    await client.startTurn(
+      project.id,
+      created.task.id,
+      { attachments: [], skills: [], text: "审批权限", type: "prompt" },
+      turnOptions,
+      { idempotencyKey: "turn-permission" },
+    );
+    const request = await pending;
+    await client.resolvePendingRequest(
+      request,
+      { grantedPermissions: ["file_system"], scope: "session" },
+      { idempotencyKey: "resolve-permission" },
+    );
+    await completed;
+
+    await expect(runtime.client.request("inspect/pending")).resolves.toEqual({
+      responses: [
+        {
+          id: "fake-permissions-1",
+          result: {
+            permissions: {
+              fileSystem: {
+                entries: [
+                  {
+                    access: "write",
+                    path: { path: "/workspace/CodeAgent/.cache", type: "path" },
+                  },
+                ],
+                globScanMaxDepth: 4,
+                read: null,
+                write: null,
+              },
+            },
+            scope: "session",
+          },
+        },
+      ],
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      "turn.started",
+      "pending_request.created",
+      "pending_request.resolved",
+      "message.delta",
+      "message.delta",
+      "item.completed",
+      "usage.updated",
+      "turn.completed",
+    ]);
   });
 
   it("submits and interrupts a running turn through the full mutation path", async () => {

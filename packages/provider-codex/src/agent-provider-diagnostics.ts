@@ -1,6 +1,6 @@
 import type { AgentProviderEvent } from "@code-agent/core";
 
-import type { CodexProviderLogger } from "./agent-provider-base.js";
+import type { CodexProviderLogger } from "./agent-provider-logger.js";
 import { SUPPORTED_CODEX_VERSION } from "./binary.js";
 import type { RpcServerRequest } from "./jsonl-rpc-client.js";
 import { readTaskId } from "./agent-provider-notifications.js";
