@@ -7,7 +7,6 @@ export const workbench = {
   },
   commit: {
     allFiles: "全选",
-    closeDialog: "关闭提交弹窗",
     commit: "提交",
     commitActions: "选择提交方式",
     commitAndPush: "提交并推送",
@@ -20,7 +19,6 @@ export const workbench = {
     commitSucceeded: "提交成功",
     changes: "变更",
     generateMessage: "生成 message 信息",
-    history: "当前分支历史",
     messagePlaceholder: "输入提交信息",
     repository: "Git 项目",
     repositoryLoading: "正在加载 Git 项目",
@@ -30,7 +28,6 @@ export const workbench = {
     selectRepository: "选择 Git 项目",
     selectionLabel: "选择文件，已选择 {{selected}}/{{total}} 个文件",
     staged: "已暂存",
-    title: "提交变更",
     totalFiles_one: "共 {{count}} 个",
     totalFiles_other: "共 {{count}} 个",
     unstaged: "未暂存",

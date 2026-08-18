@@ -7,7 +7,6 @@ export const workbench = {
   },
   commit: {
     allFiles: "All files",
-    closeDialog: "Close commit dialog",
     commit: "Commit",
     commitActions: "Choose commit action",
     commitAndPush: "Commit and push",
@@ -20,7 +19,6 @@ export const workbench = {
     commitSucceeded: "Committed successfully",
     changes: "Changes",
     generateMessage: "Generate message content",
-    history: "Current branch history",
     messagePlaceholder: "Enter a commit message",
     repository: "Git project",
     repositoryLoading: "Loading Git project",
@@ -30,7 +28,6 @@ export const workbench = {
     selectRepository: "Select Git project",
     selectionLabel: "Select files, {{selected}} of {{total}} selected",
     staged: "Staged",
-    title: "Commit changes",
     totalFiles_one: "{{count}} total",
     totalFiles_other: "{{count}} total",
     unstaged: "Unstaged",

@@ -39,7 +39,6 @@ import {
   taskRenameMutationOptions,
 } from "../../projects/project-queries.js";
 import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
-import type { CommitChangesLauncherHandle } from "./commit-changes-launcher.js";
 import type { SidebarSettingsSection } from "./project-sidebar-actions.js";
 import { deriveProjectSidebarConnectionState } from "./project-sidebar.js";
 import { getProjectFileManagerApp } from "./project-open-menu.js";
@@ -281,8 +280,7 @@ export function useWorkbenchShellRuntime({
   const [inspectorTabState, setInspectorTabState] = useState<{
     scopeKey: string;
     tab: WorkbenchInspectorTab;
-  }>({ scopeKey: inspectorScopeKey, tab: "changes" });
-  const commitChangesLauncherRef = useRef<CommitChangesLauncherHandle>(null);
+  }>({ scopeKey: inspectorScopeKey, tab: "project" });
   const {
     beginSubmission: beginNewChatSubmission,
     getStartedAt: getNewChatSubmissionStartedAt,
@@ -318,7 +316,7 @@ export function useWorkbenchShellRuntime({
 
   // 标签选择绑定当前路由身份；进入新建页或另一个 Task 时始终从项目页开始。
   const inspectorTab =
-    inspectorTabState.scopeKey === inspectorScopeKey ? inspectorTabState.tab : "changes";
+    inspectorTabState.scopeKey === inspectorScopeKey ? inspectorTabState.tab : "project";
   const gitStatusDetailsQuery = useQuery(
     projectGitDetailedStatusQueryOptions(
       projectId,
@@ -326,7 +324,7 @@ export function useWorkbenchShellRuntime({
       gitStatusQuery.data?.snapshot ?? "",
       !temporary &&
         inspectorOpen &&
-        inspectorTab === "changes" &&
+        (inspectorTab === "project" || inspectorTab === "changes") &&
         (gitStatusQuery.data?.staged.length ?? 0) + (gitStatusQuery.data?.unstaged.length ?? 0) > 0,
       client,
     ),
@@ -388,7 +386,6 @@ export function useWorkbenchShellRuntime({
     beginNewChatSubmission,
     capabilities,
     client,
-    commitChangesLauncherRef,
     error,
     expandedFileTreePaths,
     fileDiffSelection,

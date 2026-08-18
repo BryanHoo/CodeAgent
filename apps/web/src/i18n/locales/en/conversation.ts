@@ -55,7 +55,7 @@ export const conversation = {
     attachmentDetail: "Attachment",
     changeActions: "Change actions",
     changeStats: "Change statistics",
-    changes: "Project",
+    changes: "Changes",
     commit: "Commit",
     context: "Context",
     contextSources: "Context sources",
@@ -85,6 +85,7 @@ export const conversation = {
       ready: "Ready",
       starting: "Starting",
     },
+    project: "Project",
     mcpAuth: {
       bearerToken: "Bearer Token",
       notLoggedIn: "Not signed in",

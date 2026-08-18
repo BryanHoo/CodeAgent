@@ -3,7 +3,6 @@ import { lazy, Suspense } from "react";
 import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
 import { FileReviewDialog } from "../../diff/file-review-dialog.js";
 import { loadGlobalSettingsDialog } from "../../settings/components/global-settings-lazy.js";
-import { CommitChangesLauncher } from "./commit-changes-launcher.js";
 import { ProjectSourceDialog } from "./project-source-dialog.js";
 import { SubagentOutputDialog } from "./subagent-output-dialog.js";
 import { TaskRenameDialog } from "./task-rename-dialog.js";
@@ -30,14 +29,11 @@ export function WorkbenchShellDialogs({
     appUpdateMutation,
     client,
     closeTaskRenameDialog,
-    commitChangesLauncherRef,
-    gitStatusQuery,
     globalSettingsMutation,
     globalSettingsSection,
     globalSettingsQuery,
     models,
     modelsQuery,
-    openFileDiff,
     projectOpenCapabilitiesQuery,
     projectRuntime,
     renameActiveTask,
@@ -70,15 +66,6 @@ export function WorkbenchShellDialogs({
           onClose={() => {
             setFileReviewSelection(null);
           }}
-        />
-      )}
-      {!projectToolsEnabled || gitStatusQuery.data === undefined ? null : (
-        <CommitChangesLauncher
-          client={client}
-          gitStatus={gitStatusQuery.data}
-          onOpenFileDiff={openFileDiff}
-          projectId={projectId}
-          ref={commitChangesLauncherRef}
         />
       )}
       {selectedSourceFile === null ? null : (

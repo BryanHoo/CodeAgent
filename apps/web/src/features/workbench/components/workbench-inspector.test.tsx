@@ -219,7 +219,7 @@ describe("WorkbenchInspector", () => {
     expect(markup).toContain('aria-label="变更操作"');
     expect(markup).not.toContain('aria-label="审核 2 个未提交变更"');
     expect(markup).toContain('aria-label="提交 2 个未提交变更"');
-    expect(markup).toContain('aria-haspopup="dialog"');
+    expect(markup).not.toContain('aria-haspopup="dialog"');
     expect(markup).not.toContain(">审核</button>");
     expect(markup).toContain(">提交</button>");
     expect(markup).toMatch(
@@ -238,6 +238,7 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain("shadow-toolbar");
     expect(markup).toContain("lucide-folder-tree");
     expect(markup).toContain(">项目</span></button>");
+    expect(markup).toContain(">变更</span></button>");
     expect(markup).toContain(">历史</span></button>");
     expect(markup).not.toContain(">上下文</span></button>");
     expect(markup).toContain('aria-label="项目文件"');
@@ -265,12 +266,13 @@ describe("WorkbenchInspector", () => {
     );
 
     expect(markup).toContain(">项目</span></button>");
+    expect(markup).toContain(">变更</span></button>");
     expect(markup).toContain(">上下文</span></button>");
     expect(markup).toContain(">历史</span></button>");
     expect(markup).toContain("lucide-braces");
   });
 
-  it("allows opening the commit dialog for immediate child Git repositories", () => {
+  it("shows the commit entry for immediate child Git repositories", () => {
     const markup = renderInspectorMarkup(
       <WorkbenchInspector
         gitStatus={{ ...gitStatus, repositoryMode: "children" }}

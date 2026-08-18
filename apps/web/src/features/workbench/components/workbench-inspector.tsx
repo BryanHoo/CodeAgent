@@ -8,7 +8,7 @@ import type {
   ProjectOpenApp,
   ProjectOpenAppId,
 } from "@code-agent/protocol";
-import { PanelRightClose, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
@@ -38,16 +38,14 @@ import { InspectorSources } from "./workbench-inspector-sources.js";
 import { PlanSection } from "./workbench-inspector-plan.js";
 import { deriveInspectorGitChangeState } from "./workbench-inspector-git-status.js";
 import { GitHistoryPanel } from "./git-history-panel.js";
+import { WorkbenchInspectorChanges } from "./workbench-inspector-changes.js";
 import {
   projectInspectorTabs,
   taskInspectorTabs,
-  WorkbenchInspectorTabs,
+  WorkbenchInspectorHeader,
   type WorkbenchInspectorTab,
 } from "./workbench-inspector-tabs.js";
-import type {
-  CodeAgentGitCommitReviewClient,
-  CodeAgentGitHistoryClient,
-} from "../../projects/project-queries.js";
+import type { CodeAgentWorkbenchClient } from "../../projects/project-queries.js";
 
 export type { ProjectFileTreeDirectoryState } from "./workbench-inspector-file-tree.js";
 
@@ -62,10 +60,12 @@ type WorkbenchInspectorProps = Readonly<{
   fileTreeDirectories?: readonly ProjectFileTreeDirectoryState[];
   gitStatus?: ProjectGitStatus;
   gitStatusDetails?: ProjectGitStatus | undefined;
+  gitStatusDetailsError?: Error | null;
+  gitStatusDetailsPending?: boolean;
   gitStatusError?: Error | null;
   gitStatusPending?: boolean;
   gitStatusRefreshing?: boolean;
-  gitClient?: CodeAgentGitHistoryClient & CodeAgentGitCommitReviewClient;
+  gitClient?: CodeAgentWorkbenchClient;
   mcpServers?: readonly AgentMcpServer[];
   mcpServersError?: Error | null;
   mcpServersPending?: boolean;
@@ -112,6 +112,8 @@ export function WorkbenchInspector({
   fileTreeDirectories = [],
   gitStatus,
   gitStatusDetails,
+  gitStatusDetailsError = null,
+  gitStatusDetailsPending = false,
   gitStatusError = null,
   gitStatusPending = false,
   gitStatusRefreshing = false,
@@ -145,7 +147,7 @@ export function WorkbenchInspector({
   projectRefreshing = false,
   skills = [],
   subagents = [],
-  tab = "changes",
+  tab = "project",
   task,
   taskId,
   terminatingTerminalId = null,
@@ -189,26 +191,11 @@ export function WorkbenchInspector({
     ? "context"
     : tab === "context" && taskId !== undefined
       ? "context"
-      : tab === "history"
-        ? "history"
-        : "changes";
-  const closeButton =
-    onClose === undefined ? null : (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            aria-label={i18n.t("shell.closeInspector", { ns: "workbench" })}
-            onClick={onClose}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            <PanelRightClose aria-hidden="true" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{i18n.t("shell.closeInspector", { ns: "workbench" })}</TooltipContent>
-      </Tooltip>
-    );
+      : tab === "changes"
+        ? "changes"
+        : tab === "history"
+          ? "history"
+          : "project";
   const contextContent = (
     <div className="h-full space-y-5 overflow-y-auto p-2.5">
       {backgroundTerminals.length > 0 ||
@@ -253,21 +240,16 @@ export function WorkbenchInspector({
         contextOnly ? "grid-rows-[minmax(0,1fr)]" : "grid-rows-[auto_minmax(0,1fr)]"
       }`}
     >
-      {contextOnly ? (
-        <div className="absolute right-2 top-2 z-10 min-[1101px]:hidden">{closeButton}</div>
-      ) : (
-        <div className="flex min-h-workbench-header items-center gap-2 px-1.5">
-          <WorkbenchInspectorTabs
-            activeTab={activeTab}
-            availableTabs={availableTabs}
-            onTabChange={onTabChange}
-          />
-          <div className="shrink-0 min-[1101px]:hidden">{closeButton}</div>
-        </div>
-      )}
+      <WorkbenchInspectorHeader
+        activeTab={activeTab}
+        availableTabs={availableTabs}
+        contextOnly={contextOnly}
+        onClose={onClose}
+        onTabChange={onTabChange}
+      />
 
       <div className="min-h-0 overflow-hidden" role={contextOnly ? undefined : "tabpanel"}>
-        {activeTab === "changes" ? (
+        {activeTab === "project" ? (
           <div className="flex h-full min-h-0 flex-col">
             {/* 工作区干净时省略整个摘要模块，把空间完整留给项目文件。 */}
             {allChanges.length > 0 ? (
@@ -309,7 +291,6 @@ export function WorkbenchInspector({
                 >
                   <Button
                     variant="ghost"
-                    aria-haspopup="dialog"
                     aria-label={i18n.t("inspector.commitChanges", {
                       count: allChanges.length,
                       ns: "conversation",
@@ -476,6 +457,17 @@ export function WorkbenchInspector({
               </div>
             </div>
           </div>
+        ) : activeTab === "changes" ? (
+          <WorkbenchInspectorChanges
+            client={gitClient}
+            detailsError={gitStatusDetailsError}
+            detailsPending={gitStatusDetailsPending}
+            detailsStatus={gitStatusDetails}
+            gitStatus={gitStatus}
+            gitStatusError={gitStatusError}
+            onOpenFileDiff={onOpenFileDiff}
+            projectId={projectId}
+          />
         ) : activeTab === "history" && projectId !== undefined ? (
           <GitHistoryPanel
             {...(gitClient === undefined ? {} : { client: gitClient })}

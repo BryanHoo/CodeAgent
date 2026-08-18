@@ -22,7 +22,6 @@ import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
 import { ActiveTaskWorkbench } from "./workbench-shell-active-task.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
 import { loadProjectGitFileDiff } from "../project-git-file-diff.js";
-const emptyExpandedFileTreePaths = new Set<string>();
 
 type WorkbenchShellStyle = CSSProperties &
   Readonly<{ "--inspector-open-width": string; "--sidebar-open-width": string }>;
@@ -47,7 +46,6 @@ export function WorkbenchShellLayout({
     client,
     closeInspector,
     closeSidebar,
-    commitChangesLauncherRef,
     draftSettings,
     error,
     expandedFileTreePaths,
@@ -120,7 +118,6 @@ export function WorkbenchShellLayout({
       });
   };
   const openGitHistory = () => {
-    // Composer 入口同时恢复右栏并切换标签，避免用户还需执行第二次操作。
     setInspectorTab("history");
     setInspectorOpen(true);
   };
@@ -402,6 +399,8 @@ export function WorkbenchShellLayout({
           fileTreeDirectories={fileTreeDirectories}
           gitStatusError={gitStatusQuery.error}
           gitStatusDetails={context.gitStatusDetailsQuery.data}
+          gitStatusDetailsError={context.gitStatusDetailsQuery.error}
+          gitStatusDetailsPending={context.gitStatusDetailsQuery.isFetching}
           gitStatusPending={gitStatusQuery.isPending}
           gitStatusRefreshing={gitStatusQuery.isFetching}
           gitClient={client}
@@ -416,7 +415,7 @@ export function WorkbenchShellLayout({
           onFileTreeExpandedChange={(nextExpandedPaths) => {
             setFileTreeExpansion((current) => {
               const previousPaths =
-                current.projectId === projectId ? current.paths : emptyExpandedFileTreePaths;
+                current.projectId === projectId ? current.paths : new Set<string>();
               const collapsedPaths = [...previousPaths].filter(
                 (path) => !nextExpandedPaths.has(path),
               );
@@ -462,7 +461,8 @@ export function WorkbenchShellLayout({
             ])
           }
           onCommitChanges={() => {
-            commitChangesLauncherRef.current?.open();
+            setInspectorTab("changes");
+            setInspectorOpen(true);
           }}
           onRefreshFileTreeDirectory={(directoryPath) => {
             const directoryIndex = fileTreeDirectoryPaths.indexOf(directoryPath);

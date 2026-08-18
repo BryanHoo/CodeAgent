@@ -55,7 +55,7 @@ export const conversation = {
     attachmentDetail: "附件",
     changeActions: "变更操作",
     changeStats: "变更统计",
-    changes: "项目",
+    changes: "变更",
     commit: "提交",
     context: "上下文",
     contextSources: "上下文来源",
@@ -85,6 +85,7 @@ export const conversation = {
       ready: "已就绪",
       starting: "正在启动",
     },
+    project: "项目",
     mcpAuth: {
       bearerToken: "Bearer Token",
       notLoggedIn: "未登录",

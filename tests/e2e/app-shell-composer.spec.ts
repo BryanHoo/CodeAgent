@@ -228,7 +228,6 @@ test("opens current-branch Git history beside the composer branch", async ({ pag
   );
 
   await page.setViewportSize({ width: 320, height: 568 });
-  await inspector.getByRole("button", { name: "关闭上下文面板" }).click();
   await expect(inspector).not.toBeVisible();
   await historyTrigger.click();
   await expect(inspector).toBeVisible();
@@ -2028,6 +2027,7 @@ test("generates a message and commits only selected files", async ({ page }) => 
   let messageRequest: Record<string, unknown> | undefined;
   let commitRequest: Record<string, unknown> | undefined;
   let commitIdempotencyKey: string | undefined;
+  let historyRequestCount = 0;
   await page.route("**/v1/projects/code-agent/git/status*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -2061,19 +2061,12 @@ test("generates a message and commits only selected files", async ({ page }) => 
     });
   });
   await page.route("**/v1/projects/code-agent/git/history*", async (route) => {
+    historyRequestCount += 1;
     await route.fulfill({
       contentType: "application/json",
       json: {
         branch: "feat/review-targets",
-        commits: [
-          {
-            authoredAt: "2026-08-06T08:30:00+08:00",
-            authorEmail: "developer@example.com",
-            authorName: "Developer",
-            sha: "f".repeat(40),
-            title: "feat(git): 展示提交抽屉历史",
-          },
-        ],
+        commits: [],
         nextCursor: null,
         repositories: [],
         repository: null,
@@ -2081,38 +2074,23 @@ test("generates a message and commits only selected files", async ({ page }) => 
       },
     });
   });
-  await page.route("**/v1/projects/code-agent/git/commit-files*", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      json: {
-        files: [{ kind: "update", path: "src/history-review.ts" }],
-        nextCursor: null,
-      },
-    });
-  });
-  await page.route("**/v1/projects/code-agent/git/commit-diff*", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      json: {
-        diff: "diff --git a/src/history-review.ts b/src/history-review.ts\n--- a/src/history-review.ts\n+++ b/src/history-review.ts\n@@ -1 +1 @@\n-old\n+new\n",
-        truncated: false,
-      },
-    });
-  });
 
   await page.goto("/p/code-agent/t/task-1");
   await page.getByRole("button", { name: "提交 17 个未提交变更" }).click();
-  const dialog = page.getByRole("dialog", { name: "提交变更" });
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveClass(/right-0/u);
-  const unstagedTree = dialog.getByRole("tree", { name: "未暂存" });
-  const allFilesCheckbox = dialog.getByRole("checkbox", { name: "未暂存", exact: true });
-  const generateMessageButton = dialog.getByRole("button", { name: "生成 message 信息" });
+  const inspector = page.locator(".workbench-inspector");
+  const changesTab = inspector.getByRole("tab", { name: "变更" });
+  const panel = inspector.locator('[data-slot="commit-changes-panel"]');
+  await expect(changesTab).toHaveAttribute("aria-selected", "true");
+  await expect(panel).toBeVisible();
+  await expect(page.locator('[data-slot="sheet-content"]')).toHaveCount(0);
+  const unstagedTree = panel.getByRole("tree", { name: "未暂存" });
+  const allFilesCheckbox = panel.getByRole("checkbox", { name: "未暂存", exact: true });
+  const generateMessageButton = panel.getByRole("button", { name: "生成 message 信息" });
   await expect(allFilesCheckbox).toBeChecked();
   await expect(generateMessageButton).toHaveCSS("height", "28px");
   await expect(generateMessageButton).toHaveCSS("width", "28px");
   await expect(generateMessageButton).toHaveText("");
-  const inputGroup = dialog.locator('[data-slot="input-group"]');
+  const inputGroup = panel.locator('[data-slot="input-group"]');
   const generateIcon = generateMessageButton.locator("svg");
   const [inputGroupBox, generateButtonBox, generateIconBox] = await Promise.all([
     inputGroup.boundingBox(),
@@ -2137,21 +2115,21 @@ test("generates a message and commits only selected files", async ({ page }) => 
   ).toBeLessThanOrEqual(1);
   await generateMessageButton.hover();
   await expect(page.getByRole("tooltip")).toHaveText("生成 message 信息");
-  const messageInput = dialog.getByRole("textbox", { name: "提交信息" });
+  const messageInput = panel.getByRole("textbox", { name: "提交信息" });
   await expect(messageInput).toHaveJSProperty("tagName", "TEXTAREA");
-  const sheetBody = dialog.locator('[data-slot="commit-sheet-body"]');
-  const changesScroll = dialog.locator('[data-slot="commit-changes-scroll"]');
-  const historyScroll = dialog.locator('[data-slot="git-history-content"]');
-  const sheetMetrics = await dialog.evaluate((element) => ({
+  const changesScroll = panel.locator('[data-slot="commit-changes-scroll"]');
+  const panelMetrics = await panel.evaluate((element) => ({
     clientHeight: element.clientHeight,
     overflowY: getComputedStyle(element).overflowY,
     scrollHeight: element.scrollHeight,
   }));
-  const bodyMetrics = await sheetBody.evaluate((element) => ({
-    clientHeight: element.clientHeight,
-    overflowY: getComputedStyle(element).overflowY,
-    scrollHeight: element.scrollHeight,
-  }));
+  await changesScroll.evaluate((element) => {
+    // 模拟超长变更列表，验证滚动被限制在面板文件区域。
+    const spacer = document.createElement("div");
+    spacer.setAttribute("aria-hidden", "true");
+    spacer.style.height = "1200px";
+    element.append(spacer);
+  });
   const changesScrollMetrics = await changesScroll.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
     return {
@@ -2161,65 +2139,15 @@ test("generates a message and commits only selected files", async ({ page }) => 
       scrollTop: element.scrollTop,
     };
   });
-  expect(sheetMetrics.scrollHeight).toBeLessThanOrEqual(sheetMetrics.clientHeight);
-  expect(sheetMetrics.overflowY).toBe("hidden");
-  expect(bodyMetrics.scrollHeight).toBeLessThanOrEqual(bodyMetrics.clientHeight);
-  expect(bodyMetrics.overflowY).toBe("hidden");
+  expect(panelMetrics.scrollHeight).toBeLessThanOrEqual(panelMetrics.clientHeight);
+  expect(panelMetrics.overflowY).toBe("hidden");
   expect(changesScrollMetrics.scrollHeight).toBeGreaterThan(changesScrollMetrics.clientHeight);
   expect(changesScrollMetrics.overflowY).toBe("auto");
   expect(changesScrollMetrics.scrollTop).toBeGreaterThan(0);
-  await expect(historyScroll).toHaveCSS("overflow-y", "auto");
-  expect(await dialog.evaluate((element) => element.scrollTop)).toBe(0);
-  await expect(dialog.locator("header")).not.toContainText("feat/review-targets");
-  await expect(messageInput.locator("xpath=ancestor::section")).not.toContainText(
-    "feat/review-targets",
-  );
-  await expect(dialog.getByRole("button", { name: "当前分支历史" })).toContainText(
-    "feat/review-targets",
-  );
-  await expect(dialog.getByText("当前分支：feat/review-targets")).toHaveCount(0);
-  await expect(dialog.getByText("feat(git): 展示提交抽屉历史")).toBeVisible();
-  await messageInput.fill("feat(git): 保留提交表单");
-  const historyCommitButton = dialog.getByRole("button", {
-    name: /feat\(git\): 展示提交抽屉历史/u,
-  });
-  const historyCommitBackground = await historyCommitButton.evaluate(
-    (element) => getComputedStyle(element).backgroundColor,
-  );
-  await historyCommitButton.hover();
-  await expect
-    .poll(() =>
-      historyCommitButton.evaluate((element) => getComputedStyle(element).backgroundColor),
-    )
-    .not.toBe(historyCommitBackground);
-  await historyCommitButton.click();
-  const commitReviewDialog = page.getByRole("dialog", {
-    name: "feat(git): 展示提交抽屉历史",
-  });
-  await expect(commitReviewDialog).toBeVisible();
-  await expect(commitReviewDialog.locator(".file-diff-renderer")).toContainText("new");
-  await expect(page.locator('[data-slot="sheet-content"]')).toBeAttached();
-  await commitReviewDialog.getByRole("button", { name: "关闭文件审核" }).click();
-  await expect(commitReviewDialog).not.toBeAttached();
-  await expect(dialog).toBeVisible();
-  await expect(messageInput).toHaveValue("feat(git): 保留提交表单");
-  await changesScroll.evaluate((element) => {
-    element.scrollTop = 0;
-  });
-
-  const changesTrigger = dialog.getByRole("button", { name: /变更/u });
-  const historyTrigger = dialog.getByRole("button", { name: "当前分支历史" });
-  await expect(changesTrigger).toHaveAttribute("aria-expanded", "true");
-  await changesTrigger.click();
-  await expect(changesTrigger).toHaveAttribute("aria-expanded", "false");
-  await expect(unstagedTree).not.toBeAttached();
-  await changesTrigger.click();
-  await expect(unstagedTree).toBeVisible();
-  await historyTrigger.click();
-  await expect(historyTrigger).toHaveAttribute("aria-expanded", "false");
-  await expect(historyScroll).not.toBeAttached();
-  await historyTrigger.click();
-  await expect(historyScroll).toBeVisible();
+  expect(await panel.evaluate((element) => element.scrollTop)).toBe(0);
+  await expect(panel).not.toContainText("feat/review-targets");
+  await expect(panel.getByText("当前分支历史")).toHaveCount(0);
+  expect(historyRequestCount).toBe(0);
 
   const packageFile = unstagedTree.getByRole("treeitem", { name: "package.json" });
   await packageFile.click();
@@ -2248,18 +2176,18 @@ test("generates a message and commits only selected files", async ({ page }) => 
   expect(messageMetrics.scrollHeight).toBeGreaterThan(messageMetrics.clientHeight);
   expect(messageMetrics.overflowY).toBe("auto");
   await messageInput.fill("feat(git): 提交选中文件");
-  await expect(dialog.getByRole("button", { name: "提交", exact: true }).locator("svg")).toHaveCSS(
+  await expect(panel.getByRole("button", { name: "提交", exact: true }).locator("svg")).toHaveCSS(
     "width",
-    "14px",
+    "16px",
   );
-  await dialog.getByRole("button", { name: "选择提交方式" }).click();
+  await panel.getByRole("button", { name: "选择提交方式" }).click();
   await expect(page.getByRole("menuitem", { name: "提交并推送" }).locator("svg")).toHaveCSS(
     "width",
     "14px",
   );
   await page.getByRole("menuitem", { name: "提交并推送" }).click();
 
-  await expect(dialog.getByText("提交已完成，但推送失败")).toHaveCount(0);
+  await expect(panel.getByText("提交已完成，但推送失败")).toHaveCount(0);
   const pushErrorToast = page.locator('[data-sonner-toast][data-type="error"]');
   await expect(pushErrorToast).toHaveText("fatal: remote rejected");
   expect(messageRequest).toEqual({ expectedSnapshot: snapshot, paths: ["package.json"] });
@@ -2270,12 +2198,18 @@ test("generates a message and commits only selected files", async ({ page }) => 
     paths: ["package.json"],
   });
   expect(commitIdempotencyKey).toBeTruthy();
+  expect(historyRequestCount).toBe(0);
 
   await page.setViewportSize({ width: 320, height: 568 });
-  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await page.getByRole("button", { name: "展开上下文面板" }).click();
+  const mobilePanel = page.locator('[data-slot="commit-changes-panel"]');
+  await expect(mobilePanel).toBeVisible();
+  expect(await mobilePanel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+    true,
+  );
 });
 
-test("defaults to the first child repository and keeps the commit sheet mounted when switching", async ({
+test("defaults to the first child repository and keeps the changes panel mounted when switching", async ({
   page,
 }) => {
   const aggregateSnapshot = "a".repeat(64);
@@ -2316,29 +2250,14 @@ test("defaults to the first child repository and keeps the commit sheet mounted 
             };
     await route.fulfill({ contentType: "application/json", json: status });
   });
-  await page.route("**/v1/projects/code-agent/git/history*", async (route) => {
-    const repository = new URL(route.request().url()).searchParams.get("repository");
-    await route.fulfill({
-      contentType: "application/json",
-      json: {
-        branch: repository === "frontend" ? "feat/frontend" : "feat/backend",
-        commits: [],
-        nextCursor: null,
-        repositories: [],
-        repository,
-        repositoryMode: "root",
-      },
-    });
-  });
-
   await page.goto("/p/code-agent/t/task-1");
   await page.getByRole("button", { name: "提交 2 个未提交变更" }).click();
-  const dialog = page.getByRole("dialog", { name: "提交变更" });
-  const repositorySelect = dialog.getByRole("combobox", { name: "Git 项目" });
+  const panel = page.locator('[data-slot="commit-changes-panel"]');
+  const repositorySelect = panel.getByRole("combobox", { name: "Git 项目" });
   await expect(repositorySelect).toContainText("backend");
-  await expect(dialog.getByRole("treeitem", { name: "src/server.ts" })).toBeVisible();
-  await dialog.getByRole("textbox", { name: "提交信息" }).fill("fix(backend): 更新服务");
-  await dialog.evaluate((element) => {
+  await expect(panel.getByRole("treeitem", { name: "src/server.ts" })).toBeVisible();
+  await panel.getByRole("textbox", { name: "提交信息" }).fill("fix(backend): 更新服务");
+  await panel.evaluate((element) => {
     element.dataset["mountMarker"] = "stable";
   });
 
@@ -2346,9 +2265,9 @@ test("defaults to the first child repository and keeps the commit sheet mounted 
   await page.getByRole("option", { name: "frontend" }).click();
 
   await expect(repositorySelect).toContainText("frontend");
-  await expect(dialog).toHaveAttribute("data-mount-marker", "stable");
-  await expect(dialog.getByRole("treeitem", { name: "src/app.tsx" })).toBeVisible();
-  await expect(dialog.getByRole("textbox", { name: "提交信息" })).toHaveValue("");
+  await expect(panel).toHaveAttribute("data-mount-marker", "stable");
+  await expect(panel.getByRole("treeitem", { name: "src/app.tsx" })).toBeVisible();
+  await expect(panel.getByRole("textbox", { name: "提交信息" })).toHaveValue("");
   expect(requestedRepositories).toEqual(["backend", "frontend"]);
 });
 
@@ -2356,7 +2275,7 @@ for (const scenario of [
   { actionName: "提交", pushStatus: "not_requested", toastMessage: "提交成功" },
   { actionName: "提交并推送", pushStatus: "pushed", toastMessage: "提交并推送成功" },
 ] as const) {
-  test(`${scenario.actionName}成功后关闭弹窗并显示 toast`, async ({ page }) => {
+  test(`${scenario.actionName}成功后保留变更标签并显示 toast`, async ({ page }) => {
     await page.route("**/v1/projects/code-agent/git/status*", async (route) => {
       await route.fulfill({ contentType: "application/json", json: projectGitStatus });
     });
@@ -2374,32 +2293,24 @@ for (const scenario of [
         status: 201,
       });
     });
-    await page.route("**/v1/projects/code-agent/git/history*", async (route) => {
-      await route.fulfill({
-        contentType: "application/json",
-        json: {
-          branch: "feat/review-targets",
-          commits: [],
-          nextCursor: null,
-          repositories: [],
-          repository: null,
-          repositoryMode: "root",
-        },
-      });
-    });
-
     await page.goto("/p/code-agent/t/task-1");
     await page.getByRole("button", { name: /提交 \d+ 个未提交变更/u }).click();
-    const dialog = page.getByRole("dialog", { name: "提交变更" });
-    await dialog.getByRole("textbox", { name: "提交信息" }).fill("fix(git): 验证提交成功反馈");
+    const inspector = page.locator(".workbench-inspector");
+    const panel = inspector.locator('[data-slot="commit-changes-panel"]');
+    await panel.getByRole("textbox", { name: "提交信息" }).fill("fix(git): 验证提交成功反馈");
     if (scenario.actionName === "提交并推送") {
-      await dialog.getByRole("button", { name: "选择提交方式" }).click();
+      await panel.getByRole("button", { name: "选择提交方式" }).click();
       await page.getByRole("menuitem", { name: "提交并推送" }).click();
     } else {
-      await dialog.getByRole("button", { name: scenario.actionName, exact: true }).click();
+      await panel.getByRole("button", { name: scenario.actionName, exact: true }).click();
     }
 
-    await expect(dialog).not.toBeAttached();
+    await expect(inspector.getByRole("tab", { name: "变更" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(panel).toContainText("0123456");
+    await expect(page.locator('[data-slot="sheet-content"]')).toHaveCount(0);
     const toaster = page.locator("[data-sonner-toaster]");
     await expect(toaster).toHaveAttribute("data-x-position", "center");
     await expect(toaster).toHaveAttribute("data-y-position", "top");
