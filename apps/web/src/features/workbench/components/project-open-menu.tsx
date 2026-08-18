@@ -69,6 +69,7 @@ export function getProjectFileManagerApp(
 
 type ProjectQuickOpenMenuProps = Readonly<{
   apps: readonly ProjectOpenApp[];
+  className?: string;
   defaultOpenAppId?: ProjectOpenAppId | null;
   isDetecting: boolean;
   isPending: boolean;
@@ -77,6 +78,7 @@ type ProjectQuickOpenMenuProps = Readonly<{
 
 export function ProjectQuickOpenMenu({
   apps,
+  className = "",
   defaultOpenAppId,
   isDetecting,
   isPending,
@@ -96,7 +98,7 @@ export function ProjectQuickOpenMenu({
 
   return (
     <DropdownMenu modal={false}>
-      <ButtonGroup className="shrink-0">
+      <ButtonGroup className={`shrink-0 ${className}`}>
         <Button
           aria-label={openButtonLabel}
           className="max-w-28 rounded-r-none border-r-0 max-workbench:min-w-11 max-workbench:px-0"

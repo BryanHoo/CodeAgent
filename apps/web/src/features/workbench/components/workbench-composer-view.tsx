@@ -104,7 +104,10 @@ export function ComposerProjectPathButton({
 export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
   const { t } = useTranslation(["workbench", "settings"]);
   return (
-    <section className="shrink-0 bg-content px-3 pb-2 sm:px-5" aria-label={t("composer.landmark")}>
+    <section
+      className="shrink-0 bg-content px-1 pb-2 max-[360px]:px-0 sm:px-5"
+      aria-label={t("composer.landmark")}
+    >
       <div className="relative mx-auto w-full max-w-content" ref={props.commandSurfaceRef}>
         <ComposerCommandMenu props={props} />
         <ComposerFileMenu props={props} />
@@ -285,15 +288,16 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
               scope={props.composerScope}
             />
           </PromptInputBody>
-          <PromptInputFooter className="max-workbench:gap-0.5">
-            <PromptInputTools className="max-workbench:shrink-0 max-workbench:gap-0.5">
+          <PromptInputFooter className="max-workbench:gap-0.5 max-workbench:px-1 max-[360px]:!gap-0 max-[360px]:!px-0">
+            <PromptInputTools className="max-workbench:shrink-0 max-workbench:gap-0.5 max-[360px]:!gap-0">
               <PromptInputActionAddAttachments
+                className="max-workbench:w-8 max-workbench:min-w-8 max-workbench:px-0 max-[360px]:!w-6 max-[360px]:!min-w-6"
                 disabled={props.attachmentsDisabled}
                 onSelectKind={props.onSelectAttachmentKind}
               />
               <PromptInputSelect
                 aria-label={t("composer.approvalMode")}
-                className="max-workbench:w-11 max-workbench:max-w-11 max-workbench:px-1 max-workbench:[field-sizing:fixed]"
+                className="max-workbench:px-0.5"
                 disabled={props.turnControlsDisabled}
                 onChange={(event) => {
                   props.onSettingsChange(
@@ -314,7 +318,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
               {props.sandboxModeSelectable ? (
                 <PromptInputSelect
                   aria-label={t("composer.sandboxMode")}
-                  className="max-workbench:w-11 max-workbench:max-w-11 max-workbench:px-1 max-workbench:[field-sizing:fixed]"
+                  className="max-workbench:px-0.5"
                   disabled={props.turnControlsDisabled}
                   onChange={(event) => {
                     props.onSettingsChange(
@@ -342,8 +346,8 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                 />
               )}
             </PromptInputTools>
-            {/* 移动端压缩选择器的展示宽度，保持所有常用操作始终位于同一行。 */}
-            <div className="flex min-w-0 items-center gap-1 max-workbench:shrink-0 max-workbench:gap-0.5">
+            {/* 模型与提交动作保持固定分组，避免内容宽度变化时拆成两行。 */}
+            <div className="flex min-w-0 items-center gap-1 max-workbench:shrink-0 max-workbench:gap-0.5 max-[360px]:!gap-0">
               <ComposerModelSelector
                 activeSettings={props.activeSettings}
                 disabled={props.turnControlsDisabled}
@@ -373,6 +377,7 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
                   (props.submitAction === "interrupt" &&
                     (!props.canInterrupt || props.activeTurnId === undefined))
                 }
+                className="max-workbench:w-8 max-workbench:min-w-8 max-[360px]:!w-6 max-[360px]:!min-w-6"
                 onClick={props.submitAction === "interrupt" ? props.onInterrupt : undefined}
                 status={props.state === "running" && props.hasComposerInput ? "idle" : props.state}
                 type={props.submitAction === "interrupt" ? "button" : "submit"}

@@ -293,6 +293,36 @@ test("keeps composer attachment icons aligned with the compact toolbar", async (
   await expect(imageMenuIcon).toHaveCSS("height", "16px");
 });
 
+test("shows every mobile composer action in full on one row", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
+  const sandboxSelect = page.getByRole("combobox", { name: "沙盒模式" });
+  const modelSelector = page.getByRole("button", { name: /^模型和思考量：/u });
+  const submitButton = page.getByRole("button", { exact: true, name: "提交" });
+  const controls = [approvalSelect, sandboxSelect, modelSelector, submitButton];
+  const boxes = await Promise.all(controls.map((control) => control.boundingBox()));
+
+  expect(boxes.every((box) => box !== null)).toBe(true);
+  expect(new Set(boxes.map((box) => Math.round(box?.y ?? 0))).size).toBe(1);
+  await expect(approvalSelect).toHaveCSS("field-sizing", "content");
+  await expect(sandboxSelect).toHaveCSS("field-sizing", "content");
+  expect(boxes[0]?.width).toBeGreaterThan(44);
+  expect(boxes[1]?.width).toBeGreaterThan(44);
+  expect(
+    await modelSelector
+      .locator("span")
+      .first()
+      .evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBe(true);
+  const footerSize = await approvalSelect.locator("xpath=../..").evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(footerSize.scrollWidth).toBeLessThanOrEqual(footerSize.clientWidth);
+});
+
 test("navigates absolute paths and toggles hidden files in the host file picker", async ({
   page,
 }) => {

@@ -21,7 +21,6 @@ import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
 import { ActiveTaskWorkbench } from "./workbench-shell-active-task.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
 import { loadProjectGitFileDiff } from "../project-git-file-diff.js";
-
 const sidebarWidthLimits = { default: 288, maximum: 400, minimum: 220 } as const;
 const inspectorWidthLimits = { default: 288, maximum: 480, minimum: 260 } as const;
 const emptyExpandedFileTreePaths = new Set<string>();
@@ -231,6 +230,7 @@ export function WorkbenchShellLayout({
           <div className="flex shrink-0 items-center gap-1">
             <ProjectQuickOpenMenu
               apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
+              className="hidden min-workbench:flex"
               {...(globalSettings === undefined
                 ? {}
                 : { defaultOpenAppId: globalSettings.defaultOpenAppId })}
