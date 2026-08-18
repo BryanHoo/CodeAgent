@@ -12,10 +12,12 @@ CodeAgent runs on your computer. You can use it locally or access it from anothe
 - Organize tasks by project, with search, pin, rename, and archive actions
 - Start temporary tasks without adding a project, preview files, or add a project from the task
 - Attach images or files, reference project files with `@`, and use configured Skills and MCP servers
+- Fork a task from a specific AI response and continue work in a newly created Git worktree
 - Sign in with ChatGPT or connect a custom OpenAI-compatible API
 - Load models from the active service and choose the model, reasoning effort, approval behavior, and file access level
-- Browse and progressively preview project files, inspect code changes, switch branches, and view Git history
+- Browse large project file trees, inspect code changes, switch or create branches, and view Git history
 - Start code reviews, generate commit messages, and commit or push changes
+- Follow the system theme and receive native notifications when a task needs attention
 - Connect from a phone, tablet, or another computer on a trusted local network
 
 ## Requirements
@@ -76,7 +78,7 @@ The inspector's **Sources** section collects attachments used in the current tas
 
 ### Adjust Task Settings
 
-Before submitting a message, use the controls below the composer to choose the model, reasoning effort, approval behavior, and file access level. Select Plan mode when you want to prepare an implementation plan, or Goal mode when you want Codex to continue working toward an objective.
+Before submitting a message, use the controls below the composer to choose the model, reasoning effort, approval behavior, and file access level. Select Plan mode when you want to prepare an implementation plan, or Goal mode when you want Codex to continue working toward an objective. Permission requests show the requested network and file system access so you can choose the approved scope and duration.
 
 Type `@` to search for and reference a project file. CodeAgent sends the validated project-relative reference to Codex without exposing the host's absolute path. Use `Up` and `Down` at the first or last line to browse earlier prompts; returning past the newest entry restores your current draft.
 
@@ -84,11 +86,15 @@ You can submit another message while the current turn is still running. Dependin
 
 Type `/` at the beginning of the composer to access actions such as code review, context compaction, and continuing in a new task. Available actions depend on the current task. MCP status updates appear in real time while configured servers start or fail.
 
+Use an AI response's action menu to fork the conversation from that point. In a project task, the branch control below the composer can also create a Git worktree and switch the task to its new branch.
+
 ### Review and Commit Changes
 
-When a project has Git changes, use the inspector on the right to review the change summary and file diffs. You can also switch branches or view the commit history of the current branch.
+When a project has Git changes, use the inspector on the right to review the change summary and file diffs. The same inspector provides the current branch's commit history and commit controls, while the composer branch control handles branch switching and worktree creation.
 
 Select **Commit**, choose the files to include, review or edit the commit message, and complete the commit. If the branch already has an upstream, you can also select **Commit and push**. Review the selected files and diffs before committing.
+
+Global settings let CodeAgent follow the operating system theme and enable native notifications for completed or failed tasks and tasks waiting for your input.
 
 ## Local Network Access
 
