@@ -613,17 +613,19 @@ describe("project queries", () => {
     };
     const queryClient = new QueryClient();
 
+    const taskMutationOptions = taskSettingsMutationOptions("code-agent", "task-1", client);
+
     await queryClient
       .getMutationCache()
       .build(queryClient, projectDefaultsMutationOptions("code-agent", client))
       .execute(defaults);
-    await queryClient
-      .getMutationCache()
-      .build(queryClient, taskSettingsMutationOptions("code-agent", "task-1", client))
-      .execute(settings);
+    await queryClient.getMutationCache().build(queryClient, taskMutationOptions).execute(settings);
 
     expect(client.updateProjectDefaults).toHaveBeenCalledWith("code-agent", defaults);
     expect(client.updateTaskSettings).toHaveBeenCalledWith("code-agent", "task-1", settings);
+    expect(taskMutationOptions.meta).toEqual({
+      actionNotification: { successMessage: false },
+    });
   });
 
   it("sends the complete project order through a serialized mutation", async () => {

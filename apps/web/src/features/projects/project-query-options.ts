@@ -233,6 +233,7 @@ export function taskSettingsMutationOptions(
   client: Pick<CodeAgentClient, "updateTaskSettings"> = codeAgentClient,
 ) {
   return mutationOptions({
+    meta: { actionNotification: { successMessage: false } },
     mutationFn: (settings: AgentTaskSettings) =>
       client.updateTaskSettings(projectId, taskId, settings),
     mutationKey: ["projects", projectId, "tasks", taskId, "settings", "update"] as const,

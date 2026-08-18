@@ -442,7 +442,7 @@ export function WorkbenchProjectFileTree({
   return (
     <div
       {...containerProps}
-      className="h-full w-full overflow-y-auto font-mono text-label text-foreground"
+      className="h-full w-full cursor-default overflow-y-auto font-mono text-label text-foreground"
       data-project-file-tree=""
       ref={(node) => {
         scrollElementRef.current = node;

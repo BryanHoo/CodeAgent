@@ -102,10 +102,6 @@ export function GlobalSettingsDialog({
 
   const selectTheme = (nextTheme: ThemePreference) => {
     setTheme(nextTheme);
-    // 外观偏好属于浏览器本地状态，选择后立即应用，不依赖服务端保存。
-    if (typeof window !== "undefined") {
-      setThemePreference(nextTheme);
-    }
   };
 
   return (
@@ -136,6 +132,10 @@ export function GlobalSettingsDialog({
               setIsSaving(true);
               try {
                 await onSave(draft);
+                // 主题与其他设置共用提交边界，保存成功前只保留 Dialog 内的草稿。
+                if (typeof window !== "undefined") {
+                  setThemePreference(theme);
+                }
                 onClose();
               } catch {
                 // 根级 MutationCache 已统一展示失败 toast，Dialog 只保留可重试草稿。

@@ -130,12 +130,20 @@ test("defaults appearance to automatic and follows the system color scheme", asy
   await dialog.getByRole("button", { name: "深色模式" }).click();
   await page.emulateMedia({ colorScheme: "dark" });
   await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await dialog.getByRole("button", { name: "保存全局默认" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
-  await automaticMode.click();
+  await page.getByRole("button", { exact: true, name: "设置" }).click();
+  const reopenedDialog = page.getByRole("dialog", { name: "全局设置" });
+  await reopenedDialog.getByRole("button", { name: "自动模式" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await reopenedDialog.getByRole("button", { name: "保存全局默认" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
-  await dialog.getByRole("combobox", { name: "语言" }).selectOption("en");
+  await page.getByRole("button", { exact: true, name: "设置" }).click();
+  const languageDialog = page.getByRole("dialog", { name: "全局设置" });
+  await languageDialog.getByRole("combobox", { name: "语言" }).selectOption("en");
   await page.setViewportSize({ height: 844, width: 320 });
   const englishDialog = page.getByRole("dialog", { name: "Global settings" });
   for (const name of ["Automatic mode", "Light mode", "Dark mode"]) {
@@ -149,6 +157,7 @@ test("defaults appearance to automatic and follows the system color scheme", asy
 });
 
 test("edits global defaults in a dialog without overriding task settings", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/p/code-agent/t/task-1");
   const workbenchUrl = page.url();
   const taskModel = getComposerModelSelector(page);
@@ -167,7 +176,7 @@ test("edits global defaults in a dialog without overriding task settings", async
 
   await dialog.getByRole("button", { name: "外观" }).click();
   await dialog.getByRole("button", { name: "深色模式" }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await dialog.getByRole("button", { name: "Agent 默认值" }).click();
   await dialog.getByRole("combobox", { name: "审批" }).selectOption("never");
   await dialog.getByRole("combobox", { name: "工作区" }).selectOption("danger-full-access");
@@ -183,6 +192,7 @@ test("edits global defaults in a dialog without overriding task settings", async
   await dialog.getByRole("button", { name: "保存全局默认" }).click();
 
   await expect(dialog).toHaveCount(0);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page).toHaveURL(workbenchUrl);
   await expect(taskModel).toHaveAccessibleName("模型和思考量：GPT-5.6 Sol，高");
   await expect(taskApproval).toHaveValue("on-request");

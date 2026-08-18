@@ -46,6 +46,7 @@ describe("WorkbenchProjectFileTree", () => {
     expect(PROJECT_FILE_TREE_ROW_HEIGHT_PX).toBe(28);
     expect(markup).toContain('role="tree"');
     expect(markup).toContain('aria-label="项目文件"');
+    expect(markup).toContain("cursor-default");
     expect(markup).toContain("CodeAgent");
   });
 });

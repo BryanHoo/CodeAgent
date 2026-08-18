@@ -391,6 +391,40 @@ test("shows every mobile composer action in full on one row", async ({ page }) =
   expect(footerSize.scrollWidth).toBeLessThanOrEqual(footerSize.clientWidth);
 });
 
+test("switches composer task settings without success toasts", async ({ page }) => {
+  await page.goto("/p/code-agent/t/task-1");
+  const successToast = page.locator('[data-sonner-toast][data-type="success"]');
+  const waitForSettingsUpdate = () =>
+    page.waitForResponse(
+      (response) => response.url().endsWith("/tasks/task-1/settings") && response.ok(),
+    );
+
+  const approvalUpdate = waitForSettingsUpdate();
+  await page.getByRole("combobox", { name: "批准模式" }).selectOption("never");
+  await approvalUpdate;
+  await expect(successToast).toHaveCount(0);
+
+  const sandboxUpdate = waitForSettingsUpdate();
+  await page.getByRole("combobox", { name: "沙盒模式" }).selectOption("danger-full-access");
+  await sandboxUpdate;
+  await expect(successToast).toHaveCount(0);
+
+  const modelSelector = page.getByRole("button", { name: /^模型和思考量：/u });
+  await modelSelector.click();
+  await page.getByRole("menuitem", { name: "选择模型" }).click();
+  const modelUpdate = waitForSettingsUpdate();
+  await page.getByRole("menuitemradio", { name: /GPT-5\.6 Terra/u }).click();
+  await modelUpdate;
+  await expect(successToast).toHaveCount(0);
+
+  await modelSelector.click();
+  await page.getByRole("menuitem", { name: "选择思考量" }).click();
+  const reasoningUpdate = waitForSettingsUpdate();
+  await page.getByRole("menuitemradio", { name: /低/u }).click();
+  await reasoningUpdate;
+  await expect(successToast).toHaveCount(0);
+});
+
 test("navigates absolute paths and toggles hidden files in the host file picker", async ({
   page,
 }) => {
@@ -1202,7 +1236,9 @@ test("project file tree opens changed, source, image, and system files by shared
   await expect(fileTree).toBeVisible();
   await expect(fileTree.getByRole("treeitem", { name: "architecture-design.md" })).toHaveCount(0);
 
-  await fileTree.getByRole("treeitem", { name: /package\.json/u }).click();
+  const packageFile = fileTree.getByRole("treeitem", { name: /package\.json/u });
+  await expect(packageFile).toHaveCSS("cursor", "default");
+  await packageFile.click();
   const diffDialog = page.getByRole("dialog", { name: "package.json" });
   await expect(diffDialog.locator(".file-diff-renderer")).toContainText("pnpm run dev");
   await page.getByRole("button", { name: "关闭文件 Diff" }).click();
@@ -1215,7 +1251,9 @@ test("project file tree opens changed, source, image, and system files by shared
       url.searchParams.get("path") === "docs"
     );
   });
-  await fileTree.getByRole("treeitem", { name: "docs" }).click();
+  const docsDirectory = fileTree.getByRole("treeitem", { name: "docs" });
+  await expect(docsDirectory).toHaveCSS("cursor", "default");
+  await docsDirectory.click();
   await docsRequest;
   await fileTree.getByRole("treeitem", { name: "architecture-design.md" }).click();
   const sourceDialog = page.getByRole("dialog", { name: "architecture-design.md" });
