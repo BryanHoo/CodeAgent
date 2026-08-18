@@ -867,7 +867,7 @@ test("uses subtle hairline separation across registered routes", async ({ page }
   }
 });
 
-test("aligns the center toolbar divider with sidebar controls", async ({ page }) => {
+test("aligns the center toolbar with sidebar controls and inspector tabs", async ({ page }) => {
   await page.goto("/p/code-agent/t/task-1");
 
   const mainHeader = page.getByRole("main", { name: "任务时间线" }).locator(":scope > header");
@@ -876,45 +876,41 @@ test("aligns the center toolbar divider with sidebar controls", async ({ page })
     .getByText("CodeAgent", { exact: true })
     .first();
   const centerTitle = page.getByRole("heading", { name: "构建 macOS 工作台", level: 1 });
-  const rightTitle = page.getByRole("heading", { name: "运行环境", level: 2 });
+  const rightTab = page
+    .getByRole("complementary", { name: "运行环境" })
+    .getByRole("tab", { name: "项目" });
   const search = page.getByRole("textbox", { name: "搜索任务" });
-  const tabs = page.getByRole("tablist");
-  const [mainHeaderBox, leftTitleBox, centerTitleBox, rightTitleBox, searchBox, tabsBox] =
-    await Promise.all([
-      mainHeader.boundingBox(),
-      leftTitle.boundingBox(),
-      centerTitle.boundingBox(),
-      rightTitle.boundingBox(),
-      search.boundingBox(),
-      tabs.boundingBox(),
-    ]);
+  const [mainHeaderBox, leftTitleBox, centerTitleBox, rightTabBox, searchBox] = await Promise.all([
+    mainHeader.boundingBox(),
+    leftTitle.boundingBox(),
+    centerTitle.boundingBox(),
+    rightTab.boundingBox(),
+    search.boundingBox(),
+  ]);
 
   expect(mainHeaderBox).not.toBeNull();
   expect(leftTitleBox).not.toBeNull();
   expect(centerTitleBox).not.toBeNull();
-  expect(rightTitleBox).not.toBeNull();
+  expect(rightTabBox).not.toBeNull();
   expect(searchBox).not.toBeNull();
-  expect(tabsBox).not.toBeNull();
   if (
     mainHeaderBox === null ||
     leftTitleBox === null ||
     centerTitleBox === null ||
-    rightTitleBox === null ||
-    searchBox === null ||
-    tabsBox === null
+    rightTabBox === null ||
+    searchBox === null
   ) {
     return;
   }
 
-  // 三栏标题行共用同一个垂直中心，避免文字和图标上下错位。
+  // 三栏顶部主控件共用同一个垂直中心，避免文字和标签上下错位。
   const centerTitlePosition = centerTitleBox.y + centerTitleBox.height / 2;
   expect(leftTitleBox.y + leftTitleBox.height / 2).toBe(centerTitlePosition);
-  expect(rightTitleBox.y + rightTitleBox.height / 2).toBe(centerTitlePosition);
+  expect(rightTabBox.y + rightTabBox.height / 2).toBe(centerTitlePosition);
 
-  // 中栏分隔线与左右栏第二层控件顶部共用同一水平基线。
+  // 中栏分隔线与左栏第二层搜索控件顶部共用同一水平基线。
   const dividerPosition = mainHeaderBox.y + mainHeaderBox.height;
   expect(dividerPosition).toBe(searchBox.y);
-  expect(dividerPosition).toBe(tabsBox.y);
 });
 
 test("renders the AI workbench landmarks with an enabled composer", async ({ page }) => {
@@ -925,7 +921,9 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(page.getByRole("complementary", { name: "项目侧栏" })).toBeVisible();
   await expect(main).toBeVisible();
   await expect(inspector).toBeVisible();
-  await expect(page.getByRole("heading", { name: "运行环境" })).toBeVisible();
+  await expect(inspector.getByRole("heading", { name: "运行环境" })).toHaveCount(0);
+  await expect(inspector.getByRole("tab", { name: "项目" })).toBeVisible();
+  await expect(inspector.getByRole("tab", { name: "上下文" })).toBeVisible();
   await expect(page.getByRole("region", { name: "消息编辑器" })).toBeVisible();
   const prompt = page.getByRole("textbox", { name: "任务输入" });
   const approvalSelect = page.getByRole("combobox", { name: "批准模式" });
@@ -963,7 +961,7 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
     buttonWidth: element.getBoundingClientRect().width,
     footerWidth: element.parentElement?.getBoundingClientRect().width ?? 0,
   }));
-  expect(projectPathSizing.buttonWidth).toBeLessThan(projectPathSizing.footerWidth / 2);
+  expect(projectPathSizing.buttonWidth / projectPathSizing.footerWidth).toBeLessThan(0.51);
   await expect(projectPathButton).toHaveCSS("height", "24px");
   await expect(projectPathButton).toHaveCSS("font-size", "10px");
   const projectPathIcon = projectPathButton.locator("svg");

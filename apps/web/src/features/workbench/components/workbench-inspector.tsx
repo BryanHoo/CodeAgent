@@ -8,7 +8,7 @@ import type {
   ProjectOpenApp,
   ProjectOpenAppId,
 } from "@code-agent/protocol";
-import { PanelRightClose, RefreshCw } from "lucide-react";
+import { Braces, FolderTree, PanelRightClose, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
@@ -91,6 +91,9 @@ type WorkbenchInspectorProps = Readonly<{
 
 export type WorkbenchInspectorTab = "changes" | "context";
 
+const projectInspectorTabs = ["changes"] as const;
+const taskInspectorTabs = ["changes", "context"] as const;
+
 export function WorkbenchInspector({
   backgroundTerminals = [],
   backgroundTerminalsError = null,
@@ -170,7 +173,30 @@ export function WorkbenchInspector({
       ),
     [fileTreeDirectories],
   );
-  const activeTab = contextOnly ? "context" : tab;
+  const availableTabs = taskId === undefined ? projectInspectorTabs : taskInspectorTabs;
+  // 新建 Task 尚无持久化上下文，路由切换时将失效的上下文选择收敛回项目页。
+  const activeTab = contextOnly
+    ? "context"
+    : tab === "context" && taskId !== undefined
+      ? "context"
+      : "changes";
+  const closeButton =
+    onClose === undefined ? null : (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            aria-label={i18n.t("shell.closeInspector", { ns: "workbench" })}
+            onClick={onClose}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <PanelRightClose aria-hidden="true" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{i18n.t("shell.closeInspector", { ns: "workbench" })}</TooltipContent>
+      </Tooltip>
+    );
   const contextContent = (
     <div className="h-full space-y-5 overflow-y-auto p-2.5">
       {backgroundTerminals.length > 0 ||
@@ -212,57 +238,43 @@ export function WorkbenchInspector({
     <aside
       aria-label={i18n.t("inspector.title", { ns: "conversation" })}
       className={`workbench-inspector relative z-30 grid min-h-0 bg-panel shadow-divider-reverse ${
-        contextOnly ? "grid-rows-[auto_minmax(0,1fr)]" : "grid-rows-[auto_auto_minmax(0,1fr)]"
+        contextOnly ? "grid-rows-[minmax(0,1fr)]" : "grid-rows-[auto_minmax(0,1fr)]"
       }`}
     >
-      <div className="flex h-workbench-header items-center justify-between gap-2 px-3">
-        <h2 className="min-w-0 flex-1 truncate text-body-small font-semibold text-foreground">
-          {i18n.t("inspector.title", { ns: "conversation" })}
-        </h2>
-        {onClose === undefined ? null : (
-          <Tooltip>
-            <TooltipTrigger asChild>
+      {contextOnly ? (
+        <div className="absolute right-2 top-2 z-10 min-[1101px]:hidden">{closeButton}</div>
+      ) : (
+        <div className="flex min-h-workbench-header items-center gap-2 px-1.5">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" role="tablist">
+            {availableTabs.map((value) => (
               <Button
-                aria-label={i18n.t("shell.closeInspector", { ns: "workbench" })}
-                className="min-[1101px]:hidden"
-                onClick={onClose}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <PanelRightClose aria-hidden="true" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{i18n.t("shell.closeInspector", { ns: "workbench" })}</TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-
-      {contextOnly ? null : (
-        <div className="px-2.5 pb-1.5">
-          <div className="grid grid-cols-2 rounded-control bg-control p-0.5" role="tablist">
-            {(["changes", "context"] as const).map((value) => (
-              <Button
-                variant="ghost"
                 aria-selected={activeTab === value}
-                className={`h-7 rounded-control text-label font-medium transition-colors ${
-                  activeTab === value
-                    ? "bg-raised text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
+                className={`rounded-surface ${
+                  activeTab === value ? "bg-control-hover text-foreground" : ""
                 }`}
                 key={value}
                 onClick={() => {
                   onTabChange(value);
                 }}
                 role="tab"
+                size="compact"
                 type="button"
+                variant="ghost"
               >
-                {value === "changes"
-                  ? i18n.t("inspector.changes", { ns: "conversation" })
-                  : i18n.t("inspector.context", { ns: "conversation" })}
+                {value === "changes" ? (
+                  <FolderTree aria-hidden="true" />
+                ) : (
+                  <Braces aria-hidden="true" />
+                )}
+                <span>
+                  {value === "changes"
+                    ? i18n.t("inspector.changes", { ns: "conversation" })
+                    : i18n.t("inspector.context", { ns: "conversation" })}
+                </span>
               </Button>
             ))}
           </div>
+          <div className="shrink-0 min-[1101px]:hidden">{closeButton}</div>
         </div>
       )}
 

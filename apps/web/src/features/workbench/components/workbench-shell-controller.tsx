@@ -23,9 +23,7 @@ import {
   type TaskLaunchState,
   type useWorkbenchShellRuntime,
 } from "./workbench-shell-runtime.js";
-
-const sidebarOverlayQuery = "(max-width: 760px)";
-const inspectorOverlayQuery = "(max-width: 1100px)";
+import { inspectorOverlayQuery, sidebarOverlayQuery } from "./workbench-panel-layout.js";
 
 type WorkbenchShellControllerOptions = Readonly<{
   projectId: string;

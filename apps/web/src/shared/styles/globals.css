@@ -443,7 +443,10 @@ a {
 }
 
 .workbench-shell[data-inspector-open="true"] {
-  --inspector-width: var(--inspector-open-width, var(--ui-layout-inspector-width));
+  --inspector-width: min(
+    var(--inspector-open-width, var(--ui-layout-inspector-width)),
+    calc((100% - var(--sidebar-width)) / 2)
+  );
 }
 
 .workbench-shell[data-resizing-panel] {

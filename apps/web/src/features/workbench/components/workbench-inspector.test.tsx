@@ -110,6 +110,7 @@ describe("WorkbenchInspector", () => {
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         tab="context"
+        taskId="task-1"
         task={{
           plan: {
             explanation: "先打通数据链路，再完成界面验证。",
@@ -194,7 +195,8 @@ describe("WorkbenchInspector", () => {
       />,
     );
 
-    expect(markup).toMatch(/aria-selected="true"[^>]*role="tab"[^>]*>项目<\/button>/u);
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain(">项目</span></button>");
     expect(markup).not.toContain('aria-label="运行中的终端"');
     expect(markup).not.toContain("pnpm dev");
   });
@@ -226,7 +228,17 @@ describe("WorkbenchInspector", () => {
     expect(markup).toMatch(/<button[^>]*bg-control[^>]*aria-label="提交 2 个未提交变更"/u);
     expect(markup).not.toContain("bg-brand");
     expect(markup).toContain('aria-label="运行环境"');
-    expect(markup).toMatch(/role="tab"[^>]*>项目<\/button>/u);
+    expect(markup).not.toContain(">运行环境</h2>");
+    expect(markup).not.toContain("grid-cols-2");
+    const selectedTabClassName =
+      /class="([^"]*)"[^>]*data-variant="ghost"[^>]*aria-selected="true"/u.exec(markup)?.[1];
+    expect(selectedTabClassName).toBeDefined();
+    expect(selectedTabClassName?.split(" ")).toContain("bg-control-hover");
+    expect(selectedTabClassName?.split(" ")).toContain("text-foreground");
+    expect(markup).not.toContain("shadow-toolbar");
+    expect(markup).toContain("lucide-folder-tree");
+    expect(markup).toContain(">项目</span></button>");
+    expect(markup).not.toContain(">上下文</span></button>");
     expect(markup).toContain('aria-label="项目文件"');
     expect(markup).toContain('role="tree"');
     expect(markup).toContain('aria-label="收起文件夹 CodeAgent"');
@@ -240,6 +252,20 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain("已暂存");
 
     expect(markup).not.toContain(">项目文件</span>");
+  });
+
+  it("shows the context tab only after a task exists", () => {
+    const markup = renderInspectorMarkup(
+      <WorkbenchInspector
+        projectName="CodeAgent"
+        projectPath="/workspace/CodeAgent"
+        taskId="task-1"
+      />,
+    );
+
+    expect(markup).toContain(">项目</span></button>");
+    expect(markup).toContain(">上下文</span></button>");
+    expect(markup).toContain("lucide-braces");
   });
 
   it("allows opening the commit dialog for immediate child Git repositories", () => {
@@ -443,6 +469,7 @@ describe("WorkbenchInspector", () => {
           },
         ]}
         tab="context"
+        taskId="task-1"
       />,
     );
 
@@ -518,6 +545,7 @@ describe("WorkbenchInspector", () => {
           ],
         }}
         tab="context"
+        taskId="task-1"
       />,
     );
 
@@ -632,6 +660,7 @@ describe("WorkbenchInspector", () => {
           projectName="CodeAgent"
           projectPath="/workspace/CodeAgent"
           tab="context"
+          taskId="task-1"
           {...props}
         />,
       );
@@ -647,6 +676,7 @@ describe("WorkbenchInspector", () => {
         projectName="CodeAgent"
         projectPath="/workspace/CodeAgent"
         tab="context"
+        taskId="task-1"
       />,
     );
     expect(retryErrorMarkup).toContain("无法读取 MCP");

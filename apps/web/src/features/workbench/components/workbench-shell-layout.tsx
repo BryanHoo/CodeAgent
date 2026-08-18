@@ -15,14 +15,13 @@ import { ProjectSidebar } from "./project-sidebar.js";
 import { TaskTimeline } from "./task-timeline.js";
 import { WorkbenchComposer, type WorkbenchComposerHandle } from "./workbench-composer.js";
 import { WorkbenchPanelResizer } from "./workbench-panel-resizer.js";
+import { inspectorWidthLimits, sidebarWidthLimits } from "./workbench-panel-layout.js";
 import { ProjectQuickOpenMenu } from "./project-open-menu.js";
 import type { useWorkbenchShellController } from "./workbench-shell-controller.js";
 import { WorkbenchShellDialogs } from "./workbench-shell-dialogs.js";
 import { ActiveTaskWorkbench } from "./workbench-shell-active-task.js";
 import { WorkbenchInspector } from "./workbench-inspector.js";
 import { loadProjectGitFileDiff } from "../project-git-file-diff.js";
-const sidebarWidthLimits = { default: 288, maximum: 400, minimum: 220 } as const;
-const inspectorWidthLimits = { default: 288, maximum: 480, minimum: 260 } as const;
 const emptyExpandedFileTreePaths = new Set<string>();
 
 type WorkbenchShellStyle = CSSProperties &
@@ -63,6 +62,7 @@ export function WorkbenchShellLayout({
     handleTaskCreated,
     handleTaskStarted,
     inspectorOpen,
+    inspectorMaximumWidth,
     inspectorTab,
     inspectorTask,
     inspectorWidth,
@@ -373,7 +373,7 @@ export function WorkbenchShellLayout({
         <WorkbenchPanelResizer
           direction={-1}
           label={t("shell.resizeInspector")}
-          maximumWidth={inspectorWidthLimits.maximum}
+          maximumWidth={inspectorMaximumWidth}
           minimumWidth={inspectorWidthLimits.minimum}
           onResize={(width) => {
             workbenchShellRef.current?.style.setProperty(

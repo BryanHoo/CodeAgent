@@ -10,7 +10,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test("selects context automatically and keeps the latest plan visible", async ({ page }) => {
+test("keeps project selected until the user opens task context", async ({ page }) => {
   let snapshotRequestCount = 0;
   await page.route("**/v1/projects/code-agent/tasks/task-1", async (route) => {
     snapshotRequestCount += 1;
@@ -36,10 +36,23 @@ test("selects context automatically and keeps the latest plan visible", async ({
   await expect.poll(() => snapshotRequestCount).toBeGreaterThan(0);
 
   const inspector = page.getByRole("complementary", { name: "运行环境" });
-  await expect(inspector.getByRole("tab", { name: "上下文" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  const projectTab = inspector.getByRole("tab", { name: "项目" });
+  const contextTab = inspector.getByRole("tab", { name: "上下文" });
+  await expect(projectTab).toHaveAttribute("aria-selected", "true");
+  const selectedStyle = await projectTab.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { backgroundColor: style.backgroundColor, color: style.color };
+  });
+  await contextTab.hover();
+  await expect
+    .poll(() =>
+      contextTab.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { backgroundColor: style.backgroundColor, color: style.color };
+      }),
+    )
+    .toEqual(selectedStyle);
+  await contextTab.click();
   const plan = inspector.getByRole("region", { name: "计划" });
   await expect(plan).toBeVisible();
   await expect(plan.getByText("定义计划协议")).toBeVisible();
@@ -48,6 +61,21 @@ test("selects context automatically and keeps the latest plan visible", async ({
   await expect(plan.locator('[data-status="completed"]')).toHaveCount(1);
   await expect(plan.locator('[data-status="in_progress"]')).toHaveCount(1);
   await expect(plan.locator('[data-status="pending"]')).toHaveCount(1);
+});
+
+test("shows context only after a task has been created", async ({ page }) => {
+  await page.goto("/p/code-agent");
+
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
+  await expect(inspector.getByRole("tab", { name: "项目" })).toBeVisible();
+  await expect(inspector.getByRole("tab", { name: "上下文" })).toHaveCount(0);
+
+  await page.goto("/p/code-agent/t/task-1");
+  await expect(inspector.getByRole("tab", { name: "项目" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(inspector.getByRole("tab", { name: "上下文" })).toBeVisible();
 });
 
 test("orders persistent search, task actions, pinned tasks and projects in the sidebar", async ({
@@ -896,7 +924,8 @@ test("resizes desktop workbench panels within bounds", async ({ page }) => {
   await expect(sidebarResizer).toHaveAttribute("aria-valuemin", "220");
   await expect(sidebarResizer).toHaveAttribute("aria-valuemax", "400");
   await expect(inspectorResizer).toHaveAttribute("aria-valuemin", "260");
-  await expect(inspectorResizer).toHaveAttribute("aria-valuemax", "480");
+  await expect(inspectorResizer).toHaveAttribute("aria-valuemax", "576");
+  expect((await inspector.boundingBox())?.width).toBe(288);
 
   const sidebarResizerBox = await sidebarResizer.boundingBox();
   expect(sidebarResizerBox).not.toBeNull();
@@ -915,6 +944,7 @@ test("resizes desktop workbench panels within bounds", async ({ page }) => {
   await page.mouse.move(0, 100);
   await page.mouse.up();
   expect((await sidebar.boundingBox())?.width).toBe(220);
+  await expect(inspectorResizer).toHaveAttribute("aria-valuemax", "610");
 
   const inspectorResizerBox = await inspectorResizer.boundingBox();
   expect(inspectorResizerBox).not.toBeNull();
@@ -925,7 +955,9 @@ test("resizes desktop workbench panels within bounds", async ({ page }) => {
   await page.mouse.down();
   await page.mouse.move(0, 100);
   await page.mouse.up();
-  expect((await inspector.boundingBox())?.width).toBe(480);
+  const timelineBox = await page.getByRole("main", { name: "任务时间线" }).boundingBox();
+  expect((await inspector.boundingBox())?.width).toBe(610);
+  expect(timelineBox?.width).toBe(610);
 
   const expandedInspectorResizerBox = await inspectorResizer.boundingBox();
   await page.mouse.move((expandedInspectorResizerBox?.x ?? 0) + 4, 100);
@@ -933,6 +965,17 @@ test("resizes desktop workbench panels within bounds", async ({ page }) => {
   await page.mouse.move(1400, 100);
   await page.mouse.up();
   expect((await inspector.boundingBox())?.width).toBe(260);
+});
+
+test("uses the original inspector default on laptop-sized screens", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/p/code-agent/t/task-1");
+
+  const inspector = page.getByRole("complementary", { name: "运行环境" });
+  expect((await inspector.boundingBox())?.width).toBe(288);
+  await expect(inspector.getByRole("heading", { name: "运行环境" })).toHaveCount(0);
+  await expect(inspector.getByRole("tab", { name: "项目" })).toBeVisible();
+  await expect(inspector.getByRole("tab", { name: "上下文" })).toBeVisible();
 });
 
 test("keeps the narrow workbench layout stable", async ({ page }) => {

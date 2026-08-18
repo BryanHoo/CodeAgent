@@ -48,11 +48,8 @@ import type {
   ProjectFileTreeDirectoryState,
   WorkbenchInspectorTab,
 } from "./workbench-inspector.js";
+import { useWorkbenchPanelLayout } from "./workbench-panel-layout.js";
 
-const sidebarOverlayQuery = "(max-width: 760px)";
-const inspectorOverlayQuery = "(max-width: 1100px)";
-const sidebarWidthLimits = { default: 288, maximum: 400, minimum: 220 } as const;
-const inspectorWidthLimits = { default: 288, maximum: 480, minimum: 260 } as const;
 const emptyExpandedFileTreePaths = new Set<string>();
 
 export function taskLaunchQueryKey(projectId: string, taskId: string) {
@@ -80,10 +77,6 @@ export type WorkbenchShellProps = Readonly<{
   taskId?: string;
   temporary?: boolean;
 }>;
-
-function shouldOpenDesktopPanel(query: string) {
-  return typeof window === "undefined" || !window.matchMedia(query).matches;
-}
 
 export function useSubmissionStartedAt() {
   const [startedAt, setStartedAt] = useState<string>();
@@ -272,18 +265,23 @@ export function useWorkbenchShellRuntime({
       };
     },
   );
-  // 窄屏首次进入时保持主时间线可见，面板由工具栏按需打开。
-  const [sidebarOpen, setSidebarOpen] = useState(() => shouldOpenDesktopPanel(sidebarOverlayQuery));
-  const [inspectorOpen, setInspectorOpen] = useState(() =>
-    shouldOpenDesktopPanel(inspectorOverlayQuery),
-  );
+  const {
+    inspectorMaximumWidth,
+    inspectorOpen,
+    inspectorWidth,
+    setInspectorOpen,
+    setInspectorWidth,
+    setSidebarOpen,
+    setSidebarWidth,
+    sidebarOpen,
+    sidebarWidth,
+    workbenchShellRef,
+  } = useWorkbenchPanelLayout();
+  const inspectorScopeKey = `${projectId}:${taskId ?? "draft"}`;
   const [inspectorTabState, setInspectorTabState] = useState<{
-    planTaskKey: string | null;
+    scopeKey: string;
     tab: WorkbenchInspectorTab;
-  }>({ planTaskKey: null, tab: "changes" });
-  const [sidebarWidth, setSidebarWidth] = useState<number>(sidebarWidthLimits.default);
-  const [inspectorWidth, setInspectorWidth] = useState<number>(inspectorWidthLimits.default);
-  const workbenchShellRef = useRef<HTMLDivElement>(null);
+  }>({ scopeKey: inspectorScopeKey, tab: "changes" });
   const commitChangesLauncherRef = useRef<CommitChangesLauncherHandle>(null);
   const {
     beginSubmission: beginNewChatSubmission,
@@ -319,13 +317,9 @@ export function useWorkbenchShellRuntime({
     selection: SubagentSelection;
   } | null>(null);
 
-  const activePlan = runtime.snapshot?.plan ?? startingSnapshot?.plan ?? null;
-  const planTaskKey = taskId === undefined || activePlan === null ? null : `${projectId}:${taskId}`;
-  // 首次出现计划时同步派生上下文 Tab；用户点击后记录当前 Task，后续步骤更新不再抢占选择。
+  // 标签选择绑定当前路由身份；进入新建页或另一个 Task 时始终从项目页开始。
   const inspectorTab =
-    planTaskKey !== null && inspectorTabState.planTaskKey !== planTaskKey
-      ? "context"
-      : inspectorTabState.tab;
+    inspectorTabState.scopeKey === inspectorScopeKey ? inspectorTabState.tab : "changes";
   const gitStatusDetailsQuery = useQuery(
     projectGitDetailedStatusQueryOptions(
       projectId,
@@ -340,9 +334,9 @@ export function useWorkbenchShellRuntime({
   );
   const setInspectorTab = useCallback(
     (tab: WorkbenchInspectorTab) => {
-      setInspectorTabState({ planTaskKey, tab });
+      setInspectorTabState({ scopeKey: inspectorScopeKey, tab });
     },
-    [planTaskKey],
+    [inspectorScopeKey],
   );
 
   useLayoutEffect(() => {
@@ -412,6 +406,7 @@ export function useWorkbenchShellRuntime({
     globalSettingsQuery,
     handleNewChatSubmissionStateChange,
     inspectorOpen,
+    inspectorMaximumWidth,
     inspectorTab,
     inspectorTask: runtime.snapshot ?? startingSnapshot,
     inspectorWidth,
