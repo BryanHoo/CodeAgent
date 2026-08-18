@@ -39,7 +39,7 @@ export function InspectorGitChangesSection({
     >
       <div
         aria-label={i18n.t("inspector.changeStats", { ns: "conversation" })}
-        className="flex min-h-7 items-center gap-1.5 rounded-control bg-control px-2 text-caption text-muted-foreground"
+        className="flex min-h-6 items-center gap-1.5 px-2 text-caption text-muted-foreground"
       >
         <span>
           {i18n.t("inspector.gitChangesCount", {

@@ -582,7 +582,10 @@ export async function mockAppShellApi(
     const temporaryTurnMatch = /^\/v1\/temporary\/tasks\/([^/]+)\/turns$/u.exec(url.pathname);
     const projectRenameMatch = /^\/v1\/projects\/([^/]+)\/rename$/u.exec(url.pathname);
     const projectRemoveMatch = /^\/v1\/projects\/([^/]+)\/remove$/u.exec(url.pathname);
-    if (url.pathname === "/v1/projects/code-agent/files/image") {
+    if (
+      url.pathname === "/v1/projects/code-agent/files/image" ||
+      url.pathname === "/v1/temporary/files/image"
+    ) {
       await route.fulfill({
         body: Buffer.from(
           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -782,9 +785,21 @@ export async function mockAppShellApi(
             type: "message" as const,
           },
           {
+            changes: [
+              {
+                diff: "--- a/temporary-change.ts\n+++ b/temporary-change.ts\n@@ -1 +1 @@\n-old\n+new",
+                kind: "update" as const,
+                path: "/tmp/temporary-change.ts",
+              },
+            ],
+            id: `temporary-file-change-${String(turnNumber)}`,
+            status: "completed" as const,
+            type: "file_change" as const,
+          },
+          {
             id: `temporary-assistant-${String(turnNumber)}`,
             role: "assistant" as const,
-            text: `临时回复：${input["text"]}\n\n[temporary-note.md](/tmp/temporary-note.md)\n\n[temporary-report.pdf](/tmp/temporary-report.pdf)`,
+            text: `临时回复：${input["text"]}\n\n[temporary-note.md](/tmp/temporary-note.md)\n\n[temporary-preview.png](/tmp/temporary-preview.png)\n\n[temporary-report.pdf](/tmp/temporary-report.pdf)`,
             type: "message" as const,
           },
         ],

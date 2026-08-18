@@ -118,8 +118,9 @@ export const workbench = {
   },
   openMenu: {
     choose: "Choose how to open",
+    copyAbsolutePath: "Copy absolute path",
     copyName: "Copy name",
-    copyPath: "Copy path",
+    copyRelativePath: "Copy relative path",
     detect: "Detecting available apps",
     moreActions: "More actions",
     none: "No apps available",

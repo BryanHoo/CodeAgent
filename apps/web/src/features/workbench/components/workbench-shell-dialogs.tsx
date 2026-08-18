@@ -52,7 +52,7 @@ export function WorkbenchShellDialogs({
   } = context;
   return (
     <>
-      {!projectToolsEnabled || selectedFileChange === null ? null : (
+      {selectedFileChange === null ? null : (
         <FileDiffDialog
           change={selectedFileChange}
           onClose={() => {
@@ -60,7 +60,7 @@ export function WorkbenchShellDialogs({
           }}
         />
       )}
-      {!projectToolsEnabled || selectedFileReview === null ? null : (
+      {selectedFileReview === null ? null : (
         <FileReviewDialog
           changes={selectedFileReview}
           onClose={() => {

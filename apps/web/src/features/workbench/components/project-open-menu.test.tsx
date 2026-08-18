@@ -5,7 +5,7 @@ import { ContextMenu } from "../../../shared/components/core/context-menu.js";
 import {
   getProjectFileManagerApp,
   getProjectOpenAppsForTarget,
-  getProjectTargetCopyPath,
+  getProjectTargetAbsolutePath,
   ProjectOpenContextMenuItems,
 } from "./project-open-menu.js";
 
@@ -24,12 +24,12 @@ describe("getProjectFileManagerApp", () => {
   });
 });
 
-describe("getProjectTargetCopyPath", () => {
+describe("getProjectTargetAbsolutePath", () => {
   it("joins project-relative targets into native absolute paths", () => {
-    expect(getProjectTargetCopyPath("/workspace/CodeAgent", "docs/guide.md")).toBe(
+    expect(getProjectTargetAbsolutePath("/workspace/CodeAgent", "docs/guide.md")).toBe(
       "/workspace/CodeAgent/docs/guide.md",
     );
-    expect(getProjectTargetCopyPath("C:\\workspace\\CodeAgent", "docs/guide.md")).toBe(
+    expect(getProjectTargetAbsolutePath("C:\\workspace\\CodeAgent", "docs/guide.md")).toBe(
       "C:\\workspace\\CodeAgent\\docs\\guide.md",
     );
   });
@@ -48,8 +48,9 @@ describe("ProjectOpenContextMenuItems", () => {
           onReference={vi.fn()}
           onSelect={vi.fn()}
           target={{
-            copyPath: "/workspace/CodeAgent/README.md",
+            absolutePath: "/workspace/CodeAgent/README.md",
             path: "README.md",
+            relativePath: "README.md",
             reference: { name: "README.md", path: "README.md" },
             type: "file",
           }}
@@ -59,11 +60,13 @@ describe("ProjectOpenContextMenuItems", () => {
 
     expect(markup).toContain('data-slot="context-menu-content"');
     expect(markup).toContain("复制名称");
-    expect(markup).toContain("复制路径");
+    expect(markup).toContain("复制相对路径");
+    expect(markup).toContain("复制绝对路径");
+    expect(markup).not.toContain(">复制路径<");
     expect(markup).toContain("打开");
     expect(markup).toContain("引用");
     expect(markup.match(/data-slot="context-menu-sub-trigger"/gu)).toHaveLength(1);
-    expect(markup.match(/data-slot="context-menu-item"/gu)).toHaveLength(3);
+    expect(markup.match(/data-slot="context-menu-item"/gu)).toHaveLength(4);
     expect(markup).not.toContain("menuitemradio");
     expect(markup).not.toContain("aria-checked");
   });
@@ -76,13 +79,18 @@ describe("ProjectOpenContextMenuItems", () => {
           isPending={false}
           onReference={vi.fn()}
           onSelect={vi.fn()}
-          target={{ copyPath: "/workspace/CodeAgent/src", path: "src", type: "directory" }}
+          target={{
+            absolutePath: "/workspace/CodeAgent/src",
+            path: "src",
+            relativePath: "src",
+            type: "directory",
+          }}
         />
       </ContextMenu>,
     );
 
     expect(markup).not.toContain("引用");
-    expect(markup.match(/data-slot="context-menu-item"/gu)).toHaveLength(2);
+    expect(markup.match(/data-slot="context-menu-item"/gu)).toHaveLength(3);
   });
 
   it("offers the system default application only for file targets", () => {

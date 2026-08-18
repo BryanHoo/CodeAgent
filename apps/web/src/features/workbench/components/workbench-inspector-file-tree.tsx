@@ -21,7 +21,7 @@ import {
   TooltipTrigger,
 } from "../../../shared/components/core/tooltip.js";
 import {
-  getProjectTargetCopyPath,
+  getProjectTargetAbsolutePath,
   ProjectOpenContextMenu,
   ProjectOpenDropdownMenu,
 } from "./project-open-menu.js";
@@ -120,7 +120,12 @@ export function ProjectFileTreeRootActions({
         onOpen={onMenuOpen}
         onReference={onReferenceProjectPath}
         onSelect={onOpenProjectPath}
-        target={{ copyPath: projectPath, path: projectPath, type: "directory" }}
+        target={{
+          absolutePath: projectPath,
+          path: projectPath,
+          relativePath: ".",
+          type: "directory",
+        }}
       />
     </FileTreeActions>
   );
@@ -232,18 +237,20 @@ export function ProjectFileTreeNodes({
 }: ProjectFileTreeNodesProps) {
   return entries.map((entry) => {
     const name = getProjectFileName(entry.path);
-    const copyPath = getProjectTargetCopyPath(projectPath, entry.path);
+    const absolutePath = getProjectTargetAbsolutePath(projectPath, entry.path);
     const target =
       entry.type === "file"
         ? {
-            copyPath,
+            absolutePath,
             path: entry.path,
+            relativePath: entry.path,
             reference: { name, path: entry.path },
             type: "file" as const,
           }
         : {
-            copyPath,
+            absolutePath,
             path: entry.path,
+            relativePath: entry.path,
             type: "directory" as const,
           };
     const trailing = (

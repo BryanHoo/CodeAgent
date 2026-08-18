@@ -41,10 +41,28 @@ test("creates and restores a temporary task without exposing its internal projec
   await expect(page).toHaveURL(/\/temporary\/t\/temporary-task-1$/u);
   await expect(page.getByText("解释这段临时需求", { exact: true })).toBeVisible();
   await expect(page.getByText("临时回复：解释这段临时需求", { exact: true })).toBeVisible();
+  const changedFiles = page.getByRole("region", { name: "本次修改了 1 个文件" });
+  await changedFiles.getByRole("button", { name: "审核", exact: true }).click();
+  const reviewDialog = page.getByRole("dialog", { name: "temporary-change.ts" });
+  await expect(reviewDialog).toBeVisible();
+  await reviewDialog.getByRole("button", { name: "关闭文件审核" }).click();
+  await changedFiles
+    .getByRole("button", { name: "已编辑 temporary-change.ts，新增 1 行，删除 1 行" })
+    .click();
+  const diffDialog = page.getByRole("dialog", { name: "temporary-change.ts" });
+  await expect(diffDialog).toBeVisible();
+  await diffDialog.getByRole("button", { name: "关闭文件 Diff" }).click();
   await page.getByRole("button", { name: "temporary-note.md" }).click();
   const sourceDialog = page.getByRole("dialog", { name: "temporary-note.md" });
   await expect(sourceDialog).toContainText("允许从临时任务打开");
   await sourceDialog.getByRole("button", { name: "关闭源文件" }).click();
+  await page.getByRole("button", { name: "temporary-preview.png" }).click();
+  const imageDialog = page.getByRole("dialog", { name: "temporary-preview.png" });
+  await expect(imageDialog.getByRole("img", { name: "temporary-preview.png" })).toHaveAttribute(
+    "src",
+    "/v1/temporary/files/image?path=%2Ftmp%2Ftemporary-preview.png",
+  );
+  await imageDialog.getByRole("button", { name: "关闭图片预览" }).click();
   await page.getByRole("button", { name: "temporary-report.pdf" }).click();
   await expect
     .poll(() => requestedPaths.filter((path) => path === "/v1/temporary/open").length)

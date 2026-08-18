@@ -240,6 +240,9 @@ describe("WorkbenchInspector", () => {
     expect(markup).toMatch(
       /aria-label="变更统计"[^>]*><span>2 个变更<\/span><span[^>]*>\+3<\/span><span[^>]*>-1<\/span>/u,
     );
+    expect(markup).toContain(
+      'aria-label="变更统计" class="flex min-h-6 items-center gap-1.5 px-2 text-caption text-muted-foreground"',
+    );
     expect(markup).not.toContain('aria-label="变更文件导航"');
     expect(markup).not.toContain('aria-label="package.json，新增 2 行，删除 1 行"');
     expect(markup).not.toContain('aria-label="new-file.ts，新增 1 行，删除 0 行"');

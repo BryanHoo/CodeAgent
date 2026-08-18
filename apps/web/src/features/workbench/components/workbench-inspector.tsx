@@ -389,7 +389,12 @@ export function WorkbenchInspector({
                       onSelect={(appId) => {
                         onOpenProjectPath(appId);
                       }}
-                      target={{ copyPath: projectPath, path: projectPath, type: "directory" }}
+                      target={{
+                        absolutePath: projectPath,
+                        path: projectPath,
+                        relativePath: ".",
+                        type: "directory",
+                      }}
                     >
                       <FileTreeFolder
                         name={projectRootName}

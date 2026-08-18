@@ -1264,14 +1264,20 @@ test("project file tree refresh, context menu, and ellipsis share target actions
     .click({ button: "right" });
   const rootMenu = page.getByRole("menu", { name: "~/Develop/person/CodeAgent 的操作" });
   await expect(rootMenu.getByRole("menuitem", { name: "复制名称" })).toBeVisible();
-  await expect(rootMenu.getByRole("menuitem", { name: "复制路径" })).toBeVisible();
+  await expect(rootMenu.getByRole("menuitem", { name: "复制相对路径" })).toBeVisible();
+  await expect(rootMenu.getByRole("menuitem", { name: "复制绝对路径" })).toBeVisible();
   await expect(rootMenu.getByRole("menuitem", { name: "引用" })).toHaveCount(0);
   await rootMenu.getByRole("menuitem", { name: "复制名称" }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("CodeAgent");
   await rootTreeItem
     .getByRole("button", { exact: true, name: "CodeAgent" })
     .click({ button: "right" });
-  await rootMenu.getByRole("menuitem", { name: "复制路径" }).click();
+  await rootMenu.getByRole("menuitem", { name: "复制相对路径" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(".");
+  await rootTreeItem
+    .getByRole("button", { exact: true, name: "CodeAgent" })
+    .click({ button: "right" });
+  await rootMenu.getByRole("menuitem", { name: "复制绝对路径" }).click();
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toBe("~/Develop/person/CodeAgent");
@@ -1306,11 +1312,15 @@ test("project file tree refresh, context menu, and ellipsis share target actions
   const folderMenu = page.getByRole("menu", { name: "docs 的操作" });
   await expect(folderMenu).toBeVisible();
   await expect(folderMenu.getByRole("menuitem", { name: "复制名称" })).toBeVisible();
-  await expect(folderMenu.getByRole("menuitem", { name: "复制路径" })).toBeVisible();
+  await expect(folderMenu.getByRole("menuitem", { name: "复制相对路径" })).toBeVisible();
+  await expect(folderMenu.getByRole("menuitem", { name: "复制绝对路径" })).toBeVisible();
   await expect(folderMenu.getByRole("menuitem", { name: "打开" })).toBeVisible();
   await expect(folderMenu.getByRole("menuitem", { name: "引用" })).toHaveCount(0);
   await expect(docsTreeItem).toHaveAttribute("aria-selected", "true");
-  await folderMenu.getByRole("menuitem", { name: "复制路径" }).click();
+  await folderMenu.getByRole("menuitem", { name: "复制相对路径" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("docs");
+  await docsTreeItem.click({ button: "right" });
+  await folderMenu.getByRole("menuitem", { name: "复制绝对路径" }).click();
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toBe("~/Develop/person/CodeAgent/docs");

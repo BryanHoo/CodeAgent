@@ -26,7 +26,6 @@ type ProjectSidebarTaskListProps = Readonly<{
   expandedTaskProjects: ReadonlySet<string>;
   fetchNextProjectTaskPage: (projectId: string) => Promise<void>;
   getProjectReorderProps: ReturnType<typeof useProjectReordering>["getProjectReorderProps"];
-  hasPendingTasks: boolean;
   hasTaskError: boolean;
   isPending: boolean;
   isProjectActionPending: boolean;
@@ -61,7 +60,6 @@ export function ProjectSidebarTaskList({
   expandedTaskProjects,
   fetchNextProjectTaskPage,
   getProjectReorderProps,
-  hasPendingTasks,
   hasTaskError,
   isPending,
   isProjectActionPending,
@@ -153,7 +151,7 @@ export function ProjectSidebarTaskList({
             />
           </div>
 
-          {isPending || hasPendingTasks ? (
+          {isPending ? (
             <p className="px-2 py-1.5 text-meta text-subtle-foreground">
               {t("sidebar.taskLoading")}
             </p>
@@ -206,6 +204,11 @@ export function ProjectSidebarTaskList({
                       />
                     );
                   })}
+                  {temporaryTaskState?.isPending === true ? (
+                    <p className="px-2 py-1.5 text-meta text-subtle-foreground">
+                      {t("sidebar.taskLoading")}
+                    </p>
+                  ) : null}
                   {temporaryPaginationControl === null ? null : (
                     <Button
                       variant="ghost"
@@ -352,6 +355,12 @@ export function ProjectSidebarTaskList({
                           />
                         );
                       })}
+                      {/* 只在所属文件夹内反馈加载，避免请求状态改变整棵目录树的位置。 */}
+                      {projectTaskState?.isPending === true ? (
+                        <p className="px-2 py-1.5 text-meta text-subtle-foreground">
+                          {t("sidebar.taskLoading")}
+                        </p>
+                      ) : null}
                       {taskPaginationControl === null ? null : (
                         <Button
                           variant="ghost"

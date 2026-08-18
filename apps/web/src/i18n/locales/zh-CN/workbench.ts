@@ -118,8 +118,9 @@ export const workbench = {
   },
   openMenu: {
     choose: "选择打开方式",
+    copyAbsolutePath: "复制绝对路径",
     copyName: "复制名称",
-    copyPath: "复制路径",
+    copyRelativePath: "复制相对路径",
     detect: "正在检测打开方式",
     moreActions: "更多操作",
     none: "没有可用的打开方式",

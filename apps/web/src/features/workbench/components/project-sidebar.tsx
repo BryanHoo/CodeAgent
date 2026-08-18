@@ -120,8 +120,6 @@ export function ProjectSidebar({
   const pinnedTasks = getPinnedTasks(
     normalizedQuery.length === 0 ? pinnedTaskQuery.tasks : visibleTasks,
   );
-  const hasPendingTasks =
-    pinnedTaskQuery.isPending || [...projectTaskStates.values()].some((state) => state.isPending);
   const hasTaskError =
     pinnedTaskQuery.error !== null ||
     [...projectTaskStates.values()].some((state) => state.error !== null);
@@ -371,7 +369,6 @@ export function ProjectSidebar({
         expandedTaskProjects={expandedTaskProjects}
         fetchNextProjectTaskPage={fetchNextProjectTaskPage}
         getProjectReorderProps={getProjectReorderProps}
-        hasPendingTasks={hasPendingTasks}
         hasTaskError={hasTaskError}
         isPending={isPending}
         isProjectActionPending={isProjectActionPending}

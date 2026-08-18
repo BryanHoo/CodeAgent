@@ -152,8 +152,9 @@ export function ProjectQuickOpenMenu({
 }
 
 export type ProjectOpenContextMenuTarget = Readonly<{
-  copyPath: string;
+  absolutePath: string;
   path: string;
+  relativePath: string;
   reference?: ProjectFileSearchEntry;
   type: ProjectOpenTargetType;
 }>;
@@ -171,7 +172,7 @@ function getProjectTargetName(path: string): string {
   return path.split(/[\\/]/u).at(-1) ?? path;
 }
 
-export function getProjectTargetCopyPath(projectRootPath: string, targetPath: string): string {
+export function getProjectTargetAbsolutePath(projectRootPath: string, targetPath: string): string {
   const usesWindowsSeparator = projectRootPath.includes("\\") && !projectRootPath.includes("/");
   const separator = usesWindowsSeparator ? "\\" : "/";
   const rootPath = projectRootPath.replace(/[\\/]+$/u, "");
@@ -213,11 +214,19 @@ export function ProjectOpenContextMenuItems({
       </ContextMenuItem>
       <ContextMenuItem
         onSelect={() => {
-          copyProjectTargetText(target.copyPath);
+          copyProjectTargetText(target.relativePath);
         }}
       >
         <Copy aria-hidden="true" className="size-4 text-muted-foreground" />
-        <span>{t("openMenu.copyPath")}</span>
+        <span>{t("openMenu.copyRelativePath")}</span>
+      </ContextMenuItem>
+      <ContextMenuItem
+        onSelect={() => {
+          copyProjectTargetText(target.absolutePath);
+        }}
+      >
+        <Copy aria-hidden="true" className="size-4 text-muted-foreground" />
+        <span>{t("openMenu.copyAbsolutePath")}</span>
       </ContextMenuItem>
       <ContextMenuSub>
         <ContextMenuSubTrigger>
@@ -318,11 +327,19 @@ export function ProjectOpenDropdownMenu({
         </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={() => {
-            copyProjectTargetText(target.copyPath);
+            copyProjectTargetText(target.relativePath);
           }}
         >
           <Copy aria-hidden="true" className="size-4 text-muted-foreground" />
-          <span>{t("openMenu.copyPath")}</span>
+          <span>{t("openMenu.copyRelativePath")}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => {
+            copyProjectTargetText(target.absolutePath);
+          }}
+        >
+          <Copy aria-hidden="true" className="size-4 text-muted-foreground" />
+          <span>{t("openMenu.copyAbsolutePath")}</span>
         </DropdownMenuItem>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>

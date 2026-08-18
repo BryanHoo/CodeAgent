@@ -171,10 +171,10 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
       <TaskTimeline
         onBuildPlan={() => composerRef.current?.buildPlan() ?? Promise.resolve(false)}
         {...(capabilities?.tasks.fork === true ? { onForkTask: forkTask } : {})}
-        {...(projectToolsEnabled ? { onOpenFileDiff } : {})}
-        // AI 消息文件引用是 Task 通用能力，临时 Task 也必须保留点击处理。
+        // Timeline 已携带 Diff 或受控文件引用，普通与临时 Task 共用同一套查看入口。
+        onOpenFileDiff={onOpenFileDiff}
         onOpenSourceFile={onOpenSourceFile}
-        {...(projectToolsEnabled ? { onReviewFileChanges } : {})}
+        onReviewFileChanges={onReviewFileChanges}
         onResolvePendingRequest={resolvePendingRequest}
         projectId={projectId}
         key={taskScope}

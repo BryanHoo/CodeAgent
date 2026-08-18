@@ -21,7 +21,7 @@ const pendingTaskState: ProjectTaskListState = {
 };
 
 describe("ProjectSidebarTaskList", () => {
-  it("does not render the Project empty state while its tasks are loading", () => {
+  it("renders task loading state inside the expanded Project without shifting the tree", () => {
     const markup = renderToStaticMarkup(
       <TooltipProvider>
         <ProjectSidebarTaskList
@@ -35,7 +35,6 @@ describe("ProjectSidebarTaskList", () => {
               typeof ProjectSidebarTaskList
             >["getProjectReorderProps"]
           }
-          hasPendingTasks
           hasTaskError={false}
           isPending={false}
           isProjectActionPending={false}
@@ -63,7 +62,11 @@ describe("ProjectSidebarTaskList", () => {
       </TooltipProvider>,
     );
 
-    expect(markup).toContain("正在加载任务");
+    const projectTreePosition = markup.indexOf('data-testid="project-tree-scroll"');
+    const loadingPosition = markup.indexOf("正在加载任务");
+
+    expect(projectTreePosition).toBeGreaterThanOrEqual(0);
+    expect(loadingPosition).toBeGreaterThan(projectTreePosition);
     expect(markup).not.toContain("暂无任务");
   });
 });

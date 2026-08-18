@@ -19,7 +19,7 @@ const changes = [
 ];
 
 describe("InspectorGitChangesSection", () => {
-  it("renders only a compact aggregate summary", () => {
+  it("renders only the aggregate summary without a file tree or panel background", () => {
     const markup = renderToStaticMarkup(
       <InspectorGitChangesSection
         changeCount={changes.length}
@@ -37,6 +37,10 @@ describe("InspectorGitChangesSection", () => {
     expect(markup).not.toContain('aria-label="变更文件导航"');
     expect(markup).not.toContain("apps/web/src/app.tsx");
     expect(markup).not.toContain("README.md");
+    expect(markup).toContain(
+      'aria-label="变更统计" class="flex min-h-6 items-center gap-1.5 px-2 text-caption text-muted-foreground"',
+    );
+    expect(markup).not.toMatch(/aria-label="变更统计"[^>]*(?:bg-|border)/u);
   });
 
   it("keeps the file count while detailed statistics resolve", () => {
