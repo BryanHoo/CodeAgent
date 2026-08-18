@@ -66,6 +66,7 @@ export const conversation = {
     gitChangesCount: "{{count}} changes",
     gitChangesRetrying: "Git change refresh failed. Retrying automatically",
     gitLoading: "Loading Git changes...",
+    history: "History",
     loading: "Loading...",
     mcpEmpty: "No MCP servers are readable by this task",
     mcpEnabled: "MCP servers readable by this task",
@@ -135,7 +136,6 @@ export const conversation = {
   gitHistory: {
     branch: "Current branch: {{branch}}",
     branchLoading: "Current branch: Loading...",
-    close: "Close Git history",
     commits: "Commit history",
     empty: "This repository has no commits",
     diffLoadError: "Failed to load this file's commit Diff",
@@ -153,7 +153,6 @@ export const conversation = {
     loadingMoreFiles: "Loading files...",
     repositories: "Repositories",
     retry: "Retry",
-    title: "Git history",
   },
   notification: {
     completed: "Task completed",

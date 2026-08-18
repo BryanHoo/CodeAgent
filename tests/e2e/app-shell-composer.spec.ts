@@ -159,28 +159,28 @@ test("opens current-branch Git history beside the composer branch", async ({ pag
   expect(historyRequests).toEqual([]);
   await historyTrigger.click();
 
-  const dialog = page.locator('[data-slot="sheet-content"]');
-  await expect(dialog).toBeVisible();
-  await expect(page.getByRole("dialog", { name: "Git 历史" })).toBeVisible();
-  await expect(dialog).toHaveClass(/right-0/u);
-  await expect(dialog.getByText("当前分支：feat/apps-web")).toBeVisible();
-  await expect(dialog.locator("header svg").first()).toHaveCSS("width", "16px");
-  await expect(dialog.locator("header svg").first()).toHaveCSS("height", "16px");
-  await expect(dialog.getByRole("listitem")).toHaveCount(20);
-  await expect(dialog.getByRole("tab", { name: "apps/web" })).toHaveAttribute(
+  const inspector = page.locator(".workbench-inspector");
+  await expect(inspector).toBeVisible();
+  await expect(inspector).toHaveAttribute("aria-label", "运行环境");
+  await expect(inspector.getByRole("tab", { name: "历史" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
-  await dialog.evaluate(async (element) => {
-    await Promise.all(element.getAnimations().map((animation) => animation.finished));
-  });
-  const initialDialogBox = await dialog.boundingBox();
+  await expect(page.getByRole("dialog", { name: "Git 历史" })).toHaveCount(0);
+  await expect(page.locator('[data-slot="sheet-content"]')).toHaveCount(0);
+  await expect(inspector.getByText("当前分支：feat/apps-web")).toBeVisible();
+  await expect(inspector.getByRole("listitem")).toHaveCount(20);
+  await expect(inspector.getByRole("tab", { name: "apps/web" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  const initialInspectorBox = await inspector.boundingBox();
   expect(historyRequests).toEqual([""]);
 
-  await dialog.getByRole("button", { name: /^apps\/web commit 1 /u }).click();
+  await inspector.getByRole("button", { name: /^apps\/web commit 1 /u }).click();
   const reviewDialog = page.locator('[data-slot="dialog-content"]');
   await expect(page.getByRole("dialog", { name: "apps/web commit 1" })).toBeVisible();
-  await expect(dialog.getByText("apps/web commit 1", { exact: true })).toBeVisible();
+  await expect(inspector.getByText("apps/web commit 1", { exact: true })).toBeVisible();
   await expect(reviewDialog.getByText("Diff 过长，仅展示前 512 KiB")).toBeVisible();
   await expect(reviewDialog.locator(".file-diff-renderer")).toContainText("new");
   expect(commitFileRequests).toEqual([`?repository=apps%2Fweb&sha=${"0".repeat(40)}`]);
@@ -196,49 +196,56 @@ test("opens current-branch Git history beside the composer branch", async ({ pag
   expect(commitDiffRequests).toHaveLength(1);
   await reviewDialog.getByRole("button", { name: "关闭文件审核" }).click();
   await expect(reviewDialog).not.toBeVisible();
-  await expect(dialog.getByText("apps/web commit 1", { exact: true })).toBeVisible();
+  await expect(inspector.getByText("apps/web commit 1", { exact: true })).toBeVisible();
 
-  await dialog.getByRole("tab", { name: "packages/server" }).click();
-  await expect(dialog.getByText("正在读取 Git 历史...")).toBeVisible();
-  await expect(dialog.getByText("当前分支：读取中...")).toBeVisible();
-  const pendingDialogBox = await dialog.boundingBox();
-  expect(pendingDialogBox?.height).toBe(initialDialogBox?.height);
-  expect(pendingDialogBox?.y).toBe(initialDialogBox?.y);
-  await expect(dialog.getByText("apps/web commit 1", { exact: true })).toBeAttached();
-  await expect(dialog.getByText("apps/web commit 1", { exact: true })).toBeHidden();
+  await inspector.getByRole("tab", { name: "packages/server" }).click();
+  await expect(inspector.getByText("正在读取 Git 历史...")).toBeVisible();
+  await expect(inspector.getByText("当前分支：读取中...")).toBeVisible();
+  const pendingInspectorBox = await inspector.boundingBox();
+  expect(pendingInspectorBox?.height).toBe(initialInspectorBox?.height);
+  expect(pendingInspectorBox?.y).toBe(initialInspectorBox?.y);
+  await expect(inspector.getByText("apps/web commit 1", { exact: true })).toBeAttached();
+  await expect(inspector.getByText("apps/web commit 1", { exact: true })).toBeHidden();
   releaseServerHistory?.();
-  await expect(dialog.getByText("packages/server commit 20", { exact: true })).toBeVisible();
-  await expect(dialog.getByText("当前分支：release/server")).toBeVisible();
-  const loadedDialogBox = await dialog.boundingBox();
-  expect(loadedDialogBox?.height).toBe(initialDialogBox?.height);
-  expect(loadedDialogBox?.y).toBe(initialDialogBox?.y);
+  await expect(inspector.getByText("packages/server commit 20", { exact: true })).toBeVisible();
+  await expect(inspector.getByText("当前分支：release/server")).toBeVisible();
+  const loadedInspectorBox = await inspector.boundingBox();
+  expect(loadedInspectorBox?.height).toBe(initialInspectorBox?.height);
+  expect(loadedInspectorBox?.y).toBe(initialInspectorBox?.y);
   expect(historyRequests).toEqual(["", "?repository=packages%2Fserver"]);
 
-  await dialog.getByRole("tab", { name: "apps/web" }).click();
-  await expect(dialog.getByRole("listitem")).toHaveCount(20);
-  await expect(dialog.getByText("当前分支：feat/apps-web")).toBeVisible();
+  await inspector.getByRole("tab", { name: "apps/web" }).click();
+  await expect(inspector.getByRole("listitem")).toHaveCount(20);
+  await expect(inspector.getByText("当前分支：feat/apps-web")).toBeVisible();
   expect(historyRequests).toEqual(["", "?repository=packages%2Fserver"]);
 
-  await dialog.getByRole("button", { name: "关闭 Git 历史" }).click();
-  await expect(dialog).not.toBeVisible();
-  await expect(historyTrigger).toBeFocused();
+  await inspector.getByRole("tab", { name: "项目" }).click();
+  await expect(inspector.locator('[data-slot="git-history-panel"]')).toHaveCount(0);
+  await historyTrigger.click();
+  await expect(inspector.getByRole("tab", { name: "历史" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
 
   await page.setViewportSize({ width: 320, height: 568 });
+  await inspector.getByRole("button", { name: "关闭上下文面板" }).click();
+  await expect(inspector).not.toBeVisible();
   await historyTrigger.click();
-  await expect(dialog).toBeVisible();
-  await page.waitForTimeout(200);
-  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expect(inspector).toBeVisible();
+  expect(await inspector.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+    true,
+  );
   const touchControls = [
-    dialog.getByRole("button", { name: "关闭 Git 历史" }),
-    dialog.getByRole("tab", { name: "apps/web" }),
-    dialog.getByRole("tab", { name: "packages/server" }),
-    dialog.getByRole("button", { name: "加载更多" }),
+    inspector.getByRole("button", { name: "关闭上下文面板" }),
+    inspector.getByRole("tab", { name: "apps/web" }),
+    inspector.getByRole("tab", { name: "packages/server" }),
+    inspector.getByRole("button", { name: "加载更多" }),
   ];
   const touchBoxes = await Promise.all(touchControls.map((control) => control.boundingBox()));
   for (const box of touchBoxes) expect(box?.height).toBeGreaterThanOrEqual(44);
-  await dialog.getByRole("button", { name: "加载更多" }).click();
-  await expect(dialog.getByRole("listitem")).toHaveCount(21);
-  expect(historyRequests).toEqual(["", "?repository=packages%2Fserver", "", "?cursor=20"]);
+  await inspector.getByRole("button", { name: "加载更多" }).click();
+  await expect(inspector.getByRole("listitem")).toHaveCount(21);
+  expect(historyRequests).toEqual(["", "?repository=packages%2Fserver", "?cursor=20"]);
 });
 
 test("paginates a single repository inside the history content", async ({ page }) => {
@@ -267,15 +274,37 @@ test("paginates a single repository inside the history content", async ({ page }
   await page.goto("/p/code-agent/t/task-1");
   await page.getByRole("button", { name: "查看 Git 历史" }).click();
 
-  const dialog = page.getByRole("dialog", { name: "Git 历史" });
-  const content = dialog.locator('[data-slot="git-history-content"]');
+  const inspector = page.locator(".workbench-inspector");
+  const content = inspector.locator('[data-slot="git-history-content"]');
   const loadMore = content.getByRole("button", { name: "加载更多" });
-  await expect(dialog.getByRole("tab")).toHaveCount(0);
+  await expect(inspector.getByRole("tab", { name: "历史" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(inspector.getByRole("tab", { name: "apps/web" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Git 历史" })).toHaveCount(0);
   await expect(loadMore).toBeVisible();
-  await expect(dialog.locator("footer")).toHaveCount(0);
+  await expect(inspector.locator("footer")).toHaveCount(0);
+  const loadMoreMetrics = await loadMore.evaluate((element) => {
+    const container = element.parentElement;
+    if (container === null) throw new Error("Load more container is unavailable");
+    const containerStyle = getComputedStyle(container);
+    return {
+      height: element.getBoundingClientRect().height,
+      parentContentWidth:
+        container.clientWidth -
+        Number.parseFloat(containerStyle.paddingLeft) -
+        Number.parseFloat(containerStyle.paddingRight),
+      width: element.getBoundingClientRect().width,
+    };
+  });
+  expect(loadMoreMetrics.height).toBe(28);
+  expect(Math.abs(loadMoreMetrics.width - loadMoreMetrics.parentContentWidth)).toBeLessThanOrEqual(
+    1,
+  );
 
   await loadMore.click();
-  await expect(dialog.getByRole("listitem")).toHaveCount(21);
+  await expect(inspector.getByRole("listitem")).toHaveCount(21);
   await expect(content.getByText("已加载全部提交")).toBeVisible();
 });
 

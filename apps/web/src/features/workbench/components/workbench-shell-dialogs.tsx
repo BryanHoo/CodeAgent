@@ -4,7 +4,6 @@ import { FileDiffDialog } from "../../diff/file-diff-dialog.js";
 import { FileReviewDialog } from "../../diff/file-review-dialog.js";
 import { loadGlobalSettingsDialog } from "../../settings/components/global-settings-lazy.js";
 import { CommitChangesLauncher } from "./commit-changes-launcher.js";
-import { GitHistoryDialog } from "./git-history-dialog.js";
 import { ProjectSourceDialog } from "./project-source-dialog.js";
 import { SubagentOutputDialog } from "./subagent-output-dialog.js";
 import { TaskRenameDialog } from "./task-rename-dialog.js";
@@ -33,7 +32,6 @@ export function WorkbenchShellDialogs({
     closeTaskRenameDialog,
     commitChangesLauncherRef,
     gitStatusQuery,
-    gitHistoryOpen,
     globalSettingsMutation,
     globalSettingsSection,
     globalSettingsQuery,
@@ -42,7 +40,6 @@ export function WorkbenchShellDialogs({
     openFileDiff,
     projectOpenCapabilitiesQuery,
     projectRuntime,
-    queryClient,
     renameActiveTask,
     renameMutation,
     selectedFileChange,
@@ -52,7 +49,6 @@ export function WorkbenchShellDialogs({
     setFileDiffSelection,
     setFileReviewSelection,
     setGlobalSettingsSection,
-    setGitHistoryOpen,
     setSourceFileSelection,
     setSubagentDialogSelection,
     taskRenameOpen,
@@ -85,31 +81,6 @@ export function WorkbenchShellDialogs({
           ref={commitChangesLauncherRef}
         />
       )}
-      {projectToolsEnabled && gitHistoryOpen ? (
-        <GitHistoryDialog
-          client={client}
-          onClose={() => {
-            setGitHistoryOpen(false);
-            // 下次打开必须重新读取当前检出的 HEAD，避免分支切换后短暂显示旧历史。
-            queryClient.removeQueries({
-              exact: false,
-              queryKey: ["projects", projectId, "git-history"],
-            });
-            queryClient.removeQueries({
-              exact: false,
-              queryKey: ["projects", projectId, "git-commit-files"],
-            });
-            queryClient.removeQueries({
-              exact: false,
-              queryKey: ["projects", projectId, "git-commit-diff"],
-            });
-            requestAnimationFrame(() => {
-              document.querySelector<HTMLButtonElement>("#workbench-git-history")?.focus();
-            });
-          }}
-          projectId={projectId}
-        />
-      ) : null}
       {selectedSourceFile === null ? null : (
         <ProjectSourceDialog
           client={client}

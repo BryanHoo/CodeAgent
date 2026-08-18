@@ -66,6 +66,7 @@ export const conversation = {
     gitChangesCount: "{{count}} 个变更",
     gitChangesRetrying: "Git 变更刷新失败，正在自动重试",
     gitLoading: "正在读取 Git 变更...",
+    history: "历史",
     loading: "正在读取...",
     mcpEmpty: "当前任务没有可读取的 MCP",
     mcpEnabled: "当前任务可读取的 MCP",
@@ -135,7 +136,6 @@ export const conversation = {
   gitHistory: {
     branch: "当前分支：{{branch}}",
     branchLoading: "当前分支：读取中...",
-    close: "关闭 Git 历史",
     commits: "提交记录",
     empty: "当前仓库暂无提交记录",
     diffLoadError: "无法读取此文件的提交 Diff",
@@ -153,7 +153,6 @@ export const conversation = {
     loadingMoreFiles: "正在加载文件...",
     repositories: "子仓库",
     retry: "重试",
-    title: "Git 历史",
   },
   notification: {
     completed: "Task 已完成",

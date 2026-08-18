@@ -297,7 +297,6 @@ export function useWorkbenchShellRuntime({
   const [globalSettingsSection, setGlobalSettingsSection] = useState<SidebarSettingsSection | null>(
     null,
   );
-  const [gitHistoryOpen, setGitHistoryOpen] = useState(false);
   const [fileDiffSelection, setFileDiffSelection] = useState<{
     change: AgentFileChange;
     projectId: string;
@@ -400,7 +399,6 @@ export function useWorkbenchShellRuntime({
     getNewChatSubmissionStartedAt,
     gitStatusQuery,
     gitStatusDetailsQuery,
-    gitHistoryOpen,
     globalSettingsMutation,
     globalSettingsSection,
     globalSettingsQuery,
@@ -447,7 +445,6 @@ export function useWorkbenchShellRuntime({
     setFileReviewSelection,
     setFileTreeExpansion,
     setGlobalSettingsSection,
-    setGitHistoryOpen,
     setInspectorOpen,
     setInspectorTab,
     setInspectorWidth,

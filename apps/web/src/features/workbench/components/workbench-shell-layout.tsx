@@ -93,7 +93,6 @@ export function WorkbenchShellLayout({
     runtime,
     setFileTreeExpansion,
     setGlobalSettingsSection,
-    setGitHistoryOpen,
     setInspectorOpen,
     setInspectorTab,
     setInspectorWidth,
@@ -119,6 +118,11 @@ export function WorkbenchShellLayout({
       .catch((error: unknown) => {
         notifyActionError(error instanceof Error ? error : new Error("Git diff is unavailable"));
       });
+  };
+  const openGitHistory = () => {
+    // Composer 入口同时恢复右栏并切换标签，避免用户还需执行第二次操作。
+    setInspectorTab("history");
+    setInspectorOpen(true);
   };
   return (
     <div
@@ -308,9 +312,7 @@ export function WorkbenchShellLayout({
                 globalSettingsQuery.isPending
               }
               onSettingsChange={updateDraftSettings}
-              onOpenGitHistory={() => {
-                setGitHistoryOpen(true);
-              }}
+              onOpenGitHistory={openGitHistory}
               onOpenProjectPath={openProjectFolder}
               onRequestNotificationPermission={requestNotificationPermission}
               onDirectSubmission={beginNewChatSubmission}
@@ -338,9 +340,7 @@ export function WorkbenchShellLayout({
             modelsError={modelsQuery.error}
             modelsPending={modelsQuery.isPending}
             onRequestNotificationPermission={requestNotificationPermission}
-            onOpenGitHistory={() => {
-              setGitHistoryOpen(true);
-            }}
+            onOpenGitHistory={openGitHistory}
             onOpenProjectPath={openProjectFolder}
             onTaskStarted={handleTaskStarted}
             projectId={projectId}
@@ -392,7 +392,6 @@ export function WorkbenchShellLayout({
           width={inspectorWidth}
         />
       ) : null}
-
       {inspectorOpen ? (
         <WorkbenchInspector
           backgroundTerminals={backgroundTerminals.terminals}
@@ -405,6 +404,7 @@ export function WorkbenchShellLayout({
           gitStatusDetails={context.gitStatusDetailsQuery.data}
           gitStatusPending={gitStatusQuery.isPending}
           gitStatusRefreshing={gitStatusQuery.isFetching}
+          gitClient={client}
           mcpServers={mcpServersQuery.data?.data ?? []}
           mcpServersError={mcpServersQuery.error}
           mcpServersPending={taskId !== undefined && mcpServersQuery.isPending}

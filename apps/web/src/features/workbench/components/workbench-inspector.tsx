@@ -8,7 +8,7 @@ import type {
   ProjectOpenApp,
   ProjectOpenAppId,
 } from "@code-agent/protocol";
-import { Braces, FolderTree, PanelRightClose, RefreshCw } from "lucide-react";
+import { PanelRightClose, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { i18n, useTranslation } from "../../../i18n/i18n.js";
@@ -37,6 +37,17 @@ import {
 import { InspectorSources } from "./workbench-inspector-sources.js";
 import { PlanSection } from "./workbench-inspector-plan.js";
 import { deriveInspectorGitChangeState } from "./workbench-inspector-git-status.js";
+import { GitHistoryPanel } from "./git-history-panel.js";
+import {
+  projectInspectorTabs,
+  taskInspectorTabs,
+  WorkbenchInspectorTabs,
+  type WorkbenchInspectorTab,
+} from "./workbench-inspector-tabs.js";
+import type {
+  CodeAgentGitCommitReviewClient,
+  CodeAgentGitHistoryClient,
+} from "../../projects/project-queries.js";
 
 export type { ProjectFileTreeDirectoryState } from "./workbench-inspector-file-tree.js";
 
@@ -54,6 +65,7 @@ type WorkbenchInspectorProps = Readonly<{
   gitStatusError?: Error | null;
   gitStatusPending?: boolean;
   gitStatusRefreshing?: boolean;
+  gitClient?: CodeAgentGitHistoryClient & CodeAgentGitCommitReviewClient;
   mcpServers?: readonly AgentMcpServer[];
   mcpServersError?: Error | null;
   mcpServersPending?: boolean;
@@ -89,10 +101,7 @@ type WorkbenchInspectorProps = Readonly<{
   terminatingTerminalId?: string | null;
 }>;
 
-export type WorkbenchInspectorTab = "changes" | "context";
-
-const projectInspectorTabs = ["changes"] as const;
-const taskInspectorTabs = ["changes", "context"] as const;
+export type { WorkbenchInspectorTab } from "./workbench-inspector-tabs.js";
 
 export function WorkbenchInspector({
   backgroundTerminals = [],
@@ -106,6 +115,7 @@ export function WorkbenchInspector({
   gitStatusError = null,
   gitStatusPending = false,
   gitStatusRefreshing = false,
+  gitClient,
   mcpServers = [],
   mcpServersError = null,
   mcpServersPending = false,
@@ -179,7 +189,9 @@ export function WorkbenchInspector({
     ? "context"
     : tab === "context" && taskId !== undefined
       ? "context"
-      : "changes";
+      : tab === "history"
+        ? "history"
+        : "changes";
   const closeButton =
     onClose === undefined ? null : (
       <Tooltip>
@@ -245,35 +257,11 @@ export function WorkbenchInspector({
         <div className="absolute right-2 top-2 z-10 min-[1101px]:hidden">{closeButton}</div>
       ) : (
         <div className="flex min-h-workbench-header items-center gap-2 px-1.5">
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" role="tablist">
-            {availableTabs.map((value) => (
-              <Button
-                aria-selected={activeTab === value}
-                className={`rounded-surface ${
-                  activeTab === value ? "bg-control-hover text-foreground" : ""
-                }`}
-                key={value}
-                onClick={() => {
-                  onTabChange(value);
-                }}
-                role="tab"
-                size="compact"
-                type="button"
-                variant="ghost"
-              >
-                {value === "changes" ? (
-                  <FolderTree aria-hidden="true" />
-                ) : (
-                  <Braces aria-hidden="true" />
-                )}
-                <span>
-                  {value === "changes"
-                    ? i18n.t("inspector.changes", { ns: "conversation" })
-                    : i18n.t("inspector.context", { ns: "conversation" })}
-                </span>
-              </Button>
-            ))}
-          </div>
+          <WorkbenchInspectorTabs
+            activeTab={activeTab}
+            availableTabs={availableTabs}
+            onTabChange={onTabChange}
+          />
           <div className="shrink-0 min-[1101px]:hidden">{closeButton}</div>
         </div>
       )}
@@ -488,6 +476,11 @@ export function WorkbenchInspector({
               </div>
             </div>
           </div>
+        ) : activeTab === "history" && projectId !== undefined ? (
+          <GitHistoryPanel
+            {...(gitClient === undefined ? {} : { client: gitClient })}
+            projectId={projectId}
+          />
         ) : (
           contextContent
         )}

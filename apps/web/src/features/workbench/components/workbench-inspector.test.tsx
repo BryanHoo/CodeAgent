@@ -238,6 +238,7 @@ describe("WorkbenchInspector", () => {
     expect(markup).not.toContain("shadow-toolbar");
     expect(markup).toContain("lucide-folder-tree");
     expect(markup).toContain(">项目</span></button>");
+    expect(markup).toContain(">历史</span></button>");
     expect(markup).not.toContain(">上下文</span></button>");
     expect(markup).toContain('aria-label="项目文件"');
     expect(markup).toContain('role="tree"');
@@ -265,6 +266,7 @@ describe("WorkbenchInspector", () => {
 
     expect(markup).toContain(">项目</span></button>");
     expect(markup).toContain(">上下文</span></button>");
+    expect(markup).toContain(">历史</span></button>");
     expect(markup).toContain("lucide-braces");
   });
 
