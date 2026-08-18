@@ -6,6 +6,7 @@ import { ComposerBranchSwitcher } from "./composer-branch-switcher.js";
 import {
   ComposerGitHistoryButton,
   ComposerModeTag,
+  ComposerProjectPathButton,
   resolveQueuedPromptSummary,
 } from "./workbench-composer-view.js";
 
@@ -121,5 +122,30 @@ describe("WorkbenchComposerView", () => {
     expect(markup).toContain('id="workbench-git-history"');
     expect(markup).toContain("size-6");
     expect(markup).toContain("size-3");
+  });
+
+  it("将项目路径渲染为带 Tooltip 的文件夹打开按钮", () => {
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <ComposerProjectPathButton
+          disabled={false}
+          onOpen={() => undefined}
+          projectPath="/workspace/CodeAgent"
+        />
+      </TooltipProvider>,
+    );
+
+    expect(markup).toContain('data-slot="tooltip-trigger"');
+    expect(markup).toContain('aria-label="在系统文件夹中打开"');
+    expect(markup).toContain('data-variant="ghost"');
+    expect(markup).toContain("h-6");
+    expect(markup).toContain("w-fit");
+    expect(markup).toContain("max-w-full");
+    expect(markup).toContain("text-caption");
+    expect(markup).toContain("hover:bg-control-hover");
+    expect(markup).toContain("size-3");
+    expect(markup).toContain("/workspace/CodeAgent");
+    expect(markup).not.toContain("flex-1");
+    expect(markup).not.toContain('title="/workspace/CodeAgent"');
   });
 });

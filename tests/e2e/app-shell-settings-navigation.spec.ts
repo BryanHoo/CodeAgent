@@ -958,7 +958,33 @@ test("renders the AI workbench landmarks with an enabled composer", async ({ pag
   await expect(page.getByRole("button", { exact: true, name: "提交" })).toBeEnabled();
   await expect(main.locator("header").getByText("CodeAgent", { exact: true })).toHaveCount(0);
   await expect(page.getByText("本地离线", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("项目路径")).toHaveText("~/Develop/person/CodeAgent");
+  const projectPathButton = page.getByRole("button", { name: "在系统文件夹中打开" });
+  await expect(projectPathButton).toHaveText("~/Develop/person/CodeAgent");
+  const projectPathSizing = await projectPathButton.evaluate((element) => ({
+    buttonWidth: element.getBoundingClientRect().width,
+    footerWidth: element.parentElement?.getBoundingClientRect().width ?? 0,
+  }));
+  expect(projectPathSizing.buttonWidth).toBeLessThan(projectPathSizing.footerWidth / 2);
+  await expect(projectPathButton).toHaveCSS("height", "24px");
+  await expect(projectPathButton).toHaveCSS("font-size", "10px");
+  const projectPathIcon = projectPathButton.locator("svg");
+  await expect(projectPathIcon).toHaveCSS("height", "12px");
+  await expect(projectPathIcon).toHaveCSS("width", "12px");
+  const restingProjectPathBackground = await projectPathButton.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await projectPathButton.hover();
+  await expect
+    .poll(() => projectPathButton.evaluate((element) => getComputedStyle(element).backgroundColor))
+    .not.toBe(restingProjectPathBackground);
+  await expect(page.getByRole("tooltip")).toHaveText("在系统文件夹中打开");
+  const openProjectRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/v1/projects/code-agent/open" &&
+      request.method() === "POST",
+  );
+  await projectPathButton.click();
+  expect((await openProjectRequest).postDataJSON()).toEqual({ appId: "finder" });
   const contextUsageButton = page.getByRole("button", { name: "上下文已使用 13%" });
   await expect(contextUsageButton).toBeVisible();
   await expect(contextUsageButton.locator("circle")).toHaveCount(2);

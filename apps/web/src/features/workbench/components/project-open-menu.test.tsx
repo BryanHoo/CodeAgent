@@ -3,10 +3,26 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ContextMenu } from "../../../shared/components/core/context-menu.js";
 import {
+  getProjectFileManagerApp,
   getProjectOpenAppsForTarget,
   getProjectTargetCopyPath,
   ProjectOpenContextMenuItems,
 } from "./project-open-menu.js";
+
+describe("getProjectFileManagerApp", () => {
+  it("selects only the system file manager for direct folder opening", () => {
+    const apps = [
+      { id: "visual-studio-code", kind: "editor", name: "Visual Studio Code" },
+      { id: "finder", kind: "file-manager", name: "Finder" },
+      { id: "terminal", kind: "terminal", name: "Terminal" },
+    ] as const;
+
+    expect(getProjectFileManagerApp(apps)?.id).toBe("finder");
+    expect(getProjectFileManagerApp(apps.filter((app) => app.kind !== "file-manager"))).toBe(
+      undefined,
+    );
+  });
+});
 
 describe("getProjectTargetCopyPath", () => {
   it("joins project-relative targets into native absolute paths", () => {

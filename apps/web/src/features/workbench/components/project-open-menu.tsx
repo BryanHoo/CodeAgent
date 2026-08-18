@@ -61,6 +61,12 @@ export function getProjectOpenAppsForTarget(
   return targetType === "file" ? apps : apps.filter((app) => app.kind !== "system-default");
 }
 
+export function getProjectFileManagerApp(
+  apps: readonly ProjectOpenApp[],
+): ProjectOpenApp | undefined {
+  return apps.find((app) => app.kind === "file-manager");
+}
+
 type ProjectQuickOpenMenuProps = Readonly<{
   apps: readonly ProjectOpenApp[];
   defaultOpenAppId?: ProjectOpenAppId | null;

@@ -63,6 +63,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   onExecuteReview: (target: AgentReviewTarget) => void;
   onInterrupt: () => void;
   onOpenGitHistory: () => void;
+  onOpenProjectPath: () => void;
   onOpenReviewBranches: () => void;
   onComposerModeRemove: () => void;
   onPromptChange: (
@@ -79,6 +80,7 @@ export type WorkbenchComposerViewProps = Readonly<{
   onSubmit: (message: PromptInputMessage) => void;
   onViewError: (error: Error) => void;
   projectPath: string;
+  projectPathOpenDisabled: boolean;
   projectToolsEnabled: boolean;
   promptContent: PromptSkillContent;
   promptSubmissionText: string;

@@ -57,6 +57,7 @@ export function WorkbenchComposer({
   modelsPending,
   onDirectSubmission,
   onOpenGitHistory,
+  onOpenProjectPath,
   onRequestNotificationPermission,
   onSettingsChange,
   onSubmissionStateChange,
@@ -65,6 +66,7 @@ export function WorkbenchComposer({
   onTurnStarted,
   projectId,
   projectPath,
+  projectPathOpenDisabled,
   projectToolsEnabled = true,
   gitStatus,
   runtime,
@@ -391,6 +393,7 @@ export function WorkbenchComposer({
         void interruptTurn();
       }}
       onOpenGitHistory={onOpenGitHistory}
+      onOpenProjectPath={onOpenProjectPath}
       onOpenReviewBranches={() => {
         setActiveCommandIndex(0);
         setReviewMenuMode("branches");
@@ -407,6 +410,7 @@ export function WorkbenchComposer({
         setMutationError(error);
       }}
       projectPath={projectPath}
+      projectPathOpenDisabled={projectPathOpenDisabled}
       projectToolsEnabled={projectToolsEnabled}
       promptContent={promptContent}
       promptSubmissionText={promptSubmission.text}

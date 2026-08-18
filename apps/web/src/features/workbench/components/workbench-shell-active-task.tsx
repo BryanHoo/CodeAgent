@@ -42,9 +42,11 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   modelsPending,
   onRequestNotificationPermission,
   onOpenGitHistory,
+  onOpenProjectPath,
   onTaskStarted,
   projectId,
   projectPath,
+  projectPathOpenDisabled,
   projectToolsEnabled,
   gitStatus,
   runtime,
@@ -67,6 +69,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   modelsPending: boolean;
   onRequestNotificationPermission: () => void;
   onOpenGitHistory: () => void;
+  onOpenProjectPath: () => void;
   onTaskStarted: (
     task: AgentTask,
     turn?: AgentTurn,
@@ -76,6 +79,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
   ) => void;
   projectId: string;
   projectPath: string;
+  projectPathOpenDisabled: boolean;
   projectToolsEnabled: boolean;
   gitStatus?: ProjectGitStatus;
   runtime: TaskRuntimeView;
@@ -201,6 +205,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
           setTimelineScrollToBottomSignal((current) => current + 1);
         }}
         onOpenGitHistory={onOpenGitHistory}
+        onOpenProjectPath={onOpenProjectPath}
         onRequestNotificationPermission={onRequestNotificationPermission}
         onSettingsChange={(settings) =>
           settingsMutation.mutateAsync(settings).then(() => undefined)
@@ -221,6 +226,7 @@ export const ActiveTaskWorkbench = memo(function ActiveTaskWorkbench({
         }}
         projectId={projectId}
         projectPath={projectPath}
+        projectPathOpenDisabled={projectPathOpenDisabled}
         projectToolsEnabled={projectToolsEnabled}
         {...(gitStatus === undefined ? {} : { gitStatus })}
         runtime={visibleRuntime}

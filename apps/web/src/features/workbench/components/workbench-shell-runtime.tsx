@@ -42,6 +42,7 @@ import { useBackgroundTerminals } from "../hooks/use-background-terminals.js";
 import type { CommitChangesLauncherHandle } from "./commit-changes-launcher.js";
 import type { SidebarSettingsSection } from "./project-sidebar-actions.js";
 import { deriveProjectSidebarConnectionState } from "./project-sidebar.js";
+import { getProjectFileManagerApp } from "./project-open-menu.js";
 import { collectSubagents, type SubagentSelection } from "./subagent.js";
 import type {
   ProjectFileTreeDirectoryState,
@@ -166,6 +167,19 @@ export function useWorkbenchShellRuntime({
   const projectPathOpenMutationRef = useRef(projectPathOpenMutation);
   projectPathOpenMutationRef.current = projectPathOpenMutation;
   const projectPathOpenLockRef = useRef(createAsyncActionLock());
+  const projectFileManagerApp = getProjectFileManagerApp(
+    projectOpenCapabilitiesQuery.data?.apps ?? [],
+  );
+  const openProjectFolder = useCallback(() => {
+    if (projectFileManagerApp === undefined) {
+      return;
+    }
+    const mutation = projectPathOpenMutationRef.current;
+    mutation.reset();
+    void projectPathOpenLockRef.current
+      .run(() => mutation.mutateAsync({ appId: projectFileManagerApp.id, path: undefined }))
+      .catch(() => undefined);
+  }, [projectFileManagerApp, projectPathOpenLockRef, projectPathOpenMutationRef]);
   const skillsQuery = useQuery({
     ...skillsQueryOptions(projectId, client),
     enabled: capabilities?.skills.list === true,
@@ -408,11 +422,14 @@ export function useWorkbenchShellRuntime({
     modelsQuery,
     navigate,
     newChatSubmissionStartedAt,
+    openProjectFolder,
     pendingTaskSelection,
     projectDefaultsMutation,
     projectDefaultsQuery,
     projectName,
     projectOpenCapabilitiesQuery,
+    projectFolderOpenDisabled:
+      projectFileManagerApp === undefined || projectPathOpenMutation.isPending,
     projectPath,
     projectPathOpenLockRef,
     projectPathOpenMutation,

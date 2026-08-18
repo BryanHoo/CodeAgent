@@ -75,8 +75,10 @@ export function WorkbenchShellLayout({
     openFileDiff,
     openFileReview,
     openMessageFileReference,
+    openProjectFolder,
     pendingTaskSelection,
     projectDefaultsQuery,
+    projectFolderOpenDisabled,
     projectName,
     projectOpenCapabilitiesQuery,
     projectPath,
@@ -146,7 +148,6 @@ export function WorkbenchShellLayout({
             ? {}
             : { taskId })}
       />
-
       {sidebarOpen ? (
         <Button
           variant="ghost"
@@ -156,7 +157,6 @@ export function WorkbenchShellLayout({
           type="button"
         />
       ) : null}
-
       {sidebarOpen ? (
         <WorkbenchPanelResizer
           direction={1}
@@ -180,7 +180,6 @@ export function WorkbenchShellLayout({
           width={sidebarWidth}
         />
       ) : null}
-
       <main aria-label={t("shell.timeline")} className="flex min-h-0 min-w-0 flex-col bg-content">
         <header className="flex h-workbench-header shrink-0 items-center justify-between gap-3 bg-content px-2.5 shadow-toolbar sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -229,7 +228,6 @@ export function WorkbenchShellLayout({
               )}
             </h1>
           </div>
-
           <div className="flex shrink-0 items-center gap-1">
             <ProjectQuickOpenMenu
               apps={projectOpenCapabilitiesQuery.data?.apps ?? []}
@@ -268,7 +266,6 @@ export function WorkbenchShellLayout({
             </Tooltip>
           </div>
         </header>
-
         {error !== null ||
         (projectTaskState?.error ?? null) !== null ||
         modelsQuery.error !== null ||
@@ -314,6 +311,7 @@ export function WorkbenchShellLayout({
               onOpenGitHistory={() => {
                 setGitHistoryOpen(true);
               }}
+              onOpenProjectPath={openProjectFolder}
               onRequestNotificationPermission={requestNotificationPermission}
               onDirectSubmission={beginNewChatSubmission}
               onSubmissionStateChange={handleNewChatSubmissionStateChange}
@@ -321,6 +319,7 @@ export function WorkbenchShellLayout({
               onTaskStarted={handleTaskStarted}
               projectId={projectId}
               projectPath={projectPath}
+              projectPathOpenDisabled={projectFolderOpenDisabled}
               projectToolsEnabled={!temporary}
               {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
               settings={draftSettings}
@@ -342,9 +341,11 @@ export function WorkbenchShellLayout({
             onOpenGitHistory={() => {
               setGitHistoryOpen(true);
             }}
+            onOpenProjectPath={openProjectFolder}
             onTaskStarted={handleTaskStarted}
             projectId={projectId}
             projectPath={projectPath}
+            projectPathOpenDisabled={projectFolderOpenDisabled}
             projectToolsEnabled={!temporary}
             {...(gitStatusQuery.data === undefined ? {} : { gitStatus: gitStatusQuery.data })}
             runtime={runtime}
@@ -358,7 +359,6 @@ export function WorkbenchShellLayout({
           />
         )}
       </main>
-
       {inspectorOpen ? (
         <Button
           variant="ghost"

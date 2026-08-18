@@ -66,6 +66,7 @@ export type WorkbenchComposerProps = Readonly<{
   ) => Promise<void> | void;
   onRequestNotificationPermission: () => void;
   onOpenGitHistory: () => void;
+  onOpenProjectPath: () => void;
   onDirectSubmission?: () => void;
   onSubmissionStateChange?: (submitting: boolean) => void;
   onTaskCreated?: (task: AgentTask) => void;
@@ -82,6 +83,7 @@ export type WorkbenchComposerProps = Readonly<{
     messageAttachments?: readonly AgentMessageAttachment[],
   ) => void;
   projectId: string;
+  projectPathOpenDisabled: boolean;
   projectPath: string;
   projectToolsEnabled?: boolean;
   gitStatus?: ProjectGitStatus;

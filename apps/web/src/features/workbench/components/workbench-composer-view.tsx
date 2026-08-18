@@ -73,6 +73,34 @@ export function ComposerGitHistoryButton({ onOpen }: Readonly<{ onOpen: () => vo
   );
 }
 
+export function ComposerProjectPathButton({
+  disabled,
+  onOpen,
+  projectPath,
+}: Readonly<{ disabled: boolean; onOpen: () => void; projectPath: string }>) {
+  const { t } = useTranslation("workbench");
+  const label = t("composer.openProjectFolder");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          aria-label={label}
+          className="h-6 w-fit min-w-0 max-w-full shrink gap-1 rounded-control px-1 text-caption text-muted-foreground hover:bg-control-hover hover:text-foreground"
+          contentAlign="start"
+          disabled={disabled}
+          onClick={onOpen}
+          type="button"
+          variant="ghost"
+        >
+          <Folder aria-hidden="true" className="size-3 shrink-0" />
+          <span className="truncate">{projectPath}</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
   const { t } = useTranslation(["workbench", "settings"]);
   return (
@@ -371,14 +399,13 @@ export function WorkbenchComposerView(props: WorkbenchComposerViewProps) {
               />
               <ComposerGitHistoryButton onOpen={props.onOpenGitHistory} />
             </div>
-            <span
-              aria-label={t("composer.projectPath")}
-              className="inline-flex min-w-0 flex-1 items-center gap-1"
-              title={props.projectPath}
-            >
-              <Folder className="size-3 shrink-0" aria-hidden="true" />
-              <span className="truncate">{props.projectPath}</span>
-            </span>
+            <div className="min-w-0 flex-1">
+              <ComposerProjectPathButton
+                disabled={props.projectPathOpenDisabled}
+                onOpen={props.onOpenProjectPath}
+                projectPath={props.projectPath}
+              />
+            </div>
           </>
         ) : null}
         <Context

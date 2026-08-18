@@ -94,6 +94,7 @@ export const workbench = {
     modelSelect: "Select model",
     noBaseBranch: "No base branch available",
     noModels: "No models available",
+    openProjectFolder: "Open in system file manager",
     operationFailed: "Operation failed. Please retry.",
     placeholder: "Tell CodeAgent what you want to accomplish",
     planMode: "Plan",

@@ -94,6 +94,7 @@ export const workbench = {
     modelSelect: "选择模型",
     noBaseBranch: "未发现可用分支",
     noModels: "暂无可用模型",
+    openProjectFolder: "在系统文件夹中打开",
     operationFailed: "操作失败，请重试",
     placeholder: "告诉 CodeAgent 你想完成什么",
     planMode: "计划",
